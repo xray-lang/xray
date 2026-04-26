@@ -33,7 +33,7 @@
 #include "../../frontend/analyzer/xanalyzer_escape.h"
 #include "../../runtime/value/xtype.h"
 
-// AST formatter (moved from app/cli to frontend/format in CLI Phase 2)
+// AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
 #include "../../frontend/analyzer/xanalyzer_ast_visitor.h"
 #include "../../runtime/xisolate_api.h"

@@ -1554,7 +1554,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             builder_bind_call_args(b, result, &class_ref, 1);
             builder_set_slot(b, a, result);
             b->slot_rep[a] = XR_REP_PTR;
-            // Phase 2: track struct layout for downstream GET/SET inlining
+            // Track struct layout so downstream GET/SET sites can inline.
             { XirVReg *_sv = builder_vreg_for_slot(b, a);
               if (_sv) {
                 _sv->struct_idx = (int16_t)slot_offset;
@@ -1572,7 +1572,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             int rb = GETARG_B(inst);
             int field_idx = GETARG_C(inst);
 
-            // Phase 2: inline load when layout known at compile time
+            // Inline load when struct layout is known at compile time.
             XirVReg *_sv_rb = builder_vreg_for_slot(b, rb);
             int sidx = _sv_rb ? (int)_sv_rb->struct_idx : -1;
             XrStructLayout *layout = NULL;
@@ -1661,7 +1661,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             int field_idx = GETARG_B(inst);
             int rc = GETARG_C(inst);
 
-            // Phase 2: inline store when layout known at compile time
+            // Inline store when struct layout is known at compile time.
             XirVReg *_sv_a = builder_vreg_for_slot(b, a);
             int sidx = _sv_a ? (int)_sv_a->struct_idx : -1;
             XrStructLayout *layout = NULL;
@@ -1733,7 +1733,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk,
             builder_bind_call_args(b, result, &src, 1);
             builder_set_slot(b, a, result);
             b->slot_rep[a] = XR_REP_PTR;
-            // Phase 2: propagate source struct's layout to the copy
+            // Propagate source struct's layout to the copy so the copy
+            // can also benefit from inlined GET/SET.
             { XirVReg *_sv_rb2 = builder_vreg_for_slot(b, rb);
               XirVReg *_sv_a2 = builder_vreg_for_slot(b, a);
               if (_sv_rb2 && _sv_a2 && _sv_rb2->struct_idx >= 0)

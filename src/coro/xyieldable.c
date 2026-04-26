@@ -129,8 +129,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                 _Atomic uintptr_t *gpp = (events & XR_WAIT_READ) ? &pd->rg : &pd->wg;
 
                 // Two-phase CAS (Go netpollblock design):
-                // Phase 1: consume pdReady or confirm NIL
-                // Phase 2: CAS NIL → coro (not atomic_store!)
+                // Step 1: consume pdReady or confirm NIL
+                // Step 2: CAS NIL → coro (not atomic_store!)
                 for (;;) {
                     uintptr_t old = atomic_load(gpp);
 
@@ -261,7 +261,7 @@ bool xr_coro_has_continuation(XrCoroutine *coro) {
 // continuation with XR_RESUME_CLOSURE_DONE.
 //
 // Previously this lived in its own 131-line xyield_closure.c — folded in
-// here as part of Phase 3.4 file-count cleanup; it shares get_current_coro.
+// here in this file; it shares get_current_coro with the wait helpers above.
 XrCFuncResult xr_yield_call_closure(
     XrayIsolate *X,
     XrClosure *closure,

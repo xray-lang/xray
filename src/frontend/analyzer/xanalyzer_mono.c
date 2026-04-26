@@ -275,10 +275,10 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
     n->column = node->column;
     n->leading_comments = NULL;  // Comments not needed for mono clones
     n->trailing_comments = NULL; // (L-06)
-    // X-01 Phase 2.4c: AstNode no longer carries an inline type. The
-    // post-mono xa_analyzer_analyze() pass in xcompiler.c re-infers
-    // every cloned node and writes the result to the analyzer's side
-    // table, so dropping the per-node copy here is safe.
+    // AstNode no longer carries an inline type — the post-mono
+    // xa_analyzer_analyze() pass in xcompiler.c re-infers every cloned
+    // node and writes the result to the analyzer's side table, so
+    // dropping the per-node copy here is safe.
 
     switch (node->type) {
     // === Literals ===

@@ -764,7 +764,7 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
     }
 }
 
-// Rebind pd to current worker when coro has migrated (Phase 1: CORO-02 fix).
+// Rebind pd to current worker when coro has migrated.
 // Cancels any running timers on the old owner's wheel (via cross-worker cancel
 // queue), deregisters fd from old worker's local poll, and re-registers with
 // the current worker.  After this call pd->owner_worker_id == current->p.id.
@@ -813,7 +813,7 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
 // 2. Use bound Worker's Timer Wheel (no cross-Worker access)
 // 3. Increment sequence to invalidate old timer callbacks
 //
-// Phase 1 (CORO-02 fix): if the coroutine has migrated to a different worker,
+// If the coroutine has migrated to a different worker,
 // rebind the pd to the current worker so that deadline timers are always set.
 // The old "skip timer ops" silent degradation is eliminated.
 void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
@@ -824,8 +824,8 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline,
     // Bind fd to current Worker on first I/O
     xr_netpoll_bind_worker(pd);
 
-    // Phase 1: if coro migrated, rebind pd to current worker instead of
-    // silently skipping timer ops (CORO-02).
+    // If coro migrated, rebind pd to current worker instead of
+    // silently skipping timer ops on the wrong wheel.
     XrWorker *current = xr_current_worker();
     if (current && pd->owner_worker_id >= 0 &&
         current->p.id != pd->owner_worker_id) {

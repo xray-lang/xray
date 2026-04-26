@@ -119,13 +119,13 @@ static XrPooledConn* create_connection(XrConnPool *pool, const char *host, uint1
 #endif
     // Resolve all addresses (dual-stack, IPv6/IPv4 interleaved) and try
     // them in order, bailing out on first success. This is a coarse
-    // Happy-Eyeballs approximation — we do not fire parallel connects
-    // (true HE v2 RFC 8305 needs a multi-fd coroutine-wait primitive,
-    // tracked under docs/analysis TODO-P12). Serial failover alone
-    // already rescues the common "one v6 route is black-holed" case.
+    // Happy-Eyeballs approximation — we do not fire parallel connects.
+    // True HE v2 (RFC 8305) needs a multi-fd coroutine-wait primitive
+    // we do not yet have. Serial failover alone already rescues the
+    // common "one v6 route is black-holed" case.
     //
     // Note: on cache miss this still performs a blocking getaddrinfo;
-    // switching to async DNS is tracked under docs/analysis TODO-P5.
+    // an async DNS path is not yet implemented.
     XrSockAddr addrs[XR_DNS_MAX_ADDRS];
     int n = xr_dns_resolve_all(host, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
     if (n <= 0) return NULL;

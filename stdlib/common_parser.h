@@ -27,11 +27,11 @@
  *      readers for the XrJson -> struct config path.
  *
  * WHY THIS DESIGN:
- *   Per the stdlib_serialization analysis (docs/analysis), the error-map
- *   and config-extract boilerplate was duplicated across 5 modules for
- *   ~240 lines of drift-prone copy-paste. Concentrating it here keeps
- *   behaviour (interning, range checks, truncation) identical across the
- *   stdlib and makes future schema changes single-point.
+ *   The error-map and config-extract boilerplate was previously
+ *   duplicated across 5 stdlib modules for ~240 lines of drift-prone
+ *   copy-paste. Concentrating it here keeps behaviour (interning,
+ *   range checks, truncation) identical across the stdlib and makes
+ *   future schema changes single-point.
  */
 
 #ifndef XR_STDLIB_COMMON_PARSER_H

@@ -407,9 +407,8 @@ XrLocalInfo* scope_define_local_reg(XrCompilerContext *ctx, XrCompiler *compiler
 XrType* get_expr_type(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *expr) {
     if (!expr || !compiler) return NULL;
 
-    // X-01 Phase 2.4b: read from the analyzer's side table instead of
-    // the (now legacy) inline AstNode field. Codegen always has access
-    // to the owning analyzer via ctx->analyzer.
+    // Read the inferred type from the analyzer's side table. Codegen
+    // always has access to the owning analyzer via ctx->analyzer.
     XrType *ct_node = xa_analyzer_get_node_type(ctx->analyzer, expr);
     if (ct_node) {
         XrType *ct = ct_node;
@@ -1085,16 +1084,16 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                     }
                 }
             }
-            // Phase 1.5 removed: CTX_NEW is now emitted at function entry
-            // by xr_compiler_init and backpatched by xr_compiler_end.
             // Phase 2: Compile function declarations first (closures available before use)
+            // Note: CTX_NEW is emitted at function entry by xr_compiler_init
+            // and backpatched by xr_compiler_end.
             for (int i = 0; i < block->count && !compiler->had_error; i++) {
                 if (block->statements[i] && block->statements[i]->type == AST_FUNCTION_DECL) {
                     xr_compile_statement(ctx, compiler, block->statements[i]);
                 }
             }
-            // Phase 2.5: CTX_NEW backpatch is handled by emit_ctx_sync_before_closure
-            // and xr_compiler_end; nothing to do here.
+            // CTX_NEW backpatch is handled by emit_ctx_sync_before_closure
+            // and xr_compiler_end.
             // Phase 3: Compile remaining statements in source order
             for (int i = 0; i < block->count && !compiler->had_error; i++) {
                 if (!block->statements[i]) continue;
@@ -1617,7 +1616,7 @@ XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
 
     ctx->global_var_count = initial_global_offset;
 
-    // Phase 1: Type inference
+    // Type inference pass.
     if (ctx->analyzer) {
         xa_analyzer_analyze(ctx->analyzer, NULL, ast);
 

@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ========== Builtin section moved out (Phase 3, C-02) ==========
+/* ========== Builtin section ==========
  * All `compile_builtin_*` helpers, the `builtin_functions[]` table,
  * and `builtin_lookup` now live in xexpr_call_builtin.{c,h}. Call
  * sites here use xr_compile_call_builtin() as a single dispatcher.
@@ -61,7 +61,7 @@ int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExpr
     (void)out_slot_type_unused;
 
     // Builtin function detection via table-driven dispatch.
-    // Phase 3 (C-02) lifted the table out to xexpr_call_builtin.c;
+    // The builtin call table lives in xexpr_call_builtin.c;
     // negative return means "not a builtin / matched-but-bailed", in
     // which case we fall through to the regular dispatch below.
     int builtin_result = xr_compile_call_builtin(ctx, compiler, node, is_tail);
@@ -69,11 +69,11 @@ int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExpr
         return builtin_result;
     }
 
-    // Method-call dispatch lives in xexpr_call_method.c (Phase 3 C-02
-    // split). When the callee is a member-access expression, every
-    // inline optimisation -- StringBuilder / Channel / Map / Coro /
-    // INVOKE_DIRECT / chain calls / generic INVOKE -- is handled
-    // there and the function returns the result register directly.
+    // Method-call dispatch lives in xexpr_call_method.c. When the
+    // callee is a member-access expression, every inline optimisation
+    // -- StringBuilder / Channel / Map / Coro / INVOKE_DIRECT / chain
+    // calls / generic INVOKE -- is handled there and the function
+    // returns the result register directly.
     if (node->callee->type == AST_MEMBER_ACCESS) {
         return xr_compile_call_method(ctx, compiler, node, is_tail);
     }

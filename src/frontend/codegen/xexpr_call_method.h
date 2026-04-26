@@ -5,18 +5,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xexpr_call_method.h - Method-call dispatch for codegen (C-02 split)
+ * xexpr_call_method.h - Method-call dispatch for codegen
  *
  * KEY CONCEPT:
- *   Pre-Phase-3 the entire `obj.method(...)` lowering pipeline lived
- *   inline inside `compile_call_internal` in xexpr_call.c, sharing
- *   the file with the regular CALL / CALLSELF / TAILCALL paths.
- *   That made the function 1300+ lines and forced anyone touching
- *   any single inline optimisation (StringBuilder, Map, Channel,
- *   Coro, INVOKE_DIRECT, ...) to read past everything else.
+ *   The method branch of call lowering lives in this dedicated TU so
+ *   that the inline optimisations (StringBuilder, Map, Channel, Coro,
+ *   INVOKE_DIRECT, ...) do not bloat compile_call_internal in
+ *   xexpr_call.c.
  *
- *   Phase 3 (C-02) lifts the method branch into its own TU. The
- *   call dispatcher in xexpr_call.c now reads:
+ *   The call dispatcher in xexpr_call.c reads:
  *
  *       int builtin_result = xr_compile_call_builtin(...);
  *       if (builtin_result >= 0) return builtin_result;

@@ -707,7 +707,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
  * 2. Use immediate comparison when right operand is small integer (e.g. x < 10)
  * 3. Generic path uses normal comparison instruction
  *
- * This function still returns int (register), for Phase 3 migration transition.
+ * This function still returns int (register) for backward compatibility.
  */
 static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNode *node, AstNodeType type) {
     // ===== Operator overload recursion warning =====
@@ -1070,7 +1070,7 @@ static int compile_nullish_coalesce_internal(XrCompilerContext *ctx, XrCompiler 
     }
     // Case 2: Analyzer-inferred type is non-nullable and concrete (not unknown).
     // Covers narrowed variables, const declarations, non-nullable function returns.
-    // X-01 Phase 2.4b: read inferred type via the analyzer side table.
+    // Read the inferred type via the analyzer side table.
     XrType *left_t = xa_analyzer_get_node_type(ctx->analyzer, node->left);
     if (left_t && !left_t->is_nullable &&
         left_t->kind != XR_KIND_UNKNOWN &&

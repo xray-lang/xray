@@ -144,7 +144,7 @@ static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q) {
     return NULL;
 }
 
-// Phase 3.3: O(1) whole-list drain via atomic_exchange.
+// O(1) whole-list drain via atomic_exchange.
 // Grabs the entire chain in a single atomic op; caller walks locally.
 static XrAsyncJob *ready_queue_drain_all(XrAsyncReadyQueue *q) {
     return atomic_exchange_explicit(&q->head, NULL, memory_order_acq_rel);
@@ -271,7 +271,7 @@ int xr_async_check_ready(XrAsyncPool *pool, int worker_id) {
 
     XrAsyncReadyQueue *q = &pool->ready_queues[worker_id];
 
-    // Phase 3.3: O(1) drain — grab entire list in one atomic_exchange,
+    // O(1) drain — grab entire list in one atomic_exchange,
     // then walk locally without further CAS contention.
     XrAsyncJob *list = ready_queue_drain_all(q);
     if (!list) return 0;

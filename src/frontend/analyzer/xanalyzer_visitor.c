@@ -26,7 +26,7 @@
  * generic scopes, so `T` in `fn add<T>(item: T)` is parsed as CLASS("T").
  * This fixup must run before the function/method type is finalised.
  */
-// Cross-TU after Phase 2.3 (A-04): used by xa_visit_collect_class in
+// Cross-TU helper used by xa_visit_collect_class in
 // xanalyzer_visitor_decl.c when registering generic-method types.
 XrType *resolve_class_to_type_param(XrayIsolate *X, XrType *type,
                                     const char **tp_names, int tp_count) {
@@ -329,7 +329,7 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
 
 // xa_visit_collect_function_decl_only / xa_visit_collect_function_body
 // are defined in xanalyzer_visitor_decl.c and declared in
-// xanalyzer_visitor_internal.h (Phase 2.3 / A-04 split).
+// xanalyzer_visitor_internal.h.
 
 // Helper: collect statements with function hoisting (two-phase).
 // Cross-TU: also called from xa_visit_collect_function_body() in
@@ -482,10 +482,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(ta->name, XA_SYM_TYPE_ALIAS);
                 sym->location.line = node->line;
                 sym->is_const = true;
-                // X-01 Phase 2.4c: parser stashes the resolved type
-                // in TypeAliasNode::resolved_type. Mirror it into the
-                // side table so downstream readers (codegen, LSP) get
-                // the same answer through the canonical lookup path.
+                // Parser stashes the resolved type in
+                // TypeAliasNode::resolved_type. Mirror it into the side
+                // table so downstream readers (codegen, LSP) get the
+                // same answer through the canonical lookup path.
                 XrType *resolved = ta->resolved_type;
                 if (resolved) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
@@ -796,8 +796,7 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Cache inferred type for codegen phase.
-    // X-01 Phase 2.4c: side-table is now the only store.
+    // Cache inferred type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, result);
     return result;
 }

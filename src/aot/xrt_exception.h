@@ -50,7 +50,7 @@ typedef struct XrtExcFrame {
  * Thread-local exception stack
  *
  * In single-threaded AOT mode, a plain global suffices.
- * When concurrency (Phase C) is added, switch to _Thread_local.
+ * Once concurrency support lands, switch to _Thread_local.
  * ========================================================================= */
 
 #ifdef XRT_IMPL

@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   xfmt.c was previously a 1700+ line single-file implementation.
- *   Phase 1.9 (F-03) splits it into thematic modules:
+ *   It is now split into thematic modules:
  *
  *       xfmt.c         entry / config / init / public API
  *       xfmt_trivia.c  leading / trailing comment output
@@ -17,7 +17,7 @@
  *       xfmt_expr.c    expression-shaped AST nodes
  *       xfmt_stmt.c    statement / control-flow / program
  *       xfmt_decl.c    var / func / class / interface / enum / type alias
- *       xfmt_literal.c re-escaping string / template emission (F-01/F-02)
+ *       xfmt_literal.c re-escaping string / template emission
  *
  *   This header declares the few helpers that need to cross those
  *   translation units. All declarations carry XR_FUNC and use the

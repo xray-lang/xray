@@ -136,7 +136,7 @@ typedef struct XrTask {
     uint16_t _pad2;                         //  2B
 
     // Parent-Child hierarchy (only used with linked go / scope)
-    _Atomic bool child_lock;                //  1B: Phase 2 (CORO-03) spinlock for child list
+    _Atomic bool child_lock;                //  1B: spinlock for child list
     struct XrTask *parent;                  //  8B
     struct XrTask *first_child;             //  8B
     struct XrTask *next_sibling;            //  8B

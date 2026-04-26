@@ -40,10 +40,10 @@ XR_FUNC XrType *xa_substitute_generic_call(XaInferContext *ctx,
 XR_FUNC XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body);
 XR_FUNC bool xa_body_has_return_expr(AstNode *node);
 
-// Phase 2.3 (A-04): cross-TU helpers between xanalyzer_visitor.c (the
-// dispatch / hoisting / infer entry points) and xanalyzer_visitor_decl.c
-// (the bulk of decl-shaped collect logic). Not exported via
-// xanalyzer_visitor.h because no caller outside src/frontend/analyzer/
+// Cross-TU helpers between xanalyzer_visitor.c (the dispatch / hoisting
+// / infer entry points) and xanalyzer_visitor_decl.c (the bulk of
+// decl-shaped collect logic). Not exported via xanalyzer_visitor.h
+// because no caller outside src/frontend/analyzer/
 // needs them.
 XR_FUNC void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node);

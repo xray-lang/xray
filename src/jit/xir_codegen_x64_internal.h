@@ -16,6 +16,7 @@
 #define XIR_CODEGEN_X64_INTERNAL_H
 
 #include "xir_codegen.h"
+#include "xir_codegen_internal.h"
 #include "xir_x64.h"
 #include "xir_jit.h"
 #include "xir_regalloc.h"
@@ -26,7 +27,7 @@
 /* ========== Constants ========== */
 
 #define X64_MAX_PHYS_REGS   11  // allocatable GP registers (see xir_target_x64.c)
-#define X64_MAX_FP_REGS     16
+#define X64_MAX_FP_REGS     15
 #define X64_MAX_VREGS       4096
 #define X64_SCRATCH_REG     X64_R11
 #define X64_SCRATCH_XMM     15       // xmm15 as FP scratch
@@ -87,11 +88,19 @@ typedef struct {
 
     uint32_t      fast_entry_offset;  // byte offset of fast-path entry
 
-    /* Frame size patch locations (byte offsets where sub rsp/add rsp imm32 lives) */
-    uint32_t      frame_patch_sub[8];
+    /* Frame size patch locations (byte offsets where sub rsp/add rsp imm32 lives).
+     * Capacity 16 covers normal + fast prologue + up to XIR_MAX_OSR_ENTRIES (8)
+     * OSR stubs, each of which emits its own SUB RSP, imm32. */
+    uint32_t      frame_patch_sub[16];
     uint32_t      frame_patch_add[8];
     uint32_t      nsub_patches;
     uint32_t      nadd_patches;
+
+    /* Loop-header snapshots for later OSR stub emission. Filled by
+     * x64_emit_block when it sees a loop_header block; consumed by
+     * x64_emit_osr_stubs to materialize a stub per snapshot. */
+    OsrSnapshot   osr_snaps[XIR_MAX_OSR_ENTRIES];
+    uint32_t      nosr_snap;
 
     uint32_t      call_c_stub;       // byte offset of call_c_stub in code buffer
     uint32_t      deopt_stub;        // byte offset of deopt stub

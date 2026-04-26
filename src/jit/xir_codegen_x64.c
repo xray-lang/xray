@@ -19,7 +19,8 @@
  *   - No link register → CALL pushes return address on stack
  *   - Condition codes persist until next flag-setting instruction
  *
- * STATUS: Phase F.4.2 — integer arithmetic + control flow.
+ * COVERAGE: integer arithmetic, control flow, calls. Float ops and
+ *           SIMD are not yet emitted by this backend.
  *
  * RELATED MODULES:
  *   - xir_x64.h/c: x86-64 instruction encoding
@@ -53,7 +54,7 @@ const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS] = {
 };
 
 const X64Reg x64_alloc_fp_regs[X64_MAX_FP_REGS] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
 };
 
 /* ========== Register Lookup ========== */
@@ -293,6 +294,180 @@ static X64Reg x64_ensure_dst(X64CodegenCtx *ctx, X64Reg rd,
     return rd;
 }
 
+/* ========== Scratch-Probe Helpers ==========
+ *
+ * Decide whether materializing a binop operand will need to land in the
+ * single GP / FP scratch register. Used by the binop helpers below to
+ * detect the "both args clobber scratch" hazard before emitting a second
+ * x64_get_operand load (which would silently overwrite the first arg). */
+
+static int8_t x64_probe_phys_reg(X64CodegenCtx *ctx, uint32_t idx) {
+    if (ctx->vreg_override && idx < ctx->xra->nvreg &&
+        ctx->vreg_override[idx] != -128)
+        return ctx->vreg_override[idx];
+    int8_t ri = xra_reg_at_pos(ctx->xra, idx, ctx->cur_ra_pos);
+    if (ri < 0)
+        ri = xra_reg_at_pos(ctx->xra, idx, ctx->cur_ra_pos + 1);
+    return ri;
+}
+
+static bool x64_arg_needs_scratch_gp(X64CodegenCtx *ctx, XirRef ref) {
+    if (xir_ref_is_const(ref)) return true;
+    if (!xir_ref_is_vreg(ref)) return false;
+    uint32_t idx = XIR_REF_INDEX(ref);
+    if (idx >= ctx->func->nvreg) return false;
+    if (ctx->func->vregs[idx].rep == XR_REP_F64) return false;
+    return x64_probe_phys_reg(ctx, idx) < 0;
+}
+
+static bool x64_arg_needs_scratch_fp(X64CodegenCtx *ctx, XirRef ref) {
+    if (xir_ref_is_const(ref)) return true;
+    if (!xir_ref_is_vreg(ref)) return false;
+    uint32_t idx = XIR_REF_INDEX(ref);
+    if (idx >= ctx->func->nvreg) return false;
+    if (ctx->func->vregs[idx].rep != XR_REP_F64) return false;
+    return x64_probe_phys_reg(ctx, idx) < 0;
+}
+
+/* dst = arg0 OP arg1 for a commutative GP binop.
+ * Returns the RHS hardware register that the caller should pass to OP.
+ *
+ * Risks resolved here:
+ *   1. Distinct args that both need the GP scratch register.
+ *      A naive (rn = get_operand(arg0,SCRATCH); rm = get_operand(arg1,SCRATCH))
+ *      sequence silently overwrites rn. We move arg0 out of scratch into
+ *      rd first to free scratch for arg1.
+ *   2. arg1 already lives in rd. We swap operand order (commutative is
+ *      OK to reorder) and use arg1 in place, only moving arg0 over rd
+ *      when it would have been clobbered. */
+static X64Reg x64_prepare_commutative_gp(X64CodegenCtx *ctx, X64Reg rd,
+                                         XirRef arg0, XirRef arg1,
+                                         X64Reg scratch) {
+    X64Reg rn = x64_get_operand(ctx, arg0, scratch);
+
+    if (rn == scratch && arg0 != arg1 &&
+        x64_arg_needs_scratch_gp(ctx, arg1)) {
+        XR_DCHECK(rd != scratch,
+                  "commutative gp binop: dst aliases scratch with both args needing scratch");
+        x64_mov_rr(&ctx->buf, rd, scratch);
+        X64Reg rm = x64_get_operand(ctx, arg1, scratch);
+        return rm;
+    }
+
+    X64Reg rm = x64_get_operand(ctx, arg1, scratch);
+    if (rm == rd && rn != rd)
+        return rn;
+    if (rn != rd)
+        x64_mov_rr(&ctx->buf, rd, rn);
+    return rm;
+}
+
+/* Same as x64_prepare_commutative_gp but for SSE2 scalar-double binops. */
+static X64Xmm x64_prepare_commutative_fp(X64CodegenCtx *ctx, X64Xmm fd,
+                                         XirRef arg0, XirRef arg1,
+                                         X64Xmm scratch) {
+    X64Xmm fn = x64_get_fp_operand(ctx, arg0, scratch);
+
+    if (fn == scratch && arg0 != arg1 &&
+        x64_arg_needs_scratch_fp(ctx, arg1)) {
+        XR_DCHECK(fd != scratch,
+                  "commutative fp binop: dst aliases scratch with both args needing scratch");
+        x64_movsd_rr(&ctx->buf, fd, scratch);
+        X64Xmm fm = x64_get_fp_operand(ctx, arg1, scratch);
+        return fm;
+    }
+
+    X64Xmm fm = x64_get_fp_operand(ctx, arg1, scratch);
+    if (fm == fd && fn != fd)
+        return fn;
+    if (fn != fd)
+        x64_movsd_rr(&ctx->buf, fd, fn);
+    return fm;
+}
+
+/* dst = arg0 OP arg1 for a non-commutative GP binop (SUB-style).
+ *
+ * Two contract risks left over from the simple
+ * (mov rd, rn; OP rd, rm) pattern:
+ *   1. Distinct args that both need the GP scratch register would
+ *      silently clobber each other on the second x64_get_operand call.
+ *      Stash arg0 onto the stack via PUSH/POP so it ends up in rd while
+ *      arg1 lives in scratch.
+ *   2. arg1 aliases dst: the implicit `mov rd, rn` would destroy arg1
+ *      before OP. Route the computation through scratch:
+ *        mov scratch, rn ; (skipped if rn == scratch)
+ *        OP  scratch, rm
+ *        mov rd, scratch
+ *      so arg1 in rd survives until consumed by OP. */
+typedef void (*X64BinopGpEmit)(X64Buf *buf, X64Reg dst, X64Reg src);
+typedef void (*X64BinopFpEmit)(X64Buf *buf, X64Xmm dst, X64Xmm src);
+
+static void x64_emit_noncommutative_gp(X64CodegenCtx *ctx, X64Reg rd,
+                                       XirRef arg0, XirRef arg1,
+                                       X64BinopGpEmit emit_op) {
+    X64Reg rn = x64_get_operand(ctx, arg0, X64_SCRATCH_REG);
+
+    if (rn == X64_SCRATCH_REG && arg0 != arg1 &&
+        x64_arg_needs_scratch_gp(ctx, arg1)) {
+        XR_DCHECK(rd != X64_SCRATCH_REG,
+                  "noncomm gp binop: dst aliases scratch with both args needing scratch");
+        x64_push_r(&ctx->buf, X64_SCRATCH_REG);
+        X64Reg rm = x64_get_operand(ctx, arg1, X64_SCRATCH_REG);
+        XR_DCHECK(rm == X64_SCRATCH_REG,
+                  "noncomm gp binop: expected arg1 to land in scratch");
+        x64_pop_r(&ctx->buf, rd);
+        emit_op(&ctx->buf, rd, rm);
+        return;
+    }
+
+    X64Reg rm = x64_get_operand(ctx, arg1, X64_SCRATCH_REG);
+    if (rm == rd && rn != rd) {
+        if (rn != X64_SCRATCH_REG)
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, rn);
+        emit_op(&ctx->buf, X64_SCRATCH_REG, rm);
+        x64_mov_rr(&ctx->buf, rd, X64_SCRATCH_REG);
+        return;
+    }
+    if (rn != rd)
+        x64_mov_rr(&ctx->buf, rd, rn);
+    emit_op(&ctx->buf, rd, rm);
+}
+
+static void x64_emit_noncommutative_fp(X64CodegenCtx *ctx, X64Xmm fd,
+                                       XirRef arg0, XirRef arg1,
+                                       X64BinopFpEmit emit_op) {
+    X64Xmm fn = x64_get_fp_operand(ctx, arg0, X64_SCRATCH_XMM);
+
+    if (fn == X64_SCRATCH_XMM && arg0 != arg1 &&
+        x64_arg_needs_scratch_fp(ctx, arg1)) {
+        XR_DCHECK(fd != X64_SCRATCH_XMM,
+                  "noncomm fp binop: dst aliases scratch with both args needing scratch");
+        /* x86-64 has no FP push/pop. Use a 16-byte stack stash; the pair
+         * keeps RSP 16-aligned for any subsequent CALL boundary. */
+        x64_sub_ri(&ctx->buf, X64_RSP, 16);
+        x64_movsd_mr(&ctx->buf, X64_RSP, 0, X64_SCRATCH_XMM);
+        X64Xmm fm = x64_get_fp_operand(ctx, arg1, X64_SCRATCH_XMM);
+        XR_DCHECK(fm == X64_SCRATCH_XMM,
+                  "noncomm fp binop: expected arg1 to land in scratch");
+        x64_movsd_rm(&ctx->buf, fd, X64_RSP, 0);
+        x64_add_ri(&ctx->buf, X64_RSP, 16);
+        emit_op(&ctx->buf, fd, fm);
+        return;
+    }
+
+    X64Xmm fm = x64_get_fp_operand(ctx, arg1, X64_SCRATCH_XMM);
+    if (fm == fd && fn != fd) {
+        if (fn != X64_SCRATCH_XMM)
+            x64_movsd_rr(&ctx->buf, X64_SCRATCH_XMM, fn);
+        emit_op(&ctx->buf, X64_SCRATCH_XMM, fm);
+        x64_movsd_rr(&ctx->buf, fd, X64_SCRATCH_XMM);
+        return;
+    }
+    if (fn != fd)
+        x64_movsd_rr(&ctx->buf, fd, fn);
+    emit_op(&ctx->buf, fd, fm);
+}
+
 /* Forward declaration: defined after x64_emit_xir_ins */
 static void x64_emit_alloc_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd,
                                 uint8_t gc_type, uint16_t gc_extra,
@@ -317,20 +492,19 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
 
     /* ========== Integer Arithmetic ========== */
     case XIR_ADD: {
-        x64_ensure_dst(ctx, rd, ins->args[0], X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_REG);
         x64_add_rr(&ctx->buf, rd, rm);
         break;
     }
     case XIR_SUB: {
-        x64_ensure_dst(ctx, rd, ins->args[0], X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-        x64_sub_rr(&ctx->buf, rd, rm);
+        x64_emit_noncommutative_gp(ctx, rd, ins->args[0], ins->args[1],
+                                   x64_sub_rr);
         break;
     }
     case XIR_MUL: {
-        x64_ensure_dst(ctx, rd, ins->args[0], X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_REG);
         x64_imul_rr(&ctx->buf, rd, rm);
         break;
     }
@@ -369,20 +543,20 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
 
     /* ========== Logical ========== */
     case XIR_AND: {
-        x64_ensure_dst(ctx, rd, ins->args[0], X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_REG);
         x64_and_rr(&ctx->buf, rd, rm);
         break;
     }
     case XIR_OR: {
-        x64_ensure_dst(ctx, rd, ins->args[0], X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_REG);
         x64_or_rr(&ctx->buf, rd, rm);
         break;
     }
     case XIR_XOR: {
-        x64_ensure_dst(ctx, rd, ins->args[0], X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_REG);
         x64_xor_rr(&ctx->buf, rd, rm);
         break;
     }
@@ -442,34 +616,28 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
     /* ========== Float Arithmetic (SSE2 scalar double) ========== */
     case XIR_FADD: {
         X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
-        X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
-        X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
-        if (fn != fd) x64_movsd_rr(&ctx->buf, fd, fn);
+        X64Xmm fm = x64_prepare_commutative_fp(ctx, fd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_XMM);
         x64_addsd(&ctx->buf, fd, fm);
         break;
     }
     case XIR_FSUB: {
         X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
-        X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
-        X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
-        if (fn != fd) x64_movsd_rr(&ctx->buf, fd, fn);
-        x64_subsd(&ctx->buf, fd, fm);
+        x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1],
+                                   x64_subsd);
         break;
     }
     case XIR_FMUL: {
         X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
-        X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
-        X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
-        if (fn != fd) x64_movsd_rr(&ctx->buf, fd, fn);
+        X64Xmm fm = x64_prepare_commutative_fp(ctx, fd, ins->args[0],
+                                               ins->args[1], X64_SCRATCH_XMM);
         x64_mulsd(&ctx->buf, fd, fm);
         break;
     }
     case XIR_FDIV: {
         X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
-        X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
-        X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
-        if (fn != fd) x64_movsd_rr(&ctx->buf, fd, fn);
-        x64_divsd(&ctx->buf, fd, fm);
+        x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1],
+                                   x64_divsd);
         break;
     }
     case XIR_FNEG: {
@@ -1911,6 +2079,21 @@ static void x64_emit_deopt_stub(X64CodegenCtx *ctx) {
                      fp_base + i * 8, (X64Xmm)i);
     }
 
+    /* Copy spill slots from frame to jit_ctx->deopt_spill_save[] BEFORE
+     * epilogue destroys the frame.  The deopt reconstructor reads these
+     * via DEOPT_LOC_SPILL.  Uses R11 (SCRATCH_REG) — already saved above. */
+    {
+        uint32_t nspill = ctx->xra ? ctx->xra->nspill : 0;
+        if (nspill > 32) nspill = 32;
+        int32_t save_base = (int32_t)XIR_JIT_DEOPT_SPILL_SAVE_OFFSET;
+        for (uint32_t s = 0; s < nspill; s++) {
+            int32_t frame_off = -(int32_t)(X64_SPILL_BASE + s * 8);
+            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP, frame_off);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       save_base + (int32_t)s * 8, X64_SCRATCH_REG);
+        }
+    }
+
     /* Load DEOPT_MARKER into RAX as return value */
     x64_load_imm64(&ctx->buf, X64_RAX, (uint64_t)XIR_DEOPT_MARKER);
 
@@ -2057,7 +2240,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     /* SUB RSP, frame_size (placeholder imm32 — patched later).
      * Always emit the imm32 form (REX.W 81 EC imm32) so the
      * displacement can be patched to any value up to 2 GiB. */
-    XR_DCHECK(ctx->nsub_patches < 8, "too many frame sub patches");
+    XR_DCHECK(ctx->nsub_patches < 16, "too many frame sub patches");
     x64_emit8(&ctx->buf, 0x48);  /* REX.W */
     x64_emit8(&ctx->buf, 0x81);  /* SUB r/m64, imm32 */
     x64_emit8(&ctx->buf, 0xEC);  /* ModRM: mod=11, /5, rm=RSP */
@@ -2117,7 +2300,7 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
 
     /* SUB RSP, frame_size (placeholder, patched later) */
-    XR_DCHECK(ctx->nsub_patches < 8, "too many frame sub patches");
+    XR_DCHECK(ctx->nsub_patches < 16, "too many frame sub patches");
     x64_emit8(&ctx->buf, 0x48);
     x64_emit8(&ctx->buf, 0x81);
     x64_emit8(&ctx->buf, 0xEC);
@@ -2209,6 +2392,17 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
 
     /* Record block start offset (bytes) */
     ctx->block_offsets[blk->id] = ctx->buf.pos;
+
+    /* Snapshot loop-header blocks for later OSR stub emission.
+     * Skip when the function has coroutine deopt (AWAIT/SCOPE_EXIT): OSR
+     * cannot correctly recover full interpreter state in that case and
+     * may double-execute side effects (matches ARM64 behaviour). */
+    if (blk->is_loop_header && ctx->nosr_snap < XIR_MAX_OSR_ENTRIES &&
+        !ctx->func->has_coro_deopt) {
+        ctx->osr_snaps[ctx->nosr_snap].block_id = blk->id;
+        ctx->osr_snaps[ctx->nosr_snap].block_offset = ctx->buf.pos;
+        ctx->nosr_snap++;
+    }
 
     /* Emit all instructions */
     for (uint32_t i = 0; i < blk->nins; i++) {
@@ -2357,6 +2551,183 @@ static void x64_patch_branches(X64CodegenCtx *ctx) {
     }
 }
 
+/* ========== OSR Entry Stubs ========== */
+
+/* Skip vregs that the OSR stub should NOT pre-load:
+ *   1. Vregs defined by an instruction inside the loop header itself
+ *      (will be assigned by that instruction; loading would be redundant
+ *      or wrong).
+ *   2. PHI inputs that have been coalesced to the PHI dst's register
+ *      (loading would clobber the PHI dst's interpreter-side value).
+ *
+ * Mirrors osr_should_skip_vreg() in xir_codegen.c. */
+static bool x64_osr_should_skip_vreg(X64CodegenCtx *ctx, XirBlock *osr_blk,
+                                     uint32_t v, int8_t ri) {
+    if (!osr_blk) return false;
+    XirRef vref = XIR_REF(XIR_REF_VREG, v);
+    for (uint32_t ii = 0; ii < osr_blk->nins; ii++) {
+        if (osr_blk->ins[ii].dst == vref)
+            return true;
+    }
+    for (XirPhi *phi = osr_blk->phis; phi; phi = phi->next) {
+        for (uint16_t ai = 0; ai < phi->narg; ai++) {
+            if (phi->args[ai] == vref) {
+                uint32_t pdv = XIR_REF_INDEX(phi->dst);
+                int8_t pd_ri = xra_vreg_reg_at(ctx->xra, osr_blk->id, pdv);
+                if (pd_ri >= 0 && pd_ri == ri)
+                    return true;
+                break;
+            }
+        }
+    }
+    return false;
+}
+
+/* Materialize a compile-time constant directly into a phys reg for OSR.
+ * Does not require the values_ptr scratch — safe to invoke after the
+ * primary load loop. */
+static void x64_osr_materialize_const(X64CodegenCtx *ctx, XirIns *def,
+                                      int8_t phys_gp, int8_t phys_fp) {
+    if (!def) return;
+    if (!xir_ref_is_const(def->args[0])) return;
+    uint32_t ci = XIR_REF_INDEX(def->args[0]);
+    if (ci >= ctx->func->nconst) return;
+    uint64_t val = ctx->func->consts[ci].val.raw;
+
+    if (def->op == XIR_CONST_I64 || def->op == XIR_CONST_PTR) {
+        if (phys_gp >= 0)
+            x64_load_imm64(&ctx->buf, x64_alloc_regs[phys_gp], val);
+        else if (phys_fp >= 0) {
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, val);
+            x64_movq_xmm_gp(&ctx->buf, x64_alloc_fp_regs[phys_fp],
+                            X64_SCRATCH_REG);
+        }
+    } else if (def->op == XIR_CONST_F64) {
+        if (phys_fp >= 0) {
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, val);
+            x64_movq_xmm_gp(&ctx->buf, x64_alloc_fp_regs[phys_fp],
+                            X64_SCRATCH_REG);
+        } else if (phys_gp >= 0)
+            x64_load_imm64(&ctx->buf, x64_alloc_regs[phys_gp], val);
+    }
+}
+
+/* Emit OSR entry stubs: alternate function entries for loop headers.
+ *
+ * OSR calling convention: same as normal entry — RDI=coro, RSI=int64_t *values.
+ * Each stub does:
+ *   1. Standard prologue (frame setup, callee-saved push, jit_ctx load) —
+ *      identical to fast prologue except param load is replaced with OSR
+ *      value materialization.
+ *   2. Save RSI (values pointer) into R11 because the load loop may
+ *      overwrite RSI when a vreg is allocated to it.
+ *   3. Pass 1: for every vreg with a phys reg AND a bc_slot, load
+ *      values[bc_slot] into the phys reg using R11 as base.
+ *   4. Pass 2: for vregs without bc_slot but with a compile-time const
+ *      definition, materialize the constant into the phys reg. R11 may
+ *      now be reused as scratch.
+ *   5. JMP rel32 to the loop header block. block_offsets is already
+ *      populated, so the displacement is computed directly (no patch). */
+static void x64_emit_osr_stubs(X64CodegenCtx *ctx, XirCodegenResult *result) {
+    for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
+        uint32_t snap_block_id = ctx->osr_snaps[i].block_id;
+        XirOsrEntry *entry = &result->osr_entries[result->nosr];
+
+        entry->block_id = snap_block_id;
+        if (snap_block_id < ctx->func->nblk)
+            entry->bc_offset = ctx->func->blocks[snap_block_id]->bc_offset;
+        else
+            entry->bc_offset = 0;
+        entry->entry_offset = ctx->buf.pos;
+
+        /* === Standard prologue (mirrors x64_emit_fast_prologue) === */
+        x64_push_r(&ctx->buf, X64_RBP);
+        x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
+
+        XR_DCHECK(ctx->nsub_patches < 16,
+                  "too many sub patches for OSR stub");
+        x64_emit8(&ctx->buf, 0x48);
+        x64_emit8(&ctx->buf, 0x81);
+        x64_emit8(&ctx->buf, 0xEC);
+        ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.pos;
+        x64_emit32(&ctx->buf, X64_JIT_FRAME_BASE);
+
+        x64_push_r(&ctx->buf, X64_RBX);
+        x64_push_r(&ctx->buf, X64_R12);
+        x64_push_r(&ctx->buf, X64_R13);
+        x64_push_r(&ctx->buf, X64_R14);
+        x64_push_r(&ctx->buf, X64_R15);
+
+        /* MOV CORO_REG, RDI; LDR JIT_CTX_REG, [coro + jit_ctx_offset] */
+        x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_RDI);
+        x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG,
+                   (int32_t)XIR_CORO_JIT_CTX_OFFSET);
+
+        /* Save RSI (values pointer) into R11 — RSI may be overwritten by
+         * the vreg load loop when a vreg is allocated to it. */
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RSI);
+
+        /* === Pass 1: load vregs with bc_slot from values[] ===
+         * R11 (SCRATCH_REG) holds values_ptr throughout this loop. */
+        XirBlock *osr_blk = (snap_block_id < ctx->func->nblk)
+                            ? ctx->func->blocks[snap_block_id] : NULL;
+        uint16_t nslots = 0;
+
+        for (uint32_t v = 0;
+             v < ctx->func->nvreg && nslots < XIR_MAX_OSR_SLOTS; v++) {
+            int8_t ri = xra_vreg_reg_at(ctx->xra, snap_block_id, v);
+            if (ri < 0) continue;
+            int16_t slot = ctx->func->vregs[v].bc_slot;
+            if (slot < 0) continue;
+            if (x64_osr_should_skip_vreg(ctx, osr_blk, v, ri)) continue;
+            bool is_fp = (ctx->func->vregs[v].rep == XR_REP_F64);
+            int32_t off = (int32_t)((uint32_t)slot * 8);
+            if (!is_fp) {
+                X64Reg dst = x64_alloc_regs[ri];
+                x64_mov_rm(&ctx->buf, dst, X64_SCRATCH_REG, off);
+                entry->slots[nslots].bc_slot = slot;
+                entry->slots[nslots].phys_reg = (uint8_t)dst;
+                entry->slots[nslots].type = XR_REP_I64;
+                nslots++;
+            } else {
+                X64Xmm dst = x64_alloc_fp_regs[ri];
+                x64_movsd_rm(&ctx->buf, dst, X64_SCRATCH_REG, off);
+                entry->slots[nslots].bc_slot = slot;
+                entry->slots[nslots].phys_reg = (uint8_t)dst;
+                entry->slots[nslots].type = XR_REP_F64;
+                nslots++;
+            }
+        }
+
+        /* === Pass 2: materialize compile-time constants for vregs with
+         * no bc_slot. R11 (values_ptr) is no longer needed and may be
+         * reused as scratch by the const materializer. */
+        for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
+            int8_t ri = xra_vreg_reg_at(ctx->xra, snap_block_id, v);
+            if (ri < 0) continue;
+            int16_t slot = ctx->func->vregs[v].bc_slot;
+            if (slot >= 0) continue;
+            bool is_fp = (ctx->func->vregs[v].rep == XR_REP_F64);
+            x64_osr_materialize_const(ctx, ctx->func->vregs[v].def,
+                                      is_fp ? -1 : ri,
+                                      is_fp ? ri : -1);
+        }
+
+        entry->nslots = nslots;
+
+        /* JMP rel32 to loop header block. block_offsets is populated by
+         * x64_emit_block earlier, so the displacement is known here. */
+        uint32_t target = (snap_block_id < ctx->nblock_offsets)
+                          ? ctx->block_offsets[snap_block_id] : 0;
+        x64_emit8(&ctx->buf, 0xE9);
+        uint32_t rel_origin = ctx->buf.pos + 4;
+        int32_t rel = (int32_t)target - (int32_t)rel_origin;
+        x64_emit32(&ctx->buf, (uint32_t)rel);
+
+        result->nosr++;
+    }
+}
+
 /* ========== Resume Entry Stub (JIT Suspend/Resume) ========== */
 
 /* Emit resume entry stub for suspended coroutines. When a coroutine is
@@ -2376,7 +2747,7 @@ static void x64_emit_resume_entry(X64CodegenCtx *ctx,
     x64_push_r(&ctx->buf, X64_RBP);
     x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
     /* SUB RSP, frame_size (placeholder, patched later) */
-    XR_DCHECK(ctx->nsub_patches < 8, "too many sub patches for resume entry");
+    XR_DCHECK(ctx->nsub_patches < 16, "too many sub patches for resume entry");
     x64_emit8(&ctx->buf, 0x48);
     x64_emit8(&ctx->buf, 0x81);
     x64_emit8(&ctx->buf, 0xEC);
@@ -2612,6 +2983,7 @@ XirCodegenResult xir_codegen_x64(XirFunc *func, XirCodeAlloc *alloc) {
     x64_emit_deopt_stub(&ctx);
     x64_emit_call_c_stub(&ctx);
     x64_emit_barrier_stubs(&ctx);
+    x64_emit_osr_stubs(&ctx, &result);
     x64_emit_resume_entry(&ctx, &result);
 
     /* Patch branches + call stubs */

@@ -5,7 +5,8 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_analyzer_remove_file.c - Phase 2.1 regression tests (A-01 / A-03)
+ * test_analyzer_remove_file.c - regression tests for
+ *                                  xa_analyzer_remove_file()
  *
  * KEY CONCEPT:
  *   Verifies that xa_analyzer_remove_file() leaves the analyzer in a
@@ -13,10 +14,10 @@
  *     1. dependency-graph edges referencing removed symbols are gone
  *     2. file_count drops by exactly one
  *     3. dep_graph_free() reclaims BOTH forward AND reverse chains so
- *        ASan reports no leaks at xa_analyzer_free() (A-01)
+ *        ASan reports no leaks at xa_analyzer_free()
  *
- *   Pre-A-01 dep_graph_free() leaked one allocation per edge for the
- *   analyzer's lifetime. Pre-A-03 xa_analyzer_remove_file() left
+ *   An earlier dep_graph_free() leaked one allocation per edge for the
+ *   analyzer's lifetime. An earlier xa_analyzer_remove_file() left
  *   dangling dep edges pointing at freed symbols.
  */
 
@@ -65,7 +66,7 @@ static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name,
 /* Tests                                                                  */
 /* ---------------------------------------------------------------------- */
 
-// A-01: dep_graph_free reclaims BOTH chains. The "no leak" assertion is
+// dep_graph_free reclaims BOTH chains. The "no leak" assertion is
 // implicit -- the test runs under ASan in CI, and ASan reports any leak
 // of the reverse-chain nodes.
 TEST(dep_graph_free_no_leak) {
@@ -83,13 +84,13 @@ TEST(dep_graph_free_no_leak) {
     xa_dep_add(incr, s2->id, s1->id, XA_DEP_REFERENCE);
     ASSERT_EQ_INT(incr->deps->edge_count, 2);
 
-    // Free the analyzer. Pre-A-01 this leaked the two reverse-chain
+    // Free the analyzer. An earlier implementation leaked the two reverse-chain
     // allocations; under ASan, the test process exits non-zero on leak.
     xa_analyzer_free(a);
 }
 
-// A-03: removing a file drops every edge that touches a symbol owned by
-// that file, and the file_count invariant holds.
+// Removing a file drops every edge that touches a symbol owned by that
+// file, and the file_count invariant holds.
 TEST(remove_file_drops_dep_edges) {
     XaAnalyzer *a = xa_analyzer_new(g_iso);
     ASSERT(a != NULL);
@@ -130,7 +131,7 @@ TEST(remove_file_drops_dep_edges) {
     xa_analyzer_free(a);
 }
 
-// A-03: removing a non-tracked file is a no-op (file_count unchanged,
+// Removing a non-tracked file is a no-op (file_count unchanged,
 // edge_count unchanged). The DCHECK invariants must still hold.
 TEST(remove_file_unknown_path_is_noop) {
     XaAnalyzer *a = xa_analyzer_new(g_iso);

@@ -54,7 +54,7 @@ typedef struct XrAsyncJob {
 
 // ========== Completion Queue (one per Worker) ==========
 //
-// Phase 4.3: lock-free MPSC (multi async-thread producers, single owner
+// Lock-free MPSC (multi async-thread producers, single owner
 // worker consumer). Implemented as a Treiber stack with O(1) bulk drain
 // via atomic_exchange. Order-of-completion is not preserved across
 // pushes, which is fine since the consumer already iterates the whole

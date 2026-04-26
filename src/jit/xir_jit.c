@@ -909,8 +909,7 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro,
             exc.ptr = coro->jit_ctx->exception;
             exc.heap_type = (uint16_t)((XrGCHeader *)exc.ptr)->type;
             coro->jit_ctx->exception = NULL;
-            xr_vm_add_stacktrace(coro->isolate, exc);
-            xr_vm_throw_exception(coro->isolate, exc);
+            xr_vm_unwind_with_trace(coro->isolate, exc);
         }
         // Record deopt for statistics
         if (coro->isolate && coro->isolate->vm.jit)
@@ -1008,8 +1007,7 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
             exc.ptr = coro->jit_ctx->exception;
             exc.heap_type = (uint16_t)((XrGCHeader *)exc.ptr)->type;
             coro->jit_ctx->exception = NULL;
-            xr_vm_add_stacktrace(coro->isolate, exc);
-            xr_vm_throw_exception(coro->isolate, exc);
+            xr_vm_unwind_with_trace(coro->isolate, exc);
         }
         return XIR_JIT_DEOPT;
     }

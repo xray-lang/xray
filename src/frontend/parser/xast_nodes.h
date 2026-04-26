@@ -47,12 +47,12 @@ struct AstNode {
     int column;                   // 1-indexed column number (for LSP)
     int end_line;                 // 1-indexed end line, 0 = unset
     int end_column;               // 1-indexed exclusive end column, 0 = unset
-    // X-01 (Phase 2.4c done): the inline compile_type field has been
+    // The inline compile_type field has been
     // removed. Inferred types live in XaAnalyzer's side table; access
     // via xa_analyzer_get_node_type(analyzer, node). Type-alias-
     // specific resolved types live in TypeAliasNode::resolved_type.
     XrTrivia *leading_comments;   // Comments before this node (for formatter)
-    // L-06: trailing inline comment captured by the lexer on the LAST
+    // Trailing inline comment captured by the lexer on the LAST
     // token consumed for this node (commonly `;` or `}` for stmts /
     // block-bodied decls, the final expression token for expr stmts).
     // Owned by the AST; freed with the node. NULL when the source had

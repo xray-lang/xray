@@ -12,12 +12,10 @@
  *   Today these helpers are synchronous (`fopen / fread / fwrite /
  *   fclose`). They run on the calling coroutine's worker thread and
  *   will block it on slow storage. That is a deliberate, documented
- *   trade-off: the stdlib serialization analysis (P9 in
- *   docs/analysis/stdlib_serialization.md) targets full `XrAsyncPool`
- *   integration, but retrofitting every parseFile / writeFile binding
- *   to yieldable C functions with XrAsyncJob continuations is a
- *   several-day surgery that also touches `src/coro/*` (currently
- *   being reshaped by another team).
+ *   trade-off: full `XrAsyncPool` integration would require turning
+ *   every parseFile / writeFile binding into a yieldable C function
+ *   with XrAsyncJob continuations and rewriting the per-coro IO state
+ *   in `src/coro/*`.
  *
  *   By funnelling all four modules through this single helper we
  *   guarantee:

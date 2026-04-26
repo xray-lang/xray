@@ -26,11 +26,9 @@
  *   any of the bridging machinery above.
  *
  * WHY THIS FILE EXISTS:
- *   Phase 3.4 (C-02) split xstmt_simple.c (1418 lines) into
- *   xstmt_simple.c + xstmt_typed.c by cohesion. The shared helpers
- *   (xstmt_emit_*, xstmt_type_flag_name) moved to xstmt_helpers.c.
- *   Code below is byte-for-byte the pre-split body, only with the
- *   helper symbol prefixes updated.
+ *   xstmt_simple.c is split into xstmt_simple.c + xstmt_typed.c by
+ *   cohesion. The shared helpers (xstmt_emit_*, xstmt_type_flag_name)
+ *   live in xstmt_helpers.c.
  */
 
 #include "xstmt.h"

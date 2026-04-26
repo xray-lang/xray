@@ -22,10 +22,11 @@
  *   xworker_blocked.c, xworker_pool.c, xworker_runq.c.
  *
  * WHY THIS LAYOUT:
- *   Prior to Phase 1 of docs/engineering/coro_refactor_plan.md this
- *   file was 3167 lines — past the 3000-line hard limit and mixing
- *   six distinct concerns. It is now the "cold" lifecycle boundary
- *   that stitches the rest together.
+ *   Hot-path scheduling, stealing, execution, handoff, blocked queue,
+ *   pool and runq logic each live in their own .c so this file stays
+ *   the cold lifecycle boundary. Mixing them caused this file to
+ *   balloon past the size limit and obscured ownership of mutable
+ *   per-coro-state fields.
  */
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
@@ -199,7 +200,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->active_workers, 0);
 
     // Initialize idle P/M management (lock-free Treiber stacks).
-    // sched_lock removed in Phase 4.1; all three lists use atomic CAS.
+    // No sched_lock: all three idle lists use atomic CAS.
     atomic_store(&runtime->idle_p_head, (XrProc *)NULL);
     atomic_store(&runtime->idle_p_count, 0);
     atomic_store(&runtime->idle_m_head, (XrMachine *)NULL);
@@ -370,7 +371,7 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
     bool expected = false;
     if (!atomic_compare_exchange_strong(&runtime->threads_started, &expected, true)) {
         // Another thread won the race, wait for them to finish.
-        // Phase 7.1: futex-based wait instead of busy sched_yield(). Each
+        // Futex-based wait instead of busy sched_yield(). Each
         // worker_loop bumps started_workers + wakes this address, giving us
         // sub-millisecond wakeup and zero spinning.
         int expected_workers = runtime->worker_count - 1;
@@ -404,7 +405,7 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
     pthread_attr_destroy(&attr);
 
     // Wait for Worker 1..N to become ready.
-    // Phase 7.1: futex-based wait (1 ms timeout guards against missed wake).
+    // Futex-based wait (1 ms timeout guards against missed wake).
     int expected_workers = runtime->worker_count - 1;
     for (;;) {
         int cur = atomic_load_explicit(&runtime->started_workers,
@@ -439,7 +440,7 @@ void xr_runtime_stop(XrRuntime *runtime) {
 
     // Wake all idle M threads parked in handoff_thread_entry.
     //
-    // Lock-free traversal (Phase 4.1): idle_m_head is now a Treiber stack.
+    // Lock-free traversal: idle_m_head is now a Treiber stack.
     // We snapshot the head via atomic_load and walk the chain. Because M is
     // never freed and idle_link is only mutated on push/pop (which happen
     // under runtime->running), a racy load here yields a consistent

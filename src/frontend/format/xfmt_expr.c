@@ -11,7 +11,7 @@
  *   xfmt_emit_expression() is the single dispatch entry that other
  *   formatter modules (stmt, decl) call into. Literal strings and
  *   template strings delegate to xfmt_literal.c so re-escaping stays
- *   in one place (Phase 1.8 F-01/F-02).
+ *   in one place.
  */
 
 #include "xfmt_internal.h"
@@ -38,7 +38,7 @@ static void fmt_literal(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_char(ctx, 'n');
             break;
         case AST_LITERAL_STRING: {
-            // F-02: re-escape via xfmt_emit_string so quotes / backslashes /
+            // Re-escape via xfmt_emit_string so quotes / backslashes /
             // control bytes round-trip through the parser.
             const char *s = node->as.literal.raw_value.string_val;
             xfmt_emit_string(ctx, s, s ? (int)strlen(s) : 0);
@@ -116,8 +116,8 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
 }
 
 static void fmt_template_string(XrFmtContext *ctx, AstNode *node) {
-    // F-01: backticks were dropped from the lexer; emit a canonical
-    // double-quoted template via xfmt_emit_template_string. F-02: the
+    // Backticks were dropped from the lexer; emit a canonical
+    // double-quoted template via xfmt_emit_template_string. The
     // helper escapes literal parts and `$` to keep round-trip safe.
     xfmt_write_indent(ctx);
     xfmt_emit_template_string(ctx, node, xfmt_emit_expression);

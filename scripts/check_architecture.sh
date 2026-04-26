@@ -1,7 +1,8 @@
 #!/bin/bash
 # check_architecture.sh - Automated architecture constraint checker for xray
 #
-# Checks rules defined in docs/design/901_c_engineering_standards.md
+# Enforces module layering, file size limits, and forbidden direct calls
+# (raw malloc/free, custom hash impls, etc.).
 # Run from project root: scripts/check_architecture.sh
 
 set -euo pipefail

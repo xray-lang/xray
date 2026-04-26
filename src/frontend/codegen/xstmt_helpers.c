@@ -7,12 +7,10 @@
  *
  * xstmt_helpers.c - Shared helpers for statement-level type bridging
  *
- * Lifted unchanged from xstmt_simple.c during Phase 3.4 (C-02). The
- * four exported functions and the two file-static helpers that
- * support them used to be inline at the top of xstmt_simple.c; the
- * split into xstmt_simple.c / xstmt_typed.c forced the move. No
- * behaviour changes -- byte-for-byte identical to the pre-split
- * implementation.
+ * Holds the four exported helper functions plus the two file-static
+ * helpers that support them. They live in this dedicated TU so that
+ * xstmt_simple.c and xstmt_typed.c can share them without one having
+ * to depend on the other.
  */
 
 #include "xstmt_helpers.h"

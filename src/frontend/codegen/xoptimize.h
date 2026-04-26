@@ -92,10 +92,10 @@ XR_FUNC bool xr_opt_fold_comparison(
 
 /* ========== Type-Aware Optimization Hints ========== */
 
-// Phase 3 (C-02): the XrType-classification helpers (XrOptHint enum
-// + xr_opt_get_hint / xr_opt_can_unbox_arith / xr_opt_can_devirt)
-// have moved to runtime/value/xtype_opt_hint.h so the analyzer's
-// Pass 3 JIT metadata can use them without pulling a downward
+// The XrType-classification helpers (XrOptHint enum + xr_opt_get_hint
+// / xr_opt_can_unbox_arith / xr_opt_can_devirt) live in
+// runtime/value/xtype_opt_hint.h so the analyzer's JIT-metadata pass
+// can use them without pulling a downward
 // analyzer -> codegen include. xoptimize.{h,c} now only contains
 // the codegen-only constant-folding helpers (xr_opt_fold_*).
 

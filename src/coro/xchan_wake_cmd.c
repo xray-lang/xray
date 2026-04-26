@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xchan_wake_cmd.c - Channel wake command MPSC queue (Phase 0)
+ * xchan_wake_cmd.c - Channel wake command MPSC queue
  *
  * KEY CONCEPT:
  *   When a channel send/recv/close succeeds, remote workers that may have

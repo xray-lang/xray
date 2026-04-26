@@ -65,10 +65,10 @@ typedef struct XrCoroPoolBlock {
 //   2. Recycle path: from free list (lock-free Treiber stack)
 //   3. Expansion path: allocate new memory block (protected by grow_lock)
 //
-// Phase 4.2: free_list changed from mutex-protected list to a lock-free
-// Treiber stack. Link chains via coroutine->next (re-used; cleared
-// immediately on pop by memset). ABA: a popped coroutine runs user code
-// before being freed, so the re-push window is long enough that real
+// free_list is a lock-free Treiber stack (no mutex). Link chains via
+// coroutine->next (re-used; cleared immediately on pop by memset).
+// ABA: a popped coroutine runs user code before being freed, so the
+// re-push window is long enough that real
 // ABA pressure requires sustained sub-μs churn — not observed so far.
 typedef struct XrCoroStructPool {
     XrCoroPoolBlock *blocks;                   // Pre-allocated block list

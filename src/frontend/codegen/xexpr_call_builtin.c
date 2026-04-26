@@ -7,7 +7,7 @@
  *
  * xexpr_call_builtin.c - Builtin function call compilation
  *
- * Lifted from xexpr_call.c during Phase 3 (C-02). Contains:
+ * Holds the builtin-call dispatcher subset of xexpr_call.c. Contains:
  *   - the per-builtin compile_builtin_* helpers
  *   - the binary-searched builtin_functions[] table
  *   - the xr_compile_call_builtin() dispatcher (which also handles
@@ -319,20 +319,33 @@ static int compile_builtin_copy(XrCompilerContext *ctx, XrCompiler *compiler, Ca
 }
 
 static int compile_builtin_dump(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
+    // OP_DUMP contract: A = value register, B = literal indent (0..8), C = unused.
+    // The indent argument must be a compile-time integer literal so it can be
+    // encoded directly in the B field (the VM/JIT read it as a raw int, not a
+    // register reference).
     if (node->arg_count == 1 || node->arg_count == 2) {
         XrExprDesc val_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         int val_reg = xexpr_to_anyreg(ctx, compiler, &val_desc);
+
+        int indent = 0;
         if (node->arg_count == 2) {
-            XrExprDesc indent_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
-            int indent_reg = xexpr_to_anyreg(ctx, compiler, &indent_desc);
-            int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_DUMP, result_reg, val_reg, indent_reg);
-            xreg_set_freereg(compiler->regalloc, result_reg + 1);
-            return result_reg;
+            AstNode *arg1 = node->arguments[1];
+            if (arg1->type != AST_LITERAL_INT) {
+                xr_compiler_error(ctx, compiler,
+                    "dump() indent argument must be an integer literal");
+            } else {
+                int64_t v = arg1->as.literal.raw_value.int_val;
+                if (v < 0) v = 0;
+                if (v > 8) v = 8;
+                indent = (int)v;
+            }
         }
+        emit_abc(compiler->emitter, OP_DUMP, val_reg, indent, 0);
+        reg_free(compiler, val_reg);
+
+        // dump() returns null
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_DUMP, result_reg, val_reg, 0);
-        xreg_set_freereg(compiler->regalloc, result_reg + 1);
+        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "dump() expects 1 or 2 arguments, got %d", node->arg_count);

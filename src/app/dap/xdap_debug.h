@@ -248,7 +248,7 @@ XR_FUNC bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx,
 XR_FUNC bool xr_debug_hot_reload(XrayIsolate *isolate, const char *path);
 
 // ============================================================================
-// Disassembly API (Phase 4)
+// Disassembly API
 // ============================================================================
 
 // Disassembled instruction info

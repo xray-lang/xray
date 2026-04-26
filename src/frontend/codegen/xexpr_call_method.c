@@ -5,19 +5,17 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xexpr_call_method.c - Method-call dispatch (C-02 split)
+ * xexpr_call_method.c - Method-call dispatch
  *
  * IMPLEMENTATION NOTE:
- *   Body extracted verbatim from xexpr_call.c::compile_call_internal
- *   (the `if (node->callee->type == AST_MEMBER_ACCESS) { ... }`
- *   branch). The split was performed by Phase 3.6 to bring
- *   compile_call_internal under the 150-line guideline and to give
- *   method-dispatch its own translation unit so contributors editing
- *   StringBuilder / Channel / Map / Coro inlines no longer need to
- *   scroll past 1000+ lines of regular-call infrastructure.
+ *   Implements the `obj.method(...)` lowering branch of
+ *   compile_call_internal. Living in its own TU lets contributors edit
+ *   StringBuilder / Channel / Map / Coro inlines without scrolling
+ *   past 1000+ lines of regular-call infrastructure, and keeps the
+ *   regular-call dispatcher under the 150-line guideline.
  *
- *   Includes mirror xexpr_call.c exactly so any helper used by the
- *   inline optimisations resolves identically.
+ *   Includes mirror xexpr_call.c so any helper used by the inline
+ *   optimisations resolves identically.
  */
 
 #include "xexpr_call_method.h"

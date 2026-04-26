@@ -148,7 +148,7 @@ typedef struct XrMachine {
     struct XrMachine *idle_link;   // Idle list link (shared by idle_worker_list
                                     // OR idle_m_head at any moment — see xworker.h)
 
-    /* === Idle-stack guard (Phase 4.1) ===
+    /* === Idle-stack guard ===
      * Prevents the same M from being pushed twice onto idle_worker_list.
      * Set to true by idle_worker_push CAS, cleared by idle_worker_pop.
      * This is required because we removed idle_worker_remove (a lock-free

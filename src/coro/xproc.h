@@ -186,7 +186,7 @@ typedef struct XrProc {
     int blocked_count;
     int select_waiter_count;
 
-    /* === Canceled Timer Node Freelist (Phase 3.2: avoids malloc/free churn) === */
+    /* === Canceled Timer Node Freelist (avoids malloc/free churn) === */
     #define XR_CANCEL_NODE_POOL_MAX 64
     struct XrCanceledTimerNode *cancel_node_free;
     int cancel_node_free_count;
@@ -213,7 +213,7 @@ typedef struct XrProc {
 
     /* === Statistics (cache-line isolated) ===
      *
-     * Phase 4.4: all owner-written counters are grouped into XrProcStats
+     * All owner-written counters are grouped into XrProcStats
      * and aligned to XR_CACHE_LINE. This moves them onto dedicated cache
      * lines away from hot per-P scheduler fields (lifo_slot / runq) and
      * the potentially cross-worker-written cont_deque, eliminating a

@@ -18,7 +18,7 @@
  *   for diagnostics.
  *
  * WHY THIS HEADER EXISTS:
- *   Phase 3.4 (C-02) split xstmt_simple.c into xstmt_simple.c +
+ *   xstmt_simple.c is split into xstmt_simple.c +
  *   xstmt_typed.c. The four helpers below were file-static in
  *   xstmt_simple.c but used by both halves of the split. Promoting
  *   them to a small shared header is preferable to duplicating

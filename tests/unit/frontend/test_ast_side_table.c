@@ -5,12 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_ast_side_table.c - Phase 2 X-01 acceptance tests
+ * test_ast_side_table.c - Acceptance tests for the AST -> XrType side table
  *
  * KEY CONCEPT:
  *   Verifies the AST -> XrType side table that replaced the inline
- *   `AstNode::compile_type` field in Phase 2.4. Two API surfaces are
- *   exercised:
+ *   `AstNode::compile_type` field. Two API surfaces are exercised:
  *
  *     1. The raw `xa_node_table_*` map from xa_node_table.{c,h}.
  *        The map is pointer-keyed and never dereferences keys, so the

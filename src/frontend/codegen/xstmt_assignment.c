@@ -180,7 +180,7 @@ static bool check_readonly_chain(XrCompilerContext *ctx, XrCompiler *compiler,
     // Get object type
     XrType *obj_type = NULL;
 
-    // X-01 Phase 2.4b: read inferred type via the side table.
+    // Read the inferred type via the analyzer side table.
     XrType *member_obj_t = xa_analyzer_get_node_type(ctx->analyzer, member->object);
     if (member_obj_t) {
         obj_type = member_obj_t;
@@ -291,8 +291,8 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
     // Optimization 2: Struct field access (compile-time type inference)
     XrType *obj_type = NULL;
 
-    // Prefer expression node's compile_type (convert XrType* to XrType*)
-    // X-01 Phase 2.4b: read inferred type via the side table.
+    // Prefer expression node's inferred type (convert XrType* to XrType*).
+    // Read it via the analyzer side table.
     XrType *node_obj_t = xa_analyzer_get_node_type(ctx->analyzer, node->object);
     if (node_obj_t) {
         obj_type = node_obj_t;
@@ -465,7 +465,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
      * Handles: r.origin.x = 99.0 where r.origin returns a nested struct_ref
      * Uses compile_type set by analyzer on intermediate MemberAccess nodes
      */
-    // X-01 Phase 2.4b: read inferred type via the side table.
+    // Read the inferred type via the analyzer side table.
     XrType *node_obj_ct = xa_analyzer_get_node_type(ctx->analyzer, node->object);
     if (ctx->class_registry && node_obj_ct) {
         XrType *obj_ct = node_obj_ct;

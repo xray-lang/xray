@@ -20,7 +20,7 @@
 
 // Forward declaration: the formatter only stores an XrayIsolate pointer
 // in XrFmtContext (used by xtype printing). Pulling in xray_isolate.h
-// here would couple the frontend to the public API header (F-04).
+// here would couple the frontend to the public API header.
 typedef struct XrayIsolate XrayIsolate;
 
 // Format configuration

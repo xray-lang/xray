@@ -1516,9 +1516,8 @@ XirPassChange xir_pass_dse(XirFunc *func) {
 
 /* After every pass we rebuild vreg.def pointers and drop the cached
  * dominator / loop / def-use analyses so the next consumer sees a
- * coherent snapshot.  Phase 2 introduced these caches; invalidating
- * them blindly is correct (later phases can add a change-tracker for
- * finer-grained invalidation). */
+ * coherent snapshot. Blanket invalidation is correct; a fine-grained
+ * change tracker could be added if profiling shows it matters. */
 #define XIR_RESET_ANALYSIS(fn) do {                      \
     xir_rebuild_vreg_defs(fn);                           \
     xir_func_invalidate_loops(fn); /* transitively dom */ \
@@ -1722,9 +1721,9 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
     budget.deadline_ns = budget.start_ns + 50ULL * 1000000ULL; // 50ms
     budget.timed_out   = false;
 
-    /* Phase 0: initial type/rep analysis + DCE.  Runs even at
-     * -O0 because the rest of the compiler expects vreg
-     * representations to be resolved. */
+    /* Canon group: initial type/rep analysis + DCE. Runs even at -O0
+     * because the rest of the compiler expects vreg representations to
+     * be resolved. */
     run_group("canon", func, proto, PG_CANON, XIR_PIPELINE_SIZE(PG_CANON), 3, &budget);
 
     if (opt >= XIR_OPT_BASIC && !budget.timed_out) {

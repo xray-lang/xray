@@ -110,7 +110,7 @@ XR_FUNC XaIncrementalCtx *xa_incremental_new(void);
 XR_FUNC void xa_incremental_free(XaIncrementalCtx *ctx);
 
 // Dependency graph operations.
-// A-03: per-symbol delete API was removed (no caller, half-broken). Use
+// The per-symbol delete API was removed (no caller, half-broken). Use
 // xa_dep_remove_symbols() to drop every edge that touches any of `ids[]`;
 // it is the only sanctioned cleanup path and is called from
 // xa_analyzer_remove_file() in xanalyzer.c.
@@ -150,7 +150,7 @@ XR_FUNC void xa_changeset_free(XaChangeSet *cs);
 // Propagate changes through dependency graph
 XR_FUNC void xa_propagate_dirty(XaIncrementalCtx *ctx, XaChangeSet *changes);
 
-// A-02: xa_incremental_update() was deleted. The visible analyzer entry
+// xa_incremental_update() was deleted. The visible analyzer entry
 // points are now xa_analyzer_refresh_file() (full-file rebuild + dirty
 // propagation) and xa_analyzer_invalidate_range() (block-level invalidate
 // stub) -- both declared in xanalyzer.h.

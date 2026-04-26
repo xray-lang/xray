@@ -203,7 +203,7 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
 void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "worker_push: NULL worker");
     XR_DCHECK(coro != NULL, "worker_push: NULL coro");
-    // Phase 0: Chase-Lev push is owner-thread-only. Catch residual
+    // Chase-Lev push is owner-thread-only. Catch residual
     // cross-worker callers that should go through inbox instead.
     // Skip check when TLS is not yet initialized (startup / single-thread).
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,

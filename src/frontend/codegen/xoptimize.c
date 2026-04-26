@@ -205,7 +205,7 @@ bool xr_opt_fold_comparison(
 
 
 /* ========== Type-Aware Optimization Implementation ==========
- * Phase 3 (C-02): XrType-classification helpers (xr_opt_get_hint,
+ * The XrType-classification helpers (xr_opt_get_hint,
  * xr_opt_can_unbox_arith, xr_opt_can_devirt) have moved to
  * runtime/value/xtype_opt_hint.c. This TU now hosts only the
  * codegen-time constant-folding implementations above.

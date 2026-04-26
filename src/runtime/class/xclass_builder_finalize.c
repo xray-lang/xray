@@ -98,7 +98,7 @@ static int generate_vtable(XrClass *cls) {
         } else {
             // Route realloc through a temporary so a failed grow does
             // not overwrite cls->vtable with NULL and leak the previous
-            // buffer (docs/rules/c-coding-standards.md).
+            // buffer.
             XrMethod **new_vtable = (XrMethod**)xr_realloc(cls->vtable,
                 (cls->vtable_size + 1) * sizeof(XrMethod*));
             if (!new_vtable) {

@@ -908,7 +908,7 @@ bool try_compile_higher_order_call(XrCompilerContext *ctx, XrCompiler *compiler,
         return false;
     }
 
-    // X-01 Phase 2.4b: read inferred type via the analyzer side table.
+    // Read the inferred type via the analyzer side table.
     XrType *obj_type = xa_analyzer_get_node_type(ctx->analyzer, member->object);
 
     // Fallback: infer type from expression if compile_type is not set

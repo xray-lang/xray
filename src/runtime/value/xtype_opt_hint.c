@@ -7,11 +7,11 @@
  *
  * xtype_opt_hint.c - Type-derived optimization hints
  *
- * Lifted from src/frontend/codegen/xoptimize.c during Phase 3 (C-02)
- * so the analyzer's Pass 3 JIT metadata can call into it without
- * pulling a downward analyzer->codegen include. The constant-folding
- * helpers (xr_opt_fold_*) stay in xoptimize.c — those genuinely belong
- * to the codegen layer.
+ * Holds the type-classification optimisation hints. Living in the
+ * runtime/value layer lets the analyzer's JIT-metadata pass call into
+ * it without pulling a downward analyzer->codegen include. The
+ * constant-folding helpers (xr_opt_fold_*) stay in xoptimize.c — those
+ * genuinely belong to the codegen layer.
  */
 
 #include "xtype_opt_hint.h"

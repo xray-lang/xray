@@ -24,9 +24,9 @@
  * ========================================================================== */
 
 // Forward declarations for visitors defined later in this file. The
-// canonical decls also live in xanalyzer_visitor_internal.h. Phase 2.3
-// removed xa_visit_match_expr (moved to xanalyzer_visitor_pattern.c) and
-// xa_visit_call (moved to xanalyzer_visitor_call.c) from this file.
+// canonical decls also live in xanalyzer_visitor_internal.h.
+// xa_visit_match_expr lives in xanalyzer_visitor_pattern.c and
+// xa_visit_call lives in xanalyzer_visitor_call.c.
 XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node);
 XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node);
 
@@ -108,14 +108,13 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
             ctx->flow, name, declared_type, ctx->flow->current_flow, ctx->cache);
         // Never means unreachable flow path — fall back to declared type
         if (narrowed && narrowed != declared_type && !XR_TYPE_IS_NEVER(narrowed)) {
-            // X-01 Phase 2.4c: side-table is now the only store.
+            // Side table is the canonical type store.
             xa_analyzer_set_node_type(ctx->analyzer, node, narrowed);
             return narrowed;
         }
     }
 
-    // Store type on AST node for code generation phase.
-    // X-01 Phase 2.4c: side-table is now the only store.
+    // Store the declared type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, declared_type);
     return declared_type;
 }

@@ -39,7 +39,7 @@
 
 // ========== Lock-free Idle Worker Stack ==========
 //
-// Treiber stack of parked XrMachine* (Phase 4.1). Replaces the prior
+// Treiber stack of parked XrMachine*. Replaces the prior
 // fixed-size int[] + sched_lock design. Each M chains through its
 // idle_link pointer, which is also used (mutually exclusively) by the
 // idle_m_head stack — see xworker.h for the sharing invariant.
@@ -303,7 +303,7 @@ after_netpoll:
     // Drain MPSC inbox
     worker_drain_inbox(worker);
 
-    // Drain channel wake command queue (Phase 0: ownership-safe routing).
+    // Drain channel wake command queue (ownership-safe routing).
     // Commands arrive from remote workers that need us to wake our local
     // blocked waiters on specific channels.
     xr_worker_drain_chan_wake_queue(worker);
@@ -607,7 +607,7 @@ static void worker_park(XrWorker *worker) {
     }
 }
 
-// ========== Worker Main Loop Helpers (Phase 5 split) ==========
+// ========== Worker Main Loop Helpers ==========
 
 // Set CPU affinity for the worker's thread (best effort; advisory on mac).
 static void worker_bind_cpu(XrWorker *worker) {
@@ -788,7 +788,7 @@ static inline void worker_reset_spinning(XrWorker *worker, XrRuntime *runtime) {
 // M (Worker) must acquire P (Processor) to execute G (Goroutine/coroutine)
 // When M blocks, can release P to other M (Hand Off).
 //
-// Phase 5 split: the hot inner loop delegates to worker_housekeeping,
+// The hot inner loop delegates to worker_housekeeping,
 // worker_try_steal, worker_spin, and worker_reset_spinning. The main
 // function remains the state machine but stays under the 150-line limit.
 void *worker_loop(void *arg) {
@@ -801,7 +801,7 @@ void *worker_loop(void *arg) {
     worker_bind_cpu(worker);
 
     // Two counters: started_workers for startup sync, active_workers for GC coord.
-    // Phase 7.1: wake xr_runtime_ensure_workers that's futex-waiting on this counter.
+    // Wake xr_runtime_ensure_workers that's futex-waiting on this counter.
     atomic_fetch_add_explicit(&runtime->started_workers, 1, memory_order_release);
     xr_park_futex_wake(&runtime->started_workers);
 

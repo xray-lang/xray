@@ -30,7 +30,7 @@
 #include <string.h>
 #include <stdio.h>
 
-// Phase 3: forward-declare wake helper (defined later in this file) so that
+// Forward-declare wake helper (defined later in this file) so that
 // the timer_channel_fire_cb callback at the top can reference it.
 static void channel_wake_coro(XrCoroutine *coro);
 
@@ -175,7 +175,7 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
     return ch;
 }
 
-// Phase 3 (CORO 3.1): Timer wheel callback for time.after.
+// Timer wheel callback for time.after.
 // Fires once when the timeout elapses, writes current time to the channel
 // buffer so that any subsequent recv/tryRecv finds data immediately.
 // If a receiver is already blocked on this channel, wake it directly.
@@ -215,7 +215,7 @@ static void timer_channel_fire_cb(void *arg) {
 
 // Create Timer Channel
 // Returns a read-only channel that sends current time after timeout.
-// Phase 3: uses embedded tw_timer for timer wheel registration.
+// Uses the channel's embedded tw_timer for timer wheel registration.
 XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     if (!X || !xr_isolate_get_sys_heap(X)) return NULL;
 
@@ -248,7 +248,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
 
     atomic_store_explicit(&ch->timer_fired, false, memory_order_relaxed);
 
-    // Phase 3: initialize embedded timer node
+    // Initialize the embedded timer-wheel node.
     ch->tw_timer.prev = NULL;
     ch->tw_timer.next = NULL;
     ch->tw_timer.slot = XR_TW_SLOT_INACTIVE;
@@ -263,7 +263,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     return ch;
 }
 
-// Phase 3: arm the timer channel on the given timer wheel.
+// Arm the timer channel on the given timer wheel.
 // Must be called from the owner worker after xr_channel_new_timer().
 // If the timeout has already elapsed (e.g. after 0), fire immediately
 // so that the first OP_CHAN_TRY_RECV poll finds data in the buffer.
@@ -282,7 +282,7 @@ void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
     xr_twheel_set_timer(tw, &ch->tw_timer, timer_channel_fire_cb, ch, timeout_pos);
 }
 
-// Check if Timer Channel has fired (Phase 3: thin check, no polling).
+// Check if Timer Channel has fired (thin atomic check, no polling).
 // Returns true if the timer has already delivered its value to the buffer.
 bool xr_channel_timer_ready(XrChannel *ch) {
     if (!ch) return false;
@@ -329,7 +329,7 @@ static inline bool channel_empty(XrChannel *ch) {
     return ch->buf_count == 0;
 }
 
-// ========== Channel Send/Recv Primitives (Phase 6.2) ==========
+// ========== Channel Send/Recv Primitives ==========
 //
 // These helpers factor the direct-transfer and buffer push/pop patterns
 // that used to be copy-pasted across xr_channel_send / xr_channel_recv /
@@ -565,7 +565,7 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     // adds 10-100x latency per hop, collapsing pipeline throughput with
     // many stages.
     //
-    // Close fan-out (Phase 6.3): xr_channel_close may have hundreds of
+    // Close fan-out: xr_channel_close may have hundreds of
     // waiters.  Piling them all onto the current worker's LIFO serializes
     // every subsequent wake on one thread.  For cross-worker waiters we
     // route via the target worker's MPSC inbox, so the fan-out parallelises

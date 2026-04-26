@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xa_node_table.c - AST -> XrType side table implementation (X-01)
+ * xa_node_table.c - AST -> XrType side table implementation
  *
  * IMPLEMENTATION NOTE:
  *   The map uses pointer-keyed open chaining (linked list per bucket)

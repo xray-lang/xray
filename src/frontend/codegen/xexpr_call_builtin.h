@@ -13,11 +13,9 @@
  *   opcodes for them instead of OP_CALL. This file owns the lookup
  *   table, the per-builtin compilers, and the dispatcher.
  *
- *   xexpr_call.c was 1882 lines pre-Phase-3 because the builtin
- *   table lived inline alongside the main `compile_call_internal`
- *   dispatcher. Phase 3 (C-02) extracts the builtin section here so
- *   the call dispatcher stays focused on the regular / method /
- *   tail-call paths. The split is by cohesion, not size.
+ *   The builtin section lives here so the xexpr_call.c dispatcher
+ *   stays focused on the regular / method / tail-call paths. The split
+ *   is by cohesion, not size.
  *
  * BOUNDARY:
  *   Builtins recognised here are *call-site* builtins (the call

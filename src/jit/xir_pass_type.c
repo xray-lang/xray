@@ -12,9 +12,6 @@
  *   (I64/F64/PTR/BOOL) based on defining instructions and guard assertions.
  *   Specialization replaces generic opcodes with type-specific fast paths.
  *   Range analysis detects induction variables for bounds-check elimination.
- *
- * SPLIT FROM:
- *   Originally part of xir_pass_advanced.c; extracted during Phase 7.
  */
 
 #include "xir_pass_internal.h"

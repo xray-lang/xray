@@ -428,7 +428,7 @@ typedef struct XrSelectCase {
     bool is_send;
     XrValue send_value;
     int result_reg;
-    // Phase 6.1: per-bucket select queue linkage (avoids O(N) blocked scan)
+    // Per-bucket select queue linkage (avoids O(N) blocked scan).
     struct XrSelectCase *bucket_next;  // next case node in same bucket's select queue
     XrCoroutine *owner;                // back-pointer to owning coroutine
 } XrSelectCase;
@@ -447,7 +447,7 @@ typedef struct XrBlockedBucket {
     XrCoroutine *send_tail;
     XrCoroutine *recv_head;
     XrCoroutine *recv_tail;
-    XrSelectCase *select_head;       // Phase 6.1: per-channel select case chain
+    XrSelectCase *select_head;       // Per-channel select case chain.
     XrSelectCase *select_tail;
     struct XrBlockedBucket *next;
 } XrBlockedBucket;
@@ -483,7 +483,7 @@ typedef struct XrScopeContext {
     struct XrScopeContext *parent;
     uint8_t mode;                     // XrScopeMode
     _Atomic bool cancel_requested;    // linked scope: set when first child fails
-    _Atomic bool child_lock;          // Phase 2 (CORO-10): spinlock for first_child list
+    _Atomic bool child_lock;          // Spinlock guarding first_child list.
     XrValue first_error;              // linked scope: first child error
     struct XrArray *errors;           // supervisor scope: collected error array
     struct XrCoroutine *first_child;  // linked list of child coros in this scope
@@ -500,7 +500,7 @@ typedef struct XrCoroState {
     struct XrCoroRegistry *coro_registry;  // Named coroutine registry (lazy init)
 } XrCoroState;
 
-/* ========== Coroutine API (moved from vm/xvm_internal.h, Phase 4) ========== */
+/* ========== Coroutine API ========== */
 
 struct XrayIsolate;
 struct XrClosure;

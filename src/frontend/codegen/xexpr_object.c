@@ -516,7 +516,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
     // Instance field access optimization (using frontend type inference)
     // Priority: local->compile_type (set by Analyzer-inferred param types or annotations)
     //         > xa_analyzer_get_node_type(ctx->analyzer, node->object)
-    //           (set by Analyzer expression inference, X-01 side table)
+    //           (set by Analyzer expression inference, side table)
     XrType *obj_type = NULL;
 
     if (node->object->type == AST_VARIABLE) {
@@ -532,15 +532,15 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             }
         }
 
-        // Fallback to analyzer-inferred type if local type is absent or generic.
-        // X-01 Phase 2.4b: read via side table.
+        // Fallback to analyzer-inferred type if local type is absent or
+        // generic. The inferred type is read via the analyzer side table.
         if (!obj_type || XR_TYPE_IS_UNKNOWN(obj_type)) {
             XrType *ast_type = xa_analyzer_get_node_type(ctx->analyzer, node->object);
             if (ast_type && !XR_TYPE_IS_UNKNOWN(ast_type))
                 obj_type = ast_type;
         }
     } else {
-        // Non-variable: use analyzer-inferred type. X-01 Phase 2.4b.
+        // Non-variable: use analyzer-inferred type from the side table.
         XrType *ast_type = xa_analyzer_get_node_type(ctx->analyzer, node->object);
         if (ast_type)
             obj_type = ast_type;

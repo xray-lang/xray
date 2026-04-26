@@ -505,7 +505,7 @@ static XrCFuncResult net_dial_continue(XrayIsolate *X, int status, void *ctx, Xr
 }
 
 static XrCFuncResult net_dial_step(XrayIsolate *X, NetDialState *state, XrValue *result) {
-    // Phase 1: check connect result
+    // Check the connect result.
     int error = 0;
     socklen_t elen = sizeof(error);
     if (getsockopt(state->fd, SOL_SOCKET, SO_ERROR, &error, &elen) < 0 || error != 0) {

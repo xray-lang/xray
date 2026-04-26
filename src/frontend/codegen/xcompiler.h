@@ -127,7 +127,7 @@ typedef struct XrCompiler {
     XRegAlloc *regalloc;
     XrEmitter *emitter;            // Bytecode emitter with peephole optimization
 
-    // Scope block tracking (Phase 5: continuation stealing)
+    // Scope block tracking for continuation stealing.
     int scope_block_depth;  // > 0 when inside scope{}, go emits OP_SPAWN_CONT
 
     // Loop control
