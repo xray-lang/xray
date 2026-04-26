@@ -25,6 +25,7 @@
 #include "xvm_internal.h"
 #include "xic_field_table.h"
 #include "xic_method.h"
+#include "xic_builtin.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xchunk.h"
@@ -64,9 +65,20 @@ static bool ic_tables_grow(XrVMContext *ctx, uint32_t needed) {
     }
     ctx->ic_method_tables = new_method;
 
+    size_t bbytes = sizeof(struct XrICBuiltinTable *) * (size_t)new_cap;
+    struct XrICBuiltinTable **new_builtin =
+        (struct XrICBuiltinTable **)xr_realloc(ctx->ic_builtin_tables, bbytes);
+    if (!new_builtin) {
+        // Field/method arrays already grew; leave capacity at old value
+        // so their tails stay unused (per-array NULL convention).
+        return false;
+    }
+    ctx->ic_builtin_tables = new_builtin;
+
     for (uint32_t i = ctx->ic_tables_capacity; i < new_cap; i++) {
         ctx->ic_field_tables[i] = NULL;
         ctx->ic_method_tables[i] = NULL;
+        ctx->ic_builtin_tables[i] = NULL;
     }
     ctx->ic_tables_capacity = new_cap;
     return true;
@@ -127,6 +139,34 @@ XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx, XrProto *proto) {
     return table;
 }
 
+XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx, XrProto *proto) {
+    XR_DCHECK(ctx != NULL, "ensure_ic_builtin: NULL ctx");
+    XR_DCHECK(proto != NULL, "ensure_ic_builtin: NULL proto");
+
+    uint32_t pid = proto->proto_id;
+    if (pid >= ctx->ic_tables_capacity) {
+        if (!ic_tables_grow(ctx, pid + 1u)) return NULL;
+    }
+
+    XrICBuiltinTable *table = ctx->ic_builtin_tables[pid];
+    if (table) return table;
+
+    /* Pre-size to PROTO_CODE_COUNT so cache_index = pc - PROTO_CODE_BASE
+     * is always a valid lookup key (matches the field/method tables). */
+    int cache_count = PROTO_CODE_COUNT(proto);
+    table = xr_ic_builtin_table_new(cache_count);
+    if (!table) return NULL;
+    for (int i = 0; i < cache_count; i++) {
+        if (xr_ic_builtin_table_alloc(table) < 0) {
+            xr_ic_builtin_table_free(table);
+            return NULL;
+        }
+    }
+
+    ctx->ic_builtin_tables[pid] = table;
+    return table;
+}
+
 /* ========== Read-side accessors ========== */
 
 XrICFieldTable *xr_vm_ctx_get_ic_fields(const XrVMContext *ctx,
@@ -143,6 +183,14 @@ XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx,
     uint32_t pid = proto->proto_id;
     if (pid >= ctx->ic_tables_capacity || !ctx->ic_method_tables) return NULL;
     return ctx->ic_method_tables[pid];
+}
+
+XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx,
+                                            const XrProto *proto) {
+    if (!ctx || !proto) return NULL;
+    uint32_t pid = proto->proto_id;
+    if (pid >= ctx->ic_tables_capacity || !ctx->ic_builtin_tables) return NULL;
+    return ctx->ic_builtin_tables[pid];
 }
 
 /* ========== Snapshot API for JIT/AOT consumers ========== */
@@ -224,6 +272,16 @@ void xr_vm_ctx_free_ic_tables(XrVMContext *ctx) {
         }
         xr_free(ctx->ic_method_tables);
         ctx->ic_method_tables = NULL;
+    }
+    if (ctx->ic_builtin_tables) {
+        for (uint32_t i = 0; i < ctx->ic_tables_capacity; i++) {
+            if (ctx->ic_builtin_tables[i]) {
+                xr_ic_builtin_table_free(ctx->ic_builtin_tables[i]);
+                ctx->ic_builtin_tables[i] = NULL;
+            }
+        }
+        xr_free(ctx->ic_builtin_tables);
+        ctx->ic_builtin_tables = NULL;
     }
     ctx->ic_tables_capacity = 0;
 }
