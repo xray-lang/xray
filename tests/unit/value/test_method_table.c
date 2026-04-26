@@ -42,6 +42,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_BIGINT,
         XR_TID_SET,
         XR_TID_MAP,
+        XR_TID_JSON,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
         const XrMethodSlot *table = xr_builtin_method_tables[tid];
@@ -185,6 +186,17 @@ TEST(float_arity_caps) {
     ASSERT_EQ_INT(powslot->max_args, 1);
 }
 
+/* ========== Json migration ========== */
+
+TEST(json_method_table_exposes_iterator_and_to_string) {
+    const XrMethodSlot *iter = xr_method_table_lookup(
+        XR_TID_JSON, SYMBOL_ENTRIES_ITERATOR, SYMBOL_BUILTIN_COUNT);
+    const XrMethodSlot *ts = xr_method_table_lookup(
+        XR_TID_JSON, SYMBOL_TOSTRING, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(iter);
+    ASSERT_NOT_NULL(ts);
+}
+
 /* ========== Map / WeakMap migration ========== */
 
 TEST(map_method_table_exposes_full_surface) {
@@ -287,6 +299,9 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Float migration");
     RUN_TEST(float_method_table_exposes_full_surface);
     RUN_TEST(float_arity_caps);
+
+    RUN_TEST_SUITE("Json migration");
+    RUN_TEST(json_method_table_exposes_iterator_and_to_string);
 
     RUN_TEST_SUITE("Map / WeakMap migration");
     RUN_TEST(map_method_table_exposes_full_surface);

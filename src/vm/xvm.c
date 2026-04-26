@@ -5235,8 +5235,11 @@ startfunc:
                 /* === Json builtin methods === */
                 invoke_json:
                 if (xr_value_is_json(receiver)) {
-                    XrJson *json = xr_value_to_json(receiver);
-                    R(a) = json_method_call_by_symbol(isolate, json, method_symbol, &R(a + 2), nargs);
+                    /* See xjson_methods.h — unified method table dispatch. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_JSON, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs)
+                                 : XR_NOTFOUND;
                     VM_BUILTIN_INVOKE_CHECK_EXC();
                     if (unlikely(XR_IS_NOTFOUND(R(a)))) {
                         XrSymbolTable *_st = (XrSymbolTable*)isolate->symbol_table;
@@ -5738,8 +5741,11 @@ startfunc:
                     R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
                                  : XR_NOTFOUND;
                 } else if (xr_value_is_json(receiver)) {
-                    XrJson *json = xr_value_to_json(receiver);
-                    R(a) = json_method_call_by_symbol(isolate, json, method_symbol, args, nargs);
+                    /* See invoke_json above. */
+                    const XrMethodSlot *_slot = xr_method_table_lookup(
+                        XR_TID_JSON, method_symbol, SYMBOL_BUILTIN_COUNT);
+                    R(a) = _slot ? _slot->fn(isolate, receiver, args, nargs)
+                                 : XR_NOTFOUND;
                 } else if (XR_IS_INT(receiver)) {
                     /* See invoke_int above. */
                     const XrMethodSlot *_slot = xr_method_table_lookup(
