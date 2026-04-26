@@ -76,6 +76,8 @@ static const char *xr_builtin_symbol_names[] = {
     // Array extended methods
     "find", "findIndex", "every", "some", "fill", "sort", "includes",
     "capacity",
+    // Regex methods
+    "test", "findAll", "pattern",
 };
 
 #define BUILTIN_NAME_COUNT \

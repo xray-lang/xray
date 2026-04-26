@@ -35,7 +35,7 @@ TEST(registry_is_dense_and_typed) {
      * stay NULL until their owner module migrates. */
     /* Types whose methods are owned by an XrMethodSlot table. Add
      * new ids here as remaining native_type_classes-only types
-     * (Iterator / StringBuilder / Regex / ...) migrate. */
+     * (Iterator / StringBuilder / ...) migrate. */
     static const XrTypeId migrated[] = {
         XR_TID_BOOL,
         XR_TID_INT,
@@ -47,6 +47,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_ARRAY,
         XR_TID_STRING,
         XR_TID_DATETIME,
+        XR_TID_REGEX,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
         const XrMethodSlot *table = xr_builtin_method_tables[tid];

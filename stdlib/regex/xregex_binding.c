@@ -67,8 +67,13 @@ static XrRegexFlags parse_flags(const char *flags_str) {
  *
  * Structure:
  *   { start: int, end: int, text: string, groups: Array<string> }
+ *
+ * Public symbol: stdlib/regex/regex_methods.c reuses this so the new
+ * XrMethodSlot wrappers and the legacy native-type binding both yield
+ * identically shaped match objects.
  */
-static XrValue create_match_object(XrayIsolate *isolate, const char *text, XrMatch *match) {
+XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text,
+                                   XrMatch *match) {
     XrJson *result = xr_json_new(xr_current_coro(isolate), 4);
 
     // start
@@ -259,7 +264,7 @@ static XrValue regex_full_match(XrayIsolate *isolate, XrValue *args, int argc) {
     bool found = xr_regex_full_match(re, text, text_len, &match);
     if (!found) return xr_null();
 
-    return create_match_object(isolate, text, &match);
+    return xr_regex_make_match_object(isolate, text, &match);
 }
 
 // count(re, text) - Count matches
@@ -297,7 +302,7 @@ static XrValue regex_find(XrayIsolate *isolate, XrValue *args, int argc) {
     bool found = xr_regex_match_at(re, text, text_len, offset, &match);
     if (!found) return xr_null();
 
-    return create_match_object(isolate, text, &match);
+    return xr_regex_make_match_object(isolate, text, &match);
 }
 
 // findAll(re, text [, limit]) - Find all matches
@@ -322,7 +327,7 @@ static XrValue regex_find_all(XrayIsolate *isolate, XrValue *args, int argc) {
     XrArray *result = xr_array_new(xr_current_coro(isolate));
     if (matches) {
         for (int i = 0; i < count; i++) {
-            XrValue match_obj = create_match_object(isolate, text, &matches[i]);
+            XrValue match_obj = xr_regex_make_match_object(isolate, text, &matches[i]);
             xr_array_push(result, match_obj);
         }
         xr_regex_find_all_free(matches);

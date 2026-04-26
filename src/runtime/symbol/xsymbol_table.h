@@ -242,6 +242,11 @@ enum {
     SYMBOL_INCLUDES,
     SYMBOL_CAPACITY,
 
+    // Regex methods
+    SYMBOL_TEST,
+    SYMBOL_FINDALL,
+    SYMBOL_PATTERN,
+
     SYMBOL_BUILTIN_COUNT            // sentinel
 };
 
