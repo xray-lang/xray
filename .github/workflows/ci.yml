@@ -318,14 +318,14 @@ jobs:
     - name: Install clang-format
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-format-14
+        sudo apt-get install -y clang-format-18
 
     - name: Check code format
       run: |
         # Find all source files and check format
         find src include stdlib \
           \( -name '*.c' -o -name '*.h' \) -type f | \
-        xargs clang-format-14 --dry-run --Werror 2>&1 | tee format-check.txt
+        xargs clang-format-18 --dry-run --Werror 2>&1 | tee format-check.txt
 
         if [ -s format-check.txt ]; then
           echo "Code format issues found. Run 'make format' to fix."
