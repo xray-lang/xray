@@ -18,8 +18,6 @@
 #include <stdlib.h>
 #include "xdebug.h"
 
-VMProfiler g_vm_profiler;
-
 // Structure for sorting opcode statistics
 typedef struct {
     int op;
@@ -56,8 +54,12 @@ static const char* get_opcode_name(int op) {
     return xr_opcode_name((OpCode)op);
 }
 
-// Print performance report
-void vm_profiler_report(void) {
+// Print performance report. Pass NULL when the build did not allocate
+// a profiler (XR_ENABLE_VM_PROFILER off, or isolate created before the
+// caller opted in); the function bails early so callers can drop a
+// blanket vm_profiler_report() into teardown without checking first.
+void vm_profiler_report(const VMProfiler *p) {
+    if (!p) return;
     uint64_t end_time_ms = vm_profiler_get_ms();
 
     printf("\n");
@@ -65,16 +67,17 @@ void vm_profiler_report(void) {
     printf("\n");
 
 #if XR_PROFILE_TIMING
-    double total_sec = (end_time_ms - g_vm_profiler.start_time_ms) / 1000.0;
+    double total_sec = (end_time_ms - p->start_time_ms) / 1000.0;
 #else
     double total_sec = 0.0;
+    (void)end_time_ms;
 #endif
     printf("Summary\n");
-    printf("  Total instructions: %llu\n", (unsigned long long)g_vm_profiler.total_instructions);
+    printf("  Total instructions: %llu\n", (unsigned long long)p->total_instructions);
 #if XR_PROFILE_TIMING
     printf("  Runtime: %.3f sec\n", total_sec);
     if (total_sec > 0) {
-        printf("  Speed: %.2f MIPS\n", g_vm_profiler.total_instructions / total_sec / 1000000.0);
+        printf("  Speed: %.2f MIPS\n", p->total_instructions / total_sec / 1000000.0);
     }
 #else
     printf("  (Timing disabled, set XR_PROFILE_TIMING=1 to enable)\n");
@@ -85,9 +88,9 @@ void vm_profiler_report(void) {
     int count = 0;
 
     for (int i = 0; i < 256; i++) {
-        if (g_vm_profiler.op_stats[i].count > 0) {
+        if (p->op_stats[i].count > 0) {
             sorted_stats[count].op = i;
-            sorted_stats[count].stats = g_vm_profiler.op_stats[i];
+            sorted_stats[count].stats = p->op_stats[i];
             count++;
         }
     }
@@ -107,7 +110,7 @@ void vm_profiler_report(void) {
         int op = sorted_stats[i].op;
         VMOpStats *stats = &sorted_stats[i].stats;
         const char *name = get_opcode_name(op);
-        double percent = (double)stats->count * 100.0 / g_vm_profiler.total_instructions;
+        double percent = (double)stats->count * 100.0 / p->total_instructions;
 
         printf("%-20s %12llu %7.2f%%\n",
                name, (unsigned long long)stats->count, percent);

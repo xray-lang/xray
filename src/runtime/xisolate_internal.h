@@ -212,6 +212,16 @@ struct XrayIsolate {
     // types don't leak into the core header; cast via the accessor
     // functions in `stdlib/stdlib_cache.h`.
     void *stdlib_cache;  // XrStdlibCache* (stdlib/stdlib_cache.h), lazily allocated
+
+    /* ========== VM profiler (opt-in, isolate-local) ==========
+     * Bytecode execution counters collected during this isolate's
+     * lifetime. NULL unless the build was configured with
+     * -DXR_ENABLE_VM_PROFILER=ON; in that case the field is
+     * lazily allocated by the VM dispatch entry. Per-isolate so
+     * concurrent isolates (LSP / DAP / embedded scripting hosts)
+     * never share counters. Cast through `struct VMProfiler *` to
+     * avoid pulling the profiler internals into this header. */
+    void *profiler; /* VMProfiler*, see vm/xvm_profiler.h */
 };
 
 /* ========== VM State Access ========== */

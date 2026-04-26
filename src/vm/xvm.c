@@ -231,7 +231,14 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     int invoke_is_tail = 0; // shared flag: OP_INVOKE_TAIL sets 1, OP_INVOKE sets 0
     XrBcCallFrame *frame;
 
-    vm_profiler_init();
+    /* Resolve the active per-isolate profiler once. NULL is the
+     * default for builds compiled without XR_ENABLE_VM_PROFILER and
+     * for isolates whose `profiler` slot was never allocated; the
+     * VM_PROFILE_* macros / inline helpers all tolerate it. */
+    VMProfiler *_vm_prof = (VMProfiler *)(vm_ctx && vm_ctx->isolate
+                                           ? vm_ctx->isolate->profiler
+                                           : NULL);
+    vm_profiler_init(_vm_prof);
     VM_PROFILE_VARS();
 
     // Per-frame struct storage in vm_ctx (lazy-allocated, persists across calls)
