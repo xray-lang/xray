@@ -43,15 +43,15 @@ static void compile_array_elem_to_var(XrCompilerContext *ctx, XrCompiler *compil
     XrString *name_str = xr_compile_time_intern(ctx->X, name, strlen(name));
 
     int index_reg = reg_alloc(ctx, compiler);
-    emit_asbx(compiler->emitter, OP_LOADI, index_reg, index);
+    xemit_loadi(compiler->emitter, index_reg, index);
 
     int value_reg = reg_alloc(ctx, compiler);
-    emit_abc(compiler->emitter, OP_INDEX_GET, value_reg, source_reg, index_reg);
+    xemit_index_get(compiler->emitter, value_reg, source_reg, index_reg);
     reg_free(compiler, index_reg);
 
     if (compiler->scope_depth == 0) {
         int shared_index = shared_get_or_add(ctx, compiler, name_str);
-        emit_abx(compiler->emitter, OP_SETSHARED, value_reg, shared_index);
+        xemit_setshared(compiler->emitter, value_reg, shared_index);
         reg_free(compiler, value_reg);
     } else {
         XrLocalInfo *local = scope_define_local(ctx, compiler, name_str);
@@ -85,11 +85,11 @@ static void compile_object_field_to_var(XrCompilerContext *ctx, XrCompiler *comp
     int global_sym = xr_symbol_register_in_table(
         (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), field);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-    emit_abc(compiler->emitter, OP_GETPROP, target_reg, source_reg, local_sym);
+    xemit_getprop(compiler->emitter, target_reg, source_reg, local_sym);
 
     if (compiler->scope_depth == 0) {
         int shared_index = shared_get_or_add(ctx, compiler, name_str);
-        emit_abx(compiler->emitter, OP_SETSHARED, target_reg, shared_index);
+        xemit_setshared(compiler->emitter, target_reg, shared_index);
         reg_free(compiler, target_reg);
     }
 }
@@ -211,7 +211,7 @@ void compile_multi_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, MultiV
             XrLocalInfo *local = scope_define_local(ctx, compiler, name_str);
             local->is_const = node->is_const;
             // Initialize to null
-            emit_abc(compiler->emitter, OP_LOADNULL, local->reg, 0, 0);
+            xemit_loadnull(compiler->emitter, local->reg);
         }
         return;
     }
@@ -362,7 +362,7 @@ void compile_multi_assign(XrCompilerContext *ctx, XrCompiler *compiler, MultiAss
         if (source_reg < 0) {
             // Right-side values not enough, fill with null
             int nil_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_LOADNULL, nil_reg, 0, 0);
+            xemit_loadnull(compiler->emitter, nil_reg);
             source_reg = nil_reg;
         }
         
@@ -382,7 +382,7 @@ void compile_multi_assign(XrCompilerContext *ctx, XrCompiler *compiler, MultiAss
             } else {
                 // Top-level variable
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
-                emit_abx(compiler->emitter, OP_SETSHARED, source_reg, shared_index);
+                xemit_setshared(compiler->emitter, source_reg, shared_index);
             }
         } else {
             // Other types of assignment targets (like member access) not yet supported

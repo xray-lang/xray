@@ -191,7 +191,7 @@ int compile_args_to_base(XrCompilerContext *ctx, XrCompiler *compiler,
             if (xexpr_is_raw(&expr)) {
                 int boxed = xexpr_ensure_boxed(ctx, compiler, &expr, target_reg);
                 if (boxed != target_reg) {
-                    emit_abc(compiler->emitter, OP_MOVE, target_reg, boxed, 0);
+                    xemit_move(compiler->emitter, target_reg, boxed);
                 }
             }
         } else {
@@ -687,9 +687,9 @@ void emit_ctx_sync_before_closure(XrCompilerContext *ctx, XrCompiler *compiler) 
             // Hoisted variable: register not yet initialized by user code.
             // Pre-create cell with null so the closure captures a valid cell ref.
             // Actual value will be written via CELL_SET at initialization time.
-            emit_abc(compiler->emitter, OP_LOADNULL, local->reg, 0, 0);
+            xemit_loadnull(compiler->emitter, local->reg);
         }
-        emit_abc(compiler->emitter, OP_CELL_NEW, local->reg, 0, 0);
+        xemit_cell_new(compiler->emitter, local->reg);
         local->is_cellified = true;
     }
 }
@@ -1258,7 +1258,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
                         XrExprDesc e = xr_compile_expr(ctx, compiler, expr);
                         if (e.kind != XEXPR_VOID) {
                             int reg = xexpr_to_anyreg(ctx, compiler, &e);
-                            EMIT_ABC(ctx, compiler, OP_DUMP, reg, 2, 0);
+                            xemit_dump((compiler)->emitter, reg, 2);
                             reg_free(compiler, reg);
                         }
                         continue;
@@ -1333,7 +1333,7 @@ void xr_compile_statement(XrCompilerContext *ctx, XrCompiler *compiler, AstNode 
         }
 
         case AST_YIELD_STMT:
-            EMIT_ABC(ctx, compiler, OP_YIELD, 0, 0, 0);
+            xemit_yield((compiler)->emitter, 0);
             break;
 
         case AST_TYPE_ALIAS:

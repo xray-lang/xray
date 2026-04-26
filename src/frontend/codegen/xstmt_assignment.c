@@ -83,10 +83,10 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
             if (elem_slot != XR_SLOT_ANY) {
                 // Typed array: OP_TARRAY_SET R[A]:arr[R[B]] = R[C].i
                 int idx_reg = reg_alloc(ctx, compiler);
-                emit_asbx(compiler->emitter, OP_LOADI, idx_reg, (int)idx);
+                xemit_loadi(compiler->emitter, idx_reg, (int)idx);
                 XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
                 int value_reg = xexpr_to_anyreg_readonly(ctx, compiler, &val_expr);
-                emit_abc(compiler->emitter, OP_TARRAY_SET, array_reg, idx_reg, value_reg);
+                xemit_tarray_set(compiler->emitter, array_reg, idx_reg, value_reg);
                 reg_free(compiler, value_reg);
                 reg_free(compiler, idx_reg);
                 reg_free(compiler, array_reg);
@@ -97,7 +97,7 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
 
             // OP_ARRAY_SETC A B C: R[A][B] = R[C]
-            emit_abc(compiler->emitter, OP_ARRAY_SETC, array_reg, (int)idx, value_reg);
+            xemit_array_setc(compiler->emitter, array_reg, (int)idx, value_reg);
 
             reg_free(compiler, value_reg);
             reg_free(compiler, array_reg);
@@ -118,7 +118,7 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
         int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
 
         // OP_MAP_SETK A B C: R[A][K[B]] = R[C]
-        emit_abc(compiler->emitter, OP_MAP_SETK, array_reg, key_const, value_reg);
+        xemit_map_setk(compiler->emitter, array_reg, key_const, value_reg);
 
         reg_free(compiler, value_reg);
         reg_free(compiler, array_reg);
@@ -135,7 +135,7 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
         if (elem_slot != XR_SLOT_ANY) {
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg_readonly(ctx, compiler, &val_expr);
-            emit_abc(compiler->emitter, OP_TARRAY_SET, array_reg, index_reg, value_reg);
+            xemit_tarray_set(compiler->emitter, array_reg, index_reg, value_reg);
             reg_free(compiler, value_reg);
             reg_free(compiler, index_reg);
             reg_free(compiler, array_reg);
@@ -148,7 +148,7 @@ void compile_index_set(XrCompilerContext *ctx, XrCompiler *compiler, IndexSetNod
     int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
 
     // Use generic INDEX_SET instruction
-    emit_abc(compiler->emitter, OP_INDEX_SET, array_reg, index_reg, value_reg);
+    xemit_index_set(compiler->emitter, array_reg, index_reg, value_reg);
 
     reg_free(compiler, index_reg);
     reg_free(compiler, value_reg);
@@ -266,7 +266,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
 
             // Struct: native field write
             if (class_info && class_info->struct_layout) {
-                emit_abc(compiler->emitter, OP_STRUCT_SET, obj_reg, field_idx, value_reg);
+                xemit_struct_set(compiler->emitter, obj_reg, field_idx, value_reg);
                 reg_free(compiler, value_reg);
                 return;
             }
@@ -279,9 +279,9 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                 if (fst == 10 && field_idx < 64)
                     compiler->emitter->proto->tfield_float_bitmap |=
                         (uint64_t)1 << field_idx;
-                emit_abc(compiler->emitter, OP_TFIELD_SET, obj_reg, field_idx, value_reg);
+                xemit_tfield_set(compiler->emitter, obj_reg, field_idx, value_reg);
             } else {
-                emit_abc(compiler->emitter, OP_SETFIELD, obj_reg, field_idx, value_reg);
+                xemit_setfield(compiler->emitter, obj_reg, field_idx, value_reg);
             }
             reg_free(compiler, value_reg);
             return;
@@ -360,7 +360,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                     int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
                     XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
                     int value_reg = xexpr_to_anyreg_readonly(ctx, compiler, &val_expr);
-                    emit_abc(compiler->emitter, OP_TFIELD_SET, obj_reg, field_idx, value_reg);
+                    xemit_tfield_set(compiler->emitter, obj_reg, field_idx, value_reg);
                     reg_free(compiler, value_reg);
                     reg_free(compiler, obj_reg);
                     return;
@@ -373,7 +373,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
 
-            emit_abc(compiler->emitter, OP_JSON_SET, obj_reg, field_idx, value_reg);
+            xemit_json_set(compiler->emitter, obj_reg, field_idx, value_reg);
             reg_free(compiler, value_reg);
             reg_free(compiler, obj_reg);
             return;
@@ -386,7 +386,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
 
             int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->member);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-            emit_abc(compiler->emitter, OP_JSON_SETK, obj_reg, local_sym, value_reg);
+            xemit_json_setk(compiler->emitter, obj_reg, local_sym, value_reg);
             reg_free(compiler, value_reg);
             reg_free(compiler, obj_reg);
             return;
@@ -436,7 +436,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
 
                         // Struct: native field write
                         if (class_info->struct_layout) {
-                            emit_abc(compiler->emitter, OP_STRUCT_SET, obj_reg, field_idx, value_reg);
+                            xemit_struct_set(compiler->emitter, obj_reg, field_idx, value_reg);
                             reg_free(compiler, value_reg);
                             reg_free(compiler, obj_reg);
                             return;
@@ -447,9 +447,9 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                         if (fst == 7 || fst == 10) { // XR_SLOT_I64 or XR_SLOT_F64
                             if (fst == 10 && field_idx < 64)
                                 compiler->emitter->proto->tfield_float_bitmap |= (uint64_t)1 << field_idx;
-                            emit_abc(compiler->emitter, OP_TFIELD_SET, obj_reg, field_idx, value_reg);
+                            xemit_tfield_set(compiler->emitter, obj_reg, field_idx, value_reg);
                         } else {
-                            emit_abc(compiler->emitter, OP_SETFIELD, obj_reg, field_idx, value_reg);
+                            xemit_setfield(compiler->emitter, obj_reg, field_idx, value_reg);
                         }
                         reg_free(compiler, value_reg);
                         reg_free(compiler, obj_reg);
@@ -479,7 +479,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                 int obj_reg = xexpr_to_anyreg(ctx, compiler, &oe);
                 XrExprDesc ve = xr_compile_expr(ctx, compiler, node->value);
                 int val_reg = xexpr_to_anyreg(ctx, compiler, &ve);
-                emit_abc(compiler->emitter, OP_STRUCT_SET, obj_reg, field_idx, val_reg);
+                xemit_struct_set(compiler->emitter, obj_reg, field_idx, val_reg);
                 reg_free(compiler, val_reg);
                 reg_free(compiler, obj_reg);
                 return;
@@ -498,7 +498,7 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
     // Use SETPROP (symbol lookup via per-function symbol table)
     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->member);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-    emit_abc(compiler->emitter, OP_SETPROP, obj_reg, local_sym, value_reg);
+    xemit_setprop(compiler->emitter, obj_reg, local_sym, value_reg);
 
     // Free registers (consistent with other optimization paths)
     reg_free(compiler, value_reg);

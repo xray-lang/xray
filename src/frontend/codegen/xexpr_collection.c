@@ -63,10 +63,10 @@ static int compile_array_literal_internal(XrCompilerContext *ctx, XrCompiler *co
         int first_elem_reg = array_reg + 1;
         compile_args_to_base(ctx, compiler, node->elements, node->count, first_elem_reg);
 
-        emit_abc(compiler->emitter, OP_NEWARRAY, array_reg, node->count, c_field);
+        xemit_newarray(compiler->emitter, array_reg, node->count, c_field);
         xreg_set_freereg(compiler->regalloc, array_reg + 1);
     } else {
-        emit_abc(compiler->emitter, OP_NEWARRAY, array_reg, 0, c_field);
+        xemit_newarray(compiler->emitter, array_reg, 0, c_field);
     }
 
     return array_reg;
@@ -99,7 +99,7 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
     // OP_NEWMAP A B C: R[A] = #{}, B=capacity hint, C=(key_kind<<7)|(value_tid<<2)|flags
     int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
     int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWMAP, map_reg, node->count, c_field);
+    xemit_newmap(compiler->emitter, map_reg, node->count, c_field);
 
     // Set each key-value pair (map_reg already auto-protected)
     if (node->count > 0) {
@@ -119,7 +119,7 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
                 int key_const = xr_vm_proto_add_constant(compiler->proto, xr_string_value(key_str));
 
                 // OP_MAP_SETK A B C: R[A][K[B]] = R[C]
-                emit_abc(compiler->emitter, OP_MAP_SETK, map_reg, key_const, value_reg);
+                xemit_map_setk(compiler->emitter, map_reg, key_const, value_reg);
             } else {
                 // General path: compile key expression
                 XrExprDesc key_expr = xr_compile_expr(ctx, compiler, node->keys[i]);
@@ -127,7 +127,7 @@ static int compile_map_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
                 int key_reg = xexpr_to_anyreg_readonly(ctx, compiler, &key_expr);
 
                 // INDEX_SET: map[key] = value
-                emit_abc(compiler->emitter, OP_INDEX_SET, map_reg, key_reg, value_reg);
+                xemit_index_set(compiler->emitter, map_reg, key_reg, value_reg);
                 xexpr_free(compiler, &key_expr);
             }
 
@@ -182,7 +182,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
         int result_reg = reg_alloc(ctx, compiler);
 
         // OP_MAP_GETK A B C: R[A] = R[B][K[C]]
-        emit_abc(compiler->emitter, OP_MAP_GETK, result_reg, array_reg, key_const);
+        xemit_map_getk(compiler->emitter, result_reg, array_reg, key_const);
         reg_free(compiler, array_reg);
 
         // Return TEMP: already has determined register
@@ -201,7 +201,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
             XrType *elem_type = get_typed_array_elem_type(ctx, node->array);
             if (elem_type) {
                 // Typed array: use OP_TARRAY_GETC, output raw I64/F64
-                int pc = emit_abc(compiler->emitter, OP_TARRAY_GETC, 0, array_reg, (int)idx);
+                int pc = xemit_tarray_getc(compiler->emitter, 0, array_reg, (int)idx);
                 reg_free(compiler, array_reg);
                 e.kind = XEXPR_RELOC;
                 e.u.pc = pc;
@@ -210,7 +210,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
                 return e;
             }
             // OP_ARRAY_GETC A B C: R[A] = R[B][C]
-            int pc = emit_abc(compiler->emitter, OP_ARRAY_GETC, 0, array_reg, (int)idx);
+            int pc = xemit_array_getc(compiler->emitter, 0, array_reg, (int)idx);
             reg_free(compiler, array_reg);
 
             e.kind = XEXPR_RELOC;
@@ -228,7 +228,7 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
         XrType *elem_type = get_typed_array_elem_type(ctx, node->array);
         if (elem_type) {
             int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_TARRAY_GET, result_reg, array_reg, index_reg);
+            xemit_tarray_get(compiler->emitter, result_reg, array_reg, index_reg);
             reg_free(compiler, index_reg);
             reg_free(compiler, array_reg);
             e.kind = XEXPR_TEMP;
@@ -275,9 +275,9 @@ XrExprDesc compile_index_get(XrCompilerContext *ctx, XrCompiler *compiler, Index
 
     // Generate INDEX_GET or ARRAY_GET_NOCHECK, target register already determined
     if (use_nocheck) {
-        emit_abc(compiler->emitter, OP_ARRAY_GET_NOCHECK, result_reg, array_reg, index_reg);
+        xemit_array_get_nocheck(compiler->emitter, result_reg, array_reg, index_reg);
     } else {
-        emit_abc(compiler->emitter, OP_INDEX_GET, result_reg, array_reg, index_reg);
+        xemit_index_get(compiler->emitter, result_reg, array_reg, index_reg);
     }
 
     // Free temporary registers (if they are temporary)
@@ -321,11 +321,11 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
         XrExprDesc start_e = xr_compile_expr(ctx, compiler, node->start);
         int temp_start = xexpr_to_anyreg(ctx, compiler, &start_e);
         if (temp_start != start_reg) {
-            emit_abc(compiler->emitter, OP_MOVE, start_reg, temp_start, 0);
+            xemit_move(compiler->emitter, start_reg, temp_start);
         }
     } else {
         // Omitted start, load 0 to start from beginning
-        emit_asbx(compiler->emitter, OP_LOADI, start_reg, 0);
+        xemit_loadi(compiler->emitter, start_reg, 0);
     }
 
     // Compile end index (if omitted, load -1 to use default value length)
@@ -333,18 +333,18 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
         XrExprDesc end_e = xr_compile_expr(ctx, compiler, node->end);
         int temp_end = xexpr_to_anyreg(ctx, compiler, &end_e);
         if (temp_end != end_reg) {
-            emit_abc(compiler->emitter, OP_MOVE, end_reg, temp_end, 0);
+            xemit_move(compiler->emitter, end_reg, temp_end);
         }
     } else {
         // Omitted end, load -1 to use default value
-        emit_asbx(compiler->emitter, OP_LOADI, end_reg, -1);
+        xemit_loadi(compiler->emitter, end_reg, -1);
     }
 
     // Result register
     int result_reg = xreg_alloc_temp(compiler->regalloc);
 
     // Generate OP_SLICE instruction
-    emit_abc(compiler->emitter, OP_SLICE, result_reg, source_reg, start_reg);
+    xemit_slice(compiler->emitter, result_reg, source_reg, start_reg);
 
     // Free temporary registers
     xreg_free_temp(compiler->regalloc, end_reg);
@@ -375,20 +375,19 @@ XrExprDesc compile_slice_expr(XrCompilerContext *ctx, XrCompiler *compiler, Slic
 static void emit_json_field_init(XrCompilerContext *ctx, XrCompiler *compiler,
                                   int obj_reg, uint32_t shape_idx, AstNode *val_node) {
     if (val_node->type == AST_LITERAL_NULL) {
-        emit_abc(compiler->emitter, OP_JSON_INIT_N, obj_reg, shape_idx, 0);
+        xemit_json_init_n(compiler->emitter, obj_reg, shape_idx, 0);
     } else if (val_node->type == AST_LITERAL_INT) {
         int64_t int_val = val_node->as.literal.raw_value.int_val;
         if (int_val >= -128 && int_val <= 127) {
-            emit_abc(compiler->emitter, OP_JSON_INIT_I, obj_reg, shape_idx,
-                     (int)(int_val) & 0xFF);
+            xemit_json_init_i(compiler->emitter, obj_reg, shape_idx, (int)(int_val) & 0xFF);
         } else {
             int value_reg = xr_compile_expression(ctx, compiler, val_node);
-            emit_abc(compiler->emitter, OP_JSON_INIT, obj_reg, shape_idx, value_reg);
+            xemit_json_init(compiler->emitter, obj_reg, shape_idx, value_reg);
             reg_free(compiler, value_reg);
         }
     } else {
         int value_reg = xr_compile_expression(ctx, compiler, val_node);
-        emit_abc(compiler->emitter, OP_JSON_INIT, obj_reg, shape_idx, value_reg);
+        xemit_json_init(compiler->emitter, obj_reg, shape_idx, value_reg);
         reg_free(compiler, value_reg);
     }
 }
@@ -499,7 +498,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
         compiler->proto,
         xr_int((intptr_t)shape)
     );
-    emit_abc(compiler->emitter, OP_NEWJSON, obj_reg, shape_const_idx, ctx->current_storage_mode);
+    xemit_newjson(compiler->emitter, obj_reg, shape_const_idx, ctx->current_storage_mode);
 
     // Initialize fields
     if (needs_reorder) {
@@ -508,7 +507,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
             int li = reorder_map[ti];
             if (li < 0) {
                 // Field not in literal, init to null
-                emit_abc(compiler->emitter, OP_JSON_INIT_N, obj_reg, ti, 0);
+                xemit_json_init_n(compiler->emitter, obj_reg, ti, 0);
             } else {
                 emit_json_field_init(ctx, compiler, obj_reg, ti, node->values[li]);
             }
@@ -535,7 +534,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
 
                 int value_reg = xr_compile_expression(ctx, compiler, node->values[i]);
                 int key_reg = xr_compile_expression(ctx, compiler, node->keys[i]);
-                emit_abc(compiler->emitter, OP_INDEX_SET, obj_reg, key_reg, value_reg);
+                xemit_index_set(compiler->emitter, obj_reg, key_reg, value_reg);
                 reg_free(compiler, key_reg);
                 reg_free(compiler, value_reg);
             }
@@ -568,7 +567,7 @@ static int compile_set_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
     // Use dedicated OP_NEWSET instruction to create Set object
     // B = (elem_tid << 2) | storage_mode
     int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWSET, set_reg, b_field, 0);
+    xemit_newset(compiler->emitter, set_reg, b_field);
 
     // Generate set.add(elem) call for each element
     if (node->count > 0) {
@@ -594,7 +593,7 @@ static int compile_set_literal_internal(XrCompilerContext *ctx, XrCompiler *comp
 
             // Generate method call: set.add(elem)
             int local_sym = emitter_add_symbol(compiler->emitter, SYMBOL_ADD);
-            emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, 1);
+            xemit_invoke(compiler->emitter, base, local_sym, 1);
 
             // Reclaim registers
             xreg_set_freereg(compiler->regalloc, base + 1);

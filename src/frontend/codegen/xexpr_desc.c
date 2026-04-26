@@ -106,14 +106,14 @@ int xexpr_to_anyreg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e)
                 // Auto-BOX raw temps at the boundary
                 if (xexpr_is_raw_i64(e)) {
                     int dst = reg_alloc(ctx, compiler);
-                    emit_abc(compiler->emitter, OP_BOX_I64, dst, e->reg, 0);
+                    xemit_box_i64(compiler->emitter, dst, e->reg);
                     e->kind = XEXPR_TEMP;
                     e->reg = dst;
                     xexpr_clear_raw(e);
                     return dst;
                 } else if (xexpr_is_raw_f64(e)) {
                     int dst = reg_alloc(ctx, compiler);
-                    emit_abc(compiler->emitter, OP_BOX_F64, dst, e->reg, 0);
+                    xemit_box_f64(compiler->emitter, dst, e->reg);
                     e->kind = XEXPR_TEMP;
                     e->reg = dst;
                     xexpr_clear_raw(e);
@@ -130,10 +130,10 @@ int xexpr_to_anyreg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e)
     
     // BOX at the boundary if raw-typed
     if (xexpr_is_raw_i64(e)) {
-        emit_abc(compiler->emitter, OP_BOX_I64, reg, reg, 0);
+        xemit_box_i64(compiler->emitter, reg, reg);
         xexpr_clear_raw(e);
     } else if (xexpr_is_raw_f64(e)) {
-        emit_abc(compiler->emitter, OP_BOX_F64, reg, reg, 0);
+        xemit_box_f64(compiler->emitter, reg, reg);
         xexpr_clear_raw(e);
     }
     return reg;
@@ -220,7 +220,7 @@ static void xexpr_discharge2reg(XrCompilerContext *ctx, XrCompiler *compiler,
             int64_t ival = e->u.ival;
 
             if (ival >= -MAXARG_sBx && ival <= MAXARG_sBx) {
-                emit_asbx(compiler->emitter, OP_LOADI, target_reg, (int)ival);
+                xemit_loadi(compiler->emitter, target_reg, (int)ival);
             } else {
                 int kidx = xr_vm_proto_add_constant(compiler->proto, xr_int(ival));
                 emit_loadk(compiler->emitter, target_reg, kidx);
@@ -257,7 +257,7 @@ static void xexpr_discharge2reg(XrCompilerContext *ctx, XrCompiler *compiler,
         
         // ===== Global variable: reload =====
         case XEXPR_GLOBAL:
-            emit_abx(compiler->emitter, OP_GETBUILTIN, target_reg, e->u.global_idx);
+            xemit_getbuiltin(compiler->emitter, target_reg, e->u.global_idx);
             break;
             
         // ===== Already in register: MOVE (preserves raw format) =====
@@ -316,12 +316,12 @@ void xexpr_to_specific_reg(XrCompilerContext *ctx, XrCompiler *compiler,
         
         // False materialization point: patch false jump list here
         int false_pc = emit_get_current_pc(em);
-        emit_abc(em, OP_LOADFALSE, target_reg, 0, 0);
+        xemit_loadfalse(em, target_reg);
         int skip_after_false = emit_sj(em, OP_JMP, 0);  // skip past LOADTRUE
         
         // True materialization point: patch true jump list here
         int true_pc = emit_get_current_pc(em);
-        emit_abc(em, OP_LOADTRUE, target_reg, 0, 0);
+        xemit_loadtrue(em, target_reg);
         
         // Patch: skip_jmp jumps past both LOADFALSE and LOADTRUE
         int end_pc = emit_get_current_pc(em);
@@ -494,11 +494,11 @@ int xexpr_ensure_boxed(XrCompilerContext *ctx, XrCompiler *compiler,
                        XrExprDesc *e, int reg) {
     if (xexpr_is_raw_i64(e)) {
         int temp = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_BOX_I64, temp, reg, 0);
+        xemit_box_i64(compiler->emitter, temp, reg);
         return temp;
     } else if (xexpr_is_raw_f64(e)) {
         int temp = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_BOX_F64, temp, reg, 0);
+        xemit_box_f64(compiler->emitter, temp, reg);
         return temp;
     }
     return reg;
@@ -511,7 +511,7 @@ int xexpr_goiftrue(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e) 
     int reg = xexpr_to_nextreg(ctx, compiler, e);
     
     // 2. Generate TEST instruction: if reg is false, then jump
-    emit_abc(compiler->emitter, OP_TEST, reg, 0, 0);
+    xemit_test(compiler->emitter, reg, 0);
     
     // 3. Generate JMP instruction
     int jump_pc = emit_jump(compiler->emitter, OP_JMP);

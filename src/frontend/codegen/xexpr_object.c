@@ -56,11 +56,11 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
         if (module_reg < 0) {
             int si = shared_get_in_scope(ctx, compiler, mod_name_str);
             if (si >= 0) {
-                emit_abx(compiler->emitter, OP_GETSHARED, target_reg, si);
+                xemit_getshared(compiler->emitter, target_reg, si);
             } else {
                 int gi = builtin_get(ctx, mod_name_str);
                 if (gi >= 0) {
-                    emit_abx(compiler->emitter, OP_GETBUILTIN, target_reg, gi);
+                    xemit_getbuiltin(compiler->emitter, target_reg, gi);
                 }
             }
             module_reg = target_reg;
@@ -69,7 +69,7 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
         // Get class from module (using OP_GETPROP)
         int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), class_name);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-        emit_abc(compiler->emitter, OP_GETPROP, target_reg, module_reg, local_sym);
+        xemit_getprop(compiler->emitter, target_reg, module_reg, local_sym);
     } else {
         // Plain class name: prefer local variable/upvalue, finally global variable
         XrString *class_name_str = xr_compile_time_intern(ctx->X, class_name, strlen(class_name));
@@ -77,22 +77,22 @@ static void load_class_to_reg(XrCompilerContext *ctx, XrCompiler *compiler,
         // 1. Find local variable
         XrLocalInfo *local = compiler_get_local_by_name(compiler, class_name);
         if (local) {
-            emit_abc(compiler->emitter, OP_MOVE, target_reg, local->reg, 0);
+            xemit_move(compiler->emitter, target_reg, local->reg);
         } else {
             // 2. Find upvalue
             int upvalue = scope_resolve_upvalue(ctx, compiler, class_name_str);
             if (upvalue >= 0) {
                 // Class names are always const, direct UPVAL_GET
-                emit_abc(compiler->emitter, OP_UPVAL_GET, target_reg, upvalue, 0);
+                xemit_upval_get(compiler->emitter, target_reg, upvalue, 0);
             } else {
                 // 3. Load from shared or predefined global
                 int si = shared_get_in_scope(ctx, compiler, class_name_str);
                 if (si >= 0) {
-                    emit_abx(compiler->emitter, OP_GETSHARED, target_reg, si);
+                    xemit_getshared(compiler->emitter, target_reg, si);
                 } else {
                     int gi = builtin_get(ctx, class_name_str);
                     if (gi >= 0) {
-                        emit_abx(compiler->emitter, OP_GETBUILTIN, target_reg, gi);
+                        xemit_getbuiltin(compiler->emitter, target_reg, gi);
                     }
                 }
             }
@@ -116,7 +116,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             int result_reg = reg_alloc(ctx, compiler);
             int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
             int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
-            emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_field);
+            xemit_newmap(compiler->emitter, result_reg, 0, c_field);
             return result_reg;
         }
 
@@ -125,7 +125,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             int result_reg = reg_alloc(ctx, compiler);
             int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
             int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | 0x02;
-            emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_field);
+            xemit_newmap(compiler->emitter, result_reg, 0, c_field);
             return result_reg;
         }
 
@@ -134,12 +134,12 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             int result_reg = reg_alloc(ctx, compiler);
             int c_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
             if (node->arg_count == 0) {
-                emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, 0, c_field);
+                xemit_newarray(compiler->emitter, result_reg, 0, c_field);
             } else {
                 int first_arg_reg = result_reg + 1;
                 xreg_set_freereg(compiler->regalloc, first_arg_reg);
                 compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
-                emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, node->arg_count, c_field);
+                xemit_newarray(compiler->emitter, result_reg, node->arg_count, c_field);
                 xreg_set_freereg(compiler->regalloc, result_reg + 1);
             }
             return result_reg;
@@ -149,7 +149,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         if (strcmp(class_name, TYPE_NAME_WEAKSET) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
             int b_field = ((int)ctx->current_elem_tid << 2) | 0x02;
-            emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 0);
+            xemit_newset(compiler->emitter, result_reg, b_field);
             return result_reg;
         }
 
@@ -158,12 +158,12 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             int result_reg = reg_alloc(ctx, compiler);
             int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
             if (node->arg_count == 0) {
-                emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 0);
+                xemit_newset(compiler->emitter, result_reg, b_field);
             } else {
                 int first_arg_reg = result_reg + 1;
                 xreg_set_freereg(compiler->regalloc, first_arg_reg);
                 compile_args_to_base(ctx, compiler, node->arguments, node->arg_count, first_arg_reg);
-                emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 1);
+                xemit_newset(compiler->emitter, result_reg, b_field);
                 xreg_set_freereg(compiler->regalloc, result_reg + 1);
             }
             return result_reg;
@@ -172,7 +172,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         // new StringBuilder() → OP_NEWSTRINGBUILDER
         if (strcmp(class_name, TYPE_NAME_STRINGBUILDER) == 0 && node->arg_count == 0) {
             int result_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_NEWSTRINGBUILDER, result_reg, ctx->current_storage_mode, 0);
+            xemit_newstringbuilder(compiler->emitter, result_reg, ctx->current_storage_mode);
             return result_reg;
         }
 
@@ -187,11 +187,11 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
             for (int i = 0; i < node->arg_count && i < 2; i++) {
                 int target_reg = reg_alloc(ctx, compiler);
                 if (arg_regs[i] != target_reg) {
-                    emit_abc(compiler->emitter, OP_MOVE, target_reg, arg_regs[i], 0);
+                    xemit_move(compiler->emitter, target_reg, arg_regs[i]);
                     reg_free(compiler, arg_regs[i]);
                 }
             }
-            emit_abc(compiler->emitter, OP_BYTES_NEW, base_reg, node->arg_count, ctx->current_storage_mode);
+            xemit_bytes_new(compiler->emitter, base_reg, node->arg_count);
             for (int i = node->arg_count - 1; i >= 0; i--) {
                 reg_free(compiler, base_reg + 1 + i);
             }
@@ -205,7 +205,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
 
             if (node->arg_count == 0) {
                 // new Channel() - unbuffered
-                emit_abx(compiler->emitter, OP_CHAN_NEW, result_reg, 0);
+                xemit_chan_new(compiler->emitter, result_reg, 0);
                 return result_reg;
             }
 
@@ -219,7 +219,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                 XrExprDesc name_desc = xr_compile_expr(ctx, compiler, node->arguments[1]);
                 int name_reg = xexpr_to_anyreg(ctx, compiler, &name_desc);
                 if (name_reg < 0) return -1;
-                emit_abc(compiler->emitter, OP_CHAN_NEW_NAMED, result_reg, size_reg, name_reg);
+                xemit_chan_new_named(compiler->emitter, result_reg, size_reg, name_reg);
                 reg_free(compiler, name_reg);
                 reg_free(compiler, size_reg);
                 return result_reg;
@@ -227,8 +227,8 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
 
             // Anonymous Channel with dynamic size → OP_CHAN_NEW_NAMED with null name
             int null_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_LOADNULL, null_reg, 0, 0);
-            emit_abc(compiler->emitter, OP_CHAN_NEW_NAMED, result_reg, size_reg, null_reg);
+            xemit_loadnull(compiler->emitter, null_reg);
+            xemit_chan_new_named(compiler->emitter, result_reg, size_reg, null_reg);
             reg_free(compiler, null_reg);
             reg_free(compiler, size_reg);
             return result_reg;
@@ -266,7 +266,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                 // Load class to R[base+1], then OP_NEW_STRUCT overwrites with struct_ref
                 // (VM reads class from B before writing struct_ref to A)
                 load_class_to_reg(ctx, compiler, NULL, class_name, base + 1);
-                emit_abc(compiler->emitter, OP_NEW_STRUCT, base + 1, base + 1, slot_offset);
+                xemit_new_struct(compiler->emitter, base + 1, base + 1, slot_offset);
 
                 // Compile constructor arguments to R[base+2], R[base+3], ...
                 int first_arg_reg = base + 2;
@@ -277,7 +277,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
                 int global_sym = xr_symbol_register_in_table(
                     (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
                 int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-                emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, node->arg_count);
+                xemit_invoke(compiler->emitter, base, local_sym, node->arg_count);
 
                 xreg_set_freereg(compiler->regalloc, base + 1);
                 return base;
@@ -289,7 +289,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
 
     // If storage mode context exists, generate OP_SET_STORAGE_CTX instruction first
     if (ctx->current_storage_mode != 0) {
-        emit_abc(compiler->emitter, OP_SET_STORAGE_CTX, ctx->current_storage_mode, 0, 0);
+        xemit_set_storage_ctx(compiler->emitter, ctx->current_storage_mode);
     }
 
     /*
@@ -315,7 +315,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
     // Call constructor - register "constructor" in symbol system
     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), XR_KEYWORD_CONSTRUCTOR);
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-    emit_abc(compiler->emitter, OP_INVOKE, base, local_sym, node->arg_count);
+    xemit_invoke(compiler->emitter, base, local_sym, node->arg_count);
 
     // Emit reified type args if present (e.g. new Box<int>(42))
     // Note: mono pass clears type_args for monomorphized classes, so this
@@ -325,7 +325,7 @@ static int compile_new_expr_internal(XrCompilerContext *ctx, XrCompiler *compile
         int tid0 = (argc >= 1) ? xr_type_to_tid(node->type_args[0]) : 0;
         int tid1 = (argc >= 2) ? xr_type_to_tid(node->type_args[1]) : 0;
         int packed = (argc & 0x03) | ((tid0 & 0x1F) << 2) | ((tid1 & 0x1F) << 7);
-        emit_abx(compiler->emitter, OP_INST_TYPE_ARGS, base, packed);
+        xemit_inst_type_args(compiler->emitter, base, packed);
     }
 
     // After call, set freereg = base + 1 (keep return value in R[base])
@@ -401,7 +401,7 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
         proto->struct_layouts[slot_offset] = layout;
 
         int obj_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_NEW_STRUCT, obj_reg, class_reg, slot_offset);
+        xemit_new_struct(compiler->emitter, obj_reg, class_reg, slot_offset);
         reg_free(compiler, class_reg);
 
         for (int i = 0; i < node->field_count; i++) {
@@ -409,7 +409,7 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
             int value_reg = xexpr_to_anyreg(ctx, compiler, &val_expr);
 
             int field_idx = xr_class_find_instance_field_index(class_info, node->field_names[i]);
-            emit_abc(compiler->emitter, OP_STRUCT_SET, obj_reg, field_idx, value_reg);
+            xemit_struct_set(compiler->emitter, obj_reg, field_idx, value_reg);
             reg_free(compiler, value_reg);
         }
 
@@ -435,7 +435,7 @@ XrExprDesc compile_struct_literal(XrCompilerContext *ctx, XrCompiler *compiler, 
         int global_sym = xr_symbol_register_in_table(
             (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), node->field_names[i]);
         int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-        emit_abc(compiler->emitter, OP_SETPROP, obj_reg, local_sym, value_reg);
+        xemit_setprop(compiler->emitter, obj_reg, local_sym, value_reg);
         reg_free(compiler, value_reg);
     }
 
@@ -463,7 +463,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                 prio_val = 2;  // CORO_PRIORITY_HIGH
             }
             if (prio_val >= 0) {
-                int pc = emit_asbx(compiler->emitter, OP_LOADI, 0, prio_val);
+                int pc = xemit_loadi(compiler->emitter, 0, prio_val);
                 return pc;
             }
         }
@@ -502,7 +502,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             };
             for (int ti = 0; ti < (int)(sizeof(type_consts)/sizeof(type_consts[0])); ti++) {
                 if (strcmp(node->name, type_consts[ti].name) == 0) {
-                    int pc = emit_asbx(compiler->emitter, OP_LOADI, 0, type_consts[ti].tid);
+                    int pc = xemit_loadi(compiler->emitter, 0, type_consts[ti].tid);
                     // OP_LOADI for Type constants produces raw I64
                     if (out_compile_type) *out_compile_type = xr_type_new_int(NULL);
                     if (out_is_raw) *out_is_raw = true;
@@ -578,14 +578,14 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                     if (ft && (ft->kind == XR_KIND_FLOAT) && field_idx < 64) {
                         compiler->emitter->proto->tfield_float_bitmap |= (uint64_t)1 << field_idx;
                     }
-                    int pc = emit_abc(compiler->emitter, OP_TFIELD_GET, 0, obj_reg, field_idx);
+                    int pc = xemit_tfield_get(compiler->emitter, 0, obj_reg, field_idx);
                     reg_free(compiler, obj_reg);
                     // TFIELD_GET now outputs tagged values — no slot_type override
                     return pc;
                 }
             }
             // Known field: use OP_JSON_GET (O(1) direct index)
-            int pc = emit_abc(compiler->emitter, OP_JSON_GET, 0, obj_reg, field_idx);
+            int pc = xemit_json_get(compiler->emitter, 0, obj_reg, field_idx);
             reg_free(compiler, obj_reg);
             return pc;
         } else if (obj_type->object.allow_extension) {
@@ -593,7 +593,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             XrSymbolTable *sym_table = (XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X);
             int global_sym = xr_symbol_register_in_table(sym_table, node->name);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
-            int pc = emit_abc(compiler->emitter, OP_JSON_GETK, 0, obj_reg, local_sym);
+            int pc = xemit_json_getk(compiler->emitter, 0, obj_reg, local_sym);
             reg_free(compiler, obj_reg);
             return pc;
         } else {
@@ -629,8 +629,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
 
                     // Struct: native field read
                     if (class_info->struct_layout) {
-                        pc = emit_abc(compiler->emitter, OP_STRUCT_GET,
-                                      0, obj_reg, field_idx);
+                        pc = xemit_struct_get(compiler->emitter, 0, obj_reg, field_idx);
                         reg_free(compiler, obj_reg);
                         return pc;
                     }
@@ -643,11 +642,9 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                         if (fst == 10 && field_idx < 64)
                             compiler->emitter->proto->tfield_float_bitmap |=
                                 (uint64_t)1 << field_idx;
-                        pc = emit_abc(compiler->emitter, OP_TFIELD_GET,
-                                      0, obj_reg, field_idx);
+                        pc = xemit_tfield_get(compiler->emitter, 0, obj_reg, field_idx);
                     } else {
-                        pc = emit_abc(compiler->emitter, OP_GETFIELD,
-                                      0, obj_reg, field_idx);
+                        pc = xemit_getfield(compiler->emitter, 0, obj_reg, field_idx);
                     }
                     reg_free(compiler, obj_reg);
                     return pc;
@@ -680,8 +677,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
 
             // Struct: native field read
             if (ci && ci->struct_layout) {
-                pc = emit_abc(compiler->emitter, OP_STRUCT_GET,
-                              0, obj_reg, field_idx);
+                pc = xemit_struct_get(compiler->emitter, 0, obj_reg, field_idx);
                 return pc;
             }
 
@@ -692,11 +688,9 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
                 if (fst == 10 && field_idx < 64)
                     compiler->emitter->proto->tfield_float_bitmap |=
                         (uint64_t)1 << field_idx;
-                pc = emit_abc(compiler->emitter, OP_TFIELD_GET,
-                              0, obj_reg, field_idx);
+                pc = xemit_tfield_get(compiler->emitter, 0, obj_reg, field_idx);
             } else {
-                pc = emit_abc(compiler->emitter, OP_GETFIELD,
-                              0, obj_reg, field_idx);
+                pc = xemit_getfield(compiler->emitter, 0, obj_reg, field_idx);
             }
             return pc;
         }
@@ -713,7 +707,7 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
     int local_sym = emitter_add_symbol(compiler->emitter, global_sym);
 
     // RELOC optimization: A=0 pending relocation
-    int pc = emit_abc(compiler->emitter, OP_GETPROP, 0, obj_reg, local_sym);
+    int pc = xemit_getprop(compiler->emitter, 0, obj_reg, local_sym);
 
     // readonly version reuses original register, no need to free
 

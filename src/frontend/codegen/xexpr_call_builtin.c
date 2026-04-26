@@ -82,14 +82,14 @@ static int compile_builtin_assert(XrCompilerContext *ctx, XrCompiler *compiler, 
         }
         XrString *loc_str = xr_compile_time_intern(ctx->X, loc_buf, strlen(loc_buf));
         int loc_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(loc_str));
-        emit_abc(compiler->emitter, OP_ASSERT, cond_reg, loc_idx, 0);
+        xemit_assert(compiler->emitter, cond_reg, loc_idx, 0);
         reg_free(compiler, cond_reg);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert() expects 1 or 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_assert_eq(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -110,16 +110,16 @@ static int compile_builtin_assert_eq(XrCompilerContext *ctx, XrCompiler *compile
 
         actual_reg = xexpr_ensure_boxed(ctx, compiler, &actual_desc, actual_reg);
         expect_reg = xexpr_ensure_boxed(ctx, compiler, &expect_desc, expect_reg);
-        emit_abc(compiler->emitter, OP_ASSERT_EQ, actual_reg, expect_reg, loc_idx);
+        xemit_assert_eq(compiler->emitter, actual_reg, expect_reg, loc_idx);
 
         reg_free(compiler, expect_reg);
         reg_free(compiler, actual_reg);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_eq() expects 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_assert_false(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -130,14 +130,14 @@ static int compile_builtin_assert_false(XrCompilerContext *ctx, XrCompiler *comp
         snprintf(loc_buf, sizeof(loc_buf), "line %d", node->arguments[0]->line);
         XrString *loc_str = xr_compile_time_intern(ctx->X, loc_buf, strlen(loc_buf));
         int loc_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(loc_str));
-        emit_abc(compiler->emitter, OP_ASSERT, cond_reg, loc_idx, 1);
+        xemit_assert(compiler->emitter, cond_reg, loc_idx, 1);
         reg_free(compiler, cond_reg);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_false() expects 1 argument, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_assert_ne(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -156,16 +156,16 @@ static int compile_builtin_assert_ne(XrCompilerContext *ctx, XrCompiler *compile
 
         actual_reg = xexpr_ensure_boxed(ctx, compiler, &actual_desc, actual_reg);
         unexpected_reg = xexpr_ensure_boxed(ctx, compiler, &unexpected_desc, unexpected_reg);
-        emit_abc(compiler->emitter, OP_ASSERT_NE, actual_reg, unexpected_reg, loc_idx);
+        xemit_assert_ne(compiler->emitter, actual_reg, unexpected_reg, loc_idx);
 
         reg_free(compiler, unexpected_reg);
         reg_free(compiler, actual_reg);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_ne() expects 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_assert_throws(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -198,20 +198,20 @@ static int compile_builtin_assert_throws(XrCompilerContext *ctx, XrCompiler *com
 
         // 1. Flag register: true = expect throw, set to false if no throw
         int flag_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADTRUE, flag_reg, 0, 0);
+        xemit_loadtrue(compiler->emitter, flag_reg);
 
         // 2. OP_TRY (catch offset patched later)
         int try_pc = PROTO_CODE_COUNT(compiler->proto);
         emit_abx(compiler->emitter, OP_TRY, 0, 0);
 
         // 3. OP_NOP (no finally)
-        emit_abc(compiler->emitter, OP_NOP, 0, 0, 0);
+        xemit_nop(compiler->emitter, 0, 0, 0);
 
         // 4. Call the closure with 0 args
-        emit_abc(compiler->emitter, OP_CALL, fn_reg, 0, 1);
+        xemit_call(compiler->emitter, fn_reg, 0, 1);
 
         // 5. No exception → set flag to false
-        emit_abc(compiler->emitter, OP_LOADFALSE, flag_reg, 0, 0);
+        xemit_loadfalse(compiler->emitter, flag_reg);
 
         // 6. JMP to end (skip catch)
         int end_jump = emit_jump(compiler->emitter, OP_JMP);
@@ -221,22 +221,22 @@ static int compile_builtin_assert_throws(XrCompilerContext *ctx, XrCompiler *com
         PROTO_SET_CODE(compiler->proto, try_pc, CREATE_ABx(OP_TRY, 0, catch_start));
 
         int catch_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_CATCH, catch_reg, 0, 0);
+        xemit_catch(compiler->emitter, catch_reg);
         reg_free(compiler, catch_reg);
 
         // 8. End: OP_END_TRY + assert flag OUTSIDE try-catch
         patch_jump(compiler->emitter, end_jump, -1);
-        emit_abc(compiler->emitter, OP_END_TRY, 0, 0, 0);
-        emit_abc(compiler->emitter, OP_ASSERT, flag_reg, loc_idx, 0);
+        xemit_end_try(compiler->emitter);
+        xemit_assert(compiler->emitter, flag_reg, loc_idx, 0);
 
         reg_free(compiler, flag_reg);
         reg_free(compiler, fn_reg);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_throws() expects 1 argument (a function), got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_assert_true(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -247,29 +247,29 @@ static int compile_builtin_assert_true(XrCompilerContext *ctx, XrCompiler *compi
         snprintf(loc_buf, sizeof(loc_buf), "line %d", node->arguments[0]->line);
         XrString *loc_str = xr_compile_time_intern(ctx->X, loc_buf, strlen(loc_buf));
         int loc_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(loc_str));
-        emit_abc(compiler->emitter, OP_ASSERT, cond_reg, loc_idx, 0);
+        xemit_assert(compiler->emitter, cond_reg, loc_idx, 0);
         reg_free(compiler, cond_reg);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "assert_true() expects 1 argument, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_array(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
     int result_reg = reg_alloc(ctx, compiler);
     int c_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     if (node->arg_count == 0) {
-        emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, 0, c_field);
+        xemit_newarray(compiler->emitter, result_reg, 0, c_field);
     } else if (node->arg_count == 1) {
         XrExprDesc arg_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         int arg_reg = xexpr_to_anyreg(ctx, compiler, &arg_desc);
-        emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, arg_reg, c_field);
+        xemit_newarray(compiler->emitter, result_reg, arg_reg, c_field);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
     } else {
         xr_compiler_error(ctx, compiler, "Array() expects 0 or 1 argument, got %d", node->arg_count);
-        emit_abc(compiler->emitter, OP_NEWARRAY, result_reg, 0, c_field);
+        xemit_newarray(compiler->emitter, result_reg, 0, c_field);
     }
     return result_reg;
 }
@@ -289,11 +289,11 @@ static int compile_builtin_bytes(XrCompilerContext *ctx, XrCompiler *compiler, C
     for (int i = 0; i < node->arg_count && i < 2; i++) {
         int target_reg = reg_alloc(ctx, compiler);
         if (arg_regs[i] != target_reg) {
-            emit_abc(compiler->emitter, OP_MOVE, target_reg, arg_regs[i], 0);
+            xemit_move(compiler->emitter, target_reg, arg_regs[i]);
             reg_free(compiler, arg_regs[i]);
         }
     }
-    emit_abc(compiler->emitter, OP_BYTES_NEW, base_reg, node->arg_count, ctx->current_storage_mode);
+    xemit_bytes_new(compiler->emitter, base_reg, node->arg_count);
     for (int i = node->arg_count - 1; i >= 0; i--) {
         reg_free(compiler, base_reg + 1 + i);
     }
@@ -310,12 +310,12 @@ static int compile_builtin_copy(XrCompilerContext *ctx, XrCompiler *compiler, Ca
         XrExprDesc arg_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         int arg_reg = xexpr_to_anyreg(ctx, compiler, &arg_desc);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_COPY, result_reg, arg_reg, 0);
+        xemit_copy(compiler->emitter, result_reg, arg_reg);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "copy() expects 1 argument, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_dump(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -340,16 +340,16 @@ static int compile_builtin_dump(XrCompilerContext *ctx, XrCompiler *compiler, Ca
                 indent = (int)v;
             }
         }
-        emit_abc(compiler->emitter, OP_DUMP, val_reg, indent, 0);
+        xemit_dump(compiler->emitter, val_reg, indent);
         reg_free(compiler, val_reg);
 
         // dump() returns null
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_LOADNULL, result_reg, 0, 0);
+        xemit_loadnull(compiler->emitter, result_reg);
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "dump() expects 1 or 2 arguments, got %d", node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_float(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -367,7 +367,7 @@ static int compile_builtin_map(XrCompilerContext *ctx, XrCompiler *compiler, Cal
     int result_reg = reg_alloc(ctx, compiler);
     int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
     int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | ctx->current_storage_mode;
-    emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_field);
+    xemit_newmap(compiler->emitter, result_reg, 0, c_field);
     return result_reg;
 }
 
@@ -375,17 +375,17 @@ static int compile_builtin_set(XrCompilerContext *ctx, XrCompiler *compiler, Cal
     int result_reg = reg_alloc(ctx, compiler);
     int b_field = ((int)ctx->current_elem_tid << 2) | ctx->current_storage_mode;
     if (node->arg_count == 0) {
-        emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 0);
+        xemit_newset(compiler->emitter, result_reg, b_field);
     } else if (node->arg_count == 1) {
         int arg_reg = result_reg + 1;
         xreg_set_freereg(compiler->regalloc, arg_reg);
         XrExprDesc arg_desc = xr_compile_expr(ctx, compiler, node->arguments[0]);
         xexpr_to_specific_reg(ctx, compiler, &arg_desc, arg_reg);
-        emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 1);
+        xemit_newset(compiler->emitter, result_reg, b_field);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
     } else {
         xr_compiler_error(ctx, compiler, "Set() expects 0 or 1 argument (array)");
-        emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 0);
+        xemit_newset(compiler->emitter, result_reg, b_field);
     }
     return result_reg;
 }
@@ -401,7 +401,7 @@ static int compile_builtin_string(XrCompilerContext *ctx, XrCompiler *compiler, 
             ? xexpr_to_anyreg_readonly(ctx, compiler, &arg_desc)
             : xexpr_to_anyreg(ctx, compiler, &arg_desc);
         int result_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_TOSTRING, result_reg, arg_reg, slot_hint);
+        xemit_tostring(compiler->emitter, result_reg, arg_reg, slot_hint);
         xreg_set_freereg(compiler->regalloc, result_reg + 1);
         return result_reg;
     }
@@ -426,7 +426,7 @@ static int compile_typeof_impl(XrCompilerContext *ctx, XrCompiler *compiler, Cal
         return result_reg;
     }
     xr_compiler_error(ctx, compiler, "%s() expects 1 argument, got %d", func_name, node->arg_count);
-    int r = reg_alloc(ctx, compiler); emit_abc(compiler->emitter, OP_LOADNULL, r, 0, 0); return r;
+    int r = reg_alloc(ctx, compiler); xemit_loadnull(compiler->emitter, r); return r;
 }
 
 static int compile_builtin_typeof(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node) {
@@ -442,7 +442,7 @@ static int compile_builtin_weakmap(XrCompilerContext *ctx, XrCompiler *compiler,
         int result_reg = reg_alloc(ctx, compiler);
         int key_kind = (ctx->current_key_tid == XR_TID_STRING) ? 1 : (ctx->current_key_tid == XR_TID_INT) ? 2 : 0;
         int c_field = (key_kind << 7) | (((int)ctx->current_elem_tid & 0x1F) << 2) | 0x02;
-        emit_abc(compiler->emitter, OP_NEWMAP, result_reg, 0, c_field);
+        xemit_newmap(compiler->emitter, result_reg, 0, c_field);
         return result_reg;
     }
     return BUILTIN_NOT_HANDLED;
@@ -452,7 +452,7 @@ static int compile_builtin_weakset(XrCompilerContext *ctx, XrCompiler *compiler,
     if (node->arg_count == 0) {
         int result_reg = reg_alloc(ctx, compiler);
         int b_field = ((int)ctx->current_elem_tid << 2) | 0x02;
-        emit_abc(compiler->emitter, OP_NEWSET, result_reg, b_field, 0);
+        xemit_newset(compiler->emitter, result_reg, b_field);
         return result_reg;
     }
     return BUILTIN_NOT_HANDLED;

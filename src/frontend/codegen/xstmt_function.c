@@ -522,10 +522,10 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
 
             // Load null to temp register for comparison
             int temp_reg = reg_alloc(ctx, &function_compiler);
-            emit_abc(function_compiler.emitter, OP_LOADNULL, temp_reg, 0, 0);
+            xemit_loadnull(function_compiler.emitter, temp_reg);
 
             // Compare param with null
-            emit_abc(function_compiler.emitter, OP_EQ, param_reg, temp_reg, 0);
+            xemit_eq(function_compiler.emitter, param_reg, temp_reg, 0);
             reg_free(&function_compiler, temp_reg);
 
             // Jump over default assignment if param != null
@@ -581,14 +581,13 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                         int sz = (8 + ci->struct_layout->total_size + 15) & ~15;
                         int slot = function_compiler.struct_area_offset / 16;
                         function_compiler.struct_area_offset += sz;
-                        emit_abc(function_compiler.emitter, OP_STRUCT_COPY,
-                                 plocal->reg, plocal->reg, slot);
+                        xemit_struct_copy(function_compiler.emitter, plocal->reg, plocal->reg, slot);
                         used_struct_copy = true;
                     }
                 }
             }
             if (!used_struct_copy)
-                emit_abc(function_compiler.emitter, OP_COPY, plocal->reg, plocal->reg, 0);
+                xemit_copy(function_compiler.emitter, plocal->reg, plocal->reg);
         }
     }
 
@@ -629,27 +628,27 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
             if (repl_top_level) {
                 // REPL: emit closure to temp reg, store in shared variable
                 emit_ctx_sync_before_closure(ctx, compiler);
-                emit_abx(compiler->emitter, OP_CLOSURE, func_reg, proto_idx);
-                emit_abx(compiler->emitter, OP_SETSHARED, func_reg, shared_fn_index);
+                xemit_closure(compiler->emitter, func_reg, proto_idx);
+                xemit_setshared(compiler->emitter, func_reg, shared_fn_index);
                 reg_free(compiler, func_reg);
             } else if (is_module_level && is_pure_function) {
                 // Pure function: store in shared_array (cross-coroutine access), keep local variable (recursive call)
                 emit_ctx_sync_before_closure(ctx, compiler);
-                emit_abx(compiler->emitter, OP_CLOSURE, func_reg, proto_idx);
+                xemit_closure(compiler->emitter, func_reg, proto_idx);
 
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
                 shared_set_const(ctx, shared_index, true);
-                emit_abx(compiler->emitter, OP_SETSHARED, func_reg, shared_index);
+                xemit_setshared(compiler->emitter, func_reg, shared_index);
 
                 // Inner function access prioritizes shared over upvalue, so uses OP_GETSHARED
             } else if (is_module_level) {
                 // Module-level function with upvalue: local + shared
                 emit_ctx_sync_before_closure(ctx, compiler);
-                emit_abx(compiler->emitter, OP_CLOSURE, func_reg, proto_idx);
+                xemit_closure(compiler->emitter, func_reg, proto_idx);
 
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
                 shared_set_const(ctx, shared_index, true);
-                emit_abx(compiler->emitter, OP_SETSHARED, func_reg, shared_index);
+                xemit_setshared(compiler->emitter, func_reg, shared_index);
 
                 // Associate Proto with local variable (for coroutine safety check)
                 XrLocalInfo *local = compiler_get_local_by_name(compiler, node->name);
@@ -666,21 +665,21 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
                     // Cell already exists in func_reg (created by emit_ctx_sync).
                     // Emit closure to temp, then update cell via CELL_SET.
                     int tmp = reg_alloc(ctx, compiler);
-                    emit_abx(compiler->emitter, OP_CLOSURE, tmp, proto_idx);
-                    emit_abc(compiler->emitter, OP_CELL_SET, func_reg, tmp, 0);
+                    xemit_closure(compiler->emitter, tmp, proto_idx);
+                    xemit_cell_set(compiler->emitter, func_reg, tmp, 0);
                     reg_free(compiler, tmp);
                     local->is_closure = true;
                     local->closure_proto = proto;
                     local->is_hoisted = false;
                 } else {
-                    emit_abx(compiler->emitter, OP_CLOSURE, func_reg, proto_idx);
+                    xemit_closure(compiler->emitter, func_reg, proto_idx);
                     if (local) {
                         local->is_closure = true;
                         local->closure_proto = proto;
                         local->is_hoisted = false;
                         // Cellify if captured mutable (const fn decls use raw snapshot)
                         if (!local->is_const && local->is_captured && local->ctx_slot >= 0 && !local->is_cellified) {
-                            emit_abc(compiler->emitter, OP_CELL_NEW, func_reg, 0, 0);
+                            xemit_cell_new(compiler->emitter, func_reg);
                             local->is_cellified = true;
                         }
                     }
@@ -697,18 +696,18 @@ void compile_function(XrCompilerContext *ctx, XrCompiler *compiler, FunctionDecl
 
                 int reg = reg_alloc(ctx, compiler);
                 emit_ctx_sync_before_closure(ctx, compiler);
-                emit_abx(compiler->emitter, OP_CLOSURE, reg, proto_idx);
+                xemit_closure(compiler->emitter, reg, proto_idx);
 
                 int shared_index = shared_get_or_add(ctx, compiler, name_str);
                 shared_set_const(ctx, shared_index, true);
-                emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
+                xemit_setshared(compiler->emitter, reg, shared_index);
                 reg_free(compiler, reg);
             }
         } else {
             // Anonymous function expression
             int reg = reg_alloc(ctx, compiler);
             emit_ctx_sync_before_closure(ctx, compiler);
-            emit_abx(compiler->emitter, OP_CLOSURE, reg, proto_idx);
+            xemit_closure(compiler->emitter, reg, proto_idx);
         }
     }
 }

@@ -89,18 +89,18 @@ void compile_expr_stmt(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *ex
         int coro_reg = xexpr_to_anyreg(ctx, compiler, &expr_desc);
         int target = reg_alloc(ctx, compiler);
         if (await_node->is_any_success) {
-            emit_abc(compiler->emitter, OP_AWAIT_ANY, target, coro_reg, 1);
+            xemit_await_any(compiler->emitter, target, coro_reg, 1);
         } else if (await_node->is_any) {
-            emit_abc(compiler->emitter, OP_AWAIT_ANY, target, coro_reg, 0);
+            xemit_await_any(compiler->emitter, target, coro_reg, 0);
         } else if (await_node->is_all || await_node->expr->type == AST_ARRAY_LITERAL) {
-            emit_abc(compiler->emitter, OP_AWAIT_ALL, target, coro_reg, 0);
+            xemit_await_all(compiler->emitter, target, coro_reg);
         } else if (await_node->timeout != NULL) {
             XrExprDesc timeout_desc = xr_compile_expr(ctx, compiler, await_node->timeout);
             int timeout_reg = xexpr_to_anyreg(ctx, compiler, &timeout_desc);
-            emit_abc(compiler->emitter, OP_AWAIT_TIMEOUT, target, coro_reg, timeout_reg);
+            xemit_await_timeout(compiler->emitter, target, coro_reg, timeout_reg);
         } else {
             // C=1: signal VM to skip deep copy (result discarded)
-            emit_abc(compiler->emitter, OP_AWAIT, target, coro_reg, 1);
+            xemit_await(compiler->emitter, target, coro_reg, 1);
         }
         reg_free(compiler, target);
         return;
@@ -153,8 +153,8 @@ void compile_print(XrCompilerContext *ctx, XrCompiler *compiler, PrintNode *node
         int reg = reg_alloc(ctx, compiler);
         XrString *empty = xr_compile_time_intern(ctx->X, "", 0);
         int const_idx = xr_vm_proto_add_constant(compiler->proto, xr_string_value(empty));
-        emit_abx(compiler->emitter, OP_LOADK, reg, const_idx);
-        emit_abc(compiler->emitter, OP_PRINT, reg, 0, 1);  // C=1 newline
+        xemit_loadk(compiler->emitter, reg, const_idx);
+        xemit_print(compiler->emitter, reg, 0, 1);  // C=1 newline
         reg_free(compiler, reg);
         return;
     }
@@ -178,7 +178,7 @@ void compile_print(XrCompilerContext *ctx, XrCompiler *compiler, PrintNode *node
         int newline = (i == node->expr_count - 1) ? 1 : 0;
         int c_field = newline | (slot_hint << 1);
 
-        emit_abc(compiler->emitter, OP_PRINT, reg, add_space, c_field);
+        xemit_print(compiler->emitter, reg, add_space, c_field);
         reg_free(compiler, reg);
     }
 }
@@ -261,7 +261,7 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
             if (local_info) xstmt_emit_box_if_raw(compiler->emitter, value_reg, &expr);
             if (local_info && local_info->compile_type)
                 xstmt_emit_json_checktype(ctx, compiler, value_reg, local_info->compile_type, node->value);
-            emit_abc(compiler->emitter, OP_CELL_SET, local, value_reg, 0);
+            xemit_cell_set(compiler->emitter, local, value_reg, 0);
             reg_free(compiler, value_reg);
         } else {
             // Normal local: discharge directly to target register
@@ -285,7 +285,7 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
         // shared variable assignment (xexpr_to_anyreg auto-BOXes typed values)
         XrExprDesc expr = xr_compile_expr(ctx, compiler, node->value);
         int value_reg = xexpr_to_anyreg(ctx, compiler, &expr);
-        emit_abx(compiler->emitter, OP_SETSHARED, value_reg, shared_index);
+        xemit_setshared(compiler->emitter, value_reg, shared_index);
         reg_free(compiler, value_reg);
     } else {
         // Non-local variable: normal compilation (xexpr_to_anyreg auto-BOXes typed values)
@@ -296,15 +296,15 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
         if (upvalue >= 0) {
             // Upvalue assignment: UPVAL_GET (cell ref) + CELL_SET
             int cell_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_SET, cell_reg, value_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg, upvalue, 0);
+            xemit_cell_set(compiler->emitter, cell_reg, value_reg, 0);
             reg_free(compiler, cell_reg);
             reg_free(compiler, value_reg);
         } else {
             // Top-level variable assignment - check shared first, then predefined globals
             int shared_index = shared_get_in_scope(ctx, compiler, name_str);
             if (shared_index >= 0) {
-                emit_abx(compiler->emitter, OP_SETSHARED, value_reg, shared_index);
+                xemit_setshared(compiler->emitter, value_reg, shared_index);
                 reg_free(compiler, value_reg);
             } else {
                 int global_index = builtin_get(ctx, name_str);
@@ -383,7 +383,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
         int member_reg = reg_alloc(ctx, compiler);
 
         // Read current member value: R[member_reg] = R[obj_reg].prop
-        emit_abc(compiler->emitter, OP_GETPROP, member_reg, obj_reg, local_sym);
+        xemit_getprop(compiler->emitter, member_reg, obj_reg, local_sym);
 
         // Compile right-side expression
         XrExprDesc value_expr = xr_compile_expr(ctx, compiler, node->value);
@@ -393,7 +393,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
         emit_abc(compiler->emitter, binary_op, member_reg, member_reg, value_reg);
 
         // Write back member value: R[obj_reg].prop = R[member_reg]
-        emit_abc(compiler->emitter, OP_SETPROP, obj_reg, local_sym, member_reg);
+        xemit_setprop(compiler->emitter, obj_reg, local_sym, member_reg);
 
         // Free registers
         reg_free(compiler, value_reg);
@@ -435,7 +435,7 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
         if (ca_info && ca_info->is_cellified) {
             // Cellified local: load current value from cell into temp
             var_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_CELL_GET, var_reg, local, 0);
+            xemit_cell_get(compiler->emitter, var_reg, local);
             need_writeback = true;
         } else {
             // Normal local: use its register directly
@@ -447,21 +447,21 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
             var_reg = reg_alloc(ctx, compiler);
             // Upvalue: load cell ref, then deref cell
             int cell_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_GET, var_reg, cell_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg, upvalue, 0);
+            xemit_cell_get(compiler->emitter, var_reg, cell_reg);
             reg_free(compiler, cell_reg);
             need_writeback = true;
         } else {
             shared_index = shared_get_in_scope(ctx, compiler, name_str);
             if (shared_index >= 0) {
                 var_reg = reg_alloc(ctx, compiler);
-                emit_abx(compiler->emitter, OP_GETSHARED, var_reg, shared_index);
+                xemit_getshared(compiler->emitter, var_reg, shared_index);
                 need_writeback = true;
             } else {
                 global_index = builtin_get(ctx, name_str);
                 if (global_index >= 0) {
                     var_reg = reg_alloc(ctx, compiler);
-                    emit_abx(compiler->emitter, OP_GETBUILTIN, var_reg, global_index);
+                    xemit_getbuiltin(compiler->emitter, var_reg, global_index);
                     need_writeback = true;
                 } else {
                     xr_compiler_error(ctx, compiler, "Undefined variable '%s'", name_str->data);
@@ -483,15 +483,15 @@ void compile_compound_assignment(XrCompilerContext *ctx, XrCompiler *compiler, C
     if (need_writeback) {
         if (local >= 0 && ca_info && ca_info->is_cellified) {
             // Cellified local: write back through cell
-            emit_abc(compiler->emitter, OP_CELL_SET, local, var_reg, 0);
+            xemit_cell_set(compiler->emitter, local, var_reg, 0);
         } else if (upvalue >= 0) {
             // Upvalue: write back through cell
             int cell_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_SET, cell_reg, var_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg, upvalue, 0);
+            xemit_cell_set(compiler->emitter, cell_reg, var_reg, 0);
             reg_free(compiler, cell_reg);
         } else if (shared_index >= 0) {
-            emit_abx(compiler->emitter, OP_SETSHARED, var_reg, shared_index);
+            xemit_setshared(compiler->emitter, var_reg, shared_index);
         } else {
             xr_compiler_error(ctx, compiler, "Cannot assign to built-in '%s'", name_str->data);
         }
@@ -524,7 +524,7 @@ void compile_inc(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
     if (local >= 0) {
         if (local_info && local_info->is_cellified) {
             var_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_CELL_GET, var_reg, local, 0);
+            xemit_cell_get(compiler->emitter, var_reg, local);
             need_writeback = true;
         } else {
             var_reg = local;
@@ -534,21 +534,21 @@ void compile_inc(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
         if (upvalue >= 0) {
             var_reg = reg_alloc(ctx, compiler);
             int cell_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_GET, var_reg, cell_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg, upvalue, 0);
+            xemit_cell_get(compiler->emitter, var_reg, cell_reg);
             reg_free(compiler, cell_reg);
             need_writeback = true;
         } else {
             shared_index = shared_get_in_scope(ctx, compiler, name_str);
             if (shared_index >= 0) {
                 var_reg = reg_alloc(ctx, compiler);
-                emit_abx(compiler->emitter, OP_GETSHARED, var_reg, shared_index);
+                xemit_getshared(compiler->emitter, var_reg, shared_index);
                 need_writeback = true;
             } else {
                 global_index = builtin_get(ctx, name_str);
                 if (global_index >= 0) {
                     var_reg = reg_alloc(ctx, compiler);
-                    emit_abx(compiler->emitter, OP_GETBUILTIN, var_reg, global_index);
+                    xemit_getbuiltin(compiler->emitter, var_reg, global_index);
                     need_writeback = true;
                 } else {
                     xr_compiler_error(ctx, compiler, "Undefined variable '%s'", name_str->data);
@@ -558,18 +558,18 @@ void compile_inc(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
         }
     }
 
-    emit_abc(compiler->emitter, OP_ADDI, var_reg, var_reg, 1);
+    xemit_addi(compiler->emitter, var_reg, var_reg, 1);
 
     if (need_writeback) {
         if (local >= 0 && local_info && local_info->is_cellified) {
-            emit_abc(compiler->emitter, OP_CELL_SET, local, var_reg, 0);
+            xemit_cell_set(compiler->emitter, local, var_reg, 0);
         } else if (upvalue >= 0) {
             int cell_reg2 = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg2, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_SET, cell_reg2, var_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg2, upvalue, 0);
+            xemit_cell_set(compiler->emitter, cell_reg2, var_reg, 0);
             reg_free(compiler, cell_reg2);
         } else if (shared_index >= 0) {
-            emit_abx(compiler->emitter, OP_SETSHARED, var_reg, shared_index);
+            xemit_setshared(compiler->emitter, var_reg, shared_index);
         } else {
             xr_compiler_error(ctx, compiler, "Cannot assign to built-in '%s'", name_str->data);
         }
@@ -599,7 +599,7 @@ void compile_dec(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
     if (local >= 0) {
         if (local_info_dec && local_info_dec->is_cellified) {
             var_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_CELL_GET, var_reg, local, 0);
+            xemit_cell_get(compiler->emitter, var_reg, local);
             need_writeback = true;
         } else {
             var_reg = local;
@@ -609,21 +609,21 @@ void compile_dec(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
         if (upvalue >= 0) {
             var_reg = reg_alloc(ctx, compiler);
             int cell_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_GET, var_reg, cell_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg, upvalue, 0);
+            xemit_cell_get(compiler->emitter, var_reg, cell_reg);
             reg_free(compiler, cell_reg);
             need_writeback = true;
         } else {
             shared_index = shared_get_in_scope(ctx, compiler, name_str);
             if (shared_index >= 0) {
                 var_reg = reg_alloc(ctx, compiler);
-                emit_abx(compiler->emitter, OP_GETSHARED, var_reg, shared_index);
+                xemit_getshared(compiler->emitter, var_reg, shared_index);
                 need_writeback = true;
             } else {
                 global_index = builtin_get(ctx, name_str);
                 if (global_index >= 0) {
                     var_reg = reg_alloc(ctx, compiler);
-                    emit_abx(compiler->emitter, OP_GETBUILTIN, var_reg, global_index);
+                    xemit_getbuiltin(compiler->emitter, var_reg, global_index);
                     need_writeback = true;
                 } else {
                     xr_compiler_error(ctx, compiler, "Undefined variable '%s'", name_str->data);
@@ -633,18 +633,18 @@ void compile_dec(XrCompilerContext *ctx, XrCompiler *compiler, IncDecNode *node)
         }
     }
 
-    emit_abc(compiler->emitter, OP_SUBI, var_reg, var_reg, 1);
+    xemit_subi(compiler->emitter, var_reg, var_reg, 1);
 
     if (need_writeback) {
         if (local >= 0 && local_info_dec && local_info_dec->is_cellified) {
-            emit_abc(compiler->emitter, OP_CELL_SET, local, var_reg, 0);
+            xemit_cell_set(compiler->emitter, local, var_reg, 0);
         } else if (upvalue >= 0) {
             int cell_reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_UPVAL_GET, cell_reg, upvalue, 0);
-            emit_abc(compiler->emitter, OP_CELL_SET, cell_reg, var_reg, 0);
+            xemit_upval_get(compiler->emitter, cell_reg, upvalue, 0);
+            xemit_cell_set(compiler->emitter, cell_reg, var_reg, 0);
             reg_free(compiler, cell_reg);
         } else if (shared_index >= 0) {
-            emit_abx(compiler->emitter, OP_SETSHARED, var_reg, shared_index);
+            xemit_setshared(compiler->emitter, var_reg, shared_index);
         } else {
             xr_compiler_error(ctx, compiler, "Cannot assign to built-in '%s'", name_str->data);
         }

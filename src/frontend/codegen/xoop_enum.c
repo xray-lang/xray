@@ -198,8 +198,8 @@ void compile_enum_decl(XrCompilerContext *ctx, XrCompiler *compiler, EnumDeclNod
     
     // Emit bytecode: load constant and store to shared
     int enum_reg = reg_alloc(ctx, compiler);
-    EMIT_ABX(ctx, compiler, OP_LOADK, enum_reg, enum_const_idx);
-    EMIT_ABX(ctx, compiler, OP_SETSHARED, enum_reg, shared_index);
+    xemit_loadk((compiler)->emitter, enum_reg, enum_const_idx);
+    xemit_setshared((compiler)->emitter, enum_reg, shared_index);
     reg_free(compiler, enum_reg);
 }
 

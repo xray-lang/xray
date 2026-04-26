@@ -346,23 +346,23 @@ int emit_move(XrEmitter *e, int dest, int src) {
         return current_pc(e);
     }
 
-    return emit_abc(e, OP_MOVE, dest, src, 0);
+    return xemit_move(e, dest, src);
 }
 
 int emit_loadk(XrEmitter *e, int dest, int const_idx) {
-    return emit_abx(e, OP_LOADK, dest, const_idx);
+    return xemit_loadk(e, dest, const_idx);
 }
 
 int emit_loadnull(XrEmitter *e, int reg) {
-    return emit_abc(e, OP_LOADNULL, reg, 0, 0);
+    return xemit_loadnull(e, reg);
 }
 
 int emit_loadtrue(XrEmitter *e, int reg) {
-    return emit_abc(e, OP_LOADTRUE, reg, 0, 0);
+    return xemit_loadtrue(e, reg);
 }
 
 int emit_loadfalse(XrEmitter *e, int reg) {
-    return emit_abc(e, OP_LOADFALSE, reg, 0, 0);
+    return xemit_loadfalse(e, reg);
 }
 
 int emit_binary_op(XrEmitter *e, OpCode op, int dest, int lhs, int rhs) {
@@ -378,7 +378,7 @@ int emitter_add_symbol(XrEmitter *e, int global_symbol) {
 }
 
 int emit_call(XrEmitter *e, int func, int nargs, int nresults) {
-    return emit_abc(e, OP_CALL, func, nargs, nresults);
+    return xemit_call(e, func, nargs, nresults);
 }
 
 int emit_return(XrEmitter *e, int base, int nret) {
@@ -387,11 +387,11 @@ int emit_return(XrEmitter *e, int base, int nret) {
 
     // Use optimized return instructions for common cases
     if (nret == 0) {
-        return emit_abc(e, OP_RETURN0, 0, 0, 0);
+        return xemit_return0(e);
     } else if (nret == 1) {
-        return emit_abc(e, OP_RETURN1, base, 0, 0);
+        return xemit_return1(e, base);
     }
-    return emit_abc(e, OP_RETURN, base, nret, 0);
+    return xemit_return(e, base, nret);
 }
 
 /* ========== Jump Instructions ========== */
@@ -548,7 +548,7 @@ int emit_test(XrEmitter *e, int cond_reg, bool negate) {
     // TEST instruction: if (R[A]) != k then PC++
     // k in C field: 0 = false, 1 = true
     int k = negate ? 1 : 0;
-    return emit_abc(e, OP_TEST, cond_reg, 0, k);
+    return xemit_test(e, cond_reg, k);
 }
 
 /* ========== Debugging and Statistics ========== */
@@ -642,7 +642,7 @@ int emit_get_current_pc(XrEmitter *e) {
 */
 int emit_spill(XrEmitter *e, int slot, int reg) {
     XR_CHECK(e != NULL, "Emitter cannot be NULL");
-    return emit_abc(e, OP_SPILL, slot, reg, 0);
+    return xemit_spill(e, slot, reg);
 }
 
 /*
@@ -651,6 +651,6 @@ int emit_spill(XrEmitter *e, int slot, int reg) {
 */
 int emit_reload(XrEmitter *e, int reg, int slot) {
     XR_CHECK(e != NULL, "Emitter cannot be NULL");
-    return emit_abc(e, OP_RELOAD, reg, slot, 0);
+    return xemit_reload(e, reg, slot);
 }
 

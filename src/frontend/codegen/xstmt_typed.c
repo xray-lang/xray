@@ -248,12 +248,12 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                              init_type == AST_NEW_EXPR ||
                              init_type == AST_CHANNEL_NEW);
             if (!is_direct) {
-                emit_abc(compiler->emitter, OP_TO_SHARED, reg, reg, 0);
+                xemit_to_shared(compiler->emitter, reg, reg);
             }
         } else {
-            emit_abc(compiler->emitter, OP_LOADNULL, reg, 0, 0);
+            xemit_loadnull(compiler->emitter, reg);
         }
-        emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
+        xemit_setshared(compiler->emitter, reg, shared_index);
         reg_free(compiler, reg);
 
         // Store type info in shared variable table for type inference
@@ -360,14 +360,14 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 ctx->current_elem_tid = old_elem_type;
                 ctx->current_object_type = old_object_type;
             } else {
-                emit_abc(compiler->emitter, OP_LOADNULL, m_init_reg, 0, 0);
+                xemit_loadnull(compiler->emitter, m_init_reg);
             }
             if (local->is_captured && local->ctx_slot >= 0) {
                 if (m_needs_cell_set) {
-                    emit_abc(compiler->emitter, OP_CELL_SET, local->reg, m_init_reg, 0);
+                    xemit_cell_set(compiler->emitter, local->reg, m_init_reg, 0);
                     reg_free(compiler, m_init_reg);
                 } else if (!local->is_const && !local->is_cellified) {
-                    emit_abc(compiler->emitter, OP_CELL_NEW, local->reg, 0, 0);
+                    xemit_cell_new(compiler->emitter, local->reg);
                     local->is_cellified = true;
                 }
             } else if (m_needs_cell_set) {
@@ -389,7 +389,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             // Small integer uses LOADI - AsBx format!
             if (value >= -MAXARG_sBx && value <= MAXARG_sBx) {
                 // LOADI is AsBx format, A=0 temporarily, sBx=value
-                int pc = emit_asbx(compiler->emitter, OP_LOADI, 0, (int)value);
+                int pc = xemit_loadi(compiler->emitter, 0, (int)value);
                 expr.kind = XEXPR_RELOC;
                 expr.u.pc = pc;
                 expr.reg = -1;
@@ -398,7 +398,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             } else {
                 XrValue val = xr_int(value);
                 int kidx = xr_vm_proto_add_constant(compiler->proto, val);
-                int pc = emit_abx(compiler->emitter, OP_LOADK, 0, kidx);
+                int pc = xemit_loadk(compiler->emitter, 0, kidx);
 
                 expr.kind = XEXPR_RELOC;
                 expr.u.pc = pc;
@@ -413,7 +413,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
 
             int shared_index = shared_get_or_add(ctx, compiler, name_str);
             shared_set_const(ctx, shared_index, node->is_const);
-            emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
+            xemit_setshared(compiler->emitter, reg, shared_index);
             reg_free(compiler, reg);
         } else if (node->initializer) {
             // Other expression types
@@ -421,14 +421,14 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             int reg = xexpr_to_anyreg(ctx, compiler, &expr);
             int shared_index = shared_get_or_add(ctx, compiler, name_str);
             shared_set_const(ctx, shared_index, node->is_const);
-            emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
+            xemit_setshared(compiler->emitter, reg, shared_index);
             reg_free(compiler, reg);
         } else {
             // Uninitialized variable, default to null
             int reg = reg_alloc(ctx, compiler);
-            emit_abc(compiler->emitter, OP_LOADNULL, reg, 0, 0);
+            xemit_loadnull(compiler->emitter, reg);
             int shared_index = shared_get_or_add(ctx, compiler, name_str);
-            emit_abx(compiler->emitter, OP_SETSHARED, reg, shared_index);
+            xemit_setshared(compiler->emitter, reg, shared_index);
             reg_free(compiler, reg);
         }
     } else {
@@ -502,11 +502,11 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 if (hoisted->is_captured && hoisted->ctx_slot >= 0) {
                     if (hoisted->is_cellified) {
                         int tmp = reg_alloc(ctx, compiler);
-                        emit_abc(compiler->emitter, OP_MOVE, tmp, hoisted->reg, 0);
-                        emit_abc(compiler->emitter, OP_CELL_SET, hoisted->reg, tmp, 0);
+                        xemit_move(compiler->emitter, tmp, hoisted->reg);
+                        xemit_cell_set(compiler->emitter, hoisted->reg, tmp, 0);
                         reg_free(compiler, tmp);
                     } else if (!hoisted->is_const) {
-                        emit_abc(compiler->emitter, OP_CELL_NEW, hoisted->reg, 0, 0);
+                        xemit_cell_new(compiler->emitter, hoisted->reg);
                         hoisted->is_cellified = true;
                     }
                 }
@@ -526,11 +526,11 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             if (local->is_captured && local->ctx_slot >= 0) {
                 if (local->is_cellified) {
                     int tmp = reg_alloc(ctx, compiler);
-                    emit_abc(compiler->emitter, OP_MOVE, tmp, local->reg, 0);
-                    emit_abc(compiler->emitter, OP_CELL_SET, local->reg, tmp, 0);
+                    xemit_move(compiler->emitter, tmp, local->reg);
+                    xemit_cell_set(compiler->emitter, local->reg, tmp, 0);
                     reg_free(compiler, tmp);
                 } else if (!local->is_const) {
-                    emit_abc(compiler->emitter, OP_CELL_NEW, local->reg, 0, 0);
+                    xemit_cell_new(compiler->emitter, local->reg);
                     local->is_cellified = true;
                 }
             }
@@ -587,7 +587,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
         /* ========== Test relocatable expression ========== */
         // Uninitialized variable, default to null
         if (!node->initializer) {
-            emit_abc(compiler->emitter, OP_LOADNULL, init_reg, 0, 0);
+            xemit_loadnull(compiler->emitter, init_reg);
         }
         // Only handle simplest case: integer constant
         else if (node->initializer->type == AST_LITERAL_INT) {
@@ -664,24 +664,24 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             if (needs_cell_set && local->is_cellified) {
                 // Cell was pre-created by emit_ctx_sync during initializer compilation.
                 // Write init value from init_reg into the cell.
-                emit_abc(compiler->emitter, OP_CELL_SET, local_reg, init_reg, 0);
+                xemit_cell_set(compiler->emitter, local_reg, init_reg, 0);
                 reg_free(compiler, init_reg);
             } else if (needs_cell_set) {
                 // Predicted cellification but emit_ctx_sync didn't fire.
                 // Move init value to local_reg and create cell.
-                emit_abc(compiler->emitter, OP_MOVE, local_reg, init_reg, 0);
+                xemit_move(compiler->emitter, local_reg, init_reg);
                 reg_free(compiler, init_reg);
                 if (!local->is_const) {
-                    emit_abc(compiler->emitter, OP_CELL_NEW, local_reg, 0, 0);
+                    xemit_cell_new(compiler->emitter, local_reg);
                     local->is_cellified = true;
                 }
             } else if (!local->is_const && !local->is_cellified) {
-                emit_abc(compiler->emitter, OP_CELL_NEW, local_reg, 0, 0);
+                xemit_cell_new(compiler->emitter, local_reg);
                 local->is_cellified = true;
             }
         } else if (needs_cell_set) {
             // Not captured: discard temp, move to local
-            emit_abc(compiler->emitter, OP_MOVE, local_reg, init_reg, 0);
+            xemit_move(compiler->emitter, local_reg, init_reg);
             reg_free(compiler, init_reg);
         }
     }

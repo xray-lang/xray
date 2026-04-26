@@ -196,17 +196,17 @@ int compile_call_internal(XrCompilerContext *ctx, XrCompiler *compiler, CallExpr
              * Encoding same as CALLSELF: A=func_reg, B=nargs.
              * VM does: close upvals, memmove R[A+1..A+B] → R[0..B-1], PC=entry.
              */
-            emit_abc(compiler->emitter, OP_LOOP_BACK, func_reg, node->arg_count, 0);
+            xemit_loop_back(compiler->emitter, func_reg, node->arg_count, 0);
             return -1;
         } else {
             // Recursive regular call
-            emit_abc(compiler->emitter, OP_CALLSELF, func_reg, node->arg_count, 1);
+            xemit_callself(compiler->emitter, func_reg, node->arg_count, 1);
             xreg_set_freereg(compiler->regalloc, func_reg + 1);
             return func_reg;
         }
     } else if (is_tail && compiler->type == FUNCTION_FUNCTION) {
         // Regular tail call (non-recursive)
-        emit_abc(compiler->emitter, OP_TAILCALL, func_reg, node->arg_count, 0);
+        xemit_tailcall(compiler->emitter, func_reg, node->arg_count, 0);
         return -1;
     } else {
         // Regular call (non-recursive, non-tail call)

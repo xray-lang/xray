@@ -476,7 +476,7 @@ static void compile_for_in_range_object(XrCompilerContext *ctx, XrCompiler *comp
     int step_reg     = base_reg + 2;  // R[base+2] = step
 
     // OP_RANGE_UNPACK: R[base]=start, R[base+1]=end, R[base+2]=step
-    emit_abc(compiler->emitter, OP_RANGE_UNPACK, base_reg, range_reg, 0);
+    xemit_range_unpack(compiler->emitter, base_reg, range_reg);
 
     // Release range_reg temp
     xreg_set_freereg(compiler->regalloc, base_reg + 3);
@@ -496,8 +496,8 @@ static void compile_for_in_range_object(XrCompilerContext *ctx, XrCompiler *comp
 
     // Condition: loop_var < end (expression form: R[tmp] = R[loop_var] < R[end])
     int tmp_reg = xreg_reserve(compiler->regalloc, 1);
-    emit_abc(compiler->emitter, OP_CMP_LT, tmp_reg, loop_var_reg, end_reg);
-    emit_abc(compiler->emitter, OP_TEST, tmp_reg, 0, 0);
+    xemit_cmp_lt(compiler->emitter, tmp_reg, loop_var_reg, end_reg);
+    xemit_test(compiler->emitter, tmp_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
     xreg_set_freereg(compiler->regalloc, tmp_reg);
 
@@ -517,7 +517,7 @@ static void compile_for_in_range_object(XrCompilerContext *ctx, XrCompiler *comp
     // Increment: loop_var += step
     int increment_pos = PROTO_CODE_COUNT(compiler->proto);
     loop_state_patch_continue(compiler, &loop_state, increment_pos);
-    emit_abc(compiler->emitter, OP_ADD, loop_var_reg, loop_var_reg, step_reg);
+    xemit_add(compiler->emitter, loop_var_reg, loop_var_reg, step_reg);
 
     // Jump back to loop start
     emit_loop(compiler->emitter, loop_start);
@@ -572,7 +572,7 @@ static void compile_for_in_keyvalue_v3(XrCompilerContext *ctx, XrCompiler *compi
     xreg_set_freereg(compiler->regalloc, iter_base + 2);  // protect receiver
     int global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), "entriesIterator");
     int method_symbol = emitter_add_symbol(compiler->emitter, global_sym);
-    emit_abc(compiler->emitter, OP_INVOKE, iter_base, method_symbol, 0);
+    xemit_invoke(compiler->emitter, iter_base, method_symbol, 0);
     int iter_reg = iter_base;  // return value in R[base]
     xreg_set_freereg(compiler->regalloc, iter_base + 1);
 
@@ -594,12 +594,12 @@ static void compile_for_in_keyvalue_v3(XrCompilerContext *ctx, XrCompiler *compi
     xreg_set_freereg(compiler->regalloc, hasnext_base + 2);
     global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), "hasNext");
     method_symbol = emitter_add_symbol(compiler->emitter, global_sym);
-    emit_abc(compiler->emitter, OP_INVOKE, hasnext_base, method_symbol, 0);
+    xemit_invoke(compiler->emitter, hasnext_base, method_symbol, 0);
     int has_next_reg = hasnext_base;  // return value in R[base]
     xreg_set_freereg(compiler->regalloc, hasnext_base + 1);
 
     // Test condition: if false, exit loop
-    emit_abc(compiler->emitter, OP_TEST, has_next_reg, 0, 0);
+    xemit_test(compiler->emitter, has_next_reg, 0);
     int exit_jump = emit_jump(compiler->emitter, OP_JMP);
     reg_free(compiler, has_next_reg);
 
@@ -617,7 +617,7 @@ static void compile_for_in_keyvalue_v3(XrCompilerContext *ctx, XrCompiler *compi
     xreg_set_freereg(compiler->regalloc, next_base + 2);
     global_sym = xr_symbol_register_in_table((XrSymbolTable*)xr_isolate_get_symbol_table(ctx->X), "next");
     method_symbol = emitter_add_symbol(compiler->emitter, global_sym);
-    emit_abc(compiler->emitter, OP_INVOKE, next_base, method_symbol, 0);
+    xemit_invoke(compiler->emitter, next_base, method_symbol, 0);
     int entry_reg = next_base;  // return value in R[base]
     xreg_set_freereg(compiler->regalloc, next_base + 1);
 
@@ -637,11 +637,11 @@ static void compile_for_in_keyvalue_v3(XrCompilerContext *ctx, XrCompiler *compi
     if (!key_is_blank) {
         // Compile index 0
         int index0_reg = reg_alloc(ctx, compiler);
-        emit_asbx(compiler->emitter, OP_LOADI, index0_reg, 0);
+        xemit_loadi(compiler->emitter, index0_reg, 0);
 
         // GETTABLE: key = entry[0]
         int key_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, key_reg, entry_reg, index0_reg);
+        xemit_index_get(compiler->emitter, key_reg, entry_reg, index0_reg);
         xreg_set_freereg(compiler->regalloc, key_reg + 1);  // release index0_reg
 
         XrString *key_str = xr_string_intern(ctx->X, node->item_name, strlen(node->item_name), 0);
@@ -652,11 +652,11 @@ static void compile_for_in_keyvalue_v3(XrCompilerContext *ctx, XrCompiler *compi
     if (!value_is_blank) {
         // Compile index 1
         int index1_reg = reg_alloc(ctx, compiler);
-        emit_asbx(compiler->emitter, OP_LOADI, index1_reg, 1);
+        xemit_loadi(compiler->emitter, index1_reg, 1);
 
         // GETTABLE: value = entry[1]
         int value_reg = reg_alloc(ctx, compiler);
-        emit_abc(compiler->emitter, OP_INDEX_GET, value_reg, entry_reg, index1_reg);
+        xemit_index_get(compiler->emitter, value_reg, entry_reg, index1_reg);
         xreg_set_freereg(compiler->regalloc, value_reg + 1);  // release index1_reg
 
         XrString *value_str = xr_string_intern(ctx->X, node->value_name, strlen(node->value_name), 0);
