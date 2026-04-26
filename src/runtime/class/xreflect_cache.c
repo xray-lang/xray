@@ -39,21 +39,19 @@ XrReflectCache* xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
     cache->method_count = klass->method_count;
     cache->initialized = false;
 
-    // Pre-create Field wrappers.
+    // Pre-create Field wrappers on the isolate fixedgc list. The wrappers
+    // share the regular XR_TINSTANCE owner protocol so xr_gc_cleanup at
+    // isolate teardown frees their bodies; this function is responsible
+    // only for the cache-owned XrValue arrays.
     if (klass->field_count > 0) {
         cache->field_wrappers = (XrValue*)xr_malloc(sizeof(XrValue) * klass->field_count);
         if (!cache->field_wrappers) goto fail;
         for (int i = 0; i < klass->field_count; i++) cache->field_wrappers[i] = xr_null();
 
         for (int i = 0; i < klass->field_count; i++) {
-            FieldWrapper *wrapper = (FieldWrapper*)XR_ALLOCATE(FieldWrapper);
+            FieldWrapper *wrapper = (FieldWrapper*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(FieldWrapper), XR_TINSTANCE);
             if (!wrapper) goto fail;
-            // Clear every wrapper byte, otherwise reserved/unreferenced
-            // fields would inherit uninitialised heap contents and trip
-            // the GC when it walks them.
-            memset(wrapper, 0, sizeof(*wrapper));
-
-            xr_gc_header_init_type(&wrapper->gc, XR_TBLOB);
+            xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
             wrapper->metadata.owner = klass;
             wrapper->metadata.field_index = i;
 
@@ -61,18 +59,17 @@ XrReflectCache* xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
         }
     }
 
-    // Pre-create Method wrappers.
+    // Pre-create Method wrappers on the isolate fixedgc list (same owner
+    // model as field wrappers above).
     if (klass->method_count > 0) {
         cache->method_wrappers = (XrValue*)xr_malloc(sizeof(XrValue) * klass->method_count);
         if (!cache->method_wrappers) goto fail;
         for (int i = 0; i < klass->method_count; i++) cache->method_wrappers[i] = xr_null();
 
         for (int i = 0; i < klass->method_count; i++) {
-            MethodWrapper *wrapper = (MethodWrapper*)XR_ALLOCATE(MethodWrapper);
+            MethodWrapper *wrapper = (MethodWrapper*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(MethodWrapper), XR_TINSTANCE);
             if (!wrapper) goto fail;
-            memset(wrapper, 0, sizeof(*wrapper));
-
-            xr_gc_header_init_type(&wrapper->gc, XR_TBLOB);
+            xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
             wrapper->metadata.owner = klass;
             wrapper->metadata.method_index = i;
 
@@ -87,8 +84,9 @@ fail:
     // Single cleanup site: xr_reflect_cache_free tolerates NULL entries
     // and NULL field/method arrays, so handing it the partially-built
     // cache is enough regardless of which step of the construction
-    // failed. xr_reflect_cache_free is responsible for releasing every
-    // wrapper allocated above, including any partially constructed slot.
+    // failed. The individual wrapper bodies live on the isolate fixedgc
+    // list and will be released by xr_gc_cleanup at isolate teardown,
+    // so this function only releases the cache-owned XrValue arrays.
     xr_reflect_cache_free(cache);
     return NULL;
 }

@@ -38,6 +38,16 @@ void xr_shape_registry_init(XrayIsolate *X) {
 void xr_shape_registry_destroy(XrayIsolate *X) {
     if (!X) return;
     if (X->shape_entries) {
+        // Each shape body is allocated via xr_calloc; the registry is
+        // its only owner. Release every shape's malloc-backed side
+        // tables (field_symbols, symbol_to_index, transitions, etc.)
+        // through the per-object destroy hook, then free the body.
+        for (uint16_t i = 0; i < X->shape_count; i++) {
+            XrShape *shape = X->shape_entries[i];
+            if (!shape) continue;
+            xr_gc_destroy_shape(shape);
+            xr_free(shape);
+        }
         xr_free(X->shape_entries);
         X->shape_entries = NULL;
         X->shape_count = 0;

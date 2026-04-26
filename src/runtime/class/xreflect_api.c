@@ -28,7 +28,7 @@ XrValue xr_create_type_object(XrayIsolate *X, XrTypeMetadata *meta) {
     XR_DCHECK(X != NULL, "create_type_object: NULL isolate");
     if (!meta) return xr_null();
 
-    TypeWrapper *wrapper = (TypeWrapper*)XR_ALLOCATE(TypeWrapper);
+    TypeWrapper *wrapper = (TypeWrapper*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(TypeWrapper), XR_TINSTANCE);
     if (!wrapper) return xr_null();
 
     XrClass *typeClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->typeClass : NULL;
@@ -43,7 +43,7 @@ XrValue xr_create_field_object(XrayIsolate *X, XrFieldMetadata *field) {
     XR_DCHECK(X != NULL, "create_field_object: NULL isolate");
     if (!field) return xr_null();
 
-    FieldWrapper *wrapper = (FieldWrapper*)XR_ALLOCATE(FieldWrapper);
+    FieldWrapper *wrapper = (FieldWrapper*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(FieldWrapper), XR_TINSTANCE);
     if (!wrapper) return xr_null();
 
     XrClass *fieldClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->fieldClass : NULL;
@@ -58,7 +58,7 @@ XrValue xr_create_method_object(XrayIsolate *X, XrMethodMetadata *method) {
     XR_DCHECK(X != NULL, "create_method_object: NULL isolate");
     if (!method) return xr_null();
 
-    MethodWrapper *wrapper = (MethodWrapper*)XR_ALLOCATE(MethodWrapper);
+    MethodWrapper *wrapper = (MethodWrapper*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(MethodWrapper), XR_TINSTANCE);
     if (!wrapper) return xr_null();
 
     XrClass *methodClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->methodClass : NULL;
@@ -74,15 +74,16 @@ XrValue xr_create_constructor_object(XrayIsolate *X, XrMethodMetadata *ctor) {
 }
 
 XrValue xr_create_parameter_object(XrayIsolate *X, XrParameterMetadata *param) {
+    XR_DCHECK(X != NULL, "create_parameter_object: NULL isolate");
     if (!param) return xr_null();
 
-    ParameterWrapper *wrapper = (ParameterWrapper*)XR_ALLOCATE(ParameterWrapper);
+    ParameterWrapper *wrapper = (ParameterWrapper*)xr_gc_alloc(xr_isolate_get_gc(X), sizeof(ParameterWrapper), XR_TINSTANCE);
     if (!wrapper) return xr_null();
 
     XrClass *paramClass = xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->parameterClass : NULL;
     (void)paramClass;
     xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
-    wrapper->metadata = param;
+    wrapper->metadata = *param;
 
     return wrapper_to_value(wrapper);
 }
@@ -111,7 +112,7 @@ XrMethodMetadata* xr_get_method_metadata(XrValue method_obj) {
 XrParameterMetadata* xr_get_parameter_metadata(XrValue param_obj) {
     if (!XR_IS_INSTANCE(param_obj)) return NULL;
     ParameterWrapper *wrapper = (ParameterWrapper*)XR_TO_INSTANCE(param_obj);
-    return wrapper->metadata;
+    return &wrapper->metadata;
 }
 
 /* ========== Reflect Class Methods ========== */

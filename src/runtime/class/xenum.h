@@ -76,10 +76,17 @@ XR_FUNC const char* xr_enum_value_name(XrEnumValue *enum_val);
 
 XR_FUNC void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate);
 
-/* ========== Cleanup ========== */
+/* ========== Destroy Hooks ==========
+ * Both objects live on the isolate fixedgc list. The hooks below are
+ * registered in g_destroy_funcs[] so xr_gc_cleanup releases their
+ * malloc-backed side resources before freeing the body. Callers never
+ * free enum objects manually. */
 
-XR_FUNC void xr_enum_type_free(XrEnumType *enum_type);
-XR_FUNC void xr_enum_value_free(XrEnumValue *enum_val);
+struct XrGCHeader;
+struct XrCoroGC;
+
+XR_FUNC void xr_gc_destroy_enum_type(struct XrGCHeader *obj, struct XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_enum_value(struct XrGCHeader *obj, struct XrCoroGC *owning_gc);
 
 /* ========== Type Conversion ========== */
 

@@ -46,6 +46,8 @@ const XrGCDestroyFn g_destroy_funcs[XGC_MAX_TYPES] = {
     [XR_TLOGGER]        = xr_gc_destroy_logger,
     [XR_TJSON]          = xr_gc_destroy_json,
     [XR_TTASK]          = xr_gc_destroy_task,
+    [XR_TENUM_TYPE]     = xr_gc_destroy_enum_type,
+    [XR_TENUM_VALUE]    = xr_gc_destroy_enum_value,
 };
 
 /* ========== GC State ========== */

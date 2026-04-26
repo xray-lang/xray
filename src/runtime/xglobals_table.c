@@ -11,13 +11,8 @@
 #include "xglobals_table.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
-#include "gc/xgc_header.h"
 #include <string.h>
 #include <stdio.h>
-
-// Forward declaration to avoid layer violation (globals is lower than class/)
-struct XrEnumType;
-XR_FUNC void xr_enum_type_free(struct XrEnumType *e);
 
 #define GLOBALS_MIN_CAPACITY 16
 #define GLOBALS_GROWTH_FACTOR 2
@@ -36,19 +31,13 @@ XrGlobalsTable* xr_globals_create(size_t initial_capacity) {
 
 void xr_globals_destroy(XrGlobalsTable *globals) {
     if (!globals) return;
-    // Free heap-allocated enum objects stored in globals
-    if (globals->values) {
-        for (size_t i = 0; i < globals->count; i++) {
-            XrValue v = globals->values[i];
-            if (XR_IS_PTR(v)) {
-                XrGCHeader *gc = (XrGCHeader*)XR_TO_PTR(v);
-                if (XR_GC_GET_TYPE(gc) == XR_TENUM_TYPE) {
-                    xr_enum_type_free((struct XrEnumType*)gc);
-                }
-            }
-        }
-        xr_free(globals->values);
-    }
+    // The XrValue entries reference heap objects (enum types, classes,
+    // closures, etc.) but globals does NOT own those bodies. Each
+    // pointee participates in its own owner protocol — fixedgc, system
+    // heap, or shared/refcount — and is released by the corresponding
+    // cleanup path (xr_gc_cleanup, xr_sysheap_destroy, xr_shared_decref).
+    // Releasing the values array here is the full extent of this owner.
+    if (globals->values) xr_free(globals->values);
     xr_free(globals);
 }
 
