@@ -43,8 +43,7 @@ XR_FUNC void xcgen_buf_ensure(XcgenBuf *b, size_t extra);
 XR_FUNC void xcgen_buf_puts(XcgenBuf *b, const char *s);
 XR_FUNC void xcgen_buf_append(XcgenBuf *dst, const XcgenBuf *src);
 
-__attribute__((format(printf, 2, 3))) XR_FUNC void xcgen_buf_printf(XcgenBuf *b, const char *fmt,
-                                                                    ...);
+XR_PRINTF_FMT(2, 3) XR_FUNC void xcgen_buf_printf(XcgenBuf *b, const char *fmt, ...);
 
 /* ========== C File Sections ========== */
 

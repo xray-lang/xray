@@ -94,8 +94,7 @@ XR_FUNC void xr_runtime_error(XrayIsolate *X, const char *fmt, ...);
  *   }
  */
 #define XRAY_MODULE_ENTRY(name)                                                                    \
-    __attribute__((visibility("default"))) const int xr_module_abi_version_##name =                \
-        XRAY_MODULE_ABI_VERSION;                                                                   \
-    __attribute__((visibility("default"))) XrModule *xr_load_module_##name(XrayIsolate *isolate)
+    XR_EXPORT_SYM const int xr_module_abi_version_##name = XRAY_MODULE_ABI_VERSION;                \
+    XR_EXPORT_SYM XrModule *xr_load_module_##name(XrayIsolate *isolate)
 
 #endif  // XRAY_MODULE_SDK_H

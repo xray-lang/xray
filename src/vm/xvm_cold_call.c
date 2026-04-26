@@ -45,10 +45,9 @@
 
 /* ========== Cold Path: OP_INVOKE Channel Methods ========== */
 
-__attribute__((noinline)) int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                XrChannel *ch, int method_symbol, int nargs,
-                                                XrValue *base, int a, XrBcCallFrame *frame,
-                                                XrInstruction *pc) {
+XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
+                                  int method_symbol, int nargs, XrValue *base, int a,
+                                  XrBcCallFrame *frame, XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_invoke_channel: NULL isolate");
     XR_DCHECK(ch != NULL, "vm_invoke_channel: NULL channel");
     XR_DCHECK(base != NULL, "vm_invoke_channel: NULL base");
@@ -280,10 +279,9 @@ __attribute__((noinline)) int vm_invoke_channel(XrayIsolate *isolate, XrVMContex
  * cancel(): if executor alive and task pending, cancel it; otherwise no-op.
  * toString(): returns string representation.
  */
-__attribute__((noinline)) int vm_invoke_task_handle(XrayIsolate *isolate, XrValue receiver,
-                                                    int method_symbol, int nargs, XrValue *base,
-                                                    int a, XrBcCallFrame *frame,
-                                                    XrInstruction *pc) {
+XR_NOINLINE int vm_invoke_task_handle(XrayIsolate *isolate, XrValue receiver, int method_symbol,
+                                      int nargs, XrValue *base, int a, XrBcCallFrame *frame,
+                                      XrInstruction *pc) {
     XrTask *task = xr_value_to_task(receiver);
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
         XrCoroutine *coro = task->coro;
@@ -347,10 +345,9 @@ __attribute__((noinline)) int vm_invoke_task_handle(XrayIsolate *isolate, XrValu
 
 /* ========== Cold Path: OP_INVOKE Coroutine Handle ========== */
 
-__attribute__((noinline)) int vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver,
-                                                    int method_symbol, int nargs, XrValue *base,
-                                                    int a, XrBcCallFrame *frame,
-                                                    XrInstruction *pc) {
+XR_NOINLINE int vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver, int method_symbol,
+                                      int nargs, XrValue *base, int a, XrBcCallFrame *frame,
+                                      XrInstruction *pc) {
     XrCoroutine *handle = xr_value_to_coro(receiver);
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
         xr_coro_cancel(handle);
@@ -371,9 +368,8 @@ __attribute__((noinline)) int vm_invoke_coro_handle(XrayIsolate *isolate, XrValu
 
 /* ========== Cold Path: OP_INVOKE Enum Methods ========== */
 
-__attribute__((noinline)) int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver,
-                                             int method_symbol, int nargs, XrValue *base, int a,
-                                             XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int method_symbol, int nargs,
+                               XrValue *base, int a, XrBcCallFrame *frame, XrInstruction *pc) {
     if (!XR_IS_PTR(receiver))
         return VM_COLD_CONTINUE;
     XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
@@ -442,11 +438,10 @@ __attribute__((noinline)) int vm_invoke_enum(XrayIsolate *isolate, XrValue recei
  * Returns VM_COLD_BREAK on direct result, VM_COLD_STARTFUNC for closure call,
  * or VM_COLD_ERROR on error.
  */
-__attribute__((noinline)) int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                              XrValue receiver, int method_symbol,
-                                              const char *method_name_chars, int nargs,
-                                              XrValue *base, int a, XrBcCallFrame *frame,
-                                              XrInstruction *pc, int is_tail) {
+XR_NOINLINE int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
+                                int method_symbol, const char *method_name_chars, int nargs,
+                                XrValue *base, int a, XrBcCallFrame *frame, XrInstruction *pc,
+                                int is_tail) {
     XR_DCHECK(isolate != NULL, "vm_invoke_class: NULL isolate");
     XR_DCHECK(base != NULL, "vm_invoke_class: NULL base");
     XR_DCHECK(method_name_chars != NULL, "vm_invoke_class: NULL method_name");
@@ -572,9 +567,8 @@ __attribute__((noinline)) int vm_invoke_class(XrayIsolate *isolate, XrVMContext 
  * Handles the entire OP_SUPERINVOKE: constructor :super() and super.method() calls.
  * Returns VM_COLD_STARTFUNC on success, VM_COLD_ERROR on error.
  */
-__attribute__((noinline)) int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                             XrInstruction instr, XrValue *base,
-                                             XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                               XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int nargs = GETARG_C(instr);

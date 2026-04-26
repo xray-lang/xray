@@ -23,14 +23,9 @@
 
 #ifndef XR_VALUE_DEFINED
 typedef struct XrValue XrValue;
-#endif  // Thread-local storage macro
-#ifdef __GNUC__
-#define XR_THREAD_LOCAL __thread
-#elif defined(_MSC_VER)
-#define XR_THREAD_LOCAL __declspec(thread)
-#else
-#define XR_THREAD_LOCAL
-#endif  // Use unified GC header
+#endif
+
+// XR_THREAD_LOCAL is provided by base/xdefs.h via xgc_header.h.
 #include "xgc_header.h"
 
 /* ========== GC State ========== */

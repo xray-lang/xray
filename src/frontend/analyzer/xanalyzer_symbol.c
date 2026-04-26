@@ -17,10 +17,10 @@
 
 // Thread-local symbol ID counter pointer (set by analyzer)
 // No fallback - must be explicitly set via xa_symbol_set_id_counter()
-static __thread uint32_t *g_symbol_id_ptr = NULL;
+static XR_THREAD_LOCAL uint32_t *g_symbol_id_ptr = NULL;
 
 // Thread-local symbol registry for O(1) ID lookup (set by analyzer)
-static __thread XrIntMap *g_symbol_registry = NULL;
+static XR_THREAD_LOCAL XrIntMap *g_symbol_registry = NULL;
 
 // Set current symbol ID counter (called by XaAnalyzer before analysis)
 void xa_symbol_set_id_counter(uint32_t *counter) {

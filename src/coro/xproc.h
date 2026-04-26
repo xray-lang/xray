@@ -83,7 +83,7 @@ typedef struct XrProcStats {
     uint64_t cont_steal_count;  // Continuations stolen (owner as stealer)
     uint64_t completed_count;   // Coros that finished (replaces global)
     uint64_t spawned_count;     // Coros spawned by this worker
-} XrProcStats __attribute__((aligned(XR_CACHE_LINE)));
+} XrProcStats XR_ALIGN(XR_CACHE_LINE);
 
 /* ========== Run Queue (Chase-Lev deque + overflow) ========== */
 

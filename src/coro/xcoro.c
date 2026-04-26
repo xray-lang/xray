@@ -1173,8 +1173,7 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
 // ========== Deadlock Diagnosis ==========
 
 // Format coroutine identifier into caller-provided buffer
-static __attribute__((unused)) const char *format_coro_id(XrCoroutine *coro, char *buf,
-                                                          size_t bufsz) {
+static XR_UNUSED const char *format_coro_id(XrCoroutine *coro, char *buf, size_t bufsz) {
     if (coro->name) {
         snprintf(buf, bufsz, "#%d \"%s\"", coro->id, coro->name);
     } else {
@@ -1184,7 +1183,7 @@ static __attribute__((unused)) const char *format_coro_id(XrCoroutine *coro, cha
 }
 
 // Print deadlock diagnosis info (simplified: blocked queue managed by Runtime)
-static __attribute__((unused)) void xr_sched_print_deadlock(XrCoroState *sched) {
+static XR_UNUSED void xr_sched_print_deadlock(XrCoroState *sched) {
     if (!sched)
         return;
 

@@ -48,10 +48,9 @@
  * Handles property set for non-instance types (Map error, Module, Class static, Json).
  * Returns VM_COLD_BREAK on success, VM_COLD_CONTINUE for instance, VM_COLD_ERROR on error.
  */
-__attribute__((noinline)) int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                       XrValue obj, int prop_symbol, XrValue value,
-                                                       XrValue *base, int a, XrBcCallFrame *frame,
-                                                       XrInstruction *pc) {
+XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue obj,
+                                         int prop_symbol, XrValue value, XrValue *base, int a,
+                                         XrBcCallFrame *frame, XrInstruction *pc) {
     (void) base;
     (void) a;
     // Map dot assignment: forbidden
@@ -241,11 +240,10 @@ __attribute__((noinline)) int vm_setprop_type_dispatch(XrayIsolate *isolate, XrV
 
 /* ========== Cold Path: OP_SETPROP Instance Setter ========== */
 
-__attribute__((noinline)) int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                         XrInstance *inst, XrValue obj,
-                                                         int prop_symbol, XrValue value,
-                                                         XrValue *base, int c, XrBcCallFrame *frame,
-                                                         XrInstruction *pc) {
+XR_NOINLINE int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                           XrInstance *inst, XrValue obj, int prop_symbol,
+                                           XrValue value, XrValue *base, int c,
+                                           XrBcCallFrame *frame, XrInstruction *pc) {
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
@@ -302,10 +300,9 @@ __attribute__((noinline)) int vm_setprop_instance_setter(XrayIsolate *isolate, X
  * Returns VM_COLD_BREAK if property was resolved, VM_COLD_CONTINUE for instance,
  * or VM_COLD_ERROR/VM_COLD_STARTFUNC for error/getter paths.
  */
-__attribute__((noinline)) int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                       XrValue obj, int prop_symbol, XrValue *base,
-                                                       int a, int b, XrBcCallFrame *frame,
-                                                       XrInstruction *pc) {
+XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue obj,
+                                         int prop_symbol, XrValue *base, int a, int b,
+                                         XrBcCallFrame *frame, XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_getprop_type_dispatch: NULL isolate");
     XR_DCHECK(base != NULL, "vm_getprop_type_dispatch: NULL base");
     // Task properties: task.done, task.cancelled, task.result, task.error
@@ -840,10 +837,10 @@ __attribute__((noinline)) int vm_getprop_type_dispatch(XrayIsolate *isolate, XrV
 
 /* ========== Cold Path: OP_GETPROP Instance Getter ========== */
 
-__attribute__((noinline)) int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                                         XrInstance *inst, XrValue obj,
-                                                         int prop_symbol, XrValue *base, int a,
-                                                         XrBcCallFrame *frame, XrInstruction *pc) {
+XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                           XrInstance *inst, XrValue obj, int prop_symbol,
+                                           XrValue *base, int a, XrBcCallFrame *frame,
+                                           XrInstruction *pc) {
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
@@ -904,10 +901,9 @@ __attribute__((noinline)) int vm_getprop_instance_getter(XrayIsolate *isolate, X
 
 /* ========== Cold Path: OP_INVOKE Module Methods ========== */
 
-__attribute__((noinline)) int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                               XrValue receiver, int method_symbol, int nargs,
-                                               XrValue *base, int a, XrBcCallFrame *frame,
-                                               XrInstruction *pc) {
+XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
+                                 int method_symbol, int nargs, XrValue *base, int a,
+                                 XrBcCallFrame *frame, XrInstruction *pc) {
     XrModule *module = xr_value_to_module(receiver);
     if (!module || module->export_count == 0)
         return VM_COLD_CONTINUE;

@@ -96,6 +96,7 @@
 #define XR_LIKELY(x) __builtin_expect(!!(x), 1)
 #define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define XR_PRINTF_FMT(fmtarg, firstvararg) __attribute__((format(printf, fmtarg, firstvararg)))
+#define XR_NO_SANITIZE(what) __attribute__((no_sanitize(what)))
 #elif defined(_MSC_VER)
 #define XR_NORET __declspec(noreturn)
 #define XR_AINLINE __forceinline
@@ -104,6 +105,7 @@
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
 #define XR_PRINTF_FMT(fmtarg, firstvararg)
+#define XR_NO_SANITIZE(what)
 #else
 #define XR_NORET
 #define XR_AINLINE inline
@@ -112,7 +114,32 @@
 #define XR_LIKELY(x) (x)
 #define XR_UNLIKELY(x) (x)
 #define XR_PRINTF_FMT(fmtarg, firstvararg)
+#define XR_NO_SANITIZE(what)
 #endif  // Combined: noreturn + visibility
+
+// Thread-local storage. _Thread_local is the C11 spelling and is
+// portable to every compiler we target. The MSVC fallback covers
+// older toolchains that predate C11 thread storage.
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+#define XR_THREAD_LOCAL _Thread_local
+#elif defined(_MSC_VER)
+#define XR_THREAD_LOCAL __declspec(thread)
+#elif defined(XR_GCC_COMPAT)
+#define XR_THREAD_LOCAL __thread
+#else
+#error "no thread-local storage class available for this compiler"
+#endif
+
+// Force a symbol into the dynamic symbol table at definition site.
+// XRAY_API is for declarations; XR_EXPORT_SYM is the standalone form
+// used by macros that emit a definition (e.g. XRAY_MODULE_ENTRY).
+#if defined(_WIN32) || defined(__CYGWIN__)
+#define XR_EXPORT_SYM __declspec(dllexport)
+#elif defined(XR_GCC_COMPAT)
+#define XR_EXPORT_SYM __attribute__((visibility("default")))
+#else
+#define XR_EXPORT_SYM
+#endif
 #define XR_FUNC_NORET XR_FUNC XR_NORET
 #define XRAY_API_NORET XRAY_API XR_NORET
 
