@@ -1,0 +1,131 @@
+// Cross-worker race regression for the structured-concurrency scope path.
+//
+// Targets the three races CORO-10 used to expose:
+//
+//   A. linked scope first_error: two failing children both see
+//      XR_IS_NULL(first_error) and both write — winner non-deterministic
+//      but must be a real child error string.
+//
+//   B. supervisor errors[] lazy-init lost update: two failing children
+//      both see scope->errors == NULL, both allocate, the second store
+//      overwrites the first — errors collected into the displaced array
+//      are silently lost.
+//
+//   C. supervisor errors[] concurrent push: two pushes interleave on
+//      length / data and corrupt the array.
+//
+// Eager-allocation of errors[] at scope entry plus moving
+// record_child_error inside the scope spinlock closes B and C; A is
+// serialized as a side effect.
+//
+// This stress harness spawns many failing children per scope across
+// many iterations so cross-worker scheduling exercises the race
+// window. It is multicore-aware: `xray test` runs with auto-detected
+// num_workers > 1 on any host with multiple cores.
+//
+// Run mode: scripts/run_regression_tests.sh forces --no-jit for this
+// file because the JIT register allocator currently mis-assigns
+// overlapping live ranges on the try/catch + linked scope path used
+// by Test 3 (independent JIT bug; the scope race fix being verified
+// here is in the interpreter / runtime path, not in the JIT).
+
+const ITERATIONS = 50
+const FAILING_PER_SCOPE = 200
+const SUCCEEDING_PER_SCOPE = 50
+
+// Each child does a bit of arithmetic before throwing so several
+// children overlap in flight on different workers — this widens the
+// race window for the wake_waiter scope-side bookkeeping.
+fn make_failing(id: int): int {
+    let x = 0
+    for (let k = 0; k < 50; k++) {
+        x = x + k
+    }
+    throw "err_" + string(id)
+    return x
+}
+
+fn make_ok(id: int): int {
+    let x = 0
+    for (let k = 0; k < 50; k++) {
+        x = x + k
+    }
+    return x + id
+}
+
+// Test 1 — supervisor: every failing child must produce one entry in
+// errors[]; total length is deterministic across all iterations.
+@test
+fn test_supervisor_no_lost_updates(): void {
+    for (let iter = 0; iter < ITERATIONS; iter++) {
+        let errs = supervisor scope {
+            for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+                go make_failing(i)
+            }
+            for (let i = 0; i < SUCCEEDING_PER_SCOPE; i++) {
+                go make_ok(i)
+            }
+        }
+        assert_eq(errs.length, FAILING_PER_SCOPE)
+    }
+}
+
+// Test 2 — supervisor: every entry in errors[] must be a real string
+// produced by some failing child, with no torn / NULL slots from a
+// concurrent xr_array_push.
+@test
+fn test_supervisor_no_torn_pushes(): void {
+    for (let iter = 0; iter < ITERATIONS; iter++) {
+        let errs = supervisor scope {
+            for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+                go make_failing(i)
+            }
+        }
+        for (let j = 0; j < errs.length; j++) {
+            let e = errs[j]
+            // Every slot must be a non-empty string with the err_ prefix
+            // produced by make_failing. A torn push or NULL slot would
+            // either be the empty string or fail startsWith.
+            assert(e.length >= 4, "torn slot: short string")
+            assert(e.startsWith("err_"), "torn slot: bad prefix")
+        }
+    }
+}
+
+// Test 3 — linked scope: even with many concurrent failures the scope
+// must throw exactly one error (the latched first_error). The string
+// form must be a valid err_<n> from one of the children.
+@test
+fn test_linked_first_error_deterministic(): void {
+    for (let iter = 0; iter < ITERATIONS; iter++) {
+        let caught = false
+        let msg = ""
+        try {
+            linked scope {
+                for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+                    go make_failing(i)
+                }
+            }
+        } catch (e) {
+            caught = true
+            msg = string(e)
+        }
+        assert(caught, "linked scope must propagate child error")
+        // Accept any err_<n>; we do not depend on a specific winner.
+        assert(msg.contains("err_"), "first_error must be a child error")
+    }
+}
+
+// Test 4 — supervisor: empty result must stay deterministic when no
+// child fails. Verifies the "all success" path under the same load.
+@test
+fn test_supervisor_all_success(): void {
+    for (let iter = 0; iter < 5; iter++) {
+        let errs = supervisor scope {
+            for (let i = 0; i < FAILING_PER_SCOPE; i++) {
+                go make_ok(i)
+            }
+        }
+        assert_eq(errs.length, 0)
+    }
+}
