@@ -114,7 +114,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     limit_reg = xexpr_to_anyreg_readonly(ctx, compiler, &limit_desc);
                 } else {
                     limit_reg = reg_alloc(ctx, compiler);
-                    emit_abc(compiler->emitter, OP_LOADI, limit_reg, 0, 0);
+                    emit_asbx(compiler->emitter, OP_LOADI, limit_reg, 0);
                 }
                 int result_reg = reg_alloc(ctx, compiler);
                 if (node->arg_count >= 2) {
@@ -213,7 +213,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler,
                     timeout_reg = xexpr_to_anyreg_readonly(ctx, compiler, &timeout_desc);
                 } else {
                     timeout_reg = reg_alloc(ctx, compiler);
-                    emit_abx(compiler->emitter, OP_LOADI, timeout_reg, 5000);
+                    emit_asbx(compiler->emitter, OP_LOADI, timeout_reg, 5000);
                 }
                 int result_reg = reg_alloc(ctx, compiler);
                 emit_abc(compiler->emitter, OP_CORO_CTRL, result_reg, timeout_reg, CORO_CTRL_STALLED);
