@@ -476,16 +476,48 @@ XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, struct XrayIsolate *X, Xr
 // Pure stack management — no GC interaction.
 XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
 
-/* ========== Scope Context ========== */
+/* ========== Scope Context ==========
+ *
+ * XrScopeContext represents a single `scope { ... }` block at runtime
+ * and is ORTHOGONAL to the XrTask tree (xtask.h). They look similar
+ * because both express "parent / child" relationships, but they
+ * answer different questions and are NOT redundant — merging them
+ * would lose one of the two semantic dimensions:
+ *
+ *   XrTask tree (xtask.h)
+ *     - one node per `go` expression
+ *     - parent / child links describe "who awaits whom"
+ *     - GC-managed (~112B), survives executor recycle
+ *     - lives across the whole task lifecycle
+ *
+ *   XrScopeContext (this struct)
+ *     - one node per `scope { ... }` / `linked scope { ... }` /
+ *       `supervisor scope { ... }` block
+ *     - first_child links describe "which coros run inside this block"
+ *     - malloc-allocated, freed at OP_SCOPE_EXIT
+ *     - carries the per-block POLICY (mode, first_error, errors[],
+ *       cancel_requested) that does not exist on XrTask
+ *
+ * A single coroutine has both a parent_task (for await) and a
+ * parent_scope (for the structured-concurrency wait barrier). Each
+ * scope block can contain multiple tasks; a top-level `go fn()`
+ * outside any scope has no parent_scope at all.
+ *
+ * Concurrency: child_lock serializes mutations of first_child,
+ * first_error, errors[], and cancel_requested under the dispatcher
+ * in xcoro.c (xr_coro_wake_waiter); see the wake-waiter sub-step
+ * doc comments there for the full lock contract. errors[] is
+ * preallocated at OP_SCOPE_ENTER for the supervisor mode so the
+ * locked section never needs to allocate. */
 
 typedef struct XrScopeContext {
     _Atomic int count;
     struct XrScopeContext *parent;
     uint8_t mode;                     // XrScopeMode
     _Atomic bool cancel_requested;    // linked scope: set when first child fails
-    _Atomic bool child_lock;          // Spinlock guarding first_child list.
-    XrValue first_error;              // linked scope: first child error
-    struct XrArray *errors;           // supervisor scope: collected error array
+    _Atomic bool child_lock;          // Spinlock — see lock contract above
+    XrValue first_error;              // linked scope: first child error (lock-protected)
+    struct XrArray *errors;           // supervisor scope: collected errors (eager-alloc)
     struct XrCoroutine *first_child;  // linked list of child coros in this scope
 } XrScopeContext;
 
