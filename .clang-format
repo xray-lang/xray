@@ -108,7 +108,12 @@ DerivePointerAlignment: false
 PointerAlignment: Right
 
 # Include sorting
-SortIncludes: CaseInsensitive
+#
+# Disabled: this codebase relies on manual include ordering for some
+# headers (e.g. coro/xresume.h needs xcoroutine.h before xvm_call.h
+# so XR_RESUME_ERROR is in scope). Auto-sorting would silently break
+# the build whenever an include block is rewritten by the formatter.
+SortIncludes: Never
 IncludeBlocks: Preserve
 IncludeCategories:
   # Public API headers
@@ -154,4 +159,22 @@ DisableFormat: false
 InsertTrailingCommas: None
 JavaScriptQuotes: Leave
 JavaScriptWrapImports: true
+
+# ---
+# Objective-C override
+#
+# clang-format 18+ auto-detects some .h files as Objective-C even in
+# pure-C projects. Without an ObjC entry the formatter hard-fails. We
+# inherit the same LLVM-derived shape so the output is stable
+# regardless of which language the heuristic picks.
+---
+Language: ObjC
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 100
+ObjCBlockIndentWidth: 4
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: true
 ...
