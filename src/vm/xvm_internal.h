@@ -193,14 +193,9 @@ static inline bool vm_is_truthy(XrValue value) {
  * see runtime/closure/xbound_method.h (included below via the runtime closure layer).
  */
 #include "../runtime/closure/xbound_method.h"
-
-// BoundMethod handler lookup (implemented in xvm_builtins.c)
-XR_FUNC MethodHandler xr_map_get_handler(int symbol);
-XR_FUNC MethodHandler xr_array_get_handler(int symbol);
-XR_FUNC MethodHandler xr_set_get_handler(int symbol);
-XR_FUNC MethodHandler xr_string_get_handler(int symbol);
-XR_FUNC MethodHandler xr_iterator_get_handler(int symbol);
-XR_FUNC XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args, int argc);
+/* Symbol -> MethodHandler bridges (xr_*_get_handler,
+ * xr_enum_get_member_handler) are declared in xbound_method.h above
+ * and implemented under runtime/closure. */
 
 /* ========== Helper Functions (in xvm_helpers.c) ========== */
 XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *format, ...);
