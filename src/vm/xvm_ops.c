@@ -28,22 +28,182 @@
 
 /* ========== Cycle Detection Data Structures ========== */
 
-#define MAX_COMPARE_DEPTH 100
-#define MAX_VISITING_PAIRS 64
+/*
+ * Open-addressing hash set of (a, b) pointer pairs currently being
+ * compared. Sized to grow without bound so cyclic structures with
+ * arbitrarily many shared sub-objects can be compared without false
+ * negatives. Pairs are canonicalised so that (a, b) and (b, a) hash
+ * to the same slot -- equality is symmetric.
+ *
+ * Memory: empty / tombstone / occupied tracked in a parallel meta byte
+ * array; resized at 75% load factor. Worst-case lookup is O(1) average
+ * with linear probing under a good hash. Total time/space for a
+ * compare operation is O(n) where n is the number of distinct
+ * sub-object pairs visited.
+ */
 
 typedef struct {
     void *a;
     void *b;
 } ObjectPair;
 
+#define VS_EMPTY     0
+#define VS_TOMBSTONE 1
+#define VS_OCCUPIED  2
+
+typedef struct {
+    ObjectPair *entries;
+    uint8_t    *meta;
+    int         capacity;   // power of two, 0 until first insert
+    int         count;      // distinct occupied slots
+    int         load;       // occupied + tombstones (resize trigger)
+} VisitedSet;
+
 typedef struct {
     XrayIsolate *isolate;
-    ObjectPair visiting[MAX_VISITING_PAIRS];
-    int visiting_count;
-    int depth;
+    VisitedSet   visiting;
 } CompareContext;
 
 static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b);
+
+static inline void visited_init(VisitedSet *vs) {
+    vs->entries = NULL;
+    vs->meta = NULL;
+    vs->capacity = 0;
+    vs->count = 0;
+    vs->load = 0;
+}
+
+static inline void visited_free(VisitedSet *vs) {
+    if (vs->entries) xr_free(vs->entries);
+    if (vs->meta) xr_free(vs->meta);
+    vs->entries = NULL;
+    vs->meta = NULL;
+    vs->capacity = 0;
+    vs->count = 0;
+    vs->load = 0;
+}
+
+// Canonicalise so (a,b) and (b,a) end up in the same slot. Sorting by
+// pointer value avoids storing both orderings.
+static inline void pair_canon(void **a, void **b) {
+    if ((uintptr_t)*a > (uintptr_t)*b) {
+        void *t = *a; *a = *b; *b = t;
+    }
+}
+
+static inline uint32_t pair_hash(void *a, void *b) {
+    // Mix two pointers via a 64-bit FNV-style fold, then truncate to
+    // 32 bits. The "+ 1" guard ensures non-zero output so the empty
+    // slot marker (zeroed entries) never collides with a live key.
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    h ^= (uint64_t)(uintptr_t)a; h *= XR_FNV64_PRIME;
+    h ^= (uint64_t)(uintptr_t)b; h *= XR_FNV64_PRIME;
+    return (uint32_t)((h >> 32) ^ h) + 1u;
+}
+
+// Resize and rehash. new_cap must be a power of two. Returns false on OOM.
+static bool visited_resize(VisitedSet *vs, int new_cap) {
+    XR_DCHECK((new_cap & (new_cap - 1)) == 0, "visited_resize: cap not pow2");
+    ObjectPair *new_entries =
+        (ObjectPair *)xr_calloc((size_t)new_cap, sizeof(ObjectPair));
+    if (!new_entries) return false;
+    uint8_t *new_meta = (uint8_t *)xr_calloc((size_t)new_cap, sizeof(uint8_t));
+    if (!new_meta) {
+        xr_free(new_entries);
+        return false;
+    }
+    uint32_t mask = (uint32_t)new_cap - 1u;
+    for (int i = 0; i < vs->capacity; i++) {
+        if (vs->meta[i] != VS_OCCUPIED) continue;
+        ObjectPair p = vs->entries[i];
+        uint32_t idx = pair_hash(p.a, p.b) & mask;
+        while (new_meta[idx] == VS_OCCUPIED) {
+            idx = (idx + 1u) & mask;
+        }
+        new_entries[idx] = p;
+        new_meta[idx] = VS_OCCUPIED;
+    }
+    if (vs->entries) xr_free(vs->entries);
+    if (vs->meta) xr_free(vs->meta);
+    vs->entries = new_entries;
+    vs->meta = new_meta;
+    vs->capacity = new_cap;
+    vs->load = vs->count;
+    return true;
+}
+
+// Returns true if (a,b) is currently in the visited set.
+static bool is_visiting(CompareContext *ctx, void *a, void *b) {
+    VisitedSet *vs = &ctx->visiting;
+    if (vs->capacity == 0) return false;
+    pair_canon(&a, &b);
+    uint32_t mask = (uint32_t)vs->capacity - 1u;
+    uint32_t idx = pair_hash(a, b) & mask;
+    while (vs->meta[idx] != VS_EMPTY) {
+        if (vs->meta[idx] == VS_OCCUPIED &&
+            vs->entries[idx].a == a && vs->entries[idx].b == b) {
+            return true;
+        }
+        idx = (idx + 1u) & mask;
+    }
+    return false;
+}
+
+// Insert (a,b). Returns false on OOM (caller must treat as cycle/abort).
+static bool push_visiting(CompareContext *ctx, void *a, void *b) {
+    VisitedSet *vs = &ctx->visiting;
+    pair_canon(&a, &b);
+
+    // Initial allocation or grow at 75% (load == capacity * 3/4).
+    if (vs->capacity == 0) {
+        if (!visited_resize(vs, 16)) return false;
+    } else if (vs->load * 4 >= vs->capacity * 3) {
+        if (!visited_resize(vs, vs->capacity * 2)) return false;
+    }
+
+    uint32_t mask = (uint32_t)vs->capacity - 1u;
+    uint32_t idx = pair_hash(a, b) & mask;
+    int first_tomb = -1;
+    while (vs->meta[idx] != VS_EMPTY) {
+        if (vs->meta[idx] == VS_TOMBSTONE) {
+            if (first_tomb < 0) first_tomb = (int)idx;
+        } else if (vs->entries[idx].a == a && vs->entries[idx].b == b) {
+            // Already present (cycle re-entered) -- caller checks
+            // is_visiting() first, so this path implies a logic bug.
+            return true;
+        }
+        idx = (idx + 1u) & mask;
+    }
+    if (first_tomb >= 0) idx = (uint32_t)first_tomb;
+    else vs->load++;
+    vs->entries[idx].a = a;
+    vs->entries[idx].b = b;
+    vs->meta[idx] = VS_OCCUPIED;
+    vs->count++;
+    return true;
+}
+
+// Remove (a,b) from the set. Stack-discipline: only the most recently
+// pushed pair is popped, so locating it is one find + tombstone.
+static void pop_visiting(CompareContext *ctx, void *a, void *b) {
+    VisitedSet *vs = &ctx->visiting;
+    if (vs->capacity == 0) return;
+    pair_canon(&a, &b);
+    uint32_t mask = (uint32_t)vs->capacity - 1u;
+    uint32_t idx = pair_hash(a, b) & mask;
+    while (vs->meta[idx] != VS_EMPTY) {
+        if (vs->meta[idx] == VS_OCCUPIED &&
+            vs->entries[idx].a == a && vs->entries[idx].b == b) {
+            vs->meta[idx] = VS_TOMBSTONE;
+            vs->count--;
+            return;
+        }
+        idx = (idx + 1u) & mask;
+    }
+    // Not found -- this means push/pop mismatched, indicating a bug.
+    XR_DCHECK(false, "pop_visiting: pair not in set");
+}
 
 /* ========== Type Conversion Helpers ========== */
 
@@ -143,47 +303,16 @@ XrValue vm_numeric_mod(XrayIsolate *isolate, XrValue left, XrValue right) {
 
 /* ========== Deep Comparison Helpers ========== */
 
-// Check if object pair is being visited (cycle detection)
-static bool is_visiting(CompareContext *ctx, void *a, void *b) {
-    XR_DCHECK(ctx != NULL, "is_visiting: NULL ctx");
-    for (int i = 0; i < ctx->visiting_count; i++) {
-        if ((ctx->visiting[i].a == a && ctx->visiting[i].b == b) ||
-            (ctx->visiting[i].a == b && ctx->visiting[i].b == a)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Add object pair to visiting list
-static bool push_visiting(CompareContext *ctx, void *a, void *b) {
-    XR_DCHECK(ctx != NULL, "push_visiting: NULL ctx");
-    if (ctx->visiting_count >= MAX_VISITING_PAIRS) {
-        return false;
-    }
-    ctx->visiting[ctx->visiting_count].a = a;
-    ctx->visiting[ctx->visiting_count].b = b;
-    ctx->visiting_count++;
-    return true;
-}
-
-// Remove object pair from visiting list
-static void pop_visiting(CompareContext *ctx) {
-    if (ctx->visiting_count > 0) {
-        ctx->visiting_count--;
-    }
-}
-
-// Array deep comparison
+// Array deep comparison.
+// Cycles are detected by the visited set: re-entering the same (a,b)
+// pair returns true (the structures are recursively equal at this
+// point unless a difference appears elsewhere in the traversal).
 static bool array_deep_equal(CompareContext *ctx, XrArray *a, XrArray *b) {
     if (a == b) return true;
     if (a->length != b->length) return false;
-    if (ctx->depth > MAX_COMPARE_DEPTH) return false;
 
-    if (is_visiting(ctx, a, b)) return false;
+    if (is_visiting(ctx, a, b)) return true;
     if (!push_visiting(ctx, a, b)) return false;
-
-    ctx->depth++;
 
     bool result = true;
     for (int i = 0; i < a->length; i++) {
@@ -193,9 +322,7 @@ static bool array_deep_equal(CompareContext *ctx, XrArray *a, XrArray *b) {
         }
     }
 
-    ctx->depth--;
-    pop_visiting(ctx);
-
+    pop_visiting(ctx, a, b);
     return result;
 }
 
@@ -203,12 +330,9 @@ static bool array_deep_equal(CompareContext *ctx, XrArray *a, XrArray *b) {
 static bool map_deep_equal(CompareContext *ctx, XrMap *a, XrMap *b) {
     if (a == b) return true;
     if (a->count != b->count) return false;
-    if (ctx->depth > MAX_COMPARE_DEPTH) return false;
 
-    if (is_visiting(ctx, a, b)) return false;
+    if (is_visiting(ctx, a, b)) return true;
     if (!push_visiting(ctx, a, b)) return false;
-
-    ctx->depth++;
 
     bool result = true;
     if (!xr_map_isdummy(a)) {
@@ -230,9 +354,7 @@ static bool map_deep_equal(CompareContext *ctx, XrMap *a, XrMap *b) {
         }
     }
 
-    ctx->depth--;
-    pop_visiting(ctx);
-
+    pop_visiting(ctx, a, b);
     return result;
 }
 
@@ -240,12 +362,9 @@ static bool map_deep_equal(CompareContext *ctx, XrMap *a, XrMap *b) {
 static bool set_deep_equal(CompareContext *ctx, XrSet *a, XrSet *b) {
     if (a == b) return true;
     if (a->count != b->count) return false;
-    if (ctx->depth > MAX_COMPARE_DEPTH) return false;
 
-    if (is_visiting(ctx, a, b)) return false;
+    if (is_visiting(ctx, a, b)) return true;
     if (!push_visiting(ctx, a, b)) return false;
-
-    ctx->depth++;
 
     bool result = true;
     for (size_t i = 0; i < a->capacity; i++) {
@@ -258,9 +377,7 @@ static bool set_deep_equal(CompareContext *ctx, XrSet *a, XrSet *b) {
         }
     }
 
-    ctx->depth--;
-    pop_visiting(ctx);
-
+    pop_visiting(ctx, a, b);
     return result;
 }
 
@@ -338,8 +455,12 @@ bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b) {
 
     if (XR_IS_ARRAY(a) || XR_IS_MAP(a) || XR_IS_SET(a) || xr_value_is_instance(a)) {
         if (isolate) {
-            CompareContext ctx = { .isolate = isolate, .visiting_count = 0, .depth = 0 };
-            return deep_compare(&ctx, a, b);
+            CompareContext ctx;
+            ctx.isolate = isolate;
+            visited_init(&ctx.visiting);
+            bool eq = deep_compare(&ctx, a, b);
+            visited_free(&ctx.visiting);
+            return eq;
         }
     }
 
