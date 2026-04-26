@@ -34,7 +34,18 @@ XrInstance* xr_instance_new(XrayIsolate *X, XrClass *cls) {
     const char* class_name = cls->name ? cls->name : "<unnamed>";
 
     size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
-    XrInstance *inst = (XrInstance*)xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+    // Instances are regular GC objects on the running coroutine's heap:
+    // xcoro_gc_traverse handles XR_TINSTANCE field walking and the type
+    // is in HAS_REFS_BITMAP. Falling back to isolate fixedgc keeps the
+    // bootstrap path working before main_coro is ready (and matches
+    // deep-copy's fallback when dst_coro_gc is unavailable).
+    XrInstance *inst = NULL;
+    XrCoroutine *coro = xr_current_coro(X);
+    if (coro) {
+        inst = (XrInstance*)xr_alloc(coro, size, XR_TINSTANCE);
+    } else {
+        inst = (XrInstance*)xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+    }
 
     if (!inst) {
         xr_log_warning("instance", "failed to allocate instance of class %s", class_name);
@@ -93,7 +104,15 @@ XrInstance* xr_instance_clone(XrayIsolate *X, XrInstance *src) {
 
     uint32_t field_count = xr_class_instance_field_count(cls);
     size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
-    XrInstance *dst = (XrInstance*)xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+    // Same owner choice as xr_instance_new: clone lands on the running
+    // coroutine's heap, with isolate fixedgc as bootstrap fallback.
+    XrInstance *dst = NULL;
+    XrCoroutine *coro = xr_current_coro(X);
+    if (coro) {
+        dst = (XrInstance*)xr_alloc(coro, size, XR_TINSTANCE);
+    } else {
+        dst = (XrInstance*)xr_gc_alloc(xr_isolate_get_gc(X), size, XR_TINSTANCE);
+    }
     if (!dst) return NULL;
 
     xr_gc_header_init_type(&dst->gc, XR_TINSTANCE);
