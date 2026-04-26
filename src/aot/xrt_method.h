@@ -5,7 +5,31 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_method.h - Method dispatch, property access, toString
+ * xrt_method.h - AOT-side method dispatch, property access, toString.
+ *
+ * KEY CONCEPT:
+ *   This header lives inside the AOT runtime umbrella (xrt.h) and is
+ *   #include'd verbatim into AOT-generated C files. AOT-generated code
+ *   must compile and run without any runtime header, so this file has
+ *   to be self-contained: it cannot reach into runtime/value/* even
+ *   though those tables are the source of truth at the language level.
+ *
+ *   Concretely the AOT-side methods operate on XrtValue (a small
+ *   tagged union, see xrt_value.h) and call AOT's bump-allocator
+ *   helpers; the runtime side operates on the larger NaN-boxed
+ *   XrValue and has access to XrayIsolate / GC. The two ABIs are
+ *   intentionally distinct so the AOT output stays a tiny standalone
+ *   program.
+ *
+ *   The remaining shared invariant is the SYMBOL ID number space:
+ *   every XRT_SYM_X below must equal the matching SYMBOL_X in
+ *   src/runtime/symbol/xsymbol_table.h, otherwise OP_INVOKE_BUILTIN
+ *   in the VM and the equivalent xrt_method_N call in AOT-generated C
+ *   would route the same method name to different slots. The runtime-
+ *   only translation unit src/aot/xrt_symbol_check.c links into
+ *   xray_core (never into AOT output) and pairs every XRT_SYM_X with
+ *   its SYMBOL_X via _Static_assert; drift fails the build before any
+ *   miscompiled AOT binary can ship.
  */
 
 #ifndef XRT_METHOD_H
@@ -16,10 +40,15 @@
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
 
 /* =========================================================================
- * Builtin method symbol IDs  (must match xsymbol_table.h)
+ * Builtin method symbol IDs.
+ *
+ * Every constant below is paired with its runtime SYMBOL_X counterpart
+ * via _Static_assert in xrt_symbol_check.c. Adding a new method here
+ * means adding the matching SYMBOL_X to xsymbol_table.h and a new
+ * static_assert to xrt_symbol_check.c.
  * ========================================================================= */
 
-/* IDs must match SYMBOL_* enum in xsymbol_table.h (auto-numbered from 1) */
+/* IDs must match SYMBOL_* enum in xsymbol_table.h (verified by xrt_symbol_check.c). */
 #define XRT_SYM_LENGTH      1
 #define XRT_SYM_SIZE        1   /* alias — compiler always emits LENGTH */
 #define XRT_SYM_IS_EMPTY    2
