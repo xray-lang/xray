@@ -431,4 +431,4 @@ static inline int xemit_nop(XrEmitter *e, int a, int b, int c) { return emit_abc
 
 // clang-format on
 
-#endif // XEMIT_TYPED_H
+#endif  // XEMIT_TYPED_H

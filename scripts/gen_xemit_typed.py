@@ -216,7 +216,7 @@ HEADER_PROLOGUE = """\
 
 HEADER_EPILOGUE = """\
 
-#endif // XEMIT_TYPED_H
+#endif  // XEMIT_TYPED_H
 """
 
 
