@@ -41,6 +41,7 @@ TEST(registry_is_dense_and_typed) {
         XR_TID_FLOAT,
         XR_TID_BIGINT,
         XR_TID_SET,
+        XR_TID_MAP,
     };
     for (int tid = 0; tid < XR_TID_COUNT; tid++) {
         const XrMethodSlot *table = xr_builtin_method_tables[tid];
@@ -184,6 +185,32 @@ TEST(float_arity_caps) {
     ASSERT_EQ_INT(powslot->max_args, 1);
 }
 
+/* ========== Map / WeakMap migration ========== */
+
+TEST(map_method_table_exposes_full_surface) {
+    /* All thirteen migrated map symbols must resolve. */
+    static const int symbols[] = {
+        SYMBOL_IS_EMPTY, SYMBOL_HAS, SYMBOL_GET, SYMBOL_SET,
+        SYMBOL_DELETE, SYMBOL_CLEAR, SYMBOL_KEYS, SYMBOL_VALUES,
+        SYMBOL_ENTRIES, SYMBOL_HAS_VALUE_MAP, SYMBOL_ITERATOR,
+        SYMBOL_ENTRIES_ITERATOR, SYMBOL_TOSTRING,
+    };
+    for (size_t i = 0; i < sizeof(symbols)/sizeof(symbols[0]); i++) {
+        const XrMethodSlot *slot = xr_method_table_lookup(
+            XR_TID_MAP, symbols[i], SYMBOL_BUILTIN_COUNT);
+        ASSERT_NOT_NULL(slot);
+        ASSERT_NOT_NULL(slot->fn);
+    }
+}
+
+TEST(map_set_advertises_may_throw) {
+    /* WeakMap.set throws on contract violation. */
+    const XrMethodSlot *slot = xr_method_table_lookup(
+        XR_TID_MAP, SYMBOL_SET, SYMBOL_BUILTIN_COUNT);
+    ASSERT_NOT_NULL(slot);
+    ASSERT(slot->flags & XR_METHOD_FLAG_MAY_THROW);
+}
+
 /* ========== Set / WeakSet migration ========== */
 
 TEST(set_method_table_exposes_full_surface) {
@@ -260,6 +287,10 @@ TEST_MAIN_BEGIN()
     RUN_TEST_SUITE("Float migration");
     RUN_TEST(float_method_table_exposes_full_surface);
     RUN_TEST(float_arity_caps);
+
+    RUN_TEST_SUITE("Map / WeakMap migration");
+    RUN_TEST(map_method_table_exposes_full_surface);
+    RUN_TEST(map_set_advertises_may_throw);
 
     RUN_TEST_SUITE("Set / WeakSet migration");
     RUN_TEST(set_method_table_exposes_full_surface);
