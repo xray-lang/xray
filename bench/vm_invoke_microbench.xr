@@ -1,0 +1,102 @@
+// vm_invoke_microbench.xr -- focused micro-benchmark for OP_INVOKE_BUILTIN
+// monomorphic invoke-IC throughput.
+//
+// Each section calls a single builtin method in a tight loop on a
+// receiver whose type never varies.  After the warm-up the IC slot
+// for that call site is locked to (type, &XrMethodSlot) and the
+// hot path is one cmp + one indirect call -- no slow-path lookup,
+// no two-layer type dispatch.
+//
+// Compare the output against a baseline binary at every refactor of
+// xic_builtin.c / xvm_dispatch_invoke.inc.c / per-type method tables
+// to confirm the IC fast path stays under noise.
+//
+// Run: /usr/bin/time -p xray run bench/vm_invoke_microbench.xr
+//      Take min of 5-10 cold runs; outliers are scheduler noise.
+
+// ---------- String.length / charAt -- IC on String receiver ----------
+fn bench_string_methods(iters: int): int {
+    let s = "the quick brown fox jumps over the lazy dog"
+    let acc = 0
+    for (let i = 0; i < iters; i++) {
+        acc = acc + s.length
+        // charAt returns a 1-char String; length on it is always 1.
+        if (s.charAt(i % 43).length > 0) {
+            acc = acc + 1
+        }
+    }
+    return acc
+}
+
+// ---------- Array.push / get / length -- IC on Array receiver ----------
+fn bench_array_methods(iters: int): int {
+    let a: Array<int> = []
+    let total = 0
+    for (let i = 0; i < iters; i++) {
+        a.push(i)
+    }
+    // length and indexed get on a stable-typed array stress two IC sites.
+    let n = a.length
+    for (let j = 0; j < n; j++) {
+        total = total + a[j]
+    }
+    return total
+}
+
+// ---------- Map.set / has / size -- IC on Map receiver ----------
+// `m.get(k) as int` would also exercise the receiver but currently
+// crashes the JIT codegen on this particular pattern; size + has are
+// equally good IC stress sites and stay on the interpreter fast path.
+fn bench_map_methods(iters: int): int {
+    let m = #{}
+    let total = 0
+    for (let i = 0; i < iters; i++) {
+        let k = "k" + (i % 32).toString()
+        m.set(k, i)
+        if (m.has(k)) {
+            total = total + m.length
+        }
+    }
+    return total
+}
+
+// ---------- int.toString / abs -- IC on int receiver (raw-receiver opcode) ----------
+fn bench_int_methods(iters: int): int {
+    let acc = 0
+    for (let i = 0; i < iters; i++) {
+        let s = i.toString()
+        acc = acc + s.length
+        let neg = (0 - i).abs()
+        if (neg == i) {
+            acc = acc + 1
+        }
+    }
+    return acc
+}
+
+// ---------- main ----------
+fn main() {
+    // Iteration counts tuned so each section dominates wall-clock.
+    let nString = 2000000
+    let nArray  = 1000000
+    let nMap    = 500000
+    let nInt    = 2000000
+
+    // Warm up so the IC slot at each call site is locked before timing
+    // (the first call goes through the slow xr_method_table_lookup
+    // path and patches the slot; we time only the warmed-up version).
+    bench_string_methods(100)
+    bench_array_methods(100)
+    bench_map_methods(100)
+    bench_int_methods(100)
+
+    let r1 = bench_string_methods(nString)
+    let r2 = bench_array_methods(nArray)
+    let r3 = bench_map_methods(nMap)
+    let r4 = bench_int_methods(nInt)
+
+    // Concatenate so dead-code elimination cannot drop any section.
+    print("string=${r1} array=${r2} map=${r3} int=${r4}")
+}
+
+main()

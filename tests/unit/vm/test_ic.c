@@ -383,6 +383,48 @@ TEST(snapshot_method_deep_copies_mega_cache) {
     xr_vm_proto_free(p);
 }
 
+TEST(snapshot_builtin_is_deep_copy) {
+    /*
+     * The invoke-IC table (OP_INVOKE_BUILTIN) snapshot must
+     * deep-copy the per-slot { slot, cached_tid, hits } entries so
+     * the JIT builder reads stable type feedback even when the live
+     * VM continues mutating the cache during background compile.
+     */
+    XrVMContext ctx; ctx_zero(&ctx);
+    XrProto *p = make_proto_with_insts(3);
+
+    XrICBuiltinTable *live = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
+    ASSERT_NOT_NULL(live);
+
+    /* Seed two slots so we can detect both copies and isolation. */
+    XrMethodSlot fake_slot = { (XrMethodFn)(uintptr_t)0xCAFE, 1, 1, 0, 0 };
+    live->caches[0].slot       = &fake_slot;
+    live->caches[0].cached_tid = 7;
+    live->caches[0].hits       = 42;
+    live->caches[1].slot       = &fake_slot;
+    live->caches[1].cached_tid = 9;
+    live->caches[1].hits       = 1;
+
+    XrICBuiltinTable *snap = xr_vm_ic_builtin_snapshot(&ctx, p);
+    ASSERT_NOT_NULL(snap);
+    ASSERT(snap != live);
+    ASSERT(snap->caches != live->caches);
+    ASSERT_EQ_INT(snap->count, live->count);
+    ASSERT_EQ_INT((int)snap->caches[0].cached_tid, 7);
+    ASSERT_EQ_INT((int)snap->caches[0].hits, 42);
+    ASSERT_EQ_INT((int)snap->caches[1].cached_tid, 9);
+
+    /* Mutate the live table; snapshot must remain unchanged. */
+    live->caches[0].cached_tid = -1;
+    live->caches[0].hits       = 0;
+    ASSERT_EQ_INT((int)snap->caches[0].cached_tid, 7);
+    ASSERT_EQ_INT((int)snap->caches[0].hits, 42);
+
+    xr_ic_builtin_table_free(snap);
+    xr_vm_ctx_free_ic_tables(&ctx);
+    xr_vm_proto_free(p);
+}
+
 /* ========== Free / reuse ========== */
 
 TEST(free_ic_tables_resets_state_and_supports_reuse) {
@@ -470,6 +512,7 @@ TEST_MAIN_BEGIN()
     RUN_TEST(snapshot_returns_null_before_ensure);
     RUN_TEST(snapshot_field_is_deep_copy);
     RUN_TEST(snapshot_method_deep_copies_mega_cache);
+    RUN_TEST(snapshot_builtin_is_deep_copy);
 
     RUN_TEST_SUITE("Free and reuse");
     RUN_TEST(free_ic_tables_resets_state_and_supports_reuse);
