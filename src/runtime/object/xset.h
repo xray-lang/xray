@@ -49,7 +49,6 @@ typedef struct XrSet {
 } XrSet;
 
 #define XR_SET_FLAG_WEAK           0x01
-#define XR_SET_FLAG_ENTRIES_ON_GC  0x02  // entries[] allocated as GC blob on Immix heap
 
 /* ========== Set Parameters ========== */
 

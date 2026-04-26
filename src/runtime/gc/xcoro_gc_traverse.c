@@ -112,11 +112,8 @@ void xr_gc_traverse_set(XrCoroGC *gc, struct XrSet *set) {
     // XrSet uses open addressing (NOT XrMap's chained hash)
     if (!set->entries || set->capacity == 0) return;
 
-    // Mark entries blob if it lives on GC heap (prevents sweep from reclaiming it)
-    if (set->flags & XR_SET_FLAG_ENTRIES_ON_GC) {
-        XrGCHeader *blob = ((XrGCHeader*)set->entries) - 1;
-        xr_coro_gc_markobject(gc, blob);
-    }
+    // entries[] always lives on malloc, not on the per-coro Immix heap,
+    // so there is no GC blob to mark for the table itself.
 
     bool is_weak = (set->flags & XR_SET_FLAG_WEAK) != 0;
 
