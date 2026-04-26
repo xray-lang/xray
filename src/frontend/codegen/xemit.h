@@ -55,11 +55,25 @@ XR_FUNC void emitter_free(XrEmitter *e);
 XR_FUNC void emitter_set_peephole(XrEmitter *e, bool enable);
 XR_FUNC void emitter_set_debug(XrEmitter *e, bool enable);
 
+// Generic instruction emitters. Prefer the strongly typed xemit_<op>()
+// API in xemit_typed.h (included at the bottom of this header) for any
+// call site whose opcode is a literal OP_<NAME>. The generic emitters
+// below remain available for two purposes only:
+//   1. Dynamic dispatch — opcode is selected at runtime (e.g. binary_op
+//      wrappers that pick OP_ADD / OP_SUB / OP_MUL based on AST kind).
+//   2. KOP_SPECIAL opcodes (OP_TRY, OP_NOP) whose operand encoding is a
+//      composite payload that doesn't fit any single typed signature.
+// Every other call site goes through xemit_<op>() and gets parameter-by-
+// parameter type / role checking from the compiler.
 XR_FUNC int emit_abc(XrEmitter *e, OpCode op, int a, int b, int c);
 XR_FUNC int emit_abx(XrEmitter *e, OpCode op, int a, int bx);
 XR_FUNC int emit_asbx(XrEmitter *e, OpCode op, int a, int sbx);
 XR_FUNC int emit_sj(XrEmitter *e, OpCode op, int sj);
 
+// Convenience helpers retained for emitter-internal use (peephole,
+// fixups, etc.). Callers outside the emitter should prefer the typed
+// API; these wrappers exist mainly because emit_binary_op / emit_unary_op
+// take a runtime OpCode.
 XR_FUNC int emit_move(XrEmitter *e, int dest, int src);
 XR_FUNC int emit_loadk(XrEmitter *e, int dest, int const_idx);
 XR_FUNC int emit_loadnull(XrEmitter *e, int reg);
