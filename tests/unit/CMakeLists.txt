@@ -20,6 +20,7 @@ endmacro()
 # ============================================================================
 
 add_xray_unit_test(test_xvalue value/test_xvalue.c)
+add_xray_unit_test(test_method_table value/test_method_table.c)
 
 # ============================================================================
 # util/ — Hash, dynamic array, hashmap, arena
