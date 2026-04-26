@@ -101,6 +101,9 @@ XR_FUNC void xr_runtime_error(XrayIsolate *isolate, const char *format, ...);
 
 XR_FUNC void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception);
 XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
+/* Unified throw: records the full stack trace and performs the
+ * unwind in one call. See xvm_exception.c for rationale. */
+XR_FUNC void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception);
 
 /* ========== Helper Functions ========== */
 
