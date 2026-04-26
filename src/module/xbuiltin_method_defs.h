@@ -10,7 +10,11 @@
  * KEY CONCEPT:
  *   All built-in type member declarations are defined here using X-macros.
  *   The Analyzer (for LSP/type-checking) consumes this file to generate
- *   XaBuiltinMember arrays. VM implementation lives in xvm_builtins.c.
+ *   XaBuiltinMember arrays. VM implementation lives in the per-type
+ *   method tables under runtime/value/x{bool,int,float}_methods.{c,h},
+ *   runtime/object/x{array,string,map,set,bigint,json}_methods.{c,h},
+ *   and stdlib/datetime/datetime_methods.{c,h}, all registered in
+ *   runtime/value/xmethod_table.c.
  *
  * USAGE:
  *   #define M(name, sig, doc, is_method) {name, sig, doc, is_method, false},
@@ -20,11 +24,12 @@
  *   #undef M
  *
  * SYNC RULE:
- *   - Adding a method here => MUST implement in xvm_builtins.c (or native_type_classes)
- *   - Adding a method in VM => MUST declare here
+ *   - Adding a method here => MUST implement in the matching per-type
+ *     method table (or native_type_classes for class-shaped builtins)
+ *   - Adding a method in a per-type table => MUST declare here
  *
  * RELATED MODULES:
- *   - src/vm/xvm_builtins.c: VM method implementations
+ *   - src/runtime/value/xmethod_table.{c,h}: unified per-type method registry
  *   - src/analyzer/xanalyzer_builtins.c: consumes these definitions
  *   - src/object/xstringbuilder_builtins.c: StringBuilder VM implementation
  */

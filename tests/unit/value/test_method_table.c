@@ -33,8 +33,9 @@ TEST(registry_is_dense_and_typed) {
      * array size is enforced at compile time inside xmethod_table.c.
      * Migrated types must point at a stable, non-NULL table; the rest
      * stay NULL until their owner module migrates. */
-    /* Migrated types so far. Add new ids here as the migration
-     * sweeps the rest of xvm_builtins.c. */
+    /* Types whose methods are owned by an XrMethodSlot table. Add
+     * new ids here as remaining native_type_classes-only types
+     * (Iterator / StringBuilder / Regex / ...) migrate. */
     static const XrTypeId migrated[] = {
         XR_TID_BOOL,
         XR_TID_INT,

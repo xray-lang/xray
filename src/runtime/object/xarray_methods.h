@@ -12,8 +12,9 @@
  *     OP_INVOKE_BUILTIN, OP_INVOKE invoke_array, the JIT array hint,
  *     and the cold-path go-statement helper all reach methods
  *     through xr_method_table_lookup(XR_TID_ARRAY, ...).
- *   - The bound-method bridge (xr_array_get_handler in xvm_builtins.c)
- *     pulls from the same table — no duplicate handler registry.
+ *   - The bound-method bridge (xr_array_get_handler in
+ *     runtime/closure/xbound_method.c) pulls from the same table —
+ *     no duplicate handler registry.
  *   - Method bodies are `static` inside xarray_methods.c.
  */
 

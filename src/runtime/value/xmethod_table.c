@@ -38,10 +38,10 @@
  * Per-type method tables are declared as `extern const XrMethodSlot []`
  * by their owning modules and published here.
  *
- * Migration is incremental: each owner module flips its slot from NULL
- * to its own table. Until a type is migrated, its slot stays NULL and
- * the VM keeps using the legacy hand-rolled dispatcher in
- * src/vm/xvm_builtins.c.
+ * Each owner module exposes its slot here; types whose dispatch is
+ * still routed through native_type_classes (Iterator, StringBuilder,
+ * Regex, ...) keep their slot NULL until they migrate to an
+ * XrMethodSlot table.
  */
 
 const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {

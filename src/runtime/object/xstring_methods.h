@@ -13,10 +13,9 @@
  *     hint, and the cold-path go-statement helper all reach methods
  *     through xr_method_table_lookup(XR_TID_STRING, ...).
  *   - The bound-method bridge (xr_string_get_handler in
- *     xvm_builtins.c) pulls from the same table.
+ *     runtime/closure/xbound_method.c) pulls from the same table.
  *   - SYMBOL_MATCH is wired through stdlib/regex/. The reverse
- *     include used to live in src/vm/xvm_builtins.c (vm -> stdlib);
- *     it now lives in xstring_methods.c (runtime/object -> stdlib).
+ *     include lives in xstring_methods.c (runtime/object -> stdlib).
  *     Same direction; the structural fix is to move XrRegex itself
  *     into src/runtime/object/ — out of scope for the method table
  *     migration.
