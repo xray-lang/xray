@@ -9,11 +9,36 @@
  *                  constructor call stack)
  *
  * KEY CONCEPT:
- *   XrVMState is the isolate's execution state: value stack, frames,
- *   exception handlers, builtin globals, shared variables, GC counters,
- *   JIT state (if enabled), defer stack, etc. Lives at the runtime layer
- *   so gc/, class/, reflection and JIT-free builds can all consume it
- *   without reverse-depending on vm/.
+ *   XrVMState is the isolate's storage host: it embeds the fixed-size
+ *   value stack, frame array, exception-handler array, builtin globals,
+ *   shared variables, GC counters, JIT state (when enabled), defer
+ *   stack, and the isolate-wide singletons (coro_state, runtime,
+ *   strings_map). Living at the runtime layer means gc/, class/,
+ *   reflection and JIT-free builds can all consume it without
+ *   reverse-depending on vm/.
+ *
+ *   IMPORTANT: XrVMState and XrVMContext (xexec_frame.h) are
+ *   complementary, not redundant:
+ *
+ *     - XrVMState owns the storage. The fields stack[], frames[],
+ *       exception_handlers[], strings_map, builtins[], shared,
+ *       defer_stack, jit, runtime, coro_state, ctor_call_stack are
+ *       the actual backing memory.
+ *     - XrVMContext is the access path (xexec_frame.h). It carries
+ *       pointers (stack / frames / handlers / ic_*_tables) that the
+ *       run() loop reads on the hot path. Single-thread mode has
+ *       isolate->vm_ctx aliasing into isolate->vm.* for zero-overhead
+ *       access; per-coroutine mode has each XrCoroutine carrying its
+ *       own XrVMContext with independently allocated buffers.
+ *
+ *   Code accessing isolate-wide configuration (jit, runtime, builtins,
+ *   shared, coro_state, multicore_enabled) goes through isolate->vm.*
+ *   directly. Code accessing per-execution-entity state (current
+ *   stack/frames/handlers/IC tables) MUST go through a XrVMContext --
+ *   either xr_vm_current_ctx(isolate) or one threaded through the
+ *   helper signature. Only init / teardown paths in xvm_helpers.c and
+ *   xvm_compile.c touch isolate->vm.{stack,frames,...} directly to
+ *   prepare the storage that XrVMContext later aliases.
  */
 
 #ifndef XEXEC_STATE_H
