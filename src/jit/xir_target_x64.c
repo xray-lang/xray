@@ -48,12 +48,12 @@ static const int x64_gpr_alloc[] = {
     /* Note: r11=scratch, r14=jit_ctx, r15=coro, rbp=FP → not allocatable */
 };
 
-/* Allocatable FP registers: xmm0-xmm15.
- * System V ABI: xmm0-xmm7 are caller-saved, xmm8-xmm15 are callee-saved.
- * Note: x86-64 callee must preserve xmm8-15 on Windows but NOT on System V.
- * On System V, all xmm regs are effectively caller-saved. */
+/* Allocatable FP registers: xmm0-xmm14 (xmm15 reserved as scratch).
+ * System V ABI: all xmm regs are caller-saved. xmm15 is held back so the
+ * codegen has a guaranteed FP scratch for two-operand fixups, fp/gp moves
+ * and similar contract repairs without disturbing register-allocator state. */
 static const int x64_fpr_alloc[] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
 };
 
 /*
@@ -80,13 +80,13 @@ const XirTarget xir_target_x64 = {
     .name               = "x86-64",
 
     .ngpr               = 11,       // 8 caller-saved + 3 callee-saved (minus r11,r14,r15,rbp,rsp)
-    .nfpr               = 16,       // xmm0-xmm15
+    .nfpr               = 15,       // xmm0-xmm14 (xmm15 reserved as scratch)
 
     .gpr_alloc          = x64_gpr_alloc,
     .fpr_alloc          = x64_fpr_alloc,
 
     .ngpr_caller_save   = 8,        // rax,rcx,rdx,rsi,rdi,r8,r9,r10
-    .nfpr_caller_save   = 16,       // System V: all xmm are caller-saved
+    .nfpr_caller_save   = 15,       // System V: all xmm are caller-saved (xmm15 is scratch, not allocatable)
 
     .scratch_gpr        = { X64_R11, -1 },  // r11 = scratch; no second scratch
     .coro_reg           = X64_R15,

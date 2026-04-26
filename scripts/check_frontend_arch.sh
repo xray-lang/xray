@@ -1,7 +1,9 @@
 #!/bin/bash
 # check_frontend_arch.sh -- frontend (lexer/parser/format/analyzer/codegen)
-# include-boundary lint, plus a few size invariants the refactor plan
-# (docs/engineering/frontend_refactor_plan_final.md) calls out.
+# include-boundary and size-invariant lint:
+#   - parser/format/analyzer/codegen never include lexer internal headers
+#   - codegen never reaches into analyzer private state
+#   - oversized files (xanalyzer_visitor.c, xast.c, xcompiler.c) flagged
 #
 # Run from project root:
 #     scripts/check_frontend_arch.sh
@@ -59,7 +61,7 @@ fi
 echo
 
 # --------------------------------------------------------------------
-# Rule 3: format/ MUST NOT include analyzer/ (F-04)
+# Rule 3: format/ MUST NOT include analyzer/.
 # formatter must be a pure AST -> text leaf.
 # --------------------------------------------------------------------
 echo "--- R3: format/ -> analyzer/ ---"
@@ -74,7 +76,7 @@ fi
 echo
 
 # --------------------------------------------------------------------
-# Rule 4: format/ MUST NOT include the public xray API headers (F-04).
+# Rule 4: format/ MUST NOT include the public xray API headers.
 # Anything used by the formatter must be available below L7.
 # --------------------------------------------------------------------
 echo "--- R4: format/ -> include/xray*.h ---"
@@ -89,7 +91,7 @@ fi
 echo
 
 # --------------------------------------------------------------------
-# Rule 5: frontend/** MUST NOT include xray.h / xray_isolate.h (C-01)
+# Rule 5: frontend/** MUST NOT include xray.h / xray_isolate.h.
 # Internal frontend code must use runtime/* / vm/* internal headers,
 # not the L7 public API surface.
 # --------------------------------------------------------------------
@@ -136,7 +138,7 @@ echo
 
 # --------------------------------------------------------------------
 # Rule 8: AstNode must NOT carry compile_type / compile_type_legacy
-# (X-01 retired the inline field; types live in xa_node_table only)
+# (the inline field has been retired; types live in xa_node_table only)
 # --------------------------------------------------------------------
 echo "--- R8: AstNode has no inline semantic-state fields ---"
 # Match field declarations only, not commentary references. A field

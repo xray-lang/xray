@@ -74,9 +74,10 @@
  * LICM iterates per-loop until fixed-point; the iteration cap bounds
  * worst-case time on pathological chain-invariant IR.
  *
- * NOTE: LICM_MAX_LOOPS / LICM_MAX_STORE_OBJS from the pre-phase-2
- * design are intentionally absent here — Phase 2.2 replaces the fixed
- * LicmLoop[] array with XirLoopInfo's heap-allocated representation.
+ * NOTE: there is intentionally no LICM_MAX_LOOPS / LICM_MAX_STORE_OBJS
+ * cap here — LICM stores its loop set via XirLoopInfo's heap-allocated
+ * representation, not a fixed-size LicmLoop[] array, so a static cap
+ * would be redundant.
  */
 #define XIR_LICM_MAX_ITERATIONS   8      // previously 4
 
@@ -112,7 +113,7 @@
  */
 #define XIR_RA_MAX_ROUNDS         4
 
-/* ========== Inlining (reserved for Phase 4 pipeline) ========== */
+/* ========== Inlining (reserved for the inliner pass) ========== */
 #define XIR_INLINE_MAX_COUNT      16
 #define XIR_INLINE_MAX_SIZE       500
 

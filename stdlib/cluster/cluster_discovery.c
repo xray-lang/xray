@@ -379,10 +379,9 @@ int xr_cluster_discovery_start(XrCluster *c) {
     atomic_store(&disc->coro_exited, false);
 
     /*
-     * Spawn discovery as a native coroutine on the worker pool, not a
-     * dedicated pthread. Benefits match the heartbeat refactor in
-     * Phase 6b.1: no private scheduling, no thread-block on poll(),
-     * one isolate stop_pipe to wake every background task.
+     * Spawn discovery as a native coroutine on the worker pool rather
+     * than a dedicated pthread: no private scheduling, no thread-block
+     * on poll(), one isolate stop_pipe to wake every background task.
      */
     XrCoroutine *coro = xr_coro_create_native(c->isolate, discovery_coro,
                                               disc, "cluster_discovery");

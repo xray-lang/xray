@@ -5,14 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_analyzer_incremental.c - A-02 acceptance tests
+ * test_analyzer_incremental.c - acceptance tests for the analyzer's
+ *                                  incremental-analysis API
  *
  * KEY CONCEPT:
- *   Pre-Phase-2 the analyzer exposed `xa_analyzer_update_incremental()`
+ *   The analyzer used to expose `xa_analyzer_update_incremental()`
  *   which sounded like true block-level incremental analysis but was
- *   in fact a full-file re-analysis with dirty propagation. The plan
- *   §0 forbade that mismatch ("不留过渡形态 / 失败语义立明确"), so
- *   Phase 2 (A-02) renamed the function and split the API:
+ *   in fact a full-file re-analysis with dirty propagation. That API
+ *   was renamed and split:
  *
  *     - xa_analyzer_refresh_file(file, ast, hash)
  *         hash-skipped full-file rebuild + dep-graph dirty propagation
@@ -97,7 +97,7 @@ static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name,
 /* ====================================================================== */
 
 TEST(invalidate_range_registers_untracked_file) {
-    // A-02 contract: invalidate_range on an untracked file MUST
+    // Contract: invalidate_range on an untracked file MUST
     // register it (creates a XaFileEntry with dirty=true), so an
     // LSP edit issued before any save does not silently lose the
     // dirty signal.
@@ -255,7 +255,7 @@ TEST(mark_file_dirty_propagation) {
 }
 
 TEST(api_is_null_safe) {
-    // Every public A-02 entry point must absorb NULL on either
+    // Every public incremental-analysis entry point must absorb NULL on either
     // argument without crashing. This is the contract callers
     // (LSP / module loader) rely on during shutdown / error paths.
     xa_analyzer_refresh_file(NULL, "x.xr", NULL, 0);
@@ -275,11 +275,11 @@ TEST(api_is_null_safe) {
 }
 
 TEST(dead_API_is_actually_dead) {
-    // Plan §0 explicitly forbids retaining "deprecated but kept"
-    // APIs. Phase 2 deleted xa_incremental_update(). This test
+    // The project rules forbid retaining "deprecated but kept" APIs.
+    // xa_incremental_update() was deleted accordingly. This test
     // documents the deletion: it does not call the function (the
     // build would fail), but its presence in the suite is a
-    // human-readable reminder that A-02 closed the loop.
+    // human-readable reminder that the wrapper has been removed.
     //
     // If a future "convenience wrapper" is reintroduced, this test
     // is the first place to look for justification.
@@ -292,7 +292,7 @@ TEST(dead_API_is_actually_dead) {
 
 TEST_MAIN_BEGIN()
     setup();
-    RUN_TEST_SUITE("A-02 incremental analysis closed loop");
+    RUN_TEST_SUITE("incremental analysis closed loop");
     RUN_TEST(invalidate_range_registers_untracked_file);
     RUN_TEST(invalidate_range_marks_known_file_dirty);
     RUN_TEST(invalidate_range_unused_lines_do_not_matter_yet);

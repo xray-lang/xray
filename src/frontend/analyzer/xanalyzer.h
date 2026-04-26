@@ -106,7 +106,7 @@ struct XaAnalyzer {
     // Incremental analysis support
     void *incremental;          // XaIncrementalCtx* (forward declared)
 
-    // X-01: AST -> inferred XrType side table. Populated during Pass 2
+    // AST -> inferred XrType side table. Populated during Pass 2
     // (type inference) and read by codegen / LSP. Replaces the inline
     // AstNode::compile_type field that previously coupled the parser
     // with semantic state. Forward-declared as void* to keep the public
@@ -129,15 +129,15 @@ XR_FUNC void xa_analyzer_set_strict_mode(XaAnalyzer *analyzer, bool enable);
 XR_FUNC void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
 XR_FUNC void xa_analyzer_update(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
 
-// A-02: full-file rebuild + dependency-graph dirty propagation. The pre-
-// A-02 name was xa_analyzer_update_incremental(), which lied about its
+// Full-file rebuild + dependency-graph dirty propagation. Earlier
+// versions named this xa_analyzer_update_incremental(), which lied about its
 // granularity -- it always re-analysed the whole file. The new name
 // matches what it really does, freeing the word "incremental" for a
 // future true-incremental implementation.
 XR_FUNC void xa_analyzer_refresh_file(XaAnalyzer *analyzer, const char *file,
                                       XrAstNode *ast, uint64_t content_hash);
 
-// A-02: block-level invalidation hook for the LSP edit path. Today this
+// Block-level invalidation hook for the LSP edit path. Today this
 // degrades to "mark the whole file dirty"; the next refresh_file call
 // will re-analyse the file. The (start_line, end_line) range is recorded
 // so a future incremental implementation can use it without changing the
@@ -149,8 +149,8 @@ XR_FUNC void xa_analyzer_invalidate_range(XaAnalyzer *analyzer,
 
 XR_FUNC void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file);
 
-// API: AST -> inferred type side table (X-01).
-// Replaces the pre-X-01 AstNode::compile_type field. Set during Pass 2,
+// API: AST -> inferred type side table.
+// Set during Pass 2,
 // read by codegen / LSP / mono. Both functions return / accept NULL
 // gracefully (NULL == "type unknown / not yet inferred", same semantics
 // the field had).

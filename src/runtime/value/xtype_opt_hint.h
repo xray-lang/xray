@@ -15,13 +15,11 @@
  *   runtime/value/.
  *
  * WHY THIS DESIGN:
- *   Pre-X-01 these functions lived in src/frontend/codegen/xoptimize.h,
- *   which forced src/frontend/analyzer/xanalyzer_jit.c to take a
- *   downward-pointing #include "../codegen/xoptimize.h" -- the only
- *   analyzer->codegen include in the codebase. Phase 3 lints reject
- *   that direction, so the type-classification subset was lifted up
- *   to runtime/value (next to XrType) where both layers can include
- *   it cleanly.
+ *   The type-classification subset lives in runtime/value (next to
+ *   XrType) so that both the analyzer and the codegen can include it
+ *   cleanly. Putting it under codegen/ would force the analyzer to
+ *   take a downward analyzer->codegen include, which the architecture
+ *   lints reject.
  */
 
 #ifndef XTYPE_OPT_HINT_H

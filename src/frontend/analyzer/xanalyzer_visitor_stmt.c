@@ -57,8 +57,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         XrType *init_type = xa_visit_infer_expr(ctx, var->initializer);
         ctx->expected_type = saved_expected;
 
-        // Store inferred initializer type for code generation.
-        // X-01 Phase 2.4c: side-table is now the only store.
+        // Store inferred initializer type in the analyzer side table
+        // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
@@ -134,8 +134,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         s = s->parent;
     }
 
-    // Store inferred type on AST node for code generation phase.
-    // X-01 Phase 2.4c: side-table is now the only store.
+    // Store the inferred type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, var_type);
 
     // Create assignment flow node
@@ -421,8 +420,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
         // Create tuple type for multi-value return
         return_type = xr_type_new_tuple(ctx->analyzer->isolate, element_types, ret->value_count);
 
-        // Store return type info on the AST node.
-        // X-01 Phase 2.4c: side-table is now the only store.
+        // Store return type info in the analyzer side table.
         xa_analyzer_set_node_type(ctx->analyzer, node, return_type);
 
         xr_free(element_types);

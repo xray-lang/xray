@@ -44,7 +44,7 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     }
 }
 
-// Initial bucket count. Seen hash dynamically grows (Phase 7.3) when the
+// Initial bucket count. Seen hash dynamically grows when the
 // live entry count crosses 75% load factor — avoids O(N) chain traversals
 // on deep graphs (10K+ shared objects).
 #define SEEN_BUCKET_INIT 32

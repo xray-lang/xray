@@ -51,7 +51,7 @@ typedef struct XrRuntime {
     /* === Machines (M) — pre-allocated 1:1 with Workers === */
     XrMachine *machines;
 
-    /* === Idle P/M Management (Phase 4.1: lock-free Treiber stacks) ===
+    /* === Idle P/M Management (lock-free Treiber stacks) ===
      *
      * All three lists are lock-free stacks chained via XrMachine::idle_link
      * or XrProc::idle_link. The previous pthread_mutex_t sched_lock has been

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjit_hooks.c - JIT hooks global storage (Phase 4: CORO-08)
+ * xjit_hooks.c - JIT hooks global storage (decouples coro/ from jit/)
  */
 
 #include "xjit_hooks.h"

@@ -207,8 +207,7 @@ static void stringify_array(JsonWriter *w, XrArray *arr) {
 // is deterministic for a given map instance but unrelated to the order
 // entries were inserted. Scripts that need insertion-preserving
 // round-trip should build their object via XrJson (shape-backed, which
-// `stringify_json` preserves exactly). This limitation is documented
-// in docs/analysis/stdlib_serialization.md §2.1.7.
+// `stringify_json` preserves exactly).
 static void stringify_map(JsonWriter *w, XrMap *map) {
     writer_char(w, '{');
 

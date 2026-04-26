@@ -197,7 +197,7 @@ TEST(ast_clone_variable) {
 }
 
 TEST(ast_clone_with_type_substitution) {
-    // X-01 Phase 2.4c: AstNode no longer carries an inline compile_type
+    // AstNode no longer carries an inline compile_type
     // field; mono substitutes types only through legitimate per-node
     // type fields (param types, var-decl annotations, return types, ...).
     // This test now exercises that path via VarDeclNode::type_annotation.

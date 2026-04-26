@@ -37,7 +37,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-// Phase 2 (CORO-03): lightweight TAS spinlock for child list serialization.
+// Lightweight TAS spinlock for child list serialization.
 // Critical sections are very short (list link/unlink), so spinning is fine.
 static inline void child_lock_acquire(_Atomic bool *lock) {
     while (atomic_exchange_explicit(lock, true, memory_order_acquire)) {
@@ -179,7 +179,7 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
 void xr_task_child_completed(XrTask *parent, XrTask *child) {
     if (!parent || !child) return;
 
-    // Phase 2 (CORO-03): detach + empty check must be atomic to avoid TOCTOU.
+    // Detach + empty check must be atomic to avoid TOCTOU.
     // Inline the detach logic here under one lock hold.
     child_lock_acquire(&parent->child_lock);
     XrTask **pp = &parent->first_child;

@@ -54,7 +54,7 @@ XR_FUNC XrValue xr_vm_call_closure(struct XrayIsolate *isolate,
 // Implementation in vm/xvm.c.
 XR_FUNC bool xr_vm_is_truthy(XrValue value);
 
-/* ========== VM Interpreter Entry (Phase 4: coro→vm decoupling) ========== */
+/* ========== VM Interpreter Entry (coro → vm decoupling) ========== */
 
 struct XrVMContext;
 

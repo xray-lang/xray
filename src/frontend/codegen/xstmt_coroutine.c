@@ -969,7 +969,7 @@ void compile_scope_block(XrCompilerContext *ctx, XrCompiler *c, ScopeBlockNode *
     // A = scope_mode (0=WAIT, 1=LINKED, 2=SUPERVISOR)
     emit_abc(c->emitter, OP_SCOPE_ENTER, node->scope_mode, 0, 0);
 
-    // Phase 5: Track scope block depth for continuation stealing.
+    // Track scope block depth for continuation stealing.
     // go statements inside scope{} emit OP_SPAWN_CONT instead of OP_GO.
     c->scope_block_depth++;
 

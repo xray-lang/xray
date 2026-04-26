@@ -5,11 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_xfmt_literal.c - Regression tests for F-01 / F-02
+ * test_xfmt_literal.c - Regression tests for the formatter's string
+ *                       and template literal output
  *
  * KEY CONCEPT:
  *   Verifies that the formatter emits round-trippable source for
- *   string literals and template strings. Pre-F-02 the formatter
+ *   string literals and template strings. An earlier formatter
  *   wrote string payloads verbatim between two `"` characters and
  *   emitted templates between backticks; both produced source the
  *   lexer rejects.
@@ -72,7 +73,7 @@ static char *format_only(AstNode *program) {
     return xfmt_format_ast(program, &xfmt_default_config, X);
 }
 
-/* ========== F-02: simple ASCII strings round-trip ========== */
+/* ========== simple ASCII strings round-trip ========== */
 
 TEST(xfmt_string_simple_ascii) {
     setup();
@@ -88,7 +89,7 @@ TEST(xfmt_string_simple_ascii) {
     teardown();
 }
 
-/* ========== F-02: embedded double quote ========== */
+/* ========== embedded double quote ========== */
 
 TEST(xfmt_string_embedded_quote) {
     setup();
@@ -114,7 +115,7 @@ TEST(xfmt_string_embedded_quote) {
     teardown();
 }
 
-/* ========== F-02: backslash and newline ========== */
+/* ========== backslash and newline ========== */
 
 TEST(xfmt_string_backslash_and_newline) {
     setup();
@@ -140,7 +141,7 @@ TEST(xfmt_string_backslash_and_newline) {
     teardown();
 }
 
-/* ========== F-01: template string emits no backticks ========== */
+/* ========== template string emits no backticks ========== */
 
 TEST(xfmt_template_no_backticks) {
     setup();
@@ -151,8 +152,8 @@ TEST(xfmt_template_no_backticks) {
 
     char *formatted = format_only(prog);
     ASSERT_NOT_NULL(formatted);
-    // F-01: backticks were dropped from the lexer; the formatter MUST
-    // NOT emit them.
+    // Backticks were dropped from the lexer; the formatter MUST NOT
+    // emit them.
     ASSERT(strchr(formatted, '`') == NULL);
     // Must contain `${` somewhere because the template has an
     // interpolation slot.
@@ -167,7 +168,7 @@ TEST(xfmt_template_no_backticks) {
     teardown();
 }
 
-/* ========== F-02: template literal `$` is escaped ========== */
+/* ========== template literal `$` is escaped ========== */
 //
 // A template-string literal part containing `${` would be reparsed as
 // an interpolation opener. xfmt_emit_template_string escapes every `$`
@@ -202,7 +203,7 @@ TEST(xfmt_template_dollar_escaped) {
     teardown();
 }
 
-/* ========== F-02: control-byte escape via \xHH ========== */
+/* ========== control-byte escape via \xHH ========== */
 
 TEST(xfmt_string_control_byte_hex_escape) {
     setup();
@@ -233,13 +234,13 @@ TEST(xfmt_string_control_byte_hex_escape) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("xfmt_literal - F-02 string round-trip");
+    RUN_TEST_SUITE("xfmt_literal - string round-trip");
     RUN_TEST(xfmt_string_simple_ascii);
     RUN_TEST(xfmt_string_embedded_quote);
     RUN_TEST(xfmt_string_backslash_and_newline);
     RUN_TEST(xfmt_string_control_byte_hex_escape);
 
-    RUN_TEST_SUITE("xfmt_literal - F-01 template no backticks");
+    RUN_TEST_SUITE("xfmt_literal - template no backticks");
     RUN_TEST(xfmt_template_no_backticks);
     RUN_TEST(xfmt_template_dollar_escaped);
 

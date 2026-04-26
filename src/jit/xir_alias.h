@@ -17,11 +17,11 @@
  *   this classification to distinguish "this store cannot possibly
  *   alias that load" from "we have no information, assume worst".
  *
- * SCOPE IN PHASE 2:
- *   The API surface is finalised here and a minimal implementation
- *   answers FRESH_ALLOC vs PARAM vs UNKNOWN by walking def
- *   instructions.  GLOBAL is reserved for a follow-up pass that
- *   inspects CALL_KNOWN / GETSHARED helpers.
+ * CURRENT SCOPE:
+ *   The API surface is finalised here and the implementation answers
+ *   FRESH_ALLOC vs PARAM vs UNKNOWN by walking def instructions.
+ *   GLOBAL is reserved for a follow-up pass that inspects CALL_KNOWN /
+ *   GETSHARED helpers.
  */
 
 #ifndef XIR_ALIAS_H

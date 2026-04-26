@@ -11,10 +11,10 @@
  *   Handles simple statement types: expression statements, print,
  *   assignments, compound assignments, increment/decrement.
  *
- *   Phase 3.4 (C-02) split out the var-decl + try_extract_comptime
- *   path into xstmt_typed.c, and the shared xstmt_emit_* helpers
- *   into xstmt_helpers.{h,c}. This file now stays focused on the
- *   "simple" (low-type-machinery) statement shapes.
+ *   var-decl + try_extract_comptime path lives in xstmt_typed.c, and
+ *   the shared xstmt_emit_* helpers live in xstmt_helpers.{h,c}. This
+ *   file stays focused on the "simple" (low-type-machinery) statement
+ *   shapes.
  */
 
 #include "xstmt.h"

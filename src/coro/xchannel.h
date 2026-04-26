@@ -145,14 +145,14 @@ typedef struct XrChannel {
     int64_t timer_timeout_ms;
     int64_t timer_start_ticks;
     _Atomic(bool) timer_fired;
-    struct XrTWheelTimer tw_timer;  // Phase 3: embedded timer wheel node (avoids polling)
+    struct XrTWheelTimer tw_timer;  // Embedded timer wheel node (avoids polling).
     uint8_t elem_tid;           // XrTypeId: element type for reified generics (0=any)
 
     /* === Distributed Channel (cluster) === */
     void *dist;               // Opaque pointer to cluster dist context (NULL = local)
     const char *name;         // Named Channel identifier (NULL = anonymous)
 
-    /* === Waiter Worker Mask (Phase 0: ownership-safe wake routing) ===
+    /* === Waiter Worker Mask (ownership-safe wake routing) ===
      * Bit i is set when worker i has at least one coroutine blocked on this
      * channel (normal send/recv or select).  Used by xr_runtime_wake_channel()
      * to dispatch wake commands only to relevant workers.

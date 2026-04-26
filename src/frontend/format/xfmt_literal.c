@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xfmt_literal.c - String / template-string serialisation (F-01, F-02)
+ * xfmt_literal.c - String / template-string serialisation
  *
  * See xfmt_literal.h for the rationale.
  */
@@ -18,7 +18,7 @@
 /* ========== Local buffer helpers ==========
  *
  * Mirror xfmt.c's static write_char/write_str behaviour so this file
- * stays self-contained until F-03 splits xfmt.c and these helpers move
+ * stays self-contained; when xfmt.c is split, these helpers may move
  * into a shared xfmt_internal.h.
  */
 

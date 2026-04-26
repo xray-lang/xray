@@ -56,7 +56,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
 
     // Local empty: batch steal from global free list.
     //
-    // Phase 4.2: lock-free — atomic_exchange grabs the entire global list
+    // Lock-free — atomic_exchange grabs the entire global list
     // in O(1), we keep the first XR_CORO_BATCH_SIZE for local use and push
     // the remainder back with a single CAS splice. This replaces the old
     // pthread_mutex_t pool->free_lock.
@@ -201,7 +201,7 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
 
     // Local full: batch return half to global free list, then put locally.
     //
-    // Phase 4.2: lock-free splice. Detach the first `batch` nodes from
+    // Lock-free splice. Detach the first `batch` nodes from
     // worker local list as a sub-chain (head=batch_head, tail=batch_tail),
     // then CAS-splice onto global free_list in a single step.
     if (runtime->isolate && runtime->isolate->sys_heap) {

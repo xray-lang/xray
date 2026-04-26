@@ -35,10 +35,10 @@
  *         (Pass 1.5 entry point: resolve base class names to
  *          XrClassInfo pointers and build vtables)
  *
- *   Phase 2.3 (A-04) split this out of xanalyzer_visitor.c.
- *   Implementations are unchanged; only the static keyword on the
- *   two collect helpers reachable from the hoisting loop in
- *   xanalyzer_visitor.c was dropped (see xanalyzer_visitor_internal.h).
+ *   This file holds the declaration-shaped subset of the analyzer
+ *   visitor. The two collect helpers reachable from the hoisting loop
+ *   in xanalyzer_visitor.c are non-static so they can be called
+ *   cross-TU; see xanalyzer_visitor_internal.h.
  */
 
 #include "xanalyzer_visitor_internal.h"

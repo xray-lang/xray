@@ -23,7 +23,7 @@
 #include "xtimer_wheel.h"
 #include "../base/xchecks.h"
 #include "xcoroutine.h"
-#include "xworker.h"  // xr_current_worker (Phase 1 owner assertions)
+#include "xworker.h"  // xr_current_worker (owner-thread assertions)
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -548,7 +548,7 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
     // the owner worker processes the cancel queue
     atomic_store_explicit(&timer->state, XR_TIMER_STATE_ZOMBIE, memory_order_release);
 
-    // Step 2: Allocate cancel node (Phase 3.2: try per-worker freelist first)
+    // Step 2: Allocate cancel node (try per-worker freelist first)
     XrCanceledTimerNode *node = xr_cancel_node_alloc();
     if (!node) return;  // Out of memory, zombie will be cleaned up when slot is processed
 
@@ -568,7 +568,7 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
 // Returns number of timers processed
 int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     XR_DCHECK(tw != NULL, "timer_process_canceled_queue: NULL tw");
-    // Phase 1: owner-only assertion (skip during startup when TLS unset)
+    // Owner-only assertion (skip during startup when TLS is unset).
     XrWorker *cur = xr_current_worker();
     XR_DCHECK(cur == NULL || cur->p.id == tw->owner_worker_id,
               "timer_process_canceled_queue: non-owner call");
@@ -607,7 +607,7 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
         // Advance head (dequeue)
         atomic_store_explicit(&cq->head, next, memory_order_release);
 
-        // Recycle the old head (Phase 3.2: return to freelist, not xr_free)
+        // Recycle the old head (return to per-worker freelist, not xr_free)
         if (head != &cq->stub) {
             xr_cancel_node_free(head);
         }
@@ -616,7 +616,7 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     return count;
 }
 
-// ========== Cancel Node Pool (Phase 3.2) ==========
+// ========== Cancel Node Pool ==========
 //
 // Per-worker freelists avoid malloc/free churn during cancel storms.
 // Alloc: pop from current worker's freelist, fallback to xr_malloc.
@@ -735,7 +735,7 @@ void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p,
                          XrTimeoutProc timeout, void *arg, int64_t timeout_pos) {
     XR_DCHECK(tw != NULL, "twheel_set_timer: NULL tw");
     XR_DCHECK(p != NULL, "twheel_set_timer: NULL timer");
-    // Phase 1: owner-only assertion (skip during startup when TLS unset)
+    // Owner-only assertion (skip during startup when TLS is unset).
     XrWorker *cur_w = xr_current_worker();
     XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
               "twheel_set_timer: non-owner call");
@@ -791,7 +791,7 @@ void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p,
 void xr_twheel_cancel_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     XR_DCHECK(tw != NULL, "twheel_cancel_timer: NULL tw");
     XR_DCHECK(p != NULL, "twheel_cancel_timer: NULL timer");
-    // Phase 1: owner-only assertion (skip during startup when TLS unset)
+    // Owner-only assertion (skip during startup when TLS is unset).
     XrWorker *cur_w = xr_current_worker();
     XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
               "twheel_cancel_timer: non-owner call");

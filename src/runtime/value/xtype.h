@@ -379,7 +379,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
     }
 }
 
-// API: Extract element type GC tag from container XrType (P0 Phase 4)
+// API: Extract element type GC tag from container XrType.
 // For Array<T>/Set<T>/Channel<T>, returns gc_tag of T.
 // For Map<K,V>, returns gc_tag of V (value type).
 // For non-container types, returns XR_SLOT_ANY.

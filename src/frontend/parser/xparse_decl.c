@@ -906,9 +906,9 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     alias_entry->type = type_definition;
 
     // Create AST node so analyzer/LSP can see the declaration.
-    // X-01 Phase 2.4c: stash the resolved type in the type-alias-
-    // specific field instead of the retired AstNode::compile_type
-    // backchannel. The analyzer reads it directly out of TypeAliasNode.
+    // Stash the resolved type in TypeAliasNode::resolved_type so that
+    // the analyzer can read it without going through any backchannel
+    // on AstNode itself.
     AstNode *node = xr_ast_type_alias(parser->X, alias_name, NULL, NULL, NULL, 0, line);
     if (node) {
         node->as.type_alias.resolved_type = type_definition;

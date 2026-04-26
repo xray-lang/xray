@@ -5,9 +5,9 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xfmt_literal.h - String / template-string serialisation (F-01, F-02)
+ * xfmt_literal.h - String / template-string serialisation
  *
- * KEY CONCEPT (F-01 / F-02):
+ * KEY CONCEPT:
  *   Round-trippable formatter output for the three string-bearing AST
  *   shapes:
  *
@@ -25,7 +25,7 @@
  *     principle (canonical form > lexeme preservation) raw strings
  *     are emitted as ordinary double-quoted strings.
  *
- *   Pre-F-02 the formatter wrote raw_value verbatim between two
+ *   An earlier formatter wrote raw_value verbatim between two
  *   `"` characters and emitted templates between backticks. Both
  *   produced source the lexer rejects: a string containing a quote,
  *   a backslash, a newline, or a control byte became a syntax error,

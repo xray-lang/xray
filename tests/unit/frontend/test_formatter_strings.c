@@ -5,20 +5,19 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_formatter_strings.c - F-01 / F-02 round-trip property tests
+ * test_formatter_strings.c - String / template round-trip property tests
  *
  * KEY CONCEPT:
- *   Pre-F-02 the formatter wrote LiteralNode.raw_value.string_val
+ *   An earlier formatter wrote LiteralNode.raw_value.string_val
  *   verbatim between two `"` characters and emitted templates between
  *   backticks. Both produced source the lexer rejects: a payload
  *   containing a literal `"`, `\`, newline, or control byte became a
- *   syntax error, and backtick templates simply do not lex any more
- *   (F-01).
+ *   syntax error, and backtick templates simply do not lex any more.
  *
- *   F-02 replaced that with proper re-escaping in xfmt_literal.c.
- *   Since the AST does not retain raw-vs-non-raw style, raw strings
- *   are canonicalised to ordinary double-quoted strings (canonical
- *   form > lexeme preservation, per the project principle).
+ *   xfmt_literal.c now re-escapes payloads properly. Since the AST
+ *   does not retain raw-vs-non-raw style, raw strings are
+ *   canonicalised to ordinary double-quoted strings (canonical form >
+ *   lexeme preservation, per the project principle).
  *
  *   This test pins the round-trip property:
  *
@@ -30,7 +29,7 @@
  *       quotes / backslashes, embedded `${`, multi-byte UTF-8);
  *     - raw-string sources whose payloads contain bytes that ONLY
  *       lex inside raw strings (literal backslash, literal `${`),
- *       proving F-02's canonical rewrite re-escapes them properly;
+ *       exercising the canonical rewrite's re-escaping;
  *     - template strings carrying interpolations with parens, dots,
  *       arithmetic, and `$` literals;
  *     - 64 deterministic random payloads (seeded, reproducible).
@@ -162,8 +161,8 @@ TEST(regular_string_round_trip_basic) {
         ASSERT_NOT_NULL(out);
         // The payload appears between the FIRST two `"` of the output.
         // We do not pin its exact form (escape table can evolve), only
-        // that the output uses double quotes -- never backticks (F-01)
-        // and never raw-string `r"` (F-02).
+        // that the output uses double quotes -- never backticks and
+        // never raw-string `r"`.
         ASSERT_FALSE(strstr(out, "`") != NULL);
         ASSERT_FALSE(strstr(out, " r\"") != NULL);
         free(out);
@@ -186,7 +185,7 @@ TEST(raw_string_canonicalised_to_double_quoted) {
         char *src = build_raw_let(kRawPayloads[i]);
         char *out = assert_round_trip(src, "raw_canonical");
         ASSERT_NOT_NULL(out);
-        // F-02 contract: no `r"` survives the format pass.
+        // Canonical-form contract: no `r"` survives the format pass.
         ASSERT_FALSE(strstr(out, " r\"") != NULL);
         ASSERT_FALSE(strstr(out, "=r\"") != NULL);
         free(out);
@@ -196,9 +195,9 @@ TEST(raw_string_canonicalised_to_double_quoted) {
 
 TEST(template_string_round_trip) {
     // Template strings with various interpolation shapes. The
-    // formatter must re-emit them as `"..." with ${...}` (F-01:
-    // backticks are gone), with `$` in literal parts escaped so
-    // that no implicit `${` can re-form.
+    // formatter must re-emit them as `"..." with ${...}` (backticks
+    // are gone), with `$` in literal parts escaped so that no
+    // implicit `${` can re-form.
     static const char *kSources[] = {
         "let n = \"x\";\nlet s = \"hello, ${n}!\";\n",
         "let a = 1; let b = 2;\nlet s = \"sum=${a + b}\";\n",
@@ -210,7 +209,7 @@ TEST(template_string_round_trip) {
     for (int i = 0; i < n; i++) {
         char *out = assert_round_trip(kSources[i], "template");
         ASSERT_NOT_NULL(out);
-        ASSERT_FALSE(strstr(out, "`") != NULL);  // F-01 backticks gone
+        ASSERT_FALSE(strstr(out, "`") != NULL);  // backticks gone
         free(out);
     }
 }
@@ -218,7 +217,7 @@ TEST(template_string_round_trip) {
 TEST(idempotence_after_two_passes) {
     // The most direct fixed-point witness: a single source going
     // through two format passes must yield identical bytes. This
-    // is the canonical formulation of F-02's contract.
+    // is the canonical formulation of the round-trip contract.
     const char *src =
         "let a = \"plain\";\n"
         "let b = \"with \\\"quote\\\" and \\\\ backslash\";\n"
@@ -319,7 +318,7 @@ TEST(random_regular_string_round_trip) {
 TEST(random_raw_string_canonicalisation) {
     // Same alphabet, but injected as a raw-string payload. Raw
     // accepts bytes the regular form would reject (literal `\`),
-    // so this lane stresses F-02's canonicalisation pipeline.
+    // so this lane stresses the canonicalisation pipeline.
     unsigned int state = 0xc2b2ae35u;
     char payload[RANDOM_PAYLOAD_MAX + 1];
 
@@ -352,7 +351,7 @@ TEST(random_raw_string_canonicalisation) {
 
 TEST_MAIN_BEGIN()
     setup();
-    RUN_TEST_SUITE("F-01 / F-02 string round-trip");
+    RUN_TEST_SUITE("string / template round-trip");
     RUN_TEST(regular_string_round_trip_basic);
     RUN_TEST(raw_string_canonicalised_to_double_quoted);
     RUN_TEST(template_string_round_trip);

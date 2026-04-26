@@ -486,5 +486,5 @@ int xr_dns_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs, X
     return do_resolve_all(hostname, addrs, max_addrs, family);
 }
 
-// Connection-level failover: see conn_pool.c::create_connection and
-// docs/analysis/TODO-P12-happy-eyeballs.md.
+// Connection-level failover (Happy-Eyeballs serial fallback) lives in
+// conn_pool.c::create_connection.

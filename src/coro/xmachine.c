@@ -111,7 +111,7 @@ void xr_unpark_m(XrMachine *m) {
 
 // ========== Idle M Management ==========
 
-// Phase 4.1: idle_m_head is a lock-free Treiber stack.
+// idle_m_head is a lock-free Treiber stack.
 //
 // ABA safety: XrMachine instances are never freed during runtime lifetime
 // (allocated in a grow-only array keyed by handoff count). idle_link is

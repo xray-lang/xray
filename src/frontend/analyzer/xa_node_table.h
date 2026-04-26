@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xa_node_table.h - AST -> semantic info side table (X-01)
+ * xa_node_table.h - AST -> semantic info side table
  *
  * KEY CONCEPT:
  *   The analyzer infers a compile-time XrType for many AST expression
- *   nodes (literals, calls, member access, ...). Pre-X-01 each AstNode
+ *   nodes (literals, calls, member access, ...). Earlier each AstNode
  *   carried that type inline as `node->compile_type`, which forced the
  *   formatter (which never runs the analyzer) to allocate a field it
  *   never reads, and forced the analyzer / codegen to share a mutable
@@ -50,7 +50,7 @@ XR_FUNC void xa_node_table_set_type(XaNodeTable *t,
 
 // Returns the previously set type, or NULL if no entry exists for
 // `node`. Callers MUST treat NULL as "unknown" (the field used to
-// degrade to NULL in the same way before X-01).
+// degrade to NULL in the same way as a missing entry).
 XR_FUNC struct XrType *xa_node_table_get_type(const XaNodeTable *t,
                                               const struct AstNode *node);
 

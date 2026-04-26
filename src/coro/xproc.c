@@ -40,7 +40,7 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     // MPSC inbox
     xr_mpsc_init(&p->inbox);
 
-    // Channel wake command queue (Phase 0)
+    // Channel wake command queue.
     xr_chan_wake_queue_init(&p->chan_wake_queue);
 
     // Timer wheel created later (needs runtime fully initialized)
@@ -65,7 +65,7 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     p->blocked_count = 0;
     p->select_waiter_count = 0;
 
-    // Phase 3.2: canceled timer node freelist
+    // Per-worker canceled timer node freelist.
     p->cancel_node_free = NULL;
     p->cancel_node_free_count = 0;
 
@@ -103,7 +103,7 @@ void xr_proc_destroy(XrProc *p) {
     // Destroy channel wake command queue
     xr_chan_wake_queue_destroy(&p->chan_wake_queue);
 
-    // Phase 3.2: drain canceled timer node freelist
+    // Drain canceled timer node freelist.
     {
         struct XrCanceledTimerNode *n = p->cancel_node_free;
         while (n) {
@@ -208,7 +208,7 @@ void xr_proc_push(XrProc *p, XrCoroutine *coro) {
 
 // ========== Idle P Management ==========
 
-// Phase 4.1: idle P list is a lock-free Treiber stack.
+// Idle P list is a lock-free Treiber stack.
 // ABA: XrProc is 1:1 with Worker and never freed during runtime lifetime.
 // idle_p_count is kept as a separate atomic for heuristics only.
 XrProc *xr_get_idle_p(struct XrRuntime *runtime) {

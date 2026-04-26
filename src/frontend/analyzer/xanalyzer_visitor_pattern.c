@@ -16,8 +16,8 @@
  *   (type_member_to_kind, kind_to_type_member, collect_matched_*
  *   pattern walkers) live alongside the visitor that uses them.
  *
- *   Phase 2.3 split this out of xanalyzer_visitor_expr.c. The
- *   implementation is unchanged from before the split.
+ *   This file holds the match-expression / pattern-walker subset of
+ *   the analyzer visitor.
  */
 
 #include "xanalyzer_visitor_internal.h"

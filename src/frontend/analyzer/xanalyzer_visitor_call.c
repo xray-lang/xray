@@ -14,9 +14,9 @@
  *   functions, and callback-type inference for container methods
  *   (map / filter / reduce / forEach / find / every / some).
  *
- *   Phase 2.3 split it out of xanalyzer_visitor_expr.c so that the
- *   expression-shaped visitor file stayed under the 1500-line cohesion
- *   target. The implementation is unchanged from before the split.
+ *   This file holds the call-shaped subset of the analyzer visitor
+ *   (call expression inference, generic substitution, callback-type
+ *   inference for container methods).
  */
 
 #include "xanalyzer_visitor_internal.h"
@@ -260,7 +260,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                ? fn_links->param_types[i] : NULL;
             if (declared && !XR_TYPE_IS_UNKNOWN(declared)) continue;  // explicitly typed
 
-            // X-01 Phase 2.4b: side-table read.
+            // Read argument type from the analyzer side table.
             XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer,
                                                           call->arguments[i]);
             if (!arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
@@ -295,7 +295,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             // arr.map(fn) -> Array<callback_return_type>
             // Use cached type from argument evaluation above (avoid re-evaluation
             // which would lose callback context)
-            // X-01 Phase 2.4b: side-table read.
+            // Read callback type from the analyzer side table.
             XrType *cb_type = xa_analyzer_get_node_type(ctx->analyzer,
                                                          call->arguments[0]);
             if (cb_type && XR_TYPE_IS_FUNCTION(cb_type) && cb_type->function.return_type &&

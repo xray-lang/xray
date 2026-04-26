@@ -90,7 +90,7 @@ static void sysmon_check(XrRuntime *runtime) {
             // If a C function marked FAST actually blocks >10ms, increment
             // its auto_slow_count. After 3 occurrences, upgrade to SLOW so
             // future calls release P before execution (dirty worker path).
-            // Phase 2 (CORO-04): all accesses are atomic; upgrade uses
+            // All accesses are atomic; upgrade uses
             // one-way CAS to prevent ABA with concurrent VM reads.
             if (elapsed_us >= 10000 && wm->current_cfunc) {
                 XrCFunction *cfn = (XrCFunction *)wm->current_cfunc;
@@ -290,7 +290,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
 
     // Wake idle M threads parked in handoff_thread_entry.
     //
-    // Lock-free traversal (Phase 4.1): idle_m_head is a Treiber stack. We
+    // Lock-free traversal: idle_m_head is a Treiber stack. We
     // snapshot the head and walk forward; any M pushed concurrently will
     // observe runtime->running=false on its next check anyway.
     {
@@ -367,7 +367,7 @@ int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
 
 // xr_worker_block_select - Add coroutine to multiple Channel wait queues in select mode
 //
-// Phase 6.1 redesign: each XrSelectCase embeds a bucket_next pointer, so the
+// Each XrSelectCase embeds a bucket_next pointer, so the
 // case is linked into the corresponding bucket's select queue directly.
 // wake_select then traverses only the target bucket — O(waiters_on_channel).
 void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
@@ -414,11 +414,11 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro,
 
 // xr_worker_wake_select - Wake select coroutine waiting on specified Channel
 //
-// Phase 6.1: traverse bucket->select_head (XrSelectCase chain) instead of
+// Traverse bucket->select_head (XrSelectCase chain) instead of
 // scanning all blocked coros.  Complexity = O(select waiters on this channel).
 XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
     if (!worker || !channel) return NULL;
-    // Phase 0: MUST only be called from the owning worker thread.
+    // MUST only be called from the owning worker thread.
     XR_DCHECK(xr_current_worker() == worker,
               "wake_select: cross-worker call detected (use chan_wake_queue)");
 
@@ -492,7 +492,7 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
 
 // xr_worker_unblock_select - Remove select coroutine from ALL Channel wait queues
 //
-// Phase 6.1: iterate every case in the select and remove its node from the
+// Iterate every case in the select and remove its node from the
 // corresponding bucket, instead of only the first channel.
 void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro) return;

@@ -920,6 +920,7 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
             continue;
         }
         uint8_t vt = func->vregs[i].rep;
+        fprintf(stderr, "DEBUG_HEAD vreg %u rep=%u\n", i, vt);
         if (xcg_is_float_type(vt)) has_float_locals = true;
         else if (xcg_is_tagged_type(vt)) has_tagged_locals = true;
         else has_int_locals = true;

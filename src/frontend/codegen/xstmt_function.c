@@ -78,7 +78,7 @@ void compile_function_decl_only(XrCompilerContext *ctx, XrCompiler *compiler, Fu
     }
 }
 
-/* ========== Pre-scan (Phase 1) ========== */
+/* ========== Pre-scan ========== */
 
 // Add name to captured set (avoid duplicates)
 static void ps_mark_captured(XrCompiler *compiler, const char *name) {

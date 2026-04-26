@@ -180,7 +180,7 @@ XR_FUNC void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer
 // Returns number of timers processed
 XR_FUNC int xr_timer_process_canceled_queue(XrTimerWheel *tw);
 
-/* ========== Cancel Node Pool (Phase 3.2) ========== */
+/* ========== Cancel Node Pool ========== */
 
 // Allocate a cancel node from current worker's freelist, fallback to xr_malloc.
 XR_FUNC XrCanceledTimerNode *xr_cancel_node_alloc(void);

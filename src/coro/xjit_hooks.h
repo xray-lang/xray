@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjit_hooks.h - JIT callback interface for coro module (Phase 4: CORO-08)
+ * xjit_hooks.h - JIT callback interface for coro module (decoupling shim)
  *
  * KEY CONCEPT:
  *   coro/ (L3) must not include jit/ (L5) headers directly.

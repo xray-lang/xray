@@ -218,7 +218,7 @@ XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
     // Initialize incremental analysis support
     analyzer->incremental = xa_incremental_new();
 
-    // X-01: AST -> inferred-type side table.
+    // AST -> inferred-type side table.
     analyzer->node_table = xa_node_table_new();
 
     return analyzer;
@@ -242,7 +242,7 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         xa_incremental_free(analyzer->incremental);
     }
 
-    // X-01: free AST -> inferred-type side table.
+    // Free the AST -> inferred-type side table.
     if (analyzer->node_table) {
         xa_node_table_free((XaNodeTable *)analyzer->node_table);
         analyzer->node_table = NULL;
@@ -861,13 +861,13 @@ const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count) {
 
 void xa_analyzer_invalidate_range(XaAnalyzer *analyzer, const char *file,
                                   uint32_t start_line, uint32_t end_line) {
-    // A-02: today this degrades to whole-file dirty marking. The
+    // Today this degrades to whole-file dirty marking. The
     // (start_line, end_line) range is currently unused but is part of
     // the API contract so a future block-level incremental implementation
     // can use it without breaking call sites.
     //
     // Calling invalidate_range() on an untracked file MUST register it.
-    // Pre-A-02 there was no public file-registration entry, so an LSP
+    // There was no public file-registration entry before, so an LSP
     // client that issued an edit before any save+analyze would silently
     // lose the dirty signal. find_or_create_file() initialises
     // entry->dirty = true so the next refresh_file() call rebuilds it.
@@ -880,7 +880,7 @@ void xa_analyzer_invalidate_range(XaAnalyzer *analyzer, const char *file,
     }
 }
 
-// X-01: AST -> inferred type side table convenience wrappers.
+// AST -> inferred type side table convenience wrappers.
 // These exist so callers (codegen, LSP, mono) do not need to include
 // xa_node_table.h directly -- xanalyzer.h is enough. Both functions
 // are NULL-safe in every direction.
@@ -899,7 +899,7 @@ struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer,
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer || !file) return;
 
-    // A-03: this is the unified file-removal entry. It must keep the
+    // This is the unified file-removal entry. It must keep the
     // analyzer's three "size-of-everything" counters self-consistent:
     //
     //   files_map.size  ==  file_count       (one entry per tracked file)

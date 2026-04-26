@@ -11,9 +11,6 @@
  *   All XIR virtual opcodes in a single enum, separated from the
  *   core type definitions in xir.h for header-size compliance.
  *   Machine-specific opcodes (ARM64) start at XIR_MACH_BASE = 256.
- *
- * SPLIT FROM:
- *   Originally part of xir.h; extracted during Phase 7.
  */
 
 #ifndef XIR_OPS_H

@@ -202,7 +202,7 @@ TEST(arch_codegen_does_not_include_format) {
     ASSERT_EQ_INT(v, 0);
 }
 
-/* ========== X-01 acceptance: AstNode has no compile_type field ========== */
+/* ========== Architecture: AstNode has no compile_type field ========== */
 
 TEST(arch_astnode_has_no_compile_type_field) {
     const char *path = XR_TEST_SRC_DIR "/frontend/parser/xast_nodes.h";
@@ -212,7 +212,7 @@ TEST(arch_astnode_has_no_compile_type_field) {
     int violations = 0;
     char line[1024];
     while (fgets(line, sizeof line, fp)) {
-        // Skip pure-comment lines (//, /*, *) so the X-01 dust comment
+        // Skip pure-comment lines (//, /*, *) so a dust comment
         // does not trip the assertion.
         const char *p = line;
         while (*p == ' ' || *p == '\t') p++;

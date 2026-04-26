@@ -113,7 +113,7 @@
     #define XR_STATIC_ASSERT_ALIGN(type, alignment)
 #endif
 
-// ========== Reductions Check for C Extensions (Phase 4) ==========
+// ========== Reductions Check for C Extensions ==========
 //
 // Optional macro for C functions to cooperate with the scheduler.
 // Without this macro, sysmon + handoff provides preemption (10ms granularity).

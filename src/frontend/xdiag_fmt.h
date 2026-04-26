@@ -25,7 +25,7 @@
 #include "../base/xchecks.h"
 
 /*
- * ROLE PIN (X-02):
+ * ROLE PIN:
  *   This header is the SOLE diagnostic-formatting helper allowed to be
  *   shared across the frontend (lexer / parser / analyzer / codegen).
  *   It owns ONLY string assembly: ANSI colour wrapping, gutter padding,

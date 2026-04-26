@@ -19,11 +19,12 @@
  *     - run_cfunc_coro: Yieldable C-function coroutine execution with
  *       inline fast path for single-frame continuations.
  *
- * PHASE 5 NOTE:
- *   xr_coro_run_on_worker (~440 lines) exceeds the 150-line function
- *   limit. It is intentionally left intact here during Phase 1 (file
- *   split) and will be broken into run_closure_first/_resume/_jit etc.
- *   in Phase 5 of docs/engineering/coro_refactor_plan.md.
+ * KNOWN OVERSIZE:
+ *   xr_coro_run_on_worker (~440 lines) currently exceeds the 150-line
+ *   function limit. It is the dispatch hub for closure-first / resume
+ *   / cfunc / jit paths and is intentionally kept inline for branch
+ *   predictability; future split into run_closure_first / _resume /
+ *   _jit helpers would not change semantics.
  */
 #include "xworker_internal.h"
 #include "xtask.h"
@@ -500,7 +501,7 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro,
 
 // Execute Yieldable C function coroutine (supports I/O wait and rescheduling).
 //
-// Phase 5 split: first-exec and resume are factored into helpers above so the
+// First-exec and resume are factored into helpers above so the
 // orchestration here stays small and obvious.
 static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro,
                                   XrayIsolate *isolate) {
@@ -554,7 +555,7 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro,
 //   - Worker uses ctx but points at the coroutine's stack.
 //   - Eliminates state-copy race conditions across stealing.
 //
-// Phase 5 (split): the old 443-line xr_coro_run_on_worker monolith is now
+// xr_coro_run_on_worker delegates execution to per-mode helpers,
 // a thin dispatch shell that hands to run_first_exec / run_resume_path /
 // run_cfunc_coro / run_finalize. See bottom of file for the shell.
 
@@ -843,7 +844,7 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker,
 
 // ========== Thin Dispatch Shell ==========
 //
-// Phase 5: xr_coro_run_on_worker used to be a 443-line monolith combining
+// xr_coro_run_on_worker is the dispatch hub combining
 // entry checks, channel-resume fast path, first-execution setup, JIT+unroll
 // resume, and result finalization. It is now a thin dispatch shell that
 // hands off to run_first_exec / run_resume_path / run_cfunc_coro /
@@ -873,7 +874,7 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     // Most common resume case: channel wake of a started coroutine. Acquire-
     // load of flags establishes happens-before with sender's flag swap so
     // recv_slot is visible before we enter run().
-    // Handles both VM bytecode and JIT coroutines (Phase 0.3: removed
+    // Handles both VM bytecode and JIT coroutines (the redundant separate
     // !jit_resume_entry exclusion — JIT now uses run_jit_resume directly).
     if (_fast_resume == XR_RESUME_CHANNEL &&
         (_fast_flags & XR_CORO_FLG_STARTED)) {

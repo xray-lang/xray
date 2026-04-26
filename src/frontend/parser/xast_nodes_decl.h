@@ -157,11 +157,10 @@ typedef struct TypeAliasNode {
     XrType **field_types;
     bool *field_optional;
     int field_count;
-    // X-01 Phase 2.4c: parser stores the fully-resolved RHS type here
-    // so the analyzer can pick it up without re-resolving. Replaces
-    // the AstNode::compile_type backchannel that pre-X-01 alias decls
-    // used. May be NULL when the alias body is anonymous-object only
-    // (in which case field_names / field_types describe the shape).
+    // Parser stores the fully-resolved RHS type here so the analyzer
+    // can pick it up without re-resolving. May be NULL when the alias
+    // body is anonymous-object only (in which case field_names /
+    // field_types describe the shape).
     XrType *resolved_type;
 } TypeAliasNode;
 

@@ -199,7 +199,7 @@ void xr_worker_unblock(XrWorker *worker, XrCoroutine *coro) {
 }
 
 // xr_worker_wake_one - Wake one coroutine waiting on specified Channel on current Worker (lock-free)
-// Phase 0: MUST only be called from the owning worker thread.
+// MUST only be called from the owning worker thread.
 XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sender) {
     if (!worker || !channel) return NULL;
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
@@ -293,7 +293,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
 }
 
 // xr_worker_wake_all - Wake all coroutines waiting on specified Channel on current Worker (lock-free)
-// Phase 0: MUST only be called from the owning worker thread.
+// MUST only be called from the owning worker thread.
 void xr_worker_wake_all(XrWorker *worker, void *channel) {
     if (!worker || !channel) return;
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
