@@ -88,9 +88,13 @@ jobs:
   #   - matches the local development build mode used by the project
   # ubuntu-latest (x86_64) is the only native-x64 path for the JIT
   # backend tests; the dev host is Apple Silicon ARM64.
+  #
+  # Intentionally NOT gated on arch-lint: backend correctness (LSRA,
+  # codegen, JIT entry/OSR/deopt) is independent of the frontend
+  # header-size policy. Keeping these in parallel avoids losing x64
+  # signal whenever a frontend header drifts over the line cap.
   # ===========================================================================
   unit-tests:
-    needs: arch-lint
     strategy:
       fail-fast: false
       matrix:
