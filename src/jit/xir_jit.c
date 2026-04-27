@@ -22,8 +22,8 @@
 #include "xir.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include "../runtime/value/xtype_feedback.h"
-#include "../../include/xray_platform.h"  // xr_monotonic_ms()
 #include "xir_builder.h"
 #include "xir_codegen.h"
 #include "xir_target.h"
@@ -551,7 +551,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         saved_feedback = proto->type_feedback;
         proto->type_feedback = NULL;
     }
-    uint64_t compile_start_ms = xr_monotonic_ms();
+    uint64_t compile_start_ms = xr_time_monotonic_ms();
     XirFunc *func =
         xir_build_from_proto_jit(proto, shared_protos, nshared, shape_hint, jit->isolate);
     if (saved_feedback)
@@ -641,7 +641,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         jit->compiled_count++;
 
     // Record compilation statistics
-    uint64_t compile_elapsed_ms = xr_monotonic_ms() - compile_start_ms;
+    uint64_t compile_elapsed_ms = xr_time_monotonic_ms() - compile_start_ms;
     jit->stats_compile_ns += compile_elapsed_ms * 1000000ULL;
     jit->stats_code_bytes += res.code_size;
     if (conservative)

@@ -23,6 +23,7 @@
 #include "xvm_cold_paths.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xtime.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
@@ -1095,14 +1096,10 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
         }
 
         // Main thread: synchronous wait
-        struct timeval start_time;
-        gettimeofday(&start_time, NULL);
+        uint64_t start_ns = xr_time_monotonic_ns();
         int spin_count = 0;
         while (!xr_task_is_done(task)) {
-            struct timeval now;
-            gettimeofday(&now, NULL);
-            int64_t elapsed_ms =
-                (now.tv_sec - start_time.tv_sec) * 1000 + (now.tv_usec - start_time.tv_usec) / 1000;
+            int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
             if (elapsed_ms >= timeout_ms) {
                 base[a] = xr_null();
                 return VM_COLD_BREAK;

@@ -15,6 +15,7 @@
 #include "ws_deflate.h"
 #include "../../include/xray_platform.h"
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xtime.h"
 #include "../../src/coro/xsocket.h"
 #include "../../src/runtime/object/xutf8.h"
 #include "../base64/base64.h"
@@ -37,8 +38,6 @@
 #include <netdb.h>
 #endif
 
-#include <time.h>
-
 #ifdef XR_PLATFORM_MACOS
 #include <CommonCrypto/CommonDigest.h>
 #define SHA1(data, len, hash) CC_SHA1(data, (CC_LONG) (len), hash)
@@ -47,9 +46,7 @@
 #endif
 
 static uint64_t ws_now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000 + (uint64_t) ts.tv_nsec / 1000000;
+    return xr_time_monotonic_ms();
 }
 
 // WebSocket frame header constants

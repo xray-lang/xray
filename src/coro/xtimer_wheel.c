@@ -22,6 +22,7 @@
 
 #include "xtimer_wheel.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include "xcoroutine.h"
 #include "xworker.h"  // xr_current_worker (owner-thread assertions)
 #include <stdlib.h>
@@ -41,9 +42,7 @@
 
 // Get current time (clock ticks = milliseconds)
 int64_t xr_monotonic_ticks(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return (int64_t) xr_time_monotonic_ms();
 }
 
 // Get slot count index

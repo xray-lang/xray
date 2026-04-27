@@ -14,9 +14,9 @@
 #include "xcoro_debug.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xtime.h"
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 // ========== Thread-Local Debug Info Pool (per-Isolate support) ==========
 
@@ -26,9 +26,7 @@ static XR_THREAD_LOCAL XrCoroDebugPool tls_debug_pool = {0};
 
 // Get current time (nanoseconds)
 static uint64_t get_time_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+    return xr_time_monotonic_ns();
 }
 
 // Expand pool capacity

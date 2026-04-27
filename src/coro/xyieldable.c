@@ -15,6 +15,7 @@
 
 #include "xyieldable.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "../runtime/xvm_call.h"  // XrVMResult
@@ -41,9 +42,7 @@ static inline XrCoroutine *get_current_coro(XrayIsolate *X) {
 
 // Get current time (microseconds)
 static int64_t get_time_us(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t) ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    return (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 }
 
 // yield_setup_frame - Set frame state for yield.

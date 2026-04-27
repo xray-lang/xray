@@ -22,7 +22,6 @@
 #include "../runtime/xray_debug.h"
 #include <string.h>
 #include <stdio.h>
-#include <sys/time.h>  // gettimeofday
 #include "xworker.h"
 #include "xchannel.h"
 #include "xtimer_wheel.h"

@@ -57,9 +57,9 @@
 
 #include <math.h>
 #include <inttypes.h>
-#include <sys/time.h>
 #include <unistd.h>
 #include "../base/xarena.h"
+#include "../base/xtime.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
 #include "../runtime/object/xslice.h"

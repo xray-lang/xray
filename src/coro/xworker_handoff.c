@@ -23,14 +23,11 @@
  */
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include <sched.h>
-#include <time.h>
 
-// Get current time (microseconds)
 int64_t get_current_time_us(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t) ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    return (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 }
 
 // ========== Syscall Enter/Exit (P Handoff) ==========
@@ -184,8 +181,7 @@ handoff_restart:;
             if (!coro) {
                 if (++idle_iterations > 100)
                     break;
-                struct timespec ts = {0, 100000};
-                nanosleep(&ts, NULL);
+                xr_time_sleep_ns(100000ULL);
                 continue;
             }
             idle_iterations = 0;

@@ -30,6 +30,7 @@
 #include "cluster_node.h"
 #include "../net/io.h"
 #include "../../src/base/xhash.h"
+#include "../../src/base/xtime.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -290,21 +291,14 @@ static void discovery_coro(void *arg) {
         while (remaining_ms > 0 && atomic_load(&c->running)) {
             int wait_ms = remaining_ms < SLICE_MS ? remaining_ms : SLICE_MS;
 
-            int64_t t0_ns = 0;
-            {
-                struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                t0_ns = (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec;
-            }
+            int64_t t0_ns = (int64_t) xr_time_monotonic_ns();
 
             int r = xr_socket_wait_readable(c->isolate, disc->mcast_fd, wait_ms);
 
             // Deduct the elapsed portion of the deadline so partial
             // wakes (early POLLIN) do not inflate total wait time.
             {
-                struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC, &ts);
-                int64_t t1_ns = (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec;
+                int64_t t1_ns = (int64_t) xr_time_monotonic_ns();
                 int elapsed_ms = (int) ((t1_ns - t0_ns) / 1000000LL);
                 if (elapsed_ms < 0)
                     elapsed_ms = 0;
@@ -428,8 +422,7 @@ void xr_cluster_discovery_stop(XrCluster *c) {
      */
     if (disc->coro_spawned) {
         for (int i = 0; i < 100 && !atomic_load(&disc->coro_exited); i++) {
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
-            nanosleep(&ts, NULL);
+            xr_time_sleep_ns(10ULL * 1000ULL * 1000ULL);
         }
         disc->coro_spawned = false;
     }

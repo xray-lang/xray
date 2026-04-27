@@ -13,6 +13,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xtime.h"
 #include "conn_pool.h"
 #include "dns.h"
 #include "io.h"
@@ -31,7 +32,6 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <time.h>
 #include <poll.h>
 #include <stdatomic.h>
 
@@ -45,9 +45,7 @@ extern int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_
 
 // Monotonic milliseconds (no syscall on most platforms via vDSO)
 static uint64_t now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000 + (uint64_t) ts.tv_nsec / 1000000;
+    return xr_time_monotonic_ms();
 }
 
 /* ========== Helper Functions ========== */

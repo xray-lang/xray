@@ -77,11 +77,6 @@ static inline void xr_set_socket_error(int err) {
 typedef int xr_fd_t;
 #define XR_INVALID_FD (-1)
 
-// Sleep (milliseconds)
-static inline void xr_sleep_ms(int ms) {
-    Sleep(ms);
-}
-
 // Initialize network library (Windows requires WSAStartup)
 static inline int xr_net_init(void) {
     WSADATA wsa;
@@ -169,11 +164,6 @@ static inline void xr_set_socket_error(int err) {
 // File descriptor type
 typedef int xr_fd_t;
 #define XR_INVALID_FD (-1)
-
-// Sleep (milliseconds)
-static inline void xr_sleep_ms(int ms) {
-    usleep(ms * 1000);
-}
 
 // Initialize network library (no-op on Unix)
 static inline int xr_net_init(void) {
@@ -358,27 +348,9 @@ static inline void xr_random_bytes(unsigned char *buf, size_t len) {
 #endif
 }
 
-/* ========== Time Functions ========== */
-
-/*
- * Get monotonic clock (milliseconds)
- */
-static inline uint64_t xr_monotonic_ms(void) {
-#ifdef XR_PLATFORM_WINDOWS
-    return GetTickCount64();
-#elif defined(XR_PLATFORM_MACOS)
-#include <mach/mach_time.h>
-    static mach_timebase_info_data_t info = {0};
-    if (info.denom == 0) {
-        mach_timebase_info(&info);
-    }
-    uint64_t t = mach_absolute_time();
-    return t * info.numer / info.denom / 1000000;
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-#endif
-}
+// Time helpers live in src/base/xtime.h (xr_time_monotonic_ns,
+// xr_time_realtime_ns, xr_time_sleep_ns and the _ms / _us
+// convenience wrappers). Internal callers should include that
+// header directly; xray_platform.h is now socket-only.
 
 #endif  // XRAY_PLATFORM_H

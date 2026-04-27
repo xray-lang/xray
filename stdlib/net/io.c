@@ -13,6 +13,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xtime.h"
 #include "io.h"
 #include "dns.h"
 #include "../../include/xray_platform.h"
@@ -24,7 +25,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
-#include <sys/time.h>
 #include <sys/uio.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -76,11 +76,7 @@ static int set_tcp_nodelay(int fd) {
 static int64_t get_deadline_ns(int timeout_ms) {
     if (timeout_ms <= 0)
         return 0;
-
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (int64_t) tv.tv_sec * 1000000000LL + (int64_t) tv.tv_usec * 1000LL +
-           (int64_t) timeout_ms * 1000000LL;
+    return (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
 }
 
 /* ========== Global Initialization ========== */

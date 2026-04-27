@@ -34,11 +34,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <time.h>
 #include <unistd.h>
-#include <sys/time.h>
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xtime.h"
 
 // Fallback diagnostic debounce interval (ms). The live value is
 // server->config.diagnostic_debounce_ms, which is populated from
@@ -48,9 +47,7 @@
 
 // Get monotonic time in milliseconds
 static uint64_t get_monotonic_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return xr_time_monotonic_ms();
 }
 
 // Handler implementations extracted into separate files

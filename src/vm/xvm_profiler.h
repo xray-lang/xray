@@ -58,8 +58,8 @@ typedef struct VMProfiler VMProfiler;
 #if XR_ENABLE_VM_PROFILER
 
 #if XR_PROFILE_TIMING
-#include <time.h>
 #include "../base/xdefs.h"
+#include "../base/xtime.h"
 #endif
 
 typedef struct VMOpStats {
@@ -79,9 +79,7 @@ typedef struct VMProfiler {
 
 static inline uint64_t vm_profiler_get_ms(void) {
 #if XR_PROFILE_TIMING
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000ULL + (uint64_t) ts.tv_nsec / 1000000ULL;
+    return xr_time_monotonic_ms();
 #else
     return 0;
 #endif
@@ -89,9 +87,7 @@ static inline uint64_t vm_profiler_get_ms(void) {
 
 #if XR_PROFILE_TIMING
 static inline uint64_t vm_profiler_get_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+    return xr_time_monotonic_ns();
 }
 #endif
 

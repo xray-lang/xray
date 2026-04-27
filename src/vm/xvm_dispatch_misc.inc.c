@@ -353,7 +353,7 @@ vmcase(OP_SLEEP) {
             /* Timer wheel must exist for all workers.
              * If missing, fall back to blocking sleep to avoid
              * setting timer_active without timer wheel registration. */
-            usleep((useconds_t) (milliseconds * 1000));
+            xr_time_sleep_ms((uint64_t) milliseconds);
             vmbreak;
         }
 
@@ -366,8 +366,8 @@ vmcase(OP_SLEEP) {
         return XR_VM_BLOCKED;
     }
 
-    // Non-coroutine mode: blocking sleep - milliseconds to microseconds
-    usleep((useconds_t) (milliseconds * 1000));
+    // Non-coroutine mode: blocking sleep.
+    xr_time_sleep_ms((uint64_t) milliseconds);
     vmbreak;
 }
 

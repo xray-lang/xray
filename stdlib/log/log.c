@@ -25,10 +25,10 @@
 #include "../../src/runtime/object/xnative_type.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xtime.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <sys/time.h>
 #include <pthread.h>
 #include <stdarg.h>
 
@@ -324,15 +324,16 @@ static XrLogLevel xr_log_level_parse(const char *name) {
 
 // Get ISO 8601 timestamp
 static void get_timestamp(char *buf, size_t size) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
+    uint64_t ns = xr_time_realtime_ns();
+    time_t sec = (time_t) (ns / 1000000000ULL);
+    int ms = (int) ((ns % 1000000000ULL) / 1000000ULL);
 
     struct tm tm;
-    localtime_r(&tv.tv_sec, &tm);
+    localtime_r(&sec, &tm);
 
     // Format: 2024-12-14T22:45:00.123
     int len = (int) strftime(buf, size, "%Y-%m-%dT%H:%M:%S", &tm);
-    snprintf(buf + len, size - len, ".%03d", (int) (tv.tv_usec / 1000));
+    snprintf(buf + len, size - len, ".%03d", ms);
 }
 
 // Escape JSON string into CtxBuf.
