@@ -230,6 +230,20 @@ XR_FUNC void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref);
 /* Add a deferred branch patch */
 XR_FUNC void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type, uint32_t target_blk, X64Cond cc);
 
+/* Derive XR_TAG_* from const rep for call_arg_tags[] */
+static inline uint8_t const_rep_to_value_tag(uint8_t rep) {
+    switch (rep) {
+        case XR_REP_I64:
+            return 3; /* XR_TAG_I64 */
+        case XR_REP_F64:
+            return 4; /* XR_TAG_F64 */
+        case XR_REP_PTR:
+            return 5; /* XR_TAG_PTR */
+        default:
+            return 0xFF; /* XR_RTAG_UNKNOWN */
+    }
+}
+
 /* ========== Shared helpers (defined in xir_codegen_x64.c) ========== */
 
 /* Write call arguments from pool to jit_ctx->call_args[] */

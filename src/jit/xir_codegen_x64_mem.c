@@ -25,6 +25,7 @@
 
 #include "xir_codegen_x64_internal.h"
 #include "xir_offsets.h"
+#include "xir_jit_runtime.h"
 
 /* Dispatch function for tag/guard/RT/safepoint opcodes.
  * Returns true if the opcode was handled, false otherwise. */
@@ -417,14 +418,151 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             break;
         }
 
-        case XIR_RT_PRINT:
         case XIR_RT_ARRAY_NEW:
-        case XIR_RT_ARRAY_PUSH:
+        case XIR_RT_MAP_NEW: {
+            /* Inline CALL_C sequence: alloc array/map via runtime helper.
+             * args[0] = capacity, dst = result ptr. */
+            x64_emit_ptr_spill_writeback(ctx);
+
+            uint32_t smap_id = x64_record_safepoint(ctx);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* extra_arg = capacity */
+            if (xir_ref_is_const(ins->args[0])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                uint64_t val = (uint64_t) ctx->func->consts[ci].val.raw;
+                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, val);
+            } else {
+                X64Reg r = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+                if (r != X64_SCRATCH_REG)
+                    x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, r);
+            }
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+
+            /* Clear deopt_id */
+            x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* Load runtime helper pointer */
+            void *fn = (ins->op == XIR_RT_ARRAY_NEW)
+                           ? (void *) (uintptr_t) xr_jit_rt_array_new
+                           : (void *) (uintptr_t) xr_jit_rt_map_new;
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
+
+            /* CALL call_c_stub */
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE8);
+            p->emit_pos = ctx->buf.pos;
+            p->target_blk = 0;
+            p->type = X64_PATCH_CALL_C;
+            p->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_call_c = true;
+
+            /* Result ptr in RAX */
+            if (xir_ref_is_vreg(ins->dst) && rd != X64_RAX)
+                x64_mov_rr(&ctx->buf, rd, X64_RAX);
+            break;
+        }
+
+        case XIR_RT_ARRAY_PUSH: {
+            /* Inline CALL_C sequence: push value into array.
+             * args[0] = array ptr, args[1] = value to push. */
+            x64_emit_ptr_spill_writeback(ctx);
+
+            uint32_t smap_id = x64_record_safepoint(ctx);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* Store call_args[0] = array ptr */
+            int32_t off0 = (int32_t) XIR_JIT_CALL_ARGS_OFFSET;
+            X64Reg arr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off0, arr);
+
+            /* Store call_args[1] = value payload */
+            int32_t off1 = (int32_t) (XIR_JIT_CALL_ARGS_OFFSET + 8);
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                uint64_t val = (uint64_t) ctx->func->consts[ci].val.raw;
+                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, val);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off1, X64_SCRATCH_REG);
+            } else {
+                X64Reg vr = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off1, vr);
+            }
+
+            /* Store call_arg_tags: tag[0]=PTR(arr), tag[1]=inferred from type */
+            uint8_t tag0 = 4; /* XR_TAG_PTR */
+            uint8_t tag1 = XR_RTAG_UNKNOWN;
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                tag1 = const_rep_to_value_tag(ctx->func->consts[ci].rep);
+            } else {
+                XirType ct = xir_ref_ctype(ctx->func, ins->args[1]);
+                uint8_t vk = type_kind_to_vtag(ct.kind);
+                if (vtag_is_concrete(vk))
+                    tag1 = vtag_to_value_tag(vk);
+            }
+            uint64_t tag_pack = (uint64_t) tag0 | ((uint64_t) tag1 << 8);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
+
+            /* Dynamic tag patch: if tag1 unknown, read from slot_runtime_tags */
+            if (tag1 == XR_RTAG_UNKNOWN && xir_ref_is_vreg(ins->args[1])) {
+                uint32_t ai = XIR_REF_INDEX(ins->args[1]);
+                if (ai < ctx->func->nvreg) {
+                    int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
+                    if (bc_slot >= 0 && bc_slot < 256) {
+                        int32_t src_off = (int32_t) XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+                        int32_t dst_off = (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET + 1;
+                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG,
+                                      X64_JIT_CTX_REG, src_off);
+                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG,
+                                    dst_off, X64_SCRATCH_REG);
+                    }
+                }
+            }
+
+            /* extra_arg = 0 (unused) */
+            x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+
+            /* Clear deopt_id */
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* Load runtime helper pointer */
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+
+            /* CALL call_c_stub */
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *pa = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE8);
+            pa->emit_pos = ctx->buf.pos;
+            pa->target_blk = 0;
+            pa->type = X64_PATCH_CALL_C;
+            pa->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_call_c = true;
+            break;
+        }
+
+        case XIR_RT_PRINT:
         case XIR_RT_ARRAY_LEN:
-        case XIR_RT_MAP_NEW:
         case XIR_RT_INDEX_GET:
         case XIR_RT_INDEX_SET:
-            /* These are handled via CALL_C in the builder; shouldn't reach here */
+            /* Not yet lowered to CALL_C; fall through to warning */
             xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
             break;
 
