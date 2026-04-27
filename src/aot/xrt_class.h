@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_class.h - AOT class runtime: type table, vtable dispatch, instanceof
+ * xrt_class.h - AOT class runtime: type table, object allocation
  *
  * KEY CONCEPT:
  *   All heap objects (class instances, promoted structs) share XrtArcHdr
@@ -40,7 +40,6 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"  // XrtArcHdr, XRT_ARC_HDR, xrt_arc_alloc, macros
 #include <stdint.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -112,36 +111,6 @@ static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
     h->type = type_id;
     h->flags |= XRT_ARC_HAS_DEINIT;  // enable destructor dispatch on release
     return obj;
-}
-
-/* =========================================================================
- * instanceof — walk parent chain using XrtArcHdr.type
- * ========================================================================= */
-
-static inline bool xrt_instanceof(void *obj, uint16_t target_type_id) {
-    if (!obj)
-        return false;
-    XrtArcHdr *h = XRT_ARC_HDR(obj);
-    uint16_t tid = h->type;
-    while (tid != 0) {
-        if (tid == target_type_id)
-            return true;
-        tid = xrt_type_table[tid].parent_id;
-    }
-    return false;
-}
-
-/* =========================================================================
- * vtable dispatch helper — uses XrtArcHdr.type -> xrt_type_table
- *
- * Usage:  XrtMethodFn fn = xrt_vcall(obj, slot);
- *         result = ((RetType(*)(ArgTypes))fn)(args...);
- * ========================================================================= */
-
-static inline XrtMethodFn xrt_vcall(void *obj, int slot) {
-    XrtArcHdr *h = XRT_ARC_HDR(obj);
-    XrtTypeInfo *ti = &xrt_type_table[h->type];
-    return ti->vtable[slot];
 }
 
 /* Box an object pointer into XrtValue */
