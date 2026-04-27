@@ -161,10 +161,6 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *
         }
 
         case XIR_JMP_RET: {
-            // Restore shadow stack before return
-            if (cf && cf->shadow_stack_count > 0)
-                xcgen_buf_puts(b, "    xrt_shadow_sp = xrt_saved_sp;\n");
-
             // Defer cleanup: call deferred closures in LIFO order before return
             if (cf && cf->defer_count > 0) {
                 for (int di = cf->defer_count - 1; di >= 0; di--) {
