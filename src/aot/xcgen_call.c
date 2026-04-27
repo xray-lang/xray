@@ -1519,7 +1519,14 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf, 
         cf->call_args_count = 0;
         return;
     }
-    /* Unknown CALL_C target: suppress (not a known proto or intrinsic) */
+    /* Unknown CALL_C target after intrinsic resolution.
+     * This should not happen — emit a compile-time warning so it is
+     * visible rather than silently producing undefined register values. */
+    uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
+    xcgen_buf_printf(b, "    /* WARNING: unresolved CALL_C fn_ptr=%p → v%u undefined */\n",
+                     fn_ptr, dst_idx);
+    fprintf(stderr, "AOT warning: unresolved CALL_C fn_ptr=%p in %s (dst v%u)\n", fn_ptr,
+            cf->c_name ? cf->c_name : "?", dst_idx);
     cf->call_args_count = 0;
 }
 
