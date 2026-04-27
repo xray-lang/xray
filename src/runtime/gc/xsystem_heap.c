@@ -24,7 +24,7 @@
 #include "../object/xstring.h"  // STR_FLAG_GLOBAL
 #include <string.h>
 #include <stdio.h>
-#include <sys/mman.h>  // mmap for large objects
+#include "../../base/xmem.h"
 
 // Large object threshold: use mmap for objects >= 64KB
 #define XR_SHARED_MMAP_THRESHOLD (64 * 1024)
@@ -174,13 +174,13 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
     bool use_mmap = (size >= XR_SHARED_MMAP_THRESHOLD);
 
     if (use_mmap) {
-        // Large objects use mmap to avoid heap fragmentation
-        obj = (XrGCHeader *) mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                                  -1, 0);
-        if (obj == MAP_FAILED) {
+        // Large objects use anonymous mmap (xr_mem_map) to avoid
+        // heap fragmentation.
+        obj = (XrGCHeader *) xr_mem_map(size, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
+        if (!obj) {
             return NULL;
         }
-        // MAP_ANONYMOUS guarantees zero-initialized memory
+        // Anonymous pages are guaranteed zero-initialised.
         obj->type = type;
         obj->objsize = (uint32_t) size;
         // Mark as shared and mmap-allocated (in extra bit 13)
@@ -210,7 +210,7 @@ void xr_sysheap_free_shared(void *ptr, size_t size) {
 
     XrGCHeader *obj = (XrGCHeader *) ptr;
     if (XR_GC_IS_MMAP(obj)) {
-        munmap(ptr, size);
+        xr_mem_unmap(ptr, size);
     } else {
         xr_free(ptr);
     }
@@ -309,7 +309,7 @@ void xr_shared_destroy(XrGCHeader *obj) {
 
     // Free the object itself
     if (XR_GC_IS_MMAP(obj)) {
-        munmap(obj, obj->objsize);
+        xr_mem_unmap(obj, obj->objsize);
     } else {
         xr_free(obj);
     }

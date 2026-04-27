@@ -29,8 +29,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <sys/mman.h>
 #include "../../base/xmalloc.h"
+#include "../../base/xmem.h"
 #include "xstackmap.h"     // XrStackMapTable, XrStackMapEntry
 #include "xbc_stackmap.h"  // XrBcStackMap, bytecode precise GC scanning
 #include <pthread.h>
@@ -237,7 +237,7 @@ static void gc_free_large_objects(XrCoroGC *gc) {
         }
         gc->large_bytes -= lo->objsize;
         if (XR_GC_IS_MMAP(lo)) {
-            munmap(lo, lo->objsize);
+            xr_mem_unmap(lo, lo->objsize);
         } else {
             xr_free(lo);
         }
@@ -394,10 +394,10 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     bool use_mmap = false;
     if (total > XR_LARGE_OBJECT_THRESHOLD) {
         if (total >= XR_MMAP_THRESHOLD) {
-            // Tier 2: very large — use mmap to avoid libc heap fragmentation
-            obj = (XrGCHeader *) mmap(NULL, total, PROT_READ | PROT_WRITE,
-                                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-            if (obj == MAP_FAILED)
+            // Tier 2: very large — use anonymous mmap (xr_mem_map)
+            // to avoid libc heap fragmentation.
+            obj = (XrGCHeader *) xr_mem_map(total, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
+            if (!obj)
                 return NULL;
             use_mmap = true;
         } else {
@@ -1217,7 +1217,7 @@ static void sweeplargeobjects(XrCoroGC *gc) {
             gc->object_count--;
             gc->objects_swept++;
             if (XR_GC_IS_MMAP(curr)) {
-                munmap(curr, curr->objsize);
+                xr_mem_unmap(curr, curr->objsize);
             } else {
                 xr_free(curr);
             }
