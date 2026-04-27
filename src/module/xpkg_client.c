@@ -28,12 +28,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
 #include <errno.h>
-#include <libgen.h>
+#ifndef XR_OS_WINDOWS
+#include <sys/stat.h>  // chmod
+#endif
 #include "../os/os_fs.h"
+#include "../os/os_proc.h"
 
 // Thread-local config for multi-Isolate support
 static XR_THREAD_LOCAL XrPkgClientConfig tls_config = {
@@ -81,33 +81,20 @@ static bool mkdir_recursive(const char *path) {
 }
 
 /*
- * Execute command with arguments safely using fork/exec.
- * Avoids shell injection by not using system().
+ * Execute a child process. Inherits parent stdio. Returns the exit
+ * code on success, -1 on spawn / wait failure or abnormal exit.
+ * Routed through xr_proc_* so the call site is portable.
  */
 static int exec_command(const char *prog, char *const argv[]) {
-    pid_t pid = fork();
-
-    if (pid < 0) {
-        return -1;  // Fork failed
-    }
-
-    if (pid == 0) {
-        // Child process
-        execvp(prog, argv);
-        _exit(127);  // exec failed
-    }
-
-    // Parent process - wait for child
-    int status;
-    if (waitpid(pid, &status, 0) < 0) {
+    XrProcId pid = xr_proc_spawn(prog, (const char *const *) argv);
+    if (pid == XR_PROC_INVALID) {
         return -1;
     }
-
-    if (WIFEXITED(status)) {
-        return WEXITSTATUS(status);
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0) {
+        return -1;
     }
-
-    return -1;
+    return code;
 }
 
 /*
@@ -779,8 +766,12 @@ bool xr_pkg_client_save_token(const char *token) {
     fprintf(f, "{\"token\":\"%s\"}\n", token);
     fclose(f);
 
-    // Set permissions to user read/write only
+    // Restrict to user-only access on POSIX. Windows uses ACLs that
+    // we don't model here; the file inherits the parent directory's
+    // ACL which is typically already user-private under %APPDATA%.
+#ifndef XR_OS_WINDOWS
     chmod(config_path, 0600);
+#endif
 
     printf("Token saved to %s\n", config_path);
     return true;

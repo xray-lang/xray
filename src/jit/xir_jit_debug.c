@@ -28,16 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../os/os_codemem.h"
+#include "../os/os_proc.h"
 #include "../os/os_thread.h"
-
-// jit_debugger_attached() introspects the current process via sysctl on macOS.
-// Local includes; will fold into a generic os_proc shim alongside the rest of
-// the process-control surface.
-#if defined(XR_OS_MACOS)
-#include <sys/sysctl.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
 
 // ========== Code Region Registry ==========
 
@@ -385,27 +377,12 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
     raise(sig);
 }
 
-// Detect if a debugger (lldb/gdb) is attached to this process.
-// Uses macOS sysctl P_TRACED flag; returns false on other platforms.
-static bool jit_debugger_attached(void) {
-#if defined(XR_OS_MACOS)
-    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
-    struct kinfo_proc info;
-    memset(&info, 0, sizeof(info));
-    size_t size = sizeof(info);
-    if (sysctl(mib, 4, &info, &size, NULL, 0) == 0) {
-        return (info.kp_proc.p_flag & P_TRACED) != 0;
-    }
-#endif
-    return false;
-}
-
 void jit_debug_install_crash_handler(void) {
     if (getenv("XRAY_NO_JIT_CRASH_HANDLER")) {
         fprintf(stderr, "[JIT-debug] crash handler disabled by XRAY_NO_JIT_CRASH_HANDLER\n");
         return;
     }
-    if (jit_debugger_attached()) {
+    if (xr_proc_debugger_attached()) {
         fprintf(stderr, "[JIT-debug] debugger detected, skipping crash handler install\n");
         return;
     }
