@@ -24,13 +24,16 @@
 #include <limits.h>
 #include "../../src/os/os_fs.h"
 
+#include <signal.h>
+#include <time.h>
+
 #ifdef XR_OS_WINDOWS
 #include <process.h>
 #include <winsock2.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #include <pwd.h>
-#include <signal.h>
 #include <sys/wait.h>
 #endif
 
@@ -44,7 +47,9 @@
 #endif
 
 // External: environ variable
+#ifndef XR_OS_WINDOWS
 extern char **environ;
+#endif
 
 /* ========== External Declarations ========== */
 
@@ -124,6 +129,23 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
     if (!map)
         return xr_null();
 
+#ifdef XR_OS_WINDOWS
+    LPCH env_block = GetEnvironmentStringsA();
+    if (!env_block)
+        return xr_value_from_map(map);
+    for (const char *p = env_block; *p; p += strlen(p) + 1) {
+        const char *eq = strchr(p, '=');
+        if (!eq || eq == p)
+            continue;
+        size_t name_len = eq - p;
+        const char *value = eq + 1;
+        XrString *key_str = xr_string_intern(X, p, name_len, 0);
+        XrValue key = xr_string_value(key_str);
+        XrValue val = xrs_string_value_c(X, value);
+        xr_map_set(map, key, val);
+    }
+    FreeEnvironmentStringsA(env_block);
+#else
     for (char **env = environ; *env != NULL; env++) {
         char *eq = strchr(*env, '=');
         if (!eq)
@@ -138,6 +160,7 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
         XrValue val = xrs_string_value_c(X, value);
         xr_map_set(map, key, val);
     }
+#endif
 
     return xr_value_from_map(map);
 }
@@ -170,7 +193,7 @@ static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    char buf[PATH_MAX];
+    char buf[XR_PATH_MAX];
     if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }

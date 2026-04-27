@@ -28,8 +28,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include <unistd.h>
 #include <signal.h>
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #ifdef HAS_READLINE
 #include <readline/readline.h>
@@ -537,11 +541,7 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     state.proto_count = 0;
 
     // Setup SIGINT handler
-    struct sigaction sa;
-    sa.sa_handler = repl_sigint_handler;
-    sa.sa_flags = 0;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGINT, &sa, NULL);
+    signal(SIGINT, repl_sigint_handler);
 
     // Load history
 #ifdef HAS_READLINE

@@ -1011,7 +1011,7 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
                     int64_t now = xr_monotonic_ticks();
                     xr_bump_timers(w->p.timer_wheel, now);
                 }
-                sched_yield();
+                xr_thread_yield();
             }
         }
         base[a] = vm_task_consume_result(isolate, task, NULL, discard_result);
@@ -1114,7 +1114,7 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
             }
             if (++spin_count > 1000) {
                 spin_count = 0;
-                sched_yield();
+                xr_thread_yield();
             }
         }
         base[a] = vm_task_consume_result(isolate, task, NULL, 0);
@@ -1232,7 +1232,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             break;
         if (++spin_count > 1000) {
             spin_count = 0;
-            sched_yield();
+            xr_thread_yield();
         }
     }
     return VM_COLD_STARTFUNC;
@@ -1342,7 +1342,7 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             }
             if (++spin > 1000) {
                 spin = 0;
-                sched_yield();
+                xr_thread_yield();
             }
         }
     }

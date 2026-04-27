@@ -244,7 +244,7 @@ vmcase(OP_SCOPE_EXIT) {
         while (atomic_load(&scope->count) > 0) {
             if (++spin > 1000) {
                 spin = 0;
-                sched_yield();
+                xr_thread_yield();
             }
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {

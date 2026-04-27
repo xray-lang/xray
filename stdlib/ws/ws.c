@@ -32,6 +32,21 @@
 #ifdef XR_OS_MACOS
 #include <CommonCrypto/CommonDigest.h>
 #define SHA1(data, len, hash) CC_SHA1(data, (CC_LONG) (len), hash)
+#elif defined(XR_OS_WINDOWS)
+#include <bcrypt.h>
+#pragma comment(lib, "bcrypt.lib")
+// Minimal SHA1 shim using Windows CNG (BCrypt)
+static inline unsigned char *SHA1(const unsigned char *data, size_t len, unsigned char *hash) {
+    BCRYPT_ALG_HANDLE alg = NULL;
+    BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA1_ALGORITHM, NULL, 0);
+    BCRYPT_HASH_HANDLE h = NULL;
+    BCryptCreateHash(alg, &h, NULL, 0, NULL, 0, 0);
+    BCryptHashData(h, (PUCHAR) data, (ULONG) len, 0);
+    BCryptFinishHash(h, hash, 20, 0);
+    BCryptDestroyHash(h);
+    BCryptCloseAlgorithmProvider(alg, 0);
+    return hash;
+}
 #else
 #include <openssl/sha.h>
 #endif

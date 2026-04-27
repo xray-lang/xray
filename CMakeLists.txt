@@ -391,9 +391,15 @@ file(GLOB STDLIB_CORE_SRC
 set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
 if(XR_STDLIB_FULL)
-    # Full stdlib: include all modules
+    # Full stdlib: include all modules except those explicitly disabled
     file(GLOB_RECURSE STDLIB_ALL_SRC "stdlib/*/*.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
+    if(NOT XR_STDLIB_CLUSTER)
+        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/cluster/.*")
+    endif()
+    if(NOT XR_STDLIB_COMPRESS)
+        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/compress/.*")
+    endif()
     set(STDLIB_SRC ${STDLIB_ALL_SRC})
     message(STATUS "Stdlib: full")
 else()
@@ -499,11 +505,12 @@ target_include_directories(xray_core PRIVATE
 )
 
 # Link libraries
-target_link_libraries(xray_core PUBLIC m z)
-
-# Link pthread (required for coroutines)
-if(NOT WIN32)
-    target_link_libraries(xray_core PUBLIC pthread)
+if(WIN32)
+    # Math library is part of the MSVC runtime; ws2_32 for sockets,
+    # synchronization for WaitOnAddress/WakeByAddressSingle
+    target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
+else()
+    target_link_libraries(xray_core PUBLIC m z pthread)
 endif()
 
 # OpenSSL support

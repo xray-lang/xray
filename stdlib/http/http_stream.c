@@ -23,10 +23,16 @@
 #include "../net/io.h"
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include "../../src/os/os_net.h"
+#ifdef XR_OS_WINDOWS
 #include <sys/stat.h>
+#else
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#endif
 
 #define DEFAULT_BUFFER_SIZE (64 * 1024)  // 64KB
 
