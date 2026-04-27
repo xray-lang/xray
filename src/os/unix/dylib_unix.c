@@ -15,8 +15,6 @@
 
 #include "../os_dylib.h"
 
-#ifndef _WIN32
-
 #include <dlfcn.h>
 
 XrDylib *xr_dylib_open(const char *path) {
@@ -43,5 +41,3 @@ const char *xr_dylib_last_error(void) {
     const char *e = dlerror();
     return e ? e : "";
 }
-
-#endif  // !_WIN32

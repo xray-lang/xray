@@ -19,8 +19,6 @@
 
 #include "../os_time.h"
 
-#ifndef _WIN32
-
 #include <errno.h>
 #include <time.h>
 
@@ -49,5 +47,3 @@ void xr_time_sleep_ns(uint64_t ns) {
         req = rem;
     }
 }
-
-#endif  // !_WIN32

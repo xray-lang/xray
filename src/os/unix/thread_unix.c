@@ -15,8 +15,6 @@
 
 #include "../os_thread.h"
 
-#ifndef _WIN32
-
 #include <errno.h>
 #include <pthread.h>
 #include <sched.h>
@@ -165,5 +163,3 @@ void xr_rwlock_wrunlock(xr_rwlock_t *l) {
 void xr_once_call(xr_once_t *o, void (*init_fn)(void)) {
     pthread_once(o, init_fn);
 }
-
-#endif  // !_WIN32

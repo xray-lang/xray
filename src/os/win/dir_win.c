@@ -21,8 +21,6 @@
 
 #include "../os_dir.h"
 
-#ifdef _WIN32
-
 #include "xmalloc.h"
 #include <string.h>
 #ifndef WIN32_LEAN_AND_MEAN
@@ -95,5 +93,3 @@ void xr_dir_close(XrDirIter *it) {
         FindClose(it->h);
     xr_free(it);
 }
-
-#endif  // _WIN32

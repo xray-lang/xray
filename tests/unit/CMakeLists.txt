@@ -308,12 +308,16 @@ if(XR_BUILD_DAP)
     )
     add_test(NAME test_dap_breakpoints COMMAND test_dap_breakpoints)
 
+    if(WIN32)
+        set(_dap_fd_impl ${CMAKE_SOURCE_DIR}/src/os/win/fd_win.c)
+    else()
+        set(_dap_fd_impl ${CMAKE_SOURCE_DIR}/src/os/unix/fd_unix.c)
+    endif()
     add_executable(test_dap_transport
         dap/test_dap_transport.c
         ${CMAKE_SOURCE_DIR}/src/app/dap/xdap_transport.c
         ${CMAKE_SOURCE_DIR}/src/base/xframing.c
-        ${CMAKE_SOURCE_DIR}/src/os/unix/fd_unix.c
-        ${CMAKE_SOURCE_DIR}/src/os/win/fd_win.c
+        ${_dap_fd_impl}
     )
     target_include_directories(test_dap_transport PRIVATE
         ${CMAKE_SOURCE_DIR}/src/app/dap

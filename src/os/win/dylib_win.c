@@ -24,8 +24,6 @@
 
 #include "../os_dylib.h"
 
-#ifdef _WIN32
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -101,5 +99,3 @@ void xr_dylib_close(XrDylib *lib) {
 const char *xr_dylib_last_error(void) {
     return tls_err_buf;
 }
-
-#endif  // _WIN32

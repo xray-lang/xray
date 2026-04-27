@@ -339,10 +339,13 @@ set(XRAY_COMMON_INCLUDES
 # ============================================================================
 
 file(GLOB BASE_SRC "src/base/*.c")
-# Cross-platform abstraction layer. Both the unix and win
-# implementations are globbed; per-file #ifdef body guards make
-# exactly one of each pair compile real code on a given platform.
-file(GLOB OS_SRC "src/os/unix/*.c" "src/os/win/*.c")
+# Cross-platform abstraction layer. Each impl file is exclusive to
+# its platform — no body guards, only the right subtree is built.
+if(WIN32)
+    file(GLOB OS_SRC "src/os/win/*.c")
+else()
+    file(GLOB OS_SRC "src/os/unix/*.c")
+endif()
 file(GLOB RUNTIME_TOP_SRC "src/runtime/*.c")
 file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
 file(GLOB RUNTIME_GC_SRC "src/runtime/gc/*.c")

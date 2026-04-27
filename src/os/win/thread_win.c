@@ -25,8 +25,6 @@
 
 #include "../os_thread.h"
 
-#ifdef _WIN32
-
 #include "xmalloc.h"
 #include <process.h>
 
@@ -217,5 +215,3 @@ static BOOL CALLBACK xr_once_thunk_(PINIT_ONCE once, PVOID param, PVOID *ctx) {
 void xr_once_call(xr_once_t *o, void (*init_fn)(void)) {
     InitOnceExecuteOnce(o, xr_once_thunk_, (PVOID) init_fn, NULL);
 }
-
-#endif  // _WIN32

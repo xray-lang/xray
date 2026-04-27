@@ -13,8 +13,6 @@
 
 #include "../os_random.h"
 
-#ifdef _WIN32
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -37,5 +35,3 @@ void xr_random_bytes(unsigned char *buf, size_t len) {
         abort();
     }
 }
-
-#endif  // _WIN32

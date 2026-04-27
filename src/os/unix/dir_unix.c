@@ -15,8 +15,6 @@
 
 #include "../os_dir.h"
 
-#ifndef _WIN32
-
 #include "xmalloc.h"
 #include <dirent.h>
 #include <string.h>
@@ -114,5 +112,3 @@ void xr_dir_close(XrDirIter *it) {
         closedir(it->d);
     xr_free(it);
 }
-
-#endif  // !_WIN32
