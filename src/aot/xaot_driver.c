@@ -178,8 +178,12 @@ static void preregister_classes(XrProto *proto, XrayIsolate *isolate, XcgenCompi
     uint32_t code_count = (uint32_t) proto->code.count;
     const XrInstruction *code = (const XrInstruction *) proto->code.data;
 
-    XrClass *reg_class[256];
-    memset(reg_class, 0, sizeof(reg_class));
+    /* Track register→class mapping.  VM register file is 8-bit indexed
+     * (max 250), so 256 entries covers all valid registers. */
+    enum { REG_CLASS_CAP = 256 };
+    XrClass **reg_class = (XrClass **) xr_calloc(REG_CLASS_CAP, sizeof(XrClass *));
+    if (!reg_class)
+        return;
 
     for (uint32_t pc = 0; pc < code_count; pc++) {
         XrInstruction inst = code[pc];
@@ -188,7 +192,7 @@ static void preregister_classes(XrProto *proto, XrayIsolate *isolate, XcgenCompi
         if (op == OP_MOVE) {
             int dst = GETARG_A(inst);
             int src = GETARG_B(inst);
-            if (dst < 256 && src < 256)
+            if (dst < REG_CLASS_CAP && src < REG_CLASS_CAP)
                 reg_class[dst] = reg_class[src];
             continue;
         }
@@ -204,13 +208,13 @@ static void preregister_classes(XrProto *proto, XrayIsolate *isolate, XcgenCompi
         if (!desc)
             continue;
 
-        XrClass *super_override = (a < 256) ? reg_class[a] : NULL;
+        XrClass *super_override = (a < REG_CLASS_CAP) ? reg_class[a] : NULL;
         XrClass *klass =
             xr_class_from_descriptor(isolate, desc, proto, NULL, NULL, NULL, super_override);
         if (!klass)
             continue;
 
-        if (a < 256)
+        if (a < REG_CLASS_CAP)
             reg_class[a] = klass;
 
         /* Register class info for AOT type table codegen */
@@ -258,6 +262,7 @@ static void preregister_classes(XrProto *proto, XrayIsolate *isolate, XcgenCompi
             }
         }
     }
+    xr_free(reg_class);
 }
 
 /* Scan bytecodes for OP_EXPORT and correlate with OP_SETSHARED to
@@ -285,7 +290,11 @@ static void collect_exports(XrProto *proto, XcgenModule *mod, XirAotExportSlot *
     }
     int next_local_bx = max_local_bx + 1;
 
-    XirAotExportSlot synth[64];
+    /* Dynamic synthetic export slot array (grows as needed). */
+    int synth_cap = 16;
+    XirAotExportSlot *synth = (XirAotExportSlot *) xr_malloc(synth_cap * sizeof(XirAotExportSlot));
+    if (!synth)
+        return;
     int nsynth = 0;
 
     for (uint32_t pc = 0; pc < code_count; pc++) {
@@ -304,34 +313,59 @@ static void collect_exports(XrProto *proto, XcgenModule *mod, XirAotExportSlot *
             continue;
         const char *export_name = XR_STRING_CHARS(XR_TO_STRING(name_val));
 
-        /* Trace backwards through MOVE chain to find GETSHARED/SETSHARED */
+        /* Trace backwards through MOVE chain to find GETSHARED/SETSHARED.
+         * Chain is heap-allocated — no fixed depth limit. */
         int shared_idx = -1;
-        int chain[16];
+        int chain_cap = 32;
+        int *chain = (int *) xr_malloc(chain_cap * sizeof(int));
         int chain_len = 0;
-        chain[chain_len++] = value_reg;
-        for (int bpc = (int) pc - 1; bpc >= 0 && chain_len < 16; bpc--) {
-            XrInstruction prev = code[bpc];
-            if (GET_OPCODE(prev) == OP_MOVE && GETARG_A(prev) == chain[chain_len - 1]) {
-                chain[chain_len++] = GETARG_B(prev);
+        if (chain) {
+            chain[chain_len++] = value_reg;
+            for (int bpc = (int) pc - 1; bpc >= 0; bpc--) {
+                XrInstruction prev = code[bpc];
+                if (GET_OPCODE(prev) == OP_MOVE && GETARG_A(prev) == chain[chain_len - 1]) {
+                    if (chain_len >= chain_cap) {
+                        int new_cap = chain_cap * 2;
+                        int *tmp = (int *) xr_realloc(chain, new_cap * sizeof(int));
+                        if (!tmp)
+                            break;
+                        chain = tmp;
+                        chain_cap = new_cap;
+                    }
+                    chain[chain_len++] = GETARG_B(prev);
+                }
             }
         }
-        for (int bpc = (int) pc - 1; bpc >= 0 && shared_idx < 0; bpc--) {
-            XrInstruction prev = code[bpc];
-            OpCode prev_op = GET_OPCODE(prev);
-            if (prev_op == OP_GETSHARED || prev_op == OP_SETSHARED) {
-                int reg_a = GETARG_A(prev);
-                for (int ci = 0; ci < chain_len; ci++) {
-                    if (chain[ci] == reg_a) {
-                        shared_idx = GETARG_Bx(prev) + proto->shared_offset;
-                        break;
+        if (chain) {
+            for (int bpc = (int) pc - 1; bpc >= 0 && shared_idx < 0; bpc--) {
+                XrInstruction prev = code[bpc];
+                OpCode prev_op = GET_OPCODE(prev);
+                if (prev_op == OP_GETSHARED || prev_op == OP_SETSHARED) {
+                    int reg_a = GETARG_A(prev);
+                    for (int ci = 0; ci < chain_len; ci++) {
+                        if (chain[ci] == reg_a) {
+                            shared_idx = GETARG_Bx(prev) + proto->shared_offset;
+                            break;
+                        }
                     }
                 }
             }
+            xr_free(chain);
         }
 
         if (shared_idx < 0) {
             shared_idx = next_local_bx + proto->shared_offset;
-            if (nsynth < 64) {
+            /* Grow synth array if needed */
+            if (nsynth >= synth_cap) {
+                int new_cap = synth_cap * 2;
+                XirAotExportSlot *tmp =
+                    (XirAotExportSlot *) xr_realloc(synth, new_cap * sizeof(XirAotExportSlot));
+                if (tmp) {
+                    synth = tmp;
+                    synth_cap = new_cap;
+                }
+            }
+            if (nsynth < synth_cap) {
                 synth[nsynth].export_pc = pc;
                 synth[nsynth].value_reg = value_reg;
                 synth[nsynth].shared_index = shared_idx;
@@ -349,6 +383,7 @@ static void collect_exports(XrProto *proto, XcgenModule *mod, XirAotExportSlot *
             *out_nslots = nsynth;
         }
     }
+    xr_free(synth);
 }
 
 /* Recursively collect AOT-eligible protos (those with bb_leaders). */

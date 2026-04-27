@@ -139,7 +139,7 @@ static uint8_t infer_from_backward_scan(XrProto *proto, uint32_t from_pc, int rc
             return XR_REP_I64;
     }
 
-    for (int32_t pc = (int32_t) from_pc - 1; pc >= 0 && pc > (int32_t) from_pc - 64; pc--) {
+    for (int32_t pc = (int32_t) from_pc - 1; pc >= 0; pc--) {
         XrInstruction inst = PROTO_CODE(proto, (uint32_t) pc);
         OpCode op = GET_OPCODE(inst);
         int a = GETARG_A(inst);
@@ -197,13 +197,13 @@ static uint8_t infer_from_backward_scan(XrProto *proto, uint32_t from_pc, int rc
     return XR_REP_TAGGED;
 }
 
-// Infer field type from JSON_INIT instruction sequence after NEWJSON
-// Scans up to 64 instructions after newjson_pc to find JSON_INIT for field_idx
+// Infer field type from JSON_INIT instruction sequence after NEWJSON.
+// Scans forward from newjson_pc until control flow break or end of function.
 static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_idx) {
     uint32_t code_count = (uint32_t) proto->code.count;
     int a_reg = GETARG_A(PROTO_CODE(proto, newjson_pc));
 
-    for (uint32_t pc = newjson_pc + 1; pc < code_count && pc < newjson_pc + 64; pc++) {
+    for (uint32_t pc = newjson_pc + 1; pc < code_count; pc++) {
         XrInstruction inst = PROTO_CODE(proto, pc);
         OpCode op = GET_OPCODE(inst);
 
@@ -389,7 +389,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
                 // Try OP_LOADK-aware scan for better semantic type hint
                 uint32_t code_count = (uint32_t) proto->code.count;
                 int a_reg = GETARG_A(PROTO_CODE(proto, pc));
-                for (uint32_t hpc = pc + 1; hpc < code_count && hpc < pc + 64; hpc++) {
+                for (uint32_t hpc = pc + 1; hpc < code_count; hpc++) {
                     XrInstruction hinst = PROTO_CODE(proto, hpc);
                     OpCode hop = GET_OPCODE(hinst);
                     if (hop == OP_NEWJSON || hop == OP_JMP || hop == OP_RETURN ||
@@ -399,7 +399,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
                         int rc = GETARG_C(hinst);
                         // Try LOADK scan for this register
                         for (int32_t hpc2 = (int32_t) hpc - 1;
-                             hpc2 >= 0 && hpc2 > (int32_t) hpc - 64; hpc2--) {
+                             hpc2 >= 0; hpc2--) {
                             XrInstruction h2 = PROTO_CODE(proto, (uint32_t) hpc2);
                             if (GETARG_A(h2) != rc)
                                 continue;
