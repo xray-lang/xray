@@ -35,6 +35,7 @@
 ** ======================================================== */
 
 vmcase(OP_CALL) {
+op_call_entry:;
     /* Unified callable object handling
     ** Principle: no backward compatibility, use best design
     ** Strategy: distinguish two most common types for performance
@@ -637,7 +638,7 @@ vmcase(OP_CALL_STATIC) {
     ** no C function, no enum). Falls through to OP_CALL which handles
     ** the fast-path XR_IS_FUNCTION branch first.
     */
-    goto L_OP_CALL;
+    goto op_call_entry;
 }
 
 vmcase(OP_LOOP_BACK) {
@@ -1236,7 +1237,6 @@ vmcase(OP_RETURN1) {
     if (VM_MODULE_BASE >= 0 && VM_FRAME_COUNT == VM_MODULE_BASE) {
         return XR_VM_OK;
     }
-
     // Restore caller frame
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
