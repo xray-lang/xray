@@ -107,9 +107,6 @@ typedef struct XcgenFunc {
     int call_args_cap;  // current allocated size
     int call_args_count;
 
-    // Shadow stack: number of XrtValue locals registered for GC scanning
-    int shadow_stack_count;
-
     // Defer tracking: number of deferred closures in this function.
     // Codegen emits _defer_N / _defer_N_set locals and LIFO cleanup at returns.
     int defer_count;
@@ -136,7 +133,6 @@ typedef struct {
 
 typedef struct XcgenExport {
     const char *name;   // export name (e.g. "pi", "add")
-    const char *c_var;  // C global variable name (e.g. "mod_math__pi")
     int shared_index;   // index into xrt_shared[] array (-1 = named global)
     bool is_const;      // true if const export
 } XcgenExport;
@@ -161,9 +157,6 @@ typedef struct XcgenModule {
 
     // Struct promotion registry (non-owning ptr → comp->struct_reg)
     XcgenStructRegistry *struct_reg;
-
-    // Compilation flags
-    bool emit_debug;  // true = #line directives
 
     // Backpointer to parent compilation context
     XcgenCompilation *comp;
@@ -192,9 +185,6 @@ struct XcgenCompilation {
     int nclass_infos;
     int class_infos_cap;
 
-    // Output configuration
-    bool emit_debug;   // true = #line directives
-    bool single_file;  // true = combine all modules into one .c
 };
 
 /* ========== Compilation API ========== */
@@ -272,9 +262,6 @@ XR_FUNC bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
 XR_FUNC const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr);
 // Lookup proto → index in mod->funcs (-1 if not found/compiled yet)
 XR_FUNC int xcg_lookup_proto_func_idx(XcgenModule *mod, void *proto_ptr);
-// Lookup proto → compiled XcgenFunc (for struct param info); may return NULL
-// NOTE: always re-derives the pointer from mod->funcs to avoid dangling refs after realloc
-XR_FUNC XcgenFunc *xcg_lookup_proto_cf(XcgenModule *mod, void *proto_ptr);
 
 // Emit phi copies for a control-flow edge
 XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *from, XirBlock *to);

@@ -173,7 +173,6 @@ XcgenCompilation *xcgen_compilation_new(void) {
         return NULL;
     }
     comp->max_shared_index = -1;
-    comp->single_file = true;
     return comp;
 }
 
@@ -201,8 +200,6 @@ XcgenModule *xcgen_compilation_add_module(XcgenCompilation *comp, const char *na
     mod->module_id = (int16_t) comp->nmodules;
     mod->comp = comp;
     mod->struct_reg = comp->struct_reg;
-    mod->emit_debug = comp->emit_debug;
-
     for (int i = 0; i < XCGEN_SEC_COUNT; i++)
         xcgen_buf_init(&mod->sections[i]);
 
@@ -234,7 +231,6 @@ void xcgen_module_add_export(XcgenModule *mod, const char *name, int shared_inde
     }
     XcgenExport *e = &mod->exports[mod->nexports++];
     e->name = xr_strdup(name);  // copy: source may be on GC heap
-    e->c_var = NULL;            // populated during emission
     e->shared_index = shared_index;
     e->is_const = is_const;
 }
@@ -316,13 +312,6 @@ int xcg_lookup_proto_func_idx(XcgenModule *mod, void *proto_ptr) {
             return comp->proto_map[i].func_idx;
     }
     return -1;
-}
-
-XcgenFunc *xcg_lookup_proto_cf(XcgenModule *mod, void *proto_ptr) {
-    int fi = xcg_lookup_proto_func_idx(mod, proto_ptr);
-    if (fi >= 0 && fi < mod->nfuncs)
-        return &mod->funcs[fi];
-    return NULL;
 }
 
 /* ========== Module Lifecycle ========== */
@@ -1008,7 +997,6 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
             continue;
         }
         uint8_t vt = func->vregs[i].rep;
-        fprintf(stderr, "DEBUG_HEAD vreg %u rep=%u\n", i, vt);
         if (xcg_is_float_type(vt))
             has_float_locals = true;
         else if (xcg_is_tagged_type(vt))
@@ -1635,52 +1623,6 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
     // Emit each module's code
     for (int m = 0; m < comp->nmodules; m++)
         xcgen_emit_module_source(&out, comp->modules[m]);
-
-    // Emit export tables (one per module that has exports)
-    bool has_any_exports = false;
-    for (int m = 0; m < comp->nmodules; m++) {
-        XcgenModule *mod = comp->modules[m];
-        if (mod->nexports <= 0)
-            continue;
-        has_any_exports = true;
-
-        const char *raw_name = mod->module_name ? mod->module_name : "xr_main";
-        char c_ident[128];
-        SANITIZE_IDENT(c_ident, raw_name, 128);
-
-        xcgen_buf_printf(&out, "\n/* --- Module exports: %s --- */\n",
-                         mod->module_name ? mod->module_name : "main");
-        xcgen_buf_printf(&out, "static XrtModuleExport %s__exports[] = {\n", c_ident);
-        for (int e = 0; e < mod->nexports; e++) {
-            XcgenExport *ex = &mod->exports[e];
-            xcgen_buf_printf(&out, "    {\"%s\", &xrt_shared[%d], %s},\n", ex->name,
-                             ex->shared_index,
-                             ex->is_const ? "XRT_EXPORT_CONST" : "XRT_EXPORT_LET");
-        }
-        xcgen_buf_puts(&out, "};\n");
-    }
-
-    // Emit module descriptor table (if any module has exports)
-    if (has_any_exports) {
-        xcgen_buf_printf(&out, "\nstatic XrtModule xrt_modules[] = {\n");
-        for (int m = 0; m < comp->nmodules; m++) {
-            XcgenModule *mod = comp->modules[m];
-            const char *mname = mod->module_name ? mod->module_name : "main";
-
-            const char *raw = mod->module_name ? mod->module_name : "xr_main";
-            char cid[128];
-            SANITIZE_IDENT(cid, raw, 128);
-
-            if (mod->nexports > 0) {
-                xcgen_buf_printf(&out, "    {\"%s\", \"%s\", NULL, %s__exports, %d, 0},\n", mname,
-                                 mod->module_path ? mod->module_path : "", cid, mod->nexports);
-            } else {
-                xcgen_buf_printf(&out, "    {\"%s\", \"%s\", NULL, NULL, 0, 0},\n", mname,
-                                 mod->module_path ? mod->module_path : "");
-            }
-        }
-        xcgen_buf_puts(&out, "};\n");
-    }
 
     // Ownership transfers to caller
     return out.data;
