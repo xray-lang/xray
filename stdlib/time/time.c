@@ -18,7 +18,7 @@
 #include <time.h>
 #include <stdio.h>
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #endif
 
@@ -51,7 +51,7 @@ static XrValue xr_time_clock(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-#if defined(XR_PLATFORM_MACOS) || defined(XR_PLATFORM_LINUX)
+#if defined(XR_OS_MACOS) || defined(XR_OS_LINUX)
     struct timespec ts;
     if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
         int64_t ms = (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;

@@ -146,7 +146,7 @@ void xr_socket_close(XrayIsolate *X, int fd) {
     // 1. Close write end, send FIN
     shutdown(fd, XR_SHUT_WR);
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
     // 2. Use poll to wait for data send complete (max 100ms).
     //    Best-effort RST avoidance; skipped on Windows where the
     //    runtime does not currently expose a portable poll wrapper

@@ -21,7 +21,7 @@
 #include <string.h>
 #include <errno.h>
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -366,7 +366,7 @@ int xr_io_write_all(XrIOConn *conn, const void *buf, size_t len) {
     return (int) total;
 }
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt) {
     if (!conn || !iov || iovcnt <= 0)
         return -1;

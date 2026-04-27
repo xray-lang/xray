@@ -20,7 +20,7 @@
 #include "../../src/base/xchecks.h"
 #include <limits.h>
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #endif
 
@@ -30,7 +30,7 @@
 
 /* ========== Platform Definitions ========== */
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
 #define PATH_SEP '\\'
 #define PATH_SEP_STR "\\"
 #define PATH_DELIMITER ";"
@@ -82,7 +82,7 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
             continue;
 
             // Check absolute path FIRST, before adding separator
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
         bool is_abs = IS_SEP(part[0]) ||
                       (((part[0] >= 'A' && part[0] <= 'Z') || (part[0] >= 'a' && part[0] <= 'z')) &&
                        part[1] == ':');
@@ -226,7 +226,7 @@ static XrValue path_isAbsolute(XrayIsolate *X, XrValue *args, int argc) {
     if (!path || path[0] == '\0')
         return xr_bool(false);
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     // Windows: drive letter or UNC path
     if ((path[0] >= 'A' && path[0] <= 'Z' && path[1] == ':') ||
         (path[0] >= 'a' && path[0] <= 'z' && path[1] == ':')) {

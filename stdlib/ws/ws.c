@@ -27,7 +27,7 @@
 #include <string.h>
 #include <errno.h>
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -38,7 +38,7 @@
 #include <netdb.h>
 #endif
 
-#ifdef XR_PLATFORM_MACOS
+#ifdef XR_OS_MACOS
 #include <CommonCrypto/CommonDigest.h>
 #define SHA1(data, len, hash) CC_SHA1(data, (CC_LONG) (len), hash)
 #else
