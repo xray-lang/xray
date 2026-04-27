@@ -425,13 +425,22 @@ static void x64_emit_noncommutative_gp(X64CodegenCtx *ctx, X64Reg rd, XirRef arg
     X64Reg rn = x64_get_operand(ctx, arg0, X64_SCRATCH_REG);
 
     if (rn == X64_SCRATCH_REG && arg0 != arg1 && x64_arg_needs_scratch_gp(ctx, arg1)) {
-        CODEGEN_CHECK(ctx, rd != X64_SCRATCH_REG,
-                  "noncomm gp binop: dst aliases scratch with both args needing scratch");
-        x64_push_r(&ctx->buf, X64_SCRATCH_REG);
-        X64Reg rm = x64_get_operand(ctx, arg1, X64_SCRATCH_REG);
-        CODEGEN_CHECK(ctx, rm == X64_SCRATCH_REG, "noncomm gp binop: expected arg1 to land in scratch");
-        x64_pop_r(&ctx->buf, rd);
-        emit_op(&ctx->buf, rd, rm);
+        if (rd != X64_SCRATCH_REG) {
+            /* dst is a real register: push arg0, load arg1→scratch, pop arg0→dst, OP dst,scratch */
+            x64_push_r(&ctx->buf, X64_SCRATCH_REG);
+            X64Reg rm = x64_get_operand(ctx, arg1, X64_SCRATCH_REG);
+            (void) rm;
+            x64_pop_r(&ctx->buf, rd);
+            emit_op(&ctx->buf, rd, X64_SCRATCH_REG);
+        } else {
+            /* dst is ALSO scratch (spilled vreg). Borrow RAX via push/pop as temp. */
+            x64_push_r(&ctx->buf, X64_RAX);
+            x64_mov_rr(&ctx->buf, X64_RAX, X64_SCRATCH_REG);
+            x64_get_operand(ctx, arg1, X64_SCRATCH_REG);
+            emit_op(&ctx->buf, X64_RAX, X64_SCRATCH_REG);
+            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);
+            x64_pop_r(&ctx->buf, X64_RAX);
+        }
         return;
     }
 
