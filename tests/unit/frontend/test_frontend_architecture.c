@@ -30,12 +30,21 @@
 
 #include "../test_framework.h"
 
-#include <dirent.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// Frontend architecture lint walks src/ via the OS directory iterator.
+// On Windows we would need a FindFirstFile path; the lint is a Unix-side
+// build gate (runs on every Linux + macOS CI build) so we deliberately
+// stub the entire test to a no-op on Windows rather than carry that
+// dependency. The Unix CI legs catch every architecture violation that
+// the corresponding Windows leg would.
+#ifndef _WIN32
+#include <dirent.h>
 #include <sys/stat.h>
+#endif
 
 #ifndef XR_TEST_SRC_DIR
 #error "XR_TEST_SRC_DIR must be defined by CMake (path to project src/)"
@@ -49,17 +58,25 @@
 // stripped. False on any non-include line.
 static bool extract_include(const char *line, char *out, size_t out_cap) {
     const char *p = line;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p != '#') return false;
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (*p != '#')
+        return false;
     p++;
-    while (*p == ' ' || *p == '\t') p++;
-    if (strncmp(p, "include", 7) != 0) return false;
+    while (*p == ' ' || *p == '\t')
+        p++;
+    if (strncmp(p, "include", 7) != 0)
+        return false;
     p += 7;
-    while (*p == ' ' || *p == '\t') p++;
+    while (*p == ' ' || *p == '\t')
+        p++;
     char close;
-    if (*p == '"')      close = '"';
-    else if (*p == '<') close = '>';
-    else                return false;
+    if (*p == '"')
+        close = '"';
+    else if (*p == '<')
+        close = '>';
+    else
+        return false;
     p++;
     size_t i = 0;
     while (*p && *p != close && *p != '\n' && i + 1 < out_cap) {
@@ -81,7 +98,8 @@ static bool include_hits_subtree(const char *inc, const char *bad_subdir) {
     // from src/).
     char rel[128];
     snprintf(rel, sizeof rel, "%s/", bad_subdir);
-    if (strstr(inc, rel) != NULL) return true;
+    if (strstr(inc, rel) != NULL)
+        return true;
     return false;
 }
 
@@ -91,49 +109,58 @@ static bool include_is_public_api(const char *inc) {
     // Match by basename: /include/xray.h or just xray.h.
     const char *base = strrchr(inc, '/');
     base = base ? base + 1 : inc;
-    return strcmp(base, "xray.h") == 0 ||
-           strcmp(base, "xray_isolate.h") == 0;
+    return strcmp(base, "xray.h") == 0 || strcmp(base, "xray_isolate.h") == 0;
 }
 
 /* ========== filesystem walker ========== */
 
-typedef bool (*include_check_fn)(const char *file_path,
-                                 const char *include_path,
-                                 void *cookie);
+typedef bool (*include_check_fn)(const char *file_path, const char *include_path, void *cookie);
 
 // Walk every .c / .h file rooted at `dir` recursively. For every
 // #include line, call `check`. Returns the number of `check`
 // invocations that returned `true` (i.e. violations).
-static int walk_includes(const char *dir, include_check_fn check,
-                         void *cookie) {
+static int walk_includes(const char *dir, include_check_fn check, void *cookie) {
+    int violations = 0;
+#ifdef _WIN32
+    (void) dir;
+    (void) check;
+    (void) cookie;
+    return violations;
+#else
     DIR *d = opendir(dir);
     if (!d) {
         printf("    walk_includes: cannot open %s\n", dir);
         return -1;
     }
-    int violations = 0;
     struct dirent *ent;
     while ((ent = readdir(d)) != NULL) {
-        if (ent->d_name[0] == '.') continue;
+        if (ent->d_name[0] == '.')
+            continue;
         char path[1024];
         snprintf(path, sizeof path, "%s/%s", dir, ent->d_name);
         struct stat st;
-        if (stat(path, &st) != 0) continue;
+        if (stat(path, &st) != 0)
+            continue;
         if (S_ISDIR(st.st_mode)) {
             int sub = walk_includes(path, check, cookie);
-            if (sub > 0) violations += sub;
+            if (sub > 0)
+                violations += sub;
             continue;
         }
         size_t nlen = strlen(ent->d_name);
-        if (nlen < 2) continue;
+        if (nlen < 2)
+            continue;
         const char *ext = ent->d_name + nlen - 2;
-        if (strcmp(ext, ".c") != 0 && strcmp(ext, ".h") != 0) continue;
+        if (strcmp(ext, ".c") != 0 && strcmp(ext, ".h") != 0)
+            continue;
         FILE *fp = fopen(path, "r");
-        if (!fp) continue;
+        if (!fp)
+            continue;
         char line[1024];
         while (fgets(line, sizeof line, fp)) {
             char inc[512];
-            if (!extract_include(line, inc, sizeof inc)) continue;
+            if (!extract_include(line, inc, sizeof inc))
+                continue;
             if (check(path, inc, cookie)) {
                 printf("    %s: includes \"%s\"\n", path, inc);
                 violations++;
@@ -142,63 +169,58 @@ static int walk_includes(const char *dir, include_check_fn check,
         fclose(fp);
     }
     closedir(d);
+#endif
     return violations;
 }
 
 /* ========== rule checks ========== */
 
 static bool rule_no_subtree(const char *file, const char *inc, void *c) {
-    (void)file;
-    return include_hits_subtree(inc, (const char *)c);
+    (void) file;
+    return include_hits_subtree(inc, (const char *) c);
 }
 
 static bool rule_no_public_api(const char *file, const char *inc, void *c) {
-    (void)file;
-    (void)c;
+    (void) file;
+    (void) c;
     return include_is_public_api(inc);
 }
 
 /* ========== TEST CASES ========== */
 
 TEST(arch_lexer_does_not_include_runtime) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/lexer",
-                          rule_no_subtree, (void *)"runtime");
+    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/lexer", rule_no_subtree, (void *) "runtime");
     ASSERT_EQ_INT(v, 0);
 }
 
 TEST(arch_parser_does_not_include_analyzer) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/parser",
-                          rule_no_subtree, (void *)"analyzer");
+    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/parser", rule_no_subtree, (void *) "analyzer");
     ASSERT_EQ_INT(v, 0);
 }
 
 TEST(arch_format_does_not_include_analyzer) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/format",
-                          rule_no_subtree, (void *)"analyzer");
+    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/format", rule_no_subtree, (void *) "analyzer");
     ASSERT_EQ_INT(v, 0);
 }
 
 TEST(arch_format_does_not_include_public_api) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/format",
-                          rule_no_public_api, NULL);
+    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/format", rule_no_public_api, NULL);
     ASSERT_EQ_INT(v, 0);
 }
 
 TEST(arch_frontend_does_not_include_public_api) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend",
-                          rule_no_public_api, NULL);
+    int v = walk_includes(XR_TEST_SRC_DIR "/frontend", rule_no_public_api, NULL);
     ASSERT_EQ_INT(v, 0);
 }
 
 TEST(arch_analyzer_does_not_include_codegen) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/analyzer",
-                          rule_no_subtree, (void *)"codegen");
+    int v =
+        walk_includes(XR_TEST_SRC_DIR "/frontend/analyzer", rule_no_subtree, (void *) "codegen");
     ASSERT_EQ_INT(v, 0);
 }
 
 TEST(arch_codegen_does_not_include_format) {
-    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/codegen",
-                          rule_no_subtree, (void *)"format");
+    int v = walk_includes(XR_TEST_SRC_DIR "/frontend/codegen", rule_no_subtree, (void *) "format");
     ASSERT_EQ_INT(v, 0);
 }
 
@@ -215,12 +237,15 @@ TEST(arch_astnode_has_no_compile_type_field) {
         // Skip pure-comment lines (//, /*, *) so a dust comment
         // does not trip the assertion.
         const char *p = line;
-        while (*p == ' ' || *p == '\t') p++;
-        if (*p == '/' || *p == '*') continue;
+        while (*p == ' ' || *p == '\t')
+            p++;
+        if (*p == '/' || *p == '*')
+            continue;
         // Look for an actual field declaration: `compile_type;`,
         // `compile_type[`, or `compile_type,`.
         const char *needle = strstr(p, "compile_type");
-        if (!needle) continue;
+        if (!needle)
+            continue;
         const char *suffix = needle + strlen("compile_type");
         // Allow `compile_type_DUMMY`-prefixed identifiers if they ever
         // exist by skipping over an `_legacy` adornment that itself is
@@ -228,7 +253,8 @@ TEST(arch_astnode_has_no_compile_type_field) {
         if (strncmp(suffix, "_legacy", 7) == 0) {
             suffix += 7;
         }
-        while (*suffix == ' ' || *suffix == '\t') suffix++;
+        while (*suffix == ' ' || *suffix == '\t')
+            suffix++;
         if (*suffix == ';' || *suffix == '[' || *suffix == ',') {
             printf("    declaration found in %s: %s", path, line);
             violations++;
@@ -241,13 +267,13 @@ TEST(arch_astnode_has_no_compile_type_field) {
 /* ========== Driver ========== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("frontend architecture (Phase 3)");
-    RUN_TEST(arch_lexer_does_not_include_runtime);
-    RUN_TEST(arch_parser_does_not_include_analyzer);
-    RUN_TEST(arch_format_does_not_include_analyzer);
-    RUN_TEST(arch_format_does_not_include_public_api);
-    RUN_TEST(arch_frontend_does_not_include_public_api);
-    RUN_TEST(arch_analyzer_does_not_include_codegen);
-    RUN_TEST(arch_codegen_does_not_include_format);
-    RUN_TEST(arch_astnode_has_no_compile_type_field);
+RUN_TEST_SUITE("frontend architecture (Phase 3)");
+RUN_TEST(arch_lexer_does_not_include_runtime);
+RUN_TEST(arch_parser_does_not_include_analyzer);
+RUN_TEST(arch_format_does_not_include_analyzer);
+RUN_TEST(arch_format_does_not_include_public_api);
+RUN_TEST(arch_frontend_does_not_include_public_api);
+RUN_TEST(arch_analyzer_does_not_include_codegen);
+RUN_TEST(arch_codegen_does_not_include_format);
+RUN_TEST(arch_astnode_has_no_compile_type_field);
 TEST_MAIN_END()
