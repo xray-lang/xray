@@ -862,7 +862,6 @@ static void xcg_emit_box_op(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *
 // Emit CONST_PTR instruction (string literal, null, or raw pointer)
 static void xcg_emit_const_ptr(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf) {
     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-    const char *tagged_type = "XrValue";
     uint8_t vtype = XR_REP_PTR;
     if (xir_ref_is_vreg(ins->dst)) {
         uint32_t vi = XIR_REF_INDEX(ins->dst);

@@ -117,20 +117,6 @@ static bool xcg_is_tagged_type(uint8_t xir_type) {
     return xir_type == XR_REP_STR || xir_type == XR_REP_TAGGED || xir_type == XR_REP_PTR;
 }
 
-// Convert XrSlotType (from proto metadata) to C type string
-static const char *xcg_c_type_for_slot(uint8_t slot_type) {
-    switch (slot_type) {
-        case 9:  // XR_SLOT_F32
-        case 10: /* XR_SLOT_F64 */
-            return "double";
-        case 12: /* XR_SLOT_PTR */
-            return "XrValue";
-        case 0: /* XR_SLOT_ANY */
-            return "XrValue";
-        default:
-            return "int64_t";
-    }
-}
 
 // Derive C type string directly from XrType* (no lossy downgrade)
 static const char *xcg_c_type_for_xrtype(struct XrType *t) {
