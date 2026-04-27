@@ -31,7 +31,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include "../base/xdir.h"
-#include <dlfcn.h>  // dlopen, dlsym, dlclose (native package loading)
+#include "../base/xdylib.h"
 #include "xlockfile.h"
 
 /* ========== Forward Declarations ========== */
@@ -805,9 +805,9 @@ static XrModule *load_native_module(XrayIsolate *isolate, const char *module_nam
             return NULL;  // Not a native module
         }
 
-        void *handle = dlopen(dylib_path, RTLD_NOW | RTLD_LOCAL);
+        XrDylib *handle = xr_dylib_open(dylib_path);
         if (!handle) {
-            XR_DBG_MODULE("dlopen failed for '%s': %s", dylib_path, dlerror());
+            XR_DBG_MODULE("xr_dylib_open failed for '%s': %s", dylib_path, xr_dylib_last_error());
             xr_free(dylib_path);
             return NULL;
         }
@@ -820,10 +820,10 @@ static XrModule *load_native_module(XrayIsolate *isolate, const char *module_nam
         // Look for xr_load_module_<name>(XrayIsolate*) symbol
         char sym[128];
         snprintf(sym, sizeof(sym), "xr_load_module_%s", short_name);
-        NativeModuleLoader dyn_loader = (NativeModuleLoader) dlsym(handle, sym);
+        NativeModuleLoader dyn_loader = (NativeModuleLoader) xr_dylib_sym(handle, sym);
         if (!dyn_loader) {
             XR_DBG_MODULE("symbol '%s' not found in dylib", sym);
-            dlclose(handle);
+            xr_dylib_close(handle);
             return NULL;
         }
         loader_ptr = (void *) dyn_loader;
@@ -1021,21 +1021,22 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
     if (!found)
         return NULL;
 
-    // 4. dlopen
-    void *handle = dlopen(lib_path, RTLD_NOW | RTLD_LOCAL);
+    // 4. Open the shared library
+    XrDylib *handle = xr_dylib_open(lib_path);
     if (!handle) {
-        xr_log_warning("module", "dlopen failed for '%s': %s", lib_path, dlerror());
+        xr_log_warning("module", "xr_dylib_open failed for '%s': %s", lib_path,
+                       xr_dylib_last_error());
         return NULL;
     }
 
     // 5. ABI version check
     char abi_sym[128];
     snprintf(abi_sym, sizeof(abi_sym), "xr_module_abi_version_%s", name);
-    int *abi_ver = (int *) dlsym(handle, abi_sym);
+    int *abi_ver = (int *) xr_dylib_sym(handle, abi_sym);
     if (!abi_ver || *abi_ver != XRAY_MODULE_ABI_VERSION) {
         xr_log_warning("module", "ABI mismatch for '%s': package=%d, runtime=%d", module_name,
                        abi_ver ? *abi_ver : -1, XRAY_MODULE_ABI_VERSION);
-        dlclose(handle);
+        xr_dylib_close(handle);
         return NULL;
     }
 
@@ -1043,22 +1044,26 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
     char sym_name[128];
     snprintf(sym_name, sizeof(sym_name), "xr_load_module_%s", name);
 
-    NativeModuleLoader loader = (NativeModuleLoader) dlsym(handle, sym_name);
+    NativeModuleLoader loader = (NativeModuleLoader) xr_dylib_sym(handle, sym_name);
     if (!loader) {
         xr_log_warning("module", "symbol '%s' not found in '%s'", sym_name, lib_path);
-        dlclose(handle);
+        xr_dylib_close(handle);
         return NULL;
     }
 
     // 7. Call loader — creates XrModule and registers exports
     XrModule *module = loader(isolate);
     if (!module) {
-        dlclose(handle);
+        xr_dylib_close(handle);
         return NULL;
     }
 
-    // 8. Store dlopen handle (NEVER dlclose on success — symbols remain in use)
-    module->native_handle = handle;
+    // 8. Store the library handle. Symbols remain in use for the
+    // lifetime of the runtime, so we deliberately never close it
+    // on the success path; native_handle stays a void* because the
+    // same field is reused by stdlib/http and stdlib/ws to store
+    // their own per-module context pointers.
+    module->native_handle = (void *) handle;
 
     // 9. Cache and finalize
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
