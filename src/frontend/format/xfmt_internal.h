@@ -66,7 +66,7 @@ XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params
 XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrType **args, int count);
 XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern);
 XR_FUNC const char *xfmt_binary_op(AstNodeType type);
-XR_FUNC const char *xfmt_compound_op(TokenType type);
+XR_FUNC const char *xfmt_compound_op(XrTokenType type);
 
 // ---------------------------------------------------------------------------
 // AST dispatchers (cross-TU recursion targets)

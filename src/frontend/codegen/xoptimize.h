@@ -41,7 +41,7 @@
 **   Fold "10 * 2" -> 20
 **   Cannot fold "1 / 0" -> false (division by zero)
 */
-XR_FUNC bool xr_opt_fold_binary(TokenType op, XrValue left, XrValue right, XrValue *result);
+XR_FUNC bool xr_opt_fold_binary(XrTokenType op, XrValue left, XrValue right, XrValue *result);
 
 /*
 ** Try to fold unary operation constants
@@ -59,7 +59,7 @@ XR_FUNC bool xr_opt_fold_binary(TokenType op, XrValue left, XrValue right, XrVal
 **   Fold "-5" -> -5
 **   Fold "!true" -> false
 */
-XR_FUNC bool xr_opt_fold_unary(TokenType op, XrValue value, XrValue *result);
+XR_FUNC bool xr_opt_fold_unary(XrTokenType op, XrValue value, XrValue *result);
 
 /*
 ** Try to fold comparison operation constants
@@ -74,7 +74,7 @@ XR_FUNC bool xr_opt_fold_unary(TokenType op, XrValue value, XrValue *result);
 **   true  - Fold successful
 **   false - Cannot fold
 */
-XR_FUNC bool xr_opt_fold_comparison(TokenType op, XrValue left, XrValue right, XrValue *result);
+XR_FUNC bool xr_opt_fold_comparison(XrTokenType op, XrValue left, XrValue right, XrValue *result);
 
 /* ========== Type-Aware Optimization Hints ========== */
 

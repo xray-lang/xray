@@ -29,7 +29,6 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
-#include <sched.h>
 #include "../base/xmalloc.h"
 
 // ========== Helper Macros ==========

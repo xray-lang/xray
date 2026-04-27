@@ -948,7 +948,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     int name_column = parser->current.column;
 
     // Parse operator symbol
-    TokenType op_token = parser->current.type;
+    XrTokenType op_token = parser->current.type;
 
     char *name = NULL;
     int expected_params = 1;  // Most are binary operators, need 1 parameter (the other operand)

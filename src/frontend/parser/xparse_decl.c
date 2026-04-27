@@ -838,7 +838,7 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
     const char *name = NULL;
     int name_len = 0;
 
-    TokenType t = parser->current.type;
+    XrTokenType t = parser->current.type;
 
     // Accept identifier or any keyword (keyword range: TK_AND to TK_UNKNOWN)
     if (t == TK_NAME || (t >= TK_AND && t <= TK_UNKNOWN)) {
@@ -1149,7 +1149,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
     // Detect type-first declarations: int x = 5, string name = "hello"
     // Type keyword followed by identifier means user intended a declaration
     {
-        TokenType t = parser->current.type;
+        XrTokenType t = parser->current.type;
         if (t == TK_INT || t == TK_INT8 || t == TK_INT16 || t == TK_INT32 || t == TK_INT64 ||
             t == TK_UINT8 || t == TK_UINT16 || t == TK_UINT32 || t == TK_UINT64 || t == TK_FLOAT ||
             t == TK_FLOAT32 || t == TK_FLOAT64 || t == TK_STRING || t == TK_BOOL) {

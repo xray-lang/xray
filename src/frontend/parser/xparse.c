@@ -233,10 +233,10 @@ size_t xr_process_escapes(const char *src, size_t src_len, char *out) {
 /* ========== Helpers ========== */
 
 // Get parse rule for a token type
-const ParseRule *xr_get_rule(TokenType type) {
+const ParseRule *xr_get_rule(XrTokenType type) {
     size_t rules_size = sizeof(rules) / sizeof(rules[0]);
 
-    if (type >= (TokenType) rules_size || type < 0) {
+    if (type >= (XrTokenType) rules_size || type < 0) {
         // Return default rule (PREC_NONE, no prefix/infix)
         static ParseRule default_rule = {NULL, NULL, PREC_NONE};
         return &default_rule;
@@ -264,13 +264,13 @@ void xr_parser_advance(Parser *parser) {
 }
 
 // Check if current token is of specified type
-int xr_parser_check(Parser *parser, TokenType type) {
+int xr_parser_check(Parser *parser, XrTokenType type) {
     XR_DCHECK(parser != NULL, "parser_check: NULL parser");
     return parser->current.type == type;
 }
 
 // If current token matches, consume it and return true
-int xr_parser_match(Parser *parser, TokenType type) {
+int xr_parser_match(Parser *parser, XrTokenType type) {
     if (!xr_parser_check(parser, type))
         return 0;
     xr_parser_advance(parser);
@@ -278,7 +278,7 @@ int xr_parser_match(Parser *parser, TokenType type) {
 }
 
 // Consume token of specified type, or report error
-void xr_parser_consume(Parser *parser, TokenType type, const char *message) {
+void xr_parser_consume(Parser *parser, XrTokenType type, const char *message) {
     XR_DCHECK(parser != NULL, "parser_consume: NULL parser");
     if (parser->current.type == type) {
         xr_parser_advance(parser);
@@ -1459,7 +1459,7 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
 // Parse compound assignment: x += 10, x -= 5, this.field += 10, etc.
 AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
     int line = left->line;
-    TokenType op_token = parser->previous.type;
+    XrTokenType op_token = parser->previous.type;
 
     if (left->type == AST_VARIABLE) {
         // Variable compound assignment: x += 10
@@ -1491,7 +1491,7 @@ AstNode *xr_parse_inc_dec(Parser *parser) {
 }
 
 // Check if token is binary operator (for detecting x++ embedded in expression)
-static bool is_binary_operator(TokenType type) {
+static bool is_binary_operator(XrTokenType type) {
     switch (type) {
         case TK_PLUS:
         case TK_MINUS:
@@ -1523,7 +1523,7 @@ static bool is_binary_operator(TokenType type) {
 // Parse postfix increment/decrement: x++, x--
 // Only postfix form supported; must be standalone statement
 AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left) {
-    TokenType op_token = parser->previous.type;
+    XrTokenType op_token = parser->previous.type;
     int line = left->line;
 
     if (left->type != AST_VARIABLE) {

@@ -450,7 +450,7 @@ XrExprDesc compile_binary(XrCompilerContext *ctx, XrCompiler *compiler, BinaryNo
         LiteralNode *left_lit = (LiteralNode *) &node->left->as;
         LiteralNode *right_lit = (LiteralNode *) &node->right->as;
 
-        TokenType op_token;
+        XrTokenType op_token;
         switch (type) {
             case AST_BINARY_ADD:
                 op_token = TK_PLUS;
@@ -833,7 +833,7 @@ static int compile_comparison_internal(XrCompilerContext *ctx, XrCompiler *compi
                                 : xr_float(right_lit->raw_value.float_val);
 
         // Convert AST type to Token type
-        TokenType op_token;
+        XrTokenType op_token;
         switch (type) {
             case AST_BINARY_EQ:
                 op_token = TK_EQ;

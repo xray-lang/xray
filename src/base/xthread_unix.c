@@ -19,6 +19,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <sched.h>
 #include <time.h>
 #include <string.h>
 
@@ -67,6 +68,19 @@ void xr_thread_set_name(xr_thread_t t, const char *name) {
     (void) t;
     (void) name;
 #endif
+}
+
+void xr_thread_yield(void) {
+    sched_yield();
+}
+
+void xr_thread_sleep_ms(unsigned int ms) {
+    struct timespec req;
+    req.tv_sec = ms / 1000;
+    req.tv_nsec = (long) (ms % 1000) * 1000000L;
+    while (nanosleep(&req, &req) == -1 && errno == EINTR) {
+        // resume on the same `req` so remaining time is honored
+    }
 }
 
 // === Mutex ===

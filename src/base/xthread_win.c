@@ -109,6 +109,16 @@ void xr_thread_set_name(xr_thread_t t, const char *name) {
     SetThreadDescription(t.handle, wbuf);
 }
 
+void xr_thread_yield(void) {
+    // SwitchToThread runs another runnable thread on the same
+    // logical processor; falls through if none is ready.
+    SwitchToThread();
+}
+
+void xr_thread_sleep_ms(unsigned int ms) {
+    Sleep((DWORD) ms);
+}
+
 // === Mutex ===
 
 void xr_mutex_init(xr_mutex_t *m) {

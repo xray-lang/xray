@@ -24,7 +24,6 @@
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
 #include "../base/xtime.h"
-#include <sched.h>
 
 int64_t get_current_time_us(void) {
     return (int64_t) (xr_time_monotonic_ns() / 1000ULL);

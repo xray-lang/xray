@@ -27,7 +27,7 @@
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "xsched_trace.h"
-#include <sched.h>
+#include "../base/xthread.h"
 #include <time.h>
 #ifdef __APPLE__
 #include <mach/mach.h>
@@ -863,7 +863,7 @@ void *worker_loop(void *arg) {
                 if (exit_flag)
                     goto exit_loop;
                 if (!coro && min_steal_delay > 0) {
-                    sched_yield();
+                    xr_thread_yield();
                 }
             }
 

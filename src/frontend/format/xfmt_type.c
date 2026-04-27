@@ -68,7 +68,7 @@ const char *xfmt_binary_op(AstNodeType type) {
     }
 }
 
-const char *xfmt_compound_op(TokenType type) {
+const char *xfmt_compound_op(XrTokenType type) {
     switch (type) {
         case TK_PLUS_ASSIGN:
             return "+=";

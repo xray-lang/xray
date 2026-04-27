@@ -216,7 +216,7 @@ typedef enum {
     // Special
     TK_EOF,   // end of file
     TK_ERROR  // error
-} TokenType;
+} XrTokenType;
 
 // Token structure
 //
@@ -230,7 +230,7 @@ typedef enum {
 //   other token types `error_message` is NULL. Callers MUST use
 //   `token.error_message` to format diagnostics, never `token.start`.
 typedef struct Token {
-    TokenType type;
+    XrTokenType type;
     const char *start;
     int length;
     int line;
@@ -266,7 +266,7 @@ XR_FUNC Token xr_scanner_scan(Scanner *scanner);
 // Try to scan regex literal when expecting expression
 XR_FUNC Token xr_scanner_try_regex(Scanner *scanner);
 
-XR_FUNC const char *xr_token_name(TokenType type);
+XR_FUNC const char *xr_token_name(XrTokenType type);
 
 // Trivia functions
 XR_FUNC XrTrivia *xr_trivia_new(XrTriviaType type, const char *start, int length, int line);
