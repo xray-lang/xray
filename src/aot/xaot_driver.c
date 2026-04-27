@@ -557,17 +557,26 @@ static void collect_exports(XrProto *proto, XcgenModule *mod, XirAotExportSlot *
     xr_free(synth);
 }
 
-/* Recursively collect AOT-eligible protos (those with bb_leaders). */
-static void collect_aot_protos(XrProto *proto, XrProto **out, int *count, int max) {
-    if (!proto || *count >= max)
+/* Recursively collect AOT-eligible protos (those with bb_leaders).
+ * Grows the output array via xr_realloc when capacity is reached. */
+static void collect_aot_protos(XrProto *proto, XrProto ***out, int *count, int *cap) {
+    if (!proto)
         return;
     if (proto->bb_leaders) {
-        out[*count] = proto;
+        if (*count >= *cap) {
+            int new_cap = *cap * 2;
+            XrProto **tmp = (XrProto **) xr_realloc(*out, (size_t) new_cap * sizeof(XrProto *));
+            if (!tmp)
+                return;
+            *out = tmp;
+            *cap = new_cap;
+        }
+        (*out)[*count] = proto;
         (*count)++;
     }
     for (int i = 0; i < proto->protos.count; i++) {
         XrProto *child = *(XrProto **) xr_dynarray_get_raw(&proto->protos, i);
-        collect_aot_protos(child, out, count, max);
+        collect_aot_protos(child, out, count, cap);
     }
 }
 
@@ -873,12 +882,13 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         collect_exports(proto, modules[m].cmod, &modules[m].export_slots,
                         &modules[m].export_slot_count);
 
-        modules[m].aot_cap = 64;
+        modules[m].aot_cap = 16;
         modules[m].aot_protos = (XrProto **) xr_malloc(modules[m].aot_cap * sizeof(XrProto *));
         if (!modules[m].aot_protos)
             goto fail_comp;
         modules[m].aot_count = 0;
-        collect_aot_protos(proto, modules[m].aot_protos, &modules[m].aot_count, modules[m].aot_cap);
+        collect_aot_protos(proto, &modules[m].aot_protos, &modules[m].aot_count,
+                           &modules[m].aot_cap);
 
         xcgen_collect_shapes(proto, &struct_reg, (void *) X);
         for (int i = 0; i < modules[m].aot_count; i++)

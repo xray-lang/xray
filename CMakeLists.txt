@@ -59,9 +59,16 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         add_compile_options(-O2 -g)
     endif()
 
-    # Enable linker dead-code elimination (for xray build output size)
+    # Enable linker dead-code elimination (for xray build output size).
+    # Compile: split each function/data item into its own section.
+    # Link: discard sections that are never referenced.
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_options(-ffunction-sections -fdata-sections)
+        if(APPLE)
+            add_link_options(-Wl,-dead_strip)
+        else()
+            add_link_options(-Wl,--gc-sections)
+        endif()
     endif()
 
     # LTO for Release builds: enables cross-TU inlining
