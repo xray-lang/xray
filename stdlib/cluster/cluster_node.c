@@ -28,7 +28,7 @@
 #include <math.h>
 #include <fcntl.h>
 #include <errno.h>
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 #include <sys/uio.h>
 #endif
 
@@ -588,7 +588,7 @@ void xr_cluster_node_writer_loop(void *arg) {
 
         // Batch frames into iovec for writev (reduces syscalls)
         if (node->conn && node->state == XR_NODE_CONNECTED) {
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
             struct iovec iov[XR_WRITER_MAX_IOV];
             XrOutFrame *ptrs[XR_WRITER_MAX_IOV];
             XrOutFrame *f = batch;

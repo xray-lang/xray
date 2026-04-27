@@ -23,19 +23,38 @@
 
 #ifndef _WIN32
 #include <sys/types.h>
-#endif  // ========== Platform Detection ==========
+#endif
 
+// ========== Platform Detection ==========
+//
+// Single source of truth shared with src/base/xplatform.h. The
+// guards make the two headers idempotent regardless of include
+// order; they are kept in sync by hand and any divergence is a
+// build-time error you should fix in both places.
+
+#ifndef XR_OS_WINDOWS
 #if defined(_WIN32) || defined(_WIN64)
-#define XR_PLATFORM_WINDOWS 1
-#elif defined(__APPLE__) && defined(__MACH__)
-#define XR_PLATFORM_MACOS 1
+#define XR_OS_WINDOWS 1
 #elif defined(__linux__)
-#define XR_PLATFORM_LINUX 1
+#define XR_OS_LINUX 1
+#elif defined(__APPLE__) && defined(__MACH__)
+#define XR_OS_MACOS 1
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#define XR_OS_BSD 1
 #else
 #error "Unsupported platform"
-#endif  // ========== Windows Platform ==========
+#endif
+#endif  // XR_OS_WINDOWS
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_POSIX
+#if defined(XR_OS_LINUX) || defined(XR_OS_MACOS) || defined(XR_OS_BSD)
+#define XR_OS_POSIX 1
+#endif
+#endif  // XR_OS_POSIX
+
+// ========== Windows Platform ==========
+
+#ifdef XR_OS_WINDOWS
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -140,7 +159,7 @@ static inline ssize_t writev(xr_socket_t fd, const struct iovec *iov, int iovcnt
 #include <netdb.h>
 #include <poll.h>
 
-#ifdef XR_PLATFORM_MACOS
+#ifdef XR_OS_MACOS
 #include <sys/event.h>
 #include <stdlib.h>  // arc4random_buf
 #else
@@ -191,7 +210,7 @@ static inline void xr_winsock_cleanup(void) {
  * (0/1/2) but we expose explicit names so callers do not depend
  * on that coincidence.
  */
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
 #define XR_SHUT_RD SD_RECEIVE
 #define XR_SHUT_WR SD_SEND
 #define XR_SHUT_RDWR SD_BOTH
@@ -214,7 +233,7 @@ static inline void xr_winsock_cleanup(void) {
  * must use the OS-specific path explicitly.
  */
 static inline ssize_t xr_socket_recv(xr_socket_t fd, void *buf, size_t len) {
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     int n = recv(fd, (char *) buf, (int) len, 0);
     return (n == SOCKET_ERROR) ? -1 : (ssize_t) n;
 #else
@@ -223,7 +242,7 @@ static inline ssize_t xr_socket_recv(xr_socket_t fd, void *buf, size_t len) {
 }
 
 static inline ssize_t xr_socket_send(xr_socket_t fd, const void *buf, size_t len) {
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     int n = send(fd, (const char *) buf, (int) len, 0);
     return (n == SOCKET_ERROR) ? -1 : (ssize_t) n;
 #else
@@ -246,7 +265,7 @@ static inline bool xr_socket_err_is_again(int err) {
  * strncasecmp via <strings.h>; Windows MSVC names the same
  * function _strnicmp in <string.h>.
  */
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
 #define xr_strncasecmp(a, b, n) _strnicmp((a), (b), (n))
 #define xr_strcasecmp(a, b) _stricmp((a), (b))
 #else
@@ -259,7 +278,7 @@ static inline bool xr_socket_err_is_again(int err) {
  * Set socket to non-blocking mode
  */
 static inline int xr_socket_set_nonblocking(xr_socket_t fd) {
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     u_long mode = 1;
     return ioctlsocket(fd, FIONBIO, &mode);
 #else
@@ -308,7 +327,7 @@ static inline int xr_socket_get_error(xr_socket_t fd) {
  * Set socket to blocking mode
  */
 static inline int xr_socket_set_blocking(xr_socket_t fd) {
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     u_long mode = 0;
     return ioctlsocket(fd, FIONBIO, &mode);
 #else
@@ -323,7 +342,7 @@ static inline int xr_socket_set_blocking(xr_socket_t fd) {
  * Set SO_REUSEPORT (Unix only)
  */
 static inline int xr_socket_set_reuseport(xr_socket_t fd, bool enable) {
-#if defined(SO_REUSEPORT) && !defined(XR_PLATFORM_WINDOWS)
+#if defined(SO_REUSEPORT) && !defined(XR_OS_WINDOWS)
     int flag = enable ? 1 : 0;
     return setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag));
 #else
@@ -400,10 +419,10 @@ static inline int xr_send_all(xr_socket_t fd, const void *buf, size_t len, int t
  * Generate cryptographically secure random bytes
  */
 static inline void xr_random_bytes(unsigned char *buf, size_t len) {
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     // Windows: use BCryptGenRandom
     BCryptGenRandom(NULL, buf, (ULONG) len, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
-#elif defined(XR_PLATFORM_MACOS)
+#elif defined(XR_OS_MACOS)
     // macOS: use arc4random_buf
     arc4random_buf(buf, len);
 #else

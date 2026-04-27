@@ -23,7 +23,7 @@
 #include <string.h>
 #include <limits.h>
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
 #include <process.h>
 #include <winsock2.h>
 #else
@@ -33,12 +33,12 @@
 #include <sys/wait.h>
 #endif
 
-#ifdef XR_PLATFORM_MACOS
+#ifdef XR_OS_MACOS
 #include <sys/sysctl.h>
 #include <mach/mach.h>
 #endif
 
-#ifdef XR_PLATFORM_LINUX
+#ifdef XR_OS_LINUX
 #include <sys/sysinfo.h>
 #endif
 
@@ -58,7 +58,7 @@ extern XrValue xr_value_from_array(XrArray *arr);
 
 /* ========== Windows Compatibility ========== */
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
 #define os_setenv_impl(name, value) _putenv_s(name, value)
 #define os_unsetenv_impl(name) _putenv_s(name, "")
 #define os_getpid_impl() _getpid()
@@ -197,7 +197,7 @@ static XrValue os_hostname(XrayIsolate *X, XrValue *args, int argc) {
     (void) argc;
 
     char buf[256];
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     // gethostname() on Windows lives in Winsock and requires WSAStartup()
     // to have been called; otherwise it returns WSANOTINITIALISED. We
     // initialise on demand (idempotent via WSACleanup pair), so this works
@@ -246,7 +246,7 @@ static XrValue os_username(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     char buf[256];
     DWORD size = sizeof(buf);
     if (GetUserNameA(buf, &size))
@@ -266,7 +266,7 @@ static XrValue os_homedir(XrayIsolate *X, XrValue *args, int argc) {
     (void) argc;
 
     const char *home = getenv("HOME");
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     if (!home)
         home = getenv("USERPROFILE");
     if (home)
@@ -287,7 +287,7 @@ static XrValue os_uid(XrayIsolate *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     return xr_int(0);
 #else
     return xr_int(getuid());
@@ -299,7 +299,7 @@ static XrValue os_gid(XrayIsolate *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     return xr_int(0);
 #else
     return xr_int(getgid());
@@ -314,7 +314,7 @@ static XrValue os_cpuCount(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     return xr_int(si.dwNumberOfProcessors);
@@ -330,12 +330,12 @@ static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_PLATFORM_MACOS
+#ifdef XR_OS_MACOS
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
     sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
     return xr_int(memsize);
-#elif defined(XR_PLATFORM_LINUX)
+#elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return xr_int((int64_t) si.totalram * si.mem_unit);
@@ -351,7 +351,7 @@ static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_PLATFORM_MACOS
+#ifdef XR_OS_MACOS
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
@@ -360,7 +360,7 @@ static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
         return xr_int(free_bytes);
     }
     return xr_int(0);
-#elif defined(XR_PLATFORM_LINUX)
+#elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return xr_int((int64_t) si.freeram * si.mem_unit);
@@ -376,7 +376,7 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_PLATFORM_MACOS
+#ifdef XR_OS_MACOS
     struct timeval boottime;
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
@@ -384,7 +384,7 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
         return xr_float((double) (now - boottime.tv_sec));
     }
     return xr_float(0.0);
-#elif defined(XR_PLATFORM_LINUX)
+#elif defined(XR_OS_LINUX)
     struct sysinfo si;
     if (sysinfo(&si) == 0)
         return xr_float((double) si.uptime);
@@ -403,7 +403,7 @@ static XrValue os_loadavg(XrayIsolate *X, XrValue *args, int argc) {
     if (!arr)
         return xr_null();
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
     double avg[3] = {0};
     getloadavg(avg, 3);
     xr_array_push(arr, xr_float(avg[0]));
@@ -425,7 +425,7 @@ static XrValue os_ppid(XrayIsolate *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     return xr_int(0);
 #else
     return xr_int(getppid());
@@ -446,7 +446,7 @@ static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
         sig = (int) XR_TO_INT(args[1]);
     }
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     return xr_bool(false);
 #else
     return xr_bool(kill(pid, sig) == 0);
@@ -490,7 +490,7 @@ static XrValue os_clock(XrayIsolate *X, XrValue *args, int argc) {
 
 /* ========== Process Execution (P0) ========== */
 
-#ifndef XR_PLATFORM_WINDOWS
+#ifndef XR_OS_WINDOWS
 // Read all data from a file descriptor into a heap-allocated string
 static char *read_fd_to_string(int fd) {
     XR_DCHECK(fd >= 0, "read_fd_to_string: fd must be non-negative");
@@ -525,7 +525,7 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
         return xr_null();
     XR_DCHECK(cmd[0] != '\0', "os_exec: command string must be non-empty");
 
-#ifdef XR_PLATFORM_WINDOWS
+#ifdef XR_OS_WINDOWS
     // Windows: simplified via _popen (stdout only)
     FILE *fp = _popen(cmd, "r");
     if (!fp)
