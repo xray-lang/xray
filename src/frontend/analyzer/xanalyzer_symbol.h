@@ -102,7 +102,7 @@ struct XaSymbolLinks {
     // Call-site inferred parameter types (for unannotated params)
     // Populated by xa_visit_call when callee has unannotated parameters.
     // NULL entry = not yet observed; non-NULL = inferred type from call-site.
-    // If two call sites provide incompatible types, entry is set to 'any' (conflict).
+    // If two call sites provide incompatible types, entry is set to unknown (conflict).
     XrType **inferred_param_types;
     int inferred_param_count;
 

@@ -277,13 +277,13 @@ int builder_add_deopt_info(XirBuilder *b, uint32_t bc_pc) {
         if (b->slot_map[i] != XIR_NONE) {
             slots[idx].bc_slot = (int16_t) i;
             // Use proto's bytecode slot type for deopt reconstruction:
-            // if the proto declares the slot as untyped (any), use TAGGED
+            // if the proto lacks precise slot type information, use TAGGED
             // so deopt_reconstruct uses raw-value heuristic to detect ptrs.
             // Otherwise use the builder's XIR type for precision.
             uint8_t deopt_type = b->slot_rep[i];
             if (b->proto->param_types && i < b->proto->param_types_count) {
                 if (!b->proto->param_types[i])
-                    deopt_type = XR_REP_TAGGED;  // untyped → any
+                    deopt_type = XR_REP_TAGGED;
             } else if (i >= b->proto->numparams) {
                 deopt_type = XR_REP_TAGGED;  // non-param: use TAGGED for safety
             }
@@ -1948,8 +1948,8 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             // known and belong to different type kinds.
             // Must come BEFORE I64 fast path because bool and int share
             // I64 machine rep but are different semantic kinds in xray.
-            // Exception: never fold when either side is null — any typed
-            // variable can be null at runtime (default params, nullable
+            // Exception: never fold when either side is null — tagged fallback
+            // values can still be null at runtime (default params, nullable
             // returns), so `x == null` must be evaluated at runtime.
             int kind_a = TAG_KIND(tag_a);
             int kind_b = TAG_KIND(tag_b);
@@ -2235,7 +2235,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             // Nullable check elimination: if slot_xrtype[a] is non-nullable,
             // the null check can be folded away at compile time.
             // Exception 1: never fold for function parameters — callers may
-            // violate type contracts (e.g. Json field access returns any/null
+            // violate type contracts (e.g. Json field access returns unknown/null
             // passed to a non-nullable parameter via call.self.direct).
             // Exception 2: never fold when the current vreg has TAGGED/I64 rep
             // from a CALL/INVOKE result — static type info is flow-insensitive

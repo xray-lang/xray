@@ -26,7 +26,7 @@ TEST(mono_type_tag_basic) {
     ASSERT_STR_EQ(xr_mono_type_tag(&float_t), "f64");
     ASSERT_STR_EQ(xr_mono_type_tag(&str_t), "str");
     ASSERT_STR_EQ(xr_mono_type_tag(&bool_t), "bool");
-    ASSERT_STR_EQ(xr_mono_type_tag(&unknown_t), "any");
+    ASSERT_STR_EQ(xr_mono_type_tag(&unknown_t), "unknown");
     ASSERT_STR_EQ(xr_mono_type_tag(NULL), "unknown");
 }
 

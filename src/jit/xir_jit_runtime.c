@@ -1948,7 +1948,7 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
     return XR_JIT_RESULT(result);
 }
 
-/* ========== JIT→Any Function Call (OP_CALL) ========== */
+/* ========== JIT→General Function Call (OP_CALL) ========== */
 
 // Called from JIT code via CALL_C for general function calls.
 // jit_call_args[0] = raw closure pointer, jit_call_args[1..n] = raw arg values.

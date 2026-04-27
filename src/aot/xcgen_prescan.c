@@ -554,7 +554,7 @@ XR_FUNC void xcg_retype_bool_method_results(XcgenFunc *cf) {
 // JMP_RET is a block terminator in blk->jmp, not an instruction in blk->ins[].
 // When true, the AOT function can be emitted as void instead of XrtValue.
 XR_FUNC bool xcg_detect_void_return(XirFunc *func) {
-    // Only TAGGED returns can be void (any-typed → always returns null)
+    // Only TAGGED returns can be void when every return value is null.
     XrRep ret_rep = (func->proto && func->proto->return_type_info)
                         ? xr_type_rep(func->proto->return_type_info)
                         : XR_REP_TAGGED;

@@ -12,7 +12,7 @@
  *   pulls in no AOT runtime headers (no xrt_arc.h, no xrt_coll.h, no
  *   xrt_value.h), so translation units inside xray_core that just need
  *   the symbol numbers (e.g. src/aot/xcgen.c, src/aot/xcgen_call.c)
- *   can include it without dragging in static-inline ARC/bump helpers.
+ *   can include it without dragging in static-inline bump-alloc helpers.
  *
  *   Pulling xrt_arc.h into xray_core via xrt_method.h was the root
  *   cause of GNU ld undefined references to xrt_bump_cursor /

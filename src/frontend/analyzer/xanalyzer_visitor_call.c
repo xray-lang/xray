@@ -116,7 +116,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     XrType *callee_type = xa_visit_infer_expr(ctx, call->callee);
 
-    // unknown type is callable (dynamic)
+    // Unknown callee type preserves error recovery after imprecise analysis.
     if (XR_TYPE_IS_UNKNOWN(callee_type)) {
         // Check if callee is a class name - if so, return instance type
         if (call->callee && call->callee->type == AST_VARIABLE) {
