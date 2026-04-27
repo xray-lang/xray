@@ -46,8 +46,7 @@ static inline bool check_is_channel_var(XrCompilerContext *ctx, XrCompiler *comp
     XrString *name_str = xr_compile_time_intern(ctx->X, var_name, strlen(var_name));
     for (int i = compiler->local_list.count - 1; i >= 0; i--) {
         XrLocalInfo *local = compiler->local_list.items[i];
-        if (local->name == name_str ||
-            (local->name && strcmp(local->name->data, var_name) == 0)) {
+        if (local->name == name_str || (local->name && strcmp(local->name->data, var_name) == 0)) {
             XrType *ct = (XrType *) (local->compile_type);
             return ct && (ct->kind == XR_KIND_CHANNEL);
         }

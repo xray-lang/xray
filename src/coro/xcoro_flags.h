@@ -237,11 +237,10 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
 // Static inline helper avoids the GCC statement-expression macro form,
 // which MSVC does not accept. Both fields' types are stable across the
 // codebase, so the helper takes _Atomic pointers directly.
-static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr,
-                                          _Atomic uint8_t *state_ptr, uint32_t *expected,
-                                          uint32_t desired) {
-    bool ok = atomic_compare_exchange_strong_explicit(
-        flags_ptr, expected, desired, memory_order_acq_rel, memory_order_acquire);
+static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr, _Atomic uint8_t *state_ptr,
+                                          uint32_t *expected, uint32_t desired) {
+    bool ok = atomic_compare_exchange_strong_explicit(flags_ptr, expected, desired,
+                                                      memory_order_acq_rel, memory_order_acquire);
     if (ok && (desired & XR_CORO_STATE_FLAG_MASK)) {
         uint8_t ns = xr_flag_to_state(desired);
         if (ns)
