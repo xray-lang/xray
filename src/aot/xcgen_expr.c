@@ -163,21 +163,7 @@ void xcg_emit_ref(XcgenBuf *b, XirFunc *func, XirRef ref) {
     }
 }
 
-// Emit a ref as XrtValue, auto-boxing int64_t/double if needed
-static void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref) {
-    uint8_t t = xcg_ref_type(func, ref);
-    if (t == XR_REP_I64) {
-        xcgen_buf_puts(b, "xrt_box_int(");
-        xcg_emit_ref(b, func, ref);
-        xcgen_buf_puts(b, ")");
-    } else if (t == XR_REP_F64) {
-        xcgen_buf_puts(b, "xrt_box_float(");
-        xcg_emit_ref(b, func, ref);
-        xcgen_buf_puts(b, ")");
-    } else {
-        xcg_emit_ref(b, func, ref);
-    }
-}
+// xcg_emit_ref_as_tagged() is now a shared public function in xcgen_intrinsic.c
 
 /* ========== Binary/Compare/Unary Operations ========== */
 
