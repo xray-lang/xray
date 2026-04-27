@@ -70,6 +70,21 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         add_compile_options(-flto)
         add_link_options(-flto)
     endif()
+elseif(MSVC)
+    # MSVC needs explicit opt-in for C11 atomics. /std:c11 sets the
+    # language version; /experimental:c11atomics turns on the
+    # _Atomic keyword path (still flagged "experimental" in VS 2022
+    # but the implementation is stable and required by the
+    # runtime's lock-free queues / GC marker / IC counters).
+    add_compile_options(/std:c11 /experimental:c11atomics)
+    # Silence the wall of CRT "deprecated" warnings on strerror,
+    # strncpy and friends. These are POSIX functions whose Windows
+    # _s replacements have a different signature; our portable code
+    # uses the plain forms deliberately.
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+    # UTF-8 source / execution charset so string literals and the
+    # console match what every other platform uses.
+    add_compile_options(/utf-8)
 endif()
 
 # ============================================================================
