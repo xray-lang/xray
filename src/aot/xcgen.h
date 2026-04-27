@@ -270,4 +270,30 @@ XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *
 XR_FUNC void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *self_name,
                                  XcgenFunc *cf);
 
+/* ========== Prescan / Analysis Passes (xcgen_prescan.c) ========== */
+
+// Block reachability: BFS from entry to find live blocks
+XR_FUNC void xcg_compute_reachable(XirFunc *func, bool *reachable);
+
+// Dead vreg elimination: seed-then-propagate used-vreg analysis
+XR_FUNC void xcg_compute_used_vregs(XirFunc *func, bool *reachable, bool *used);
+
+// Detect struct-promoted vregs (JSON shapes → C struct pointers)
+XR_FUNC void xcg_prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf);
+
+// Retype LOAD_FIELD results from narrow I64/F64 to TAGGED (16-byte slots)
+XR_FUNC void xcg_retype_field_loads(XcgenFunc *cf);
+
+// Retype boolean method results to TAGGED so print preserves true/false
+XR_FUNC void xcg_retype_bool_method_results(XcgenFunc *cf);
+
+// Returns true if every return in the function returns null → emit as void
+XR_FUNC bool xcg_detect_void_return(XirFunc *func);
+
+// Lookup proto entry by pointer in global compilation registry
+XR_FUNC XcgenProtoEntry *xcg_lookup_proto_entry(XcgenModule *mod, void *proto_ptr);
+
+// Escape analysis: mark non-escaping child closures in proto_map
+XR_FUNC void xcg_prescan_closure_escape(XcgenModule *mod, XirFunc *func);
+
 #endif  // XCGEN_H
