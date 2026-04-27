@@ -156,10 +156,6 @@ static inline int xrt_truthy(XrtValue v) {
     }
 }
 
-// xrt_str_alloc/xrt_str_concat: defined in xrt_arc.h
-static inline XrtValue xrt_str_alloc(size_t len);
-static inline XrtValue xrt_str_concat(const char *sa, const char *sb);
-
 /* =========================================================================
  * VM-native type aliases (for AOT ↔ VM interop)
  *
