@@ -14,6 +14,14 @@
 
 #include "xnetpoll.h"
 #include "../base/xchecks.h"
+
+// The full POSIX-only implementation of this file (kqueue / epoll
+// / pipe / unistd I/O) lives below the platform guard. On Windows
+// we provide a small stub at the bottom that fails every public
+// entry point with a clear error code; a future IOCP backend will
+// replace it.
+#ifndef _WIN32
+
 #include "xcoroutine.h"  // XrCoroutine
 #include "xworker.h"     // XrRuntime, XrWorker
 #include "xyieldable.h"  // XR_RESUME_TIMEOUT
@@ -1032,3 +1040,169 @@ void xr_netpoll_drain_deferred(XrNetpoll *np, XrProc *p) {
         pd = next;
     }
 }
+
+#else  // _WIN32
+
+/* ============================================================
+ * Windows stub backend.
+ *
+ * The native poller pulls in kqueue (Apple/BSD), epoll (Linux)
+ * and a pipe-based wakeup channel. None of those have a direct
+ * Win32 equivalent; the long-term plan is an IOCP backend, but
+ * shipping that is a separate, sizable effort.
+ *
+ * For now every public entry point returns a clear failure so
+ * the runtime links and any caller that actually exercises
+ * networking gets an obvious diagnostic instead of a silent
+ * deadlock. Coroutines and pure CPU code paths are unaffected.
+ * ============================================================ */
+
+#include "xcoroutine.h"
+#include "xworker.h"
+#include <stdlib.h>
+#include <string.h>
+
+void xr_poll_cache_free(XrPollCache *cache, XrPollDesc *pd) {
+    (void) cache;
+    (void) pd;
+}
+
+XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
+    (void) cache;
+    return NULL;
+}
+
+bool xr_netpoll_block(XrPollDesc *pd, int mode, struct XrayIsolate *X) {
+    (void) pd;
+    (void) mode;
+    (void) X;
+    return false;
+}
+
+void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
+    (void) list;
+    (void) pd;
+    (void) mode;
+}
+
+struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) {
+    (void) pd;
+    (void) mode;
+    (void) io_ready;
+    return NULL;
+}
+
+int xr_local_poll_init(XrLocalPoll *lp) {
+    (void) lp;
+    return -1;
+}
+
+void xr_local_poll_cleanup(XrLocalPoll *lp) {
+    (void) lp;
+}
+
+int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
+    (void) lp;
+    (void) fd;
+    (void) pd;
+    return -1;
+}
+
+void xr_local_poll_del_fd(XrLocalPoll *lp, int fd) {
+    (void) lp;
+    (void) fd;
+}
+
+int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
+    (void) lp;
+    (void) delta_ns;
+    (void) list;
+    return 0;
+}
+
+void xr_local_poll_wakeup(XrLocalPoll *lp) {
+    (void) lp;
+}
+
+int xr_netpoll_init(XrNetpoll *np) {
+    if (np)
+        memset(np, 0, sizeof(*np));
+    return -1;
+}
+
+void xr_netpoll_cleanup(XrNetpoll *np) {
+    (void) np;
+}
+
+XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
+    (void) np;
+    (void) fd;
+    return NULL;
+}
+
+void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
+    (void) np;
+    (void) pd;
+}
+
+int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, struct XrayIsolate *X) {
+    (void) np;
+    (void) pd;
+    (void) mode;
+    (void) X;
+    return -1;
+}
+
+XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
+    (void) np;
+    (void) delta_ns;
+    XrReadyList r;
+    memset(&r, 0, sizeof r);
+    return r;
+}
+
+void xr_netpoll_break(XrNetpoll *np) {
+    (void) np;
+}
+
+bool xr_netpoll_any_waiters(XrNetpoll *np) {
+    (void) np;
+    return false;
+}
+
+void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, int mode,
+                             XrTimerWheel *tw) {
+    (void) np;
+    (void) pd;
+    (void) deadline;
+    (void) mode;
+    (void) tw;
+}
+
+void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
+    (void) pd;
+    (void) seq;
+    (void) read;
+}
+
+int xr_netpoll_bind_worker(XrPollDesc *pd) {
+    (void) pd;
+    return -1;
+}
+
+struct XrTimerWheel *xr_netpoll_get_timer_wheel(XrPollDesc *pd) {
+    (void) pd;
+    return NULL;
+}
+
+void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd) {
+    (void) np;
+    (void) pd;
+}
+
+void xr_netpoll_drain_deferred(XrNetpoll *np, struct XrProc *p) {
+    (void) np;
+    (void) p;
+}
+
+#endif  // _WIN32
