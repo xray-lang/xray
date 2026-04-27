@@ -27,7 +27,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "../../base/xthread.h"
+#include "../../os/os_thread.h"
 #include <stdatomic.h>
 #include "../../base/xdefs.h"
 #include "xlsp_types.h"  // For XrLspSymbolKind

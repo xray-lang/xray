@@ -16,7 +16,7 @@
 #ifndef XLSP_ASYNC_H
 #define XLSP_ASYNC_H
 
-#include "../../base/xthread.h"
+#include "../../os/os_thread.h"
 #include <stdbool.h>
 #include <stdatomic.h>
 #include "../../base/xdefs.h"

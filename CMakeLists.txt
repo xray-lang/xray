@@ -306,6 +306,7 @@ endif()
 set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/base
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/os
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/value
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/gc
@@ -338,6 +339,10 @@ set(XRAY_COMMON_INCLUDES
 # ============================================================================
 
 file(GLOB BASE_SRC "src/base/*.c")
+# Cross-platform abstraction layer. Both the unix and win
+# implementations are globbed; per-file #ifdef body guards make
+# exactly one of each pair compile real code on a given platform.
+file(GLOB OS_SRC "src/os/unix/*.c" "src/os/win/*.c")
 file(GLOB RUNTIME_TOP_SRC "src/runtime/*.c")
 file(GLOB RUNTIME_VALUE_SRC "src/runtime/value/*.c")
 file(GLOB RUNTIME_GC_SRC "src/runtime/gc/*.c")
@@ -441,6 +446,7 @@ endif()
 
 set(CORE_ALL_SOURCES
     ${BASE_SRC}
+    ${OS_SRC}
     ${RUNTIME_TOP_SRC}
     ${RUNTIME_VALUE_SRC}
     ${RUNTIME_GC_SRC}

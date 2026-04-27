@@ -17,7 +17,7 @@
  * the Linux semantics our coroutine scheduler assumes.
  */
 
-#include "xtime.h"
+#include "../os_time.h"
 
 #ifndef _WIN32
 

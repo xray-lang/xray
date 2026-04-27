@@ -312,8 +312,8 @@ if(XR_BUILD_DAP)
         dap/test_dap_transport.c
         ${CMAKE_SOURCE_DIR}/src/app/dap/xdap_transport.c
         ${CMAKE_SOURCE_DIR}/src/base/xframing.c
-        ${CMAKE_SOURCE_DIR}/src/base/xfd_unix.c
-        ${CMAKE_SOURCE_DIR}/src/base/xfd_win.c
+        ${CMAKE_SOURCE_DIR}/src/os/unix/fd_unix.c
+        ${CMAKE_SOURCE_DIR}/src/os/win/fd_win.c
     )
     target_include_directories(test_dap_transport PRIVATE
         ${CMAKE_SOURCE_DIR}/src/app/dap

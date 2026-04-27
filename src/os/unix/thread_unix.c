@@ -13,7 +13,7 @@
  * `now + timeout` here.
  */
 
-#include "xthread.h"
+#include "../os_thread.h"
 
 #ifndef _WIN32
 

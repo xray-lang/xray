@@ -11,7 +11,7 @@
  * POSIX to be 0/1/2; isatty is the canonical terminal check.
  */
 
-#include "xfd.h"
+#include "../os_fd.h"
 
 #ifndef _WIN32
 

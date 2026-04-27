@@ -43,7 +43,7 @@
 #ifndef XDYLIB_H
 #define XDYLIB_H
 
-#include "xdefs.h"
+#include "../base/xdefs.h"
 
 #ifdef __cplusplus
 extern "C" {

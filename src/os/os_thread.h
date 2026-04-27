@@ -49,7 +49,7 @@
 #ifndef XTHREAD_H
 #define XTHREAD_H
 
-#include "xdefs.h"
+#include "../base/xdefs.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>

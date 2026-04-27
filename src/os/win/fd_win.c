@@ -14,7 +14,7 @@
  * _fileno is the right choice.
  */
 
-#include "xfd.h"
+#include "../os_fd.h"
 
 #ifdef _WIN32
 

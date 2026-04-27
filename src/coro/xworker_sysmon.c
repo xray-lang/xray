@@ -15,7 +15,7 @@
 
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "../base/xlog.h"
 #include "xjit_hooks.h"
 

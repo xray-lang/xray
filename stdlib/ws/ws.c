@@ -15,7 +15,7 @@
 #include "ws_deflate.h"
 #include "../../include/xray_platform.h"
 #include "../../src/base/xmalloc.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 #include "../../src/coro/xsocket.h"
 #include "../../src/runtime/object/xutf8.h"
 #include "../base64/base64.h"

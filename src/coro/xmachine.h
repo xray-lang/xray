@@ -26,7 +26,7 @@
 #ifndef XMACHINE_H
 #define XMACHINE_H
 
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>

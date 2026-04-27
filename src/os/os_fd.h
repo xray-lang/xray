@@ -28,7 +28,7 @@
 #ifndef XFD_H
 #define XFD_H
 
-#include "xdefs.h"
+#include "../base/xdefs.h"
 #include <stdbool.h>
 
 #ifdef __cplusplus

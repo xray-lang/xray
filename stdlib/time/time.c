@@ -14,7 +14,7 @@
 #include "../../src/vm/xvm_internal.h"  // XrCoroState, XrCoroutine
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/base/xchecks.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 #include <time.h>
 #include <stdio.h>
 

@@ -15,7 +15,7 @@
  * concern that lives outside this layer).
  */
 
-#include "xmem.h"
+#include "../os_mem.h"
 
 #ifndef _WIN32
 

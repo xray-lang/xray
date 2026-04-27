@@ -27,7 +27,7 @@
 #include <stddef.h>
 #include "../value/xtype_names.h"
 #include "../../base/xchecks.h"
-#include "../../base/xtime.h"
+#include "../../os/os_time.h"
 
 /* ========== GC Debug Options ========== */
 

@@ -19,7 +19,7 @@
  * conversion is the right long-term fix; tracked separately.
  */
 
-#include "xdir.h"
+#include "../os_dir.h"
 
 #ifdef _WIN32
 

@@ -13,7 +13,7 @@
 
 #include "xcoroutine.h"
 #include "../base/xchecks.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "xworker.h"
 #include "xexec_state.h"
 #include "xproc.h"
@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include "../base/xmalloc.h"
 
 // ========== Thread-Local State (per-Isolate monitor support) ==========

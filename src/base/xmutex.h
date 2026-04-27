@@ -34,7 +34,7 @@
 #include <unistd.h>
 #include <sched.h>
 #elif defined(XR_OS_MACOS)
-#include "xthread.h"
+#include "../os/os_thread.h"
 #include <sched.h>
 // Darwin kernel futex equivalent (used by Go runtime, Rust std, etc.)
 extern int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout_us);

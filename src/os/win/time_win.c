@@ -19,7 +19,7 @@
  *   which over-sleeping respects.
  */
 
-#include "xtime.h"
+#include "../os_time.h"
 
 #ifdef _WIN32
 

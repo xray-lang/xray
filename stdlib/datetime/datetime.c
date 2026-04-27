@@ -20,7 +20,7 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/gc/xgc.h"
 #include "../../src/base/xchecks.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>

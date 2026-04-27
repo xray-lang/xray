@@ -21,7 +21,7 @@
 #include "xvm_cold_paths.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "xvm_checks.h"
 #include "xdebug.h"

@@ -59,7 +59,7 @@ typedef struct VMProfiler VMProfiler;
 
 #if XR_PROFILE_TIMING
 #include "../base/xdefs.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #endif
 
 typedef struct VMOpStats {

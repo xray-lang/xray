@@ -54,7 +54,7 @@ static void free_aligned_block(char *data) {
  * cross-worker contention to rare L2 accesses.
  */
 
-#include "../../base/xthread.h"
+#include "../../os/os_thread.h"
 #include "../../coro/xworker.h"
 
 #define XR_BLOCK_CACHE_L2_MAX 64

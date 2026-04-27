@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include <fcntl.h>
 #include <errno.h>
 #include <sched.h>

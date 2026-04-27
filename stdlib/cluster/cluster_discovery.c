@@ -30,7 +30,7 @@
 #include "cluster_node.h"
 #include "../net/io.h"
 #include "../../src/base/xhash.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 
 #include <stdlib.h>
 #include <string.h>

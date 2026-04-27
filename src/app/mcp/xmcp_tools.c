@@ -26,7 +26,7 @@
 #include "../../frontend/format/xfmt.h"
 #include "xray_isolate.h"
 #include "../../base/xarena.h"
-#include "../../base/xfd.h"
+#include "../../os/os_fd.h"
 #include <stdio.h>
 #include <string.h>
 #ifdef _WIN32

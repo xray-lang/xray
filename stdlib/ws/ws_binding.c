@@ -56,7 +56,7 @@ extern XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name)
 // Profiling counters (compile-time toggle)
 #define WS_PROFILE 0
 #if WS_PROFILE
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 static _Atomic uint64_t ws_prof_recv_fast = 0;  // recv fast path hits (no yield)
 static _Atomic uint64_t ws_prof_recv_slow = 0;  // recv slow path (yield to kqueue)
 static _Atomic uint64_t ws_prof_send_fast = 0;  // send completed immediately

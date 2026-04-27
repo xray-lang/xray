@@ -18,7 +18,7 @@
 #include "http2.h"
 #include "../net/tls.h"
 #include <stdbool.h>
-#include "../../src/base/xthread.h"
+#include "../../src/os/os_thread.h"
 
 /* ========== HTTP/2 Server Config ========== */
 

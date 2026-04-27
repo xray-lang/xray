@@ -32,7 +32,7 @@
 #ifndef XTIME_H
 #define XTIME_H
 
-#include "xdefs.h"
+#include "../base/xdefs.h"
 #include <stdint.h>
 
 #ifdef __cplusplus

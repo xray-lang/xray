@@ -27,7 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "../../base/xdir.h"
+#include "../../os/os_dir.h"
 
 // Format configuration
 typedef struct {

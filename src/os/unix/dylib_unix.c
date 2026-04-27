@@ -13,7 +13,7 @@
  * out of HMODULE.
  */
 
-#include "xdylib.h"
+#include "../os_dylib.h"
 
 #ifndef _WIN32
 

@@ -24,7 +24,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../base/xfd.h"
+#include "../../os/os_fd.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>

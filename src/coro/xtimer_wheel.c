@@ -22,7 +22,7 @@
 
 #include "xtimer_wheel.h"
 #include "../base/xchecks.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "xcoroutine.h"
 #include "xworker.h"  // xr_current_worker (owner-thread assertions)
 #include <stdlib.h>

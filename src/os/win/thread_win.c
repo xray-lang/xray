@@ -23,7 +23,7 @@
  *   user retval through the surviving ctx pointer, then frees it.
  */
 
-#include "xthread.h"
+#include "../os_thread.h"
 
 #ifdef _WIN32
 

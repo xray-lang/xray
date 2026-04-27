@@ -30,8 +30,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
-#include "../base/xdir.h"
-#include "../base/xdylib.h"
+#include "../os/os_dir.h"
+#include "../os/os_dylib.h"
 #include "xlockfile.h"
 
 /* ========== Forward Declarations ========== */

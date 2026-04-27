@@ -27,7 +27,7 @@
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "xsched_trace.h"
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include <time.h>
 #ifdef __APPLE__
 #include <mach/mach.h>

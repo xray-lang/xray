@@ -18,7 +18,7 @@
 #include "xcli_output.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../base/xfd.h"
+#include "../../os/os_fd.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>

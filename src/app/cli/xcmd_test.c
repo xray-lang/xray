@@ -43,9 +43,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "../../base/xdir.h"
-#include "../../base/xthread.h"
-#include "../../base/xtime.h"
+#include "../../os/os_dir.h"
+#include "../../os/os_thread.h"
+#include "../../os/os_time.h"
 #include <stdatomic.h>
 #include <unistd.h>
 

@@ -15,8 +15,8 @@
 
 #include "xcli_output.h"
 #include "../../base/xchecks.h"
-#include "../../base/xfd.h"
-#include "../../base/xtime.h"
+#include "../../os/os_fd.h"
+#include "../../os/os_time.h"
 #include <stdio.h>
 
 /* ========== Color State ========== */

@@ -16,13 +16,13 @@
  */
 
 #include "../../src/base/xmalloc.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 #include "dns.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xasync.h"
 #include <stdlib.h>
 #include <string.h>
-#include "../../src/base/xthread.h"
+#include "../../src/os/os_thread.h"
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>

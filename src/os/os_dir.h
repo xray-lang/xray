@@ -39,7 +39,7 @@
 #ifndef XDIR_H
 #define XDIR_H
 
-#include "xdefs.h"
+#include "../base/xdefs.h"
 #include <stdbool.h>
 #include <stddef.h>
 

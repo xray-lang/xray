@@ -21,7 +21,7 @@
 #ifndef XWORKER_H
 #define XWORKER_H
 
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc

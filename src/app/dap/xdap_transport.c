@@ -10,7 +10,7 @@
 
 #include "xdap_transport.h"
 #include "../../base/xframing.h"
-#include "../../base/xfd.h"
+#include "../../os/os_fd.h"
 #include "../../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
