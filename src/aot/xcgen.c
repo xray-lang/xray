@@ -914,7 +914,6 @@ char *xcgen_emit_source(XcgenCompilation *comp) {
     // Struct typedefs (global, from Json promotion)
     if (comp->struct_reg && comp->struct_reg->nstructs > 0)
         xcgen_emit_all_typedefs(&out, comp->struct_reg);
-    xcgen_emit_struct_deinits(&out, comp->struct_reg);
 
     // Emit each module's code
     for (int m = 0; m < comp->nmodules; m++)

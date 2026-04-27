@@ -16,10 +16,11 @@
  *
  *   Concretely the AOT-side methods operate on XrtValue (a small
  *   tagged union, see xrt_value.h) and call AOT's bump-allocator
- *   helpers; the runtime side operates on the larger NaN-boxed
- *   XrValue and has access to XrayIsolate / GC. The two ABIs are
- *   intentionally distinct so the AOT output stays a tiny standalone
- *   program.
+ *   helpers; the runtime side operates on runtime/value/xvalue.h's
+ *   XrValue and has access to XrayIsolate / GC. The layouts and tag
+ *   numbers are intentionally distinct: the AOT side keeps a
+ *   self-contained standalone representation and only reuses selected
+ *   source-level names.
  *
  *   The remaining shared invariant is the SYMBOL ID number space:
  *   every XRT_SYM_X below must equal the matching SYMBOL_X in
