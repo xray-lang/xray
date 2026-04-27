@@ -1192,7 +1192,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                                   memory_order_release);
             if (xr_task_is_done(t)) {
                 XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
-                                                           NULL, memory_order_acq_rel);
+                                                          NULL, memory_order_acq_rel);
                 if (w == caller)
                     atomic_fetch_sub(&caller->wait_count, 1);
             }
@@ -1296,7 +1296,7 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                                   memory_order_release);
             if (xr_task_is_done(t)) {
                 XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
-                                                           NULL, memory_order_acq_rel);
+                                                          NULL, memory_order_acq_rel);
                 if (w == current) {
                     if (mode == 0 || !XR_IS_STRING(t->error)) {
                         bool expected = false;
