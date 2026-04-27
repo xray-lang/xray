@@ -157,7 +157,7 @@ static inline int xrt_truthy(XrtValue v) {
 }
 
 /* =========================================================================
- * VM-style naming aliases for standalone AOT output
+ * Source-level aliases for standalone AOT output
  *
  * These aliases let AOT-generated code reuse familiar XrValue / XR_TAG_*
  * spellings inside standalone output. They do not imply ABI compatibility
@@ -167,20 +167,20 @@ static inline int xrt_truthy(XrtValue v) {
 
 typedef XrtValue XrValue;
 
-// VM-style tag aliases
+// Source-level tag aliases
 #define XR_TAG_NULL XRT_TAG_NULL
 #define XR_TAG_BOOL XRT_TAG_BOOL
 #define XR_TAG_I64 XRT_TAG_I64
 #define XR_TAG_F64 XRT_TAG_F64
 #define XR_TAG_PTR XRT_TAG_PTR
 
-// VM-style type checks
+// Source-level type checks
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
 #define XR_IS_NUM(v) (XR_IS_INT(v) || XR_IS_FLOAT(v))
 
-// VM-style value creation
+// Source-level value creation
 #define XR_FROM_INT(x) ((XrValue){.i = (int64_t) (x), .tag = XR_TAG_I64})
 #define XR_FROM_FLOAT(x) ((XrValue){.f = (double) (x), .tag = XR_TAG_F64})
 #define XR_FROM_BOOL(x) ((XrValue){.i = (x) ? 1 : 0, .tag = XR_TAG_BOOL})
@@ -188,7 +188,7 @@ typedef XrtValue XrValue;
 #define XR_TRUE_VAL ((XrValue){.i = 1, .tag = XR_TAG_BOOL})
 #define XR_FALSE_VAL ((XrValue){.i = 0, .tag = XR_TAG_BOOL})
 
-// VM-style value extraction
+// Source-level value extraction
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
 

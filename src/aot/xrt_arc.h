@@ -43,41 +43,36 @@
 #endif
 
 /* =========================================================================
- * ARC (Automatic Reference Counting)
+ * Object header — precedes every bump-allocated object.
  *
- * Object layout (bytes preceding user data):
- *   [XrtArcHdr][  user data  ]
- *    ^--- hdr pointer (via XRT_ARC_HDR macro)
+ * Layout: [XrtArcHdr][  user data  ]
+ *          ^--- hdr pointer (via XRT_ARC_HDR macro)
  *
- * The header is kept for type tracking (type field) and possible future
- * use; retain/release are no longer emitted by AOT codegen.
+ * The `type` field records the class/struct type ID for runtime dispatch
+ * (e.g. xrt_type_table lookup). The `flags` field carries allocation
+ * metadata (bump vs heap).
  * ========================================================================= */
 
 typedef struct {
-    uint32_t rc;     // reference count (non-atomic, single-coroutine)
     uint16_t flags;  // XRT_ARC_* flags
-    uint16_t type;   // object type tag for deinit dispatch
+    uint16_t type;   // object type tag for type-table dispatch
+    uint32_t _pad;   // alignment padding (8-byte aligned header)
 } XrtArcHdr;
 
 #define XRT_ARC_HDR(p) ((XrtArcHdr *) ((char *) (p) - sizeof(XrtArcHdr)))
-#define XRT_ARC_IMMORTAL (1u << 0)
 #define XRT_ARC_HAS_DEINIT (1u << 1)
 
 /* =========================================================================
- * Bump allocator for ARC objects
+ * Bump allocator
  *
- * Replaces calloc in xrt_arc_alloc for allocation-heavy workloads.
- * Objects are never individually freed — the entire arena is released
- * at program exit via xrt_bump_destroy().
- *
- * This is always compiled in; xrt_arc_alloc picks the bump path when
- * xrt_bump_enabled is set (default: on). Individual objects still carry
- * an XrtArcHdr so retain/release/deinit semantics are preserved;
- * the actual free() in xrt_arc_release becomes a no-op for bump objects.
+ * Primary allocation path for AOT-generated code. Objects are never
+ * individually freed — the entire arena is released at program exit
+ * via xrt_bump_destroy(). Each object carries an XrtArcHdr for type
+ * tracking. When xrt_bump_enabled is 0, falls back to calloc/free.
  * ========================================================================= */
 
 #define XRT_BUMP_BLOCK_SIZE (2u * 1024u * 1024u)  // 2 MB per block
-#define XRT_ARC_BUMP (1u << 2)                    // object was bump-allocated
+#define XRT_ARC_BUMP (1u << 2)                    // bump-allocated (skip individual free)
 
 typedef struct XrtBumpBlock {
     struct XrtBumpBlock *next;
@@ -150,7 +145,6 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
             abort();
         }
     }
-    hdr->rc = 1;
     return (char *) hdr + sizeof(XrtArcHdr);
 }
 
