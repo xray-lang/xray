@@ -38,6 +38,15 @@
 #define xr_calloc_raw(count, size) calloc(count, size)
 #define xr_realloc_raw(ptr, size) realloc(ptr, size)
 #define xr_free_raw(ptr) free(ptr)
+#ifdef _WIN32
+// MSVC: _aligned_malloc must be paired with _aligned_free; the
+// pointer it returns is not addressable through plain free().
+#include <malloc.h>
+static inline void *xr_malloc_aligned(size_t size, size_t align) {
+    return _aligned_malloc(size, align);
+}
+#define xr_free_aligned(ptr, align) _aligned_free(ptr)
+#else
 static inline void *xr_malloc_aligned(size_t size, size_t align) {
     void *ptr = NULL;
     if (posix_memalign(&ptr, align, size) != 0)
@@ -45,6 +54,7 @@ static inline void *xr_malloc_aligned(size_t size, size_t align) {
     return ptr;
 }
 #define xr_free_aligned(ptr, align) free(ptr)
+#endif
 #define XR_ALLOCATOR_NAME "system malloc"
 #endif
 

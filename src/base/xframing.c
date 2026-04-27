@@ -10,6 +10,7 @@
 
 #include "xframing.h"
 #include "xchecks.h"
+#include "../../include/xray_platform.h"
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -21,7 +22,7 @@
 static const char *find_header_field(const char *haystack, const char *hay_end, const char *needle,
                                      size_t needle_len) {
     for (const char *p = haystack; p + needle_len <= hay_end; p++) {
-        if (strncasecmp(p, needle, needle_len) == 0) {
+        if (xr_strncasecmp(p, needle, needle_len) == 0) {
             return p;
         }
     }

@@ -236,6 +236,20 @@ static inline bool xr_socket_err_is_again(int err) {
 }
 
 /*
+ * Portable case-insensitive bounded compare. POSIX exposes
+ * strncasecmp via <strings.h>; Windows MSVC names the same
+ * function _strnicmp in <string.h>.
+ */
+#ifdef XR_PLATFORM_WINDOWS
+#define xr_strncasecmp(a, b, n) _strnicmp((a), (b), (n))
+#define xr_strcasecmp(a, b) _stricmp((a), (b))
+#else
+#include <strings.h>
+#define xr_strncasecmp(a, b, n) strncasecmp((a), (b), (n))
+#define xr_strcasecmp(a, b) strcasecmp((a), (b))
+#endif
+
+/*
  * Set socket to non-blocking mode
  */
 static inline int xr_socket_set_nonblocking(xr_socket_t fd) {
