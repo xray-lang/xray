@@ -154,14 +154,15 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
 /*
  * Load flags with state bits reconstructed from authoritative coro_state.
  * Returns a 32-bit value compatible with all existing flag-checking code.
- * Uses GCC statement expression ({...}) — supported by both GCC and Clang.
+ * Plain expression macro (no statement-expression / temp variable) so
+ * MSVC compiles it; the two atomic loads are evaluated at distinct
+ * points in the expanded expression, no shared temp is required.
  */
 #define xr_coro_flags_load(coro)                                                                   \
-    ({                                                                                             \
-        uint32_t _f = atomic_load_explicit(&(coro)->flags, memory_order_acquire);                  \
-        uint8_t _s = atomic_load_explicit(&(coro)->coro_state, memory_order_acquire);              \
-        (uint32_t)((_f & ~(uint32_t) XR_CORO_STATE_FLAG_MASK) | xr_state_to_flag(_s));             \
-    })
+    ((uint32_t) ((atomic_load_explicit(&(coro)->flags, memory_order_acquire) &                     \
+                  ~(uint32_t) XR_CORO_STATE_FLAG_MASK) |                                           \
+                 xr_state_to_flag(                                                                 \
+                     atomic_load_explicit(&(coro)->coro_state, memory_order_acquire))))
 
 /*
  * Set flag bits. If any state bit (READY/RUNNING/BLOCKED/DONE) is included,
