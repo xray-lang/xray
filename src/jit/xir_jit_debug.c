@@ -27,14 +27,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
+#include "../os/os_codemem.h"
 #include "../os/os_thread.h"
 
+// jit_debugger_attached() introspects the current process via sysctl on macOS.
+// Local includes; will fold into a generic os_proc shim alongside the rest of
+// the process-control surface.
 #if defined(XR_OS_MACOS)
-#include <sys/types.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
 #include <unistd.h>
-#endif  // ========== Code Region Registry ==========
+#endif
+
+// ========== Code Region Registry ==========
 
 static JitCodeRegion g_regions[JIT_DEBUG_MAX_REGIONS];
 static uint32_t g_nregions = 0;
@@ -89,26 +94,20 @@ static void *g_safepoint_trampoline = NULL;  // global trampoline code (mmap'd e
 static uint32_t g_trampoline_size = 0;
 
 void *jit_guard_page_alloc(void) {
-    void *page = mmap(NULL, 4096, PROT_READ, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (page == MAP_FAILED)
-        return NULL;
-    // Start disarmed (PROT_READ). Sysmon will arm periodically.
-    return page;
+    // Start disarmed (R). Sysmon will flip to NONE periodically to arm.
+    return xr_os_mem_alloc(4096, XR_MEM_PROT_R);
 }
 
 void jit_guard_page_free(void *page) {
-    if (page)
-        munmap(page, 4096);
+    xr_os_mem_free(page, 4096);
 }
 
 void jit_guard_page_arm(void *page) {
-    if (page)
-        mprotect(page, 4096, PROT_NONE);
+    xr_os_mem_protect(page, 4096, XR_MEM_PROT_NONE);
 }
 
 void jit_guard_page_disarm(void *page) {
-    if (page)
-        mprotect(page, 4096, PROT_READ);
+    xr_os_mem_protect(page, 4096, XR_MEM_PROT_R);
 }
 
 /*
@@ -179,21 +178,16 @@ void jit_guard_page_init_trampoline(void) {
     a64_buf_emit(&buf, a64_ldr(A64_X16, A64_X28, (int32_t) XIR_JIT_SAFEPOINT_RETURN_PC_OFFSET));
     a64_buf_emit(&buf, a64_br(A64_X16));
 
-    // Copy to executable memory
+    // Copy to executable memory via the OS shim.
     g_trampoline_size = buf.count * 4;
-    g_safepoint_trampoline =
-        mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-    if (g_safepoint_trampoline == MAP_FAILED) {
-        g_safepoint_trampoline = NULL;
+    g_safepoint_trampoline = xr_os_codemem_alloc(4096);
+    if (g_safepoint_trampoline == NULL) {
         fprintf(stderr, "[JIT] FATAL: failed to allocate safepoint trampoline\n");
         return;
     }
     memcpy(g_safepoint_trampoline, code, g_trampoline_size);
-    mprotect(g_safepoint_trampoline, 4096, PROT_READ | PROT_EXEC);
-
-    // Clear instruction cache for the trampoline
-    __builtin___clear_cache(g_safepoint_trampoline,
-                            (char *) g_safepoint_trampoline + g_trampoline_size);
+    xr_os_codemem_make_executable(g_safepoint_trampoline, 4096);
+    xr_os_codemem_flush_icache(g_safepoint_trampoline, g_trampoline_size);
 }
 
 /* ========== Crash Handler ========== */

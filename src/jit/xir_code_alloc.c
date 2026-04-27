@@ -16,54 +16,29 @@
 #include "xir_code_alloc.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../os/os_codemem.h"
 #include <stdlib.h>
 #include <string.h>
-#include <sys/mman.h>
-#include <unistd.h>
 
-#ifdef XR_OS_MACOS
-#include <pthread.h>
-#include <libkern/OSCacheControl.h>
-#endif  // ========== Platform Helpers ==========
+// ========== Page helpers ==========
 
-static size_t get_page_size(void) {
-    static size_t ps = 0;
-    if (ps == 0) {
-        ps = (size_t) sysconf(_SC_PAGESIZE);
-    }
-    return ps;
-}
-
-// Round up to page boundary
 static size_t page_align(size_t size) {
-    size_t ps = get_page_size();
+    size_t ps = xr_os_page_size();
     return (size + ps - 1) & ~(ps - 1);
 }
 
-// Allocate a new code page via mmap
+// Allocate a new code page via the OS shim (W^X-aware).
 static XirCodePage *alloc_code_page(size_t min_size) {
     size_t size = min_size < XIR_CODE_PAGE_SIZE ? XIR_CODE_PAGE_SIZE : page_align(min_size);
 
-    int flags = MAP_PRIVATE | MAP_ANONYMOUS;
-    int prot;
-
-#ifdef XR_OS_MACOS
-    // macOS Apple Silicon: MAP_JIT requires RWX in mmap, then
-    // pthread_jit_write_protect_np() toggles between W and X at runtime
-    flags |= MAP_JIT;
-    prot = PROT_READ | PROT_WRITE | PROT_EXEC;
-#else
-    prot = PROT_READ | PROT_WRITE;
-#endif
-
-    void *mem = mmap(NULL, size, prot, flags, -1, 0);
-    if (mem == MAP_FAILED) {
+    void *mem = xr_os_codemem_alloc(size);
+    if (mem == NULL) {
         return NULL;
     }
 
     XirCodePage *page = (XirCodePage *) xr_malloc(sizeof(XirCodePage));
     if (!page) {
-        munmap(mem, size);
+        xr_os_codemem_free(mem, size);
         return NULL;
     }
 
@@ -75,10 +50,9 @@ static XirCodePage *alloc_code_page(size_t min_size) {
     return page;
 }
 
-// Free a code page
 static void free_code_page(XirCodePage *page) {
     if (page) {
-        munmap(page->base, page->size);
+        xr_os_codemem_free(page->base, page->size);
         xr_free(page);
     }
 }
@@ -169,35 +143,11 @@ void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
 }
 
 void xir_code_make_executable(void *ptr, size_t size) {
-    (void) ptr;
-    (void) size;
-#ifdef XR_OS_MACOS
-    // macOS: per-thread W^X switch (MAP_JIT pages)
-    pthread_jit_write_protect_np(1);  // enable execute, disable write
-#else
-    // Linux: per-page mprotect
-    size_t ps = get_page_size();
-    void *page_start = (void *) ((uintptr_t) ptr & ~(ps - 1));
-    size_t total = ((uintptr_t) ptr + size) - (uintptr_t) page_start;
-    total = page_align(total);
-    mprotect(page_start, total, PROT_READ | PROT_EXEC);
-#endif
+    xr_os_codemem_make_executable(ptr, size);
 }
 
 void xir_code_make_writable(void *ptr, size_t size) {
-    (void) ptr;
-    (void) size;
-#ifdef XR_OS_MACOS
-    // macOS: per-thread W^X switch (MAP_JIT pages)
-    pthread_jit_write_protect_np(0);  // enable write, disable execute
-#else
-    // Linux: per-page mprotect
-    size_t ps = get_page_size();
-    void *page_start = (void *) ((uintptr_t) ptr & ~(ps - 1));
-    size_t total = ((uintptr_t) ptr + size) - (uintptr_t) page_start;
-    total = page_align(total);
-    mprotect(page_start, total, PROT_READ | PROT_WRITE);
-#endif
+    xr_os_codemem_make_writable(ptr, size);
 }
 
 void xir_code_alloc_set_budget(XirCodeAlloc *alloc, size_t budget_bytes) {
@@ -247,27 +197,5 @@ void xir_code_alloc_reclaim(XirCodeAlloc *alloc, uint64_t safe_epoch) {
 }
 
 void xir_code_flush_icache(void *ptr, size_t size) {
-#ifdef XR_OS_MACOS
-    // macOS: sys_icache_invalidate (ARM64 requires this)
-    sys_icache_invalidate(ptr, size);
-#elif defined(__aarch64__)
-    // Linux ARM64: manual cache flush
-    uint64_t start = (uint64_t) ptr;
-    uint64_t end = start + size;
-    // Clean data cache
-    for (uint64_t addr = start & ~63ULL; addr < end; addr += 64) {
-        __asm__ volatile("dc cvau, %0" ::"r"(addr));
-    }
-    __asm__ volatile("dsb ish");
-    // Invalidate instruction cache
-    for (uint64_t addr = start & ~63ULL; addr < end; addr += 64) {
-        __asm__ volatile("ic ivau, %0" ::"r"(addr));
-    }
-    __asm__ volatile("dsb ish");
-    __asm__ volatile("isb");
-#else
-    // x86_64: coherent i-cache, no flush needed
-    (void) ptr;
-    (void) size;
-#endif
+    xr_os_codemem_flush_icache(ptr, size);
 }
