@@ -72,11 +72,7 @@ bool xr_coro_debug_pool_init(XrCoroDebugPool *pool, uint32_t capacity) {
     pool->capacity = capacity;
     atomic_store(&pool->count, 0);
 
-    if (pthread_mutex_init(&pool->expand_lock, NULL) != 0) {
-        xr_free(pool->entries);
-        pool->entries = NULL;
-        return false;
-    }
+    xr_mutex_init(&pool->expand_lock);
 
     pool->initialized = true;
     return true;
@@ -91,7 +87,7 @@ void xr_coro_debug_pool_destroy(XrCoroDebugPool *pool) {
         pool->entries = NULL;
     }
 
-    pthread_mutex_destroy(&pool->expand_lock);
+    xr_mutex_destroy(&pool->expand_lock);
     pool->initialized = false;
 }
 
@@ -108,19 +104,19 @@ uint32_t xr_coro_debug_register(XrCoroDebugPool *pool, const char *name, const c
 
     // Check if expansion needed
     if (idx >= pool->capacity) {
-        pthread_mutex_lock(&pool->expand_lock);
+        xr_mutex_lock(&pool->expand_lock);
 
         // Double check
         if (idx >= pool->capacity) {
             if (!expand_pool(pool)) {
-                pthread_mutex_unlock(&pool->expand_lock);
+                xr_mutex_unlock(&pool->expand_lock);
                 // Allocation failed, rollback count
                 atomic_fetch_sub(&pool->count, 1);
                 return XR_DEBUG_IDX_INVALID;
             }
         }
 
-        pthread_mutex_unlock(&pool->expand_lock);
+        xr_mutex_unlock(&pool->expand_lock);
     }
 
     // Fill debug info

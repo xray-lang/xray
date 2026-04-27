@@ -20,7 +20,7 @@
 #include "http_client.h"
 #include "../net/tls.h"
 #include <stdbool.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 
 /* ========== Connection Pool ========== */
 
@@ -45,7 +45,7 @@ typedef struct XrH2PoolEntry {
 typedef struct XrH2Pool {
     XrH2PoolEntry *hosts[XR_H2_POOL_MAX_HOSTS];
     int host_count;
-    pthread_mutex_t lock;
+    xr_mutex_t lock;
     bool initialized;
 } XrH2Pool;
 

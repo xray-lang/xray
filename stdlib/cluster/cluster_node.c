@@ -127,7 +127,7 @@ void xr_outq_init(XrOutputQueue *q) {
         fcntl(q->notify_pipe[1], F_SETFL, O_NONBLOCK);
     if (q->notify_pipe[0] >= 0)
         fcntl(q->notify_pipe[0], F_SETFL, O_NONBLOCK);
-    xr_mutex_init(&q->lock);
+    xr_amutex_init(&q->lock);
 }
 
 /*
@@ -212,9 +212,9 @@ int xr_outq_push(XrOutputQueue *q, const uint8_t *data, uint32_t len) {
     f->owned = true;
     f->next = NULL;
 
-    xr_mutex_lock(&q->lock);
+    xr_amutex_lock(&q->lock);
     outq_enqueue_locked(q, f);
-    xr_mutex_unlock(&q->lock);
+    xr_amutex_unlock(&q->lock);
     outq_notify(q);
     return 0;
 }
@@ -232,15 +232,15 @@ int xr_outq_push_nocopy(XrOutputQueue *q, uint8_t *data, uint32_t len) {
     f->owned = true;  // we own it (caller transferred ownership)
     f->next = NULL;
 
-    xr_mutex_lock(&q->lock);
+    xr_amutex_lock(&q->lock);
     outq_enqueue_locked(q, f);
-    xr_mutex_unlock(&q->lock);
+    xr_amutex_unlock(&q->lock);
     outq_notify(q);
     return 0;
 }
 
 XrOutFrame *xr_outq_pop(XrOutputQueue *q) {
-    xr_mutex_lock(&q->lock);
+    xr_amutex_lock(&q->lock);
     XrOutFrame *f = q->head;
     if (f) {
         q->head = f->next;
@@ -252,19 +252,19 @@ XrOutFrame *xr_outq_pop(XrOutputQueue *q) {
             atomic_store(&q->is_full, false);
         }
     }
-    xr_mutex_unlock(&q->lock);
+    xr_amutex_unlock(&q->lock);
     return f;
 }
 
 XrOutFrame *xr_outq_pop_all(XrOutputQueue *q) {
-    xr_mutex_lock(&q->lock);
+    xr_amutex_lock(&q->lock);
     XrOutFrame *batch = q->head;
     q->head = NULL;
     q->tail = NULL;
     q->total_bytes = 0;
     q->frame_count = 0;
     atomic_store(&q->is_full, false);
-    xr_mutex_unlock(&q->lock);
+    xr_amutex_unlock(&q->lock);
     return batch;
 }
 
@@ -346,7 +346,7 @@ XrClusterNode *xr_cluster_node_new(const char *name, const char *host, uint16_t 
     node->missed_heartbeats = 0;
     memset(node->pending_buckets, 0, sizeof(node->pending_buckets));
     node->pending_count = 0;
-    xr_mutex_init(&node->pending_lock);
+    xr_amutex_init(&node->pending_lock);
     xr_outq_init(&node->outq);
     atomic_store(&node->writer_running, false);
     atomic_store(&node->writer_exited, false);
@@ -1064,9 +1064,9 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
      * XR_PENDING_BUCKETS and saves a div on the hot path. */
     uint32_t bucket = (uint32_t) (request_id & (XR_PENDING_BUCKETS - 1));
 
-    xr_mutex_lock(&node->pending_lock);
+    xr_amutex_lock(&node->pending_lock);
     if (node->pending_count >= max_pending) {
-        xr_mutex_unlock(&node->pending_lock);
+        xr_amutex_unlock(&node->pending_lock);
         xr_channel_close(ch);
         xr_free(pr);
         return NULL;
@@ -1074,7 +1074,7 @@ XrChannel *xr_cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
     pr->next = node->pending_buckets[bucket];
     node->pending_buckets[bucket] = pr;
     node->pending_count++;
-    xr_mutex_unlock(&node->pending_lock);
+    xr_amutex_unlock(&node->pending_lock);
 
     return ch;
 }
@@ -1085,7 +1085,7 @@ XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id
 
     uint32_t bucket = (uint32_t) (request_id & (XR_PENDING_BUCKETS - 1));
 
-    xr_mutex_lock(&node->pending_lock);
+    xr_amutex_lock(&node->pending_lock);
     XrPendingRequest **pp = &node->pending_buckets[bucket];
     while (*pp) {
         if ((*pp)->request_id == request_id) {
@@ -1093,12 +1093,12 @@ XrChannel *xr_cluster_node_take_pending(XrClusterNode *node, uint64_t request_id
             *pp = pr->next;
             node->pending_count--;
             XrChannel *ch = pr->response_ch;
-            xr_mutex_unlock(&node->pending_lock);
+            xr_amutex_unlock(&node->pending_lock);
             xr_free(pr);
             return ch;
         }
         pp = &(*pp)->next;
     }
-    xr_mutex_unlock(&node->pending_lock);
+    xr_amutex_unlock(&node->pending_lock);
     return NULL;
 }

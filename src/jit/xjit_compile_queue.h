@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include "../base/xdefs.h"
 #include "xir_code_alloc.h"
 #include "../runtime/value/xtype_feedback.h"
@@ -102,10 +102,10 @@ typedef struct XirCompileQueue {
     _Atomic uint32_t tail;  // CAS-advanced by consumers (bg workers)
 
     // Background worker threads
-    pthread_t workers[XJIT_MAX_WORKERS];
+    xr_thread_t workers[XJIT_MAX_WORKERS];
     uint32_t n_workers;  // actual number of bg threads started
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    xr_mutex_t mutex;
+    xr_cond_t cond;
     _Atomic bool shutdown;  // signal background threads to exit
     bool started;           // at least one worker thread is running
 

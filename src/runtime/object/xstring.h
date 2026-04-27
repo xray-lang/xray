@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <pthread.h>
+#include "../../base/xthread.h"
 
 // Forward declaration
 struct XrArray;
@@ -116,7 +116,7 @@ typedef struct XrGlobalStringPool {
     size_t mask;
     size_t count;
     size_t permanent_count;  // compile-time constants (never evicted)
-    pthread_rwlock_t lock;
+    xr_rwlock_t lock;
 } XrGlobalStringPool;
 
 // Global pool initial capacity

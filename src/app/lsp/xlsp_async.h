@@ -16,7 +16,7 @@
 #ifndef XLSP_ASYNC_H
 #define XLSP_ASYNC_H
 
-#include <pthread.h>
+#include "../../base/xthread.h"
 #include <stdbool.h>
 #include <stdatomic.h>
 #include "../../base/xdefs.h"
@@ -74,20 +74,20 @@ typedef struct XrLspCancelToken {
 typedef struct XrLspTaskQueue {
     _Atomic(XrLspTask *) head;
     XrLspTask *tail;
-    pthread_mutex_t consumer_lock;
-    pthread_rwlock_t traverse_lock;  // For safe traversal during cancellation
+    xr_mutex_t consumer_lock;
+    xr_rwlock_t traverse_lock;  // For safe traversal during cancellation
 } XrLspTaskQueue;
 
 // Async worker pool
 typedef struct XrLspAsync {
     // Worker thread
-    pthread_t worker;
+    xr_thread_t worker;
     _Atomic bool running;
 
     // Pending task queue (main -> worker)
     XrLspTaskQueue pending;
-    pthread_mutex_t pending_mutex;
-    pthread_cond_t pending_cond;
+    xr_mutex_t pending_mutex;
+    xr_cond_t pending_cond;
 
     // Completed task queue (worker -> main)
     XrLspTaskQueue completed;
@@ -95,7 +95,7 @@ typedef struct XrLspAsync {
     // Currently running task (for cancellation)
     // Protected by current_task_mutex to prevent TOCTOU race conditions
     XrLspTask *current_task;
-    pthread_mutex_t current_task_mutex;
+    xr_mutex_t current_task_mutex;
 
     // Notification pipe (worker -> main)
     int notify_fd[2];  // [0]=read, [1]=write

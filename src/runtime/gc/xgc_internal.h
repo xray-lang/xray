@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <pthread.h>
+#include "../../base/xthread.h"
 
 #ifndef XR_VALUE_DEFINED
 typedef struct XrValue XrValue;

@@ -208,16 +208,16 @@ static bool should_connect(XrCluster *c, const char *name) {
         return false;
 
     // Don't connect if already connected
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (strcmp(node->name, name) == 0) {
-            xr_mutex_unlock(&c->nodes_lock);
+            xr_amutex_unlock(&c->nodes_lock);
             return false;
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     return true;
 }

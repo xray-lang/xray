@@ -207,7 +207,7 @@ static void dist_close(XrChannel *ch) {
         if (flen < 0)
             return;
 
-        xr_mutex_lock(&c->nodes_lock);
+        xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
             if (node->state == XR_NODE_CONNECTED && node->conn) {
@@ -215,7 +215,7 @@ static void dist_close(XrChannel *ch) {
             }
             node = node->next;
         }
-        xr_mutex_unlock(&c->nodes_lock);
+        xr_amutex_unlock(&c->nodes_lock);
     } else {
         // Proxy closing: notify Owner via output queue
         if (dc->owner_node && dc->owner_node->state == XR_NODE_CONNECTED) {
@@ -382,14 +382,14 @@ void xr_cluster_channel_push_to_subscribers(XrCluster *c, const char *name) {
     }
 
     // Round-robin select one subscriber (O(1) array index)
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     XrClusterNode *target_node = NULL;
     if (dc->subscribers.count > 0) {
         int idx = dc->rr_index % dc->subscribers.count;
         dc->rr_index++;
         target_node = dc->subscribers.nodes[idx];
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 
     if (!target_node || target_node->state != XR_NODE_CONNECTED) {
         xr_serial_buf_free(&sbuf);
@@ -496,7 +496,7 @@ void xr_cluster_channel_sync_to_node(XrCluster *c, XrClusterNode *node) {
         return;
 
     // Send CHANNEL_SYNC for each locally owned channel
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     for (int i = 0; i < XR_CLUSTER_CHANNEL_BUCKETS; i++) {
         XrDistChannel *dc = c->channel_buckets[i];
         while (dc) {
@@ -526,5 +526,5 @@ void xr_cluster_channel_sync_to_node(XrCluster *c, XrClusterNode *node) {
             dc = dc->next;
         }
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 }

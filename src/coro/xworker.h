@@ -21,7 +21,7 @@
 #ifndef XWORKER_H
 #define XWORKER_H
 
-#include <pthread.h>
+#include "../base/xthread.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc
@@ -54,7 +54,7 @@ typedef struct XrRuntime {
     /* === Idle P/M Management (lock-free Treiber stacks) ===
      *
      * All three lists are lock-free stacks chained via XrMachine::idle_link
-     * or XrProc::idle_link. The previous pthread_mutex_t sched_lock has been
+     * or XrProc::idle_link. The previous xr_mutex_t sched_lock has been
      * removed; mutual exclusion is now achieved via atomic CAS.
      *
      * ABA: XrProc / XrMachine instances are never freed during runtime
@@ -94,7 +94,7 @@ typedef struct XrRuntime {
 
     /* === I/O & Async === */
     XrNetpoll netpoll;
-    pthread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
+    xr_thread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
     struct XrAsyncPool *async_pool;
 
     /* === Scope & Migration === */

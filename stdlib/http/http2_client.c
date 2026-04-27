@@ -45,7 +45,7 @@ XrH2Pool *xr_h2_pool_create(void) {
     if (!pool)
         return NULL;
 
-    pthread_mutex_init(&pool->lock, NULL);
+    xr_mutex_init(&pool->lock);
     pool->initialized = true;
     return pool;
 }
@@ -55,7 +55,7 @@ void xr_h2_pool_destroy(XrH2Pool *pool) {
     if (!pool)
         return;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     for (int i = 0; i < XR_H2_POOL_MAX_HOSTS; i++) {
         XrH2PoolEntry *entry = pool->hosts[i];
@@ -79,8 +79,8 @@ void xr_h2_pool_destroy(XrH2Pool *pool) {
     }
 
     pool->host_count = 0;
-    pthread_mutex_unlock(&pool->lock);
-    pthread_mutex_destroy(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
+    xr_mutex_destroy(&pool->lock);
     xr_free(pool);
 }
 
@@ -94,7 +94,7 @@ XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
     if (!pool || !pool->initialized || !host)
         return NULL;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     unsigned int idx = hash_host(host, port);
     XrH2PoolEntry *entry = pool->hosts[idx];
@@ -107,7 +107,7 @@ XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
                     (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS]) {
                 entry->in_use = true;
                 entry->last_used = get_time_ms();
-                pthread_mutex_unlock(&pool->lock);
+                xr_mutex_unlock(&pool->lock);
                 return entry;
             }
             // Connection invalid, remove
@@ -135,7 +135,7 @@ XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
         entry = entry->next;
     }
 
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
 
     // Create new connection
     entry = create_h2_connection(host, port, is_https);
@@ -143,10 +143,10 @@ XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
         return NULL;
 
     // Add to pool
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
     entry->next = pool->hosts[idx];
     pool->hosts[idx] = entry;
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
 
     return entry;
 }
@@ -156,10 +156,10 @@ void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry) {
     if (!pool || !entry)
         return;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
     entry->in_use = false;
     entry->last_used = get_time_ms();
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
 }
 
 // Get current time (milliseconds)
@@ -182,7 +182,7 @@ void xr_h2_pool_init(void) {
         return;
 
     memset(&g_pool, 0, sizeof(g_pool));
-    pthread_mutex_init(&g_pool.lock, NULL);
+    xr_mutex_init(&g_pool.lock);
     g_pool.initialized = true;
 }
 
@@ -190,7 +190,7 @@ void xr_h2_pool_cleanup(void) {
     if (!g_pool.initialized)
         return;
 
-    pthread_mutex_lock(&g_pool.lock);
+    xr_mutex_lock(&g_pool.lock);
 
     for (int i = 0; i < XR_H2_POOL_MAX_HOSTS; i++) {
         XrH2PoolEntry *entry = g_pool.hosts[i];
@@ -214,8 +214,8 @@ void xr_h2_pool_cleanup(void) {
     }
 
     g_pool.host_count = 0;
-    pthread_mutex_unlock(&g_pool.lock);
-    pthread_mutex_destroy(&g_pool.lock);
+    xr_mutex_unlock(&g_pool.lock);
+    xr_mutex_destroy(&g_pool.lock);
     g_pool.initialized = false;
 }
 
@@ -356,7 +356,7 @@ XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https) {
 
     xr_h2_pool_init();
 
-    pthread_mutex_lock(&g_pool.lock);
+    xr_mutex_lock(&g_pool.lock);
 
     unsigned int idx = hash_host(host, port);
     XrH2PoolEntry *entry = g_pool.hosts[idx];
@@ -371,7 +371,7 @@ XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https) {
                     (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS]) {
                 entry->in_use = true;
                 entry->last_used = get_time_ms();
-                pthread_mutex_unlock(&g_pool.lock);
+                xr_mutex_unlock(&g_pool.lock);
                 return entry;
             }
             // Connection invalid, remove
@@ -399,7 +399,7 @@ XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https) {
         entry = entry->next;
     }
 
-    pthread_mutex_unlock(&g_pool.lock);
+    xr_mutex_unlock(&g_pool.lock);
 
     // Create new connection
     entry = create_h2_connection(host, port, is_https);
@@ -407,10 +407,10 @@ XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https) {
         return NULL;
 
     // Add to connection pool
-    pthread_mutex_lock(&g_pool.lock);
+    xr_mutex_lock(&g_pool.lock);
     entry->next = g_pool.hosts[idx];
     g_pool.hosts[idx] = entry;
-    pthread_mutex_unlock(&g_pool.lock);
+    xr_mutex_unlock(&g_pool.lock);
 
     return entry;
 }
@@ -419,10 +419,10 @@ void xr_h2_pool_release(XrH2PoolEntry *entry) {
     if (!entry)
         return;
 
-    pthread_mutex_lock(&g_pool.lock);
+    xr_mutex_lock(&g_pool.lock);
     entry->in_use = false;
     entry->last_used = get_time_ms();
-    pthread_mutex_unlock(&g_pool.lock);
+    xr_mutex_unlock(&g_pool.lock);
 }
 
 void xr_h2_pool_cleanup_idle(void) {
@@ -431,7 +431,7 @@ void xr_h2_pool_cleanup_idle(void) {
 
     uint64_t now = get_time_ms();
 
-    pthread_mutex_lock(&g_pool.lock);
+    xr_mutex_lock(&g_pool.lock);
 
     for (int i = 0; i < XR_H2_POOL_MAX_HOSTS; i++) {
         XrH2PoolEntry *entry = g_pool.hosts[i];
@@ -465,7 +465,7 @@ void xr_h2_pool_cleanup_idle(void) {
         }
     }
 
-    pthread_mutex_unlock(&g_pool.lock);
+    xr_mutex_unlock(&g_pool.lock);
 }
 
 /* ========== HTTP/2 Request ========== */

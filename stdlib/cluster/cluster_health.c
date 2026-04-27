@@ -50,7 +50,7 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
     int remove_count = 0;
     int remove_cap = XR_HB_INLINE;
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         bool is_dead = false;
@@ -98,7 +98,7 @@ void xr_cluster_check_heartbeats(XrCluster *c) {
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     for (int i = 0; i < remove_count; i++) {
         XrClusterNode *dead = to_remove[i];
@@ -119,7 +119,7 @@ void xr_cluster_send_heartbeats(XrCluster *c) {
     if (!c)
         return;
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED && node->conn) {
@@ -127,7 +127,7 @@ void xr_cluster_send_heartbeats(XrCluster *c) {
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 }
 
 /*
@@ -267,7 +267,7 @@ void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *target) {
     uint16_t count = 0;
     p += 2;  // reserve for count
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node != target && node->state == XR_NODE_CONNECTED) {
@@ -303,7 +303,7 @@ void xr_cluster_gossip_to_node(XrCluster *c, XrClusterNode *target) {
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     // Write count
     payload[0] = (uint8_t) (count >> 8);
@@ -373,7 +373,7 @@ void xr_cluster_mark_dead(XrCluster *c, const char *name) {
     if (!c || !name)
         return;
 
-    xr_mutex_lock(&c->dead_nodes_lock);
+    xr_amutex_lock(&c->dead_nodes_lock);
     // Grow dynamic array if needed
     if (c->tombstone_count >= c->tombstone_cap) {
         int new_cap = c->tombstone_cap * 2;
@@ -396,21 +396,21 @@ void xr_cluster_mark_dead(XrCluster *c, const char *name) {
         c->tombstones[c->tombstone_count].time = xr_cluster_now_ms();
         c->tombstone_count++;
     }
-    xr_mutex_unlock(&c->dead_nodes_lock);
+    xr_amutex_unlock(&c->dead_nodes_lock);
 }
 
 bool xr_cluster_is_dead(XrCluster *c, const char *name) {
     if (!c || !name)
         return false;
 
-    xr_mutex_lock(&c->dead_nodes_lock);
+    xr_amutex_lock(&c->dead_nodes_lock);
     for (int i = 0; i < c->tombstone_count; i++) {
         if (strcmp(c->tombstones[i].name, name) == 0) {
-            xr_mutex_unlock(&c->dead_nodes_lock);
+            xr_amutex_unlock(&c->dead_nodes_lock);
             return true;
         }
     }
-    xr_mutex_unlock(&c->dead_nodes_lock);
+    xr_amutex_unlock(&c->dead_nodes_lock);
     return false;
 }
 
@@ -420,7 +420,7 @@ void xr_cluster_sweep_tombstones(XrCluster *c, int64_t max_age_ms) {
 
     int64_t now = xr_cluster_now_ms();
 
-    xr_mutex_lock(&c->dead_nodes_lock);
+    xr_amutex_lock(&c->dead_nodes_lock);
     int i = 0;
     while (i < c->tombstone_count) {
         if (now - c->tombstones[i].time > max_age_ms) {
@@ -433,5 +433,5 @@ void xr_cluster_sweep_tombstones(XrCluster *c, int64_t max_age_ms) {
             i++;
         }
     }
-    xr_mutex_unlock(&c->dead_nodes_lock);
+    xr_amutex_unlock(&c->dead_nodes_lock);
 }

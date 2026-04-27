@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include <fcntl.h>
 #include <errno.h>
 #include <sched.h>
@@ -44,8 +44,8 @@ static void poll_cache_cleanup(XrPollCache *cache) {
     XrPollDesc *pd = atomic_exchange_explicit(&cache->head, NULL, memory_order_acquire);
     while (pd) {
         XrPollDesc *next = pd->link;
-        pthread_cond_destroy(&pd->block_cond);
-        pthread_mutex_destroy(&pd->block_mu);
+        xr_cond_destroy(&pd->block_cond);
+        xr_mutex_destroy(&pd->block_mu);
         xr_free(pd);
         pd = next;
     }
@@ -67,8 +67,8 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
             // Cache empty, allocate new and initialize mutex/cond ONCE
             pd = (XrPollDesc *) xr_calloc(1, sizeof(XrPollDesc));
             if (pd) {
-                pthread_mutex_init(&pd->block_mu, NULL);
-                pthread_cond_init(&pd->block_cond, NULL);
+                xr_mutex_init(&pd->block_mu);
+                xr_cond_init(&pd->block_cond);
                 is_new = true;
             }
             break;
@@ -145,7 +145,7 @@ static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
 // Block current thread waiting for I/O ready on pd
 //
 // Used by cfunc coroutines and io.c connect that cannot use yieldable mechanism.
-// Uses pthread_cond_wait instead of busy-wait (sched_yield loop).
+// Uses xr_cond_wait instead of busy-wait (sched_yield loop).
 // The condition variable is signaled by xr_netpoll_unblock when I/O is ready.
 //
 // Returns true if I/O ready, false if closed
@@ -180,11 +180,11 @@ bool xr_netpoll_block(XrPollDesc *pd, int mode, XrayIsolate *X) {
     }
 
     // Wait on condition variable instead of busy-wait
-    pthread_mutex_lock(&pd->block_mu);
+    xr_mutex_lock(&pd->block_mu);
     while (atomic_load(gpp) == XR_PD_WAIT && !atomic_load(&pd->closing)) {
-        pthread_cond_wait(&pd->block_cond, &pd->block_mu);
+        xr_cond_wait(&pd->block_cond, &pd->block_mu);
     }
-    pthread_mutex_unlock(&pd->block_mu);
+    xr_mutex_unlock(&pd->block_mu);
 
     uintptr_t old = atomic_exchange(gpp, XR_PD_NIL);
     return old == XR_PD_READY;
@@ -211,10 +211,10 @@ struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) 
 
         if (atomic_compare_exchange_strong(gpp, &old, new_val)) {
             if (old == XR_PD_WAIT) {
-                // Thread may be blocked in pthread_cond_wait, signal it
-                pthread_mutex_lock(&pd->block_mu);
-                pthread_cond_signal(&pd->block_cond);
-                pthread_mutex_unlock(&pd->block_mu);
+                // Thread may be blocked in xr_cond_wait, signal it
+                xr_mutex_lock(&pd->block_mu);
+                xr_cond_signal(&pd->block_cond);
+                xr_mutex_unlock(&pd->block_mu);
                 return NULL;
             } else if (old > XR_PD_WAIT) {
                 // Decrement yieldable I/O waiter count
@@ -787,9 +787,9 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
         if (old == XR_PD_WAIT) {
             if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
                 // Signal condition variable for threads in xr_netpoll_block
-                pthread_mutex_lock(&pd->block_mu);
-                pthread_cond_signal(&pd->block_cond);
-                pthread_mutex_unlock(&pd->block_mu);
+                xr_mutex_lock(&pd->block_mu);
+                xr_cond_signal(&pd->block_cond);
+                xr_mutex_unlock(&pd->block_mu);
                 return;
             }
             continue;

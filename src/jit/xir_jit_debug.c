@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 
 #if defined(__APPLE__)
 #include <sys/types.h>

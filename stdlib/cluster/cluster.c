@@ -326,11 +326,11 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name, uint16_t port, const c
         }
     }
 
-    xr_mutex_init(&c->nodes_lock);
-    xr_mutex_init(&c->channels_lock);
-    xr_mutex_init(&c->services_lock);
-    xr_mutex_init(&c->dead_nodes_lock);
-    xr_mutex_init(&c->topics_lock);
+    xr_amutex_init(&c->nodes_lock);
+    xr_amutex_init(&c->channels_lock);
+    xr_amutex_init(&c->services_lock);
+    xr_amutex_init(&c->dead_nodes_lock);
+    xr_amutex_init(&c->topics_lock);
     atomic_store(&c->next_request_id, 1);
 
     /* Topic routing trie — allocated eagerly so subscribe never has to
@@ -358,7 +358,7 @@ int xr_cluster_start_ex(XrayIsolate *X, const char *name, uint16_t port, const c
     c->on_node_removed = NULL;
     c->monitors = NULL;
     c->monitor_count = 0;
-    xr_mutex_init(&c->monitors_lock);
+    xr_amutex_init(&c->monitors_lock);
 
     // Start listening
     c->listen_fd = xr_io_listen(NULL, port, 128);
@@ -498,7 +498,7 @@ void xr_cluster_stop(XrCluster *c) {
     xr_cluster_channel_uninstall_hooks(c->isolate);
 
     // Close all node connections
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         XrClusterNode *next = node->next;
@@ -507,10 +507,10 @@ void xr_cluster_stop(XrCluster *c) {
     }
     c->nodes = NULL;
     c->node_count = 0;
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     // Free channel registry
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     for (int i = 0; i < XR_CLUSTER_CHANNEL_BUCKETS; i++) {
         XrDistChannel *dc = c->channel_buckets[i];
         while (dc) {
@@ -521,10 +521,10 @@ void xr_cluster_stop(XrCluster *c) {
         c->channel_buckets[i] = NULL;
     }
     c->channel_count = 0;
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 
     // Free service registry
-    xr_mutex_lock(&c->services_lock);
+    xr_amutex_lock(&c->services_lock);
     for (int i = 0; i < XR_CLUSTER_SERVICE_BUCKETS; i++) {
         XrServiceEntry *se = c->service_buckets[i];
         while (se) {
@@ -535,13 +535,13 @@ void xr_cluster_stop(XrCluster *c) {
         c->service_buckets[i] = NULL;
     }
     c->service_count = 0;
-    xr_mutex_unlock(&c->services_lock);
+    xr_amutex_unlock(&c->services_lock);
 
     // Free topic subscriptions (recursive trie teardown lives in cluster_topic.c)
     xr_cluster_topics_destroy(c);
 
     // Free node monitors
-    xr_mutex_lock(&c->monitors_lock);
+    xr_amutex_lock(&c->monitors_lock);
     {
         XrNodeMonitor *mon = c->monitors;
         while (mon) {
@@ -552,7 +552,7 @@ void xr_cluster_stop(XrCluster *c) {
         c->monitors = NULL;
         c->monitor_count = 0;
     }
-    xr_mutex_unlock(&c->monitors_lock);
+    xr_amutex_unlock(&c->monitors_lock);
 
     // Free remote coroutine monitors
     {
@@ -614,16 +614,16 @@ const char *xr_cluster_self_name(XrCluster *c) {
 XrClusterNode *xr_cluster_find_node(XrCluster *c, const char *name) {
     if (!c)
         return NULL;
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (strcmp(node->name, name) == 0) {
-            xr_mutex_unlock(&c->nodes_lock);
+            xr_amutex_unlock(&c->nodes_lock);
             return node;
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
     return NULL;
 }
 
@@ -631,18 +631,18 @@ void xr_cluster_add_node(XrCluster *c, XrClusterNode *node) {
     if (!c || !node)
         return;
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     node->next = c->nodes;
     c->nodes = node;
     c->node_count++;
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 }
 
 void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node) {
     if (!c || !node)
         return;
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode **pp = &c->nodes;
     while (*pp) {
         if (*pp == node) {
@@ -652,7 +652,7 @@ void xr_cluster_remove_node(XrCluster *c, XrClusterNode *node) {
         }
         pp = &(*pp)->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 }
 
 int xr_cluster_join(XrCluster *c, const char *host, uint16_t port) {
@@ -704,11 +704,11 @@ void xr_cluster_register_channel(XrCluster *c, const char *name, struct XrChanne
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_CHANNEL_BUCKETS;
 
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     dc->next = c->channel_buckets[bucket];
     c->channel_buckets[bucket] = dc;
     c->channel_count++;
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 }
 
 XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name) {
@@ -717,16 +717,16 @@ XrDistChannel *xr_cluster_find_channel(XrCluster *c, const char *name) {
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_CHANNEL_BUCKETS;
 
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     XrDistChannel *dc = c->channel_buckets[bucket];
     while (dc) {
         if (strcmp(dc->name, name) == 0) {
-            xr_mutex_unlock(&c->channels_lock);
+            xr_amutex_unlock(&c->channels_lock);
             return dc;
         }
         dc = dc->next;
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
     return NULL;
 }
 
@@ -736,7 +736,7 @@ void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_CHANNEL_BUCKETS;
 
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     XrDistChannel **pp = &c->channel_buckets[bucket];
     while (*pp) {
         if (strcmp((*pp)->name, name) == 0) {
@@ -753,7 +753,7 @@ void xr_cluster_unregister_channel(XrCluster *c, const char *name) {
         }
         pp = &(*pp)->next;
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 }
 
 /* ========== Service Registry ========== */
@@ -779,11 +779,11 @@ XrChannel *xr_cluster_register_service(XrayIsolate *X, const char *name) {
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_SERVICE_BUCKETS;
 
-    xr_mutex_lock(&c->services_lock);
+    xr_amutex_lock(&c->services_lock);
     se->next = c->service_buckets[bucket];
     c->service_buckets[bucket] = se;
     c->service_count++;
-    xr_mutex_unlock(&c->services_lock);
+    xr_amutex_unlock(&c->services_lock);
 
     return se->request_ch;
 }
@@ -794,16 +794,16 @@ XrServiceEntry *xr_cluster_find_service(XrCluster *c, const char *name) {
 
     uint32_t bucket = str_hash(name) % XR_CLUSTER_SERVICE_BUCKETS;
 
-    xr_mutex_lock(&c->services_lock);
+    xr_amutex_lock(&c->services_lock);
     XrServiceEntry *se = c->service_buckets[bucket];
     while (se) {
         if (strcmp(se->name, name) == 0) {
-            xr_mutex_unlock(&c->services_lock);
+            xr_amutex_unlock(&c->services_lock);
             return se;
         }
         se = se->next;
     }
-    xr_mutex_unlock(&c->services_lock);
+    xr_amutex_unlock(&c->services_lock);
     return NULL;
 }
 
@@ -813,7 +813,7 @@ void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrCluster
     if (!c || !channel_name || !node)
         return;
 
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     uint32_t bucket = str_hash(channel_name) % XR_CLUSTER_CHANNEL_BUCKETS;
     XrDistChannel *dc = c->channel_buckets[bucket];
     while (dc) {
@@ -822,7 +822,7 @@ void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrCluster
             // Check for duplicate
             for (int i = 0; i < subs->count; i++) {
                 if (subs->nodes[i] == node) {
-                    xr_mutex_unlock(&c->channels_lock);
+                    xr_amutex_unlock(&c->channels_lock);
                     return;  // already subscribed
                 }
             }
@@ -834,14 +834,14 @@ void xr_cluster_add_subscriber(XrCluster *c, const char *channel_name, XrCluster
         }
         dc = dc->next;
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 }
 
 void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClusterNode *node) {
     if (!c || !channel_name || !node)
         return;
 
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     uint32_t bucket = str_hash(channel_name) % XR_CLUSTER_CHANNEL_BUCKETS;
     XrDistChannel *dc = c->channel_buckets[bucket];
     while (dc) {
@@ -859,14 +859,14 @@ void xr_cluster_remove_subscriber(XrCluster *c, const char *channel_name, XrClus
         }
         dc = dc->next;
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 }
 
 void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *node) {
     if (!c || !node)
         return;
 
-    xr_mutex_lock(&c->channels_lock);
+    xr_amutex_lock(&c->channels_lock);
     for (int i = 0; i < XR_CLUSTER_CHANNEL_BUCKETS; i++) {
         XrDistChannel *dc = c->channel_buckets[i];
         while (dc) {
@@ -884,7 +884,7 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
             dc = dc->next;
         }
     }
-    xr_mutex_unlock(&c->channels_lock);
+    xr_amutex_unlock(&c->channels_lock);
 }
 
 /* ========== xray Function Bindings ========== */
@@ -1010,14 +1010,14 @@ static XrValue cluster_nodes(XrayIsolate *X, XrValue *args, int argc) {
     if (!arr)
         return xr_null();
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         XrString *name = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
         xr_array_push(arr, xr_string_value(name));
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     return xr_value_from_array(arr);
 }
@@ -1108,7 +1108,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     // Find the requesting node
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *target = NULL;
     XrClusterNode *node = c->nodes;
     while (node) {
@@ -1118,7 +1118,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     if (!target)
         return xr_bool(0);
@@ -1211,12 +1211,12 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
 
     // Route to first connected node
     XrClusterNode *target = NULL;
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     target = c->nodes;
     while (target && target->state != XR_NODE_CONNECTED) {
         target = target->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     if (!target || !target->conn) {
         xr_serial_buf_free(&sbuf);
@@ -1552,11 +1552,11 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
 
                         uint32_t bucket = str_hash(ch_name) % XR_CLUSTER_CHANNEL_BUCKETS;
 
-                        xr_mutex_lock(&c->channels_lock);
+                        xr_amutex_lock(&c->channels_lock);
                         dc->next = c->channel_buckets[bucket];
                         c->channel_buckets[bucket] = dc;
                         c->channel_count++;
-                        xr_mutex_unlock(&c->channels_lock);
+                        xr_amutex_unlock(&c->channels_lock);
                     }
                 }
                 break;
@@ -1737,7 +1737,7 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
     // Node list with metrics
     XrArray *node_arr = xr_array_new(NULL);
     if (node_arr) {
-        xr_mutex_lock(&c->nodes_lock);
+        xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
             XrJson *nj = xr_json_new(NULL, 10);
@@ -1798,7 +1798,7 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
             }
             node = node->next;
         }
-        xr_mutex_unlock(&c->nodes_lock);
+        xr_amutex_unlock(&c->nodes_lock);
         xr_json_set_by_key(X, info, "nodes", xr_value_from_array(node_arr));
     }
 
@@ -1818,9 +1818,9 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
      * refused if they try to rejoin. Useful for correlating "split
      * brain" scenarios.
      */
-    xr_mutex_lock(&c->dead_nodes_lock);
+    xr_amutex_lock(&c->dead_nodes_lock);
     xr_json_set_by_key(X, info, "dead_nodes", xr_int(c->tombstone_count));
-    xr_mutex_unlock(&c->dead_nodes_lock);
+    xr_amutex_unlock(&c->dead_nodes_lock);
 
     /*
      * Expose the operator-configurable heartbeat knobs so ops can

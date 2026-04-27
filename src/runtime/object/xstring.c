@@ -51,7 +51,7 @@ void xr_global_pool_init(XrGlobalStringPool *pool) {
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
 
     // Initialize rwlock
-    pthread_rwlock_init(&pool->lock, NULL);
+    xr_rwlock_init(&pool->lock);
 
     // Initialize to NULL
     for (size_t i = 0; i < pool->capacity; i++) {
@@ -65,7 +65,7 @@ void xr_global_pool_free(XrGlobalStringPool *pool) {
         return;
 
     // Destroy rwlock
-    pthread_rwlock_destroy(&pool->lock);
+    xr_rwlock_destroy(&pool->lock);
 
     // Free all globally allocated strings
     for (size_t i = 0; i < pool->capacity; i++) {
@@ -278,7 +278,7 @@ size_t xr_global_pool_sweep(XrGlobalStringPool *pool) {
     if (!pool || !pool->entries)
         return 0;
 
-    pthread_rwlock_wrlock(&pool->lock);
+    xr_rwlock_wrlock(&pool->lock);
 
     size_t evicted = 0;
     size_t cap = pool->capacity;
@@ -346,7 +346,7 @@ size_t xr_global_pool_sweep(XrGlobalStringPool *pool) {
         xr_free(old);
     }
 
-    pthread_rwlock_unlock(&pool->lock);
+    xr_rwlock_wrunlock(&pool->lock);
     return evicted;
 }
 
@@ -473,27 +473,27 @@ XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, u
     }
 
     // Step 1: Read lock lookup
-    pthread_rwlock_rdlock(&pool->lock);
+    xr_rwlock_rdlock(&pool->lock);
     XrString *found = xr_global_pool_lookup(pool, chars, length, hash);
-    pthread_rwlock_unlock(&pool->lock);
+    xr_rwlock_rdunlock(&pool->lock);
 
     if (found) {
         return found;
     }
 
     // Step 2: Write lock insert (double-check pattern)
-    pthread_rwlock_wrlock(&pool->lock);
+    xr_rwlock_wrlock(&pool->lock);
 
     // Check again (another thread may have inserted)
     found = xr_global_pool_lookup(pool, chars, length, hash);
     if (found) {
-        pthread_rwlock_unlock(&pool->lock);
+        xr_rwlock_wrunlock(&pool->lock);
         return found;
     }
 
     // Insert new string
     XrString *str = global_pool_insert_unlocked(pool, chars, length, hash);
-    pthread_rwlock_unlock(&pool->lock);
+    xr_rwlock_wrunlock(&pool->lock);
 
     // If global pool full, fallback to coroutine heap
     if (!str) {

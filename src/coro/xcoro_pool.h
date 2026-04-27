@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include "../base/xdefs.h"
 
 // Forward declaration
@@ -82,8 +82,8 @@ typedef struct XrCoroStructPool {
     _Atomic uint64_t free_alloc;   // Free list allocations
     _Atomic uint64_t total_free;   // Total frees
 
-    pthread_mutex_t grow_lock;  // Protects block-list growth only (low-frequency path)
-    bool initialized;           // Initialized flag
+    xr_mutex_t grow_lock;  // Protects block-list growth only (low-frequency path)
+    bool initialized;      // Initialized flag
 } XrCoroStructPool;
 
 // ========== Pool Lifecycle API ==========

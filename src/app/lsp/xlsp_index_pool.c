@@ -274,13 +274,13 @@ static void *worker_thread(void *arg) {
 
     while (atomic_load(&pool->running)) {
         // Wait for work
-        pthread_mutex_lock(&pool->work_mutex);
+        xr_mutex_lock(&pool->work_mutex);
         while (pool->work_head == NULL && atomic_load(&pool->running)) {
-            pthread_cond_wait(&pool->work_cond, &pool->work_mutex);
+            xr_cond_wait(&pool->work_cond, &pool->work_mutex);
         }
 
         if (!atomic_load(&pool->running)) {
-            pthread_mutex_unlock(&pool->work_mutex);
+            xr_mutex_unlock(&pool->work_mutex);
             break;
         }
 
@@ -293,7 +293,7 @@ static void *worker_thread(void *arg) {
             }
             pool->work_count--;
         }
-        pthread_mutex_unlock(&pool->work_mutex);
+        xr_mutex_unlock(&pool->work_mutex);
 
         if (!work)
             continue;
@@ -310,7 +310,7 @@ static void *worker_thread(void *arg) {
 
         // Submit result
         if (result) {
-            pthread_mutex_lock(&pool->result_mutex);
+            xr_mutex_lock(&pool->result_mutex);
             result->next = NULL;
             if (pool->result_tail) {
                 pool->result_tail->next = result;
@@ -319,7 +319,7 @@ static void *worker_thread(void *arg) {
             }
             pool->result_tail = result;
             pool->result_count++;
-            pthread_mutex_unlock(&pool->result_mutex);
+            xr_mutex_unlock(&pool->result_mutex);
 
             // Notify main thread
             char byte = 1;
@@ -362,9 +362,9 @@ XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
     fcntl(pool->notify_fd[0], F_SETFL, flags | O_NONBLOCK);
 
     // Initialize mutexes and condition variables
-    pthread_mutex_init(&pool->work_mutex, NULL);
-    pthread_cond_init(&pool->work_cond, NULL);
-    pthread_mutex_init(&pool->result_mutex, NULL);
+    xr_mutex_init(&pool->work_mutex);
+    xr_cond_init(&pool->work_cond);
+    xr_mutex_init(&pool->result_mutex);
 
     atomic_store(&pool->running, true);
 
@@ -375,7 +375,7 @@ XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
         pool->workers[i].pool = pool;
         pool->workers[i].isolate = NULL;
 
-        if (pthread_create(&pool->workers[i].thread, NULL, worker_thread, &pool->workers[i]) != 0) {
+        if (!xr_thread_create(&pool->workers[i].thread, worker_thread, &pool->workers[i])) {
             lsp_log("[IndexPool] Failed to create worker %d", i);
             pool->worker_count = i;
             break;
@@ -394,13 +394,13 @@ void xlsp_index_pool_free(XrLspIndexPool *pool) {
     atomic_store(&pool->running, false);
 
     // Wake all workers
-    pthread_mutex_lock(&pool->work_mutex);
-    pthread_cond_broadcast(&pool->work_cond);
-    pthread_mutex_unlock(&pool->work_mutex);
+    xr_mutex_lock(&pool->work_mutex);
+    xr_cond_broadcast(&pool->work_cond);
+    xr_mutex_unlock(&pool->work_mutex);
 
     // Wait for workers to finish
     for (int i = 0; i < pool->worker_count; i++) {
-        pthread_join(pool->workers[i].thread, NULL);
+        xr_thread_join(pool->workers[i].thread, NULL);
     }
 
     // Free remaining work items
@@ -419,9 +419,9 @@ void xlsp_index_pool_free(XrLspIndexPool *pool) {
     // Cleanup
     close(pool->notify_fd[0]);
     close(pool->notify_fd[1]);
-    pthread_mutex_destroy(&pool->work_mutex);
-    pthread_cond_destroy(&pool->work_cond);
-    pthread_mutex_destroy(&pool->result_mutex);
+    xr_mutex_destroy(&pool->work_mutex);
+    xr_cond_destroy(&pool->work_cond);
+    xr_mutex_destroy(&pool->result_mutex);
 
     xr_free(pool);
     lsp_log("[IndexPool] Destroyed");
@@ -444,7 +444,7 @@ void xlsp_index_pool_submit(XrLspIndexPool *pool, const char *path, const char *
         work->uri = xr_strdup(uri_buf);
     }
 
-    pthread_mutex_lock(&pool->work_mutex);
+    xr_mutex_lock(&pool->work_mutex);
     work->next = NULL;
     if (pool->work_tail) {
         pool->work_tail->next = work;
@@ -453,8 +453,8 @@ void xlsp_index_pool_submit(XrLspIndexPool *pool, const char *path, const char *
     }
     pool->work_tail = work;
     pool->work_count++;
-    pthread_cond_signal(&pool->work_cond);
-    pthread_mutex_unlock(&pool->work_mutex);
+    xr_cond_signal(&pool->work_cond);
+    xr_mutex_unlock(&pool->work_mutex);
 
     atomic_fetch_add(&pool->files_submitted, 1);
 }
@@ -463,7 +463,7 @@ void xlsp_index_pool_submit_batch(XrLspIndexPool *pool, char **paths, int count)
     if (!pool || !paths || count <= 0)
         return;
 
-    pthread_mutex_lock(&pool->work_mutex);
+    xr_mutex_lock(&pool->work_mutex);
 
     for (int i = 0; i < count; i++) {
         if (!paths[i])
@@ -489,8 +489,8 @@ void xlsp_index_pool_submit_batch(XrLspIndexPool *pool, char **paths, int count)
     }
 
     // Wake all workers
-    pthread_cond_broadcast(&pool->work_cond);
-    pthread_mutex_unlock(&pool->work_mutex);
+    xr_cond_broadcast(&pool->work_cond);
+    xr_mutex_unlock(&pool->work_mutex);
 
     atomic_fetch_add(&pool->files_submitted, count);
 }
@@ -510,12 +510,12 @@ XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *pool) {
     }
 
     // Get all results
-    pthread_mutex_lock(&pool->result_mutex);
+    xr_mutex_lock(&pool->result_mutex);
     XrLspIndexResult *results = pool->result_head;
     pool->result_head = NULL;
     pool->result_tail = NULL;
     pool->result_count = 0;
-    pthread_mutex_unlock(&pool->result_mutex);
+    xr_mutex_unlock(&pool->result_mutex);
 
     return results;
 }

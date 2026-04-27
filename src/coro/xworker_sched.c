@@ -629,13 +629,13 @@ static void worker_park(XrWorker *worker) {
 static void worker_bind_cpu(XrWorker *worker) {
 #ifdef __APPLE__
     thread_affinity_policy_data_t policy = {worker->p.id};
-    thread_policy_set(pthread_mach_thread_np(pthread_self()), THREAD_AFFINITY_POLICY,
+    thread_policy_set(pthread_mach_thread_np(xr_thread_self()), THREAD_AFFINITY_POLICY,
                       (thread_policy_t) &policy, 1);
 #elif defined(__linux__)
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(worker->p.id % sysconf(_SC_NPROCESSORS_ONLN), &cpuset);
-    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    pthread_setaffinity_np(xr_thread_self(), sizeof(cpu_set_t), &cpuset);
 #elif defined(_WIN32)
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);

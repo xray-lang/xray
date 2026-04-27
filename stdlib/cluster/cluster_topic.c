@@ -368,11 +368,11 @@ XR_FUNC void xr_cluster_topics_destroy(XrCluster *c) {
      * tear the tree down. Doing it in two passes keeps the delicate
      * re-entrancy rules of xr_channel_close (can wake other coros)
      * away from the allocator churn. */
-    xr_mutex_lock(&c->topics_lock);
+    xr_amutex_lock(&c->topics_lock);
     XrTopicTrieNode *root = c->topic_root;
     c->topic_root = NULL;
     c->topic_sub_count = 0;
-    xr_mutex_unlock(&c->topics_lock);
+    xr_amutex_unlock(&c->topics_lock);
 
     if (root) {
         /*
@@ -482,11 +482,11 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X, const char *pattern
     }
     sub->notify_ch = ch;
 
-    xr_mutex_lock(&c->topics_lock);
+    xr_amutex_lock(&c->topics_lock);
     int rc = trie_insert(c->topic_root, sub->pattern, sub);
     if (rc == 0)
         c->topic_sub_count++;
-    xr_mutex_unlock(&c->topics_lock);
+    xr_amutex_unlock(&c->topics_lock);
 
     if (rc != 0) {
         /* Malformed pattern (">" in the middle) or OOM — back out the
@@ -503,7 +503,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X, const char *pattern
     payload[0] = name_len;
     memcpy(payload + 1, pattern, name_len);
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
@@ -511,7 +511,7 @@ struct XrChannel *xr_cluster_topic_subscribe(XrayIsolate *X, const char *pattern
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 
     return ch;
 }
@@ -530,7 +530,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
      * hold live references to channels for different subscribers of
      * the same pattern. */
     XrTopicSubscription *found = NULL;
-    xr_mutex_lock(&c->topics_lock);
+    xr_amutex_lock(&c->topics_lock);
     /* Iterate the pattern's terminator node to find the head sub with
      * any non-NULL channel, then remove it. trie_remove already matches
      * by channel identity, so walk exact_subs via a dummy lookup: we
@@ -576,7 +576,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
     }
     if (found)
         c->topic_sub_count--;
-    xr_mutex_unlock(&c->topics_lock);
+    xr_amutex_unlock(&c->topics_lock);
 
     if (found) {
         if (found->notify_ch)
@@ -590,7 +590,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
     payload[0] = name_len;
     memcpy(payload + 1, pattern, name_len);
 
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node->state == XR_NODE_CONNECTED) {
@@ -598,7 +598,7 @@ void xr_cluster_topic_unsubscribe(XrCluster *c, const char *pattern) {
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 }
 
 /* ========== Deliver & Publish ========== */
@@ -634,9 +634,9 @@ void xr_cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue val
         .grown_alloc = false,
     };
 
-    xr_mutex_lock(&c->topics_lock);
+    xr_amutex_lock(&c->topics_lock);
     trie_match(c->topic_root, topic, &e);
-    xr_mutex_unlock(&c->topics_lock);
+    xr_amutex_unlock(&c->topics_lock);
 
     for (int i = 0; i < e.count; i++) {
         // Channel may have been closed by another thread between
@@ -700,7 +700,7 @@ static int topic_build_publish_frame(XrayIsolate *X, const char *topic, const Xr
  */
 static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const uint8_t *payload,
                                   uint32_t payload_len) {
-    xr_mutex_lock(&c->nodes_lock);
+    xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node != exclude && node->state == XR_NODE_CONNECTED) {
@@ -708,7 +708,7 @@ static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const ui
         }
         node = node->next;
     }
-    xr_mutex_unlock(&c->nodes_lock);
+    xr_amutex_unlock(&c->nodes_lock);
 }
 
 void xr_cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char *topic,

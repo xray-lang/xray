@@ -180,9 +180,9 @@ void xr_startm(struct XrProc *p, bool spinning) {
             return;
         }
         // No live thread: fall through to create one
-        pthread_t t;
-        pthread_create(&t, NULL, xr_handoff_thread_entry, m);
-        pthread_detach(t);
+        xr_thread_t t;
+        xr_thread_create(&t, xr_handoff_thread_entry, m);
+        xr_thread_detach(t);
         return;
     }
 
@@ -197,7 +197,7 @@ void xr_startm(struct XrProc *p, bool spinning) {
     atomic_store(&m->state, M_RUNNING);
 
     // Start new handoff thread
-    pthread_t t;
-    pthread_create(&t, NULL, xr_handoff_thread_entry, m);
-    pthread_detach(t);
+    xr_thread_t t;
+    xr_thread_create(&t, xr_handoff_thread_entry, m);
+    xr_thread_detach(t);
 }

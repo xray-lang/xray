@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include <unistd.h>
 #include "../base/xmalloc.h"
 
@@ -31,7 +31,7 @@ static XR_THREAD_LOCAL XrayIsolate *tls_monitor_isolate = NULL;
 static XR_THREAD_LOCAL int tls_watch_interval_ms = 0;
 static XR_THREAD_LOCAL int tls_http_port = 0;
 static XR_THREAD_LOCAL volatile bool tls_monitor_running = false;
-static XR_THREAD_LOCAL pthread_t tls_watch_thread;
+static XR_THREAD_LOCAL xr_thread_t tls_watch_thread;
 
 // ========== ANSI Escape Sequences ==========
 
@@ -214,7 +214,7 @@ void xr_coro_monitor_start(XrayIsolate *X, int watch_interval_ms, int http_port)
         ctx->interval_ms = watch_interval_ms;
         ctx->running = &tls_monitor_running;
 
-        pthread_create(&tls_watch_thread, NULL, watch_thread_func, ctx);
+        xr_thread_create(&tls_watch_thread, watch_thread_func, ctx);
     }
 
     // HTTP monitor (hint to user, needs script support)
@@ -232,6 +232,6 @@ void xr_coro_monitor_start(XrayIsolate *X, int watch_interval_ms, int http_port)
 static XR_UNUSED void xr_coro_monitor_stop(void) {
     if (tls_monitor_running) {
         tls_monitor_running = false;
-        pthread_join(tls_watch_thread, NULL);
+        xr_thread_join(tls_watch_thread, NULL);
     }
 }

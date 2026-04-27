@@ -199,22 +199,20 @@ static void *bg_worker_main(void *arg) {
     uint32_t wid = wa->worker_id;
     xr_free(wa);  // heap-allocated by init, owned by this thread
 
-#if defined(__APPLE__)
-    // Set thread name for debugging (macOS: can only set own name)
+    // Set thread name for debugging.
     char tname[32];
     snprintf(tname, sizeof(tname), "jit-bg-%u", wid);
-    pthread_setname_np(tname);
-#endif
+    xr_thread_set_name(xr_thread_self(), tname);
 
     while (!atomic_load_explicit(&q->shutdown, memory_order_acquire)) {
         // Wait for tasks
-        pthread_mutex_lock(&q->mutex);
+        xr_mutex_lock(&q->mutex);
         while (atomic_load_explicit(&q->head, memory_order_acquire) ==
                    atomic_load_explicit(&q->tail, memory_order_acquire) &&
                !atomic_load_explicit(&q->shutdown, memory_order_acquire)) {
-            pthread_cond_wait(&q->cond, &q->mutex);
+            xr_cond_wait(&q->cond, &q->mutex);
         }
-        pthread_mutex_unlock(&q->mutex);
+        xr_mutex_unlock(&q->mutex);
 
         if (atomic_load_explicit(&q->shutdown, memory_order_acquire))
             break;
@@ -253,8 +251,8 @@ void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
     atomic_store(&q->tail, 0);
     atomic_store(&q->shutdown, false);
 
-    pthread_mutex_init(&q->mutex, NULL);
-    pthread_cond_init(&q->cond, NULL);
+    xr_mutex_init(&q->mutex);
+    xr_cond_init(&q->cond);
 
     // Determine worker count: min(XJIT_MAX_WORKERS, nCPU - 1), at least 1
     long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
@@ -279,12 +277,11 @@ void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
             break;
         wa->queue = q;
         wa->worker_id = i;
-        int err = pthread_create(&q->workers[i], NULL, bg_worker_main, wa);
-        if (err == 0) {
+        if (xr_thread_create(&q->workers[i], bg_worker_main, wa)) {
             q->n_workers++;
         } else {
             xr_free(wa);
-            xr_log_warning("jit-bg", "failed to create worker %u: %d", i, err);
+            xr_log_warning("jit-bg", "failed to create worker %u", i);
             break;
         }
     }
@@ -303,13 +300,13 @@ void xjit_queue_destroy(XirCompileQueue *q) {
     atomic_store_explicit(&q->shutdown, true, memory_order_release);
 
     // Wake up all blocked workers
-    pthread_mutex_lock(&q->mutex);
-    pthread_cond_broadcast(&q->cond);
-    pthread_mutex_unlock(&q->mutex);
+    xr_mutex_lock(&q->mutex);
+    xr_cond_broadcast(&q->cond);
+    xr_mutex_unlock(&q->mutex);
 
     // Join all worker threads
     for (uint32_t i = 0; i < q->n_workers; i++) {
-        pthread_join(q->workers[i], NULL);
+        xr_thread_join(q->workers[i], NULL);
     }
     q->n_workers = 0;
     q->started = false;
@@ -319,8 +316,8 @@ void xjit_queue_destroy(XirCompileQueue *q) {
         xir_code_alloc_destroy(&q->worker_code_alloc[i]);
     }
 
-    pthread_mutex_destroy(&q->mutex);
-    pthread_cond_destroy(&q->cond);
+    xr_mutex_destroy(&q->mutex);
+    xr_cond_destroy(&q->cond);
 }
 
 bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task) {
@@ -340,9 +337,9 @@ bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task) {
     atomic_store_explicit(&q->head, head + 1, memory_order_release);
 
     // Wake one worker (or broadcast if queue was empty — multiple items queued rapidly)
-    pthread_mutex_lock(&q->mutex);
-    pthread_cond_signal(&q->cond);
-    pthread_mutex_unlock(&q->mutex);
+    xr_mutex_lock(&q->mutex);
+    xr_cond_signal(&q->cond);
+    xr_mutex_unlock(&q->mutex);
 
     return true;
 }

@@ -27,8 +27,8 @@ static void queue_init(XrLspTaskQueue *q) {
     stub->next = NULL;
     atomic_store(&q->head, stub);
     q->tail = stub;
-    pthread_mutex_init(&q->consumer_lock, NULL);
-    pthread_rwlock_init(&q->traverse_lock, NULL);
+    xr_mutex_init(&q->consumer_lock);
+    xr_rwlock_init(&q->traverse_lock);
 }
 
 static void queue_destroy(XrLspTaskQueue *q) {
@@ -39,8 +39,8 @@ static void queue_destroy(XrLspTaskQueue *q) {
         xr_free(node);
         node = next;
     }
-    pthread_mutex_destroy(&q->consumer_lock);
-    pthread_rwlock_destroy(&q->traverse_lock);
+    xr_mutex_destroy(&q->consumer_lock);
+    xr_rwlock_destroy(&q->traverse_lock);
 }
 
 // Push (thread-safe, lock-free)
@@ -52,7 +52,7 @@ static void queue_push(XrLspTaskQueue *q, XrLspTask *task) {
 
 // Pop (single consumer, needs lock if multiple consumers)
 static XrLspTask *queue_pop(XrLspTaskQueue *q) {
-    pthread_mutex_lock(&q->consumer_lock);
+    xr_mutex_lock(&q->consumer_lock);
 
     XrLspTask *tail = q->tail;
     XrLspTask *next = tail->next;
@@ -74,11 +74,11 @@ static XrLspTask *queue_pop(XrLspTaskQueue *q) {
         next->request_id = 0;
         q->tail = next;
 
-        pthread_mutex_unlock(&q->consumer_lock);
+        xr_mutex_unlock(&q->consumer_lock);
         return result;
     }
 
-    pthread_mutex_unlock(&q->consumer_lock);
+    xr_mutex_unlock(&q->consumer_lock);
     return NULL;
 }
 
@@ -88,8 +88,8 @@ static int queue_cancel_if(XrLspTaskQueue *q, bool (*filter)(XrLspTask *task, vo
                            void *ctx) {
     int cancelled = 0;
 
-    pthread_rwlock_wrlock(&q->traverse_lock);
-    pthread_mutex_lock(&q->consumer_lock);
+    xr_rwlock_wrlock(&q->traverse_lock);
+    xr_mutex_lock(&q->consumer_lock);
 
     // Traverse from tail (oldest) to head
     XrLspTask *node = q->tail;
@@ -108,8 +108,8 @@ static int queue_cancel_if(XrLspTaskQueue *q, bool (*filter)(XrLspTask *task, vo
         node = next;
     }
 
-    pthread_mutex_unlock(&q->consumer_lock);
-    pthread_rwlock_unlock(&q->traverse_lock);
+    xr_mutex_unlock(&q->consumer_lock);
+    xr_rwlock_wrunlock(&q->traverse_lock);
 
     return cancelled;
 }
@@ -130,11 +130,11 @@ static void *worker_thread(void *arg) {
 
     while (atomic_load(&async->running)) {
         // Wait for tasks
-        pthread_mutex_lock(&async->pending_mutex);
+        xr_mutex_lock(&async->pending_mutex);
         while (atomic_load(&async->pending_count) == 0 && atomic_load(&async->running)) {
-            pthread_cond_wait(&async->pending_cond, &async->pending_mutex);
+            xr_cond_wait(&async->pending_cond, &async->pending_mutex);
         }
-        pthread_mutex_unlock(&async->pending_mutex);
+        xr_mutex_unlock(&async->pending_mutex);
 
         if (!atomic_load(&async->running))
             break;
@@ -177,9 +177,9 @@ static void *worker_thread(void *arg) {
 
         // Set as current task (for cancellation while running)
         // Protected by mutex to prevent TOCTOU race in cancel functions
-        pthread_mutex_lock(&async->current_task_mutex);
+        xr_mutex_lock(&async->current_task_mutex);
         async->current_task = task;
-        pthread_mutex_unlock(&async->current_task_mutex);
+        xr_mutex_unlock(&async->current_task_mutex);
 
         // Execute task
         if (task->execute) {
@@ -188,9 +188,9 @@ static void *worker_thread(void *arg) {
 
         // Clear current task before pushing to completed queue
         // This ensures cancel functions won't access a task being freed
-        pthread_mutex_lock(&async->current_task_mutex);
+        xr_mutex_lock(&async->current_task_mutex);
         async->current_task = NULL;
-        pthread_mutex_unlock(&async->current_task_mutex);
+        xr_mutex_unlock(&async->current_task_mutex);
 
         // Check if cancelled during execution
         if (atomic_load(&task->cancel_requested)) {
@@ -239,9 +239,9 @@ XrLspAsync *xlsp_async_new(void) {
     queue_init(&async->completed);
 
     // Initialize synchronization
-    pthread_mutex_init(&async->pending_mutex, NULL);
-    pthread_cond_init(&async->pending_cond, NULL);
-    pthread_mutex_init(&async->current_task_mutex, NULL);
+    xr_mutex_init(&async->pending_mutex);
+    xr_cond_init(&async->pending_cond);
+    xr_mutex_init(&async->current_task_mutex);
 
     // Initialize task ID generator (start from 1)
     atomic_store(&async->next_task_id, 1);
@@ -249,13 +249,13 @@ XrLspAsync *xlsp_async_new(void) {
 
     // Start worker thread
     atomic_store(&async->running, true);
-    if (pthread_create(&async->worker, NULL, worker_thread, async) != 0) {
+    if (!xr_thread_create(&async->worker, worker_thread, async)) {
         close(async->notify_fd[0]);
         close(async->notify_fd[1]);
         queue_destroy(&async->pending);
         queue_destroy(&async->completed);
-        pthread_mutex_destroy(&async->pending_mutex);
-        pthread_cond_destroy(&async->pending_cond);
+        xr_mutex_destroy(&async->pending_mutex);
+        xr_cond_destroy(&async->pending_cond);
         xr_free(async);
         return NULL;
     }
@@ -271,12 +271,12 @@ void xlsp_async_free(XrLspAsync *async) {
     atomic_store(&async->running, false);
 
     // Wake worker thread
-    pthread_mutex_lock(&async->pending_mutex);
-    pthread_cond_signal(&async->pending_cond);
-    pthread_mutex_unlock(&async->pending_mutex);
+    xr_mutex_lock(&async->pending_mutex);
+    xr_cond_signal(&async->pending_cond);
+    xr_mutex_unlock(&async->pending_mutex);
 
     // Wait for worker to exit
-    pthread_join(async->worker, NULL);
+    xr_thread_join(async->worker, NULL);
 
     // Cleanup
     close(async->notify_fd[0]);
@@ -300,9 +300,9 @@ void xlsp_async_free(XrLspAsync *async) {
 
     queue_destroy(&async->pending);
     queue_destroy(&async->completed);
-    pthread_mutex_destroy(&async->pending_mutex);
-    pthread_cond_destroy(&async->pending_cond);
-    pthread_mutex_destroy(&async->current_task_mutex);
+    xr_mutex_destroy(&async->pending_mutex);
+    xr_cond_destroy(&async->pending_cond);
+    xr_mutex_destroy(&async->current_task_mutex);
 
     xr_free(async);
 }
@@ -322,9 +322,9 @@ uint64_t xlsp_async_submit(XrLspAsync *async, XrLspTask *task) {
     atomic_fetch_add(&async->total_tasks, 1);
 
     // Wake worker thread
-    pthread_mutex_lock(&async->pending_mutex);
-    pthread_cond_signal(&async->pending_cond);
-    pthread_mutex_unlock(&async->pending_mutex);
+    xr_mutex_lock(&async->pending_mutex);
+    xr_cond_signal(&async->pending_cond);
+    xr_mutex_unlock(&async->pending_mutex);
 
     return task->task_id;
 }
@@ -438,14 +438,14 @@ bool xlsp_async_cancel_task(XrLspAsync *async, uint64_t task_id) {
 
     // First, check if this is the currently running task
     // Use mutex to prevent TOCTOU race with worker thread
-    pthread_mutex_lock(&async->current_task_mutex);
+    xr_mutex_lock(&async->current_task_mutex);
     XrLspTask *current = async->current_task;
     if (current && current->task_id == task_id) {
         atomic_store(&current->cancel_requested, true);
-        pthread_mutex_unlock(&async->current_task_mutex);
+        xr_mutex_unlock(&async->current_task_mutex);
         return true;
     }
-    pthread_mutex_unlock(&async->current_task_mutex);
+    xr_mutex_unlock(&async->current_task_mutex);
 
     // Try to cancel in pending queue
     int cancelled = queue_cancel_if(&async->pending, filter_by_task_id, &ctx);
@@ -461,13 +461,13 @@ int xlsp_async_cancel_request(XrLspAsync *async, int64_t request_id) {
     int cancelled = 0;
 
     // Check currently running task with mutex protection
-    pthread_mutex_lock(&async->current_task_mutex);
+    xr_mutex_lock(&async->current_task_mutex);
     XrLspTask *current = async->current_task;
     if (current && current->request_id == request_id) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
-    pthread_mutex_unlock(&async->current_task_mutex);
+    xr_mutex_unlock(&async->current_task_mutex);
 
     // Cancel in pending queue
     cancelled += queue_cancel_if(&async->pending, filter_by_request_id, &ctx);
@@ -483,13 +483,13 @@ int xlsp_async_cancel_type(XrLspAsync *async, XrLspTaskType type) {
     int cancelled = 0;
 
     // Check currently running task with mutex protection
-    pthread_mutex_lock(&async->current_task_mutex);
+    xr_mutex_lock(&async->current_task_mutex);
     XrLspTask *current = async->current_task;
     if (current && current->type == type) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
-    pthread_mutex_unlock(&async->current_task_mutex);
+    xr_mutex_unlock(&async->current_task_mutex);
 
     // Cancel in pending queue
     cancelled += queue_cancel_if(&async->pending, filter_by_type, &ctx);
@@ -504,13 +504,13 @@ int xlsp_async_cancel(XrLspAsync *async, bool (*filter)(XrLspTask *task, void *c
     int cancelled = 0;
 
     // Check currently running task with mutex protection
-    pthread_mutex_lock(&async->current_task_mutex);
+    xr_mutex_lock(&async->current_task_mutex);
     XrLspTask *current = async->current_task;
     if (current && filter(current, ctx)) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
-    pthread_mutex_unlock(&async->current_task_mutex);
+    xr_mutex_unlock(&async->current_task_mutex);
 
     // Cancel in pending queue
     cancelled += queue_cancel_if(&async->pending, filter, ctx);
@@ -525,13 +525,13 @@ int xlsp_async_cancel_all(XrLspAsync *async) {
     int cancelled = 0;
 
     // Mark currently running task for cancellation with mutex protection
-    pthread_mutex_lock(&async->current_task_mutex);
+    xr_mutex_lock(&async->current_task_mutex);
     XrLspTask *current = async->current_task;
     if (current) {
         atomic_store(&current->cancel_requested, true);
         cancelled++;
     }
-    pthread_mutex_unlock(&async->current_task_mutex);
+    xr_mutex_unlock(&async->current_task_mutex);
 
     // Cancel all in pending queue
     cancelled += queue_cancel_if(&async->pending, filter_all, NULL);

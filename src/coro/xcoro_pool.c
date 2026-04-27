@@ -122,12 +122,7 @@ bool xr_coro_pool_init(XrCoroStructPool *pool, size_t init_size) {
     atomic_store(&pool->free_list, (XrCoroutine *) NULL);
 
     // Only grow_lock remains — protects block-list expansion (low-frequency).
-    if (pthread_mutex_init(&pool->grow_lock, NULL) != 0) {
-        xr_coro_pool_block_destroy(pool->blocks);
-        pool->blocks = NULL;
-        pool->current_block = NULL;
-        return false;
-    }
+    xr_mutex_init(&pool->grow_lock);
 
     // Initialize stats
     atomic_store_explicit(&pool->total_alloc, 0, memory_order_relaxed);
@@ -153,7 +148,7 @@ void xr_coro_pool_destroy(XrCoroStructPool *pool) {
     }
 
     // Destroy lock
-    pthread_mutex_destroy(&pool->grow_lock);
+    xr_mutex_destroy(&pool->grow_lock);
 
     pool->initialized = false;
 }
@@ -200,7 +195,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
     }
 
     // Strategy 3: expand pool
-    pthread_mutex_lock(&pool->grow_lock);
+    xr_mutex_lock(&pool->grow_lock);
 
     // Double check: other thread may have expanded
     block = pool->current_block;
@@ -208,7 +203,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
         uint32_t global_idx = atomic_fetch_add(&pool->alloc_idx, 1);
         uint32_t local_idx = global_idx - block->base_idx;
         if (local_idx < block->capacity) {
-            pthread_mutex_unlock(&pool->grow_lock);
+            xr_mutex_unlock(&pool->grow_lock);
 
             coro = &block->coros[local_idx];
             atomic_fetch_add_explicit(&pool->fast_alloc, 1, memory_order_relaxed);
@@ -220,7 +215,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
 
     // Actually need to expand
     if (!xr_coro_pool_grow(pool)) {
-        pthread_mutex_unlock(&pool->grow_lock);
+        xr_mutex_unlock(&pool->grow_lock);
 
         // Expansion failed, fallback to malloc
         coro = xr_calloc(1, sizeof(XrCoroutine));
@@ -233,7 +228,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
     // Allocate from new block
     block = pool->current_block;
     uint32_t global_idx2 = atomic_fetch_add(&pool->alloc_idx, 1);
-    pthread_mutex_unlock(&pool->grow_lock);
+    xr_mutex_unlock(&pool->grow_lock);
 
     uint32_t local_idx2 = global_idx2 - block->base_idx;
     if (local_idx2 < block->capacity) {

@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 
 // Thread-local: current Worker and Machine pointers
 XR_THREAD_LOCAL XrWorker *tls_current_worker = NULL;
@@ -278,7 +278,7 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     if (!runtime)
         return;
 
-    // Stop running (internally calls pthread_join to wait for all Workers to exit)
+    // Stop running (internally calls xr_thread_join to wait for all Workers to exit)
     xr_runtime_stop(runtime);
 
     // Leak detection: check for unreleased coroutines after all workers stopped
@@ -392,7 +392,7 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
     }
 
     // Start sysmon thread (heartbeat monitoring + stuck detection)
-    pthread_create(&runtime->sysmon_thread, NULL, sysmon_thread_func, runtime);
+    xr_thread_create(&runtime->sysmon_thread, sysmon_thread_func, runtime);
 
     // Start async pool threads
     if (runtime->async_pool) {
@@ -401,15 +401,10 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
 
     // Worker threads need larger stack for nested run() calls (e.g. module import)
     // and ASan instrumentation which greatly inflates stack frame sizes.
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, XR_WORKER_STACK_BYTES);
-
-    // Create Worker 1~N threads (Worker 0 runs on main thread)
     for (int i = 1; i < runtime->worker_count; i++) {
-        pthread_create(&runtime->workers[i].m->thread, &attr, worker_loop, &runtime->workers[i]);
+        xr_thread_create_ex(&runtime->workers[i].m->thread, worker_loop, &runtime->workers[i],
+                            XR_WORKER_STACK_BYTES);
     }
-    pthread_attr_destroy(&attr);
 
     // Wait for Worker 1..N to become ready.
     // Futex-based wait (1 ms timeout guards against missed wake).
@@ -438,7 +433,7 @@ void xr_runtime_stop(XrRuntime *runtime) {
     if (atomic_load(&runtime->netpoll.inited)) {
         xr_netpoll_break(&runtime->netpoll);
     }
-    pthread_join(runtime->sysmon_thread, NULL);
+    xr_thread_join(runtime->sysmon_thread, NULL);
 
     // Wake all Workers to check running flag and exit
     for (int i = 0; i < runtime->worker_count; i++) {
@@ -465,7 +460,7 @@ void xr_runtime_stop(XrRuntime *runtime) {
     for (int i = 1; i < runtime->worker_count; i++) {
         XrMachine *wm = runtime->workers[i].m;
         if (wm)
-            pthread_join(wm->thread, NULL);
+            xr_thread_join(wm->thread, NULL);
     }
 }
 
