@@ -23,7 +23,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "../../base/xpoll.h"
+#include "../../os/os_poll.h"
 #include "../../base/xdefs.h"
 
 // ============================================================================

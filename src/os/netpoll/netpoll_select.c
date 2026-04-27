@@ -17,7 +17,7 @@
 #if !defined(XR_OS_MACOS) && !defined(XR_OS_LINUX) && !defined(XR_OS_WINDOWS) &&                   \
     defined(XR_NETPOLL_INCLUDED)
 
-#include "../base/xchecks.h"
+#include "../../base/xchecks.h"
 #include <sys/select.h>
 #include <errno.h>
 

@@ -29,7 +29,7 @@
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING) && defined(XR_NETPOLL_INCLUDED)
 
-#include "../base/xchecks.h"
+#include "../../base/xchecks.h"
 #include <liburing.h>
 #include <sys/eventfd.h>
 #include <errno.h>

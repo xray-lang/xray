@@ -28,7 +28,7 @@
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../base/xhash.h"
 #include "../../runtime/object/xutf8.h"
-#include "../../base/xpoll.h"  // Cross-platform poll abstraction
+#include "../../os/os_poll.h"  // Cross-platform poll abstraction
 #include "xray_version.h"
 #include <stdlib.h>
 #include <string.h>

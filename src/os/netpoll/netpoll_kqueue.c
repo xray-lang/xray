@@ -16,7 +16,7 @@
 
 #if defined(XR_OS_MACOS) && defined(XR_NETPOLL_INCLUDED)
 
-#include "../base/xchecks.h"
+#include "../../base/xchecks.h"
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>

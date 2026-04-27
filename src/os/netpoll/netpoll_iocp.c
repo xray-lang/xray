@@ -16,7 +16,7 @@
 // Only compile when included by xnetpoll.c
 #if defined(XR_OS_WINDOWS) && defined(XR_NETPOLL_INCLUDED)
 
-#include "../base/xchecks.h"
+#include "../../base/xchecks.h"
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>

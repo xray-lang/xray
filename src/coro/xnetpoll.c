@@ -298,11 +298,11 @@ static void close_wakeup_pipe(int pipe_fds[2]) {
 #define XR_NETPOLL_INCLUDED
 
 #ifdef XR_OS_MACOS
-#include "xnetpoll_kqueue.c"
+#include "../os/netpoll/netpoll_kqueue.c"
 #elif defined(XR_OS_LINUX)
-#include "xnetpoll_epoll.c"
+#include "../os/netpoll/netpoll_epoll.c"
 #if defined(XR_HAS_IO_URING)
-#include "xnetpoll_iouring.c"
+#include "../os/netpoll/netpoll_iouring.c"
 #endif
 #endif
 
