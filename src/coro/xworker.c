@@ -37,9 +37,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../os/os_thread.h"
-#ifndef XR_OS_WINDOWS
-#include <unistd.h>  // sysconf for CPU-count fallback
-#endif
 
 // Thread-local: current Worker and Machine pointers
 XR_THREAD_LOCAL XrWorker *tls_current_worker = NULL;
@@ -184,14 +181,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
         if (env && atoi(env) > 0) {
             num_workers = atoi(env);
         } else {
-            // Default to CPU core count
-#ifdef XR_OS_WINDOWS
-            SYSTEM_INFO sysinfo;
-            GetSystemInfo(&sysinfo);
-            num_workers = (int) sysinfo.dwNumberOfProcessors;
-#else
-            num_workers = (int) sysconf(_SC_NPROCESSORS_ONLN);
-#endif
+            // Default to CPU core count.
+            num_workers = (int) xr_os_cpu_count();
             if (num_workers <= 0)
                 num_workers = 1;
         }

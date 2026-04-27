@@ -117,6 +117,24 @@ void xr_thread_sleep_ms(unsigned int ms) {
     Sleep((DWORD) ms);
 }
 
+unsigned int xr_os_cpu_count(void) {
+    static unsigned int cached = 0;
+    if (cached != 0) {
+        return cached;
+    }
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    cached = (si.dwNumberOfProcessors > 0) ? (unsigned int) si.dwNumberOfProcessors : 1u;
+    return cached;
+}
+
+int xr_thread_pin_to_cpu(unsigned int cpu_index) {
+    unsigned int n = xr_os_cpu_count();
+    DWORD_PTR mask = ((DWORD_PTR) 1) << (cpu_index % n);
+    DWORD_PTR prev = SetThreadAffinityMask(GetCurrentThread(), mask);
+    return prev != 0 ? 0 : -1;
+}
+
 // === Mutex ===
 
 void xr_mutex_init(xr_mutex_t *m) {

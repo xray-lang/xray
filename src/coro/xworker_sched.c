@@ -29,13 +29,6 @@
 #include "xsched_trace.h"
 #include "../os/os_thread.h"
 #include <time.h>
-#ifdef XR_OS_MACOS
-#include <mach/mach.h>
-#elif defined(XR_OS_WINDOWS)
-#include <windows.h>
-#elif defined(XR_OS_LINUX)
-#include <unistd.h>
-#endif
 
 // ========== Lock-free Idle Worker Stack ==========
 //
@@ -625,25 +618,9 @@ static void worker_park(XrWorker *worker) {
 
 // ========== Worker Main Loop Helpers ==========
 
-// Set CPU affinity for the worker's thread (best effort; advisory on mac).
+// Set CPU affinity for the worker's thread (best effort; advisory on macOS).
 static void worker_bind_cpu(XrWorker *worker) {
-#ifdef XR_OS_MACOS
-    thread_affinity_policy_data_t policy = {worker->p.id};
-    thread_policy_set(pthread_mach_thread_np(xr_thread_self()), THREAD_AFFINITY_POLICY,
-                      (thread_policy_t) &policy, 1);
-#elif defined(XR_OS_LINUX)
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(worker->p.id % sysconf(_SC_NPROCESSORS_ONLN), &cpuset);
-    pthread_setaffinity_np(xr_thread_self(), sizeof(cpu_set_t), &cpuset);
-#elif defined(XR_OS_WINDOWS)
-    SYSTEM_INFO sysinfo;
-    GetSystemInfo(&sysinfo);
-    DWORD_PTR mask = 1ULL << (worker->p.id % sysinfo.dwNumberOfProcessors);
-    SetThreadAffinityMask(GetCurrentThread(), mask);
-#else
-    (void) worker;
-#endif
+    (void) xr_thread_pin_to_cpu((unsigned int) worker->p.id);
 }
 
 // Run one round of housekeeping when local queue is empty: poll sources

@@ -39,7 +39,7 @@
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
 #include <string.h>
-#include <unistd.h>  // sysconf(_SC_NPROCESSORS_ONLN)
+#include "../os/os_thread.h"
 
 /* ========== Worker context (passed via thread arg) ========== */
 
@@ -255,10 +255,8 @@ void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
     xr_cond_init(&q->cond);
 
     // Determine worker count: min(XJIT_MAX_WORKERS, nCPU - 1), at least 1
-    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
-    if (ncpu < 1)
-        ncpu = 1;
-    uint32_t nw = (uint32_t) (ncpu - 1);
+    unsigned int ncpu = xr_os_cpu_count();
+    uint32_t nw = (ncpu > 0) ? (uint32_t) (ncpu - 1) : 0;
     if (nw < 1)
         nw = 1;
     if (nw > XJIT_MAX_WORKERS)

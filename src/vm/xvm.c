@@ -57,7 +57,6 @@
 
 #include <math.h>
 #include <inttypes.h>
-#include <unistd.h>
 #include "../base/xarena.h"
 #include "../os/os_time.h"
 #include "../runtime/xstrbuf.h"
