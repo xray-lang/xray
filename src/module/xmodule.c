@@ -505,6 +505,13 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     if (module_name[0] == '/') {
         return xr_strdup(module_name);
     }
+#ifdef XR_OS_WINDOWS
+    if (((module_name[0] >= 'A' && module_name[0] <= 'Z') ||
+         (module_name[0] >= 'a' && module_name[0] <= 'z')) &&
+        module_name[1] == ':') {
+        return xr_strdup(module_name);
+    }
+#endif
 
     // Get current module directory (prefer path of currently executing module)
     char dir_buf[XR_PATH_MAX];
@@ -515,6 +522,11 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
         strncpy(dir_buf, xr_isolate_get_current_module(isolate)->path, sizeof(dir_buf) - 1);
         dir_buf[sizeof(dir_buf) - 1] = '\0';
         char *last_slash = strrchr(dir_buf, '/');
+#ifdef XR_OS_WINDOWS
+        char *last_bslash = strrchr(dir_buf, '\\');
+        if (!last_slash || (last_bslash && last_bslash > last_slash))
+            last_slash = last_bslash;
+#endif
         if (last_slash) {
             *last_slash = '\0';
             script_dir = dir_buf;
@@ -526,6 +538,11 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
         strncpy(dir_buf, xr_isolate_get_script_file(isolate), sizeof(dir_buf) - 1);
         dir_buf[sizeof(dir_buf) - 1] = '\0';
         char *last_slash = strrchr(dir_buf, '/');
+#ifdef XR_OS_WINDOWS
+        char *last_bslash = strrchr(dir_buf, '\\');
+        if (!last_slash || (last_bslash && last_bslash > last_slash))
+            last_slash = last_bslash;
+#endif
         if (last_slash) {
             *last_slash = '\0';
             script_dir = dir_buf;
@@ -535,7 +552,11 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     }
 
     // 2. Relative path: relative to current script directory
-    if (strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0) {
+    bool is_relative = strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0;
+#ifdef XR_OS_WINDOWS
+    is_relative = is_relative || strncmp(module_name, ".\\", 2) == 0 || strncmp(module_name, "..\\", 3) == 0;
+#endif
+    if (is_relative) {
         if (script_dir) {
             // Handle case with .xr extension
             const char *ext = strrchr(module_name, '.');
