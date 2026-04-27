@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../base/xthread.h"
-#include <unistd.h>
 #include "../base/xmalloc.h"
 
 // ========== Thread-Local State (per-Isolate monitor support) ==========
@@ -204,7 +203,7 @@ void xr_coro_monitor_start(XrayIsolate *X, int watch_interval_ms, int http_port)
         printf("╚══════════════════════════════════════════════════════════════╝\n");
         printf("\nWaiting 2 seconds before starting monitor...\n\n");
 
-        sleep(2);
+        xr_thread_sleep_ms(2000);
 
         tls_monitor_running = true;
 

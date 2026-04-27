@@ -57,7 +57,7 @@ typedef struct ParseRule {
     Precedence precedence;
 } ParseRule;
 
-XR_FUNC const ParseRule *xr_get_rule(TokenType type);
+XR_FUNC const ParseRule *xr_get_rule(XrTokenType type);
 
 /* ========== Arena-backed AST Allocation ==========
  *
@@ -87,9 +87,9 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s);
 /* ========== Token-Stream Helpers ========== */
 
 XR_FUNC void xr_parser_advance(Parser *parser);
-XR_FUNC int xr_parser_check(Parser *parser, TokenType type);
-XR_FUNC int xr_parser_match(Parser *parser, TokenType type);
-XR_FUNC void xr_parser_consume(Parser *parser, TokenType type, const char *message);
+XR_FUNC int xr_parser_check(Parser *parser, XrTokenType type);
+XR_FUNC int xr_parser_match(Parser *parser, XrTokenType type);
+XR_FUNC void xr_parser_consume(Parser *parser, XrTokenType type, const char *message);
 
 // Soft-keyword helpers: TK_NAME tokens whose lexeme equals the given string.
 XR_FUNC bool xr_parser_check_name(Parser *parser, const char *name);

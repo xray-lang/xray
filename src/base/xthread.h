@@ -153,6 +153,17 @@ static inline bool xr_thread_is_valid(xr_thread_t t) {
 // thread out-of-band.
 XR_FUNC void xr_thread_set_name(xr_thread_t t, const char *name);
 
+// Hint the scheduler to run another runnable thread of equal
+// priority. Wraps POSIX sched_yield / Win32 SwitchToThread so
+// callers don't have to pull in <sched.h> directly (which is
+// not present on MSVC).
+XR_FUNC void xr_thread_yield(void);
+
+// Sleep the calling thread for at least `ms` milliseconds.
+// Wraps POSIX nanosleep / Win32 Sleep. Coarse: callers that
+// need sub-ms precision should use the runtime's timer wheel.
+XR_FUNC void xr_thread_sleep_ms(unsigned int ms);
+
 // === Mutex ===
 
 XR_FUNC void xr_mutex_init(xr_mutex_t *m);

@@ -36,7 +36,6 @@
 #include "xjit_hooks.h"
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include "../base/xthread.h"
 
 // Thread-local: current Worker and Machine pointers

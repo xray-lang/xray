@@ -55,12 +55,12 @@ XR_FUNC AstNode *xr_ast_variable(XrayIsolate *X, const char *name, int line);
 XR_FUNC AstNode *xr_ast_assignment(XrayIsolate *X, const char *name, AstNode *value, int line);
 
 // Create compound assignment node
-XR_FUNC AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name, TokenType op,
+XR_FUNC AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name, XrTokenType op,
                                             AstNode *value, int line);
 
 // Create member compound assignment node
 XR_FUNC AstNode *xr_ast_member_compound_assignment(XrayIsolate *X, AstNode *object,
-                                                   const char *name, TokenType op, AstNode *value,
+                                                   const char *name, XrTokenType op, AstNode *value,
                                                    int line);
 
 // Create increment node

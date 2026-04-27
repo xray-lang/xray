@@ -234,17 +234,24 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
 #define xr_coro_flags_has_fast(coro, f) (((coro)->flags & (f)) != 0)
 
 // CAS on flags (used by xr_coro_ready). Also updates coro_state on success.
+// Static inline helper avoids the GCC statement-expression macro form,
+// which MSVC does not accept. Both fields' types are stable across the
+// codebase, so the helper takes _Atomic pointers directly.
+static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr,
+                                          _Atomic uint8_t *state_ptr, uint32_t *expected,
+                                          uint32_t desired) {
+    bool ok = atomic_compare_exchange_strong_explicit(
+        flags_ptr, expected, desired, memory_order_acq_rel, memory_order_acquire);
+    if (ok && (desired & XR_CORO_STATE_FLAG_MASK)) {
+        uint8_t ns = xr_flag_to_state(desired);
+        if (ns)
+            atomic_store_explicit(state_ptr, ns, memory_order_release);
+    }
+    return ok;
+}
+
 #define xr_coro_flags_cas(coro, expected, desired)                                                 \
-    ({                                                                                             \
-        bool _ok = atomic_compare_exchange_strong_explicit(                                        \
-            &(coro)->flags, (expected), (desired), memory_order_acq_rel, memory_order_acquire);    \
-        if (_ok && ((desired) & XR_CORO_STATE_FLAG_MASK)) {                                        \
-            uint8_t _ns = xr_flag_to_state(desired);                                               \
-            if (_ns)                                                                               \
-                atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release);             \
-        }                                                                                          \
-        _ok;                                                                                       \
-    })
+    xr_coro_flags_cas_impl(&(coro)->flags, &(coro)->coro_state, (expected), (desired))
 
 /* ========== State Transition Helpers ==========
  *

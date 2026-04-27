@@ -21,7 +21,7 @@
 /*
  * Fold binary operation.
  */
-bool xr_opt_fold_binary(TokenType op, XrValue left, XrValue right, XrValue *result) {
+bool xr_opt_fold_binary(XrTokenType op, XrValue left, XrValue right, XrValue *result) {
     // 1. Type check: only fold numeric operations
     if (!XR_IS_INT(left) && !XR_IS_FLOAT(left)) {
         return false;
@@ -103,7 +103,7 @@ bool xr_opt_fold_binary(TokenType op, XrValue left, XrValue right, XrValue *resu
 /*
  * Fold unary operation.
  */
-bool xr_opt_fold_unary(TokenType op, XrValue value, XrValue *result) {
+bool xr_opt_fold_unary(XrTokenType op, XrValue value, XrValue *result) {
     switch (op) {
         case TK_MINUS:
             // Numeric negation
@@ -146,7 +146,7 @@ bool xr_opt_fold_unary(TokenType op, XrValue value, XrValue *result) {
 /*
  * Fold comparison operation.
  */
-bool xr_opt_fold_comparison(TokenType op, XrValue left, XrValue right, XrValue *result) {
+bool xr_opt_fold_comparison(XrTokenType op, XrValue left, XrValue right, XrValue *result) {
     // Only support numeric comparison
     if (!XR_IS_INT(left) && !XR_IS_FLOAT(left)) {
         return false;

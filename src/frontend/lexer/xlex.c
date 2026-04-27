@@ -208,7 +208,7 @@ static XrTrivia *scan_inline_trailing_trivia(Scanner *scanner) {
     return NULL;
 }
 
-static Token make_token(Scanner *scanner, TokenType type) {
+static Token make_token(Scanner *scanner, XrTokenType type) {
     Token token;
     token.type = type;
     token.start = scanner->start;
@@ -358,7 +358,7 @@ static bool skip_whitespace(Scanner *scanner) {
 typedef struct {
     const char *name;
     int length;
-    TokenType type;
+    XrTokenType type;
 } XrKeyword;
 
 // Sorted lookup table. Order MUST match xkeywords.def, which is itself
@@ -378,7 +378,7 @@ static const XrKeyword keywords[] = {
 #include "xkeywords.def"
 #undef XR_KW
 
-static TokenType identifier_type(Scanner *scanner) {
+static XrTokenType identifier_type(Scanner *scanner) {
     const char *s = scanner->start;
     int len = (int) (scanner->current - scanner->start);
 
@@ -438,7 +438,7 @@ static int is_octal_digit(char c) {
 }
 
 static Token number(Scanner *scanner) {
-    TokenType type = TK_LITERAL_INT;
+    XrTokenType type = TK_LITERAL_INT;
     char first = scanner->start[0];
 
     if (first == '0' && !is_at_end(scanner)) {
@@ -846,7 +846,7 @@ Token xr_scanner_scan(Scanner *scanner) {
     return error_token(scanner, "Unknown character");
 }
 
-// Token name lookup table (indexed by TokenType value)
+// Token name lookup table (indexed by XrTokenType value)
 static const char *token_names[] = {
     // Single character tokens (ASCII values as index)
     [TK_LPAREN] = "(",
@@ -1019,8 +1019,8 @@ static const char *token_names[] = {
     [TK_ERROR] = "ERROR",
 };
 
-const char *xr_token_name(TokenType type) {
-    if (type >= 0 && type < (TokenType) (sizeof(token_names) / sizeof(token_names[0])) &&
+const char *xr_token_name(XrTokenType type) {
+    if (type >= 0 && type < (XrTokenType) (sizeof(token_names) / sizeof(token_names[0])) &&
         token_names[type]) {
         return token_names[type];
     }

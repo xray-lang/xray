@@ -661,7 +661,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
 // Parse unary operators: -expr, !expr, ~expr
 AstNode *xr_parse_unary(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_unary: NULL parser");
-    TokenType operator_type = parser->previous.type;
+    XrTokenType operator_type = parser->previous.type;
     int line = parser->previous.line;
 
     AstNode *operand = xr_parse_precedence(parser, PREC_UNARY);
@@ -784,7 +784,7 @@ AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left) {
     return xr_ast_binary(parser->X, AST_BINARY_LT, left, right, line);
 }
 
-// TokenType -> AstNodeType mapping for binary operators
+// XrTokenType -> AstNodeType mapping for binary operators
 static const AstNodeType binary_op_map[] = {
     [TK_PLUS] = AST_BINARY_ADD,
     [TK_MINUS] = AST_BINARY_SUB,
@@ -811,7 +811,7 @@ static const AstNodeType binary_op_map[] = {
 // Parse binary operators: left op right
 AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
     XR_DCHECK(parser != NULL, "parse_binary: NULL parser");
-    TokenType operator_type = parser->previous.type;
+    XrTokenType operator_type = parser->previous.type;
     int line = parser->previous.line;
 
     const ParseRule *rule = xr_get_rule(operator_type);
@@ -821,7 +821,7 @@ AstNode *xr_parse_binary(Parser *parser, AstNode *left) {
 
     AstNodeType ast_type = 0;
     if (operator_type >= 0 &&
-        operator_type < (TokenType) (sizeof(binary_op_map) / sizeof(binary_op_map[0]))) {
+        operator_type < (XrTokenType) (sizeof(binary_op_map) / sizeof(binary_op_map[0]))) {
         ast_type = binary_op_map[operator_type];
     }
     if (ast_type == 0) {

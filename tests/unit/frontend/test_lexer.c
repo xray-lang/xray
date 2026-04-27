@@ -19,7 +19,7 @@ static Token scan_single(const char *source) {
     return xr_scanner_scan(&scanner);
 }
 
-static void assert_token(Token t, TokenType expected_type, const char *expected_text) {
+static void assert_token(Token t, XrTokenType expected_type, const char *expected_text) {
     ASSERT_EQ_INT(t.type, expected_type);
     if (expected_text) {
         ASSERT_EQ_INT(t.length, (int)strlen(expected_text));
@@ -443,12 +443,12 @@ TEST(lexer_keyword_prefix_identifiers) {
     assert_token(scan_single("map"),      TK_NAME, "map");    // != Map
 }
 
-// Every keyword in xkeywords.def must round-trip to its declared TokenType.
+// Every keyword in xkeywords.def must round-trip to its declared XrTokenType.
 // This guards against silent coverage gaps when the table is edited.
 TEST(lexer_keyword_table_completeness) {
     struct {
         const char *spelling;
-        TokenType expected;
+        XrTokenType expected;
     } cases[] = {
         // Lowercase keywords
         {"abstract", TK_ABSTRACT}, {"as", TK_AS}, {"await", TK_AWAIT},

@@ -33,7 +33,7 @@ typedef struct AssignmentNode {
 // Compound assignment node
 typedef struct CompoundAssignmentNode {
     char *name;
-    TokenType op;
+    XrTokenType op;
     AstNode *value;
     AstNode *object;
 } CompoundAssignmentNode;

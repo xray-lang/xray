@@ -18,7 +18,7 @@
  *   These tests pin down the contract:
  *
  *     1. Every spelling listed in xkeywords.def is recognised as
- *        its declared TokenType.
+ *        its declared XrTokenType.
  *     2. NO spelling listed in the table is matched by a strict
  *        prefix that happens to itself be an identifier (regression
  *        guard for L-01: `iffy` is TK_NAME, not TK_IF).
@@ -67,10 +67,10 @@ static bool token_text_eq(Token t, const char *expected) {
 /* Per-keyword recognition matrix                                          */
 /* ====================================================================== */
 
-// Each entry: spelling, expected TokenType. List MUST mirror
+// Each entry: spelling, expected XrTokenType. List MUST mirror
 // xkeywords.def -- adding a keyword requires a new row here AND a
 // new prefix-identifier row in keyword_prefix_identifiers below.
-typedef struct { const char *spelling; TokenType type; } KwExpect;
+typedef struct { const char *spelling; XrTokenType type; } KwExpect;
 
 static const KwExpect kKnownKeywords[] = {
     { "Array",       TK_TYPE_ARRAY    },
@@ -152,7 +152,7 @@ static const KwExpect kKnownKeywords[] = {
 
 TEST(every_keyword_recognised) {
     // Every spelling exercised in isolation must scan as its
-    // declared TokenType, with token text equal to the spelling.
+    // declared XrTokenType, with token text equal to the spelling.
     for (int i = 0; i < KW_COUNT; i++) {
         Token t = scan_one(kKnownKeywords[i].spelling);
         ASSERT_EQ_INT(t.type, kKnownKeywords[i].type);
@@ -228,7 +228,7 @@ static const char *kPrefixIdentifiers[] = {
 
 TEST(keyword_prefix_identifiers_are_TK_NAME) {
     // L-01 / L-08 regression guard. None of these may match a
-    // keyword TokenType -- they are user identifiers.
+    // keyword XrTokenType -- they are user identifiers.
     for (int i = 0; i < PREFIX_COUNT; i++) {
         Token t = scan_one(kPrefixIdentifiers[i]);
         ASSERT_EQ_INT(t.type, TK_NAME);

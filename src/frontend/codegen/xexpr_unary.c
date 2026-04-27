@@ -45,7 +45,7 @@ static int compile_unary_internal(XrCompilerContext *ctx, XrCompiler *compiler, 
         LiteralNode *lit = (LiteralNode *) &node->operand->as;
 
         // Map AST node type to Token type
-        TokenType op_token;
+        XrTokenType op_token;
         switch (type) {
             case AST_UNARY_NEG:
                 op_token = TK_MINUS;

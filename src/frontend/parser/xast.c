@@ -332,7 +332,7 @@ AstNode *xr_ast_assignment(XrayIsolate *X, const char *name, AstNode *value, int
 // name: variable name
 // op: compound assignment operator type
 // value: right-hand side expression
-AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name, TokenType op, AstNode *value,
+AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name, XrTokenType op, AstNode *value,
                                     int line) {
     AstNode *node = alloc_node(X, AST_COMPOUND_ASSIGNMENT, line);
     node->as.compound_assignment.name = ast_strdup(X, name);
@@ -348,7 +348,7 @@ AstNode *xr_ast_compound_assignment(XrayIsolate *X, const char *name, TokenType 
 // op: compound assignment operator type
 // value: right-hand side expression
 AstNode *xr_ast_member_compound_assignment(XrayIsolate *X, AstNode *object, const char *name,
-                                           TokenType op, AstNode *value, int line) {
+                                           XrTokenType op, AstNode *value, int line) {
     AstNode *node = alloc_node(X, AST_COMPOUND_ASSIGNMENT, line);
     node->as.compound_assignment.name = ast_strdup(X, name);
     node->as.compound_assignment.op = op;
