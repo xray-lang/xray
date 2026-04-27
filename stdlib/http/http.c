@@ -22,7 +22,7 @@
 #include "http_parser.h"
 #include "http_router.h"
 #include "http_server.h"
-#include "../../include/xray_platform.h"
+#include "../../src/base/xplatform.h"
 #include "http_stream.h"
 #include "http_multipart.h"
 #include "http_proxy.h"

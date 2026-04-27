@@ -10,7 +10,7 @@
 
 #include "time.h"
 #include "../common.h"
-#include "../../include/xray_platform.h"
+#include "../../src/base/xplatform.h"
 #include "../../src/vm/xvm_internal.h"  // XrCoroState, XrCoroutine
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/base/xchecks.h"

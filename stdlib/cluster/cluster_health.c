@@ -14,7 +14,7 @@
 
 #include "cluster.h"
 #include "cluster_node.h"
-#include "../../include/xray_platform.h" /* xr_random_bytes */
+#include "../../src/os/os_random.h"
 
 #include <stdlib.h>
 #include <string.h>

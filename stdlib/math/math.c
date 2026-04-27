@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <float.h>
-#include "../../include/xray_platform.h"
+#include "../../src/os/os_random.h"
 #include "../../src/base/xchecks.h"
 
 // Portability: MSVC/<math.h> does not define M_PI/M_E unless _USE_MATH_DEFINES

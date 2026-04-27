@@ -24,8 +24,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 // POLLIN/POLLOUT come from poll.h on POSIX and winsock2.h on
-// Windows; xray_platform.h pulls in the right header per OS.
-#include "../../include/xray_platform.h"
+// Windows; os_net.h pulls in the right header per OS.
+#include "../os/os_net.h"
 
 // XrValue type (needed for continuation return value)
 #include "../runtime/value/xvalue.h"

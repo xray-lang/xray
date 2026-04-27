@@ -16,7 +16,7 @@
 #include "../../src/base/xmalloc.h"
 #include "http_client.h"
 #include "http_parser.h"
-#include "../../include/xray_platform.h"
+#include "../../src/base/xplatform.h"
 #include "http.h"
 #include "../net/tls.h"
 #include "http_cookie.h"

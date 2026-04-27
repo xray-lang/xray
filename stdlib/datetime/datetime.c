@@ -16,7 +16,7 @@
 #include "datetime.h"
 #include "../common.h"
 #include "../ctxbuf.h"
-#include "../../include/xray_platform.h"
+#include "../../src/base/xplatform.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/gc/xgc.h"
 #include "../../src/base/xchecks.h"

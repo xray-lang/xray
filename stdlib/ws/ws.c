@@ -13,7 +13,8 @@
 
 #include "ws.h"
 #include "ws_deflate.h"
-#include "../../include/xray_platform.h"
+#include "../../src/os/os_net.h"
+#include "../../src/os/os_random.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_time.h"
 #include "../../src/coro/xsocket.h"

@@ -10,7 +10,7 @@
 
 #include "xframing.h"
 #include "xchecks.h"
-#include "../../include/xray_platform.h"
+#include "xstrcompat.h"
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>

@@ -20,6 +20,7 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/vm/xvm_internal.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/os/os_random.h"
 #include "../../src/os/os_time.h"
 
 #include <stdlib.h>
@@ -32,14 +33,9 @@
 #include <sys/uio.h>
 #endif
 
-/*
- * xr_socket_read lives in src/coro/xsocket.h. We cannot pull that
- * header here because it drags include/xray_platform.h, which defines
- * `static inline void xr_random_bytes(...)` — conflicts with
- * stdlib/crypto/crypto.h's `int xr_random_bytes(...)` already included
- * above. Forward-declare just the one entry point we need; the real
- * signature is checked at link time against xsocket.c.
- */
+// Forward-declare the single xsocket entry point used here
+// rather than pulling xsocket.h. Link-time signature checking
+// against xsocket.c keeps the two in sync.
 extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
 extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
 extern void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
