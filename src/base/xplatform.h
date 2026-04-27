@@ -50,8 +50,18 @@
 #define XR_COMPILER_MSVC 1
 #endif  // ========== CPU Primitives ==========
 
-// Pause/yield hint for spin loops
+// Pause/yield hint for spin loops. MSVC has no inline-asm syntax
+// for x64 / ARM64 and uses intrinsics instead.
+#if defined(XR_COMPILER_MSVC)
+#include <intrin.h>
 #if defined(XR_ARCH_X86_64) || defined(XR_ARCH_X86)
+#define XR_CPU_PAUSE() _mm_pause()
+#elif defined(XR_ARCH_ARM64)
+#define XR_CPU_PAUSE() __yield()
+#else
+#define XR_CPU_PAUSE() ((void) 0)
+#endif
+#elif defined(XR_ARCH_X86_64) || defined(XR_ARCH_X86)
 #define XR_CPU_PAUSE() __asm__ __volatile__("pause" ::: "memory")
 #elif defined(XR_ARCH_ARM64)
 #define XR_CPU_PAUSE() __asm__ __volatile__("yield" ::: "memory")
