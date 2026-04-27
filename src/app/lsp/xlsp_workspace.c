@@ -31,38 +31,33 @@
 
 #include "xlsp_async.h"
 #include "xlsp_index_pool.h"
-#include <dirent.h>
-#include <sys/stat.h>
+#include "../../base/xdir.h"
 
 // Recursively find all .xr files in a directory (with configurable ignore rules)
 static void find_xr_files_with_config(const char *dir_path, char ***files, int *count,
                                       int *capacity, XlspConfig *config) {
-    DIR *dir = opendir(dir_path);
-    if (!dir)
+    XrDirIter *it = xr_dir_open(dir_path);
+    if (!it)
         return;
 
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
+    XrDirEntry e;
+    while (xr_dir_next(it, &e)) {
         char path[XLSP_MAX_PATH];
-        snprintf(path, sizeof(path), "%s/%s", dir_path, entry->d_name);
-
-        struct stat st;
-        if (stat(path, &st) < 0)
-            continue;
-
-        bool is_dir = S_ISDIR(st.st_mode);
+        snprintf(path, sizeof(path), "%s/%s", dir_path, e.name);
 
         // Check ignore rules (handles hidden files, configured patterns)
-        if (xlsp_config_should_ignore(config, entry->d_name, is_dir)) {
+        if (xlsp_config_should_ignore(config, e.name, e.is_dir)) {
             continue;
         }
 
-        if (is_dir) {
+        if (e.is_dir) {
             find_xr_files_with_config(path, files, count, capacity, config);
-        } else if (S_ISREG(st.st_mode)) {
-            // Check if .xr file
-            size_t len = strlen(entry->d_name);
-            if (len > 3 && strcmp(entry->d_name + len - 3, ".xr") == 0) {
+        } else {
+            // Check if .xr file. xr_dir_next returns is_dir reliably; everything
+            // else (regular file, symlink, etc.) is treated uniformly here so
+            // a project that symlinks .xr files in still gets indexed.
+            size_t len = strlen(e.name);
+            if (len > 3 && strcmp(e.name + len - 3, ".xr") == 0) {
                 if (*count >= *capacity) {
                     int new_capacity = *capacity * 2;
                     // Overflow check
@@ -84,7 +79,7 @@ static void find_xr_files_with_config(const char *dir_path, char ***files, int *
         }
     }
 
-    closedir(dir);
+    xr_dir_close(it);
 }
 
 // Simplified wrapper without custom ignore rules

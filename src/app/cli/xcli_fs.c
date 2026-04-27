@@ -16,11 +16,11 @@
 #include "xcli_fs.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xdir.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <dirent.h>
 #include <limits.h>
 #include <errno.h>
 #include <unistd.h>
@@ -129,41 +129,31 @@ XrCliWalkOpts xr_cli_walk_defaults(void) {
 }
 
 static void walk_recursive(const char *dirpath, const XrCliWalkOpts *opts, XrCliFileList *fl) {
-    DIR *dir = opendir(dirpath);
-    if (!dir)
+    XrDirIter *it = xr_dir_open(dirpath);
+    if (!it)
         return;
 
-    struct dirent *entry;
     char filepath[XR_CLI_PATH_MAX];
+    XrDirEntry e;
 
-    while ((entry = readdir(dir)) != NULL) {
-        /* Always skip . and .. */
-        if (entry->d_name[0] == '.' &&
-            (entry->d_name[1] == '\0' || (entry->d_name[1] == '.' && entry->d_name[2] == '\0'))) {
-            continue;
-        }
-
-        int n = snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, entry->d_name);
+    while (xr_dir_next(it, &e)) {
+        int n = snprintf(filepath, sizeof(filepath), "%s/%s", dirpath, e.name);
         if (n < 0 || (size_t) n >= sizeof(filepath))
             continue;
 
-        struct stat st;
-        if (stat(filepath, &st) != 0)
-            continue;
-
-        if (S_ISDIR(st.st_mode)) {
-            if (!is_ignored_dir(entry->d_name, opts)) {
+        if (e.is_dir) {
+            if (!is_ignored_dir(e.name, opts)) {
                 walk_recursive(filepath, opts, fl);
             }
-        } else if (S_ISREG(st.st_mode)) {
-            if (opts->xr_only && !xr_cli_is_xr_file(entry->d_name)) {
+        } else {
+            if (opts->xr_only && !xr_cli_is_xr_file(e.name)) {
                 continue;
             }
             xr_cli_filelist_add(fl, filepath);
         }
     }
 
-    closedir(dir);
+    xr_dir_close(it);
 }
 
 int xr_cli_collect_files(const char *path, const XrCliWalkOpts *opts, XrCliFileList *fl) {

@@ -30,7 +30,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
-#include <dirent.h>
+#include "../base/xdir.h"
 #include <dlfcn.h>  // dlopen, dlsym, dlclose (native package loading)
 #include "xlockfile.h"
 
@@ -622,24 +622,24 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                 // Fallback: scan version directories (no lockfile)
                 char pkg_base[PATH_MAX];
                 snprintf(pkg_base, sizeof(pkg_base), "%s/.xray/packages/%s/%s", home, owner, name);
-                DIR *vdir = opendir(pkg_base);
+                XrDirIter *vdir = xr_dir_open(pkg_base);
                 if (vdir) {
-                    struct dirent *ve;
-                    while ((ve = readdir(vdir)) != NULL) {
-                        if (ve->d_name[0] == '.')
+                    XrDirEntry ve;
+                    while (xr_dir_next(vdir, &ve)) {
+                        if (ve.name[0] == '.')
                             continue;
-                        snprintf(path, sizeof(path), "%s/%s/src/main.xr", pkg_base, ve->d_name);
+                        snprintf(path, sizeof(path), "%s/%s/src/main.xr", pkg_base, ve.name);
                         if (access(path, F_OK) == 0) {
-                            closedir(vdir);
+                            xr_dir_close(vdir);
                             return xr_strdup(path);
                         }
-                        snprintf(path, sizeof(path), "%s/%s/main.xr", pkg_base, ve->d_name);
+                        snprintf(path, sizeof(path), "%s/%s/main.xr", pkg_base, ve.name);
                         if (access(path, F_OK) == 0) {
-                            closedir(vdir);
+                            xr_dir_close(vdir);
                             return xr_strdup(path);
                         }
                     }
-                    closedir(vdir);
+                    xr_dir_close(vdir);
                 }
             }
         }

@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <dirent.h>
+#include "../../src/base/xdir.h"
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -299,27 +299,23 @@ static XrValue io_readDir(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    DIR *dir = opendir(path);
-    if (!dir)
+    XrDirIter *it = xr_dir_open(path);
+    if (!it)
         return xr_null();
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr) {
-        closedir(dir);
+        xr_dir_close(it);
         return xr_null();
     }
 
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Skip . and ..
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-        XrValue name = xrs_string_value_c(X, entry->d_name);
+    XrDirEntry e;
+    while (xr_dir_next(it, &e)) {
+        XrValue name = xrs_string_value_c(X, e.name);
         xr_array_push(arr, name);
     }
 
-    closedir(dir);
+    xr_dir_close(it);
     return xr_value_from_array(arr);
 }
 
@@ -779,18 +775,14 @@ typedef struct {
 static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth) {
     if (depth >= READ_DIR_MAX_DEPTH)
         return;
-    DIR *dir = opendir(path);
-    if (!dir)
+    XrDirIter *it = xr_dir_open(path);
+    if (!it)
         return;
 
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-
+    XrDirEntry e;
+    while (xr_dir_next(it, &e)) {
         char fullpath[PATH_MAX];
-        int wrote = snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
+        int wrote = snprintf(fullpath, sizeof(fullpath), "%s/%s", path, e.name);
         if (wrote <= 0 || wrote >= (int) sizeof(fullpath)) {
             // Entry would overflow PATH_MAX; skip rather than report a
             // truncated path to the caller.
@@ -804,16 +796,17 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
         XrValue name = xrs_string_value_c(ctx->X, relpath);
         xr_array_push(ctx->arr, name);
 
-        // Recursively enter real subdirectories only (lstat never follows
-        // symlinks, which prevents accidental escape via bind mounts or
-        // malicious link chains).
+        // Recursively enter real subdirectories only. xr_dir_next's
+        // is_dir uses stat() as a fallback which would follow symlinks,
+        // so we re-check with lstat to preserve the no-symlink-traversal
+        // contract (prevents escape via bind mounts or malicious links).
         struct stat st;
         if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
             read_dir_recursive_impl(ctx, fullpath, depth + 1);
         }
     }
 
-    closedir(dir);
+    xr_dir_close(it);
 }
 
 // readDirRecursive(path) - Recursively read directory
