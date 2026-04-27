@@ -286,13 +286,13 @@ static inline void xr_poll_signal_wakeup(int fd) {
 
 // Platform backend implementations (split into separate headers)
 #if defined(XR_POLL_EPOLL)
-#include "xpoll_epoll.h"
+#include "os_poll_epoll.h"
 #elif defined(XR_POLL_KQUEUE)
-#include "xpoll_kqueue.h"
+#include "os_poll_kqueue.h"
 #elif defined(XR_POLL_IOCP)
-#include "xpoll_iocp.h"
+#include "os_poll_iocp.h"
 #else
-#include "xpoll_select.h"
+#include "os_poll_select.h"
 #endif
 
 static inline int xr_poll_get_wakeup_fd(XrPoll *p) {

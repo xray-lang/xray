@@ -16,7 +16,7 @@
 
 #if defined(XR_OS_LINUX) && defined(XR_NETPOLL_INCLUDED)
 
-#include "../base/xchecks.h"
+#include "../../base/xchecks.h"
 #include <sys/epoll.h>
 #include <errno.h>
 
