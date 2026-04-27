@@ -17,7 +17,7 @@
 #include "../../src/base/xmalloc.h"
 #include "http2_server.h"
 #include "http2.h"
-#include "../../include/xray_platform.h"
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

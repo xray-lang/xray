@@ -13,7 +13,7 @@
 
 #include "../../src/base/xmalloc.h"
 #include "http_multipart.h"
-#include "xray_platform.h"  // xr_random_bytes (CSPRNG)
+#include "../../src/os/os_random.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

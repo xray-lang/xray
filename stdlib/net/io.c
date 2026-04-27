@@ -16,7 +16,7 @@
 #include "../../src/os/os_time.h"
 #include "io.h"
 #include "dns.h"
-#include "../../include/xray_platform.h"
+#include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>

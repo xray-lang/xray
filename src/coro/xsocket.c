@@ -15,7 +15,7 @@
  */
 
 #include "xsocket.h"
-#include "../../include/xray_platform.h"
+#include "../os/os_net.h"
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
 #include "xnetpoll.h"
@@ -31,7 +31,7 @@
 // ========== Utility Functions ==========
 
 // Set socket to non-blocking mode. The body lives in
-// xr_socket_set_nonblocking (xray_platform.h); this name is the
+// xr_socket_set_nonblocking (src/os/os_net.h); this name is the
 // historical public symbol used by stdlib net/http/ws callers.
 int xr_socket_set_nonblock(int fd) {
     return xr_socket_set_nonblocking((xr_socket_t) fd);

@@ -42,15 +42,9 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 
-/*
- * Forward-declare the two xsocket entry points we need. We cannot
- * include src/coro/xsocket.h here because its include chain pulls in
- * include/xray_platform.h whose `static inline void xr_random_bytes`
- * clashes with stdlib/crypto/crypto.h's non-static declaration (same
- * collision that forced the workaround in cluster.c and
- * cluster_node.c). Link-time checks enforce signature agreement
- * against xsocket.c's canonical definitions.
- */
+// Forward-declare the xsocket entry points used here rather
+// than pulling xsocket.h directly; link-time signature checking
+// against xsocket.c keeps them in sync.
 extern int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
 
 // xr_coro_create_native is not declared in any public header

@@ -191,16 +191,6 @@ void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *inp
 void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input, uint8_t *output,
                         size_t len);
 
-/* ========== Random Number Generation ========== */
-
-/*
- * Generate cryptographically secure random bytes.
- * Uses /dev/urandom on Unix or BCryptGenRandom on Windows.
- *
- * Returns: 0 on success, -1 on failure
- */
-int xr_random_bytes(uint8_t *buffer, size_t len);
-
 /* ========== Utility Functions ========== */
 
 // Convert bytes to lowercase hex string

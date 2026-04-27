@@ -16,12 +16,7 @@
 #define XPLATFORM_H
 
 /* ========== OS Detection ========== */
-//
-// Idempotent: include/xray_platform.h supplies the same XR_OS_*
-// macros, so either header may be included first. Keep the two
-// definitions in sync by hand.
 
-#ifndef XR_OS_WINDOWS
 #if defined(_WIN32) || defined(_WIN64)
 #define XR_OS_WINDOWS 1
 #elif defined(__linux__)
@@ -31,13 +26,10 @@
 #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
 #define XR_OS_BSD 1
 #endif
-#endif  // XR_OS_WINDOWS
 
-#ifndef XR_OS_POSIX
 #if defined(XR_OS_LINUX) || defined(XR_OS_MACOS) || defined(XR_OS_BSD)
 #define XR_OS_POSIX 1
 #endif
-#endif  // XR_OS_POSIX
 
 /* ========== Architecture Detection ========== */
 

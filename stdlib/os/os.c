@@ -14,7 +14,7 @@
 
 #include "os.h"
 #include "../common.h"
-#include "../../include/xray_platform.h"
+#include "../../src/base/xplatform.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout

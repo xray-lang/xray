@@ -16,7 +16,7 @@
 #include "../common.h"
 #include "../ctxbuf.h"
 #include "../../src/vm/xvm_internal.h"
-#include "../../include/xray_platform.h"
+#include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
 #include <limits.h>
 

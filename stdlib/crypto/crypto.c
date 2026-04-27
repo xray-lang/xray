@@ -16,22 +16,12 @@
 #include "crypto.h"
 #include "../common.h"
 #include "../../src/base/xmalloc.h"
+#include "../../src/os/os_random.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#include <bcrypt.h>
-#else
-#include <fcntl.h>
-#include <unistd.h>
-#ifdef __linux__
-#include <sys/random.h>
-#endif
-#endif
 
 /* ========== Utility Macros ========== */
 
@@ -861,37 +851,6 @@ void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *inp
     }
 }
 
-/* ========== Random Number Generation ========== */
-
-int xr_random_bytes(uint8_t *buffer, size_t len) {
-    XR_DCHECK(buffer != NULL, "xr_random_bytes: NULL buffer");
-#ifdef _WIN32
-    return BCryptGenRandom(NULL, buffer, (ULONG) len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0 ? 0
-                                                                                            : -1;
-#elif defined(__APPLE__)
-    arc4random_buf(buffer, len);
-    return 0;
-#elif defined(__linux__)
-    ssize_t n = getrandom(buffer, len, 0);
-    return (n == (ssize_t) len) ? 0 : -1;
-#else
-    int fd = open("/dev/urandom", O_RDONLY);
-    if (fd < 0)
-        return -1;
-    ssize_t total = 0;
-    while ((size_t) total < len) {
-        ssize_t n = read(fd, buffer + total, len - total);
-        if (n <= 0) {
-            close(fd);
-            return -1;
-        }
-        total += n;
-    }
-    close(fd);
-    return 0;
-#endif
-}
-
 /* ========== Utility Functions ========== */
 
 static const char hex_chars[] = "0123456789abcdef";
@@ -1025,8 +984,7 @@ static XrValue crypto_random_bytes(XrayIsolate *isolate, XrValue *args, int narg
         return xr_null();
     uint8_t buf[1024];
     char hex[2049];
-    if (xr_random_bytes(buf, len) != 0)
-        return xr_null();
+    xr_random_bytes(buf, len);
     xr_bytes_to_hex(buf, len, hex);
     return xr_string_value(xr_string_new(isolate, hex, len * 2));
 }
@@ -1035,8 +993,7 @@ static XrValue crypto_uuid(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
     uint8_t bytes[16];
-    if (xr_random_bytes(bytes, 16) != 0)
-        return xr_null();
+    xr_random_bytes(bytes, 16);
     bytes[6] = (bytes[6] & 0x0F) | 0x40;
     bytes[8] = (bytes[8] & 0x3F) | 0x80;
     char uuid[37];
@@ -1065,8 +1022,7 @@ static XrValue crypto_encrypt(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     // Generate random IV
     uint8_t iv[16];
-    if (xr_random_bytes(iv, 16) != 0)
-        return xr_null();
+    xr_random_bytes(iv, 16);
 
     // PKCS7 padding
     size_t plain_len = plain_str->length;

@@ -22,10 +22,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 #ifdef _WIN32
-// xray_platform.h provides a struct iovec compatibility shim
-// alongside the WSASend-backed writev emulation used by callers
-// of xr_io_writev on Windows.
-#include "../../include/xray_platform.h"
+// os_net.h provides a struct iovec compatibility shim alongside
+// the WSASend-backed writev emulation used by callers of
+// xr_io_writev on Windows.
+#include "../../src/os/os_net.h"
 #else
 #include <sys/uio.h>
 #endif

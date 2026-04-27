@@ -23,7 +23,7 @@
 
 #include <stddef.h>
 #include "../base/xdefs.h"
-#include "../../include/xray_platform.h"
+#include "../os/os_net.h"
 
 struct XrayIsolate;
 

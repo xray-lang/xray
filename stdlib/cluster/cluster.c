@@ -41,16 +41,10 @@
 extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
                                                  void *arg, const char *name);
 
-/*
- * xr_socket_read / xr_socket_set_read_timeout live in
- * src/coro/xsocket.h. We cannot pull that header in here because it
- * includes include/xray_platform.h which defines
- * `static inline void xr_random_bytes(...)`, and stdlib/crypto/crypto.h
- * (already included above for xr_secure_wipe) exposes
- * `int xr_random_bytes(...)` — the two cannot coexist. Forward-declare
- * just the two entry points we need; the real signatures are checked
- * at link time against the canonical definitions in xsocket.c.
- */
+// Forward-declarations for the two xsocket entry points used by
+// the cluster transport. Pulling xsocket.h directly would expand
+// the translation unit unnecessarily; the link-time signature
+// check against xsocket.c is sufficient.
 extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
 extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
 
