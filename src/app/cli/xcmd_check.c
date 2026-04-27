@@ -26,7 +26,7 @@
 #include "../../os/os_dir.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include "../../os/os_fs.h"
 
 // Check single file, returns: 0 = no error, 1 = has error
 static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, int verbose) {
@@ -139,26 +139,25 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
 
     /* No positionals -> check current directory */
     if (inv->positional_count == 0) {
-        struct stat st;
-        if (stat(".", &st) == 0 && S_ISDIR(st.st_mode)) {
+        if (xr_fs_is_dir(".")) {
             total_errors = check_directory(X, analyzer, ".", verbose, &total_files, &passed_files);
         }
     } else {
         /* Check specified files or directories */
         for (int i = 0; i < inv->positional_count; i++) {
             const char *path = inv->positionals[i];
-            struct stat st;
+            XrFsStat st;
 
-            if (stat(path, &st) != 0) {
+            if (xr_fs_stat(path, &st) != 0) {
                 xr_cli_error("check", "path does not exist '%s'", path);
                 total_errors++;
                 continue;
             }
 
-            if (S_ISDIR(st.st_mode)) {
+            if (st.kind == XR_FS_DIR) {
                 total_errors +=
                     check_directory(X, analyzer, path, verbose, &total_files, &passed_files);
-            } else if (S_ISREG(st.st_mode)) {
+            } else if (st.kind == XR_FS_FILE) {
                 total_files++;
                 if (check_file(X, analyzer, path, verbose) == 0) {
                     passed_files++;

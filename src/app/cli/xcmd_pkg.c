@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "../../os/os_fs.h"
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -45,13 +46,9 @@ static const char *home_packages_dir(const char *home) {
     return buf;
 }
 
-// Create directory if not exists
+// Create directory if not exists.
 static int ensure_dir(const char *path) {
-    struct stat st;
-    if (stat(path, &st) == 0) {
-        return S_ISDIR(st.st_mode) ? 0 : -1;
-    }
-    return mkdir(path, 0755);
+    return xr_fs_mkdir(path, 0755);
 }
 
 // Initialize global cache directory structure
@@ -129,7 +126,7 @@ static int cmd_pkg_init(int argc, char **argv) {
     char default_name[256] = "my-project";
     if (!name) {
         char cwd[512];
-        if (getcwd(cwd, sizeof(cwd))) {
+        if (xr_fs_getcwd(cwd, sizeof(cwd))) {
             char *last_slash = strrchr(cwd, '/');
             if (last_slash) {
                 strncpy(default_name, last_slash + 1, sizeof(default_name) - 1);
@@ -389,7 +386,7 @@ static bool pkg_build_native(const char *pkg_dir, bool verbose) {
     char *cmake_file = xr_path_join(pkg_dir, "CMakeLists.txt");
     if (!cmake_file)
         return false;
-    bool has_cmake = (access(cmake_file, F_OK) == 0);
+    bool has_cmake = (xr_fs_exists(cmake_file));
     xr_free(cmake_file);
 
     if (!has_cmake) {
@@ -455,7 +452,7 @@ static int cmd_pkg_install(int argc, char **argv) {
         return XR_CLI_EXIT_FAIL;
 
     char cwd[512];
-    if (!getcwd(cwd, sizeof(cwd))) {
+    if (!xr_fs_getcwd(cwd, sizeof(cwd))) {
         xr_cli_error("pkg install", "cannot get current directory");
         return XR_CLI_EXIT_FAIL;
     }
@@ -563,7 +560,7 @@ static int cmd_pkg_install(int argc, char **argv) {
 
         char entry_check[512];
         snprintf(entry_check, sizeof(entry_check), "%s/xray.toml", pkg_dir);
-        if (access(entry_check, F_OK) == 0) {
+        if (xr_fs_exists(entry_check)) {
             printf("  %s@%s — already installed\n", dep_name, target_version);
             skipped++;
             continue;
@@ -711,7 +708,7 @@ static int cmd_pkg_publish(int argc, char **argv) {
 
     // Load project config
     char cwd[512];
-    if (!getcwd(cwd, sizeof(cwd))) {
+    if (!xr_fs_getcwd(cwd, sizeof(cwd))) {
         xr_cli_error("pkg publish", "cannot get current directory");
         return XR_CLI_EXIT_FAIL;
     }
@@ -783,7 +780,7 @@ static int cmd_pkg_publish(int argc, char **argv) {
     bool success = xr_pkg_client_publish(tarball, token, &pub_info);
 
     // Cleanup
-    unlink(tarball);
+    xr_fs_remove(tarball);
     xr_free(token);
     xr_project_free(project);
     xr_pkg_client_cleanup();

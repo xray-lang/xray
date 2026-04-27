@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include "../../src/os/os_fs.h"
 
 #ifdef XR_OS_WINDOWS
 #include <process.h>
@@ -62,12 +63,10 @@ extern XrValue xr_value_from_array(XrArray *arr);
 #define os_setenv_impl(name, value) _putenv_s(name, value)
 #define os_unsetenv_impl(name) _putenv_s(name, "")
 #define os_getpid_impl() _getpid()
-#define os_chdir_impl(path) _chdir(path)
 #else
 #define os_setenv_impl(name, value) setenv(name, value, 1)
 #define os_unsetenv_impl(name) unsetenv(name)
 #define os_getpid_impl() getpid()
-#define os_chdir_impl(path) chdir(path)
 #endif
 
 /* ========== Environment Variables ========== */
@@ -172,7 +171,7 @@ static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
     (void) argc;
 
     char buf[PATH_MAX];
-    if (getcwd(buf, sizeof(buf)) == NULL) {
+    if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
     return xrs_string_value_c(X, buf);
@@ -188,7 +187,7 @@ static XrValue os_chdir(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    return xr_bool(os_chdir_impl(path) == 0);
+    return xr_bool(xr_fs_chdir(path) == 0);
 }
 
 // hostname() - Get hostname

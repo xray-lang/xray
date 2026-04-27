@@ -26,7 +26,7 @@
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
 
 // Format configuration
@@ -183,17 +183,17 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
     } else {
         for (int i = 0; i < inv->positional_count; i++) {
             const char *path = inv->positionals[i];
-            struct stat st;
+            XrFsStat st;
 
-            if (stat(path, &st) != 0) {
+            if (xr_fs_stat(path, &st) != 0) {
                 xr_cli_error("fmt", "path does not exist '%s'", path);
                 errors++;
                 continue;
             }
 
-            if (S_ISDIR(st.st_mode)) {
+            if (st.kind == XR_FS_DIR) {
                 errors += format_directory(X, path, &config, check_only, verbose, &total, &changed);
-            } else if (S_ISREG(st.st_mode)) {
+            } else if (st.kind == XR_FS_FILE) {
                 total++;
                 int result = format_file(X, path, &config, check_only, verbose);
                 if (result > 0)

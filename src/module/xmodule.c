@@ -28,9 +28,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <limits.h>
 #include "../os/os_dir.h"
+#include "../os/os_fs.h"
 #include "../os/os_dylib.h"
 #include "xlockfile.h"
 
@@ -541,17 +541,17 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
             const char *ext = strrchr(module_name, '.');
             if (ext && strcmp(ext, ".xr") == 0) {
                 snprintf(path, sizeof(path), "%s/%s", script_dir, module_name);
-                if (access(path, F_OK) == 0)
+                if (xr_fs_exists(path))
                     return xr_strdup(path);
             } else {
                 // First try path.xr
                 snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-                if (access(path, F_OK) == 0)
+                if (xr_fs_exists(path))
                     return xr_strdup(path);
 
                 // Then try path/index.xr (directory entry)
                 snprintf(path, sizeof(path), "%s/%s/index.xr", script_dir, module_name);
-                if (access(path, F_OK) == 0)
+                if (xr_fs_exists(path))
                     return xr_strdup(path);
             }
         }
@@ -597,7 +597,7 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                             snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s", home,
                                      owner, name, version, entries[e]);
                         }
-                        if (access(path, F_OK) == 0) {
+                        if (xr_fs_exists(path)) {
                             xr_lockfile_free(lock);
                             return xr_strdup(path);
                         }
@@ -605,13 +605,13 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                     // Try native module (.dylib / .so)
                     snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/build/lib%s.dylib",
                              home, owner, name, version, name);
-                    if (access(path, F_OK) == 0) {
+                    if (xr_fs_exists(path)) {
                         xr_lockfile_free(lock);
                         return xr_strdup(path);
                     }
                     snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/build/lib%s.so", home,
                              owner, name, version, name);
-                    if (access(path, F_OK) == 0) {
+                    if (xr_fs_exists(path)) {
                         xr_lockfile_free(lock);
                         return xr_strdup(path);
                     }
@@ -629,12 +629,12 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                         if (ve.name[0] == '.')
                             continue;
                         snprintf(path, sizeof(path), "%s/%s/src/main.xr", pkg_base, ve.name);
-                        if (access(path, F_OK) == 0) {
+                        if (xr_fs_exists(path)) {
                             xr_dir_close(vdir);
                             return xr_strdup(path);
                         }
                         snprintf(path, sizeof(path), "%s/%s/main.xr", pkg_base, ve.name);
-                        if (access(path, F_OK) == 0) {
+                        if (xr_fs_exists(path)) {
                             xr_dir_close(vdir);
                             return xr_strdup(path);
                         }
@@ -648,7 +648,7 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     // 4. Current script directory: <script_dir>/<name>.xr
     if (script_dir) {
         snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-        if (access(path, F_OK) == 0)
+        if (xr_fs_exists(path))
             return xr_strdup(path);
     }
 
@@ -656,7 +656,7 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     if (registry && registry->stdlib_path) {
         snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
                  module_name);
-        if (access(path, F_OK) == 0)
+        if (xr_fs_exists(path))
             return xr_strdup(path);
     }
 
@@ -1015,7 +1015,7 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
     bool found = false;
     for (int i = 0; i < 2 && !found; i++) {
         snprintf(lib_path, sizeof(lib_path), "%s/lib/libxray_%s%s", pkg_dir, name, suffixes[i]);
-        if (access(lib_path, F_OK) == 0)
+        if (xr_fs_exists(lib_path))
             found = true;
     }
     if (!found)

@@ -19,10 +19,7 @@
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
 #include <limits.h>
-
-#ifndef XR_OS_WINDOWS
-#include <unistd.h>
-#endif
+#include "../../src/os/os_fs.h"
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -334,7 +331,7 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
 // (backslash on Windows) through IS_SEP().
 static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
     char cwd[PATH_MAX];
-    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+    if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL) {
         cwd[0] = PATH_SEP;
         cwd[1] = '\0';
     }
