@@ -30,10 +30,10 @@
 #include <string.h>
 #include <stdio.h>
 #include "../../base/xmalloc.h"
-#include "../../base/xmem.h"
+#include "../../os/os_mem.h"
 #include "xstackmap.h"     // XrStackMapTable, XrStackMapEntry
 #include "xbc_stackmap.h"  // XrBcStackMap, bytecode precise GC scanning
-#include "../../base/xthread.h"
+#include "../../os/os_thread.h"
 
 /* ========== GC Struct Two-Level Pool ========== */
 /*

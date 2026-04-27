@@ -23,7 +23,7 @@
  * the original size — this matches POSIX semantics.
  */
 
-#include "xmem.h"
+#include "../os_mem.h"
 
 #ifdef _WIN32
 

@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include "../../base/xthread.h"
+#include "../../os/os_thread.h"
 
 // Forward declaration
 struct XrArray;

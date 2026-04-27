@@ -13,7 +13,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 #include "io.h"
 #include "dns.h"
 #include "../../include/xray_platform.h"

@@ -34,7 +34,7 @@
 #ifndef XMEM_H
 #define XMEM_H
 
-#include "xdefs.h"
+#include "../base/xdefs.h"
 #include <stddef.h>
 #include <stdbool.h>
 

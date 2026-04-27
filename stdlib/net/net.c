@@ -50,7 +50,7 @@ extern void xr_socket_close(struct XrayIsolate *X, int fd);
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#include "../../src/base/xthread.h"
+#include "../../src/os/os_thread.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>

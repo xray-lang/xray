@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "../base/xdir.h"
+#include "../os/os_dir.h"
 
 /* ========== Helper Functions ========== */
 

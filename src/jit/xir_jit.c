@@ -22,7 +22,7 @@
 #include "xir.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "../runtime/value/xtype_feedback.h"
 #include "xir_builder.h"
 #include "xir_codegen.h"

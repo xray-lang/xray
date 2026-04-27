@@ -15,7 +15,7 @@
 
 #include "xyieldable.h"
 #include "../base/xchecks.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "../runtime/xvm_call.h"  // XrVMResult

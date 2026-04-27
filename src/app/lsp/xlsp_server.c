@@ -37,7 +37,7 @@
 #include <unistd.h>
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../base/xtime.h"
+#include "../../os/os_time.h"
 
 // Fallback diagnostic debounce interval (ms). The live value is
 // server->config.diagnostic_debounce_ms, which is populated from

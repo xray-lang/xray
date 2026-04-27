@@ -22,7 +22,7 @@
 #include <string.h>
 #include <limits.h>
 #include "../../base/xmalloc.h"
-#include "../../base/xtime.h"
+#include "../../os/os_time.h"
 
 // lsp_log declared in xlsp_server.h (included via xlsp_workspace.h)
 // ============================================================================
@@ -31,7 +31,7 @@
 
 #include "xlsp_async.h"
 #include "xlsp_index_pool.h"
-#include "../../base/xdir.h"
+#include "../../os/os_dir.h"
 
 // Recursively find all .xr files in a directory (with configurable ignore rules)
 static void find_xr_files_with_config(const char *dir_path, char ***files, int *count,

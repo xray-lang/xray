@@ -27,9 +27,9 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <errno.h>
-#include "../../base/xtime.h"
+#include "../../os/os_time.h"
 
-#include "../../base/xfd.h"
+#include "../../os/os_fd.h"
 #ifdef _WIN32
 #include <io.h>
 #include <winsock2.h>

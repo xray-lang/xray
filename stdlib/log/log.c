@@ -25,11 +25,11 @@
 #include "../../src/runtime/object/xnative_type.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
-#include "../../src/base/xtime.h"
+#include "../../src/os/os_time.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "../../src/base/xthread.h"
+#include "../../src/os/os_thread.h"
 #include <stdarg.h>
 
 /* ========== Async Write Buffer ========== */

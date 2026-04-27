@@ -13,7 +13,7 @@
  * caller having to plumb that path through.
  */
 
-#include "xdir.h"
+#include "../os_dir.h"
 
 #ifndef _WIN32
 

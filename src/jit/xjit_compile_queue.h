@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include "../base/xdefs.h"
 #include "xir_code_alloc.h"
 #include "../runtime/value/xtype_feedback.h"

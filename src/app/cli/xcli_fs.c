@@ -16,7 +16,7 @@
 #include "xcli_fs.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../base/xdir.h"
+#include "../../os/os_dir.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

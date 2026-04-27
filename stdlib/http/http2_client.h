@@ -20,7 +20,7 @@
 #include "http_client.h"
 #include "../net/tls.h"
 #include <stdbool.h>
-#include "../../src/base/xthread.h"
+#include "../../src/os/os_thread.h"
 
 /* ========== Connection Pool ========== */
 

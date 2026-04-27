@@ -17,7 +17,7 @@
 #include "xsocket.h"
 #include "../../include/xray_platform.h"
 #include "../base/xchecks.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include "xnetpoll.h"
 #include "xworker.h"
 #include "xcoroutine.h"                    // XrCoroutine

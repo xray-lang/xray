@@ -33,7 +33,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "../../src/base/xthread.h"
+#include "../../src/os/os_thread.h"
 
 /* ========== Forward Declarations ========== */
 

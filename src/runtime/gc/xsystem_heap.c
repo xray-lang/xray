@@ -24,7 +24,7 @@
 #include "../object/xstring.h"  // STR_FLAG_GLOBAL
 #include <string.h>
 #include <stdio.h>
-#include "../../base/xmem.h"
+#include "../../os/os_mem.h"
 
 // Large object threshold: use mmap for objects >= 64KB
 #define XR_SHARED_MMAP_THRESHOLD (64 * 1024)

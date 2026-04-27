@@ -14,7 +14,7 @@
 #include "xcoro_debug.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../base/xtime.h"
+#include "../os/os_time.h"
 #include <stdlib.h>
 #include <string.h>
 

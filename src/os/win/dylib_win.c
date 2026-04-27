@@ -22,7 +22,7 @@
  * variant is the right long-term fix and is tracked separately.
  */
 
-#include "xdylib.h"
+#include "../os_dylib.h"
 
 #ifdef _WIN32
 

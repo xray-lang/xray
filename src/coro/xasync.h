@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #include "xworker.h"
 
 // ========== Configuration ==========

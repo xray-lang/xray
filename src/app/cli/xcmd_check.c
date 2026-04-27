@@ -23,7 +23,7 @@
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
-#include "../../base/xdir.h"
+#include "../../os/os_dir.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>

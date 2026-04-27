@@ -36,7 +36,7 @@
 #include "xjit_hooks.h"
 #include <stdlib.h>
 #include <string.h>
-#include "../base/xthread.h"
+#include "../os/os_thread.h"
 #ifndef _WIN32
 #include <unistd.h>  // sysconf for CPU-count fallback
 #endif
