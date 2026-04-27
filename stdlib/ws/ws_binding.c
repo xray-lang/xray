@@ -143,12 +143,12 @@ static const char *get_data_arg(XrValue v, size_t *out_len) {
 
 typedef struct XrWsContext {
     // Connection registry (protected by conn_mutex for multi-worker safety)
-    XrWebSocket **conn_array;    // conn_array[id] = ws, id starts from 1
-    int array_capacity;          // current capacity of conn_array
-    _Atomic int next_id;         // Connection ID counter (atomic for multi-worker)
-    _Atomic int conn_count;      // Active connection count
-    int max_conns;               // Max connections (0 = unlimited)
-    pthread_mutex_t conn_mutex;  // Protects conn_array grow/store/remove
+    XrWebSocket **conn_array;  // conn_array[id] = ws, id starts from 1
+    int array_capacity;        // current capacity of conn_array
+    _Atomic int next_id;       // Connection ID counter (atomic for multi-worker)
+    _Atomic int conn_count;    // Active connection count
+    int max_conns;             // Max connections (0 = unlimited)
+    xr_mutex_t conn_mutex;     // Protects conn_array grow/store/remove
 
     // Free-list for ID recycling (protected by conn_mutex)
     int *free_ids;      // Stack of recycled IDs
@@ -232,7 +232,7 @@ static XrWsContext *get_ws_context(XrayIsolate *X) {
         }
         ctx->array_capacity = WS_CONN_INIT_CAP;
         atomic_store(&ctx->next_id, 1);
-        pthread_mutex_init(&ctx->conn_mutex, NULL);
+        xr_mutex_init(&ctx->conn_mutex);
 
         ctx->free_ids = (int *) xr_malloc(WS_CONN_INIT_CAP * sizeof(int));
         ctx->free_capacity = ctx->free_ids ? WS_CONN_INIT_CAP : 0;
@@ -265,7 +265,7 @@ void xr_ws_module_context_free(XrWsContext *ctx) {
     }
 
     xr_free(ctx->free_ids);
-    pthread_mutex_destroy(&ctx->conn_mutex);
+    xr_mutex_destroy(&ctx->conn_mutex);
     xr_free(ctx);
 }
 
@@ -295,7 +295,7 @@ static int store_ws(XrayIsolate *X, XrWebSocket *ws) {
     int id;
 
     // Mutex protects conn_array grow + store + free-list (multi-worker safety)
-    pthread_mutex_lock(&ctx->conn_mutex);
+    xr_mutex_lock(&ctx->conn_mutex);
 
     // Try recycling a free ID first
     if (ctx->free_count > 0) {
@@ -305,11 +305,11 @@ static int store_ws(XrayIsolate *X, XrWebSocket *ws) {
     }
 
     if (!ws_conn_array_grow(ctx, id)) {
-        pthread_mutex_unlock(&ctx->conn_mutex);
+        xr_mutex_unlock(&ctx->conn_mutex);
         return -1;
     }
     ctx->conn_array[id] = ws;
-    pthread_mutex_unlock(&ctx->conn_mutex);
+    xr_mutex_unlock(&ctx->conn_mutex);
 
     atomic_fetch_add(&ctx->conn_count, 1);
     return id;
@@ -325,7 +325,7 @@ static inline XrWebSocket *get_ws_from_ctx(XrWsContext *ctx, int id) {
 static void remove_ws(XrWsContext *ctx, int id) {
     if (!ctx || id < 1 || id >= ctx->array_capacity)
         return;
-    pthread_mutex_lock(&ctx->conn_mutex);
+    xr_mutex_lock(&ctx->conn_mutex);
     ctx->conn_array[id] = NULL;
     // Push ID onto free-list for recycling
     if (ctx->free_count < ctx->free_capacity) {
@@ -339,7 +339,7 @@ static void remove_ws(XrWsContext *ctx, int id) {
             ctx->free_ids[ctx->free_count++] = id;
         }
     }
-    pthread_mutex_unlock(&ctx->conn_mutex);
+    xr_mutex_unlock(&ctx->conn_mutex);
     atomic_fetch_sub(&ctx->conn_count, 1);
 }
 

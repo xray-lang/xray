@@ -38,7 +38,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../../base/xthread.h"
 #include "../../base/xarena.h"
 
 // Forward declarations
@@ -94,7 +94,7 @@ typedef struct XrSystemHeap {
      * teardown structs are pushed here, and L1 misses pop from here
      * before falling back to xr_malloc. Lock guards the linked stack
      * using the first sizeof(void*) bytes of each free struct. */
-    pthread_mutex_t gc_pool_mu;
+    xr_mutex_t gc_pool_mu;
     struct XrCoroGC *gc_pool_head;
     int gc_pool_count;
 

@@ -33,7 +33,7 @@
 #include "../../base/xmem.h"
 #include "xstackmap.h"     // XrStackMapTable, XrStackMapEntry
 #include "xbc_stackmap.h"  // XrBcStackMap, bytecode precise GC scanning
-#include <pthread.h>
+#include "../../base/xthread.h"
 
 /* ========== GC Struct Two-Level Pool ========== */
 /*

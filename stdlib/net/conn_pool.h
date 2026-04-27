@@ -19,7 +19,7 @@
 #include "tls.h"
 #include <stdint.h>
 #include <stdbool.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 
 /* ========== Constants ========== */
 
@@ -65,7 +65,7 @@ typedef struct XrHostPool {
 
 typedef struct XrConnPool {
     XrHostPool *buckets[XR_POOL_MAX_HOSTS];  // Hash buckets
-    pthread_mutex_t lock;                    // Global lock
+    xr_mutex_t lock;                         // Global lock
     int total_conns;
     bool initialized;
     XrTlsContext *tls_ctx;     // Shared TLS context

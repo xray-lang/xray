@@ -18,7 +18,7 @@
 #include "http2.h"
 #include "../net/tls.h"
 #include <stdbool.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 
 /* ========== HTTP/2 Server Config ========== */
 
@@ -78,7 +78,7 @@ typedef struct XrH2Server {
     XrH2Conn **connections;
     int connection_count;
     int max_connections;
-    pthread_mutex_t conn_lock;
+    xr_mutex_t conn_lock;
 
     // State
     volatile bool running;

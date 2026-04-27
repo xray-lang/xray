@@ -116,7 +116,7 @@ void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
     if (!ch || !coro)
         return;
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
     // Try to remove from send queue
     if (!xr_waitq_remove(&ch->sendq, coro)) {
@@ -124,7 +124,7 @@ void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
         xr_waitq_remove(&ch->recvq, coro);
     }
 
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
 }
 
 // ========== GC Callbacks ==========
@@ -196,7 +196,7 @@ static void timer_channel_fire_cb(void *arg) {
     int64_t now = xr_monotonic_ticks();
     XrCoroutine *receiver = NULL;
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
     if (!atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) {
         // Try to hand value directly to a blocked receiver
         receiver = xr_waitq_dequeue(&ch->recvq);
@@ -212,7 +212,7 @@ static void timer_channel_fire_cb(void *arg) {
         }
         atomic_store_explicit(&ch->timer_fired, true, memory_order_release);
     }
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
 
     // Wake receiver outside lock (same pattern as chan_direct_send)
     if (receiver) {
@@ -247,7 +247,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
 
     // Initialize state
     atomic_store_explicit(&ch->closed, false, memory_order_relaxed);
-    xr_mutex_init(&ch->lock);
+    xr_amutex_init(&ch->lock);
 
     // Timer specific fields
     atomic_store_explicit(&ch->is_timer, true, memory_order_relaxed);
@@ -368,7 +368,7 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
     XrValue *slot = receiver->recv_slot;
     if (slot)
         *slot = v;
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     channel_wake_coro(receiver);
     return true;
 }
@@ -392,7 +392,7 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
         // buf_count unchanged: take one, put one.
     }
     sender->send_value = xr_null();
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     *out = direct_val;
     channel_wake_coro(sender);
     return true;
@@ -431,10 +431,10 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
     if (!ch)
         return false;
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return false;
     }
 
@@ -442,11 +442,11 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
     if (chan_direct_send(ch, value))
         return true;
     if (chan_buffer_push(ch, value)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return true;
     }
 
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     return false;
 }
 
@@ -466,11 +466,11 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
         return false;
     }
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
     // Check if closed
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return false;
     }
 
@@ -479,12 +479,12 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
     if (chan_direct_send(ch, value))
         return true;
     if (chan_buffer_push(ch, value)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return true;
     }
 
     // Unbuffered or buffer full, cannot send
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     return false;
 }
 
@@ -508,7 +508,7 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
         return xr_null();
     }
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
     // Direct transfer from waiting sender (handles unbuffered and full-
     // buffered rotate). Must be checked first, otherwise blocked senders
@@ -519,20 +519,20 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
         return value;
     }
     if (chan_buffer_pop(ch, &value)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         *ok = true;
         return value;
     }
 
     // Check if closed
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         *ok = false;
         return xr_null();
     }
 
     // No data available
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     *ok = false;
     return xr_null();
 }
@@ -619,11 +619,11 @@ void xr_channel_close(XrChannel *ch) {
         hooks->close(ch);
     }
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
         // Already closed, idempotent
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return;
     }
 
@@ -652,7 +652,7 @@ void xr_channel_close(XrChannel *ch) {
         send_list = coro;
     }
 
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
 
     // Wake all waiters after releasing lock (close wake, let them recheck buffer)
     while (recv_list) {
@@ -698,25 +698,25 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
 
     // Trylock fast path: for buffered channels with buffer space and no waiters.
     // Avoids spin contention under high concurrency (e.g. 20 coros on 1 channel).
-    if (ch->buf_size > 0 && xr_mutex_trylock(&ch->lock)) {
+    if (ch->buf_size > 0 && xr_amutex_trylock(&ch->lock)) {
         if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
             ch->buf_count < ch->buf_size) {
             ch->buffer[ch->send_idx] = value;
             ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
             ch->buf_count++;
-            xr_mutex_unlock(&ch->lock);
+            xr_amutex_unlock(&ch->lock);
             return XR_CHAN_OK;
         }
         // Conditions not met under trylock: fall through with lock held
         goto send_locked;
     }
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
 send_locked:
     // Recheck closed (with lock held)
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return XR_CHAN_CLOSED;
     }
 
@@ -724,13 +724,13 @@ send_locked:
     if (chan_direct_send(ch, value))
         return XR_CHAN_OK;
     if (chan_buffer_push(ch, value)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return XR_CHAN_OK;
     }
 
     // Case 3: need to block
     if (!coro) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return XR_CHAN_NO_CORO;
     }
 
@@ -751,7 +751,7 @@ send_locked:
     }
     xr_waitq_enqueue(&ch->sendq, coro);
 
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     return XR_CHAN_BLOCK;
 }
 
@@ -775,40 +775,40 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
     // Trylock fast path: for buffered channels with data and no waiting senders.
     // Avoids spin contention under high concurrency.
-    if (ch->buf_size > 0 && xr_mutex_trylock(&ch->lock)) {
+    if (ch->buf_size > 0 && xr_amutex_trylock(&ch->lock)) {
         if (!ch->sendq.first && ch->buf_count > 0) {
             *out = ch->buffer[ch->recv_idx];
             ch->buffer[ch->recv_idx] = xr_null();
             ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
             ch->buf_count--;
-            xr_mutex_unlock(&ch->lock);
+            xr_amutex_unlock(&ch->lock);
             return XR_CHAN_OK;
         }
         // Conditions not met under trylock: fall through with lock held
         goto recv_locked;
     }
 
-    xr_mutex_lock(&ch->lock);
+    xr_amutex_lock(&ch->lock);
 
 recv_locked:
     // Direct transfer from waiting sender, or buffer pop.
     if (chan_direct_recv(ch, out))
         return XR_CHAN_OK;
     if (chan_buffer_pop(ch, out)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return XR_CHAN_OK;
     }
 
     // Case 3: channel closed and buffer empty
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         *out = xr_null();
         return XR_CHAN_CLOSED;
     }
 
     // Case 4: need to block
     if (!coro) {
-        xr_mutex_unlock(&ch->lock);
+        xr_amutex_unlock(&ch->lock);
         return XR_CHAN_NO_CORO;
     }
 
@@ -827,6 +827,6 @@ recv_locked:
     }
     xr_waitq_enqueue(&ch->recvq, coro);
 
-    xr_mutex_unlock(&ch->lock);
+    xr_amutex_unlock(&ch->lock);
     return XR_CHAN_BLOCK;
 }

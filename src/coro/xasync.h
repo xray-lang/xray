@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include "xworker.h"
 
 // ========== Configuration ==========
@@ -68,14 +68,14 @@ typedef struct XrAsyncReadyQueue {
 typedef struct XrAsyncPool {
     // Thread management
     int thread_count;
-    pthread_t *threads;
+    xr_thread_t *threads;
     _Atomic bool running;
 
     // Task queue
     XrAsyncJob *queue_head;
     XrAsyncJob *queue_tail;
-    pthread_mutex_t queue_mutex;
-    pthread_cond_t queue_cond;
+    xr_mutex_t queue_mutex;
+    xr_cond_t queue_cond;
 
     // Completion queues (one per Worker)
     XrAsyncReadyQueue ready_queues[XR_MAX_WORKERS];

@@ -27,7 +27,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <pthread.h>
+#include "../../base/xthread.h"
 #include <stdatomic.h>
 #include "../../base/xdefs.h"
 #include "xlsp_types.h"  // For XrLspSymbolKind
@@ -79,7 +79,7 @@ typedef struct XrLspIndexWork {
 
 // Worker thread state
 typedef struct XrLspIndexWorker {
-    pthread_t thread;             // Thread handle
+    xr_thread_t thread;           // Thread handle
     XrayIsolate *isolate;         // Per-worker Isolate
     int worker_id;                // Worker ID (0 to N-1)
     struct XrLspIndexPool *pool;  // Back-pointer to pool
@@ -95,14 +95,14 @@ typedef struct XrLspIndexPool {
     XrLspIndexWork *work_head;
     XrLspIndexWork *work_tail;
     int work_count;
-    pthread_mutex_t work_mutex;
-    pthread_cond_t work_cond;
+    xr_mutex_t work_mutex;
+    xr_cond_t work_cond;
 
     // Result queue
     XrLspIndexResult *result_head;
     XrLspIndexResult *result_tail;
     int result_count;
-    pthread_mutex_t result_mutex;
+    xr_mutex_t result_mutex;
 
     // Notification pipe (to wake main thread)
     int notify_fd[2];

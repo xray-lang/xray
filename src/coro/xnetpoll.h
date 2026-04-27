@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include "../base/xdefs.h"
 #include "xtimer_wheel.h"  // XrTWheelTimer
 
@@ -103,8 +103,8 @@ typedef struct XrPollDesc {
     XrTWheelTimer wt_storage;  // Write timer storage
 
     // Condition variable for xr_netpoll_block (thread-blocking wait)
-    pthread_mutex_t block_mu;
-    pthread_cond_t block_cond;
+    xr_mutex_t block_mu;
+    xr_cond_t block_cond;
 
     // User data
     void *user_data;

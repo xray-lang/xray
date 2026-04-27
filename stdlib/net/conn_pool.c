@@ -37,7 +37,7 @@
 
 // Coroutine-safe fd I/O primitives (implemented in src/coro/xsocket.c).
 // When the caller is running on a coroutine, these yield through the
-// netpoll / pthread_cond_wait machinery instead of blocking the worker
+// netpoll / xr_cond_wait machinery instead of blocking the worker
 // in recv/send. Return values match the usual short-read/short-write
 // conventions plus -1 on error.
 extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
@@ -297,7 +297,7 @@ XrConnPool *xr_conn_pool_new(void) {
     if (!pool)
         return NULL;
 
-    pthread_mutex_init(&pool->lock, NULL);
+    xr_mutex_init(&pool->lock);
     pool->initialized = true;
     pool->idle_timeout_ms = (uint64_t) XR_POOL_MAX_IDLE_TIME * 1000;
     return pool;
@@ -308,7 +308,7 @@ void xr_conn_pool_init(XrConnPool *pool) {
         return;
 
     memset(pool, 0, sizeof(XrConnPool));
-    pthread_mutex_init(&pool->lock, NULL);
+    xr_mutex_init(&pool->lock);
     pool->initialized = true;
     pool->idle_timeout_ms = (uint64_t) XR_POOL_MAX_IDLE_TIME * 1000;
 }
@@ -317,7 +317,7 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
     if (!pool || !pool->initialized)
         return;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     // Close all connections
     for (int i = 0; i < XR_POOL_MAX_HOSTS; i++) {
@@ -349,8 +349,8 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
     pool->total_conns = 0;
     pool->initialized = false;
 
-    pthread_mutex_unlock(&pool->lock);
-    pthread_mutex_destroy(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
+    xr_mutex_destroy(&pool->lock);
 }
 
 XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port, bool is_https) {
@@ -361,7 +361,7 @@ XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port
     make_host_key(key, sizeof(key), host, port, is_https);
     uint32_t bucket = hash_string(key) % XR_POOL_MAX_HOSTS;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     // Find host pool
     XrHostPool *hp = pool->buckets[bucket];
@@ -401,7 +401,7 @@ XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port
         }
     }
 
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
 
     // No idle connection, create new one
     if (!result) {
@@ -427,7 +427,7 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
     make_host_key(key, sizeof(key), host, port, is_https);
     uint32_t bucket = hash_string(key) % XR_POOL_MAX_HOSTS;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     // Find or create host pool
     XrHostPool *hp = pool->buckets[bucket];
@@ -439,7 +439,7 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
         // Create new host pool
         hp = (XrHostPool *) xr_calloc(1, sizeof(XrHostPool));
         if (!hp) {
-            pthread_mutex_unlock(&pool->lock);
+            xr_mutex_unlock(&pool->lock);
             close_connection(conn);
             xr_free(conn);
             return;
@@ -456,7 +456,7 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
 
     // Check connection limit
     if (hp->idle_count >= XR_POOL_MAX_CONNS_PER_HOST) {
-        pthread_mutex_unlock(&pool->lock);
+        xr_mutex_unlock(&pool->lock);
         close_connection(conn);
         xr_free(conn);
         return;
@@ -471,7 +471,7 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
     hp->idle_count++;
     pool->total_conns++;
 
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
 }
 
 void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn) {
@@ -489,7 +489,7 @@ int xr_conn_pool_evict_idle(XrConnPool *pool) {
     uint64_t now = now_ms();
     int evicted = 0;
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     for (int i = 0; i < XR_POOL_MAX_HOSTS; i++) {
         XrHostPool *hp = pool->buckets[i];
@@ -514,7 +514,7 @@ int xr_conn_pool_evict_idle(XrConnPool *pool) {
         }
     }
 
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
     return evicted;
 }
 
@@ -531,7 +531,7 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
         return;
     }
 
-    pthread_mutex_lock(&pool->lock);
+    xr_mutex_lock(&pool->lock);
 
     int t = 0, i = 0;
     for (int b = 0; b < XR_POOL_MAX_HOSTS; b++) {
@@ -548,7 +548,7 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
     if (idle)
         *idle = i;
 
-    pthread_mutex_unlock(&pool->lock);
+    xr_mutex_unlock(&pool->lock);
 }
 
 /* ========== Connection Read/Write Helpers ========== */

@@ -26,7 +26,7 @@
 #ifndef XMACHINE_H
 #define XMACHINE_H
 
-#include <pthread.h>
+#include "../base/xthread.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -114,7 +114,7 @@ typedef struct XrMachineVMStorage {
 
 typedef struct XrMachine {
     /* === Thread Identity === */
-    pthread_t thread;
+    xr_thread_t thread;
     int id;
 
     /* === Current P (NULL = idle/blocked) === */

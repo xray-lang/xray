@@ -50,7 +50,7 @@ extern void xr_socket_close(struct XrayIsolate *X, int fd);
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -350,9 +350,9 @@ void xr_net_shutdown(void) {
 
 static XrTlsConn **g_tls_conns = NULL;
 static int g_tls_conns_cap = 0;
-static pthread_mutex_t g_tls_conns_mutex = PTHREAD_MUTEX_INITIALIZER;
+static xr_mutex_t g_tls_conns_mutex = XR_MUTEX_INITIALIZER;
 static XrTlsContext *g_tls_client_ctx = NULL;
-static pthread_once_t g_tls_client_once = PTHREAD_ONCE_INIT;
+static xr_once_t g_tls_client_once = XR_ONCE_INITIALIZER;
 
 // Grow g_tls_conns array to hold fd. Caller must hold g_tls_conns_mutex.
 static bool tls_fd_ensure_locked(int fd) {
@@ -377,23 +377,23 @@ static void tls_client_ctx_init(void) {
 }
 
 static XrTlsContext *get_tls_client_ctx(void) {
-    pthread_once(&g_tls_client_once, tls_client_ctx_init);
+    xr_once_call(&g_tls_client_once, tls_client_ctx_init);
     return g_tls_client_ctx;
 }
 
 static XrTlsConn *get_tls_conn(int fd) {
-    pthread_mutex_lock(&g_tls_conns_mutex);
+    xr_mutex_lock(&g_tls_conns_mutex);
     XrTlsConn *tls = (fd >= 0 && fd < g_tls_conns_cap) ? g_tls_conns[fd] : NULL;
-    pthread_mutex_unlock(&g_tls_conns_mutex);
+    xr_mutex_unlock(&g_tls_conns_mutex);
     return tls;
 }
 
 static bool set_tls_conn(int fd, XrTlsConn *tls) {
-    pthread_mutex_lock(&g_tls_conns_mutex);
+    xr_mutex_lock(&g_tls_conns_mutex);
     bool ok = tls_fd_ensure_locked(fd);
     if (ok)
         g_tls_conns[fd] = tls;
-    pthread_mutex_unlock(&g_tls_conns_mutex);
+    xr_mutex_unlock(&g_tls_conns_mutex);
     return ok;
 }
 #endif

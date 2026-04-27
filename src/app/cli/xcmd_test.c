@@ -44,9 +44,8 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <time.h>
-#include <pthread.h>
-#include <errno.h>
+#include "../../base/xthread.h"
+#include "../../base/xtime.h"
 #include <stdatomic.h>
 #include <unistd.h>
 
@@ -156,50 +155,52 @@ static const char *extract_coro_error(XrCoroutine *coro) {
 
 typedef struct {
     XrayIsolate *X;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    xr_mutex_t mutex;
+    xr_cond_t cond;
     bool done;
     int timeout_sec;
 } FileWatchdog;
 
 static void *file_watchdog_thread(void *arg) {
     FileWatchdog *wd = (FileWatchdog *) arg;
-    struct timespec deadline;
-    clock_gettime(CLOCK_REALTIME, &deadline);
-    deadline.tv_sec += wd->timeout_sec;
+    // Track an absolute monotonic deadline so spurious wake-ups
+    // do not extend the watchdog window.
+    uint64_t deadline_ns = xr_time_monotonic_ns() + (uint64_t) wd->timeout_sec * 1000000000ULL;
 
-    pthread_mutex_lock(&wd->mutex);
+    xr_mutex_lock(&wd->mutex);
     while (!wd->done) {
-        if (pthread_cond_timedwait(&wd->cond, &wd->mutex, &deadline) == ETIMEDOUT) {
-            if (!wd->done) {
-                XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(wd->X)->runtime;
-                if (runtime)
-                    xr_runtime_force_stop(runtime);
-            }
+        uint64_t now_ns = xr_time_monotonic_ns();
+        if (now_ns >= deadline_ns)
+            break;
+        bool signalled = xr_cond_wait_for_ns(&wd->cond, &wd->mutex, deadline_ns - now_ns);
+        if (!signalled && !wd->done) {
+            XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(wd->X)->runtime;
+            if (runtime)
+                xr_runtime_force_stop(runtime);
             break;
         }
     }
-    pthread_mutex_unlock(&wd->mutex);
+    xr_mutex_unlock(&wd->mutex);
     return NULL;
 }
 
-static void watchdog_start(FileWatchdog *wd, XrayIsolate *X, int timeout_sec, pthread_t *tid) {
+static void watchdog_start(FileWatchdog *wd, XrayIsolate *X, int timeout_sec, xr_thread_t *tid) {
     wd->X = X;
     wd->done = false;
     wd->timeout_sec = timeout_sec;
-    pthread_mutex_init(&wd->mutex, NULL);
-    pthread_cond_init(&wd->cond, NULL);
-    pthread_create(tid, NULL, file_watchdog_thread, wd);
+    xr_mutex_init(&wd->mutex);
+    xr_cond_init(&wd->cond);
+    xr_thread_create(tid, file_watchdog_thread, wd);
 }
 
-static void watchdog_stop(FileWatchdog *wd, pthread_t tid) {
-    pthread_mutex_lock(&wd->mutex);
+static void watchdog_stop(FileWatchdog *wd, xr_thread_t tid) {
+    xr_mutex_lock(&wd->mutex);
     wd->done = true;
-    pthread_cond_signal(&wd->cond);
-    pthread_mutex_unlock(&wd->mutex);
-    pthread_join(tid, NULL);
-    pthread_mutex_destroy(&wd->mutex);
-    pthread_cond_destroy(&wd->cond);
+    xr_cond_signal(&wd->cond);
+    xr_mutex_unlock(&wd->mutex);
+    xr_thread_join(tid, NULL);
+    xr_mutex_destroy(&wd->mutex);
+    xr_cond_destroy(&wd->cond);
 }
 
 /* ========== Unified Test Execution (reuse main_coro) ========== */
@@ -291,7 +292,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, bool jitle
 
     // Start file-level watchdog
     FileWatchdog wd;
-    pthread_t wd_tid;
+    xr_thread_t wd_tid;
     watchdog_start(&wd, X, TEST_FILE_TIMEOUT_SEC, &wd_tid);
 
     double file_start = get_time_ms();
@@ -808,11 +809,11 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
             printf(" " XR_CLR_DIM "Running %d files on %d threads..." XR_CLR_RESET "\n\n", fl.count,
                    nworkers);
 
-        pthread_t *threads = xr_calloc(nworkers, sizeof(pthread_t));
+        xr_thread_t *threads = xr_calloc(nworkers, sizeof(xr_thread_t));
         for (int i = 0; i < nworkers; i++)
-            pthread_create(&threads[i], NULL, test_worker_thread, &pctx);
+            xr_thread_create(&threads[i], test_worker_thread, &pctx);
         for (int i = 0; i < nworkers; i++)
-            pthread_join(threads[i], NULL);
+            xr_thread_join(threads[i], NULL);
         xr_free(threads);
 
         if (!quiet) {

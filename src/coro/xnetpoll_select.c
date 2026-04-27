@@ -26,7 +26,7 @@
 // Active descriptor list
 static XrPollDesc *active_pds[XR_SELECT_MAX_FDS];
 static int active_count = 0;
-static pthread_mutex_t active_lock = PTHREAD_MUTEX_INITIALIZER;
+static xr_mutex_t active_lock = XR_MUTEX_INITIALIZER;
 
 // Initialize select
 int xr_netpoll_init(XrNetpoll *np) {
@@ -58,9 +58,9 @@ void xr_netpoll_cleanup(XrNetpoll *np) {
     close_wakeup_pipe(np->wakeup_pipe);
     poll_cache_cleanup(&np->cache);
 
-    pthread_mutex_lock(&active_lock);
+    xr_mutex_lock(&active_lock);
     active_count = 0;
-    pthread_mutex_unlock(&active_lock);
+    xr_mutex_unlock(&active_lock);
 
     atomic_store(&np->inited, false);
 }
@@ -83,11 +83,11 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
     pd->fd = fd;
 
     // Add to active list
-    pthread_mutex_lock(&active_lock);
+    xr_mutex_lock(&active_lock);
     if (active_count < XR_SELECT_MAX_FDS) {
         active_pds[active_count++] = pd;
     }
-    pthread_mutex_unlock(&active_lock);
+    xr_mutex_unlock(&active_lock);
 
     return pd;
 }
@@ -100,14 +100,14 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
     atomic_store(&pd->closing, true);
 
     // Remove from active list
-    pthread_mutex_lock(&active_lock);
+    xr_mutex_lock(&active_lock);
     for (int i = 0; i < active_count; i++) {
         if (active_pds[i] == pd) {
             active_pds[i] = active_pds[--active_count];
             break;
         }
     }
-    pthread_mutex_unlock(&active_lock);
+    xr_mutex_unlock(&active_lock);
 
     xr_netpoll_unblock(pd, XR_POLL_READ, false);
     xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
@@ -132,7 +132,7 @@ XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
     FD_SET(np->wakeup_pipe[0], &rfds);
 
     // Build fd_set
-    pthread_mutex_lock(&active_lock);
+    xr_mutex_lock(&active_lock);
     for (int i = 0; i < active_count; i++) {
         XrPollDesc *pd = active_pds[i];
         if (pd && pd->fd >= 0 && pd->fd < FD_SETSIZE) {
@@ -142,7 +142,7 @@ XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
                 maxfd = pd->fd;
         }
     }
-    pthread_mutex_unlock(&active_lock);
+    xr_mutex_unlock(&active_lock);
 
     // Set timeout
     struct timeval tv;
@@ -176,7 +176,7 @@ XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
     }
 
     // Process ready fds
-    pthread_mutex_lock(&active_lock);
+    xr_mutex_lock(&active_lock);
     for (int i = 0; i < active_count; i++) {
         XrPollDesc *pd = active_pds[i];
         if (!pd || pd->fd < 0)
@@ -192,7 +192,7 @@ XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
             xr_netpoll_ready(&list, pd, mode);
         }
     }
-    pthread_mutex_unlock(&active_lock);
+    xr_mutex_unlock(&active_lock);
 
     return list;
 }

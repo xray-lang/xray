@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 #include <stdarg.h>
 
 /* ========== Async Write Buffer ========== */
@@ -41,11 +41,11 @@ typedef struct {
     int head;
     int tail;
     int count;
-    pthread_mutex_t mutex;
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;  // legacy, no longer used by producers
-    pthread_cond_t drained;   // signaled when queue becomes empty
-    pthread_t thread;
+    xr_mutex_t mutex;
+    xr_cond_t not_empty;
+    xr_cond_t not_full;  // legacy, no longer used by producers
+    xr_cond_t drained;   // signaled when queue becomes empty
+    xr_thread_t thread;
     bool running;
     FILE *output;
     // Tally of messages the producer had to discard because the ring was
@@ -65,7 +65,7 @@ typedef struct {
 // g_default_logger / g_async_queue / g_default_logger_mutex.
 typedef struct XrLogState {
     XrLogger default_logger;
-    pthread_mutex_t mutex;       // protects setLevel/setFormat/setOutput
+    xr_mutex_t mutex;            // protects setLevel/setFormat/setOutput
     AsyncLogQueue *async_queue;  // NULL until enableAsync(true)
     bool async_initialized;
 } XrLogState;
@@ -88,7 +88,7 @@ static XrLogState *log_state_get(XrayIsolate *X) {
     s->default_logger.level = XR_LOG_INFO;
     s->default_logger.format = XR_LOG_FORMAT_TEXT;
     s->default_logger.output = stderr;
-    pthread_mutex_init(&s->mutex, NULL);
+    xr_mutex_init(&s->mutex);
 
     cache->log_state = s;
     cache->log_state_cleanup = log_state_destroy;
@@ -108,16 +108,16 @@ static void *async_log_thread(void *arg) {
     AsyncLogQueue *q = (AsyncLogQueue *) arg;
 
     while (1) {
-        pthread_mutex_lock(&q->mutex);
+        xr_mutex_lock(&q->mutex);
 
         // Wait for queue not empty or stop signal
         while (q->count == 0 && q->running) {
-            pthread_cond_wait(&q->not_empty, &q->mutex);
+            xr_cond_wait(&q->not_empty, &q->mutex);
         }
 
         // Check if should exit
         if (!q->running && q->count == 0) {
-            pthread_mutex_unlock(&q->mutex);
+            xr_mutex_unlock(&q->mutex);
             break;
         }
 
@@ -137,11 +137,11 @@ static void *async_log_thread(void *arg) {
         }
 
         // Signal queue has space (and drained if empty)
-        pthread_cond_signal(&q->not_full);
+        xr_cond_signal(&q->not_full);
         if (q->count == 0) {
-            pthread_cond_broadcast(&q->drained);
+            xr_cond_broadcast(&q->drained);
         }
-        pthread_mutex_unlock(&q->mutex);
+        xr_mutex_unlock(&q->mutex);
 
         FILE *out = q->output ? q->output : stderr;
 
@@ -171,15 +171,15 @@ static void async_queue_init(XrLogState *ls, FILE *output) {
         return;
     memset(q, 0, sizeof(AsyncLogQueue));
 
-    pthread_mutex_init(&q->mutex, NULL);
-    pthread_cond_init(&q->not_empty, NULL);
-    pthread_cond_init(&q->not_full, NULL);
-    pthread_cond_init(&q->drained, NULL);
+    xr_mutex_init(&q->mutex);
+    xr_cond_init(&q->not_empty);
+    xr_cond_init(&q->not_full);
+    xr_cond_init(&q->drained);
 
     q->output = output;
     q->running = true;
 
-    pthread_create(&q->thread, NULL, async_log_thread, q);
+    xr_thread_create(&q->thread, async_log_thread, q);
     ls->async_queue = q;
     ls->async_initialized = true;
 }
@@ -191,12 +191,12 @@ static void async_queue_stop(XrLogState *ls) {
 
     AsyncLogQueue *q = ls->async_queue;
 
-    pthread_mutex_lock(&q->mutex);
+    xr_mutex_lock(&q->mutex);
     q->running = false;
-    pthread_cond_signal(&q->not_empty);
-    pthread_mutex_unlock(&q->mutex);
+    xr_cond_signal(&q->not_empty);
+    xr_mutex_unlock(&q->mutex);
 
-    pthread_join(q->thread, NULL);
+    xr_thread_join(q->thread, NULL);
 
     // Clean up remaining entries
     for (int i = 0; i < ASYNC_QUEUE_SIZE; i++) {
@@ -206,10 +206,10 @@ static void async_queue_stop(XrLogState *ls) {
         }
     }
 
-    pthread_mutex_destroy(&q->mutex);
-    pthread_cond_destroy(&q->not_empty);
-    pthread_cond_destroy(&q->not_full);
-    pthread_cond_destroy(&q->drained);
+    xr_mutex_destroy(&q->mutex);
+    xr_cond_destroy(&q->not_empty);
+    xr_cond_destroy(&q->not_full);
+    xr_cond_destroy(&q->drained);
 
     xr_free(q);
     ls->async_queue = NULL;
@@ -221,7 +221,7 @@ static void async_queue_stop(XrLogState *ls) {
 // Discard strategy: if the ring buffer is full we drop the *new* record
 // and increment a counter instead of blocking the producer. Rationale:
 //   - A coroutine hitting log.info() in a tight loop must never stall
-//     on pthread_cond_wait -- that would pin a worker thread and cascade
+//     on xr_cond_wait -- that would pin a worker thread and cascade
 //     into latency across unrelated tasks.
 //   - Dropping newest preserves the earlier context most useful for
 //     postmortem analysis; the writer thread later emits a synthetic
@@ -234,10 +234,10 @@ static void async_log_write(XrLogState *ls, char *msg) {
 
     AsyncLogQueue *q = ls->async_queue;
 
-    pthread_mutex_lock(&q->mutex);
+    xr_mutex_lock(&q->mutex);
 
     if (!q->running) {
-        pthread_mutex_unlock(&q->mutex);
+        xr_mutex_unlock(&q->mutex);
         xr_free(msg);
         return;
     }
@@ -245,7 +245,7 @@ static void async_log_write(XrLogState *ls, char *msg) {
     if (q->count >= ASYNC_QUEUE_SIZE) {
         // Ring full: drop newest, bump counter, return immediately.
         q->dropped++;
-        pthread_mutex_unlock(&q->mutex);
+        xr_mutex_unlock(&q->mutex);
         xr_free(msg);
         return;
     }
@@ -256,8 +256,8 @@ static void async_log_write(XrLogState *ls, char *msg) {
     q->count++;
 
     // Signal background thread
-    pthread_cond_signal(&q->not_empty);
-    pthread_mutex_unlock(&q->mutex);
+    xr_cond_signal(&q->not_empty);
+    xr_mutex_unlock(&q->mutex);
 }
 
 // Flush async queue (blocks until complete)
@@ -268,11 +268,11 @@ static void async_queue_flush(XrLogState *ls) {
     AsyncLogQueue *q = ls->async_queue;
 
     // Wait for queue to drain using condvar (no busy-wait)
-    pthread_mutex_lock(&q->mutex);
+    xr_mutex_lock(&q->mutex);
     while (q->count > 0 && q->running) {
-        pthread_cond_wait(&q->drained, &q->mutex);
+        xr_cond_wait(&q->drained, &q->mutex);
     }
-    pthread_mutex_unlock(&q->mutex);
+    xr_mutex_unlock(&q->mutex);
 }
 
 /* ========== Dynamic Buffer ========== */
@@ -692,14 +692,14 @@ static XrValue xr_log_enable_source(XrayIsolate *isolate, XrValue *args, int nar
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
 
-    pthread_mutex_lock(&ls->mutex);
+    xr_mutex_lock(&ls->mutex);
     if (nargs >= 1 && XR_IS_BOOL(args[0])) {
         logger->add_source = XR_TO_BOOL(args[0]);
     } else {
         // Toggle if no argument
         logger->add_source = !logger->add_source;
     }
-    pthread_mutex_unlock(&ls->mutex);
+    xr_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
@@ -715,7 +715,7 @@ static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int narg
     // Guard the async transition with the logger mutex: flipping
     // async_mode while a concurrent log.info() call is reading the flag
     // would otherwise race the async_queue init/teardown sequence.
-    pthread_mutex_lock(&ls->mutex);
+    xr_mutex_lock(&ls->mutex);
     if (enable && !logger->async_mode) {
         async_queue_init(ls, logger->output);
         logger->async_mode = true;
@@ -724,7 +724,7 @@ static XrValue xr_log_enable_async(XrayIsolate *isolate, XrValue *args, int narg
         async_queue_stop(ls);
         logger->async_mode = false;
     }
-    pthread_mutex_unlock(&ls->mutex);
+    xr_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
@@ -749,13 +749,13 @@ static XrValue xr_log_set_level(XrayIsolate *isolate, XrValue *args, int nargs) 
 
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
-    pthread_mutex_lock(&ls->mutex);
+    xr_mutex_lock(&ls->mutex);
     if (XR_IS_INT(args[0])) {
         logger->level = (XrLogLevel) XR_TO_INT(args[0]);
     } else if (XR_IS_STRING(args[0])) {
         logger->level = xr_log_level_parse(XR_STRING_CHARS(XR_TO_STRING(args[0])));
     }
-    pthread_mutex_unlock(&ls->mutex);
+    xr_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
@@ -769,7 +769,7 @@ static XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs)
     XrLogger *logger = &ls->default_logger;
     const char *format = XR_STRING_CHARS(XR_TO_STRING(args[0]));
 
-    pthread_mutex_lock(&ls->mutex);
+    xr_mutex_lock(&ls->mutex);
     if (strcasecmp(format, "json") == 0) {
         logger->format = XR_LOG_FORMAT_JSON;
     } else if (strcasecmp(format, "text") == 0) {
@@ -777,7 +777,7 @@ static XrValue xr_log_set_format(XrayIsolate *isolate, XrValue *args, int nargs)
     } else {
         fprintf(stderr, "log.setFormat(): unknown format '%s', use 'json' or 'text'\n", format);
     }
-    pthread_mutex_unlock(&ls->mutex);
+    xr_mutex_unlock(&ls->mutex);
     return xr_null();
 }
 
@@ -809,10 +809,10 @@ static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs)
         }
     }
 
-    pthread_mutex_lock(&ls->mutex);
+    xr_mutex_lock(&ls->mutex);
     FILE *old_out = logger->output;
     logger->output = new_out;
-    pthread_mutex_unlock(&ls->mutex);
+    xr_mutex_unlock(&ls->mutex);
 
     // Close the previous file handle only after the swap so any in-flight
     // log write that already sampled the old pointer can finish draining
@@ -1041,7 +1041,7 @@ static void log_state_destroy(void *opaque) {
         fclose(out);
     }
 
-    pthread_mutex_destroy(&ls->mutex);
+    xr_mutex_destroy(&ls->mutex);
     xr_free(ls);
 }
 

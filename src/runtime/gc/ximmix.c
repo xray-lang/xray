@@ -54,21 +54,21 @@ static void free_aligned_block(char *data) {
  * cross-worker contention to rare L2 accesses.
  */
 
-#include <pthread.h>
+#include "../../base/xthread.h"
 #include "../../coro/xworker.h"
 
 #define XR_BLOCK_CACHE_L2_MAX 64
 
-static pthread_mutex_t g_block_cache_mu = PTHREAD_MUTEX_INITIALIZER;
+static xr_mutex_t g_block_cache_mu = XR_MUTEX_INITIALIZER;
 static XrImmixBlock *g_block_cache_head = NULL;
 static int g_block_cache_count = 0;
 
 static void block_cache_cleanup(void) {
-    pthread_mutex_lock(&g_block_cache_mu);
+    xr_mutex_lock(&g_block_cache_mu);
     XrImmixBlock *b = g_block_cache_head;
     g_block_cache_head = NULL;
     g_block_cache_count = 0;
-    pthread_mutex_unlock(&g_block_cache_mu);
+    xr_mutex_unlock(&g_block_cache_mu);
 
     while (b) {
         XrImmixBlock *next = b->next;
@@ -87,27 +87,27 @@ static void block_cache_init_once(void) {
 
 // L2 pop (caller holds no lock — we lock internally)
 static XrImmixBlock *block_cache_l2_pop(void) {
-    pthread_mutex_lock(&g_block_cache_mu);
+    xr_mutex_lock(&g_block_cache_mu);
     XrImmixBlock *b = g_block_cache_head;
     if (b) {
         g_block_cache_head = b->next;
         g_block_cache_count--;
     }
-    pthread_mutex_unlock(&g_block_cache_mu);
+    xr_mutex_unlock(&g_block_cache_mu);
     return b;
 }
 
 // L2 push (returns false if L2 full — caller should free the block)
 static bool block_cache_l2_push(XrImmixBlock *block) {
-    pthread_mutex_lock(&g_block_cache_mu);
+    xr_mutex_lock(&g_block_cache_mu);
     if (g_block_cache_count >= XR_BLOCK_CACHE_L2_MAX) {
-        pthread_mutex_unlock(&g_block_cache_mu);
+        xr_mutex_unlock(&g_block_cache_mu);
         return false;
     }
     block->next = g_block_cache_head;
     g_block_cache_head = block;
     g_block_cache_count++;
-    pthread_mutex_unlock(&g_block_cache_mu);
+    xr_mutex_unlock(&g_block_cache_mu);
     return true;
 }
 

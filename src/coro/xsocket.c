@@ -124,7 +124,7 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
         }
 
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // Block until I/O ready (uses pthread_cond_wait, not busy-wait)
+            // Block until I/O ready (uses xr_cond_wait, not busy-wait)
             if (xr_netpoll_block(pd, XR_POLL_READ, X)) {
                 continue;
             }

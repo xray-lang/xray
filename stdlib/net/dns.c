@@ -22,7 +22,7 @@
 #include "../../src/coro/xasync.h"
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 #include <netdb.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -56,8 +56,8 @@ struct XrDnsRequest {
     char *hostname;
     XrSockAddr addr;
     XrDnsStatus status;
-    pthread_mutex_t mutex;
-    pthread_cond_t cond;
+    xr_mutex_t mutex;
+    xr_cond_t cond;
     int refcount;
 };
 
@@ -68,7 +68,7 @@ static struct {
     XrDnsCacheEntry *cache_tail;  // LRU tail (least recent)
     XrDnsCacheEntry *cache_hash[DNS_CACHE_SIZE];
     int cache_count;
-    pthread_mutex_t cache_mutex;
+    xr_mutex_t cache_mutex;
     bool initialized;
 } g_dns;
 
@@ -184,7 +184,7 @@ static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int add
 
 // Round-robin: get next address from cache
 static bool cache_lookup(const char *hostname, XrSockAddr *addr, XrAddrFamily family) {
-    pthread_mutex_lock(&g_dns.cache_mutex);
+    xr_mutex_lock(&g_dns.cache_mutex);
 
     XrDnsCacheEntry *entry = cache_find_locked(hostname);
     if (entry && entry->addr_count > 0) {
@@ -207,26 +207,26 @@ static bool cache_lookup(const char *hostname, XrSockAddr *addr, XrAddrFamily fa
                     }
                 }
                 if (found < 0) {
-                    pthread_mutex_unlock(&g_dns.cache_mutex);
+                    xr_mutex_unlock(&g_dns.cache_mutex);
                     return false;
                 }
                 *addr = entry->addrs[found];
                 entry->current_idx = (found + 1) % entry->addr_count;
             }
             cache_move_to_front_locked(entry);
-            pthread_mutex_unlock(&g_dns.cache_mutex);
+            xr_mutex_unlock(&g_dns.cache_mutex);
             return true;
         }
     }
 
-    pthread_mutex_unlock(&g_dns.cache_mutex);
+    xr_mutex_unlock(&g_dns.cache_mutex);
     return false;
 }
 
 // Get all addresses from cache
 static int cache_lookup_all(const char *hostname, XrSockAddr *addrs, int max_addrs,
                             XrAddrFamily family) {
-    pthread_mutex_lock(&g_dns.cache_mutex);
+    xr_mutex_lock(&g_dns.cache_mutex);
 
     XrDnsCacheEntry *entry = cache_find_locked(hostname);
     if (entry && entry->addr_count > 0) {
@@ -246,12 +246,12 @@ static int cache_lookup_all(const char *hostname, XrSockAddr *addrs, int max_add
             if (count > 0) {
                 cache_move_to_front_locked(entry);
             }
-            pthread_mutex_unlock(&g_dns.cache_mutex);
+            xr_mutex_unlock(&g_dns.cache_mutex);
             return count;
         }
     }
 
-    pthread_mutex_unlock(&g_dns.cache_mutex);
+    xr_mutex_unlock(&g_dns.cache_mutex);
     return 0;
 }
 
@@ -323,9 +323,9 @@ static int do_resolve_all(const char *hostname, XrSockAddr *addrs, int max_addrs
 
     if (count > 0) {
         // Update cache
-        pthread_mutex_lock(&g_dns.cache_mutex);
+        xr_mutex_lock(&g_dns.cache_mutex);
         cache_insert_locked(hostname, addrs, count);
-        pthread_mutex_unlock(&g_dns.cache_mutex);
+        xr_mutex_unlock(&g_dns.cache_mutex);
     }
 
     return count;
@@ -349,7 +349,7 @@ void xr_dns_init(void) {
         return;
 
     memset(&g_dns, 0, sizeof(g_dns));
-    pthread_mutex_init(&g_dns.cache_mutex, NULL);
+    xr_mutex_init(&g_dns.cache_mutex);
     g_dns.initialized = true;
 }
 
@@ -359,7 +359,7 @@ void xr_dns_shutdown(void) {
 
     // Clear cache
     xr_dns_cache_clear();
-    pthread_mutex_destroy(&g_dns.cache_mutex);
+    xr_mutex_destroy(&g_dns.cache_mutex);
     g_dns.initialized = false;
 }
 
@@ -445,7 +445,7 @@ bool xr_dns_resolve_on_async(XrAsyncPool *pool, struct XrCoroutine *coro, int wo
 }
 
 void xr_dns_cache_clear(void) {
-    pthread_mutex_lock(&g_dns.cache_mutex);
+    xr_mutex_lock(&g_dns.cache_mutex);
 
     XrDnsCacheEntry *entry = g_dns.cache_head;
     while (entry) {
@@ -460,7 +460,7 @@ void xr_dns_cache_clear(void) {
     g_dns.cache_tail = NULL;
     g_dns.cache_count = 0;
 
-    pthread_mutex_unlock(&g_dns.cache_mutex);
+    xr_mutex_unlock(&g_dns.cache_mutex);
 }
 
 void xr_dns_prefetch(const char *hostname) {

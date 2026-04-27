@@ -39,9 +39,9 @@
  *
  *   INVARIANT 5 (Lock discipline): All mutations to buffer state
  *   (buf_count, send_idx, recv_idx) and wait queues (sendq, recvq)
- *   must be performed under the channel mutex (XrMutex). The lock
+ *   must be performed under the channel mutex (XrAdaptiveMutex). The lock
  *   is held for short durations only (no blocking operations under
- *   lock). XrMutex is an adaptive 3-state lock (active spin -> yield
+ *   lock). XrAdaptiveMutex is an adaptive 3-state lock (active spin -> yield
  *   -> futex sleep) and degrades to a single CAS under no contention.
  *
  *   INVARIANT 6 (Distributed hooks): When dist != NULL, all send/
@@ -138,7 +138,7 @@ typedef struct XrChannel {
 
     /* === State (atomic) === */
     _Atomic(bool) closed;
-    XrMutex lock;
+    XrAdaptiveMutex lock;
 
     /* === Timer Channel === */
     _Atomic(bool) is_timer;

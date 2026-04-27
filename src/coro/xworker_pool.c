@@ -60,7 +60,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
     // Lock-free — atomic_exchange grabs the entire global list
     // in O(1), we keep the first XR_CORO_BATCH_SIZE for local use and push
     // the remainder back with a single CAS splice. This replaces the old
-    // pthread_mutex_t pool->free_lock.
+    // xr_mutex_t pool->free_lock.
     if (worker && runtime->isolate && runtime->isolate->sys_heap) {
         XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
         if (pool && pool->initialized) {

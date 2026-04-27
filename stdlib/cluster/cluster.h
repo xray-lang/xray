@@ -33,7 +33,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -93,17 +93,17 @@ typedef struct XrCluster {
     // Connected nodes (linked list, protected by nodes_lock)
     XrClusterNode *nodes;
     int node_count;
-    XrMutex nodes_lock;
+    XrAdaptiveMutex nodes_lock;
 
     // Named Channel registry (hash table, protected by channels_lock)
     XrDistChannel *channel_buckets[XR_CLUSTER_CHANNEL_BUCKETS];
     int channel_count;
-    XrMutex channels_lock;
+    XrAdaptiveMutex channels_lock;
 
     // Service registry (hash table)
     XrServiceEntry *service_buckets[XR_CLUSTER_SERVICE_BUCKETS];
     int service_count;
-    XrMutex services_lock;
+    XrAdaptiveMutex services_lock;
 
     /*
      * Topic Pub/Sub registry.
@@ -122,7 +122,7 @@ typedef struct XrCluster {
      */
     struct XrTopicTrieNode *topic_root;  // trie root; NULL before init
     int topic_sub_count;
-    XrMutex topics_lock;
+    XrAdaptiveMutex topics_lock;
 
     // Request ID counter for service calls
     _Atomic(uint64_t) next_request_id;
@@ -143,7 +143,7 @@ typedef struct XrCluster {
     } *tombstones;  // dynamic array
     int tombstone_count;
     int tombstone_cap;
-    XrMutex dead_nodes_lock;
+    XrAdaptiveMutex dead_nodes_lock;
 
     // Node event callbacks
     void (*on_node_added)(const char *name);
@@ -152,7 +152,7 @@ typedef struct XrCluster {
     // Node monitors (CSP-style: Channel receives notification on disconnect)
     struct XrNodeMonitor *monitors;
     int monitor_count;
-    XrMutex monitors_lock;
+    XrAdaptiveMutex monitors_lock;
 
     // Running state
     _Atomic(bool) running;

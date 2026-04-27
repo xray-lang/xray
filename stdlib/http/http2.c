@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
+#include "../../src/base/xthread.h"
 #include <arpa/inet.h>
 
 /* ========== HPACK Static Table (RFC 7541 Appendix A) ========== */
@@ -436,7 +436,7 @@ typedef struct {
 #define HPACK_HUFFMAN_TREE_CAP 1024  // 2 * 257 leaves = 514 nodes upper bound
 static HpackHuffmanNode hpack_huffman_tree[HPACK_HUFFMAN_TREE_CAP];
 static int hpack_huffman_tree_size = 0;
-static pthread_once_t hpack_huffman_once = PTHREAD_ONCE_INIT;
+static xr_once_t hpack_huffman_once = XR_ONCE_INITIALIZER;
 
 static void hpack_huffman_init(void) {
     hpack_huffman_tree[0].left = -1;
@@ -475,7 +475,7 @@ static void hpack_huffman_init(void) {
 //   - output buffer too small
 static int hpack_decode_huffman(const uint8_t *src, size_t src_len, char *dst, size_t dst_cap,
                                 size_t *dst_len) {
-    pthread_once(&hpack_huffman_once, hpack_huffman_init);
+    xr_once_call(&hpack_huffman_once, hpack_huffman_init);
 
     int cur = 0;               // current trie node
     size_t out = 0;            // bytes written to dst

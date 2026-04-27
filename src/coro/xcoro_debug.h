@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
-#include <pthread.h>
+#include "../base/xthread.h"
 #include "../base/xdefs.h"
 
 // ========== Debug Info Entry ==========
@@ -42,11 +42,11 @@ typedef struct XrCoroDebugInfo {
 // XrCoroDebugPool - Global shared debug info storage
 // Uses atomic counter for index allocation, supports concurrent registration
 typedef struct XrCoroDebugPool {
-    XrCoroDebugInfo *entries;     // Entry array
-    _Atomic uint32_t count;       // Current entry count
-    uint32_t capacity;            // Capacity
-    pthread_mutex_t expand_lock;  // Expansion lock
-    bool initialized;             // Initialized flag
+    XrCoroDebugInfo *entries;  // Entry array
+    _Atomic uint32_t count;    // Current entry count
+    uint32_t capacity;         // Capacity
+    xr_mutex_t expand_lock;    // Expansion lock
+    bool initialized;          // Initialized flag
 } XrCoroDebugPool;
 
 // ========== Pool Lifecycle API ==========

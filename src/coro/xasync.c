@@ -74,7 +74,7 @@ static void *async_thread_main(void *arg) {
 static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job) {
     job->next = NULL;
 
-    pthread_mutex_lock(&pool->queue_mutex);
+    xr_mutex_lock(&pool->queue_mutex);
 
     if (pool->queue_tail) {
         pool->queue_tail->next = job;
@@ -84,18 +84,18 @@ static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job) {
     pool->queue_tail = job;
 
     // Wake one waiting async thread
-    pthread_cond_signal(&pool->queue_cond);
+    xr_cond_signal(&pool->queue_cond);
 
-    pthread_mutex_unlock(&pool->queue_mutex);
+    xr_mutex_unlock(&pool->queue_mutex);
 }
 
 // Dequeue task (blocking wait)
 static XrAsyncJob *async_queue_pop(XrAsyncPool *pool) {
-    pthread_mutex_lock(&pool->queue_mutex);
+    xr_mutex_lock(&pool->queue_mutex);
 
     // Wait for task or shutdown signal
     while (!pool->queue_head && atomic_load(&pool->running)) {
-        pthread_cond_wait(&pool->queue_cond, &pool->queue_mutex);
+        xr_cond_wait(&pool->queue_cond, &pool->queue_mutex);
     }
 
     XrAsyncJob *job = NULL;
@@ -108,7 +108,7 @@ static XrAsyncJob *async_queue_pop(XrAsyncPool *pool) {
         job->next = NULL;
     }
 
-    pthread_mutex_unlock(&pool->queue_mutex);
+    xr_mutex_unlock(&pool->queue_mutex);
     return job;
 }
 
@@ -170,8 +170,8 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
     // Initialize task queue
     pool->queue_head = NULL;
     pool->queue_tail = NULL;
-    pthread_mutex_init(&pool->queue_mutex, NULL);
-    pthread_cond_init(&pool->queue_cond, NULL);
+    xr_mutex_init(&pool->queue_mutex);
+    xr_cond_init(&pool->queue_cond);
 
     // Initialize completion queues (lock-free MPSC; no mutex).
     for (int i = 0; i < XR_MAX_WORKERS; i++) {
@@ -187,24 +187,17 @@ void xr_async_pool_start_threads(XrAsyncPool *pool) {
     if (!pool)
         return;
 
-    pool->threads = (pthread_t *) xr_calloc(pool->thread_count, sizeof(pthread_t));
+    pool->threads = (xr_thread_t *) xr_calloc(pool->thread_count, sizeof(xr_thread_t));
     if (!pool->threads) {
         xr_log_warning("async", "failed to allocate thread array");
         return;
     }
 
-    pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setstacksize(&attr, XR_ASYNC_STACK_SIZE);
-
     for (int i = 0; i < pool->thread_count; i++) {
-        int ret = pthread_create(&pool->threads[i], &attr, async_thread_main, pool);
-        if (ret != 0) {
-            xr_log_warning("async", "failed to create async thread %d: %d", i, ret);
+        if (!xr_thread_create_ex(&pool->threads[i], async_thread_main, pool, XR_ASYNC_STACK_SIZE)) {
+            xr_log_warning("async", "failed to create async thread %d", i);
         }
     }
-
-    pthread_attr_destroy(&attr);
 }
 
 // Destroy async thread pool
@@ -216,15 +209,15 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     atomic_store(&pool->running, false);
 
     // Wake all waiting async threads
-    pthread_mutex_lock(&pool->queue_mutex);
-    pthread_cond_broadcast(&pool->queue_cond);
-    pthread_mutex_unlock(&pool->queue_mutex);
+    xr_mutex_lock(&pool->queue_mutex);
+    xr_cond_broadcast(&pool->queue_cond);
+    xr_mutex_unlock(&pool->queue_mutex);
 
     // Wait for all threads to exit
     if (pool->threads) {
         for (int i = 0; i < pool->thread_count; i++) {
             if (pool->threads[i]) {
-                pthread_join(pool->threads[i], NULL);
+                xr_thread_join(pool->threads[i], NULL);
             }
         }
         xr_free(pool->threads);
@@ -246,8 +239,8 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     }
 
     // Destroy sync primitives
-    pthread_mutex_destroy(&pool->queue_mutex);
-    pthread_cond_destroy(&pool->queue_cond);
+    xr_mutex_destroy(&pool->queue_mutex);
+    xr_cond_destroy(&pool->queue_cond);
 }
 
 // Submit async task

@@ -34,16 +34,16 @@
 #include <unistd.h>
 #include <sched.h>
 #elif defined(XR_OS_MACOS)
-#include <pthread.h>
+#include "xthread.h"
 #include <sched.h>
 // Darwin kernel futex equivalent (used by Go runtime, Rust std, etc.)
 extern int __ulock_wait(uint32_t operation, void *addr, uint64_t value, uint32_t timeout_us);
 extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
 #define XR_UL_COMPARE_AND_WAIT 1
 #endif  // Lock state constants
-#define XR_MUTEX_UNLOCKED 0
-#define XR_MUTEX_LOCKED 1
-#define XR_MUTEX_SLEEPING 2
+#define XR_AMUTEX_UNLOCKED 0
+#define XR_AMUTEX_LOCKED 1
+#define XR_AMUTEX_SLEEPING 2
 
 // Spin parameters
 #define XR_ACTIVE_SPIN 4       // Active spin iterations
@@ -53,32 +53,32 @@ extern int __ulock_wake(uint32_t operation, void *addr, uint64_t wake_value);
 /* ========== Cross-platform Three-state Lock ========== */
 
 // Unified mutex structure
-typedef struct XrMutex {
+typedef struct XrAdaptiveMutex {
     _Atomic(int) state;
-} XrMutex;
+} XrAdaptiveMutex;
 
-static inline void xr_mutex_init(XrMutex *m) {
-    atomic_store_explicit(&m->state, XR_MUTEX_UNLOCKED, memory_order_relaxed);
+static inline void xr_amutex_init(XrAdaptiveMutex *m) {
+    atomic_store_explicit(&m->state, XR_AMUTEX_UNLOCKED, memory_order_relaxed);
 }
 
 // Platform-specific futex operations
 #ifdef XR_OS_LINUX
 
-static inline void xr_futex_wait(XrMutex *m, int expected) {
+static inline void xr_futex_wait(XrAdaptiveMutex *m, int expected) {
     syscall(SYS_futex, &m->state, FUTEX_WAIT_PRIVATE, expected, NULL, NULL, 0);
 }
 
-static inline void xr_futex_wake(XrMutex *m) {
+static inline void xr_futex_wake(XrAdaptiveMutex *m) {
     syscall(SYS_futex, &m->state, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
 }
 
 #elif defined(XR_OS_WINDOWS)
 
-static inline void xr_futex_wait(XrMutex *m, int expected) {
+static inline void xr_futex_wait(XrAdaptiveMutex *m, int expected) {
     WaitOnAddress(&m->state, &expected, sizeof(int), INFINITE);
 }
 
-static inline void xr_futex_wake(XrMutex *m) {
+static inline void xr_futex_wake(XrAdaptiveMutex *m) {
     WakeByAddressSingle(&m->state);
 }
 
@@ -87,32 +87,32 @@ static inline void xr_futex_wake(XrMutex *m) {
 /* macOS: use __ulock_wait/__ulock_wake (Darwin kernel futex equivalent).
  * Blocks the calling thread when *addr == expected, wakes on __ulock_wake.
  * Same semantics as Linux FUTEX_WAIT/FUTEX_WAKE. */
-static inline void xr_futex_wait(XrMutex *m, int expected) {
+static inline void xr_futex_wait(XrAdaptiveMutex *m, int expected) {
     __ulock_wait(XR_UL_COMPARE_AND_WAIT, &m->state, (uint64_t) (uint32_t) expected, 0);
 }
 
-static inline void xr_futex_wake(XrMutex *m) {
+static inline void xr_futex_wake(XrAdaptiveMutex *m) {
     __ulock_wake(XR_UL_COMPARE_AND_WAIT, &m->state, 0);
 }
 
 #endif  // ========== Unified lock/unlock Interface ==========
 
-static inline void xr_mutex_lock(XrMutex *m) {
+static inline void xr_amutex_lock(XrAdaptiveMutex *m) {
     // Fast path: try to acquire unlocked mutex
-    int expected = XR_MUTEX_UNLOCKED;
-    if (atomic_compare_exchange_strong_explicit(&m->state, &expected, XR_MUTEX_LOCKED,
+    int expected = XR_AMUTEX_UNLOCKED;
+    if (atomic_compare_exchange_strong_explicit(&m->state, &expected, XR_AMUTEX_LOCKED,
                                                 memory_order_acquire, memory_order_relaxed)) {
         return;
     }
 
     // Slow path
-    int wait = XR_MUTEX_LOCKED;
+    int wait = XR_AMUTEX_LOCKED;
 
     for (;;) {
         // Active spin with CPU pause
         for (int i = 0; i < XR_ACTIVE_SPIN; i++) {
-            while (atomic_load_explicit(&m->state, memory_order_relaxed) == XR_MUTEX_UNLOCKED) {
-                expected = XR_MUTEX_UNLOCKED;
+            while (atomic_load_explicit(&m->state, memory_order_relaxed) == XR_AMUTEX_UNLOCKED) {
+                expected = XR_AMUTEX_UNLOCKED;
                 if (atomic_compare_exchange_weak_explicit(
                         &m->state, &expected, wait, memory_order_acquire, memory_order_relaxed)) {
                     return;
@@ -126,8 +126,8 @@ static inline void xr_mutex_lock(XrMutex *m) {
 
         // Passive spin with sched_yield
         for (int i = 0; i < XR_PASSIVE_SPIN; i++) {
-            while (atomic_load_explicit(&m->state, memory_order_relaxed) == XR_MUTEX_UNLOCKED) {
-                expected = XR_MUTEX_UNLOCKED;
+            while (atomic_load_explicit(&m->state, memory_order_relaxed) == XR_AMUTEX_UNLOCKED) {
+                expected = XR_AMUTEX_UNLOCKED;
                 if (atomic_compare_exchange_weak_explicit(
                         &m->state, &expected, wait, memory_order_acquire, memory_order_relaxed)) {
                     return;
@@ -141,26 +141,26 @@ static inline void xr_mutex_lock(XrMutex *m) {
         }
 
         // True sleep
-        int v = atomic_exchange_explicit(&m->state, XR_MUTEX_SLEEPING, memory_order_acquire);
-        if (v == XR_MUTEX_UNLOCKED) {
+        int v = atomic_exchange_explicit(&m->state, XR_AMUTEX_SLEEPING, memory_order_acquire);
+        if (v == XR_AMUTEX_UNLOCKED) {
             return;
         }
-        wait = XR_MUTEX_SLEEPING;
-        xr_futex_wait(m, XR_MUTEX_SLEEPING);
+        wait = XR_AMUTEX_SLEEPING;
+        xr_futex_wait(m, XR_AMUTEX_SLEEPING);
     }
 }
 
-static inline void xr_mutex_unlock(XrMutex *m) {
-    int v = atomic_exchange_explicit(&m->state, XR_MUTEX_UNLOCKED, memory_order_release);
-    if (v == XR_MUTEX_SLEEPING) {
+static inline void xr_amutex_unlock(XrAdaptiveMutex *m) {
+    int v = atomic_exchange_explicit(&m->state, XR_AMUTEX_UNLOCKED, memory_order_release);
+    if (v == XR_AMUTEX_SLEEPING) {
         // Wake up waiters
         xr_futex_wake(m);
     }
 }
 
-static inline bool xr_mutex_trylock(XrMutex *m) {
-    int expected = XR_MUTEX_UNLOCKED;
-    return atomic_compare_exchange_strong_explicit(&m->state, &expected, XR_MUTEX_LOCKED,
+static inline bool xr_amutex_trylock(XrAdaptiveMutex *m) {
+    int expected = XR_AMUTEX_UNLOCKED;
+    return atomic_compare_exchange_strong_explicit(&m->state, &expected, XR_AMUTEX_LOCKED,
                                                    memory_order_acquire, memory_order_relaxed);
 }
 

@@ -474,7 +474,7 @@ XrH2Server *xr_h2_server_new(const XrH2ServerConfig *config) {
     server->listen_fd = -1;
     server->event_fd = -1;
 
-    pthread_mutex_init(&server->conn_lock, NULL);
+    xr_mutex_init(&server->conn_lock);
 
     // Create TLS context
     if (config->cert_file && config->key_file) {
@@ -498,7 +498,7 @@ void xr_h2_server_free(XrH2Server *server) {
 
     xr_h2_server_stop(server);
 
-    pthread_mutex_destroy(&server->conn_lock);
+    xr_mutex_destroy(&server->conn_lock);
 
     h2_server_conn_pool_destroy(server);
 
