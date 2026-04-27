@@ -20,6 +20,12 @@
 #include <sched.h>
 #include <time.h>
 #include <string.h>
+#include <unistd.h>  // sysconf
+
+#if defined(XR_OS_MACOS)
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#endif
 
 bool xr_thread_create(xr_thread_t *t, xr_thread_fn fn, void *arg) {
     return pthread_create(t, NULL, fn, arg) == 0;
@@ -79,6 +85,46 @@ void xr_thread_sleep_ms(unsigned int ms) {
     while (nanosleep(&req, &req) == -1 && errno == EINTR) {
         // resume on the same `req` so remaining time is honored
     }
+}
+
+unsigned int xr_os_cpu_count(void) {
+    static unsigned int cached = 0;
+    if (cached != 0) {
+        return cached;
+    }
+    long n = -1;
+#if defined(_SC_NPROCESSORS_ONLN)
+    n = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+#if defined(XR_OS_MACOS)
+    if (n <= 0) {
+        // sysconf can return -1 on older macOS; fall back to sysctl.
+        int mib[2] = {CTL_HW, HW_NCPU};
+        int v = 0;
+        size_t sz = sizeof(v);
+        if (sysctl(mib, 2, &v, &sz, NULL, 0) == 0 && v > 0) {
+            n = v;
+        }
+    }
+#endif
+    cached = (n > 0) ? (unsigned int) n : 1u;
+    return cached;
+}
+
+int xr_thread_pin_to_cpu(unsigned int cpu_index) {
+#if defined(XR_OS_LINUX)
+    unsigned int n = xr_os_cpu_count();
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET((int) (cpu_index % n), &set);
+    return pthread_setaffinity_np(pthread_self(), sizeof(set), &set) == 0 ? 0 : -1;
+#else
+    // macOS: thread_policy_set with THREAD_AFFINITY_POLICY exists but
+    // is advisory and tied to the L2 cache topology, not CPU index.
+    // Treat the call as unsupported; callers fall back to OS scheduling.
+    (void) cpu_index;
+    return -1;
+#endif
 }
 
 // === Mutex ===

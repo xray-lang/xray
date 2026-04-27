@@ -165,6 +165,19 @@ XR_FUNC void xr_thread_yield(void);
 // need sub-ms precision should use the runtime's timer wheel.
 XR_FUNC void xr_thread_sleep_ms(unsigned int ms);
 
+// Number of CPUs available to the process for scheduling work.
+// Returns at least 1 even on platforms where the query fails.
+// The value is cached after the first successful query.
+XR_FUNC unsigned int xr_os_cpu_count(void);
+
+// Best-effort: pin the calling thread to a single CPU index.
+// `cpu_index` is taken modulo the result of xr_os_cpu_count().
+// Returns 0 on success, -1 if affinity APIs are unavailable on
+// the current platform (macOS in particular has no portable
+// equivalent). Callers must treat affinity as a hint, never a
+// correctness primitive.
+XR_FUNC int xr_thread_pin_to_cpu(unsigned int cpu_index);
+
 // === Mutex ===
 
 XR_FUNC void xr_mutex_init(xr_mutex_t *m);

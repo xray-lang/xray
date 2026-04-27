@@ -35,9 +35,6 @@
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
 #include "../coro/xtimer_wheel.h"
-#include <sched.h>
-#include <sys/time.h>
-#include <unistd.h>
 
 /* ========== Branch Prediction ========== */
 #if defined(__GNUC__) || defined(__clang__)
