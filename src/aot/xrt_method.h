@@ -11,7 +11,7 @@
  *   This header lives inside the AOT runtime umbrella (xrt.h) and is
  *   #include'd verbatim into AOT-generated C files. AOT-generated code
  *   must compile and run without any runtime header, so this file has
- *   to be self-contained: it cannot reach into runtime/value/* even
+ *   to be self-contained: it cannot reach into runtime/value/ even
  *   though those tables are the source of truth at the language level.
  *
  *   Concretely the AOT-side methods operate on XrtValue (a small

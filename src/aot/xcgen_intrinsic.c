@@ -101,7 +101,6 @@ XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, Xc
             }
             if (cf->vreg_struct_id && dst_idx < func->nvreg)
                 cf->vreg_struct_id[dst_idx] = (int16_t) sidx;
-            cf->needs_gc = true;
         }
         cf->call_args_count = 0;
         return;

@@ -322,7 +322,6 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
         }
         xcgen_buf_puts(b, ");\n");
         xcgen_buf_printf(b, "      v%u = _inst; }\n", dst_idx);
-        cf->needs_gc = true;
         cf->call_args_count = 0;
         for (int i = 0; i < cf->call_args_cap; i++)
             cf->call_args[i] = XIR_NONE;

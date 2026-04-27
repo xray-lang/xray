@@ -354,7 +354,6 @@ XR_FUNC void xcg_prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
                     uint32_t dst_vi = XIR_REF_INDEX(ins->dst);
                     if (dst_vi < func->nvreg)
                         cf->vreg_struct_id[dst_vi] = (int16_t) sidx;
-                    cf->needs_gc = true;
                 }
             }
 

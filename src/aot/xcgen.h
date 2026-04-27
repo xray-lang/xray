@@ -78,7 +78,6 @@ typedef struct XcgenFunc {
     XcgenBuf body;             // function body buffer
     int tmp_count;             // temp variable counter
     bool needs_runtime;        // true if function calls runtime APIs
-    bool needs_gc;             // true if function allocates GC objects
     bool needs_closure_param;  // true if function accesses upvalues (needs XrtValue xrt_closure
                                // param)
     bool non_escaping;         // true if all callers pass upvalues inline (no closure object)

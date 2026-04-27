@@ -929,12 +929,8 @@ static void xcg_emit_mov(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf)
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;
-    } else if (src_tagged && dst_tagged) {
-        // Simple tagged-to-tagged copy (bump allocator frees in bulk)
-        xcgen_buf_printf(b, "    v%u = ", dst_idx);
-        xcg_emit_ref(b, func, ins->args[0]);
-        xcgen_buf_puts(b, ";\n");
     } else {
+        // Direct copy: tagged-to-tagged or same-type (bump frees in bulk)
         xcgen_buf_printf(b, "    v%u = ", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ";\n");
