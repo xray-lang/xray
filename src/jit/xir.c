@@ -659,6 +659,7 @@ static const char *op_names[] = {
     [XIR_CALL_C_LEAF] = "call.c.leaf",
     [XIR_CALL_SELF_DIRECT] = "call.self.direct",
     [XIR_CALL_KNOWN_REG] = "call.known.reg",
+    [XIR_CALL_INTRINSIC] = "call.intrinsic",
     [XIR_RT_ADD] = "rt.add",
     [XIR_RT_SUB] = "rt.sub",
     [XIR_RT_MUL] = "rt.mul",
@@ -818,6 +819,7 @@ bool xir_op_has_side_effect(uint16_t op) {
         case XIR_CALL_DIRECT:
         case XIR_CALL_KNOWN:
         case XIR_CALL_KNOWN_REG:
+        case XIR_CALL_INTRINSIC:
         // Mixed-type runtime helpers (may allocate, throw, or have observable effects)
         case XIR_RT_ADD:
         case XIR_RT_SUB:

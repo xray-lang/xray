@@ -24,7 +24,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include "../base/xmalloc.h"
-#include "../jit/xir_sentinels.h"  // xrt_invoke_method_sentinel
+#include "../jit/xir_intrinsic.h"  // xir_resolve_intrinsics, XR_INTRIN_*
 #include "xrt_method_symbols.h"    // XRT_SYM_* constants only (avoids xrt_arc.h)
 
 /* ========== Dynamic String Buffer ========== */
@@ -518,7 +518,8 @@ static void compute_used_vregs(XirFunc *func, bool *reachable, bool *used) {
             // Mark dst as used so transitive pass picks up STORE_FIELD args.
             // Also mark vreg args directly used by CALL_C (e.g. xr_jit_throw
             // passes exception value in args[1] — a vreg, not via STORE_CORO).
-            if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF) {
+            if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF ||
+                ins->op == XIR_CALL_INTRINSIC) {
                 if (!xir_ref_is_none(ins->dst) && xir_ref_is_vreg(ins->dst)) {
                     mark_ref_used(used, func->nvreg, ins->dst);
                 }
@@ -555,6 +556,34 @@ static void compute_used_vregs(XirFunc *func, bool *reachable, bool *used) {
             mark_ref_used(used, func->nvreg, ins->args[0]);
             mark_ref_used(used, func->nvreg, ins->args[1]);
             mark_ref_used(used, func->nvreg, ins->dst);
+        }
+    }
+
+    // Seed from call_arg_pool: mark vreg references in the pool as used.
+    // The call_arg_pool stores XirRef entries (vreg/const refs) for each
+    // call instruction's arguments, indexed by vreg->call_arg_start.
+    // Without this, vregs passed as call arguments but never read by a
+    // STORE_CORO or the instruction's direct args would be wrongly DCE'd.
+    if (func->call_arg_pool) {
+        for (uint32_t bi = 0; bi < func->nblk; bi++) {
+            if (!reachable[bi])
+                continue;
+            XirBlock *blk = func->blocks[bi];
+            for (uint32_t i = 0; i < blk->nins; i++) {
+                XirIns *ins = &blk->ins[i];
+                if (!xir_ref_is_vreg(ins->dst))
+                    continue;
+                uint32_t vi = XIR_REF_INDEX(ins->dst);
+                if (vi >= func->nvreg)
+                    continue;
+                XirVReg *vreg = &func->vregs[vi];
+                if (vreg->call_nargs == 0)
+                    continue;
+                uint32_t start = vreg->call_arg_start;
+                for (uint16_t k = 0; k < vreg->call_nargs; k++) {
+                    mark_ref_used(used, func->nvreg, func->call_arg_pool[start + k]);
+                }
+            }
         }
     }
 
@@ -653,8 +682,6 @@ static void compute_used_vregs(XirFunc *func, bool *reachable, bool *used) {
     }
 }
 
-#include "xcgen_bridge.h"
-
 // Pre-scan XIR instructions to identify vregs that will be struct-promoted,
 // and retype getprop dst vregs from I64 to TAGGED (XrtValue).
 //
@@ -671,21 +698,22 @@ static void prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
         return;
     XirFunc *func = cf->xfunc;
 
-    // Pass 1: mark vregs created by xr_json_new_with_shape (allocations)
+    // Pass 1: after intrinsic resolution, scan CALL_INTRINSIC instructions
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XirBlock *blk = func->blocks[bi];
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
+            if (ins->op != XIR_CALL_INTRINSIC)
+                continue;
             if (!xir_ref_is_const(ins->args[0]))
                 continue;
             uint32_t ci = XIR_REF_INDEX(ins->args[0]);
-            if (ci >= func->nconst || func->consts[ci].rep != XR_REP_PTR)
+            if (ci >= func->nconst)
                 continue;
-            void *fn_ptr = func->consts[ci].val.ptr;
+            int intrin_id = (int) func->consts[ci].val.i64;
 
-            // CALL_C(xr_json_new_with_shape): mark dst as promoted struct
-            if (ins->op == XIR_CALL_C && fn_ptr == (void *) xr_json_new_with_shape &&
-                cf->vreg_struct_id) {
+            // JSON_NEW_SHAPE: mark dst as promoted struct
+            if (intrin_id == XR_INTRIN_JSON_NEW_SHAPE && cf->vreg_struct_id) {
                 void *shape_ptr = NULL;
                 if (xir_ref_is_const(ins->args[1])) {
                     uint32_t si = XIR_REF_INDEX(ins->args[1]);
@@ -701,9 +729,9 @@ static void prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
                 }
             }
 
-            // CALL_C_LEAF(xr_jit_getprop): retype dst from I64 to TAGGED
+            // GETPROP: retype dst from I64 to TAGGED
             // In AOT, getprop returns XrtValue (struct field) not raw int64
-            if (ins->op == XIR_CALL_C_LEAF && fn_ptr == (void *) xr_jit_getprop) {
+            if (intrin_id == XR_INTRIN_GETPROP) {
                 if (xir_ref_is_vreg(ins->dst)) {
                     uint32_t dst_vi = XIR_REF_INDEX(ins->dst);
                     if (dst_vi < func->nvreg)
@@ -860,7 +888,7 @@ static void retype_bool_method_results(XcgenFunc *cf) {
         XirBlock *blk = func->blocks[bi];
         for (uint32_t i = 0; i < blk->nins; i++) {
             XirIns *ins = &blk->ins[i];
-            if (ins->op != XIR_CALL_C && ins->op != XIR_CALL_C_LEAF)
+            if (ins->op != XIR_CALL_INTRINSIC)
                 continue;
             if (!xir_ref_is_vreg(ins->dst))
                 continue;
@@ -869,8 +897,7 @@ static void retype_bool_method_results(XcgenFunc *cf) {
             uint32_t ci = XIR_REF_INDEX(ins->args[0]);
             if (ci >= func->nconst)
                 continue;
-            void *fn_ptr = func->consts[ci].val.ptr;
-            if (fn_ptr != (void *) xrt_invoke_method_sentinel)
+            if (func->consts[ci].val.i64 != XR_INTRIN_INVOKE_METHOD)
                 continue;
             // Decode method_symbol from args[1]
             int64_t encoded = 0;
@@ -1405,6 +1432,10 @@ static void prescan_closure_escape(XcgenModule *mod, XirFunc *func) {
 XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_name) {
     if (!mod || !xfunc || !c_name)
         return NULL;
+
+    /* Convert CALL_C(fn_ptr) → CALL_INTRINSIC(id) before codegen.
+     * This decouples AOT C emission from JIT runtime symbol addresses. */
+    xir_resolve_intrinsics(xfunc);
 
     // Grow func array if needed
     if (mod->nfuncs >= mod->funcs_cap) {

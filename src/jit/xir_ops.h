@@ -127,6 +127,9 @@ typedef enum {
                            // callee proto pre-stored in coro->jit_call_proto by builder
                            // Fast: load proto->jit_fast_entry, MOV args to regs, BLR
                            // Slow: fallback to xr_jit_call_func C bridge
+    XIR_CALL_INTRINSIC,    // AOT intrinsic call (converted from CALL_C by resolve pass)
+                           // args[0] = const(XirIntrinsicId), args[1] = extra_arg
+                           // AOT codegen dispatches on the intrinsic ID, never on fn_ptr
 
     // --- Runtime helper calls (mixed-type operations) ---
     // Codegen inlines type conversions for known numeric combos,

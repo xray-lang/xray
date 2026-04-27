@@ -769,6 +769,7 @@ XirPassChange xir_pass_store_to_load(XirFunc *func) {
              * and anything with SIDE_EFFECT flag. */
             if (ins->op == XIR_CALL || ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF ||
                 ins->op == XIR_CALL_SELF_DIRECT || ins->op == XIR_CALL_KNOWN_REG ||
+                ins->op == XIR_CALL_INTRINSIC ||
                 ins->op == XIR_STORE || ins->op == XIR_ALLOC || ins->op == XIR_STORE_CORO ||
                 (ins->flags & XIR_FLAG_SIDE_EFFECT)) {
                 s2l_kill_all(&t);
@@ -1554,7 +1555,8 @@ XirPassChange xir_pass_dse(XirFunc *func) {
              * (may observe stored values through aliases) */
             if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_KNOWN ||
                 ins->op == XIR_CALL_KNOWN_REG || ins->op == XIR_CALL_DIRECT ||
-                ins->op == XIR_CALL_SELF_DIRECT || ins->op == XIR_ALLOC ||
+                ins->op == XIR_CALL_SELF_DIRECT || ins->op == XIR_CALL_INTRINSIC ||
+                ins->op == XIR_ALLOC ||
                 ins->op == XIR_SAFEPOINT || ins->op == XIR_CALL_C_LEAF) {
                 ntracked = 0;
                 continue;
