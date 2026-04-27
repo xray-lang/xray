@@ -94,6 +94,8 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 #ifdef XR_OS_MACOS
     spawn_argv[ai++] = "-Wl,-dead_strip";
 #else
+    spawn_argv[ai++] = "-ffunction-sections";
+    spawn_argv[ai++] = "-fdata-sections";
     spawn_argv[ai++] = "-Wl,--gc-sections";
 #endif
     if (strip_symbols)
@@ -138,7 +140,7 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char
     }
 #endif
 
-    const char *spawn_argv[16];
+    const char *spawn_argv[20];
     int ai = 0;
     spawn_argv[ai++] = cc;
     spawn_argv[ai++] = opt_flag;
@@ -151,6 +153,8 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char
 #ifdef XR_OS_MACOS
     spawn_argv[ai++] = "-Wl,-dead_strip";
 #else
+    spawn_argv[ai++] = "-ffunction-sections";
+    spawn_argv[ai++] = "-fdata-sections";
     spawn_argv[ai++] = "-Wl,--gc-sections";
 #endif
     if (strip_symbols)

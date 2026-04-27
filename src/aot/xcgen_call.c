@@ -1449,7 +1449,7 @@ static void emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFu
         return;
 
     default:
-        /* Unknown intrinsic — suppress (defensive) */
+        fprintf(stderr, "AOT: unhandled intrinsic %d\n", intrin);
         cf->call_args_count = 0;
         return;
     }
