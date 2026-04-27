@@ -19,16 +19,10 @@
 #include "http2.h"
 #include "../net/io.h"
 #include "../net/dns.h"
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <netdb.h>
 
 // ALPN protocol list: h2, http/1.1
 static const unsigned char ALPN_PROTOS[] = "\x02h2\x08http/1.1";
@@ -264,7 +258,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
     }
 
     if (connect(fd, sa, sa_len) < 0) {
-        close(fd);
+        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -274,7 +268,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
         // TLS handshake
         entry->tls_ctx = xr_tls_context_new_client();
         if (!entry->tls_ctx) {
-            close(fd);
+            xr_closesocket(fd);
             xr_free(entry->host);
             xr_free(entry);
             return NULL;
@@ -286,7 +280,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
         entry->tls_conn = xr_tls_conn_new(entry->tls_ctx, fd);
         if (!entry->tls_conn) {
             xr_tls_context_free(entry->tls_ctx);
-            close(fd);
+            xr_closesocket(fd);
             xr_free(entry->host);
             xr_free(entry);
             return NULL;
@@ -297,7 +291,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
         if (xr_tls_conn_handshake_client(entry->tls_conn) != XR_TLS_OK) {
             xr_tls_conn_free(entry->tls_conn);
             xr_tls_context_free(entry->tls_ctx);
-            close(fd);
+            xr_closesocket(fd);
             xr_free(entry->host);
             xr_free(entry);
             return NULL;
@@ -310,7 +304,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
             xr_tls_conn_close(entry->tls_conn);
             xr_tls_conn_free(entry->tls_conn);
             xr_tls_context_free(entry->tls_ctx);
-            close(fd);
+            xr_closesocket(fd);
             xr_free(entry->host);
             xr_free(entry);
             return NULL;
@@ -326,7 +320,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
         }
         if (entry->tls_ctx)
             xr_tls_context_free(entry->tls_ctx);
-        close(fd);
+        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -341,7 +335,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
         }
         if (entry->tls_ctx)
             xr_tls_context_free(entry->tls_ctx);
-        close(fd);
+        xr_closesocket(fd);
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -672,14 +666,14 @@ bool xr_http_auto_version(const char *host, int port, bool is_https) {
     }
 
     if (connect(fd, sa, sa_len) < 0) {
-        close(fd);
+        xr_closesocket(fd);
         xr_tls_context_free(ctx);
         return false;
     }
 
     XrTlsConn *conn = xr_tls_conn_new(ctx, fd);
     if (!conn) {
-        close(fd);
+        xr_closesocket(fd);
         xr_tls_context_free(ctx);
         return false;
     }
@@ -688,7 +682,7 @@ bool xr_http_auto_version(const char *host, int port, bool is_https) {
 
     if (xr_tls_conn_handshake_client(conn) != XR_TLS_OK) {
         xr_tls_conn_free(conn);
-        close(fd);
+        xr_closesocket(fd);
         xr_tls_context_free(ctx);
         return false;
     }
@@ -698,7 +692,7 @@ bool xr_http_auto_version(const char *host, int port, bool is_https) {
 
     xr_tls_conn_close(conn);
     xr_tls_conn_free(conn);
-    close(fd);
+    xr_closesocket(fd);
     xr_tls_context_free(ctx);
 
     return is_h2;

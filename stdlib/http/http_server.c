@@ -34,12 +34,10 @@ extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
 // Per-Coroutine GC root registration
 #include "../../src/runtime/gc/xcoro_gc.h"
 
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/uio.h>  // writev
 
 /* ========== Pre-generated Response Headers (global shared, zero allocation) ========== */
 
@@ -251,7 +249,7 @@ void xr_http_server_free(XrHttpServer *server) {
     }
 
     if (server->listen_fd >= 0) {
-        close(server->listen_fd);
+        xr_closesocket(server->listen_fd);
     }
 
     if (server->router) {
@@ -628,7 +626,7 @@ void xr_http_server_stop(XrHttpServer *server) {
 
     // Close listen socket, wake up accept
     if (server->listen_fd >= 0) {
-        close(server->listen_fd);
+        xr_closesocket(server->listen_fd);
         server->listen_fd = -1;
     }
 }

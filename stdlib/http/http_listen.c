@@ -39,12 +39,10 @@
 #include "../../src/base/xmalloc.h"
 #include "../net/xnetbuf.h"
 #include "../ws/ws.h"
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/socket.h>
 
 /* ========== External Declarations ========== */
 
@@ -432,7 +430,7 @@ static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
             }
         }
     }
-    close(fd);
+    xr_closesocket(fd);
     if (ctx->http_ctx)
         atomic_fetch_sub(&ctx->http_ctx->current_conns, 1);
     xr_free(ctx);
@@ -862,7 +860,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
 
     HttpConnCtx *ctx = (HttpConnCtx *) xr_calloc(1, sizeof(HttpConnCtx));
     if (!ctx) {
-        close(fd);
+        xr_closesocket(fd);
         return XR_CFUNC_DONE;
     }
 
@@ -876,7 +874,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
 
     ctx->read_buf = (char *) xr_malloc(CONN_READ_BUF_SIZE);
     if (!ctx->read_buf) {
-        close(fd);
+        xr_closesocket(fd);
         if (hctx)
             atomic_fetch_sub(&hctx->current_conns, 1);
         xr_free(ctx);
@@ -1034,14 +1032,13 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
         }
 
         xr_socket_set_nonblock(client_fd);
-        {
-            int flag = 1;
-            setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+        xr_socket_set_nodelay(client_fd, true);
 #ifdef TCP_NOTSENT_LOWAT
+        {
             int lowat = 16384;
-            setsockopt(client_fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &lowat, sizeof(lowat));
-#endif
+            setsockopt(client_fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat, sizeof(lowat));
         }
+#endif
 
         // Check connection limit
         int max = atomic_load(&ctx->max_conns);
@@ -1049,10 +1046,10 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
             int cur = atomic_fetch_add(&ctx->current_conns, 1);
             if (cur >= max) {
                 atomic_fetch_sub(&ctx->current_conns, 1);
-                ssize_t ret = write(client_fd, RESP_503, sizeof(RESP_503) - 1);
+                ssize_t ret = xr_socket_send(client_fd, RESP_503, sizeof(RESP_503) - 1);
                 (void) ret;
-                shutdown(client_fd, SHUT_WR);
-                close(client_fd);
+                shutdown(client_fd, XR_SHUT_WR);
+                xr_closesocket(client_fd);
                 continue;
             }
         } else {
@@ -1068,7 +1065,7 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
             xr_coro_spawn(X, coro);
         } else {
             atomic_fetch_sub(&ctx->current_conns, 1);
-            close(client_fd);
+            xr_closesocket(client_fd);
         }
     }
 
@@ -1134,7 +1131,7 @@ XrCFuncResult xr_http_listen_impl(XrayIsolate *X, XrValue *args, int nargs, XrVa
     XrCoroutine *listen_coro =
         xr_coro_create_cfunc(X, http_listen_init, listen_args, 2, "http.listen");
     if (!listen_coro) {
-        close(listen_fd);
+        xr_closesocket(listen_fd);
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }

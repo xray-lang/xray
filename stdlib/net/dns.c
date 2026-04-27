@@ -23,14 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../src/os/os_thread.h"
-#include <netdb.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
+#include "../../src/os/os_net.h"
 
 /* ========== Constants ========== */
 

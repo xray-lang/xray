@@ -18,9 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include "../../src/os/os_net.h"
 #include "../../src/os/os_thread.h"
-#include <arpa/inet.h>
 
 /* ========== HPACK Static Table (RFC 7541 Appendix A) ========== */
 

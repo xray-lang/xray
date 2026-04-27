@@ -28,16 +28,6 @@
 #include <string.h>
 #include <errno.h>
 
-#ifndef XR_OS_WINDOWS
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/uio.h>  // for writev
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#endif
 
 #ifdef XR_OS_MACOS
 #include <CommonCrypto/CommonDigest.h>
@@ -970,7 +960,7 @@ void xr_ws_free(XrWebSocket *ws) {
     }
 
     if (ws->fd >= 0)
-        close(ws->fd);
+        xr_closesocket(ws->fd);
 
     xr_free(ws->rbuf);
     ws->rbuf = NULL;
@@ -1029,14 +1019,14 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     }
 
     // Set TCP_NODELAY + low-latency options
-    int flag = 1;
-    setsockopt(ws->fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+    xr_socket_set_nodelay(ws->fd, true);
 #ifdef TCP_NOTSENT_LOWAT
     int lowat = 16384;
-    setsockopt(ws->fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &lowat, sizeof(lowat));
+    setsockopt(ws->fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat, sizeof(lowat));
 #endif
 #ifdef SO_NOSIGPIPE
-    setsockopt(ws->fd, SOL_SOCKET, SO_NOSIGPIPE, &flag, sizeof(flag));
+    int flag = 1;
+    setsockopt(ws->fd, SOL_SOCKET, SO_NOSIGPIPE, (const char *) &flag, sizeof(flag));
 #endif
 
     /*
@@ -1061,10 +1051,7 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
      *      EHOSTUNREACH, etc.).
      */
     {
-        int nb_flags = fcntl(ws->fd, F_GETFL, 0);
-        if (nb_flags >= 0) {
-            (void) fcntl(ws->fd, F_SETFL, nb_flags | O_NONBLOCK);
-        }
+        (void) xr_socket_set_nonblocking(ws->fd);
     }
 
     // Connect
@@ -1293,10 +1280,7 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
      * post-handshake read/write paths consistently yield via
      * netpoll instead of blocking the worker thread.
      */
-    int flags = fcntl(ws->fd, F_GETFL, 0);
-    if (flags >= 0 && !(flags & O_NONBLOCK)) {
-        fcntl(ws->fd, F_SETFL, flags | O_NONBLOCK);
-    }
+    xr_socket_set_nonblocking(ws->fd);
 
     // Connection successful
     ws->state = WS_STATE_OPEN;
@@ -1318,7 +1302,7 @@ fail_cleanup:
         ws->tls_ctx = NULL;
     }
     if (ws->fd >= 0) {
-        close(ws->fd);
+        xr_closesocket(ws->fd);
         ws->fd = -1;
     }
 fail_early:
@@ -1375,7 +1359,7 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
     }
 
     if (ws->fd >= 0) {
-        close(ws->fd);
+        xr_closesocket(ws->fd);
         ws->fd = -1;
     }
 
@@ -2460,21 +2444,17 @@ XrWebSocket *xr_ws_upgrade_ex(struct XrayIsolate *isolate, int fd, const char *r
 
     // Socket should already be non-blocking from the accept, but ensure it
     // (Required for coroutine-aware I/O with netpoll)
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) {
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    }
+    xr_socket_set_nonblocking(fd);
 
     // Disable Nagle's algorithm + low-latency write wakeup
-    int nodelay = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+    xr_socket_set_nodelay(fd, true);
 #ifdef TCP_NOTSENT_LOWAT
     int lowat = 16384;
-    setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, &lowat, sizeof(lowat));
+    setsockopt(fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat, sizeof(lowat));
 #endif
 #ifdef SO_NOSIGPIPE
     int nosig = 1;
-    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &nosig, sizeof(nosig));
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, (const char *) &nosig, sizeof(nosig));
 #endif
 
     // Initialize buffer state (rbuf lazy-allocated on first recv)

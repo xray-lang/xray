@@ -25,12 +25,10 @@
 #include "../net/io.h"
 #include "../net/xnetbuf.h"
 #include "../net/conn_pool.h"
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-#include <poll.h>
-#include <netdb.h>
 
 /* ========== Per-Isolate Connection Pool ========== */
 

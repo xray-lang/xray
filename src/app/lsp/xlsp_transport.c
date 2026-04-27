@@ -30,13 +30,9 @@
 #include "../../os/os_time.h"
 
 #include "../../os/os_fd.h"
+#include "../../os/os_net.h"
 #ifdef XR_OS_WINDOWS
 #include <io.h>
-#include <winsock2.h>
-typedef int ssize_t;  // MSVC / MinGW
-#else
-#include <unistd.h>
-#include <fcntl.h>
 #endif
 
 #define INITIAL_BUF_SIZE 4096

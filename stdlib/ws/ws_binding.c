@@ -32,16 +32,11 @@
 #include "../../src/coro/xsocket.h"  // For xr_socket_listen, xr_socket_set_nonblock
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <errno.h>
-#include <poll.h>
 #include <stdatomic.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 
 extern void *xr_isolate_get_symbol_table(void *isolate);
 
@@ -1168,7 +1163,7 @@ static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args, int argc, 
 
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) xr_calloc(1, sizeof(WsEchoConnCtx));
     if (!ctx) {
-        close(fd);
+        xr_closesocket(fd);
         return XR_CFUNC_DONE;
     }
 
@@ -1177,7 +1172,7 @@ static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args, int argc, 
     ctx->runtime = (XrRuntime *) X->vm.runtime;
     ctx->upgrade_buf = (char *) xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
-        close(fd);
+        xr_closesocket(fd);
         xr_free(ctx);
         return XR_CFUNC_DONE;
     }
@@ -1254,7 +1249,7 @@ cleanup: {
             xr_netpoll_close(&rt->netpoll, pd);
     }
 }
-    close(ctx->fd);
+    xr_closesocket(ctx->fd);
     xr_free(ctx);
     return XR_CFUNC_DONE;
 }
@@ -1373,7 +1368,7 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
 
     WsConnCtx *ctx = (WsConnCtx *) xr_calloc(1, sizeof(WsConnCtx));
     if (!ctx) {
-        close(fd);
+        xr_closesocket(fd);
         return XR_CFUNC_DONE;
     }
 
@@ -1383,7 +1378,7 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
     ctx->runtime = (XrRuntime *) X->vm.runtime;
     ctx->upgrade_buf = (char *) xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
-        close(fd);
+        xr_closesocket(fd);
         xr_free(ctx);
         return XR_CFUNC_DONE;
     }
@@ -1460,7 +1455,7 @@ cleanup: {
             xr_netpoll_close(&rt->netpoll, pd);
     }
 }
-    close(ctx->fd);
+    xr_closesocket(ctx->fd);
     xr_free(ctx);
     return XR_CFUNC_DONE;
 }
@@ -1558,13 +1553,13 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, void *user
         }
 
         xr_socket_set_nonblock(client_fd);
+        xr_socket_set_nodelay(client_fd, true);
+#ifdef SO_NOSIGPIPE
         {
             int flag = 1;
-            setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-#ifdef SO_NOSIGPIPE
-            setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, &flag, sizeof(flag));
-#endif
+            setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, (const char *) &flag, sizeof(flag));
         }
+#endif
 
         // Spawn stackless connection coroutine
         XrValue conn_args[2] = {xr_int(client_fd), ctx->handler_val};
@@ -1572,7 +1567,7 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, void *user
         if (coro) {
             xr_coro_spawn(X, coro);
         } else {
-            close(client_fd);
+            xr_closesocket(client_fd);
         }
     }
 
@@ -1647,13 +1642,13 @@ static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, void *user_
         }
 
         xr_socket_set_nonblock(client_fd);
+        xr_socket_set_nodelay(client_fd, true);
+#ifdef SO_NOSIGPIPE
         {
             int flag = 1;
-            setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
-#ifdef SO_NOSIGPIPE
-            setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, &flag, sizeof(flag));
-#endif
+            setsockopt(client_fd, SOL_SOCKET, SO_NOSIGPIPE, (const char *) &flag, sizeof(flag));
         }
+#endif
 
         // Spawn stackless echo connection coroutine
         XrValue conn_args[1] = {xr_int(client_fd)};
@@ -1661,7 +1656,7 @@ static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, void *user_
         if (coro) {
             xr_coro_spawn(X, coro);
         } else {
-            close(client_fd);
+            xr_closesocket(client_fd);
         }
     }
 
@@ -1715,7 +1710,7 @@ static XrCFuncResult ws_echo_serve_yieldable(XrayIsolate *X, XrValue *args, int 
     XrCoroutine *listen_coro =
         xr_coro_create_cfunc(X, ws_echo_listen_init, listen_args, 1, "ws.echo.listen");
     if (!listen_coro) {
-        close(listen_fd);
+        xr_closesocket(listen_fd);
         ctx->listen_fd = -1;
         ctx->server_running = false;
         *result = xr_bool(false);
@@ -1781,7 +1776,7 @@ static XrCFuncResult ws_serve_yieldable(XrayIsolate *X, XrValue *args, int argc,
     XrCoroutine *listen_coro =
         xr_coro_create_cfunc(X, ws_serve_listen_init, listen_args, 2, "ws.listen");
     if (!listen_coro) {
-        close(listen_fd);
+        xr_closesocket(listen_fd);
         ctx->listen_fd = -1;
         ctx->server_running = false;
         *result = xr_bool(false);
@@ -1806,7 +1801,7 @@ static XrValue ws_stop_server(XrayIsolate *X, XrValue *args, int argc) {
     ctx->server_running = false;
 
     if (ctx->listen_fd >= 0) {
-        close(ctx->listen_fd);
+        xr_closesocket(ctx->listen_fd);
         ctx->listen_fd = -1;
     }
 
