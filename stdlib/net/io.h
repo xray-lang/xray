@@ -21,7 +21,12 @@
 #include "../../src/coro/xnetpoll.h"
 #include <stddef.h>
 #include <stdbool.h>
-#ifndef XR_PLATFORM_WINDOWS
+#ifdef _WIN32
+// xray_platform.h provides a struct iovec compatibility shim
+// alongside the WSASend-backed writev emulation used by callers
+// of xr_io_writev on Windows.
+#include "../../include/xray_platform.h"
+#else
 #include <sys/uio.h>
 #endif
 
