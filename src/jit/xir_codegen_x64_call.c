@@ -20,8 +20,8 @@
 #include <string.h>
 
 bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
-    XR_DCHECK(ctx != NULL, "x64_emit_call_ins: NULL ctx");
-    XR_DCHECK(ins != NULL, "x64_emit_call_ins: NULL ins");
+    CODEGEN_CHECK(ctx, ctx != NULL, "x64_emit_call_ins: NULL ctx");
+    CODEGEN_CHECK(ctx, ins != NULL, "x64_emit_call_ins: NULL ins");
 
     switch (ins->op) {
         case XIR_CALL_C: {
@@ -78,7 +78,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             }
 
             /* CALL call_c_stub (patched later as rel32) */
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *p = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE8); /* CALL rel32 */
             p->emit_pos = ctx->buf.pos;
@@ -275,7 +275,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                 /* ABI_ARG1 = coro (platform calling convention) */
                 x64_mov_rr(&ctx->buf, X64_ABI_ARG1, X64_CORO_REG);
                 /* CALL to fast_entry (after param loading) */
-                XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+                CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
                 x64_emit8(&ctx->buf, 0xE8);
                 p->emit_pos = ctx->buf.pos;
@@ -290,7 +290,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                 x64_lea(&ctx->buf, X64_ABI_ARG2, X64_JIT_CTX_REG,
                          (int32_t) XIR_JIT_CALL_ARGS_OFFSET);
                 /* CALL to entry (offset 0) */
-                XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+                CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
                 x64_emit8(&ctx->buf, 0xE8);
                 p->emit_pos = ctx->buf.pos;
@@ -337,7 +337,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             x64_load_imm64(&ctx->buf, X64_RCX, 0xFFFF);
             x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_RCX);
             /* JMP to deopt_stub */
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *dp = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE9);
             dp->emit_pos = ctx->buf.pos;
@@ -472,7 +472,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             /* Load helper function pointer to R11 (call_c_stub calls R11) */
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
             /* CALL rel32 → call_c_stub */
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE8);
             cp->emit_pos = ctx->buf.pos;
@@ -647,7 +647,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) nargs_reg);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp_kr = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE8);
             cp_kr->emit_pos = ctx->buf.pos;
@@ -742,7 +742,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
              * extra_arg = &call_args[1] */
             x64_lea(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) (XIR_JIT_CALL_ARGS_OFFSET + 8));
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp_fast = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE8);
             cp_fast->emit_pos = ctx->buf.pos;
@@ -798,7 +798,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             } else {
                 x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
             }
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp_slow = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE8);
             cp_slow->emit_pos = ctx->buf.pos;
