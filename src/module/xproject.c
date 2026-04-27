@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <dirent.h>
+#include "../base/xdir.h"
 
 /* ========== Helper Functions ========== */
 
@@ -172,42 +172,31 @@ char *xr_resolve_local_dependency(XrProject *project, const char *package_name) 
  */
 static bool collect_files_recursive(const char *dir_path, char ***files, int *count,
                                     int *capacity) {
-    DIR *dir = opendir(dir_path);
-    if (!dir)
+    XrDirIter *it = xr_dir_open(dir_path);
+    if (!it)
         return false;
 
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        // Skip . and ..
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-
-        char *full_path = xr_path_join(dir_path, entry->d_name);
+    XrDirEntry e;
+    while (xr_dir_next(it, &e)) {
+        char *full_path = xr_path_join(dir_path, e.name);
         if (!full_path)
             continue;
 
-        struct stat st;
-        if (stat(full_path, &st) != 0) {
-            xr_free(full_path);
-            continue;
-        }
-
-        if (S_ISDIR(st.st_mode)) {
+        if (e.is_dir) {
             // Recursively collect from subdirectory
             collect_files_recursive(full_path, files, count, capacity);
             xr_free(full_path);
-        } else if (S_ISREG(st.st_mode)) {
+        } else {
             // Check if it's a .xr file
-            size_t name_len = strlen(entry->d_name);
-            if (name_len > 3 && strcmp(entry->d_name + name_len - 3, ".xr") == 0) {
+            size_t name_len = strlen(e.name);
+            if (name_len > 3 && strcmp(e.name + name_len - 3, ".xr") == 0) {
                 // Expand array if needed
                 if (*count >= *capacity) {
                     int new_cap = *capacity * 2;
                     char **new_files = (char **) xr_realloc(*files, sizeof(char *) * new_cap);
                     if (!new_files) {
                         xr_free(full_path);
-                        closedir(dir);
+                        xr_dir_close(it);
                         return false;
                     }
                     *files = new_files;
@@ -218,12 +207,10 @@ static bool collect_files_recursive(const char *dir_path, char ***files, int *co
             } else {
                 xr_free(full_path);
             }
-        } else {
-            xr_free(full_path);
         }
     }
 
-    closedir(dir);
+    xr_dir_close(it);
     return true;
 }
 

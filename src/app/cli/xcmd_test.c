@@ -42,8 +42,8 @@
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
-#include <dirent.h>
 #include <sys/stat.h>
+#include "../../base/xdir.h"
 #include "../../base/xthread.h"
 #include "../../base/xtime.h"
 #include <stdatomic.h>
@@ -440,8 +440,8 @@ static void build_path(char *buf, size_t size, const char *dir, const char *name
 }
 
 static void collect_files_recursive(const char *path, XrFileList *fl) {
-    DIR *dir = opendir(path);
-    if (!dir)
+    XrDirIter *it = xr_dir_open(path);
+    if (!it)
         return;
 
     // Collect entries first for sorted order
@@ -450,22 +450,19 @@ static void collect_files_recursive(const char *path, XrFileList *fl) {
     char **xrfiles = NULL;
     int nfile = 0, fcap = 0;
 
-    struct dirent *entry;
     char filepath[1024];
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_name[0] == '.' || entry->d_name[0] == '_')
+    XrDirEntry e;
+    while (xr_dir_next(it, &e)) {
+        if (e.name[0] == '.' || e.name[0] == '_')
             continue;
-        build_path(filepath, sizeof(filepath), path, entry->d_name);
-        struct stat st;
-        if (stat(filepath, &st) != 0)
-            continue;
-        if (S_ISDIR(st.st_mode)) {
+        build_path(filepath, sizeof(filepath), path, e.name);
+        if (e.is_dir) {
             if (ndir >= dcap) {
                 dcap = dcap == 0 ? 16 : dcap * 2;
                 XR_REALLOC_OR_ABORT(subdirs, dcap * sizeof(char *), "xcmd_test subdirs grow");
             }
             subdirs[ndir++] = xr_strdup(filepath);
-        } else if (S_ISREG(st.st_mode) && xr_cli_is_xr_file(entry->d_name)) {
+        } else if (xr_cli_is_xr_file(e.name)) {
             if (nfile >= fcap) {
                 fcap = fcap == 0 ? 16 : fcap * 2;
                 XR_REALLOC_OR_ABORT(xrfiles, fcap * sizeof(char *), "xcmd_test xrfiles grow");
@@ -473,7 +470,7 @@ static void collect_files_recursive(const char *path, XrFileList *fl) {
             xrfiles[nfile++] = xr_strdup(filepath);
         }
     }
-    closedir(dir);
+    xr_dir_close(it);
 
     if (nfile > 1)
         qsort(xrfiles, nfile, sizeof(char *), cmp_strings);

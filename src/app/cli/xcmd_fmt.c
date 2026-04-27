@@ -26,8 +26,8 @@
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
-#include <dirent.h>
 #include <sys/stat.h>
+#include "../../base/xdir.h"
 
 // Format configuration
 typedef struct {
@@ -113,36 +113,28 @@ static int format_file(XrayIsolate *X, const char *path, FmtConfig *config, int 
 // Recursively format directory
 static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config, int check_only,
                             int verbose, int *total, int *changed) {
-    DIR *dir = opendir(path);
-    if (!dir) {
+    XrDirIter *it = xr_dir_open(path);
+    if (!it) {
         fprintf(stderr, "Error: cannot open directory '%s'\n", path);
         return -1;
     }
 
     int errors = 0;
-    struct dirent *entry;
     char filepath[1024];
+    XrDirEntry e;
 
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
+    while (xr_dir_next(it, &e)) {
+        snprintf(filepath, sizeof(filepath), "%s/%s", path, e.name);
 
-        snprintf(filepath, sizeof(filepath), "%s/%s", path, entry->d_name);
-
-        struct stat st;
-        if (stat(filepath, &st) != 0)
-            continue;
-
-        if (S_ISDIR(st.st_mode)) {
+        if (e.is_dir) {
             // Skip hidden directories and build directories
-            if (entry->d_name[0] == '.' || strcmp(entry->d_name, "node_modules") == 0 ||
-                strcmp(entry->d_name, "build") == 0 || strcmp(entry->d_name, "build-asan") == 0 ||
-                strcmp(entry->d_name, "build-release") == 0) {
+            if (e.name[0] == '.' || strcmp(e.name, "node_modules") == 0 ||
+                strcmp(e.name, "build") == 0 || strcmp(e.name, "build-asan") == 0 ||
+                strcmp(e.name, "build-release") == 0) {
                 continue;
             }
             format_directory(X, filepath, config, check_only, verbose, total, changed);
-        } else if (S_ISREG(st.st_mode) && xr_cli_is_xr_file(entry->d_name)) {
+        } else if (xr_cli_is_xr_file(e.name)) {
             (*total)++;
             int result = format_file(X, filepath, config, check_only, verbose);
             if (result > 0)
@@ -152,7 +144,7 @@ static int format_directory(XrayIsolate *X, const char *path, FmtConfig *config,
         }
     }
 
-    closedir(dir);
+    xr_dir_close(it);
     return errors;
 }
 

@@ -23,9 +23,9 @@
 #include "../../frontend/analyzer/xanalyzer.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xdir.h"
 #include <stdio.h>
 #include <string.h>
-#include <dirent.h>
 #include <sys/stat.h>
 
 // Check single file, returns: 0 = no error, 1 = has error
@@ -81,32 +81,23 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, in
 // Recursively check directory, returns: error file count
 static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, int verbose,
                            int *total, int *passed) {
-    DIR *dir = opendir(path);
-    if (!dir) {
+    XrDirIter *it = xr_dir_open(path);
+    if (!it) {
         fprintf(stderr, "Error: cannot open directory '%s'\n", path);
         return 1;
     }
 
     int errors = 0;
-    struct dirent *entry;
     char filepath[1024];
+    XrDirEntry e;
 
-    while ((entry = readdir(dir)) != NULL) {
-        // Skip . and ..
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
+    while (xr_dir_next(it, &e)) {
+        snprintf(filepath, sizeof(filepath), "%s/%s", path, e.name);
 
-        snprintf(filepath, sizeof(filepath), "%s/%s", path, entry->d_name);
-
-        struct stat st;
-        if (stat(filepath, &st) != 0)
-            continue;
-
-        if (S_ISDIR(st.st_mode)) {
+        if (e.is_dir) {
             // Recursively check subdirectory
             errors += check_directory(X, analyzer, filepath, verbose, total, passed);
-        } else if (S_ISREG(st.st_mode) && xr_cli_is_xr_file(entry->d_name)) {
+        } else if (xr_cli_is_xr_file(e.name)) {
             // Check .xr file
             (*total)++;
             if (check_file(X, analyzer, filepath, verbose) == 0) {
@@ -117,7 +108,7 @@ static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer, const char *pat
         }
     }
 
-    closedir(dir);
+    xr_dir_close(it);
     return errors;
 }
 
