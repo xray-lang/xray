@@ -1388,10 +1388,10 @@ static void emit_prologue(CodegenCtx *ctx) {
                 a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, A64_SP, SPILL_BASE + slot * 8));
             }
         }
-        // Init slot_runtime_tags for TAGGED (any/Json) params from param_tags[].
+        // Init slot_runtime_tags for TAGGED (unknown/Json) params from param_tags[].
         // emit_call_args_from_pool dynamic-patches UNKNOWN tags by reading
         // slot_runtime_tags[bc_slot]. Without this init, dynamic ops on
-        // any-typed params (OP_ADD, etc.) see stale/zero tags → wrong results.
+        // tagged fallback params (OP_ADD, etc.) see stale/zero tags → wrong results.
         // param_tags[] is set by xir_jit_call (interp→JIT) or
         // xr_jit_call_func / CALL_KNOWN codegen (JIT→JIT).
         for (uint32_t i = 0; i < nparams && i < 8; i++) {

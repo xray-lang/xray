@@ -1000,7 +1000,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (target == source)
         return true;
 
-    // unknown is compatible with all types
+    // Unknown means analysis did not produce a precise type. Keep compatibility
+    // permissive here so later diagnostics and IDE queries can continue after
+    // earlier errors.
     if (XR_TYPE_IS_UNKNOWN(target) || XR_TYPE_IS_UNKNOWN(source))
         return true;
 
@@ -1081,8 +1083,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         if (target->object.field_count == 0)
             return true;
 
-        // If source has no fields (plain Json), accept assignment to any struct
-        // This is needed for dynamic typing - runtime will validate
+        // If source has no fields (plain Json), accept assignment to structured
+        // Json. Json is the explicit dynamic data boundary; codegen inserts
+        // runtime validation for downstream coercions.
         if (source->object.field_count == 0)
             return true;
 
@@ -1129,7 +1132,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (target->kind == XR_KIND_BYTES && source->kind == XR_KIND_BYTES)
         return true;
 
-    // Array type compatibility (invariant, but any is special)
+    // Array type compatibility (invariant, with unknown element fallback)
     if (XR_TYPE_IS_ARRAY(target) && XR_TYPE_IS_ARRAY(source)) {
         if (!target->container.element_type || !source->container.element_type)
             return true;
@@ -1142,7 +1145,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                xr_type_assignable(source->container.element_type, target->container.element_type);
     }
 
-    // Map type compatibility (invariant, but any is special)
+    // Map type compatibility (invariant, with unknown element fallback)
     if (XR_TYPE_IS_MAP(target) && XR_TYPE_IS_MAP(source)) {
         if (!target->map.key_type || !source->map.key_type)
             return true;
@@ -1173,7 +1176,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_equals(target->fixed_array.element_type, source->fixed_array.element_type);
     }
 
-    // Set type compatibility (invariant, but any is special)
+    // Set type compatibility (invariant, with unknown element fallback)
     if (XR_TYPE_IS_SET(target) && XR_TYPE_IS_SET(source)) {
         if (!target->container.element_type || !source->container.element_type)
             return true;
@@ -1216,7 +1219,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
 
         // Parameters: contravariant - target params assignable to source params
-        // Simplified: allow if types match or either is any/type_param
+        // Simplified: allow if types match or either side is unknown/type_param
         for (int i = 0; i < target->function.param_count; i++) {
             XrType *t_param = target->function.param_types ? target->function.param_types[i] : NULL;
             XrType *s_param = source->function.param_types ? source->function.param_types[i] : NULL;

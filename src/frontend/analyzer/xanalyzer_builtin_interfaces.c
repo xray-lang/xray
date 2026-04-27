@@ -80,7 +80,7 @@ static XaInterfaceMethod iterator_methods[] = {
  *       //   negative int : this < other
  *       //   zero         : this == other
  *       //   positive int : this > other
- *       compareTo(other: any): int
+ *       compareTo(other: T): int
  *   }
  *
  * Built-in types that implement Comparable:
@@ -112,7 +112,7 @@ static XaInterfaceMethod iterator_methods[] = {
  *   }
  */
 static XaInterfaceMethod comparable_methods[] = {
-    {"compareTo", NULL, NULL, 1}  // param: other: any, return: int
+    {"compareTo", NULL, NULL, 1}  // param: other: T, return: int
 };
 
 /*
@@ -247,7 +247,7 @@ static XaInterfaceMethod indexable_methods[] = {
  *   interface Equatable {
  *       // Check equality with another object
  *       // Returns true if this equals other
- *       equals(other: any): bool
+ *       equals(other: T): bool
  *   }
  *
  * Built-in types that implement Equatable:

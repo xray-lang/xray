@@ -89,12 +89,12 @@ void xexpr_init_null(XrExprDesc *e) {
 // ========== Core Smart Allocation Functions ==========
 
 /*
- * Put expression into any register (DYNAMIC consumer).
+ * Put expression into a tagged-value register.
  *
- * This is the typed→dynamic boundary: if the expression holds a raw
+ * This is the raw-to-tagged boundary: if the expression holds a raw
  * I64/F64 value, it is automatically BOXed into a tagged XrValue.
- * All generic/dynamic consumers (template strings, closures, generic
- * OP_ADD, OP_PRINT without hint, etc.) should use this function.
+ * Consumers that require a full XrValue (template strings, closures,
+ * generic OP_ADD, OP_PRINT without hint, etc.) should use this function.
  */
 int xexpr_to_anyreg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e) {
     XR_DCHECK(ctx != NULL, "xexpr_to_anyreg: NULL ctx");
@@ -142,7 +142,7 @@ int xexpr_to_anyreg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e)
 }
 
 /*
- * Put expression into any register (TYPED consumer, readonly).
+ * Put expression into a register for raw-value consumers.
  *
  * Preserves raw format — no BOX. Returns the original register for
  * LOCAL/PARAM (zero overhead). Used by native _I64/_F64 instructions,

@@ -72,7 +72,7 @@ const char *xr_mono_type_tag(XrType *t) {
         case XR_KIND_ENUM:
             return t->enum_type.enum_name ? t->enum_type.enum_name : "enum";
         default:
-            return "any";  // Range/Task → INSTANCE with class_name
+            return "unknown";  // Fallback for types without a dedicated mono tag
     }
 }
 

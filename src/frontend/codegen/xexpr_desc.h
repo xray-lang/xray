@@ -83,9 +83,9 @@ typedef struct XrExprDesc {
     bool is_raw;     // Register holds raw (unboxed) I64/F64 value
 
     // Compile-time type: single source of truth for semantic type.
-    // NULL = unknown/any (tagged XrValue). Drives inst_types[pc]
+    // NULL = unknown / tagged fallback (XrValue). Drives inst_types[pc]
     // propagation. Combined with is_raw for BOX/UNBOX decisions.
-    struct XrType *compile_type;  // NULL = unknown/any
+    struct XrType *compile_type;  // NULL = unknown / tagged fallback
 } XrExprDesc;
 
 /* ========== Compile-Type Helpers ========== */
@@ -131,16 +131,16 @@ XR_FUNC void xexpr_init_null(XrExprDesc *e);
 
 /* ========== Core API: Smart Register Allocation ========== */
 /*
- * TWO-WORLD BOUNDARY:
+ * RAW/TAGGED VALUE BOUNDARY:
  *
- *   xexpr_to_anyreg()          — DYNAMIC consumer (auto-BOX raw→tagged)
- *   xexpr_to_anyreg_readonly() — TYPED consumer   (preserves raw format)
+ *   xexpr_to_anyreg()          — tagged consumer (auto-BOX raw→tagged)
+ *   xexpr_to_anyreg_readonly() — raw consumer    (preserves raw format)
  *
- * Rule: typed consumers (native _I64/_F64 ops) use readonly.
- *       dynamic consumers (OP_ADD, closures, templates) use anyreg.
+ * Rule: native _I64/_F64 ops use readonly.
+ *       XrValue consumers (OP_ADD, closures, templates) use anyreg.
  */
 
-// Dynamic consumer: auto-BOX raw I64/F64 values at the typed→dynamic boundary.
+// Tagged consumer: auto-BOX raw I64/F64 values at the raw-to-tagged boundary.
 // Returns a register guaranteed to hold a tagged XrValue.
 XR_FUNC int xexpr_to_anyreg(XrCompilerContext *ctx, XrCompiler *compiler, XrExprDesc *e);
 

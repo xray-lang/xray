@@ -264,7 +264,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // unknown type allows dynamic member access
+    // Unknown preserves error recovery and IDE responsiveness after imprecise analysis.
     if (XR_TYPE_IS_UNKNOWN(obj_type)) {
         return xr_type_new_unknown(NULL);
     }
@@ -354,7 +354,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     // Handle Json object field access.
-    // Json is a dynamic container: field values can be any type at runtime
+    // Json is the explicit dynamic data boundary: field values may vary at runtime,
     // including null, so the result type is always nullable.
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {

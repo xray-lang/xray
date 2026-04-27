@@ -441,8 +441,6 @@ static void xcg_emit_collection_op(XcgenBuf *b, XirFunc *func, XirIns *ins, Xcge
 static void xcg_emit_field_load(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule *mod,
                                 XcgenFunc *cf) {
     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-    const char *tagged_type = "XrValue";
-    (void) tagged_type;
     // args[0] = base ptr, args[1] = const(byte_offset)
     int64_t offset = 0;
     if (xir_ref_is_const(ins->args[1])) {

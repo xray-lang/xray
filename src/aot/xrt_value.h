@@ -49,12 +49,12 @@ typedef union XrtValue {
 #define XRT_TAG_I64 6
 #define XRT_TAG_F64 12
 #define XRT_TAG_PTR 13
-#define XRT_TAG_STR 14  // static / literal string (no ARC)
+#define XRT_TAG_STR 14  // static / literal string (not heap-allocated)
 #define XRT_TAG_ARRAY 15
 #define XRT_TAG_MAP 16
 #define XRT_TAG_STRBUF 17
 #define XRT_TAG_CLOSURE 18
-#define XRT_TAG_STR_ARC 19  // heap string managed by ARC (xrt_arc_alloc)
+#define XRT_TAG_STR_ARC 19  // heap string (bump-allocated via xrt_arc_alloc)
 
 // Treat both STR and STR_ARC as strings in generic operations
 #define XRT_IS_STR(v) ((v).tag == XRT_TAG_STR || (v).tag == XRT_TAG_STR_ARC)
