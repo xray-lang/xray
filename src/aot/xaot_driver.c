@@ -80,6 +80,177 @@ static char *read_source_file(const char *path) {
     return buf;
 }
 
+/* ========== Feature Inference ========== */
+
+/* Scan a single proto's bytecode for runtime feature usage. */
+static void infer_features_proto(XrProto *proto, XaotFeatureSet *fs) {
+    if (!proto)
+        return;
+    uint32_t code_count = (uint32_t) proto->code.count;
+    const XrInstruction *code = (const XrInstruction *) proto->code.data;
+
+    for (uint32_t pc = 0; pc < code_count; pc++) {
+        OpCode op = GET_OPCODE(code[pc]);
+        switch (op) {
+            /* Coroutine launch */
+            case OP_GO:
+            case OP_GO_INVOKE:
+            case OP_SPAWN_CONT:
+                fs->need_coro = true;
+                break;
+
+            /* Await */
+            case OP_AWAIT:
+            case OP_AWAIT_TIMEOUT:
+            case OP_AWAIT_ALL:
+            case OP_AWAIT_ANY:
+                fs->need_coro = true;
+                break;
+
+            /* Channels */
+            case OP_CHAN_NEW:
+            case OP_CHAN_NEW_NAMED:
+            case OP_CHAN_SEND:
+            case OP_CHAN_RECV:
+            case OP_CHAN_TRY_SEND:
+            case OP_CHAN_TRY_RECV:
+            case OP_CHAN_SEND_TIMEOUT:
+            case OP_CHAN_RECV_TIMEOUT:
+            case OP_CHAN_CLOSE:
+            case OP_CHAN_IS_CLOSED:
+                fs->need_channel = true;
+                break;
+
+            /* Select (implies channels) */
+            case OP_SELECT_START:
+            case OP_SELECT_CASE:
+            case OP_SELECT_END:
+            case OP_SELECT_BLOCK:
+                fs->need_channel = true;
+                break;
+
+            /* Scoped concurrency */
+            case OP_SCOPE_ENTER:
+            case OP_SCOPE_EXIT:
+                fs->need_scope = true;
+                break;
+
+            /* Timer primitives */
+            case OP_SLEEP:
+            case OP_TIME_AFTER:
+                fs->need_timer = true;
+                break;
+
+            /* Exception handling */
+            case OP_TRY:
+            case OP_CATCH:
+            case OP_FINALLY:
+            case OP_END_TRY:
+            case OP_THROW:
+                fs->need_exception = true;
+                break;
+
+            /* Type introspection */
+            case OP_IS:
+                fs->need_instanceof = true;
+                break;
+
+            case OP_TYPEOF:
+            case OP_TYPENAME:
+                fs->need_reflection = true;
+                break;
+
+            /* Import — check for stdlib module references */
+            case OP_IMPORT: {
+                int bx = GETARG_Bx(code[pc]);
+                if (bx >= 0 && bx < (int) VALUEARRAY_COUNT(&proto->constants)) {
+                    XrValue kv = VALUEARRAY_GET(&proto->constants, bx);
+                    if (XR_IS_STRING(kv)) {
+                        const char *mod = XR_STRING_CHARS(XR_TO_STRING(kv));
+                        XR_DCHECK(mod != NULL, "infer_features_proto: NULL import string");
+                        if (strcmp(mod, "json") == 0) fs->stdlib |= XAOT_STDLIB_JSON;
+                        else if (strcmp(mod, "regex") == 0) fs->stdlib |= XAOT_STDLIB_REGEX;
+                        else if (strcmp(mod, "math") == 0) fs->stdlib |= XAOT_STDLIB_MATH;
+                        else if (strcmp(mod, "time") == 0) fs->stdlib |= XAOT_STDLIB_TIME;
+                        else if (strcmp(mod, "path") == 0) fs->stdlib |= XAOT_STDLIB_PATH;
+                        else if (strcmp(mod, "io") == 0) fs->stdlib |= XAOT_STDLIB_IO;
+                        else if (strcmp(mod, "os") == 0) fs->stdlib |= XAOT_STDLIB_OS;
+                        else if (strcmp(mod, "net") == 0) { fs->stdlib |= XAOT_STDLIB_NET; fs->need_netpoll = true; }
+                        else if (strcmp(mod, "http") == 0) { fs->stdlib |= XAOT_STDLIB_HTTP; fs->need_netpoll = true; }
+                        else if (strcmp(mod, "crypto") == 0) fs->stdlib |= XAOT_STDLIB_CRYPTO;
+                        else if (strcmp(mod, "base64") == 0) fs->stdlib |= XAOT_STDLIB_BASE64;
+                        else if (strcmp(mod, "csv") == 0) fs->stdlib |= XAOT_STDLIB_CSV;
+                        else if (strcmp(mod, "toml") == 0) fs->stdlib |= XAOT_STDLIB_TOML;
+                        else if (strcmp(mod, "yaml") == 0) fs->stdlib |= XAOT_STDLIB_YAML;
+                        else if (strcmp(mod, "xml") == 0) fs->stdlib |= XAOT_STDLIB_XML;
+                        else if (strcmp(mod, "compress") == 0) fs->stdlib |= XAOT_STDLIB_COMPRESS;
+                    }
+                }
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    /* Recurse into nested protos (closures, class methods) */
+    for (int i = 0; i < proto->protos.count; i++) {
+        XrProto *child = *(XrProto **) xr_dynarray_get_raw(&proto->protos, i);
+        infer_features_proto(child, fs);
+    }
+}
+
+/* Apply dependency closure rules after all protos scanned. */
+static void apply_feature_closure(XaotFeatureSet *fs) {
+    /* Channels require coroutine runtime */
+    if (fs->need_channel)
+        fs->need_coro = true;
+
+    /* Scoped concurrency requires coroutines */
+    if (fs->need_scope)
+        fs->need_coro = true;
+
+    /* Timer requires coroutines (sleep/after suspend the coro) */
+    if (fs->need_timer)
+        fs->need_coro = true;
+
+    /* Deep copy needed when coroutines + channels (message passing) */
+    if (fs->need_coro && fs->need_channel)
+        fs->need_deep_copy = true;
+
+    /* Stack traces require exception support */
+    if (fs->need_stacktrace && !fs->need_exception)
+        fs->need_stacktrace = false;
+
+    /* Net/HTTP imply netpoll */
+    if (fs->stdlib & (XAOT_STDLIB_NET | XAOT_STDLIB_HTTP))
+        fs->need_netpoll = true;
+
+    /* Netpoll requires coroutines */
+    if (fs->need_netpoll)
+        fs->need_coro = true;
+}
+
+/* Print feature summary to stdout for diagnostics. */
+static void print_features(const XaotFeatureSet *fs) {
+    printf("[native] Features:");
+    if (fs->need_coro) printf(" coro");
+    if (fs->need_channel) printf(" channel");
+    if (fs->need_scope) printf(" scope");
+    if (fs->need_timer) printf(" timer");
+    if (fs->need_netpoll) printf(" netpoll");
+    if (fs->need_deep_copy) printf(" deep_copy");
+    if (fs->need_exception) printf(" exception");
+    if (fs->need_reflection) printf(" reflection");
+    if (fs->need_instanceof) printf(" instanceof");
+    if (fs->need_stacktrace) printf(" stacktrace");
+    if (fs->stdlib) printf(" stdlib=0x%x", fs->stdlib);
+    if (!fs->need_coro && !fs->need_exception && !fs->stdlib)
+        printf(" (minimal)");
+    printf("\n");
+}
+
 /* ========== Per-module state during AOT compilation ========== */
 
 typedef struct {
@@ -669,6 +840,14 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         }
     }
 
+    /* --- Infer runtime features from bytecode --- */
+    XaotFeatureSet features;
+    memset(&features, 0, sizeof(features));
+    for (int m = 0; m < nmodules; m++)
+        infer_features_proto(modules[m].proto, &features);
+    apply_feature_closure(&features);
+    print_features(&features);
+
     /* --- Create compilation context, collect protos + exports --- */
     XcgenStructRegistry struct_reg;
     xcgen_struct_registry_init(&struct_reg);
@@ -832,6 +1011,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     result->total_compiled = total_compiled;
     result->total_aot = total_aot;
     result->nmodules = nmodules;
+    result->features = features;
 
     free_modules(modules, nmodules);
     return 0;
