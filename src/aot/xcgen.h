@@ -270,6 +270,17 @@ XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *
 XR_FUNC void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *self_name,
                                  XcgenFunc *cf);
 
+/* ========== Shared Emit Helpers ========== */
+
+// Auto-box int64_t/double vregs to XrtValue for runtime call arguments
+XR_FUNC void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
+
+/* ========== Intrinsic Lowering (xcgen_intrinsic.c) ========== */
+
+// Emit C code for a CALL_INTRINSIC instruction
+XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf,
+                                      XcgenModule *mod);
+
 /* ========== Prescan / Analysis Passes (xcgen_prescan.c) ========== */
 
 // Block reachability: BFS from entry to find live blocks
