@@ -492,11 +492,11 @@ void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]) {
 /* ========== Secure Memory Wipe ========== */
 
 void xr_secure_wipe(void *ptr, size_t len) {
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     memset_s(ptr, len, 0, len);
 #elif defined(__GLIBC__)
     explicit_bzero(ptr, len);
-#elif defined(_WIN32)
+#elif defined(XR_OS_WINDOWS)
     SecureZeroMemory(ptr, len);
 #else
     volatile uint8_t *p = (volatile uint8_t *) ptr;

@@ -92,7 +92,7 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     spawn_argv[ai++] = "-lxray_core";
     spawn_argv[ai++] = "-lpthread";
     spawn_argv[ai++] = "-lm";
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     spawn_argv[ai++] = "-Wl,-dead_strip";
 #else
     spawn_argv[ai++] = "-Wl,--gc-sections";
@@ -154,7 +154,7 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char
     if (aot_include[0])
         spawn_argv[ai++] = aot_include;
     spawn_argv[ai++] = "-lm";
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     spawn_argv[ai++] = "-Wl,-dead_strip";
 #else
     spawn_argv[ai++] = "-Wl,--gc-sections";

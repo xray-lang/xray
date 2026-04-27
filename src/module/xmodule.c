@@ -1006,7 +1006,7 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
     // 3. Find native library (try platform-preferred suffix first)
     char lib_path[PATH_MAX];
     static const char *suffixes[] = {
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
         ".dylib", ".so"
 #else
         ".so", ".dylib"

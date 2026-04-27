@@ -14,7 +14,8 @@
  */
 
 // Only compile when included by xnetpoll.c
-#if !defined(__APPLE__) && !defined(__linux__) && !defined(_WIN32) && defined(XR_NETPOLL_INCLUDED)
+#if !defined(XR_OS_MACOS) && !defined(XR_OS_LINUX) && !defined(XR_OS_WINDOWS) &&                   \
+    defined(XR_NETPOLL_INCLUDED)
 
 #include "../base/xchecks.h"
 #include <sys/select.h>

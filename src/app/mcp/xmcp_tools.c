@@ -29,7 +29,7 @@
 #include "../../os/os_fd.h"
 #include <stdio.h>
 #include <string.h>
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #include <io.h>
 #else
 #include <unistd.h>

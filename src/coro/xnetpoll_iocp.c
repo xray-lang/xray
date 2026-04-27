@@ -14,7 +14,7 @@
  */
 
 // Only compile when included by xnetpoll.c
-#if defined(_WIN32) && defined(XR_NETPOLL_INCLUDED)
+#if defined(XR_OS_WINDOWS) && defined(XR_NETPOLL_INCLUDED)
 
 #include "../base/xchecks.h"
 #include <winsock2.h>
@@ -171,4 +171,4 @@ void xr_netpoll_break(XrNetpoll *np) {
     PostQueuedCompletionStatus(np->iocp, 0, 0, NULL);
 }
 
-#endif  // _WIN32
+#endif  // XR_OS_WINDOWS

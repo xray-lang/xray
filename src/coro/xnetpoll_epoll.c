@@ -14,7 +14,7 @@
  * Note: This file is #included by xnetpoll.c, not compiled separately.
  */
 
-#if defined(__linux__) && defined(XR_NETPOLL_INCLUDED)
+#if defined(XR_OS_LINUX) && defined(XR_NETPOLL_INCLUDED)
 
 #include "../base/xchecks.h"
 #include <sys/epoll.h>
@@ -120,4 +120,4 @@ static const XrNetpollOps epoll_ops = {
     .wakeup = epoll_np_wakeup,
 };
 
-#endif  // __linux__
+#endif  // XR_OS_LINUX

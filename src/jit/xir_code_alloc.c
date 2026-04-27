@@ -21,7 +21,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
 #include <pthread.h>
 #include <libkern/OSCacheControl.h>
 #endif  // ========== Platform Helpers ==========
@@ -47,7 +47,7 @@ static XirCodePage *alloc_code_page(size_t min_size) {
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
     int prot;
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     // macOS Apple Silicon: MAP_JIT requires RWX in mmap, then
     // pthread_jit_write_protect_np() toggles between W and X at runtime
     flags |= MAP_JIT;
@@ -171,7 +171,7 @@ void *xir_code_alloc(XirCodeAlloc *alloc, size_t size, size_t alignment) {
 void xir_code_make_executable(void *ptr, size_t size) {
     (void) ptr;
     (void) size;
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     // macOS: per-thread W^X switch (MAP_JIT pages)
     pthread_jit_write_protect_np(1);  // enable execute, disable write
 #else
@@ -187,7 +187,7 @@ void xir_code_make_executable(void *ptr, size_t size) {
 void xir_code_make_writable(void *ptr, size_t size) {
     (void) ptr;
     (void) size;
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     // macOS: per-thread W^X switch (MAP_JIT pages)
     pthread_jit_write_protect_np(0);  // enable write, disable execute
 #else
@@ -247,7 +247,7 @@ void xir_code_alloc_reclaim(XirCodeAlloc *alloc, uint64_t safe_epoch) {
 }
 
 void xir_code_flush_icache(void *ptr, size_t size) {
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     // macOS: sys_icache_invalidate (ARM64 requires this)
     sys_icache_invalidate(ptr, size);
 #elif defined(__aarch64__)

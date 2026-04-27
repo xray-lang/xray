@@ -13,7 +13,7 @@
  *   are _fileno(stdin) etc., which are not constant. This header
  *   wraps the difference into three accessors plus a portable
  *   isatty helper so transports (LSP / DAP / MCP / CLI) do not have
- *   to embed `#ifdef _WIN32 #define STDIN_FILENO 0` blocks.
+ *   to embed `#ifdef XR_OS_WINDOWS #define STDIN_FILENO 0` blocks.
  *
  *   The accessors return integer fds and are intentionally cheap on
  *   both platforms (literal 0/1/2 on POSIX, single CRT call on

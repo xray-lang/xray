@@ -27,6 +27,11 @@
 #ifndef XDEFS_H
 #define XDEFS_H
 
+// xplatform.h has zero dependencies and supplies XR_OS_*,
+// XR_ARCH_*, XR_COMPILER_*. Including it from this lowest-level
+// header propagates the macros to every TU automatically.
+#include "xplatform.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -51,7 +56,7 @@
  */
 
 // Public API: visible to embedders
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(XR_OS_WINDOWS) || defined(__CYGWIN__)
 #ifdef XRAY_BUILD_DLL
 #define XRAY_API __declspec(dllexport)
 #elif defined(XRAY_USE_DLL)
@@ -133,7 +138,7 @@
 // Force a symbol into the dynamic symbol table at definition site.
 // XRAY_API is for declarations; XR_EXPORT_SYM is the standalone form
 // used by macros that emit a definition (e.g. XRAY_MODULE_ENTRY).
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(XR_OS_WINDOWS) || defined(__CYGWIN__)
 #define XR_EXPORT_SYM __declspec(dllexport)
 #elif defined(XR_GCC_COMPAT)
 #define XR_EXPORT_SYM __attribute__((visibility("default")))

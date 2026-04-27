@@ -48,19 +48,19 @@
 // Platform Detection
 // ============================================================================
 
-#if defined(__linux__)
+#if defined(XR_OS_LINUX)
 #define XR_POLL_EPOLL 1
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <fcntl.h>
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#elif defined(XR_OS_MACOS) || defined(XR_OS_BSD) || defined(XR_OS_BSD) || defined(XR_OS_BSD)
 #define XR_POLL_KQUEUE 1
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <fcntl.h>
-#elif defined(_WIN32)
+#elif defined(XR_OS_WINDOWS)
 #define XR_POLL_IOCP 1
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -145,7 +145,7 @@ typedef struct XrPoll {
 
 // Set fd to non-blocking mode
 static inline int xr_poll_set_nonblock(int fd) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     u_long mode = 1;
     return ioctlsocket((SOCKET) fd, FIONBIO, &mode);
 #else
@@ -159,7 +159,7 @@ static inline int xr_poll_set_nonblock(int fd) {
 // Create wakeup pipe (from xnetpoll.c: create_wakeup_pipe)
 // Key: non-blocking to avoid deadlock
 static inline int xr_poll_create_wakeup_pipe(int pipe_fds[2]) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     // Windows: create self-connected TCP socket pair
     // (xnetpoll_iocp uses PostQueuedCompletionStatus, but for select we need pipe)
 
@@ -243,7 +243,7 @@ static inline int xr_poll_create_wakeup_pipe(int pipe_fds[2]) {
 
 // Close wakeup pipe (from xnetpoll.c: close_wakeup_pipe)
 static inline void xr_poll_close_wakeup_pipe(int pipe_fds[2]) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     if (pipe_fds[0] >= 0)
         closesocket((SOCKET) pipe_fds[0]);
     if (pipe_fds[1] >= 0)
@@ -259,7 +259,7 @@ static inline void xr_poll_close_wakeup_pipe(int pipe_fds[2]) {
 
 // Drain wakeup pipe (from xnetpoll_epoll.c/kqueue.c)
 static inline void xr_poll_drain_wakeup(int fd) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     char buf[16];
     while (recv((SOCKET) fd, buf, sizeof(buf), 0) > 0) {
     }
@@ -272,7 +272,7 @@ static inline void xr_poll_drain_wakeup(int fd) {
 
 // Write to wakeup pipe (from xnetpoll_epoll.c: xr_netpoll_break)
 static inline void xr_poll_signal_wakeup(int fd) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     char c = 0;
     send((SOCKET) fd, &c, 1, 0);
 #else

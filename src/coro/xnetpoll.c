@@ -20,7 +20,7 @@
 // we provide a small stub at the bottom that fails every public
 // entry point with a clear error code; a future IOCP backend will
 // replace it.
-#ifndef _WIN32
+#ifndef XR_OS_WINDOWS
 
 #include "xcoroutine.h"  // XrCoroutine
 #include "xworker.h"     // XrRuntime, XrWorker
@@ -261,7 +261,7 @@ void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
 
 // Create wakeup pipe
 static int create_wakeup_pipe(int pipe_fds[2]) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 // Windows: a full IOCP-based wakeup integration is tracked separately
 // (see xnetpoll_iocp.c which is not yet wired into netpoll_default_ops).
 // Fail-fast here instead of silently returning -1 — callers that try to
@@ -284,7 +284,7 @@ static int create_wakeup_pipe(int pipe_fds[2]) {
 
 // Close wakeup pipe
 static void close_wakeup_pipe(int pipe_fds[2]) {
-#ifndef _WIN32
+#ifndef XR_OS_WINDOWS
     if (pipe_fds[0] >= 0)
         close(pipe_fds[0]);
     if (pipe_fds[1] >= 0)
@@ -297,9 +297,9 @@ static void close_wakeup_pipe(int pipe_fds[2]) {
 
 #define XR_NETPOLL_INCLUDED
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
 #include "xnetpoll_kqueue.c"
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
 #include "xnetpoll_epoll.c"
 #if defined(XR_HAS_IO_URING)
 #include "xnetpoll_iouring.c"
@@ -309,9 +309,9 @@ static void close_wakeup_pipe(int pipe_fds[2]) {
 // Select best available ops for current platform.
 // On Linux with XR_HAS_IO_URING: try io_uring first, fall back to epoll.
 static const XrNetpollOps *netpoll_default_ops(void) {
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     return &kqueue_ops;
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
 #if defined(XR_HAS_IO_URING)
     return &iouring_ops;
 #else
@@ -335,9 +335,9 @@ int xr_local_poll_init(XrLocalPoll *lp) {
     lp->wakeup_pipe[0] = lp->wakeup_pipe[1] = -1;
     atomic_store(&lp->break_pending, false);
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     lp->poll_fd = kqueue();
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     lp->poll_fd = epoll_create1(EPOLL_CLOEXEC);
 #else
     return -1;
@@ -352,11 +352,11 @@ int xr_local_poll_init(XrLocalPoll *lp) {
     }
 
     // Register wakeup pipe with per-worker poller
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     struct kevent kev;
     EV_SET(&kev, lp->wakeup_pipe[0], EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
     kevent(lp->poll_fd, &kev, 1, NULL, 0, NULL);
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     struct epoll_event ev = {.events = EPOLLIN | EPOLLET, .data.fd = lp->wakeup_pipe[0]};
     epoll_ctl(lp->poll_fd, EPOLL_CTL_ADD, lp->wakeup_pipe[0], &ev);
 #endif
@@ -376,12 +376,12 @@ void xr_local_poll_cleanup(XrLocalPoll *lp) {
 int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
     if (!lp || lp->poll_fd < 0 || fd < 0)
         return -1;
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     struct kevent kev[2];
     EV_SET(&kev[0], fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, pd);
     EV_SET(&kev[1], fd, EVFILT_WRITE, EV_ADD | EV_CLEAR, 0, 0, pd);
     return kevent(lp->poll_fd, kev, 2, NULL, 0, NULL);
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     struct epoll_event ev = {.events = EPOLLIN | EPOLLOUT | EPOLLET, .data.ptr = pd};
     return epoll_ctl(lp->poll_fd, EPOLL_CTL_ADD, fd, &ev);
 #else
@@ -392,12 +392,12 @@ int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
 void xr_local_poll_del_fd(XrLocalPoll *lp, int fd) {
     if (!lp || lp->poll_fd < 0 || fd < 0)
         return;
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     struct kevent kev[2];
     EV_SET(&kev[0], fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     EV_SET(&kev[1], fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
     kevent(lp->poll_fd, kev, 2, NULL, 0, NULL);
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     epoll_ctl(lp->poll_fd, EPOLL_CTL_DEL, fd, NULL);
 #endif
 }
@@ -406,7 +406,7 @@ int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
     if (!lp || lp->poll_fd < 0)
         return 0;
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     struct timespec ts;
     struct timespec *timeout = NULL;
     if (delta_ns == 0) {
@@ -448,7 +448,7 @@ int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
     }
     return n;
 
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     int timeout_ms = 0;
     if (delta_ns == 0)
         timeout_ms = 0;
@@ -521,7 +521,7 @@ int xr_netpoll_init(XrNetpoll *np) {
         return -1;
 
     if (np->ops->init(np) < 0) {
-#if defined(__linux__) && defined(XR_HAS_IO_URING)
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
         // io_uring failed (old kernel?), fall back to epoll
         np->ops = &epoll_ops;
         if (np->ops->init(np) < 0) {
@@ -1041,7 +1041,7 @@ void xr_netpoll_drain_deferred(XrNetpoll *np, XrProc *p) {
     }
 }
 
-#else  // _WIN32
+#else  // XR_OS_WINDOWS
 
 /* ============================================================
  * Windows stub backend.
@@ -1205,4 +1205,4 @@ void xr_netpoll_drain_deferred(XrNetpoll *np, struct XrProc *p) {
     (void) p;
 }
 
-#endif  // _WIN32
+#endif  // XR_OS_WINDOWS

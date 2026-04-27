@@ -37,7 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../os/os_thread.h"
-#ifndef _WIN32
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>  // sysconf for CPU-count fallback
 #endif
 
@@ -185,7 +185,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
             num_workers = atoi(env);
         } else {
             // Default to CPU core count
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
             SYSTEM_INFO sysinfo;
             GetSystemInfo(&sysinfo);
             num_workers = (int) sysinfo.dwNumberOfProcessors;

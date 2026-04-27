@@ -30,7 +30,7 @@
 #include "../../os/os_time.h"
 
 #include "../../os/os_fd.h"
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #include <io.h>
 #include <winsock2.h>
 typedef int ssize_t;  // MSVC / MinGW
@@ -46,7 +46,7 @@ typedef int ssize_t;  // MSVC / MinGW
 // ---------------------------------------------------------------------------
 
 static int set_nonblock(int fd) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     // Windows console stdin does not honour O_NONBLOCK via the CRT.
     // When the IDE launches us over a pipe (which VS Code does) the
     // pipe still behaves synchronously on Win32 — a proper fix needs
@@ -67,7 +67,7 @@ static int set_nonblock(int fd) {
 // Returns: > 0 bytes read, 0 = would-block (no data yet),
 //          < 0 = EOF / fatal error.
 static ssize_t read_nonblock(int fd, char *buf, size_t len) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     int n = _read(fd, buf, (unsigned) len);
     if (n < 0) {
         // errno==EAGAIN on pipes set non-blocking; we also treat
@@ -99,7 +99,7 @@ static ssize_t read_nonblock(int fd, char *buf, size_t len) {
 static ssize_t write_all(int fd, const char *buf, size_t len) {
     size_t total = 0;
     while (total < len) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         int n = _write(fd, buf + total, (unsigned) (len - total));
         if (n < 0) {
             if (errno == EAGAIN || errno == EINTR)
@@ -160,7 +160,7 @@ XrLspTransport *xlsp_transport_stdio(void) {
     }
     t->read_cap = INITIAL_BUF_SIZE;
 
-    // stdin → non-blocking (no-op on _WIN32 for now, see set_nonblock).
+    // stdin → non-blocking (no-op on XR_OS_WINDOWS for now, see set_nonblock).
     set_nonblock(t->read_fd);
 
     // stdout must be unbuffered so responses hit the IDE immediately.

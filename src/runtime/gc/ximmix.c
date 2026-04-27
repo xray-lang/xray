@@ -22,7 +22,7 @@
 
 static char *alloc_aligned_block(void) {
     void *ptr = NULL;
-#if defined(_WIN32)
+#if defined(XR_OS_WINDOWS)
     ptr = _aligned_malloc(XR_IMMIX_BLOCK_SIZE, XR_IMMIX_BLOCK_SIZE);
 #else
     if (posix_memalign(&ptr, XR_IMMIX_BLOCK_SIZE, XR_IMMIX_BLOCK_SIZE) != 0) {
@@ -33,7 +33,7 @@ static char *alloc_aligned_block(void) {
 }
 
 static void free_aligned_block(char *data) {
-#if defined(_WIN32)
+#if defined(XR_OS_WINDOWS)
     _aligned_free(data);
 #else
     // posix_memalign paired with libc free is the documented contract.

@@ -2649,7 +2649,7 @@ XirCodegenResult xir_codegen_arm64(XirFunc *func, XirCodeAlloc *alloc) {
         return result;
     }
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     xir_code_make_writable(code_mem, alloc_size);
 #endif
 

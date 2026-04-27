@@ -18,7 +18,7 @@
 #include <ctype.h>
 #include <errno.h>
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
@@ -50,7 +50,7 @@
 
 // Set fd to non-blocking mode
 static int set_nonblock(int fd) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     u_long mode = 1;
     return ioctlsocket((SOCKET) fd, FIONBIO, &mode);
 #else
@@ -64,7 +64,7 @@ static int set_nonblock(int fd) {
 // Read from fd into buffer (non-blocking)
 // Returns: bytes read, 0 = would block, -1 = error/closed
 static ssize_t read_nonblock(int fd, char *buf, size_t len) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     int n = recv((SOCKET) fd, buf, (int) len, 0);
     if (n < 0) {
         int err = WSAGetLastError();
@@ -90,7 +90,7 @@ static ssize_t read_nonblock(int fd, char *buf, size_t len) {
 //   0: would block — kernel buffer full, caller should queue & retry
 //   -1: fatal error / peer closed.
 static ssize_t write_nonblock(int fd, const char *buf, size_t len) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     int n = send((SOCKET) fd, buf, (int) len, 0);
     if (n < 0) {
         int err = WSAGetLastError();
@@ -198,7 +198,7 @@ XdapTransport *xdap_transport_tcp_server(int port) {
     if (!t)
         return NULL;
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     // Initialize Winsock
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
@@ -335,7 +335,7 @@ XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
     if (!t)
         return NULL;
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         xdap_transport_free(t);
@@ -425,7 +425,7 @@ void xdap_transport_free(XdapTransport *t) {
             close(t->write_fd);
         if (t->listen_fd >= 0)
             close(t->listen_fd);
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         WSACleanup();
 #endif
     }

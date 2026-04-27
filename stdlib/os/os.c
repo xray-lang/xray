@@ -229,7 +229,7 @@ static XrValue os_tmpdir(XrayIsolate *X, XrValue *args, int argc) {
     if (!tmpdir)
         tmpdir = getenv("TEMP");
     if (!tmpdir) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         tmpdir = "C:\\Windows\\Temp";
 #else
         tmpdir = "/tmp";
@@ -635,15 +635,15 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
 
 // Get operating system name
 static const char *get_platform(void) {
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(XR_OS_WINDOWS) || defined(_WIN64)
     return "windows";
-#elif defined(__APPLE__) && defined(__MACH__)
+#elif defined(XR_OS_MACOS) && defined(__MACH__)
     return "darwin";
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     return "linux";
-#elif defined(__FreeBSD__)
+#elif defined(XR_OS_BSD)
     return "freebsd";
-#elif defined(__OpenBSD__)
+#elif defined(XR_OS_BSD)
     return "openbsd";
 #else
     return "unknown";
@@ -756,7 +756,7 @@ XrModule *xr_load_module_os(XrayIsolate *isolate) {
     xr_module_add_export(isolate, mod, "platform", xrs_string_value_c(isolate, get_platform()));
     xr_module_add_export(isolate, mod, "arch", xrs_string_value_c(isolate, get_arch()));
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     xr_module_add_export(isolate, mod, "sep", xrs_string_value_c(isolate, "\\"));
     xr_module_add_export(isolate, mod, "eol", xrs_string_value_c(isolate, "\r\n"));
 #else

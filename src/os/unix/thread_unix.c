@@ -51,12 +51,12 @@ xr_thread_t xr_thread_self(void) {
 }
 
 void xr_thread_set_name(xr_thread_t t, const char *name) {
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     // Apple's pthread_setname_np only operates on the current
     // thread; calling on another thread is a no-op.
     if (pthread_equal(t, pthread_self()))
         pthread_setname_np(name);
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     // glibc accepts an arbitrary thread; truncates to 16 bytes.
     char buf[16];
     strncpy(buf, name, sizeof(buf) - 1);

@@ -27,7 +27,7 @@
  *       Only active when XR_HAS_IO_URING is defined by CMake.
  */
 
-#if defined(__linux__) && defined(XR_HAS_IO_URING) && defined(XR_NETPOLL_INCLUDED)
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING) && defined(XR_NETPOLL_INCLUDED)
 
 #include "../base/xchecks.h"
 #include <liburing.h>
@@ -336,4 +336,4 @@ static const XrNetpollOps iouring_ops = {
     .wakeup = iouring_wakeup,
 };
 
-#endif  // __linux__ && XR_HAS_IO_URING
+#endif  // XR_OS_LINUX && XR_HAS_IO_URING

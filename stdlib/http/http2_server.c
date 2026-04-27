@@ -23,19 +23,19 @@
 #include <string.h>
 #include <errno.h>
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #define xr_close_socket closesocket
 #else
 #define xr_close_socket close
 #endif
 
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
 #include <sys/event.h>
 #define XR_USE_KQUEUE 1
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
 #include <sys/epoll.h>
 #define XR_USE_EPOLL 1
-#elif defined(_WIN32)
+#elif defined(XR_OS_WINDOWS)
 #define XR_USE_IOCP 1
 #endif
 
@@ -218,7 +218,7 @@ static int handle_preface(XrH2Server *server, XrH2FastConn *conn) {
     }
 
     if (n < 0) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         if (WSAGetLastError() == WSAEWOULDBLOCK)
             return 0;
 #else
@@ -308,7 +308,7 @@ static void handle_accept(XrH2Server *server) {
 
         xr_socket_t fd = accept(server->listen_fd, (struct sockaddr *) &addr, &len);
         if (fd == XR_INVALID_SOCKET) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
             if (WSAGetLastError() == WSAEWOULDBLOCK)
                 break;
 #else
@@ -460,7 +460,7 @@ XrH2Server *xr_h2_server_new(const XrH2ServerConfig *config) {
     if (!config)
         return NULL;
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     WSADATA wsa;
     WSAStartup(MAKEWORD(2, 2), &wsa);
 #endif
@@ -518,7 +518,7 @@ void xr_h2_server_free(XrH2Server *server) {
 
     xr_free(server);
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     WSACleanup();
 #endif
 }
