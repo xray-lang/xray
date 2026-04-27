@@ -45,9 +45,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
-#include <unistd.h>
-#include <spawn.h>
-#include <sys/wait.h>
+#include "../../os/os_fs.h"
+#include "../../os/os_proc.h"
 
 /* ========== Shared Helpers ========== */
 
@@ -106,18 +105,13 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
         printf(" %s", spawn_argv[i]);
     printf("\n");
 
-    extern char **environ;
-    pid_t pid;
-    int spawn_err = posix_spawnp(&pid, cc, NULL, NULL, (char *const *) spawn_argv, environ);
-    if (spawn_err != 0) {
-        fprintf(stderr, "Error: failed to start compiler '%s': %s\n", cc, strerror(spawn_err));
+    XrProcId pid = xr_proc_spawn(cc, spawn_argv);
+    if (pid == XR_PROC_INVALID) {
+        fprintf(stderr, "Error: failed to start compiler '%s'\n", cc);
         return 1;
     }
-
-    int status;
-    waitpid(pid, &status, 0);
-
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0 || code != 0) {
         fprintf(stderr, "Error: linking failed\n");
         fprintf(stderr, "Tip: set XRAY_INCLUDE and XRAY_LIB environment variables\n");
         fprintf(stderr, "  export XRAY_INCLUDE=/path/to/xray/include\n");
@@ -168,18 +162,13 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char
         printf(" %s", spawn_argv[i]);
     printf("\n");
 
-    extern char **environ;
-    pid_t pid;
-    int spawn_err = posix_spawnp(&pid, cc, NULL, NULL, (char *const *) spawn_argv, environ);
-    if (spawn_err != 0) {
-        fprintf(stderr, "Error: failed to start compiler '%s': %s\n", cc, strerror(spawn_err));
+    XrProcId pid = xr_proc_spawn(cc, spawn_argv);
+    if (pid == XR_PROC_INVALID) {
+        fprintf(stderr, "Error: failed to start compiler '%s'\n", cc);
         return 1;
     }
-
-    int status;
-    waitpid(pid, &status, 0);
-
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0 || code != 0) {
         fprintf(stderr, "Error: standalone linking failed\n");
         return 1;
     }
@@ -313,7 +302,7 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
     if (c_only)
         snprintf(c_file, sizeof(c_file), "%s", output);
     else
-        snprintf(c_file, sizeof(c_file), "/tmp/xray_bc_%d.c", getpid());
+        snprintf(c_file, sizeof(c_file), "/tmp/xray_bc_%d.c", (int) xr_proc_self_pid());
 
     FILE *f = fopen(c_file, "w");
     if (!f) {
@@ -331,7 +320,7 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
     }
 
     int ret = invoke_cc(cc, opt_flag, output, c_file, NULL, strip, sysroot);
-    unlink(c_file);
+    xr_fs_remove(c_file);
     if (ret == 0)
         printf("Generated: %s\n", output);
     return ret;
@@ -1037,7 +1026,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     if (c_only)
         snprintf(c_file, sizeof(c_file), "%s", output);
     else
-        snprintf(c_file, sizeof(c_file), "/tmp/xray_native_%d.c", getpid());
+        snprintf(c_file, sizeof(c_file), "/tmp/xray_native_%d.c", (int) xr_proc_self_pid());
 
     FILE *f = fopen(c_file, "w");
     if (!f) {
@@ -1082,7 +1071,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
     }
 
     int ret = invoke_cc_standalone(cc, opt_flag, output, c_file, strip, sysroot);
-    unlink(c_file);
+    xr_fs_remove(c_file);
     if (ret == 0)
         printf("Generated: %s\n", output);
     return ret;

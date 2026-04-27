@@ -33,11 +33,9 @@
 #include "../../base/xtoml.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
-#include "../../os/os_fs.h"
-#include <unistd.h>
-#include <sys/wait.h>
 #include <errno.h>
+#include "../../os/os_fs.h"
+#include "../../os/os_proc.h"
 
 /* Build ~/.xray/packages path. Returns pointer to static buffer. */
 static const char *home_packages_dir(const char *home) {
@@ -84,25 +82,22 @@ static int init_global_cache(void) {
 }
 
 /*
- * Create tarball safely using fork/exec instead of system().
- * Avoids shell injection vulnerabilities.
+ * Create tarball via the system tar. Argument list avoids shell
+ * interpretation; the child inherits parent stdio so progress is
+ * visible.
  */
 static bool create_tarball(const char *output_path) {
-    pid_t pid = fork();
-    if (pid < 0)
+    const char *const argv[] = {
+        "tar",      "-czf",      output_path, "--exclude=.git", "--exclude=node_modules",
+        ".",        NULL,
+    };
+    XrProcId pid = xr_proc_spawn("tar", argv);
+    if (pid == XR_PROC_INVALID)
         return false;
-
-    if (pid == 0) {
-        // Child process
-        execlp("tar", "tar", "-czf", output_path, "--exclude=.git", "--exclude=node_modules", ".",
-               NULL);
-        _exit(127);
-    }
-
-    int status;
-    if (waitpid(pid, &status, 0) < 0)
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0)
         return false;
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    return code == 0;
 }
 
 // xray pkg init - Initialize project, create xray.toml
@@ -401,35 +396,24 @@ static bool pkg_build_native(const char *pkg_dir, bool verbose) {
     if (verbose)
         printf("Building native package: cmake -B %s -S %s\n", build_dir, pkg_dir);
 
-    char *cmake_argv[] = {
-        "cmake", "-B", build_dir, "-S", (char *) pkg_dir, "-DCMAKE_BUILD_TYPE=Release", NULL};
-    pid_t pid = fork();
-    if (pid < 0)
+    const char *const cmake_argv[] = {
+        "cmake", "-B", build_dir, "-S", pkg_dir, "-DCMAKE_BUILD_TYPE=Release", NULL};
+    XrProcId pid = xr_proc_spawn("cmake", cmake_argv);
+    if (pid == XR_PROC_INVALID)
         return false;
-    if (pid == 0) {
-        execvp("cmake", cmake_argv);
-        _exit(127);
-    }
-    int status;
-    if (waitpid(pid, &status, 0) < 0)
-        return false;
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    int code = -1;
+    if (xr_proc_wait(pid, &code) != 0 || code != 0) {
         fprintf(stderr, "cmake configure failed\n");
         return false;
     }
 
     /* cmake --build build */
-    char *build_argv[] = {"cmake", "--build", build_dir, "--parallel", "4", NULL};
-    pid = fork();
-    if (pid < 0)
+    const char *const build_argv[] = {"cmake", "--build", build_dir, "--parallel", "4", NULL};
+    pid = xr_proc_spawn("cmake", build_argv);
+    if (pid == XR_PROC_INVALID)
         return false;
-    if (pid == 0) {
-        execvp("cmake", build_argv);
-        _exit(127);
-    }
-    if (waitpid(pid, &status, 0) < 0)
-        return false;
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    code = -1;
+    if (xr_proc_wait(pid, &code) != 0 || code != 0) {
         fprintf(stderr, "cmake build failed\n");
         return false;
     }
