@@ -81,7 +81,15 @@ elseif(MSVC)
     # strncpy and friends. These are POSIX functions whose Windows
     # _s replacements have a different signature; our portable code
     # uses the plain forms deliberately.
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+    # WIN32_LEAN_AND_MEAN: keep <windows.h> from pulling in the
+    # legacy <winsock.h>, which collides with <winsock2.h>'s
+    # struct definitions whenever the latter is included second.
+    add_compile_definitions(
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_NONSTDC_NO_WARNINGS
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+    )
     # UTF-8 source / execution charset so string literals and the
     # console match what every other platform uses.
     add_compile_options(/utf-8)

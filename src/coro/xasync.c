@@ -216,7 +216,7 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     // Wait for all threads to exit
     if (pool->threads) {
         for (int i = 0; i < pool->thread_count; i++) {
-            if (pool->threads[i]) {
+            if (xr_thread_is_valid(pool->threads[i])) {
                 xr_thread_join(pool->threads[i], NULL);
             }
         }

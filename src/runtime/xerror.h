@@ -21,12 +21,12 @@
 #define XERROR_H
 
 #include <stdbool.h>
-#include <unistd.h>  // isatty
-#include <stdio.h>   // FILE, stderr
+#include <stdio.h>  // FILE, stderr
+#include "../base/xfd.h"
 
 /* ========== ANSI Color Codes ========== */
 
-#define XR_COLOR_SUPPORTED() (isatty(fileno(stderr)))
+#define XR_COLOR_SUPPORTED() (xr_isatty(xr_stderr_fd()))
 #define XR_COLOR_RESET "\033[0m"
 #define XR_COLOR_RED "\033[31m"
 #define XR_COLOR_GREEN "\033[32m"
