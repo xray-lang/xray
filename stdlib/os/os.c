@@ -31,6 +31,7 @@
 #include <process.h>
 #include <winsock2.h>
 #include <windows.h>
+#include <tlhelp32.h>
 #else
 #include <unistd.h>
 #include <pwd.h>
@@ -352,7 +353,13 @@ static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    if (GlobalMemoryStatusEx(&statex))
+        return xr_int((int64_t) statex.ullTotalPhys);
+    return xr_int(0);
+#elif defined(XR_OS_MACOS)
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
     sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
@@ -373,7 +380,13 @@ static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    if (GlobalMemoryStatusEx(&statex))
+        return xr_int((int64_t) statex.ullAvailPhys);
+    return xr_int(0);
+#elif defined(XR_OS_MACOS)
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
@@ -398,7 +411,9 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    return xr_float((double) GetTickCount64() / 1000.0);
+#elif defined(XR_OS_MACOS)
     struct timeval boottime;
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
@@ -448,7 +463,23 @@ static XrValue os_ppid(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 #ifdef XR_OS_WINDOWS
-    return xr_int(0);
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE)
+        return xr_int(0);
+    PROCESSENTRY32 pe;
+    pe.dwSize = sizeof(pe);
+    DWORD pid = GetCurrentProcessId();
+    int64_t ppid = 0;
+    if (Process32First(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == pid) {
+                ppid = (int64_t) pe.th32ParentProcessID;
+                break;
+            }
+        } while (Process32Next(snap, &pe));
+    }
+    CloseHandle(snap);
+    return xr_int(ppid);
 #else
     return xr_int(getppid());
 #endif

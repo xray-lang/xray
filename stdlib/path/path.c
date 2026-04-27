@@ -24,14 +24,13 @@
 
 /* ========== Platform Definitions ========== */
 
+/* Output always uses '/' for portability; input parsing accepts both on Windows. */
+#define PATH_SEP '/'
+#define PATH_SEP_STR "/"
 #ifdef XR_OS_WINDOWS
-#define PATH_SEP '\\'
-#define PATH_SEP_STR "\\"
 #define PATH_DELIMITER ";"
 #define IS_SEP(c) ((c) == '/' || (c) == '\\')
 #else
-#define PATH_SEP '/'
-#define PATH_SEP_STR "/"
 #define PATH_DELIMITER ":"
 #define IS_SEP(c) ((c) == '/')
 #endif
