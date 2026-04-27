@@ -16,6 +16,7 @@
 #include "../../../src/jit/xir_pass.h"
 #include "../../../src/jit/xir_pass_sccp.h"
 #include "../../../src/jit/xir_looptree.h"
+#include "../test_win_compat.h"
 
 /* ========== Copy Propagation Tests ========== */
 
@@ -98,7 +99,7 @@ static void test_copy_prop_no_mov(void) {
 /* ========== Branch Simplification Tests ========== */
 
 /*
- * Test: BR with constant true condition â†’ JMP to true branch.
+ * Test: BR with constant true condition â†?JMP to true branch.
  *
  *   entry:
  *     v0 = CONST_I64(1)   ; true
@@ -140,7 +141,7 @@ static void test_branch_simp_const_true(void) {
 }
 
 /*
- * Test: BR with constant false condition â†’ JMP to false branch.
+ * Test: BR with constant false condition â†?JMP to false branch.
  */
 static void test_branch_simp_const_false(void) {
     fprintf(stderr, "  test_branch_simp_const_false...");
@@ -174,7 +175,7 @@ static void test_branch_simp_const_false(void) {
 }
 
 /*
- * Test: BR with both targets the same â†’ JMP.
+ * Test: BR with both targets the same â†?JMP.
  */
 static void test_branch_simp_same_target(void) {
     fprintf(stderr, "  test_branch_simp_same_target...");
@@ -211,8 +212,8 @@ static void test_branch_simp_same_target(void) {
  * deletes the dead block.
  *
  *   entry: BR(const 1) then else
- *   â†’ entry: JMP then   (else becomes unreachable)
- *   â†’ remove_unreachable: nblk decreases
+ *   â†?entry: JMP then   (else becomes unreachable)
+ *   â†?remove_unreachable: nblk decreases
  */
 static void test_remove_unreachable_basic(void) {
     fprintf(stderr, "  test_remove_unreachable_basic...");
@@ -238,7 +239,7 @@ static void test_remove_unreachable_basic(void) {
 
     assert(func->nblk == 3);
 
-    /* SCCP folds BR(1) â†’ JMP then and removes unreachable else_blk */
+    /* SCCP folds BR(1) â†?JMP then and removes unreachable else_blk */
     xir_pass_sccp(func);
     assert(entry->jmp.type == XIR_JMP_JMP);
     assert(func->nblk == 2);
@@ -254,7 +255,7 @@ static void test_remove_unreachable_basic(void) {
 /* ========== Phi Simplification Tests ========== */
 
 /*
- * Test: Trivial phi where all args are the same â†’ MOV.
+ * Test: Trivial phi where all args are the same â†?MOV.
  *
  *   header:
  *     phi(v0, v0) = v1    ; all args = v0
@@ -274,7 +275,7 @@ static void test_phi_simp_trivial(void) {
     XirRef c42 = xir_const_i64(func, 42);
     XirRef v0 = xir_emit_unary(func, pred1, XIR_CONST_I64, XR_REP_I64, c42);
 
-    /* Wire preds â†’ merge */
+    /* Wire preds â†?merge */
     xir_block_set_jmp(pred1, pred2);
     xir_block_add_pred(pred2, pred1, func->arena);
     xir_block_set_jmp(pred2, merge);
@@ -346,7 +347,7 @@ static void test_phi_simp_nontrivial(void) {
 /* ========== Block Merging Tests ========== */
 
 /*
- * Test: Two blocks Aâ†’B where B has single pred â†’ merged into one block.
+ * Test: Two blocks Aâ†’B where B has single pred â†?merged into one block.
  *
  *   A: v0 = CONST_I64(1)
  *      JMP B
@@ -439,7 +440,7 @@ static void test_merge_blocks_multi_pred(void) {
  *     v2 = CONST_I64(99)
  *     RET v2
  *
- * After pipeline: entry â†’ JMP then, else block removed.
+ * After pipeline: entry â†?JMP then, else block removed.
  */
 static void test_combined_branch_elim(void) {
     fprintf(stderr, "  test_combined_branch_elim...");
@@ -484,13 +485,13 @@ static void test_combined_branch_elim(void) {
 /*
  * Test: commutative normalization makes ADD(v1,v0) match ADD(v0,v1).
  *
- *   Block 0 (entry â†’ JMP b1):
+ *   Block 0 (entry â†?JMP b1):
  *     v0 = CONST_I64(10)
  *     v1 = CONST_I64(20)
  *     v2 = ADD v0, v1      // canonical order
  *
  *   Block 1:
- *     v3 = ADD v1, v0      // reversed order â€” should be CSE'd by GVN
+ *     v3 = ADD v1, v0      // reversed order â€?should be CSE'd by GVN
  *     v4 = ADD v2, v3
  *     RET v4
  *
@@ -511,7 +512,7 @@ static void test_gvn_normalize_commutative(void) {
     xir_block_set_jmp(b0, b1);
     xir_block_add_pred(b1, b0, func->arena);
 
-    /* Reversed arg order â€” should normalize to same hash */
+    /* Reversed arg order â€?should normalize to same hash */
     XirRef v3 = xir_emit(func, b1, XIR_ADD, XR_REP_I64, v1, v0);
     XirRef v4 = xir_emit(func, b1, XIR_ADD, XR_REP_I64, v2, v3);
     xir_block_set_ret(b1, v4);
@@ -534,7 +535,7 @@ static void test_gvn_normalize_commutative(void) {
 /*
  * Test: non-commutative SUB is NOT normalized (SUB(a,b) != SUB(b,a)).
  *
- *   Block 0 â†’ Block 1:
+ *   Block 0 â†?Block 1:
  *     v0 = CONST_I64(10)
  *     v1 = CONST_I64(20)
  *     v2 = SUB v0, v1      // 10 - 20
@@ -705,7 +706,7 @@ static void test_s2l_kill_by_call(void) {
 /* ========== Dead Store Elimination Tests ========== */
 
 /*
- * Test: Two consecutive STORE_FIELD to same (obj, offset) â€” first is dead.
+ * Test: Two consecutive STORE_FIELD to same (obj, offset) â€?first is dead.
  *
  *   STORE_FIELD offset=16, obj=v0, val=v1   // dead (overwritten by next)
  *   STORE_FIELD offset=16, obj=v0, val=v2   // live
@@ -756,7 +757,7 @@ static void test_dse_consecutive_stores(void) {
 }
 
 /*
- * Test: STORE, LOAD, STORE â€” first store is NOT dead (it was read).
+ * Test: STORE, LOAD, STORE â€?first store is NOT dead (it was read).
  *
  *   STORE_FIELD offset=16, obj=v0, val=v1   // live (read by LOAD)
  *   v3 = LOAD_FIELD obj=v0, offset=16       // reads the store
@@ -789,7 +790,7 @@ static void test_dse_store_load_store(void) {
 
     xir_pass_store_to_load(func);
 
-    /* First store should still be STORE_FIELD (not dead â€” was read by LOAD) */
+    /* First store should still be STORE_FIELD (not dead â€?was read by LOAD) */
     XirIns *first = &entry->ins[first_store_idx];
     assert(first->op == XIR_STORE_FIELD);
 
@@ -802,8 +803,8 @@ static void test_dse_store_load_store(void) {
 /*
  * Test: Pure instruction with loop-invariant operands is hoisted.
  *
- * CFG: entry(0) â†’ header(1) â†’ body(2) â†’ header(1)  [back-edge]
- *                  header(1) â†’ exit(3)
+ * CFG: entry(0) â†?header(1) â†?body(2) â†?header(1)  [back-edge]
+ *                  header(1) â†?exit(3)
  *
  *   entry:  v0 = CONST_I64(10)
  *           v1 = CONST_I64(20)
@@ -830,7 +831,7 @@ static void test_licm_basic_hoist(void) {
     xir_block_set_jmp(entry, header);
     xir_block_add_pred(header, entry, func->arena);
 
-    /* header: BR(cond) â†’ body or exit */
+    /* header: BR(cond) â†?body or exit */
     XirRef cond = xir_emit_unary(func, header, XIR_CONST_I64, XR_REP_I64, c1);
     xir_block_set_br(header, cond, body, exit_b);
     xir_block_add_pred(body, header, func->arena);
@@ -874,9 +875,9 @@ static void test_licm_basic_hoist(void) {
 /*
  * Test: loop_depth is computed correctly for nested loops.
  *
- * CFG: entry(0) â†’ outer_hdr(1) â†’ inner_hdr(2) â†’ inner_body(3) â†’ inner_hdr(2)
- *                                  inner_hdr(2) â†’ outer_body(4) â†’ outer_hdr(1)
- *                  outer_hdr(1) â†’ exit(5)
+ * CFG: entry(0) â†?outer_hdr(1) â†?inner_hdr(2) â†?inner_body(3) â†?inner_hdr(2)
+ *                                  inner_hdr(2) â†?outer_body(4) â†?outer_hdr(1)
+ *                  outer_hdr(1) â†?exit(5)
  *
  * Expected loop_depth:
  *   entry=0, outer_hdr=1, inner_hdr=2, inner_body=2, outer_body=1, exit=0
@@ -895,29 +896,29 @@ static void test_licm_loop_depth(void) {
     XirRef c1 = xir_const_i64(func, 1);
     XirRef v0 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
 
-    /* entry â†’ outer_hdr */
+    /* entry â†?outer_hdr */
     xir_block_set_jmp(entry, outer_hdr);
     xir_block_add_pred(outer_hdr, entry, func->arena);
 
-    /* outer_hdr: BR â†’ inner_hdr or exit */
+    /* outer_hdr: BR â†?inner_hdr or exit */
     XirRef vc1 = xir_emit_unary(func, outer_hdr, XIR_CONST_I64, XR_REP_I64, c1);
     xir_block_set_br(outer_hdr, vc1, inner_hdr, exit_b);
     xir_block_add_pred(inner_hdr, outer_hdr, func->arena);
     xir_block_add_pred(exit_b, outer_hdr, func->arena);
 
-    /* inner_hdr: BR â†’ inner_body or outer_body */
+    /* inner_hdr: BR â†?inner_body or outer_body */
     XirRef vc2 = xir_emit_unary(func, inner_hdr, XIR_CONST_I64, XR_REP_I64, c1);
     xir_block_set_br(inner_hdr, vc2, inner_body, outer_body);
     xir_block_add_pred(inner_body, inner_hdr, func->arena);
     xir_block_add_pred(outer_body, inner_hdr, func->arena);
 
-    /* inner_body â†’ inner_hdr (inner back-edge) */
+    /* inner_body â†?inner_hdr (inner back-edge) */
     XirRef vc3 = xir_emit_unary(func, inner_body, XIR_CONST_I64, XR_REP_I64, c1);
     (void)vc3;
     xir_block_set_jmp(inner_body, inner_hdr);
     xir_block_add_pred(inner_hdr, inner_body, func->arena);
 
-    /* outer_body â†’ outer_hdr (outer back-edge) */
+    /* outer_body â†?outer_hdr (outer back-edge) */
     XirRef vc4 = xir_emit_unary(func, outer_body, XIR_CONST_I64, XR_REP_I64, c1);
     (void)vc4;
     xir_block_set_jmp(outer_body, outer_hdr);
@@ -945,7 +946,7 @@ static void test_licm_loop_depth(void) {
 /*
  * Test: Diamond pattern is converted to SELECT.
  *
- * CFG: entry(0): BR(cond) â†’ then(1), else(2)
+ * CFG: entry(0): BR(cond) â†?then(1), else(2)
  *       then(1):  v_then = CONST_I64(10); JMP merge(3)
  *       else(2):  v_else = CONST_I64(20); JMP merge(3)
  *       merge(3): v_phi = PHI(v_then, v_else); RET v_phi
@@ -965,7 +966,7 @@ static void test_ifconv_diamond(void) {
     XirBlock *elseb  = xir_func_add_block(func, "else");   // 2
     XirBlock *merge  = xir_func_add_block(func, "merge");  // 3
 
-    /* entry: BR(cond) â†’ then, else */
+    /* entry: BR(cond) â†?then, else */
     XirRef c1 = xir_const_i64(func, 1);
     XirRef cond = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
     xir_block_set_br(entry, cond, thenb, elseb);
@@ -1024,6 +1025,7 @@ static void test_ifconv_diamond(void) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir_pass ===\n");
 
     /* Copy Propagation */

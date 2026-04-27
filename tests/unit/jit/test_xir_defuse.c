@@ -12,6 +12,7 @@
 #include <assert.h>
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_defuse.h"
+#include "../test_win_compat.h"
 
 /*
  * Test 1: Single block, each vreg used once.
@@ -113,7 +114,7 @@ static void test_multi_use(void) {
  * Test 3: Dead vreg (no uses).
  *
  *   v0 = CONST_I64(42)
- *   v1 = CONST_I64(99)   ; dead â€” never used
+ *   v1 = CONST_I64(99)   ; dead â€?never used
  *   RET v0
  *
  * Expected: v1 has 0 uses, xir_defuse_is_dead returns true
@@ -328,6 +329,7 @@ static void test_br_cond_use(void) {
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir_defuse ===\n");
 
     test_single_block_uses();

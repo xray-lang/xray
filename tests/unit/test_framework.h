@@ -20,6 +20,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#include "test_win_compat.h"
 
 /* ========== Test Counters ========== */
 
@@ -254,6 +255,7 @@ static int xr_tests_failed = 0;
 #define TEST_MAIN_BEGIN() \
 int main(int argc, char **argv) { \
     (void)argc; (void)argv; \
+    xr_test_suppress_dialogs(); \
     printf("\n");
 
 #define TEST_MAIN_END() \

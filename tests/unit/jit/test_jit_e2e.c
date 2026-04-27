@@ -13,11 +13,9 @@
 #include <assert.h>
 #include <signal.h>
 #include <string.h>
+#include "../test_win_compat.h"
 #ifdef _WIN32
-#include <stdlib.h>
 #include <io.h>
-#include <Windows.h>
-#include <crtdbg.h>
 #else
 #include <unistd.h>
 #include <sys/mman.h>
@@ -2571,15 +2569,7 @@ static void test_alloc_inline(void) {
 }
 
 int main(void) {
-#ifdef _WIN32
-    /* Suppress Windows error dialogs so crashes/asserts terminate immediately */
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
-    _set_abort_behavior(0, _WRITE_ABORT_MSG);
-    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
-#endif
+    xr_test_suppress_dialogs();
     signal(SIGSEGV, crash_handler);
 #ifdef SIGBUS
     signal(SIGBUS, crash_handler);

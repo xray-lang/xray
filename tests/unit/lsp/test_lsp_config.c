@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/base/xmalloc.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -336,7 +337,7 @@ TEST(toml_load_no_lsp_section) {
 }
 
 TEST(toml_load_partial_config) {
-    // Only some fields present â€” others should remain at their preset values
+    // Only some fields present â€?others should remain at their preset values
     char *dir = create_temp_toml(
         "[lsp]\n"
         "format_tab_size = 8\n"
@@ -375,6 +376,7 @@ TEST(toml_null_safety) {
 // ============================================================================
 
 int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
     (void)argc; (void)argv;
 
     printf("\n=== LSP Configuration Unit Tests ===\n\n");
