@@ -52,21 +52,18 @@ XR_FUNC void xr_dynarray_clear(XrDynArray *arr);
 #define DYNARRAY_TYPE(T) XrDynArray
 #define DYNARRAY_INIT(arr, T) xr_dynarray_init(arr, sizeof(T))
 
-#define DYNARRAY_ADD(arr, elem, T)                                                                 \
-    ({                                                                                             \
-        T _tmp = (elem);                                                                           \
-        xr_dynarray_add_raw(arr, &_tmp);                                                           \
-    })
+// C99 compound literal in array form: (T[1]){val} creates a
+// one-element array initialized by val and decays to T* in
+// expression context. Whole-struct copy is preserved (the scalar
+// form (T){val} would init only the first member when T is a
+// struct). Replaces a GCC statement-expression that MSVC rejects.
+#define DYNARRAY_ADD(arr, elem, T) xr_dynarray_add_raw((arr), (T[1]){(elem)})
 
 #define DYNARRAY_GET(arr, index, T) (*(T *) xr_dynarray_get_raw(arr, index))
 
 #define DYNARRAY_GET_PTR(arr, index, T) ((T *) xr_dynarray_get_raw(arr, index))
 
-#define DYNARRAY_SET(arr, index, elem, T)                                                          \
-    do {                                                                                           \
-        T _tmp = (elem);                                                                           \
-        xr_dynarray_set_raw(arr, index, &_tmp);                                                    \
-    } while (0)
+#define DYNARRAY_SET(arr, index, elem, T) xr_dynarray_set_raw((arr), (index), (T[1]){(elem)})
 
 #define DYNARRAY_COUNT(arr) ((arr)->count)
 #define DYNARRAY_CAPACITY(arr) ((arr)->capacity)
