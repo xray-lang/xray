@@ -77,13 +77,15 @@ static inline void xr_set_socket_error(int err) {
 typedef int xr_fd_t;
 #define XR_INVALID_FD (-1)
 
-// Initialize network library (Windows requires WSAStartup)
-static inline int xr_net_init(void) {
+// Initialize Winsock (Windows requires WSAStartup before any
+// socket call; no-op on POSIX). Distinct from the stdlib-level
+// xr_net_init in stdlib/net/net.h which initializes mbedTLS.
+static inline int xr_winsock_init(void) {
     WSADATA wsa;
     return WSAStartup(MAKEWORD(2, 2), &wsa);
 }
 
-static inline void xr_net_cleanup(void) {
+static inline void xr_winsock_cleanup(void) {
     WSACleanup();
 }
 
@@ -165,16 +167,73 @@ static inline void xr_set_socket_error(int err) {
 typedef int xr_fd_t;
 #define XR_INVALID_FD (-1)
 
-// Initialize network library (no-op on Unix)
-static inline int xr_net_init(void) {
+// POSIX has no analog to WSAStartup; the helpers below match the
+// Windows API surface so callers do not need their own #ifdef.
+static inline int xr_winsock_init(void) {
     return 0;
 }
 
-static inline void xr_net_cleanup(void) {
+static inline void xr_winsock_cleanup(void) {
     // no-op
 }
 
 #endif  // ========== Common Socket Utilities ==========
+
+/*
+ * Portable shutdown() direction constants. POSIX uses SHUT_*,
+ * Winsock uses SD_*; the underlying integers happen to match
+ * (0/1/2) but we expose explicit names so callers do not depend
+ * on that coincidence.
+ */
+#ifdef XR_PLATFORM_WINDOWS
+#define XR_SHUT_RD SD_RECEIVE
+#define XR_SHUT_WR SD_SEND
+#define XR_SHUT_RDWR SD_BOTH
+#else
+#define XR_SHUT_RD SHUT_RD
+#define XR_SHUT_WR SHUT_WR
+#define XR_SHUT_RDWR SHUT_RDWR
+#endif
+
+/*
+ * Cross-platform read/write on a socket file descriptor.
+ *
+ * On POSIX, read()/write() work on any fd (sockets, pipes, files)
+ * which lets the runtime layer share a single code path between
+ * sockets and self-pipe shutdown channels.
+ *
+ * On Windows, ReadFile()/WriteFile() cannot operate on a SOCKET
+ * handle and read()/write() will simply fail; we must call
+ * recv()/send(). Callers that need to read from a pipe on Windows
+ * must use the OS-specific path explicitly.
+ */
+static inline ssize_t xr_socket_recv(xr_socket_t fd, void *buf, size_t len) {
+#ifdef XR_PLATFORM_WINDOWS
+    int n = recv(fd, (char *) buf, (int) len, 0);
+    return (n == SOCKET_ERROR) ? -1 : (ssize_t) n;
+#else
+    return read(fd, buf, len);
+#endif
+}
+
+static inline ssize_t xr_socket_send(xr_socket_t fd, const void *buf, size_t len) {
+#ifdef XR_PLATFORM_WINDOWS
+    int n = send(fd, (const char *) buf, (int) len, 0);
+    return (n == SOCKET_ERROR) ? -1 : (ssize_t) n;
+#else
+    return write(fd, buf, len);
+#endif
+}
+
+/*
+ * Test whether the most recent socket error indicates the
+ * operation would block (i.e. the caller should re-arm netpoll
+ * and retry). EAGAIN and EWOULDBLOCK are the same value on most
+ * POSIX systems but the standard does not require it.
+ */
+static inline bool xr_socket_err_is_again(int err) {
+    return err == XR_EAGAIN || err == XR_EWOULDBLOCK;
+}
 
 /*
  * Set socket to non-blocking mode
