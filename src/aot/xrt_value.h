@@ -157,28 +157,30 @@ static inline int xrt_truthy(XrtValue v) {
 }
 
 /* =========================================================================
- * VM-native type aliases (for AOT ↔ VM interop)
+ * VM-style naming aliases for standalone AOT output
  *
- * XrtValue and XrValue are the same type (same ABI). These aliases let
- * AOT-generated code use the VM-style naming convention.
+ * These aliases let AOT-generated code reuse familiar XrValue / XR_TAG_*
+ * spellings inside standalone output. They do not imply ABI compatibility
+ * with runtime/value/xvalue.h's XrValue: the runtime layout and tag numbers
+ * are different.
  * ========================================================================= */
 
 typedef XrtValue XrValue;
 
-// VM-compatible tag constants
+// VM-style tag aliases
 #define XR_TAG_NULL XRT_TAG_NULL
 #define XR_TAG_BOOL XRT_TAG_BOOL
 #define XR_TAG_I64 XRT_TAG_I64
 #define XR_TAG_F64 XRT_TAG_F64
 #define XR_TAG_PTR XRT_TAG_PTR
 
-// VM-compatible type checks
+// VM-style type checks
 #define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
 #define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
 #define XR_IS_NUM(v) (XR_IS_INT(v) || XR_IS_FLOAT(v))
 
-// VM-compatible value creation
+// VM-style value creation
 #define XR_FROM_INT(x) ((XrValue){.i = (int64_t) (x), .tag = XR_TAG_I64})
 #define XR_FROM_FLOAT(x) ((XrValue){.f = (double) (x), .tag = XR_TAG_F64})
 #define XR_FROM_BOOL(x) ((XrValue){.i = (x) ? 1 : 0, .tag = XR_TAG_BOOL})
@@ -186,7 +188,7 @@ typedef XrtValue XrValue;
 #define XR_TRUE_VAL ((XrValue){.i = 1, .tag = XR_TAG_BOOL})
 #define XR_FALSE_VAL ((XrValue){.i = 0, .tag = XR_TAG_BOOL})
 
-// VM-compatible value extraction
+// VM-style value extraction
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
 

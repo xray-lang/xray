@@ -54,7 +54,7 @@ TEST(value_int_min) {
 }
 
 TEST(value_int_full_64bit) {
-    // Values that exceed old 48-bit NaN-boxing limit
+    // Values that exceed the older narrower integer payload assumption
     int64_t large_pos = (int64_t)1 << 50;
     XrValue v1 = xr_int(large_pos);
     ASSERT_TRUE(XR_IS_INT(v1));
@@ -130,7 +130,7 @@ TEST(value_bool_from_int) {
     // Non-zero should be true
     XrValue v1 = xr_bool(1);
     ASSERT_TRUE(XR_TO_BOOL(v1));
-    
+
     XrValue v2 = xr_bool(0);
     ASSERT_FALSE(XR_TO_BOOL(v2));
 }
@@ -162,19 +162,19 @@ TEST(value_type_exclusivity) {
     ASSERT_FALSE(XR_IS_BOOL(int_val));
     ASSERT_FALSE(XR_IS_NULL(int_val));
     ASSERT_FALSE(XR_IS_PTR(int_val));
-    
+
     XrValue float_val = xr_float(3.14);
     ASSERT_FALSE(XR_IS_INT(float_val));
     ASSERT_TRUE(XR_IS_FLOAT(float_val));
     ASSERT_FALSE(XR_IS_BOOL(float_val));
     ASSERT_FALSE(XR_IS_NULL(float_val));
-    
+
     XrValue bool_val = xr_bool(true);
     ASSERT_FALSE(XR_IS_INT(bool_val));
     ASSERT_FALSE(XR_IS_FLOAT(bool_val));
     ASSERT_TRUE(XR_IS_BOOL(bool_val));
     ASSERT_FALSE(XR_IS_NULL(bool_val));
-    
+
     XrValue null_val = xr_null();
     ASSERT_FALSE(XR_IS_INT(null_val));
     ASSERT_FALSE(XR_IS_FLOAT(null_val));
@@ -195,7 +195,7 @@ TEST(value_as_number) {
     // Int to number
     XrValue int_val = xr_int(42);
     ASSERT_FLOAT_EQ((double)XR_TO_INT(int_val), 42.0, 1e-10);
-    
+
     // Float to number
     XrValue float_val = xr_float(3.14);
     ASSERT_FLOAT_EQ(XR_TO_FLOAT(float_val), 3.14, 1e-10);
@@ -220,15 +220,15 @@ TEST(value_is_truthy) {
     ASSERT_FALSE(is_truthy(xr_int(0)));
     ASSERT_TRUE(is_truthy(xr_int(1)));
     ASSERT_TRUE(is_truthy(xr_int(-1)));
-    
+
     ASSERT_FALSE(is_truthy(xr_float(0.0)));
     ASSERT_TRUE(is_truthy(xr_float(0.1)));
     ASSERT_TRUE(is_truthy(xr_float(-0.1)));
-    
+
     // Bool: direct
     ASSERT_TRUE(is_truthy(xr_bool(true)));
     ASSERT_FALSE(is_truthy(xr_bool(false)));
-    
+
     // Null is always falsy
     ASSERT_FALSE(is_truthy(xr_null()));
 }
@@ -238,7 +238,7 @@ TEST(value_is_falsy) {
     ASSERT_TRUE(is_falsy(xr_float(0.0)));
     ASSERT_TRUE(is_falsy(xr_bool(false)));
     ASSERT_TRUE(is_falsy(xr_null()));
-    
+
     ASSERT_FALSE(is_falsy(xr_int(1)));
     ASSERT_FALSE(is_falsy(xr_float(1.0)));
     ASSERT_FALSE(is_falsy(xr_bool(true)));
@@ -250,7 +250,7 @@ TEST(value_equality_int) {
     XrValue a = xr_int(42);
     XrValue b = xr_int(42);
     XrValue c = xr_int(43);
-    
+
     ASSERT_TRUE(xr_value_deep_eq(a, b));
     ASSERT_FALSE(xr_value_deep_eq(a, c));
 }
@@ -259,7 +259,7 @@ TEST(value_equality_float) {
     XrValue a = xr_float(3.14);
     XrValue b = xr_float(3.14);
     XrValue c = xr_float(2.71);
-    
+
     ASSERT_TRUE(xr_value_deep_eq(a, b));
     ASSERT_FALSE(xr_value_deep_eq(a, c));
 }
@@ -360,7 +360,7 @@ static void run_all_tests(void) {
     RUN_TEST(value_int_max);
     RUN_TEST(value_int_min);
     RUN_TEST(value_int_full_64bit);
-    
+
     RUN_TEST_SUITE("Float Values");
     RUN_TEST(value_float_zero);
     RUN_TEST(value_float_positive);
@@ -369,47 +369,47 @@ static void run_all_tests(void) {
     RUN_TEST(value_float_large);
     RUN_TEST(value_float_infinity);
     RUN_TEST(value_float_neg_infinity);
-    
+
     RUN_TEST_SUITE("Boolean Values");
     RUN_TEST(value_bool_true);
     RUN_TEST(value_bool_false);
     RUN_TEST(value_bool_from_int);
-    
+
     RUN_TEST_SUITE("Null Values");
     RUN_TEST(value_null);
     RUN_TEST(value_null_consistency);
-    
+
     RUN_TEST_SUITE("Type Checking");
     RUN_TEST(value_type_exclusivity);
-    
+
     RUN_TEST_SUITE("Number Conversion");
     RUN_TEST(value_is_number);
     RUN_TEST(value_as_number);
-    
+
     RUN_TEST_SUITE("Truthiness");
     RUN_TEST(value_is_truthy);
     RUN_TEST(value_is_falsy);
-    
+
     RUN_TEST_SUITE("Value Equality");
     RUN_TEST(value_equality_int);
     RUN_TEST(value_equality_float);
     RUN_TEST(value_equality_bool);
     RUN_TEST(value_equality_null);
     RUN_TEST(value_equality_cross_type);
-    
+
     RUN_TEST_SUITE("Tagged Union Integrity");
     RUN_TEST(value_tagged_union_integrity);
     RUN_TEST(value_float_precision);
     RUN_TEST(value_sizeof);
     RUN_TEST(value_memset_zero_is_null);
-    
+
     RUN_TEST_SUITE("Numeric Type Checks");
     RUN_TEST(value_int_type_checks);
     RUN_TEST(value_float_type_checks);
-    
+
     RUN_TEST_SUITE("Precise Extraction");
     RUN_TEST(value_to_f64_conversion);
-    
+
 }
 
 TEST_MAIN_BEGIN()
