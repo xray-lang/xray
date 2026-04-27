@@ -37,6 +37,36 @@
 #include <stdio.h>
 #include <string.h>
 
+// Helper used by the CHECK_IS_CHANNEL macro inside
+// xr_compile_call_method. File-scope so MSVC accepts it
+// (functions cannot nest in C); identical logic to the previous
+// GCC statement-expression macro.
+static inline bool check_is_channel_var(XrCompilerContext *ctx, XrCompiler *compiler,
+                                        const char *var_name) {
+    XrString *name_str = xr_compile_time_intern(ctx->X, var_name, strlen(var_name));
+    for (int i = compiler->local_list.count - 1; i >= 0; i--) {
+        XrLocalInfo *local = compiler->local_list.items[i];
+        if (local->name == name_str ||
+            (local->name && strcmp(local->name->data, var_name) == 0)) {
+            XrType *ct = (XrType *) (local->compile_type);
+            return ct && (ct->kind == XR_KIND_CHANNEL);
+        }
+    }
+    int uv_idx = scope_resolve_upvalue(ctx, compiler, name_str);
+    if (uv_idx >= 0) {
+        XrType *ct = (XrType *) (compiler->upvalues[uv_idx].type_info);
+        if (ct && (ct->kind == XR_KIND_CHANNEL))
+            return true;
+    }
+    int sh_idx = shared_get_in_scope(ctx, compiler, name_str);
+    if (sh_idx >= 0) {
+        XrType *ct = shared_get_type(ctx, sh_idx);
+        if (ct && (ct->kind == XR_KIND_CHANNEL))
+            return true;
+    }
+    return false;
+}
+
 int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler, CallExprNode *node,
                            bool is_tail) {
     XR_DCHECK(ctx != NULL, "xr_compile_call_method: NULL ctx");
@@ -667,47 +697,10 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler, CallExp
         }
     }
 
-// Channel method inline optimization (supports local, upvalue and shared)
-
-// Helper: check if variable is Channel type
-#define CHECK_IS_CHANNEL(var_name)                                                                 \
-    ({                                                                                             \
-        bool _is_channel = false;                                                                  \
-        XrString *_name_str = xr_compile_time_intern(ctx->X, var_name, strlen(var_name));          \
-        /* 1. Check local variables */                                                             \
-        for (int i = compiler->local_list.count - 1; i >= 0; i--) {                                \
-            XrLocalInfo *local = compiler->local_list.items[i];                                    \
-            if (local->name == _name_str ||                                                        \
-                (local->name && strcmp(local->name->data, var_name) == 0)) {                       \
-                XrType *ct = (XrType *) (local->compile_type);                                     \
-                if (ct && (ct->kind == XR_KIND_CHANNEL)) {                                         \
-                    _is_channel = true;                                                            \
-                }                                                                                  \
-                break;                                                                             \
-            }                                                                                      \
-        }                                                                                          \
-        /* 2. Check upvalue (closure captured variables) */                                        \
-        if (!_is_channel) {                                                                        \
-            int uv_idx = scope_resolve_upvalue(ctx, compiler, _name_str);                          \
-            if (uv_idx >= 0) {                                                                     \
-                XrType *ct = (XrType *) (compiler->upvalues[uv_idx].type_info);                    \
-                if (ct && (ct->kind == XR_KIND_CHANNEL)) {                                         \
-                    _is_channel = true;                                                            \
-                }                                                                                  \
-            }                                                                                      \
-        }                                                                                          \
-        /* 3. Check shared variables (e.g. shared const ch = Channel(...)) */                      \
-        if (!_is_channel) {                                                                        \
-            int _sh_idx = shared_get_in_scope(ctx, compiler, _name_str);                           \
-            if (_sh_idx >= 0) {                                                                    \
-                XrType *ct = shared_get_type(ctx, _sh_idx);                                        \
-                if (ct && (ct->kind == XR_KIND_CHANNEL)) {                                         \
-                    _is_channel = true;                                                            \
-                }                                                                                  \
-            }                                                                                      \
-        }                                                                                          \
-        _is_channel;                                                                               \
-    })
+// Channel method inline optimization (supports local, upvalue and shared).
+// CHECK_IS_CHANNEL forwards to a file-scope helper defined above
+// xr_compile_call_method (functions cannot nest in C).
+#define CHECK_IS_CHANNEL(var_name) check_is_channel_var(ctx, compiler, (var_name))
 
     // time.sleep(seconds) -> OP_SLEEP (coroutine friendly)
     if (strcmp(member->name, "sleep") == 0 && node->arg_count == 1) {
