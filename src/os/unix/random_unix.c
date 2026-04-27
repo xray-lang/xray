@@ -14,8 +14,6 @@
 
 #include "../os_random.h"
 
-#ifndef _WIN32
-
 #include "../../base/xplatform.h"
 #include <errno.h>
 #include <stdio.h>
@@ -61,5 +59,3 @@ void xr_random_bytes(unsigned char *buf, size_t len) {
     }
 #endif
 }
-
-#endif  // !_WIN32

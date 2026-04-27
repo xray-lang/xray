@@ -16,8 +16,6 @@
 
 #include "../os_fd.h"
 
-#ifdef _WIN32
-
 #include <io.h>
 #include <stdio.h>
 
@@ -36,5 +34,3 @@ int xr_stderr_fd(void) {
 bool xr_isatty(int fd) {
     return _isatty(fd) != 0;
 }
-
-#endif  // _WIN32

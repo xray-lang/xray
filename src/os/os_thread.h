@@ -50,11 +50,12 @@
 #define XTHREAD_H
 
 #include "../base/xdefs.h"
+#include "../base/xplatform.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -100,7 +101,7 @@ typedef pthread_once_t xr_once_t;
 #define XR_COND_INITIALIZER PTHREAD_COND_INITIALIZER
 #define XR_ONCE_INITIALIZER PTHREAD_ONCE_INIT
 
-#endif  // _WIN32
+#endif  // XR_OS_WINDOWS
 
 #ifdef __cplusplus
 extern "C" {
@@ -138,7 +139,7 @@ XR_FUNC xr_thread_t xr_thread_self(void);
 // memory and detect "this slot was never used" without
 // platform-specific struct accesses.
 static inline bool xr_thread_is_valid(xr_thread_t t) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     return t.handle != NULL;
 #else
     // pthread_t is a scalar on every supported POSIX platform;

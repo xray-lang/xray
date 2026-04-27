@@ -17,8 +17,6 @@
 
 #include "../os_mem.h"
 
-#ifndef _WIN32
-
 #include <sys/mman.h>
 
 // Some BSDs spell it MAP_ANON; Linux/macOS expose both via
@@ -58,5 +56,3 @@ void xr_mem_unmap(void *ptr, size_t size) {
 bool xr_mem_protect(void *ptr, size_t size, int prot) {
     return mprotect(ptr, size, prot_to_posix(prot)) == 0;
 }
-
-#endif  // !_WIN32

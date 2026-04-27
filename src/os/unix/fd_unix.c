@@ -13,8 +13,6 @@
 
 #include "../os_fd.h"
 
-#ifndef _WIN32
-
 #include <unistd.h>
 
 int xr_stdin_fd(void) {
@@ -32,5 +30,3 @@ int xr_stderr_fd(void) {
 bool xr_isatty(int fd) {
     return isatty(fd) != 0;
 }
-
-#endif  // !_WIN32

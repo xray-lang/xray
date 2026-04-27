@@ -25,8 +25,6 @@
 
 #include "../os_mem.h"
 
-#ifdef _WIN32
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -63,5 +61,3 @@ bool xr_mem_protect(void *ptr, size_t size, int prot) {
     DWORD old;
     return VirtualProtect(ptr, size, prot_to_win(prot), &old) != 0;
 }
-
-#endif  // _WIN32

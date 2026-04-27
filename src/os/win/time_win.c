@@ -21,8 +21,6 @@
 
 #include "../os_time.h"
 
-#ifdef _WIN32
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -78,5 +76,3 @@ void xr_time_sleep_ns(uint64_t ns) {
         ms -= chunk;
     }
 }
-
-#endif  // _WIN32
