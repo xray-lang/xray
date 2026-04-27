@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "../../os/os_fs.h"
 #include <limits.h>
 #include <errno.h>
 #include <unistd.h>
@@ -164,17 +165,17 @@ int xr_cli_collect_files(const char *path, const XrCliWalkOpts *opts, XrCliFileL
     if (!opts)
         opts = &defaults;
 
-    struct stat st;
-    if (stat(path, &st) != 0)
+    XrFsStat st;
+    if (xr_fs_stat(path, &st) != 0)
         return -1;
 
-    if (S_ISREG(st.st_mode)) {
+    if (st.kind == XR_FS_FILE) {
         /* Single file — add directly (ignore xr_only filter for explicit files) */
         xr_cli_filelist_add(fl, path);
         return 0;
     }
 
-    if (S_ISDIR(st.st_mode)) {
+    if (st.kind == XR_FS_DIR) {
         walk_recursive(path, opts, fl);
         xr_cli_filelist_sort(fl);
         return 0;
@@ -271,7 +272,7 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
     size_t written = fwrite(content, 1, len, f);
     if (fflush(f) != 0 || written != len) {
         fclose(f);
-        unlink(tmp_path);
+        xr_fs_remove(tmp_path);
         return -1;
     }
     fclose(f);
@@ -283,7 +284,7 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
     }
 
     if (rename(tmp_path, path) != 0) {
-        unlink(tmp_path);
+        xr_fs_remove(tmp_path);
         return -1;
     }
 
@@ -293,15 +294,11 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
 /* ========== Path Queries ========== */
 
 bool xr_cli_file_exists(const char *path) {
-    struct stat st;
-    return path && stat(path, &st) == 0;
+    return xr_fs_exists(path);
 }
 
 bool xr_cli_is_directory(const char *path) {
-    struct stat st;
-    if (!path || stat(path, &st) != 0)
-        return false;
-    return S_ISDIR(st.st_mode);
+    return xr_fs_is_dir(path);
 }
 
 bool xr_cli_is_xr_file(const char *filename) {

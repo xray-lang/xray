@@ -33,6 +33,7 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <libgen.h>
+#include "../os/os_fs.h"
 
 // Thread-local config for multi-Isolate support
 static XR_THREAD_LOCAL XrPkgClientConfig tls_config = {
@@ -61,7 +62,7 @@ static bool mkdir_recursive(const char *path) {
     for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
-            if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+            if (xr_fs_mkdir(tmp, 0755) != 0) {
                 xr_free(tmp);
                 return false;
             }
@@ -70,7 +71,7 @@ static bool mkdir_recursive(const char *path) {
     }
 
     // Create final directory
-    if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+    if (xr_fs_mkdir(tmp, 0755) != 0) {
         xr_free(tmp);
         return false;
     }
@@ -492,7 +493,7 @@ bool xr_pkg_client_download(const char *owner, const char *name, const char *ver
         return false;
 
     // Ensure destination directory exists
-    mkdir(dest_dir, 0755);
+    xr_fs_mkdir(dest_dir, 0755);
 
     char url[512];
     snprintf(url, sizeof(url), "%s/api/packages/%s/%s/%s/download", tls_config.registry_url, owner,
@@ -764,7 +765,7 @@ bool xr_pkg_client_save_token(const char *token) {
 
     char config_dir[512];
     snprintf(config_dir, sizeof(config_dir), "%s/.xray", home);
-    mkdir(config_dir, 0755);
+    xr_fs_mkdir(config_dir, 0755);
 
     char config_path[512];
     snprintf(config_path, sizeof(config_path), "%s/.xray/credentials", home);

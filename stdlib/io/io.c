@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "../../src/os/os_fs.h"
 #include "../../src/os/os_dir.h"
 #include <unistd.h>
 #include <errno.h>
@@ -202,8 +203,7 @@ static XrValue io_exists(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    struct stat st;
-    return xr_bool(stat(path, &st) == 0);
+    return xr_bool(xr_fs_exists(path));
 }
 
 // isFile(path) - Check if path is a file
@@ -215,10 +215,7 @@ static XrValue io_isFile(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    struct stat st;
-    if (stat(path, &st) != 0)
-        return xr_bool(false);
-    return xr_bool(S_ISREG(st.st_mode));
+    return xr_bool(xr_fs_is_file(path));
 }
 
 // isDir(path) - Check if path is a directory
@@ -230,10 +227,7 @@ static XrValue io_isDir(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    struct stat st;
-    if (stat(path, &st) != 0)
-        return xr_bool(false);
-    return xr_bool(S_ISDIR(st.st_mode));
+    return xr_bool(xr_fs_is_dir(path));
 }
 
 // fileSize(path) - Get file size
@@ -245,10 +239,10 @@ static XrValue io_fileSize(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_int(-1);
 
-    struct stat st;
-    if (stat(path, &st) != 0)
+    XrFsStat st;
+    if (xr_fs_stat(path, &st) != 0)
         return xr_int(-1);
-    return xr_int(st.st_size);
+    return xr_int((int64_t) st.size);
 }
 
 /* ========== File Operations ========== */
@@ -325,7 +319,7 @@ static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
     (void) argc;
 
     char buf[PATH_MAX];
-    if (getcwd(buf, sizeof(buf)) == NULL) {
+    if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
     return xrs_string_value_c(X, buf);
@@ -342,7 +336,7 @@ static XrValue io_chdir(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    return xr_bool(chdir(path) == 0);
+    return xr_bool(xr_fs_chdir(path) == 0);
 }
 
 // copyFile(src, dst) - Copy file

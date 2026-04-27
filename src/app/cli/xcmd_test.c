@@ -42,12 +42,11 @@
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
+#include "../../os/os_fs.h"
 #include "../../os/os_dir.h"
 #include "../../os/os_thread.h"
 #include "../../os/os_time.h"
 #include <stdatomic.h>
-#include <unistd.h>
 
 #define TEST_FILE_TIMEOUT_SEC 120
 
@@ -729,13 +728,13 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     XrFileList fl = {0};
     for (int i = 0; i < inv->positional_count; i++) {
         const char *test_path = inv->positionals[i];
-        struct stat st;
-        if (stat(test_path, &st) != 0) {
+        XrFsStat st;
+        if (xr_fs_stat(test_path, &st) != 0) {
             xr_cli_error("test", "path does not exist '%s'", test_path);
             filelist_free(&fl);
             return XR_CLI_EXIT_FAIL;
         }
-        if (S_ISDIR(st.st_mode)) {
+        if (st.kind == XR_FS_DIR) {
             collect_files_recursive(test_path, &fl);
         } else {
             filelist_add(&fl, test_path);

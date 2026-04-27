@@ -33,9 +33,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#ifndef XR_OS_WINDOWS
-#include <unistd.h>
-#endif
+
+#include "../os/os_fs.h"
+
 #include "../base/xmalloc.h"
 #include "../vm/xdebug.h"
 #include "../base/xsource_cache.h"
@@ -250,7 +250,7 @@ void xray_isolate_set_script_info(XrayIsolate *isolate, const char *script_file,
     XrString *main_str = NULL;
     XrString *dir_str = NULL;
 
-    if (script_file && realpath(script_file, abs_path)) {
+    if (script_file && xr_fs_realpath(script_file, abs_path, sizeof(abs_path))) {
         main_str = xr_string_intern(isolate, abs_path, strlen(abs_path), 0);
 
         snprintf(dir_path, PATH_MAX, "%s", abs_path);
@@ -258,7 +258,7 @@ void xray_isolate_set_script_info(XrayIsolate *isolate, const char *script_file,
         if (last_slash) {
             *last_slash = '\0';
             dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
-        } else if (getcwd(dir_path, PATH_MAX)) {
+        } else if (xr_fs_getcwd(dir_path, PATH_MAX)) {
             dir_str = xr_string_intern(isolate, dir_path, strlen(dir_path), 0);
         }
     } else if (script_file) {
