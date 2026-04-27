@@ -953,8 +953,9 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
 
         // CAS on task->await_state (await coordination lives on the task)
         if (current) {
-            __atomic_store_n(&task->waiter_index, -1, __ATOMIC_RELAXED);
-            __atomic_store_n(&task->waiter, current, __ATOMIC_RELEASE);
+            atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
+            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, current,
+                                  memory_order_release);
 
             int expected = XR_AWAIT_NONE;
             if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected,
@@ -982,7 +983,8 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
 
             // RESOLVED: result already cached in task by executor_complete
             XR_CHECK(expected == XR_AWAIT_RESOLVED, "await: unexpected state, expected RESOLVED");
-            __atomic_store_n(&task->waiter, NULL, __ATOMIC_RELAXED);
+            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
+                                  memory_order_relaxed);
             base[a] = vm_task_consume_result(isolate, task, current, discard_result);
             atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
             return VM_COLD_BREAK;
@@ -1078,8 +1080,9 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
 
         XrCoroutine *current = vm_cold_get_coro(vm_ctx);
         if (current && rt) {
-            __atomic_store_n(&task->waiter_index, -1, __ATOMIC_RELAXED);
-            __atomic_store_n(&task->waiter, current, __ATOMIC_RELEASE);
+            atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
+            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, current,
+                                  memory_order_release);
             current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
 
             XrWorker *worker = xr_current_worker();
@@ -1184,10 +1187,12 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                 continue;
             atomic_fetch_add(&caller->wait_count, 1);
             XrTask *t = xr_value_to_task(cv);
-            __atomic_store_n(&t->waiter_index, j, __ATOMIC_RELAXED);
-            __atomic_store_n(&t->waiter, caller, __ATOMIC_RELEASE);
+            atomic_store_explicit((_Atomic int *) &t->waiter_index, j, memory_order_relaxed);
+            atomic_store_explicit((_Atomic(XrCoroutine *) *) &t->waiter, caller,
+                                  memory_order_release);
             if (xr_task_is_done(t)) {
-                XrCoroutine *w = __atomic_exchange_n(&t->waiter, NULL, __ATOMIC_ACQ_REL);
+                XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
+                                                           NULL, memory_order_acq_rel);
                 if (w == caller)
                     atomic_fetch_sub(&caller->wait_count, 1);
             }
@@ -1286,10 +1291,12 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             atomic_fetch_add(&current->wait_count, 1);
             int widx = (mode == 0) ? -3 : -4;
             XrTask *t = xr_value_to_task(cv);
-            __atomic_store_n(&t->waiter_index, widx, __ATOMIC_RELAXED);
-            __atomic_store_n(&t->waiter, current, __ATOMIC_RELEASE);
+            atomic_store_explicit((_Atomic int *) &t->waiter_index, widx, memory_order_relaxed);
+            atomic_store_explicit((_Atomic(XrCoroutine *) *) &t->waiter, current,
+                                  memory_order_release);
             if (xr_task_is_done(t)) {
-                XrCoroutine *w = __atomic_exchange_n(&t->waiter, NULL, __ATOMIC_ACQ_REL);
+                XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
+                                                           NULL, memory_order_acq_rel);
                 if (w == current) {
                     if (mode == 0 || !XR_IS_STRING(t->error)) {
                         bool expected = false;

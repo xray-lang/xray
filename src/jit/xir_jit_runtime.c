@@ -2771,8 +2771,9 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
     }
 
     // CAS: NONE → WAITING (mirror vm_await logic in xvm_cold_paths.c:2439)
-    __atomic_store_n(&task->waiter_index, -1, __ATOMIC_RELAXED);
-    __atomic_store_n(&task->waiter, coro, __ATOMIC_RELEASE);
+    atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
+    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro,
+                          memory_order_release);
 
     int expected = XR_AWAIT_NONE;
     if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected, XR_AWAIT_WAITING,
@@ -2790,7 +2791,8 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
     if (expected == XR_AWAIT_RESOLVED) {
         /* Race: executor completed between our state check and CAS.
          * Result already in task->result. */
-        __atomic_store_n(&task->waiter, NULL, __ATOMIC_RELAXED);
+        atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
+                              memory_order_relaxed);
         XrValue res = xr_null();
         if (!discard_result) {
             res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
