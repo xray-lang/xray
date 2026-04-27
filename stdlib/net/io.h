@@ -21,7 +21,7 @@
 #include "../../src/coro/xnetpoll.h"
 #include <stddef.h>
 #include <stdbool.h>
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 // os_net.h provides a struct iovec compatibility shim alongside
 // the WSASend-backed writev emulation used by callers of
 // xr_io_writev on Windows.

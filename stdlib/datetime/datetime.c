@@ -60,7 +60,7 @@ static int days_in_month_table(int year, int mon) {
 static inline time_t datetime_mktime(struct tm *tm, int is_utc) {
     XR_DCHECK(tm != NULL, "datetime_mktime: tm must not be NULL");
     if (is_utc) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         return _mkgmtime(tm);
 #else
         return timegm(tm);
@@ -74,7 +74,7 @@ static inline time_t datetime_mktime(struct tm *tm, int is_utc) {
 int xr_datetime_local_offset(void) {
     time_t now = time(NULL);
     struct tm local_tm, utc_tm;
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
     localtime_s(&local_tm, &now);
     gmtime_s(&utc_tm, &now);
 #else
@@ -280,13 +280,13 @@ XrDateTime *xr_datetime_parse(XrayIsolate *isolate, const char *str, const char 
 void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm) {
     time_t t = (time_t) dt->timestamp;
     if (dt->is_utc) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         gmtime_s(tm, &t);
 #else
         gmtime_r(&t, tm);
 #endif
     } else {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         localtime_s(tm, &t);
 #else
         localtime_r(&t, tm);

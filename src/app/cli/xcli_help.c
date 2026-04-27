@@ -36,11 +36,11 @@ void xr_cli_print_version(void) {
     printf(", x86");
 #endif
 
-#if defined(__linux__)
+#if defined(XR_OS_LINUX)
     printf("-linux");
-#elif defined(__APPLE__)
+#elif defined(XR_OS_MACOS)
     printf("-darwin");
-#elif defined(_WIN32)
+#elif defined(XR_OS_WINDOWS)
     printf("-windows");
 #endif
 

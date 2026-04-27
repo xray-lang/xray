@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#ifndef _WIN32
+#ifndef XR_OS_WINDOWS
 #include <unistd.h>
 #endif
 #include "../base/xmalloc.h"

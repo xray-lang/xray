@@ -14,7 +14,7 @@
  * Note: This file is #included by xnetpoll.c, not compiled separately.
  */
 
-#if defined(__APPLE__) && defined(XR_NETPOLL_INCLUDED)
+#if defined(XR_OS_MACOS) && defined(XR_NETPOLL_INCLUDED)
 
 #include "../base/xchecks.h"
 #include <sys/types.h>
@@ -131,4 +131,4 @@ static const XrNetpollOps kqueue_ops = {
     .wakeup = kqueue_wakeup,
 };
 
-#endif  // __APPLE__
+#endif  // XR_OS_MACOS

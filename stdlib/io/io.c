@@ -34,9 +34,9 @@
 #include <utime.h>
 #include <limits.h>
 #include <ftw.h>
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
 #include <copyfile.h>
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
 #include <sys/sendfile.h>
 #endif
 
@@ -356,7 +356,7 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
     if (!src || !dst)
         return xr_bool(false);
 
-#ifdef __APPLE__
+#ifdef XR_OS_MACOS
     // macOS: use fcopyfile for kernel-level copy (zero-copy when possible)
     int src_fd = open(src, O_RDONLY);
     if (src_fd < 0)
@@ -370,7 +370,7 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
     close(src_fd);
     close(dst_fd);
     return xr_bool(ret == 0);
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     // Linux: use sendfile for zero-copy
     int src_fd = open(src, O_RDONLY);
     if (src_fd < 0)
@@ -719,7 +719,7 @@ static const char *io_tempdir_root(void) {
     if (!d || !d[0])
         d = getenv("TEMP");
     if (!d || !d[0]) {
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
         d = "C:\\Windows\\Temp";
 #else
         d = "/tmp";

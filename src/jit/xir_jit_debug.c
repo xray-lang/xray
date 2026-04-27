@@ -30,7 +30,7 @@
 #include <sys/mman.h>
 #include "../os/os_thread.h"
 
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
@@ -215,9 +215,9 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr, void *
     ucontext_t *uc = (ucontext_t *) ucontext;
 
     // Read x28 (JIT_CTX_REG) from ucontext to get jit_ctx
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     uint64_t x28_val = uc->uc_mcontext->__ss.__x[28];
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     uint64_t x28_val = uc->uc_mcontext.regs[28];
 #else
     return false;
@@ -250,9 +250,9 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr, void *
         for (uint32_t i = 0; i < smap->count; i++) {
             if (smap->entries[i].pc_offset == fault_offset) {
                 jit_ctx->active_safepoint_id = i;
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
                 uint64_t fp_val = uc->uc_mcontext->__ss.__fp;
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
                 uint64_t fp_val = uc->uc_mcontext.regs[29];
 #endif
                 if (fp_val) {
@@ -267,9 +267,9 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr, void *
     jit_ctx->safepoint_return_pc = (void *) ((uintptr_t) fault_pc + 4);
 
     // 3. Redirect execution to global safepoint trampoline
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     uc->uc_mcontext->__ss.__pc = (uint64_t) (uintptr_t) g_safepoint_trampoline;
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     uc->uc_mcontext.pc = (uint64_t) (uintptr_t) g_safepoint_trampoline;
 #endif
 
@@ -289,16 +289,16 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
     void *fault_pc = NULL;
 #if defined(__aarch64__) || defined(__arm64__)
     ucontext_t *uc = (ucontext_t *) ucontext;
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     fault_pc = (void *) uc->uc_mcontext->__ss.__pc;
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     fault_pc = (void *) uc->uc_mcontext.pc;
 #endif
 #elif defined(__x86_64__)
     ucontext_t *uc = (ucontext_t *) ucontext;
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     fault_pc = (void *) uc->uc_mcontext->__ss.__rip;
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     fault_pc = (void *) uc->uc_mcontext.gregs[16];  // REG_RIP
 #endif
 #endif
@@ -364,7 +364,7 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
 #if defined(__aarch64__) || defined(__arm64__)
     // Print key registers for diagnosis
     ucontext_t *uc2 = (ucontext_t *) ucontext;
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     fprintf(stderr, "[JIT-CRASH] Registers:\n");
     for (int i = 0; i < 29; i++) {
         fprintf(stderr, "  x%-2d = 0x%016llx", i,
@@ -394,7 +394,7 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
 // Detect if a debugger (lldb/gdb) is attached to this process.
 // Uses macOS sysctl P_TRACED flag; returns false on other platforms.
 static bool jit_debugger_attached(void) {
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
     struct kinfo_proc info;
     memset(&info, 0, sizeof(info));

@@ -35,7 +35,7 @@
 #include <time.h>
 #include "../../os/os_fd.h"
 
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #include <io.h>
 #else
 #include <unistd.h>

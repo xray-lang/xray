@@ -38,7 +38,7 @@
 #define xr_calloc_raw(count, size) calloc(count, size)
 #define xr_realloc_raw(ptr, size) realloc(ptr, size)
 #define xr_free_raw(ptr) free(ptr)
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 // MSVC: _aligned_malloc must be paired with _aligned_free; the
 // pointer it returns is not addressable through plain free().
 #include <malloc.h>
