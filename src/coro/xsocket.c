@@ -15,6 +15,7 @@
  */
 
 #include "xsocket.h"
+#include "../../include/xray_platform.h"
 #include "../base/xchecks.h"
 #include "../base/xtime.h"
 #include "xnetpoll.h"
@@ -26,24 +27,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <poll.h>
 
 // ========== Utility Functions ==========
 
-// Set socket to non-blocking mode
+// Set socket to non-blocking mode. The body lives in
+// xr_socket_set_nonblocking (xray_platform.h); this name is the
+// historical public symbol used by stdlib net/http/ws callers.
 int xr_socket_set_nonblock(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1)
-        return -1;
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    return xr_socket_set_nonblocking((xr_socket_t) fd);
 }
 
 // ========== Connection Management ==========
@@ -52,9 +43,9 @@ int xr_socket_set_nonblock(int fd) {
 int xr_socket_listen(const char *host, int port, int backlog) {
     XR_DCHECK(host != NULL, "socket_listen: NULL host");
     XR_DCHECK(port > 0, "socket_listen: invalid port");
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = (int) socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        fprintf(stderr, "socket() failed: %s\n", strerror(errno));
+        fprintf(stderr, "socket() failed: %d\n", xr_get_socket_error());
         return -1;
     }
 
@@ -75,15 +66,15 @@ int xr_socket_listen(const char *host, int port, int backlog) {
     }
 
     if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        fprintf(stderr, "bind() failed (port %d): %s\n", port, strerror(errno));
-        close(fd);
+        fprintf(stderr, "bind() failed (port %d): %d\n", port, xr_get_socket_error());
+        xr_closesocket((xr_socket_t) fd);
         return -1;
     }
 
     // Start listening
     if (listen(fd, backlog > 0 ? backlog : 128) < 0) {
-        fprintf(stderr, "listen() failed (port %d): %s\n", port, strerror(errno));
-        close(fd);
+        fprintf(stderr, "listen() failed (port %d): %d\n", port, xr_get_socket_error());
+        xr_closesocket((xr_socket_t) fd);
         return -1;
     }
 
@@ -115,15 +106,15 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
-        int client_fd = accept(listen_fd, (struct sockaddr *) &client_addr, &addr_len);
+        int client_fd = (int) accept(listen_fd, (struct sockaddr *) &client_addr, &addr_len);
 
         if (client_fd >= 0) {
             xr_socket_set_nonblock(client_fd);
-            xr_socket_set_nodelay(client_fd, true);
+            xr_socket_set_nodelay((xr_socket_t) client_fd, true);
             return client_fd;
         }
 
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             // Block until I/O ready (uses xr_cond_wait, not busy-wait)
             if (xr_netpoll_block(pd, XR_POLL_READ, X)) {
                 continue;
@@ -153,9 +144,15 @@ void xr_socket_close(XrayIsolate *X, int fd) {
         return;
 
     // 1. Close write end, send FIN
-    shutdown(fd, SHUT_WR);
+    shutdown(fd, XR_SHUT_WR);
 
-    // 2. Use poll to wait for data send complete (max 100ms)
+#ifndef XR_PLATFORM_WINDOWS
+    // 2. Use poll to wait for data send complete (max 100ms).
+    //    Best-effort RST avoidance; skipped on Windows where the
+    //    runtime does not currently expose a portable poll wrapper
+    //    on this code path. The fd is already non-blocking, so a
+    //    small recv loop would still be safe but the poll keeps
+    //    the wait bounded.
     struct pollfd pfd = {fd, POLLIN, 0};
     if (poll(&pfd, 1, 100) > 0) {
         // 3. Read remaining data (avoid RST)
@@ -164,9 +161,10 @@ void xr_socket_close(XrayIsolate *X, int fd) {
             // Discard data
         }
     }
+#endif
 
     // 4. Close socket
-    close(fd);
+    xr_closesocket((xr_socket_t) fd);
 }
 
 // ========== Data Read/Write ==========
@@ -179,7 +177,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
     XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
     if (!runtime) {
         // No Runtime, use system blocking read
-        return (int) read(fd, buf, len);
+        return (int) xr_socket_recv((xr_socket_t) fd, buf, len);
     }
 
     // Get or create pollDesc
@@ -189,7 +187,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
     }
 
     while (1) {
-        ssize_t n = read(fd, buf, len);
+        ssize_t n = xr_socket_recv((xr_socket_t) fd, buf, len);
 
         if (n > 0) {
             return (int) n;
@@ -199,7 +197,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
             return 0;
         }
 
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             if (xr_netpoll_block(pd, XR_POLL_READ, X)) {
                 continue;
             }
@@ -218,7 +216,7 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
     XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
     if (!runtime) {
         // No Runtime, use system blocking write
-        return (int) write(fd, buf, len);
+        return (int) xr_socket_send((xr_socket_t) fd, buf, len);
     }
 
     // Get or create pollDesc
@@ -229,7 +227,7 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
 
     size_t total = 0;
     while (total < len) {
-        ssize_t n = write(fd, buf + total, len - total);
+        ssize_t n = xr_socket_send((xr_socket_t) fd, buf + total, len - total);
 
         if (n > 0) {
             total += n;
@@ -243,7 +241,7 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
             return total > 0 ? (int) total : -1;
         }
 
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             if (xr_netpoll_block(pd, XR_POLL_WRITE, X)) {
                 continue;
             }
@@ -446,7 +444,8 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
         // No Runtime, use blocking accept
         struct sockaddr_in client_addr;
         socklen_t addr_len = sizeof(client_addr);
-        state->result_fd = accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
+        state->result_fd =
+            (int) accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
         return (state->result_fd >= 0) ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
     }
 
@@ -461,17 +460,17 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
     // Try non-blocking accept
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);
-    int client_fd = accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
+    int client_fd = (int) accept(state->listen_fd, (struct sockaddr *) &client_addr, &addr_len);
 
     if (client_fd >= 0) {
         // Success
         xr_socket_set_nonblock(client_fd);
-        xr_socket_set_nodelay(client_fd, true);
+        xr_socket_set_nodelay((xr_socket_t) client_fd, true);
         state->result_fd = client_fd;
         return XR_CFUNC_DONE;
     }
 
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    if (xr_socket_err_is_again(xr_get_socket_error())) {
         // Yield directly (no block_yieldable double-call)
         return xr_yield_for_io(X, state->listen_fd, XR_WAIT_READ, -1, xr_socket_accept_continue,
                                state, NULL);
@@ -509,18 +508,19 @@ XrIOTryResult xr_socket_accept_try(XrayIsolate *X, int listen_fd) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    int client_fd = accept(listen_fd, (struct sockaddr *) &client_addr, &client_len);
+    int client_fd = (int) accept(listen_fd, (struct sockaddr *) &client_addr, &client_len);
 
     if (client_fd >= 0) {
         // Success: set new connection to non-blocking
         xr_socket_set_nonblock(client_fd);
-        xr_socket_set_nodelay(client_fd, true);
+        xr_socket_set_nodelay((xr_socket_t) client_fd, true);
         result.ready = true;
         result.value = client_fd;
         return result;
     }
 
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    int err = xr_get_socket_error();
+    if (xr_socket_err_is_again(err)) {
         // No connection, need to wait
         result.ready = false;
         return result;
@@ -529,7 +529,7 @@ XrIOTryResult xr_socket_accept_try(XrayIsolate *X, int listen_fd) {
     // Other errors
     result.ready = true;
     result.value = -1;
-    result.error = errno;
+    result.error = err;
     return result;
 }
 
@@ -538,7 +538,7 @@ XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) 
     (void) X;
     XrIOTryResult result = {false, 0, 0};
 
-    ssize_t n = read(fd, buf, len);
+    ssize_t n = xr_socket_recv((xr_socket_t) fd, buf, len);
 
     if (n > 0) {
         result.ready = true;
@@ -553,7 +553,8 @@ XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) 
         return result;
     }
 
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    int err = xr_get_socket_error();
+    if (xr_socket_err_is_again(err)) {
         // No data, need to wait
         result.ready = false;
         return result;
@@ -562,7 +563,7 @@ XrIOTryResult xr_socket_read_try(XrayIsolate *X, int fd, char *buf, size_t len) 
     // Other errors
     result.ready = true;
     result.value = -1;
-    result.error = errno;
+    result.error = err;
     return result;
 }
 
@@ -571,7 +572,7 @@ XrIOTryResult xr_socket_write_try(XrayIsolate *X, int fd, const char *buf, size_
     (void) X;
     XrIOTryResult result = {false, 0, 0};
 
-    ssize_t n = write(fd, buf, len);
+    ssize_t n = xr_socket_send((xr_socket_t) fd, buf, len);
 
     if (n >= 0) {
         result.ready = true;
@@ -579,7 +580,8 @@ XrIOTryResult xr_socket_write_try(XrayIsolate *X, int fd, const char *buf, size_
         return result;
     }
 
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    int err = xr_get_socket_error();
+    if (xr_socket_err_is_again(err)) {
         // Buffer full, need to wait
         result.ready = false;
         return result;
@@ -588,6 +590,6 @@ XrIOTryResult xr_socket_write_try(XrayIsolate *X, int fd, const char *buf, size_
     // Other errors
     result.ready = true;
     result.value = -1;
-    result.error = errno;
+    result.error = err;
     return result;
 }
