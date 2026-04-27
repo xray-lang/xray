@@ -11,28 +11,12 @@
 #include "xdap_transport.h"
 #include "../../base/xframing.h"
 #include "../../os/os_fd.h"
+#include "../../os/os_net.h"
 #include "../../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
-#include <errno.h>
-
-#ifdef XR_OS_WINDOWS
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
-#define close closesocket
-#define ssize_t int
-#else
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <netinet/tcp.h>
-#endif
 
 #define INITIAL_BUF_SIZE 4096
 #define MAX_HEADER_SIZE 256
@@ -50,38 +34,19 @@
 
 // Set fd to non-blocking mode
 static int set_nonblock(int fd) {
-#ifdef XR_OS_WINDOWS
-    u_long mode = 1;
-    return ioctlsocket((SOCKET) fd, FIONBIO, &mode);
-#else
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0)
-        return -1;
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-#endif
+    return xr_socket_set_nonblocking(fd);
 }
 
 // Read from fd into buffer (non-blocking)
 // Returns: bytes read, 0 = would block, -1 = error/closed
 static ssize_t read_nonblock(int fd, char *buf, size_t len) {
-#ifdef XR_OS_WINDOWS
-    int n = recv((SOCKET) fd, buf, (int) len, 0);
+    ssize_t n = xr_socket_recv(fd, buf, len);
     if (n < 0) {
-        int err = WSAGetLastError();
-        if (err == WSAEWOULDBLOCK)
+        if (xr_socket_err_is_again(xr_get_socket_error()))
             return 0;
         return -1;
     }
     return n;
-#else
-    ssize_t n = read(fd, buf, len);
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            return 0;
-        return -1;
-    }
-    return n;
-#endif
 }
 
 // Non-blocking single-shot write.
@@ -90,28 +55,16 @@ static ssize_t read_nonblock(int fd, char *buf, size_t len) {
 //   0: would block — kernel buffer full, caller should queue & retry
 //   -1: fatal error / peer closed.
 static ssize_t write_nonblock(int fd, const char *buf, size_t len) {
-#ifdef XR_OS_WINDOWS
-    int n = send((SOCKET) fd, buf, (int) len, 0);
+    ssize_t n = xr_socket_send(fd, buf, len);
     if (n < 0) {
-        int err = WSAGetLastError();
-        if (err == WSAEWOULDBLOCK)
-            return 0;
-        return -1;
-    }
-    return n;
-#else
-    ssize_t n = write(fd, buf, len);
-    if (n < 0) {
-        if (errno == EINTR)
-            return 0;
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        int err = xr_get_socket_error();
+        if (err == XR_EINTR || xr_socket_err_is_again(err))
             return 0;
         return -1;
     }
     if (n == 0)
         return -1;
     return n;
-#endif
 }
 
 // Ensure buffer has enough capacity
@@ -198,14 +151,7 @@ XdapTransport *xdap_transport_tcp_server(int port) {
     if (!t)
         return NULL;
 
-#ifdef XR_OS_WINDOWS
-    // Initialize Winsock
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        xdap_transport_free(t);
-        return NULL;
-    }
-#endif
+    xr_winsock_init();
 
     // Create server socket
     t->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -216,11 +162,8 @@ XdapTransport *xdap_transport_tcp_server(int port) {
     }
 
     // Allow address reuse
-    int opt = 1;
-    setsockopt(t->listen_fd, SOL_SOCKET, SO_REUSEADDR, (const char *) &opt, sizeof(opt));
-#ifdef SO_REUSEPORT
-    setsockopt(t->listen_fd, SOL_SOCKET, SO_REUSEPORT, (const char *) &opt, sizeof(opt));
-#endif
+    xr_socket_set_reuseaddr(t->listen_fd, true);
+    xr_socket_set_reuseport(t->listen_fd, true);
 
     // Bind to port
     struct sockaddr_in addr = {0};
@@ -305,8 +248,7 @@ XdapTransport *xdap_transport_tcp_server(int port) {
     t->write_fd = client_fd;
 
     // Disable Nagle's algorithm for low-latency DAP messages
-    int nodelay = 1;
-    setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &nodelay, sizeof(nodelay));
+    xr_socket_set_nodelay(client_fd, true);
 
     // Set client socket to non-blocking
     set_nonblock(t->read_fd);
@@ -335,13 +277,7 @@ XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
     if (!t)
         return NULL;
 
-#ifdef XR_OS_WINDOWS
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        xdap_transport_free(t);
-        return NULL;
-    }
-#endif
+    xr_winsock_init();
 
     // Resolve host using getaddrinfo (thread-safe)
     struct addrinfo hints = {0};
@@ -372,7 +308,7 @@ XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
 
     if (connect(sock_fd, result->ai_addr, result->ai_addrlen) < 0) {
         fprintf(stderr, "[DAP] Failed to connect: %s\n", strerror(errno));
-        close(sock_fd);
+        xr_closesocket(sock_fd);
         freeaddrinfo(result);
         xdap_transport_free(t);
         return NULL;
@@ -385,8 +321,7 @@ XdapTransport *xdap_transport_tcp_connect(const char *host, int port) {
     t->write_fd = sock_fd;
 
     // Disable Nagle's algorithm for low-latency DAP messages
-    int nodelay = 1;
-    setsockopt(sock_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &nodelay, sizeof(nodelay));
+    xr_socket_set_nodelay(sock_fd, true);
 
     // Set to non-blocking
     set_nonblock(t->read_fd);
@@ -419,15 +354,13 @@ void xdap_transport_free(XdapTransport *t) {
 
     if (t->type == XDAP_TRANSPORT_TCP_SERVER || t->type == XDAP_TRANSPORT_TCP_CLIENT) {
         if (t->read_fd >= 0)
-            close(t->read_fd);
+            xr_closesocket(t->read_fd);
         // For TCP, write_fd == read_fd; for safety, only close if different
         if (t->write_fd >= 0 && t->write_fd != t->read_fd)
-            close(t->write_fd);
+            xr_closesocket(t->write_fd);
         if (t->listen_fd >= 0)
-            close(t->listen_fd);
-#ifdef XR_OS_WINDOWS
-        WSACleanup();
-#endif
+            xr_closesocket(t->listen_fd);
+        xr_winsock_cleanup();
     }
 
     xr_free(t->read_buf);

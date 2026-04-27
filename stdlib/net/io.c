@@ -19,17 +19,6 @@
 #include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
-
-#ifndef XR_OS_WINDOWS
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <sys/uio.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#endif
 
 /* ========== Global State ========== */
 
@@ -55,15 +44,11 @@ struct XrayIsolate *xr_io_get_isolate(void) {
 /* ========== Utility Functions ========== */
 
 int xr_io_set_nonblocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0)
-        return -1;
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    return xr_socket_set_nonblocking(fd);
 }
 
 static int set_tcp_nodelay(int fd) {
-    int flag = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+    xr_socket_set_nodelay(fd, true);
 #ifdef TCP_NOTSENT_LOWAT
     /* Reduce tail latency: wake writable event when <= 16KB unsent.
      * Default kernel value is often ~128KB, causing write stalls. */
@@ -185,15 +170,15 @@ XrIOConn *xr_io_connect(const char *host, int port, int timeout_ms) {
 
     // Non-blocking connect
     int ret = connect(fd, sa, sa_len);
-    if (ret < 0 && errno != EINPROGRESS) {
-        close(fd);
+    if (ret < 0 && xr_get_socket_error() != XR_EINPROGRESS) {
+        xr_closesocket(fd);
         return NULL;
     }
 
     // Register with netpoll
     XrPollDesc *pd = xr_netpoll_open(g_io.np, fd);
     if (!pd) {
-        close(fd);
+        xr_closesocket(fd);
         return NULL;
     }
 
@@ -209,16 +194,15 @@ XrIOConn *xr_io_connect(const char *host, int port, int timeout_ms) {
         int wait_ret = xr_netpoll_wait(g_io.np, pd, XR_POLL_WRITE, tls_isolate);
         if (wait_ret != XR_POLL_OK) {
             xr_netpoll_close(g_io.np, pd);
-            close(fd);
+            xr_closesocket(fd);
             return NULL;
         }
 
         // Check connection result
-        int error = 0;
-        socklen_t len = sizeof(error);
-        if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &len) < 0 || error != 0) {
+        int error = xr_socket_get_error(fd);
+        if (error != 0) {
             xr_netpoll_close(g_io.np, pd);
-            close(fd);
+            xr_closesocket(fd);
             return NULL;
         }
     }
@@ -288,7 +272,7 @@ void xr_io_close(XrIOConn *conn) {
     }
 
     if (conn->fd >= 0) {
-        close(conn->fd);
+        xr_closesocket(conn->fd);
     }
 
     xr_free(conn);
@@ -366,7 +350,6 @@ int xr_io_write_all(XrIOConn *conn, const void *buf, size_t len) {
     return (int) total;
 }
 
-#ifndef XR_OS_WINDOWS
 int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt) {
     if (!conn || !iov || iovcnt <= 0)
         return -1;
@@ -415,7 +398,7 @@ int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt) {
         } else if (n == 0) {
             break;
         } else {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (xr_socket_err_is_again(xr_get_socket_error())) {
                 // Yield and retry via coroutine-safe write for remaining
                 for (int i = cur; i < iovcnt; i++) {
                     if (vecs[i].iov_len == 0)
@@ -441,7 +424,6 @@ int xr_io_writev(XrIOConn *conn, const struct iovec *iov, int iovcnt) {
         xr_free(vecs);
     return total;
 }
-#endif
 
 /* ========== Server API ========== */
 
@@ -463,10 +445,9 @@ int xr_io_listen(const char *addr, int port, int backlog) {
         // Try IPv6 dual-stack (accepts both IPv4 and IPv6)
         int fd = socket(AF_INET6, SOCK_STREAM, 0);
         if (fd >= 0) {
-            int opt = 1;
-            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+            xr_socket_set_reuseaddr(fd, true);
             int v6only = 0;
-            setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only));
+            setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, (const char *) &v6only, sizeof(v6only));
 
             struct sockaddr_in6 sa6;
             memset(&sa6, 0, sizeof(sa6));
@@ -483,7 +464,7 @@ int xr_io_listen(const char *addr, int port, int backlog) {
                 xr_io_set_nonblocking(fd);
                 return fd;
             }
-            close(fd);
+            xr_closesocket(fd);
             // Fall through to IPv4
         }
     }
@@ -494,8 +475,7 @@ int xr_io_listen(const char *addr, int port, int backlog) {
         return -1;
     }
 
-    int opt = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    xr_socket_set_reuseaddr(fd, true);
 
     struct sockaddr_in sa;
     memset(&sa, 0, sizeof(sa));
@@ -509,12 +489,12 @@ int xr_io_listen(const char *addr, int port, int backlog) {
     }
 
     if (bind(fd, (struct sockaddr *) &sa, sizeof(sa)) < 0) {
-        close(fd);
+        xr_closesocket(fd);
         return -1;
     }
 
     if (listen(fd, backlog) < 0) {
-        close(fd);
+        xr_closesocket(fd);
         return -1;
     }
 
@@ -537,7 +517,7 @@ XrIOConn *xr_io_accept(int listen_fd) {
     // Create connection context
     XrIOConn *conn = (XrIOConn *) xr_calloc(1, sizeof(XrIOConn));
     if (!conn) {
-        close(client_fd);
+        xr_closesocket(client_fd);
         return NULL;
     }
 

@@ -21,18 +21,10 @@
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xworker.h"     // For XrRuntime
 #include "../../src/vm/xvm_internal.h"  // For XrayIsolate->vm.runtime
+#include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <poll.h>
 #include <stdatomic.h>
 
 // Coroutine-safe fd I/O primitives (implemented in src/coro/xsocket.c).
@@ -142,8 +134,7 @@ static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint1
         if (try_fd < 0)
             continue;
         xr_io_set_nonblocking(try_fd);
-        int flag = 1;
-        setsockopt(try_fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+        xr_socket_set_nodelay(try_fd, true);
 
         struct sockaddr *sa;
         socklen_t sa_len;
@@ -170,7 +161,7 @@ static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint1
                 xr_netpoll_close(&runtime->netpoll, pd);
             }
         }
-        close(try_fd);
+        xr_closesocket(try_fd);
     }
     if (fd < 0)
         return NULL;
@@ -178,7 +169,7 @@ static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint1
     // Create pooled connection
     XrPooledConn *conn = (XrPooledConn *) xr_calloc(1, sizeof(XrPooledConn));
     if (!conn) {
-        close(fd);
+        xr_closesocket(fd);
         return NULL;
     }
 
@@ -283,7 +274,7 @@ static void close_connection(XrPooledConn *conn) {
                 xr_netpoll_close(&runtime->netpoll, pd);
             }
         }
-        close(conn->fd);
+        xr_closesocket(conn->fd);
         conn->fd = -1;
     }
 

@@ -32,15 +32,10 @@
 #include "../../src/base/xhash.h"
 #include "../../src/os/os_time.h"
 
+#include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
 
 // Forward-declare the xsocket entry points used here rather
 // than pulling xsocket.h directly; link-time signature checking
@@ -144,11 +139,8 @@ static int create_mcast_socket(uint16_t port) {
         return -1;
 
     // Allow multiple listeners on same port
-    int reuse = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-#ifdef SO_REUSEPORT
-    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
-#endif
+    xr_socket_set_reuseaddr(fd, true);
+    xr_socket_set_reuseport(fd, true);
 
     // Bind to multicast port
     struct sockaddr_in addr;
@@ -158,7 +150,7 @@ static int create_mcast_socket(uint16_t port) {
     addr.sin_port = htons(port);
 
     if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-        close(fd);
+        xr_closesocket(fd);
         return -1;
     }
 
@@ -166,23 +158,21 @@ static int create_mcast_socket(uint16_t port) {
     struct ip_mreq mreq;
     mreq.imr_multiaddr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
     mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0) {
-        close(fd);
+    if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char *) &mreq, sizeof(mreq)) < 0) {
+        xr_closesocket(fd);
         return -1;
     }
 
     // Set TTL=1 (link-local only)
     unsigned char ttl = 1;
-    setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl));
+    setsockopt(fd, IPPROTO_IP, IP_MULTICAST_TTL, (const char *) &ttl, sizeof(ttl));
 
     // Disable loopback (don't receive own announces)
     unsigned char loop = 0;
-    setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(loop));
+    setsockopt(fd, IPPROTO_IP, IP_MULTICAST_LOOP, (const char *) &loop, sizeof(loop));
 
     // Non-blocking for poll
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0)
-        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    xr_socket_set_nonblocking(fd);
 
     return fd;
 }
@@ -388,7 +378,7 @@ int xr_cluster_discovery_start(XrCluster *c) {
     XrCoroutine *coro =
         xr_coro_create_native(c->isolate, discovery_coro, disc, "cluster_discovery");
     if (!coro) {
-        close(disc->mcast_fd);
+        xr_closesocket(disc->mcast_fd);
         c->discovery = NULL;
         xr_free(disc);
         return -1;
@@ -426,8 +416,8 @@ void xr_cluster_discovery_stop(XrCluster *c) {
         struct ip_mreq mreq;
         mreq.imr_multiaddr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
         mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-        setsockopt(disc->mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &mreq, sizeof(mreq));
-        close(disc->mcast_fd);
+        setsockopt(disc->mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, (const char *) &mreq, sizeof(mreq));
+        xr_closesocket(disc->mcast_fd);
         disc->mcast_fd = -1;
     }
 

@@ -23,15 +23,10 @@
 #include "../../src/os/os_random.h"
 #include "../../src/os/os_time.h"
 
+#include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <math.h>
-#include <fcntl.h>
-#include <errno.h>
-#ifndef XR_OS_WINDOWS
-#include <sys/uio.h>
-#endif
 
 // Forward-declare the single xsocket entry point used here
 // rather than pulling xsocket.h. Link-time signature checking
