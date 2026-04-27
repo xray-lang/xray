@@ -15,9 +15,9 @@
 
 #include "xcli_output.h"
 #include "../../base/xchecks.h"
+#include "../../base/xfd.h"
 #include "../../base/xtime.h"
 #include <stdio.h>
-#include <unistd.h>
 
 /* ========== Color State ========== */
 
@@ -35,7 +35,7 @@ bool xr_cli_color_enabled(void) {
             return false;
         case XR_COLOR_AUTO:
         default:
-            return isatty(STDOUT_FILENO) != 0;
+            return xr_isatty(xr_stdout_fd());
     }
 }
 

@@ -33,11 +33,10 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <time.h>
+#include "../../base/xfd.h"
 
 #ifdef _WIN32
 #include <io.h>
-#define STDIN_FILENO 0
-#define STDOUT_FILENO 1
 #else
 #include <unistd.h>
 #endif
@@ -116,7 +115,7 @@ void xmcp_write_message(const char *json, size_t len) {
 
     size_t total = 0;
     while (total < (size_t) hlen) {
-        ssize_t n = write(STDOUT_FILENO, header + total, (size_t) hlen - total);
+        ssize_t n = write(xr_stdout_fd(), header + total, (size_t) hlen - total);
         if (n <= 0) {
             if (errno == EINTR)
                 continue;
@@ -126,7 +125,7 @@ void xmcp_write_message(const char *json, size_t len) {
     }
     total = 0;
     while (total < len) {
-        ssize_t n = write(STDOUT_FILENO, json + total, len - total);
+        ssize_t n = write(xr_stdout_fd(), json + total, len - total);
         if (n <= 0) {
             if (errno == EINTR)
                 continue;
@@ -187,7 +186,7 @@ static char *mcp_read_message(XmcpServer *s) {
         /* XR_FRAME_PARTIAL — need more data; do a blocking read. */
         if (!mcp_ensure_buf(s, 1024))
             return NULL;
-        ssize_t n = read(STDIN_FILENO, s->read_buf + s->read_len, s->read_cap - s->read_len - 1);
+        ssize_t n = read(xr_stdin_fd(), s->read_buf + s->read_len, s->read_cap - s->read_len - 1);
         if (n < 0) {
             if (errno == EINTR)
                 continue;

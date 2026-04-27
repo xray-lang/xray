@@ -10,6 +10,8 @@
 
 #include "xdap_transport.h"
 #include "../../base/xframing.h"
+#include "../../base/xfd.h"
+#include "../../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -30,7 +32,6 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
-#include "../../base/xmalloc.h"
 #endif
 
 #define INITIAL_BUF_SIZE 4096
@@ -164,8 +165,8 @@ XdapTransport *xdap_transport_stdio(void) {
     if (!t)
         return NULL;
 
-    t->read_fd = STDIN_FILENO;
-    t->write_fd = STDOUT_FILENO;
+    t->read_fd = xr_stdin_fd();
+    t->write_fd = xr_stdout_fd();
 
     // Set stdin to non-blocking
     set_nonblock(t->read_fd);

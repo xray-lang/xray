@@ -24,6 +24,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xfd.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -68,7 +69,7 @@ static bool terminal_supports_color(void) {
         return false;
     if (strcmp(term, "dumb") == 0)
         return false;
-    return isatty(STDOUT_FILENO);
+    return xr_isatty(xr_stdout_fd());
 }
 
 // Get history file path

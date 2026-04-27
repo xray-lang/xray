@@ -26,9 +26,14 @@
 #include "../../frontend/format/xfmt.h"
 #include "xray_isolate.h"
 #include "../../base/xarena.h"
+#include "../../base/xfd.h"
 #include <stdio.h>
 #include <string.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 /* Maximum errors captured per check/diagnostics */
 #define MAX_CHECK_ERRORS 20
@@ -488,7 +493,7 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
     }
 
     /* Redirect stdout to a temp file to capture print() output */
-    int saved_stdout = dup(STDOUT_FILENO);
+    int saved_stdout = dup(xr_stdout_fd());
     if (saved_stdout < 0) {
         return xmcp_make_error_result("Error: failed to save stdout");
     }
@@ -499,7 +504,7 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
         return xmcp_make_error_result("Error: failed to create capture buffer");
     }
     fflush(stdout);
-    dup2(fileno(tmp), STDOUT_FILENO);
+    dup2(fileno(tmp), xr_stdout_fd());
 
     /* Create a full isolate for execution */
     XrayIsolateParams params;
@@ -515,7 +520,7 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
 
     /* Restore stdout and read captured output */
     fflush(stdout);
-    dup2(saved_stdout, STDOUT_FILENO);
+    dup2(saved_stdout, xr_stdout_fd());
     close(saved_stdout);
 
     /* Read captured output */
