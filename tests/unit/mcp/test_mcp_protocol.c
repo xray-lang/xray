@@ -20,6 +20,7 @@
 #include "../../../src/app/mcp/xmcp_knowledge.h"
 #include "../../../src/base/xjson.h"
 #include "../../../src/base/xmalloc.h"
+#include "../test_win_compat.h"
 
 /* Stubs for notification functions (implemented in xmcp_server.c, not linked
  * into this test binary). Tools may call these; they are no-ops here. */
@@ -914,6 +915,7 @@ TEST(method_entry_struct_size) {
  * ========================================================================= */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("=== MCP Protocol Tests ===\n");
 
     /* Error codes */

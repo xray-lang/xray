@@ -14,6 +14,7 @@
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_code_action.h"
 #include "../../../src/base/xjson.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -386,6 +387,7 @@ TEST(code_action_quickfix_skips_when_decl_missing) {
 // ============================================================================
 
 int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
     (void)argc; (void)argv;
 
     printf("\n=== LSP Document Management Unit Tests ===\n\n");

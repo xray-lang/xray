@@ -16,25 +16,26 @@
 #include <string.h>
 #include "../../../src/jit/xir_arm64.h"
 #include "../../../src/jit/xir_code_alloc.h"
+#include "../test_win_compat.h"
 
 /* ========== Encoding Tests ========== */
 
 static void test_add_sub(void) {
     fprintf(stderr, "  test_add_sub...");
 
-    // ADD X0, X1, X2  â†’ 0x8B020020
+    // ADD X0, X1, X2  â†?0x8B020020
     uint32_t inst = a64_add(A64_X0, A64_X1, A64_X2);
     assert(inst == 0x8B020020);
 
-    // SUB X3, X4, X5  â†’ 0xCB050083
+    // SUB X3, X4, X5  â†?0xCB050083
     inst = a64_sub(A64_X3, A64_X4, A64_X5);
     assert(inst == 0xCB050083);
 
-    // ADD X0, X0, #1  â†’ 0x91000400
+    // ADD X0, X0, #1  â†?0x91000400
     inst = a64_add_imm(A64_X0, A64_X0, 1);
     assert(inst == 0x91000400);
 
-    // SUB X0, X0, #1  â†’ 0xD1000400
+    // SUB X0, X0, #1  â†?0xD1000400
     inst = a64_sub_imm(A64_X0, A64_X0, 1);
     assert(inst == 0xD1000400);
 
@@ -44,11 +45,11 @@ static void test_add_sub(void) {
 static void test_mul_div(void) {
     fprintf(stderr, "  test_mul_div...");
 
-    // MUL X0, X1, X2  â†’ MADD X0, X1, X2, XZR â†’ 0x9B027C20
+    // MUL X0, X1, X2  â†?MADD X0, X1, X2, XZR â†?0x9B027C20
     uint32_t inst = a64_mul(A64_X0, A64_X1, A64_X2);
     assert(inst == 0x9B027C20);
 
-    // SDIV X0, X1, X2  â†’ 0x9AC20C20
+    // SDIV X0, X1, X2  â†?0x9AC20C20
     inst = a64_sdiv(A64_X0, A64_X1, A64_X2);
     assert(inst == 0x9AC20C20);
 
@@ -58,19 +59,19 @@ static void test_mul_div(void) {
 static void test_logic(void) {
     fprintf(stderr, "  test_logic...");
 
-    // AND X0, X1, X2  â†’ 0x8A020020
+    // AND X0, X1, X2  â†?0x8A020020
     uint32_t inst = a64_and(A64_X0, A64_X1, A64_X2);
     assert(inst == 0x8A020020);
 
-    // ORR X0, X1, X2  â†’ 0xAA020020
+    // ORR X0, X1, X2  â†?0xAA020020
     inst = a64_orr(A64_X0, A64_X1, A64_X2);
     assert(inst == 0xAA020020);
 
-    // EOR X0, X1, X2  â†’ 0xCA020020
+    // EOR X0, X1, X2  â†?0xCA020020
     inst = a64_eor(A64_X0, A64_X1, A64_X2);
     assert(inst == 0xCA020020);
 
-    // MOV X0, X1 (= ORR X0, XZR, X1) â†’ 0xAA0103E0
+    // MOV X0, X1 (= ORR X0, XZR, X1) â†?0xAA0103E0
     inst = a64_mov(A64_X0, A64_X1);
     assert(inst == 0xAA0103E0);
 
@@ -80,11 +81,11 @@ static void test_logic(void) {
 static void test_cmp_cset(void) {
     fprintf(stderr, "  test_cmp_cset...");
 
-    // CMP X0, X1 (= SUBS XZR, X0, X1) â†’ 0xEB01001F
+    // CMP X0, X1 (= SUBS XZR, X0, X1) â†?0xEB01001F
     uint32_t inst = a64_cmp(A64_X0, A64_X1);
     assert(inst == 0xEB01001F);
 
-    // CSET X0, LT â†’ CSINC X0, XZR, XZR, GE â†’ 0x9A9FA7E0
+    // CSET X0, LT â†?CSINC X0, XZR, XZR, GE â†?0x9A9FA7E0
     inst = a64_cset(A64_X0, A64_CC_LT);
     assert(inst == 0x9A9FA7E0);
 
@@ -94,11 +95,11 @@ static void test_cmp_cset(void) {
 static void test_movz_movk(void) {
     fprintf(stderr, "  test_movz_movk...");
 
-    // MOVZ X0, #42  â†’ 0xD2800540
+    // MOVZ X0, #42  â†?0xD2800540
     uint32_t inst = a64_movz(A64_X0, 42, 0);
     assert(inst == 0xD2800540);
 
-    // MOVK X0, #0x1234, LSL #16  â†’ 0xF2A24680
+    // MOVK X0, #0x1234, LSL #16  â†?0xF2A24680
     inst = a64_movk(A64_X0, 0x1234, 16);
     assert(inst == 0xF2A24680);
 
@@ -108,19 +109,19 @@ static void test_movz_movk(void) {
 static void test_branch(void) {
     fprintf(stderr, "  test_branch...");
 
-    // RET â†’ 0xD65F03C0
+    // RET â†?0xD65F03C0
     uint32_t inst = a64_ret();
     assert(inst == 0xD65F03C0);
 
-    // NOP â†’ 0xD503201F
+    // NOP â†?0xD503201F
     inst = a64_nop();
     assert(inst == 0xD503201F);
 
-    // B +4 (offset 1 instruction) â†’ 0x14000001
+    // B +4 (offset 1 instruction) â†?0x14000001
     inst = a64_b(1);
     assert(inst == 0x14000001);
 
-    // B.EQ +8 (offset 2 instructions) â†’ 0x54000040
+    // B.EQ +8 (offset 2 instructions) â†?0x54000040
     inst = a64_bcond(A64_CC_EQ, 2);
     assert(inst == 0x54000040);
 
@@ -130,11 +131,11 @@ static void test_branch(void) {
 static void test_load_store(void) {
     fprintf(stderr, "  test_load_store...");
 
-    // LDR X0, [X1, #0]  â†’ 0xF9400020
+    // LDR X0, [X1, #0]  â†?0xF9400020
     uint32_t inst = a64_ldr(A64_X0, A64_X1, 0);
     assert(inst == 0xF9400020);
 
-    // STR X0, [X1, #0]  â†’ 0xF9000020
+    // STR X0, [X1, #0]  â†?0xF9000020
     inst = a64_str(A64_X0, A64_X1, 0);
     assert(inst == 0xF9000020);
 
@@ -238,10 +239,10 @@ static void test_emit_factorial_like(void) {
 
     a64_buf_emit(&buf, a64_movz(A64_X1, 1, 0));       // 0: result = 1
     a64_buf_emit(&buf, a64_cmp_imm(A64_X0, 0));        // 1: cmp n, 0
-    a64_buf_emit(&buf, a64_bcond(A64_CC_LE, 4));        // 2: b.le done (+4 â†’ pc 6)
+    a64_buf_emit(&buf, a64_bcond(A64_CC_LE, 4));        // 2: b.le done (+4 â†?pc 6)
     a64_buf_emit(&buf, a64_mul(A64_X1, A64_X1, A64_X0)); // 3: result *= n
     a64_buf_emit(&buf, a64_sub_imm(A64_X0, A64_X0, 1)); // 4: n--
-    a64_buf_emit(&buf, a64_b(-4));                       // 5: b loop (-4 â†’ pc 1)
+    a64_buf_emit(&buf, a64_b(-4));                       // 5: b loop (-4 â†?pc 1)
     a64_buf_emit(&buf, a64_mov(A64_X0, A64_X1));        // 6: return result
     a64_buf_emit(&buf, a64_ret());                       // 7: ret
 
@@ -297,6 +298,7 @@ static void test_load_imm64(void) {
 #endif // __aarch64__
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_arm64_emit ===\n");
 
     // Encoding correctness tests (all platforms)

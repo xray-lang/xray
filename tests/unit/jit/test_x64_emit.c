@@ -62,7 +62,7 @@ static void test_add_rr_low(void) {
 static void test_add_rr_high(void) {
     reset();
     x64_add_rr(&g_buf, X64_R8, X64_R9);
-    /* R9(src)>7 â†’ REX.R, R8(dst)>7 â†’ REX.B */
+    /* R9(src)>7 â†?REX.R, R8(dst)>7 â†?REX.B */
     uint8_t exp[] = { 0x4D, 0x01, 0xC8 };
     check_bytes("add_rr_high", exp, sizeof(exp));
 }
@@ -249,7 +249,7 @@ static void test_mov_ri64_high(void) {
     check_bytes("mov_ri64_high", exp, sizeof(exp));
 }
 
-/* MOV EAX, 0x42:  B8 42 00 00 00  (32-bit, no REX.W â†’ zero-extends) */
+/* MOV EAX, 0x42:  B8 42 00 00 00  (32-bit, no REX.W â†?zero-extends) */
 static void test_mov_ri32(void) {
     reset();
     x64_mov_ri32(&g_buf, X64_RAX, 0x42);
@@ -301,7 +301,7 @@ static void test_mov_rm_rbp(void) {
     check_bytes("mov_rm_rbp", exp, sizeof(exp));
 }
 
-/* Edge case: MOV RAX, [RSP]:  needs SIB byte (rm=100 â†’ SIB follows)
+/* Edge case: MOV RAX, [RSP]:  needs SIB byte (rm=100 â†?SIB follows)
  * REX.W(48) 8B 04 24 */
 static void test_mov_rm_rsp(void) {
     reset();
@@ -460,7 +460,7 @@ static void test_patch_rel32(void) {
 
 /* ========== SETcc ========== */
 
-/* SETE AL:  0F 94 C0 (no REX for RAX/AL â€” registers 0-3 don't need it) */
+/* SETE AL:  0F 94 C0 (no REX for RAX/AL â€?registers 0-3 don't need it) */
 static void test_setcc_low(void) {
     reset();
     x64_setcc(&g_buf, X64_CC_E, X64_RAX);
@@ -697,6 +697,7 @@ static void test_and_ri(void) {
 /* ========== Driver ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "[test_x64_emit]\n");
 
     /* Integer arithmetic */
@@ -811,7 +812,9 @@ int main(void) {
 #else // !__x86_64__
 
 #include <stdio.h>
+#include "../test_win_compat.h"
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "[test_x64_emit] SKIPPED (not x86-64)\n");
     return 0;
 }

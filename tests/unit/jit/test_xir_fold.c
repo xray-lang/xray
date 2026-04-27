@@ -14,6 +14,7 @@
 #include <math.h>
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_fold.h"
+#include "../test_win_compat.h"
 
 /* ========== Helpers ========== */
 
@@ -78,11 +79,11 @@ static void test_identity_add_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x + 0 â†’ x */
+    /* x + 0 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_ADD, XR_REP_I64, x, zero);
     assert(same_ref(r, x));
 
-    /* 0 + x â†’ x */
+    /* 0 + x â†?x */
     r = xir_fold_emit(func, blk, XIR_ADD, XR_REP_I64, zero, x);
     assert(same_ref(r, x));
 
@@ -98,7 +99,7 @@ static void test_identity_sub_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x - 0 â†’ x */
+    /* x - 0 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_SUB, XR_REP_I64, x, zero);
     assert(same_ref(r, x));
 
@@ -114,11 +115,11 @@ static void test_identity_mul_one(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef one = make_i64(func, blk, 1);
 
-    /* x * 1 â†’ x */
+    /* x * 1 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_MUL, XR_REP_I64, x, one);
     assert(same_ref(r, x));
 
-    /* 1 * x â†’ x */
+    /* 1 * x â†?x */
     r = xir_fold_emit(func, blk, XIR_MUL, XR_REP_I64, one, x);
     assert(same_ref(r, x));
 
@@ -134,7 +135,7 @@ static void test_identity_div_one(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef one = make_i64(func, blk, 1);
 
-    /* x / 1 â†’ x */
+    /* x / 1 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_DIV, XR_REP_I64, x, one);
     assert(same_ref(r, x));
 
@@ -150,11 +151,11 @@ static void test_identity_or_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x | 0 â†’ x */
+    /* x | 0 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_OR, XR_REP_I64, x, zero);
     assert(same_ref(r, x));
 
-    /* 0 | x â†’ x */
+    /* 0 | x â†?x */
     r = xir_fold_emit(func, blk, XIR_OR, XR_REP_I64, zero, x);
     assert(same_ref(r, x));
 
@@ -170,11 +171,11 @@ static void test_identity_and_allones(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef allones = make_i64(func, blk, -1);
 
-    /* x & -1 â†’ x */
+    /* x & -1 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_AND, XR_REP_I64, x, allones);
     assert(same_ref(r, x));
 
-    /* -1 & x â†’ x */
+    /* -1 & x â†?x */
     r = xir_fold_emit(func, blk, XIR_AND, XR_REP_I64, allones, x);
     assert(same_ref(r, x));
 
@@ -190,7 +191,7 @@ static void test_identity_xor_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x ^ 0 â†’ x */
+    /* x ^ 0 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_XOR, XR_REP_I64, x, zero);
     assert(same_ref(r, x));
 
@@ -206,11 +207,11 @@ static void test_identity_shift_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x << 0 â†’ x */
+    /* x << 0 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_SHL, XR_REP_I64, x, zero);
     assert(same_ref(r, x));
 
-    /* x >> 0 â†’ x */
+    /* x >> 0 â†?x */
     r = xir_fold_emit(func, blk, XIR_SHR, XR_REP_I64, x, zero);
     assert(same_ref(r, x));
 
@@ -228,11 +229,11 @@ static void test_annihilation_mul_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x * 0 â†’ 0 */
+    /* x * 0 â†?0 */
     XirRef r = xir_fold_emit(func, blk, XIR_MUL, XR_REP_I64, x, zero);
     assert(get_i64_val(func, r) == 0);
 
-    /* 0 * x â†’ 0 */
+    /* 0 * x â†?0 */
     r = xir_fold_emit(func, blk, XIR_MUL, XR_REP_I64, zero, x);
     assert(get_i64_val(func, r) == 0);
 
@@ -248,11 +249,11 @@ static void test_annihilation_and_zero(void) {
     XirRef x = make_i64(func, blk, 42);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* x & 0 â†’ 0 */
+    /* x & 0 â†?0 */
     XirRef r = xir_fold_emit(func, blk, XIR_AND, XR_REP_I64, x, zero);
     assert(get_i64_val(func, r) == 0);
 
-    /* 0 & x â†’ 0 */
+    /* 0 & x â†?0 */
     r = xir_fold_emit(func, blk, XIR_AND, XR_REP_I64, zero, x);
     assert(get_i64_val(func, r) == 0);
 
@@ -269,7 +270,7 @@ static void test_self_sub(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* x - x â†’ 0 */
+    /* x - x â†?0 */
     XirRef r = xir_fold_emit(func, blk, XIR_SUB, XR_REP_I64, x, x);
     assert(get_i64_val(func, r) == 0);
 
@@ -284,7 +285,7 @@ static void test_self_xor(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* x ^ x â†’ 0 */
+    /* x ^ x â†?0 */
     XirRef r = xir_fold_emit(func, blk, XIR_XOR, XR_REP_I64, x, x);
     assert(get_i64_val(func, r) == 0);
 
@@ -299,7 +300,7 @@ static void test_self_and(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* x & x â†’ x */
+    /* x & x â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_AND, XR_REP_I64, x, x);
     assert(same_ref(r, x));
 
@@ -314,7 +315,7 @@ static void test_self_or(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* x | x â†’ x */
+    /* x | x â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_OR, XR_REP_I64, x, x);
     assert(same_ref(r, x));
 
@@ -331,11 +332,11 @@ static void test_double_neg(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* NEG(x) â†’ intermediate */
+    /* NEG(x) â†?intermediate */
     XirRef neg1 = xir_fold_emit(func, blk, XIR_NEG, XR_REP_I64, x, XIR_NONE);
     assert(!same_ref(neg1, x));
 
-    /* NEG(NEG(x)) â†’ x */
+    /* NEG(NEG(x)) â†?x */
     XirRef neg2 = xir_fold_emit(func, blk, XIR_NEG, XR_REP_I64, neg1, XIR_NONE);
     assert(same_ref(neg2, x));
 
@@ -350,11 +351,11 @@ static void test_double_not(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* NOT(x) â†’ intermediate */
+    /* NOT(x) â†?intermediate */
     XirRef not1 = xir_fold_emit(func, blk, XIR_NOT, XR_REP_I64, x, XIR_NONE);
     assert(!same_ref(not1, x));
 
-    /* NOT(NOT(x)) â†’ x */
+    /* NOT(NOT(x)) â†?x */
     XirRef not2 = xir_fold_emit(func, blk, XIR_NOT, XR_REP_I64, not1, XIR_NONE);
     assert(same_ref(not2, x));
 
@@ -369,11 +370,11 @@ static void test_double_fneg(void) {
 
     XirRef x = make_f64(func, blk, 3.14);
 
-    /* FNEG(x) â†’ intermediate */
+    /* FNEG(x) â†?intermediate */
     XirRef neg1 = xir_fold_emit(func, blk, XIR_FNEG, XR_REP_F64, x, XIR_NONE);
     assert(!same_ref(neg1, x));
 
-    /* FNEG(FNEG(x)) â†’ x */
+    /* FNEG(FNEG(x)) â†?x */
     XirRef neg2 = xir_fold_emit(func, blk, XIR_FNEG, XR_REP_F64, neg1, XIR_NONE);
     assert(same_ref(neg2, x));
 
@@ -390,11 +391,11 @@ static void test_f2i_i2f_roundtrip(void) {
 
     XirRef x = make_i64(func, blk, 42);
 
-    /* I2F(x) â†’ intermediate */
+    /* I2F(x) â†?intermediate */
     XirRef i2f = xir_fold_emit(func, blk, XIR_I2F, XR_REP_F64, x, XIR_NONE);
     assert(!same_ref(i2f, x));
 
-    /* F2I(I2F(x)) â†’ x */
+    /* F2I(I2F(x)) â†?x */
     XirRef f2i = xir_fold_emit(func, blk, XIR_F2I, XR_REP_I64, i2f, XIR_NONE);
     assert(same_ref(f2i, x));
 
@@ -409,11 +410,11 @@ static void test_i2f_f2i_roundtrip(void) {
 
     XirRef x = make_f64(func, blk, 3.14);
 
-    /* F2I(x) â†’ intermediate */
+    /* F2I(x) â†?intermediate */
     XirRef f2i = xir_fold_emit(func, blk, XIR_F2I, XR_REP_I64, x, XIR_NONE);
     assert(!same_ref(f2i, x));
 
-    /* I2F(F2I(x)) â†’ x */
+    /* I2F(F2I(x)) â†?x */
     XirRef i2f = xir_fold_emit(func, blk, XIR_I2F, XR_REP_F64, f2i, XIR_NONE);
     assert(same_ref(i2f, x));
 
@@ -431,23 +432,23 @@ static void test_const_fold_i64(void) {
     XirRef a = make_i64(func, blk, 10);
     XirRef b = make_i64(func, blk, 3);
 
-    /* 10 + 3 â†’ 13 */
+    /* 10 + 3 â†?13 */
     XirRef r = xir_fold_emit(func, blk, XIR_ADD, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 13);
 
-    /* 10 - 3 â†’ 7 */
+    /* 10 - 3 â†?7 */
     r = xir_fold_emit(func, blk, XIR_SUB, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 7);
 
-    /* 10 * 3 â†’ 30 */
+    /* 10 * 3 â†?30 */
     r = xir_fold_emit(func, blk, XIR_MUL, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 30);
 
-    /* 10 / 3 â†’ 3 */
+    /* 10 / 3 â†?3 */
     r = xir_fold_emit(func, blk, XIR_DIV, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 3);
 
-    /* 10 % 3 â†’ 1 */
+    /* 10 % 3 â†?1 */
     r = xir_fold_emit(func, blk, XIR_MOD, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 1);
 
@@ -463,25 +464,25 @@ static void test_const_fold_i64_bitwise(void) {
     XirRef a = make_i64(func, blk, 0xFF);
     XirRef b = make_i64(func, blk, 0x0F);
 
-    /* 0xFF & 0x0F â†’ 0x0F */
+    /* 0xFF & 0x0F â†?0x0F */
     XirRef r = xir_fold_emit(func, blk, XIR_AND, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 0x0F);
 
-    /* 0xFF | 0x0F â†’ 0xFF */
+    /* 0xFF | 0x0F â†?0xFF */
     r = xir_fold_emit(func, blk, XIR_OR, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 0xFF);
 
-    /* 0xFF ^ 0x0F â†’ 0xF0 */
+    /* 0xFF ^ 0x0F â†?0xF0 */
     r = xir_fold_emit(func, blk, XIR_XOR, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 0xF0);
 
-    /* 1 << 4 â†’ 16 */
+    /* 1 << 4 â†?16 */
     XirRef one = make_i64(func, blk, 1);
     XirRef four = make_i64(func, blk, 4);
     r = xir_fold_emit(func, blk, XIR_SHL, XR_REP_I64, one, four);
     assert(get_i64_val(func, r) == 16);
 
-    /* 16 >> 2 â†’ 4 */
+    /* 16 >> 2 â†?4 */
     XirRef sixteen = make_i64(func, blk, 16);
     XirRef two = make_i64(func, blk, 2);
     r = xir_fold_emit(func, blk, XIR_SHR, XR_REP_I64, sixteen, two);
@@ -499,27 +500,27 @@ static void test_const_fold_i64_cmp(void) {
     XirRef a = make_i64(func, blk, 10);
     XirRef b = make_i64(func, blk, 20);
 
-    /* 10 < 20 â†’ 1 */
+    /* 10 < 20 â†?1 */
     XirRef r = xir_fold_emit(func, blk, XIR_LT, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 1);
 
-    /* 20 < 10 â†’ 0 */
+    /* 20 < 10 â†?0 */
     r = xir_fold_emit(func, blk, XIR_LT, XR_REP_I64, b, a);
     assert(get_i64_val(func, r) == 0);
 
-    /* 10 == 10 â†’ 1 */
+    /* 10 == 10 â†?1 */
     r = xir_fold_emit(func, blk, XIR_EQ, XR_REP_I64, a, a);
     assert(get_i64_val(func, r) == 1);
 
-    /* 10 != 20 â†’ 1 */
+    /* 10 != 20 â†?1 */
     r = xir_fold_emit(func, blk, XIR_NE, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 1);
 
-    /* 10 <= 10 â†’ 1 */
+    /* 10 <= 10 â†?1 */
     r = xir_fold_emit(func, blk, XIR_LE, XR_REP_I64, a, a);
     assert(get_i64_val(func, r) == 1);
 
-    /* 10 >= 20 â†’ 0 */
+    /* 10 >= 20 â†?0 */
     r = xir_fold_emit(func, blk, XIR_GE, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 0);
 
@@ -537,19 +538,19 @@ static void test_const_fold_f64(void) {
     XirRef a = make_f64(func, blk, 2.5);
     XirRef b = make_f64(func, blk, 1.5);
 
-    /* 2.5 + 1.5 â†’ 4.0 */
+    /* 2.5 + 1.5 â†?4.0 */
     XirRef r = xir_fold_emit(func, blk, XIR_FADD, XR_REP_F64, a, b);
     assert(get_f64_val(func, r) == 4.0);
 
-    /* 2.5 - 1.5 â†’ 1.0 */
+    /* 2.5 - 1.5 â†?1.0 */
     r = xir_fold_emit(func, blk, XIR_FSUB, XR_REP_F64, a, b);
     assert(get_f64_val(func, r) == 1.0);
 
-    /* 2.5 * 1.5 â†’ 3.75 */
+    /* 2.5 * 1.5 â†?3.75 */
     r = xir_fold_emit(func, blk, XIR_FMUL, XR_REP_F64, a, b);
     assert(get_f64_val(func, r) == 3.75);
 
-    /* 3.0 / 1.5 â†’ 2.0 */
+    /* 3.0 / 1.5 â†?2.0 */
     XirRef three = make_f64(func, blk, 3.0);
     r = xir_fold_emit(func, blk, XIR_FDIV, XR_REP_F64, three, b);
     assert(get_f64_val(func, r) == 2.0);
@@ -566,19 +567,19 @@ static void test_const_fold_f64_cmp(void) {
     XirRef a = make_f64(func, blk, 1.0);
     XirRef b = make_f64(func, blk, 2.0);
 
-    /* 1.0 < 2.0 â†’ 1 */
+    /* 1.0 < 2.0 â†?1 */
     XirRef r = xir_fold_emit(func, blk, XIR_FLT, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 1);
 
-    /* 1.0 == 1.0 â†’ 1 */
+    /* 1.0 == 1.0 â†?1 */
     r = xir_fold_emit(func, blk, XIR_FEQ, XR_REP_I64, a, a);
     assert(get_i64_val(func, r) == 1);
 
-    /* 1.0 != 2.0 â†’ 1 */
+    /* 1.0 != 2.0 â†?1 */
     r = xir_fold_emit(func, blk, XIR_FNE, XR_REP_I64, a, b);
     assert(get_i64_val(func, r) == 1);
 
-    /* 2.0 <= 1.0 â†’ 0 */
+    /* 2.0 <= 1.0 â†?0 */
     r = xir_fold_emit(func, blk, XIR_FLE, XR_REP_I64, b, a);
     assert(get_i64_val(func, r) == 0);
 
@@ -597,27 +598,27 @@ static void test_float_identity(void) {
     XirRef zero = make_f64(func, blk, 0.0);
     XirRef one = make_f64(func, blk, 1.0);
 
-    /* x + 0.0 â†’ x */
+    /* x + 0.0 â†?x */
     XirRef r = xir_fold_emit(func, blk, XIR_FADD, XR_REP_F64, x, zero);
     assert(same_ref(r, x));
 
-    /* 0.0 + x â†’ x */
+    /* 0.0 + x â†?x */
     r = xir_fold_emit(func, blk, XIR_FADD, XR_REP_F64, zero, x);
     assert(same_ref(r, x));
 
-    /* x - 0.0 â†’ x */
+    /* x - 0.0 â†?x */
     r = xir_fold_emit(func, blk, XIR_FSUB, XR_REP_F64, x, zero);
     assert(same_ref(r, x));
 
-    /* x * 1.0 â†’ x */
+    /* x * 1.0 â†?x */
     r = xir_fold_emit(func, blk, XIR_FMUL, XR_REP_F64, x, one);
     assert(same_ref(r, x));
 
-    /* 1.0 * x â†’ x */
+    /* 1.0 * x â†?x */
     r = xir_fold_emit(func, blk, XIR_FMUL, XR_REP_F64, one, x);
     assert(same_ref(r, x));
 
-    /* x / 1.0 â†’ x */
+    /* x / 1.0 â†?x */
     r = xir_fold_emit(func, blk, XIR_FDIV, XR_REP_F64, x, one);
     assert(same_ref(r, x));
 
@@ -636,11 +637,11 @@ static void test_no_fold_dynamic(void) {
     XirRef param = xir_new_vreg(func, XR_REP_I64);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* param + 0 â†’ param (identity still works with right-const) */
+    /* param + 0 â†?param (identity still works with right-const) */
     XirRef r = xir_fold_emit(func, blk, XIR_ADD, XR_REP_I64, param, zero);
     assert(same_ref(r, param));
 
-    /* param + param â†’ should NOT fold (not self-zero pattern, just new instruction) */
+    /* param + param â†?should NOT fold (not self-zero pattern, just new instruction) */
     /* Actually param + param with same vreg has no special rule for ADD */
     uint32_t nins_before = blk->nins;
     r = xir_fold_emit(func, blk, XIR_ADD, XR_REP_I64, param, param);
@@ -660,13 +661,13 @@ static void test_div_by_zero_not_folded(void) {
     XirRef a = make_i64(func, blk, 10);
     XirRef zero = make_i64(func, blk, 0);
 
-    /* 10 / 0 â†’ NOT folded (emits normal instruction) */
+    /* 10 / 0 â†?NOT folded (emits normal instruction) */
     uint32_t nins_before = blk->nins;
     XirRef r = xir_fold_emit(func, blk, XIR_DIV, XR_REP_I64, a, zero);
     assert(blk->nins == nins_before + 1);
     (void)r;
 
-    /* 10 % 0 â†’ NOT folded */
+    /* 10 % 0 â†?NOT folded */
     nins_before = blk->nins;
     r = xir_fold_emit(func, blk, XIR_MOD, XR_REP_I64, a, zero);
     assert(blk->nins == nins_before + 1);
@@ -678,6 +679,7 @@ static void test_div_by_zero_not_folded(void) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir_fold ===\n");
 
     /* Identity elimination */

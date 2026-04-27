@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "../../../src/jit/xir_bset.h"
+#include "../test_win_compat.h"
 
 static void test_init_zero(void) {
     fprintf(stderr, "  test_init_zero...");
@@ -236,6 +237,7 @@ static void test_large(void) {
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir_bset ===\n");
 
     test_init_zero();
