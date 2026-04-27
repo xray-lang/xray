@@ -46,8 +46,21 @@
 #include <windows.h>
 #include <io.h>
 #include <process.h>
+#include <bcrypt.h>
 
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "bcrypt.lib")
+
+// ssize_t — provided by POSIX <sys/types.h>, not by MSVC. Define
+// it before any inline that takes it as a return type.
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
+#ifdef _WIN64
+typedef __int64 ssize_t;
+#else
+typedef int ssize_t;
+#endif
+#endif
 
 // Socket types and constants
 typedef SOCKET xr_socket_t;
@@ -108,14 +121,7 @@ static inline ssize_t writev(xr_socket_t fd, const struct iovec *iov, int iovcnt
     return (ssize_t) sent;
 }
 
-// ssize_t definition
-#ifndef ssize_t
-#ifdef _WIN64
-typedef __int64 ssize_t;
-#else
-typedef int ssize_t;
-#endif
-#endif  // ========== Unix Platform (macOS/Linux) ==========
+// ========== Unix Platform (macOS/Linux) ==========
 
 #else
 
