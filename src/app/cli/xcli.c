@@ -28,7 +28,7 @@
 #define __has_feature(x) 0
 #endif
 
-#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&                             \
+#if !defined(_WIN32) && !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&         \
     !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
 static void crash_handler(int sig) {
     // Only use async-signal-safe functions: write(), _exit()
@@ -50,7 +50,7 @@ static void crash_handler(int sig) {
 #endif
 
 int main(int argc, char **argv) {
-#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&                             \
+#if !defined(_WIN32) && !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&         \
     !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
     signal(SIGSEGV, crash_handler);
 #ifdef SIGBUS

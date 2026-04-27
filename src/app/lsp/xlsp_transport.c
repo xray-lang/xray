@@ -29,11 +29,10 @@
 #include <errno.h>
 #include "../../base/xtime.h"
 
+#include "../../base/xfd.h"
 #ifdef _WIN32
 #include <io.h>
 #include <winsock2.h>
-#define STDIN_FILENO 0
-#define STDOUT_FILENO 1
 typedef int ssize_t;  // MSVC / MinGW
 #else
 #include <unistd.h>
@@ -150,8 +149,8 @@ XrLspTransport *xlsp_transport_stdio(void) {
     if (!t)
         return NULL;
 
-    t->read_fd = STDIN_FILENO;
-    t->write_fd = STDOUT_FILENO;
+    t->read_fd = xr_stdin_fd();
+    t->write_fd = xr_stdout_fd();
     t->pending_content_length = -1;
 
     t->read_buf = xr_malloc(INITIAL_BUF_SIZE);

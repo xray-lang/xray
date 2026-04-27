@@ -18,6 +18,7 @@
 #include "xcli_output.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xfd.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,7 +29,7 @@
 int xr_cli_parse_global(int argc, char **argv, XrCliContext *ctx) {
     XR_DCHECK(ctx != NULL, "ctx is NULL");
     /* Defaults */
-    ctx->color = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
+    ctx->color = xr_isatty(xr_stdout_fd()) && xr_isatty(xr_stderr_fd());
     ctx->verbose = false;
     ctx->quiet = false;
     ctx->json_output = false;
