@@ -85,7 +85,7 @@
 #include "../coro/xyieldable.h"
 #include "../coro/xcoro_registry.h"
 #include "../coro/xtask.h"
-#include <sched.h>
+#include "../os/os_thread.h"
 
 #include "xvm_profiler.h"
 
@@ -509,8 +509,9 @@ startfunc:
     k = (XrValue *) cl->proto->constants.data;
     frame = ci;
 
-    // Check for continuation function return value
-    if (ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
+    // Check for continuation function return value (C frames only;
+    // u.c is a union branch invalid for bytecode frames)
+    if ((ci->call_status & XR_CALL_C) && ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
         base[ci->u.c.result_slot] = ci->u.c.cfunc_result;
         ci->u.c.has_cfunc_result = false;
     }

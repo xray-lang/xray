@@ -254,11 +254,12 @@ XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
 
     XR_DCHECK(ctx->frame_count >= 0 && ctx->frame_count < ctx->frame_capacity,
               "vm_interpret_proto: prepare_entry post-condition violated");
-    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
+    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count];
+    memset(frame, 0, sizeof(XrBcCallFrame));
+    ctx->frame_count++;
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = 0;
-    frame->u.l.pending_operator_check = false;
 
     return run(isolate, ctx);
 }
