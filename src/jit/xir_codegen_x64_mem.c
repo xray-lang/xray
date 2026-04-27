@@ -29,8 +29,8 @@
 /* Dispatch function for tag/guard/RT/safepoint opcodes.
  * Returns true if the opcode was handled, false otherwise. */
 bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
-    XR_DCHECK(ctx != NULL, "emit_mem_ins: NULL ctx");
-    XR_DCHECK(ins != NULL, "emit_mem_ins: NULL ins");
+    CODEGEN_CHECK(ctx, ctx != NULL, "emit_mem_ins: NULL ctx");
+    CODEGEN_CHECK(ctx, ins != NULL, "emit_mem_ins: NULL ins");
 
     switch (ins->op) {
         /* ========== Tag load/check ========== */
@@ -56,7 +56,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         }
 
         case XIR_UNBOX_I64: {
-            XR_DCHECK(!xir_ref_is_none(ins->args[0]), "UNBOX_I64: missing src");
+            CODEGEN_CHECK(ctx, !xir_ref_is_none(ins->args[0]), "UNBOX_I64: missing src");
             uint8_t src_type = XR_REP_I64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t vi = XIR_REF_INDEX(ins->args[0]);
@@ -76,7 +76,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         }
 
         case XIR_UNBOX_F64: {
-            XR_DCHECK(!xir_ref_is_none(ins->args[0]), "UNBOX_F64: missing src");
+            CODEGEN_CHECK(ctx, !xir_ref_is_none(ins->args[0]), "UNBOX_F64: missing src");
             uint8_t src_type = XR_REP_F64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t vi = XIR_REF_INDEX(ins->args[0]);
@@ -202,7 +202,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         case XIR_DEOPT: {
             /* Unconditional deopt */
             x64_emit_deopt_id(ctx, ins);
-            XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *p = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE9); /* JMP rel32 */
             p->emit_pos = ctx->buf.pos;
@@ -232,7 +232,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         /* ========== Safepoint ========== */
         case XIR_SAFEPOINT: {
             /* Record safepoint bitmap so GC can identify roots if we fault */
-            XR_DCHECK(ctx->nsmap < XIR_MAX_STACK_MAP_ENTRIES, "too many safepoints");
+            CODEGEN_CHECK(ctx, ctx->nsmap < XIR_MAX_STACK_MAP_ENTRIES, "too many safepoints");
             uint32_t smap_id_sp = x64_record_safepoint(ctx);
             /* Store smap_id to jit_ctx (GC reads this in signal handler) */
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id_sp);
@@ -251,8 +251,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         case XIR_RT_MUL:
         case XIR_RT_DIV:
         case XIR_RT_MOD: {
-            XR_DCHECK(!xir_ref_is_none(ins->args[0]), "RT arith: missing lhs");
-            XR_DCHECK(!xir_ref_is_none(ins->args[1]), "RT arith: missing rhs");
+            CODEGEN_CHECK(ctx, !xir_ref_is_none(ins->args[0]), "RT arith: missing lhs");
+            CODEGEN_CHECK(ctx, !xir_ref_is_none(ins->args[1]), "RT arith: missing rhs");
             uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t ai = XIR_REF_INDEX(ins->args[0]);
@@ -316,7 +316,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             } else {
                 /* Unknown types: deopt */
                 x64_emit_deopt_id(ctx, ins);
-                XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+                CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
                 x64_emit8(&ctx->buf, 0xE9);
                 p->emit_pos = ctx->buf.pos;
@@ -331,7 +331,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
         }
 
         case XIR_RT_UNM: {
-            XR_DCHECK(!xir_ref_is_none(ins->args[0]), "RT_UNM: missing operand");
+            CODEGEN_CHECK(ctx, !xir_ref_is_none(ins->args[0]), "RT_UNM: missing operand");
             uint8_t ta = XR_REP_I64;
             if (xir_ref_is_vreg(ins->args[0])) {
                 uint32_t ai = XIR_REF_INDEX(ins->args[0]);
@@ -403,7 +403,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                 x64_emit8(&ctx->buf, (uint8_t) (0xC0 | ((uint8_t) rd & 7)));
             } else {
                 x64_emit_deopt_id(ctx, ins);
-                XR_DCHECK(ctx->npatch < ctx->patches_cap, "too many patches");
+                CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
                 x64_emit8(&ctx->buf, 0xE9);
                 p->emit_pos = ctx->buf.pos;

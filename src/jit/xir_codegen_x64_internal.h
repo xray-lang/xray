@@ -15,6 +15,7 @@
 #ifndef XIR_CODEGEN_X64_INTERNAL_H
 #define XIR_CODEGEN_X64_INTERNAL_H
 
+#include <setjmp.h>
 #include "xir_codegen.h"
 #include "xir_codegen_internal.h"
 #include "xir_x64.h"
@@ -186,6 +187,9 @@ typedef struct {
     uint32_t nsmap;
 
     bool had_error;
+    const char *error_reason;
+    jmp_buf bail_jmp;
+
     bool has_deopt;
     bool has_call_c;
     bool has_barriers;
@@ -256,5 +260,18 @@ XR_FUNC void x64_emit_epilogue(X64CodegenCtx *ctx);
 
 /* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */
 XR_FUNC bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd);
+
+/* Bail out of codegen on invariant violation instead of abort().
+ * Sets had_error and longjmps to the entry point of xir_codegen_x64
+ * so the caller can report failure gracefully. */
+#define CODEGEN_CHECK(ctx, cond, msg)                                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            (ctx)->had_error = true;                                                               \
+            (ctx)->error_reason = (msg);                                                           \
+            xr_log_warning("x64-cg", "bail: %s (%s:%d)", (msg), __FILE__, __LINE__);               \
+            longjmp((ctx)->bail_jmp, 1);                                                           \
+        }                                                                                          \
+    } while (0)
 
 #endif  // XIR_CODEGEN_X64_INTERNAL_H
