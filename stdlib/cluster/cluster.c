@@ -29,6 +29,7 @@
 #include "../../src/vm/xvm_internal.h"
 #include "../../src/base/xhash.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xtime.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -473,8 +474,7 @@ void xr_cluster_stop(XrCluster *c) {
      */
     if (c->accept_coro_spawned) {
         for (int i = 0; i < 100 && atomic_load(&c->accept_running); i++) {
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
-            nanosleep(&ts, NULL);
+            xr_time_sleep_ns(10ULL * 1000ULL * 1000ULL);
         }
         c->accept_coro_spawned = false;
     }
@@ -486,8 +486,7 @@ void xr_cluster_stop(XrCluster *c) {
      */
     if (c->heartbeat_coro_spawned) {
         for (int i = 0; i < 100 && atomic_load(&c->heartbeat_running); i++) {
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = 10 * 1000 * 1000};
-            nanosleep(&ts, NULL);
+            xr_time_sleep_ns(10ULL * 1000ULL * 1000ULL);
         }
         c->heartbeat_coro_spawned = false;
     }

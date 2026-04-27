@@ -15,9 +15,9 @@
 
 #include "xcli_output.h"
 #include "../../base/xchecks.h"
+#include "../../base/xtime.h"
 #include <stdio.h>
 #include <unistd.h>
-#include <time.h>
 
 /* ========== Color State ========== */
 
@@ -70,7 +70,5 @@ bool xr_cli_json_output(void) {
 /* ========== Timing ========== */
 
 double xr_cli_get_time_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1000000.0;
+    return (double) xr_time_monotonic_ns() / 1000000.0;
 }

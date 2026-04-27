@@ -25,9 +25,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <time.h>
 #include "../value/xtype_names.h"
 #include "../../base/xchecks.h"
+#include "../../base/xtime.h"
 
 /* ========== GC Debug Options ========== */
 
@@ -52,9 +52,7 @@
 
 // Get current time (nanoseconds)
 static inline uint64_t xr_gc_time_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+    return xr_time_monotonic_ns();
 }
 
 // Forward declarations

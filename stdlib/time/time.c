@@ -14,52 +14,22 @@
 #include "../../src/vm/xvm_internal.h"  // XrCoroState, XrCoroutine
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xtime.h"
 #include <time.h>
 #include <stdio.h>
 
 #ifndef XR_PLATFORM_WINDOWS
-#include <sys/time.h>
 #include <unistd.h>
 #endif
 
 // ========== Helper functions ==========
 
 static int64_t get_timestamp_ms(void) {
-#ifdef XR_PLATFORM_WINDOWS
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-    int64_t t = ((int64_t) ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-    return (t - 116444736000000000LL) / 10000;
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-#endif
+    return (int64_t) (xr_time_realtime_ns() / 1000000ULL);
 }
 
 static int64_t get_monotonic_ns(void) {
-#ifdef XR_PLATFORM_WINDOWS
-    // Windows: QueryPerformanceCounter for nanosecond precision. Compute
-    // seconds and the sub-second remainder separately so the intermediate
-    // product never overflows int64 — the naive counter * 1e9 expression
-    // wraps after a few days on a 10 MHz performance counter.
-    static LARGE_INTEGER freq = {0};
-    if (freq.QuadPart == 0)
-        QueryPerformanceFrequency(&freq);
-    LARGE_INTEGER counter;
-    QueryPerformanceCounter(&counter);
-    int64_t q = counter.QuadPart;
-    int64_t f = freq.QuadPart;
-    int64_t sec = q / f;
-    int64_t sub_ns = ((q % f) * 1000000000LL) / f;
-    return sec * 1000000000LL + sub_ns;
-#elif defined(XR_PLATFORM_MACOS)
-    return (int64_t) clock_gettime_nsec_np(CLOCK_MONOTONIC);
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec;
-#endif
+    return (int64_t) xr_time_monotonic_ns();
 }
 
 // ========== Module-private function bindings ==========

@@ -21,8 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include <time.h>
 #include "../../base/xmalloc.h"
+#include "../../base/xtime.h"
 
 // lsp_log declared in xlsp_server.h (included via xlsp_workspace.h)
 // ============================================================================
@@ -614,9 +614,7 @@ int xlsp_drain_pending_analysis(XrLspServer *server) {
     if (!server || server->pending_analysis_count == 0)
         return 0;
 
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    uint64_t now_ms = (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    uint64_t now_ms = xr_time_monotonic_ms();
     uint64_t deadline = now_ms + ANALYSIS_DRAIN_BUDGET_MS;
     int processed = 0;
 
@@ -637,8 +635,7 @@ int xlsp_drain_pending_analysis(XrLspServer *server) {
         processed++;
 
         // Respect time budget
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        now_ms = (uint64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        now_ms = xr_time_monotonic_ms();
         if (now_ms >= deadline)
             break;
     }

@@ -20,15 +20,12 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/gc/xgc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xtime.h"
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
 
 #define XR_INT(n) XR_FROM_INT(n)
-
-#ifndef XR_PLATFORM_WINDOWS
-#include <sys/time.h>
-#endif
 
 /* ========== Internal Helpers ========== */
 
@@ -46,16 +43,7 @@ static XrDateTime *datetime_alloc(XrayIsolate *isolate) {
 }
 
 static int64_t get_current_millis(void) {
-#ifdef XR_PLATFORM_WINDOWS
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-    int64_t t = ((int64_t) ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-    return (t - 116444736000000000LL) / 10000;
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-#endif
+    return (int64_t) (xr_time_realtime_ns() / 1000000ULL);
 }
 
 static int days_in_month_table(int year, int mon) {

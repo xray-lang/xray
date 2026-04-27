@@ -20,10 +20,10 @@
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/vm/xvm_internal.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xtime.h"
 
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 #include <math.h>
 #include <fcntl.h>
@@ -51,9 +51,7 @@ extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*f
 /* ========== Time Utility ========== */
 
 int64_t xr_cluster_now_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return (int64_t) xr_time_monotonic_ms();
 }
 
 /* ========== Proof Computation ========== */
@@ -396,8 +394,7 @@ void xr_cluster_node_free(XrClusterNode *node) {
     if (node->isolate) {
         // Writer was spawned — wait for the exit flag it flips on return.
         for (int i = 0; i < 500 && !atomic_load(&node->writer_exited); i++) {
-            struct timespec ts = {.tv_sec = 0, .tv_nsec = 1 * 1000 * 1000};
-            nanosleep(&ts, NULL);
+            xr_time_sleep_ns(1ULL * 1000ULL * 1000ULL);
         }
     }
 

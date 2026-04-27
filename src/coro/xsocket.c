@@ -16,6 +16,7 @@
 
 #include "xsocket.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include "xnetpoll.h"
 #include "xworker.h"
 #include "xcoroutine.h"                    // XrCoroutine
@@ -310,9 +311,7 @@ void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
 
     int64_t deadline = 0;
     if (timeout_ms > 0) {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        deadline = ts.tv_sec * 1000000000LL + ts.tv_nsec + timeout_ms * 1000000LL;
+        deadline = (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
     }
 
     // Get current Worker's Timer Wheel
@@ -350,10 +349,7 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
     // Arm read deadline. timeout_ms == 0 leaves the fd without a
     // deadline; xr_netpoll_block then sleeps until POLLIN.
     if (timeout_ms > 0) {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        int64_t deadline =
-            (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec + (int64_t) timeout_ms * 1000000LL;
+        int64_t deadline = (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
         XrTimerWheel *tw = NULL;
         XrWorker *worker = xr_current_worker();
         if (worker)
@@ -391,10 +387,7 @@ int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
         return -1;
 
     if (timeout_ms > 0) {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        int64_t deadline =
-            (int64_t) ts.tv_sec * 1000000000LL + ts.tv_nsec + (int64_t) timeout_ms * 1000000LL;
+        int64_t deadline = (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
         XrTimerWheel *tw = NULL;
         XrWorker *worker = xr_current_worker();
         if (worker)
@@ -426,9 +419,7 @@ void xr_socket_set_write_timeout(XrayIsolate *X, int fd, int timeout_ms) {
 
     int64_t deadline = 0;
     if (timeout_ms > 0) {
-        struct timespec ts;
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        deadline = ts.tv_sec * 1000000000LL + ts.tv_nsec + timeout_ms * 1000000LL;
+        deadline = (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
     }
 
     // Get current Worker's Timer Wheel

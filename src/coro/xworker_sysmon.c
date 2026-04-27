@@ -15,6 +15,7 @@
 
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include "../base/xlog.h"
 #include "xjit_hooks.h"
 
@@ -216,8 +217,7 @@ void *sysmon_thread_func(void *arg) {
                 interval_ns = 10000000;  // 10ms
         }
 
-        struct timespec ts = {.tv_sec = 0, .tv_nsec = interval_ns};
-        nanosleep(&ts, NULL);
+        xr_time_sleep_ns((uint64_t) interval_ns);
         sysmon_check(runtime);
         sysmon_assist(runtime);
         sysmon_arm_guard_pages(runtime);

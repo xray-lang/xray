@@ -20,7 +20,7 @@
 #include "xir_alias.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../../include/xray_platform.h"  // xr_monotonic_ms()
+#include "../base/xtime.h"
 
 /* ========== Dead Code Elimination ========== */
 
@@ -1685,7 +1685,7 @@ XirPipelineStats xir_run_fixedpoint(XirFunc *func, XrProto *proto, const XirPass
     for (uint32_t round = 0; round < max_rounds; round++) {
         // Check compile-time budget at each round boundary
         if (budget && !budget->timed_out) {
-            uint64_t now_ms = xr_monotonic_ms();
+            uint64_t now_ms = xr_time_monotonic_ms();
             if (now_ms * 1000000ULL > budget->deadline_ns) {
                 budget->timed_out = true;
                 st.timed_out = 1;
@@ -1816,7 +1816,7 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
 
     // Compile-time budget: 50ms default (skip remaining groups on timeout)
     XirCompileBudget budget;
-    budget.start_ns = xr_monotonic_ms() * 1000000ULL;
+    budget.start_ns = xr_time_monotonic_ns();
     budget.deadline_ns = budget.start_ns + 50ULL * 1000000ULL;  // 50ms
     budget.timed_out = false;
 
@@ -1859,7 +1859,7 @@ void xir_run_pipeline_ex(XirFunc *func, XirOptLevel opt, XrProto *proto) {
     }
 
     if (budget.timed_out && pipeline_verbose()) {
-        uint64_t elapsed_ms = xr_monotonic_ms() - budget.start_ns / 1000000ULL;
+        uint64_t elapsed_ms = xr_time_monotonic_ms() - budget.start_ns / 1000000ULL;
         fprintf(stderr, "[jit-pipe] TIMEOUT func=%s after %llums\n", func->name ? func->name : "?",
                 (unsigned long long) elapsed_ms);
     }

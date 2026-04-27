@@ -21,6 +21,7 @@
 #include "xvm_cold_paths.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../base/xtime.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
@@ -185,9 +186,7 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
 
     XrCoroutine *current = vm_cold_get_coro(vm_ctx);
     if (current) {
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        int64_t now_us = (int64_t) now.tv_sec * 1000000LL + now.tv_usec;
+        int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 
         if (current->channel_deadline == 0)
             current->channel_deadline = now_us + timeout_ms * 1000LL;
@@ -214,13 +213,9 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     }
 
     // Main thread: synchronous polling
-    struct timeval start_time;
-    gettimeofday(&start_time, NULL);
+    uint64_t start_ns = xr_time_monotonic_ns();
     while (1) {
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        int64_t elapsed_ms =
-            (now.tv_sec - start_time.tv_sec) * 1000 + (now.tv_usec - start_time.tv_usec) / 1000;
+        int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
         if (elapsed_ms >= timeout_ms) {
             base[a] = xr_bool(false);
             break;
@@ -278,9 +273,7 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
 
     XrCoroutine *current = vm_cold_get_coro(vm_ctx);
     if (current) {
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        int64_t now_us = (int64_t) now.tv_sec * 1000000LL + now.tv_usec;
+        int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 
         if (current->channel_deadline == 0)
             current->channel_deadline = now_us + timeout_ms * 1000LL;
@@ -308,13 +301,9 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     }
 
     // Main thread: synchronous polling
-    struct timeval start_time;
-    gettimeofday(&start_time, NULL);
+    uint64_t start_ns = xr_time_monotonic_ns();
     while (1) {
-        struct timeval now;
-        gettimeofday(&now, NULL);
-        int64_t elapsed_ms =
-            (now.tv_sec - start_time.tv_sec) * 1000 + (now.tv_usec - start_time.tv_usec) / 1000;
+        int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
         if (elapsed_ms >= timeout_ms) {
             base[a] = xr_null();
             break;

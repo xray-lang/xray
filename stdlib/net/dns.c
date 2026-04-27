@@ -16,6 +16,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xtime.h"
 #include "dns.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xasync.h"
@@ -23,7 +24,6 @@
 #include <string.h>
 #include <pthread.h>
 #include <netdb.h>
-#include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -75,9 +75,7 @@ static struct {
 /* ========== Utility Functions ========== */
 
 static uint64_t get_time_ms(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t) tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    return xr_time_monotonic_ms();
 }
 
 static unsigned int hash_hostname(const char *hostname) {

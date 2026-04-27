@@ -27,7 +27,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <errno.h>
-#include <time.h>  // nanosleep, struct timespec
+#include "../../base/xtime.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -114,8 +114,7 @@ static ssize_t write_all(int fd, const char *buf, size_t len) {
                 continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // Back-pressure on pipe; brief yield rather than spin.
-                struct timespec ts = {0, 100000};  // 100 us
-                nanosleep(&ts, NULL);
+                xr_time_sleep_ns(100000ULL);  // 100 us
                 continue;
             }
             return -1;

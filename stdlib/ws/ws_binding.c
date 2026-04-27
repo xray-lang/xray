@@ -56,7 +56,7 @@ extern XrModule *xr_module_create_native(XrayIsolate *isolate, const char *name)
 // Profiling counters (compile-time toggle)
 #define WS_PROFILE 0
 #if WS_PROFILE
-#include <time.h>
+#include "../../src/base/xtime.h"
 static _Atomic uint64_t ws_prof_recv_fast = 0;  // recv fast path hits (no yield)
 static _Atomic uint64_t ws_prof_recv_slow = 0;  // recv slow path (yield to kqueue)
 static _Atomic uint64_t ws_prof_send_fast = 0;  // send completed immediately
@@ -66,9 +66,7 @@ static _Atomic uint64_t ws_prof_send_ns = 0;    // total ns in send C function
 static _Atomic uint64_t ws_prof_alloc_ns = 0;   // total ns in make_recv_result
 
 static inline uint64_t ws_now_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t) ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+    return xr_time_monotonic_ns();
 }
 
 static void ws_prof_dump(void) {

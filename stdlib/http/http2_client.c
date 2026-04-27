@@ -14,6 +14,7 @@
  */
 
 #include "../../src/base/xmalloc.h"
+#include "../../src/base/xtime.h"
 #include "http2_client.h"
 #include "http2.h"
 #include "../net/io.h"
@@ -23,9 +24,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <time.h>
 #include <sys/socket.h>
-#include <sys/time.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
@@ -165,9 +164,7 @@ void xr_h2_pool_release_to(XrH2Pool *pool, XrH2PoolEntry *entry) {
 
 // Get current time (milliseconds)
 static uint64_t get_time_ms(void) {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (uint64_t) tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    return xr_time_monotonic_ms();
 }
 
 // Calculate host hash

@@ -13,6 +13,7 @@
 
 #include "xcoroutine.h"
 #include "../base/xchecks.h"
+#include "../base/xtime.h"
 #include "xworker.h"
 #include "xexec_state.h"
 #include "xproc.h"
@@ -174,7 +175,7 @@ static void *watch_thread_func(void *arg) {
         fflush(stdout);
 
         // Sleep for specified interval
-        usleep(ctx->interval_ms * 1000);
+        xr_time_sleep_ms((uint64_t) ctx->interval_ms);
     }
 
     // Show cursor
