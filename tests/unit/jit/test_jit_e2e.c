@@ -12,15 +12,24 @@
 #include <stdint.h>
 #include <assert.h>
 #include <signal.h>
-#include <unistd.h>
 #include <string.h>
+#ifdef _WIN32
+#include <stdlib.h>
+#include <io.h>
+#include <Windows.h>
+#include <crtdbg.h>
+#else
+#include <unistd.h>
 #include <sys/mman.h>
+#endif
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_printer.h"
 #include "../../../src/jit/xir_codegen.h"
 #include "../../../src/jit/xir_pass.h"
 #include "../../../src/jit/xir_pass_sccp.h"
 #include "../../../src/jit/xir_jit.h"
+#include "../../../src/jit/xir_jit_runtime.h"
+#include "../../../src/jit/xir_offsets.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/coro/xcoroutine.h"
 
@@ -66,9 +75,15 @@ static void *g_safepoint_page = NULL;
 
 static void jit_env_init(void) {
     if (g_safepoint_page == NULL) {
+#ifdef _WIN32
+        g_safepoint_page = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE,
+                                        PAGE_READWRITE);
+        assert(g_safepoint_page != NULL && "VirtualAlloc safepoint_page");
+#else
         g_safepoint_page = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
                                 MAP_ANON | MAP_PRIVATE, -1, 0);
         assert(g_safepoint_page != MAP_FAILED && "mmap safepoint_page");
+#endif
     }
     memset(&g_jit_coro, 0, sizeof(g_jit_coro));
     memset(&g_jit_ctx, 0, sizeof(g_jit_ctx));
@@ -164,8 +179,10 @@ static XirCodegenResult safe_codegen(XirFunc *f, XirCodeAlloc *a) {
 static void crash_handler(int sig) {
     const char *msg = "\n!!! SIGNAL received: ";
     write(2, msg, strlen(msg));
-    if (sig == 11) write(2, "SIGSEGV\n", 8);
-    else if (sig == 10) write(2, "SIGBUS\n", 7);
+    if (sig == SIGSEGV) write(2, "SIGSEGV\n", 8);
+#ifdef SIGBUS
+    else if (sig == SIGBUS) write(2, "SIGBUS\n", 7);
+#endif
     else write(2, "OTHER\n", 6);
     _exit(128 + sig);
 }
@@ -1217,8 +1234,8 @@ static void test_licm(void) {
     XirCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     int64_t result = jit_call1(res.code, 10);
-    assert(result == 210);
     fprintf(stderr, " exec=%lld", (long long)result);
+    assert(result == 210);
 
     xir_code_alloc_destroy(&alloc);
     xir_func_destroy(func);
@@ -1785,9 +1802,9 @@ static void test_store_load_field(void) {
  *     v1 =i64 call.c @jit_test_add42, v0
  *     ret v1
  */
-static int64_t jit_test_add42(void *coro, int64_t x) {
+static XrJitResult jit_test_add42(void *coro, int64_t x) {
     (void)coro;
-    return x + 42;
+    return (XrJitResult){x + 42, 3};
 }
 
 static void test_call_c(void) {
@@ -1903,11 +1920,9 @@ static void test_guard_class(void) {
  *
  * Tests that CALL_C correctly handles const_ptr for both fn and arg.
  */
-static int64_t jit_test_make_obj(void *coro, void *shape_ptr) {
+static XrJitResult jit_test_make_obj(void *coro, int64_t shape_raw) {
     (void)coro;
-    // Simulate: allocate a "fake object" and write a value at byte 16
-    // We cheat by returning shape_ptr itself (which points to a prepared buffer)
-    return (int64_t)(intptr_t)shape_ptr;
+    return (XrJitResult){shape_raw, 5};
 }
 
 static void test_call_c_const_arg(void) {
@@ -2045,9 +2060,14 @@ static void test_fp_noncommutative_chain(void) {
 
 /* C helper for test_call_c_fp_live_across_call: returns 16.0 to make the
  * expected sum a clean 136.0 = (0+1+...+15) + 16. */
-static double jit_test_fp16_const(void *coro, double x) {
+static XrJitResult jit_test_fp16_const(void *coro, int64_t x_raw) {
     (void)coro;
-    return x * 2.0;  // helper(8.0) = 16.0
+    double x;
+    memcpy(&x, &x_raw, 8);
+    double result = x * 2.0;
+    int64_t result_raw;
+    memcpy(&result_raw, &result, 8);
+    return (XrJitResult){result_raw, 4};
 }
 
 /*
@@ -2473,16 +2493,21 @@ static void test_alloc_inline(void) {
 
     // Reuse global fake env so the JIT prologue can deref coro->jit_ctx.
     // We only need to attach a fake coro_gc + immix heap on top of it.
-    static uint8_t fake_gc[256];
-    static uint8_t heap_buf[4096];
+    static uint8_t fake_gc[512];
+    // Oversized buffer to manually align to 16KB boundary.
+    // The inline alloc_post writes block->local_allgc (offset 24),
+    // alloc_count (40), alloc_bytes (48) — all must be within the block.
+    static uint8_t heap_raw[16384 * 2];
     memset(fake_gc, 0, sizeof(fake_gc));
-    memset(heap_buf, 0xCC, sizeof(heap_buf));
+    memset(heap_raw, 0, sizeof(heap_raw));
+    uintptr_t aligned = ((uintptr_t)heap_raw + 16383) & ~(uintptr_t)0x3FFF;
+    uint8_t *heap_buf = (uint8_t *)aligned;
 
-    // gc->immix.cursor at offset 0
-    char *cursor = (char*)heap_buf;
+    // gc->immix.cursor at offset 256 (past the block header)
+    char *cursor = (char*)heap_buf + 256;
     memcpy(fake_gc + 0, &cursor, 8);
     // gc->immix.limit at offset 8
-    char *limit = (char*)heap_buf + sizeof(heap_buf);
+    char *limit = (char*)heap_buf + 16384;
     memcpy(fake_gc + 8, &limit, 8);
     // gc->currentwhite = 0x01 at XIR_GC_CURRENTWHITE_OFFSET (109)
     fake_gc[109] = 0x01;
@@ -2513,8 +2538,8 @@ static void test_alloc_inline(void) {
     int64_t result = ((JitFn)res.code)(jit_test_coro(), args);
     fprintf(stderr, " result=%p", (void*)result);
 
-    // Fast path should return heap_buf (original cursor)
-    assert(result == (int64_t)(intptr_t)heap_buf);
+    // Fast path should return original cursor (heap_buf + 256)
+    assert(result == (int64_t)(intptr_t)cursor);
 
     // Verify cursor advanced by 48
     char *new_cursor;
@@ -2546,8 +2571,19 @@ static void test_alloc_inline(void) {
 }
 
 int main(void) {
+#ifdef _WIN32
+    /* Suppress Windows error dialogs so crashes/asserts terminate immediately */
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
     signal(SIGSEGV, crash_handler);
+#ifdef SIGBUS
     signal(SIGBUS, crash_handler);
+#endif
 
     jit_env_init();
 
