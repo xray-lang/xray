@@ -132,6 +132,22 @@ XR_FUNC void xr_thread_detach(xr_thread_t t);
 // Return the calling thread's handle.
 XR_FUNC xr_thread_t xr_thread_self(void);
 
+// Test whether a thread handle is non-zero, i.e. has been
+// populated by a successful xr_thread_create*. Lets callers
+// keep arrays of thread handles in heap-allocated zero-init
+// memory and detect "this slot was never used" without
+// platform-specific struct accesses.
+static inline bool xr_thread_is_valid(xr_thread_t t) {
+#ifdef _WIN32
+    return t.handle != NULL;
+#else
+    // pthread_t is a scalar on every supported POSIX platform;
+    // a zero-initialised slot compares equal to (pthread_t)0
+    // and never matches a real, joinable thread.
+    return t != (xr_thread_t) 0;
+#endif
+}
+
 // Best-effort thread name for debuggers / profilers. Silent
 // failure on platforms that do not support naming the calling
 // thread out-of-band.
