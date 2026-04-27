@@ -620,7 +620,8 @@ void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro) {
 void xr_coro_release_heap(XrCoroutine *coro) {
     if (!coro)
         return;
-    XrCoroGC *gc = __atomic_exchange_n(&coro->coro_gc, NULL, __ATOMIC_ACQ_REL);
+    XrCoroGC *gc = atomic_exchange_explicit((_Atomic(XrCoroGC *) *) &coro->coro_gc, NULL,
+                                            memory_order_acq_rel);
     if (gc)
         xr_coro_gc_destroy(gc);
 }
@@ -636,7 +637,8 @@ void xr_coro_release_resources(XrCoroutine *coro) {
     // Destroy coro_gc (Immix heap) — use atomic exchange to prevent
     // double-free race with early release in xr_coro_run_on_worker
     {
-        XrCoroGC *gc = __atomic_exchange_n(&coro->coro_gc, NULL, __ATOMIC_ACQ_REL);
+        XrCoroGC *gc = atomic_exchange_explicit((_Atomic(XrCoroGC *) *) &coro->coro_gc, NULL,
+                                                memory_order_acq_rel);
         if (gc)
             xr_coro_gc_destroy(gc);
     }
@@ -767,7 +769,8 @@ void xr_coro_free(XrCoroutine *coro) {
 
     // Free GC context — atomic exchange to prevent double-free race
     {
-        XrCoroGC *gc = __atomic_exchange_n(&coro->coro_gc, NULL, __ATOMIC_ACQ_REL);
+        XrCoroGC *gc = atomic_exchange_explicit((_Atomic(XrCoroGC *) *) &coro->coro_gc, NULL,
+                                                memory_order_acq_rel);
         if (gc)
             xr_coro_gc_destroy(gc);
     }

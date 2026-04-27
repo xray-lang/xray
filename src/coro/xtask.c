@@ -360,12 +360,13 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
         atomic_exchange_explicit(&task->await_state, XR_AWAIT_RESOLVED, memory_order_acq_rel);
 
     // Atomically claim waiter pointer, prevent duplicate processing
-    XrCoroutine *waiter = __atomic_exchange_n(&task->waiter, NULL, __ATOMIC_ACQ_REL);
+    XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
+                                                   memory_order_acq_rel);
     if (!waiter)
         return;
 
-    int idx = __atomic_load_n(&task->waiter_index, __ATOMIC_ACQUIRE);
-    __atomic_store_n(&task->waiter_index, -1, __ATOMIC_RELAXED);
+    int idx = atomic_load_explicit((_Atomic int *) &task->waiter_index, memory_order_acquire);
+    atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
 
     switch (idx) {
         case -1: {
