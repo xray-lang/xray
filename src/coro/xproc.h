@@ -77,13 +77,17 @@ typedef struct XrChanWakeCmdQueue {
 // shared with lifo_slot / runq / cont_deque that other workers may be
 // concurrently reading during work-stealing.
 typedef struct XrProcStats {
-    uint64_t executed_count;    // Coros the owner has dispatched
+    // _Alignas on the first member portably places the entire
+    // struct on its own cache-line boundary. GCC accepts a
+    // trailing __attribute__((aligned)) on the typedef name;
+    // MSVC's __declspec(align) cannot legally appear there.
+    _Alignas(XR_CACHE_LINE) uint64_t executed_count;
     uint64_t stolen_count;      // Coros the owner has stolen from peers
     uint64_t yielded_count;     // Voluntary yields
     uint64_t cont_steal_count;  // Continuations stolen (owner as stealer)
     uint64_t completed_count;   // Coros that finished (replaces global)
     uint64_t spawned_count;     // Coros spawned by this worker
-} XrProcStats XR_ALIGN(XR_CACHE_LINE);
+} XrProcStats;
 
 /* ========== Run Queue (Chase-Lev deque + overflow) ========== */
 
