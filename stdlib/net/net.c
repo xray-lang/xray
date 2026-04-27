@@ -49,12 +49,15 @@ extern void xr_socket_close(struct XrayIsolate *X, int fd);
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>
+#include "../../src/os/os_net.h"
 #include "../../src/os/os_thread.h"
+#ifndef XR_OS_WINDOWS
+#include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
+#endif
 
 // ========== Internal Helpers ==========
 
@@ -72,8 +75,8 @@ static void net_close_fd(XrayIsolate *X, int fd) {
         if (pd && !atomic_load(&pd->closing))
             xr_netpoll_close(&runtime->netpoll, pd);
     }
-    shutdown(fd, SHUT_WR);
-    close(fd);
+    shutdown(fd, XR_SHUT_WR);
+    xr_closesocket(fd);
 }
 
 /*

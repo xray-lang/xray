@@ -97,14 +97,15 @@ TEST(test_match_digits) {
 
 TEST(find_position) {
     XrRegex *re = RE_COMPILE("\\d+");
+    const char *input = "abc123def";
     XrMatch match;
-    bool found = xr_regex_match(re, "abc123def", 9, &match);
+    bool found = xr_regex_match(re, input, 9, &match);
     ASSERT_TRUE(found);
     // groups[0] is full match
     ASSERT_NOT_NULL(match.groups[0].start);
     ASSERT_NOT_NULL(match.groups[0].end);
-    int start = (int)(match.groups[0].start - "abc123def");
-    int end = (int)(match.groups[0].end - "abc123def");
+    int start = (int)(match.groups[0].start - input);
+    int end = (int)(match.groups[0].end - input);
     ASSERT_EQ_INT(start, 3);
     ASSERT_EQ_INT(end, 6);
     xr_regex_free(re);
@@ -126,11 +127,12 @@ TEST(full_match_failure) {
 
 TEST(find_at_offset) {
     XrRegex *re = RE_COMPILE("\\d+");
+    const char *input = "abc123def456";
     XrMatch match;
     // Find starting from offset 6 (past first digits)
-    bool found = xr_regex_match_at(re, "abc123def456", 12, 6, &match);
+    bool found = xr_regex_match_at(re, input, 12, 6, &match);
     ASSERT_TRUE(found);
-    int start = (int)(match.groups[0].start - "abc123def456");
+    int start = (int)(match.groups[0].start - input);
     ASSERT_EQ_INT(start, 9);
     xr_regex_free(re);
 }

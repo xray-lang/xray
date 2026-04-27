@@ -601,10 +601,11 @@ startfunc:
 // Switch mode macro definitions
 #define vmcase(l) case l:
 #undef vmbreak
-#define vmbreak break
+#define vmbreak goto vm_switch_next
 
     // Standard switch dispatch
     for (;;) {
+    vm_switch_next:
         i = *pc++;
         VM_DEBUG_CHECK();  // Check breakpoint at each instruction
         OpCode op = GET_OPCODE(i);

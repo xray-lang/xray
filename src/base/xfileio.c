@@ -14,6 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef XR_OS_WINDOWS
+#include <windows.h>
+#endif
 
 char *xr_file_read_all(const char *path, const char *mode, size_t *out_size) {
     if (!path || !mode)
@@ -132,6 +135,13 @@ char *xr_realpath(const char *path) {
     if (!path)
         return NULL;
 
+#ifdef XR_OS_WINDOWS
+    char resolved[4096];
+    DWORD len = GetFullPathNameA(path, sizeof(resolved), resolved, NULL);
+    if (len == 0 || len >= sizeof(resolved))
+        return NULL;
+    return xr_strdup(resolved);
+#else
     char *rp = realpath(path, NULL);
     if (!rp)
         return NULL;
@@ -139,4 +149,5 @@ char *xr_realpath(const char *path) {
     char *dup = xr_strdup(rp);
     free(rp); /* realpath uses system malloc */
     return dup;
+#endif
 }

@@ -585,7 +585,7 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // Generate platform-specific machine code
 #if defined(__aarch64__)
     XirCodegenResult res = xir_codegen_arm64(func, &jit->code_alloc);
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(_M_X64)
     XirCodegenResult res = xir_codegen_x64(func, &jit->code_alloc);
 #else
     XirCodegenResult res = {.success = false, .error = "unsupported architecture"};
@@ -911,8 +911,12 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
         }
     }
 
+#ifdef _WIN32
+    int64_t ret = ((XirJitFn) jit_entry)((intptr_t) coro, raw_args);
+#else
     XrJitResult jr = ((XirJitFn) jit_entry)((intptr_t) coro, raw_args);
     int64_t ret = jr.payload;
+#endif
 
     if (ret == XIR_SUSPEND_MARKER) {
         // JIT suspend: coro blocked on channel/await. resume_entry/proto
@@ -951,8 +955,13 @@ int xir_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
         return XIR_JIT_DEOPT;
     }
 
-    // Use tag from XrJitResult.tag (set by JIT epilogue via x1).
+    // Extract tag: Win64 reads from jit_ctx (stored by JIT epilogue);
+    // System V reads from XrJitResult.tag (returned in RDX register).
+#ifdef _WIN32
+    uint8_t tag = (uint8_t) coro->jit_ctx->call_result_tag;
+#else
     uint8_t tag = (uint8_t) jr.tag;
+#endif
     uint16_t ht = 0;
 
     if (tag == XR_RTAG_UNKNOWN) {
@@ -1012,8 +1021,12 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     // inline-resume path or worker resume path).
 
     // Call the resume entry stub: same calling convention as XirJitFn
+#ifdef _WIN32
+    int64_t ret = ((XirJitFn) resume_entry)((intptr_t) coro, NULL);
+#else
     XrJitResult jr = ((XirJitFn) resume_entry)((intptr_t) coro, NULL);
     int64_t ret = jr.payload;
+#endif
 
     if (ret == (int64_t) XIR_SUSPEND_MARKER) {
         // Nested suspend: another channel/await block hit during resume.
@@ -1047,7 +1060,11 @@ int xir_jit_resume(XrCoroutine *coro, XrValue *result) {
     }
 
     // Reconstruct return value (same logic as xir_jit_call)
+#ifdef _WIN32
+    uint8_t tag = (uint8_t) coro->jit_ctx->call_result_tag;
+#else
     uint8_t tag = (uint8_t) jr.tag;
+#endif
     if (tag == XR_TAG_F64) {
         result->descriptor = 0;
         memcpy(&result->f, &ret, sizeof(double));

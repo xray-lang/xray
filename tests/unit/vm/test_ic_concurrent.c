@@ -37,7 +37,7 @@
 #include "vm/xic_method.h"
 #include "base/xmalloc.h"
 
-#include <pthread.h>
+#include "os/os_thread.h"
 #include <stdlib.h>  /* qsort */
 #include <stdint.h>
 #include <stdatomic.h>
@@ -133,18 +133,18 @@ TEST(ic_concurrent_workers_stay_isolated) {
         xr_vm_proto_write(shared, (XrInstruction)0, 1);
     }
 
-    pthread_t threads[IC_STRESS_THREADS];
+    xr_thread_t threads[IC_STRESS_THREADS];
     IcStressArg args[IC_STRESS_THREADS];
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
         args[t].shared_proto = shared;
         args[t].tid = t;
         atomic_store_explicit(&args[t].errors, 0u, memory_order_relaxed);
-        int rc = pthread_create(&threads[t], NULL, ic_stress_worker,
-                                 &args[t]);
-        ASSERT_EQ_INT(rc, 0);
+        bool ok = xr_thread_create(&threads[t], ic_stress_worker,
+                                    &args[t]);
+        ASSERT_TRUE(ok);
     }
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
-        pthread_join(threads[t], NULL);
+        xr_thread_join(threads[t], NULL);
     }
 
     uint64_t total_errors = 0;
@@ -190,17 +190,17 @@ static int cmp_u32(const void *a, const void *b) {
 }
 
 TEST(proto_id_allocation_is_race_free) {
-    pthread_t threads[IC_STRESS_THREADS];
+    xr_thread_t threads[IC_STRESS_THREADS];
     IdRecord  records[IC_STRESS_THREADS];
 
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
         memset(&records[t], 0, sizeof(records[t]));
-        int rc = pthread_create(&threads[t], NULL, proto_id_alloc_worker,
-                                 &records[t]);
-        ASSERT_EQ_INT(rc, 0);
+        bool ok = xr_thread_create(&threads[t], proto_id_alloc_worker,
+                                    &records[t]);
+        ASSERT_TRUE(ok);
     }
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
-        pthread_join(threads[t], NULL);
+        xr_thread_join(threads[t], NULL);
     }
 
     /* Merge all ids into one buffer and sort to detect duplicates. */

@@ -454,44 +454,44 @@ TEST(spec_handler_null_before_register) {
 
 /* ========== Help Generation (smoke tests) ========== */
 
+// Redirect stdout to a null device so help-printing tests stay silent.
+// MSVC does not allow direct stdout assignment; use freopen + freopen.
+#ifdef _WIN32
+#define SUPPRESS_STDOUT_BEGIN() freopen("NUL", "w", stdout)
+#define SUPPRESS_STDOUT_END()   freopen("CON", "w", stdout)
+#else
+#define SUPPRESS_STDOUT_BEGIN() freopen("/dev/null", "w", stdout)
+#define SUPPRESS_STDOUT_END()   freopen("/dev/tty", "w", stdout)
+#endif
+
 TEST(help_print_usage_no_crash) {
-    /* Redirect stdout to /dev/null for this test */
-    FILE *old = stdout;
-    stdout = fopen("/dev/null", "w");
+    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_usage();
-    fclose(stdout);
-    stdout = old;
-    /* If we get here without crashing, test passes */
+    SUPPRESS_STDOUT_END();
 }
 
 TEST(help_print_command_help_no_crash) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
 
-    FILE *old = stdout;
-    stdout = fopen("/dev/null", "w");
+    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_command_help(spec);
-    fclose(stdout);
-    stdout = old;
+    SUPPRESS_STDOUT_END();
 }
 
 TEST(help_print_subcommand_help_no_crash) {
     const XrCliCommandSpec *spec = xr_cli_find_command("pkg");
     ASSERT_NOT_NULL(spec);
 
-    FILE *old = stdout;
-    stdout = fopen("/dev/null", "w");
+    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_command_help(spec);
-    fclose(stdout);
-    stdout = old;
+    SUPPRESS_STDOUT_END();
 }
 
 TEST(help_print_version_no_crash) {
-    FILE *old = stdout;
-    stdout = fopen("/dev/null", "w");
+    SUPPRESS_STDOUT_BEGIN();
     xr_cli_print_version();
-    fclose(stdout);
-    stdout = old;
+    SUPPRESS_STDOUT_END();
 }
 
 /* ========== Test Main ========== */

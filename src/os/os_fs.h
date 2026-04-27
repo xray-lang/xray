@@ -43,6 +43,22 @@
 
 #include "../base/xdefs.h"
 
+// Cross-platform maximum path length. On POSIX PATH_MAX is 4096
+// (Linux) or 1024 (macOS); on Windows MAX_PATH is 260 but extended
+// paths can reach 32767. We pick 4096 as a pragmatic compromise.
+#ifndef XR_PATH_MAX
+#ifdef _WIN32
+#define XR_PATH_MAX 4096
+#else
+#include <limits.h>
+#ifdef PATH_MAX
+#define XR_PATH_MAX PATH_MAX
+#else
+#define XR_PATH_MAX 4096
+#endif
+#endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

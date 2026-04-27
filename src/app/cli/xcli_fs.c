@@ -24,7 +24,12 @@
 #include "../../os/os_fs.h"
 #include <limits.h>
 #include <errno.h>
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#include <direct.h>
+#else
 #include <unistd.h>
+#endif
 
 /* ========== Default Ignore Rules ========== */
 

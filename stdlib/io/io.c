@@ -26,19 +26,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include "../../src/os/os_fs.h"
 #include "../../src/os/os_dir.h"
-#include <unistd.h>
 #include <errno.h>
+#include <limits.h>
+
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#include <direct.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/utime.h>
+#include <windows.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <utime.h>
-#include <limits.h>
 #include <ftw.h>
 #ifdef XR_OS_MACOS
 #include <copyfile.h>
 #elif defined(XR_OS_LINUX)
 #include <sys/sendfile.h>
+#endif
 #endif
 
 /* ========== External Declarations ========== */
@@ -282,7 +292,7 @@ static XrValue io_mkdir(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    return xr_bool(mkdir(path, 0755) == 0);
+    return xr_bool(xr_fs_mkdir(path, 0755) == 0);
 }
 
 // readDir(path) - Read directory contents
@@ -318,7 +328,7 @@ static XrValue io_cwd(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    char buf[PATH_MAX];
+    char buf[XR_PATH_MAX];
     if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
@@ -350,7 +360,9 @@ static XrValue io_copyFile(XrayIsolate *X, XrValue *args, int argc) {
     if (!src || !dst)
         return xr_bool(false);
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    return xr_bool(CopyFileA(src, dst, FALSE) != 0);
+#elif defined(XR_OS_MACOS)
     // macOS: use fcopyfile for kernel-level copy (zero-copy when possible)
     int src_fd = open(src, O_RDONLY);
     if (src_fd < 0)
@@ -473,10 +485,17 @@ static XrValue io_isSymlink(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
+#ifdef XR_OS_WINDOWS
+    DWORD attrs = GetFileAttributesA(path);
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return xr_bool(false);
+    return xr_bool((attrs & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
+#else
     struct stat st;
     if (lstat(path, &st) != 0)
         return xr_bool(false);
     return xr_bool(S_ISLNK(st.st_mode));
+#endif
 }
 
 // Compact Shape for stat result (Level 0: all primitives, GC skips entirely).
@@ -537,9 +556,15 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
     if (stat(path, &st) != 0)
         return xr_null();
 
+#ifdef XR_OS_WINDOWS
+    DWORD attrs = GetFileAttributesA(path);
+    bool is_symlink = (attrs != INVALID_FILE_ATTRIBUTES) &&
+                      (attrs & FILE_ATTRIBUTE_REPARSE_POINT);
+#else
     // Use lstat to detect symlink (stat follows symlinks, lstat does not)
     struct stat lst;
     bool is_symlink = (lstat(path, &lst) == 0) && S_ISLNK(lst.st_mode);
+#endif
 
     extern XrValue xr_json_value(XrJson * json);
 
@@ -555,10 +580,17 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
     obj->fields[STAT_MTIME_IDX] = xr_int((int64_t) st.st_mtime);
     obj->fields[STAT_ATIME_IDX] = xr_int((int64_t) st.st_atime);
     obj->fields[STAT_CTIME_IDX] = xr_int((int64_t) st.st_ctime);
+#ifdef XR_OS_WINDOWS
+    obj->fields[STAT_UID_IDX] = xr_int(0);
+    obj->fields[STAT_GID_IDX] = xr_int(0);
+    obj->fields[STAT_ISFILE_IDX] = xr_bool((st.st_mode & _S_IFREG) != 0);
+    obj->fields[STAT_ISDIR_IDX] = xr_bool((st.st_mode & _S_IFDIR) != 0);
+#else
     obj->fields[STAT_UID_IDX] = xr_int((int64_t) st.st_uid);
     obj->fields[STAT_GID_IDX] = xr_int((int64_t) st.st_gid);
     obj->fields[STAT_ISFILE_IDX] = xr_bool(S_ISREG(st.st_mode));
     obj->fields[STAT_ISDIR_IDX] = xr_bool(S_ISDIR(st.st_mode));
+#endif
     obj->fields[STAT_ISSYMLINK_IDX] = xr_bool(is_symlink);
 
     return xr_json_value(obj);
@@ -572,13 +604,13 @@ static XrValue io_mkdirp(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
     const char *path = xrs_string_arg(args[0], NULL);
-    // Catch truncation before we copy into a PATH_MAX buffer.
-    if (path && strnlen(path, PATH_MAX) >= PATH_MAX)
+    // Catch truncation before we copy into a XR_PATH_MAX buffer.
+    if (path && strnlen(path, XR_PATH_MAX) >= XR_PATH_MAX)
         return xr_bool(false);
     if (!path || path[0] == '\0')
         return xr_bool(false);
 
-    char tmp[PATH_MAX];
+    char tmp[XR_PATH_MAX];
     size_t len = strnlen(path, sizeof(tmp));
     if (len == 0 || len >= sizeof(tmp))
         return xr_bool(false);
@@ -588,17 +620,52 @@ static XrValue io_mkdirp(XrayIsolate *X, XrValue *args, int argc) {
         tmp[len - 1] = '\0';
 
     for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
+        if (*p == '/' || *p == '\\') {
+            char saved = *p;
             *p = '\0';
-            mkdir(tmp, 0755);
-            *p = '/';
+            xr_fs_mkdir(tmp, 0755);
+            *p = saved;
         }
     }
 
-    return xr_bool(mkdir(tmp, 0755) == 0 || errno == EEXIST);
+    return xr_bool(xr_fs_mkdir(tmp, 0755) == 0);
 }
 
-// removeAll helper callback.
+#ifdef XR_OS_WINDOWS
+// Windows recursive removal using FindFirstFile/FindNextFile
+static bool remove_all_impl(const char *dir) {
+    char pattern[XR_PATH_MAX];
+    int n = snprintf(pattern, sizeof(pattern), "%s\\*", dir);
+    if (n <= 0 || n >= (int) sizeof(pattern))
+        return false;
+
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE)
+        return RemoveDirectoryA(dir) || DeleteFileA(dir);
+
+    bool ok = true;
+    do {
+        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
+            continue;
+        char child[XR_PATH_MAX];
+        snprintf(child, sizeof(child), "%s\\%s", dir, fd.cFileName);
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (!remove_all_impl(child))
+                ok = false;
+        } else {
+            SetFileAttributesA(child, FILE_ATTRIBUTE_NORMAL);
+            if (!DeleteFileA(child))
+                ok = false;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    if (!RemoveDirectoryA(dir))
+        ok = false;
+    return ok;
+}
+#else
+// POSIX removeAll helper callback.
 // FTW_PHYS is passed to nftw so that symlinks are *not* followed — the
 // callback therefore only observes entries inside the originally supplied
 // subtree, and remove() here will unlink the link itself instead of
@@ -610,6 +677,7 @@ static int remove_callback(const char *fpath, const struct stat *sb, int typefla
     (void) ftwbuf;
     return remove(fpath);
 }
+#endif
 
 // removeAll(path) - Recursively remove directory
 static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
@@ -620,9 +688,12 @@ static XrValue io_removeAll(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    // Use nftw to recursively traverse and remove
+#ifdef XR_OS_WINDOWS
+    return xr_bool(remove_all_impl(path));
+#else
     int ret = nftw(path, remove_callback, 64, FTW_DEPTH | FTW_PHYS);
     return xr_bool(ret == 0);
+#endif
 }
 
 // chmod(path, mode) - Change file permissions
@@ -636,8 +707,8 @@ static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
     if (!XR_IS_INT(args[1]))
         return xr_bool(false);
 
-    mode_t mode = (mode_t) XR_TO_INT(args[1]);
-    return xr_bool(chmod(path, mode) == 0);
+    int mode = (int) XR_TO_INT(args[1]);
+    return xr_bool(_chmod(path, mode) == 0);
 }
 
 // touch(path) - Create empty file or update timestamp
@@ -650,7 +721,7 @@ static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     // Try to update timestamp
-    if (utime(path, NULL) == 0)
+    if (_utime(path, NULL) == 0)
         return xr_bool(true);
 
     // File doesn't exist, create empty file
@@ -671,7 +742,16 @@ static XrValue io_symlink(XrayIsolate *X, XrValue *args, int argc) {
     if (!target || !path)
         return xr_bool(false);
 
+#ifdef XR_OS_WINDOWS
+    DWORD flags = 0;
+    DWORD attrs = GetFileAttributesA(target);
+    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
+        flags |= SYMBOLIC_LINK_FLAG_DIRECTORY;
+    flags |= SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
+    return xr_bool(CreateSymbolicLinkA(path, target, flags) != 0);
+#else
     return xr_bool(symlink(target, path) == 0);
+#endif
 }
 
 // readlink(path) - Read symbolic link target
@@ -682,12 +762,29 @@ static XrValue io_readlink(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    char buf[PATH_MAX];
+    char buf[XR_PATH_MAX];
+#ifdef XR_OS_WINDOWS
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                           OPEN_EXISTING,
+                           FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return xr_null();
+    DWORD len = GetFinalPathNameByHandleA(h, buf, sizeof(buf), FILE_NAME_NORMALIZED);
+    CloseHandle(h);
+    if (len == 0 || len >= sizeof(buf))
+        return xr_null();
+    // Strip \\?\ prefix if present
+    const char *result = buf;
+    if (len >= 4 && buf[0] == '\\' && buf[1] == '\\' && buf[2] == '?' && buf[3] == '\\')
+        result = buf + 4;
+    return xrs_string_value_c(X, result);
+#else
     ssize_t len = readlink(path, buf, sizeof(buf) - 1);
     if (len < 0)
         return xr_null();
     buf[len] = '\0';
     return xrs_string_value_c(X, buf);
+#endif
 }
 
 // realpath(path) - Get resolved absolute path
@@ -698,8 +795,8 @@ static XrValue io_realpath(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    char resolved[PATH_MAX];
-    if (realpath(path, resolved) == NULL)
+    char resolved[XR_PATH_MAX];
+    if (xr_fs_realpath(path, resolved, sizeof(resolved)) == NULL)
         return xr_null();
     return xrs_string_value_c(X, resolved);
 }
@@ -727,7 +824,16 @@ static XrValue io_tempFile(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    char tpl[PATH_MAX];
+    char tpl[XR_PATH_MAX];
+#ifdef XR_OS_WINDOWS
+    char tmpdir[MAX_PATH];
+    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
+        return xr_null();
+    char tmpfile[MAX_PATH];
+    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
+        return xr_null();
+    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
+#else
     int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
     if (n <= 0 || n >= (int) sizeof(tpl))
         return xr_null();
@@ -735,6 +841,7 @@ static XrValue io_tempFile(XrayIsolate *X, XrValue *args, int argc) {
     if (fd < 0)
         return xr_null();
     close(fd);
+#endif
     return xrs_string_value_c(X, tpl);
 }
 
@@ -743,12 +850,26 @@ static XrValue io_tempDir(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    char tpl[PATH_MAX];
+    char tpl[XR_PATH_MAX];
+#ifdef XR_OS_WINDOWS
+    char tmpdir[MAX_PATH];
+    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
+        return xr_null();
+    char tmpfile[MAX_PATH];
+    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
+        return xr_null();
+    // GetTempFileName creates a file; remove it and create dir instead
+    DeleteFileA(tmpfile);
+    if (!CreateDirectoryA(tmpfile, NULL))
+        return xr_null();
+    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
+#else
     int n = snprintf(tpl, sizeof(tpl), "%s/xray_XXXXXX", io_tempdir_root());
     if (n <= 0 || n >= (int) sizeof(tpl))
         return xr_null();
     if (mkdtemp(tpl) == NULL)
         return xr_null();
+#endif
     return xrs_string_value_c(X, tpl);
 }
 
@@ -763,7 +884,7 @@ typedef struct {
 } ReadDirCtx;
 
 // readDirRecursive helper function.
-// Skips entries whose composed full path does not fit into PATH_MAX instead
+// Skips entries whose composed full path does not fit into XR_PATH_MAX instead
 // of silently truncating, and descends only into real directories (symlinks
 // are intentionally not followed, mirroring POSIX `find -xdev` semantics).
 static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth) {
@@ -775,10 +896,10 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
 
     XrDirEntry e;
     while (xr_dir_next(it, &e)) {
-        char fullpath[PATH_MAX];
+        char fullpath[XR_PATH_MAX];
         int wrote = snprintf(fullpath, sizeof(fullpath), "%s/%s", path, e.name);
         if (wrote <= 0 || wrote >= (int) sizeof(fullpath)) {
-            // Entry would overflow PATH_MAX; skip rather than report a
+            // Entry would overflow XR_PATH_MAX; skip rather than report a
             // truncated path to the caller.
             continue;
         }
@@ -790,14 +911,21 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
         XrValue name = xrs_string_value_c(ctx->X, relpath);
         xr_array_push(ctx->arr, name);
 
-        // Recursively enter real subdirectories only. xr_dir_next's
-        // is_dir uses stat() as a fallback which would follow symlinks,
-        // so we re-check with lstat to preserve the no-symlink-traversal
-        // contract (prevents escape via bind mounts or malicious links).
+        // Recursively enter real subdirectories only, without following
+        // symlinks (prevents escape via bind mounts or malicious links).
+#ifdef XR_OS_WINDOWS
+        DWORD attrs = GetFileAttributesA(fullpath);
+        if (attrs != INVALID_FILE_ATTRIBUTES &&
+            (attrs & FILE_ATTRIBUTE_DIRECTORY) &&
+            !(attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
+            read_dir_recursive_impl(ctx, fullpath, depth + 1);
+        }
+#else
         struct stat st;
         if (lstat(fullpath, &st) == 0 && S_ISDIR(st.st_mode)) {
             read_dir_recursive_impl(ctx, fullpath, depth + 1);
         }
+#endif
     }
 
     xr_dir_close(it);
@@ -810,7 +938,7 @@ static XrValue io_readDirRecursive(XrayIsolate *X, XrValue *args, int argc) {
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
         return xr_null();
-    XR_DCHECK(strlen(path) < PATH_MAX, "io_readDirRecursive: path within bounds");
+    XR_DCHECK(strlen(path) < XR_PATH_MAX, "io_readDirRecursive: path within bounds");
 
     XrArray *arr = xr_array_new(xr_current_coro(X));
     if (!arr)

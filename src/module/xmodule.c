@@ -499,7 +499,7 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
         return NULL;
 
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    char path[PATH_MAX];
+    char path[XR_PATH_MAX];
 
     // 1. Absolute path: return directly
     if (module_name[0] == '/') {
@@ -507,7 +507,7 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     }
 
     // Get current module directory (prefer path of currently executing module)
-    char dir_buf[PATH_MAX];
+    char dir_buf[XR_PATH_MAX];
     const char *script_dir = NULL;
 
     // Prefer current module's path (supports relative imports within module)
@@ -569,13 +569,13 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
 
                 // Read version from xray.lock if present
                 if (xr_isolate_get_script_file(isolate)) {
-                    char lock_dir[PATH_MAX];
+                    char lock_dir[XR_PATH_MAX];
                     strncpy(lock_dir, xr_isolate_get_script_file(isolate), sizeof(lock_dir) - 1);
                     lock_dir[sizeof(lock_dir) - 1] = '\0';
                     char *ls = strrchr(lock_dir, '/');
                     if (ls)
                         *ls = '\0';
-                    char lock_path[PATH_MAX];
+                    char lock_path[XR_PATH_MAX];
                     snprintf(lock_path, sizeof(lock_path), "%s/xray.lock", lock_dir);
                     lock = xr_lockfile_load(lock_path);
                 }
@@ -620,7 +620,7 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
                 xr_lockfile_free(lock);
 
                 // Fallback: scan version directories (no lockfile)
-                char pkg_base[PATH_MAX];
+                char pkg_base[XR_PATH_MAX];
                 snprintf(pkg_base, sizeof(pkg_base), "%s/.xray/packages/%s/%s", home, owner, name);
                 XrDirIter *vdir = xr_dir_open(pkg_base);
                 if (vdir) {
@@ -711,7 +711,7 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
     xr_isolate_set_current_module(isolate, module);
 
     void *code = NULL;
-    char path[PATH_MAX];
+    char path[XR_PATH_MAX];
     char *source = NULL;
 
     // Load script extension from file system (stdlib/<name>/<name>.xr)
@@ -1000,11 +1000,11 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
     if (!home)
         return NULL;
 
-    char pkg_dir[PATH_MAX];
+    char pkg_dir[XR_PATH_MAX];
     snprintf(pkg_dir, sizeof(pkg_dir), "%s/.xray/packages/%s/%s/latest", home, owner, name);
 
     // 3. Find native library (try platform-preferred suffix first)
-    char lib_path[PATH_MAX];
+    char lib_path[XR_PATH_MAX];
     static const char *suffixes[] = {
 #ifdef XR_OS_MACOS
         ".dylib", ".so"
@@ -1304,13 +1304,13 @@ static const StdlibEntry stdlib_crypto[] = {
 };
 #endif
 
-#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
+#if XR_HAS_COMPRESS
 static const StdlibEntry stdlib_compress[] = {
     {"compress", xr_load_module_compress},
 };
 #endif
 
-#if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
+#if XR_HAS_CLUSTER
 static const StdlibEntry stdlib_cluster[] = {
     {"cluster", xr_load_module_cluster},
 };
@@ -1348,10 +1348,10 @@ void xr_module_register_stdlib(XrayIsolate *isolate) {
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
     REGISTER_TABLE(stdlib_crypto);
 #endif
-#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
+#if XR_HAS_COMPRESS
     REGISTER_TABLE(stdlib_compress);
 #endif
-#if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
+#if XR_HAS_CLUSTER
     REGISTER_TABLE(stdlib_cluster);
 #endif
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)

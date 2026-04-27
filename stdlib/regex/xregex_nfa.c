@@ -115,7 +115,7 @@ typedef struct {
 } XrNFAContext;
 
 // Thread-local NFA context
-static __thread XrNFAContext g_nfa_ctx = {0};
+static XR_THREAD_LOCAL XrNFAContext g_nfa_ctx = {0};
 
 // Get or initialize NFA context
 static XrNFAContext *nfa_context_get(int inst_count) {

@@ -21,7 +21,7 @@
  *   RT_PRINT, RT_ARRAY_x, RT_MAP_x, RT_INDEX_x, RT_ISNULL
  */
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(_M_X64)
 
 #include "xir_codegen_x64_internal.h"
 #include "xir_offsets.h"
@@ -447,4 +447,4 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
     return true; /* handled */
 }
 
-#endif /* __x86_64__ */
+#endif /* __x86_64__ || _M_X64 */

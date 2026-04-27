@@ -229,7 +229,7 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
             base[a] = xr_bool(false);
             break;
         }
-        sched_yield();
+        xr_thread_yield();
     }
     return VM_COLD_BREAK;
 }
@@ -318,7 +318,7 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
             base[a] = xr_null();
             break;
         }
-        sched_yield();
+        xr_thread_yield();
     }
     return VM_COLD_BREAK;
 }

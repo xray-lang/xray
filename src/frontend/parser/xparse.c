@@ -763,12 +763,10 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
 
     xr_scanner_init_with_trivia(&parser->scanner, source, collect_trivia);
 
+    memset(&parser->current, 0, sizeof(parser->current));
     parser->current.type = TK_ERROR;
-    parser->current.leading_trivia = NULL;
-    parser->current.trailing_trivia = NULL;
+    memset(&parser->previous, 0, sizeof(parser->previous));
     parser->previous.type = TK_ERROR;
-    parser->previous.leading_trivia = NULL;
-    parser->previous.trailing_trivia = NULL;
 
     parser->type_scope = xr_type_scope_new(NULL);
 

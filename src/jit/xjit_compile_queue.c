@@ -125,7 +125,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     // This eliminates data races between workers and the main thread.
 #if defined(__aarch64__)
     XirCodegenResult res = xir_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(_M_X64)
     XirCodegenResult res = xir_codegen_x64(func, &q->worker_code_alloc[worker_id]);
 #else
     XirCodegenResult res = {.success = false, .error = "unsupported architecture"};

@@ -69,7 +69,12 @@ XrJitResult xr_jit_call_self(XrCoroutine *coro, int64_t unused) {
         return (XrJitResult){XIR_DEOPT_MARKER, 0};
 
     // Recursive JIT call: same calling convention (coro, args_ptr)
+#ifdef _WIN32
+    int64_t payload = ((XirJitFn) proto->jit_entry)((intptr_t) coro, coro->jit_ctx->call_args);
+    return (XrJitResult){payload, (uint64_t) coro->jit_ctx->call_result_tag};
+#else
     return ((XirJitFn) proto->jit_entry)((intptr_t) coro, coro->jit_ctx->call_args);
+#endif
 }
 
 /* ========== JIT Yield Frame Pre-push ========== */
@@ -2057,8 +2062,14 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
                 tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i]));
             coro->jit_ctx->param_tags[i] = (int64_t) tag;
         }
+#ifdef _WIN32
+        int64_t payload =
+            ((XirJitFn) proto->jit_entry)((intptr_t) coro, &coro->jit_ctx->call_args[1]);
+        XrJitResult ret = {payload, (uint64_t) coro->jit_ctx->call_result_tag};
+#else
         XrJitResult ret =
             ((XirJitFn) proto->jit_entry)((intptr_t) coro, &coro->jit_ctx->call_args[1]);
+#endif
         coro->jit_ctx->call_proto = saved_proto;
         coro->jit_ctx->call_closure = saved_closure;
         if (ret.payload != XIR_DEOPT_MARKER)
@@ -2120,17 +2131,22 @@ bool xir_jit_osr_enter(void *osr_entry, XrCoroutine *coro, int64_t *values, uint
     if (!osr_entry || !result)
         return false;
 
-    XrJitResult jr = ((XirJitFn) osr_entry)((intptr_t) coro, values);
-
-    if (jr.payload == XIR_DEOPT_MARKER) {
+#ifdef _WIN32
+    int64_t payload = ((XirJitFn) osr_entry)((intptr_t) coro, values);
+    if (payload == XIR_DEOPT_MARKER)
         return false;
-    }
-
+    uint8_t tag = (uint8_t) coro->jit_ctx->call_result_tag;
+#else
+    XrJitResult jr = ((XirJitFn) osr_entry)((intptr_t) coro, values);
+    if (jr.payload == XIR_DEOPT_MARKER)
+        return false;
+    int64_t payload = jr.payload;
     uint8_t tag = (uint8_t) jr.tag;
+#endif
     if (tag == XR_RTAG_UNKNOWN) {
-        *result = jit_value_from_tag(jr.payload, slot_type_to_xr_tag(return_type));
+        *result = jit_value_from_tag(payload, slot_type_to_xr_tag(return_type));
     } else {
-        *result = jit_value_from_tag(jr.payload, tag);
+        *result = jit_value_from_tag(payload, tag);
     }
     return true;
 }
@@ -2233,9 +2249,14 @@ int xir_jit_osr_trigger(XirJitState *jit, XrProto *proto, XrCoroutine *coro, uin
 
     // Step 6: enter JIT at loop header
     int saved_id = coro->id;  // save before JIT call (coro may be resumed by another worker)
+#ifdef _WIN32
+    int64_t osr_payload = ((XirJitFn) osr_entry)((intptr_t) coro, values);
+#else
     XrJitResult osr_jr = ((XirJitFn) osr_entry)((intptr_t) coro, values);
+    int64_t osr_payload = osr_jr.payload;
+#endif
 
-    if (osr_jr.payload == XIR_DEOPT_MARKER) {
+    if (osr_payload == XIR_DEOPT_MARKER) {
         // JIT ran but deoptimized mid-function. It may have produced
         // side effects (spawned coroutines, pushed to arrays, etc.).
         // Recover interpreter state from deopt info so the interpreter
@@ -2249,7 +2270,7 @@ int xir_jit_osr_trigger(XirJitState *jit, XrProto *proto, XrCoroutine *coro, uin
         return XIR_JIT_DEOPT;
     }
 
-    if (osr_jr.payload == XIR_SUSPEND_MARKER) {
+    if (osr_payload == XIR_SUSPEND_MARKER) {
         // JIT suspended at channel/await blocking point during OSR.
         // resume_entry/proto already set by XIR_SUSPEND codegen.
         // Return XIR_JIT_SUSPEND on the stack — no racy side-channel needed.
@@ -2257,11 +2278,15 @@ int xir_jit_osr_trigger(XirJitState *jit, XrProto *proto, XrCoroutine *coro, uin
         return XIR_JIT_SUSPEND;
     }
 
+#ifdef _WIN32
+    uint8_t osr_tag = (uint8_t) coro->jit_ctx->call_result_tag;
+#else
     uint8_t osr_tag = (uint8_t) osr_jr.tag;
+#endif
     if (osr_tag == XR_RTAG_UNKNOWN) {
-        *result = jit_value_from_tag(osr_jr.payload, slot_type_to_xr_tag(return_type));
+        *result = jit_value_from_tag(osr_payload, slot_type_to_xr_tag(return_type));
     } else {
-        *result = jit_value_from_tag(osr_jr.payload, osr_tag);
+        *result = jit_value_from_tag(osr_payload, osr_tag);
     }
     return XIR_JIT_OK;
 }
