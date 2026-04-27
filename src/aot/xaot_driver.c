@@ -694,9 +694,9 @@ static XirAotImportEntry *build_export_map(XaotModuleInfo *modules, int nmodules
 /* Assemble the complete C program: headers + transpiled source + main().
  * Returns malloc'd string.  Caller frees via xr_free(). */
 static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, int nmodules) {
-    /* Estimate total size: headers ~100 + source + main (~50 per module) */
+    /* Estimate total size: headers ~100 + source + main (~80 per module + 128 init/cleanup) */
     size_t src_len = aot_source ? strlen(aot_source) : 0;
-    size_t est = 256 + src_len + (size_t) nmodules * 60;
+    size_t est = 512 + src_len + (size_t) nmodules * 80;
     char *buf = (char *) xr_malloc(est);
     if (!buf)
         return NULL;
@@ -711,7 +711,7 @@ static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, 
     if (aot_source && src_len > 0) {
         /* Grow buffer if source is larger than estimate */
         if (pos + src_len + 128 > est) {
-            est = pos + src_len + 256 + (size_t) nmodules * 60;
+            est = pos + src_len + 512 + (size_t) nmodules * 80;
             char *tmp = (char *) xr_realloc(buf, est);
             if (!tmp) {
                 xr_free(buf);
@@ -727,7 +727,9 @@ static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, 
     pos += (size_t) snprintf(buf + pos, est - pos,
         "/* --- Standalone Main (multi-module, no VM) --- */\n"
         "\nint main(int argc, char **argv) {\n"
-        "    (void)argc; (void)argv;\n");
+        "    (void)argc; (void)argv;\n"
+        "    xrt_bump_enabled = 1;\n"
+        "    xrt_arc_init();\n");
 
     for (int m = 0; m < nmodules; m++) {
         if (!modules[m].cmod)
@@ -744,6 +746,7 @@ static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, 
             pos += (size_t) snprintf(buf + pos, est - pos, "    %s(NULL);\n", init_name);
     }
     pos += (size_t) snprintf(buf + pos, est - pos,
+        "    xrt_bump_destroy();\n"
         "    return 0;\n"
         "}\n");
 
