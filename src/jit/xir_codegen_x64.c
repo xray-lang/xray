@@ -41,7 +41,6 @@
 
 /* Forward declarations for helpers (defined after emit_xir_ins).
  * These are XR_FUNC (not static) so xir_codegen_x64_call.c can use them. */
-static inline uint8_t const_rep_to_value_tag(uint8_t rep);
 
 /* ========== Register Mapping Tables ========== */
 
@@ -1478,14 +1477,149 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
             break;
         }
 
-        case XIR_RT_PRINT:
         case XIR_RT_ARRAY_NEW:
-        case XIR_RT_ARRAY_PUSH:
+        case XIR_RT_MAP_NEW: {
+            /* Inline CALL_C: alloc array/map via runtime helper.
+             * args[0] = capacity, dst = result ptr. */
+            x64_emit_ptr_spill_writeback(ctx);
+
+            uint32_t smap_id = x64_record_safepoint(ctx);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* extra_arg = capacity */
+            if (xir_ref_is_const(ins->args[0])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[0]);
+                uint64_t cval = (uint64_t) ctx->func->consts[ci].val.raw;
+                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, cval);
+            } else {
+                X64Reg r = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+                if (r != X64_SCRATCH_REG)
+                    x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, r);
+            }
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+
+            /* Clear deopt_id */
+            x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* Load runtime helper pointer */
+            void *fn = (ins->op == XIR_RT_ARRAY_NEW)
+                           ? (void *) (uintptr_t) xr_jit_rt_array_new
+                           : (void *) (uintptr_t) xr_jit_rt_map_new;
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
+
+            /* CALL call_c_stub */
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p_an = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE8);
+            p_an->emit_pos = ctx->buf.pos;
+            p_an->target_blk = 0;
+            p_an->type = X64_PATCH_CALL_C;
+            p_an->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_call_c = true;
+
+            /* Result ptr in RAX */
+            if (xir_ref_is_vreg(ins->dst) && rd != X64_RAX)
+                x64_mov_rr(&ctx->buf, rd, X64_RAX);
+            break;
+        }
+
+        case XIR_RT_ARRAY_PUSH: {
+            /* Inline CALL_C: push value into array.
+             * args[0] = array ptr, args[1] = value to push. */
+            x64_emit_ptr_spill_writeback(ctx);
+
+            uint32_t smap_id_ap = x64_record_safepoint(ctx);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id_ap);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* Store call_args[0] = array ptr */
+            int32_t ca0 = (int32_t) XIR_JIT_CALL_ARGS_OFFSET;
+            X64Reg arr_r = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, ca0, arr_r);
+
+            /* Store call_args[1] = value payload */
+            int32_t ca1 = (int32_t) (XIR_JIT_CALL_ARGS_OFFSET + 8);
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                uint64_t cval = (uint64_t) ctx->func->consts[ci].val.raw;
+                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, cval);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, ca1, X64_SCRATCH_REG);
+            } else {
+                X64Reg vr = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, ca1, vr);
+            }
+
+            /* Store call_arg_tags: tag[0]=PTR(arr), tag[1]=inferred */
+            uint8_t t0 = 4; /* XR_TAG_PTR */
+            uint8_t t1 = XR_RTAG_UNKNOWN;
+            if (xir_ref_is_const(ins->args[1])) {
+                uint32_t ci = XIR_REF_INDEX(ins->args[1]);
+                t1 = const_rep_to_value_tag(ctx->func->consts[ci].rep);
+            } else {
+                XirType ct = xir_ref_ctype(ctx->func, ins->args[1]);
+                uint8_t vk = type_kind_to_vtag(ct.kind);
+                if (vtag_is_concrete(vk))
+                    t1 = vtag_to_value_tag(vk);
+            }
+            uint64_t tpk = (uint64_t) t0 | ((uint64_t) t1 << 8);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tpk);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
+
+            /* Dynamic tag patch: if t1 unknown, read from slot_runtime_tags */
+            if (t1 == XR_RTAG_UNKNOWN && xir_ref_is_vreg(ins->args[1])) {
+                uint32_t ai = XIR_REF_INDEX(ins->args[1]);
+                if (ai < ctx->func->nvreg) {
+                    int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
+                    if (bc_slot >= 0 && bc_slot < 256) {
+                        int32_t soff = (int32_t) XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+                        int32_t doff = (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET + 1;
+                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG,
+                                      X64_JIT_CTX_REG, soff);
+                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG,
+                                    doff, X64_SCRATCH_REG);
+                    }
+                }
+            }
+
+            /* extra_arg = 0, deopt_id = 0 (already zeroed together) */
+            x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
+                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
+                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+
+            /* Load runtime helper pointer */
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+
+            /* CALL call_c_stub */
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *p_ap = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE8);
+            p_ap->emit_pos = ctx->buf.pos;
+            p_ap->target_blk = 0;
+            p_ap->type = X64_PATCH_CALL_C;
+            p_ap->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_call_c = true;
+            break;
+        }
+
+        case XIR_RT_PRINT:
         case XIR_RT_ARRAY_LEN:
-        case XIR_RT_MAP_NEW:
         case XIR_RT_INDEX_GET:
         case XIR_RT_INDEX_SET:
-            /* These are handled via CALL_C in the builder; shouldn't reach here */
+            /* Not yet lowered to CALL_C */
             xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
             break;
 
@@ -1762,19 +1896,7 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
 
 /* ========== Call Helpers ========== */
 
-/* Derive XR_TAG_* from const rep for call_arg_tags[] */
-static inline uint8_t const_rep_to_value_tag(uint8_t rep) {
-    switch (rep) {
-        case XR_REP_I64:
-            return 3; /* XR_TAG_I64 */
-        case XR_REP_F64:
-            return 4; /* XR_TAG_F64 */
-        case XR_REP_PTR:
-            return 5; /* XR_TAG_PTR */
-        default:
-            return 0xFF; /* XR_RTAG_UNKNOWN */
-    }
-}
+/* const_rep_to_value_tag: moved to xir_codegen_x64_internal.h */
 
 /* Store call arguments from the pool to jit_ctx->call_args[] and
  * compile-time type tags to jit_ctx->call_arg_tags[]. */
