@@ -234,8 +234,10 @@ typedef struct XiBlock {
     uint16_t npreds;
     uint16_t preds_cap;
 
-    /* Ordering */
+    /* Ordering & dominance */
     uint32_t rpo;             /* reverse post-order index (0 = not computed) */
+    struct XiBlock *idom;     /* immediate dominator (NULL for entry) */
+    uint16_t dom_depth;       /* depth in dominator tree (entry = 0) */
 
     /* Braun SSA: block sealing.
      * A block is sealed when all its predecessors are known.
