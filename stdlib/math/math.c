@@ -341,9 +341,14 @@ static XrValue math_min(XrayIsolate *X, XrValue *args, int argc) {
         }
         return xr_int(result);
     }
+    /* IEEE-754 NaN propagation: any NaN argument produces NaN. */
     double result = get_number(args[0]);
+    if (isnan(result))
+        return xr_float(NAN);
     for (int i = 1; i < argc; i++) {
         double v = get_number(args[i]);
+        if (isnan(v))
+            return xr_float(NAN);
         if (v < result)
             result = v;
     }
@@ -370,9 +375,14 @@ static XrValue math_max(XrayIsolate *X, XrValue *args, int argc) {
         }
         return xr_int(result);
     }
+    /* IEEE-754 NaN propagation: any NaN argument produces NaN. */
     double result = get_number(args[0]);
+    if (isnan(result))
+        return xr_float(NAN);
     for (int i = 1; i < argc; i++) {
         double v = get_number(args[i]);
+        if (isnan(v))
+            return xr_float(NAN);
         if (v > result)
             result = v;
     }
@@ -387,6 +397,11 @@ static XrValue math_clamp(XrayIsolate *X, XrValue *args, int argc) {
         int64_t x = XR_TO_INT(args[0]);
         int64_t lo = XR_TO_INT(args[1]);
         int64_t hi = XR_TO_INT(args[2]);
+        if (lo > hi) {
+            int64_t tmp = lo;
+            lo = hi;
+            hi = tmp;
+        }
         if (x < lo)
             return xr_int(lo);
         if (x > hi)
@@ -396,6 +411,13 @@ static XrValue math_clamp(XrayIsolate *X, XrValue *args, int argc) {
     double x = get_number(args[0]);
     double lo = get_number(args[1]);
     double hi = get_number(args[2]);
+    if (isnan(x) || isnan(lo) || isnan(hi))
+        return xr_float(NAN);
+    if (lo > hi) {
+        double tmp = lo;
+        lo = hi;
+        hi = tmp;
+    }
     if (x < lo)
         return xr_float(lo);
     if (x > hi)
@@ -431,8 +453,9 @@ static XrValue math_randomInt(XrayIsolate *X, XrValue *args, int argc) {
     if (min_val == max_val)
         return xr_int(min_val);
 
-    // Use unsigned arithmetic to avoid overflow when range spans full int64
-    uint64_t range = (uint64_t) (max_val - min_val) + 1;
+    /* Pure unsigned arithmetic avoids signed overflow UB when the
+     * range spans a large portion of int64 (e.g. INT64_MIN..INT64_MAX). */
+    uint64_t range = (uint64_t) max_val - (uint64_t) min_val + 1;
     uint64_t r;
 
     if (range == 0) {
@@ -446,7 +469,9 @@ static XrValue math_randomInt(XrayIsolate *X, XrValue *args, int argc) {
         } while (r < threshold);
         r = r % range;
     }
-    return xr_int(min_val + (int64_t) r);
+    /* Cast through unsigned so the addition wraps predictably on
+     * 2's-complement (mandated by C23, universal in practice). */
+    return xr_int((int64_t) ((uint64_t) min_val + r));
 }
 
 /* ========== Utilities ========== */
@@ -456,6 +481,8 @@ static XrValue math_sign(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(0);
     double v = get_number(args[0]);
+    if (isnan(v))
+        return xr_float(NAN);
     if (v > 0)
         return xr_int(1);
     if (v < 0)
@@ -477,6 +504,8 @@ static XrValue math_isFinite(XrayIsolate *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
+    if (XR_IS_INT(args[0]))
+        return xr_bool(true);  /* integers are always finite */
     double v = get_number(args[0]);
     return xr_bool(isfinite(v));
 }
@@ -530,7 +559,7 @@ XR_DEFINE_BUILTIN(math_isFinite, "isFinite", "(x: float): bool", "Check if finit
 
 /* ========== Module Loading ========== */
 
-XrModule *xr_load_module_math(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_math(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_math: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "math");

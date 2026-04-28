@@ -20,9 +20,11 @@
 #ifndef XR_STDLIB_MATH_H
 #define XR_STDLIB_MATH_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/base/xdefs.h"
 
-XrModule *xr_load_module_math(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_math(struct XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_MATH_H
