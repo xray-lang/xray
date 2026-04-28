@@ -426,8 +426,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
 
             uint32_t smap_id = x64_record_safepoint(ctx);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* extra_arg = capacity */
             if (xir_ref_is_const(ins->args[0])) {
@@ -439,18 +439,16 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                 if (r != X64_SCRATCH_REG)
                     x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, r);
             }
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
 
             /* Clear deopt_id */
             x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_DEOPT_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* Load runtime helper pointer */
-            void *fn = (ins->op == XIR_RT_ARRAY_NEW)
-                           ? (void *) (uintptr_t) xr_jit_rt_array_new
-                           : (void *) (uintptr_t) xr_jit_rt_map_new;
+            void *fn = (ins->op == XIR_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
+                                                     : (void *) (uintptr_t) xr_jit_rt_map_new;
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
             /* CALL call_c_stub */
@@ -478,8 +476,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
 
             uint32_t smap_id = x64_record_safepoint(ctx);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* Store call_args[0] = array ptr */
             int32_t off0 = (int32_t) XIR_JIT_CALL_ARGS_OFFSET;
@@ -512,8 +510,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             }
             uint64_t tag_pack = (uint64_t) tag0 | ((uint64_t) tag1 << 8);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack);
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                       (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET,
+                       X64_SCRATCH_REG);
 
             /* Dynamic tag patch: if tag1 unknown, read from slot_runtime_tags */
             if (tag1 == XR_RTAG_UNKNOWN && xir_ref_is_vreg(ins->args[1])) {
@@ -523,26 +521,22 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                     if (bc_slot >= 0 && bc_slot < 256) {
                         int32_t src_off = (int32_t) XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
                         int32_t dst_off = (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET + 1;
-                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG,
-                                      X64_JIT_CTX_REG, src_off);
-                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG,
-                                    dst_off, X64_SCRATCH_REG);
+                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
+                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst_off, X64_SCRATCH_REG);
                     }
                 }
             }
 
             /* extra_arg = 0 (unused) */
             x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
 
             /* Clear deopt_id */
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_DEOPT_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* Load runtime helper pointer */
-            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
-                           (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
 
             /* CALL call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");

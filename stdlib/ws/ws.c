@@ -28,7 +28,6 @@
 #include <string.h>
 #include <errno.h>
 
-
 #ifdef XR_OS_MACOS
 #include <CommonCrypto/CommonDigest.h>
 #define SHA1(data, len, hash) CC_SHA1(data, (CC_LONG) (len), hash)

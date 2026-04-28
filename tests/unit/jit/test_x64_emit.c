@@ -14,25 +14,25 @@
 #include <stdio.h>
 #include <string.h>
 #include "../../src/jit/xir_x64.h"
+#include "../test_win_compat.h"
 
 /* ========== Test Helpers ========== */
 
 #define BUF_SIZE 64
 
 static uint8_t g_mem[BUF_SIZE];
-static X64Buf  g_buf;
+static X64Buf g_buf;
 
 static void reset(void) {
-    memset(g_mem, 0xCC, BUF_SIZE);  /* fill with INT3 for safety */
+    memset(g_mem, 0xCC, BUF_SIZE); /* fill with INT3 for safety */
     x64_buf_init(&g_buf, g_mem, BUF_SIZE);
 }
 
 /* Assert emitted bytes match expected */
-static void check_bytes(const char *test_name, const uint8_t *expected,
-                        uint32_t expected_len) {
+static void check_bytes(const char *test_name, const uint8_t *expected, uint32_t expected_len) {
     if (g_buf.pos != expected_len) {
-        fprintf(stderr, "  FAIL %s: length %u != expected %u\n",
-                test_name, g_buf.pos, expected_len);
+        fprintf(stderr, "  FAIL %s: length %u != expected %u\n", test_name, g_buf.pos,
+                expected_len);
         assert(g_buf.pos == expected_len);
     }
     if (memcmp(g_mem, expected, expected_len) != 0) {
@@ -54,7 +54,7 @@ static void check_bytes(const char *test_name, const uint8_t *expected,
 static void test_add_rr_low(void) {
     reset();
     x64_add_rr(&g_buf, X64_RAX, X64_RCX);
-    uint8_t exp[] = { 0x48, 0x01, 0xC8 };
+    uint8_t exp[] = {0x48, 0x01, 0xC8};
     check_bytes("add_rr_low", exp, sizeof(exp));
 }
 
@@ -63,7 +63,7 @@ static void test_add_rr_high(void) {
     reset();
     x64_add_rr(&g_buf, X64_R8, X64_R9);
     /* R9(src)>7 â†?REX.R, R8(dst)>7 â†?REX.B */
-    uint8_t exp[] = { 0x4D, 0x01, 0xC8 };
+    uint8_t exp[] = {0x4D, 0x01, 0xC8};
     check_bytes("add_rr_high", exp, sizeof(exp));
 }
 
@@ -71,7 +71,7 @@ static void test_add_rr_high(void) {
 static void test_add_ri_imm8(void) {
     reset();
     x64_add_ri(&g_buf, X64_RBX, 42);
-    uint8_t exp[] = { 0x48, 0x83, 0xC3, 0x2A };
+    uint8_t exp[] = {0x48, 0x83, 0xC3, 0x2A};
     check_bytes("add_ri_imm8", exp, sizeof(exp));
 }
 
@@ -79,7 +79,7 @@ static void test_add_ri_imm8(void) {
 static void test_add_ri_imm32(void) {
     reset();
     x64_add_ri(&g_buf, X64_RBX, 0x1000);
-    uint8_t exp[] = { 0x48, 0x81, 0xC3, 0x00, 0x10, 0x00, 0x00 };
+    uint8_t exp[] = {0x48, 0x81, 0xC3, 0x00, 0x10, 0x00, 0x00};
     check_bytes("add_ri_imm32", exp, sizeof(exp));
 }
 
@@ -87,7 +87,7 @@ static void test_add_ri_imm32(void) {
 static void test_sub_rr(void) {
     reset();
     x64_sub_rr(&g_buf, X64_RDX, X64_RSI);
-    uint8_t exp[] = { 0x48, 0x29, 0xF2 };
+    uint8_t exp[] = {0x48, 0x29, 0xF2};
     check_bytes("sub_rr", exp, sizeof(exp));
 }
 
@@ -95,7 +95,7 @@ static void test_sub_rr(void) {
 static void test_sub_ri_high(void) {
     reset();
     x64_sub_ri(&g_buf, X64_R12, 10);
-    uint8_t exp[] = { 0x49, 0x83, 0xEC, 0x0A };
+    uint8_t exp[] = {0x49, 0x83, 0xEC, 0x0A};
     check_bytes("sub_ri_high", exp, sizeof(exp));
 }
 
@@ -103,7 +103,7 @@ static void test_sub_ri_high(void) {
 static void test_imul_rr(void) {
     reset();
     x64_imul_rr(&g_buf, X64_RDI, X64_RSI);
-    uint8_t exp[] = { 0x48, 0x0F, 0xAF, 0xFE };
+    uint8_t exp[] = {0x48, 0x0F, 0xAF, 0xFE};
     check_bytes("imul_rr", exp, sizeof(exp));
 }
 
@@ -111,7 +111,7 @@ static void test_imul_rr(void) {
 static void test_neg(void) {
     reset();
     x64_neg_r(&g_buf, X64_RCX);
-    uint8_t exp[] = { 0x48, 0xF7, 0xD9 };
+    uint8_t exp[] = {0x48, 0xF7, 0xD9};
     check_bytes("neg", exp, sizeof(exp));
 }
 
@@ -119,7 +119,7 @@ static void test_neg(void) {
 static void test_cqo(void) {
     reset();
     x64_cqo(&g_buf);
-    uint8_t exp[] = { 0x48, 0x99 };
+    uint8_t exp[] = {0x48, 0x99};
     check_bytes("cqo", exp, sizeof(exp));
 }
 
@@ -127,7 +127,7 @@ static void test_cqo(void) {
 static void test_idiv(void) {
     reset();
     x64_idiv_r(&g_buf, X64_RBX);
-    uint8_t exp[] = { 0x48, 0xF7, 0xFB };
+    uint8_t exp[] = {0x48, 0xF7, 0xFB};
     check_bytes("idiv", exp, sizeof(exp));
 }
 
@@ -137,7 +137,7 @@ static void test_idiv(void) {
 static void test_and_rr(void) {
     reset();
     x64_and_rr(&g_buf, X64_RCX, X64_RDX);
-    uint8_t exp[] = { 0x48, 0x21, 0xD1 };
+    uint8_t exp[] = {0x48, 0x21, 0xD1};
     check_bytes("and_rr", exp, sizeof(exp));
 }
 
@@ -145,7 +145,7 @@ static void test_and_rr(void) {
 static void test_or_rr(void) {
     reset();
     x64_or_rr(&g_buf, X64_RAX, X64_RDI);
-    uint8_t exp[] = { 0x48, 0x09, 0xF8 };
+    uint8_t exp[] = {0x48, 0x09, 0xF8};
     check_bytes("or_rr", exp, sizeof(exp));
 }
 
@@ -153,7 +153,7 @@ static void test_or_rr(void) {
 static void test_xor_rr(void) {
     reset();
     x64_xor_rr(&g_buf, X64_RDX, X64_RDX);
-    uint8_t exp[] = { 0x48, 0x31, 0xD2 };
+    uint8_t exp[] = {0x48, 0x31, 0xD2};
     check_bytes("xor_rr", exp, sizeof(exp));
 }
 
@@ -161,7 +161,7 @@ static void test_xor_rr(void) {
 static void test_not(void) {
     reset();
     x64_not_r(&g_buf, X64_RSI);
-    uint8_t exp[] = { 0x48, 0xF7, 0xD6 };
+    uint8_t exp[] = {0x48, 0xF7, 0xD6};
     check_bytes("not", exp, sizeof(exp));
 }
 
@@ -169,7 +169,7 @@ static void test_not(void) {
 static void test_shl(void) {
     reset();
     x64_shl_rcl(&g_buf, X64_RCX);
-    uint8_t exp[] = { 0x48, 0xD3, 0xE1 };
+    uint8_t exp[] = {0x48, 0xD3, 0xE1};
     check_bytes("shl", exp, sizeof(exp));
 }
 
@@ -177,7 +177,7 @@ static void test_shl(void) {
 static void test_shr(void) {
     reset();
     x64_shr_rcl(&g_buf, X64_RAX);
-    uint8_t exp[] = { 0x48, 0xD3, 0xE8 };
+    uint8_t exp[] = {0x48, 0xD3, 0xE8};
     check_bytes("shr", exp, sizeof(exp));
 }
 
@@ -185,7 +185,7 @@ static void test_shr(void) {
 static void test_sar(void) {
     reset();
     x64_sar_rcl(&g_buf, X64_RDX);
-    uint8_t exp[] = { 0x48, 0xD3, 0xFA };
+    uint8_t exp[] = {0x48, 0xD3, 0xFA};
     check_bytes("sar", exp, sizeof(exp));
 }
 
@@ -195,7 +195,7 @@ static void test_sar(void) {
 static void test_cmp_rr(void) {
     reset();
     x64_cmp_rr(&g_buf, X64_RAX, X64_RCX);
-    uint8_t exp[] = { 0x48, 0x39, 0xC8 };
+    uint8_t exp[] = {0x48, 0x39, 0xC8};
     check_bytes("cmp_rr", exp, sizeof(exp));
 }
 
@@ -203,7 +203,7 @@ static void test_cmp_rr(void) {
 static void test_cmp_ri_zero(void) {
     reset();
     x64_cmp_ri(&g_buf, X64_RDI, 0);
-    uint8_t exp[] = { 0x48, 0x83, 0xFF, 0x00 };
+    uint8_t exp[] = {0x48, 0x83, 0xFF, 0x00};
     check_bytes("cmp_ri_zero", exp, sizeof(exp));
 }
 
@@ -211,7 +211,7 @@ static void test_cmp_ri_zero(void) {
 static void test_test_rr(void) {
     reset();
     x64_test_rr(&g_buf, X64_RCX, X64_RCX);
-    uint8_t exp[] = { 0x48, 0x85, 0xC9 };
+    uint8_t exp[] = {0x48, 0x85, 0xC9};
     check_bytes("test_rr", exp, sizeof(exp));
 }
 
@@ -221,7 +221,7 @@ static void test_test_rr(void) {
 static void test_mov_rr(void) {
     reset();
     x64_mov_rr(&g_buf, X64_RDX, X64_RCX);
-    uint8_t exp[] = { 0x48, 0x89, 0xCA };
+    uint8_t exp[] = {0x48, 0x89, 0xCA};
     check_bytes("mov_rr", exp, sizeof(exp));
 }
 
@@ -229,7 +229,7 @@ static void test_mov_rr(void) {
 static void test_mov_rr_high(void) {
     reset();
     x64_mov_rr(&g_buf, X64_R10, X64_R13);
-    uint8_t exp[] = { 0x4D, 0x89, 0xEA };
+    uint8_t exp[] = {0x4D, 0x89, 0xEA};
     check_bytes("mov_rr_high", exp, sizeof(exp));
 }
 
@@ -237,7 +237,7 @@ static void test_mov_rr_high(void) {
 static void test_mov_ri64(void) {
     reset();
     x64_mov_ri64(&g_buf, X64_RAX, 0x123456789ABCDEF0ULL);
-    uint8_t exp[] = { 0x48, 0xB8, 0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x12 };
+    uint8_t exp[] = {0x48, 0xB8, 0xF0, 0xDE, 0xBC, 0x9A, 0x78, 0x56, 0x34, 0x12};
     check_bytes("mov_ri64", exp, sizeof(exp));
 }
 
@@ -245,7 +245,7 @@ static void test_mov_ri64(void) {
 static void test_mov_ri64_high(void) {
     reset();
     x64_mov_ri64(&g_buf, X64_R8, 42);
-    uint8_t exp[] = { 0x49, 0xB8, 42, 0, 0, 0, 0, 0, 0, 0 };
+    uint8_t exp[] = {0x49, 0xB8, 42, 0, 0, 0, 0, 0, 0, 0};
     check_bytes("mov_ri64_high", exp, sizeof(exp));
 }
 
@@ -253,7 +253,7 @@ static void test_mov_ri64_high(void) {
 static void test_mov_ri32(void) {
     reset();
     x64_mov_ri32(&g_buf, X64_RAX, 0x42);
-    uint8_t exp[] = { 0xB8, 0x42, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0xB8, 0x42, 0x00, 0x00, 0x00};
     check_bytes("mov_ri32", exp, sizeof(exp));
 }
 
@@ -261,7 +261,7 @@ static void test_mov_ri32(void) {
 static void test_mov_ri32_high(void) {
     reset();
     x64_mov_ri32(&g_buf, X64_R9, 0xFF);
-    uint8_t exp[] = { 0x41, 0xB9, 0xFF, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0x41, 0xB9, 0xFF, 0x00, 0x00, 0x00};
     check_bytes("mov_ri32_high", exp, sizeof(exp));
 }
 
@@ -271,7 +271,7 @@ static void test_mov_ri32_high(void) {
 static void test_mov_rm_no_disp(void) {
     reset();
     x64_mov_rm(&g_buf, X64_RAX, X64_RCX, 0);
-    uint8_t exp[] = { 0x48, 0x8B, 0x01 };
+    uint8_t exp[] = {0x48, 0x8B, 0x01};
     check_bytes("mov_rm_no_disp", exp, sizeof(exp));
 }
 
@@ -279,7 +279,7 @@ static void test_mov_rm_no_disp(void) {
 static void test_mov_rm_disp8(void) {
     reset();
     x64_mov_rm(&g_buf, X64_RAX, X64_RCX, 8);
-    uint8_t exp[] = { 0x48, 0x8B, 0x41, 0x08 };
+    uint8_t exp[] = {0x48, 0x8B, 0x41, 0x08};
     check_bytes("mov_rm_disp8", exp, sizeof(exp));
 }
 
@@ -287,7 +287,7 @@ static void test_mov_rm_disp8(void) {
 static void test_mov_rm_disp32(void) {
     reset();
     x64_mov_rm(&g_buf, X64_RAX, X64_RCX, 0x200);
-    uint8_t exp[] = { 0x48, 0x8B, 0x81, 0x00, 0x02, 0x00, 0x00 };
+    uint8_t exp[] = {0x48, 0x8B, 0x81, 0x00, 0x02, 0x00, 0x00};
     check_bytes("mov_rm_disp32", exp, sizeof(exp));
 }
 
@@ -297,7 +297,7 @@ static void test_mov_rm_rbp(void) {
     reset();
     x64_mov_rm(&g_buf, X64_RAX, X64_RBP, 0);
     /* rbp with disp=0 must use mod=01 with disp8=0 */
-    uint8_t exp[] = { 0x48, 0x8B, 0x45, 0x00 };
+    uint8_t exp[] = {0x48, 0x8B, 0x45, 0x00};
     check_bytes("mov_rm_rbp", exp, sizeof(exp));
 }
 
@@ -306,7 +306,7 @@ static void test_mov_rm_rbp(void) {
 static void test_mov_rm_rsp(void) {
     reset();
     x64_mov_rm(&g_buf, X64_RAX, X64_RSP, 0);
-    uint8_t exp[] = { 0x48, 0x8B, 0x04, 0x24 };
+    uint8_t exp[] = {0x48, 0x8B, 0x04, 0x24};
     check_bytes("mov_rm_rsp", exp, sizeof(exp));
 }
 
@@ -314,7 +314,7 @@ static void test_mov_rm_rsp(void) {
 static void test_mov_rm_rsp_disp8(void) {
     reset();
     x64_mov_rm(&g_buf, X64_RAX, X64_RSP, 16);
-    uint8_t exp[] = { 0x48, 0x8B, 0x44, 0x24, 0x10 };
+    uint8_t exp[] = {0x48, 0x8B, 0x44, 0x24, 0x10};
     check_bytes("mov_rm_rsp_disp8", exp, sizeof(exp));
 }
 
@@ -322,7 +322,7 @@ static void test_mov_rm_rsp_disp8(void) {
 static void test_mov_mr(void) {
     reset();
     x64_mov_mr(&g_buf, X64_RDI, 16, X64_RSI);
-    uint8_t exp[] = { 0x48, 0x89, 0x77, 0x10 };
+    uint8_t exp[] = {0x48, 0x89, 0x77, 0x10};
     check_bytes("mov_mr", exp, sizeof(exp));
 }
 
@@ -330,7 +330,7 @@ static void test_mov_mr(void) {
 static void test_lea(void) {
     reset();
     x64_lea(&g_buf, X64_RAX, X64_RCX, 32);
-    uint8_t exp[] = { 0x48, 0x8D, 0x41, 0x20 };
+    uint8_t exp[] = {0x48, 0x8D, 0x41, 0x20};
     check_bytes("lea", exp, sizeof(exp));
 }
 
@@ -340,7 +340,7 @@ static void test_lea(void) {
 static void test_jmp_rel32(void) {
     reset();
     x64_jmp_rel32(&g_buf, 0);
-    uint8_t exp[] = { 0xE9, 0x00, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0xE9, 0x00, 0x00, 0x00, 0x00};
     check_bytes("jmp_rel32", exp, sizeof(exp));
 }
 
@@ -348,7 +348,7 @@ static void test_jmp_rel32(void) {
 static void test_jmp_rel8(void) {
     reset();
     x64_jmp_rel8(&g_buf, 0x10);
-    uint8_t exp[] = { 0xEB, 0x10 };
+    uint8_t exp[] = {0xEB, 0x10};
     check_bytes("jmp_rel8", exp, sizeof(exp));
 }
 
@@ -356,7 +356,7 @@ static void test_jmp_rel8(void) {
 static void test_je_rel32(void) {
     reset();
     x64_jcc_rel32(&g_buf, X64_CC_E, 0);
-    uint8_t exp[] = { 0x0F, 0x84, 0x00, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0x0F, 0x84, 0x00, 0x00, 0x00, 0x00};
     check_bytes("je_rel32", exp, sizeof(exp));
 }
 
@@ -364,7 +364,7 @@ static void test_je_rel32(void) {
 static void test_jg_rel32(void) {
     reset();
     x64_jcc_rel32(&g_buf, X64_CC_G, 0);
-    uint8_t exp[] = { 0x0F, 0x8F, 0x00, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0x0F, 0x8F, 0x00, 0x00, 0x00, 0x00};
     check_bytes("jg_rel32", exp, sizeof(exp));
 }
 
@@ -372,7 +372,7 @@ static void test_jg_rel32(void) {
 static void test_call_rel32(void) {
     reset();
     x64_call_rel32(&g_buf, 0);
-    uint8_t exp[] = { 0xE8, 0x00, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0xE8, 0x00, 0x00, 0x00, 0x00};
     check_bytes("call_rel32", exp, sizeof(exp));
 }
 
@@ -380,7 +380,7 @@ static void test_call_rel32(void) {
 static void test_call_r_low(void) {
     reset();
     x64_call_r(&g_buf, X64_RAX);
-    uint8_t exp[] = { 0xFF, 0xD0 };
+    uint8_t exp[] = {0xFF, 0xD0};
     check_bytes("call_r_low", exp, sizeof(exp));
 }
 
@@ -388,7 +388,7 @@ static void test_call_r_low(void) {
 static void test_call_r_high(void) {
     reset();
     x64_call_r(&g_buf, X64_R12);
-    uint8_t exp[] = { 0x41, 0xFF, 0xD4 };
+    uint8_t exp[] = {0x41, 0xFF, 0xD4};
     check_bytes("call_r_high", exp, sizeof(exp));
 }
 
@@ -396,7 +396,7 @@ static void test_call_r_high(void) {
 static void test_ret(void) {
     reset();
     x64_ret(&g_buf);
-    uint8_t exp[] = { 0xC3 };
+    uint8_t exp[] = {0xC3};
     check_bytes("ret", exp, sizeof(exp));
 }
 
@@ -404,7 +404,7 @@ static void test_ret(void) {
 static void test_nop(void) {
     reset();
     x64_nop(&g_buf);
-    uint8_t exp[] = { 0x90 };
+    uint8_t exp[] = {0x90};
     check_bytes("nop", exp, sizeof(exp));
 }
 
@@ -414,7 +414,7 @@ static void test_nop(void) {
 static void test_push_low(void) {
     reset();
     x64_push_r(&g_buf, X64_RBX);
-    uint8_t exp[] = { 0x53 };
+    uint8_t exp[] = {0x53};
     check_bytes("push_low", exp, sizeof(exp));
 }
 
@@ -422,7 +422,7 @@ static void test_push_low(void) {
 static void test_push_high(void) {
     reset();
     x64_push_r(&g_buf, X64_R15);
-    uint8_t exp[] = { 0x41, 0x57 };
+    uint8_t exp[] = {0x41, 0x57};
     check_bytes("push_high", exp, sizeof(exp));
 }
 
@@ -430,7 +430,7 @@ static void test_push_high(void) {
 static void test_pop_low(void) {
     reset();
     x64_pop_r(&g_buf, X64_RBX);
-    uint8_t exp[] = { 0x5B };
+    uint8_t exp[] = {0x5B};
     check_bytes("pop_low", exp, sizeof(exp));
 }
 
@@ -438,7 +438,7 @@ static void test_pop_low(void) {
 static void test_pop_high(void) {
     reset();
     x64_pop_r(&g_buf, X64_R14);
-    uint8_t exp[] = { 0x41, 0x5E };
+    uint8_t exp[] = {0x41, 0x5E};
     check_bytes("pop_high", exp, sizeof(exp));
 }
 
@@ -464,7 +464,7 @@ static void test_patch_rel32(void) {
 static void test_setcc_low(void) {
     reset();
     x64_setcc(&g_buf, X64_CC_E, X64_RAX);
-    uint8_t exp[] = { 0x0F, 0x94, 0xC0 };
+    uint8_t exp[] = {0x0F, 0x94, 0xC0};
     check_bytes("setcc_e_al", exp, sizeof(exp));
 }
 
@@ -472,7 +472,7 @@ static void test_setcc_low(void) {
 static void test_setcc_rsi(void) {
     reset();
     x64_setcc(&g_buf, X64_CC_E, X64_RSI);
-    uint8_t exp[] = { 0x40, 0x0F, 0x94, 0xC6 };
+    uint8_t exp[] = {0x40, 0x0F, 0x94, 0xC6};
     check_bytes("setcc_e_sil", exp, sizeof(exp));
 }
 
@@ -480,7 +480,7 @@ static void test_setcc_rsi(void) {
 static void test_setcc_high(void) {
     reset();
     x64_setcc(&g_buf, X64_CC_E, X64_R9);
-    uint8_t exp[] = { 0x41, 0x0F, 0x94, 0xC1 };
+    uint8_t exp[] = {0x41, 0x0F, 0x94, 0xC1};
     check_bytes("setcc_e_r9b", exp, sizeof(exp));
 }
 
@@ -490,7 +490,7 @@ static void test_setcc_high(void) {
 static void test_cmov(void) {
     reset();
     x64_cmov_rr(&g_buf, X64_CC_NE, X64_RAX, X64_RCX);
-    uint8_t exp[] = { 0x48, 0x0F, 0x45, 0xC1 };
+    uint8_t exp[] = {0x48, 0x0F, 0x45, 0xC1};
     check_bytes("cmovne", exp, sizeof(exp));
 }
 
@@ -500,7 +500,7 @@ static void test_cmov(void) {
 static void test_addsd(void) {
     reset();
     x64_addsd(&g_buf, X64_XMM0, X64_XMM1);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x58, 0xC1 };
+    uint8_t exp[] = {0xF2, 0x0F, 0x58, 0xC1};
     check_bytes("addsd", exp, sizeof(exp));
 }
 
@@ -508,7 +508,7 @@ static void test_addsd(void) {
 static void test_subsd(void) {
     reset();
     x64_subsd(&g_buf, X64_XMM2, X64_XMM3);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x5C, 0xD3 };
+    uint8_t exp[] = {0xF2, 0x0F, 0x5C, 0xD3};
     check_bytes("subsd", exp, sizeof(exp));
 }
 
@@ -516,7 +516,7 @@ static void test_subsd(void) {
 static void test_mulsd(void) {
     reset();
     x64_mulsd(&g_buf, X64_XMM0, X64_XMM0);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x59, 0xC0 };
+    uint8_t exp[] = {0xF2, 0x0F, 0x59, 0xC0};
     check_bytes("mulsd", exp, sizeof(exp));
 }
 
@@ -524,7 +524,7 @@ static void test_mulsd(void) {
 static void test_divsd(void) {
     reset();
     x64_divsd(&g_buf, X64_XMM1, X64_XMM0);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x5E, 0xC8 };
+    uint8_t exp[] = {0xF2, 0x0F, 0x5E, 0xC8};
     check_bytes("divsd", exp, sizeof(exp));
 }
 
@@ -532,7 +532,7 @@ static void test_divsd(void) {
 static void test_movsd_rr(void) {
     reset();
     x64_movsd_rr(&g_buf, X64_XMM1, X64_XMM2);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x10, 0xCA };
+    uint8_t exp[] = {0xF2, 0x0F, 0x10, 0xCA};
     check_bytes("movsd_rr", exp, sizeof(exp));
 }
 
@@ -540,7 +540,7 @@ static void test_movsd_rr(void) {
 static void test_ucomisd(void) {
     reset();
     x64_ucomisd(&g_buf, X64_XMM0, X64_XMM1);
-    uint8_t exp[] = { 0x66, 0x0F, 0x2E, 0xC1 };
+    uint8_t exp[] = {0x66, 0x0F, 0x2E, 0xC1};
     check_bytes("ucomisd", exp, sizeof(exp));
 }
 
@@ -548,7 +548,7 @@ static void test_ucomisd(void) {
 static void test_cvtsi2sd(void) {
     reset();
     x64_cvtsi2sd(&g_buf, X64_XMM0, X64_RAX);
-    uint8_t exp[] = { 0xF2, 0x48, 0x0F, 0x2A, 0xC0 };
+    uint8_t exp[] = {0xF2, 0x48, 0x0F, 0x2A, 0xC0};
     check_bytes("cvtsi2sd", exp, sizeof(exp));
 }
 
@@ -556,7 +556,7 @@ static void test_cvtsi2sd(void) {
 static void test_cvttsd2si(void) {
     reset();
     x64_cvttsd2si(&g_buf, X64_RAX, X64_XMM0);
-    uint8_t exp[] = { 0xF2, 0x48, 0x0F, 0x2C, 0xC0 };
+    uint8_t exp[] = {0xF2, 0x48, 0x0F, 0x2C, 0xC0};
     check_bytes("cvttsd2si", exp, sizeof(exp));
 }
 
@@ -566,7 +566,7 @@ static void test_cvttsd2si(void) {
 static void test_xorpd(void) {
     reset();
     x64_xorpd(&g_buf, X64_XMM0, X64_XMM0);
-    uint8_t exp[] = { 0x66, 0x0F, 0x57, 0xC0 };
+    uint8_t exp[] = {0x66, 0x0F, 0x57, 0xC0};
     check_bytes("xorpd", exp, sizeof(exp));
 }
 
@@ -574,7 +574,7 @@ static void test_xorpd(void) {
 static void test_movq_xmm_gp(void) {
     reset();
     x64_movq_xmm_gp(&g_buf, X64_XMM0, X64_RAX);
-    uint8_t exp[] = { 0x66, 0x48, 0x0F, 0x6E, 0xC0 };
+    uint8_t exp[] = {0x66, 0x48, 0x0F, 0x6E, 0xC0};
     check_bytes("movq_xmm_gp", exp, sizeof(exp));
 }
 
@@ -582,7 +582,7 @@ static void test_movq_xmm_gp(void) {
 static void test_movq_gp_xmm(void) {
     reset();
     x64_movq_gp_xmm(&g_buf, X64_RAX, X64_XMM0);
-    uint8_t exp[] = { 0x66, 0x48, 0x0F, 0x7E, 0xC0 };
+    uint8_t exp[] = {0x66, 0x48, 0x0F, 0x7E, 0xC0};
     check_bytes("movq_gp_xmm", exp, sizeof(exp));
 }
 
@@ -590,7 +590,7 @@ static void test_movq_gp_xmm(void) {
 static void test_movsd_load(void) {
     reset();
     x64_movsd_rm(&g_buf, X64_XMM1, X64_RBP, -8);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x10, 0x4D, 0xF8 };
+    uint8_t exp[] = {0xF2, 0x0F, 0x10, 0x4D, 0xF8};
     check_bytes("movsd_load", exp, sizeof(exp));
 }
 
@@ -598,7 +598,7 @@ static void test_movsd_load(void) {
 static void test_movsd_store(void) {
     reset();
     x64_movsd_mr(&g_buf, X64_RBP, -8, X64_XMM1);
-    uint8_t exp[] = { 0xF2, 0x0F, 0x11, 0x4D, 0xF8 };
+    uint8_t exp[] = {0xF2, 0x0F, 0x11, 0x4D, 0xF8};
     check_bytes("movsd_store", exp, sizeof(exp));
 }
 
@@ -608,7 +608,7 @@ static void test_movsd_store(void) {
 static void test_movzx_rm8(void) {
     reset();
     x64_movzx_rm8(&g_buf, X64_RAX, X64_RAX, 0);
-    uint8_t exp[] = { 0x48, 0x0F, 0xB6, 0x00 };
+    uint8_t exp[] = {0x48, 0x0F, 0xB6, 0x00};
     check_bytes("movzx_rm8", exp, sizeof(exp));
 }
 
@@ -616,7 +616,7 @@ static void test_movzx_rm8(void) {
 static void test_movsx_rm8(void) {
     reset();
     x64_movsx_rm8(&g_buf, X64_RAX, X64_RAX, 0);
-    uint8_t exp[] = { 0x48, 0x0F, 0xBE, 0x00 };
+    uint8_t exp[] = {0x48, 0x0F, 0xBE, 0x00};
     check_bytes("movsx_rm8", exp, sizeof(exp));
 }
 
@@ -624,7 +624,7 @@ static void test_movsx_rm8(void) {
 static void test_mov_mr8(void) {
     reset();
     x64_mov_mr8(&g_buf, X64_RAX, 0, X64_RCX);
-    uint8_t exp[] = { 0x88, 0x08 };
+    uint8_t exp[] = {0x88, 0x08};
     check_bytes("mov_mr8", exp, sizeof(exp));
 }
 
@@ -632,7 +632,7 @@ static void test_mov_mr8(void) {
 static void test_mov_rm32(void) {
     reset();
     x64_mov_rm32(&g_buf, X64_RAX, X64_RBP, -8);
-    uint8_t exp[] = { 0x8B, 0x45, 0xF8 };
+    uint8_t exp[] = {0x8B, 0x45, 0xF8};
     check_bytes("mov_rm32", exp, sizeof(exp));
 }
 
@@ -640,7 +640,7 @@ static void test_mov_rm32(void) {
 static void test_mov_mr32(void) {
     reset();
     x64_mov_mr32(&g_buf, X64_RBP, -8, X64_RAX);
-    uint8_t exp[] = { 0x89, 0x45, 0xF8 };
+    uint8_t exp[] = {0x89, 0x45, 0xF8};
     check_bytes("mov_mr32", exp, sizeof(exp));
 }
 
@@ -648,7 +648,7 @@ static void test_mov_mr32(void) {
 static void test_movsxd(void) {
     reset();
     x64_movsxd_rm(&g_buf, X64_RAX, X64_RBP, -4);
-    uint8_t exp[] = { 0x48, 0x63, 0x45, 0xFC };
+    uint8_t exp[] = {0x48, 0x63, 0x45, 0xFC};
     check_bytes("movsxd", exp, sizeof(exp));
 }
 
@@ -658,7 +658,7 @@ static void test_movsxd(void) {
 static void test_shl_ri(void) {
     reset();
     x64_shl_ri(&g_buf, X64_RAX, 16);
-    uint8_t exp[] = { 0x48, 0xC1, 0xE0, 0x10 };
+    uint8_t exp[] = {0x48, 0xC1, 0xE0, 0x10};
     check_bytes("shl_ri", exp, sizeof(exp));
 }
 
@@ -666,7 +666,7 @@ static void test_shl_ri(void) {
 static void test_or_ri_imm8(void) {
     reset();
     x64_or_ri(&g_buf, X64_RAX, 5);
-    uint8_t exp[] = { 0x48, 0x83, 0xC8, 0x05 };
+    uint8_t exp[] = {0x48, 0x83, 0xC8, 0x05};
     check_bytes("or_ri_imm8", exp, sizeof(exp));
 }
 
@@ -674,7 +674,7 @@ static void test_or_ri_imm8(void) {
 static void test_shr_ri(void) {
     reset();
     x64_shr_ri(&g_buf, X64_RAX, 2);
-    uint8_t exp[] = { 0x48, 0xC1, 0xE8, 0x02 };
+    uint8_t exp[] = {0x48, 0xC1, 0xE8, 0x02};
     check_bytes("shr_ri", exp, sizeof(exp));
 }
 
@@ -682,7 +682,7 @@ static void test_shr_ri(void) {
 static void test_test_ri(void) {
     reset();
     x64_test_ri(&g_buf, X64_RAX, 0x7);
-    uint8_t exp[] = { 0x48, 0xF7, 0xC0, 0x07, 0x00, 0x00, 0x00 };
+    uint8_t exp[] = {0x48, 0xF7, 0xC0, 0x07, 0x00, 0x00, 0x00};
     check_bytes("test_ri", exp, sizeof(exp));
 }
 
@@ -690,7 +690,7 @@ static void test_test_ri(void) {
 static void test_and_ri(void) {
     reset();
     x64_and_ri(&g_buf, X64_RAX, 0x7);
-    uint8_t exp[] = { 0x48, 0x83, 0xE0, 0x07 };
+    uint8_t exp[] = {0x48, 0x83, 0xE0, 0x07};
     check_bytes("and_ri", exp, sizeof(exp));
 }
 
@@ -809,7 +809,7 @@ int main(void) {
     return 0;
 }
 
-#else // !__x86_64__
+#else  // !__x86_64__
 
 #include <stdio.h>
 #include "../test_win_compat.h"
@@ -819,4 +819,4 @@ int main(void) {
     return 0;
 }
 
-#endif // __x86_64__
+#endif  // __x86_64__

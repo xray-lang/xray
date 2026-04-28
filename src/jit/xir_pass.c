@@ -169,7 +169,7 @@ XirPassChange xir_pass_dce(XirFunc *func) {
     xr_free(use_count);
     xr_free(removable);
     xr_free(worklist);
-    return n_removed ? (XirPassChange){false, true, false, n_removed, 0, n_removed}
+    return n_removed ? (XirPassChange) {false, true, false, n_removed, 0, n_removed}
                      : xir_pass_no_change();
 }
 
@@ -308,7 +308,7 @@ XirPassChange xir_pass_cse(XirFunc *func) {
     }
 
     xr_free(table);
-    return n_replaced ? (XirPassChange){false, false, true, 0, 0, 0} : xir_pass_no_change();
+    return n_replaced ? (XirPassChange) {false, false, true, 0, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Global Value Numbering (GVN) ========== */
@@ -547,7 +547,7 @@ XirPassChange xir_pass_gvn(XirFunc *func) {
     }
 
     xr_free(table);
-    return n_replaced ? (XirPassChange){false, false, true, 0, 0, 0} : xir_pass_no_change();
+    return n_replaced ? (XirPassChange) {false, false, true, 0, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Store-to-Load Forwarding ========== */
@@ -769,16 +769,15 @@ XirPassChange xir_pass_store_to_load(XirFunc *func) {
              * and anything with SIDE_EFFECT flag. */
             if (ins->op == XIR_CALL || ins->op == XIR_CALL_C || ins->op == XIR_CALL_C_LEAF ||
                 ins->op == XIR_CALL_SELF_DIRECT || ins->op == XIR_CALL_KNOWN_REG ||
-                ins->op == XIR_CALL_INTRINSIC ||
-                ins->op == XIR_STORE || ins->op == XIR_ALLOC || ins->op == XIR_STORE_CORO ||
-                (ins->flags & XIR_FLAG_SIDE_EFFECT)) {
+                ins->op == XIR_CALL_INTRINSIC || ins->op == XIR_STORE || ins->op == XIR_ALLOC ||
+                ins->op == XIR_STORE_CORO || (ins->flags & XIR_FLAG_SIDE_EFFECT)) {
                 s2l_kill_all(&t);
             }
         }
     }
 
     xr_free(t.entries);
-    return n_fwd ? (XirPassChange){false, true, true, n_fwd, 0, 0} : xir_pass_no_change();
+    return n_fwd ? (XirPassChange) {false, true, true, n_fwd, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== If-Conversion ========== */
@@ -954,7 +953,7 @@ XirPassChange xir_pass_ifconvert(XirFunc *func) {
         if (!converted_any)
             break;
     }
-    return ever_converted ? (XirPassChange){true, true, false, 0, 0, 0} : xir_pass_no_change();
+    return ever_converted ? (XirPassChange) {true, true, false, 0, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Loop Invariant Code Motion (LICM) ========== */
@@ -1133,7 +1132,7 @@ XirPassChange xir_pass_licm(XirFunc *func) {
                     store_cap = store_cap ? store_cap * 2 : 8;
                     XR_REALLOC_OR_ABORT(stores, store_cap * sizeof(LicmStoreInfo), "licm stores");
                 }
-                stores[nstores++] = (LicmStoreInfo){obj, off, has_off};
+                stores[nstores++] = (LicmStoreInfo) {obj, off, has_off};
             }
         }
 
@@ -1239,7 +1238,7 @@ XirPassChange xir_pass_licm(XirFunc *func) {
 
     xr_free(def_block);
     xr_free(in_loop);
-    return any_hoisted ? (XirPassChange){false, true, false, 0, 0, 0} : xir_pass_no_change();
+    return any_hoisted ? (XirPassChange) {false, true, false, 0, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Canonicalize ========== */
@@ -1494,7 +1493,7 @@ XirPassChange xir_pass_canonicalize(XirFunc *func) {
                 changed = true;
         }
     }
-    return changed ? (XirPassChange){false, false, true, 0, 0, 0} : xir_pass_no_change();
+    return changed ? (XirPassChange) {false, false, true, 0, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Dead Store Elimination ========== */
@@ -1556,8 +1555,7 @@ XirPassChange xir_pass_dse(XirFunc *func) {
             if (ins->op == XIR_CALL_C || ins->op == XIR_CALL_KNOWN ||
                 ins->op == XIR_CALL_KNOWN_REG || ins->op == XIR_CALL_DIRECT ||
                 ins->op == XIR_CALL_SELF_DIRECT || ins->op == XIR_CALL_INTRINSIC ||
-                ins->op == XIR_ALLOC ||
-                ins->op == XIR_SAFEPOINT || ins->op == XIR_CALL_C_LEAF) {
+                ins->op == XIR_ALLOC || ins->op == XIR_SAFEPOINT || ins->op == XIR_CALL_C_LEAF) {
                 ntracked = 0;
                 continue;
             }
@@ -1611,7 +1609,7 @@ XirPassChange xir_pass_dse(XirFunc *func) {
     }
 
     xr_free(tracked);
-    return n_killed ? (XirPassChange){false, true, false, n_killed, 0, 0} : xir_pass_no_change();
+    return n_killed ? (XirPassChange) {false, true, false, n_killed, 0, 0} : xir_pass_no_change();
 }
 
 /* ========== Pipeline Runner ========== */
@@ -1781,7 +1779,7 @@ static const XirPassDesc PG_RANGE[] = {
     {"split_critical_edges", {.v = xir_pass_split_critical_edges}, 0},
 };
 
-#define XIR_PIPELINE_SIZE(arr) (uint32_t)(sizeof(arr) / sizeof((arr)[0]))
+#define XIR_PIPELINE_SIZE(arr) (uint32_t) (sizeof(arr) / sizeof((arr)[0]))
 
 /* Cached pipeline-verbose toggle (XRAY_JIT_PIPELINE_VERBOSE).  Read
  * once on first use; suitable for debugging / tuning runs where

@@ -77,8 +77,8 @@ static inline ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
 
 /* ========== memmem ========== */
 
-static inline void *memmem(const void *haystack, size_t haystacklen,
-                            const void *needle, size_t needlelen) {
+static inline void *memmem(const void *haystack, size_t haystacklen, const void *needle,
+                           size_t needlelen) {
     if (needlelen == 0)
         return (void *) haystack;
     if (haystacklen < needlelen)
@@ -102,7 +102,10 @@ static inline char *strptime(const char *s, const char *fmt, struct tm *tm) {
                                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     // Skip day-of-week
     const char *p = strchr(s, ',');
-    if (p) p += 2; else p = s;
+    if (p)
+        p += 2;
+    else
+        p = s;
     int day, year, hour, min, sec;
     char mon[4] = {0};
     if (sscanf(p, "%d %3s %d %d:%d:%d", &day, mon, &year, &hour, &min, &sec) != 6)

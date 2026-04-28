@@ -44,8 +44,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                            XIR_REF_INDEX(ins->args[1]) < ctx->func->nvreg &&
                            ctx->func->vregs[XIR_REF_INDEX(ins->args[1])].rep == XR_REP_F64) {
                     /* FP vreg: extract raw bits via MOVQ xmm→gp */
-                    X64Xmm fp = x64_get_fp_operand(ctx, ins->args[1],
-                                                    (X64Xmm) X64_SCRATCH_XMM);
+                    X64Xmm fp = x64_get_fp_operand(ctx, ins->args[1], (X64Xmm) X64_SCRATCH_XMM);
                     x64_movq_gp_xmm(&ctx->buf, X64_SCRATCH_REG, fp);
                 } else {
                     X64Reg arg_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
@@ -288,7 +287,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
                 /* Memory passing: ABI_ARG1=coro, ABI_ARG2=&call_args */
                 x64_mov_rr(&ctx->buf, X64_ABI_ARG1, X64_CORO_REG);
                 x64_lea(&ctx->buf, X64_ABI_ARG2, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_CALL_ARGS_OFFSET);
+                        (int32_t) XIR_JIT_CALL_ARGS_OFFSET);
                 /* CALL to entry (offset 0) */
                 CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
@@ -434,7 +433,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd) {
             /* Fast path direct CALL: ABI_ARG1=coro, ABI_ARG2=&call_args[1] */
             x64_mov_rr(&ctx->buf, X64_ABI_ARG1, X64_CORO_REG);
             x64_lea(&ctx->buf, X64_ABI_ARG2, X64_JIT_CTX_REG,
-                     (int32_t) (XIR_JIT_CALL_ARGS_OFFSET + 8));
+                    (int32_t) (XIR_JIT_CALL_ARGS_OFFSET + 8));
             x64_call_r(&ctx->buf, X64_SCRATCH_REG);
 
             /* Store RCX (callee tag from epilogue) to jit_ctx->call_result_tag */
