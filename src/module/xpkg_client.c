@@ -18,6 +18,7 @@
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
 #include "../base/xjson.h"
+#include "../base/xchecks.h"
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 
