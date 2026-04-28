@@ -925,7 +925,7 @@ XR_DEFINE_BUILTIN(url_join_fn, "join", "(...parts: string): string", "Join URL p
 
 /* ========== Module Registration ========== */
 
-XrModule *xr_load_module_url(XrayIsolate *X) {
+XR_FUNC XrModule *xr_load_module_url(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "xr_load_module_url: NULL isolate");
 
     XrModule *mod = xr_module_create_native(X, "url");

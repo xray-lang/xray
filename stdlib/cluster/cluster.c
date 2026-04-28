@@ -1881,7 +1881,7 @@ static XrValue cluster_monitor_coro_fn(XrayIsolate *X, XrValue *args, int argc) 
 
 /* ========== Module Registration ========== */
 
-XrModule *xr_load_module_cluster(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_cluster(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "cluster");
 
     XRS_EXPORT(mod, isolate, "start", cluster_start);

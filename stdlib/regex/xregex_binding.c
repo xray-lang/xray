@@ -599,7 +599,7 @@ XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: any, s: string): Array<string
 XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
 XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")
 
-XrModule *xr_load_module_regex(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_regex(XrayIsolate *isolate) {
     // 1. Create native module
     XrModule *mod = xr_module_create_native(isolate, "regex");
     if (!mod)

@@ -21,11 +21,6 @@
 #define XR_STDLIB_ENCODING_H
 
 #include "../../src/base/xdefs.h"
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/runtime/object/xstring.h"
-#include "../../src/runtime/object/xutf8.h"
-#include "../../src/base/xsimd.h"
 
 /* ========== Hex Encoding/Decoding ========== */
 
@@ -55,6 +50,9 @@ XR_FUNC int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16
 
 /* ========== Module Loading ========== */
 
-XrModule *xr_load_module_encoding(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_encoding(struct XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_ENCODING_H

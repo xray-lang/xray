@@ -38,8 +38,7 @@
 #ifndef XR_STDLIB_CRYPTO_H
 #define XR_STDLIB_CRYPTO_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/base/xdefs.h"
 
 /* ========== Internal Data Structures ========== */
 
@@ -210,7 +209,9 @@ void xr_secure_wipe(void *ptr, size_t len);
 
 /* ========== Module Loading ========== */
 
-// Load crypto module and register all functions
-XrModule *xr_load_module_crypto(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_crypto(struct XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_CRYPTO_H

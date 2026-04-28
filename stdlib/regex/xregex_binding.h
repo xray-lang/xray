@@ -46,9 +46,11 @@
 #ifndef XREGEX_BINDING_H
 #define XREGEX_BINDING_H
 
-#include "xregex.h"  // XrRegex type
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "xregex.h"
+#include "../../src/base/xdefs.h"
+#include "../../src/runtime/value/xvalue.h"
+
+struct XrModule;
 
 /*
  * Load regex module
@@ -70,7 +72,7 @@
  *   - text                       Matched text
  *   - groups                     Capture group array (groups[0] is full match)
  */
-XrModule *xr_load_module_regex(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_regex(XrayIsolate *isolate);
 
 /*
  * Wrap XrRegex as XrValue (GC-managed XrRegexObject)
@@ -78,25 +80,25 @@ XrModule *xr_load_module_regex(XrayIsolate *isolate);
  * @param re Regex object pointer
  * @return Wrapped XrValue
  */
-XrValue xr_regex_wrap(XrayIsolate *X, XrRegex *re);
+XR_FUNC XrValue xr_regex_wrap(XrayIsolate *X, XrRegex *re);
 
 /*
  * Initialize regex native type (for regex literals without import)
  * Call this during isolate initialization to enable r.test() syntax
  */
-void xr_regex_init_native_type(XrayIsolate *isolate);
+XR_FUNC void xr_regex_init_native_type(XrayIsolate *isolate);
 
 // Check if value is a Regex object
-bool xr_value_is_regex(XrValue v);
+XR_FUNC bool xr_value_is_regex(XrValue v);
 
 // Get Regex pointer
-XrRegex *xr_value_to_regex(XrValue v);
+XR_FUNC XrRegex *xr_value_to_regex(XrValue v);
 
 /*
  * Build a Json match result with shape { start, end, text, groups }.
  * Lifted from a static helper so stdlib/regex/regex_methods.c can
  * reuse the exact same shape used by the legacy native-type binding.
  */
-XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match);
+XR_FUNC XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match);
 
 #endif  // XREGEX_BINDING_H

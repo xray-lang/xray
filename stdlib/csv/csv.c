@@ -470,7 +470,7 @@ XR_DEFINE_BUILTIN(csv_write_file, "writeFile",
                   "(path: string, data: Array<Array<string>>, options?: Json): bool",
                   "Write CSV file")
 
-XrModule *xr_load_module_csv(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_csv(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "csv");
     if (!mod)
         return NULL;

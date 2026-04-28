@@ -42,8 +42,9 @@
 #define XR_STDLIB_TOML_H
 
 #include "../../src/base/xdefs.h"
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/runtime/value/xvalue.h"
+
+struct XrModule;
 
 // Parse TOML string
 // Returns: Map object
@@ -58,6 +59,6 @@ XR_FUNC XrValue xr_toml_parse(XrayIsolate *isolate, const char *data, size_t len
 XR_FUNC XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value, int indent);
 
 // Load toml module
-XR_FUNC XrModule *xr_load_module_toml(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_toml(XrayIsolate *isolate);
 
-#endif
+#endif  // XR_STDLIB_TOML_H

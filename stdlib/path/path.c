@@ -582,7 +582,7 @@ XR_DEFINE_BUILTIN(path_relative, "relative", "(from: string, to: string): string
 XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): Json", "Parse path into components")
 XR_DEFINE_BUILTIN(path_format, "format", "(obj: Json): string", "Format path from components")
 
-XrModule *xr_load_module_path(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_path(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_path: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "path");

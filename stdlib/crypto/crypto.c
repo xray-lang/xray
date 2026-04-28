@@ -1213,7 +1213,7 @@ XR_DEFINE_BUILTIN(crypto_decrypt, "decrypt", "(key: string, ciphertext: string):
 XR_DEFINE_BUILTIN(crypto_timing_safe_equal, "timingSafeEqual", "(a: string, b: string): bool",
                   "Constant-time string comparison")
 
-XrModule *xr_load_module_crypto(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_crypto(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "crypto");
     if (!mod)
         return NULL;

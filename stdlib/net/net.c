@@ -1600,7 +1600,7 @@ XR_DEFINE_BUILTIN(net_send_to_yieldable, "sendTo",
 XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: Json, maxlen?: int): Json?",
                   "Receive UDP datagram")
 
-XrModule *xr_load_module_net(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_net(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "net");
 
     // Initialize symbols and shapes once per isolate

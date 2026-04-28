@@ -30,10 +30,11 @@
 #ifndef XR_STDLIB_PATH_H
 #define XR_STDLIB_PATH_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/runtime/object/xstring.h"
+#include "../../src/base/xdefs.h"
 
-XrModule *xr_load_module_path(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_PATH_H

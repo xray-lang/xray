@@ -20,8 +20,7 @@
  * DESIGN NOTE — this module is the CANONICAL compression entry point.
  * ====================================================================
  *
- * As of the P15 audit item, three separate compression layers exist
- * in the codebase for historical reasons:
+ * Three separate compression layers exist for historical reasons:
  *
  *   1. stdlib/compress/         — this module. Full-featured gzip +
  *                                 deflate + zlib + CRC32 + Adler32,
@@ -32,50 +31,20 @@
  *
  *   2. stdlib/http/http_compress — HTTP-specific gzip/deflate with
  *                                  Content-Encoding auto-detect and
- *                                  a compressor object pool for
- *                                  allocation-heavy HTTP pipelines.
- *                                  Duplicates the core zlib calls
- *                                  this module already wraps.
+ *                                  a compressor object pool.
  *
  *   3. stdlib/ws/ws_deflate     — RFC 7692 permessage-deflate with
- *                                  Z_SYNC_FLUSH + 0x00 0x00 0xff
- *                                  0xff trailer strip/append. The
- *                                  trailer handling is specific
- *                                  enough that wrapping it as a
- *                                  one-liner over this module
- *                                  requires adding a "sync flush"
- *                                  variant here first.
+ *                                  Z_SYNC_FLUSH trailer handling.
  *
- * Migration plan (tracked as a separate cleanup item — NOT done in
- * the current phase to avoid destabilising three production paths
- * at once):
- *
- *   Step A: Expose a stateful stream API in this module
- *           (xr_compress_stream_{new,feed,finish,free}) that takes
- *           an explicit flush flag (Z_FULL_FLUSH / Z_SYNC_FLUSH /
- *           Z_FINISH). ws_deflate's current fork-and-call pattern
- *           can then become a 10-line wrapper over that.
- *
- *   Step B: Move http_compress.c's pooled gzip path into this
- *           module (xr_gzip_compress_pooled) and reduce
- *           http_compress to a thin "detect + route" layer.
- *
- *   Step C: Once both wrappers are ≤ 50 LoC each, fold them into
- *           this module as `compress_http.c` and `compress_ws.c`
- *           under the same compilation unit boundary. The xray
- *           module surface (`compress.gzip`, `compress.gunzip`, …)
- *           stays unchanged.
- *
- * Until the migration lands, new features should go HERE — the other
- * two layers are maintenance-only.
+ * Consolidation: expose a stateful stream API here, then reduce
+ * http_compress and ws_deflate to thin wrappers. New features
+ * should go HERE — the other two layers are maintenance-only.
  */
 
 #ifndef XR_STDLIB_COMPRESS_H
 #define XR_STDLIB_COMPRESS_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/runtime/object/xstring.h"
+#include "../../src/base/xdefs.h"
 
 /* ========== Compression Levels ========== */
 
@@ -231,6 +200,9 @@ XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding);
 
 /* ========== Module Loading ========== */
 
-XR_FUNC XrModule *xr_load_module_compress(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
+
+XR_FUNC struct XrModule *xr_load_module_compress(struct XrayIsolate *isolate);
 
 #endif  // XR_STDLIB_COMPRESS_H
