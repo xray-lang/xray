@@ -117,7 +117,6 @@ static bool xcg_is_tagged_type(uint8_t xir_type) {
     return xir_type == XR_REP_STR || xir_type == XR_REP_TAGGED || xir_type == XR_REP_PTR;
 }
 
-
 // Derive C type string directly from XrType* (no lossy downgrade)
 static const char *xcg_c_type_for_xrtype(struct XrType *t) {
     if (!t)

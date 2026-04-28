@@ -48,7 +48,7 @@ CheckOptions:
   # Performance checks
   - key: performance-unnecessary-value-param.AllowedTypes
     value: ''
-  
+
   # Naming conventions (informational only)
   - key: readability-identifier-naming.FunctionCase
     value: lower_case
@@ -62,7 +62,7 @@ CheckOptions:
     value: '_t'
   - key: readability-identifier-naming.EnumCase
     value: UPPER_CASE
-  
+
   # Bugprone settings
   - key: bugprone-argument-comment.StrictMode
     value: 'false'
@@ -72,20 +72,16 @@ CheckOptions:
     value: 'true'
   - key: bugprone-sizeof-expression.WarnOnSizeOfIntegerExpression
     value: 'true'
-  
+
   # Misc settings
   - key: misc-throw-by-value-catch-by-reference.CheckThrowTemporaries
     value: 'true'
-  
+
   # Clang-analyzer settings
   - key: clang-analyzer-core.CallAndMessage.ArgPointeeInitializedness
     value: 'true'
   - key: clang-analyzer-deadcode.DeadStores.WarnForDeadNestedAssignments
     value: 'true'
 
-# System headers are excluded by default
-SystemHeaders: false
-
-# Use colors in output
-UseColor: true
+# System headers are excluded by default (implicit in clang-tidy 14+)
 ...

@@ -131,9 +131,9 @@ typedef struct {
 /* ========== Module-Level Export Entry ========== */
 
 typedef struct XcgenExport {
-    const char *name;   // export name (e.g. "pi", "add")
-    int shared_index;   // index into xrt_shared[] array (-1 = named global)
-    bool is_const;      // true if const export
+    const char *name;  // export name (e.g. "pi", "add")
+    int shared_index;  // index into xrt_shared[] array (-1 = named global)
+    bool is_const;     // true if const export
 } XcgenExport;
 
 /* ========== Module-Level Codegen State ========== */
@@ -183,7 +183,6 @@ struct XcgenCompilation {
     XcgenClassInfo *class_infos;
     int nclass_infos;
     int class_infos_cap;
-
 };
 
 /* ========== Compilation API ========== */
@@ -278,7 +277,7 @@ XR_FUNC void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
 
 // Emit C code for a CALL_INTRINSIC instruction
 XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf,
-                                      XcgenModule *mod);
+                                     XcgenModule *mod);
 
 /* ========== Prescan / Analysis Passes (xcgen_prescan.c) ========== */
 
