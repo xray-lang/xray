@@ -564,6 +564,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         arg_vals[i] = lower_expr(l, call->arguments[i]);
     }
 
+    /* Detect self-call: callee resolves to the self-reference dummy.
+     * Mark with aux_int=1 so xi_emit produces OP_CALLSELF. */
+    bool is_self_call = (l->self_value != NULL && callee_val == l->self_value);
+
     struct XrType *result_type = node_type(l, node);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
     if (!v) return NULL;
@@ -574,6 +578,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     }
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     v->line = (uint32_t) node->line;
+    if (is_self_call) v->aux_int = 1;
     return v;
 }
 
@@ -2325,6 +2330,17 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
         /* Register parameter in Braun SSA */
         int var_id = var_lookup_or_create(&l, p->name, ptype);
         braun_write(&l, var_id, entry, param_val);
+    }
+
+    /* For named functions, register a self-reference so the body can
+     * resolve recursive calls.  lower_call detects l.self_value and
+     * emits a self-call (OP_CALLSELF) instead of a regular call. */
+    if (fdecl->name) {
+        struct XrType *fn_type = ret_type;  /* approximate; exact type unused */
+        XiValue *self = xi_const_null(l.func, entry, l.type_null);
+        l.self_value = self;
+        int self_var = var_lookup_or_create(&l, fdecl->name, fn_type);
+        braun_write(&l, self_var, entry, self);
     }
 
     /* Lower function body */

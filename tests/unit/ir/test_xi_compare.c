@@ -610,7 +610,7 @@ TEST(cmp_func_recursive) {
         .label = "recursive fibonacci",
         .expect_xi_success = true,
         .min_similarity = 0.2,
-        .check_exec = false,  /* needs SETSHARED/GETSHARED for self-reference */
+        .check_exec = true,
     });
 }
 

@@ -100,6 +100,12 @@ typedef struct XiLower {
     struct XrType *type_void;
     struct XrType *type_any;
 
+    /* Self-reference for recursive named functions.
+     * Set to a dummy XI_CONST in xi_lower_func so the function body
+     * can resolve its own name; lower_call detects this and emits
+     * a self-call (OP_CALLSELF) instead of a regular call. */
+    XiValue *self_value;
+
     /* Error tracking */
     bool had_error;
 } XiLower;
