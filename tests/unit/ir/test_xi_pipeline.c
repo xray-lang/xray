@@ -173,8 +173,10 @@ TEST(e2e_no_optimize) {
     cfg.run_optimize = false;
     XrProto *p = compile_source("let x = 1 + 2\nprint(x)", &cfg);
     assert(p != NULL);
-    /* Without optimization, ADD should remain */
-    assert(has_opcode(p, OP_ADD) && "unoptimized should keep ADD");
+    /* Without optimization, constant folding doesn't run, so arithmetic remains.
+     * Instruction fusion may emit ADDI instead of ADD for small constant args. */
+    assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_ADDI)) &&
+           "unoptimized should keep ADD or ADDI");
     xr_vm_proto_free(p);
 }
 
