@@ -269,6 +269,11 @@ typedef struct XiFunc {
     uint32_t arena_used;
     uint32_t arena_cap;
 
+    /* Nested functions / closures lowered from this function */
+    struct XiFunc **children;
+    uint16_t nchildren;
+    uint16_t children_cap;
+
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
 } XiFunc;

@@ -256,4 +256,10 @@ void xi_func_dump(const XiFunc *f, void *stream) {
         dump_block(out, f->blocks[i]);
 
     fprintf(out, "}\n");
+
+    /* Nested functions */
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        fprintf(out, "\n");
+        xi_func_dump(f->children[i], stream);
+    }
 }

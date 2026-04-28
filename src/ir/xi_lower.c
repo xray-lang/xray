@@ -694,6 +694,82 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
     return map_val;
 }
 
+static void func_add_child(XiFunc *parent, XiFunc *child) {
+    if (parent->nchildren >= parent->children_cap) {
+        uint16_t new_cap = parent->children_cap ? parent->children_cap * 2 : 4;
+        XiFunc **tmp = (XiFunc **) xr_realloc(parent->children,
+                                                new_cap * sizeof(XiFunc *));
+        if (!tmp) return;
+        parent->children = tmp;
+        parent->children_cap = new_cap;
+    }
+    parent->children[parent->nchildren++] = child;
+}
+
+/*
+ * Lower a function declaration / function expression.
+ * Recursively lowers the function body into a child XiFunc,
+ * then emits XI_CLOSURE_NEW in the parent to produce a callable value.
+ */
+static XiValue *lower_function_decl(XiLower *l, AstNode *node) {
+    /* Recursively lower the function body into a child XiFunc */
+    XiFunc *child = xi_lower_func(node, l->analyzer, l->isolate);
+    if (!child) return xi_const_null(l->func, l->cur_block, l->type_null);
+
+    /* Register as child of parent function */
+    func_add_child(l->func, child);
+    uint16_t child_idx = (uint16_t)(l->func->nchildren - 1);
+
+    /* Emit CLOSURE_NEW with aux pointing to child func */
+    struct XrType *fn_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type, 0);
+    if (!v) return NULL;
+    v->aux = (void *) child;
+    v->aux_int = child_idx;
+    v->line = (uint32_t) node->line;
+
+    /* If named, register in SSA so the function can be called by name */
+    FunctionDeclNode *fdecl = &node->as.function_decl;
+    if (fdecl->name) {
+        int var_id = var_lookup_or_create(l, fdecl->name, fn_type);
+        braun_write(l, var_id, l->cur_block, v);
+    }
+
+    return v;
+}
+
+static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
+    NewExprNode *ne = &node->as.new_expr;
+
+    /* Evaluate arguments */
+    XiValue *arg_vals[32];
+    int n = ne->arg_count > 32 ? 32 : ne->arg_count;
+    for (int i = 0; i < n; i++) {
+        arg_vals[i] = lower_expr(l, ne->arguments[i]);
+    }
+
+    /* Allocate and call constructor */
+    struct XrType *result_type = node_type(l, node);
+    XiValue *obj = xi_value_new(l->func, l->cur_block, XI_ALLOC, result_type, 0);
+    if (!obj) return NULL;
+    obj->aux = (void *) ne->class_name;
+    obj->line = (uint32_t) node->line;
+
+    /* Constructor call: CALL_METHOD on the allocated object */
+    uint16_t nargs = (uint16_t)(n + 1);
+    XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                  result_type, nargs);
+    if (call) {
+        call->args[0] = obj;
+        for (int i = 0; i < n; i++)
+            call->args[i + 1] = arg_vals[i];
+        call->aux = (void *) "init";  /* constructor method name */
+        call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        call->line = (uint32_t) node->line;
+    }
+    return obj;
+}
+
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     int count = obj->count;
@@ -975,6 +1051,15 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
         /* Match expression */
         case AST_MATCH_EXPR:
             return lower_match(l, node);
+
+        /* Function / closure */
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            return lower_function_decl(l, node);
+
+        /* Object creation */
+        case AST_NEW_EXPR:
+            return lower_new_expr(l, node);
 
         default:
             /* Unsupported expression: emit null placeholder */
@@ -1401,6 +1486,12 @@ static void lower_stmt(XiLower *l, AstNode *node) {
 
         case AST_TRY_CATCH:
             lower_try_catch(l, node);
+            break;
+
+        /* Function declaration as statement */
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            lower_function_decl(l, node);
             break;
 
         /* Expressions that appear as statements (assignment, call, etc.) */
