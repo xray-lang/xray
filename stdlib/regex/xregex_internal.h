@@ -381,7 +381,6 @@ struct XrMatchIter {
 
 // Parser
 XR_FUNC XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser);
-XR_FUNC void xr_regex_ast_free(XrAstNode *node);
 XR_FUNC void xr_regex_ast_dump(XrAstNode *node, int indent);
 
 // Compiler
