@@ -981,7 +981,7 @@ static void stringify_value(JsonWriter *w, XrJsonValue *v) {
         }
         case XR_JSON_STRING:
             stringify_string_n(w, v->as.string ? v->as.string : "",
-                              v->as.string ? v->string_len : 0);
+                               v->as.string ? v->string_len : 0);
             break;
         case XR_JSON_ARRAY:
             writer_char(w, '[');
@@ -997,8 +997,7 @@ static void stringify_value(JsonWriter *w, XrJsonValue *v) {
             for (int i = 0; i < v->as.object.count; i++) {
                 if (i > 0)
                     writer_char(w, ',');
-                stringify_string_n(w, v->as.object.members[i].key,
-                                  v->as.object.members[i].key_len);
+                stringify_string_n(w, v->as.object.members[i].key, v->as.object.members[i].key_len);
                 writer_char(w, ':');
                 stringify_value(w, v->as.object.members[i].value);
             }
