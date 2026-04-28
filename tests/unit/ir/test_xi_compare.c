@@ -787,6 +787,152 @@ TEST(cmp_bool_logic) {
     });
 }
 
+/* --- Multiple Functions --- */
+
+TEST(cmp_multi_func) {
+    run_compare((CompareSpec){
+        .source = "fn double(x: int): int { return x * 2 }\n"
+                  "fn inc(x: int): int { return x + 1 }\n"
+                  "print(inc(double(3)))",
+        .label = "multiple function declarations and chained calls",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Bitwise Operations --- */
+
+TEST(cmp_bitwise_and_or) {
+    run_compare((CompareSpec){
+        .source = "let a = 12\nlet b = 10\n"
+                  "print(a & b)\nprint(a | b)",
+        .label = "bitwise AND and OR",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_bitwise_xor_shift) {
+    run_compare((CompareSpec){
+        .source = "let a = 5\n"
+                  "print(a ^ 3)\nprint(a << 2)\nprint(a >> 1)",
+        .label = "bitwise XOR and shifts",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_bitwise_not) {
+    run_compare((CompareSpec){
+        .source = "let a = 0\nprint(~a)\n"
+                  "let b = 255\nprint(~b)",
+        .label = "bitwise NOT",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Increment / Decrement --- */
+
+TEST(cmp_increment) {
+    run_compare((CompareSpec){
+        .source = "let x = 5\nx++\nprint(x)\n"
+                  "x--\nx--\nprint(x)",
+        .label = "increment and decrement operators",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Array Literal and Indexing --- */
+
+TEST(cmp_array_literal) {
+    run_compare((CompareSpec){
+        .source = "let arr = [10, 20, 30]\n"
+                  "print(arr[0])\nprint(arr[1])\nprint(arr[2])",
+        .label = "array literal and index access",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_array_assign) {
+    run_compare((CompareSpec){
+        .source = "let arr = [1, 2, 3]\n"
+                  "arr[1] = 99\nprint(arr[1])",
+        .label = "array index assignment",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Nested Ternary --- */
+
+TEST(cmp_nested_ternary) {
+    run_compare((CompareSpec){
+        .source = "let x = 5\n"
+                  "let r = x > 10 ? 1 : (x > 3 ? 2 : 3)\n"
+                  "print(r)",
+        .label = "nested ternary expression",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Multi-branch If-Else --- */
+
+TEST(cmp_if_else_chain) {
+    run_compare((CompareSpec){
+        .source = "let x = 15\n"
+                  "if (x > 20) { print(1) }\n"
+                  "else if (x > 10) { print(2) }\n"
+                  "else if (x > 5) { print(3) }\n"
+                  "else { print(4) }",
+        .label = "if-else chain with multiple branches",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Deeply Nested Arithmetic --- */
+
+TEST(cmp_deep_arith) {
+    run_compare((CompareSpec){
+        .source = "let a = 2\nlet b = 3\nlet c = 4\nlet d = 5\n"
+                  "let r = ((a + b) * (c - d) + a * b) * c\n"
+                  "print(r)",
+        .label = "deeply nested arithmetic expression",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- While with Multiple Conditions --- */
+
+TEST(cmp_while_multi_cond) {
+    run_compare((CompareSpec){
+        .source = "let i = 0\nlet sum = 0\n"
+                  "while (i < 10 && sum < 20) {\n"
+                  "  sum = sum + i\n"
+                  "  i = i + 1\n"
+                  "}\nprint(sum)\nprint(i)",
+        .label = "while loop with compound condition",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -882,6 +1028,33 @@ int main(void) {
     run_cmp_chained_comparison();
     run_cmp_while_countdown();
     run_cmp_bool_logic();
+
+    /* Multiple functions */
+    run_cmp_multi_func();
+
+    /* Bitwise operations */
+    run_cmp_bitwise_and_or();
+    run_cmp_bitwise_xor_shift();
+    run_cmp_bitwise_not();
+
+    /* Increment / decrement */
+    run_cmp_increment();
+
+    /* Array literal and indexing */
+    run_cmp_array_literal();
+    run_cmp_array_assign();
+
+    /* Nested ternary */
+    run_cmp_nested_ternary();
+
+    /* Multi-branch if-else */
+    run_cmp_if_else_chain();
+
+    /* Deep arithmetic */
+    run_cmp_deep_arith();
+
+    /* While with compound condition */
+    run_cmp_while_multi_cond();
 
     teardown();
 
