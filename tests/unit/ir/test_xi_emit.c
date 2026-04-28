@@ -57,7 +57,7 @@ TEST(emit_return_const_int) {
     xi_block_set_return(entry, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && "emit should succeed");
     assert(proto != NULL);
 
@@ -84,7 +84,7 @@ TEST(emit_return_void) {
     xi_block_set_return(entry, NULL);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK);
     assert(proto != NULL);
 
@@ -105,7 +105,7 @@ TEST(emit_const_bool) {
     xi_block_set_return(entry, t);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -125,7 +125,7 @@ TEST(emit_const_null) {
     xi_block_set_return(entry, n);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -148,7 +148,7 @@ TEST(emit_add) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
     assert(proto->numparams == 2);
 
@@ -184,7 +184,7 @@ TEST(emit_sub_mul_div) {
     xi_block_set_return(entry, mul);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Verify all opcodes are present */
@@ -211,7 +211,7 @@ TEST(emit_unary_neg) {
     xi_block_set_return(entry, neg);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -237,7 +237,7 @@ TEST(emit_cmp_eq) {
     xi_block_set_return(entry, eq);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -261,7 +261,7 @@ TEST(emit_cmp_gt) {
     xi_block_set_return(entry, gt);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -304,7 +304,7 @@ TEST(emit_if_then_else) {
     xi_block_set_return(else_b, c2);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Should have: TEST, JMP, LOADI 1, RETURN1, LOADI 2, RETURN1 */
@@ -336,7 +336,7 @@ TEST(emit_jump_fallthrough) {
     xi_block_set_return(b1, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Should have: LOADI 99, RETURN1 — no JMP since b1 is the next block */
@@ -363,7 +363,7 @@ TEST(emit_copy_becomes_move) {
     xi_block_set_return(entry, cp);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Should have MOVE + RETURN1 */
@@ -388,7 +388,7 @@ TEST(emit_const_float_small) {
     xi_block_set_return(entry, cf);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -407,7 +407,7 @@ TEST(emit_const_float_large) {
     xi_block_set_return(entry, cf);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -429,7 +429,7 @@ TEST(emit_const_int_large) {
     xi_block_set_return(entry, c);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
@@ -458,7 +458,7 @@ TEST(emit_after_optimization) {
     xi_opt_run(f);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* After optimization, should have minimal instructions */
@@ -497,7 +497,7 @@ TEST(emit_reg_recycling) {
     xi_block_set_return(entry, t3);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* After recycling, dead temps' regs are reused.
@@ -526,7 +526,7 @@ TEST(emit_reg_pressure) {
     xi_block_set_return(entry, prev);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* p1 is live throughout (used in every ADD), so we need:
@@ -551,7 +551,7 @@ TEST(emit_addi_rhs_const) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addi = false;
@@ -580,7 +580,7 @@ TEST(emit_addi_lhs_const) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addi = false;
@@ -609,7 +609,7 @@ TEST(emit_subi_muli) {
     xi_block_set_return(entry, mul);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_subi = false, found_muli = false;
@@ -642,7 +642,7 @@ TEST(emit_addi_negative) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addi = false;
@@ -669,7 +669,7 @@ TEST(emit_addk_large_const) {
     xi_block_set_return(entry, add);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found_addk = false;
@@ -701,7 +701,7 @@ TEST(emit_str_concat) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     /* Verify sequence: STRBUF_NEW, STRBUF_APPEND, STRBUF_APPEND, STRBUF_FINISH */
@@ -731,7 +731,7 @@ TEST(emit_closure_new) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -758,7 +758,7 @@ TEST(emit_set_new) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -786,7 +786,7 @@ TEST(emit_is_check) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
@@ -812,7 +812,7 @@ TEST(emit_cancelled_builtin) {
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
-    XiEmitStatus s = xi_emit(f, &proto);
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
 
     bool found = false;
