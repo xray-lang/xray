@@ -211,6 +211,11 @@ typedef struct XiBlock {
     /* Ordering */
     uint32_t rpo;             /* reverse post-order index (0 = not computed) */
 
+    /* Braun SSA: block sealing.
+     * A block is sealed when all its predecessors are known.
+     * Loop headers are unsealed until the back edge is added. */
+    bool sealed;
+
     /* Back-pointer */
     struct XiFunc *func;
 } XiBlock;
@@ -268,6 +273,10 @@ typedef struct XiFunc {
 
 XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
 XR_FUNC void xi_func_free(XiFunc *f);
+
+/* Arena helper: allocate aligned memory from the function's bump allocator.
+ * Used by xi_lower.c for phi arg arrays during Braun SSA construction. */
+XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
 
 /* ========== API: Block Management ========== */
 
