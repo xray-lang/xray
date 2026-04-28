@@ -215,6 +215,117 @@ TEST(comparison_ops) {
     xi_func_free(f);
 }
 
+TEST(compound_assignment) {
+    XiFunc *f = lower_source(
+        "let x = 10\n"
+        "x += 5\n"
+        "x -= 2\n"
+        "print(x)\n"
+    );
+    assert(f != NULL);
+    assert(f->nblocks >= 1);
+    /* const 10, const 5, add, const 2, sub, print */
+    assert(f->entry->nvalues >= 5);
+    xi_func_free(f);
+}
+
+TEST(inc_dec) {
+    XiFunc *f = lower_source(
+        "let x = 0\n"
+        "x++\n"
+        "x++\n"
+        "x--\n"
+        "print(x)\n"
+    );
+    assert(f != NULL);
+    /* const 0, [const 1, add] * 2, [const 1, sub], print */
+    assert(f->entry->nvalues >= 6);
+    xi_func_free(f);
+}
+
+TEST(ternary_expr) {
+    XiFunc *f = lower_source(
+        "let x = 10\n"
+        "let y = (x > 5) ? 1 : 0\n"
+        "print(y)\n"
+    );
+    assert(f != NULL);
+    /* ternary produces: entry, then, else, merge blocks */
+    assert(f->nblocks >= 4);
+    xi_func_free(f);
+}
+
+TEST(break_continue) {
+    XiFunc *f = lower_source(
+        "let i = 0\n"
+        "while (i < 100) {\n"
+        "    i = i + 1\n"
+        "    if (i == 5) {\n"
+        "        break\n"
+        "    }\n"
+        "    if (i == 3) {\n"
+        "        continue\n"
+        "    }\n"
+        "}\n"
+        "print(i)\n"
+    );
+    assert(f != NULL);
+    assert(f->nblocks >= 4);
+    xi_func_free(f);
+}
+
+TEST(nested_while) {
+    XiFunc *f = lower_source(
+        "let sum = 0\n"
+        "let i = 0\n"
+        "while (i < 3) {\n"
+        "    let j = 0\n"
+        "    while (j < 3) {\n"
+        "        sum = sum + 1\n"
+        "        j = j + 1\n"
+        "    }\n"
+        "    i = i + 1\n"
+        "}\n"
+        "print(sum)\n"
+    );
+    assert(f != NULL);
+    /* Two nested loops: each needs cond + body + exit blocks */
+    assert(f->nblocks >= 6);
+    xi_func_free(f);
+}
+
+TEST(type_propagation) {
+    XiFunc *f = lower_source(
+        "let a = 1\n"
+        "let b = 2.0\n"
+        "let c = a + a\n"
+        "let d = b + b\n"
+        "let e = a > 0\n"
+        "print(c)\n"
+        "print(d)\n"
+        "print(e)\n"
+    );
+    assert(f != NULL);
+    /* Verify types: walk entry block values */
+    XiBlock *b0 = f->entry;
+    assert(b0 != NULL);
+    /* Find add operations and check their types */
+    int found_int_add = 0, found_float_add = 0, found_bool_gt = 0;
+    for (uint32_t i = 0; i < b0->nvalues; i++) {
+        XiValue *v = b0->values[i];
+        if (v->op == XI_ADD && v->type && v->type->kind == XR_KIND_INT)
+            found_int_add = 1;
+        if (v->op == XI_ADD && v->type && v->type->kind == XR_KIND_FLOAT)
+            found_float_add = 1;
+        if (v->op == XI_GT && v->type && v->type->kind == XR_KIND_BOOL)
+            found_bool_gt = 1;
+    }
+    assert(found_int_add && "int + int should produce int");
+    assert(found_float_add && "float + float should produce float");
+    assert(found_bool_gt && "a > 0 should produce bool");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -232,6 +343,12 @@ int main(void) {
     run_float_arithmetic();
     run_string_const();
     run_comparison_ops();
+    run_compound_assignment();
+    run_inc_dec();
+    run_ternary_expr();
+    run_break_continue();
+    run_nested_while();
+    run_type_propagation();
 
     teardown();
 
