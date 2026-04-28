@@ -38,7 +38,7 @@ void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv,
 void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv,
                          const uint8_t *input, uint8_t *output, size_t len);
 
-int xr_random_bytes(uint8_t *buffer, size_t len);
+void xr_random_bytes(uint8_t *buffer, size_t len);
 void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output);
 
 // Helper: compare digest with expected hex string
@@ -186,17 +186,20 @@ TEST(crypto_aes_cbc_single_block) {
 TEST(crypto_random_bytes) {
     uint8_t buf1[32], buf2[32];
 
-    ASSERT_EQ_INT(xr_random_bytes(buf1, 32), 0);
-    ASSERT_EQ_INT(xr_random_bytes(buf2, 32), 0);
+    memset(buf1, 0, 32);
+    memset(buf2, 0, 32);
+    xr_random_bytes(buf1, 32);
+    xr_random_bytes(buf2, 32);
 
     // Two random buffers should (almost certainly) differ
     ASSERT_TRUE(memcmp(buf1, buf2, 32) != 0);
 }
 
 TEST(crypto_random_bytes_zero) {
-    // Zero-length should succeed
+    // Zero-length should succeed without crashing
     uint8_t buf[1] = {0xAA};
-    ASSERT_EQ_INT(xr_random_bytes(buf, 0), 0);
+    xr_random_bytes(buf, 0);
+    ASSERT_EQ_INT(buf[0], 0xAA);
 }
 
 /* ========== Bytes to Hex ========== */

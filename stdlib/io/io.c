@@ -723,7 +723,7 @@ static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
-    // Try to update timestamp
+        // Try to update timestamp
 #ifdef XR_OS_WINDOWS
     if (_utime(path, NULL) == 0)
 #else

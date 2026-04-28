@@ -355,17 +355,13 @@ XrLspServer *xlsp_server_new(void) {
         lsp_log("Warning: Failed to create workspace analyzer");
     }
 
-    // Create background task system
-    server->async = xlsp_async_new();
+    // Create background task system.
+    // Pass the log-server init hook so the worker thread shares the same
+    // log file / stderr routing as the main loop. The hook is installed
+    // before pthread_create inside xlsp_async_new to avoid a data race.
+    server->async = xlsp_async_new((void (*)(void *)) xlsp_set_log_server, server);
     if (!server->async) {
         lsp_log("Warning: Failed to create async worker, background tasks disabled");
-    } else {
-        // Ensure the worker thread shares the same log file / stderr routing
-        // as the main loop — otherwise every lsp_log() call from a task would
-        // see tls_server == NULL and go to stderr only, bypassing the log
-        // file entirely (see the comment in XrLspAsync::thread_init).
-        server->async->thread_init = (void (*)(void *)) xlsp_set_log_server;
-        server->async->thread_init_ctx = server;
     }
 
     // Default configuration

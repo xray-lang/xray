@@ -119,8 +119,10 @@ typedef struct XrLspAsync {
     void *thread_init_ctx;
 } XrLspAsync;
 
-// Initialize/destroy async system
-XR_FUNC XrLspAsync *xlsp_async_new(void);
+// Initialize/destroy async system.
+// thread_init/ctx are called once at worker startup (before any tasks).
+// Pass NULL if no per-thread init is needed.
+XR_FUNC XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx);
 XR_FUNC void xlsp_async_free(XrLspAsync *async);
 
 // Submit task (called from main thread)
