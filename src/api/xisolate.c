@@ -39,6 +39,7 @@
 #include "../runtime/object/xshape.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
+#include "../../stdlib/stdlib_cache.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -194,15 +195,9 @@ void xray_isolate_delete(XrayIsolate *isolate) {
         isolate->global_string_pool = NULL;
     }
 
-    // Release the lazy stdlib per-isolate cache. The struct only holds
-    // pointers to GC-managed objects (shapes, interned XrValues), so
-    // freeing the container itself is sufficient; defined as an opaque
-    // void* in xisolate_internal.h to avoid leaking stdlib types into
-    // the core header (see stdlib/stdlib_cache.h).
-    if (isolate->stdlib_cache) {
-        xr_free(isolate->stdlib_cache);
-        isolate->stdlib_cache = NULL;
-    }
+    // Release the lazy stdlib per-isolate cache. Calls log_state_cleanup
+    // and frees the container. Safe to call even when cache is NULL.
+    xr_stdlib_cache_free(isolate);
 
     if (isolate->config) {
         xr_free(isolate->config);

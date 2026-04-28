@@ -35,10 +35,11 @@
 #ifndef XR_STDLIB_CACHE_H
 #define XR_STDLIB_CACHE_H
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #include "../src/base/xdefs.h"
-#include "../src/base/xmalloc.h"
 #include "../src/runtime/value/xvalue.h"
-#include "../src/runtime/xisolate_internal.h"
 
 struct XrShape;
 struct XrString;
@@ -106,36 +107,12 @@ typedef struct XrStdlibCache {
 } XrStdlibCache;
 
 // Retrieve (and lazily allocate) the per-isolate stdlib cache.
-// Never returns NULL in practice; on allocator OOM it aborts, matching the
-// xmalloc OOM policy used elsewhere by stdlib.
-static inline XrStdlibCache *xr_stdlib_cache_get(XrayIsolate *isolate) {
-    XrStdlibCache *c = (XrStdlibCache *) isolate->stdlib_cache;
-    if (c)
-        return c;
-    c = (XrStdlibCache *) xr_malloc(sizeof(XrStdlibCache));
-    if (!c)
-        return NULL;
-    memset(c, 0, sizeof(*c));
-    isolate->stdlib_cache = c;
-    return c;
-}
+// Never returns NULL in practice; on allocator OOM it returns NULL,
+// matching the xmalloc OOM policy used elsewhere by stdlib.
+XR_FUNC XrStdlibCache *xr_stdlib_cache_get(struct XrayIsolate *isolate);
 
-// Release the cache and every lazily-populated object it owns. Safe to call
-// with a NULL isolate or with the cache already freed.
-static inline void xr_stdlib_cache_free(XrayIsolate *isolate) {
-    if (!isolate || !isolate->stdlib_cache)
-        return;
-    XrStdlibCache *c = (XrStdlibCache *) isolate->stdlib_cache;
-
-    // Tear down the per-isolate log state (async thread, mutex, logger).
-    if (c->log_state_cleanup && c->log_state) {
-        c->log_state_cleanup(c->log_state);
-    }
-
-    // Shapes are GC-managed, so we do NOT xr_free io_stat_shape itself.
-    // Zeroing the struct and releasing the container is enough.
-    xr_free(c);
-    isolate->stdlib_cache = NULL;
-}
+// Release the cache and every lazily-populated object it owns. Safe to
+// call with a NULL isolate or with the cache already freed.
+XR_FUNC void xr_stdlib_cache_free(struct XrayIsolate *isolate);
 
 #endif  // XR_STDLIB_CACHE_H

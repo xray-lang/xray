@@ -388,6 +388,7 @@ file(GLOB NEW_CLI_SRC "src/app/cli/*.c")
 # Standard Library (Native modules) - modular conditional compilation
 # Core modules (required): time, math, json, log, gc, regex, path, datetime, encoding, base64, url
 file(GLOB STDLIB_CORE_SRC
+    "stdlib/stdlib_cache.c"
     "stdlib/time/*.c"
     "stdlib/math/*.c"
     "stdlib/json/*.c"
@@ -406,6 +407,7 @@ find_package(ZLIB QUIET)
 if(XR_STDLIB_FULL)
     # Full stdlib: include all modules except those explicitly disabled
     file(GLOB_RECURSE STDLIB_ALL_SRC "stdlib/*/*.c")
+    list(APPEND STDLIB_ALL_SRC "stdlib/stdlib_cache.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
     if(NOT XR_STDLIB_CLUSTER)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/cluster/.*")
