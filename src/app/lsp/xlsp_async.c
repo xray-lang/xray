@@ -219,7 +219,7 @@ static void *worker_thread(void *arg) {
 // Public API
 // ============================================================================
 
-XrLspAsync *xlsp_async_new(void) {
+XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx) {
     XrLspAsync *async = xr_calloc(1, sizeof(XrLspAsync));
     if (!async)
         return NULL;
@@ -246,6 +246,10 @@ XrLspAsync *xlsp_async_new(void) {
     // Initialize task ID generator (start from 1)
     atomic_store(&async->next_task_id, 1);
     async->current_task = NULL;
+
+    // Set thread-init hook before starting worker (avoids data race)
+    async->thread_init = thread_init;
+    async->thread_init_ctx = thread_init_ctx;
 
     // Start worker thread
     atomic_store(&async->running, true);

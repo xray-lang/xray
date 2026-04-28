@@ -54,14 +54,15 @@ if [ "${XRAY_SKIP_BUILD}" != "1" ]; then
     echo -e "${GREEN}构建完成${NC}"
 fi
 
-# Portable timeout: use timeout/gtimeout if available, else shell-based fallback
+# Portable timeout: use timeout/gtimeout if available, else shell-based fallback.
+# Provides portable_timeout() that works on Linux, macOS, and bare systems.
 if command -v timeout &>/dev/null; then
-    TIMEOUT_CMD="timeout"
+    portable_timeout() { timeout "$@"; }
 elif command -v gtimeout &>/dev/null; then
-    TIMEOUT_CMD="gtimeout"
+    portable_timeout() { gtimeout "$@"; }
 else
     # Shell-based fallback for macOS without coreutils
-    run_with_timeout() {
+    portable_timeout() {
         local secs=$1; shift
         "$@" &
         local pid=$!
@@ -77,7 +78,6 @@ else
         fi
         return $rc
     }
-    TIMEOUT_CMD="__builtin__"
 fi
 
 # 检查可执行文件是否存在
@@ -146,10 +146,10 @@ for test_file in $(find "${TEST_DIR}" -name "*.xr" -type f | sort); do
     esac
 
     if [ "${VERBOSE}" = "1" ]; then
-        output=$(timeout 30 "${XRAY_BIN}" test ${jit_flag} "${test_file}" 2>&1)
+        output=$(portable_timeout 30 "${XRAY_BIN}" test ${jit_flag} "${test_file}" 2>&1)
         exit_code=$?
     else
-        timeout 30 "${XRAY_BIN}" test ${jit_flag} "${test_file}" > /dev/null 2>&1
+        portable_timeout 30 "${XRAY_BIN}" test ${jit_flag} "${test_file}" > /dev/null 2>&1
         exit_code=$?
     fi
 
