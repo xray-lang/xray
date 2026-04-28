@@ -889,6 +889,164 @@ static void lower_defer(XiLower *l, AstNode *node) {
     v->line = (uint32_t) node->line;
 }
 
+static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
+    IsExprNode *is = &node->as.is_expr;
+    XiValue *val = lower_expr(l, is->expr);
+    if (!val) return NULL;
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, 1);
+    if (!v) return NULL;
+    v->args[0] = val;
+    v->aux = (void *) is->type;  /* target type for runtime check */
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
+    AsExprNode *as = &node->as.as_expr;
+    XiValue *val = lower_expr(l, as->expr);
+    if (!val) return NULL;
+
+    struct XrType *target = as->type ? as->type : l->type_any;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, target, 1);
+    if (!v) return NULL;
+    v->args[0] = val;
+    v->aux = (void *) as->type;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_slice_expr(XiLower *l, AstNode *node) {
+    SliceExprNode *sl = &node->as.slice_expr;
+    XiValue *src = lower_expr(l, sl->source);
+    XiValue *start = sl->start ? lower_expr(l, sl->start)
+                                : xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    XiValue *end = sl->end ? lower_expr(l, sl->end) : NULL;
+    if (!src) return NULL;
+
+    uint16_t nargs = end ? 3 : 2;
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_SLICE, result_type, nargs);
+    if (!v) return NULL;
+    v->args[0] = src;
+    v->args[1] = start;
+    if (end) v->args[2] = end;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_range_expr(XiLower *l, AstNode *node) {
+    RangeNode *rn = &node->as.range;
+    XiValue *start = lower_expr(l, rn->start);
+    XiValue *end = lower_expr(l, rn->end);
+    if (!start || !end) return NULL;
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_RANGE, result_type, 2);
+    if (!v) return NULL;
+    v->args[0] = start;
+    v->args[1] = end;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
+    StructLiteralNode *sl = &node->as.struct_literal;
+    int count = sl->field_count;
+
+    XiValue *val_vals[32];
+    int n = count > 32 ? 32 : count;
+    for (int i = 0; i < n; i++) {
+        val_vals[i] = lower_expr(l, sl->field_values[i]);
+    }
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
+    XiValue *obj = xi_value_new(l->func, l->cur_block, XI_ALLOC, result_type, 1);
+    if (!obj) return NULL;
+    obj->args[0] = cap;
+    obj->aux = (void *) sl->struct_name;
+    obj->line = (uint32_t) node->line;
+
+    for (int i = 0; i < n; i++) {
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
+                                     l->type_void, 2);
+        if (!set) break;
+        set->args[0] = obj;
+        set->args[1] = val_vals[i];
+        if (sl->field_names[i])
+            set->aux = (void *) sl->field_names[i];
+        set->flags |= XI_FLAG_SIDE_EFFECT;
+    }
+    return obj;
+}
+
+/*
+ * Optional chain: obj?.name or obj?[idx]
+ * Short-circuits to null if obj is null.
+ */
+static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
+    OptionalChainNode *oc = &node->as.optional_chain;
+    XiValue *obj = lower_expr(l, oc->object);
+    if (!obj) return NULL;
+
+    /* Check if obj is null */
+    XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+    if (!is_null) return obj;
+    is_null->args[0] = obj;
+
+    XiBlock *access_blk = xi_block_new(l->func);
+    XiBlock *null_blk = xi_block_new(l->func);
+    XiBlock *merge = xi_block_new(l->func);
+
+    xi_block_set_if(l->cur_block, is_null, null_blk, access_blk);
+    braun_seal_block(l, access_blk);
+    braun_seal_block(l, null_blk);
+
+    /* Null path → produce null */
+    l->cur_block = null_blk;
+    XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
+    xi_block_set_jump(l->cur_block, merge);
+
+    /* Access path → perform member access or index */
+    l->cur_block = access_blk;
+    struct XrType *result_type = node_type(l, node);
+    XiValue *access_val = NULL;
+    if (oc->name) {
+        /* Property access: obj.name */
+        access_val = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
+        if (access_val) {
+            access_val->args[0] = obj;
+            access_val->aux = (void *) oc->name;
+        }
+    } else if (oc->index) {
+        /* Index access: obj[idx] */
+        XiValue *idx = lower_expr(l, oc->index);
+        access_val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
+        if (access_val) {
+            access_val->args[0] = obj;
+            access_val->args[1] = idx;
+        }
+    }
+    XiBlock *access_exit = l->cur_block;
+    xi_block_set_jump(access_exit, merge);
+
+    braun_seal_block(l, merge);
+    l->cur_block = merge;
+
+    /* PHI merge: null or accessed value */
+    XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+    if (phi) {
+        for (uint16_t i = 0; i < merge->npreds; i++) {
+            if (merge->preds[i] == null_blk)
+                phi->value.args[i] = null_val;
+            else
+                phi->value.args[i] = access_val ? access_val : null_val;
+        }
+    }
+    return phi ? &phi->value : null_val;
+}
+
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     int count = obj->count;
@@ -1193,6 +1351,24 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
             return lower_template_string(l, node);
         case AST_SET_LITERAL:
             return lower_set_literal(l, node);
+
+        /* Type operations */
+        case AST_IS_EXPR:
+            return lower_is_expr(l, node);
+        case AST_AS_EXPR:
+            return lower_as_expr(l, node);
+
+        /* Slice / range */
+        case AST_SLICE_EXPR:
+            return lower_slice_expr(l, node);
+        case AST_RANGE:
+            return lower_range_expr(l, node);
+
+        /* Struct literal / optional chain */
+        case AST_STRUCT_LITERAL:
+            return lower_struct_literal(l, node);
+        case AST_OPTIONAL_CHAIN:
+            return lower_optional_chain(l, node);
 
         default:
             /* Unsupported expression: emit null placeholder */

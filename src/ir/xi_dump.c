@@ -77,6 +77,10 @@ static const char *xi_op_name(uint16_t op) {
         case XI_CHAN_NEW:    return "CHAN_NEW";
         case XI_SET_NEW:     return "SET_NEW";
         case XI_STR_CONCAT:  return "STR_CONCAT";
+        case XI_IS:          return "IS";
+        case XI_AS:          return "AS";
+        case XI_SLICE:       return "SLICE";
+        case XI_RANGE:       return "RANGE";
         case XI_ISNULL:      return "ISNULL";
         case XI_PHI:         return "PHI";
         case XI_COPY:        return "COPY";

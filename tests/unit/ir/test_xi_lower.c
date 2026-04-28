@@ -666,6 +666,91 @@ TEST(set_literal) {
     xi_func_free(f);
 }
 
+TEST(is_expr) {
+    XiFunc *f = lower_source(
+        "let x = 42\n"
+        "let ok = x is int\n"
+        "print(ok)\n"
+    );
+    assert(f != NULL);
+    int found_is = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_IS) found_is = 1;
+    }
+    assert(found_is && "should have IS op");
+    xi_func_free(f);
+}
+
+TEST(slice_expr) {
+    XiFunc *f = lower_source(
+        "let arr = [1, 2, 3, 4]\n"
+        "let sub = arr[1:3]\n"
+        "print(sub)\n"
+    );
+    assert(f != NULL);
+    int found_slice = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_SLICE) found_slice = 1;
+    }
+    assert(found_slice && "should have SLICE op");
+    xi_func_free(f);
+}
+
+TEST(range_expr) {
+    XiFunc *f = lower_source(
+        "let r = 1..10\n"
+        "print(r)\n"
+    );
+    assert(f != NULL);
+    int found_range = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_RANGE) found_range = 1;
+    }
+    assert(found_range && "should have RANGE op");
+    xi_func_free(f);
+}
+
+TEST(optional_chain) {
+    XiFunc *f = lower_source(
+        "let obj = {name: \"alice\"}\n"
+        "let n = obj?.name\n"
+        "print(n)\n"
+    );
+    assert(f != NULL);
+    /* Optional chain generates ISNULL + branch + merge */
+    int found_isnull = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i]->op == XI_ISNULL) found_isnull = 1;
+        }
+    }
+    assert(found_isnull && "should have ISNULL for optional chain");
+    assert(f->nblocks >= 3 && "should have branch blocks for optional chain");
+    xi_func_free(f);
+}
+
+TEST(struct_literal) {
+    XiFunc *f = lower_source(
+        "struct Point {\n"
+        "    x: float\n"
+        "    y: float\n"
+        "}\n"
+        "let p = Point{x: 1.0, y: 2.0}\n"
+        "print(p)\n"
+    );
+    assert(f != NULL);
+    int found_alloc = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i]->op == XI_ALLOC) found_alloc = 1;
+        }
+    }
+    assert(found_alloc && "should have ALLOC for struct literal");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -707,6 +792,11 @@ int main(void) {
     run_go_await();
     run_defer_stmt();
     run_set_literal();
+    run_is_expr();
+    run_slice_expr();
+    run_range_expr();
+    run_optional_chain();
+    run_struct_literal();
 
     teardown();
 

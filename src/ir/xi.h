@@ -138,6 +138,12 @@ typedef enum {
     /* String concatenation (for template strings) */
     XI_STR_CONCAT,  /* concat: args[0..n]=parts, produces string */
 
+    /* Type operations */
+    XI_IS,          /* runtime type check: args[0]=value, aux=target type, returns bool */
+    XI_AS,          /* type cast: args[0]=value, aux=target type */
+    XI_SLICE,       /* slice: args[0]=source, args[1]=start, args[2]=end */
+    XI_RANGE,       /* range: args[0]=start, args[1]=end */
+
     /* Null check */
     XI_ISNULL,      /* args[0]=value, returns bool (true if null) */
 
