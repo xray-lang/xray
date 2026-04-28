@@ -449,10 +449,10 @@ static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
                        parts.password ? make_str(X, parts.password, parts.password_len)
                                       : make_cstr(X, ""));
 
-    // Derived: host = hostname[:port]
+    // Derived: host = hostname[:port] (only include validated port)
     XrCtxBuf host_buf;
     xr_ctxbuf_init(&host_buf, 64);
-    if (parts.port && parts.port_len > 0) {
+    if (port_is_valid) {
         xr_ctxbuf_appendf(&host_buf, "%.*s:%.*s", (int) parts.hostname_len,
                           parts.hostname ? parts.hostname : "", (int) parts.port_len, parts.port);
     } else {

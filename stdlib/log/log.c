@@ -551,16 +551,20 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, 
         ctxbuf_putc(&b, '\n');
     }
 
-    // Async: transfer buffer ownership to queue; Sync: write and free
+    // Async: transfer buffer ownership to queue; Sync: write and free.
+    // The mutex prevents setOutput() from closing the FILE* between our
+    // read of logger->output and the fwrite/fflush that uses it.
     if (logger->async_mode && ls && ls->async_initialized) {
         async_log_write(ls, b.data);  // ownership transferred
     } else {
+        xr_mutex_lock(&ls->mutex);
         FILE *out = logger->output ? logger->output : stderr;
         fwrite(b.data, 1, b.len, out);
         // Flush immediately for WARN+ to avoid buffered loss on crash
         if (level >= XR_LOG_WARN) {
             fflush(out);
         }
+        xr_mutex_unlock(&ls->mutex);
         xr_free(b.data);
     }
 }
