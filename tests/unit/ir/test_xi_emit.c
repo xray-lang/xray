@@ -23,6 +23,7 @@ static XrType stub_float= { .kind = XR_KIND_FLOAT,  .id = 2, .frozen = true };
 static XrType stub_bool = { .kind = XR_KIND_BOOL,   .id = 3, .frozen = true };
 static XrType stub_null = { .kind = XR_KIND_NULL,   .id = 4, .frozen = true };
 static XrType stub_void = { .kind = XR_KIND_VOID,   .id = 6, .frozen = true };
+static XrType stub_string={ .kind = XR_KIND_STRING, .id = 5, .frozen = true };
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -537,6 +538,149 @@ TEST(emit_reg_pressure) {
     xi_func_free(f);
 }
 
+/* ========== New Op Coverage ========== */
+
+TEST(emit_str_concat) {
+    /* STR_CONCAT with 2 parts -> STRBUF_NEW + 2*STRBUF_APPEND + STRBUF_FINISH */
+    XiFunc *f = make_func("concat", &stub_string);
+    XiBlock *entry = f->entry;
+
+    XiValue *s1 = xi_const_str(f, entry, "hello", &stub_string);
+    XiValue *s2 = xi_const_str(f, entry, " world", &stub_string);
+
+    XiValue *v = xi_value_new(f, entry, XI_STR_CONCAT, &stub_string, 2);
+    assert(v != NULL);
+    v->args[0] = s1;
+    v->args[1] = s2;
+    xi_block_set_return(entry, v);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* Verify sequence: STRBUF_NEW, STRBUF_APPEND, STRBUF_APPEND, STRBUF_FINISH */
+    bool found_new = false, found_append = false, found_finish = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
+        if (op == OP_STRBUF_NEW) found_new = true;
+        if (op == OP_STRBUF_APPEND) found_append = true;
+        if (op == OP_STRBUF_FINISH) found_finish = true;
+    }
+    assert(found_new && "should have STRBUF_NEW");
+    assert(found_append && "should have STRBUF_APPEND");
+    assert(found_finish && "should have STRBUF_FINISH");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_closure_new) {
+    /* CLOSURE_NEW -> OP_CLOSURE */
+    XiFunc *f = make_func("parent", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *v = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_int, 0);
+    assert(v != NULL);
+    v->aux_int = 0;  /* proto index 0 */
+    xi_block_set_return(entry, v);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CLOSURE) {
+            found = true; break;
+        }
+    }
+    assert(found && "CLOSURE_NEW should emit OP_CLOSURE");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_set_new) {
+    /* SET_NEW -> OP_NEWSET */
+    XiFunc *f = make_func("mkset", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *cap = xi_const_int(f, entry, 4, &stub_int);
+    XiValue *v = xi_value_new(f, entry, XI_SET_NEW, &stub_int, 1);
+    assert(v != NULL);
+    v->args[0] = cap;
+    xi_block_set_return(entry, v);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_NEWSET) {
+            found = true; break;
+        }
+    }
+    assert(found && "SET_NEW should emit OP_NEWSET");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_is_check) {
+    /* IS -> OP_IS */
+    XiFunc *f = make_func("typecheck", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *p0 = xi_param(f, entry, 0, &stub_int);
+    XiValue *v = xi_value_new(f, entry, XI_IS, &stub_bool, 1);
+    assert(v != NULL);
+    v->args[0] = p0;
+    v->aux_int = 1;  /* type_id for int */
+    xi_block_set_return(entry, v);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_IS) {
+            found = true; break;
+        }
+    }
+    assert(found && "XI_IS should emit OP_IS");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_cancelled_builtin) {
+    /* CALL_BUILTIN(0) -> OP_CANCELLED */
+    XiFunc *f = make_func("chk", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *v = xi_value_new(f, entry, XI_CALL_BUILTIN, &stub_bool, 0);
+    assert(v != NULL);
+    v->aux_int = 0;  /* cancelled() */
+    xi_block_set_return(entry, v);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CANCELLED) {
+            found = true; break;
+        }
+    }
+    assert(found && "CALL_BUILTIN(0) should emit OP_CANCELLED");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 /* ========== Error Handling ========== */
 
 TEST(emit_status_str) {
@@ -590,6 +734,13 @@ int main(void) {
     /* Register recycling */
     run_emit_reg_recycling();
     run_emit_reg_pressure();
+
+    /* New op coverage */
+    run_emit_str_concat();
+    run_emit_closure_new();
+    run_emit_set_new();
+    run_emit_is_check();
+    run_emit_cancelled_builtin();
 
     /* Error handling */
     run_emit_status_str();

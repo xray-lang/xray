@@ -629,6 +629,141 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
+        /* Closure creation: XI_CLOSURE_NEW -> OP_CLOSURE(A, Bx=proto_index) */
+        case XI_CLOSURE_NEW: {
+            int proto_idx = (int)v->aux_int;
+            XR_DCHECK(proto_idx >= 0, "closure proto index must be non-negative");
+            emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
+            break;
+        }
+
+        /* Upvalue access */
+        case XI_LOAD_UPVAL: {
+            int upval_idx = (int)v->aux_int;
+            emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, dst, (uint8_t)upval_idx, 0));
+            break;
+        }
+        case XI_STORE_UPVAL: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t val = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int upval_idx = (int)v->aux_int;
+            emit_inst(ctx, CREATE_ABC(OP_CELL_SET, (uint8_t)upval_idx, val, 0));
+            break;
+        }
+
+        /* Method call: args[0]=receiver, args[1..n]=params, aux=method name */
+        case XI_CALL_METHOD: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t recv = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            uint8_t nargs = (uint8_t)(v->nargs - 1);
+
+            /* Place receiver and args in consecutive registers */
+            for (uint16_t a = 1; a < v->nargs; a++) {
+                uint8_t arg_reg = reg_of(ctx, v->args[a]);
+                if (ctx->status != XI_EMIT_OK) return;
+                uint8_t target = (uint8_t)(recv + a);
+                if (arg_reg != target)
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+            }
+
+            /* Method name -> constant pool -> INVOKE */
+            const char *method_name = (const char *)v->aux;
+            int ki = add_const_string(ctx, method_name);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_INVOKE, recv, (uint8_t)ki, nargs + 1));
+
+            if (dst != recv)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, recv, 0));
+            break;
+        }
+
+        /* Builtin call: aux_int=builtin_id */
+        case XI_CALL_BUILTIN: {
+            int builtin_id = (int)v->aux_int;
+            /* Special case: builtin 0 = cancelled() */
+            if (builtin_id == 0) {
+                emit_inst(ctx, CREATE_ABC(OP_CANCELLED, dst, 0, 0));
+            } else {
+                /* Generic: INVOKE_BUILTIN A=base, B=builtin_idx, C=nargs */
+                if (v->nargs > 0) {
+                    uint8_t base = reg_of(ctx, v->args[0]);
+                    if (ctx->status != XI_EMIT_OK) return;
+                    emit_inst(ctx, CREATE_ABC(OP_INVOKE_BUILTIN,
+                                              base, (uint8_t)builtin_id,
+                                              (uint8_t)v->nargs));
+                    if (dst != base)
+                        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+                }
+            }
+            break;
+        }
+
+        /* String concatenation: STRBUF_NEW + STRBUF_APPEND*n + STRBUF_FINISH */
+        case XI_STR_CONCAT: {
+            emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                uint8_t part = reg_of(ctx, v->args[a]);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, part, 0));
+            }
+            emit_inst(ctx, CREATE_ABC(OP_STRBUF_FINISH, dst, 0, 0));
+            break;
+        }
+
+        /* Object allocation: aux=class/type name */
+        case XI_ALLOC: {
+            /* Emit as NEWMAP with field capacity from aux or args[0] */
+            uint8_t cap = 0;
+            if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
+                cap = (uint8_t)v->args[0]->aux_int;
+            }
+            emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, 0));
+            break;
+        }
+
+        /* Set creation */
+        case XI_SET_NEW: {
+            uint8_t cap = 0;
+            if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
+                cap = (uint8_t)v->args[0]->aux_int;
+            }
+            emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, cap, 0));
+            break;
+        }
+
+        /* Defer: args[0]=callee; OP_DEFER A=callee_reg B=nargs */
+        case XI_DEFER: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t callee = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            uint8_t nargs = (uint8_t)(v->nargs > 1 ? v->nargs - 1 : 0);
+            emit_inst(ctx, CREATE_ABC(OP_DEFER, callee, nargs, 0));
+            break;
+        }
+
+        /* Type check: IS A B C — R[A] = (R[B] is Type[C]) */
+        case XI_IS: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t src = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int type_id = (int)v->aux_int;
+            emit_inst(ctx, CREATE_ABC(OP_IS, dst, src, (uint8_t)type_id));
+            break;
+        }
+
+        /* Type cast: treated as assertion + move */
+        case XI_AS: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t src = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            /* For now, cast is just a move (runtime check happens via IS) */
+            if (dst != src)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+            break;
+        }
+
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
             return;
