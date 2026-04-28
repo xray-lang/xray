@@ -90,7 +90,7 @@ static void md5_transform(XrMD5Context *ctx, const uint8_t block[64]) {
     ctx->state[3] += d;
 }
 
-void xr_md5_init(XrMD5Context *ctx) {
+XR_FUNC void xr_md5_init(XrMD5Context *ctx) {
     ctx->count[0] = ctx->count[1] = 0;
     ctx->state[0] = 0x67452301;
     ctx->state[1] = 0xefcdab89;
@@ -98,7 +98,7 @@ void xr_md5_init(XrMD5Context *ctx) {
     ctx->state[3] = 0x10325476;
 }
 
-void xr_md5_update(XrMD5Context *ctx, const uint8_t *data, size_t len) {
+XR_FUNC void xr_md5_update(XrMD5Context *ctx, const uint8_t *data, size_t len) {
     XR_DCHECK(ctx != NULL, "xr_md5_update: NULL ctx");
     XR_DCHECK(data != NULL || len == 0, "xr_md5_update: NULL data");
     uint32_t index = (ctx->count[0] >> 3) & 0x3F;
@@ -118,7 +118,7 @@ void xr_md5_update(XrMD5Context *ctx, const uint8_t *data, size_t len) {
     memcpy(&ctx->buffer[index], &data[i], len - i);
 }
 
-void xr_md5_final(XrMD5Context *ctx, uint8_t digest[16]) {
+XR_FUNC void xr_md5_final(XrMD5Context *ctx, uint8_t digest[16]) {
     uint8_t padding[64] = {0x80}, bits[8];
     for (int i = 0; i < 4; i++) {
         bits[i] = (uint8_t) (ctx->count[0] >> (i * 8));
@@ -136,7 +136,7 @@ void xr_md5_final(XrMD5Context *ctx, uint8_t digest[16]) {
     }
 }
 
-void xr_md5(const uint8_t *data, size_t len, uint8_t digest[16]) {
+XR_FUNC void xr_md5(const uint8_t *data, size_t len, uint8_t digest[16]) {
     XrMD5Context ctx;
     xr_md5_init(&ctx);
     xr_md5_update(&ctx, data, len);
@@ -205,7 +205,7 @@ static void sha256_transform(XrSHA256Context *ctx, const uint8_t block[64]) {
     ctx->state[7] += h;
 }
 
-void xr_sha256_init(XrSHA256Context *ctx) {
+XR_FUNC void xr_sha256_init(XrSHA256Context *ctx) {
     ctx->count = 0;
     ctx->state[0] = 0x6a09e667;
     ctx->state[1] = 0xbb67ae85;
@@ -217,7 +217,7 @@ void xr_sha256_init(XrSHA256Context *ctx) {
     ctx->state[7] = 0x5be0cd19;
 }
 
-void xr_sha256_update(XrSHA256Context *ctx, const uint8_t *data, size_t len) {
+XR_FUNC void xr_sha256_update(XrSHA256Context *ctx, const uint8_t *data, size_t len) {
     XR_DCHECK(ctx != NULL, "xr_sha256_update: NULL ctx");
     XR_DCHECK(data != NULL || len == 0, "xr_sha256_update: NULL data");
     size_t index = (size_t) (ctx->count & 0x3F);
@@ -233,7 +233,7 @@ void xr_sha256_update(XrSHA256Context *ctx, const uint8_t *data, size_t len) {
     memcpy(&ctx->buffer[index], &data[i], len - i);
 }
 
-void xr_sha256_final(XrSHA256Context *ctx, uint8_t digest[32]) {
+XR_FUNC void xr_sha256_final(XrSHA256Context *ctx, uint8_t digest[32]) {
     uint8_t padding[64] = {0x80};
     uint64_t bits = ctx->count * 8;
     size_t index = (size_t) (ctx->count & 0x3F);
@@ -251,7 +251,7 @@ void xr_sha256_final(XrSHA256Context *ctx, uint8_t digest[32]) {
     }
 }
 
-void xr_sha256(const uint8_t *data, size_t len, uint8_t digest[32]) {
+XR_FUNC void xr_sha256(const uint8_t *data, size_t len, uint8_t digest[32]) {
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, data, len);
@@ -260,7 +260,7 @@ void xr_sha256(const uint8_t *data, size_t len, uint8_t digest[32]) {
 
 /* ========== SHA-1 Implementation ========== */
 
-void xr_sha1_init(XrSHA1Context *ctx) {
+XR_FUNC void xr_sha1_init(XrSHA1Context *ctx) {
     ctx->count[0] = ctx->count[1] = 0;
     ctx->state[0] = 0x67452301;
     ctx->state[1] = 0xEFCDAB89;
@@ -311,7 +311,7 @@ static void sha1_transform(XrSHA1Context *ctx, const uint8_t block[64]) {
     ctx->state[4] += e;
 }
 
-void xr_sha1_update(XrSHA1Context *ctx, const uint8_t *data, size_t len) {
+XR_FUNC void xr_sha1_update(XrSHA1Context *ctx, const uint8_t *data, size_t len) {
     uint32_t index = (ctx->count[0] >> 3) & 0x3F;
     ctx->count[0] += (uint32_t) (len << 3);
     if (ctx->count[0] < (uint32_t) (len << 3))
@@ -328,7 +328,7 @@ void xr_sha1_update(XrSHA1Context *ctx, const uint8_t *data, size_t len) {
     memcpy(&ctx->buffer[index], &data[i], len - i);
 }
 
-void xr_sha1_final(XrSHA1Context *ctx, uint8_t digest[20]) {
+XR_FUNC void xr_sha1_final(XrSHA1Context *ctx, uint8_t digest[20]) {
     uint8_t padding[64] = {0x80}, bits[8];
     uint64_t total_bits = ((uint64_t) ctx->count[1] << 32) | ctx->count[0];
     for (int i = 0; i < 8; i++)
@@ -345,7 +345,7 @@ void xr_sha1_final(XrSHA1Context *ctx, uint8_t digest[20]) {
     }
 }
 
-void xr_sha1(const uint8_t *data, size_t len, uint8_t digest[20]) {
+XR_FUNC void xr_sha1(const uint8_t *data, size_t len, uint8_t digest[20]) {
     XrSHA1Context ctx;
     xr_sha1_init(&ctx);
     xr_sha1_update(&ctx, data, len);
@@ -428,7 +428,7 @@ static void sha512_transform(XrSHA512Context *ctx, const uint8_t block[128]) {
     ctx->state[7] += h;
 }
 
-void xr_sha512_init(XrSHA512Context *ctx) {
+XR_FUNC void xr_sha512_init(XrSHA512Context *ctx) {
     ctx->count[0] = ctx->count[1] = 0;
     ctx->state[0] = 0x6a09e667f3bcc908ULL;
     ctx->state[1] = 0xbb67ae8584caa73bULL;
@@ -440,7 +440,7 @@ void xr_sha512_init(XrSHA512Context *ctx) {
     ctx->state[7] = 0x5be0cd19137e2179ULL;
 }
 
-void xr_sha512_update(XrSHA512Context *ctx, const uint8_t *data, size_t len) {
+XR_FUNC void xr_sha512_update(XrSHA512Context *ctx, const uint8_t *data, size_t len) {
     size_t index = (size_t) (ctx->count[0] & 0x7F);
     ctx->count[0] += len;
     if (ctx->count[0] < len)
@@ -457,7 +457,7 @@ void xr_sha512_update(XrSHA512Context *ctx, const uint8_t *data, size_t len) {
     memcpy(&ctx->buffer[index], &data[i], len - i);
 }
 
-void xr_sha512_final(XrSHA512Context *ctx, uint8_t digest[64]) {
+XR_FUNC void xr_sha512_final(XrSHA512Context *ctx, uint8_t digest[64]) {
     uint8_t padding[128] = {0x80};
     uint64_t bits_lo = ctx->count[0] * 8;
     uint64_t bits_hi = ctx->count[1] * 8 + (ctx->count[0] >> 61);
@@ -482,7 +482,7 @@ void xr_sha512_final(XrSHA512Context *ctx, uint8_t digest[64]) {
     }
 }
 
-void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]) {
+XR_FUNC void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]) {
     XrSHA512Context ctx;
     xr_sha512_init(&ctx);
     xr_sha512_update(&ctx, data, len);
@@ -491,7 +491,7 @@ void xr_sha512(const uint8_t *data, size_t len, uint8_t digest[64]) {
 
 /* ========== Secure Memory Wipe ========== */
 
-void xr_secure_wipe(void *ptr, size_t len) {
+XR_FUNC void xr_secure_wipe(void *ptr, size_t len) {
 #if defined(XR_OS_MACOS)
     memset_s(ptr, len, 0, len);
 #elif defined(__GLIBC__)
@@ -575,23 +575,23 @@ static void hash_sha512_wrapper(const uint8_t *data, size_t len, uint8_t *digest
     xr_sha512(data, len, digest);
 }
 
-void xr_hmac_md5(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                 uint8_t digest[16]) {
+XR_FUNC void xr_hmac_md5(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
+                         uint8_t digest[16]) {
     hmac_compute(hash_md5_wrapper, 64, 16, key, key_len, data, data_len, digest);
 }
 
-void xr_hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                  uint8_t digest[20]) {
+XR_FUNC void xr_hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
+                          uint8_t digest[20]) {
     hmac_compute(hash_sha1_wrapper, 64, 20, key, key_len, data, data_len, digest);
 }
 
-void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                    uint8_t digest[32]) {
+XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
+                            uint8_t digest[32]) {
     hmac_compute(hash_sha256_wrapper, 64, 32, key, key_len, data, data_len, digest);
 }
 
-void xr_hmac_sha512(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                    uint8_t digest[64]) {
+XR_FUNC void xr_hmac_sha512(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
+                            uint8_t digest[64]) {
     hmac_compute(hash_sha512_wrapper, 128, 64, key, key_len, data, data_len, digest);
 }
 
@@ -651,7 +651,7 @@ static uint8_t gf_mul(uint8_t a, uint8_t b) {
     return p;
 }
 
-void xr_aes_init(XrAESContext *ctx, const uint8_t *key, int key_bits) {
+XR_FUNC void xr_aes_init(XrAESContext *ctx, const uint8_t *key, int key_bits) {
     XR_DCHECK(ctx != NULL, "xr_aes_init: NULL ctx");
     XR_DCHECK(key != NULL, "xr_aes_init: NULL key");
     XR_DCHECK(key_bits == 128 || key_bits == 192 || key_bits == 256,
@@ -825,8 +825,8 @@ static void aes_decrypt_block(const XrAESContext *ctx, const uint8_t in[16], uin
     memcpy(out, state, 16);
 }
 
-void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input, uint8_t *output,
-                        size_t len) {
+XR_FUNC void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input,
+                                uint8_t *output, size_t len) {
     uint8_t prev[16];
     memcpy(prev, iv, 16);
     for (size_t i = 0; i < len; i += 16) {
@@ -838,8 +838,8 @@ void xr_aes_cbc_encrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *inp
     }
 }
 
-void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input, uint8_t *output,
-                        size_t len) {
+XR_FUNC void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *input,
+                                uint8_t *output, size_t len) {
     uint8_t prev[16];
     memcpy(prev, iv, 16);
     for (size_t i = 0; i < len; i += 16) {
@@ -855,7 +855,7 @@ void xr_aes_cbc_decrypt(XrAESContext *ctx, const uint8_t *iv, const uint8_t *inp
 
 static const char hex_chars[] = "0123456789abcdef";
 
-void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output) {
+XR_FUNC void xr_bytes_to_hex(const uint8_t *bytes, size_t len, char *output) {
     XR_DCHECK(bytes != NULL || len == 0, "xr_bytes_to_hex: NULL bytes");
     XR_DCHECK(output != NULL, "xr_bytes_to_hex: NULL output");
     for (size_t i = 0; i < len; i++) {
@@ -875,7 +875,7 @@ static int hex_digit(char c) {
     return -1;
 }
 
-int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len) {
+XR_FUNC int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len) {
     size_t len = strlen(hex);
     if (len % 2 != 0 || len / 2 > max_len)
         return -1;
