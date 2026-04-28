@@ -538,8 +538,7 @@ static void emit_value(YamlEmitter *e, XrValue val, int level, bool flow_mode) {
 // ========== Public API ===========
 
 XR_FUNCDEF XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level) {
-    YamlEmitConfig config = {.indent = indent > 0 ? indent : 2,
-                             .flow_level = flow_level};
+    YamlEmitConfig config = {.indent = indent > 0 ? indent : 2, .flow_level = flow_level};
 
     YamlEmitter emitter;
     emit_init(&emitter, isolate, &config);

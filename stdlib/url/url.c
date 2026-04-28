@@ -901,8 +901,7 @@ static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
         if (shrink > 0) {
             size_t tail_len = result.len - path_end;
             if (tail_len > 0)
-                memmove(result.data + path_start + new_path_len,
-                        result.data + path_end, tail_len);
+                memmove(result.data + path_start + new_path_len, result.data + path_end, tail_len);
             result.len -= shrink;
         }
     }

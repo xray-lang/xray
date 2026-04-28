@@ -104,7 +104,7 @@ XR_FUNC XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrReg
  * @return regex object on success, NULL on failure
  */
 XR_FUNC XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
-                             int *error_pos, char *error_msg, size_t msg_size);
+                                     int *error_pos, char *error_msg, size_t msg_size);
 
 // Free regex object
 XR_FUNC void xr_regex_free(XrRegex *re);
@@ -159,7 +159,8 @@ XR_FUNC bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatc
  * Find from specified position
  * @param start_pos start position (byte offset)
  */
-XR_FUNC bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos, XrMatch *match);
+XR_FUNC bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos,
+                               XrMatch *match);
 
 // Full match (entire text must match pattern)
 XR_FUNC bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *match);
@@ -205,7 +206,8 @@ XR_FUNC int xr_regex_count(const XrRegex *re, const char *text, int len);
  * @param out_count output actual match count
  * @return match array (must call xr_regex_find_all_free to free)
  */
-XR_FUNC XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit, int *out_count);
+XR_FUNC XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit,
+                                   int *out_count);
 
 // Free array returned by xr_regex_find_all
 XR_FUNC void xr_regex_find_all_free(XrMatch *matches);
@@ -223,8 +225,8 @@ XR_FUNC void xr_regex_find_all_free(XrMatch *matches);
  * @param all         true = replace all, false = replace first
  * @return newly allocated string, caller must xr_re_free()
  */
-XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
-                             bool all);
+XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len,
+                                     const char *replacement, bool all);
 
 /* ========================================================================
  * Split Operations
@@ -246,8 +248,8 @@ typedef struct {
  * @param limit     max split count (-1 for unlimited)
  * @return actual split count
  */
-XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
-                   int limit);
+XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts,
+                           int max_parts, int limit);
 
 /* ========================================================================
  * Utility Functions

@@ -505,7 +505,7 @@ static XrValue math_isFinite(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
     if (XR_IS_INT(args[0]))
-        return xr_bool(true);  /* integers are always finite */
+        return xr_bool(true); /* integers are always finite */
     double v = get_number(args[0]);
     return xr_bool(isfinite(v));
 }

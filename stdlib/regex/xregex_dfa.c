@@ -403,7 +403,7 @@ static XrDFAState *dfa_next_state(XrDFA *dfa, XrDFAState *state, int c, const ch
  * Return: 1=match found, 0=no match, -1=DFA failed (need to fallback to NFA)
  */
 XR_FUNC int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
-                  const char **match_end) {
+                          const char **match_end) {
     if (!dfa || len < 0)
         return -1;
 

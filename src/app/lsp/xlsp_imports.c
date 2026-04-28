@@ -55,7 +55,7 @@ static char *get_directory(const char *path) {
         sep = bsep;
     if (!sep)
         return xr_strdup(".");
-    size_t len = (size_t)(sep - path);
+    size_t len = (size_t) (sep - path);
     if (len == 0)
         return xr_strdup("/");
     char *result = xr_malloc(len + 1);
@@ -218,10 +218,16 @@ char *xlsp_resolve_import_path(const char *base_uri, const char *import_path) {
     xr_free(base_dir);
 
     // Normalize path (handle ../ etc)
+#ifdef XR_OS_WINDOWS
+    char resolved_buf[_MAX_PATH];
+    char *resolved = _fullpath(resolved_buf, full_path, _MAX_PATH);
+    xr_free(full_path);
+    return resolved ? xr_strdup(resolved) : NULL;
+#else
     char *resolved = realpath(full_path, NULL);
     xr_free(full_path);
-
     return resolved;
+#endif
 }
 
 // ============================================================================

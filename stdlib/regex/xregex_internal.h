@@ -392,19 +392,23 @@ XR_FUNC void xr_prog_dump(XrProg *prog);
 XR_FUNC void xr_prog_compute_bytemap(XrProg *prog);
 
 // Zero-width assertion check (shared by NFA and DFA)
-XR_FUNC bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p, const char *end);
+XR_FUNC bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p,
+                                     const char *end);
 
 // Execution engine
-XR_FUNC bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures, int ncaptures);
-XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures, int ncaptures);
-XR_FUNC bool xr_dfa_match(XrDFA *dfa, const char *text, int len, const char **match_end, bool anchored);
+XR_FUNC bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures,
+                          int ncaptures);
+XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures,
+                           int ncaptures);
+XR_FUNC bool xr_dfa_match(XrDFA *dfa, const char *text, int len, const char **match_end,
+                          bool anchored);
 
 // DFA
 XR_FUNC XrDFA *xr_dfa_new(XrProg *prog);
 XR_FUNC void xr_dfa_free(XrDFA *dfa);
 XR_FUNC void xr_dfa_reset(XrDFA *dfa);
 XR_FUNC int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
-                  const char **match_end);
+                          const char **match_end);
 XR_FUNC int xr_dfa_test(XrDFA *dfa, const char *text, int len);
 
 // Optimization

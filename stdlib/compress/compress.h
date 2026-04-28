@@ -68,12 +68,12 @@ typedef enum {
 /* ========== Deflate Compression/Decompression ========== */
 
 // Raw deflate compression (no header)
-XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                           size_t *out_len, int level);
+XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len, int level);
 
 // Raw deflate decompression
-XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                           size_t *out_len);
+XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len);
 
 // Estimate maximum compressed size
 XR_FUNC size_t xr_deflate_bound(size_t in_len);
@@ -81,12 +81,12 @@ XR_FUNC size_t xr_deflate_bound(size_t in_len);
 /* ========== Gzip Compression/Decompression ========== */
 
 // Gzip compression
-XR_FUNC XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                        size_t *out_len, int level);
+XR_FUNC XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output,
+                                size_t out_cap, size_t *out_len, int level);
 
 // Gzip decompression
-XR_FUNC XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                          size_t *out_len);
+XR_FUNC XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output,
+                                  size_t out_cap, size_t *out_len);
 
 // Check if data is valid gzip format
 XR_FUNC bool xr_is_gzip(const uint8_t *data, size_t len);
@@ -98,11 +98,11 @@ XR_FUNC uint32_t xr_gzip_original_size(const uint8_t *data, size_t len);
 
 // Zlib compression (with header and checksum)
 XR_FUNC XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, uint8_t *output,
-                                 size_t out_cap, size_t *out_len, int level);
+                                         size_t out_cap, size_t *out_len, int level);
 
 // Zlib decompression
 XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
-                                   size_t out_cap, size_t *out_len);
+                                           size_t out_cap, size_t *out_len);
 
 // Check if data is valid zlib format
 XR_FUNC bool xr_is_zlib(const uint8_t *data, size_t len);

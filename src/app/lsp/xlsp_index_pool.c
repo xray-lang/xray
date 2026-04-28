@@ -25,8 +25,8 @@
 #include <io.h>
 #include <fcntl.h>
 #define xr_pipe(fds) _pipe((fds), 4096, _O_BINARY)
-#define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned)(n))
-#define xr_pipe_write(fd, buf, n) _write((fd), (buf), (unsigned)(n))
+#define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned) (n))
+#define xr_pipe_write(fd, buf, n) _write((fd), (buf), (unsigned) (n))
 #define xr_pipe_close(fd) _close(fd)
 #define xr_pipe_set_nonblocking(fd) /* Windows _pipe fds polled eagerly */
 #else

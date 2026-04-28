@@ -950,7 +950,7 @@ XR_FUNC XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, ui
 }
 
 XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
-                                            size_t out_cap, size_t *out_len) {
+                                           size_t out_cap, size_t *out_len) {
     if (!input || !output || !out_len)
         return XR_COMPRESS_ERR_DATA;
     if (!xr_is_zlib(input, in_len))

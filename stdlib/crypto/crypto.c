@@ -585,13 +585,13 @@ XR_FUNC void xr_hmac_sha1(const uint8_t *key, size_t key_len, const uint8_t *dat
     hmac_compute(hash_sha1_wrapper, 64, 20, key, key_len, data, data_len, digest);
 }
 
-XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                            uint8_t digest[32]) {
+XR_FUNC void xr_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *data,
+                            size_t data_len, uint8_t digest[32]) {
     hmac_compute(hash_sha256_wrapper, 64, 32, key, key_len, data, data_len, digest);
 }
 
-XR_FUNC void xr_hmac_sha512(const uint8_t *key, size_t key_len, const uint8_t *data, size_t data_len,
-                            uint8_t digest[64]) {
+XR_FUNC void xr_hmac_sha512(const uint8_t *key, size_t key_len, const uint8_t *data,
+                            size_t data_len, uint8_t digest[64]) {
     hmac_compute(hash_sha512_wrapper, 128, 64, key, key_len, data, data_len, digest);
 }
 
