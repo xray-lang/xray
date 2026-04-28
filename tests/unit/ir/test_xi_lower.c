@@ -601,6 +601,71 @@ TEST(multiple_functions) {
     xi_func_free(f);
 }
 
+TEST(template_string) {
+    XiFunc *f = lower_source(
+        "let name = \"world\"\n"
+        "let msg = \"hello ${name}!\"\n"
+        "print(msg)\n"
+    );
+    assert(f != NULL);
+    int found_concat = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_STR_CONCAT)
+            found_concat = 1;
+    }
+    assert(found_concat && "should have STR_CONCAT for template string");
+    xi_func_free(f);
+}
+
+TEST(go_await) {
+    XiFunc *f = lower_source(
+        "fn work(): int { return 42 }\n"
+        "let t = go work()\n"
+        "let r = await t\n"
+        "print(r)\n"
+    );
+    assert(f != NULL);
+    int found_go = 0, found_await = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_GO) found_go = 1;
+        if (f->entry->values[i]->op == XI_AWAIT) found_await = 1;
+    }
+    assert(found_go && "should have GO op");
+    assert(found_await && "should have AWAIT op");
+    xi_func_free(f);
+}
+
+TEST(defer_stmt) {
+    XiFunc *f = lower_source(
+        "fn cleanup(): void { print(0) }\n"
+        "defer cleanup()\n"
+        "print(1)\n"
+    );
+    assert(f != NULL);
+    int found_defer = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_DEFER)
+            found_defer = 1;
+    }
+    assert(found_defer && "should have DEFER op");
+    xi_func_free(f);
+}
+
+TEST(set_literal) {
+    XiFunc *f = lower_source(
+        "let s = #[1, 2, 3]\n"
+        "print(s)\n"
+    );
+    assert(f != NULL);
+    int found_set_new = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_SET_NEW)
+            found_set_new = 1;
+    }
+    assert(found_set_new && "should have SET_NEW op");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -638,6 +703,10 @@ int main(void) {
     run_nested_function();
     run_function_expr();
     run_multiple_functions();
+    run_template_string();
+    run_go_await();
+    run_defer_stmt();
+    run_set_literal();
 
     teardown();
 

@@ -73,6 +73,10 @@ static const char *xi_op_name(uint16_t op) {
         case XI_ITER_NEW:    return "ITER_NEW";
         case XI_ITER_NEXT:   return "ITER_NEXT";
         case XI_ITER_VALID:  return "ITER_VALID";
+        case XI_DEFER:       return "DEFER";
+        case XI_CHAN_NEW:    return "CHAN_NEW";
+        case XI_SET_NEW:     return "SET_NEW";
+        case XI_STR_CONCAT:  return "STR_CONCAT";
         case XI_ISNULL:      return "ISNULL";
         case XI_PHI:         return "PHI";
         case XI_COPY:        return "COPY";

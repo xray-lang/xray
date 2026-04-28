@@ -126,6 +126,18 @@ typedef enum {
     XI_ITER_NEXT,   /* advance + get value: args[0]=iterator, returns next value */
     XI_ITER_VALID,  /* test not-done: args[0]=iterator, returns bool */
 
+    /* Defer */
+    XI_DEFER,       /* defer expr: args[0]=callee (executed at scope exit) */
+
+    /* Channel creation */
+    XI_CHAN_NEW,     /* create channel: args[0]=buffer_size (optional) */
+
+    /* Set creation */
+    XI_SET_NEW,     /* create set: args[0]=capacity */
+
+    /* String concatenation (for template strings) */
+    XI_STR_CONCAT,  /* concat: args[0..n]=parts, produces string */
+
     /* Null check */
     XI_ISNULL,      /* args[0]=value, returns bool (true if null) */
 
