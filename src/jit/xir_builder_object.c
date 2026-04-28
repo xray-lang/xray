@@ -385,8 +385,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, Xr
             XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_getprop);
             XirRef sym_ref = xir_const_i64(b->func, (int64_t) (uint32_t) sym);
             XirRef sym_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, sym_ref);
-            // AOT: getprop returns XrtValue (struct), not raw i64
-            uint8_t gp_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+            uint8_t gp_rep = builder_tagged_rep(b);
             XirRef v = xir_emit(b->func, blk, XIR_CALL_C_LEAF, gp_rep, fn_ref, sym_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             builder_bind_call_args(b, v, &obj, 1);

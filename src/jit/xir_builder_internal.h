@@ -51,6 +51,14 @@ XR_FUNC int64_t xrt_strbuf_new_sentinel(struct XrCoroutine *c, int64_t x);
 XR_FUNC int64_t xrt_strbuf_append_sentinel(struct XrCoroutine *c, int64_t x);
 XR_FUNC int64_t xrt_strbuf_finish_sentinel(struct XrCoroutine *c, int64_t x);
 
+// Rep for a fully-tagged (generic/boxed) value in the current compilation mode.
+// JIT: raw i64 payload with separate tag tracking (XrJitResult = {i64, tag})
+// AOT: 16-byte XrValue struct (tag + payload as a single unit)
+// Centralizes the JIT-vs-AOT value encoding difference in one place.
+static inline uint8_t builder_tagged_rep(const XirBuilder *b) {
+    return b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+}
+
 // Returns the XirVReg* for the current SSA def in slot reg, or NULL.
 static inline XirVReg *builder_vreg_for_slot(XirBuilder *b, int reg) {
     if (reg < 0 || reg >= 256)
