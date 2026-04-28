@@ -1307,6 +1307,11 @@ static const StdlibEntry stdlib_core[] = {
 static const StdlibEntry stdlib_filesystem[] = {
     {"io", xr_load_module_io},
     {"os", xr_load_module_os},
+};
+#endif
+
+#if defined(XR_HAS_TEST_MODULES)
+static const StdlibEntry stdlib_test_modules[] = {
     {"test_yield", xr_load_module_test_yield},
 };
 #endif
@@ -1362,6 +1367,9 @@ void xr_module_register_stdlib(XrayIsolate *isolate) {
 
 #if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
     REGISTER_TABLE(stdlib_filesystem);
+#endif
+#if defined(XR_HAS_TEST_MODULES)
+    REGISTER_TABLE(stdlib_test_modules);
 #endif
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
     REGISTER_TABLE(stdlib_network);

@@ -38,8 +38,11 @@ XR_FUNC struct XrModule *xr_load_module_encoding(struct XrayIsolate *isolate);
 #if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_load_module_io(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_os(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_test_yield(struct XrayIsolate *isolate);
 #endif  // ========== Network Modules ==========
+
+#if defined(XR_HAS_TEST_MODULES)
+XR_FUNC struct XrModule *xr_load_module_test_yield(struct XrayIsolate *isolate);
+#endif
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_load_module_net(struct XrayIsolate *isolate);
