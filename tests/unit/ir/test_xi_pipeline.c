@@ -45,17 +45,18 @@ static void teardown(void) {
 static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     assert(g_iso != NULL);
 
+    /* Create analyzer first — its type pool must be active during parsing
+     * so the parser can create type annotations (function types, etc.). */
+    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    if (!analyzer) return NULL;
+
     AstNode *program = xr_parse(g_iso, source);
     if (!program) {
         fprintf(stderr, "  PARSE FAILED for: %s\n", source);
+        xa_analyzer_free(analyzer);
         return NULL;
     }
 
-    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
-    if (!analyzer) {
-        xr_program_destroy(program);
-        return NULL;
-    }
     xa_analyzer_analyze(analyzer, "test.xr", program);
 
     XiPipelineResult res = xi_pipeline_compile_program(
@@ -472,6 +473,117 @@ TEST(e2e_string_concat) {
     xr_vm_proto_free(p);
 }
 
+/* ========== Map Literal ========== */
+
+TEST(e2e_map_literal) {
+    XrProto *p = compile_source(
+        "let m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
+    assert(p != NULL);
+    /* Map creation should emit NEWMAP or NEWJSON + field stores */
+    int total = PROTO_CODE_COUNT(p);
+    assert(total >= 3 && "map literal needs multiple instructions");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Template String ========== */
+
+TEST(e2e_template_string) {
+    XrProto *p = compile_source(
+        "let x = \"world\"\nlet s = \"hello ${x}\"\nprint(s)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_STRBUF_NEW) && "template uses STRBUF pipeline");
+    assert(has_opcode(p, OP_STRBUF_APPEND));
+    assert(has_opcode(p, OP_STRBUF_FINISH));
+    xr_vm_proto_free(p);
+}
+
+/* ========== Nullish Coalesce ========== */
+
+TEST(e2e_nullish_coalesce) {
+    XrProto *p = compile_source(
+        "let a: int? = null\nlet b = a ?? 42\nprint(b)", NULL);
+    assert(p != NULL);
+    /* ?? lowers to ISNULL + conditional branch; verify enough instructions */
+    int total = PROTO_CODE_COUNT(p);
+    assert(total >= 3 && "nullish coalesce needs branch logic");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Match Expression ========== */
+
+TEST(e2e_match_expr) {
+    XrProto *p = compile_source(
+        "let x = 2\n"
+        "let r = match (x) {\n"
+        "  1 => 10,\n"
+        "  2 => 20,\n"
+        "  _ => 0\n"
+        "}\nprint(r)", NULL);
+    assert(p != NULL);
+    /* Match lowers to comparisons + branches; verify enough instructions */
+    int total = PROTO_CODE_COUNT(p);
+    assert(total >= 5 && "match needs comparison + branch logic");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Try-Catch ========== */
+
+TEST(e2e_try_catch) {
+    XrProto *p = compile_source(
+        "try { print(1) } catch (e) { print(e) }", NULL);
+    assert(p != NULL);
+    /* Try-catch should emit SETUP_TRY + POP_TRY or similar */
+    int total = PROTO_CODE_COUNT(p);
+    assert(total >= 3 && "try-catch requires setup/body/handler");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Slice ========== */
+
+TEST(e2e_slice) {
+    XrProto *p = compile_source(
+        "let arr = [1, 2, 3, 4, 5]\nlet s = arr[1:3]\nprint(s)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_SLICE) && "slice expression needs OP_SLICE");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Closure (nested function) ========== */
+
+TEST(e2e_closure) {
+    XrProto *p = compile_source(
+        "fn make(): fn(): int {\n"
+        "  fn inner(): int { return 42 }\n"
+        "  return inner\n"
+        "}\nlet f = make()\nprint(f())", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_CLOSURE) && "nested func needs OP_CLOSURE");
+    assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Type Conversion ========== */
+
+TEST(e2e_type_convert) {
+    XrProto *p = compile_source(
+        "let x = 42\nlet s = x as string\nprint(s)", NULL);
+    assert(p != NULL);
+    /* XI_AS lowers to MOVE; just verify pipeline succeeds */
+    int total = PROTO_CODE_COUNT(p);
+    assert(total >= 2 && "type conversion pipeline must produce instructions");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Range ========== */
+
+TEST(e2e_range) {
+    XrProto *p = compile_source(
+        "let r = 0..10\nprint(r)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_NEWRANGE) && "range expression needs OP_NEWRANGE");
+    xr_vm_proto_free(p);
+}
+
 /* ========== Pipeline Status API ========== */
 
 TEST(e2e_status_str) {
@@ -561,6 +673,33 @@ int main(void) {
 
     /* String concatenation */
     run_e2e_string_concat();
+
+    /* Map literal */
+    run_e2e_map_literal();
+
+    /* Template string */
+    run_e2e_template_string();
+
+    /* Nullish coalesce */
+    run_e2e_nullish_coalesce();
+
+    /* Match expression */
+    run_e2e_match_expr();
+
+    /* Try-catch */
+    run_e2e_try_catch();
+
+    /* Slice */
+    run_e2e_slice();
+
+    /* Closure (nested function) */
+    run_e2e_closure();
+
+    /* Type conversion */
+    run_e2e_type_convert();
+
+    /* Range */
+    run_e2e_range();
 
     /* API */
     run_e2e_status_str();
