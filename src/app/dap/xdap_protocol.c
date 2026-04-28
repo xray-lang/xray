@@ -20,7 +20,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>  // chdir
+#ifdef XR_OS_WINDOWS
+#include <direct.h>
+#define chdir _chdir
+#else
+#include <unistd.h>
+#endif
 #include "../../vm/xvm_internal.h"
 #include "xray.h"
 

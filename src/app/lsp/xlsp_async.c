@@ -12,10 +12,29 @@
 #include "../../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
 #include <stdio.h>
+
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#include <fcntl.h>
+#define xr_pipe(fds) _pipe((fds), 4096, _O_BINARY)
+#define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned)(n))
+#define xr_pipe_write(fd, buf, n) _write((fd), (buf), (unsigned)(n))
+#define xr_pipe_close(fd) _close(fd)
+#define xr_pipe_set_nonblocking(fd) /* Windows _pipe fds are not waitable; polling drains eagerly */
+#else
+#include <unistd.h>
+#include <fcntl.h>
+#define xr_pipe(fds) pipe(fds)
+#define xr_pipe_read(fd, buf, n) read((fd), (buf), (n))
+#define xr_pipe_write(fd, buf, n) write((fd), (buf), (n))
+#define xr_pipe_close(fd) close(fd)
+static inline void xr_pipe_set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+#endif
 
 // ============================================================================
 // Task Queue (Lock-free MPSC with cancellation support)
@@ -153,7 +172,7 @@ static void *worker_thread(void *arg) {
             queue_push(&async->completed, task);
             atomic_fetch_add(&async->completed_count, 1);
             char byte = 1;
-            ssize_t n = write(async->notify_fd[1], &byte, 1);
+            ssize_t n = xr_pipe_write(async->notify_fd[1], &byte, 1);
             (void) n;
             continue;
         }
@@ -168,7 +187,7 @@ static void *worker_thread(void *arg) {
             queue_push(&async->completed, task);
             atomic_fetch_add(&async->completed_count, 1);
             char byte = 1;
-            ssize_t n = write(async->notify_fd[1], &byte, 1);
+            ssize_t n = xr_pipe_write(async->notify_fd[1], &byte, 1);
             (void) n;
             continue;
         }
@@ -208,7 +227,7 @@ static void *worker_thread(void *arg) {
 
         // Notify main thread
         char byte = 1;
-        ssize_t n = write(async->notify_fd[1], &byte, 1);
+        ssize_t n = xr_pipe_write(async->notify_fd[1], &byte, 1);
         (void) n;  // Ignore write errors
     }
 
@@ -225,14 +244,13 @@ XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx) {
         return NULL;
 
     // Create notification pipe
-    if (pipe(async->notify_fd) < 0) {
+    if (xr_pipe(async->notify_fd) < 0) {
         xr_free(async);
         return NULL;
     }
 
     // Set read end to non-blocking
-    int flags = fcntl(async->notify_fd[0], F_GETFL, 0);
-    fcntl(async->notify_fd[0], F_SETFL, flags | O_NONBLOCK);
+    xr_pipe_set_nonblocking(async->notify_fd[0]);
 
     // Initialize queues
     queue_init(&async->pending);
@@ -254,8 +272,8 @@ XrLspAsync *xlsp_async_new(void (*thread_init)(void *), void *thread_init_ctx) {
     // Start worker thread
     atomic_store(&async->running, true);
     if (!xr_thread_create(&async->worker, worker_thread, async)) {
-        close(async->notify_fd[0]);
-        close(async->notify_fd[1]);
+        xr_pipe_close(async->notify_fd[0]);
+        xr_pipe_close(async->notify_fd[1]);
         queue_destroy(&async->pending);
         queue_destroy(&async->completed);
         xr_mutex_destroy(&async->pending_mutex);
@@ -283,8 +301,8 @@ void xlsp_async_free(XrLspAsync *async) {
     xr_thread_join(async->worker, NULL);
 
     // Cleanup
-    close(async->notify_fd[0]);
-    close(async->notify_fd[1]);
+    xr_pipe_close(async->notify_fd[0]);
+    xr_pipe_close(async->notify_fd[1]);
 
     // Drain remaining tasks, calling complete handlers to free task->data
     XrLspTask *task;
@@ -369,7 +387,7 @@ int xlsp_async_poll(XrLspAsync *async) {
 
     // Drain notification pipe
     char buf[64];
-    while (read(async->notify_fd[0], buf, sizeof(buf)) > 0) {
+    while (xr_pipe_read(async->notify_fd[0], buf, sizeof(buf)) > 0) {
         // Consume all notifications
     }
 
