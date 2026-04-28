@@ -70,6 +70,8 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
     } else {
         int scheme_len = (int) (scheme_end - p);
         out->scheme = (char *) xr_malloc(scheme_len + 1);
+        if (!out->scheme)
+            return -1;
         memcpy(out->scheme, p, scheme_len);
         out->scheme[scheme_len] = '\0';
 
@@ -165,6 +167,8 @@ int xr_http_url_parse(const char *url, XrHttpUrl *out) {
     }
 
     out->host = (char *) xr_malloc(host_len + 1);
+    if (!out->host)
+        return -1;
     memcpy(out->host, host_start, host_len);
     out->host[host_len] = '\0';
 
@@ -502,6 +506,11 @@ XrHttpResult xr_http_request(XrayIsolate *X, const XrHttpRequestConfig *config) 
                     if (xr_http_url_parse(current_url, &parsed) == 0) {
                         size_t len = strlen(parsed.host) + strlen(location) + 16;
                         new_url = (char *) xr_malloc(len);
+                        if (!new_url) {
+                            xr_http_url_free(&parsed);
+                            xr_free(location);
+                            break;
+                        }
                         snprintf(new_url, len, "%s://%s%s", parsed.is_https ? "https" : "http",
                                  parsed.host, location);
                         xr_http_url_free(&parsed);
@@ -659,8 +668,10 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                 result.status_code = resp.status_code;
                 if (resp.status_text && resp.status_text_len > 0) {
                     result.status_text = (char *) xr_malloc(resp.status_text_len + 1);
-                    memcpy(result.status_text, resp.status_text, resp.status_text_len);
-                    result.status_text[resp.status_text_len] = '\0';
+                    if (result.status_text) {
+                        memcpy(result.status_text, resp.status_text, resp.status_text_len);
+                        result.status_text[resp.status_text_len] = '\0';
+                    }
                 }
                 // Copy headers (compact single-allocation)
                 copy_headers_compact(&result, resp.headers, resp.header_count);
@@ -716,8 +727,10 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
 
     if (resp.status_text && resp.status_text_len > 0) {
         result.status_text = (char *) xr_malloc(resp.status_text_len + 1);
-        memcpy(result.status_text, resp.status_text, resp.status_text_len);
-        result.status_text[resp.status_text_len] = '\0';
+        if (result.status_text) {
+            memcpy(result.status_text, resp.status_text, resp.status_text_len);
+            result.status_text[resp.status_text_len] = '\0';
+        }
     }
 
     // Copy Headers (compact single-allocation) and extract Set-Cookie
@@ -762,6 +775,8 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     char *decoded_body = NULL;
     if (resp.chunked && raw_body && raw_body_len > 0) {
         decoded_body = (char *) xr_malloc(raw_body_len + 1);
+        if (!decoded_body)
+            goto cleanup;
         memcpy(decoded_body, raw_body, raw_body_len);
 
         XrChunkedDecoder decoder;
@@ -822,23 +837,29 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             } else {
                 // Decompress failed, use original data
                 result.body = (char *) xr_malloc(raw_body_len + 1);
-                memcpy(result.body, raw_body, raw_body_len);
-                result.body[raw_body_len] = '\0';
-                result.body_len = raw_body_len;
+                if (result.body) {
+                    memcpy(result.body, raw_body, raw_body_len);
+                    result.body[raw_body_len] = '\0';
+                    result.body_len = raw_body_len;
+                }
             }
         } else {
             // No compression, copy directly
             result.body = (char *) xr_malloc(raw_body_len + 1);
-            memcpy(result.body, raw_body, raw_body_len);
-            result.body[raw_body_len] = '\0';
-            result.body_len = raw_body_len;
+            if (result.body) {
+                memcpy(result.body, raw_body, raw_body_len);
+                result.body[raw_body_len] = '\0';
+                result.body_len = raw_body_len;
+            }
         }
 #else
         // Compress module not available, copy body as-is
         result.body = (char *) xr_malloc(raw_body_len + 1);
-        memcpy(result.body, raw_body, raw_body_len);
-        result.body[raw_body_len] = '\0';
-        result.body_len = raw_body_len;
+        if (result.body) {
+            memcpy(result.body, raw_body, raw_body_len);
+            result.body[raw_body_len] = '\0';
+            result.body_len = raw_body_len;
+        }
 #endif  // XR_HAS_COMPRESS
     }
 
