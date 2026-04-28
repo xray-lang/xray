@@ -99,15 +99,6 @@ XrValue xr_toml_parse(XrayIsolate *X, const char *data, size_t len) {
 typedef struct {
     XrSerWriter sw;  // shared buffer: sw.data / sw.len / sw.cap
     XrayIsolate *isolate;
-
-    // Requested indentation (0 = flat). NOTE: currently reserved — the
-    // writer emits flat TOML regardless. TOML files are mostly line
-    // oriented so the visual benefit of indentation is limited; still,
-    // the parameter is kept in the public API so scripts that already
-    // pass `indent` continue to compile. A future change can consume
-    // this field in `write_table` to prefix nested-table entries.
-    int indent;
-
     int depth;  // nesting depth for stringify cycle guard
 } TomlWriter;
 
@@ -116,10 +107,9 @@ typedef struct {
 // without hitting this ceiling.
 #define TOML_STRINGIFY_MAX_DEPTH XR_STDLIB_MAX_DEPTH
 
-static inline void tw_init(TomlWriter *w, XrayIsolate *isolate, int indent) {
+static inline void tw_init(TomlWriter *w, XrayIsolate *isolate) {
     xr_serw_init(&w->sw, 256);
     w->isolate = isolate;
-    w->indent = indent;
     w->depth = 0;
 }
 
@@ -456,13 +446,13 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
     }
 }
 
-XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value, int indent) {
+XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value) {
     if (!XR_IS_MAP(value)) {
         return xr_string_value(xr_string_intern(isolate, "", 0, 0));
     }
 
     TomlWriter writer;
-    tw_init(&writer, isolate, indent);
+    tw_init(&writer, isolate);
 
     write_table(&writer, XR_TO_MAP(value), "");
 
@@ -521,16 +511,7 @@ static XrValue toml_stringify(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1) {
         return xr_string_value(xr_string_intern(X, "", 0, 0));
     }
-    int indent = 0;
-
-    if (argc >= 2 && xr_value_is_json(args[1])) {
-        XrJson *json = xr_value_to_json(args[1]);
-        xrs_cfg_get_int(X, json, "indent", &indent);
-    } else if (argc >= 2 && XR_IS_INT(args[1])) {
-        indent = (int) XR_TO_INT(args[1]);
-    }
-
-    return xr_toml_stringify(X, args[0], indent);
+    return xr_toml_stringify(X, args[0]);
 }
 
 // parseFile. Synchronous; see stdlib/common_io.h for the P9 async plan.
@@ -557,7 +538,7 @@ static XrValue toml_write_file(XrayIsolate *X, XrValue *args, int argc) {
         return xr_bool(false);
     }
     XrString *path = XR_TO_STRING(args[0]);
-    XrValue toml_str = xr_toml_stringify(X, args[1], 0);
+    XrValue toml_str = xr_toml_stringify(X, args[1]);
 
     if (!XR_IS_STRING(toml_str)) {
         return xr_bool(false);

@@ -52,11 +52,7 @@ XR_FUNC XrValue xr_toml_parse(XrayIsolate *isolate, const char *data, size_t len
 
 // Serialize to TOML string
 // value: Map object
-// indent: requested number of indent spaces (0 = flat).
-// NOTE: the `indent` parameter is currently reserved — the writer
-// emits flat TOML regardless. Kept in the API for forward-compat; see
-// the comment on TomlWriter.indent inside toml.c.
-XR_FUNC XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value, int indent);
+XR_FUNC XrValue xr_toml_stringify(XrayIsolate *isolate, XrValue value);
 
 // Load toml module
 XR_FUNC struct XrModule *xr_load_module_toml(XrayIsolate *isolate);

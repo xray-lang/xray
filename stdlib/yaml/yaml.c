@@ -24,8 +24,7 @@
 // attribute/ABI matches the definition; previously it was a bare
 // `extern` which works on every current platform but would diverge from
 // the definition on a hypothetical amalgamated build.
-XR_FUNC XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level,
-                          int line_width);
+XR_FUNC XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level);
 
 // ========== Public API ==========
 
@@ -54,7 +53,7 @@ XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t len) {
 }
 
 XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent) {
-    return yaml_emit(isolate, value, indent, -1, 80);
+    return yaml_emit(isolate, value, indent, -1);
 }
 
 // ========== Module Functions ==========
@@ -136,18 +135,16 @@ static XrValue yaml_stringify(XrayIsolate *X, XrValue *args, int argc) {
 
     int indent = 2;
     int flow_level = -1;
-    int line_width = 80;
 
     if (argc >= 2 && xr_value_is_json(args[1])) {
         XrJson *json = xr_value_to_json(args[1]);
         xrs_cfg_get_int(X, json, "indent", &indent);
         xrs_cfg_get_int(X, json, "flowLevel", &flow_level);
-        xrs_cfg_get_int(X, json, "lineWidth", &line_width);
     } else if (argc >= 2 && XR_IS_INT(args[1])) {
         indent = (int) XR_TO_INT(args[1]);
     }
 
-    return yaml_emit(X, args[0], indent, flow_level, line_width);
+    return yaml_emit(X, args[0], indent, flow_level);
 }
 
 // parseFile(path). Currently synchronous — see stdlib/common_io.h for

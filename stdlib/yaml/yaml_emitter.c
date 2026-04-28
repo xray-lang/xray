@@ -8,7 +8,7 @@
  * yaml_emitter.c - YAML serialization output
  *
  * KEY CONCEPT:
- *   Supports flowLevel and lineWidth to control output format.
+ *   Supports indent and flowLevel to control output format.
  */
 
 #include "yaml_parser.h"
@@ -27,20 +27,6 @@
 typedef struct {
     int indent;      // Indentation spaces, default 2
     int flow_level;  // Depth > flow_level uses flow style, default -1 (disabled)
-
-    // Intended maximum output line width in characters (default 80).
-    //
-    // NOTE: currently reserved — the emitter does not yet wrap flow
-    // sequences / mappings nor fold long plain scalars. The parameter
-    // is kept in the API and YamlEmitConfig struct so existing callers
-    // continue to compile, and so we have a stable place to hook a
-    // future implementation (track chars-since-last-newline in
-    // `current_line_len`, then emit a newline + continuation indent
-    // once the running count passes `line_width`).
-    //
-    // If you are relying on wrap behaviour, do not rely on this field
-    // today; file an issue so we can prioritise the implementation.
-    int line_width;
 } YamlEmitConfig;
 
 // ========== Output Buffer ==========
@@ -62,7 +48,6 @@ static inline void emit_init(YamlEmitter *e, XrayIsolate *isolate, YamlEmitConfi
     } else {
         e->config.indent = 2;
         e->config.flow_level = -1;
-        e->config.line_width = 80;
     }
 }
 
@@ -552,11 +537,9 @@ static void emit_value(YamlEmitter *e, XrValue val, int level, bool flow_mode) {
 
 // ========== Public API ===========
 
-XR_FUNCDEF XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level,
-                             int line_width) {
+XR_FUNCDEF XrValue yaml_emit(XrayIsolate *isolate, XrValue value, int indent, int flow_level) {
     YamlEmitConfig config = {.indent = indent > 0 ? indent : 2,
-                             .flow_level = flow_level,
-                             .line_width = line_width > 0 ? line_width : 80};
+                             .flow_level = flow_level};
 
     YamlEmitter emitter;
     emit_init(&emitter, isolate, &config);

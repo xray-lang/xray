@@ -56,10 +56,6 @@ XR_FUNC XrValue xr_yaml_parse_all(XrayIsolate *isolate, const char *data, size_t
 
 // Serialize to YAML string
 // indent: number of spaces for indentation, default 2.
-// NOTE: the script-level `stringify(value, opts)` also accepts a
-// `lineWidth` option; that parameter is currently reserved and does
-// not yet trigger wrapping — see yaml_emitter.c for the full
-// rationale.
 XR_FUNC XrValue xr_yaml_stringify(XrayIsolate *isolate, XrValue value, int indent);
 
 // Load yaml module
