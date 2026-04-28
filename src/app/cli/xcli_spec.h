@@ -53,7 +53,9 @@ typedef struct {
 } XrCliOptionSpec;
 
 /* Sentinel: end of option spec array */
+// clang-format off
 #define XR_CLI_OPT_END {NULL, 0, XR_CLI_VALUE_NONE, false, false, NULL, NULL}
+// clang-format on
 
 /* ========== Option Query Model ========== */
 
