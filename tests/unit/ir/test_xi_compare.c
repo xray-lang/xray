@@ -979,9 +979,9 @@ TEST(cmp_for_in_array) {
                   "for (item in arr) { sum = sum + item }\n"
                   "print(sum)",
         .label = "for-in loop over array",
-        .expect_xi_success = false,  /* XI_ITER_* not yet in xi_emit */
-        .min_similarity = 0.1,
-        .check_exec = false,
+        .expect_xi_success = true,
+        .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -991,9 +991,9 @@ TEST(cmp_for_in_range) {
                   "for (i in 0..5) { sum = sum + i }\n"
                   "print(sum)",
         .label = "for-in loop over range",
-        .expect_xi_success = false,  /* XI_ITER_* not yet in xi_emit */
-        .min_similarity = 0.1,
-        .check_exec = false,
+        .expect_xi_success = true,
+        .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
