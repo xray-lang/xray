@@ -66,6 +66,11 @@ typedef struct {
     } *patches;
     uint32_t npatch;
     uint32_t patch_cap;
+
+    /* Comparison-branch fusion: if the block control is a comparison with
+     * no other consumers, skip emitting OP_CMP_* and instead emit the
+     * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
+    XiValue *fused_cmp;
 } EmitCtx;
 
 /* ========== Helpers ========== */
@@ -330,6 +335,9 @@ static void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
 
 static void emit_value(EmitCtx *ctx, XiValue *v) {
     if (ctx->status != XI_EMIT_OK) return;
+
+    /* Skip comparison that was absorbed into the block terminator */
+    if (v == ctx->fused_cmp) return;
 
     /* Call-like ops place args at dst+1..dst+nargs.  A recycled low register
      * for dst could overlap with live source arg registers (clobber bug).
@@ -935,6 +943,23 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
 
 /* ========== Block Emission ========== */
 
+/* Check if a comparison value is only used as the block control (no other
+ * consumers).  If so, we can fuse it into the branch-form opcode. */
+static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
+    XR_DCHECK(ctrl != NULL, "ctrl must not be NULL");
+    uint16_t op = ctrl->op;
+    if (op < XI_EQ || op > XI_GE || ctrl->nargs < 2) return false;
+    /* Ensure no other value in this block uses the comparison result */
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        XiValue *v = blk->values[i];
+        if (v == ctrl) continue;
+        for (uint16_t a = 0; a < v->nargs; a++) {
+            if (v->args[a] == ctrl) return false;
+        }
+    }
+    return true;
+}
+
 static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     if (ctx->status != XI_EMIT_OK) return;
 
@@ -942,14 +967,22 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     XR_DCHECK(blk->id < ctx->block_pc_size, "block_id out of range");
     ctx->block_pc[blk->id] = current_pc(ctx);
 
+    /* Detect fuseable comparison for IF blocks */
+    ctx->fused_cmp = NULL;
+    if (blk->kind == XI_BLOCK_IF && blk->control)
+        if (can_fuse_cmp(blk, blk->control))
+            ctx->fused_cmp = blk->control;
+
     /* Emit instruction values with register recycling */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         ctx->current_ordinal++;
         ctx->current_line = (int)blk->values[i]->line;
         emit_value(ctx, blk->values[i]);
         if (ctx->status != XI_EMIT_OK) return;
-        /* Recycle registers of args whose last use was this instruction */
-        if (ctx->last_use)
+        /* Recycle registers of args whose last use was this instruction.
+         * Skip recycling for the fused comparison's args — they are still
+         * needed by the branch-form opcode in the terminator. */
+        if (ctx->last_use && blk->values[i] != ctx->fused_cmp)
             try_free_args(ctx, blk->values[i]);
     }
 
@@ -983,17 +1016,64 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
 
         case XI_BLOCK_IF: {
             if (!blk->control) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
-            uint8_t cond = reg_of(ctx, blk->control);
-            if (ctx->status != XI_EMIT_OK) return;
 
             XiBlock *then_b = blk->succs[0];
             XiBlock *else_b = blk->succs[1];
             XR_DCHECK(then_b && else_b, "IF block missing successor");
 
-            /* TEST cond, 0 — skip next instruction if cond is false */
-            emit_inst(ctx, CREATE_ABC(OP_TEST, cond, 0, 0));
+            if (ctx->fused_cmp) {
+                /* Fused comparison-branch: emit OP_LT/LE/EQ etc. directly.
+                 * Saves one instruction vs OP_CMP_* + OP_TEST. */
+                XiValue *cmp = ctx->fused_cmp;
+                XiValue *lhs = cmp->args[0];
+                XiValue *rhs = cmp->args[1];
+                uint8_t a = reg_of(ctx, lhs);
+                uint8_t b = reg_of(ctx, rhs);
+                if (ctx->status != XI_EMIT_OK) return;
 
-            /* JMP -> else block (if TEST fails, i.e., cond is false) */
+                /* Determine branch-form opcode and sense.  GT/GE swap args. */
+                OpCode branch_op;
+                int k = 0;
+                bool swap = false;
+                switch (cmp->op) {
+                    case XI_LT: branch_op = OP_LT; break;
+                    case XI_LE: branch_op = OP_LE; break;
+                    case XI_GT: branch_op = OP_LT; swap = true; break;
+                    case XI_GE: branch_op = OP_LE; swap = true; break;
+                    case XI_EQ: branch_op = OP_EQ; break;
+                    case XI_NE: branch_op = OP_EQ; k = 1; break;
+                    default:    branch_op = OP_EQ; break;
+                }
+                if (swap) { uint8_t t = a; a = b; b = t; }
+
+                /* Try immediate form (OP_LTI/LEI/EQI) when RHS is small int */
+                bool is_imm = false;
+                XiValue *imm_arg = swap ? lhs : rhs;   /* the "B" operand */
+                XiValue *reg_arg = swap ? rhs : lhs;    /* the "A" operand */
+                if (imm_arg->op == XI_CONST && imm_arg->type &&
+                    imm_arg->type->kind == XR_KIND_INT &&
+                    imm_arg->aux_int >= -128 && imm_arg->aux_int <= 127 &&
+                    (branch_op == OP_LT || branch_op == OP_LE || branch_op == OP_EQ)) {
+                    OpCode imm_op = branch_op == OP_LT ? OP_LTI :
+                                   branch_op == OP_LE ? OP_LEI : OP_EQI;
+                    uint8_t ra = reg_of(ctx, reg_arg);
+                    if (ctx->status != XI_EMIT_OK) return;
+                    int8_t imm = (int8_t)imm_arg->aux_int;
+                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint8_t)imm, (uint8_t)k));
+                    is_imm = true;
+                }
+
+                if (!is_imm) {
+                    emit_inst(ctx, CREATE_ABC(branch_op, a, b, (uint8_t)k));
+                }
+            } else {
+                /* Non-fused path: TEST cond, skip next if cond is false */
+                uint8_t cond = reg_of(ctx, blk->control);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_TEST, cond, 0, 0));
+            }
+
+            /* JMP -> else block */
             int else_jmp_pc = current_pc(ctx);
             emit_inst(ctx, CREATE_sJ(OP_JMP, 0));  /* placeholder */
             add_patch(ctx, else_jmp_pc, else_b->id);
