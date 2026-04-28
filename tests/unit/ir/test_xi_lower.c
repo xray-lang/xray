@@ -326,6 +326,80 @@ TEST(type_propagation) {
     xi_func_free(f);
 }
 
+TEST(array_literal) {
+    XiFunc *f = lower_source(
+        "let arr = [1, 2, 3]\n"
+        "print(arr)\n"
+    );
+    assert(f != NULL);
+    /* Should have: CONST*3 elements, ARRAY_NEW, INDEX_SET*3, PRINT */
+    int found_array_new = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_ARRAY_NEW)
+            found_array_new = 1;
+    }
+    assert(found_array_new && "should have ARRAY_NEW op");
+    xi_func_free(f);
+}
+
+TEST(index_access) {
+    XiFunc *f = lower_source(
+        "let arr = [10, 20, 30]\n"
+        "let x = arr[1]\n"
+        "print(x)\n"
+    );
+    assert(f != NULL);
+    int found_index_get = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_INDEX_GET)
+            found_index_get = 1;
+    }
+    assert(found_index_get && "should have INDEX_GET op");
+    xi_func_free(f);
+}
+
+TEST(member_access) {
+    XiFunc *f = lower_source(
+        "let arr = [1, 2, 3]\n"
+        "let n = arr.length\n"
+        "print(n)\n"
+    );
+    assert(f != NULL);
+    int found_load_field = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_LOAD_FIELD)
+            found_load_field = 1;
+    }
+    assert(found_load_field && "should have LOAD_FIELD op");
+    xi_func_free(f);
+}
+
+TEST(throw_stmt) {
+    XiFunc *f = lower_source(
+        "let x = 1\n"
+        "if (x == 0) {\n"
+        "    throw \"error\"\n"
+        "}\n"
+        "print(x)\n"
+    );
+    assert(f != NULL);
+    /* Should have: entry + then(throw) + else + merge */
+    assert(f->nblocks >= 3);
+    /* Find the throw block — should be UNREACHABLE */
+    int found_throw = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i]->op == XI_THROW) {
+                found_throw = 1;
+                assert(blk->kind == XI_BLOCK_UNREACHABLE);
+            }
+        }
+    }
+    assert(found_throw && "should have THROW op");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -349,6 +423,10 @@ int main(void) {
     run_break_continue();
     run_nested_while();
     run_type_propagation();
+    run_array_literal();
+    run_index_access();
+    run_member_access();
+    run_throw_stmt();
 
     teardown();
 
