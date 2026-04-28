@@ -436,6 +436,25 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
     return result;
 }
 
+static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
+    const char *name = node->as.inc.name;
+    int var_id = var_find(l, name);
+    if (var_id < 0)
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+
+    XiValue *cur = braun_read(l, var_id, l->cur_block);
+    if (!cur) return NULL;
+
+    XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+    uint16_t op = (node->type == AST_INC) ? XI_ADD : XI_SUB;
+    struct XrType *result_type = cur->type ? cur->type : l->type_int;
+
+    XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
+    if (result)
+        braun_write(l, var_id, l->cur_block, result);
+    return result;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     uint16_t nargs = (uint16_t)(call->arg_count + 1);  /* callee + args */
@@ -544,6 +563,9 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
             return lower_assignment(l, node);
         case AST_COMPOUND_ASSIGNMENT:
             return lower_compound_assignment(l, node);
+        case AST_INC:
+        case AST_DEC:
+            return lower_inc_dec(l, node);
 
         /* Calls */
         case AST_CALL_EXPR:
@@ -816,6 +838,8 @@ static void lower_stmt(XiLower *l, AstNode *node) {
         case AST_ASSIGNMENT:
         case AST_COMPOUND_ASSIGNMENT:
         case AST_CALL_EXPR:
+        case AST_INC:
+        case AST_DEC:
             lower_expr(l, node);
             break;
 
@@ -840,6 +864,11 @@ static void lower_init(XiLower *l, struct XaAnalyzer *analyzer,
     l->analyzer = analyzer;
     l->isolate = isolate;
 
+    /* Heap-allocate the 2D def map (256*256 pointers = 512KB) */
+    size_t def_map_size = (size_t)XI_LOWER_MAX_VARS * XI_LOWER_MAX_BLOCKS;
+    l->var_defs = (XiValue **) xr_calloc(def_map_size, sizeof(XiValue *));
+    XR_CHECK(l->var_defs != NULL, "xi_lower: failed to allocate var_defs");
+
     /* Cache singleton types */
     l->type_int = xr_type_new_int(isolate);
     l->type_float = xr_type_new_float(isolate);
@@ -848,6 +877,13 @@ static void lower_init(XiLower *l, struct XaAnalyzer *analyzer,
     l->type_null = xr_type_new_null(isolate);
     l->type_void = xr_type_new_void(isolate);
     l->type_any = xr_type_new_unknown(isolate);
+}
+
+static void lower_cleanup(XiLower *l) {
+    if (l->var_defs) {
+        xr_free(l->var_defs);
+        l->var_defs = NULL;
+    }
 }
 
 /* ========== Public API ========== */
@@ -870,7 +906,7 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
     if (!ret_type) ret_type = l.type_void;
 
     l.func = xi_func_new(fdecl->name ? fdecl->name : "<anonymous>", ret_type);
-    if (!l.func) return NULL;
+    if (!l.func) { lower_cleanup(&l); return NULL; }
     l.func->analyzer = analyzer;
 
     /* Entry block (no predecessors — seal immediately) */
@@ -883,7 +919,7 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
     if (fdecl->param_count > 0) {
         l.func->params = (XiValue **) xr_calloc(
             fdecl->param_count, sizeof(XiValue *));
-        if (!l.func->params) { xi_func_free(l.func); return NULL; }
+        if (!l.func->params) { xi_func_free(l.func); lower_cleanup(&l); return NULL; }
     }
 
     for (int i = 0; i < fdecl->param_count; i++) {
@@ -908,6 +944,7 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
         xi_block_set_return(l.cur_block, NULL);
     }
 
+    lower_cleanup(&l);
     return l.func;
 }
 
@@ -920,7 +957,7 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
     lower_init(&l, analyzer, isolate);
 
     l.func = xi_func_new("<main>", l.type_void);
-    if (!l.func) return NULL;
+    if (!l.func) { lower_cleanup(&l); return NULL; }
     l.func->analyzer = analyzer;
     l.func->nparams = 0;
     l.func->params = NULL;
@@ -943,5 +980,6 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
         xi_block_set_return(l.cur_block, NULL);
     }
 
+    lower_cleanup(&l);
     return l.func;
 }

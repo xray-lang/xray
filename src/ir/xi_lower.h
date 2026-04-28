@@ -79,8 +79,9 @@ typedef struct XiLower {
     XiVarEntry vars[XI_LOWER_MAX_VARS];
     int var_count;
 
-    /* 2D def map: var_defs[var_id * max_blocks + block_id] = XiValue* */
-    XiValue *var_defs[XI_LOWER_MAX_VARS * XI_LOWER_MAX_BLOCKS];
+    /* 2D def map: var_defs[var_id * max_blocks + block_id] = XiValue*
+     * Heap-allocated (256*256*8 = 512KB — too large for stack). */
+    XiValue **var_defs;
 
     /* Incomplete phis for unsealed blocks */
     XiIncompletePhi incomplete[XI_LOWER_MAX_INCOMPLETE];
