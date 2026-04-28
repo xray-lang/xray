@@ -83,6 +83,12 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
 void xi_func_free(XiFunc *f) {
     if (!f) return;
 
+    /* Free nested children recursively */
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        xi_func_free(f->children[i]);
+    }
+    xr_free(f->children);
+
     /* Arena owns all XiValues, XiPhis, arg arrays.
      * Blocks and block arrays are also arena-allocated if we switch,
      * but currently blocks[] is heap-allocated for resizability. */

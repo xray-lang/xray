@@ -548,6 +548,59 @@ TEST(object_literal) {
     xi_func_free(f);
 }
 
+TEST(nested_function) {
+    XiFunc *f = lower_source(
+        "fn add(a: int, b: int): int {\n"
+        "    return a + b\n"
+        "}\n"
+        "let r = add(1, 2)\n"
+        "print(r)\n"
+    );
+    assert(f != NULL);
+    /* Parent should have a child function */
+    assert(f->nchildren == 1);
+    XiFunc *child = f->children[0];
+    assert(child != NULL);
+    assert(child->nparams == 2);
+    /* Child should have at least an ADD and a return */
+    assert(child->nblocks >= 1);
+    assert(child->entry->nvalues >= 1);
+    /* Parent should have CLOSURE_NEW and CALL */
+    int found_closure = 0, found_call = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_CLOSURE_NEW) found_closure = 1;
+        if (f->entry->values[i]->op == XI_CALL) found_call = 1;
+    }
+    assert(found_closure && "parent should have CLOSURE_NEW");
+    assert(found_call && "parent should have CALL");
+    xi_func_free(f);
+}
+
+TEST(function_expr) {
+    XiFunc *f = lower_source(
+        "let double = fn(x: int): int { return x * 2 }\n"
+        "let r = double(5)\n"
+        "print(r)\n"
+    );
+    assert(f != NULL);
+    assert(f->nchildren == 1);
+    XiFunc *child = f->children[0];
+    assert(child != NULL);
+    assert(child->nparams == 1);
+    xi_func_free(f);
+}
+
+TEST(multiple_functions) {
+    XiFunc *f = lower_source(
+        "fn foo(): int { return 1 }\n"
+        "fn bar(): int { return 2 }\n"
+        "print(foo() + bar())\n"
+    );
+    assert(f != NULL);
+    assert(f->nchildren == 2);
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -582,6 +635,9 @@ int main(void) {
     run_try_catch();
     run_try_catch_finally();
     run_object_literal();
+    run_nested_function();
+    run_function_expr();
+    run_multiple_functions();
 
     teardown();
 
