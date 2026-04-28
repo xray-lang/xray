@@ -7,6 +7,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -386,6 +387,240 @@ TEST(opt_run_combined) {
     xi_func_free(f);
 }
 
+/* ========== Strength Reduction Tests ========== */
+
+TEST(strength_add_zero) {
+    /* x + 0 => x (copy) */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, x, c0);
+    xi_block_set_return(blk, add);
+
+    xi_opt_strength_reduce(f);
+
+    assert(add->op == XI_COPY && "x + 0 should become COPY");
+    assert(add->args[0] == x && "should copy x");
+    xi_func_free(f);
+}
+
+TEST(strength_zero_add) {
+    /* 0 + x => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, c0, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(add->op == XI_COPY && add->args[0] == x);
+    xi_func_free(f);
+}
+
+TEST(strength_mul_zero) {
+    /* x * 0 => 0 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, x, c0);
+
+    xi_opt_strength_reduce(f);
+
+    assert(mul->op == XI_CONST && mul->aux_int == 0 && "x * 0 should be 0");
+    xi_func_free(f);
+}
+
+TEST(strength_mul_one) {
+    /* x * 1 => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, x, c1);
+
+    xi_opt_strength_reduce(f);
+
+    assert(mul->op == XI_COPY && mul->args[0] == x && "x * 1 should become COPY");
+    xi_func_free(f);
+}
+
+TEST(strength_sub_self) {
+    /* x - x => 0 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *sub = xi_binary(f, blk, XI_SUB, &stub_int, x, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(sub->op == XI_CONST && sub->aux_int == 0 && "x - x should be 0");
+    xi_func_free(f);
+}
+
+TEST(strength_xor_self) {
+    /* x ^ x => 0 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *xr = xi_binary(f, blk, XI_BXOR, &stub_int, x, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(xr->op == XI_CONST && xr->aux_int == 0 && "x ^ x should be 0");
+    xi_func_free(f);
+}
+
+TEST(strength_and_zero) {
+    /* x & 0 => 0 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *band = xi_binary(f, blk, XI_BAND, &stub_int, x, c0);
+
+    xi_opt_strength_reduce(f);
+
+    assert(band->op == XI_CONST && band->aux_int == 0);
+    xi_func_free(f);
+}
+
+TEST(strength_div_one) {
+    /* x / 1 => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *div = xi_binary(f, blk, XI_DIV, &stub_int, x, c1);
+
+    xi_opt_strength_reduce(f);
+
+    assert(div->op == XI_COPY && div->args[0] == x && "x / 1 should copy x");
+    xi_func_free(f);
+}
+
+TEST(strength_shl_zero) {
+    /* x << 0 => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *shl = xi_binary(f, blk, XI_SHL, &stub_int, x, c0);
+
+    xi_opt_strength_reduce(f);
+
+    assert(shl->op == XI_COPY && shl->args[0] == x);
+    xi_func_free(f);
+}
+
+/* ========== Verification Tests ========== */
+
+TEST(verify_valid_func) {
+    /* A well-formed function should pass verification */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c = xi_const_int(f, blk, 42, &stub_int);
+    xi_block_set_return(blk, c);
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    assert(ok && "well-formed func should pass verification");
+    assert(errbuf[0] == '\0');
+    xi_func_free(f);
+}
+
+TEST(verify_null_type) {
+    /* A value with NULL type should fail verification */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *v = xi_value_new(f, blk, XI_CONST, &stub_int, 0);
+    v->type = NULL;  /* intentionally break invariant */
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    assert(!ok && "NULL type should fail verification");
+    assert(errbuf[0] != '\0');
+    xi_func_free(f);
+}
+
+TEST(verify_phi_arg_mismatch) {
+    /* Phi with wrong arg count should fail */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_const_int(f, entry, 1, &stub_int);
+
+    XiBlock *merge = xi_block_new(f);
+    xi_block_add_pred(merge, entry);
+    xi_block_add_pred(merge, entry);
+    merge->sealed = true;
+
+    /* Create phi with 1 arg but block has 2 preds */
+    XiPhi *phi = xi_phi_new(f, merge, &stub_int, 1);
+    phi->value.args[0] = a;
+    /* Manually set nargs to 1 (should be 2) */
+    phi->value.nargs = 1;
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    assert(!ok && "phi arg mismatch should fail verification");
+    xi_func_free(f);
+}
+
+TEST(verify_if_block_missing_control) {
+    /* IF block with NULL control should fail */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiBlock *then_blk = xi_block_new(f);
+    XiBlock *else_blk = xi_block_new(f);
+
+    /* Manually set up an IF block with NULL control */
+    blk->kind = XI_BLOCK_IF;
+    blk->succs[0] = then_blk;
+    blk->succs[1] = else_blk;
+    blk->control = NULL;  /* broken! */
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    assert(!ok && "IF with NULL control should fail");
+    xi_func_free(f);
+}
+
+TEST(verify_after_optimization) {
+    /* Function should be valid after running all optimizations */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c3 = xi_const_int(f, blk, 3, &stub_int);
+    XiValue *c4 = xi_const_int(f, blk, 4, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, c3, c4);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    xi_binary(f, blk, XI_MUL, &stub_int, add, c0); /* dead: x * 0 = 0, unused */
+    xi_block_set_return(blk, add);
+
+    xi_opt_run(f);
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok) printf("  verify error: %s\n", errbuf);
+    assert(ok && "function should be valid after optimization");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -394,6 +629,7 @@ int main(void) {
     (void)stub_null;
     (void)stub_str;
 
+    /* Constant folding */
     run_const_fold_int_add();
     run_const_fold_int_sub();
     run_const_fold_int_mul();
@@ -405,12 +641,38 @@ int main(void) {
     run_const_fold_float_add();
     run_const_fold_chain();
     run_const_fold_no_fold_variable();
+
+    /* Copy propagation */
     run_copy_prop_basic();
     run_copy_prop_chain();
+
+    /* Dead code elimination */
     run_dce_removes_unused();
     run_dce_keeps_side_effects();
     run_dce_cascading();
+
+    /* Phi simplification */
     run_phi_simplify_trivial();
+
+    /* Strength reduction */
+    run_strength_add_zero();
+    run_strength_zero_add();
+    run_strength_mul_zero();
+    run_strength_mul_one();
+    run_strength_sub_self();
+    run_strength_xor_self();
+    run_strength_and_zero();
+    run_strength_div_one();
+    run_strength_shl_zero();
+
+    /* Verification */
+    run_verify_valid_func();
+    run_verify_null_type();
+    run_verify_phi_arg_mismatch();
+    run_verify_if_block_missing_control();
+    run_verify_after_optimization();
+
+    /* Combined */
     run_opt_run_combined();
 
     printf("\n=== %d/%d Xi Opt tests passed ===\n",

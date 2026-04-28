@@ -51,13 +51,19 @@ XR_FUNC void xi_opt_dce(XiFunc *f);
  * Replaces trivial phis with their unique operand. */
 XR_FUNC void xi_opt_phi_simplify(XiFunc *f);
 
+/* Strength reduction: algebraic identity simplification.
+ * Rewrites patterns like x+0, x*1, x*0, x-0, x&0, x|0, etc.
+ * to their simpler equivalents. Single forward pass. O(n). */
+XR_FUNC void xi_opt_strength_reduce(XiFunc *f);
+
 /* ========== Combined Pass ========== */
 
 /* Run all optimization passes in the recommended order:
  *   1. Constant folding
- *   2. Copy propagation
- *   3. Phi simplification
- *   4. Dead code elimination
+ *   2. Strength reduction
+ *   3. Copy propagation
+ *   4. Phi simplification
+ *   5. Dead code elimination
  * Safe to call multiple times (idempotent after convergence). */
 XR_FUNC void xi_opt_run(XiFunc *f);
 
