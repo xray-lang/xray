@@ -22,6 +22,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
+
+#include "../../../src/vm/xvm_internal.h"
+#include "../../../src/runtime/xisolate_api.h"
 
 /* ========== Test Infrastructure ========== */
 
@@ -34,6 +38,7 @@ static void setup(void) {
     if (!g_iso) {
         XrayIsolateParams p;
         xray_isolate_params_init(&p);
+        xray_isolate_setup_full(&p);
         g_iso = xray_isolate_new(&p);
     }
 }
@@ -96,6 +101,40 @@ static XrProto *compile_xi(const char *source) {
     XrProto *proto = res.proto;
     xi_pipeline_result_free(&res);
     return proto;
+}
+
+/* ========== Execution Capture ========== */
+
+/* Capture path for temp file */
+static const char *g_capture_path = "/tmp/xi_cmp_capture.txt";
+
+/* Read captured output from temp file into heap buffer */
+static char *read_capture(void) {
+    FILE *f = fopen(g_capture_path, "r");
+    if (!f) return NULL;
+
+    char *buf = (char *)xr_malloc(4096);
+    if (!buf) { fclose(f); return NULL; }
+
+    size_t n = fread(buf, 1, 4095, f);
+    fclose(f);
+    buf[n] = '\0';
+    return buf;
+}
+
+/* Execute proto via xr_execute and capture stdout into a heap buffer. */
+static char *execute_and_capture(XrProto *proto) {
+    if (!proto || !g_iso) return NULL;
+
+    fflush(stdout);
+    if (!freopen(g_capture_path, "w", stdout)) return NULL;
+
+    int rc = xr_execute(g_iso, proto);
+    (void)rc;
+    fflush(stdout);
+
+    if (!freopen("/dev/tty", "w", stdout)) return NULL;
+    return read_capture();
 }
 
 /* ========== Comparison Utilities ========== */
@@ -190,6 +229,7 @@ typedef struct {
     const char *label;
     bool expect_xi_success;    /* true = Xi pipeline must succeed */
     double min_similarity;     /* minimum opcode histogram similarity */
+    bool check_exec;           /* compare VM execution output */
 } CompareSpec;
 
 static void run_compare(CompareSpec spec) {
@@ -238,6 +278,25 @@ static void run_compare(CompareSpec spec) {
     assert(legacy_has_ret && "legacy must contain RETURN");
     assert(xi_has_ret && "xi must contain RETURN");
 
+    /* Execution output comparison */
+    if (spec.check_exec) {
+        char *out_l = execute_and_capture(p_legacy);
+        char *out_x = execute_and_capture(p_xi);
+
+        if (out_l && out_x) {
+            bool match = (strcmp(out_l, out_x) == 0);
+            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n",
+                    out_l, out_x, match ? "MATCH" : "MISMATCH");
+            assert(match && "execution output must match between legacy and Xi");
+        } else {
+            fprintf(stderr, "  exec: skipped (capture failed: legacy=%s xi=%s)\n",
+                    out_l ? "ok" : "fail", out_x ? "ok" : "fail");
+        }
+
+        if (out_l) xr_free(out_l);
+        if (out_x) xr_free(out_x);
+    }
+
     xr_vm_proto_free(p_legacy);
     xr_vm_proto_free(p_xi);
 }
@@ -252,6 +311,7 @@ TEST(cmp_int_const) {
         .label = "int constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -261,6 +321,7 @@ TEST(cmp_float_const) {
         .label = "float constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -270,6 +331,7 @@ TEST(cmp_bool_const) {
         .label = "bool constants",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -279,6 +341,7 @@ TEST(cmp_string_const) {
         .label = "string constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -288,6 +351,7 @@ TEST(cmp_null_const) {
         .label = "null constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -299,6 +363,7 @@ TEST(cmp_add) {
         .label = "addition",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -308,6 +373,7 @@ TEST(cmp_arith_chain) {
         .label = "arithmetic chain (const folded)",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -317,6 +383,7 @@ TEST(cmp_unary_neg) {
         .label = "unary negation",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -328,6 +395,7 @@ TEST(cmp_if_else) {
         .label = "if-else",
         .expect_xi_success = true,
         .min_similarity = 0.2,
+        .check_exec = true,
     });
 }
 
@@ -337,6 +405,7 @@ TEST(cmp_if_const_true) {
         .label = "if with const true (branch elimination)",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -346,6 +415,7 @@ TEST(cmp_while_loop) {
         .label = "while loop",
         .expect_xi_success = true,
         .min_similarity = 0.2,
+        .check_exec = true,
     });
 }
 
@@ -357,6 +427,7 @@ TEST(cmp_multi_print) {
         .label = "multiple prints",
         .expect_xi_success = true,
         .min_similarity = 0.5,
+        .check_exec = true,
     });
 }
 
@@ -367,6 +438,7 @@ TEST(cmp_multi_vars) {
         .label = "multiple variables + sum",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -378,6 +450,7 @@ TEST(cmp_var_reassign) {
         .label = "variable reassignment chain",
         .expect_xi_success = true,
         .min_similarity = 0.3,
+        .check_exec = true,
     });
 }
 
@@ -391,6 +464,7 @@ TEST(cmp_comparisons) {
         .label = "comparison operators",
         .expect_xi_success = true,
         .min_similarity = 0.2,
+        .check_exec = true,
     });
 }
 

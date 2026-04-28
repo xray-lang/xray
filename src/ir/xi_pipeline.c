@@ -35,7 +35,8 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
 
 /* ========== Internal Pipeline ========== */
 
-static XiPipelineResult run_pipeline(XiFunc *ir, const XiPipelineConfig *cfg) {
+static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
+                                     const XiPipelineConfig *cfg) {
     XiPipelineResult res;
     memset(&res, 0, sizeof(res));
     res.ir = ir;
@@ -78,7 +79,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, const XiPipelineConfig *cfg) {
 
     /* Bytecode emission */
     struct XrProto *proto = NULL;
-    XiEmitStatus emit_st = xi_emit(ir, &proto);
+    XiEmitStatus emit_st = xi_emit(ir, X, &proto);  /* X needed for string interning */
     if (emit_st != XI_EMIT_OK) {
         res.status = XI_PIPE_ERR_EMIT;
         res.error_msg = xi_emit_status_str(emit_st);
@@ -107,7 +108,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(
     }
 
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
-    return run_pipeline(ir, cfg);
+    return run_pipeline(ir, isolate, cfg);
 }
 
 XR_FUNC XiPipelineResult xi_pipeline_compile_program(
@@ -125,7 +126,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(
     }
 
     XiFunc *ir = xi_lower_program(program_node, analyzer, isolate);
-    return run_pipeline(ir, cfg);
+    return run_pipeline(ir, isolate, cfg);
 }
 
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res) {

@@ -18,6 +18,9 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xvalue.h"
+#include "../runtime/object/xstring.h"
+#include "../../include/xray_isolate.h"
 #include <string.h>
 
 /* ========== Emit Context ========== */
@@ -28,6 +31,7 @@
 typedef struct {
     XiFunc *func;
     XrProto *proto;
+    XrayIsolate *isolate;      /* for string interning; may be NULL */
     XiEmitStatus status;
 
     /* Register allocation: value_id -> register number */
@@ -163,7 +167,13 @@ static int add_const_float(EmitCtx *ctx, double val) {
 }
 
 static int add_const_string(EmitCtx *ctx, const char *str) {
-    XrValue xv = xr_make_ptr_val((void *)str);
+    XrValue xv;
+    if (ctx->isolate && str) {
+        XrString *xs = xr_compile_time_intern(ctx->isolate, str, strlen(str));
+        xv = xr_string_value(xs);
+    } else {
+        xv = xr_make_ptr_val((void *)str);
+    }
     int idx = xr_vm_proto_add_constant(ctx->proto, xv);
     if (idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
@@ -217,6 +227,18 @@ static void compute_last_use(EmitCtx *ctx) {
             }
         }
         ord++;  /* account for terminator */
+    }
+
+    /* Phi registers must never be freed: they are referenced by
+     * emit_phi_moves from any predecessor, which is not captured
+     * by the ordinal-based last-use tracking above. */
+    for (uint32_t r = 1; r <= ctx->rpo_count; r++) {
+        XiBlock *blk = ctx->rpo_order[r];
+        if (!blk) continue;
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (phi->value.id < ctx->reg_map_size)
+                ctx->last_use[phi->value.id] = UINT32_MAX;
+        }
     }
 }
 
@@ -331,7 +353,7 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                     emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
                     break;
                 case XR_KIND_STRING: {
-                    const char *s = (const char *)(uintptr_t)v->aux_int;
+                    const char *s = (const char *)v->aux;
                     int ki = add_const_string(ctx, s);
                     if (ctx->status != XI_EMIT_OK) return;
                     emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
@@ -953,7 +975,8 @@ static void patch_jumps(EmitCtx *ctx) {
 
 /* ========== Public API ========== */
 
-XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrProto **out_proto) {
+XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
+                              struct XrProto **out_proto) {
     XR_DCHECK(f != NULL, "xi_emit: NULL func");
     XR_DCHECK(out_proto != NULL, "xi_emit: NULL out_proto");
     *out_proto = NULL;
@@ -977,6 +1000,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrProto **out_proto) {
     EmitCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.func = f;
+    ctx.isolate = isolate;
     ctx.proto = xr_vm_proto_new();
     if (!ctx.proto) { xr_free(rpo_order); return XI_EMIT_ERR_INTERNAL; }
     ctx.rpo_order = rpo_order;
