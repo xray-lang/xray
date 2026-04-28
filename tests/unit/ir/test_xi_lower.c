@@ -464,6 +464,90 @@ TEST(map_literal) {
     xi_func_free(f);
 }
 
+TEST(match_expr) {
+    XiFunc *f = lower_source(
+        "let x = 2\n"
+        "let y = match x {\n"
+        "    1 => 10,\n"
+        "    2 => 20,\n"
+        "    _ => 0\n"
+        "}\n"
+        "print(y)\n"
+    );
+    assert(f != NULL);
+    /* Match generates: chain of test blocks + body blocks + merge */
+    assert(f->nblocks >= 3);
+    /* Verify EQ comparisons for pattern matching */
+    int found_eq = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i]->op == XI_EQ) found_eq++;
+        }
+    }
+    assert(found_eq >= 2 && "should have >= 2 EQ ops for pattern tests");
+    xi_func_free(f);
+}
+
+TEST(try_catch) {
+    XiFunc *f = lower_source(
+        "let result = 0\n"
+        "try {\n"
+        "    result = 42\n"
+        "} catch (e) {\n"
+        "    result = -1\n"
+        "}\n"
+        "print(result)\n"
+    );
+    assert(f != NULL);
+    /* try-catch generates: entry, try_blk, catch_blk, merge */
+    assert(f->nblocks >= 3);
+    /* Verify catch variable binding (PARAM with aux_int == -1) */
+    int found_catch_param = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v->op == XI_PARAM && v->aux_int == -1)
+                found_catch_param = 1;
+        }
+    }
+    assert(found_catch_param && "should have catch PARAM binding");
+    xi_func_free(f);
+}
+
+TEST(try_catch_finally) {
+    XiFunc *f = lower_source(
+        "let x = 0\n"
+        "try {\n"
+        "    x = 1\n"
+        "} catch (e) {\n"
+        "    x = 2\n"
+        "} finally {\n"
+        "    print(x)\n"
+        "}\n"
+    );
+    assert(f != NULL);
+    /* try + catch + finally + merge = at least 4 blocks */
+    assert(f->nblocks >= 4);
+    xi_func_free(f);
+}
+
+TEST(object_literal) {
+    XiFunc *f = lower_source(
+        "let obj = {a: 1, b: 2}\n"
+        "print(obj)\n"
+    );
+    assert(f != NULL);
+    int found_alloc = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_ALLOC)
+            found_alloc = 1;
+    }
+    assert(found_alloc && "should have ALLOC for object literal");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -494,6 +578,10 @@ int main(void) {
     run_for_in_loop();
     run_nullish_coalesce();
     run_map_literal();
+    run_match_expr();
+    run_try_catch();
+    run_try_catch_finally();
+    run_object_literal();
 
     teardown();
 
