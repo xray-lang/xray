@@ -1149,8 +1149,7 @@ static void translate_binop(XirBuilder *b, XirBlock *blk, XrInstruction inst, ui
                 int64_t tag_enc = ((int64_t) btag << 8) | ctag;
                 XirRef fn_ref = xir_const_ptr(b->func, (void *) fn);
                 XirRef enc_ref = xir_const_i64(b->func, tag_enc);
-                // AOT: tagged arithmetic returns XrtValue (struct), not raw i64
-                uint8_t rt_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+                uint8_t rt_rep = builder_tagged_rep(b);
                 XirRef result = xir_emit(b->func, blk, XIR_CALL_C, rt_rep, fn_ref, enc_ref);
                 blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
                 builder_bind_call_args(b, result, bo_args, 2);

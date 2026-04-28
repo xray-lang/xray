@@ -336,7 +336,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             int rb = GETARG_B(inst);
             XirRef cp = builder_get_slot(b, blk, rb);
             XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_chr);
-            uint8_t res_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+            uint8_t res_rep = builder_tagged_rep(b);
             XirRef zero = xir_const_i64(b->func, 0);
             XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, res_rep, fn_ref, zval);
@@ -360,7 +360,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             ss_args[1] = builder_get_slot(b, blk, rc);      // start = R[C]
             ss_args[2] = builder_get_slot(b, blk, rc + 1);  // end   = R[C+1]
             XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_substring);
-            uint8_t res_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+            uint8_t res_rep = builder_tagged_rep(b);
             XirRef zero = xir_const_i64(b->func, 0);
             XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, res_rep, fn_ref, zval);
@@ -381,7 +381,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             sr_args[0] = builder_get_slot(b, blk, rb);
             sr_args[1] = builder_get_slot(b, blk, rc);
             XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_str_repeat);
-            uint8_t res_rep = b->aot_mode ? XR_REP_TAGGED : XR_REP_I64;
+            uint8_t res_rep = builder_tagged_rep(b);
             XirRef zero = xir_const_i64(b->func, 0);
             XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, res_rep, fn_ref, zval);
