@@ -153,6 +153,8 @@ static void cache_insert_locked(const char *hostname, XrSockAddr *addrs, int add
 
     // Create new entry
     entry = (XrDnsCacheEntry *) xr_malloc(sizeof(XrDnsCacheEntry));
+    if (!entry)
+        return;
     entry->hostname = xr_strdup(hostname);
     entry->addr_count = addr_count < XR_DNS_MAX_ADDRS ? addr_count : XR_DNS_MAX_ADDRS;
     memcpy(entry->addrs, addrs, sizeof(XrSockAddr) * entry->addr_count);

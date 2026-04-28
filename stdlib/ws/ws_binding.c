@@ -363,6 +363,8 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
 
     // Copy URL
     char *url_copy = (char *) xr_malloc(url_len + 1);
+    if (!url_copy)
+        return xr_null();
     memcpy(url_copy, url, url_len);
     url_copy[url_len] = '\0';
 
