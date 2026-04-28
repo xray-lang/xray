@@ -577,22 +577,38 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
         case XI_CALL: {
             /* args[0]=callee, args[1..n]=params */
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
-            uint8_t callee = reg_of(ctx, v->args[0]);
-            if (ctx->status != XI_EMIT_OK) return;
             uint8_t nargs = (uint8_t)(v->nargs - 1);
-            /* Move args into consecutive registers after callee */
-            for (uint16_t a = 1; a < v->nargs; a++) {
-                uint8_t arg_reg = reg_of(ctx, v->args[a]);
-                if (ctx->status != XI_EMIT_OK) return;
-                uint8_t target = (uint8_t)(callee + a);
-                if (arg_reg != target) {
-                    emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+            bool self_call = (v->aux_int == 1);
+
+            if (self_call) {
+                /* Recursive self-call: OP_CALLSELF uses frame->closure,
+                 * no callee register needed. Use dst as base. */
+                for (uint16_t a = 1; a < v->nargs; a++) {
+                    uint8_t arg_reg = reg_of(ctx, v->args[a]);
+                    if (ctx->status != XI_EMIT_OK) return;
+                    uint8_t target = (uint8_t)(dst + a);
+                    if (arg_reg != target) {
+                        emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+                    }
                 }
-            }
-            emit_inst(ctx, CREATE_ABC(OP_CALL, callee, nargs, 1));
-            /* Result is in callee register; map dst to it */
-            if (dst != callee) {
-                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+                emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs, 1));
+            } else {
+                uint8_t callee = reg_of(ctx, v->args[0]);
+                if (ctx->status != XI_EMIT_OK) return;
+                /* Move args into consecutive registers after callee */
+                for (uint16_t a = 1; a < v->nargs; a++) {
+                    uint8_t arg_reg = reg_of(ctx, v->args[a]);
+                    if (ctx->status != XI_EMIT_OK) return;
+                    uint8_t target = (uint8_t)(callee + a);
+                    if (arg_reg != target) {
+                        emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+                    }
+                }
+                emit_inst(ctx, CREATE_ABC(OP_CALL, callee, nargs, 1));
+                /* Result is in callee register; map dst to it */
+                if (dst != callee) {
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+                }
             }
             break;
         }
