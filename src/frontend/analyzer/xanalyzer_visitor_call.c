@@ -239,7 +239,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 // Check null safety then assignability
                 bool null_err =
                     xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
-                if (!null_err && !xr_type_assignable(param_type, arg_type)) {
+                if (!null_err && !xa_typecheck_assignable(param_type, arg_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                              "Argument %d: type '%s' is not assignable to parameter type '%s'",

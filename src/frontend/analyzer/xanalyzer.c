@@ -575,12 +575,35 @@ void xa_analyzer_exit_scope(XaAnalyzer *analyzer) {
 }
 
 // Type checking
+static bool typecheck_source_precise_for_target(XrType *target, XrType *source) {
+    XR_DCHECK(target != NULL, "typecheck_source_precise_for_target: NULL target");
+    XR_DCHECK(source != NULL, "typecheck_source_precise_for_target: NULL source");
+    if (!target || !source)
+        return false;
+
+    if (XR_TYPE_IS_UNKNOWN(target))
+        return true;
+    if (XR_TYPE_IS_UNKNOWN(source))
+        return false;
+    return true;
+}
+
+bool xa_typecheck_assignable(XrType *target, XrType *source) {
+    XR_DCHECK(target != NULL, "xa_typecheck_assignable: NULL target");
+    XR_DCHECK(source != NULL, "xa_typecheck_assignable: NULL source");
+    if (!target || !source)
+        return false;
+    if (!xr_type_assignable(target, source))
+        return false;
+    return typecheck_source_precise_for_target(target, source);
+}
+
 bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target, XrType *source,
                                   XrLocation *loc) {
     if (!analyzer || !target || !source)
         return false;
 
-    if (xr_type_assignable(target, source)) {
+    if (xa_typecheck_assignable(target, source)) {
         return true;
     }
 
@@ -619,7 +642,7 @@ bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **ar
     // Check argument types
     bool ok = true;
     for (int i = 0; i < arg_count && i < expected; i++) {
-        if (!xr_type_assignable(func_type->function.param_types[i], arg_types[i])) {
+        if (!xa_typecheck_assignable(func_type->function.param_types[i], arg_types[i])) {
             ok = false;
             char message[256];
             snprintf(message, sizeof(message),

@@ -70,7 +70,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             bool null_err = xa_check_null_safety(ctx->analyzer, links->declared_type, init_type,
                                                  "Variable initializer", &loc);
             // Check assignment compatibility
-            if (!null_err && !xr_type_assignable(links->declared_type, init_type)) {
+            if (!null_err && !xa_typecheck_assignable(links->declared_type, init_type)) {
                 // Json/JsonValue→concrete type: allowed at compile time, runtime check inserted by
                 // codegen. e.g. let x: int = json["key"] is legal but requires runtime validation.
                 if (!xr_is_json_coercion(links->declared_type, init_type)) {
@@ -220,7 +220,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         // Check null safety first (null→T, T?→T)
         bool null_err =
             xa_check_null_safety(ctx->analyzer, var_type, value_type, "Assignment", &loc);
-        if (!null_err && !xr_type_assignable(var_type, value_type)) {
+        if (!null_err && !xa_typecheck_assignable(var_type, value_type)) {
             // Json/JsonValue→concrete type: allowed at compile time, runtime check inserted by
             // codegen.
             if (!xr_is_json_coercion(var_type, value_type)) {
@@ -446,11 +446,12 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
 
     // Check against expected return type (strict: void and concrete types enforced)
     if (ctx->expected_return_type && !XR_TYPE_IS_UNKNOWN(ctx->expected_return_type)) {
-        if (!xr_type_assignable(ctx->expected_return_type, return_type)) {
+        if (!xa_typecheck_assignable(ctx->expected_return_type, return_type)) {
             // Json/JsonValue→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
             if (!xr_is_json_coercion(ctx->expected_return_type, return_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, "Return type mismatch",
                                            &loc);
