@@ -144,16 +144,23 @@ static inline XrtValue xrt_str_method_0(const char *s, int64_t slen, XrtValue re
         int64_t v = 0;
         int neg = 0;
         const char *p = s;
-        while (*p == ' ') p++;
-        if (*p == '-') { neg = 1; p++; }
-        else if (*p == '+') p++;
-        while (*p >= '0' && *p <= '9') { v = v * 10 + (*p - '0'); p++; }
+        while (*p == ' ')
+            p++;
+        if (*p == '-') {
+            neg = 1;
+            p++;
+        } else if (*p == '+')
+            p++;
+        while (*p >= '0' && *p <= '9') {
+            v = v * 10 + (*p - '0');
+            p++;
+        }
         return xrt_box_int(neg ? -v : v);
     }
     if (sym == XRT_SYM_TOFLOAT)
         return xrt_box_float(atof(s));
     if (sym == XRT_SYM_ORD)
-        return xrt_box_int(slen > 0 ? (int64_t)(unsigned char)s[0] : 0);
+        return xrt_box_int(slen > 0 ? (int64_t) (unsigned char) s[0] : 0);
     if (sym == XRT_SYM_REVERSE) {
         XrtValue sv = xrt_str_alloc((size_t) slen);
         char *r = (char *) sv.ptr;
@@ -162,13 +169,13 @@ static inline XrtValue xrt_str_method_0(const char *s, int64_t slen, XrtValue re
         r[slen] = 0;
         return sv;
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
 }
 
 static inline XrtValue xrt_method_0(XrtValue recv, int sym) {
     if (XRT_IS_STR(recv)) {
-        return xrt_str_method_0((const char *) recv.ptr,
-                                (int64_t) strlen((const char *) recv.ptr), recv, sym);
+        return xrt_str_method_0((const char *) recv.ptr, (int64_t) strlen((const char *) recv.ptr),
+                                recv, sym);
     }
     if (recv.tag == XRT_TAG_ARRAY) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
@@ -268,12 +275,12 @@ static inline XrtValue xrt_method_0(XrtValue recv, int sym) {
         if (sym == XRT_SYM_SQRT)
             return xrt_box_float(sqrt(v));
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
 }
 
 /* String 1-arg method dispatch (extracted to keep xrt_method_1 under 150 lines) */
 static inline XrtValue xrt_str_method_1(const char *s, int64_t slen, XrtValue recv, int sym,
-                                         XrtValue arg0) {
+                                        XrtValue arg0) {
     if (sym == XRT_SYM_CONTAINS && XRT_IS_STR(arg0))
         return xrt_box_bool(strstr(s, (const char *) arg0.ptr) ? 1 : 0);
     if (sym == XRT_SYM_INDEXOF && XRT_IS_STR(arg0)) {
@@ -401,28 +408,28 @@ static inline XrtValue xrt_str_method_1(const char *s, int64_t slen, XrtValue re
         ((char *) sv.ptr)[1] = 0;
         return sv;
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
 }
 
 static inline XrtValue xrt_method_1(XrtValue recv, int sym, XrtValue arg0) {
     if (XRT_IS_STR(recv)) {
-        return xrt_str_method_1((const char *) recv.ptr,
-                                (int64_t) strlen((const char *) recv.ptr), recv, sym, arg0);
+        return xrt_str_method_1((const char *) recv.ptr, (int64_t) strlen((const char *) recv.ptr),
+                                recv, sym, arg0);
     }
     if (recv.tag == XRT_TAG_ARRAY) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         if (sym == XRT_SYM_PUSH) {
             xrt_array_push(recv, arg0);
-            return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+            return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
         }
         if (sym == XRT_SYM_UNSHIFT) {
             /* Grow and shift all elements right by 1 */
-            xrt_array_push(recv, (XrtValue){.i = 0, .tag = XRT_TAG_NULL});
-            a = (xrt_array_t *) recv.ptr;  /* re-read after potential realloc */
+            xrt_array_push(recv, (XrtValue) {.i = 0, .tag = XRT_TAG_NULL});
+            a = (xrt_array_t *) recv.ptr; /* re-read after potential realloc */
             for (int64_t i = a->len - 1; i > 0; i--)
                 a->data[i] = a->data[i - 1];
             a->data[0] = arg0;
-            return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+            return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
         }
         if (sym == XRT_SYM_FILL) {
             for (int64_t i = 0; i < a->len; i++)
@@ -532,7 +539,7 @@ static inline XrtValue xrt_method_1(XrtValue recv, int sym, XrtValue arg0) {
         double b = (arg0.tag == XRT_TAG_F64) ? arg0.f : (double) arg0.i;
         return xrt_box_float(a < b ? a : b);
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
 }
 
 static inline XrtValue xrt_method_2(XrtValue recv, int sym, XrtValue arg0, XrtValue arg1) {
@@ -568,7 +575,10 @@ static inline XrtValue xrt_method_2(XrtValue recv, int sym, XrtValue arg0, XrtVa
         /* Count occurrences first */
         int count = 0;
         const char *p = s;
-        while ((p = strstr(p, old_s)) != NULL) { count++; p += olen; }
+        while ((p = strstr(p, old_s)) != NULL) {
+            count++;
+            p += olen;
+        }
         if (count == 0)
             return recv;
         size_t rlen = (size_t) slen + count * (nlen - olen);
@@ -656,9 +666,9 @@ static inline XrtValue xrt_method_2(XrtValue recv, int sym, XrtValue arg0, XrtVa
     }
     if (recv.tag == XRT_TAG_MAP && sym == XRT_SYM_SET) {
         xrt_map_set((xrt_map_t *) recv.ptr, arg0, arg1);
-        return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+        return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
 }
 
 /* =========================================================================
@@ -690,7 +700,7 @@ static inline XrtValue xrt_getprop(XrtValue obj, int64_t symbol_id) {
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return xrt_box_int(s[0] == '\0');
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrtValue) {.i = 0, .tag = XRT_TAG_NULL};
 }
 
 #endif  // XRT_METHOD_H

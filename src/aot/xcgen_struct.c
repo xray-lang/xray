@@ -398,8 +398,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
                     if (hop == OP_JSON_INIT && GETARG_A(hinst) == a_reg && GETARG_B(hinst) == fi) {
                         int rc = GETARG_C(hinst);
                         // Try LOADK scan for this register
-                        for (int32_t hpc2 = (int32_t) hpc - 1;
-                             hpc2 >= 0; hpc2--) {
+                        for (int32_t hpc2 = (int32_t) hpc - 1; hpc2 >= 0; hpc2--) {
                             XrInstruction h2 = PROTO_CODE(proto, (uint32_t) hpc2);
                             if (GETARG_A(h2) != rc)
                                 continue;
@@ -479,4 +478,3 @@ void xcgen_emit_all_typedefs(XcgenBuf *b, XcgenStructRegistry *reg) {
         xcgen_emit_struct_typedef(b, &reg->structs[i]);
     }
 }
-

@@ -554,7 +554,8 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     // 2. Relative path: relative to current script directory
     bool is_relative = strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0;
 #ifdef XR_OS_WINDOWS
-    is_relative = is_relative || strncmp(module_name, ".\\", 2) == 0 || strncmp(module_name, "..\\", 3) == 0;
+    is_relative =
+        is_relative || strncmp(module_name, ".\\", 2) == 0 || strncmp(module_name, "..\\", 3) == 0;
 #endif
     if (is_relative) {
         if (script_dir) {
