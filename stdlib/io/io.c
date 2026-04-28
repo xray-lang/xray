@@ -708,7 +708,11 @@ static XrValue io_chmod(XrayIsolate *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     int mode = (int) XR_TO_INT(args[1]);
+#ifdef XR_OS_WINDOWS
     return xr_bool(_chmod(path, mode) == 0);
+#else
+    return xr_bool(chmod(path, mode) == 0);
+#endif
 }
 
 // touch(path) - Create empty file or update timestamp
@@ -721,7 +725,11 @@ static XrValue io_touch(XrayIsolate *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     // Try to update timestamp
+#ifdef XR_OS_WINDOWS
     if (_utime(path, NULL) == 0)
+#else
+    if (utime(path, NULL) == 0)
+#endif
         return xr_bool(true);
 
     // File doesn't exist, create empty file
