@@ -44,6 +44,9 @@ typedef struct {
     uint32_t *last_use;      /* [next_value_id], 0 = unused/dead */
     uint32_t current_ordinal;/* monotonic instruction counter */
 
+    /* Line number tracking for debug info */
+    int current_line;        /* line of the value being emitted */
+
     /* Block linearization */
     XiBlock **rpo_order;     /* blocks in RPO order */
     uint32_t rpo_count;
@@ -73,7 +76,7 @@ static int current_pc(EmitCtx *ctx) {
 }
 
 static void emit_inst(EmitCtx *ctx, XrInstruction inst) {
-    xr_vm_proto_write(ctx->proto, inst, 0);
+    xr_vm_proto_write(ctx->proto, inst, ctx->current_line);
 }
 
 /* Return a register to the free pool for reuse. */
@@ -782,6 +785,7 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     /* Emit instruction values with register recycling */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         ctx->current_ordinal++;
+        ctx->current_line = (int)blk->values[i]->line;
         emit_value(ctx, blk->values[i]);
         if (ctx->status != XI_EMIT_OK) return;
         /* Recycle registers of args whose last use was this instruction */
