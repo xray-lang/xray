@@ -468,6 +468,194 @@ TEST(cmp_comparisons) {
     });
 }
 
+/* --- Logical Operators --- */
+
+TEST(cmp_logical_and) {
+    run_compare((CompareSpec){
+        .source = "let a = true\nlet b = false\n"
+                  "print(a && b)\nprint(a && true)",
+        .label = "logical AND (short-circuit)",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_logical_or) {
+    run_compare((CompareSpec){
+        .source = "let a = false\nlet b = true\n"
+                  "print(a || b)\nprint(false || false)",
+        .label = "logical OR (short-circuit)",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_logical_not) {
+    run_compare((CompareSpec){
+        .source = "let a = true\nprint(!a)\nprint(!false)",
+        .label = "logical NOT",
+        .expect_xi_success = true,
+        .min_similarity = 0.3,
+        .check_exec = true,
+    });
+}
+
+/* --- For Loop --- */
+
+TEST(cmp_for_loop) {
+    run_compare((CompareSpec){
+        .source = "let sum = 0\n"
+                  "for (let i = 1; i <= 5; i = i + 1) { sum = sum + i }\n"
+                  "print(sum)",
+        .label = "for loop with accumulator",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Nested Control Flow --- */
+
+TEST(cmp_nested_if) {
+    run_compare((CompareSpec){
+        .source = "let x = 15\n"
+                  "if (x > 20) { print(1) }\n"
+                  "else if (x > 10) { print(2) }\n"
+                  "else { print(3) }",
+        .label = "nested if-else chain",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Compound Assignment --- */
+
+TEST(cmp_compound_assign) {
+    run_compare((CompareSpec){
+        .source = "let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)",
+        .label = "compound assignment operators",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Ternary Expression --- */
+
+TEST(cmp_ternary) {
+    run_compare((CompareSpec){
+        .source = "let x = 5\n"
+                  "let y = x > 3 ? 100 : 200\n"
+                  "print(y)",
+        .label = "ternary expression",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Break and Continue --- */
+
+TEST(cmp_while_break) {
+    run_compare((CompareSpec){
+        .source = "let i = 0\n"
+                  "while (true) {\n"
+                  "  if (i >= 3) { break }\n"
+                  "  i = i + 1\n"
+                  "}\nprint(i)",
+        .label = "while loop with break",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_while_continue) {
+    run_compare((CompareSpec){
+        .source = "let sum = 0\nlet i = 0\n"
+                  "while (i < 6) {\n"
+                  "  i = i + 1\n"
+                  "  if (i == 3) { continue }\n"
+                  "  sum = sum + i\n"
+                  "}\nprint(sum)",
+        .label = "while loop with continue (skip 3)",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Function Declaration + Call --- */
+
+TEST(cmp_func_call) {
+    run_compare((CompareSpec){
+        .source = "fn add(a: int, b: int): int { return a + b }\n"
+                  "let r = add(3, 4)\nprint(r)",
+        .label = "function declaration and call",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = false,  /* Xi closure sub-proto not yet execution-safe */
+    });
+}
+
+TEST(cmp_func_recursive) {
+    run_compare((CompareSpec){
+        .source = "fn fib(n: int): int {\n"
+                  "  if (n <= 1) { return n }\n"
+                  "  return fib(n - 1) + fib(n - 2)\n"
+                  "}\nprint(fib(7))",
+        .label = "recursive fibonacci",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = false,  /* Xi closure sub-proto not yet execution-safe */
+    });
+}
+
+/* --- Nested Loops --- */
+
+TEST(cmp_nested_loop) {
+    run_compare((CompareSpec){
+        .source = "let sum = 0\n"
+                  "let i = 0\nwhile (i < 3) {\n"
+                  "  let j = 0\n  while (j < 3) {\n"
+                  "    sum = sum + 1\n    j = j + 1\n"
+                  "  }\n  i = i + 1\n}\nprint(sum)",
+        .label = "nested while loops (3x3)",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- String Operations --- */
+
+TEST(cmp_string_concat) {
+    run_compare((CompareSpec){
+        .source = "let a = \"hello\"\nlet b = \" world\"\n"
+                  "let c = a + b\nprint(c)",
+        .label = "string concatenation",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Mixed Types --- */
+
+TEST(cmp_mixed_arith) {
+    run_compare((CompareSpec){
+        .source = "let a = 10\nlet b = 3\n"
+                  "print(a / b)\nprint(a % b)",
+        .label = "integer division and modulo",
+        .expect_xi_success = true,
+        .min_similarity = 0.3,
+        .check_exec = true,
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -511,6 +699,40 @@ int main(void) {
 
     /* Comparisons */
     run_cmp_comparisons();
+
+    /* Logical operators */
+    run_cmp_logical_and();
+    run_cmp_logical_or();
+    run_cmp_logical_not();
+
+    /* For loop */
+    run_cmp_for_loop();
+
+    /* Nested control flow */
+    run_cmp_nested_if();
+
+    /* Compound assignment */
+    run_cmp_compound_assign();
+
+    /* Ternary */
+    run_cmp_ternary();
+
+    /* Break / continue */
+    run_cmp_while_break();
+    run_cmp_while_continue();
+
+    /* Functions */
+    run_cmp_func_call();
+    run_cmp_func_recursive();
+
+    /* Nested loops */
+    run_cmp_nested_loop();
+
+    /* String operations */
+    run_cmp_string_concat();
+
+    /* Mixed arithmetic */
+    run_cmp_mixed_arith();
 
     teardown();
 
