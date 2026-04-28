@@ -694,6 +694,205 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
     return map_val;
 }
 
+static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
+    ObjectLiteralNode *obj = &node->as.object_literal;
+    int count = obj->count;
+
+    /* Evaluate all values first */
+    XiValue *val_vals[32];
+    int n = count > 32 ? 32 : count;
+    for (int i = 0; i < n; i++) {
+        val_vals[i] = lower_expr(l, obj->values[i]);
+    }
+
+    /* Allocate object */
+    struct XrType *result_type = node_type(l, node);
+    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
+    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_ALLOC, result_type, 1);
+    if (!obj_val) return NULL;
+    obj_val->args[0] = cap;
+    obj_val->line = (uint32_t) node->line;
+
+    /* STORE_FIELD for each property */
+    for (int i = 0; i < n; i++) {
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
+                                     l->type_void, 2);
+        if (!set) break;
+        set->args[0] = obj_val;
+        set->args[1] = val_vals[i];
+        /* Key is either a literal string or computed — use aux for name */
+        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING)
+            set->aux = (void *) obj->keys[i]->as.literal.raw_value.string_val;
+        set->flags |= XI_FLAG_SIDE_EFFECT;
+    }
+    return obj_val;
+}
+
+/*
+ * Lower pattern comparison for a match arm.
+ * Returns a bool XiValue representing whether the pattern matches.
+ */
+static XiValue *lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pattern) {
+    if (!pattern || !subject) return NULL;
+
+    switch (pattern->type) {
+        case AST_PATTERN_WILDCARD:
+            /* _ always matches */
+            return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
+
+        case AST_PATTERN_LITERAL: {
+            /* Compare subject == literal value */
+            XiValue *lit = lower_expr(l, pattern->as.pattern_literal.value);
+            if (!lit) return NULL;
+            return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, subject, lit);
+        }
+
+        case AST_PATTERN_RANGE: {
+            /* subject >= start && subject <= end */
+            XiValue *start = lower_expr(l, pattern->as.pattern_range.start);
+            XiValue *end = lower_expr(l, pattern->as.pattern_range.end);
+            if (!start || !end) return NULL;
+            XiValue *ge = xi_binary(l->func, l->cur_block, XI_GE,
+                                     l->type_bool, subject, start);
+            XiValue *le = xi_binary(l->func, l->cur_block, XI_LE,
+                                     l->type_bool, subject, end);
+            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, le);
+        }
+
+        case AST_PATTERN_MULTI: {
+            /* pattern1 | pattern2 | ... → OR chain */
+            PatternMultiNode *mp = &pattern->as.pattern_multi;
+            XiValue *result = NULL;
+            for (int i = 0; i < mp->count; i++) {
+                XiValue *test = lower_pattern_test(l, subject, mp->patterns[i]);
+                if (!test) continue;
+                if (!result)
+                    result = test;
+                else
+                    result = xi_binary(l->func, l->cur_block, XI_BOR,
+                                        l->type_bool, result, test);
+            }
+            return result ? result : xi_const_bool(l->func, l->cur_block,
+                                                     false, l->type_bool);
+        }
+
+        default:
+            /* Unknown pattern — treat as no match */
+            return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
+    }
+}
+
+/*
+ * match expr { arm1, arm2, ..., armN }
+ *
+ * Lowered as a chain of conditional blocks:
+ *   test arm0 → body0 | test arm1 → body1 | ... | default
+ * All body blocks jump to a single merge block with a PHI for the result.
+ */
+static XiValue *lower_match(XiLower *l, AstNode *node) {
+    MatchExprNode *m = &node->as.match_expr;
+    XiValue *subject = lower_expr(l, m->expr);
+    if (!subject) return NULL;
+
+    struct XrType *result_type = node_type(l, node);
+    XiBlock *merge = xi_block_new(l->func);
+    int arm_count = m->arm_count;
+
+    /* Track body exit blocks and their result values for the PHI */
+    XiBlock *body_exits[32];
+    XiValue *body_vals[32];
+    int exit_count = 0;
+    int max_arms = arm_count > 32 ? 32 : arm_count;
+
+    for (int i = 0; i < max_arms; i++) {
+        AstNode *arm_node = m->arms[i];
+        MatchArmNode *arm = &arm_node->as.match_arm;
+
+        /* Generate pattern test in current block */
+        XiValue *test = lower_pattern_test(l, subject, arm->pattern);
+
+        /* Apply guard: test = test && guard */
+        if (arm->guard && test) {
+            XiValue *guard = lower_expr(l, arm->guard);
+            if (guard)
+                test = xi_binary(l->func, l->cur_block, XI_BAND,
+                                  l->type_bool, test, guard);
+        }
+
+        /* Last arm: no condition check needed (fallthrough / default) */
+        bool is_last = (i == max_arms - 1);
+
+        if (is_last || !test) {
+            /* Unconditional: lower body directly */
+            XiValue *val = lower_expr(l, arm->body);
+            if (l->cur_block) {
+                if (exit_count < 32) {
+                    body_exits[exit_count] = l->cur_block;
+                    body_vals[exit_count] = val;
+                    exit_count++;
+                }
+                xi_block_set_jump(l->cur_block, merge);
+            }
+        } else {
+            /* Conditional: create body and next-test blocks */
+            XiBlock *body_blk = xi_block_new(l->func);
+            XiBlock *next_blk = xi_block_new(l->func);
+            xi_block_set_if(l->cur_block, test, body_blk, next_blk);
+            braun_seal_block(l, body_blk);
+            braun_seal_block(l, next_blk);
+
+            /* Lower arm body */
+            l->cur_block = body_blk;
+            XiValue *val = lower_expr(l, arm->body);
+            if (l->cur_block) {
+                if (exit_count < 32) {
+                    body_exits[exit_count] = l->cur_block;
+                    body_vals[exit_count] = val;
+                    exit_count++;
+                }
+                xi_block_set_jump(l->cur_block, merge);
+            }
+
+            /* Continue testing in next block */
+            l->cur_block = next_blk;
+        }
+    }
+
+    /* If we fell through all arms without matching, jump to merge with null */
+    if (l->cur_block && l->cur_block != merge) {
+        if (exit_count < 32) {
+            body_exits[exit_count] = l->cur_block;
+            body_vals[exit_count] = xi_const_null(l->func, l->cur_block, l->type_null);
+            exit_count++;
+        }
+        xi_block_set_jump(l->cur_block, merge);
+    }
+
+    braun_seal_block(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    if (!l->cur_block) return NULL;
+
+    /* Create PHI for the match result */
+    if (merge->npreds == 1) {
+        /* Single predecessor: no PHI needed */
+        return (exit_count > 0) ? body_vals[0] : NULL;
+    }
+
+    XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+    if (!phi) return NULL;
+    for (uint16_t p = 0; p < merge->npreds; p++) {
+        phi->value.args[p] = xi_const_null(l->func, merge, l->type_null);
+        for (int j = 0; j < exit_count; j++) {
+            if (merge->preds[p] == body_exits[j]) {
+                phi->value.args[p] = body_vals[j] ? body_vals[j]
+                    : xi_const_null(l->func, merge, l->type_null);
+                break;
+            }
+        }
+    }
+    return &phi->value;
+}
+
 /* Main expression dispatcher */
 static XiValue *lower_expr(XiLower *l, AstNode *node) {
     if (!node) return NULL;
@@ -766,9 +965,16 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
         case AST_MAP_LITERAL:
             return lower_map_literal(l, node);
 
+        case AST_OBJECT_LITERAL:
+            return lower_object_literal(l, node);
+
         /* Nullish coalesce */
         case AST_NULLISH_COALESCE:
             return lower_nullish_coalesce(l, node);
+
+        /* Match expression */
+        case AST_MATCH_EXPR:
+            return lower_match(l, node);
 
         default:
             /* Unsupported expression: emit null placeholder */
@@ -1077,6 +1283,67 @@ static void lower_continue(XiLower *l) {
     }
 }
 
+/*
+ * try { ... } catch (e) { ... } finally { ... }
+ *
+ * Lowered structurally (exception dispatch is runtime):
+ *   try_blk:  body instructions
+ *   catch_blk: catch variable bound to exception value
+ *   finally_blk: always executed
+ *   merge: continuation
+ */
+static void lower_try_catch(XiLower *l, AstNode *node) {
+    TryCatchNode *tc = &node->as.try_catch;
+
+    XiBlock *try_blk = xi_block_new(l->func);
+    XiBlock *catch_blk = xi_block_new(l->func);
+    XiBlock *merge = xi_block_new(l->func);
+    XiBlock *finally_blk = tc->finally_body ? xi_block_new(l->func) : NULL;
+    XiBlock *normal_target = finally_blk ? finally_blk : merge;
+
+    /* Jump into try block */
+    xi_block_set_jump(l->cur_block, try_blk);
+    braun_seal_block(l, try_blk);
+
+    /* Lower try body */
+    l->cur_block = try_blk;
+    lower_stmt(l, tc->try_body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, normal_target);
+
+    /* Seal catch block (1 pred: implicit exception edge) */
+    braun_seal_block(l, catch_blk);
+    l->cur_block = catch_blk;
+
+    /* Bind catch variable to a PARAM-like placeholder */
+    if (tc->catch_var) {
+        struct XrType *err_type = l->type_any;
+        XiValue *exc_val = xi_value_new(l->func, l->cur_block, XI_PARAM, err_type, 0);
+        if (exc_val) {
+            exc_val->aux_int = -1;  /* sentinel: catch param, not function param */
+            exc_val->line = (uint32_t) tc->catch_var_line;
+        }
+        int var_id = var_lookup_or_create(l, tc->catch_var, err_type);
+        if (exc_val) braun_write(l, var_id, l->cur_block, exc_val);
+    }
+
+    lower_stmt(l, tc->catch_body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, normal_target);
+
+    /* Finally block (optional) */
+    if (finally_blk) {
+        braun_seal_block(l, finally_blk);
+        l->cur_block = finally_blk;
+        lower_stmt(l, tc->finally_body);
+        if (l->cur_block)
+            xi_block_set_jump(l->cur_block, merge);
+    }
+
+    braun_seal_block(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+}
+
 /* Main statement dispatcher */
 static void lower_stmt(XiLower *l, AstNode *node) {
     if (!node) return;
@@ -1130,6 +1397,10 @@ static void lower_stmt(XiLower *l, AstNode *node) {
 
         case AST_THROW_STMT:
             lower_throw(l, node);
+            break;
+
+        case AST_TRY_CATCH:
+            lower_try_catch(l, node);
             break;
 
         /* Expressions that appear as statements (assignment, call, etc.) */
