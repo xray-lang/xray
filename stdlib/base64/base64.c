@@ -410,7 +410,7 @@ XR_DEFINE_BUILTIN(base64_decodeToBytes, "decodeToBytes", "(data: string): Array<
                   "Decode Base64 to byte array")
 XR_DEFINE_BUILTIN(base64_isValid, "isValid", "(data: string): bool", "Check if valid base64")
 
-XrModule *xr_load_module_base64(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_base64(XrayIsolate *isolate) {
     // Create native module
     XrModule *mod = xr_module_create_native(isolate, "base64");
     if (!mod)

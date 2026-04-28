@@ -35,26 +35,13 @@ unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_le
 // Validate Base64 string (checks characters and length)
 bool xr_base64_is_valid(const char *data, size_t len);
 
-/* ========== xray module interface ========== */
+/* ========== Module Loader ========== */
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/runtime/value/xvalue.h"
-#include "../../src/runtime/object/xstring.h"
-#include "../../src/runtime/object/xarray.h"
-#include "../../src/runtime/gc/xgc.h"
-#include "../../src/base/xmalloc.h"
+#include "../../src/base/xdefs.h"
 
-/*
- * Load base64 module. Provides:
- *   - encode(str)           Encode string to Base64
- *   - decode(str)           Decode Base64 to string
- *   - encodeUrl(str)        URL-safe Base64 encoding
- *   - decodeUrl(str)        URL-safe Base64 decoding
- *   - encodeBytes(bytes)    Encode Array<uint8> to Base64 string
- *   - decodeToBytes(str)    Decode Base64 to Array<uint8>
- *   - isValid(str)          Check if string is valid Base64
- */
-XrModule *xr_load_module_base64(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_base64(struct XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_BASE64_H

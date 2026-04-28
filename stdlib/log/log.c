@@ -1085,7 +1085,7 @@ XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void",
 XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): void", "Flush log buffer")
 XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): any", "Create child logger")
 
-XrModule *xr_load_module_log(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_log(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "log");

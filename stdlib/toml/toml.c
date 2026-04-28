@@ -582,7 +582,7 @@ XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json?", "Parse 
 XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool",
                   "Write TOML file")
 
-XrModule *xr_load_module_toml(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_toml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "toml");
     if (!mod)
         return NULL;

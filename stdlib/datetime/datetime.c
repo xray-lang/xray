@@ -952,7 +952,7 @@ XR_DEFINE_BUILTIN(dt_equals, "equals", "(other: DateTime): bool",
 XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year")
 XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
 
-XrModule *xr_load_module_datetime(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_datetime(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_datetime: NULL isolate");
 
     // Register DateTime native type

@@ -16,8 +16,10 @@
 #ifndef XR_STDLIB_IO_H
 #define XR_STDLIB_IO_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/base/xdefs.h"
+
+struct XrayIsolate;
+struct XrModule;
 
 /*
  * Load io module
@@ -63,6 +65,6 @@
  *   - tempFile()                  Create temporary file
  *   - tempDir()                   Create temporary directory
  */
-XrModule *xr_load_module_io(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_io(struct XrayIsolate *isolate);
 
-#endif
+#endif  // XR_STDLIB_IO_H

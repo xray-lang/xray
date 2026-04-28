@@ -30,8 +30,9 @@
 #define XR_STDLIB_JSON_H
 
 #include "../../src/base/xdefs.h"
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/runtime/value/xvalue.h"
+
+struct XrModule;
 
 /*
  * Module exports:
@@ -54,4 +55,4 @@ XR_FUNC char *xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out
 // Public API: parse JSON C-string to XrValue (returns xr_null() on error)
 XR_FUNC XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len);
 
-#endif
+#endif  // XR_STDLIB_JSON_H

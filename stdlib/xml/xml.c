@@ -643,7 +643,7 @@ XR_DEFINE_BUILTIN(xml_text_fn, "text", "(content: string): Json", "Create XML te
 XR_DEFINE_BUILTIN(xml_comment_fn, "comment", "(content: string): Json", "Create XML comment node")
 XR_DEFINE_BUILTIN(xml_cdata_fn, "cdata", "(content: string): Json", "Create XML CDATA node")
 
-XrModule *xr_load_module_xml(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_xml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "xml");
     if (!mod)
         return NULL;

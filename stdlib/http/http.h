@@ -97,4 +97,4 @@ XR_FUNC XrValue xr_http_response_impl(XrayIsolate *X, XrValue *args, int argc);
 // http.serverStats() -> Json { currentConns, totalRequests, totalConns }
 XR_FUNC XrValue xr_http_server_stats(XrayIsolate *X, XrValue *args, int argc);
 
-#endif
+#endif  // XR_STDLIB_HTTP_H

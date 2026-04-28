@@ -1372,7 +1372,7 @@ XR_DEFINE_BUILTIN(h2_request, "h2Request",
 
 /* ========== Module Loading ========== */
 
-XrModule *xr_load_module_http(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_http(XrayIsolate *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "http");
     if (!mod)

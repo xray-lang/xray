@@ -945,7 +945,7 @@ XR_DEFINE_BUILTIN(json_values, "values", "(obj: Json): Array<any>", "Get object 
 
 /* ========== Module Loading ========== */
 
-XrModule *xr_load_module_json(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_json(XrayIsolate *isolate) {
     // Create native module
     XrModule *mod = xr_module_create_native(isolate, "json");
     if (!mod)

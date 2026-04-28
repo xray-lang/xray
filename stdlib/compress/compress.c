@@ -1331,7 +1331,7 @@ XR_DEFINE_BUILTIN(compress_is_zlib, "isZlib", "(data: string): bool", "Check if 
 XR_DEFINE_BUILTIN(compress_crc32, "crc32", "(data: string): int", "Compute CRC-32 checksum")
 XR_DEFINE_BUILTIN(compress_adler32, "adler32", "(data: string): int", "Compute Adler-32 checksum")
 
-XrModule *xr_load_module_compress(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_compress(XrayIsolate *isolate) {
     XrModule *module = xr_module_create_native(isolate, "compress");
     if (!module)
         return NULL;

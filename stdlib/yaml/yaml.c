@@ -202,7 +202,7 @@ XR_DEFINE_BUILTIN(yaml_parse_file, "parseFile", "(path: string): Json?", "Parse 
 XR_DEFINE_BUILTIN(yaml_write_file, "writeFile", "(path: string, value: Json): bool",
                   "Write YAML file")
 
-XrModule *xr_load_module_yaml(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_yaml(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "yaml");
     if (!mod)
         return NULL;
