@@ -32,7 +32,7 @@ static const char *error_messages[] = {
     [XR_RE_ERR_NOMEM] = "out of memory",
 };
 
-const char *xr_regex_error_str(XrRegexError error) {
+XR_FUNC const char *xr_regex_error_str(XrRegexError error) {
     if (error >= 0 && error <= XR_RE_ERR_NOMEM) {
         return error_messages[error];
     }
@@ -43,11 +43,11 @@ const char *xr_regex_error_str(XrRegexError error) {
  * Compile
  * ======================================================================== */
 
-XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrRegexError *error) {
+XR_FUNC XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrRegexError *error) {
     return xr_regex_compile_ex(pattern, flags, error, NULL, NULL, 0);
 }
 
-XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
+XR_FUNC XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
                              int *error_pos, char *error_msg, size_t msg_size) {
     if (!pattern) {
         if (error)
@@ -123,7 +123,7 @@ XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexErr
     return re;
 }
 
-void xr_regex_free(XrRegex *re) {
+XR_FUNC void xr_regex_free(XrRegex *re) {
     if (!re)
         return;
 
@@ -139,15 +139,15 @@ void xr_regex_free(XrRegex *re) {
  * Property Query
  * ======================================================================== */
 
-const char *xr_regex_pattern(const XrRegex *re) {
+XR_FUNC const char *xr_regex_pattern(const XrRegex *re) {
     return re ? re->pattern : NULL;
 }
 
-int xr_regex_capture_count(const XrRegex *re) {
+XR_FUNC int xr_regex_capture_count(const XrRegex *re) {
     return re ? re->prog->capture_count : 0;
 }
 
-int xr_regex_named_group(const XrRegex *re, const char *name) {
+XR_FUNC int xr_regex_named_group(const XrRegex *re, const char *name) {
     if (!re || !name || !re->prog->capture_names)
         return -1;
 
@@ -159,7 +159,7 @@ int xr_regex_named_group(const XrRegex *re, const char *name) {
     return -1;
 }
 
-const char *xr_regex_group_name(const XrRegex *re, int index) {
+XR_FUNC const char *xr_regex_group_name(const XrRegex *re, int index) {
     if (!re || index < 1 || index > re->prog->capture_count)
         return NULL;
     if (!re->prog->capture_names)
@@ -188,7 +188,7 @@ static void captures_to_match(const char **caps, int cap_count, XrMatch *match) 
     }
 }
 
-bool xr_regex_test(const XrRegex *re, const char *text, int len) {
+XR_FUNC bool xr_regex_test(const XrRegex *re, const char *text, int len) {
     if (!re || !text)
         return false;
     if (len < 0)
@@ -211,11 +211,11 @@ bool xr_regex_test(const XrRegex *re, const char *text, int len) {
     return xr_nfa_search(re->prog, text, len, caps, 2);
 }
 
-bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatch *match) {
+XR_FUNC bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatch *match) {
     return xr_regex_match_at(re, text, len, 0, match);
 }
 
-bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos,
+XR_FUNC bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos,
                        XrMatch *match) {
     if (!re || !text)
         return false;
@@ -239,7 +239,7 @@ bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_p
     return found;
 }
 
-bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *match) {
+XR_FUNC bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *match) {
     if (!re || !text)
         return false;
     if (len < 0)
@@ -272,7 +272,7 @@ bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *
  * Iterator
  * ======================================================================== */
 
-XrMatchIter *xr_regex_iter_new(const XrRegex *re, const char *text, int len) {
+XR_FUNC XrMatchIter *xr_regex_iter_new(const XrRegex *re, const char *text, int len) {
     if (!re || !text)
         return NULL;
 
@@ -286,7 +286,7 @@ XrMatchIter *xr_regex_iter_new(const XrRegex *re, const char *text, int len) {
     return iter;
 }
 
-bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match) {
+XR_FUNC bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match) {
     if (!iter || iter->done)
         return false;
 
@@ -320,14 +320,14 @@ bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match) {
     return false;
 }
 
-void xr_regex_iter_reset(XrMatchIter *iter) {
+XR_FUNC void xr_regex_iter_reset(XrMatchIter *iter) {
     if (iter) {
         iter->pos = 0;
         iter->done = false;
     }
 }
 
-void xr_regex_iter_free(XrMatchIter *iter) {
+XR_FUNC void xr_regex_iter_free(XrMatchIter *iter) {
     if (!iter)
         return;
     xr_re_free(iter);
@@ -340,7 +340,7 @@ void xr_regex_iter_free(XrMatchIter *iter) {
 /**
  * Count matches (prefer DFA, efficient without memory allocation)
  */
-int xr_regex_count(const XrRegex *re, const char *text, int len) {
+XR_FUNC int xr_regex_count(const XrRegex *re, const char *text, int len) {
     if (!re || !text)
         return 0;
     if (len < 0)
@@ -399,7 +399,7 @@ int xr_regex_count(const XrRegex *re, const char *text, int len) {
  * @param out_count Output actual number of matches
  * @return Match array (caller must free)
  */
-XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit,
+XR_FUNC XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit,
                            int *out_count) {
     if (!re || !text) {
         if (out_count)
@@ -459,7 +459,7 @@ XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int lim
 /**
  * Free find_all return array
  */
-void xr_regex_find_all_free(XrMatch *matches) {
+XR_FUNC void xr_regex_find_all_free(XrMatch *matches) {
     xr_re_free(matches);
 }
 
@@ -625,7 +625,7 @@ static char *replace_all_fast(const XrRegex *re, const char *text, int len, cons
     return buf.data;
 }
 
-char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
+XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
                              bool all) {
     if (!re || !text || !replacement)
         return NULL;
@@ -683,7 +683,7 @@ char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const
  * Split
  * ======================================================================== */
 
-int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
+XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
                    int limit) {
     if (!re || !text || !parts || max_parts <= 0)
         return 0;
@@ -735,7 +735,7 @@ int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *pa
  * Utility Functions
  * ======================================================================== */
 
-int xr_regex_escape(const char *text, int len, char *out, size_t out_size) {
+XR_FUNC int xr_regex_escape(const char *text, int len, char *out, size_t out_size) {
     if (!text || !out || out_size == 0)
         return -1;
     if (len < 0)
@@ -761,7 +761,7 @@ int xr_regex_escape(const char *text, int len, char *out, size_t out_size) {
     return (int) (o - out);
 }
 
-bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags) {
+XR_FUNC bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags) {
     if (!pattern)
         return false;
     // Only parse, no need for full compilation
@@ -782,7 +782,7 @@ bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags) {
  * Debug
  * ======================================================================== */
 
-void xr_regex_dump(const XrRegex *re) {
+XR_FUNC void xr_regex_dump(const XrRegex *re) {
     if (!re) {
         printf("(null regex)\n");
         return;

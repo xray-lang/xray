@@ -17,6 +17,7 @@
 #ifndef XREGEX_H
 #define XREGEX_H
 
+#include "../../src/base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -90,7 +91,7 @@ typedef struct {
  * @param error     output error code (can be NULL)
  * @return regex object on success, NULL on failure
  */
-XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrRegexError *error);
+XR_FUNC XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrRegexError *error);
 
 /*
  * Compile regular expression (with detailed error info)
@@ -102,34 +103,34 @@ XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrRegexError 
  * @param msg_size  buffer size
  * @return regex object on success, NULL on failure
  */
-XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
+XR_FUNC XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
                              int *error_pos, char *error_msg, size_t msg_size);
 
 // Free regex object
-void xr_regex_free(XrRegex *re);
+XR_FUNC void xr_regex_free(XrRegex *re);
 
 /* ========================================================================
  * Property Query
  * ======================================================================== */
 
 // Get original pattern string
-const char *xr_regex_pattern(const XrRegex *re);
+XR_FUNC const char *xr_regex_pattern(const XrRegex *re);
 
 // Get capture group count (excluding full match)
-int xr_regex_capture_count(const XrRegex *re);
+XR_FUNC int xr_regex_capture_count(const XrRegex *re);
 
 /*
  * Get index of named capture group
  * @return group index (1-based), -1 if not found
  */
-int xr_regex_named_group(const XrRegex *re, const char *name);
+XR_FUNC int xr_regex_named_group(const XrRegex *re, const char *name);
 
 /*
  * Get name of capture group
  * @param index group index (1-based)
  * @return name string, NULL if unnamed
  */
-const char *xr_regex_group_name(const XrRegex *re, int index);
+XR_FUNC const char *xr_regex_group_name(const XrRegex *re, int index);
 
 /* ========================================================================
  * Match Operations
@@ -142,7 +143,7 @@ const char *xr_regex_group_name(const XrRegex *re, int index);
  * @param len   text length (-1 for strlen)
  * @return whether it matches
  */
-bool xr_regex_test(const XrRegex *re, const char *text, int len);
+XR_FUNC bool xr_regex_test(const XrRegex *re, const char *text, int len);
 
 /*
  * Find first match
@@ -152,35 +153,35 @@ bool xr_regex_test(const XrRegex *re, const char *text, int len);
  * @param match output match result
  * @return whether match found
  */
-bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatch *match);
+XR_FUNC bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatch *match);
 
 /*
  * Find from specified position
  * @param start_pos start position (byte offset)
  */
-bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos, XrMatch *match);
+XR_FUNC bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos, XrMatch *match);
 
 // Full match (entire text must match pattern)
-bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *match);
+XR_FUNC bool xr_regex_full_match(const XrRegex *re, const char *text, int len, XrMatch *match);
 
 /* ========================================================================
  * Iterator (find all matches)
  * ======================================================================== */
 
 // Create match iterator
-XrMatchIter *xr_regex_iter_new(const XrRegex *re, const char *text, int len);
+XR_FUNC XrMatchIter *xr_regex_iter_new(const XrRegex *re, const char *text, int len);
 
 /*
  * Get next match
  * @return whether there are more matches
  */
-bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match);
+XR_FUNC bool xr_regex_iter_next(XrMatchIter *iter, XrMatch *match);
 
 // Reset iterator to start position
-void xr_regex_iter_reset(XrMatchIter *iter);
+XR_FUNC void xr_regex_iter_reset(XrMatchIter *iter);
 
 // Free iterator
-void xr_regex_iter_free(XrMatchIter *iter);
+XR_FUNC void xr_regex_iter_free(XrMatchIter *iter);
 
 /* ========================================================================
  * Batch Find
@@ -193,7 +194,7 @@ void xr_regex_iter_free(XrMatchIter *iter);
  * @param len  text length (-1 for strlen)
  * @return match count
  */
-int xr_regex_count(const XrRegex *re, const char *text, int len);
+XR_FUNC int xr_regex_count(const XrRegex *re, const char *text, int len);
 
 /*
  * Find all matches (returns array)
@@ -204,10 +205,10 @@ int xr_regex_count(const XrRegex *re, const char *text, int len);
  * @param out_count output actual match count
  * @return match array (must call xr_regex_find_all_free to free)
  */
-XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit, int *out_count);
+XR_FUNC XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit, int *out_count);
 
 // Free array returned by xr_regex_find_all
-void xr_regex_find_all_free(XrMatch *matches);
+XR_FUNC void xr_regex_find_all_free(XrMatch *matches);
 
 /* ========================================================================
  * Replace Operations
@@ -222,7 +223,7 @@ void xr_regex_find_all_free(XrMatch *matches);
  * @param all         true = replace all, false = replace first
  * @return newly allocated string, caller must xr_re_free()
  */
-char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
+XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
                              bool all);
 
 /* ========================================================================
@@ -245,7 +246,7 @@ typedef struct {
  * @param limit     max split count (-1 for unlimited)
  * @return actual split count
  */
-int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
+XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
                    int limit);
 
 /* ========================================================================
@@ -260,20 +261,20 @@ int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *pa
  * @param out_size buffer size
  * @return result length, -1 if buffer insufficient
  */
-int xr_regex_escape(const char *text, int len, char *out, size_t out_size);
+XR_FUNC int xr_regex_escape(const char *text, int len, char *out, size_t out_size);
 
 // Validate if pattern is valid
-bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags);
+XR_FUNC bool xr_regex_is_valid(const char *pattern, XrRegexFlags flags);
 
 // Get error description
-const char *xr_regex_error_str(XrRegexError error);
+XR_FUNC const char *xr_regex_error_str(XrRegexError error);
 
 /* ========================================================================
  * Debug
  * ======================================================================== */
 
 // Print compiled program (for debugging)
-void xr_regex_dump(const XrRegex *re);
+XR_FUNC void xr_regex_dump(const XrRegex *re);
 
 #ifdef __cplusplus
 }

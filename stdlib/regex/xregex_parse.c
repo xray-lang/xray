@@ -159,7 +159,7 @@ static XrAstNode *ast_capture(XrArena *arena, XrAstNode *child, int index, const
  * AST Free
  * ======================================================================== */
 
-void xr_regex_ast_free(XrAstNode *node) {
+XR_FUNC void xr_regex_ast_free(XrAstNode *node) {
     // AST nodes are managed by Arena, this function is a no-op.
     // Interface kept for compatibility with old code calls.
     // Arena is freed at once via xr_arena_destroy() after compilation.
@@ -892,7 +892,7 @@ static XrAstNode *parse_expr(XrParser *p) {
  * Public Interface
  * ======================================================================== */
 
-XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser) {
+XR_FUNC XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser) {
     memset(parser, 0, sizeof(XrParser));
     parser->pattern = pattern;
     parser->p = pattern;
@@ -931,7 +931,7 @@ static void print_indent(int indent) {
         printf("  ");
 }
 
-void xr_regex_ast_dump(XrAstNode *node, int indent) {
+XR_FUNC void xr_regex_ast_dump(XrAstNode *node, int indent) {
     if (!node) {
         print_indent(indent);
         printf("(null)\n");
