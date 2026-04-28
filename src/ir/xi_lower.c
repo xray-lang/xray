@@ -770,6 +770,125 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     return obj;
 }
 
+static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
+    GoExprNode *go = &node->as.go_expr;
+    XiValue *task_expr = lower_expr(l, go->expr);
+    if (!task_expr) return NULL;
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, 1);
+    if (!v) return NULL;
+    v->args[0] = task_expr;
+    v->aux_int = (int64_t) go->link_mode;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
+    AwaitExprNode *aw = &node->as.await_expr;
+    XiValue *task = lower_expr(l, aw->expr);
+    if (!task) return NULL;
+
+    /* Optional timeout argument */
+    XiValue *timeout = aw->timeout ? lower_expr(l, aw->timeout) : NULL;
+    uint16_t nargs = timeout ? 2 : 1;
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AWAIT, result_type, nargs);
+    if (!v) return NULL;
+    v->args[0] = task;
+    if (timeout) v->args[1] = timeout;
+    /* Encode await variant flags: is_any, is_all, is_any_success */
+    v->aux_int = (aw->is_any ? 1 : 0) | (aw->is_all ? 2 : 0) |
+                 (aw->is_any_success ? 4 : 0);
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_channel_new(XiLower *l, AstNode *node) {
+    ChannelNewNode *ch = &node->as.channel_new;
+    XiValue *buf_size = ch->buffer_size ? lower_expr(l, ch->buffer_size) : NULL;
+    uint16_t nargs = buf_size ? 1 : 0;
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CHAN_NEW, result_type, nargs);
+    if (!v) return NULL;
+    if (buf_size) v->args[0] = buf_size;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+/*
+ * Template string: "hello ${name}, age ${age}"
+ * parts = ["hello ", <name_expr>, ", age ", <age_expr>]
+ * Lower each part, then STR_CONCAT all.
+ */
+static XiValue *lower_template_string(XiLower *l, AstNode *node) {
+    TemplateStringNode *ts = &node->as.template_str;
+    int count = ts->part_count;
+
+    /* Evaluate all parts */
+    XiValue *parts[64];
+    int n = count > 64 ? 64 : count;
+    for (int i = 0; i < n; i++) {
+        parts[i] = lower_expr(l, ts->parts[i]);
+    }
+
+    struct XrType *result_type = l->type_string;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_STR_CONCAT,
+                               result_type, (uint16_t) n);
+    if (!v) return NULL;
+    for (int i = 0; i < n; i++) {
+        v->args[i] = parts[i];
+    }
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
+    SetLiteralNode *sl = &node->as.set_literal;
+    int count = sl->count;
+
+    XiValue *elem_vals[64];
+    int n = count > 64 ? 64 : count;
+    for (int i = 0; i < n; i++) {
+        elem_vals[i] = lower_expr(l, sl->elements[i]);
+    }
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
+    XiValue *set_val = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
+    if (!set_val) return NULL;
+    set_val->args[0] = cap;
+    set_val->line = (uint32_t) node->line;
+
+    /* Populate: CALL_METHOD("add") for each element */
+    for (int i = 0; i < n; i++) {
+        XiValue *add = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                     l->type_void, 2);
+        if (!add) break;
+        add->args[0] = set_val;
+        add->args[1] = elem_vals[i];
+        add->aux = (void *) "add";
+        add->flags |= XI_FLAG_SIDE_EFFECT;
+    }
+    return set_val;
+}
+
+static void lower_defer(XiLower *l, AstNode *node) {
+    DeferStmtNode *d = &node->as.defer_stmt;
+    XiValue *expr = lower_expr(l, d->expr);
+    if (!expr || !l->cur_block) return;
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_void, 1);
+    if (!v) return;
+    v->args[0] = expr;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+}
+
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     int count = obj->count;
@@ -1060,6 +1179,20 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
         /* Object creation */
         case AST_NEW_EXPR:
             return lower_new_expr(l, node);
+
+        /* Coroutine */
+        case AST_GO_EXPR:
+            return lower_go_expr(l, node);
+        case AST_AWAIT_EXPR:
+            return lower_await_expr(l, node);
+        case AST_CHANNEL_NEW:
+            return lower_channel_new(l, node);
+
+        /* Template string / set literal */
+        case AST_TEMPLATE_STRING:
+            return lower_template_string(l, node);
+        case AST_SET_LITERAL:
+            return lower_set_literal(l, node);
 
         default:
             /* Unsupported expression: emit null placeholder */
@@ -1494,6 +1627,10 @@ static void lower_stmt(XiLower *l, AstNode *node) {
             lower_function_decl(l, node);
             break;
 
+        case AST_DEFER_STMT:
+            lower_defer(l, node);
+            break;
+
         /* Expressions that appear as statements (assignment, call, etc.) */
         case AST_ASSIGNMENT:
         case AST_COMPOUND_ASSIGNMENT:
@@ -1502,6 +1639,8 @@ static void lower_stmt(XiLower *l, AstNode *node) {
         case AST_DEC:
         case AST_MEMBER_SET:
         case AST_INDEX_SET:
+        case AST_GO_EXPR:
+        case AST_AWAIT_EXPR:
             lower_expr(l, node);
             break;
 
