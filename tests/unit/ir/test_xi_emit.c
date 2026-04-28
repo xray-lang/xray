@@ -1,0 +1,534 @@
+/*
+ * test_xi_emit.c - Unit tests for Xi IR to bytecode emitter
+ *
+ * Tests register allocation, instruction selection, block linearization,
+ * phi elimination, and jump patching.
+ */
+
+#include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_opt.h"
+#include "../../../src/ir/xi_emit.h"
+#include "../../../src/runtime/value/xchunk.h"
+#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/base/xmalloc.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <string.h>
+
+/* Minimal XrType stubs */
+static XrType stub_int  = { .kind = XR_KIND_INT,    .id = 1, .frozen = true };
+static XrType stub_float= { .kind = XR_KIND_FLOAT,  .id = 2, .frozen = true };
+static XrType stub_bool = { .kind = XR_KIND_BOOL,   .id = 3, .frozen = true };
+static XrType stub_null = { .kind = XR_KIND_NULL,   .id = 4, .frozen = true };
+static XrType stub_void = { .kind = XR_KIND_VOID,   .id = 6, .frozen = true };
+
+static int tests_passed = 0;
+static int tests_failed = 0;
+
+#define TEST(name) \
+    static void test_##name(void); \
+    static void run_##name(void) { \
+        printf("--- " #name " ---\n"); \
+        test_##name(); \
+        printf("  PASS\n"); \
+        tests_passed++; \
+    } \
+    static void test_##name(void)
+
+/* Helper: create function with sealed entry block */
+static XiFunc *make_func(const char *name, XrType *ret) {
+    XiFunc *f = xi_func_new(name, ret);
+    XiBlock *entry = xi_block_new(f);
+    entry->sealed = true;
+    return f;
+}
+
+/* ========== Basic Emission Tests ========== */
+
+TEST(emit_return_const_int) {
+    /* fn() { return 42 } */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *c = xi_const_int(f, entry, 42, &stub_int);
+    xi_block_set_return(entry, c);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && "emit should succeed");
+    assert(proto != NULL);
+
+    /* Should have: LOADI rX, 42; RETURN1 rX */
+    int count = PROTO_CODE_COUNT(proto);
+    assert(count == 2 && "expected 2 instructions");
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADI && "first should be LOADI");
+    assert(GETARG_sBx(i0) == 42 && "should load 42");
+
+    XrInstruction i1 = PROTO_CODE(proto, 1);
+    assert(GET_OPCODE(i1) == OP_RETURN1 && "second should be RETURN1");
+    assert(GETARG_A(i1) == GETARG_A(i0) && "return same register as loaded");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_return_void) {
+    /* fn() { return } */
+    XiFunc *f = make_func("test", &stub_void);
+    XiBlock *entry = f->entry;
+    xi_block_set_return(entry, NULL);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK);
+    assert(proto != NULL);
+
+    int count = PROTO_CODE_COUNT(proto);
+    assert(count == 1);
+    assert(GET_OPCODE(PROTO_CODE(proto, 0)) == OP_RETURN0);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_const_bool) {
+    /* fn() { return true } */
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *t = xi_const_bool(f, entry, true, &stub_bool);
+    xi_block_set_return(entry, t);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADTRUE);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_const_null) {
+    /* fn() { return null } */
+    XiFunc *f = make_func("test", &stub_null);
+    XiBlock *entry = f->entry;
+
+    XiValue *n = xi_value_new(f, entry, XI_CONST, &stub_null, 0);
+    n->aux_int = 0;
+    xi_block_set_return(entry, n);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADNULL);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Arithmetic Tests ========== */
+
+TEST(emit_add) {
+    /* fn(a, b) { return a + b } */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, a, b);
+    xi_block_set_return(entry, add);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+    assert(proto->numparams == 2);
+
+    /* Should have: PARAM, PARAM (no-ops), ADD, RETURN1 */
+    /* Find ADD instruction */
+    bool found_add = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_ADD) {
+            found_add = true;
+            XrInstruction inst = PROTO_CODE(proto, i);
+            /* B and C should be param registers (0, 1) */
+            assert(GETARG_B(inst) == 0 && "first arg should be R[0]");
+            assert(GETARG_C(inst) == 1 && "second arg should be R[1]");
+            break;
+        }
+    }
+    assert(found_add && "should emit ADD instruction");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_sub_mul_div) {
+    /* fn(a, b) { return (a - b) * (a / b) } */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *sub = xi_binary(f, entry, XI_SUB, &stub_int, a, b);
+    XiValue *div = xi_binary(f, entry, XI_DIV, &stub_int, a, b);
+    XiValue *mul = xi_binary(f, entry, XI_MUL, &stub_int, sub, div);
+    xi_block_set_return(entry, mul);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* Verify all opcodes are present */
+    bool has_sub = false, has_div = false, has_mul = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
+        if (op == OP_SUB) has_sub = true;
+        if (op == OP_DIV) has_div = true;
+        if (op == OP_MUL) has_mul = true;
+    }
+    assert(has_sub && has_div && has_mul && "should emit SUB, DIV, MUL");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_unary_neg) {
+    /* fn(a) { return -a } */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *neg = xi_unary(f, entry, XI_NEG, &stub_int, a);
+    xi_block_set_return(entry, neg);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_UNM) { found = true; break; }
+    }
+    assert(found && "should emit UNM");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Comparison Tests ========== */
+
+TEST(emit_cmp_eq) {
+    /* fn(a, b) { return a == b } */
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *eq = xi_binary(f, entry, XI_EQ, &stub_bool, a, b);
+    xi_block_set_return(entry, eq);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CMP_EQ) { found = true; break; }
+    }
+    assert(found && "should emit CMP_EQ");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_cmp_gt) {
+    /* fn(a, b) { return a > b } -- emits CMP_LT with swapped args */
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *gt = xi_binary(f, entry, XI_GT, &stub_bool, a, b);
+    xi_block_set_return(entry, gt);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) == OP_CMP_LT) {
+            found = true;
+            /* a > b = b < a: B=b_reg(1), C=a_reg(0) */
+            assert(GETARG_B(inst) == 1 && GETARG_C(inst) == 0 &&
+                   "GT swaps to LT with reversed args");
+            break;
+        }
+    }
+    assert(found && "should emit CMP_LT for GT");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Control Flow Tests ========== */
+
+TEST(emit_if_then_else) {
+    /* fn(cond) { if cond then return 1 else return 2 } */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+
+    XiBlock *then_b = xi_block_new(f);
+    then_b->sealed = true;
+    XiBlock *else_b = xi_block_new(f);
+    else_b->sealed = true;
+
+    xi_block_set_if(entry, cond, then_b, else_b);
+
+    XiValue *c1 = xi_const_int(f, then_b, 1, &stub_int);
+    xi_block_set_return(then_b, c1);
+
+    XiValue *c2 = xi_const_int(f, else_b, 2, &stub_int);
+    xi_block_set_return(else_b, c2);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* Should have: TEST, JMP, LOADI 1, RETURN1, LOADI 2, RETURN1 */
+    bool has_test = false, has_jmp = false;
+    int ret_count = 0;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
+        if (op == OP_TEST) has_test = true;
+        if (op == OP_JMP) has_jmp = true;
+        if (op == OP_RETURN1) ret_count++;
+    }
+    assert(has_test && "should emit TEST");
+    assert(has_jmp && "should emit JMP");
+    assert(ret_count == 2 && "should have 2 RETURN1 instructions");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_jump_fallthrough) {
+    /* entry -> b1 -> return; test that unnecessary JMP is elided */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *b1 = xi_block_new(f);
+    b1->sealed = true;
+
+    xi_block_set_jump(entry, b1);
+    XiValue *c = xi_const_int(f, b1, 99, &stub_int);
+    xi_block_set_return(b1, c);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* Should have: LOADI 99, RETURN1 — no JMP since b1 is the next block */
+    int jmp_count = 0;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_JMP) jmp_count++;
+    }
+    assert(jmp_count == 0 && "should elide fallthrough JMP");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Copy / Move Tests ========== */
+
+TEST(emit_copy_becomes_move) {
+    /* fn(a) { b = copy(a); return b } */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *cp = xi_value_new(f, entry, XI_COPY, &stub_int, 1);
+    cp->args[0] = a;
+    xi_block_set_return(entry, cp);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* Should have MOVE + RETURN1 */
+    bool found_move = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_MOVE) { found_move = true; break; }
+    }
+    assert(found_move && "COPY should emit MOVE");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Float Constants ========== */
+
+TEST(emit_const_float_small) {
+    /* fn() { return 3.0 } - uses LOADF */
+    XiFunc *f = make_func("test", &stub_float);
+    XiBlock *entry = f->entry;
+
+    XiValue *cf = xi_const_float(f, entry, 3.0, &stub_float);
+    xi_block_set_return(entry, cf);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADF && "small float should use LOADF");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_const_float_large) {
+    /* fn() { return 3.14 } - uses LOADK (not integer-representable) */
+    XiFunc *f = make_func("test", &stub_float);
+    XiBlock *entry = f->entry;
+
+    XiValue *cf = xi_const_float(f, entry, 3.14, &stub_float);
+    xi_block_set_return(entry, cf);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADK && "non-integer float should use LOADK");
+    assert(PROTO_CONST_COUNT(proto) == 1 && "should have 1 constant");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Large Constants ========== */
+
+TEST(emit_const_int_large) {
+    /* fn() { return 100000 } - uses LOADK since > sBx range */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *c = xi_const_int(f, entry, 100000, &stub_int);
+    xi_block_set_return(entry, c);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADK && "large int should use LOADK");
+    assert(PROTO_CONST_COUNT(proto) == 1);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Optimization + Emit ========== */
+
+TEST(emit_after_optimization) {
+    /* fn(a) { return a + 0 }
+     * Strength reduction: a + 0 -> copy(a)
+     * Copy propagation: copy(a) -> a
+     * Result: just return a */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *c0 = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, a, c0);
+    xi_block_set_return(entry, add);
+
+    xi_opt_run(f);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* After optimization, should have minimal instructions */
+    int count = PROTO_CODE_COUNT(proto);
+    /* Should be 1-2 instructions: maybe just RETURN1 R[0], or MOVE + RETURN1 */
+    assert(count <= 3 && "optimized emit should be compact");
+
+    /* Should NOT have ADD */
+    for (int i = 0; i < count; i++) {
+        assert(GET_OPCODE(PROTO_CODE(proto, i)) != OP_ADD &&
+               "ADD should be eliminated by strength reduction");
+    }
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+/* ========== Error Handling ========== */
+
+TEST(emit_status_str) {
+    assert(strcmp(xi_emit_status_str(XI_EMIT_OK), "OK") == 0);
+    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_TOO_MANY_REGS),
+                  "too many registers (>255)") == 0);
+    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_UNSUPPORTED_OP),
+                  "unsupported Xi IR operation") == 0);
+}
+
+/* ========== Main ========== */
+
+int main(void) {
+    printf("=== Xi Emit Unit Tests ===\n\n");
+
+    (void)stub_null;
+    (void)stub_void;
+
+    /* Basic emission */
+    run_emit_return_const_int();
+    run_emit_return_void();
+    run_emit_const_bool();
+    run_emit_const_null();
+
+    /* Arithmetic */
+    run_emit_add();
+    run_emit_sub_mul_div();
+    run_emit_unary_neg();
+
+    /* Comparison */
+    run_emit_cmp_eq();
+    run_emit_cmp_gt();
+
+    /* Control flow */
+    run_emit_if_then_else();
+    run_emit_jump_fallthrough();
+
+    /* Copy / Move */
+    run_emit_copy_becomes_move();
+
+    /* Float constants */
+    run_emit_const_float_small();
+    run_emit_const_float_large();
+
+    /* Large constants */
+    run_emit_const_int_large();
+
+    /* Optimization + emit */
+    run_emit_after_optimization();
+
+    /* Error handling */
+    run_emit_status_str();
+
+    printf("\n=== %d/%d Xi Emit tests passed ===\n",
+           tests_passed, tests_passed + tests_failed);
+    return tests_failed > 0 ? 1 : 0;
+}
