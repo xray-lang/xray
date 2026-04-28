@@ -36,6 +36,19 @@ uint64_t xr_time_realtime_ns(void) {
     return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 
+uint64_t xr_time_process_cpu_ns(void) {
+#ifdef CLOCK_PROCESS_CPUTIME_ID
+    struct timespec ts;
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
+        return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+    }
+#endif
+    /* Fallback: clock() has poor resolution and wraps on 32-bit, but
+     * is universally available. */
+    clock_t t = clock();
+    return (uint64_t) t * (1000000000ULL / CLOCKS_PER_SEC);
+}
+
 void xr_time_sleep_ns(uint64_t ns) {
     struct timespec req;
     req.tv_sec = (time_t) (ns / 1000000000ULL);
