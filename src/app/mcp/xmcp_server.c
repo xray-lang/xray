@@ -33,6 +33,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <time.h>
+#include <signal.h>
 #include "../../os/os_fd.h"
 
 #ifdef XR_OS_WINDOWS
@@ -90,6 +91,11 @@ static void mcp_signal_handler(int sig) {
 
 static void mcp_install_signals(XmcpServer *s) {
     g_mcp_server = s;
+#ifdef XR_OS_WINDOWS
+    signal(SIGTERM, mcp_signal_handler);
+    signal(SIGINT, mcp_signal_handler);
+    /* SIGPIPE does not exist on Windows */
+#else
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = mcp_signal_handler;
@@ -100,6 +106,7 @@ static void mcp_install_signals(XmcpServer *s) {
     /* Ignore SIGPIPE to avoid crash on broken pipe */
     sa.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa, NULL);
+#endif
 }
 
 /* --------------------------------------------------------------------------
