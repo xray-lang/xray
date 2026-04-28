@@ -14,6 +14,7 @@
 
 #include "base64.h"
 #include "../common.h"
+#include "../../src/coro/xcoroutine.h"
 #include <stdio.h>
 #include <string.h>
 

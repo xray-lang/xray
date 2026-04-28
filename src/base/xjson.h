@@ -50,7 +50,7 @@ typedef struct XrJsonMember {
 
 struct XrJsonValue {
     XrJsonType type;
-    bool is_integer;  /* true when number was parsed without '.' or 'e/E' */
+    bool is_integer;   /* true when number was parsed without '.' or 'e/E' */
     size_t string_len; /* valid when type==XR_JSON_STRING; byte length of string */
     union {
         bool boolean;

@@ -48,7 +48,7 @@ XR_FUNC XrRegex *xr_regex_compile(const char *pattern, XrRegexFlags flags, XrReg
 }
 
 XR_FUNC XrRegex *xr_regex_compile_ex(const char *pattern, XrRegexFlags flags, XrRegexError *error,
-                             int *error_pos, char *error_msg, size_t msg_size) {
+                                     int *error_pos, char *error_msg, size_t msg_size) {
     if (!pattern) {
         if (error)
             *error = XR_RE_ERR_SYNTAX;
@@ -216,7 +216,7 @@ XR_FUNC bool xr_regex_match(const XrRegex *re, const char *text, int len, XrMatc
 }
 
 XR_FUNC bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int start_pos,
-                       XrMatch *match) {
+                               XrMatch *match) {
     if (!re || !text)
         return false;
     if (len < 0)
@@ -400,7 +400,7 @@ XR_FUNC int xr_regex_count(const XrRegex *re, const char *text, int len) {
  * @return Match array (caller must free)
  */
 XR_FUNC XrMatch *xr_regex_find_all(const XrRegex *re, const char *text, int len, int limit,
-                           int *out_count) {
+                                   int *out_count) {
     if (!re || !text) {
         if (out_count)
             *out_count = 0;
@@ -625,8 +625,8 @@ static char *replace_all_fast(const XrRegex *re, const char *text, int len, cons
     return buf.data;
 }
 
-XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len, const char *replacement,
-                             bool all) {
+XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int len,
+                                     const char *replacement, bool all) {
     if (!re || !text || !replacement)
         return NULL;
     if (len < 0)
@@ -683,8 +683,8 @@ XR_FUNC char *xr_regex_replace_alloc(const XrRegex *re, const char *text, int le
  * Split
  * ======================================================================== */
 
-XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts, int max_parts,
-                   int limit) {
+XR_FUNC int xr_regex_split(const XrRegex *re, const char *text, int len, XrSplitPart *parts,
+                           int max_parts, int limit) {
     if (!re || !text || !parts || max_parts <= 0)
         return 0;
     if (len < 0)
