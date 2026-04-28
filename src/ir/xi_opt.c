@@ -412,12 +412,115 @@ XR_FUNC void xi_opt_phi_simplify(XiFunc *f) {
     }
 }
 
+/* ========== Strength Reduction ========== */
+
+/*
+ * Algebraic identity rewrites for integer binary operations.
+ * Converts a binary op to either a COPY (identity) or CONST (zero/absorb).
+ *
+ * Patterns handled:
+ *   x + 0 = x,  0 + x = x
+ *   x - 0 = x
+ *   x * 1 = x,  1 * x = x
+ *   x * 0 = 0,  0 * x = 0
+ *   x / 1 = x
+ *   x & 0 = 0,  0 & x = 0
+ *   x | 0 = x,  0 | x = x
+ *   x ^ 0 = x,  0 ^ x = x
+ *   x << 0 = x, x >> 0 = x
+ *   x - x = 0
+ *   x ^ x = 0
+ */
+XR_FUNC void xi_opt_strength_reduce(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_strength_reduce: NULL func");
+
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v->nargs != 2) continue;
+
+            XiValue *lhs = v->args[0];
+            XiValue *rhs = v->args[1];
+            bool l_zero = is_const_int(lhs) && lhs->aux_int == 0;
+            bool r_zero = is_const_int(rhs) && rhs->aux_int == 0;
+            bool l_one  = is_const_int(lhs) && lhs->aux_int == 1;
+            bool r_one  = is_const_int(rhs) && rhs->aux_int == 1;
+            bool same   = (lhs == rhs);
+
+            switch (v->op) {
+                case XI_ADD:
+                    /* x + 0 = x */
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    /* 0 + x = x */
+                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    break;
+
+                case XI_SUB:
+                    /* x - 0 = x */
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    /* x - x = 0 */
+                    else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    break;
+
+                case XI_MUL:
+                    /* x * 0 = 0 */
+                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    /* x * 1 = x */
+                    else if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    /* 1 * x = x */
+                    else if (l_one) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    break;
+
+                case XI_DIV:
+                    /* x / 1 = x */
+                    if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    break;
+
+                case XI_BAND:
+                    /* x & 0 = 0 */
+                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    /* x & x = x */
+                    else if (same) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    break;
+
+                case XI_BOR:
+                    /* x | 0 = x */
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    /* x | x = x */
+                    else if (same) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    break;
+
+                case XI_BXOR:
+                    /* x ^ 0 = x */
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    /* x ^ x = 0 */
+                    else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    break;
+
+                case XI_SHL:
+                case XI_SHR:
+                    /* x << 0 = x, x >> 0 = x */
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    break;
+
+                default:
+                    break;
+            }
+        }
+    }
+}
+
 /* ========== Combined Pass ========== */
 
 XR_FUNC void xi_opt_run(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_run: NULL func");
 
     xi_opt_const_fold(f);
+    xi_opt_strength_reduce(f);
     xi_opt_copy_prop(f);
     xi_opt_phi_simplify(f);
     xi_opt_dce(f);
