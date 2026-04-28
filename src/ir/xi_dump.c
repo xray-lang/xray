@@ -70,6 +70,10 @@ static const char *xi_op_name(uint16_t op) {
         case XI_CHAN_RECV:   return "CHAN_RECV";
         case XI_YIELD:       return "YIELD";
         case XI_THROW:       return "THROW";
+        case XI_ITER_NEW:    return "ITER_NEW";
+        case XI_ITER_NEXT:   return "ITER_NEXT";
+        case XI_ITER_VALID:  return "ITER_VALID";
+        case XI_ISNULL:      return "ISNULL";
         case XI_PHI:         return "PHI";
         case XI_COPY:        return "COPY";
         default:             return "???";
