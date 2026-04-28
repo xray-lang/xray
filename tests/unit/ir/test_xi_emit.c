@@ -538,6 +538,152 @@ TEST(emit_reg_pressure) {
     xi_func_free(f);
 }
 
+/* ========== Instruction Fusion ========== */
+
+TEST(emit_addi_rhs_const) {
+    /* fn(a) { return a + 5 } -> should emit ADDI, not LOADI + ADD */
+    XiFunc *f = make_func("addi", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *c5 = xi_const_int(f, entry, 5, &stub_int);
+    XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, a, c5);
+    xi_block_set_return(entry, add);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_addi = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_ADDI) {
+            found_addi = true;
+            XrInstruction inst = PROTO_CODE(proto, i);
+            assert(GETARG_B(inst) == 0 && "src should be param R[0]");
+            assert(GETARG_sC(inst) == 5 && "immediate should be 5");
+        }
+    }
+    assert(found_addi && "a + 5 should fuse into ADDI");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_addi_lhs_const) {
+    /* fn(a) { return 3 + a } -> commutative, should emit ADDI */
+    XiFunc *f = make_func("addi_swap", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *c3 = xi_const_int(f, entry, 3, &stub_int);
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, c3, a);
+    xi_block_set_return(entry, add);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_addi = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_ADDI) {
+            found_addi = true;
+            assert(GETARG_sC(PROTO_CODE(proto, i)) == 3);
+        }
+    }
+    assert(found_addi && "3 + a should fuse into ADDI (commutative)");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_subi_muli) {
+    /* fn(a) { return (a - 1) * 2 } -> SUBI then MULI */
+    XiFunc *f = make_func("sub_mul", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *c1 = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *c2 = xi_const_int(f, entry, 2, &stub_int);
+    XiValue *sub = xi_binary(f, entry, XI_SUB, &stub_int, a, c1);
+    XiValue *mul = xi_binary(f, entry, XI_MUL, &stub_int, sub, c2);
+    xi_block_set_return(entry, mul);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_subi = false, found_muli = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
+        if (op == OP_SUBI) {
+            found_subi = true;
+            assert(GETARG_sC(PROTO_CODE(proto, i)) == 1);
+        }
+        if (op == OP_MULI) {
+            found_muli = true;
+            assert(GETARG_sC(PROTO_CODE(proto, i)) == 2);
+        }
+    }
+    assert(found_subi && "a - 1 should fuse into SUBI");
+    assert(found_muli && "(a-1) * 2 should fuse into MULI");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_addi_negative) {
+    /* fn(a) { return a + (-10) } -> ADDI with negative immediate */
+    XiFunc *f = make_func("addi_neg", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *cn = xi_const_int(f, entry, -10, &stub_int);
+    XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, a, cn);
+    xi_block_set_return(entry, add);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_addi = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_ADDI) {
+            found_addi = true;
+            assert(GETARG_sC(PROTO_CODE(proto, i)) == -10);
+        }
+    }
+    assert(found_addi && "a + (-10) should fuse into ADDI");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_addk_large_const) {
+    /* fn(a) { return a + 1000 } -> ADDK (too large for ADDI's int8_t) */
+    XiFunc *f = make_func("addk", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *ck = xi_const_int(f, entry, 1000, &stub_int);
+    XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, a, ck);
+    xi_block_set_return(entry, add);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    bool found_addk = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_ADDK) {
+            found_addk = true;
+        }
+    }
+    assert(found_addk && "a + 1000 should use ADDK (const pool)");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 /* ========== New Op Coverage ========== */
 
 TEST(emit_str_concat) {
@@ -734,6 +880,13 @@ int main(void) {
     /* Register recycling */
     run_emit_reg_recycling();
     run_emit_reg_pressure();
+
+    /* Instruction fusion */
+    run_emit_addi_rhs_const();
+    run_emit_addi_lhs_const();
+    run_emit_subi_muli();
+    run_emit_addi_negative();
+    run_emit_addk_large_const();
 
     /* New op coverage */
     run_emit_str_concat();

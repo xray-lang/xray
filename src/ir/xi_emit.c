@@ -357,12 +357,79 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Binary arithmetic */
+        /* Binary arithmetic — with instruction fusion for constant operands.
+         * ADDI/SUBI/MULI use signed 8-bit immediate (int8_t, -128..127).
+         * ADDK/SUBK/MULK/DIVK use constant pool index. */
         case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
         case XI_BAND: case XI_BOR: case XI_BXOR: case XI_SHL: case XI_SHR: {
             if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
-            uint8_t b = reg_of(ctx, v->args[0]);
-            uint8_t c = reg_of(ctx, v->args[1]);
+
+            XiValue *lhs = v->args[0];
+            XiValue *rhs = v->args[1];
+
+            /* Try fused immediate form: OP_ADDI/SUBI/MULI with signed 8-bit C */
+            bool rhs_is_small_int = (rhs->op == XI_CONST && rhs->type &&
+                                     rhs->type->kind == XR_KIND_INT &&
+                                     rhs->aux_int >= -128 && rhs->aux_int <= 127);
+            bool lhs_is_small_int = (lhs->op == XI_CONST && lhs->type &&
+                                     lhs->type->kind == XR_KIND_INT &&
+                                     lhs->aux_int >= -128 && lhs->aux_int <= 127);
+
+            if (rhs_is_small_int &&
+                (v->op == XI_ADD || v->op == XI_SUB || v->op == XI_MUL)) {
+                uint8_t b = reg_of(ctx, lhs);
+                if (ctx->status != XI_EMIT_OK) return;
+                int8_t imm = (int8_t)rhs->aux_int;
+                OpCode fused = v->op == XI_ADD ? OP_ADDI :
+                               v->op == XI_SUB ? OP_SUBI : OP_MULI;
+                emit_inst(ctx, CREATE_ABC(fused, dst, b, (uint8_t)imm));
+                break;
+            }
+
+            /* ADD is commutative: try swapping if lhs is the constant */
+            if (lhs_is_small_int && v->op == XI_ADD) {
+                uint8_t b = reg_of(ctx, rhs);
+                if (ctx->status != XI_EMIT_OK) return;
+                int8_t imm = (int8_t)lhs->aux_int;
+                emit_inst(ctx, CREATE_ABC(OP_ADDI, dst, b, (uint8_t)imm));
+                break;
+            }
+            /* MUL is commutative: try swapping if lhs is the constant */
+            if (lhs_is_small_int && v->op == XI_MUL) {
+                uint8_t b = reg_of(ctx, rhs);
+                if (ctx->status != XI_EMIT_OK) return;
+                int8_t imm = (int8_t)lhs->aux_int;
+                emit_inst(ctx, CREATE_ABC(OP_MULI, dst, b, (uint8_t)imm));
+                break;
+            }
+
+            /* Try constant-pool form: ADDK/SUBK/MULK/DIVK for larger constants */
+            bool rhs_is_const_num = (rhs->op == XI_CONST && rhs->type &&
+                (rhs->type->kind == XR_KIND_INT || rhs->type->kind == XR_KIND_FLOAT));
+            if (rhs_is_const_num && !rhs_is_small_int &&
+                (v->op == XI_ADD || v->op == XI_SUB ||
+                 v->op == XI_MUL || v->op == XI_DIV)) {
+                uint8_t b = reg_of(ctx, lhs);
+                if (ctx->status != XI_EMIT_OK) return;
+                int ki;
+                if (rhs->type->kind == XR_KIND_INT) {
+                    ki = add_const_int(ctx, rhs->aux_int);
+                } else {
+                    double fval;
+                    memcpy(&fval, &rhs->aux_int, sizeof(double));
+                    ki = add_const_float(ctx, fval);
+                }
+                if (ctx->status != XI_EMIT_OK) return;
+                OpCode kop = v->op == XI_ADD ? OP_ADDK :
+                             v->op == XI_SUB ? OP_SUBK :
+                             v->op == XI_MUL ? OP_MULK : OP_DIVK;
+                emit_inst(ctx, CREATE_ABC(kop, dst, b, (uint8_t)ki));
+                break;
+            }
+
+            /* Generic register-register form */
+            uint8_t b = reg_of(ctx, lhs);
+            uint8_t c = reg_of(ctx, rhs);
             if (ctx->status != XI_EMIT_OK) return;
 
             OpCode op;
