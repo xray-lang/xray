@@ -47,16 +47,34 @@
 #ifdef _WIN32
 const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS] = {
     /* Caller-saved (first 6): Win64 treats RSI/RDI as callee-saved */
-    X64_RAX, X64_RCX, X64_RDX, X64_R8, X64_R9, X64_R10,
+    X64_RAX,
+    X64_RCX,
+    X64_RDX,
+    X64_R8,
+    X64_R9,
+    X64_R10,
     /* Callee-saved (next 5) — r14=jit_ctx, r15=coro, rbp=FP excluded */
-    X64_RBX, X64_RDI, X64_RSI, X64_R12, X64_R13,
+    X64_RBX,
+    X64_RDI,
+    X64_RSI,
+    X64_R12,
+    X64_R13,
 };
 #else
 const X64Reg x64_alloc_regs[X64_MAX_PHYS_REGS] = {
     /* Caller-saved (first 8) */
-    X64_RAX, X64_RCX, X64_RDX, X64_RSI, X64_RDI, X64_R8, X64_R9, X64_R10,
+    X64_RAX,
+    X64_RCX,
+    X64_RDX,
+    X64_RSI,
+    X64_RDI,
+    X64_R8,
+    X64_R9,
+    X64_R10,
     /* Callee-saved (next 3) — r14=jit_ctx, r15=coro, rbp=FP excluded */
-    X64_RBX, X64_R12, X64_R13,
+    X64_RBX,
+    X64_R12,
+    X64_R13,
 };
 #endif
 
@@ -367,7 +385,7 @@ static X64Reg x64_prepare_commutative_gp(X64CodegenCtx *ctx, X64Reg rd, XirRef a
 
     if (rn == scratch && arg0 != arg1 && x64_arg_needs_scratch_gp(ctx, arg1)) {
         CODEGEN_CHECK(ctx, rd != scratch,
-                  "commutative gp binop: dst aliases scratch with both args needing scratch");
+                      "commutative gp binop: dst aliases scratch with both args needing scratch");
         x64_mov_rr(&ctx->buf, rd, scratch);
         X64Reg rm = x64_get_operand(ctx, arg1, scratch);
         return rm;
@@ -388,7 +406,7 @@ static X64Xmm x64_prepare_commutative_fp(X64CodegenCtx *ctx, X64Xmm fd, XirRef a
 
     if (fn == scratch && arg0 != arg1 && x64_arg_needs_scratch_fp(ctx, arg1)) {
         CODEGEN_CHECK(ctx, fd != scratch,
-                  "commutative fp binop: dst aliases scratch with both args needing scratch");
+                      "commutative fp binop: dst aliases scratch with both args needing scratch");
         x64_movsd_rr(&ctx->buf, fd, scratch);
         X64Xmm fm = x64_get_fp_operand(ctx, arg1, scratch);
         return fm;
@@ -462,13 +480,14 @@ static void x64_emit_noncommutative_fp(X64CodegenCtx *ctx, X64Xmm fd, XirRef arg
 
     if (fn == X64_SCRATCH_XMM && arg0 != arg1 && x64_arg_needs_scratch_fp(ctx, arg1)) {
         CODEGEN_CHECK(ctx, fd != X64_SCRATCH_XMM,
-                  "noncomm fp binop: dst aliases scratch with both args needing scratch");
+                      "noncomm fp binop: dst aliases scratch with both args needing scratch");
         /* x86-64 has no FP push/pop. Use a 16-byte stack stash; the pair
          * keeps RSP 16-aligned for any subsequent CALL boundary. */
         x64_sub_ri(&ctx->buf, X64_RSP, 16);
         x64_movsd_mr(&ctx->buf, X64_RSP, 0, X64_SCRATCH_XMM);
         X64Xmm fm = x64_get_fp_operand(ctx, arg1, X64_SCRATCH_XMM);
-        CODEGEN_CHECK(ctx, fm == X64_SCRATCH_XMM, "noncomm fp binop: expected arg1 to land in scratch");
+        CODEGEN_CHECK(ctx, fm == X64_SCRATCH_XMM,
+                      "noncomm fp binop: expected arg1 to land in scratch");
         x64_movsd_rm(&ctx->buf, fd, X64_RSP, 0);
         x64_add_ri(&ctx->buf, X64_RSP, 16);
         emit_op(&ctx->buf, fd, fm);
@@ -1485,8 +1504,8 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
 
             uint32_t smap_id = x64_record_safepoint(ctx);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* extra_arg = capacity */
             if (xir_ref_is_const(ins->args[0])) {
@@ -1498,18 +1517,16 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
                 if (r != X64_SCRATCH_REG)
                     x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, r);
             }
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
 
             /* Clear deopt_id */
             x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_DEOPT_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* Load runtime helper pointer */
-            void *fn = (ins->op == XIR_RT_ARRAY_NEW)
-                           ? (void *) (uintptr_t) xr_jit_rt_array_new
-                           : (void *) (uintptr_t) xr_jit_rt_map_new;
+            void *fn = (ins->op == XIR_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
+                                                     : (void *) (uintptr_t) xr_jit_rt_map_new;
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
             /* CALL call_c_stub */
@@ -1537,8 +1554,8 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
 
             uint32_t smap_id_ap = x64_record_safepoint(ctx);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id_ap);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_ACTIVE_SMAP_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* Store call_args[0] = array ptr */
             int32_t ca0 = (int32_t) XIR_JIT_CALL_ARGS_OFFSET;
@@ -1571,8 +1588,8 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
             }
             uint64_t tpk = (uint64_t) t0 | ((uint64_t) t1 << 8);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tpk);
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                       (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET,
+                       X64_SCRATCH_REG);
 
             /* Dynamic tag patch: if t1 unknown, read from slot_runtime_tags */
             if (t1 == XR_RTAG_UNKNOWN && xir_ref_is_vreg(ins->args[1])) {
@@ -1582,24 +1599,20 @@ static void x64_emit_xir_ins(X64CodegenCtx *ctx, XirIns *ins) {
                     if (bc_slot >= 0 && bc_slot < 256) {
                         int32_t soff = (int32_t) XIR_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
                         int32_t doff = (int32_t) XIR_JIT_CALL_ARG_TAGS_OFFSET + 1;
-                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG,
-                                      X64_JIT_CTX_REG, soff);
-                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG,
-                                    doff, X64_SCRATCH_REG);
+                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, soff);
+                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, doff, X64_SCRATCH_REG);
                     }
                 }
             }
 
             /* extra_arg = 0, deopt_id = 0 (already zeroed together) */
             x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                       (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG,
-                         (int32_t) XIR_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_DEOPT_ID_OFFSET,
+                         X64_SCRATCH_REG);
 
             /* Load runtime helper pointer */
-            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
-                           (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
 
             /* CALL call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
@@ -2146,8 +2159,8 @@ static void x64_emit_call_c_stub(X64CodegenCtx *ctx) {
     x64_mov_rm(&ctx->buf, X64_R8, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
     /* Read payload/tag from return buffer */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RSP, 32);    /* payload */
-    x64_mov_rm(&ctx->buf, X64_RDX, X64_RSP, 40);             /* tag */
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RSP, 32); /* payload */
+    x64_mov_rm(&ctx->buf, X64_RDX, X64_RSP, 40);         /* tag */
     x64_add_ri(&ctx->buf, X64_RSP, 48);
 #else
     /* System V: RDI=coro, RSI=extra_arg, func_ptr in R11 */
@@ -2197,7 +2210,7 @@ static void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
         x64_push_r(&ctx->buf, x64_alloc_regs[i]);
     /* Alignment: (ncaller+1 pushes + return addr) * 8 must be 16-aligned.
      * If not, push a dummy. */
-    int total_pushes_fwd = ncaller + 1; /* +1 for RCX save */
+    int total_pushes_fwd = ncaller + 1;                         /* +1 for RCX save */
     bool need_pad_fwd = ((total_pushes_fwd + 1) * 8) % 16 != 0; /* +1 for ret addr */
     if (need_pad_fwd)
         x64_push_r(&ctx->buf, X64_SCRATCH_REG);
@@ -2210,7 +2223,7 @@ static void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_RCX, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RDX, X64_SCRATCH_REG); /* parent was in R11 */
     x64_mov_rm(&ctx->buf, X64_R8, X64_RSP, X64_ABI_SHADOW_BYTES + child_stack_off);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_barrier_fwd);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_fwd);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
     x64_add_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
 #else
@@ -2218,7 +2231,7 @@ static void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RSI, X64_SCRATCH_REG);
     x64_mov_rm(&ctx->buf, X64_RDX, X64_RSP, child_stack_off);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_barrier_fwd);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_fwd);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
 #endif
 
@@ -2244,13 +2257,13 @@ static void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     x64_sub_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
     x64_mov_rr(&ctx->buf, X64_RCX, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RDX, X64_SCRATCH_REG);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_barrier_back);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_back);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
     x64_add_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
 #else
     x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RSI, X64_SCRATCH_REG);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t)(uintptr_t)xr_jit_barrier_back);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_back);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
 #endif
 
@@ -2469,8 +2482,8 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
      * Full 128-bit XMM state from C callers is preserved because our allocatable
      * FP ops never touch upper 64 bits (SSE2 scalar instructions zero-extend). */
     for (int i = 0; i < X64_CALLEE_XMM_COUNT; i++) {
-        int32_t off = -(int32_t)(X64_XMM_SAVE_OFFSET + i * 8);
-        x64_movsd_mr(&ctx->buf, X64_RBP, off, (X64Xmm)(6 + i));
+        int32_t off = -(int32_t) (X64_XMM_SAVE_OFFSET + i * 8);
+        x64_movsd_mr(&ctx->buf, X64_RBP, off, (X64Xmm) (6 + i));
     }
 #endif
 
@@ -2502,8 +2515,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     uint32_t nparams = ctx->func->num_params;
     if (nparams > 0 && ctx->xra) {
         uint32_t entry_id = ctx->func->blocks[0]->id;
-        int32_t entry_pos = (entry_id < ctx->xra->nblk)
-                                ? ctx->xra->blk_start[entry_id] : 0;
+        int32_t entry_pos = (entry_id < ctx->xra->nblk) ? ctx->xra->blk_start[entry_id] : 0;
         int32_t deferred = -1; /* param index that clobbers ABI_ARG2 */
         for (uint32_t i = 0; i < nparams; i++) {
             bool is_fp = (i < ctx->func->nvreg && ctx->func->vregs[i].rep == XR_REP_F64);
@@ -2514,12 +2526,11 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
                 if (slot >= 0) {
                     int32_t offset = -(X64_SPILL_BASE + slot * 8);
                     if (is_fp) {
-                        x64_movsd_rm(&ctx->buf, (X64Xmm) X64_SCRATCH_XMM,
-                                     X64_ABI_ARG2, (int32_t) (i * 8));
+                        x64_movsd_rm(&ctx->buf, (X64Xmm) X64_SCRATCH_XMM, X64_ABI_ARG2,
+                                     (int32_t) (i * 8));
                         x64_movsd_mr(&ctx->buf, X64_RBP, offset, (X64Xmm) X64_SCRATCH_XMM);
                     } else {
-                        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG,
-                                   X64_ABI_ARG2, (int32_t) (i * 8));
+                        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_ABI_ARG2, (int32_t) (i * 8));
                         x64_mov_mr(&ctx->buf, X64_RBP, offset, X64_SCRATCH_REG);
                     }
                 }
@@ -2528,7 +2539,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
 
             /* Defer the param that would clobber the args pointer */
             if (!is_fp && x64_alloc_regs[ri] == X64_ABI_ARG2) {
-                deferred = (int32_t)i;
+                deferred = (int32_t) i;
                 continue;
             }
 
@@ -2553,7 +2564,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
 
         /* Load the deferred param last (clobbers ABI_ARG2 = args pointer) */
         if (deferred >= 0) {
-            uint32_t i = (uint32_t)deferred;
+            uint32_t i = (uint32_t) deferred;
             int8_t ri = xra_reg_at_pos(ctx->xra, i, entry_pos);
             X64Reg dst = x64_alloc_regs[ri];
             x64_mov_rm(&ctx->buf, dst, X64_ABI_ARG2, (int32_t) (i * 8));
@@ -2585,8 +2596,8 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
 #ifdef _WIN32
     /* Save callee-saved XMM registers */
     for (int i = 0; i < X64_CALLEE_XMM_COUNT; i++) {
-        int32_t off = -(int32_t)(X64_XMM_SAVE_OFFSET + i * 8);
-        x64_movsd_mr(&ctx->buf, X64_RBP, off, (X64Xmm)(6 + i));
+        int32_t off = -(int32_t) (X64_XMM_SAVE_OFFSET + i * 8);
+        x64_movsd_mr(&ctx->buf, X64_RBP, off, (X64Xmm) (6 + i));
     }
 #endif
 
@@ -2657,8 +2668,8 @@ void x64_emit_epilogue(X64CodegenCtx *ctx) {
 #ifdef _WIN32
     /* Restore callee-saved XMM registers xmm6-xmm14 */
     for (int i = 0; i < X64_CALLEE_XMM_COUNT; i++) {
-        int32_t off = -(int32_t)(X64_XMM_SAVE_OFFSET + i * 8);
-        x64_movsd_rm(&ctx->buf, (X64Xmm)(6 + i), X64_RBP, off);
+        int32_t off = -(int32_t) (X64_XMM_SAVE_OFFSET + i * 8);
+        x64_movsd_rm(&ctx->buf, (X64Xmm) (6 + i), X64_RBP, off);
     }
 #endif
 
@@ -2684,16 +2695,16 @@ static void x64_emit_edge_copies(X64CodegenCtx *ctx, XirBlock *target, XirBlock 
     XraEdgeCopy ec[64];
     uint32_t nc = xra_edge_copies(ctx->xra, ctx->func, target, from, ec, 64);
     for (uint32_t i = 0; i < nc && n < 64; i++) {
-        X64Reg d = ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].dst_idx]
-                                : x64_alloc_regs[ec[i].dst_idx];
+        X64Reg d =
+            ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].dst_idx] : x64_alloc_regs[ec[i].dst_idx];
         if (ec[i].is_reload) {
-            copies[n++] = (Copy){d, X64_R11, false, ec[i].is_fp, true, ec[i].spill_slot};
+            copies[n++] = (Copy) {d, X64_R11, false, ec[i].is_fp, true, ec[i].spill_slot};
             continue;
         }
-        X64Reg s = ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].src_idx]
-                                : x64_alloc_regs[ec[i].src_idx];
+        X64Reg s =
+            ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].src_idx] : x64_alloc_regs[ec[i].src_idx];
         if (d != s)
-            copies[n++] = (Copy){d, s, false, ec[i].is_fp, false, 0};
+            copies[n++] = (Copy) {d, s, false, ec[i].is_fp, false, 0};
     }
     if (n == 0)
         return;
@@ -2779,8 +2790,7 @@ static void x64_emit_edge_copies(X64CodegenCtx *ctx, XirBlock *target, XirBlock 
                             x64_mov_rr(&ctx->buf, copies[j].dst, X64_SCRATCH_REG);
                     } else {
                         if (cycle_fp)
-                            x64_movsd_rr(&ctx->buf, (X64Xmm) copies[j].dst,
-                                         (X64Xmm) copies[j].src);
+                            x64_movsd_rr(&ctx->buf, (X64Xmm) copies[j].dst, (X64Xmm) copies[j].src);
                         else
                             x64_mov_rr(&ctx->buf, copies[j].dst, copies[j].src);
                     }
@@ -2889,7 +2899,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                 x64_emit32(&ctx->buf, 0);
 
                 /* Patch JNE to here (true path) */
-                int32_t rel = (int32_t)(ctx->buf.pos - (skip_pos + 4));
+                int32_t rel = (int32_t) (ctx->buf.pos - (skip_pos + 4));
                 memcpy(&ctx->buf.code[skip_pos], &rel, 4);
                 x64_emit_edge_copies(ctx, blk->s1, blk);
                 /* s1 falls through */
@@ -2912,7 +2922,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                 x64_emit32(&ctx->buf, 0);
 
                 /* Patch JE to here (false path) */
-                int32_t rel = (int32_t)(ctx->buf.pos - (skip_pos + 4));
+                int32_t rel = (int32_t) (ctx->buf.pos - (skip_pos + 4));
                 memcpy(&ctx->buf.code[skip_pos], &rel, 4);
                 x64_emit_edge_copies(ctx, blk->s2, blk);
                 if (!s2_is_next) {
@@ -2937,8 +2947,8 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
              * RCX or RDX, which are clobbered by the tag writes below. */
             if (!xir_ref_is_none(blk->jmp.arg)) {
                 uint32_t ret_idx = XIR_REF_INDEX(blk->jmp.arg);
-                bool is_fp = (ret_idx < ctx->func->nvreg &&
-                              ctx->func->vregs[ret_idx].rep == XR_REP_F64);
+                bool is_fp =
+                    (ret_idx < ctx->func->nvreg && ctx->func->vregs[ret_idx].rep == XR_REP_F64);
 
                 /* Move payload to RAX before tag writes clobber RCX/RDX */
                 if (is_fp) {
@@ -2972,8 +2982,8 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                 x64_mov_ri32(&ctx->buf, X64_RCX, (uint32_t) ret_xr_tag);
 #ifdef _WIN32
                 /* Win64: store tag to jit_ctx for C callers */
-                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG,
-                            (int32_t) XIR_JIT_CALL_RESULT_TAG_OFFSET, X64_RCX);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XIR_JIT_CALL_RESULT_TAG_OFFSET,
+                           X64_RCX);
 #else
                 /* SysV: RDX = tag for C callers (struct return in RAX+RDX) */
                 x64_mov_ri32(&ctx->buf, X64_RDX, (uint32_t) ret_xr_tag);
@@ -3013,7 +3023,8 @@ static void x64_patch_branches(X64CodegenCtx *ctx) {
                 x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->barrier_back_stub);
                 break;
             default:
-                CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets, "x64_patch: target block OOB");
+                CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets,
+                              "x64_patch: target block OOB");
                 x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->block_offsets[p->target_blk]);
                 break;
         }
@@ -3123,8 +3134,8 @@ static void x64_emit_osr_stubs(X64CodegenCtx *ctx, XirCodegenResult *result) {
 
 #ifdef _WIN32
         for (int xi = 0; xi < X64_CALLEE_XMM_COUNT; xi++) {
-            int32_t xoff = -(int32_t)(X64_XMM_SAVE_OFFSET + xi * 8);
-            x64_movsd_mr(&ctx->buf, X64_RBP, xoff, (X64Xmm)(6 + xi));
+            int32_t xoff = -(int32_t) (X64_XMM_SAVE_OFFSET + xi * 8);
+            x64_movsd_mr(&ctx->buf, X64_RBP, xoff, (X64Xmm) (6 + xi));
         }
 #endif
 
@@ -3268,8 +3279,8 @@ static void x64_emit_resume_entry(X64CodegenCtx *ctx, XirCodegenResult *result) 
 
 #ifdef _WIN32
     for (int xi = 0; xi < X64_CALLEE_XMM_COUNT; xi++) {
-        int32_t xoff = -(int32_t)(X64_XMM_SAVE_OFFSET + xi * 8);
-        x64_movsd_mr(&ctx->buf, X64_RBP, xoff, (X64Xmm)(6 + xi));
+        int32_t xoff = -(int32_t) (X64_XMM_SAVE_OFFSET + xi * 8);
+        x64_movsd_mr(&ctx->buf, X64_RBP, xoff, (X64Xmm) (6 + xi));
     }
 #endif
 

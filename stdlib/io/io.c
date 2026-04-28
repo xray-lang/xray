@@ -558,8 +558,7 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
 
 #ifdef XR_OS_WINDOWS
     DWORD attrs = GetFileAttributesA(path);
-    bool is_symlink = (attrs != INVALID_FILE_ATTRIBUTES) &&
-                      (attrs & FILE_ATTRIBUTE_REPARSE_POINT);
+    bool is_symlink = (attrs != INVALID_FILE_ATTRIBUTES) && (attrs & FILE_ATTRIBUTE_REPARSE_POINT);
 #else
     // Use lstat to detect symlink (stat follows symlinks, lstat does not)
     struct stat lst;
@@ -772,8 +771,7 @@ static XrValue io_readlink(XrayIsolate *X, XrValue *args, int argc) {
 
     char buf[XR_PATH_MAX];
 #ifdef XR_OS_WINDOWS
-    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL,
-                           OPEN_EXISTING,
+    HANDLE h = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
                            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
     if (h == INVALID_HANDLE_VALUE)
         return xr_null();
@@ -923,8 +921,7 @@ static void read_dir_recursive_impl(ReadDirCtx *ctx, const char *path, int depth
         // symlinks (prevents escape via bind mounts or malicious links).
 #ifdef XR_OS_WINDOWS
         DWORD attrs = GetFileAttributesA(fullpath);
-        if (attrs != INVALID_FILE_ATTRIBUTES &&
-            (attrs & FILE_ATTRIBUTE_DIRECTORY) &&
+        if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY) &&
             !(attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
             read_dir_recursive_impl(ctx, fullpath, depth + 1);
         }

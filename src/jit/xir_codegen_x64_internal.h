@@ -53,12 +53,12 @@
 #define X64_ABI_ARG3 X64_R8
 #define X64_ABI_ARG4 X64_R9
 #define X64_ABI_SHADOW_BYTES 32
-#define X64_ABI_STRUCT_RET_SPACE 16   /* XrJitResult return buffer for C calls */
-#define X64_NGPR_CALLER_SAVE 6        /* rax,rcx,rdx,r8,r9,r10 */
-#define X64_NGPR_CALLEE_SAVE_ALLOC 5  /* rbx,rdi,rsi,r12,r13 */
-#define X64_NPUSH_CALLEE_SAVE 7       /* rbx,rdi,rsi,r12,r13,r14,r15 */
-#define X64_NFPR_CALLER_SAVE 6        /* xmm0-xmm5 */
-#define X64_CALLEE_XMM_COUNT 9        /* xmm6-xmm14 (xmm15=scratch) */
+#define X64_ABI_STRUCT_RET_SPACE 16                     /* XrJitResult return buffer for C calls */
+#define X64_NGPR_CALLER_SAVE 6                          /* rax,rcx,rdx,r8,r9,r10 */
+#define X64_NGPR_CALLEE_SAVE_ALLOC 5                    /* rbx,rdi,rsi,r12,r13 */
+#define X64_NPUSH_CALLEE_SAVE 7                         /* rbx,rdi,rsi,r12,r13,r14,r15 */
+#define X64_NFPR_CALLER_SAVE 6                          /* xmm0-xmm5 */
+#define X64_CALLEE_XMM_COUNT 9                          /* xmm6-xmm14 (xmm15=scratch) */
 #define X64_CALLEE_XMM_BYTES (X64_CALLEE_XMM_COUNT * 8) /* MOVSD, 8B each */
 #else
 /*
@@ -76,10 +76,10 @@
 #define X64_ABI_ARG4 X64_RCX
 #define X64_ABI_SHADOW_BYTES 0
 #define X64_ABI_STRUCT_RET_SPACE 0
-#define X64_NGPR_CALLER_SAVE 8        /* rax,rcx,rdx,rsi,rdi,r8,r9,r10 */
-#define X64_NGPR_CALLEE_SAVE_ALLOC 3  /* rbx,r12,r13 */
-#define X64_NPUSH_CALLEE_SAVE 5       /* rbx,r12,r13,r14,r15 */
-#define X64_NFPR_CALLER_SAVE 15       /* all xmm caller-saved */
+#define X64_NGPR_CALLER_SAVE 8       /* rax,rcx,rdx,rsi,rdi,r8,r9,r10 */
+#define X64_NGPR_CALLEE_SAVE_ALLOC 3 /* rbx,r12,r13 */
+#define X64_NPUSH_CALLEE_SAVE 5      /* rbx,r12,r13,r14,r15 */
+#define X64_NFPR_CALLER_SAVE 15      /* all xmm caller-saved */
 #define X64_CALLEE_XMM_COUNT 0
 #define X64_CALLEE_XMM_BYTES 0
 #endif
@@ -103,9 +103,9 @@
  * SPILL_BASE = frame metadata + XMM save area
  */
 #ifdef _WIN32
-#define X64_SPILL_BASE (16 + X64_CALLEE_XMM_BYTES)  /* 16 + 72 = 88 */
+#define X64_SPILL_BASE (16 + X64_CALLEE_XMM_BYTES) /* 16 + 72 = 88 */
 #define X64_JIT_FRAME_BASE (16 + X64_CALLEE_XMM_BYTES)
-#define X64_XMM_SAVE_OFFSET 24  /* first XMM save at [rbp - 24] */
+#define X64_XMM_SAVE_OFFSET 24 /* first XMM save at [rbp - 24] */
 #else
 #define X64_SPILL_BASE 64
 #define X64_JIT_FRAME_BASE 64

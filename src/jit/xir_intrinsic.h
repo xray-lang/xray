@@ -35,7 +35,7 @@
 #define XIR_INTRINSIC_H
 
 #include <stdint.h>
-#include "../base/xdefs.h"  /* XR_FUNC */
+#include "../base/xdefs.h" /* XR_FUNC */
 
 /* Forward-declare XIR types to avoid pulling in the full xir.h header. */
 typedef struct XirFunc XirFunc;
