@@ -626,7 +626,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                                                    ne->type_args, ne->type_arg_count);
                             if (resolved && !XR_TYPE_IS_UNKNOWN(resolved)) {
                                 XrType *arg_type = xa_visit_infer_expr(ctx, ne->arguments[i]);
-                                if (arg_type && !xr_type_assignable(resolved, arg_type)) {
+                                if (arg_type && !xa_typecheck_assignable(resolved, arg_type)) {
                                     XrLocation loc = {.file = ctx->file_path,
                                                       .line = node->line,
                                                       .column = node->column};

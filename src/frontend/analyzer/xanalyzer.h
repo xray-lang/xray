@@ -196,6 +196,7 @@ XR_FUNC bool xa_analyzer_check_assignment(XaAnalyzer *analyzer, XrType *target, 
                                           XrLocation *loc);
 XR_FUNC bool xa_analyzer_check_call(XaAnalyzer *analyzer, XrType *func_type, XrType **arg_types,
                                     int arg_count, XrLocation *loc);
+XR_FUNC bool xa_typecheck_assignable(XrType *target, XrType *source);
 
 // API: Iterable/Iterator structural type checking
 // Check if type satisfies Iterator<T> (has hasNext(): bool and next(): T)

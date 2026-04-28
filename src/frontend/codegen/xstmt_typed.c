@@ -470,7 +470,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                     if (base)
                         check_init = base;
                 }
-                if (check_init && !xr_type_assignable(inferred_compile_type, check_init)) {
+                if (check_init && !xa_typecheck_assignable(inferred_compile_type, check_init)) {
                     // Json/JsonValue→primitive/union: allowed with runtime type check
                     // (OP_CHECKTYPE)
                     if (!xr_is_json_coercion(inferred_compile_type, check_init)) {
