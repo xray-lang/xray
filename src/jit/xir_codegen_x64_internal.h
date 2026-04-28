@@ -15,6 +15,7 @@
 #ifndef XIR_CODEGEN_X64_INTERNAL_H
 #define XIR_CODEGEN_X64_INTERNAL_H
 
+#include <setjmp.h>
 #include "xir_codegen.h"
 #include "xir_codegen_internal.h"
 #include "xir_x64.h"
@@ -33,8 +34,82 @@
 #define X64_SCRATCH_XMM 15  // xmm15 as FP scratch
 #define X64_CORO_REG X64_R15
 #define X64_JIT_CTX_REG X64_R14  // jit_ctx pointer (XrJitScratch*)
-#define X64_SPILL_BASE 64        // must match xir_target_x64.c
+
+/* ========== Platform ABI Abstraction ========== */
+
+#ifdef _WIN32
+/*
+ * Win64 (Microsoft x64) calling convention:
+ *   Integer args:  RCX, RDX, R8, R9   (only 4 register args)
+ *   FP args:       XMM0-XMM3
+ *   Return:        RAX  (struct >8B via hidden first-arg pointer)
+ *   Caller-saved:  RAX, RCX, RDX, R8, R9, R10, R11, XMM0-XMM5
+ *   Callee-saved:  RBX, RDI, RSI, RBP, R12-R15, XMM6-XMM15
+ *   Shadow space:  32 bytes above return address (reserved by caller)
+ *   No red zone.
+ */
+#define X64_ABI_ARG1 X64_RCX
+#define X64_ABI_ARG2 X64_RDX
+#define X64_ABI_ARG3 X64_R8
+#define X64_ABI_ARG4 X64_R9
+#define X64_ABI_SHADOW_BYTES 32
+#define X64_ABI_STRUCT_RET_SPACE 16   /* XrJitResult return buffer for C calls */
+#define X64_NGPR_CALLER_SAVE 6        /* rax,rcx,rdx,r8,r9,r10 */
+#define X64_NGPR_CALLEE_SAVE_ALLOC 5  /* rbx,rdi,rsi,r12,r13 */
+#define X64_NPUSH_CALLEE_SAVE 7       /* rbx,rdi,rsi,r12,r13,r14,r15 */
+#define X64_NFPR_CALLER_SAVE 6        /* xmm0-xmm5 */
+#define X64_CALLEE_XMM_COUNT 9        /* xmm6-xmm14 (xmm15=scratch) */
+#define X64_CALLEE_XMM_BYTES (X64_CALLEE_XMM_COUNT * 8) /* MOVSD, 8B each */
+#else
+/*
+ * System V AMD64 ABI:
+ *   Integer args:  RDI, RSI, RDX, RCX, R8, R9
+ *   FP args:       XMM0-XMM7
+ *   Return:        RAX + RDX  (struct <=16B in two registers)
+ *   Caller-saved:  RAX, RCX, RDX, RSI, RDI, R8, R9, R10, R11, XMM0-XMM15
+ *   Callee-saved:  RBX, RBP, R12-R15
+ *   Red zone:      128 bytes below RSP (leaf functions only)
+ */
+#define X64_ABI_ARG1 X64_RDI
+#define X64_ABI_ARG2 X64_RSI
+#define X64_ABI_ARG3 X64_RDX
+#define X64_ABI_ARG4 X64_RCX
+#define X64_ABI_SHADOW_BYTES 0
+#define X64_ABI_STRUCT_RET_SPACE 0
+#define X64_NGPR_CALLER_SAVE 8        /* rax,rcx,rdx,rsi,rdi,r8,r9,r10 */
+#define X64_NGPR_CALLEE_SAVE_ALLOC 3  /* rbx,r12,r13 */
+#define X64_NPUSH_CALLEE_SAVE 5       /* rbx,r12,r13,r14,r15 */
+#define X64_NFPR_CALLER_SAVE 15       /* all xmm caller-saved */
+#define X64_CALLEE_XMM_COUNT 0
+#define X64_CALLEE_XMM_BYTES 0
+#endif
+
+/*
+ * Frame layout (x86-64, both ABIs):
+ *
+ *   [higher addresses]
+ *     return address      (pushed by CALL)
+ *     saved rbp           (PUSH rbp)             ← rbp points here
+ *     --- SUB RSP, frame_size ---
+ *     [stack_map_ptr]     -8
+ *     [safepoint_id]      -16
+ *     [XMM callee-save area: Win64 only, 9×8=72 bytes at -24..-96]
+ *     --- spill slots ---
+ *     --- PUSH callee-saved GP regs ---           ← RSP after prologue
+ *
+ * SysV:  5 GP pushes (rbx,r12,r13,r14,r15)  = 40B, frame_base=16
+ * Win64: 7 GP pushes (rbx,rdi,rsi,r12,r13,r14,r15) = 56B, frame_base=16+72=88
+ *
+ * SPILL_BASE = frame metadata + XMM save area
+ */
+#ifdef _WIN32
+#define X64_SPILL_BASE (16 + X64_CALLEE_XMM_BYTES)  /* 16 + 72 = 88 */
+#define X64_JIT_FRAME_BASE (16 + X64_CALLEE_XMM_BYTES)
+#define X64_XMM_SAVE_OFFSET 24  /* first XMM save at [rbp - 24] */
+#else
+#define X64_SPILL_BASE 64
 #define X64_JIT_FRAME_BASE 64
+#endif
 
 /* ========== Branch Patch ========== */
 
@@ -112,6 +187,9 @@ typedef struct {
     uint32_t nsmap;
 
     bool had_error;
+    const char *error_reason;
+    jmp_buf bail_jmp;
+
     bool has_deopt;
     bool has_call_c;
     bool has_barriers;
@@ -152,6 +230,20 @@ XR_FUNC void x64_maybe_spill(X64CodegenCtx *ctx, XirRef dst_ref);
 /* Add a deferred branch patch */
 XR_FUNC void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type, uint32_t target_blk, X64Cond cc);
 
+/* Derive XR_TAG_* from const rep for call_arg_tags[] */
+static inline uint8_t const_rep_to_value_tag(uint8_t rep) {
+    switch (rep) {
+        case XR_REP_I64:
+            return 3; /* XR_TAG_I64 */
+        case XR_REP_F64:
+            return 4; /* XR_TAG_F64 */
+        case XR_REP_PTR:
+            return 5; /* XR_TAG_PTR */
+        default:
+            return 0xFF; /* XR_RTAG_UNKNOWN */
+    }
+}
+
 /* ========== Shared helpers (defined in xir_codegen_x64.c) ========== */
 
 /* Write call arguments from pool to jit_ctx->call_args[] */
@@ -182,5 +274,18 @@ XR_FUNC void x64_emit_epilogue(X64CodegenCtx *ctx);
 
 /* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */
 XR_FUNC bool x64_emit_call_ins(X64CodegenCtx *ctx, XirIns *ins, X64Reg rd);
+
+/* Bail out of codegen on invariant violation instead of abort().
+ * Sets had_error and longjmps to the entry point of xir_codegen_x64
+ * so the caller can report failure gracefully. */
+#define CODEGEN_CHECK(ctx, cond, msg)                                                              \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            (ctx)->had_error = true;                                                               \
+            (ctx)->error_reason = (msg);                                                           \
+            xr_log_warning("x64-cg", "bail: %s (%s:%d)", (msg), __FILE__, __LINE__);               \
+            longjmp((ctx)->bail_jmp, 1);                                                           \
+        }                                                                                          \
+    } while (0)
 
 #endif  // XIR_CODEGEN_X64_INTERNAL_H

@@ -36,29 +36,32 @@ vmcase(OP_DEFER) {
     // Required stack space: closure + arg count + arg values
     int needed = 2 + b;
 
-    // Lazy allocate defer stack
-    if (isolate->vm.defer_stack == NULL) {
-        isolate->vm.defer_capacity = XR_DEFER_ENTRIES_MAX;
-        isolate->vm.defer_stack = xr_malloc(sizeof(XrValue) * isolate->vm.defer_capacity);
-        isolate->vm.defer_frame_marks = xr_malloc(sizeof(int) * XR_FRAMES_MAX);
-        for (int j = 0; j < XR_FRAMES_MAX; j++) {
-            isolate->vm.defer_frame_marks[j] = 0;
+    // Lazy allocate per-context defer stack
+    if (vm_ctx->defer_stack == NULL) {
+        vm_ctx->defer_capacity = XR_DEFER_ENTRIES_MAX;
+        vm_ctx->defer_stack = xr_malloc(sizeof(XrValue) * vm_ctx->defer_capacity);
+        vm_ctx->defer_frame_marks = xr_malloc(sizeof(int) * vm_ctx->frame_capacity);
+        // Zero-init all slots.  Active frames whose startfunc ran before this
+        // allocation get mark 0, which is correct because no OP_DEFER could
+        // have fired before this first lazy allocation.
+        for (int j = 0; j < vm_ctx->frame_capacity; j++) {
+            vm_ctx->defer_frame_marks[j] = 0;
         }
     }
 
     // Capacity expansion check
-    while (isolate->vm.defer_count + needed > isolate->vm.defer_capacity) {
-        isolate->vm.defer_capacity *= 2;
-        XR_REALLOC_OR_ABORT(isolate->vm.defer_stack,
-                            sizeof(XrValue) * (size_t) isolate->vm.defer_capacity,
+    while (vm_ctx->defer_count + needed > vm_ctx->defer_capacity) {
+        vm_ctx->defer_capacity *= 2;
+        XR_REALLOC_OR_ABORT(vm_ctx->defer_stack,
+                            sizeof(XrValue) * (size_t) vm_ctx->defer_capacity,
                             "vm defer_stack grow");
     }
 
     // Push to defer stack: closure + arg count + args
-    isolate->vm.defer_stack[isolate->vm.defer_count++] = closure_val;
-    isolate->vm.defer_stack[isolate->vm.defer_count++] = xr_int(b);
+    vm_ctx->defer_stack[vm_ctx->defer_count++] = closure_val;
+    vm_ctx->defer_stack[vm_ctx->defer_count++] = xr_int(b);
     for (int j = 0; j < b; j++) {
-        isolate->vm.defer_stack[isolate->vm.defer_count++] = R(a + 1 + j);
+        vm_ctx->defer_stack[vm_ctx->defer_count++] = R(a + 1 + j);
     }
     vmbreak;
 }
@@ -244,7 +247,7 @@ vmcase(OP_SCOPE_EXIT) {
         while (atomic_load(&scope->count) > 0) {
             if (++spin > 1000) {
                 spin = 0;
-                sched_yield();
+                xr_thread_yield();
             }
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {

@@ -205,6 +205,7 @@ TEST(map_many_entries) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     RUN_TEST_SUITE("Map Tests");
 
     RUN_TEST(map_new_empty);

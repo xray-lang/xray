@@ -70,8 +70,11 @@ fn test_setenv_overwrite(): void {
 fn test_environ(): void {
     let env = os.environ()
     assert(env != null)
-    // PATH should exist in the environment
+    // PATH should exist; Windows may store it as "Path"
     let path = env.get("PATH")
+    if (path == null) {
+        path = env.get("Path")
+    }
     assert(path != null)
 }
 

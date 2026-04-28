@@ -43,8 +43,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/socket.h>
+#include "../../src/os/os_net.h"
 
 /* ========== External Declarations ========== */
 

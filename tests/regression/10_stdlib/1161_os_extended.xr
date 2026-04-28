@@ -97,6 +97,10 @@ fn test_exec_echo(): void {
 
 @test
 fn test_exec_stderr(): void {
+    // Windows _popen cannot capture stderr separately
+    if (os.platform == "windows") {
+        return
+    }
     let result = os.exec("echo error_msg >&2")
     assert(result != null)
     let stderr = result.get("stderr")
@@ -115,10 +119,18 @@ fn test_exec_exit_code(): void {
 
 @test
 fn test_exec_command_output(): void {
-    let result = os.exec("printf 'abc'")
-    assert(result != null)
-    let stdout = result.get("stdout")
-    assert_eq(stdout, "abc")
+    if (os.platform == "windows") {
+        // Windows echo adds \r\n; printf not available
+        let result = os.exec("echo abc")
+        assert(result != null)
+        let stdout = result.get("stdout")
+        assert(stdout != null)
+    } else {
+        let result = os.exec("printf 'abc'")
+        assert(result != null)
+        let stdout = result.get("stdout")
+        assert_eq(stdout, "abc")
+    }
 }
 
 // ===== Edge Cases =====

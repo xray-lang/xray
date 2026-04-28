@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_parser.c - Unit tests for parser (source â†’ AST)
+ * test_parser.c - Unit tests for parser (source â†?AST)
  *
  * KEY CONCEPT:
  *   Verifies that the parser produces correct AST structure for various
@@ -387,6 +387,7 @@ TEST(parser_member_access) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     RUN_TEST_SUITE("Parser Tests");
 
     // Literals

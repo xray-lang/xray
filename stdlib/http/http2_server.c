@@ -105,7 +105,7 @@ static void h2_server_conn_pool_destroy(XrH2Server *server) {
     }
 }
 
-static __attribute__((unused)) XrH2FastConn *h2_conn_get(XrH2Server *server, int fd) {
+static XR_UNUSED XrH2FastConn *h2_conn_get(XrH2Server *server, int fd) {
     if (fd < 0 || fd >= server->conn_pool.size)
         return NULL;
     return &server->conn_pool.conns[fd];
@@ -605,7 +605,7 @@ void xr_h2_server_stop(XrH2Server *server) {
     server->running = false;
 
     if (server->listen_fd >= 0) {
-        shutdown(server->listen_fd, SHUT_RDWR);
+        shutdown(server->listen_fd, XR_SHUT_RDWR);
         xr_close_socket(server->listen_fd);
         server->listen_fd = -1;
     }

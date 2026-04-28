@@ -13,6 +13,7 @@
 #include <string.h>
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_printer.h"
+#include "../test_win_compat.h"
 
 /* ========== Test: XirRef encoding ========== */
 
@@ -282,6 +283,7 @@ static void test_vreg_growth(void) {
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir ===\n");
 
     test_ref_encoding();

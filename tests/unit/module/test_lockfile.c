@@ -11,7 +11,12 @@
 #include "../test_framework.h"
 #include "module/xlockfile.h"
 #include "base/xmalloc.h"
+#ifdef _WIN32
+#include <io.h>
+#include <windows.h>
+#else
 #include <unistd.h>
+#endif
 
 /* ========== Lockfile Creation Tests ========== */
 
@@ -109,7 +114,13 @@ TEST(lockfile_add_dependency) {
 /* ========== Lockfile Save/Load Tests ========== */
 
 TEST(lockfile_save_and_load) {
+#ifdef _WIN32
+    char test_path[MAX_PATH];
+    GetTempPathA(sizeof(test_path), test_path);
+    strncat(test_path, "xray_test_lockfile.lock", sizeof(test_path) - strlen(test_path) - 1);
+#else
     const char *test_path = "/tmp/xray_test_lockfile.lock";
+#endif
 
     // Create and save
     XrLockfile *lock = xr_lockfile_new();

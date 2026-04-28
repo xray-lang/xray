@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -82,6 +83,7 @@ static void test_message_framing(void) {
 // ============================================================================
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("DAP Transport Tests\n");
     printf("==================\n");
     

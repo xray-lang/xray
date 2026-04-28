@@ -13,6 +13,7 @@
 #include <string.h>
 #include <assert.h>
 #include "../../../src/base/xjson.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -418,6 +419,7 @@ TEST(roundtrip_complex) {
 // ============================================================================
 
 int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
     (void)argc; (void)argv;
 
     printf("\n=== LSP JSON Parser Unit Tests ===\n\n");

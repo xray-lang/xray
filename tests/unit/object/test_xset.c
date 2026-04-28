@@ -247,6 +247,7 @@ TEST(set_many_entries) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     RUN_TEST_SUITE("Set Tests");
 
     RUN_TEST(set_new_empty);

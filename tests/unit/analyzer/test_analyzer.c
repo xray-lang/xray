@@ -15,6 +15,7 @@
 #include "xanalyzer_visitor.h"
 #include "xtype_pool.h"
 #include "xray_isolate.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -699,6 +700,7 @@ TEST(class_info_members) {
 // ============================================================================
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("Running analyzer unit tests...\n\n");
 
     // Setup type pool (required for type allocation)

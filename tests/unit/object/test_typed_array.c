@@ -352,6 +352,7 @@ TEST(uint8array_fill_partial) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("\n========== TypedArray Unit Tests ==========\n");
     
     RUN_TEST_SUITE("ArrayBuffer Creation");

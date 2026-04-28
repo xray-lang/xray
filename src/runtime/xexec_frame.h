@@ -184,6 +184,14 @@ typedef struct XrVMContext {
     struct XrICMethodTable **ic_method_tables;
     struct XrICBuiltinTable **ic_builtin_tables;
     uint32_t ic_tables_capacity;
+
+    // Per-coroutine defer stack.  Stored here (not on XrVMState) so that
+    // child coroutines do not corrupt the parent's defer_frame_marks when
+    // their frame indices collide.  Lazy-allocated on first OP_DEFER.
+    XrValue *defer_stack;
+    int defer_count;
+    int defer_capacity;
+    int *defer_frame_marks;
 } XrVMContext;
 
 /*

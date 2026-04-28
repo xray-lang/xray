@@ -85,7 +85,7 @@
 #include "../coro/xyieldable.h"
 #include "../coro/xcoro_registry.h"
 #include "../coro/xtask.h"
-#include <sched.h>
+#include "../os/os_thread.h"
 
 #include "xvm_profiler.h"
 
@@ -509,8 +509,9 @@ startfunc:
     k = (XrValue *) cl->proto->constants.data;
     frame = ci;
 
-    // Check for continuation function return value
-    if (ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
+    // Check for continuation function return value (C frames only;
+    // u.c is a union branch invalid for bytecode frames)
+    if ((ci->call_status & XR_CALL_C) && ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
         base[ci->u.c.result_slot] = ci->u.c.cfunc_result;
         ci->u.c.has_cfunc_result = false;
     }
@@ -576,9 +577,12 @@ startfunc:
         }
     }
 
-    // Record defer start position for current frame
-    if (isolate->vm.defer_frame_marks) {
-        isolate->vm.defer_frame_marks[VM_FRAME_COUNT - 1] = isolate->vm.defer_count;
+    // Record defer start position for current frame.
+    // Only on first entry (pc at proto start).  Re-entries (SPAWN_CONT
+    // continuation, exception handler, OSR) must keep the original mark
+    // so defers registered before the suspension point are not lost.
+    if (vm_ctx->defer_frame_marks && pc == PROTO_CODE_BASE(cl->proto)) {
+        vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1] = vm_ctx->defer_count;
     }
 
     /* ========== Main Loop ========== */
@@ -600,10 +604,11 @@ startfunc:
 // Switch mode macro definitions
 #define vmcase(l) case l:
 #undef vmbreak
-#define vmbreak break
+#define vmbreak goto vm_switch_next
 
     // Standard switch dispatch
     for (;;) {
+    vm_switch_next:
         i = *pc++;
         VM_DEBUG_CHECK();  // Check breakpoint at each instruction
         OpCode op = GET_OPCODE(i);

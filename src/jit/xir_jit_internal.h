@@ -24,7 +24,14 @@
 
 /* ========== JIT function pointer type ========== */
 
+#ifdef _WIN32
+/* Win64: JIT code returns payload in RAX only; tag is written to
+ * jit_ctx->call_result_tag by the JIT epilogue. */
+typedef int64_t (*XirJitFn)(intptr_t, int64_t *);
+#else
+/* System V: JIT code returns XrJitResult in RAX(payload) + RDX(tag). */
 typedef XrJitResult (*XirJitFn)(intptr_t, int64_t *);
+#endif
 
 /* ========== Convenience alias ========== */
 
