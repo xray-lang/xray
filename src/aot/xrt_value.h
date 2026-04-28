@@ -20,86 +20,105 @@
 #include <math.h>
 
 /* =========================================================================
- * Value representation
+ * Value representation — unified with VM's XrValue layout (tag@byte0, payload@byte8).
+ *
+ * MEMORY LAYOUT (16 bytes, struct-of-unions):
+ *   [0]    tag       uint8_t   - type tag (XRT_TAG_*)
+ *   [1]    flags     uint8_t   - reserved (0 in AOT)
+ *   [2-3]  heap_type uint16_t  - AOT object subtype (PTR only)
+ *   [4-7]  ext       uint32_t  - reserved = 0
+ *   [8-15] payload   union     - int64 / double / pointer
+ *
+ * This layout matches runtime/value/xvalue.h's XrValue exactly, enabling
+ * shared binary representation between VM, JIT, and AOT paths.
+ * The struct-of-unions form eliminates the compound literal bug that
+ * existed in the old union-of-structs layout.
  * ========================================================================= */
 
-typedef union XrtValue {
-    struct {
-        int64_t i;
-        uint8_t _pi[7];
-        uint8_t tag;
+typedef struct XrtValue {
+    union {
+        struct {
+            uint8_t tag;         /* [0]   XRT_TAG_* */
+            uint8_t flags;       /* [1]   reserved = 0 */
+            uint16_t heap_type;  /* [2-3] AOT object subtype (PTR only) */
+            uint32_t ext;        /* [4-7] reserved = 0 */
+        };
+        uint64_t descriptor;     /* [0-7] bulk load/compare */
     };
-    struct {
-        double f;
-        uint8_t _pf[7];
-        uint8_t _tf;
+    union {
+        int64_t i;   /* [8-15] integer payload (I64) */
+        double f;    /* [8-15] float payload (F64) */
+        void *ptr;   /* [8-15] heap pointer (PTR/STR_ARC/ARRAY/...) */
     };
-    struct {
-        void *ptr;
-        uint32_t heap_type;
-        uint8_t _pp[3];
-        uint8_t _tp;
-    };
-    uint8_t raw[16];
 } XrtValue;
 
-#define XRT_TAG_NULL 0
-#define XRT_TAG_BOOL 1
-// 2 reserved (was XRT_TAG_FALSE)
-#define XRT_TAG_I64 6
-#define XRT_TAG_F64 12
-#define XRT_TAG_PTR 13
-#define XRT_TAG_STR 14  // static / literal string (not heap-allocated)
-#define XRT_TAG_ARRAY 15
-#define XRT_TAG_MAP 16
+/* Tag constants — base tags match VM's XrValueTag for binary compatibility.
+ * Extended tags (>= 8) are AOT-specific and never appear in VM values. */
+#define XRT_TAG_NULL    0   /* null singleton */
+#define XRT_TAG_BOOL    1   /* bool: payload 0=false, 1=true */
+#define XRT_TAG_I64     3   /* integer (stored in .i as int64) */
+#define XRT_TAG_F64     4   /* float (stored in .f as double) */
+#define XRT_TAG_PTR     5   /* generic heap object pointer */
+#define XRT_TAG_STR    14   /* static / literal string (not heap-allocated) */
+#define XRT_TAG_ARRAY  15
+#define XRT_TAG_MAP    16
 #define XRT_TAG_STRBUF 17
 #define XRT_TAG_CLOSURE 18
-#define XRT_TAG_STR_ARC 19  // heap string (bump-allocated via xrt_arc_alloc)
+#define XRT_TAG_STR_ARC 19  /* heap string (bump-allocated via xrt_arc_alloc) */
 
-// Treat both STR and STR_ARC as strings in generic operations
+/* Treat both STR and STR_ARC as strings in generic operations */
 #define XRT_IS_STR(v) ((v).tag == XRT_TAG_STR || (v).tag == XRT_TAG_STR_ARC)
 
 /* =========================================================================
  * Boxing / unboxing
  *
- * IMPORTANT: XrtValue is a union with 3 anonymous structs. Compound
- * literals like (XrtValue){.f = v, .tag = T} cross struct boundaries —
- * Clang zeros .f because .tag selects a different union member.
- * Always use two-step init or xrt_mkptr/xrt_mkf64 helpers.
+ * The struct-of-unions layout allows direct compound literals for all
+ * payload types — .tag and .i/.f/.ptr live in different struct members,
+ * so there is no union-member conflict.
  * ========================================================================= */
 
-// Helper: build XrtValue with ptr payload (avoids compound literal bug)
+/* Build XrtValue with ptr payload */
 static inline XrtValue xrt_mkptr(void *p, uint8_t tag) {
-    XrtValue r;
-    r.i = 0;
+    XrtValue r = {0};
     r.tag = tag;
     r.ptr = p;
     return r;
 }
 
-// Helper: build XrtValue with double payload
+/* Build XrtValue with double payload */
 static inline XrtValue xrt_mkf64(double v, uint8_t tag) {
-    XrtValue r;
-    r.i = 0;
+    XrtValue r = {0};
     r.tag = tag;
     r.f = v;
     return r;
 }
 
 static inline XrtValue xrt_box_int(int64_t v) {
-    return (XrtValue){.i = v, .tag = XRT_TAG_I64};
+    XrtValue r = {0};
+    r.tag = XRT_TAG_I64;
+    r.i = v;
+    return r;
 }
 
 static inline XrtValue xrt_box_float(double v) {
-    return xrt_mkf64(v, XRT_TAG_F64);
+    XrtValue r = {0};
+    r.tag = XRT_TAG_F64;
+    r.f = v;
+    return r;
 }
 
 static inline XrtValue xrt_box_bool(int64_t v) {
-    return (XrtValue){.i = v ? 1 : 0, .tag = XRT_TAG_BOOL};
+    XrtValue r = {0};
+    r.tag = XRT_TAG_BOOL;
+    r.i = v ? 1 : 0;
+    return r;
 }
 
 static inline XrtValue xrt_box_str(const char *s) {
-    return xrt_mkptr((void *) s, XRT_TAG_STR);
+    XrtValue r = {0};
+    r.tag = XRT_TAG_STR;
+    r.ptr = (void *) s;
+    return r;
 }
 
 static inline int64_t xrt_unbox_int(XrtValue v) {
@@ -159,10 +178,8 @@ static inline int xrt_truthy(XrtValue v) {
 /* =========================================================================
  * Source-level aliases for standalone AOT output
  *
- * These aliases let AOT-generated code reuse familiar XrValue / XR_TAG_*
- * spellings inside standalone output. They do not imply ABI compatibility
- * with runtime/value/xvalue.h's XrValue: the runtime layout and tag numbers
- * are different.
+ * XrtValue is now ABI-compatible with runtime/value/xvalue.h's XrValue:
+ * identical layout (tag@0, payload@8) and base tag numbers (0-7).
  * ========================================================================= */
 
 typedef XrtValue XrValue;
