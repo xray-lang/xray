@@ -64,6 +64,12 @@ void xlsp_set_log_server(XrLspServer *server) {
     tls_server = server;
 }
 
+/* void(*)(void*) wrapper — avoids UB from calling through
+ * an incompatible function pointer type. */
+static void set_log_server_wrapper(void *ctx) {
+    xlsp_set_log_server((XrLspServer *) ctx);
+}
+
 // Default log path (can be overridden by XRAY_LSP_LOG env var or xray.toml)
 #define XLSP_DEFAULT_LOG_PATH "/tmp/xray_lsp.log"
 
@@ -359,7 +365,7 @@ XrLspServer *xlsp_server_new(void) {
     // Pass the log-server init hook so the worker thread shares the same
     // log file / stderr routing as the main loop. The hook is installed
     // before pthread_create inside xlsp_async_new to avoid a data race.
-    server->async = xlsp_async_new((void (*)(void *)) xlsp_set_log_server, server);
+    server->async = xlsp_async_new(set_log_server_wrapper, server);
     if (!server->async) {
         lsp_log("Warning: Failed to create async worker, background tasks disabled");
     }
