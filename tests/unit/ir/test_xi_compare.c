@@ -597,7 +597,7 @@ TEST(cmp_func_call) {
         .label = "function declaration and call",
         .expect_xi_success = true,
         .min_similarity = 0.2,
-        .check_exec = false,  /* Xi closure sub-proto not yet execution-safe */
+        .check_exec = true,
     });
 }
 
@@ -610,7 +610,7 @@ TEST(cmp_func_recursive) {
         .label = "recursive fibonacci",
         .expect_xi_success = true,
         .min_similarity = 0.2,
-        .check_exec = false,  /* Xi closure sub-proto not yet execution-safe */
+        .check_exec = false,  /* needs SETSHARED/GETSHARED for self-reference */
     });
 }
 
