@@ -150,9 +150,10 @@ static void dump_value(FILE *out, const XiValue *v) {
     }
 
     /* Auxiliary info for specific ops */
-    if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN ||
-        v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD ||
-        v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
+    if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
+        fprintf(out, " .%s", (const char *) v->aux);
+    } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN ||
+               v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
     }
 

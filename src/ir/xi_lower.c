@@ -455,6 +455,103 @@ static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
     return result;
 }
 
+static XiValue *lower_member_access(XiLower *l, AstNode *node) {
+    MemberAccessNode *ma = &node->as.member_access;
+    XiValue *obj = lower_expr(l, ma->object);
+    if (!obj) return NULL;
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
+    if (!v) return NULL;
+    v->args[0] = obj;
+    v->aux = (void *) ma->name;  /* field name (borrowed from AST) */
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_member_set(XiLower *l, AstNode *node) {
+    MemberSetNode *ms = &node->as.member_set;
+    XiValue *obj = lower_expr(l, ms->object);
+    XiValue *val = lower_expr(l, ms->value);
+    if (!obj || !val) return NULL;
+
+    struct XrType *result_type = val->type;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, result_type, 2);
+    if (!v) return NULL;
+    v->args[0] = obj;
+    v->args[1] = val;
+    v->aux = (void *) ms->member;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_index_get(XiLower *l, AstNode *node) {
+    IndexGetNode *ig = &node->as.index_get;
+    XiValue *obj = lower_expr(l, ig->array);
+    XiValue *idx = lower_expr(l, ig->index);
+    if (!obj || !idx) return NULL;
+
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
+    if (!v) return NULL;
+    v->args[0] = obj;
+    v->args[1] = idx;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_index_set(XiLower *l, AstNode *node) {
+    IndexSetNode *is_node = &node->as.index_set;
+    XiValue *obj = lower_expr(l, is_node->array);
+    XiValue *idx = lower_expr(l, is_node->index);
+    XiValue *val = lower_expr(l, is_node->value);
+    if (!obj || !idx || !val) return NULL;
+
+    struct XrType *result_type = val->type;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, result_type, 3);
+    if (!v) return NULL;
+    v->args[0] = obj;
+    v->args[1] = idx;
+    v->args[2] = val;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
+    ArrayLiteralNode *arr = &node->as.array_literal;
+    int count = arr->count;
+
+    /* Evaluate all elements first */
+    XiValue *elem_vals[64];
+    int n = count > 64 ? 64 : count;
+    for (int i = 0; i < n; i++) {
+        elem_vals[i] = lower_expr(l, arr->elements[i]);
+    }
+
+    /* Create array: XI_ARRAY_NEW with element count as aux */
+    struct XrType *result_type = node_type(l, node);
+    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
+    XiValue *arr_val = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW, result_type, 1);
+    if (!arr_val) return NULL;
+    arr_val->args[0] = cap;
+    arr_val->line = (uint32_t) node->line;
+
+    /* Populate: INDEX_SET for each element */
+    for (int i = 0; i < n; i++) {
+        XiValue *idx = xi_const_int(l->func, l->cur_block, i, l->type_int);
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
+                                     l->type_void, 3);
+        if (!set) break;
+        set->args[0] = arr_val;
+        set->args[1] = idx;
+        set->args[2] = elem_vals[i];
+        set->flags |= XI_FLAG_SIDE_EFFECT;
+    }
+    return arr_val;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     uint16_t nargs = (uint16_t)(call->arg_count + 1);  /* callee + args */
@@ -575,6 +672,18 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
         case AST_TERNARY:
             return lower_ternary(l, node);
 
+        /* Member / index access */
+        case AST_MEMBER_ACCESS:
+            return lower_member_access(l, node);
+        case AST_MEMBER_SET:
+            return lower_member_set(l, node);
+        case AST_INDEX_GET:
+            return lower_index_get(l, node);
+        case AST_INDEX_SET:
+            return lower_index_set(l, node);
+        case AST_ARRAY_LITERAL:
+            return lower_array_literal(l, node);
+
         default:
             /* Unsupported expression: emit null placeholder */
             return xi_const_null(l->func, l->cur_block, l->type_null);
@@ -619,6 +728,23 @@ static void lower_print(XiLower *l, AstNode *node) {
     }
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
+}
+
+static void lower_throw(XiLower *l, AstNode *node) {
+    ThrowStmtNode *t = &node->as.throw_stmt;
+    XiValue *val = lower_expr(l, t->expression);
+    if (!val) return;
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_void, 1);
+    if (!v) return;
+    v->args[0] = val;
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    v->line = (uint32_t) node->line;
+
+    /* Throw terminates the block — no successors */
+    l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+    l->cur_block->control = val;
+    l->cur_block = NULL;
 }
 
 static void lower_return(XiLower *l, AstNode *node) {
@@ -834,12 +960,18 @@ static void lower_stmt(XiLower *l, AstNode *node) {
             lower_continue(l);
             break;
 
+        case AST_THROW_STMT:
+            lower_throw(l, node);
+            break;
+
         /* Expressions that appear as statements (assignment, call, etc.) */
         case AST_ASSIGNMENT:
         case AST_COMPOUND_ASSIGNMENT:
         case AST_CALL_EXPR:
         case AST_INC:
         case AST_DEC:
+        case AST_MEMBER_SET:
+        case AST_INDEX_SET:
             lower_expr(l, node);
             break;
 
