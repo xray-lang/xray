@@ -104,6 +104,7 @@ void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
     ctx->instruction_count = 0;
     ctx->preempt_pending = false;
     ctx->last_nret = 0;
+    ctx->defer_count = 0;
     ctx->trace_execution = false;
     ctx->isolate = X;
 }
@@ -820,6 +821,17 @@ void xr_coro_free(XrCoroutine *coro) {
         coro->vm_ctx.struct_ret_arena_used = 0;
         coro->vm_ctx.struct_ret_arena_cap = 0;
     }
+    // Per-coroutine defer stack
+    if (coro->vm_ctx.defer_stack) {
+        xr_free(coro->vm_ctx.defer_stack);
+        coro->vm_ctx.defer_stack = NULL;
+    }
+    if (coro->vm_ctx.defer_frame_marks) {
+        xr_free(coro->vm_ctx.defer_frame_marks);
+        coro->vm_ctx.defer_frame_marks = NULL;
+    }
+    coro->vm_ctx.defer_count = 0;
+    coro->vm_ctx.defer_capacity = 0;
     // Per-coroutine inline caches (mirrors xr_coro_release_resources path
     // for coros that go straight to the GC destructor).
     xr_vm_ctx_free_ic_tables(&coro->vm_ctx);
@@ -886,6 +898,17 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->vm_ctx.stack_top = coro->vm_ctx.stack;
     coro->vm_ctx.frame_count = 0;
     coro->vm_ctx.handler_count = 0;
+    // Defer: free allocated buffers (most child coros never use defer)
+    if (coro->vm_ctx.defer_stack) {
+        xr_free(coro->vm_ctx.defer_stack);
+        coro->vm_ctx.defer_stack = NULL;
+    }
+    if (coro->vm_ctx.defer_frame_marks) {
+        xr_free(coro->vm_ctx.defer_frame_marks);
+        coro->vm_ctx.defer_frame_marks = NULL;
+    }
+    coro->vm_ctx.defer_count = 0;
+    coro->vm_ctx.defer_capacity = 0;
     coro->arg_count = 0;
     coro->sched_link = NULL;
     coro->next = NULL;
