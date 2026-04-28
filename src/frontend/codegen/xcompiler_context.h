@@ -89,6 +89,8 @@ struct XrCompilerContext {
     ConstEntry *const_entries;
     int const_entry_count;
     int const_entry_capacity;
+
+    bool use_xi_pipeline;  // opt-in: use Xi IR pipeline instead of legacy codegen
 };
 
 /*

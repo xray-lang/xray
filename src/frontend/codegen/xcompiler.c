@@ -28,6 +28,7 @@
 #include "xfusion.h"
 #include "xinline.h"
 #include "../../base/xmalloc.h"
+#include "../../ir/xi_pipeline.h"
 #include "../../runtime/object/xstring.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../runtime/class/xclass.h"
@@ -1738,7 +1739,22 @@ XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         }
     }
 
-    // Code generation
+    // Xi IR pipeline path: opt-in via use_xi_pipeline flag.
+    // Falls back to legacy codegen if the pipeline fails.
+    if (ctx->use_xi_pipeline) {
+        XiPipelineConfig pipe_cfg = xi_pipeline_default_config();
+        XiPipelineResult pipe_res = xi_pipeline_compile_program(
+            ast, ctx->analyzer, ctx->X, &pipe_cfg);
+        if (pipe_res.status == XI_PIPE_OK && pipe_res.proto != NULL) {
+            XrProto *proto = pipe_res.proto;
+            xi_pipeline_result_free(&pipe_res);
+            return proto;
+        }
+        // Fallback: pipeline failed, continue with legacy codegen
+        xi_pipeline_result_free(&pipe_res);
+    }
+
+    // Legacy code generation
     XrCompiler compiler;
     xr_compiler_init(ctx, &compiler, FUNCTION_SCRIPT);
 
