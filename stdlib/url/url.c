@@ -27,6 +27,7 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/runtime/value/xvalue_format.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -670,7 +671,12 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
             xr_ctxbuf_putc(&buf, '=');
             ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
         } else if (!XR_IS_NULL(val)) {
+            // Stringify non-string primitives (int, float, bool) so
+            // buildQuery({page: 1}) produces "page=1" not "page=".
+            XrString *vs = xr_value_to_string(X, val);
             xr_ctxbuf_putc(&buf, '=');
+            if (vs)
+                ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
         }
     }
 
