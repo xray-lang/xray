@@ -88,8 +88,7 @@ static int init_global_cache(void) {
  */
 static bool create_tarball(const char *output_path) {
     const char *const argv[] = {
-        "tar",      "-czf",      output_path, "--exclude=.git", "--exclude=node_modules",
-        ".",        NULL,
+        "tar", "-czf", output_path, "--exclude=.git", "--exclude=node_modules", ".", NULL,
     };
     XrProcId pid = xr_proc_spawn("tar", argv);
     if (pid == XR_PROC_INVALID)

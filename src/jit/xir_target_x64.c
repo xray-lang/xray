@@ -38,7 +38,7 @@
 #include "xir_target.h"
 #include "../base/xchecks.h"
 #include "xir_x64.h"
-#include "xir_codegen_x64_internal.h"  /* X64_NGPR_CALLER_SAVE etc. */
+#include "xir_codegen_x64_internal.h" /* X64_NGPR_CALLER_SAVE etc. */
 
 #ifdef _WIN32
 /* Win64: caller-saved (6) then callee-saved (5).
@@ -47,9 +47,18 @@
  * Total: 11 allocatable */
 static const int x64_gpr_alloc[] = {
     /* Caller-saved (first 6 entries) */
-    X64_RAX, X64_RCX, X64_RDX, X64_R8, X64_R9, X64_R10,
+    X64_RAX,
+    X64_RCX,
+    X64_RDX,
+    X64_R8,
+    X64_R9,
+    X64_R10,
     /* Callee-saved (next 5 entries) */
-    X64_RBX, X64_RDI, X64_RSI, X64_R12, X64_R13,
+    X64_RBX,
+    X64_RDI,
+    X64_RSI,
+    X64_R12,
+    X64_R13,
 };
 #else
 /* System V: caller-saved (8) then callee-saved (3).
@@ -58,9 +67,18 @@ static const int x64_gpr_alloc[] = {
  * Total: 11 allocatable */
 static const int x64_gpr_alloc[] = {
     /* Caller-saved (first 8 entries) */
-    X64_RAX, X64_RCX, X64_RDX, X64_RSI, X64_RDI, X64_R8, X64_R9, X64_R10,
+    X64_RAX,
+    X64_RCX,
+    X64_RDX,
+    X64_RSI,
+    X64_RDI,
+    X64_R8,
+    X64_R9,
+    X64_R10,
     /* Callee-saved (next 3 entries) */
-    X64_RBX, X64_R12, X64_R13,
+    X64_RBX,
+    X64_R12,
+    X64_R13,
 };
 #endif
 
@@ -75,8 +93,8 @@ static const int x64_fpr_alloc[] = {
 const XirTarget xir_target_x64 = {
     .name = "x86-64",
 
-    .ngpr = 11,  /* X64_NGPR_CALLER_SAVE + X64_NGPR_CALLEE_SAVE_ALLOC */
-    .nfpr = 15,  /* xmm0-xmm14 */
+    .ngpr = 11, /* X64_NGPR_CALLER_SAVE + X64_NGPR_CALLEE_SAVE_ALLOC */
+    .nfpr = 15, /* xmm0-xmm14 */
 
     .gpr_alloc = x64_gpr_alloc,
     .fpr_alloc = x64_fpr_alloc,
@@ -88,7 +106,7 @@ const XirTarget xir_target_x64 = {
     .coro_reg = X64_R15,
     .sp_reg = X64_RSP,
     .fp_reg = X64_RBP,
-    .lr_reg = -1,  /* x86-64 uses stack for return address */
+    .lr_reg = -1, /* x86-64 uses stack for return address */
 
     .frame_base = X64_JIT_FRAME_BASE,
     .spill_base = X64_SPILL_BASE,

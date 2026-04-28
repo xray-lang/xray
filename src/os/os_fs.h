@@ -72,8 +72,8 @@ typedef enum XrFsKind {
 
 typedef struct XrFsStat {
     XrFsKind kind;
-    uint64_t size;      // file size in bytes; 0 for non-files
-    int64_t mtime_ns;   // last-modified time in ns since unix epoch; 0 if unknown
+    uint64_t size;     // file size in bytes; 0 for non-files
+    int64_t mtime_ns;  // last-modified time in ns since unix epoch; 0 if unknown
 } XrFsStat;
 
 // Inspect `path`. Returns 0 on success, -1 on error (path missing,

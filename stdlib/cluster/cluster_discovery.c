@@ -416,7 +416,8 @@ void xr_cluster_discovery_stop(XrCluster *c) {
         struct ip_mreq mreq;
         mreq.imr_multiaddr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
         mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-        setsockopt(disc->mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, (const char *) &mreq, sizeof(mreq));
+        setsockopt(disc->mcast_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, (const char *) &mreq,
+                   sizeof(mreq));
         xr_closesocket(disc->mcast_fd);
         disc->mcast_fd = -1;
     }

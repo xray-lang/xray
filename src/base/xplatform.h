@@ -110,7 +110,8 @@ static __forceinline int __builtin_sub_overflow(int64_t a, int64_t b, int64_t *r
 }
 static __forceinline int __builtin_mul_overflow(int64_t a, int64_t b, int64_t *res) {
     *res = a * b;
-    if (a == 0 || b == 0) return 0;
+    if (a == 0 || b == 0)
+        return 0;
     return (*res / a != b);
 }
 #endif  // XR_COMPILER_MSVC builtins
@@ -119,9 +120,9 @@ static __forceinline int __builtin_mul_overflow(int64_t a, int64_t b, int64_t *r
 
 #if defined(XR_COMPILER_MSVC)
 #include <string.h>
-#define strcasecmp  _stricmp
+#define strcasecmp _stricmp
 #define strncasecmp _strnicmp
-#define strtok_r    strtok_s
+#define strtok_r strtok_s
 #endif
 
 #endif  // XPLATFORM_H

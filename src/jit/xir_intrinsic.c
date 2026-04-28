@@ -43,11 +43,11 @@ typedef struct {
 /* Populated once at first call; relies on linker-resolved addresses. */
 static IntrinsicMapEntry intrinsic_map[] = {
     /* Object / property access */
-    {NULL, XR_INTRIN_GETPROP},       /* xr_jit_getprop     */
-    {NULL, XR_INTRIN_INDEX_GET},     /* xr_jit_index_get   */
-    {NULL, XR_INTRIN_INDEX_SET},     /* xr_jit_index_set   */
-    {NULL, XR_INTRIN_TARRAY_GET},    /* xr_jit_tarray_get  */
-    {NULL, XR_INTRIN_TARRAY_SET},    /* xr_jit_tarray_set  */
+    {NULL, XR_INTRIN_GETPROP},    /* xr_jit_getprop     */
+    {NULL, XR_INTRIN_INDEX_GET},  /* xr_jit_index_get   */
+    {NULL, XR_INTRIN_INDEX_SET},  /* xr_jit_index_set   */
+    {NULL, XR_INTRIN_TARRAY_GET}, /* xr_jit_tarray_get  */
+    {NULL, XR_INTRIN_TARRAY_SET}, /* xr_jit_tarray_set  */
 
     /* Map ops */
     {NULL, XR_INTRIN_MAP_GET},       /* xr_jit_map_get       */
@@ -60,38 +60,38 @@ static IntrinsicMapEntry intrinsic_map[] = {
     {NULL, XR_INTRIN_STRBUF_FINISH}, /* xrt_strbuf_finish_sentinel */
 
     /* String ops */
-    {NULL, XR_INTRIN_SUBSTRING},     /* xr_jit_substring  */
-    {NULL, XR_INTRIN_STR_REPEAT},    /* xr_jit_str_repeat */
-    {NULL, XR_INTRIN_CHR},           /* xr_jit_chr        */
+    {NULL, XR_INTRIN_SUBSTRING},  /* xr_jit_substring  */
+    {NULL, XR_INTRIN_STR_REPEAT}, /* xr_jit_str_repeat */
+    {NULL, XR_INTRIN_CHR},        /* xr_jit_chr        */
 
     /* Method dispatch */
     {NULL, XR_INTRIN_INVOKE_METHOD}, /* xrt_invoke_method_sentinel */
 
     /* Shared variables */
-    {NULL, XR_INTRIN_GET_SHARED},    /* xr_jit_get_shared */
-    {NULL, XR_INTRIN_SET_SHARED},    /* xr_jit_set_shared */
+    {NULL, XR_INTRIN_GET_SHARED}, /* xr_jit_get_shared */
+    {NULL, XR_INTRIN_SET_SHARED}, /* xr_jit_set_shared */
 
     /* I/O */
-    {NULL, XR_INTRIN_PRINT},         /* xr_jit_print */
+    {NULL, XR_INTRIN_PRINT}, /* xr_jit_print */
 
     /* Tagged arithmetic fallback */
-    {NULL, XR_INTRIN_RT_ADD},        /* xr_jit_rt_add */
-    {NULL, XR_INTRIN_RT_SUB},        /* xr_jit_rt_sub */
-    {NULL, XR_INTRIN_RT_MUL},        /* xr_jit_rt_mul */
-    {NULL, XR_INTRIN_RT_DIV},        /* xr_jit_rt_div */
-    {NULL, XR_INTRIN_RT_MOD},        /* xr_jit_rt_mod */
+    {NULL, XR_INTRIN_RT_ADD}, /* xr_jit_rt_add */
+    {NULL, XR_INTRIN_RT_SUB}, /* xr_jit_rt_sub */
+    {NULL, XR_INTRIN_RT_MUL}, /* xr_jit_rt_mul */
+    {NULL, XR_INTRIN_RT_DIV}, /* xr_jit_rt_div */
+    {NULL, XR_INTRIN_RT_MOD}, /* xr_jit_rt_mod */
 
     /* Exception handling */
-    {NULL, XR_INTRIN_THROW},         /* xr_jit_throw */
+    {NULL, XR_INTRIN_THROW}, /* xr_jit_throw */
 
     /* Json struct promotion */
     {NULL, XR_INTRIN_JSON_NEW_SHAPE}, /* xr_json_new_with_shape */
 
     /* Type checking */
-    {NULL, XR_INTRIN_TYPEOF},        /* xr_jit_typeof */
+    {NULL, XR_INTRIN_TYPEOF}, /* xr_jit_typeof */
 };
 
-#define INTRINSIC_MAP_COUNT (int)(sizeof(intrinsic_map) / sizeof(intrinsic_map[0]))
+#define INTRINSIC_MAP_COUNT (int) (sizeof(intrinsic_map) / sizeof(intrinsic_map[0]))
 
 /* One-time init: fill fn_ptr slots from linker symbols.  Thread-safety is
  * not required — AOT compilation is single-threaded. */
@@ -180,7 +180,7 @@ XR_FUNC void xir_resolve_intrinsics(XirFunc *func) {
                 if (v > XR_INTRIN_NONE && v < XR_INTRIN_COUNT)
                     id = (int) v;
                 else
-                    continue;  /* not an intrinsic — unrelated i64 const */
+                    continue; /* not an intrinsic — unrelated i64 const */
             } else {
                 continue;
             }
@@ -196,32 +196,59 @@ XR_FUNC void xir_resolve_intrinsics(XirFunc *func) {
 
 XR_FUNC const char *xir_intrinsic_name(int id) {
     switch (id) {
-        case XR_INTRIN_GETPROP:        return "getprop";
-        case XR_INTRIN_INDEX_GET:      return "index_get";
-        case XR_INTRIN_INDEX_SET:      return "index_set";
-        case XR_INTRIN_TARRAY_GET:     return "tarray_get";
-        case XR_INTRIN_TARRAY_SET:     return "tarray_set";
-        case XR_INTRIN_MAP_GET:        return "map_get";
-        case XR_INTRIN_MAP_SET:        return "map_set";
-        case XR_INTRIN_MAP_INCREMENT:  return "map_increment";
-        case XR_INTRIN_STRBUF_NEW:     return "strbuf_new";
-        case XR_INTRIN_STRBUF_APPEND:  return "strbuf_append";
-        case XR_INTRIN_STRBUF_FINISH:  return "strbuf_finish";
-        case XR_INTRIN_SUBSTRING:      return "substring";
-        case XR_INTRIN_STR_REPEAT:     return "str_repeat";
-        case XR_INTRIN_CHR:            return "chr";
-        case XR_INTRIN_INVOKE_METHOD:  return "invoke_method";
-        case XR_INTRIN_GET_SHARED:     return "get_shared";
-        case XR_INTRIN_SET_SHARED:     return "set_shared";
-        case XR_INTRIN_PRINT:          return "print";
-        case XR_INTRIN_RT_ADD:         return "rt_add";
-        case XR_INTRIN_RT_SUB:         return "rt_sub";
-        case XR_INTRIN_RT_MUL:         return "rt_mul";
-        case XR_INTRIN_RT_DIV:         return "rt_div";
-        case XR_INTRIN_RT_MOD:         return "rt_mod";
-        case XR_INTRIN_THROW:          return "throw";
-        case XR_INTRIN_JSON_NEW_SHAPE: return "json_new_shape";
-        case XR_INTRIN_TYPEOF:         return "typeof";
-        default:                       return "intrin?";
+        case XR_INTRIN_GETPROP:
+            return "getprop";
+        case XR_INTRIN_INDEX_GET:
+            return "index_get";
+        case XR_INTRIN_INDEX_SET:
+            return "index_set";
+        case XR_INTRIN_TARRAY_GET:
+            return "tarray_get";
+        case XR_INTRIN_TARRAY_SET:
+            return "tarray_set";
+        case XR_INTRIN_MAP_GET:
+            return "map_get";
+        case XR_INTRIN_MAP_SET:
+            return "map_set";
+        case XR_INTRIN_MAP_INCREMENT:
+            return "map_increment";
+        case XR_INTRIN_STRBUF_NEW:
+            return "strbuf_new";
+        case XR_INTRIN_STRBUF_APPEND:
+            return "strbuf_append";
+        case XR_INTRIN_STRBUF_FINISH:
+            return "strbuf_finish";
+        case XR_INTRIN_SUBSTRING:
+            return "substring";
+        case XR_INTRIN_STR_REPEAT:
+            return "str_repeat";
+        case XR_INTRIN_CHR:
+            return "chr";
+        case XR_INTRIN_INVOKE_METHOD:
+            return "invoke_method";
+        case XR_INTRIN_GET_SHARED:
+            return "get_shared";
+        case XR_INTRIN_SET_SHARED:
+            return "set_shared";
+        case XR_INTRIN_PRINT:
+            return "print";
+        case XR_INTRIN_RT_ADD:
+            return "rt_add";
+        case XR_INTRIN_RT_SUB:
+            return "rt_sub";
+        case XR_INTRIN_RT_MUL:
+            return "rt_mul";
+        case XR_INTRIN_RT_DIV:
+            return "rt_div";
+        case XR_INTRIN_RT_MOD:
+            return "rt_mod";
+        case XR_INTRIN_THROW:
+            return "throw";
+        case XR_INTRIN_JSON_NEW_SHAPE:
+            return "json_new_shape";
+        case XR_INTRIN_TYPEOF:
+            return "typeof";
+        default:
+            return "intrin?";
     }
 }

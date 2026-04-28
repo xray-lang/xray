@@ -51,7 +51,7 @@ extern "C" {
 // cross-platform behaviour.
 typedef int64_t XrProcId;
 
-#define XR_PROC_INVALID ((XrProcId) -1)
+#define XR_PROC_INVALID ((XrProcId) - 1)
 
 // Spawn a child process running `prog`. `argv` is a NULL-terminated
 // array; argv[0] is conventionally the program name. The child

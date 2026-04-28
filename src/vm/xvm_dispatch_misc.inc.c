@@ -52,8 +52,7 @@ vmcase(OP_DEFER) {
     // Capacity expansion check
     while (vm_ctx->defer_count + needed > vm_ctx->defer_capacity) {
         vm_ctx->defer_capacity *= 2;
-        XR_REALLOC_OR_ABORT(vm_ctx->defer_stack,
-                            sizeof(XrValue) * (size_t) vm_ctx->defer_capacity,
+        XR_REALLOC_OR_ABORT(vm_ctx->defer_stack, sizeof(XrValue) * (size_t) vm_ctx->defer_capacity,
                             "vm defer_stack grow");
     }
 

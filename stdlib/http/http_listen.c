@@ -1036,7 +1036,8 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
 #ifdef TCP_NOTSENT_LOWAT
         {
             int lowat = 16384;
-            setsockopt(client_fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat, sizeof(lowat));
+            setsockopt(client_fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat,
+                       sizeof(lowat));
         }
 #endif
 
