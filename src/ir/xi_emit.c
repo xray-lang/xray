@@ -21,6 +21,8 @@
 #include "../runtime/value/xvalue.h"
 #include "../runtime/object/xstring.h"
 #include "../../include/xray_isolate.h"
+#include "../runtime/xisolate_api.h"
+#include "../runtime/symbol/xsymbol_table.h"
 #include <string.h>
 
 /* ========== Emit Context ========== */
@@ -207,6 +209,25 @@ static int add_const_string(EmitCtx *ctx, const char *str) {
     return idx;
 }
 
+/* Add a method name to the proto's local symbol table.  Returns the local
+ * symbol index suitable for OP_INVOKE's B field.  Requires an isolate
+ * (for the global symbol table); returns -1 on error. */
+static int add_symbol(EmitCtx *ctx, const char *name) {
+    if (!ctx->isolate || !name) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return -1;
+    }
+    XrSymbolTable *st = (XrSymbolTable *)xr_isolate_get_symbol_table(ctx->isolate);
+    XR_DCHECK(st != NULL, "isolate must have a symbol table");
+    SymbolId global = xr_symbol_register_in_table(st, name);
+    int local = xr_proto_add_symbol(ctx->proto, (int32_t)global);
+    if (local > MAXARG_B) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+        return -1;
+    }
+    return local;
+}
+
 /* ========== Last-Use Computation ========== */
 
 /* Pre-compute last-use ordinals for register recycling.
@@ -264,6 +285,42 @@ static void compute_last_use(EmitCtx *ctx) {
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (phi->value.id < ctx->reg_map_size)
                 ctx->last_use[phi->value.id] = UINT32_MAX;
+        }
+    }
+
+    /* Loop-invariant liveness: values defined outside a loop but used inside
+     * must stay live for the entire loop — the single RPO walk above only
+     * records one ordinal per use, but the VM re-executes loop blocks.
+     *
+     * Algorithm: detect back edges (succ.rpo <= block.rpo).  For each back
+     * edge target (loop header), any value whose def-block RPO < header RPO
+     * and whose last_use falls inside the loop range must be pinned. */
+    for (uint32_t r = 1; r <= ctx->rpo_count; r++) {
+        XiBlock *blk = ctx->rpo_order[r];
+        if (!blk) continue;
+        for (int s = 0; s < 2; s++) {
+            XiBlock *succ = blk->succs[s];
+            if (!succ || succ->rpo == 0) continue;
+            if (succ->rpo > blk->rpo) continue;   /* not a back edge */
+
+            /* Back edge: blk → succ.  Loop spans RPO [succ->rpo, blk->rpo].
+             * Pin every value defined before the loop that is used inside. */
+            uint32_t loop_lo = succ->rpo;
+            uint32_t loop_hi = blk->rpo;
+            for (uint32_t lr = loop_lo; lr <= loop_hi; lr++) {
+                XiBlock *lb = ctx->rpo_order[lr];
+                if (!lb) continue;
+                for (uint32_t i = 0; i < lb->nvalues; i++) {
+                    XiValue *v = lb->values[i];
+                    for (uint16_t a = 0; a < v->nargs; a++) {
+                        XiValue *arg = v->args[a];
+                        if (!arg || arg->id >= ctx->reg_map_size) continue;
+                        if (!arg->block) continue;
+                        if (arg->block->rpo > 0 && arg->block->rpo < loop_lo)
+                            ctx->last_use[arg->id] = UINT32_MAX;
+                    }
+                }
+            }
         }
     }
 }
@@ -562,8 +619,16 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
             uint8_t obj = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK) return;
-            int field_idx = (int)v->aux_int;
-            emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, obj, (uint8_t)field_idx));
+            /* aux = property name string (set by lower_member_access) */
+            const char *prop = (const char *)v->aux;
+            if (prop) {
+                int sym = add_symbol(ctx, prop);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, (uint8_t)sym));
+            } else {
+                /* Fallback: numeric field index from aux_int */
+                emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, obj, (uint8_t)v->aux_int));
+            }
             break;
         }
         case XI_STORE_FIELD: {
@@ -571,8 +636,14 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             uint8_t obj = reg_of(ctx, v->args[0]);
             uint8_t val = reg_of(ctx, v->args[1]);
             if (ctx->status != XI_EMIT_OK) return;
-            int field_idx = (int)v->aux_int;
-            emit_inst(ctx, CREATE_ABC(OP_SETFIELD, obj, (uint8_t)field_idx, val));
+            const char *prop = (const char *)v->aux;
+            if (prop) {
+                int sym = add_symbol(ctx, prop);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, (uint8_t)sym, val));
+            } else {
+                emit_inst(ctx, CREATE_ABC(OP_SETFIELD, obj, (uint8_t)v->aux_int, val));
+            }
             break;
         }
 
@@ -839,11 +910,11 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                     emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
 
-            /* Method name -> constant pool -> INVOKE */
+            /* Method name -> proto symbol table -> INVOKE */
             const char *method_name = (const char *)v->aux;
-            int ki = add_const_string(ctx, method_name);
+            int sym = add_symbol(ctx, method_name);
             if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_INVOKE, recv, (uint8_t)ki, nargs + 1));
+            emit_inst(ctx, CREATE_ABC(OP_INVOKE, recv, (uint8_t)sym, nargs + 1));
 
             if (dst != recv)
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, recv, 0));
@@ -932,6 +1003,32 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             /* For now, cast is just a move (runtime check happens via IS) */
             if (dst != src)
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+            break;
+        }
+
+        /* Iteration protocol: desugar to method calls.
+         * XI_ITER_NEW(coll) → base = coll.iterator() via OP_INVOKE
+         * XI_ITER_VALID(iter) → base = iter.hasNext() via OP_INVOKE
+         * XI_ITER_NEXT(iter)  → base = iter.next() via OP_INVOKE */
+        case XI_ITER_NEW: case XI_ITER_VALID: case XI_ITER_NEXT: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t obj = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+
+            const char *method =
+                v->op == XI_ITER_NEW   ? "iterator" :
+                v->op == XI_ITER_VALID ? "hasNext"  : "next";
+            int sym = add_symbol(ctx, method);
+            if (ctx->status != XI_EMIT_OK) return;
+
+            /* OP_INVOKE calling convention:
+             *   R[base]   = return value
+             *   R[base+1] = receiver (this)
+             *   B = local symbol index, C = nargs (excl. receiver) */
+            uint8_t base = dst;  /* reuse dst as invoke base */
+            if (obj != base + 1)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 1, obj, 0));
+            emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t)sym, 1));
             break;
         }
 

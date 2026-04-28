@@ -1954,72 +1954,118 @@ static void lower_for(XiLower *l, AstNode *node) {
 /*
  * for (item in collection) { body }
  *
- * Lowered to:
- *   iter = ITER_NEW collection
+ * Index-based desugaring (matches legacy compiler for arrays/strings):
+ *   __col = collection        ; cache once
+ *   __len = __col.length      ; LOAD_FIELD "length"
+ *   __idx = 0
  *   jmp cond_blk
- * cond_blk:             ; loop header (unsealed)
- *   valid = ITER_VALID iter
- *   if valid → body_blk, exit_blk
+ * cond_blk:                   ; loop header (unsealed until back edge)
+ *   cur_idx = phi(0, new_idx)
+ *   cond = cur_idx < __len
+ *   if cond → body_blk, exit_blk
  * body_blk:
- *   item = ITER_NEXT iter
+ *   item = __col[cur_idx]     ; INDEX_GET
  *   ... body ...
- *   jmp cond_blk        ; back edge
+ *   jmp incr_blk
+ * incr_blk:
+ *   new_idx = cur_idx + 1
+ *   jmp cond_blk              ; back edge
  * exit_blk:
  *   ...
  */
-static void lower_for_in(XiLower *l, AstNode *node) {
+/*
+ * Common loop scaffold used by both range and index-based for-in.
+ *
+ * Caller provides:
+ *   - init_val : initial value for the loop variable (e.g. 0 or range.start)
+ *   - limit    : upper bound (e.g. coll.length or range.end)
+ *   - item_name, item_type : loop variable binding
+ *   - get_item : if non-NULL, XI_INDEX_GET source; if NULL, the loop variable
+ *                itself IS the item (range mode: item = __idx).
+ */
+static void lower_for_in_loop(XiLower *l, AstNode *node,
+                               XiValue *init_val, XiValue *limit,
+                               XiValue *get_item_coll) {
     ForInStmtNode *s = &node->as.for_in_stmt;
+    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
 
-    /* Evaluate collection and create iterator */
-    XiValue *coll = lower_expr(l, s->collection);
-    if (!coll || !l->cur_block) return;
+    int idx_var = var_lookup_or_create(l, "__for_idx", l->type_int);
+    int lim_var = var_lookup_or_create(l, "__for_lim", l->type_int);
+    braun_write(l, idx_var, l->cur_block, init_val);
+    braun_write(l, lim_var, l->cur_block, limit);
 
-    struct XrType *iter_type = l->type_any;  /* opaque iterator */
-    XiValue *iter = xi_value_new(l->func, l->cur_block, XI_ITER_NEW, iter_type, 1);
-    if (!iter) return;
-    iter->args[0] = coll;
-    iter->line = (uint32_t) node->line;
+    int col_var = -1;
+    if (get_item_coll) {
+        col_var = var_lookup_or_create(l, "__for_col", l->type_any);
+        braun_write(l, col_var, l->cur_block, get_item_coll);
+    }
 
     XiBlock *cond_blk = xi_block_new(l->func);
     XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *incr_blk = xi_block_new(l->func);
     XiBlock *exit_blk = xi_block_new(l->func);
 
     /* cond_blk is a loop header — do NOT seal yet */
     xi_block_set_jump(l->cur_block, cond_blk);
 
-    /* Condition: ITER_VALID */
+    /* Condition: __idx < __lim */
     l->cur_block = cond_blk;
-    XiValue *valid = xi_value_new(l->func, l->cur_block, XI_ITER_VALID, l->type_bool, 1);
-    if (valid) {
-        valid->args[0] = iter;
-        xi_block_set_if(l->cur_block, valid, body_blk, exit_blk);
-    }
+    XiValue *cur_idx = braun_read(l, idx_var, l->cur_block);
+    XiValue *cur_lim = braun_read(l, lim_var, l->cur_block);
+    XR_DCHECK(cur_idx != NULL, "braun_read idx must not be NULL");
+    XiValue *cond = xi_binary(l->func, l->cur_block, XI_LT,
+                              l->type_bool, cur_idx, cur_lim);
+    if (cond)
+        xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
 
     braun_seal_block(l, body_blk);
 
-    /* Body: get current item via ITER_NEXT */
+    /* Body */
     XiBlock *prev_break = l->break_target;
     XiBlock *prev_cont = l->continue_target;
     l->break_target = exit_blk;
-    l->continue_target = cond_blk;
+    l->continue_target = incr_blk;
 
     l->cur_block = body_blk;
-    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
-    XiValue *item = xi_value_new(l->func, l->cur_block, XI_ITER_NEXT, item_type, 1);
-    if (item) {
-        item->args[0] = iter;
-        item->line = (uint32_t) node->line;
+    XiValue *body_idx = braun_read(l, idx_var, l->cur_block);
+    XiValue *item;
+
+    if (get_item_coll) {
+        /* Index-based: item = coll[__idx] */
+        XiValue *body_col = braun_read(l, col_var, l->cur_block);
+        item = xi_value_new(l->func, l->cur_block, XI_INDEX_GET,
+                            item_type, 2);
+        if (item) {
+            item->args[0] = body_col;
+            item->args[1] = body_idx;
+            item->line = (uint32_t)node->line;
+        }
+    } else {
+        /* Range mode: loop variable IS the item */
+        item = body_idx;
     }
 
-    /* Register loop variable */
-    int var_id = var_lookup_or_create(l, s->item_name, item_type);
-    if (item) braun_write(l, var_id, l->cur_block, item);
+    int item_var = var_lookup_or_create(l, s->item_name, item_type);
+    if (item) braun_write(l, item_var, l->cur_block, item);
 
     lower_stmt(l, s->body);
     if (l->cur_block)
+        xi_block_set_jump(l->cur_block, incr_blk);
+
+    braun_seal_block(l, incr_blk);
+
+    /* Increment: __idx = __idx + 1 */
+    l->cur_block = incr_blk;
+    if (incr_blk->npreds > 0) {
+        XiValue *inc_idx = braun_read(l, idx_var, l->cur_block);
+        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD,
+                                     l->type_int, inc_idx, one);
+        if (new_idx) braun_write(l, idx_var, l->cur_block, new_idx);
+    }
+    if (l->cur_block && incr_blk->npreds > 0)
         xi_block_set_jump(l->cur_block, cond_blk);
 
-    /* All preds of cond_blk now known — seal */
     braun_seal_block(l, cond_blk);
 
     l->break_target = prev_break;
@@ -2027,6 +2073,39 @@ static void lower_for_in(XiLower *l, AstNode *node) {
 
     braun_seal_block(l, exit_blk);
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
+static void lower_for_in(XiLower *l, AstNode *node) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+
+    /* Range literal: for (i in start..end)
+     * Desugar to: for (__idx = start; __idx < end; __idx++) { i = __idx }
+     * Range end is exclusive — matches legacy compiler semantics. */
+    if (s->collection->type == AST_RANGE) {
+        RangeNode *rn = &s->collection->as.range;
+        XiValue *start = lower_expr(l, rn->start);
+        if (!start || !l->cur_block) return;
+        XiValue *end = lower_expr(l, rn->end);
+        if (!end || !l->cur_block) return;
+        lower_for_in_loop(l, node, start, end, NULL);
+        return;
+    }
+
+    /* General collection (Array, String, etc.):
+     * Desugar to: for (__idx = 0; __idx < coll.length; __idx++)
+     *                 { item = coll[__idx] } */
+    XiValue *coll = lower_expr(l, s->collection);
+    if (!coll || !l->cur_block) return;
+
+    XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
+                                l->type_int, 1);
+    if (!len) return;
+    len->args[0] = coll;
+    len->aux = (void *)"length";
+    len->line = (uint32_t)node->line;
+
+    XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    lower_for_in_loop(l, node, zero, len, coll);
 }
 
 static void lower_break(XiLower *l) {

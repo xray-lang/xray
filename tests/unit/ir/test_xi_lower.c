@@ -408,22 +408,23 @@ TEST(for_in_loop) {
         "}\n"
     );
     assert(f != NULL);
-    /* Should have: entry, cond, body, exit blocks (loop structure) */
-    assert(f->nblocks >= 3);
-    /* Verify ITER_NEW, ITER_VALID, ITER_NEXT ops exist */
-    int found_iter_new = 0, found_iter_valid = 0, found_iter_next = 0;
+    /* Should have: entry, cond, body, incr, exit blocks (loop structure) */
+    assert(f->nblocks >= 4);
+    /* Array for-in is desugared to index-based loop:
+     *   LOAD_FIELD(.length), INDEX_GET, LT, ADD (increment) */
+    int found_load_field = 0, found_index_get = 0, found_lt = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             uint16_t op = blk->values[i]->op;
-            if (op == XI_ITER_NEW)   found_iter_new = 1;
-            if (op == XI_ITER_VALID) found_iter_valid = 1;
-            if (op == XI_ITER_NEXT)  found_iter_next = 1;
+            if (op == XI_LOAD_FIELD) found_load_field = 1;
+            if (op == XI_INDEX_GET)  found_index_get = 1;
+            if (op == XI_LT)        found_lt = 1;
         }
     }
-    assert(found_iter_new && "should have ITER_NEW");
-    assert(found_iter_valid && "should have ITER_VALID");
-    assert(found_iter_next && "should have ITER_NEXT");
+    assert(found_load_field && "should have LOAD_FIELD for .length");
+    assert(found_index_get && "should have INDEX_GET for coll[idx]");
+    assert(found_lt && "should have LT for idx < len");
     xi_func_free(f);
 }
 
