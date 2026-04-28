@@ -35,6 +35,7 @@
 ** ======================================================== */
 
 vmcase(OP_CALL) {
+op_call_entry:;
     /* Unified callable object handling
     ** Principle: no backward compatibility, use best design
     ** Strategy: distinguish two most common types for performance
@@ -637,7 +638,7 @@ vmcase(OP_CALL_STATIC) {
     ** no C function, no enum). Falls through to OP_CALL which handles
     ** the fast-path XR_IS_FUNCTION branch first.
     */
-    goto L_OP_CALL;
+    goto op_call_entry;
 }
 
 vmcase(OP_LOOP_BACK) {
@@ -916,17 +917,17 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
      * defer stack format: [closure, arg_count, arg1, arg2, ...]
      * Read from back: pop args, then arg count, then closure
      */
-    if (isolate->vm.defer_count > 0 && isolate->vm.defer_frame_marks) {
+    if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
         // Get current frame's defer start position
-        int frame_defer_start = isolate->vm.defer_frame_marks[VM_FRAME_COUNT - 1];
+        int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
 
         // Only execute defer registered by current frame
-        if (isolate->vm.defer_count > frame_defer_start) {
+        if (vm_ctx->defer_count > frame_defer_start) {
             // Save current frame state
             ci->pc = pc;
 
             // Execute current frame's defer from stack top (LIFO)
-            while (isolate->vm.defer_count > frame_defer_start) {
+            while (vm_ctx->defer_count > frame_defer_start) {
                 // Temporary array for args (bounded)
                 XrValue defer_args[XR_DEFER_ARGS_MAX];
 
@@ -934,13 +935,13 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
                 int pos = frame_defer_start;
                 int entries[XR_DEFER_ENTRIES_MAX];  // Start position of each defer entry
                 int entry_count = 0;
-                int end = isolate->vm.defer_count;
+                int end = vm_ctx->defer_count;
 
                 // Collect all defer entry positions (with bounds check)
                 while (pos < end && entry_count < XR_DEFER_ENTRIES_MAX) {
                     entries[entry_count++] = pos;
                     // Skip: closure + arg count + args
-                    int nargs = (int) XR_TO_INT(isolate->vm.defer_stack[pos + 1]);
+                    int nargs = (int) XR_TO_INT(vm_ctx->defer_stack[pos + 1]);
                     pos += 2 + nargs;
                 }
 
@@ -953,8 +954,8 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
                 // LIFO execution: from back to front
                 for (int e = entry_count - 1; e >= 0; e--) {
                     int start = entries[e];
-                    XrValue closure_val = isolate->vm.defer_stack[start];
-                    int nargs = (int) XR_TO_INT(isolate->vm.defer_stack[start + 1]);
+                    XrValue closure_val = vm_ctx->defer_stack[start];
+                    int nargs = (int) XR_TO_INT(vm_ctx->defer_stack[start + 1]);
 
                     // Error if defer args exceed limit
                     if (nargs > XR_DEFER_ARGS_MAX) {
@@ -964,7 +965,7 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
 
                     // Collect args
                     for (int j = 0; j < nargs; j++) {
-                        defer_args[j] = isolate->vm.defer_stack[start + 2 + j];
+                        defer_args[j] = vm_ctx->defer_stack[start + 2 + j];
                     }
 
                     // Execute
@@ -975,7 +976,7 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
                 }
 
                 // Clear current frame's defer
-                isolate->vm.defer_count = frame_defer_start;
+                vm_ctx->defer_count = frame_defer_start;
                 break;
             }
         }
@@ -1070,9 +1071,9 @@ vmcase(OP_RETURN0) {
     }
 
     // Check if we have defer to execute
-    if (isolate->vm.defer_count > 0 && isolate->vm.defer_frame_marks) {
-        int frame_defer_start = isolate->vm.defer_frame_marks[VM_FRAME_COUNT - 1];
-        if (isolate->vm.defer_count > frame_defer_start) {
+    if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
+        int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
+        if (vm_ctx->defer_count > frame_defer_start) {
             // Has defer, fall back to full RETURN
             vm_ctx->last_nret = 0;
             goto return_with_defer;
@@ -1144,9 +1145,9 @@ vmcase(OP_RETURN1) {
     }
 
     // Check if we have defer to execute
-    if (isolate->vm.defer_count > 0 && isolate->vm.defer_frame_marks) {
-        int frame_defer_start = isolate->vm.defer_frame_marks[VM_FRAME_COUNT - 1];
-        if (isolate->vm.defer_count > frame_defer_start) {
+    if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
+        int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
+        if (vm_ctx->defer_count > frame_defer_start) {
             // Has defer, fall back to full RETURN
             vm_ctx->last_nret = 1;
             goto return_with_defer;
@@ -1236,7 +1237,6 @@ vmcase(OP_RETURN1) {
     if (VM_MODULE_BASE >= 0 && VM_FRAME_COUNT == VM_MODULE_BASE) {
         return XR_VM_OK;
     }
-
     // Restore caller frame
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 

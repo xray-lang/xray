@@ -24,13 +24,17 @@
 #include <limits.h>
 #include "../../src/os/os_fs.h"
 
+#include <signal.h>
+#include <time.h>
+
 #ifdef XR_OS_WINDOWS
 #include <process.h>
 #include <winsock2.h>
+#include <windows.h>
+#include <tlhelp32.h>
 #else
 #include <unistd.h>
 #include <pwd.h>
-#include <signal.h>
 #include <sys/wait.h>
 #endif
 
@@ -44,7 +48,9 @@
 #endif
 
 // External: environ variable
+#ifndef XR_OS_WINDOWS
 extern char **environ;
+#endif
 
 /* ========== External Declarations ========== */
 
@@ -124,6 +130,23 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
     if (!map)
         return xr_null();
 
+#ifdef XR_OS_WINDOWS
+    LPCH env_block = GetEnvironmentStringsA();
+    if (!env_block)
+        return xr_value_from_map(map);
+    for (const char *p = env_block; *p; p += strlen(p) + 1) {
+        const char *eq = strchr(p, '=');
+        if (!eq || eq == p)
+            continue;
+        size_t name_len = eq - p;
+        const char *value = eq + 1;
+        XrString *key_str = xr_string_intern(X, p, name_len, 0);
+        XrValue key = xr_string_value(key_str);
+        XrValue val = xrs_string_value_c(X, value);
+        xr_map_set(map, key, val);
+    }
+    FreeEnvironmentStringsA(env_block);
+#else
     for (char **env = environ; *env != NULL; env++) {
         char *eq = strchr(*env, '=');
         if (!eq)
@@ -138,6 +161,7 @@ static XrValue os_environ(XrayIsolate *X, XrValue *args, int argc) {
         XrValue val = xrs_string_value_c(X, value);
         xr_map_set(map, key, val);
     }
+#endif
 
     return xr_value_from_map(map);
 }
@@ -170,7 +194,7 @@ static XrValue os_getcwd(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    char buf[PATH_MAX];
+    char buf[XR_PATH_MAX];
     if (xr_fs_getcwd(buf, sizeof(buf)) == NULL) {
         return xr_null();
     }
@@ -329,7 +353,13 @@ static XrValue os_totalMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    if (GlobalMemoryStatusEx(&statex))
+        return xr_int((int64_t) statex.ullTotalPhys);
+    return xr_int(0);
+#elif defined(XR_OS_MACOS)
     int64_t memsize = 0;
     size_t len = sizeof(memsize);
     sysctlbyname("hw.memsize", &memsize, &len, NULL, 0);
@@ -350,7 +380,13 @@ static XrValue os_freeMemory(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    MEMORYSTATUSEX statex;
+    statex.dwLength = sizeof(statex);
+    if (GlobalMemoryStatusEx(&statex))
+        return xr_int((int64_t) statex.ullAvailPhys);
+    return xr_int(0);
+#elif defined(XR_OS_MACOS)
     vm_statistics64_data_t vm_stat;
     mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
     if (host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t) &vm_stat, &count) ==
@@ -375,7 +411,9 @@ static XrValue os_uptime(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-#ifdef XR_OS_MACOS
+#ifdef XR_OS_WINDOWS
+    return xr_float((double) GetTickCount64() / 1000.0);
+#elif defined(XR_OS_MACOS)
     struct timeval boottime;
     size_t len = sizeof(boottime);
     if (sysctlbyname("kern.boottime", &boottime, &len, NULL, 0) == 0) {
@@ -425,7 +463,23 @@ static XrValue os_ppid(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 #ifdef XR_OS_WINDOWS
-    return xr_int(0);
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE)
+        return xr_int(0);
+    PROCESSENTRY32 pe;
+    pe.dwSize = sizeof(pe);
+    DWORD pid = GetCurrentProcessId();
+    int64_t ppid = 0;
+    if (Process32First(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == pid) {
+                ppid = (int64_t) pe.th32ParentProcessID;
+                break;
+            }
+        } while (Process32Next(snap, &pe));
+    }
+    CloseHandle(snap);
+    return xr_int(ppid);
 #else
     return xr_int(getppid());
 #endif

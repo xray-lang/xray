@@ -16,6 +16,7 @@
 #include "../../../src/app/lsp/xlsp_analysis.h"
 #include "../../../src/app/lsp/xlsp_rename.h"
 #include "../../../src/base/xjson.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -65,7 +66,7 @@ TEST(hover_on_keyword) {
     XrLspPosition pos = {0, 0};
     XrJsonValue *result = xlsp_analyze_hover(server, doc, pos);
     // "let" is a keyword, hover should return something (keyword doc)
-    // May return NULL if no keyword doc available â€” either is acceptable
+    // May return NULL if no keyword doc available â€?either is acceptable
     if (result) {
         xjson_free(result);
     }
@@ -324,7 +325,7 @@ TEST(prepare_rename_keyword_rejected) {
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
-    // Prepare rename on "let" (line 0, col 0) â€” should be rejected
+    // Prepare rename on "let" (line 0, col 0) â€?should be rejected
     XrLspPosition pos = {0, 0};
     XrJsonValue *result = xlsp_analyze_prepare_rename(doc, pos);
     ASSERT(result == NULL);
@@ -398,6 +399,7 @@ TEST(symbols_null_safety) {
 // ============================================================================
 
 int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
     (void)argc; (void)argv;
 
     printf("\n=== LSP Navigation Unit Tests ===\n\n");

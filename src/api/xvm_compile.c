@@ -261,6 +261,12 @@ static void init_vm_context(XrayIsolate *isolate) {
     ctx->isolate = isolate;
 
     ctx->tmp_strbuf = NULL;
+
+    // Defer stack is per-context (lazy-allocated on first OP_DEFER)
+    ctx->defer_stack = NULL;
+    ctx->defer_count = 0;
+    ctx->defer_capacity = 0;
+    ctx->defer_frame_marks = NULL;
 }
 
 // Initialize VM execution engine
@@ -290,12 +296,6 @@ int xr_vm_init(XrayIsolate *isolate) {
 
     init_globals(isolate);
     init_coro_state(isolate);
-
-    // Initialize defer stack (lazy allocation)
-    isolate->vm.defer_stack = NULL;
-    isolate->vm.defer_count = 0;
-    isolate->vm.defer_capacity = 0;
-    isolate->vm.defer_frame_marks = NULL;
 
     init_vm_context(isolate);
 
@@ -333,14 +333,14 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
     }
 #endif
 
-    // Cleanup defer stack
-    if (isolate->vm.defer_stack != NULL) {
-        xr_free(isolate->vm.defer_stack);
-        isolate->vm.defer_stack = NULL;
+    // Cleanup main-thread defer stack (per vm_ctx)
+    if (isolate->vm_ctx.defer_stack != NULL) {
+        xr_free(isolate->vm_ctx.defer_stack);
+        isolate->vm_ctx.defer_stack = NULL;
     }
-    if (isolate->vm.defer_frame_marks != NULL) {
-        xr_free(isolate->vm.defer_frame_marks);
-        isolate->vm.defer_frame_marks = NULL;
+    if (isolate->vm_ctx.defer_frame_marks != NULL) {
+        xr_free(isolate->vm_ctx.defer_frame_marks);
+        isolate->vm_ctx.defer_frame_marks = NULL;
     }
 
     // Static-fallback VM context (used by xr_vm_current_ctx when no coro

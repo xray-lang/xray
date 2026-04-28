@@ -17,6 +17,8 @@
  */
 
 #include "ws_deflate.h"
+
+#if XR_HAS_COMPRESS
 #include "../compress/compress.h"
 
 int xr_ws_deflate_compress(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len) {
@@ -27,3 +29,15 @@ int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, u
                              size_t *out_len) {
     return xr_inflate_bounded(in, in_len, max_out, out, out_len);
 }
+#else
+// Stubs when compress module is not available
+int xr_ws_deflate_compress(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len) {
+    (void) in; (void) in_len; (void) out; (void) out_len;
+    return -1;
+}
+int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, uint8_t **out,
+                             size_t *out_len) {
+    (void) in; (void) in_len; (void) max_out; (void) out; (void) out_len;
+    return -1;
+}
+#endif  // XR_HAS_COMPRESS

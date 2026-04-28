@@ -16,12 +16,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "../../../src/runtime/gc/xcoro_gc.h"
 #include "../../../src/runtime/gc/ximmix.h"
 #include "../../../src/runtime/gc/xgc_header.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/coro/xcoroutine.h"
+#include "../test_win_compat.h"
 
 /* Dummy coroutine for GC tests (gc_create only stores gc->owner, no dereference) */
 static XrCoroutine dummy_coro;
@@ -57,9 +61,16 @@ static int tests_failed = 0;
     } while(0)
 
 static uint64_t time_ns(void) {
+#ifdef _WIN32
+    LARGE_INTEGER freq, counter;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&counter);
+    return (uint64_t)(counter.QuadPart * 1000000000ULL / freq.QuadPart);
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+#endif
 }
 
 /* ========== 1. Immix Block & Bitmap Tests ========== */
@@ -551,6 +562,7 @@ static void perf_bulk_destroy(void) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("\n========================================\n");
     printf("  Immix Single-Bitmap GC Unit Tests\n");
     printf("========================================\n\n");

@@ -181,12 +181,6 @@ typedef struct XrVMState {
     void *runtime;  // XrayRuntime*
     bool multicore_enabled;
 
-    // Defer stack
-    XrValue *defer_stack;  // deferred function calls
-    int defer_count;
-    int defer_capacity;
-    int *defer_frame_marks;  // frame boundaries in defer stack
-
 } XrVMState;
 
 #endif  // XEXEC_STATE_H

@@ -99,7 +99,7 @@ TEST(type_substitute_non_param) {
 }
 
 TEST(type_substitute_array_element) {
-    // Array<T> where T=int â†’ Array<int>
+    // Array<T> where T=int â†?Array<int>
     XrType param_t = { .kind = XR_KIND_TYPE_PARAM };
     param_t.type_param.name = "T";
 
@@ -247,19 +247,19 @@ TEST(mono_collector_dedup) {
     XrType *args1[] = { &int_t };
     xa_mono_collector_add(&c, "identity", args1, 1);
 
-    // bool has different slot type from int (BOOL=11 vs I64=7) â†’ separate instance
+    // bool has different slot type from int (BOOL=11 vs I64=7) â†?separate instance
     XrType bool_t = { .kind = XR_KIND_BOOL };
     XrType *args2[] = { &bool_t };
     xa_mono_collector_add(&c, "identity", args2, 1);
     ASSERT_EQ(c.count, 2);
 
-    // Same int type again â†’ should deduplicate
+    // Same int type again â†?should deduplicate
     XrType int_t2 = { .kind = XR_KIND_INT };
     XrType *args2b[] = { &int_t2 };
     xa_mono_collector_add(&c, "identity", args2b, 1);
     ASSERT_EQ(c.count, 2);
 
-    // float has different rep â†’ separate instance
+    // float has different rep â†?separate instance
     XrType float_t = { .kind = XR_KIND_FLOAT };
     XrType *args3[] = { &float_t };
     xa_mono_collector_add(&c, "identity", args3, 1);
@@ -271,6 +271,7 @@ TEST(mono_collector_dedup) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     RUN_TEST_SUITE("Name Mangling");
     RUN_TEST(mono_type_tag_basic);
     RUN_TEST(mono_mangle_single);

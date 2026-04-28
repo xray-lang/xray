@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../../src/base/xjson.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -242,6 +243,7 @@ TEST(parse_evaluate_request) {
 // ============================================================================
 
 int main(int argc, char **argv) {
+    xr_test_suppress_dialogs();
     (void)argc; (void)argv;
     
     printf("\n=== DAP Message Format Unit Tests ===\n\n");

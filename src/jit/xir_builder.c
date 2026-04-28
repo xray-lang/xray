@@ -353,6 +353,7 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
     b->code_count = (uint32_t) PROTO_CODE_COUNT(proto);
     b->ops_translated = 0;
     b->ops_skipped = 0;
+    b->nyi_opcode = NULL;
     b->nloops = 0;
     b->try_depth = 0;
     b->block_defs = NULL;
@@ -2884,6 +2885,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos
         xr_log_warning("jit", "builder skipped %d ops in %s, first nyi: %s", b.ops_skipped, name,
                        b.nyi_opcode ? b.nyi_opcode : "?");
         xir_func_destroy(func);
+        braun_cleanup(&b);
         builder_cleanup(&b);
         return NULL;
     }

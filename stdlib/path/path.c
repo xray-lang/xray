@@ -21,20 +21,16 @@
 #include <limits.h>
 #include "../../src/os/os_fs.h"
 
-#ifndef PATH_MAX
-#define PATH_MAX 4096
-#endif
 
 /* ========== Platform Definitions ========== */
 
+/* Output always uses '/' for portability; input parsing accepts both on Windows. */
+#define PATH_SEP '/'
+#define PATH_SEP_STR "/"
 #ifdef XR_OS_WINDOWS
-#define PATH_SEP '\\'
-#define PATH_SEP_STR "\\"
 #define PATH_DELIMITER ";"
 #define IS_SEP(c) ((c) == '/' || (c) == '\\')
 #else
-#define PATH_SEP '/'
-#define PATH_SEP_STR "/"
 #define PATH_DELIMITER ":"
 #define IS_SEP(c) ((c) == '/')
 #endif
@@ -330,7 +326,7 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
 // path length, and it recognises the platform-specific separator set
 // (backslash on Windows) through IS_SEP().
 static XrValue path_resolve(XrayIsolate *X, XrValue *args, int argc) {
-    char cwd[PATH_MAX];
+    char cwd[XR_PATH_MAX];
     if (xr_fs_getcwd(cwd, sizeof(cwd)) == NULL) {
         cwd[0] = PATH_SEP;
         cwd[1] = '\0';
