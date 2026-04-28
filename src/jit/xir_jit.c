@@ -557,8 +557,8 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     if (saved_feedback)
         proto->type_feedback = saved_feedback;
     if (!func) {
-        xr_log_warning("jit", "builder failed for %s",
-                       proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        xr_log_debug("jit", "builder failed for %s",
+                     proto->name ? XR_STRING_CHARS(proto->name) : "?");
         xr_free(shared_protos);
         return false;
     }
