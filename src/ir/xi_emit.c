@@ -589,7 +589,7 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                     emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
                 }
             }
-            emit_inst(ctx, CREATE_ABC(OP_CALL, callee, nargs + 1, 1));
+            emit_inst(ctx, CREATE_ABC(OP_CALL, callee, nargs, 1));
             /* Result is in callee register; map dst to it */
             if (dst != callee) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
@@ -721,10 +721,20 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Closure creation: XI_CLOSURE_NEW -> OP_CLOSURE(A, Bx=proto_index) */
+        /* Closure creation: recursively emit child XiFunc, register sub-proto,
+         * then emit OP_CLOSURE(A, Bx=proto_index). */
         case XI_CLOSURE_NEW: {
-            int proto_idx = (int)v->aux_int;
-            XR_DCHECK(proto_idx >= 0, "closure proto index must be non-negative");
+            XiFunc *child_func = (XiFunc *)v->aux;
+            XR_DCHECK(child_func != NULL, "closure child func must not be NULL");
+
+            XrProto *child_proto = NULL;
+            XiEmitStatus child_st = xi_emit(child_func, ctx->isolate, &child_proto);
+            if (child_st != XI_EMIT_OK || !child_proto) {
+                emit_error(ctx, child_st != XI_EMIT_OK
+                           ? child_st : XI_EMIT_ERR_INTERNAL);
+                return;
+            }
+            int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
             emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
             break;
         }
