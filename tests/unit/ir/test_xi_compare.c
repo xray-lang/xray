@@ -656,6 +656,137 @@ TEST(cmp_mixed_arith) {
     });
 }
 
+/* --- Nested Function Calls --- */
+
+TEST(cmp_nested_call) {
+    run_compare((CompareSpec){
+        .source = "fn add(a: int, b: int): int { return a + b }\n"
+                  "print(add(1, add(2, 3)))",
+        .label = "nested function calls",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_func_early_return) {
+    run_compare((CompareSpec){
+        .source = "fn abs(n: int): int {\n"
+                  "  if (n < 0) { return -n }\n"
+                  "  return n\n"
+                  "}\nprint(abs(-5))\nprint(abs(3))",
+        .label = "function with early return",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_factorial) {
+    run_compare((CompareSpec){
+        .source = "fn fact(n: int): int {\n"
+                  "  if (n <= 1) { return 1 }\n"
+                  "  return n * fact(n - 1)\n"
+                  "}\nprint(fact(6))",
+        .label = "recursive factorial",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Float Arithmetic --- */
+
+TEST(cmp_float_arith) {
+    run_compare((CompareSpec){
+        .source = "let x = 3.14\nlet y = 2.0\n"
+                  "print(x + y)\nprint(x * y)",
+        .label = "float arithmetic",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Scope Shadowing --- */
+
+TEST(cmp_block_scope) {
+    run_compare((CompareSpec){
+        .source = "let x = 10\n"
+                  "if (true) {\n"
+                  "  let y = x + 5\n"
+                  "  print(y)\n"
+                  "}\nprint(x)",
+        .label = "block scoping with inner variable",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- Complex Expressions --- */
+
+TEST(cmp_complex_expr) {
+    run_compare((CompareSpec){
+        .source = "let a = 2\nlet b = 3\nlet c = 4\n"
+                  "let r = (a + b) * c - a\nprint(r)",
+        .label = "complex arithmetic expression",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_for_accumulate) {
+    run_compare((CompareSpec){
+        .source = "let sum = 0\n"
+                  "for (let i = 1; i <= 10; i = i + 1) {\n"
+                  "  sum = sum + i\n"
+                  "}\nprint(sum)",
+        .label = "for-loop sum 1..10",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_chained_comparison) {
+    run_compare((CompareSpec){
+        .source = "let a = 5\nlet b = 10\nlet c = 3\n"
+                  "if (a > c && b > a) { print(1) } else { print(0) }",
+        .label = "chained comparison with logical and",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_while_countdown) {
+    run_compare((CompareSpec){
+        .source = "let n = 5\nlet result = 1\n"
+                  "while (n > 0) {\n"
+                  "  result = result * n\n"
+                  "  n = n - 1\n"
+                  "}\nprint(result)",
+        .label = "while-loop factorial (iterative)",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_bool_logic) {
+    run_compare((CompareSpec){
+        .source = "let t = true\nlet f = false\n"
+                  "print(t && t)\nprint(t && f)\n"
+                  "print(f || t)\nprint(f || f)",
+        .label = "boolean logic combinations",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -733,6 +864,24 @@ int main(void) {
 
     /* Mixed arithmetic */
     run_cmp_mixed_arith();
+
+    /* Nested / advanced function calls */
+    run_cmp_nested_call();
+    run_cmp_func_early_return();
+    run_cmp_factorial();
+
+    /* Float arithmetic */
+    run_cmp_float_arith();
+
+    /* Block scoping */
+    run_cmp_block_scope();
+
+    /* Complex expressions */
+    run_cmp_complex_expr();
+    run_cmp_for_accumulate();
+    run_cmp_chained_comparison();
+    run_cmp_while_countdown();
+    run_cmp_bool_logic();
 
     teardown();
 

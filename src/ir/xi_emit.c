@@ -118,6 +118,27 @@ static uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
     return ctx->reg_map[v->id];
 }
 
+/* Like reg_of but never uses the free list — always allocates from next_reg.
+ * Call instructions place args at dst+1..dst+nargs; a recycled low register
+ * for dst could overlap with live source registers and cause clobber bugs. */
+static uint8_t alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
+    XR_DCHECK(v != NULL, "alloc_reg_fresh: NULL value");
+    if (v->id >= ctx->reg_map_size) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return 0;
+    }
+    if (ctx->reg_map[v->id] == NO_REG) {
+        if (ctx->next_reg >= MAX_REGS - 1) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return 0;
+        }
+        ctx->reg_map[v->id] = ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+    }
+    return ctx->reg_map[v->id];
+}
+
 /* Release registers of input args whose last use is at the current ordinal.
  * Called AFTER emitting an instruction that reads these args. */
 static void try_free_args(EmitCtx *ctx, const XiValue *v) {
@@ -310,7 +331,11 @@ static void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
 static void emit_value(EmitCtx *ctx, XiValue *v) {
     if (ctx->status != XI_EMIT_OK) return;
 
-    uint8_t dst = reg_of(ctx, v);
+    /* Call-like ops place args at dst+1..dst+nargs.  A recycled low register
+     * for dst could overlap with live source arg registers (clobber bug).
+     * Force fresh allocation so dst > all previously allocated registers. */
+    bool call_like = (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_GO);
+    uint8_t dst = call_like ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK) return;
 
     switch (v->op) {
@@ -580,6 +605,12 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             uint8_t nargs = (uint8_t)(v->nargs - 1);
             bool self_call = (v->aux_int == 1);
 
+            /* Account for arg registers (dst+1..dst+nargs) in maxstacksize */
+            {
+                uint8_t call_top = (uint8_t)(dst + nargs + 1);
+                if (call_top > ctx->max_reg) ctx->max_reg = call_top;
+            }
+
             if (self_call) {
                 /* Recursive self-call: OP_CALLSELF uses frame->closure,
                  * no callee register needed. Use dst as base. */
@@ -593,22 +624,25 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                 }
                 emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs, 1));
             } else {
+                /* Use dst as call base: OP_CALL writes result to the base
+                 * register, so using the callee's original register would
+                 * clobber the closure (breaks nested calls to the same fn).
+                 * dst is always beyond all source registers, so copying
+                 * callee→dst and args→dst+1..dst+n is safe. */
                 uint8_t callee = reg_of(ctx, v->args[0]);
                 if (ctx->status != XI_EMIT_OK) return;
-                /* Move args into consecutive registers after callee */
+                if (callee != dst) {
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+                }
                 for (uint16_t a = 1; a < v->nargs; a++) {
                     uint8_t arg_reg = reg_of(ctx, v->args[a]);
                     if (ctx->status != XI_EMIT_OK) return;
-                    uint8_t target = (uint8_t)(callee + a);
+                    uint8_t target = (uint8_t)(dst + a);
                     if (arg_reg != target) {
                         emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
                     }
                 }
-                emit_inst(ctx, CREATE_ABC(OP_CALL, callee, nargs, 1));
-                /* Result is in callee register; map dst to it */
-                if (dst != callee) {
-                    emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
-                }
+                emit_inst(ctx, CREATE_ABC(OP_CALL, dst, nargs, 1));
             }
             break;
         }
