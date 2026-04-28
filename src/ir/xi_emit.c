@@ -761,13 +761,24 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Slice */
+        /* Slice: OP_SLICE expects start at R[C], end at R[C+1] (consecutive). */
         case XI_SLICE: {
             if (v->nargs < 3) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
-            uint8_t src = reg_of(ctx, v->args[0]);
-            uint8_t lo  = reg_of(ctx, v->args[1]);
+            uint8_t src    = reg_of(ctx, v->args[0]);
+            uint8_t lo_src = reg_of(ctx, v->args[1]);
+            uint8_t hi_src = reg_of(ctx, v->args[2]);
             if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_SLICE, dst, src, lo));
+            /* Allocate consecutive temp pair for start/end */
+            if (ctx->next_reg + 2 >= MAX_REGS) {
+                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS); return;
+            }
+            uint8_t lo_slot = ctx->next_reg;
+            ctx->next_reg += 2;
+            if (ctx->next_reg > ctx->max_reg)
+                ctx->max_reg = ctx->next_reg;
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, lo_slot, lo_src, 0));
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t)(lo_slot + 1), hi_src, 0));
+            emit_inst(ctx, CREATE_ABC(OP_SLICE, dst, src, lo_slot));
             break;
         }
 

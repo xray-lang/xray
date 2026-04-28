@@ -56,14 +56,14 @@ static void teardown(void) {
 static XrProto *compile_legacy(const char *source) {
     XR_DCHECK(g_iso != NULL, "isolate must be initialized");
 
-    AstNode *program = xr_parse(g_iso, source);
-    if (!program) return NULL;
-
+    /* Create context first — its analyzer installs a type pool on the
+     * isolate, which the parser needs for creating type annotations. */
     XrCompilerContext *ctx = xr_compiler_context_new(g_iso);
-    if (!ctx) {
-        xr_program_destroy(program);
-        return NULL;
-    }
+    if (!ctx) return NULL;
+
+    AstNode *program = xr_parse(g_iso, source);
+    if (!program) { xr_compiler_context_free(ctx); return NULL; }
+
     /* Use the context's built-in analyzer */
     xa_analyzer_analyze(ctx->analyzer, "compare.xr", program);
     ctx->use_xi_pipeline = false;
@@ -86,11 +86,14 @@ static XrProto *compile_legacy(const char *source) {
 static XrProto *compile_xi(const char *source) {
     XR_DCHECK(g_iso != NULL, "isolate must be initialized");
 
-    AstNode *program = xr_parse(g_iso, source);
-    if (!program) return NULL;
-
+    /* Create analyzer first — it installs a type pool on the isolate,
+     * which the parser needs for creating type annotations. */
     XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
-    if (!analyzer) { xr_program_destroy(program); return NULL; }
+    if (!analyzer) return NULL;
+
+    AstNode *program = xr_parse(g_iso, source);
+    if (!program) { xa_analyzer_free(analyzer); return NULL; }
+
     xa_analyzer_analyze(analyzer, "compare.xr", program);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
@@ -996,7 +999,20 @@ TEST(cmp_for_in_range) {
 
 /* --- Closure with Captures --- */
 
-SKIP(cmp_closure_capture, "upvalue capture causes internal trap in xi_emit")
+TEST(cmp_closure_capture) {
+    run_compare((CompareSpec){
+        .source = "fn make_adder(x: int): fn(int): int {\n"
+                  "  fn adder(y: int): int { return x + y }\n"
+                  "  return adder\n"
+                  "}\n"
+                  "let add5 = make_adder(5)\n"
+                  "print(add5(3))",
+        .label = "closure capturing outer variable",
+        .expect_xi_success = false,
+        .min_similarity = 0.1,
+        .check_exec = false,
+    });
+}
 
 /* --- Type Conversion --- */
 
@@ -1077,13 +1093,25 @@ TEST(cmp_slice) {
         .label = "array slice expression",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* OP_SLICE needs consecutive regs for start/end */
+        .check_exec = true,
     });
 }
 
 /* --- Scope with Nested Functions --- */
 
-SKIP(cmp_nested_func_scope, "upvalue capture causes internal trap in xi_emit")
+TEST(cmp_nested_func_scope) {
+    run_compare((CompareSpec){
+        .source = "fn outer(): int {\n"
+                  "  let x = 10\n"
+                  "  fn inner(): int { return x * 2 }\n"
+                  "  return inner()\n"
+                  "}\nprint(outer())",
+        .label = "nested function accessing outer scope",
+        .expect_xi_success = false,
+        .min_similarity = 0.1,
+        .check_exec = false,
+    });
+}
 
 /* --- Multiple Return Values --- */
 

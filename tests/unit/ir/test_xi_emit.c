@@ -721,13 +721,22 @@ TEST(emit_str_concat) {
 }
 
 TEST(emit_closure_new) {
-    /* CLOSURE_NEW -> OP_CLOSURE */
+    /* CLOSURE_NEW -> OP_CLOSURE with recursive child emit */
     XiFunc *f = make_func("parent", &stub_int);
     XiBlock *entry = f->entry;
 
+    /* Create a minimal child func that just returns a constant */
+    XiFunc *child = xi_func_new("child", &stub_int);
+    assert(child != NULL);
+    XiBlock *child_entry = xi_block_new(child);
+    child_entry->sealed = true;
+    XiValue *c42 = xi_const_int(child, child_entry, 42, &stub_int);
+    xi_block_set_return(child_entry, c42);
+
     XiValue *v = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_int, 0);
     assert(v != NULL);
-    v->aux_int = 0;  /* proto index 0 */
+    v->aux = (void *)child;  /* child func for recursive emit */
+    v->aux_int = 0;
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
@@ -744,6 +753,7 @@ TEST(emit_closure_new) {
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
+    xi_func_free(child);
 }
 
 TEST(emit_set_new) {
