@@ -134,6 +134,12 @@ if(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
 endif()
 add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
 
+# ============================================================================
+# ir/ — New typed SSA IR (Xi)
+# ============================================================================
+
+add_xray_unit_test(test_xi ir/test_xi.c)
+
 # E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build
 # Covered by regression tests (scripts/run_regression_tests.sh)
 # add_xray_unit_test(test_aot_e2e jit/test_aot_e2e.c)

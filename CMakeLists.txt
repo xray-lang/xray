@@ -380,6 +380,7 @@ file(GLOB VM_SRC "src/vm/*.c")
 # the computed-goto switch. They are not standalone translation units.
 list(FILTER VM_SRC EXCLUDE REGEX "\\.inc\\.c$")
 file(GLOB JIT_SRC "src/jit/*.c")
+file(GLOB IR_SRC "src/ir/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
 file(GLOB API_SRC "src/api/*.c")
@@ -501,6 +502,7 @@ set(CORE_ALL_SOURCES
     ${FRONTEND_FORMAT_SRC}
     ${VM_SRC}
     ${JIT_SRC}
+    ${IR_SRC}
     ${MODULE_SRC}
     ${AOT_SRC}
     ${API_SRC}
