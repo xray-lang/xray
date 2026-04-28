@@ -48,6 +48,11 @@ XR_FUNC uint64_t xr_time_monotonic_ns(void);
 // may jump forward or backward when the system clock is adjusted.
 XR_FUNC uint64_t xr_time_realtime_ns(void);
 
+// Nanoseconds of CPU time consumed by the current process (user +
+// kernel). Returns 0 if the platform does not support this query.
+// Use for profiling; not meaningful as a wall-clock substitute.
+XR_FUNC uint64_t xr_time_process_cpu_ns(void);
+
 // Sleep for at least `ns` nanoseconds. Best effort; the kernel
 // may schedule the wake-up later under load.
 XR_FUNC void xr_time_sleep_ns(uint64_t ns);
