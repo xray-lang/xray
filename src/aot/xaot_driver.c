@@ -168,22 +168,40 @@ static void infer_features_proto(XrProto *proto, XaotFeatureSet *fs) {
                     if (XR_IS_STRING(kv)) {
                         const char *mod = XR_STRING_CHARS(XR_TO_STRING(kv));
                         XR_DCHECK(mod != NULL, "infer_features_proto: NULL import string");
-                        if (strcmp(mod, "json") == 0) fs->stdlib |= XAOT_STDLIB_JSON;
-                        else if (strcmp(mod, "regex") == 0) fs->stdlib |= XAOT_STDLIB_REGEX;
-                        else if (strcmp(mod, "math") == 0) fs->stdlib |= XAOT_STDLIB_MATH;
-                        else if (strcmp(mod, "time") == 0) fs->stdlib |= XAOT_STDLIB_TIME;
-                        else if (strcmp(mod, "path") == 0) fs->stdlib |= XAOT_STDLIB_PATH;
-                        else if (strcmp(mod, "io") == 0) fs->stdlib |= XAOT_STDLIB_IO;
-                        else if (strcmp(mod, "os") == 0) fs->stdlib |= XAOT_STDLIB_OS;
-                        else if (strcmp(mod, "net") == 0) { fs->stdlib |= XAOT_STDLIB_NET; fs->need_netpoll = true; }
-                        else if (strcmp(mod, "http") == 0) { fs->stdlib |= XAOT_STDLIB_HTTP; fs->need_netpoll = true; }
-                        else if (strcmp(mod, "crypto") == 0) fs->stdlib |= XAOT_STDLIB_CRYPTO;
-                        else if (strcmp(mod, "base64") == 0) fs->stdlib |= XAOT_STDLIB_BASE64;
-                        else if (strcmp(mod, "csv") == 0) fs->stdlib |= XAOT_STDLIB_CSV;
-                        else if (strcmp(mod, "toml") == 0) fs->stdlib |= XAOT_STDLIB_TOML;
-                        else if (strcmp(mod, "yaml") == 0) fs->stdlib |= XAOT_STDLIB_YAML;
-                        else if (strcmp(mod, "xml") == 0) fs->stdlib |= XAOT_STDLIB_XML;
-                        else if (strcmp(mod, "compress") == 0) fs->stdlib |= XAOT_STDLIB_COMPRESS;
+                        if (strcmp(mod, "json") == 0)
+                            fs->stdlib |= XAOT_STDLIB_JSON;
+                        else if (strcmp(mod, "regex") == 0)
+                            fs->stdlib |= XAOT_STDLIB_REGEX;
+                        else if (strcmp(mod, "math") == 0)
+                            fs->stdlib |= XAOT_STDLIB_MATH;
+                        else if (strcmp(mod, "time") == 0)
+                            fs->stdlib |= XAOT_STDLIB_TIME;
+                        else if (strcmp(mod, "path") == 0)
+                            fs->stdlib |= XAOT_STDLIB_PATH;
+                        else if (strcmp(mod, "io") == 0)
+                            fs->stdlib |= XAOT_STDLIB_IO;
+                        else if (strcmp(mod, "os") == 0)
+                            fs->stdlib |= XAOT_STDLIB_OS;
+                        else if (strcmp(mod, "net") == 0) {
+                            fs->stdlib |= XAOT_STDLIB_NET;
+                            fs->need_netpoll = true;
+                        } else if (strcmp(mod, "http") == 0) {
+                            fs->stdlib |= XAOT_STDLIB_HTTP;
+                            fs->need_netpoll = true;
+                        } else if (strcmp(mod, "crypto") == 0)
+                            fs->stdlib |= XAOT_STDLIB_CRYPTO;
+                        else if (strcmp(mod, "base64") == 0)
+                            fs->stdlib |= XAOT_STDLIB_BASE64;
+                        else if (strcmp(mod, "csv") == 0)
+                            fs->stdlib |= XAOT_STDLIB_CSV;
+                        else if (strcmp(mod, "toml") == 0)
+                            fs->stdlib |= XAOT_STDLIB_TOML;
+                        else if (strcmp(mod, "yaml") == 0)
+                            fs->stdlib |= XAOT_STDLIB_YAML;
+                        else if (strcmp(mod, "xml") == 0)
+                            fs->stdlib |= XAOT_STDLIB_XML;
+                        else if (strcmp(mod, "compress") == 0)
+                            fs->stdlib |= XAOT_STDLIB_COMPRESS;
                     }
                 }
                 break;
@@ -235,17 +253,28 @@ static void apply_feature_closure(XaotFeatureSet *fs) {
 /* Print feature summary to stdout for diagnostics. */
 static void print_features(const XaotFeatureSet *fs) {
     printf("[native] Features:");
-    if (fs->need_coro) printf(" coro");
-    if (fs->need_channel) printf(" channel");
-    if (fs->need_scope) printf(" scope");
-    if (fs->need_timer) printf(" timer");
-    if (fs->need_netpoll) printf(" netpoll");
-    if (fs->need_deep_copy) printf(" deep_copy");
-    if (fs->need_exception) printf(" exception");
-    if (fs->need_reflection) printf(" reflection");
-    if (fs->need_instanceof) printf(" instanceof");
-    if (fs->need_stacktrace) printf(" stacktrace");
-    if (fs->stdlib) printf(" stdlib=0x%x", fs->stdlib);
+    if (fs->need_coro)
+        printf(" coro");
+    if (fs->need_channel)
+        printf(" channel");
+    if (fs->need_scope)
+        printf(" scope");
+    if (fs->need_timer)
+        printf(" timer");
+    if (fs->need_netpoll)
+        printf(" netpoll");
+    if (fs->need_deep_copy)
+        printf(" deep_copy");
+    if (fs->need_exception)
+        printf(" exception");
+    if (fs->need_reflection)
+        printf(" reflection");
+    if (fs->need_instanceof)
+        printf(" instanceof");
+    if (fs->need_stacktrace)
+        printf(" stacktrace");
+    if (fs->stdlib)
+        printf(" stdlib=0x%x", fs->stdlib);
     if (!fs->need_coro && !fs->need_exception && !fs->stdlib)
         printf(" (minimal)");
     printf("\n");
@@ -254,15 +283,15 @@ static void print_features(const XaotFeatureSet *fs) {
 /* ========== Per-module state during AOT compilation ========== */
 
 typedef struct {
-    const char *path;          /* absolute source path (owned) */
-    const char *mod_name;      /* C-safe module name (owned) */
-    XrProto *proto;            /* compiled bytecode (owned by isolate) */
-    XcgenModule *cmod;         /* codegen module (owned by comp) */
-    XrProto **aot_protos;      /* AOT-eligible protos (owned) */
-    char (*aot_c_names)[140];  /* C function names (owned) */
+    const char *path;         /* absolute source path (owned) */
+    const char *mod_name;     /* C-safe module name (owned) */
+    XrProto *proto;           /* compiled bytecode (owned by isolate) */
+    XcgenModule *cmod;        /* codegen module (owned by comp) */
+    XrProto **aot_protos;     /* AOT-eligible protos (owned) */
+    char (*aot_c_names)[140]; /* C function names (owned) */
     int aot_count;
     int aot_cap;
-    XirAotExportSlot *export_slots;  /* synthetic export slots (owned) */
+    XirAotExportSlot *export_slots; /* synthetic export slots (owned) */
     int export_slot_count;
 } XaotModuleInfo;
 
@@ -320,7 +349,7 @@ static int build_shared_proto_map(XrProto *top, XrProto **shared_protos, bool *s
                 for (int scan = (int) pc - 1; scan >= 0; scan--) {
                     OpCode sop = GET_OPCODE(code[scan]);
                     if (sop == OP_CLOSURE && GETARG_A(code[scan]) == class_reg)
-                        ctor_pc = scan;  /* keep updating — earliest wins */
+                        ctor_pc = scan; /* keep updating — earliest wins */
                     else if (ctor_pc >= 0)
                         break;
                 }
@@ -351,7 +380,9 @@ static void preregister_classes(XrProto *proto, XrayIsolate *isolate, XcgenCompi
 
     /* Track register→class mapping.  VM register file is 8-bit indexed
      * (max 250), so 256 entries covers all valid registers. */
-    enum { REG_CLASS_CAP = 256 };
+    enum {
+        REG_CLASS_CAP = 256
+    };
     XrClass **reg_class = (XrClass **) xr_calloc(REG_CLASS_CAP, sizeof(XrClass *));
     if (!reg_class)
         return;
@@ -635,8 +666,8 @@ static char *derive_import_string(const char *target_path, const char *importer_
 }
 
 /* Build cross-module export map for AOT import resolution. */
-static XirAotImportEntry *build_export_map(XaotModuleInfo *modules, int nmodules,
-                                           int entry_index, int *out_count) {
+static XirAotImportEntry *build_export_map(XaotModuleInfo *modules, int nmodules, int entry_index,
+                                           int *out_count) {
     *out_count = 0;
     int cap = 64;
     XirAotImportEntry *map = (XirAotImportEntry *) xr_malloc(cap * sizeof(XirAotImportEntry));
@@ -704,8 +735,8 @@ static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, 
 
     /* Standard headers */
     pos += (size_t) snprintf(buf + pos, est - pos,
-        "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
-        "#include <stdint.h>\n#include <stddef.h>\n\n");
+                             "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
+                             "#include <stdint.h>\n#include <stddef.h>\n\n");
 
     /* Transpiled functions */
     if (aot_source && src_len > 0) {
@@ -720,16 +751,16 @@ static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, 
             buf = tmp;
         }
         pos += (size_t) snprintf(buf + pos, est - pos,
-            "/* --- AOT Transpiled Functions --- */\n%s\n\n", aot_source);
+                                 "/* --- AOT Transpiled Functions --- */\n%s\n\n", aot_source);
     }
 
     /* main() calling module inits in topo order */
     pos += (size_t) snprintf(buf + pos, est - pos,
-        "/* --- Standalone Main (multi-module, no VM) --- */\n"
-        "\nint main(int argc, char **argv) {\n"
-        "    (void)argc; (void)argv;\n"
-        "    xrt_bump_enabled = 1;\n"
-        "    xrt_arc_init();\n");
+                             "/* --- Standalone Main (multi-module, no VM) --- */\n"
+                             "\nint main(int argc, char **argv) {\n"
+                             "    (void)argc; (void)argv;\n"
+                             "    xrt_bump_enabled = 1;\n"
+                             "    xrt_arc_init();\n");
 
     for (int m = 0; m < nmodules; m++) {
         if (!modules[m].cmod)
@@ -746,9 +777,9 @@ static char *assemble_c_source(const char *aot_source, XaotModuleInfo *modules, 
             pos += (size_t) snprintf(buf + pos, est - pos, "    %s(NULL);\n", init_name);
     }
     pos += (size_t) snprintf(buf + pos, est - pos,
-        "    xrt_bump_destroy();\n"
-        "    return 0;\n"
-        "}\n");
+                             "    xrt_bump_destroy();\n"
+                             "    return 0;\n"
+                             "}\n");
 
     return buf;
 }

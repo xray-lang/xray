@@ -53,7 +53,6 @@
 #define AOT_CALL_ARGS_BASE 688
 #define AOT_CALL_ARGS_SLOT_SIZE 8
 
-
 // Resolve a constant int64 value from an XIR ref, tracing through MOV chains.
 // Returns true if resolved, writing to *out_val.
 bool xcg_resolve_const_i64(XirFunc *func, XirRef ref, int64_t *out_val) {
@@ -609,8 +608,7 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf, 
             }
         }
         if (child_non_esc) {
-            xcgen_buf_printf(b, "    /* non-escaping closure %s: no allocation */\n",
-                             closure_fn);
+            xcgen_buf_printf(b, "    /* non-escaping closure %s: no allocation */\n", closure_fn);
             cf->call_args_count = 0;
             return;
         }
@@ -632,8 +630,8 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf, 
                 }
             }
         }
-        xcgen_buf_printf(b, "    v%u = xrt_closure_new((void*)%s, %d);\n", dst_idx,
-                         closure_fn, (int) nupvals);
+        xcgen_buf_printf(b, "    v%u = xrt_closure_new((void*)%s, %d);\n", dst_idx, closure_fn,
+                         (int) nupvals);
         cf->needs_runtime = true;
         cf->call_args_count = 0;
         return;
@@ -642,8 +640,8 @@ static void emit_call_c(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf, 
      * This should not happen — emit a compile-time warning so it is
      * visible rather than silently producing undefined register values. */
     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-    xcgen_buf_printf(b, "    /* WARNING: unresolved CALL_C fn_ptr=%p → v%u undefined */\n",
-                     fn_ptr, dst_idx);
+    xcgen_buf_printf(b, "    /* WARNING: unresolved CALL_C fn_ptr=%p → v%u undefined */\n", fn_ptr,
+                     dst_idx);
     fprintf(stderr, "AOT warning: unresolved CALL_C fn_ptr=%p in %s (dst v%u)\n", fn_ptr,
             cf->c_name ? cf->c_name : "?", dst_idx);
     cf->call_args_count = 0;
