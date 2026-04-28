@@ -264,7 +264,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // unknown type allows dynamic member access
+    // Unknown preserves error recovery and IDE responsiveness after imprecise analysis.
     if (XR_TYPE_IS_UNKNOWN(obj_type)) {
         return xr_type_new_unknown(NULL);
     }
@@ -354,7 +354,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     // Handle Json object field access.
-    // Json is a dynamic container: field values can be any type at runtime
+    // Json is the explicit dynamic data boundary: field values may vary at runtime,
     // including null, so the result type is always nullable.
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {
@@ -626,7 +626,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                                                    ne->type_args, ne->type_arg_count);
                             if (resolved && !XR_TYPE_IS_UNKNOWN(resolved)) {
                                 XrType *arg_type = xa_visit_infer_expr(ctx, ne->arguments[i]);
-                                if (arg_type && !xr_type_assignable(resolved, arg_type)) {
+                                if (arg_type && !xa_typecheck_assignable(resolved, arg_type)) {
                                     XrLocation loc = {.file = ctx->file_path,
                                                       .line = node->line,
                                                       .column = node->column};

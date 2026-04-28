@@ -518,8 +518,9 @@ XirPassChange xir_insert_arc_releases(XirFunc *func) {
         // releases[i] = number of releases to insert *after* instruction i
         // (slot nins = after last instruction, before terminator)
         uint32_t slots = blk->nins + 1;  // +1 for "after last insn" sentinel
-        uint8_t releases_at[blk->nins + 1];
-        memset(releases_at, 0, sizeof(releases_at));
+        uint8_t *releases_at = (uint8_t *) xr_calloc(slots, sizeof(uint8_t));
+        if (!releases_at)
+            continue;
         uint32_t total_releases = 0;
 
         for (uint32_t j = 0; j < nloc; j++) {
@@ -586,8 +587,10 @@ XirPassChange xir_insert_arc_releases(XirFunc *func) {
         }
         (void) slots;
 
-        if (total_releases == 0)
+        if (total_releases == 0) {
+            xr_free(releases_at);
             continue;
+        }
 
         // ---- Pass D: rebuild instruction array with releases interleaved ----
         uint32_t new_nins = blk->nins + total_releases;
@@ -634,6 +637,7 @@ XirPassChange xir_insert_arc_releases(XirFunc *func) {
         XR_DCHECK(wi == new_nins, "instruction count mismatch after rewrite");
         blk->ins = new_ins;
         blk->nins = new_nins;
+        xr_free(releases_at);
 #undef ARC_MAX_LOCAL
     }
 

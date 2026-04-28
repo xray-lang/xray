@@ -18,16 +18,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#include <direct.h>
+#include <windows.h>
+#define test_mkdir(p) _mkdir(p)
+#else
 #include <unistd.h>
+#define test_mkdir(p) mkdir(p, 0755)
+#endif
 
 /* ========== Helper: Create temp directory tree ========== */
 
 static char g_tmpdir[256];
 
 static void make_tmp_tree(void) {
+#ifdef _WIN32
+    char tmpdir[MAX_PATH];
+    GetTempPathA(sizeof(tmpdir), tmpdir);
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "%sxr_test_cli_fs", tmpdir);
+    _mkdir(g_tmpdir);
+#else
     snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xr_test_cli_fs_XXXXXX");
     char *r = mkdtemp(g_tmpdir);
     (void)r;
+#endif
 
     /* Create structure:
      *   g_tmpdir/
@@ -46,37 +61,41 @@ static void make_tmp_tree(void) {
     char path[512];
 
     snprintf(path, sizeof(path), "%s/hello.xr", g_tmpdir);
-    FILE *f = fopen(path, "w"); fprintf(f, "print(1)\n"); fclose(f);
+    FILE *f = fopen(path, "wb"); fprintf(f, "print(1)\n"); fclose(f);
 
     snprintf(path, sizeof(path), "%s/readme.txt", g_tmpdir);
-    f = fopen(path, "w"); fprintf(f, "doc\n"); fclose(f);
+    f = fopen(path, "wb"); fprintf(f, "doc\n"); fclose(f);
 
     snprintf(path, sizeof(path), "%s/.hidden", g_tmpdir);
-    mkdir(path, 0755);
+    test_mkdir(path);
     snprintf(path, sizeof(path), "%s/.hidden/secret.xr", g_tmpdir);
-    f = fopen(path, "w"); fprintf(f, "hidden\n"); fclose(f);
+    f = fopen(path, "wb"); fprintf(f, "hidden\n"); fclose(f);
 
     snprintf(path, sizeof(path), "%s/sub", g_tmpdir);
-    mkdir(path, 0755);
+    test_mkdir(path);
     snprintf(path, sizeof(path), "%s/sub/foo.xr", g_tmpdir);
-    f = fopen(path, "w"); fprintf(f, "foo\n"); fclose(f);
+    f = fopen(path, "wb"); fprintf(f, "foo\n"); fclose(f);
     snprintf(path, sizeof(path), "%s/sub/bar.xr", g_tmpdir);
-    f = fopen(path, "w"); fprintf(f, "bar\n"); fclose(f);
+    f = fopen(path, "wb"); fprintf(f, "bar\n"); fclose(f);
 
     snprintf(path, sizeof(path), "%s/node_modules", g_tmpdir);
-    mkdir(path, 0755);
+    test_mkdir(path);
     snprintf(path, sizeof(path), "%s/node_modules/pkg.xr", g_tmpdir);
-    f = fopen(path, "w"); fprintf(f, "pkg\n"); fclose(f);
+    f = fopen(path, "wb"); fprintf(f, "pkg\n"); fclose(f);
 
     snprintf(path, sizeof(path), "%s/build", g_tmpdir);
-    mkdir(path, 0755);
+    test_mkdir(path);
     snprintf(path, sizeof(path), "%s/build/out.xr", g_tmpdir);
-    f = fopen(path, "w"); fprintf(f, "out\n"); fclose(f);
+    f = fopen(path, "wb"); fprintf(f, "out\n"); fclose(f);
 }
 
 static void rm_rf(const char *dir) {
     char cmd[512];
+#ifdef _WIN32
+    snprintf(cmd, sizeof(cmd), "rmdir /s /q \"%s\" >nul 2>&1", dir);
+#else
     snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
+#endif
     (void)system(cmd);
 }
 

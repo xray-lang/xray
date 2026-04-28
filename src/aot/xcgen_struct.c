@@ -139,7 +139,7 @@ static uint8_t infer_from_backward_scan(XrProto *proto, uint32_t from_pc, int rc
             return XR_REP_I64;
     }
 
-    for (int32_t pc = (int32_t) from_pc - 1; pc >= 0 && pc > (int32_t) from_pc - 64; pc--) {
+    for (int32_t pc = (int32_t) from_pc - 1; pc >= 0; pc--) {
         XrInstruction inst = PROTO_CODE(proto, (uint32_t) pc);
         OpCode op = GET_OPCODE(inst);
         int a = GETARG_A(inst);
@@ -197,13 +197,13 @@ static uint8_t infer_from_backward_scan(XrProto *proto, uint32_t from_pc, int rc
     return XR_REP_TAGGED;
 }
 
-// Infer field type from JSON_INIT instruction sequence after NEWJSON
-// Scans up to 64 instructions after newjson_pc to find JSON_INIT for field_idx
+// Infer field type from JSON_INIT instruction sequence after NEWJSON.
+// Scans forward from newjson_pc until control flow break or end of function.
 static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_idx) {
     uint32_t code_count = (uint32_t) proto->code.count;
     int a_reg = GETARG_A(PROTO_CODE(proto, newjson_pc));
 
-    for (uint32_t pc = newjson_pc + 1; pc < code_count && pc < newjson_pc + 64; pc++) {
+    for (uint32_t pc = newjson_pc + 1; pc < code_count; pc++) {
         XrInstruction inst = PROTO_CODE(proto, pc);
         OpCode op = GET_OPCODE(inst);
 
@@ -389,7 +389,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
                 // Try OP_LOADK-aware scan for better semantic type hint
                 uint32_t code_count = (uint32_t) proto->code.count;
                 int a_reg = GETARG_A(PROTO_CODE(proto, pc));
-                for (uint32_t hpc = pc + 1; hpc < code_count && hpc < pc + 64; hpc++) {
+                for (uint32_t hpc = pc + 1; hpc < code_count; hpc++) {
                     XrInstruction hinst = PROTO_CODE(proto, hpc);
                     OpCode hop = GET_OPCODE(hinst);
                     if (hop == OP_NEWJSON || hop == OP_JMP || hop == OP_RETURN ||
@@ -399,7 +399,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
                         int rc = GETARG_C(hinst);
                         // Try LOADK scan for this register
                         for (int32_t hpc2 = (int32_t) hpc - 1;
-                             hpc2 >= 0 && hpc2 > (int32_t) hpc - 64; hpc2--) {
+                             hpc2 >= 0; hpc2--) {
                             XrInstruction h2 = PROTO_CODE(proto, (uint32_t) hpc2);
                             if (GETARG_A(h2) != rc)
                                 continue;
@@ -480,72 +480,3 @@ void xcgen_emit_all_typedefs(XcgenBuf *b, XcgenStructRegistry *reg) {
     }
 }
 
-void xcgen_emit_struct_deinits(XcgenBuf *b, XcgenStructRegistry *reg) {
-    if (!b)
-        return;
-
-    // If no structs or all structs are native-only: emit no-op xrt_arc_deinit
-    // (satisfies the forward declaration in the ARC runtime section)
-    bool any_ptr = false;
-    if (reg) {
-        for (int i = 0; i < reg->nstructs; i++) {
-            if (!reg->structs[i].all_native) {
-                any_ptr = true;
-                break;
-            }
-        }
-    }
-    if (!any_ptr) {
-        // No structs with PTR fields — emit class-only deinit via type table
-        xcgen_buf_puts(b, "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
-                          "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
-                          "        xrt_type_table[type].destructor(p);\n"
-                          "}\n\n");
-        return;
-    }
-
-    xcgen_buf_puts(b, "/* === ARC deinit functions for struct field release === */\n\n");
-
-    // Emit one deinit function per struct that has XrtValue fields
-    for (int i = 0; i < reg->nstructs; i++) {
-        XcgenStruct *st = &reg->structs[i];
-        if (st->all_native)
-            continue;
-
-        xcgen_buf_printf(b, "static void xrt_deinit_%d(void *p) {\n", i);
-        xcgen_buf_printf(b, "    %s *s = (%s *)p;\n", st->c_name, st->c_name);
-        for (int fi = 0; fi < st->field_count; fi++) {
-            if (st->fields[fi].c_type == 2) {  // XrtValue
-                xcgen_buf_printf(b, "    xrt_arc_release_val(s->%s);\n", st->fields[fi].name);
-            }
-        }
-        xcgen_buf_puts(b, "}\n\n");
-    }
-
-    // Emit dispatch table: indexed by type ID (struct index)
-    xcgen_buf_printf(b, "static void (*xrt_deinit_table[%d])(void *) = {\n", reg->nstructs);
-    for (int i = 0; i < reg->nstructs; i++) {
-        XcgenStruct *st = &reg->structs[i];
-        if (st->all_native)
-            xcgen_buf_puts(b, "    NULL");
-        else
-            xcgen_buf_printf(b, "    xrt_deinit_%d", i);
-        if (i < reg->nstructs - 1)
-            xcgen_buf_puts(b, ",");
-        xcgen_buf_puts(b, "\n");
-    }
-    xcgen_buf_puts(b, "};\n\n");
-
-    // Emit the actual definition of xrt_arc_deinit (forward-declared in ARC runtime)
-    // Checks struct deinit table first, then falls back to class type table
-    xcgen_buf_puts(
-        b, "static void xrt_arc_deinit(void *p, uint16_t type) {\n"
-           "    if (type < (uint16_t)(sizeof(xrt_deinit_table)/sizeof(xrt_deinit_table[0]))\n"
-           "        && xrt_deinit_table[type]) {\n"
-           "        xrt_deinit_table[type](p);\n"
-           "        return;\n"
-           "    }\n"
-           "    if (type < xrt_type_count && xrt_type_table[type].destructor)\n"
-           "        xrt_type_table[type].destructor(p);\n"
-           "}\n\n");
-}

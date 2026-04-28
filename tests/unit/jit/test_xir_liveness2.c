@@ -12,6 +12,7 @@
 #include <assert.h>
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_liveness2.h"
+#include "../test_win_compat.h"
 
 /*
  * Test 1: Single block, no liveness across boundaries.
@@ -270,7 +271,7 @@ static void test_dead_var(void) {
 }
 
 /*
- * Test 5: Chain of blocks â€” value passes through middle block.
+ * Test 5: Chain of blocks â€?value passes through middle block.
  *
  *   entry:
  *     v0 = CONST_I64(42)
@@ -327,6 +328,7 @@ static void test_passthrough(void) {
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir_liveness2 ===\n");
 
     test_single_block();

@@ -10,5 +10,5 @@ test3: worker 2 start
 test3: worker 2 end
 test3: all done
 test4: sum = 10
-test5: total = 3
+test5: sums = 45 45 45
 all tests passed

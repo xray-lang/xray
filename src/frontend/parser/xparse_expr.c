@@ -65,7 +65,7 @@ AstNode *xr_parse_literal(Parser *parser) {
                 parse_integer_literal(parser->previous.start, parser->previous.length);
             // Full int64 range allowed at parse time.
             // The compiler decides per-context: int64 targets use LOADK_RAW,
-            // untyped (any) targets with >64-bit values get a compile error.
+            // tagged fallback targets with >64-bit values get a compile error.
             AstNode *node = xr_ast_literal_int(parser->X, value, parser->previous.line);
             node->column = column;
             return node;

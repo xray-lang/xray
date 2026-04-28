@@ -76,7 +76,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     // concurrent deopt may have bumped deopt_count in between; re-checking
     // here keeps eligibility a read-only query and costs very little.
     if (!is_jit_eligible(proto, false))
-        return;
+        goto fail_clear_sentinel;
 
     /* Build XIR from the immutable proto bytecode.
      *
@@ -106,15 +106,15 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     if (task->ic_builtin_snapshot)
         xr_ic_builtin_table_free(task->ic_builtin_snapshot);
     if (!func) {
-        xr_log_warning("jit-bg", "builder failed for %s",
-                       proto->name ? XR_STRING_CHARS(proto->name) : "?");
-        return;
+        xr_log_debug("jit-bg", "builder failed for %s",
+                     proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        goto fail_clear_sentinel;
     }
 
     // Guard: reject oversized functions
     if (func->nvreg > 4096) {
         xir_func_destroy(func);
-        return;
+        goto fail_clear_sentinel;
     }
 
     // Optimization passes
@@ -125,16 +125,17 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     // This eliminates data races between workers and the main thread.
 #if defined(__aarch64__)
     XirCodegenResult res = xir_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(_M_X64)
     XirCodegenResult res = xir_codegen_x64(func, &q->worker_code_alloc[worker_id]);
 #else
     XirCodegenResult res = {.success = false, .error = "unsupported architecture"};
 #endif
     if (!res.success) {
-        xr_log_warning("jit-bg", "codegen failed for %s",
-                       proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        xr_log_debug("jit-bg", "codegen failed for %s: %s",
+                     proto->name ? XR_STRING_CHARS(proto->name) : "?",
+                     res.error ? res.error : "unknown");
         xir_func_destroy(func);
-        return;
+        goto fail_clear_sentinel;
     }
 
     // Bundle ALL compilation outputs into a heap-allocated result struct.
@@ -143,7 +144,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     XirBgResult *bgr = (XirBgResult *) xr_calloc(1, sizeof(XirBgResult));
     if (!bgr) {
         xir_func_destroy(func);
-        return;
+        goto fail_clear_sentinel;
     }
 
     bgr->code = res.code;
@@ -187,6 +188,13 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     }
 
     xir_func_destroy(func);
+    return;
+
+fail_clear_sentinel:
+    // Clear the 0x1 sentinel so the main thread can retry compilation
+    // later (e.g. after the proto gains more type feedback or the
+    // unsupported opcode is implemented).
+    atomic_store_explicit(&proto->jit_entry_pending, NULL, memory_order_release);
 }
 
 /* ========== Background worker main loop ========== */

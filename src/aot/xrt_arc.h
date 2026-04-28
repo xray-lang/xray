@@ -5,13 +5,13 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_arc.h - ARC (Automatic Reference Counting) + bump allocator
+ * xrt_arc.h - Bump allocator for AOT-generated code
  *
  * KEY CONCEPT:
  *   Self-contained memory management for AOT-generated code.
- *   Objects carry an XrtArcHdr before user data for retain/release.
- *   Bump allocator provides allocation-heavy fast path; objects are
- *   freed in bulk by xrt_bump_destroy().
+ *   Objects carry an XrtArcHdr before user data for type tracking.
+ *   The bump allocator provides a fast allocation path; all objects
+ *   are freed in bulk by xrt_bump_destroy() at program exit.
  */
 
 #ifndef XRT_ARC_H
@@ -43,41 +43,36 @@
 #endif
 
 /* =========================================================================
- * ARC (Automatic Reference Counting)
+ * Object header — precedes every bump-allocated object.
  *
- * Object layout (bytes preceding user data):
- *   [XrtArcHdr][  user data  ]
- *    ^--- hdr pointer (via XRT_ARC_HDR macro)
+ * Layout: [XrtArcHdr][  user data  ]
+ *          ^--- hdr pointer (via XRT_ARC_HDR macro)
  *
- * rc = 0 means freed. XRT_ARC_IMMORTAL prevents retain/release.
- * xrt_arc_deinit is called once when rc drops to 0 and HAS_DEINIT is set.
+ * The `type` field records the class/struct type ID for runtime dispatch
+ * (e.g. xrt_type_table lookup). The `flags` field carries allocation
+ * metadata (bump vs heap).
  * ========================================================================= */
 
 typedef struct {
-    uint32_t rc;     // reference count (non-atomic, single-coroutine)
     uint16_t flags;  // XRT_ARC_* flags
-    uint16_t type;   // object type tag for deinit dispatch
+    uint16_t type;   // object type tag for type-table dispatch
+    uint32_t _pad;   // alignment padding (8-byte aligned header)
 } XrtArcHdr;
 
 #define XRT_ARC_HDR(p) ((XrtArcHdr *) ((char *) (p) - sizeof(XrtArcHdr)))
-#define XRT_ARC_IMMORTAL (1u << 0)
 #define XRT_ARC_HAS_DEINIT (1u << 1)
 
 /* =========================================================================
- * Bump allocator for ARC objects
+ * Bump allocator
  *
- * Replaces calloc in xrt_arc_alloc for allocation-heavy workloads.
- * Objects are never individually freed — the entire arena is released
- * at program exit via xrt_bump_destroy().
- *
- * This is always compiled in; xrt_arc_alloc picks the bump path when
- * xrt_bump_enabled is set (default: on). Individual objects still carry
- * an XrtArcHdr so retain/release/deinit semantics are preserved;
- * the actual free() in xrt_arc_release becomes a no-op for bump objects.
+ * Primary allocation path for AOT-generated code. Objects are never
+ * individually freed — the entire arena is released at program exit
+ * via xrt_bump_destroy(). Each object carries an XrtArcHdr for type
+ * tracking. When xrt_bump_enabled is 0, falls back to calloc/free.
  * ========================================================================= */
 
 #define XRT_BUMP_BLOCK_SIZE (2u * 1024u * 1024u)  // 2 MB per block
-#define XRT_ARC_BUMP (1u << 2)                    // object was bump-allocated
+#define XRT_ARC_BUMP (1u << 2)                    // bump-allocated (skip individual free)
 
 typedef struct XrtBumpBlock {
     struct XrtBumpBlock *next;
@@ -150,54 +145,19 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
             abort();
         }
     }
-    hdr->rc = 1;
     return (char *) hdr + sizeof(XrtArcHdr);
 }
 
-static inline void *xrt_arc_retain(void *p) {
-    if (!p)
-        return NULL;
-    XrtArcHdr *h = XRT_ARC_HDR(p);
-    if (__builtin_expect(!!(h->flags & XRT_ARC_IMMORTAL), 0))
-        return p;
-    h->rc++;
-    return p;
-}
-
-// Forward declaration — definition generated per-module by xcgen_emit_struct_deinits()
-static void xrt_arc_deinit(void *p, uint16_t type);
-
-static inline void xrt_arc_release(void *p) {
-    if (!p)
-        return;
-    XrtArcHdr *h = XRT_ARC_HDR(p);
-    if (__builtin_expect(!!(h->flags & XRT_ARC_IMMORTAL), 0))
-        return;
-    if (--h->rc == 0) {
-        if (h->flags & XRT_ARC_HAS_DEINIT)
-            xrt_arc_deinit((char *) h + sizeof(XrtArcHdr), h->type);
-        if (!(h->flags & XRT_ARC_BUMP))
-            XRT_FREE(h);  // bump-allocated objects are freed in bulk by xrt_bump_destroy
-    }
-}
-
-static inline XrtValue xrt_arc_retain_val(XrtValue v) {
-    if ((v.tag == XRT_TAG_PTR || v.tag == XRT_TAG_STR_ARC) && v.ptr)
-        xrt_arc_retain(v.ptr);
-    return v;
-}
-
-static inline void xrt_arc_release_val(XrtValue v) {
-    if ((v.tag == XRT_TAG_PTR || v.tag == XRT_TAG_STR_ARC) && v.ptr)
-        xrt_arc_release(v.ptr);
-}
+// ARC retain/release removed — bump allocator frees all objects in bulk
+// via xrt_bump_destroy() at program exit. Per-object reference counting
+// is not needed for short-lived AOT programs.
 
 static inline void xrt_arc_init(void) {
     if (xrt_bump_enabled)
         xrt_bump_new_block(0);
 }
 
-// Allocate a heap string via ARC; xrt_arc_release will free it
+// Allocate a heap string via bump allocator
 static inline XrtValue xrt_str_alloc(size_t len) {
     char *p = (char *) xrt_arc_alloc(len + 1);
     return xrt_mkptr(p, XRT_TAG_STR_ARC);

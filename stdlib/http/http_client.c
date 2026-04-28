@@ -783,6 +783,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
 
     if (raw_body && raw_body_len > 0) {
         // Check Content-Encoding for decompression
+#if XR_HAS_COMPRESS
         XrContentEncoding compress_type = XR_CONTENT_ENC_NONE;
         for (size_t i = 0; i < resp.header_count; i++) {
             if (resp.headers[i].name_len == 16 &&
@@ -832,6 +833,13 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             result.body[raw_body_len] = '\0';
             result.body_len = raw_body_len;
         }
+#else
+        // Compress module not available, copy body as-is
+        result.body = (char *) xr_malloc(raw_body_len + 1);
+        memcpy(result.body, raw_body, raw_body_len);
+        result.body[raw_body_len] = '\0';
+        result.body_len = raw_body_len;
+#endif  // XR_HAS_COMPRESS
     }
 
     result.error = XR_HTTP_OK;

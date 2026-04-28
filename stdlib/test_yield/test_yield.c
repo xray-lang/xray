@@ -503,7 +503,7 @@ static XrCFuncResult test_yield_long_task(XrayIsolate *X, XrValue *args, int arg
 // Module registration
 /* ========================================================================== */
 
-XrModule *xr_load_module_test_yield(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_test_yield(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_test_yield: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "test_yield");

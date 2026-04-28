@@ -73,4 +73,55 @@
 #endif  // Cache line size (used for padding to avoid false sharing)
 #define XR_CACHE_LINE 64
 
+/* ========== MSVC GCC-builtin Compatibility ========== */
+
+#if defined(XR_COMPILER_MSVC) && !defined(__clang__)
+#include <stdlib.h>
+
+// Branch prediction hints (no-op on MSVC; the optimizer handles it)
+#define __builtin_expect(expr, val) (expr)
+
+// Bit manipulation intrinsics
+#include <intrin.h>
+static __forceinline int __builtin_ctz(unsigned int x) {
+    unsigned long idx;
+    _BitScanForward(&idx, x);
+    return (int) idx;
+}
+static __forceinline int __builtin_ctzll(unsigned long long x) {
+    unsigned long idx;
+    _BitScanForward64(&idx, x);
+    return (int) idx;
+}
+static __forceinline int __builtin_popcountll(unsigned long long x) {
+    return (int) __popcnt64(x);
+}
+
+// Overflow-checked arithmetic (C23 ckd_* style; MSVC lacks builtins)
+#include <stdint.h>
+#include <limits.h>
+static __forceinline int __builtin_add_overflow(int64_t a, int64_t b, int64_t *res) {
+    *res = a + b;
+    return ((b > 0) && (a > INT64_MAX - b)) || ((b < 0) && (a < INT64_MIN - b));
+}
+static __forceinline int __builtin_sub_overflow(int64_t a, int64_t b, int64_t *res) {
+    *res = a - b;
+    return ((b < 0) && (a > INT64_MAX + b)) || ((b > 0) && (a < INT64_MIN + b));
+}
+static __forceinline int __builtin_mul_overflow(int64_t a, int64_t b, int64_t *res) {
+    *res = a * b;
+    if (a == 0 || b == 0) return 0;
+    return (*res / a != b);
+}
+#endif  // XR_COMPILER_MSVC builtins
+
+/* ========== MSVC POSIX Function Shims ========== */
+
+#if defined(XR_COMPILER_MSVC)
+#include <string.h>
+#define strcasecmp  _stricmp
+#define strncasecmp _strnicmp
+#define strtok_r    strtok_s
+#endif
+
 #endif  // XPLATFORM_H

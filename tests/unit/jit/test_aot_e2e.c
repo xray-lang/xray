@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_aot_e2e.c - End-to-end AOT tests: XIR â†’ ARM64 (AAPCS) â†’ Execute
+ * test_aot_e2e.c - End-to-end AOT tests: XIR â†?ARM64 (AAPCS) â†?Execute
  *
  * KEY CONCEPT:
  *   Verifies AOT codegen produces correct native code with AAPCS
@@ -22,6 +22,7 @@
 #include "../../../src/jit/xir.h"
 #include "../../../src/jit/xir_pass.h"
 #include "../../../src/jit/xir_codegen.h"
+#include "../test_win_compat.h"
 
 // AOT calling convention: AAPCS (params in x0-x7, return in x0)
 typedef int64_t (*AotFn0)(void);
@@ -204,7 +205,7 @@ static void test_branch(void) {
     int64_t ret5 = fn(5);
     CHECK(ret5 == 10, "expected 10 for n=5");
 
-    fprintf(stderr, " OK (0â†’%lld, 1â†’%lld, 5â†’%lld)\n",
+    fprintf(stderr, " OK (0â†?lld, 1â†?lld, 5â†?lld)\n",
             (long long)ret0, (long long)ret1, (long long)ret5);
     tests_passed++;
     xir_func_destroy(func);
@@ -212,6 +213,7 @@ static void test_branch(void) {
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     signal(SIGSEGV, crash_handler);
     signal(SIGBUS, crash_handler);
 

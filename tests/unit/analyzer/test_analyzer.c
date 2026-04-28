@@ -15,6 +15,7 @@
 #include "xanalyzer_visitor.h"
 #include "xtype_pool.h"
 #include "xray_isolate.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -134,7 +135,7 @@ TEST(type_union) {
 TEST(type_assignable) {
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_float = xr_type_new_float(NULL);
-    XrType *t_any = xr_type_new_unknown(NULL);
+    XrType *t_unknown = xr_type_new_unknown(NULL);
     XrType *t_never = xr_type_new_never(NULL);
 
     // int assignable to int
@@ -143,11 +144,45 @@ TEST(type_assignable) {
     // int assignable to float (numeric coercion)
     ASSERT(xr_type_assignable(t_float, t_int));
 
-    // anything assignable to any
-    ASSERT(xr_type_assignable(t_any, t_int));
+    // Internal lattice keeps unknown as a permissive top type.
+    ASSERT(xr_type_assignable(t_unknown, t_int));
 
     // never assignable to anything
     ASSERT(xr_type_assignable(t_int, t_never));
+}
+
+TEST(typecheck_assignable_rejects_unknown_source) {
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_unknown = xr_type_new_unknown(NULL);
+
+    ASSERT(!xa_typecheck_assignable(t_int, t_unknown));
+    ASSERT(xa_typecheck_assignable(t_unknown, t_int));
+}
+
+TEST(typecheck_assignable_rejects_unknown_container_member) {
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *target = xr_type_new_array(g_isolate, t_int);
+    XrType *source = xr_type_new_array(g_isolate, xr_type_new_unknown(NULL));
+
+    ASSERT(xr_type_assignable(target, source));
+    ASSERT(xa_typecheck_assignable(target, source));
+}
+
+TEST(analyzer_check_assignment_rejects_unknown_source) {
+    XrType *t_int = xr_type_new_int(NULL);
+    XrType *t_unknown = xr_type_new_unknown(NULL);
+    XrLocation loc = {.file = "test.xr", .line = 1, .column = 1};
+
+    xa_analyzer_clear_diagnostics(g_analyzer);
+    ASSERT(!xa_analyzer_check_assignment(g_analyzer, t_int, t_unknown, &loc));
+
+    int count = 0;
+    XaDiagnostic *diag = xa_analyzer_get_diagnostics(g_analyzer, &count);
+    ASSERT(count == 1);
+    ASSERT(diag != NULL);
+    ASSERT(diag->code == XR_ERR_ANALYZE_TYPE_MISMATCH);
+
+    xa_analyzer_clear_diagnostics(g_analyzer);
 }
 
 TEST(type_to_string) {
@@ -665,6 +700,7 @@ TEST(class_info_members) {
 // ============================================================================
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("Running analyzer unit tests...\n\n");
 
     // Setup type pool (required for type allocation)
@@ -675,6 +711,9 @@ int main(void) {
     RUN_TEST(type_containers);
     RUN_TEST(type_union);
     RUN_TEST(type_assignable);
+    RUN_TEST(typecheck_assignable_rejects_unknown_source);
+    RUN_TEST(typecheck_assignable_rejects_unknown_container_member);
+    RUN_TEST(analyzer_check_assignment_rejects_unknown_source);
     RUN_TEST(type_to_string);
     RUN_TEST(type_narrowing);
 

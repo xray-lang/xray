@@ -195,7 +195,9 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 
 add_xray_unit_test(test_datetime stdlib/test_datetime.c)
 add_xray_unit_test(test_crypto stdlib/test_crypto.c)
-add_xray_unit_test(test_compress stdlib/test_compress.c)
+if(XR_STDLIB_COMPRESS)
+    add_xray_unit_test(test_compress stdlib/test_compress.c)
+endif()
 add_xray_unit_test(test_xml_node stdlib/test_xml_node.c)
 add_xray_unit_test(test_buffer_pool stdlib/test_buffer_pool.c)
 

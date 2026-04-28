@@ -204,6 +204,7 @@ TEST(allocator_name) {
 /* ========== Main ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     RUN_TEST_SUITE("xmalloc Tests");
 
     RUN_TEST(malloc_basic);

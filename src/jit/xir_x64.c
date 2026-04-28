@@ -17,7 +17,7 @@
  *   AMD64 Architecture Programmer's Manual Vol.3, "General-Purpose Instructions"
  */
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(_M_X64)
 
 #include "xir_x64.h"
 
@@ -619,4 +619,4 @@ void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src) {
     x64_modrm(buf, 0x3, (uint8_t) dst & 7, (uint8_t) src & 7);
 }
 
-#endif  // __x86_64__
+#endif  // __x86_64__ || _M_X64

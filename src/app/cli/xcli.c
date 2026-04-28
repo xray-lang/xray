@@ -16,7 +16,14 @@
 #include "xcli_dispatch.h"
 #include <signal.h>
 #include <string.h>
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#include <process.h>
+#include <Windows.h>
+#include <crtdbg.h>
+#else
 #include <unistd.h>
+#endif
 
 #if defined(XR_OS_MACOS) || (defined(XR_OS_LINUX) && !defined(__ANDROID__))
 #include <execinfo.h>
@@ -50,6 +57,14 @@ static void crash_handler(int sig) {
 #endif
 
 int main(int argc, char **argv) {
+#ifdef XR_OS_WINDOWS
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
 #if !defined(XR_OS_WINDOWS) && !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__) &&  \
     !(__has_feature(address_sanitizer) || __has_feature(thread_sanitizer))
     signal(SIGSEGV, crash_handler);

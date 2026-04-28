@@ -93,8 +93,7 @@ static const uint8_t builtin_return_rep[SYMBOL_BUILTIN_COUNT] = {
     [SYMBOL_POW] = BREP(XR_REP_F64),
     [SYMBOL_TOFLOAT] = BREP(XR_REP_F64),
     [SYMBOL_TIMESTAMP] = BREP(XR_REP_F64),
-    [SYMBOL_MAX] = BREP(XR_REP_F64),
-    [SYMBOL_MIN] = BREP(XR_REP_F64),
+    /* MAX/MIN are polymorphic (I64 for int, F64 for float) — omitted → default PTR (tagged) */
 };
 
 // Decode builtin_return_rep: 0=unset→PTR, nonzero→rep-1

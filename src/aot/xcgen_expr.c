@@ -163,21 +163,7 @@ void xcg_emit_ref(XcgenBuf *b, XirFunc *func, XirRef ref) {
     }
 }
 
-// Emit a ref as XrtValue, auto-boxing int64_t/double if needed
-static void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref) {
-    uint8_t t = xcg_ref_type(func, ref);
-    if (t == XR_REP_I64) {
-        xcgen_buf_puts(b, "xrt_box_int(");
-        xcg_emit_ref(b, func, ref);
-        xcgen_buf_puts(b, ")");
-    } else if (t == XR_REP_F64) {
-        xcgen_buf_puts(b, "xrt_box_float(");
-        xcg_emit_ref(b, func, ref);
-        xcgen_buf_puts(b, ")");
-    } else {
-        xcg_emit_ref(b, func, ref);
-    }
-}
+// xcg_emit_ref_as_tagged() is now a shared public function in xcgen_intrinsic.c
 
 /* ========== Binary/Compare/Unary Operations ========== */
 
@@ -455,8 +441,6 @@ static void xcg_emit_collection_op(XcgenBuf *b, XirFunc *func, XirIns *ins, Xcge
 static void xcg_emit_field_load(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule *mod,
                                 XcgenFunc *cf) {
     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-    const char *tagged_type = "XrValue";
-    (void) tagged_type;
     // args[0] = base ptr, args[1] = const(byte_offset)
     int64_t offset = 0;
     if (xir_ref_is_const(ins->args[1])) {
@@ -563,14 +547,7 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenM
                 uint8_t hint = st->fields[fi].val_hint_type;
                 bool val_tagged =
                     (val_type == XR_REP_PTR || val_type == XR_REP_TAGGED || val_type == XR_REP_STR);
-                // ARC: retain new val, release old field for tagged fields
-                if (st->fields[fi].c_type == 2 && val_tagged) {
-                    xcgen_buf_puts(b, "    xrt_arc_retain_val(");
-                    xcg_emit_ref(b, func, ins->args[1]);
-                    xcgen_buf_puts(b, "); xrt_arc_release_val(");
-                    EMIT_STRUCT_BASE(b, st, base_vi, func);
-                    xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
-                }
+                // ARC retain/release removed — bump allocator frees in bulk
                 xcgen_buf_puts(b, "    ");
                 EMIT_STRUCT_BASE(b, st, base_vi, func);
                 xcgen_buf_printf(b, "%s = ", st->fields[fi].name);
@@ -876,7 +853,6 @@ static void xcg_emit_box_op(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *
 // Emit CONST_PTR instruction (string literal, null, or raw pointer)
 static void xcg_emit_const_ptr(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf) {
     uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
-    const char *tagged_type = "XrValue";
     uint8_t vtype = XR_REP_PTR;
     if (xir_ref_is_vreg(ins->dst)) {
         uint32_t vi = XIR_REF_INDEX(ins->dst);
@@ -953,16 +929,8 @@ static void xcg_emit_mov(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf)
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;
-    } else if (src_tagged && dst_tagged) {
-        // ARC: retain new value, release old, then assign
-        xcgen_buf_puts(b, "    xrt_arc_retain_val(");
-        xcg_emit_ref(b, func, ins->args[0]);
-        xcgen_buf_printf(b, "); xrt_arc_release_val(v%u);\n", dst_idx);
-        xcgen_buf_printf(b, "    v%u = ", dst_idx);
-        xcg_emit_ref(b, func, ins->args[0]);
-        xcgen_buf_puts(b, ";\n");
-        cf->needs_runtime = true;
     } else {
+        // Direct copy: tagged-to-tagged or same-type (bump frees in bulk)
         xcgen_buf_printf(b, "    v%u = ", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ";\n");
@@ -1198,20 +1166,10 @@ void xcg_emit_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *s
             return;
         }
 
-        // --- ARC retain/release ---
+        // --- No-op: ARC retain/release suppressed (bump allocator frees in bulk) ---
         case XIR_RETAIN:
-        case XIR_RELEASE: {
-            uint8_t t = xcg_ref_type(func, ins->args[0]);
-            bool tagged = (t == XR_REP_PTR || t == XR_REP_TAGGED || t == XR_REP_STR);
-            if (tagged) {
-                xcgen_buf_printf(b, "    %s(",
-                                 ins->op == XIR_RETAIN ? "xrt_arc_retain_val"
-                                                       : "xrt_arc_release_val");
-                xcg_emit_ref(b, func, ins->args[0]);
-                xcgen_buf_puts(b, ");\n");
-            }
+        case XIR_RELEASE:
             return;
-        }
 
         // --- No-op categories: guards, GC barriers ---
         case XIR_GUARD_TAG:
