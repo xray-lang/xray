@@ -174,11 +174,6 @@ typedef struct {
     XirAotExportSlot *aot_export_slots;
     int aot_export_slot_count;
 
-    // Conservative mode: skip type speculation guards (shape/klass guards).
-    // Emits generic CALL_C paths to avoid deopt on type-unstable functions.
-    // Set when deopt_count >= 5 (adaptive recompile after frequent deopts).
-    bool conservative;
-
     // Inline-cache snapshots for type feedback. JIT/AOT use these read-only
     // copies of the proto's IC state to drive speculative devirtualization
     // and Json shape guards. ic_snapshots_owned == true means the builder

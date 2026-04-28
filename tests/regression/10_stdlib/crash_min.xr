@@ -1,0 +1,12 @@
+// Test: just define and use a class
+class Box {
+    value: int
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+for (let i = 0; i < 200; i++) {
+    let b = new Box(i)
+}
+print("OK 200")
