@@ -222,6 +222,158 @@ TEST(const_fold_no_fold_variable) {
     xi_func_free(f);
 }
 
+TEST(const_fold_int_mod) {
+    /* 17 % 5 => 2 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c17 = xi_const_int(f, blk, 17, &stub_int);
+    XiValue *c5 = xi_const_int(f, blk, 5, &stub_int);
+    XiValue *mod = xi_binary(f, blk, XI_MOD, &stub_int, c17, c5);
+
+    xi_opt_const_fold(f);
+
+    assert(mod->op == XI_CONST && mod->aux_int == 2);
+    xi_func_free(f);
+}
+
+TEST(const_fold_mod_by_zero) {
+    /* 10 % 0 => NOT folded */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c10 = xi_const_int(f, blk, 10, &stub_int);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *mod = xi_binary(f, blk, XI_MOD, &stub_int, c10, c0);
+
+    xi_opt_const_fold(f);
+
+    assert(mod->op == XI_MOD && "mod by zero should NOT be folded");
+    xi_func_free(f);
+}
+
+TEST(const_fold_bnot) {
+    /* ~0 => -1 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *bn = xi_unary(f, blk, XI_BNOT, &stub_int, c0);
+
+    xi_opt_const_fold(f);
+
+    assert(bn->op == XI_CONST && bn->aux_int == ~(int64_t)0);
+    xi_func_free(f);
+}
+
+TEST(const_fold_float_sub) {
+    /* 5.0 - 1.5 => 3.5 */
+    XiFunc *f = make_func("test", &stub_float);
+    XiBlock *blk = f->entry;
+
+    XiValue *c5 = xi_const_float(f, blk, 5.0, &stub_float);
+    XiValue *c1 = xi_const_float(f, blk, 1.5, &stub_float);
+    XiValue *sub = xi_binary(f, blk, XI_SUB, &stub_float, c5, c1);
+
+    xi_opt_const_fold(f);
+
+    assert(sub->op == XI_CONST && "float sub should be folded");
+    double result;
+    memcpy(&result, &sub->aux_int, sizeof(double));
+    assert(result == 3.5 && "5.0 - 1.5 should be 3.5");
+    xi_func_free(f);
+}
+
+TEST(const_fold_float_compare) {
+    /* 2.0 < 3.0 => true */
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *blk = f->entry;
+
+    XiValue *c2 = xi_const_float(f, blk, 2.0, &stub_float);
+    XiValue *c3 = xi_const_float(f, blk, 3.0, &stub_float);
+    XiValue *lt = xi_binary(f, blk, XI_LT, &stub_bool, c2, c3);
+
+    xi_opt_const_fold(f);
+
+    assert(lt->op == XI_CONST && lt->aux_int == 1 && "2.0 < 3.0 should be true");
+    xi_func_free(f);
+}
+
+TEST(const_fold_int_eq) {
+    /* 7 == 7 => true */
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *blk = f->entry;
+
+    XiValue *c7a = xi_const_int(f, blk, 7, &stub_int);
+    XiValue *c7b = xi_const_int(f, blk, 7, &stub_int);
+    XiValue *eq = xi_binary(f, blk, XI_EQ, &stub_bool, c7a, c7b);
+
+    xi_opt_const_fold(f);
+
+    assert(eq->op == XI_CONST && eq->aux_int == 1 && "7 == 7 should be true");
+    xi_func_free(f);
+}
+
+TEST(const_fold_int_ne) {
+    /* 3 != 5 => true */
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *blk = f->entry;
+
+    XiValue *c3 = xi_const_int(f, blk, 3, &stub_int);
+    XiValue *c5 = xi_const_int(f, blk, 5, &stub_int);
+    XiValue *ne = xi_binary(f, blk, XI_NE, &stub_bool, c3, c5);
+
+    xi_opt_const_fold(f);
+
+    assert(ne->op == XI_CONST && ne->aux_int == 1 && "3 != 5 should be true");
+    xi_func_free(f);
+}
+
+TEST(const_fold_bitwise_ops) {
+    /* 0xFF & 0x0F => 0x0F; 0xA0 | 0x05 => 0xA5; 6 ^ 3 => 5 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *cFF = xi_const_int(f, blk, 0xFF, &stub_int);
+    XiValue *c0F = xi_const_int(f, blk, 0x0F, &stub_int);
+    XiValue *band = xi_binary(f, blk, XI_BAND, &stub_int, cFF, c0F);
+
+    XiValue *cA0 = xi_const_int(f, blk, 0xA0, &stub_int);
+    XiValue *c05 = xi_const_int(f, blk, 0x05, &stub_int);
+    XiValue *bor = xi_binary(f, blk, XI_BOR, &stub_int, cA0, c05);
+
+    XiValue *c6 = xi_const_int(f, blk, 6, &stub_int);
+    XiValue *c3 = xi_const_int(f, blk, 3, &stub_int);
+    XiValue *bxor = xi_binary(f, blk, XI_BXOR, &stub_int, c6, c3);
+
+    xi_opt_const_fold(f);
+
+    assert(band->op == XI_CONST && band->aux_int == 0x0F);
+    assert(bor->op == XI_CONST && bor->aux_int == 0xA5);
+    assert(bxor->op == XI_CONST && bxor->aux_int == 5);
+    xi_func_free(f);
+}
+
+TEST(const_fold_shift) {
+    /* 1 << 4 => 16; 32 >> 2 => 8 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *c4 = xi_const_int(f, blk, 4, &stub_int);
+    XiValue *shl = xi_binary(f, blk, XI_SHL, &stub_int, c1, c4);
+
+    XiValue *c32 = xi_const_int(f, blk, 32, &stub_int);
+    XiValue *c2 = xi_const_int(f, blk, 2, &stub_int);
+    XiValue *shr = xi_binary(f, blk, XI_SHR, &stub_int, c32, c2);
+
+    xi_opt_const_fold(f);
+
+    assert(shl->op == XI_CONST && shl->aux_int == 16);
+    assert(shr->op == XI_CONST && shr->aux_int == 8);
+    xi_func_free(f);
+}
+
 /* ========== Copy Propagation Tests ========== */
 
 TEST(copy_prop_basic) {
@@ -524,6 +676,122 @@ TEST(strength_shl_zero) {
     xi_func_free(f);
 }
 
+TEST(strength_one_mul) {
+    /* 1 * x => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, c1, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(mul->op == XI_COPY && mul->args[0] == x && "1 * x should become COPY");
+    xi_func_free(f);
+}
+
+TEST(strength_zero_mul_lhs) {
+    /* 0 * x => 0 */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, c0, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(mul->op == XI_CONST && mul->aux_int == 0 && "0 * x should be 0");
+    xi_func_free(f);
+}
+
+TEST(strength_and_self) {
+    /* x & x => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *band = xi_binary(f, blk, XI_BAND, &stub_int, x, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(band->op == XI_COPY && band->args[0] == x && "x & x should be COPY x");
+    xi_func_free(f);
+}
+
+TEST(strength_or_self) {
+    /* x | x => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *bor = xi_binary(f, blk, XI_BOR, &stub_int, x, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(bor->op == XI_COPY && bor->args[0] == x && "x | x should be COPY x");
+    xi_func_free(f);
+}
+
+TEST(strength_or_zero_lhs) {
+    /* 0 | x => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *bor = xi_binary(f, blk, XI_BOR, &stub_int, c0, x);
+
+    xi_opt_strength_reduce(f);
+
+    assert(bor->op == XI_COPY && bor->args[0] == x);
+    xi_func_free(f);
+}
+
+TEST(strength_shr_zero) {
+    /* x >> 0 => x */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *shr = xi_binary(f, blk, XI_SHR, &stub_int, x, c0);
+
+    xi_opt_strength_reduce(f);
+
+    assert(shr->op == XI_COPY && shr->args[0] == x);
+    xi_func_free(f);
+}
+
+TEST(phi_simplify_non_trivial) {
+    /* phi(a, b) with a != b should NOT be simplified */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *b = xi_const_int(f, entry, 2, &stub_int);
+
+    XiBlock *merge = xi_block_new(f);
+    xi_block_add_pred(merge, entry);
+    xi_block_add_pred(merge, entry);
+    merge->sealed = true;
+
+    XiPhi *phi = xi_phi_new(f, merge, &stub_int, 2);
+    phi->value.args[0] = a;
+    phi->value.args[1] = b;
+
+    XiValue *use = xi_value_new(f, merge, XI_PRINT, &stub_void, 1);
+    use->args[0] = &phi->value;
+    use->flags |= XI_FLAG_SIDE_EFFECT;
+
+    xi_opt_phi_simplify(f);
+
+    assert(merge->phis != NULL && "non-trivial phi should NOT be removed");
+    assert(use->args[0] == &phi->value && "use should still reference phi");
+    xi_func_free(f);
+}
+
 /* ========== Verification Tests ========== */
 
 TEST(verify_valid_func) {
@@ -641,6 +909,15 @@ int main(void) {
     run_const_fold_float_add();
     run_const_fold_chain();
     run_const_fold_no_fold_variable();
+    run_const_fold_int_mod();
+    run_const_fold_mod_by_zero();
+    run_const_fold_bnot();
+    run_const_fold_float_sub();
+    run_const_fold_float_compare();
+    run_const_fold_int_eq();
+    run_const_fold_int_ne();
+    run_const_fold_bitwise_ops();
+    run_const_fold_shift();
 
     /* Copy propagation */
     run_copy_prop_basic();
@@ -653,6 +930,7 @@ int main(void) {
 
     /* Phi simplification */
     run_phi_simplify_trivial();
+    run_phi_simplify_non_trivial();
 
     /* Strength reduction */
     run_strength_add_zero();
@@ -664,6 +942,12 @@ int main(void) {
     run_strength_and_zero();
     run_strength_div_one();
     run_strength_shl_zero();
+    run_strength_one_mul();
+    run_strength_zero_mul_lhs();
+    run_strength_and_self();
+    run_strength_or_self();
+    run_strength_or_zero_lhs();
+    run_strength_shr_zero();
 
     /* Verification */
     run_verify_valid_func();
