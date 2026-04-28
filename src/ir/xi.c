@@ -46,6 +46,10 @@ static void *arena_alloc(XiFunc *f, uint32_t size) {
     return ptr;
 }
 
+void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
+    return arena_alloc(f, size);
+}
+
 /* ========== Function Lifecycle ========== */
 
 XiFunc *xi_func_new(const char *name, struct XrType *return_type) {

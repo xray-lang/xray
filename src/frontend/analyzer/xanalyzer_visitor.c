@@ -912,6 +912,23 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_ASSIGNMENT:
             xa_visit_assignment_stmt(ctx, node);
             break;
+        case AST_COMPOUND_ASSIGNMENT: {
+            // Infer value expression so its type is recorded in the side table
+            CompoundAssignmentNode *ca = &node->as.compound_assignment;
+            if (ca->value)
+                xa_visit_infer_expr(ctx, ca->value);
+            // Check const/in-param immutability
+            XaSymbol *ca_sym = xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
+            if (ca_sym && ca_sym->is_const) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[128];
+                snprintf(msg, sizeof(msg), "Cannot assign to const '%s'", ca->name);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
+            break;
+        }
         case AST_MEMBER_SET: {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
@@ -1016,7 +1033,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     }
                 }
             }
-            if (inner && inner->type == AST_MEMBER_SET) {
+            if (inner && (inner->type == AST_MEMBER_SET ||
+                          inner->type == AST_ASSIGNMENT ||
+                          inner->type == AST_COMPOUND_ASSIGNMENT)) {
                 xa_visit_infer_stmt(ctx, inner);
             } else {
                 xa_visit_infer_expr(ctx, inner);

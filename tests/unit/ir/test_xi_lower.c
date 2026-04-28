@@ -1,0 +1,241 @@
+/*
+ * test_xi_lower.c - Unit tests for AST to Xi IR lowering
+ *
+ * Uses a minimal isolate + analyzer to test the full lowering pipeline.
+ * Each test parses a small xray source snippet, runs the analyzer,
+ * lowers to Xi IR, and verifies the dump output.
+ */
+
+#include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_lower.h"
+#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/frontend/parser/xast_nodes.h"
+#include "../../../src/frontend/parser/xast_types.h"
+#include "../../../src/frontend/parser/xparse.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/base/xmalloc.h"
+#include "../../../include/xray_isolate.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+
+/* ========== Test Infrastructure ========== */
+
+static XrayIsolate *g_iso = NULL;
+static int tests_passed = 0;
+static int tests_failed = 0;
+
+static void setup(void) {
+    if (!g_iso) {
+        XrayIsolateParams p;
+        xray_isolate_params_init(&p);
+        g_iso = xray_isolate_new(&p);
+    }
+}
+
+static void teardown(void) {
+    if (g_iso) {
+        xray_isolate_delete(g_iso);
+        g_iso = NULL;
+    }
+}
+
+/* Parse source, run analyzer, lower to Xi, dump and return XiFunc.
+ * Caller must call xi_func_free() on the result. */
+static XiFunc *lower_source(const char *source) {
+    assert(g_iso != NULL);
+
+    /* Parse */
+    AstNode *program = xr_parse(g_iso, source);
+    if (!program) {
+        fprintf(stderr, "  PARSE FAILED for: %s\n", source);
+        return NULL;
+    }
+
+    /* Analyze */
+    XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
+    if (!analyzer) {
+        fprintf(stderr, "  ANALYZER ALLOC FAILED\n");
+        xr_program_destroy(program);
+        return NULL;
+    }
+    xa_analyzer_analyze(analyzer, "test.xr", program);
+
+    /* Lower */
+    XiFunc *func = xi_lower_program(program, analyzer, g_iso);
+    if (!func) {
+        fprintf(stderr, "  LOWER FAILED for: %s\n", source);
+        xa_analyzer_free(analyzer);
+        xr_program_destroy(program);
+        return NULL;
+    }
+
+    /* Dump to stdout for visual verification */
+    xi_func_dump(func, stdout);
+
+    /* Cleanup AST and analyzer (Xi IR is independent) */
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+
+    return func;
+}
+
+#define TEST(name) \
+    static void test_##name(void); \
+    static void run_##name(void) { \
+        printf("--- %s ---\n", #name); \
+        test_##name(); \
+        printf("  PASS\n\n"); \
+        tests_passed++; \
+    } \
+    static void test_##name(void)
+
+/* ========== Tests ========== */
+
+TEST(simple_arithmetic) {
+    XiFunc *f = lower_source("let x = 1 + 2\nlet y = x * 3\nprint(y)");
+    assert(f != NULL);
+    assert(f->nblocks >= 1);
+    /* Entry block should have: const 1, const 2, add, const 3, mul, print */
+    assert(f->entry->nvalues >= 5);
+    xi_func_free(f);
+}
+
+TEST(variable_assignment) {
+    XiFunc *f = lower_source("let x = 10\nx = x + 5\nprint(x)");
+    assert(f != NULL);
+    assert(f->nblocks >= 1);
+    xi_func_free(f);
+}
+
+TEST(if_else) {
+    XiFunc *f = lower_source(
+        "let x = 10\n"
+        "if (x > 5) {\n"
+        "    print(1)\n"
+        "} else {\n"
+        "    print(0)\n"
+        "}\n"
+    );
+    assert(f != NULL);
+    /* Should have: entry, then, else, merge blocks */
+    assert(f->nblocks >= 3);
+    xi_func_free(f);
+}
+
+TEST(while_loop) {
+    XiFunc *f = lower_source(
+        "let i = 0\n"
+        "while (i < 10) {\n"
+        "    i = i + 1\n"
+        "}\n"
+        "print(i)\n"
+    );
+    assert(f != NULL);
+    /* Should have: entry, cond, body, exit blocks */
+    assert(f->nblocks >= 3);
+    xi_func_free(f);
+}
+
+TEST(for_loop) {
+    XiFunc *f = lower_source(
+        "let sum = 0\n"
+        "for (let i = 0; i < 5; i = i + 1) {\n"
+        "    sum = sum + i\n"
+        "}\n"
+        "print(sum)\n"
+    );
+    assert(f != NULL);
+    assert(f->nblocks >= 3);
+    xi_func_free(f);
+}
+
+TEST(nested_if) {
+    XiFunc *f = lower_source(
+        "let x = 10\n"
+        "if (x > 5) {\n"
+        "    if (x > 8) {\n"
+        "        print(2)\n"
+        "    } else {\n"
+        "        print(1)\n"
+        "    }\n"
+        "} else {\n"
+        "    print(0)\n"
+        "}\n"
+    );
+    assert(f != NULL);
+    assert(f->nblocks >= 5);
+    xi_func_free(f);
+}
+
+TEST(bool_literals) {
+    XiFunc *f = lower_source(
+        "let a = true\n"
+        "let b = false\n"
+        "let c = !a\n"
+        "print(c)\n"
+    );
+    assert(f != NULL);
+    xi_func_free(f);
+}
+
+TEST(float_arithmetic) {
+    XiFunc *f = lower_source(
+        "let x = 3.14\n"
+        "let y = x * 2.0\n"
+        "print(y)\n"
+    );
+    assert(f != NULL);
+    xi_func_free(f);
+}
+
+TEST(string_const) {
+    XiFunc *f = lower_source(
+        "let msg = \"hello\"\n"
+        "print(msg)\n"
+    );
+    assert(f != NULL);
+    xi_func_free(f);
+}
+
+TEST(comparison_ops) {
+    XiFunc *f = lower_source(
+        "let a = 1\n"
+        "let b = 2\n"
+        "let eq = a == b\n"
+        "let ne = a != b\n"
+        "let lt = a < b\n"
+        "print(eq)\n"
+        "print(ne)\n"
+        "print(lt)\n"
+    );
+    assert(f != NULL);
+    xi_func_free(f);
+}
+
+/* ========== Main ========== */
+
+int main(void) {
+    printf("=== Xi Lower Unit Tests ===\n\n");
+
+    setup();
+
+    run_simple_arithmetic();
+    run_variable_assignment();
+    run_if_else();
+    run_while_loop();
+    run_for_loop();
+    run_nested_if();
+    run_bool_literals();
+    run_float_arithmetic();
+    run_string_const();
+    run_comparison_ops();
+
+    teardown();
+
+    printf("=== %d/%d Xi Lower tests passed ===\n",
+           tests_passed, tests_passed + tests_failed);
+    return tests_failed > 0 ? 1 : 0;
+}

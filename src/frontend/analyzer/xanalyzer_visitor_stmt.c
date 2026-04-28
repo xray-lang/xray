@@ -215,7 +215,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    if (!XR_TYPE_IS_UNKNOWN(var_type)) {
+    if (!XR_TYPE_IS_UNKNOWN(var_type) && !XR_TYPE_IS_UNKNOWN(value_type)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         // Check null safety first (null→T, T?→T)
         bool null_err =
@@ -233,8 +233,9 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Update flow graph
-    if (ctx->flow) {
+    // Update flow graph — but only if value type is known.
+    // Recording unknown would downgrade a variable from its declared type.
+    if (ctx->flow && value_type && !XR_TYPE_IS_UNKNOWN(value_type)) {
         xa_flow_create_assignment(ctx->flow, NULL, assign->name, value_type);
     }
 }
