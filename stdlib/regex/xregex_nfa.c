@@ -182,7 +182,7 @@ static inline bool is_word_char(int c) {
  * @param p     current position
  * @param end   text end
  */
-bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p, const char *end) {
+XR_FUNC bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p, const char *end) {
     if (flags & XR_EMPTY_BEGIN_TEXT) {
         if (p != text)
             return false;
@@ -448,7 +448,7 @@ static bool onepass_search(XrProg *prog, const char *text, int len, const char *
  * NFA Match Main Loop
  * ======================================================================== */
 
-bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures, int ncaptures) {
+XR_FUNC bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures, int ncaptures) {
     if (len < 0)
         len = (int) strlen(text);
 
@@ -757,7 +757,7 @@ static bool nfa_search_fast(XrProg *prog, const char *text, int len, const char 
  * ======================================================================== */
 
 // Search for match in text (non-anchored)
-bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures, int ncaptures) {
+XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures, int ncaptures) {
     if (len < 0)
         len = (int) strlen(text);
 

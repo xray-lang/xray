@@ -250,7 +250,7 @@ static void step_nfa(XrProg *prog, XrSparseSet *curr, int byte_class, int c, XrS
  * ======================================================================== */
 
 // Create DFA
-XrDFA *xr_dfa_new(XrProg *prog) {
+XR_FUNC XrDFA *xr_dfa_new(XrProg *prog) {
     XrDFA *dfa = (XrDFA *) xr_re_alloc(sizeof(XrDFA));
     if (!dfa)
         return NULL;
@@ -279,7 +279,7 @@ XrDFA *xr_dfa_new(XrProg *prog) {
 }
 
 // Free DFA
-void xr_dfa_free(XrDFA *dfa) {
+XR_FUNC void xr_dfa_free(XrDFA *dfa) {
     if (!dfa)
         return;
 
@@ -402,7 +402,7 @@ static XrDFAState *dfa_next_state(XrDFA *dfa, XrDFAState *state, int c, const ch
  * Use DFA to search for match
  * Return: 1=match found, 0=no match, -1=DFA failed (need to fallback to NFA)
  */
-int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
+XR_FUNC int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
                   const char **match_end) {
     if (!dfa || len < 0)
         return -1;
@@ -469,6 +469,6 @@ int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_star
  * Use DFA to test if matches (no position info needed)
  * Return: 1=match, 0=no match, -1=DFA failed
  */
-int xr_dfa_test(XrDFA *dfa, const char *text, int len) {
+XR_FUNC int xr_dfa_test(XrDFA *dfa, const char *text, int len) {
     return xr_dfa_search(dfa, text, len, NULL, NULL);
 }
