@@ -751,6 +751,117 @@ TEST(struct_literal) {
     xi_func_free(f);
 }
 
+TEST(force_unwrap) {
+    XiFunc *f = lower_source(
+        "let x: int? = 42\n"
+        "let y = x!\n"
+        "print(y)\n"
+    );
+    assert(f != NULL);
+    /* Force unwrap generates ISNULL + branch */
+    int found_isnull = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i]->op == XI_ISNULL) found_isnull = 1;
+        }
+    }
+    assert(found_isnull && "should have ISNULL for force unwrap");
+    assert(f->nblocks >= 3 && "force unwrap should create throw/ok branches");
+    xi_func_free(f);
+}
+
+TEST(destructure_decl) {
+    XiFunc *f = lower_source(
+        "let arr = [1, 2, 3]\n"
+        "let [a, b, c] = arr\n"
+        "print(a + b + c)\n"
+    );
+    assert(f != NULL);
+    /* Destructure should create INDEX_GET ops */
+    int index_count = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_INDEX_GET) index_count++;
+    }
+    assert(index_count >= 3 && "should have 3 INDEX_GET for destructure");
+    xi_func_free(f);
+}
+
+TEST(multi_assign) {
+    XiFunc *f = lower_source(
+        "let a = 1\n"
+        "let b = 2\n"
+        "a, b = b, a\n"
+        "print(a)\n"
+        "print(b)\n"
+    );
+    assert(f != NULL);
+    xi_func_free(f);
+}
+
+TEST(enum_access) {
+    XiFunc *f = lower_source(
+        "enum Color {\n"
+        "    Red,\n"
+        "    Green,\n"
+        "    Blue\n"
+        "}\n"
+        "let c = Color.Red\n"
+        "print(c)\n"
+    );
+    assert(f != NULL);
+    int found_load = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_LOAD_FIELD) found_load = 1;
+    }
+    assert(found_load && "should have LOAD_FIELD for enum access");
+    xi_func_free(f);
+}
+
+TEST(import_export_skip) {
+    XiFunc *f = lower_source(
+        "import \"math\" as math\n"
+        "let x = 42\n"
+        "print(x)\n"
+    );
+    assert(f != NULL);
+    /* Import is compile-time, should not generate any special ops */
+    assert(f->entry->nvalues >= 2);
+    xi_func_free(f);
+}
+
+TEST(class_decl_skip) {
+    XiFunc *f = lower_source(
+        "class Dog {\n"
+        "    name: string\n"
+        "}\n"
+        "print(1)\n"
+    );
+    assert(f != NULL);
+    /* Class decl is compile-time, lowered body goes nowhere.
+     * Main should still have print. */
+    int found_print = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_PRINT) found_print = 1;
+    }
+    assert(found_print && "should still have print after class decl");
+    xi_func_free(f);
+}
+
+TEST(yield_stmt) {
+    XiFunc *f = lower_source(
+        "yield\n"
+        "print(1)\n"
+    );
+    assert(f != NULL);
+    int found_yield = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_YIELD) found_yield = 1;
+    }
+    assert(found_yield && "should have YIELD op");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -797,6 +908,13 @@ int main(void) {
     run_range_expr();
     run_optional_chain();
     run_struct_literal();
+    run_force_unwrap();
+    run_destructure_decl();
+    run_multi_assign();
+    run_enum_access();
+    run_import_export_skip();
+    run_class_decl_skip();
+    run_yield_stmt();
 
     teardown();
 

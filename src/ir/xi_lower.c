@@ -1047,6 +1047,318 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
     return phi ? &phi->value : null_val;
 }
 
+/* expr! — force unwrap nullable; runtime null-check then pass-through */
+static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
+    XiValue *val = lower_expr(l, node->as.unary.operand);
+    if (!val) return NULL;
+    struct XrType *result_type = node_type(l, node);
+    /* Emit a null-check that throws on null, otherwise returns val */
+    XiValue *chk = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+    if (!chk) return val;
+    chk->args[0] = val;
+
+    XiBlock *ok_blk = xi_block_new(l->func);
+    XiBlock *throw_blk = xi_block_new(l->func);
+    xi_block_set_if(l->cur_block, chk, throw_blk, ok_blk);
+    braun_seal_block(l, throw_blk);
+    braun_seal_block(l, ok_blk);
+
+    /* Throw path */
+    l->cur_block = throw_blk;
+    XiValue *msg = xi_const_str(l->func, l->cur_block,
+                                 "force unwrap of null value", l->type_string);
+    XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_void, 1);
+    if (thr) {
+        thr->args[0] = msg;
+        thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    }
+    l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+
+    /* Ok path */
+    l->cur_block = ok_blk;
+    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    if (copy) copy->args[0] = val;
+    return copy ? copy : val;
+}
+
+static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
+    (void) node;
+    /* 'this' is the first implicit parameter (index 0) in methods */
+    struct XrType *this_type = node_type(l, node);
+    int var_id = var_lookup_or_create(l, "this", this_type);
+    return braun_read(l, var_id, l->cur_block);
+}
+
+static XiValue *lower_super_call(XiLower *l, AstNode *node) {
+    SuperCallNode *sc = &node->as.super_call;
+    XiValue *arg_vals[32];
+    int n = sc->arg_count > 32 ? 32 : sc->arg_count;
+    for (int i = 0; i < n; i++)
+        arg_vals[i] = lower_expr(l, sc->arguments[i]);
+
+    /* 'this' is receiver for super call */
+    struct XrType *this_type = l->type_any;
+    int var_id = var_lookup_or_create(l, "this", this_type);
+    XiValue *this_val = braun_read(l, var_id, l->cur_block);
+
+    struct XrType *result_type = node_type(l, node);
+    uint16_t nargs = (uint16_t)(n + 1);
+    XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                  result_type, nargs);
+    if (!call) return NULL;
+    call->args[0] = this_val ? this_val : xi_const_null(l->func, l->cur_block, l->type_null);
+    for (int i = 0; i < n; i++)
+        call->args[i + 1] = arg_vals[i];
+    call->aux = (void *)(sc->method_name ? sc->method_name : "init");
+    call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    call->line = (uint32_t) node->line;
+    return call;
+}
+
+static XiValue *lower_enum_access(XiLower *l, AstNode *node) {
+    EnumAccessNode *ea = &node->as.enum_access;
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 0);
+    if (!v) return NULL;
+    v->aux = (void *) ea->member_name;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_enum_convert(XiLower *l, AstNode *node) {
+    EnumConvertNode *ec = &node->as.enum_convert;
+    XiValue *val = lower_expr(l, ec->value_expr);
+    if (!val) return NULL;
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
+    if (!v) return NULL;
+    v->args[0] = val;
+    v->aux = (void *) ec->enum_name;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+/* ch.send / ch.recv are parsed as method calls, not dedicated AST nodes.
+ * AST_CHAN_SEND / AST_CHAN_RECV are reserved types, handled here for
+ * completeness if ever emitted. */
+
+static XiValue *lower_cancelled_expr(XiLower *l, AstNode *node) {
+    /* cancelled() returns bool */
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, l->type_bool, 0);
+    if (!v) return NULL;
+    v->aux_int = 0;  /* builtin id for 'cancelled' */
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+static XiValue *lower_move_expr(XiLower *l, AstNode *node) {
+    /* move var — transfer ownership; semantically same as reading the var */
+    MoveExprNode *me = &node->as.move_expr;
+    XiValue *val = lower_expr(l, me->expr);
+    if (!val) return NULL;
+    struct XrType *result_type = node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    if (!v) return val;
+    v->args[0] = val;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t) node->line;
+    return v;
+}
+
+/*
+ * select { case msg from ch => body; case ch.send(v) => body; default => body }
+ * Lowered as a chain of recv/send attempts like match.
+ */
+static void lower_select(XiLower *l, AstNode *node) {
+    SelectStmtNode *sel = &node->as.select_stmt;
+    int n = sel->case_count;
+
+    XiBlock *merge = xi_block_new(l->func);
+    int max_cases = n > 32 ? 32 : n;
+
+    for (int i = 0; i < max_cases; i++) {
+        AstNode *case_node = sel->cases[i];
+        SelectCaseNode *sc = &case_node->as.select_case;
+
+        if (sc->is_default) {
+            /* Default case: unconditional body */
+            lower_stmt(l, sc->body);
+            if (l->cur_block)
+                xi_block_set_jump(l->cur_block, merge);
+        } else {
+            XiBlock *body_blk = xi_block_new(l->func);
+            XiBlock *next_blk = xi_block_new(l->func);
+
+            if (sc->is_send) {
+                /* ch.send(v) case */
+                XiValue *chan = lower_expr(l, sc->channel);
+                XiValue *val = lower_expr(l, sc->value);
+                if (chan && val) {
+                    XiValue *send = xi_value_new(l->func, l->cur_block,
+                                                  XI_CHAN_SEND, l->type_bool, 2);
+                    if (send) {
+                        send->args[0] = chan;
+                        send->args[1] = val;
+                        send->flags |= XI_FLAG_SIDE_EFFECT;
+                        xi_block_set_if(l->cur_block, send, body_blk, next_blk);
+                    }
+                }
+            } else {
+                /* msg from ch: recv case */
+                XiValue *chan = lower_expr(l, sc->channel);
+                if (chan) {
+                    struct XrType *val_type = l->type_any;
+                    XiValue *recv = xi_value_new(l->func, l->cur_block,
+                                                  XI_CHAN_RECV, val_type, 1);
+                    if (recv) {
+                        recv->args[0] = chan;
+                        recv->flags |= XI_FLAG_SIDE_EFFECT;
+                    }
+                    /* Bind received value to variable */
+                    if (sc->var_name && recv) {
+                        int var_id = var_lookup_or_create(l, sc->var_name, val_type);
+                        braun_write(l, var_id, l->cur_block, recv);
+                    }
+                    /* Always enter body (recv blocks until success) */
+                    xi_block_set_jump(l->cur_block, body_blk);
+                }
+            }
+
+            braun_seal_block(l, body_blk);
+            braun_seal_block(l, next_blk);
+
+            l->cur_block = body_blk;
+            lower_stmt(l, sc->body);
+            if (l->cur_block)
+                xi_block_set_jump(l->cur_block, merge);
+
+            l->cur_block = next_blk;
+        }
+    }
+
+    /* Fall-through to merge if no default matched */
+    if (l->cur_block && l->cur_block != merge)
+        xi_block_set_jump(l->cur_block, merge);
+
+    braun_seal_block(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+}
+
+/* scope { body } — structured concurrency block */
+static void lower_scope_block(XiLower *l, AstNode *node) {
+    ScopeBlockNode *sb = &node->as.scope_block;
+    lower_stmt(l, sb->body);
+}
+
+static void lower_yield_stmt(XiLower *l) {
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_void, 0);
+    if (v) v->flags |= XI_FLAG_SIDE_EFFECT;
+}
+
+/*
+ * Bind destructure pattern elements to extracted values from 'src'.
+ * Array patterns: INDEX_GET by position.
+ * Object patterns: LOAD_FIELD by field name.
+ * Identifier patterns: bind directly.
+ */
+static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat,
+                                    XiValue *src) {
+    if (!pat || !src || !l->cur_block) return;
+
+    switch (pat->type) {
+        case PATTERN_ARRAY: {
+            int n = pat->as.array.element_count;
+            for (int i = 0; i < n; i++) {
+                XrDestructurePattern *elem = pat->as.array.elements[i];
+                if (!elem) continue;
+                XiValue *idx = xi_const_int(l->func, l->cur_block, i, l->type_int);
+                XiValue *val = xi_value_new(l->func, l->cur_block,
+                                             XI_INDEX_GET, l->type_any, 2);
+                if (val) { val->args[0] = src; val->args[1] = idx; }
+                lower_destructure_bind(l, elem, val);
+            }
+            break;
+        }
+        case PATTERN_OBJECT: {
+            int n = pat->as.object.field_count;
+            for (int i = 0; i < n; i++) {
+                char *fname = pat->as.object.field_names[i];
+                XrDestructurePattern *sub = pat->as.object.patterns[i];
+                if (!fname) continue;
+                XiValue *val = xi_value_new(l->func, l->cur_block,
+                                             XI_LOAD_FIELD, l->type_any, 1);
+                if (val) { val->args[0] = src; val->aux = (void *) fname; }
+                lower_destructure_bind(l, sub, val);
+            }
+            break;
+        }
+        case PATTERN_IDENTIFIER: {
+            const char *name = pat->as.identifier.name;
+            if (!name) break;
+            int var_id = var_lookup_or_create(l, name, l->type_any);
+            braun_write(l, var_id, l->cur_block, src);
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+/* Destructure declaration: let [a, b] = expr or let {x, y} = expr */
+static void lower_destructure_decl(XiLower *l, AstNode *node) {
+    DestructureDeclNode *dd = &node->as.destructure_decl;
+    XiValue *init = lower_expr(l, dd->initializer);
+    if (!init || !dd->pattern) return;
+    lower_destructure_bind(l, dd->pattern, init);
+}
+
+/* Destructure assignment: [a, b] = [b, a] */
+static void lower_destructure_assign(XiLower *l, AstNode *node) {
+    DestructureAssignNode *da = &node->as.destructure_assign;
+    XiValue *rhs = lower_expr(l, da->value);
+    if (!rhs || !da->pattern) return;
+    lower_destructure_bind(l, da->pattern, rhs);
+}
+
+/* Multi-value declaration: let a, b = foo() */
+static void lower_multi_var_decl(XiLower *l, AstNode *node) {
+    MultiVarDeclNode *mv = &node->as.multi_var_decl;
+    /* Evaluate all value expressions */
+    for (int i = 0; i < mv->name_count && i < mv->value_count; i++) {
+        XiValue *val = lower_expr(l, mv->values[i]);
+        struct XrType *vtype = val ? val->type : l->type_any;
+        int var_id = var_lookup_or_create(l, mv->names[i], vtype);
+        if (val) braun_write(l, var_id, l->cur_block, val);
+    }
+    /* Names without values get null */
+    for (int i = mv->value_count; i < mv->name_count; i++) {
+        int var_id = var_lookup_or_create(l, mv->names[i], l->type_any);
+        XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
+        braun_write(l, var_id, l->cur_block, null_val);
+    }
+}
+
+/* Multi-value assignment: a, b = b, a */
+static void lower_multi_assign(XiLower *l, AstNode *node) {
+    MultiAssignNode *ma = &node->as.multi_assign;
+    /* Evaluate all RHS first to support swaps */
+    XiValue *rhs_vals[32];
+    int n = ma->value_count > 32 ? 32 : ma->value_count;
+    for (int i = 0; i < n; i++)
+        rhs_vals[i] = lower_expr(l, ma->values[i]);
+
+    /* Assign to each target */
+    for (int i = 0; i < ma->target_count && i < n; i++) {
+        AstNode *tgt = ma->targets[i];
+        if (tgt && tgt->type == AST_VARIABLE) {
+            const char *name = tgt->as.variable.name;
+            struct XrType *vtype = rhs_vals[i] ? rhs_vals[i]->type : l->type_any;
+            int var_id = var_lookup_or_create(l, name, vtype);
+            if (rhs_vals[i]) braun_write(l, var_id, l->cur_block, rhs_vals[i]);
+        }
+    }
+}
+
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     int count = obj->count;
@@ -1369,6 +1681,48 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
             return lower_struct_literal(l, node);
         case AST_OPTIONAL_CHAIN:
             return lower_optional_chain(l, node);
+
+        /* Force unwrap: expr! */
+        case AST_FORCE_UNWRAP:
+            return lower_force_unwrap(l, node);
+
+        /* OOP: this / super */
+        case AST_THIS_EXPR:
+            return lower_this_expr(l, node);
+        case AST_SUPER_CALL:
+            return lower_super_call(l, node);
+
+        /* Enum access / convert / index */
+        case AST_ENUM_ACCESS:
+            return lower_enum_access(l, node);
+        case AST_ENUM_CONVERT:
+            return lower_enum_convert(l, node);
+        case AST_ENUM_INDEX:
+            return lower_enum_access(l, node);  /* same pattern: load field */
+
+        /* Coroutine expressions */
+        case AST_AWAIT_ALL_EXPR:
+        case AST_AWAIT_ANY_EXPR:
+            return lower_await_expr(l, node);  /* reuse: flags distinguish */
+        case AST_CANCELLED_EXPR:
+            return lower_cancelled_expr(l, node);
+        case AST_MOVE_EXPR:
+            return lower_move_expr(l, node);
+
+        /* BigInt / Regex: lowered as const values */
+        case AST_LITERAL_BIGINT:
+            return xi_const_int(l->func, l->cur_block,
+                                node->as.literal.raw_value.int_val,
+                                l->type_int);
+        case AST_LITERAL_REGEX:
+            return xi_const_str(l->func, l->cur_block,
+                                node->as.literal.raw_value.string_val ?
+                                node->as.literal.raw_value.string_val : "",
+                                l->type_string);
+
+        /* Expression statement wrapper: unwrap */
+        case AST_EXPR_STMT:
+            return lower_expr(l, node->as.expr_stmt);
 
         default:
             /* Unsupported expression: emit null placeholder */
@@ -1807,6 +2161,57 @@ static void lower_stmt(XiLower *l, AstNode *node) {
             lower_defer(l, node);
             break;
 
+        /* Select statement (channel multiplexing) */
+        case AST_SELECT_STMT:
+            lower_select(l, node);
+            break;
+
+        /* Scope block (structured concurrency) */
+        case AST_SCOPE_BLOCK:
+            lower_scope_block(l, node);
+            break;
+
+        /* Yield execution */
+        case AST_YIELD_STMT:
+            lower_yield_stmt(l);
+            break;
+
+        /* Destructuring */
+        case AST_DESTRUCTURE_DECL:
+            lower_destructure_decl(l, node);
+            break;
+        case AST_DESTRUCTURE_ASSIGN:
+            lower_destructure_assign(l, node);
+            break;
+
+        /* Multi-value declarations and assignments */
+        case AST_MULTI_VAR_DECL:
+            lower_multi_var_decl(l, node);
+            break;
+        case AST_MULTI_ASSIGN:
+            lower_multi_assign(l, node);
+            break;
+
+        /* Module system: import/export are compile-time directives,
+         * no runtime IR needed. Skip silently. */
+        case AST_IMPORT_STMT:
+        case AST_EXPORT_STMT:
+            break;
+
+        /* Type declarations are compile-time; no runtime IR needed.
+         * Class/struct/enum bodies are accessed via their methods and literals. */
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+        case AST_INTERFACE_DECL:
+        case AST_ENUM_DECL:
+        case AST_TYPE_ALIAS:
+            break;
+
+        /* Match expression used as statement */
+        case AST_MATCH_EXPR:
+            lower_expr(l, node);
+            break;
+
         /* Expressions that appear as statements (assignment, call, etc.) */
         case AST_ASSIGNMENT:
         case AST_COMPOUND_ASSIGNMENT:
@@ -1817,6 +2222,10 @@ static void lower_stmt(XiLower *l, AstNode *node) {
         case AST_INDEX_SET:
         case AST_GO_EXPR:
         case AST_AWAIT_EXPR:
+        case AST_AWAIT_ALL_EXPR:
+        case AST_AWAIT_ANY_EXPR:
+        case AST_NEW_EXPR:
+        case AST_MOVE_EXPR:
             lower_expr(l, node);
             break;
 
