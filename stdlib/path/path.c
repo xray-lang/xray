@@ -15,7 +15,7 @@
 #include "path.h"
 #include "../common.h"
 #include "../ctxbuf.h"
-#include "../../src/vm/xvm_internal.h"
+#include "../../src/runtime/object/xmap.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
 #include <limits.h>
@@ -315,6 +315,7 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     result[pos] = '\0';
 
     XrValue ret = xrs_string_value_c(X, result);
+    xr_free(result);
     xr_free(seg_buf);
     return ret;
 }
