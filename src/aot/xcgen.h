@@ -78,7 +78,6 @@ typedef struct XcgenFunc {
     XcgenBuf body;             // function body buffer
     int tmp_count;             // temp variable counter
     bool needs_runtime;        // true if function calls runtime APIs
-    bool needs_gc;             // true if function allocates GC objects
     bool needs_closure_param;  // true if function accesses upvalues (needs XrtValue xrt_closure
                                // param)
     bool non_escaping;         // true if all callers pass upvalues inline (no closure object)
@@ -107,9 +106,6 @@ typedef struct XcgenFunc {
     int call_args_cap;  // current allocated size
     int call_args_count;
 
-    // Shadow stack: number of XrtValue locals registered for GC scanning
-    int shadow_stack_count;
-
     // Defer tracking: number of deferred closures in this function.
     // Codegen emits _defer_N / _defer_N_set locals and LIFO cleanup at returns.
     int defer_count;
@@ -136,7 +132,6 @@ typedef struct {
 
 typedef struct XcgenExport {
     const char *name;   // export name (e.g. "pi", "add")
-    const char *c_var;  // C global variable name (e.g. "mod_math__pi")
     int shared_index;   // index into xrt_shared[] array (-1 = named global)
     bool is_const;      // true if const export
 } XcgenExport;
@@ -161,9 +156,6 @@ typedef struct XcgenModule {
 
     // Struct promotion registry (non-owning ptr → comp->struct_reg)
     XcgenStructRegistry *struct_reg;
-
-    // Compilation flags
-    bool emit_debug;  // true = #line directives
 
     // Backpointer to parent compilation context
     XcgenCompilation *comp;
@@ -192,9 +184,6 @@ struct XcgenCompilation {
     int nclass_infos;
     int class_infos_cap;
 
-    // Output configuration
-    bool emit_debug;   // true = #line directives
-    bool single_file;  // true = combine all modules into one .c
 };
 
 /* ========== Compilation API ========== */
@@ -272,9 +261,6 @@ XR_FUNC bool xcg_emit_call_instruction(XcgenBuf *b, XirFunc *func, XirIns *ins,
 XR_FUNC const char *xcg_lookup_proto_name(XcgenModule *mod, void *proto_ptr);
 // Lookup proto → index in mod->funcs (-1 if not found/compiled yet)
 XR_FUNC int xcg_lookup_proto_func_idx(XcgenModule *mod, void *proto_ptr);
-// Lookup proto → compiled XcgenFunc (for struct param info); may return NULL
-// NOTE: always re-derives the pointer from mod->funcs to avoid dangling refs after realloc
-XR_FUNC XcgenFunc *xcg_lookup_proto_cf(XcgenModule *mod, void *proto_ptr);
 
 // Emit phi copies for a control-flow edge
 XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *from, XirBlock *to);
@@ -282,5 +268,42 @@ XR_FUNC void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *
 // Emit block terminator (branch/jump/return)
 XR_FUNC void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *self_name,
                                  XcgenFunc *cf);
+
+/* ========== Shared Emit Helpers ========== */
+
+// Auto-box int64_t/double vregs to XrtValue for runtime call arguments
+XR_FUNC void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
+
+/* ========== Intrinsic Lowering (xcgen_intrinsic.c) ========== */
+
+// Emit C code for a CALL_INTRINSIC instruction
+XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf,
+                                      XcgenModule *mod);
+
+/* ========== Prescan / Analysis Passes (xcgen_prescan.c) ========== */
+
+// Block reachability: BFS from entry to find live blocks
+XR_FUNC void xcg_compute_reachable(XirFunc *func, bool *reachable);
+
+// Dead vreg elimination: seed-then-propagate used-vreg analysis
+XR_FUNC void xcg_compute_used_vregs(XirFunc *func, bool *reachable, bool *used);
+
+// Detect struct-promoted vregs (JSON shapes → C struct pointers)
+XR_FUNC void xcg_prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf);
+
+// Retype LOAD_FIELD results from narrow I64/F64 to TAGGED (16-byte slots)
+XR_FUNC void xcg_retype_field_loads(XcgenFunc *cf);
+
+// Retype boolean method results to TAGGED so print preserves true/false
+XR_FUNC void xcg_retype_bool_method_results(XcgenFunc *cf);
+
+// Returns true if every return in the function returns null → emit as void
+XR_FUNC bool xcg_detect_void_return(XirFunc *func);
+
+// Lookup proto entry by pointer in global compilation registry
+XR_FUNC XcgenProtoEntry *xcg_lookup_proto_entry(XcgenModule *mod, void *proto_ptr);
+
+// Escape analysis: mark non-escaping child closures in proto_map
+XR_FUNC void xcg_prescan_closure_escape(XcgenModule *mod, XirFunc *func);
 
 #endif  // XCGEN_H

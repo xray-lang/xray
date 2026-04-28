@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include "../os/os_fs.h"
 
 // xr_parse_with_source declared in xparse.h (included above)
 // xr_compile_ast_with_source declared in xisolate_internal.h (included above)
@@ -46,7 +47,7 @@ typedef struct {
 static char *resolve_module_path(const char *base_dir, const char *module_name) {
     XR_DCHECK(base_dir != NULL, "resolve_module_path: NULL base_dir");
     XR_DCHECK(module_name != NULL, "resolve_module_path: NULL module_name");
-    char path[PATH_MAX];
+    char path[XR_PATH_MAX];
 
     // Absolute path
     if (module_name[0] == '/') {
@@ -103,7 +104,7 @@ static char *resolve_package_path(const char *package_name) {
     FILE *f = fopen(path, "r");
     if (f) {
         fclose(f);
-        char *real = realpath(path, NULL);
+        char *real = xr_realpath(path);
         return real ? real : xr_strdup(path);
     }
 
@@ -112,7 +113,7 @@ static char *resolve_package_path(const char *package_name) {
     f = fopen(path, "r");
     if (f) {
         fclose(f);
-        char *real = realpath(path, NULL);
+        char *real = xr_realpath(path);
         return real ? real : xr_strdup(path);
     }
 

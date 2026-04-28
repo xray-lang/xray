@@ -59,9 +59,16 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         add_compile_options(-O2 -g)
     endif()
 
-    # Enable linker dead-code elimination (for xray build output size)
+    # Enable linker dead-code elimination (for xray build output size).
+    # Compile: split each function/data item into its own section.
+    # Link: discard sections that are never referenced.
     if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_compile_options(-ffunction-sections -fdata-sections)
+        if(APPLE)
+            add_link_options(-Wl,-dead_strip)
+        else()
+            add_link_options(-Wl,--gc-sections)
+        endif()
     endif()
 
     # LTO for Release builds: enables cross-TU inlining
@@ -120,6 +127,11 @@ option(XR_STDLIB_CRYPTO     "Crypto modules (crypto)" ON)
 option(XR_STDLIB_DATA       "Data format modules (csv, toml, yaml, xml)" ON)
 option(XR_STDLIB_COMPRESS   "Compression modules (compress)" ON)
 option(XR_STDLIB_CLUSTER    "Cluster module (distributed Named Channel)" OFF)
+option(XR_BUILD_TEST_MODULES "Build internal stdlib test modules" OFF)
+
+if(XR_BUILD_TEST_MODULES)
+    add_compile_definitions(XR_HAS_TEST_MODULES=1)
+endif()
 
 # io_uring backend (Linux only, auto-detected)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -391,9 +403,18 @@ file(GLOB STDLIB_CORE_SRC
 set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
 if(XR_STDLIB_FULL)
-    # Full stdlib: include all modules
+    # Full stdlib: include all modules except those explicitly disabled
     file(GLOB_RECURSE STDLIB_ALL_SRC "stdlib/*/*.c")
     list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*sqlite.*\\.c$")
+    if(NOT XR_STDLIB_CLUSTER)
+        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/cluster/.*")
+    endif()
+    if(NOT XR_STDLIB_COMPRESS)
+        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/compress/.*")
+    endif()
+    if(NOT XR_BUILD_TEST_MODULES)
+        list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
+    endif()
     set(STDLIB_SRC ${STDLIB_ALL_SRC})
     message(STATUS "Stdlib: full")
 else()
@@ -440,6 +461,12 @@ else()
         list(APPEND STDLIB_SRC ${STDLIB_CLUSTER_SRC})
         add_compile_definitions(XR_HAS_CLUSTER=1)
         message(STATUS "Stdlib: +cluster (distributed Named Channel)")
+    endif()
+
+    if(XR_BUILD_TEST_MODULES)
+        file(GLOB STDLIB_TEST_SRC "stdlib/test_yield/*.c")
+        list(APPEND STDLIB_SRC ${STDLIB_TEST_SRC})
+        message(STATUS "Stdlib: +test modules")
     endif()
 endif()
 
@@ -499,11 +526,12 @@ target_include_directories(xray_core PRIVATE
 )
 
 # Link libraries
-target_link_libraries(xray_core PUBLIC m z)
-
-# Link pthread (required for coroutines)
-if(NOT WIN32)
-    target_link_libraries(xray_core PUBLIC pthread)
+if(WIN32)
+    # Math library is part of the MSVC runtime; ws2_32 for sockets,
+    # synchronization for WaitOnAddress/WakeByAddressSingle
+    target_link_libraries(xray_core PUBLIC ws2_32 synchronization)
+else()
+    target_link_libraries(xray_core PUBLIC m z pthread)
 endif()
 
 # OpenSSL support

@@ -69,7 +69,8 @@ typedef struct XirJitState {
 /* ========== Deoptimization ========== */
 
 // Sentinel return value from JIT code when a guard fails.
-// Chosen to be an invalid XrValue bit pattern (NaN-boxed nonsense).
+// Chosen to be an invalid raw payload sentinel so JIT/bridge code can
+// recognize deopt without treating it as a normal helper result.
 #define XIR_DEOPT_MARKER ((int64_t) 0xDEAD0001DEAD0001LL)
 
 /* ========== Suspend/Resume ========== */

@@ -1,0 +1,16 @@
+test1: recvTimeout with data
+  result: 42 ok: <unknown>
+test2: recvTimeout timeout
+  got: null
+test3: sendTimeout with space
+  success: true
+  value: 100
+test4: sendTimeout timeout
+  success: false
+test5: producer-consumer with timeout
+  consumed: 1
+  consumed: 2
+  consumed: 3
+  consumed: null
+  total consumed: 4
+all tests passed

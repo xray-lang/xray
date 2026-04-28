@@ -103,9 +103,4 @@ XR_FUNC void xcgen_emit_struct_typedef(struct XcgenBuf *b, XcgenStruct *st);
 // Emit all struct typedefs in registry
 XR_FUNC void xcgen_emit_all_typedefs(struct XcgenBuf *b, XcgenStructRegistry *reg);
 
-// Emit per-struct deinit functions and function pointer table.
-// Generated after typedefs so struct types are visible.
-// Only emitted when at least one struct has PTR/TAGGED (XrtValue) fields.
-XR_FUNC void xcgen_emit_struct_deinits(struct XcgenBuf *b, XcgenStructRegistry *reg);
-
 #endif  // XCGEN_STRUCT_H

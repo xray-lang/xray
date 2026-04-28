@@ -638,7 +638,7 @@ static inline void *xir_arena_calloc(XirArena *arena, size_t count, size_t elem_
     size_t total = count * elem_size;
     void *p = xir_arena_alloc(arena, total);
     if (p)
-        __builtin_memset(p, 0, total);
+        memset(p, 0, total);
     return p;
 }
 

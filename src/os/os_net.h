@@ -60,6 +60,14 @@ typedef int ssize_t;
 #endif
 #endif
 
+// Winsock uses ADDRESS_FAMILY (unsigned short) where POSIX uses
+// sa_family_t. Provide the POSIX name so cross-platform code
+// (dns.h, net/) can use a single spelling.
+#ifndef _SA_FAMILY_T_DEFINED
+#define _SA_FAMILY_T_DEFINED
+typedef ADDRESS_FAMILY sa_family_t;
+#endif
+
 typedef SOCKET xr_socket_t;
 #define XR_INVALID_SOCKET INVALID_SOCKET
 #define XR_SOCKET_ERROR SOCKET_ERROR

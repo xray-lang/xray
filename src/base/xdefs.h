@@ -36,6 +36,20 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// MSVC <sys/types.h> omits ssize_t (POSIX signed size type).
+// Provide it once so every TU that pulls xdefs.h can use it.
+#if defined(_MSC_VER) && !defined(_SSIZE_T_DEFINED)
+#define _SSIZE_T_DEFINED
+#ifdef _WIN64
+typedef __int64 ssize_t;
+#else
+typedef int ssize_t;
+#endif
+#endif
+
+// POSIX function shims (must follow ssize_t definition above)
+#include "xposix_compat.h"
+
 /* === Compiler Detection ===  */
 
 #if defined(__GNUC__) || defined(__clang__)

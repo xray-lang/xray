@@ -49,12 +49,12 @@ typedef union XrtValue {
 #define XRT_TAG_I64 6
 #define XRT_TAG_F64 12
 #define XRT_TAG_PTR 13
-#define XRT_TAG_STR 14  // static / literal string (no ARC)
+#define XRT_TAG_STR 14  // static / literal string (not heap-allocated)
 #define XRT_TAG_ARRAY 15
 #define XRT_TAG_MAP 16
 #define XRT_TAG_STRBUF 17
 #define XRT_TAG_CLOSURE 18
-#define XRT_TAG_STR_ARC 19  // heap string managed by ARC (xrt_arc_alloc)
+#define XRT_TAG_STR_ARC 19  // heap string (bump-allocated via xrt_arc_alloc)
 
 // Treat both STR and STR_ARC as strings in generic operations
 #define XRT_IS_STR(v) ((v).tag == XRT_TAG_STR || (v).tag == XRT_TAG_STR_ARC)
@@ -156,8 +156,47 @@ static inline int xrt_truthy(XrtValue v) {
     }
 }
 
-// xrt_str_alloc/xrt_str_concat: defined in xrt_arc.h
-static inline XrtValue xrt_str_alloc(size_t len);
-static inline XrtValue xrt_str_concat(const char *sa, const char *sb);
+/* =========================================================================
+ * Source-level aliases for standalone AOT output
+ *
+ * These aliases let AOT-generated code reuse familiar XrValue / XR_TAG_*
+ * spellings inside standalone output. They do not imply ABI compatibility
+ * with runtime/value/xvalue.h's XrValue: the runtime layout and tag numbers
+ * are different.
+ * ========================================================================= */
+
+typedef XrtValue XrValue;
+
+// Source-level tag aliases
+#define XR_TAG_NULL XRT_TAG_NULL
+#define XR_TAG_BOOL XRT_TAG_BOOL
+#define XR_TAG_I64 XRT_TAG_I64
+#define XR_TAG_F64 XRT_TAG_F64
+#define XR_TAG_PTR XRT_TAG_PTR
+
+// Source-level type checks
+#define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
+#define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
+#define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
+#define XR_IS_NUM(v) (XR_IS_INT(v) || XR_IS_FLOAT(v))
+
+// Source-level value creation
+#define XR_FROM_INT(x) ((XrValue){.i = (int64_t) (x), .tag = XR_TAG_I64})
+#define XR_FROM_FLOAT(x) ((XrValue){.f = (double) (x), .tag = XR_TAG_F64})
+#define XR_FROM_BOOL(x) ((XrValue){.i = (x) ? 1 : 0, .tag = XR_TAG_BOOL})
+#define XR_NULL_VAL ((XrValue){.ptr = 0, .tag = XR_TAG_NULL})
+#define XR_TRUE_VAL ((XrValue){.i = 1, .tag = XR_TAG_BOOL})
+#define XR_FALSE_VAL ((XrValue){.i = 0, .tag = XR_TAG_BOOL})
+
+// Source-level value extraction
+#define XR_TO_INT(v) ((v).i)
+#define XR_TO_FLOAT(v) ((v).f)
+
+/* =========================================================================
+ * Runtime context — opaque handle passed to all AOT functions.
+ * Points to XrCoroutine* internally; AOT code never dereferences it.
+ * ========================================================================= */
+
+typedef void *XrtContext;
 
 #endif  // XRT_VALUE_H

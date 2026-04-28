@@ -15,6 +15,7 @@
 #include "../../../src/app/lsp/xlsp_server.h"
 #include "../../../src/app/lsp/xlsp_analysis.h"
 #include "../../../src/base/xjson.h"
+#include "../test_win_compat.h"
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -177,7 +178,7 @@ TEST(diagnostics_debounce_dedup) {
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
-    // Schedule multiple times â€” should not duplicate in pending queue
+    // Schedule multiple times â€?should not duplicate in pending queue
     xlsp_schedule_diagnostics(server, doc);
     int count_after_first = server->pending_diag_count;
     xlsp_schedule_diagnostics(server, doc);
@@ -214,6 +215,7 @@ TEST(diagnostics_multiple_documents) {
 // ============================================================================
 
 int main(void) {
+    xr_test_suppress_dialogs();
     printf("test_lsp_diagnostics:\n");
 
     // Generation

@@ -1,6 +1,7 @@
 // Test io module extended functionality
 
 import io
+import os
 
 @test
 fn test_basic_file_ops(): void {
@@ -68,7 +69,10 @@ fn test_touch_and_chmod(): void {
     assert_eq(io.fileSize(tmp), 0)
     io.chmod(tmp, 420)
     let st = io.stat(tmp)
-    assert_eq(st.mode, 420)
+    // Windows does not support Unix file permissions; skip mode check
+    if (os.platform != "windows") {
+        assert_eq(st.mode, 420)
+    }
     io.remove(tmp)
 }
 

@@ -22,7 +22,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 
 /* ========== Global Flag Parsing ========== */
 

@@ -70,6 +70,10 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
         ctx->isolate = runtime->isolate;
     }
     ctx->tmp_strbuf = NULL;
+    ctx->defer_stack = NULL;
+    ctx->defer_count = 0;
+    ctx->defer_capacity = 0;
+    ctx->defer_frame_marks = NULL;
 
     // Initialize futex-based park state
     atomic_store(&m->park_state, XR_PARK_IDLE);
@@ -84,9 +88,15 @@ void xr_machine_destroy(XrMachine *m) {
         xr_strbuf_free(m->vm_ctx.tmp_strbuf);
         m->vm_ctx.tmp_strbuf = NULL;
     }
-
-    // Futex-based park: no resources to destroy
-    (void) m;
+    // Free per-context defer stack
+    if (m->vm_ctx.defer_stack) {
+        xr_free(m->vm_ctx.defer_stack);
+        m->vm_ctx.defer_stack = NULL;
+    }
+    if (m->vm_ctx.defer_frame_marks) {
+        xr_free(m->vm_ctx.defer_frame_marks);
+        m->vm_ctx.defer_frame_marks = NULL;
+    }
 }
 
 // ========== M Park/Unpark ==========

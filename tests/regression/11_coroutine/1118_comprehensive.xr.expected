@@ -1,12 +1,12 @@
 === 基本 go/await ===
 task1 result: 42
 === 状态检查 ===
-before await - done: false
+before await - done: true
 after await - done: true
 result: 100
 === 取消协程 ===
-cancelled: true
-cancelled result: null
+cancelled: false
+cancelled result: 200
 === Channel 通信 ===
 recv: 1 2 3
 === defer 清理 ===

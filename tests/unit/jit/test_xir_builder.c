@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_xir_builder.c - Unit tests for XIR builder (bytecode â†’ XIR)
+ * test_xir_builder.c - Unit tests for XIR builder (bytecode â†?XIR)
  */
 
 #include <stdio.h>
@@ -18,6 +18,7 @@
 #include "../../../src/runtime/value/xslot_type.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xtype_pool.h"
+#include "../test_win_compat.h"
 
 static XrTypePool *g_test_pool = NULL;
 
@@ -127,7 +128,7 @@ static void test_tagged_add(void) {
     XrProto *proto = xr_vm_proto_new();
     proto->numparams = 2;
     proto->maxstacksize = 3;
-    // No param_types â†’ all slots are ANY
+    // No param_types â†?all slots are ANY
 
     xr_vm_proto_write(proto, CREATE_ABC(OP_ADD, 2, 0, 1), 1);
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN1, 2, 0, 0), 2);
@@ -293,6 +294,7 @@ static void test_box_unbox(void) {
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "=== test_xir_builder ===\n");
 
     setup_type_pool();

@@ -12,7 +12,7 @@
  *   not bake raw helper function pointers into the IR. Instead, it emits
  *   XIR_CALL_INTRINSIC with one of the IDs below as args[0] (encoded as a
  *   const i64). The AOT C codegen consults that ID directly, never the
- *   helper symbol name — that is what allows src/aot/* to be free of any
+ *   helper symbol name — that is what allows src/aot/ to be free of any
  *   reference to xr_jit_* / xrt_*_sentinel addresses.
  *
  *   JIT mode still emits XIR_CALL_C with raw fn_ptr; this enum is not
@@ -35,6 +35,10 @@
 #define XIR_INTRINSIC_H
 
 #include <stdint.h>
+#include "../base/xdefs.h"  /* XR_FUNC */
+
+/* Forward-declare XIR types to avoid pulling in the full xir.h header. */
+typedef struct XirFunc XirFunc;
 
 typedef enum {
     XR_INTRIN_NONE = 0,
@@ -84,10 +88,21 @@ typedef enum {
     /* --- Json struct promotion --- */
     XR_INTRIN_JSON_NEW_SHAPE = 90, /* xr_json_new_with_shape */
 
+    /* --- Type checking --- */
+    XR_INTRIN_TYPEOF = 100, /* xr_jit_typeof */
+
     XR_INTRIN_COUNT, /* sentinel; keep last */
 } XirIntrinsicId;
 
 /* Returns a human-readable name for this intrinsic, or "intrin?" if unknown. */
-const char *xir_intrinsic_name(int id);
+XR_FUNC const char *xir_intrinsic_name(int id);
+
+/*
+ * Convert CALL_C/CALL_C_LEAF instructions whose fn_ptr matches a known
+ * JIT helper into XIR_CALL_INTRINSIC(id, extra).  Must be called after
+ * the optimizer pipeline and before AOT codegen.  JIT codegen never sees
+ * XIR_CALL_INTRINSIC — this is AOT-only.
+ */
+XR_FUNC void xir_resolve_intrinsics(XirFunc *func);
 
 #endif /* XIR_INTRINSIC_H */

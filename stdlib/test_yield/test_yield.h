@@ -12,8 +12,9 @@
 #define XR_STDLIB_TEST_YIELD_H
 
 #include "xray.h"
+#include "../../src/base/xdefs.h"
 
 // Load test_yield module
-XrModule *xr_load_module_test_yield(XrayIsolate *isolate);
+XR_FUNC XrModule *xr_load_module_test_yield(XrayIsolate *isolate);
 
 #endif

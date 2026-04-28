@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <string.h>
 #include "../../../src/jit/xir_peephole.h"
+#include "../test_win_compat.h"
 
 #define A64_NOP 0xD503201Fu
 
@@ -118,12 +119,12 @@ static uint32_t run_peephole(uint32_t *code, uint32_t count) {
     return xir_peephole(&buf);
 }
 
-/* ========== Pattern 1: STR+LDR â†’ NOP the LDR (64-bit) ========== */
+/* ========== Pattern 1: STR+LDR â†?NOP the LDR (64-bit) ========== */
 
 static void test_pattern1_str_ldr_64(void) {
     fprintf(stderr, "  test_pattern1_str_ldr_64...");
 
-    /* STR X0, [X1, #8] ; LDR X0, [X1, #8] â†’ NOP the LDR */
+    /* STR X0, [X1, #8] ; LDR X0, [X1, #8] â†?NOP the LDR */
     uint32_t code[2] = {
         enc_str_x(0, 1, 1),  /* STR X0, [X1, #8] (imm12=1 means 1*8=8 bytes) */
         enc_ldr_x(0, 1, 1),  /* LDR X0, [X1, #8] */
@@ -136,12 +137,12 @@ static void test_pattern1_str_ldr_64(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 1b: STR+LDR â†’ NOP the LDR (32-bit) ========== */
+/* ========== Pattern 1b: STR+LDR â†?NOP the LDR (32-bit) ========== */
 
 static void test_pattern1_str_ldr_32(void) {
     fprintf(stderr, "  test_pattern1_str_ldr_32...");
 
-    /* STR W5, [X3, #16] ; LDR W5, [X3, #16] â†’ NOP the LDR */
+    /* STR W5, [X3, #16] ; LDR W5, [X3, #16] â†?NOP the LDR */
     uint32_t code[2] = {
         enc_str_w(5, 3, 4),  /* STR W5, [X3, #16] (imm12=4 means 4*4=16 bytes) */
         enc_ldr_w(5, 3, 4),  /* LDR W5, [X3, #16] */
@@ -160,7 +161,7 @@ static void test_pattern1_no_match_diff_offset(void) {
 
     uint32_t code[2] = {
         enc_str_x(0, 1, 1),  /* STR X0, [X1, #8] */
-        enc_ldr_x(0, 1, 2),  /* LDR X0, [X1, #16]  â€” different offset */
+        enc_ldr_x(0, 1, 2),  /* LDR X0, [X1, #16]  â€?different offset */
     };
     uint32_t nops = run_peephole(code, 2);
     assert(nops == 0);
@@ -168,7 +169,7 @@ static void test_pattern1_no_match_diff_offset(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 2: MOV Xd, Xd â†’ NOP ========== */
+/* ========== Pattern 2: MOV Xd, Xd â†?NOP ========== */
 
 static void test_pattern2_mov_self(void) {
     fprintf(stderr, "  test_pattern2_mov_self...");
@@ -182,7 +183,7 @@ static void test_pattern2_mov_self(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 2: MOV Xd, Xm (d!=m) â†’ no match ========== */
+/* ========== Pattern 2: MOV Xd, Xm (d!=m) â†?no match ========== */
 
 static void test_pattern2_mov_diff(void) {
     fprintf(stderr, "  test_pattern2_mov_diff...");
@@ -196,12 +197,12 @@ static void test_pattern2_mov_diff(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 3: CMP Xn,#0 + B.EQ â†’ CBZ ========== */
+/* ========== Pattern 3: CMP Xn,#0 + B.EQ â†?CBZ ========== */
 
 static void test_pattern3_cmp_beq_cbz(void) {
     fprintf(stderr, "  test_pattern3_cmp_beq_cbz...");
 
-    /* CMP X2, #0 ; B.EQ +10  â†’ CBZ X2, +11 (offset adjusted by +1) */
+    /* CMP X2, #0 ; B.EQ +10  â†?CBZ X2, +11 (offset adjusted by +1) */
     uint32_t code[2] = {
         enc_cmp_imm(2, 0),       /* CMP X2, #0 */
         enc_bcond(CC_EQ, 10),    /* B.EQ +10 */
@@ -214,7 +215,7 @@ static void test_pattern3_cmp_beq_cbz(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 3: CMP Xn,#0 + B.NE â†’ CBNZ ========== */
+/* ========== Pattern 3: CMP Xn,#0 + B.NE â†?CBNZ ========== */
 
 static void test_pattern3_cmp_bne_cbnz(void) {
     fprintf(stderr, "  test_pattern3_cmp_bne_cbnz...");
@@ -231,7 +232,7 @@ static void test_pattern3_cmp_bne_cbnz(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 3: CMP Xn,#1 â†’ no match (imm != 0) ========== */
+/* ========== Pattern 3: CMP Xn,#1 â†?no match (imm != 0) ========== */
 
 static void test_pattern3_no_match_nonzero(void) {
     fprintf(stderr, "  test_pattern3_no_match_nonzero...");
@@ -246,12 +247,12 @@ static void test_pattern3_no_match_nonzero(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 4: STR+STR adjacent â†’ STP ========== */
+/* ========== Pattern 4: STR+STR adjacent â†?STP ========== */
 
 static void test_pattern4_str_str_stp(void) {
     fprintf(stderr, "  test_pattern4_str_str_stp...");
 
-    /* STR X0, [X29, #0] ; STR X1, [X29, #8] â†’ STP X0, X1, [X29, #0] */
+    /* STR X0, [X29, #0] ; STR X1, [X29, #8] â†?STP X0, X1, [X29, #0] */
     uint32_t code[2] = {
         enc_str_x(0, 29, 0),    /* STR X0, [X29, #0] (imm12=0) */
         enc_str_x(1, 29, 1),    /* STR X1, [X29, #8] (imm12=1) */
@@ -264,15 +265,15 @@ static void test_pattern4_str_str_stp(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 4: LDR+LDR adjacent â†’ LDP ========== */
+/* ========== Pattern 4: LDR+LDR adjacent â†?LDP ========== */
 
 static void test_pattern4_ldr_ldr_ldp(void) {
     fprintf(stderr, "  test_pattern4_ldr_ldr_ldp...");
 
-    /* LDR X2, [SP, #16] ; LDR X3, [SP, #24] â†’ LDP X2, X3, [SP, #16] */
+    /* LDR X2, [SP, #16] ; LDR X3, [SP, #24] â†?LDP X2, X3, [SP, #16] */
     uint32_t code[2] = {
-        enc_ldr_x(2, 31, 2),    /* LDR X2, [SP, #16] (imm12=2 â†’ 2*8=16) */
-        enc_ldr_x(3, 31, 3),    /* LDR X3, [SP, #24] (imm12=3 â†’ 3*8=24) */
+        enc_ldr_x(2, 31, 2),    /* LDR X2, [SP, #16] (imm12=2 â†?2*8=16) */
+        enc_ldr_x(3, 31, 3),    /* LDR X3, [SP, #24] (imm12=3 â†?3*8=24) */
     };
     uint32_t nops = run_peephole(code, 2);
     assert(nops == 1);
@@ -282,15 +283,15 @@ static void test_pattern4_ldr_ldr_ldp(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 4: non-consecutive â†’ no match ========== */
+/* ========== Pattern 4: non-consecutive â†?no match ========== */
 
 static void test_pattern4_no_match_gap(void) {
     fprintf(stderr, "  test_pattern4_no_match_gap...");
 
-    /* STR X0, [X29, #0] ; STR X1, [X29, #16] â€” gap of 16 bytes, not 8 */
+    /* STR X0, [X29, #0] ; STR X1, [X29, #16] â€?gap of 16 bytes, not 8 */
     uint32_t code[2] = {
         enc_str_x(0, 29, 0),
-        enc_str_x(1, 29, 2),  /* imm12=2 â†’ offset 16, not 8 */
+        enc_str_x(1, 29, 2),  /* imm12=2 â†?offset 16, not 8 */
     };
     uint32_t nops = run_peephole(code, 2);
     assert(nops == 0);
@@ -298,12 +299,12 @@ static void test_pattern4_no_match_gap(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 5: SUBS + CMP same operands â†’ NOP the CMP ========== */
+/* ========== Pattern 5: SUBS + CMP same operands â†?NOP the CMP ========== */
 
 static void test_pattern5_redundant_cmp(void) {
     fprintf(stderr, "  test_pattern5_redundant_cmp...");
 
-    /* SUBS X0, X1, X2 ; CMP X1, X2 â†’ NOP the CMP */
+    /* SUBS X0, X1, X2 ; CMP X1, X2 â†?NOP the CMP */
     uint32_t code[2] = {
         enc_subs_reg(0, 1, 2),   /* SUBS X0, X1, X2 */
         enc_cmp_reg(1, 2),       /* CMP X1, X2  (= SUBS XZR, X1, X2) */
@@ -316,14 +317,14 @@ static void test_pattern5_redundant_cmp(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 5: SUBS + CMP different operands â†’ no match ========== */
+/* ========== Pattern 5: SUBS + CMP different operands â†?no match ========== */
 
 static void test_pattern5_no_match_diff_ops(void) {
     fprintf(stderr, "  test_pattern5_no_match_diff_ops...");
 
     uint32_t code[2] = {
         enc_subs_reg(0, 1, 2),   /* SUBS X0, X1, X2 */
-        enc_cmp_reg(3, 4),       /* CMP X3, X4 â€” different operands */
+        enc_cmp_reg(3, 4),       /* CMP X3, X4 â€?different operands */
     };
     uint32_t nops = run_peephole(code, 2);
     assert(nops == 0);
@@ -331,12 +332,12 @@ static void test_pattern5_no_match_diff_ops(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 6: MOVZ #0 + MOVK #imm â†’ MOVZ #imm ========== */
+/* ========== Pattern 6: MOVZ #0 + MOVK #imm â†?MOVZ #imm ========== */
 
 static void test_pattern6_movz_movk(void) {
     fprintf(stderr, "  test_pattern6_movz_movk...");
 
-    /* MOVZ X0, #0 ; MOVK X0, #42, LSL #0 â†’ MOVZ X0, #42 */
+    /* MOVZ X0, #0 ; MOVK X0, #42, LSL #0 â†?MOVZ X0, #42 */
     uint32_t code[2] = {
         enc_movz_x(0, 0, 0),     /* MOVZ X0, #0, LSL#0 */
         enc_movk_x(0, 42, 0),    /* MOVK X0, #42, LSL#0 */
@@ -349,14 +350,14 @@ static void test_pattern6_movz_movk(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 6: MOVZ #0 + MOVK LSL#16 â†’ no match (different hw) ========== */
+/* ========== Pattern 6: MOVZ #0 + MOVK LSL#16 â†?no match (different hw) ========== */
 
 static void test_pattern6_no_match_hw(void) {
     fprintf(stderr, "  test_pattern6_no_match_hw...");
 
     uint32_t code[2] = {
         enc_movz_x(0, 0, 0),     /* MOVZ X0, #0, LSL#0 */
-        enc_movk_x(0, 42, 1),    /* MOVK X0, #42, LSL#16 â€” hw=1 */
+        enc_movk_x(0, 42, 1),    /* MOVK X0, #42, LSL#16 â€?hw=1 */
     };
     uint32_t nops = run_peephole(code, 2);
     assert(nops == 0);
@@ -364,13 +365,13 @@ static void test_pattern6_no_match_hw(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 7: B.cond +2 ; B target â†’ inverted B.cond ========== */
+/* ========== Pattern 7: B.cond +2 ; B target â†?inverted B.cond ========== */
 
 static void test_pattern7_bcond_over_b(void) {
     fprintf(stderr, "  test_pattern7_bcond_over_b...");
 
     /* B.EQ +2 ; B +100 ; <something>
-     * â†’ B.NE +101 ; NOP ; <something>
+     * â†?B.NE +101 ; NOP ; <something>
      * (B at i+1 has offset +100 relative to i+1; new B.NE at i has offset +101) */
     uint32_t code[3] = {
         enc_bcond(CC_EQ, 2),     /* B.EQ +2 (skip the B instruction) */
@@ -385,7 +386,7 @@ static void test_pattern7_bcond_over_b(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 7: B.cond +3 â†’ no match (not +2) ========== */
+/* ========== Pattern 7: B.cond +3 â†?no match (not +2) ========== */
 
 static void test_pattern7_no_match_offset(void) {
     fprintf(stderr, "  test_pattern7_no_match_offset...");
@@ -401,12 +402,12 @@ static void test_pattern7_no_match_offset(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 8: duplicate STR â†’ NOP the first ========== */
+/* ========== Pattern 8: duplicate STR â†?NOP the first ========== */
 
 static void test_pattern8_dup_str(void) {
     fprintf(stderr, "  test_pattern8_dup_str...");
 
-    /* STR X0, [X1, #8] ; STR X0, [X1, #8] â†’ NOP first STR */
+    /* STR X0, [X1, #8] ; STR X0, [X1, #8] â†?NOP first STR */
     uint32_t str = enc_str_x(0, 1, 1);
     uint32_t code[2] = { str, str };
     uint32_t nops = run_peephole(code, 2);
@@ -417,7 +418,7 @@ static void test_pattern8_dup_str(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 8: duplicate 32-bit STR â†’ NOP the first ========== */
+/* ========== Pattern 8: duplicate 32-bit STR â†?NOP the first ========== */
 
 static void test_pattern8_dup_str_32(void) {
     fprintf(stderr, "  test_pattern8_dup_str_32...");
@@ -432,12 +433,12 @@ static void test_pattern8_dup_str_32(void) {
     fprintf(stderr, " PASS\n");
 }
 
-/* ========== Pattern 8: different STR â†’ no match ========== */
+/* ========== Pattern 8: different STR â†?no match ========== */
 
 static void test_pattern8_no_match_diff(void) {
     fprintf(stderr, "  test_pattern8_no_match_diff...");
 
-    /* STR X0,[X1,#8] ; STR X0,[X1,#24] â€” not consecutive, not duplicate */
+    /* STR X0,[X1,#8] ; STR X0,[X1,#24] â€?not consecutive, not duplicate */
     uint32_t code[2] = {
         enc_str_x(0, 1, 1),  /* offset #8 */
         enc_str_x(0, 1, 3),  /* offset #24 */
@@ -455,18 +456,18 @@ static void test_combined(void) {
 
     /* Mix of patterns: MOV X0,X0; STR+LDR; CMP+B.EQ */
     uint32_t code[5] = {
-        enc_mov_x(0, 0),          /* Pattern 2: MOV X0,X0 â†’ NOP */
+        enc_mov_x(0, 0),          /* Pattern 2: MOV X0,X0 â†?NOP */
         enc_str_x(3, 4, 2),       /* Pattern 1: STR X3,[X4,#16] */
-        enc_ldr_x(3, 4, 2),       /*            LDR X3,[X4,#16] â†’ NOP */
+        enc_ldr_x(3, 4, 2),       /*            LDR X3,[X4,#16] â†?NOP */
         enc_cmp_imm(5, 0),        /* Pattern 3: CMP X5,#0 */
-        enc_bcond(CC_NE, 20),     /*            B.NE +20 â†’ CBNZ X5,+21 */
+        enc_bcond(CC_NE, 20),     /*            B.NE +20 â†?CBNZ X5,+21 */
     };
     uint32_t nops = run_peephole(code, 5);
     assert(nops == 3);
-    assert(code[0] == A64_NOP);             /* MOV self â†’ NOP */
-    assert(code[2] == A64_NOP);             /* LDR â†’ NOP */
-    assert(code[3] == enc_cbnz(5, 21));     /* CMP+B.NE â†’ CBNZ */
-    assert(code[4] == A64_NOP);             /* B.NE â†’ NOP */
+    assert(code[0] == A64_NOP);             /* MOV self â†?NOP */
+    assert(code[2] == A64_NOP);             /* LDR â†?NOP */
+    assert(code[3] == enc_cbnz(5, 21));     /* CMP+B.NE â†?CBNZ */
+    assert(code[4] == A64_NOP);             /* B.NE â†?NOP */
 
     fprintf(stderr, " PASS\n");
 }
@@ -501,6 +502,7 @@ static void test_single_nop(void) {
 /* ========== Driver ========== */
 
 int main(void) {
+    xr_test_suppress_dialogs();
     fprintf(stderr, "[test_peephole]\n");
 
     /* Pattern 1: STR+LDR elimination */
@@ -512,7 +514,7 @@ int main(void) {
     test_pattern2_mov_self();
     test_pattern2_mov_diff();
 
-    /* Pattern 3: CMP #0 + B.cond â†’ CBZ/CBNZ fusion */
+    /* Pattern 3: CMP #0 + B.cond â†?CBZ/CBNZ fusion */
     test_pattern3_cmp_beq_cbz();
     test_pattern3_cmp_bne_cbnz();
     test_pattern3_no_match_nonzero();
@@ -530,7 +532,7 @@ int main(void) {
     test_pattern6_movz_movk();
     test_pattern6_no_match_hw();
 
-    /* Pattern 7: B.cond over B â†’ inverted B.cond */
+    /* Pattern 7: B.cond over B â†?inverted B.cond */
     test_pattern7_bcond_over_b();
     test_pattern7_no_match_offset();
 

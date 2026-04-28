@@ -13,8 +13,13 @@
 #include <string.h>
 #include <assert.h>
 #include <signal.h>
+#ifdef _WIN32
+#include <io.h>
+#else
 #include <unistd.h>
+#endif
 #include "../../../src/jit/xir_code_alloc.h"
+#include "../test_win_compat.h"
 
 static void crash_handler(int sig) {
     const char *msg = "\n!!! SIGNAL received: ";
@@ -41,155 +46,158 @@ static const uint8_t arm64_add[] = {
 
 static void test_basic_alloc(void) {
     fprintf(stderr, "  test_basic_alloc...");
-    
+
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    
+
     // Allocate some memory
     void *p1 = xir_code_alloc(&alloc, 64, 16);
     assert(p1 != NULL);
     assert(((uintptr_t)p1 & 15) == 0);  // 16-byte aligned
-    
+
     void *p2 = xir_code_alloc(&alloc, 128, 16);
     assert(p2 != NULL);
     assert(p2 != p1);
     assert(((uintptr_t)p2 & 15) == 0);
-    
+
     // Check stats
     assert(xir_code_alloc_used(&alloc) == 64 + 128);
     assert(xir_code_alloc_total(&alloc) >= 64 + 128);
-    
+
     xir_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
 
 static void test_large_alloc(void) {
     fprintf(stderr, "  test_large_alloc...");
-    
+
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    
+
     // Allocate larger than default page size
     size_t large = XIR_CODE_PAGE_SIZE * 2;
     void *p = xir_code_alloc(&alloc, large, 16);
     assert(p != NULL);
-    
+
     // Should still be able to allocate more
     void *p2 = xir_code_alloc(&alloc, 64, 16);
     assert(p2 != NULL);
-    
+
     xir_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
 
 static void test_execute_code(void) {
     fprintf(stderr, "  test_execute_code...");
-    
+
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    
+
     // Allocate and write arm64 machine code
     void *code = xir_code_alloc(&alloc, sizeof(arm64_ret42), 16);
     assert(code != NULL);
     fprintf(stderr, "alloc=%p ", code);
-    
+
 #ifdef __APPLE__
     xir_code_make_writable(code, sizeof(arm64_ret42));
     fprintf(stderr, "writable ");
 #endif
-    
+
     memcpy(code, arm64_ret42, sizeof(arm64_ret42));
     fprintf(stderr, "copied ");
-    
+
     xir_code_make_executable(code, sizeof(arm64_ret42));
     fprintf(stderr, "executable ");
-    
+
     xir_code_flush_icache(code, sizeof(arm64_ret42));
     fprintf(stderr, "flushed ");
-    
+
     // Cast to function pointer and call
     typedef int (*IntFunc)(void);
     IntFunc fn = (IntFunc)code;
     fprintf(stderr, "calling... ");
     int result = fn();
     fprintf(stderr, "result=%d ", result);
-    
+
     assert(result == 42);
-    
+
     xir_code_alloc_destroy(&alloc);
     fprintf(stderr, "PASS\n");
 }
 
 static void test_execute_add(void) {
     fprintf(stderr, "  test_execute_add...");
-    
+
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    
+
     void *code = xir_code_alloc(&alloc, sizeof(arm64_add), 16);
     assert(code != NULL);
-    
+
 #ifdef __APPLE__
     xir_code_make_writable(code, sizeof(arm64_add));
 #endif
-    
+
     memcpy(code, arm64_add, sizeof(arm64_add));
     xir_code_make_executable(code, sizeof(arm64_add));
     xir_code_flush_icache(code, sizeof(arm64_add));
-    
+
     typedef int (*AddFunc)(int, int);
     AddFunc fn = (AddFunc)code;
-    
+
     fprintf(stderr, "calling... ");
     assert(fn(10, 32) == 42);
     assert(fn(0, 0) == 0);
     assert(fn(100, -58) == 42);
-    
+
     xir_code_alloc_destroy(&alloc);
     fprintf(stderr, "PASS\n");
 }
 
 static void test_multiple_functions(void) {
     fprintf(stderr, "  test_multiple_functions...");
-    
+
     XirCodeAlloc alloc;
     xir_code_alloc_init(&alloc);
-    
+
     // Allocate two functions in the same page
     void *code1 = xir_code_alloc(&alloc, sizeof(arm64_ret42), 16);
     void *code2 = xir_code_alloc(&alloc, sizeof(arm64_add), 16);
     assert(code1 != NULL && code2 != NULL);
     assert(code1 != code2);
-    
+
 #ifdef __APPLE__
     xir_code_make_writable(code1, sizeof(arm64_ret42));
 #endif
-    
+
     memcpy(code1, arm64_ret42, sizeof(arm64_ret42));
     memcpy(code2, arm64_add, sizeof(arm64_add));
-    
+
     xir_code_make_executable(code1, sizeof(arm64_ret42));
     xir_code_flush_icache(code1, sizeof(arm64_ret42));
     xir_code_flush_icache(code2, sizeof(arm64_add));
-    
+
     typedef int (*IntFunc)(void);
     typedef int (*AddFunc)(int, int);
-    
+
     assert(((IntFunc)code1)() == 42);
     assert(((AddFunc)code2)(10, 20) == 30);
-    
+
     xir_code_alloc_destroy(&alloc);
     fprintf(stderr, "PASS\n");
 }
 
 int main(void) {
+    xr_test_suppress_dialogs();
     signal(SIGSEGV, crash_handler);
+#ifdef SIGBUS
     signal(SIGBUS, crash_handler);
+#endif
     fprintf(stderr, "=== test_code_alloc ===\n");
-    
+
     test_basic_alloc();
     test_large_alloc();
-    
+
 #ifdef __aarch64__
     test_execute_code();
     test_execute_add();
@@ -197,7 +205,7 @@ int main(void) {
 #else
     fprintf(stderr, "  (skipping arm64 execution tests on non-arm64 platform)\n");
 #endif
-    
+
     fprintf(stderr, "All tests passed!\n");
     return 0;
 }

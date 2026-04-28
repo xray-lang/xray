@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_class.h - AOT class runtime: type table, vtable dispatch, instanceof
+ * xrt_class.h - AOT class runtime: type table, object allocation
  *
  * KEY CONCEPT:
- *   All heap objects (class instances, promoted structs) share XrtArcHdr
- *   from xrt_arc.h as their common header.  XrtArcHdr.type indexes into
+ *   All heap objects (class instances, promoted structs) carry XrtArcHdr
+ *   from xrt_arc.h as a common header.  XrtArcHdr.type indexes into
  *   xrt_type_table[] for class metadata (name, parent, vtable, destructor).
  *
  *   Field access is via C struct members (compile-time offsets).
@@ -29,7 +29,7 @@
  *     v5 = _inst; }
  *
  * RELATED MODULES:
- *   - xrt_arc.h: XrtArcHdr, ARC retain/release, bump allocator
+ *   - xrt_arc.h: XrtArcHdr, bump allocator
  *   - xrt_value.h: XrtValue tagged union (PTR tag carries object pointer)
  *   - xcgen.c: emits class type registration and constructor calls
  */
@@ -40,7 +40,6 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"  // XrtArcHdr, XRT_ARC_HDR, xrt_arc_alloc, macros
 #include <stdint.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -100,9 +99,9 @@ static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id, X
 }
 
 /* =========================================================================
- * Object allocation — ARC alloc + set type in XrtArcHdr
+ * Object allocation — bump alloc + set type in XrtArcHdr
  *
- * Uses xrt_arc_alloc (supports bump allocator) and stores the type_id
+ * Uses xrt_arc_alloc (bump allocator) and stores the type_id
  * in XrtArcHdr.type for vtable dispatch and instanceof.
  * ========================================================================= */
 
@@ -110,38 +109,8 @@ static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
     void *obj = xrt_arc_alloc((size_t) size);
     XrtArcHdr *h = XRT_ARC_HDR(obj);
     h->type = type_id;
-    h->flags |= XRT_ARC_HAS_DEINIT;  // enable destructor dispatch on release
+    h->flags |= XRT_ARC_HAS_DEINIT;  // mark as having type metadata
     return obj;
-}
-
-/* =========================================================================
- * instanceof — walk parent chain using XrtArcHdr.type
- * ========================================================================= */
-
-static inline bool xrt_instanceof(void *obj, uint16_t target_type_id) {
-    if (!obj)
-        return false;
-    XrtArcHdr *h = XRT_ARC_HDR(obj);
-    uint16_t tid = h->type;
-    while (tid != 0) {
-        if (tid == target_type_id)
-            return true;
-        tid = xrt_type_table[tid].parent_id;
-    }
-    return false;
-}
-
-/* =========================================================================
- * vtable dispatch helper — uses XrtArcHdr.type -> xrt_type_table
- *
- * Usage:  XrtMethodFn fn = xrt_vcall(obj, slot);
- *         result = ((RetType(*)(ArgTypes))fn)(args...);
- * ========================================================================= */
-
-static inline XrtMethodFn xrt_vcall(void *obj, int slot) {
-    XrtArcHdr *h = XRT_ARC_HDR(obj);
-    XrtTypeInfo *ti = &xrt_type_table[h->type];
-    return ti->vtable[slot];
 }
 
 /* Box an object pointer into XrtValue */
