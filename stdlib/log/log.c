@@ -491,7 +491,9 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, 
             XrValue val = attrs[i * 2 + 1];
 
             const char *key_str = value_to_string(key, vbuf, sizeof(vbuf));
-            ctxbuf_printf(&b, ",\"%s\":", key_str);
+            ctxbuf_putc(&b, ',');
+            write_json_string_buf(&b, key_str);
+            ctxbuf_putc(&b, ':');
 
             if (XR_IS_STRING(val)) {
                 write_json_string_buf(&b, XR_STRING_CHARS(XR_TO_STRING(val)));
@@ -555,7 +557,7 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, 
     } else {
         FILE *out = logger->output ? logger->output : stderr;
         fwrite(b.data, 1, b.len, out);
-        // Only flush for WARN+ level (P2-3: smart flush)
+        // Flush immediately for WARN+ to avoid buffered loss on crash
         if (level >= XR_LOG_WARN) {
             fflush(out);
         }
@@ -905,9 +907,8 @@ static XrLogger *create_child_logger(XrLogger *parent, XrValue *attrs, int nattr
         // === JSON context ===
         if (jbuf.len > 0)
             ctxbuf_putc(&jbuf, ',');
-        ctxbuf_putc(&jbuf, '"');
-        ctxbuf_append(&jbuf, key_str, (int) strlen(key_str));
-        ctxbuf_append(&jbuf, "\":", 2);
+        write_json_string_buf(&jbuf, key_str);
+        ctxbuf_putc(&jbuf, ':');
 
         if (XR_IS_STRING(val)) {
             write_json_string_buf(&jbuf, XR_STRING_CHARS(XR_TO_STRING(val)));

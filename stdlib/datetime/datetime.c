@@ -140,8 +140,16 @@ XrDateTime *xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp) 
 
 XrDateTime *xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestamp_ms) {
     XrDateTime *dt = datetime_alloc(isolate);
-    dt->timestamp = timestamp_ms / 1000;
-    dt->milliseconds = (int32_t) (timestamp_ms % 1000);
+    // Floor division: milliseconds must be in [0, 999].
+    // C truncation toward zero gives negative remainder for negative inputs.
+    int64_t sec = timestamp_ms / 1000;
+    int32_t ms = (int32_t) (timestamp_ms % 1000);
+    if (ms < 0) {
+        sec -= 1;
+        ms += 1000;
+    }
+    dt->timestamp = sec;
+    dt->milliseconds = ms;
     dt->tz_offset = 0;
     dt->is_utc = 1;
     return dt;
