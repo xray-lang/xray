@@ -121,6 +121,14 @@ typedef enum {
     /* Exception handling */
     XI_THROW,       /* throw exception: args[0]=value */
 
+    /* Iteration (for-in protocol) */
+    XI_ITER_NEW,    /* create iterator: args[0]=collection */
+    XI_ITER_NEXT,   /* advance + get value: args[0]=iterator, returns next value */
+    XI_ITER_VALID,  /* test not-done: args[0]=iterator, returns bool */
+
+    /* Null check */
+    XI_ISNULL,      /* args[0]=value, returns bool (true if null) */
+
     /* Phi node (not in value list — separate on XiBlock) */
     XI_PHI,         /* SSA phi: args[i] corresponds to block->preds[i] */
 

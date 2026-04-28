@@ -400,6 +400,70 @@ TEST(throw_stmt) {
     xi_func_free(f);
 }
 
+TEST(for_in_loop) {
+    XiFunc *f = lower_source(
+        "let arr = [10, 20, 30]\n"
+        "for (x in arr) {\n"
+        "    print(x)\n"
+        "}\n"
+    );
+    assert(f != NULL);
+    /* Should have: entry, cond, body, exit blocks (loop structure) */
+    assert(f->nblocks >= 3);
+    /* Verify ITER_NEW, ITER_VALID, ITER_NEXT ops exist */
+    int found_iter_new = 0, found_iter_valid = 0, found_iter_next = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            uint16_t op = blk->values[i]->op;
+            if (op == XI_ITER_NEW)   found_iter_new = 1;
+            if (op == XI_ITER_VALID) found_iter_valid = 1;
+            if (op == XI_ITER_NEXT)  found_iter_next = 1;
+        }
+    }
+    assert(found_iter_new && "should have ITER_NEW");
+    assert(found_iter_valid && "should have ITER_VALID");
+    assert(found_iter_next && "should have ITER_NEXT");
+    xi_func_free(f);
+}
+
+TEST(nullish_coalesce) {
+    XiFunc *f = lower_source(
+        "let x: int? = null\n"
+        "let y = x ?? 42\n"
+        "print(y)\n"
+    );
+    assert(f != NULL);
+    /* Nullish coalesce produces: entry, eval_rhs, skip, merge blocks */
+    assert(f->nblocks >= 3);
+    /* Verify ISNULL op exists */
+    int found_isnull = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i]->op == XI_ISNULL)
+                found_isnull = 1;
+        }
+    }
+    assert(found_isnull && "should have ISNULL op");
+    xi_func_free(f);
+}
+
+TEST(map_literal) {
+    XiFunc *f = lower_source(
+        "let m = {\"a\" => 1, \"b\" => 2}\n"
+        "print(m)\n"
+    );
+    assert(f != NULL);
+    int found_map_new = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_MAP_NEW)
+            found_map_new = 1;
+    }
+    assert(found_map_new && "should have MAP_NEW op");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -427,6 +491,9 @@ int main(void) {
     run_index_access();
     run_member_access();
     run_throw_stmt();
+    run_for_in_loop();
+    run_nullish_coalesce();
+    run_map_literal();
 
     teardown();
 

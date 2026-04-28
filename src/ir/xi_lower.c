@@ -614,6 +614,86 @@ static XiValue *lower_ternary(XiLower *l, AstNode *node) {
     return phi ? &phi->value : then_val;
 }
 
+/*
+ * Nullish coalesce (a ?? b): if a is null, evaluate b; otherwise use a.
+ * Similar to short-circuit OR but checks null instead of falsy.
+ */
+static XiValue *lower_nullish_coalesce(XiLower *l, AstNode *node) {
+    XiValue *lhs = lower_expr(l, node->as.binary.left);
+    if (!lhs) return NULL;
+
+    XiBlock *eval_rhs = xi_block_new(l->func);
+    XiBlock *skip = xi_block_new(l->func);
+    XiBlock *merge = xi_block_new(l->func);
+
+    /* Test: is lhs null? */
+    XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+    if (!is_null) return lhs;
+    is_null->args[0] = lhs;
+
+    /* If null → eval rhs; otherwise → skip (use lhs) */
+    xi_block_set_if(l->cur_block, is_null, eval_rhs, skip);
+    braun_seal_block(l, eval_rhs);
+    braun_seal_block(l, skip);
+
+    /* Evaluate RHS in eval_rhs block */
+    l->cur_block = eval_rhs;
+    XiValue *rhs = lower_expr(l, node->as.binary.right);
+    XiBlock *rhs_exit = l->cur_block;
+    xi_block_set_jump(rhs_exit, merge);
+
+    /* Skip → merge (lhs is non-null) */
+    xi_block_set_jump(skip, merge);
+
+    braun_seal_block(l, merge);
+    l->cur_block = merge;
+
+    struct XrType *result_type = node_type(l, node);
+    XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+    if (phi) {
+        for (uint16_t i = 0; i < merge->npreds; i++) {
+            if (merge->preds[i] == rhs_exit)
+                phi->value.args[i] = rhs ? rhs : lhs;
+            else
+                phi->value.args[i] = lhs;
+        }
+    }
+    return phi ? &phi->value : lhs;
+}
+
+static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
+    MapLiteralNode *map = &node->as.map_literal;
+    int count = map->count;
+
+    /* Evaluate all keys and values first */
+    XiValue *key_vals[32], *val_vals[32];
+    int n = count > 32 ? 32 : count;
+    for (int i = 0; i < n; i++) {
+        key_vals[i] = lower_expr(l, map->keys[i]);
+        val_vals[i] = lower_expr(l, map->values[i]);
+    }
+
+    /* Create map: XI_MAP_NEW with capacity */
+    struct XrType *result_type = node_type(l, node);
+    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
+    XiValue *map_val = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
+    if (!map_val) return NULL;
+    map_val->args[0] = cap;
+    map_val->line = (uint32_t) node->line;
+
+    /* Populate: INDEX_SET for each key-value pair */
+    for (int i = 0; i < n; i++) {
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
+                                     l->type_void, 3);
+        if (!set) break;
+        set->args[0] = map_val;
+        set->args[1] = key_vals[i];
+        set->args[2] = val_vals[i];
+        set->flags |= XI_FLAG_SIDE_EFFECT;
+    }
+    return map_val;
+}
+
 /* Main expression dispatcher */
 static XiValue *lower_expr(XiLower *l, AstNode *node) {
     if (!node) return NULL;
@@ -683,6 +763,12 @@ static XiValue *lower_expr(XiLower *l, AstNode *node) {
             return lower_index_set(l, node);
         case AST_ARRAY_LITERAL:
             return lower_array_literal(l, node);
+        case AST_MAP_LITERAL:
+            return lower_map_literal(l, node);
+
+        /* Nullish coalesce */
+        case AST_NULLISH_COALESCE:
+            return lower_nullish_coalesce(l, node);
 
         default:
             /* Unsupported expression: emit null placeholder */
@@ -899,6 +985,84 @@ static void lower_for(XiLower *l, AstNode *node) {
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
 }
 
+/*
+ * for (item in collection) { body }
+ *
+ * Lowered to:
+ *   iter = ITER_NEW collection
+ *   jmp cond_blk
+ * cond_blk:             ; loop header (unsealed)
+ *   valid = ITER_VALID iter
+ *   if valid → body_blk, exit_blk
+ * body_blk:
+ *   item = ITER_NEXT iter
+ *   ... body ...
+ *   jmp cond_blk        ; back edge
+ * exit_blk:
+ *   ...
+ */
+static void lower_for_in(XiLower *l, AstNode *node) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+
+    /* Evaluate collection and create iterator */
+    XiValue *coll = lower_expr(l, s->collection);
+    if (!coll || !l->cur_block) return;
+
+    struct XrType *iter_type = l->type_any;  /* opaque iterator */
+    XiValue *iter = xi_value_new(l->func, l->cur_block, XI_ITER_NEW, iter_type, 1);
+    if (!iter) return;
+    iter->args[0] = coll;
+    iter->line = (uint32_t) node->line;
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    /* cond_blk is a loop header — do NOT seal yet */
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    /* Condition: ITER_VALID */
+    l->cur_block = cond_blk;
+    XiValue *valid = xi_value_new(l->func, l->cur_block, XI_ITER_VALID, l->type_bool, 1);
+    if (valid) {
+        valid->args[0] = iter;
+        xi_block_set_if(l->cur_block, valid, body_blk, exit_blk);
+    }
+
+    braun_seal_block(l, body_blk);
+
+    /* Body: get current item via ITER_NEXT */
+    XiBlock *prev_break = l->break_target;
+    XiBlock *prev_cont = l->continue_target;
+    l->break_target = exit_blk;
+    l->continue_target = cond_blk;
+
+    l->cur_block = body_blk;
+    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+    XiValue *item = xi_value_new(l->func, l->cur_block, XI_ITER_NEXT, item_type, 1);
+    if (item) {
+        item->args[0] = iter;
+        item->line = (uint32_t) node->line;
+    }
+
+    /* Register loop variable */
+    int var_id = var_lookup_or_create(l, s->item_name, item_type);
+    if (item) braun_write(l, var_id, l->cur_block, item);
+
+    lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    /* All preds of cond_blk now known — seal */
+    braun_seal_block(l, cond_blk);
+
+    l->break_target = prev_break;
+    l->continue_target = prev_cont;
+
+    braun_seal_block(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 static void lower_break(XiLower *l) {
     if (l->break_target && l->cur_block) {
         xi_block_set_jump(l->cur_block, l->break_target);
@@ -950,6 +1114,10 @@ static void lower_stmt(XiLower *l, AstNode *node) {
 
         case AST_FOR_STMT:
             lower_for(l, node);
+            break;
+
+        case AST_FOR_IN_STMT:
+            lower_for_in(l, node);
             break;
 
         case AST_BREAK_STMT:
