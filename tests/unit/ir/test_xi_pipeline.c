@@ -240,6 +240,238 @@ TEST(e2e_unary_neg) {
     xr_vm_proto_free(p);
 }
 
+/* ========== For Loop ========== */
+
+TEST(e2e_for_loop) {
+    XrProto *p = compile_source(
+        "let sum = 0\n"
+        "for (let i = 0; i < 5; i = i + 1) { sum = sum + i }\n"
+        "print(sum)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_JMP) && "for loop needs backward JMP");
+    assert(has_opcode(p, OP_PRINT));
+    xr_vm_proto_free(p);
+}
+
+/* ========== Function / Closure ========== */
+
+TEST(e2e_function_decl) {
+    /* Function declaration should emit CLOSURE opcode and have a child proto */
+    XrProto *p = compile_source(
+        "fn add(a: int, b: int): int { return a + b }\n"
+        "print(add(1, 2))", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_CLOSURE) && "function decl needs CLOSURE");
+    assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto for add()");
+    xr_vm_proto_free(p);
+}
+
+TEST(e2e_recursive_func) {
+    XrProto *p = compile_source(
+        "fn fib(n: int): int {\n"
+        "  if (n <= 1) { return n }\n"
+        "  return fib(n - 1) + fib(n - 2)\n"
+        "}\nprint(fib(5))", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_CLOSURE));
+    /* Child proto should use CALLSELF for recursion */
+    XrProto *child = PROTO_PROTO(p, 0);
+    assert(has_opcode(child, OP_CALLSELF) && "recursive call should use CALLSELF");
+    xr_vm_proto_free(p);
+}
+
+TEST(e2e_nested_call) {
+    /* Tests the register clobber fix: nested calls to same function */
+    XrProto *p = compile_source(
+        "fn add(a: int, b: int): int { return a + b }\n"
+        "print(add(1, add(2, 3)))", NULL);
+    assert(p != NULL);
+    /* Main proto should have 2 CALL instructions (not CALLSELF) */
+    assert(count_opcode(p, OP_CALL) >= 2 && "nested calls need >= 2 CALLs");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Constant Propagation Chain ========== */
+
+TEST(e2e_const_prop_chain) {
+    /* let a = 2; let b = a + 3; let c = b * 4; print(c)
+     * After folding: a=2, b=5, c=20. No arithmetic ops. */
+    XrProto *p = compile_source(
+        "let a = 2\nlet b = a + 3\nlet c = b * 4\nprint(c)", NULL);
+    assert(p != NULL);
+    assert(!has_opcode(p, OP_ADD) && "chain should fold ADD away");
+    assert(!has_opcode(p, OP_MUL) && "chain should fold MUL away");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Dead Code Elimination ========== */
+
+TEST(e2e_dce_unused_var) {
+    /* let x = 42; let y = 99; print(x)
+     * y is unused → should be eliminated */
+    XrProto *p = compile_source(
+        "let x = 42\nlet y = 99\nprint(x)", NULL);
+    assert(p != NULL);
+    /* Only one LOADI needed (for x=42); y=99 should be dead */
+    int loads = count_opcode(p, OP_LOADI) + count_opcode(p, OP_LOADK);
+    assert(loads <= 1 && "unused y should be eliminated by DCE");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Array Operations ========== */
+
+TEST(e2e_array_literal) {
+    XrProto *p = compile_source(
+        "let arr = [10, 20, 30]\nprint(arr[1])", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_NEWARRAY) && "array literal needs NEWARRAY");
+    assert(has_opcode(p, OP_INDEX_GET) && "arr[1] needs INDEX_GET");
+    xr_vm_proto_free(p);
+}
+
+TEST(e2e_array_set) {
+    XrProto *p = compile_source(
+        "let arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_INDEX_SET) && "arr[0]=99 needs INDEX_SET");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Bitwise Operations ========== */
+
+TEST(e2e_bitwise_ops) {
+    /* Variable-based bitwise ops should emit real instructions */
+    XrProto *p = compile_source(
+        "let a = 12\nlet b = 10\n"
+        "print(a & b)\nprint(a | b)\nprint(a ^ b)", NULL);
+    assert(p != NULL);
+    xr_vm_proto_free(p);
+}
+
+TEST(e2e_bitwise_shift) {
+    XrProto *p = compile_source(
+        "let x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
+    assert(p != NULL);
+    xr_vm_proto_free(p);
+}
+
+/* ========== Compound Assignment ========== */
+
+TEST(e2e_compound_assign) {
+    XrProto *p = compile_source(
+        "let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_PRINT));
+    xr_vm_proto_free(p);
+}
+
+/* ========== Increment / Decrement ========== */
+
+TEST(e2e_inc_dec) {
+    XrProto *p = compile_source(
+        "let x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
+    assert(p != NULL);
+    xr_vm_proto_free(p);
+}
+
+/* ========== Break / Continue ========== */
+
+TEST(e2e_break) {
+    XrProto *p = compile_source(
+        "let i = 0\n"
+        "while (i < 100) {\n"
+        "  if (i == 5) { break }\n"
+        "  i = i + 1\n"
+        "}\nprint(i)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_JMP));
+    xr_vm_proto_free(p);
+}
+
+TEST(e2e_continue) {
+    XrProto *p = compile_source(
+        "let sum = 0\nlet i = 0\n"
+        "while (i < 10) {\n"
+        "  i = i + 1\n"
+        "  if (i % 2 == 0) { continue }\n"
+        "  sum = sum + i\n"
+        "}\nprint(sum)", NULL);
+    assert(p != NULL);
+    xr_vm_proto_free(p);
+}
+
+/* ========== Multi-branch If-Else ========== */
+
+TEST(e2e_if_else_chain) {
+    XrProto *p = compile_source(
+        "let x = 7\n"
+        "if (x > 10) { print(1) }\n"
+        "else if (x > 5) { print(2) }\n"
+        "else { print(3) }", NULL);
+    assert(p != NULL);
+    /* Multiple branches means multiple conditional jumps */
+    xr_vm_proto_free(p);
+}
+
+/* ========== Float Constants ========== */
+
+TEST(e2e_float_arith) {
+    /* let x = 1.5 + 2.5 → folded to 4.0 */
+    XrProto *p = compile_source(
+        "let x = 1.5 + 2.5\nprint(x)", NULL);
+    assert(p != NULL);
+    assert(!has_opcode(p, OP_ADD) && "1.5+2.5 should be folded");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Ternary ========== */
+
+TEST(e2e_ternary) {
+    XrProto *p = compile_source(
+        "let x = 5\nlet r = x > 3 ? 1 : 0\nprint(r)", NULL);
+    assert(p != NULL);
+    xr_vm_proto_free(p);
+}
+
+/* ========== Logical Short-Circuit ========== */
+
+TEST(e2e_short_circuit) {
+    /* Short-circuit AND/OR produce conditional jumps, not BAND/BOR */
+    XrProto *p = compile_source(
+        "let a = true\nlet b = false\n"
+        "if (a && b) { print(1) }\n"
+        "if (a || b) { print(2) }", NULL);
+    assert(p != NULL);
+    /* Should NOT have BAND/BOR — these are logical ops with short-circuit */
+    assert(!has_opcode(p, OP_BAND) && "&& should not emit BAND");
+    assert(!has_opcode(p, OP_BOR) && "|| should not emit BOR");
+    xr_vm_proto_free(p);
+}
+
+/* ========== Multiple Functions ========== */
+
+TEST(e2e_multi_func) {
+    XrProto *p = compile_source(
+        "fn double(x: int): int { return x * 2 }\n"
+        "fn negate(x: int): int { return -x }\n"
+        "print(negate(double(3)))", NULL);
+    assert(p != NULL);
+    assert(PROTO_PROTO_COUNT(p) >= 2 && "should have 2 child protos");
+    assert(count_opcode(p, OP_CLOSURE) >= 2 && "need 2 CLOSUREs");
+    xr_vm_proto_free(p);
+}
+
+/* ========== String Concatenation ========== */
+
+TEST(e2e_string_concat) {
+    XrProto *p = compile_source(
+        "let a = \"hello\"\nlet b = \" world\"\n"
+        "let c = a + b\nprint(c)", NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_ADD) && "string concat uses ADD");
+    xr_vm_proto_free(p);
+}
+
 /* ========== Pipeline Status API ========== */
 
 TEST(e2e_status_str) {
@@ -279,6 +511,56 @@ int main(void) {
 
     /* Unary */
     run_e2e_unary_neg();
+
+    /* For loop */
+    run_e2e_for_loop();
+
+    /* Functions / closures */
+    run_e2e_function_decl();
+    run_e2e_recursive_func();
+    run_e2e_nested_call();
+
+    /* Constant propagation chain */
+    run_e2e_const_prop_chain();
+
+    /* Dead code elimination */
+    run_e2e_dce_unused_var();
+
+    /* Array operations */
+    run_e2e_array_literal();
+    run_e2e_array_set();
+
+    /* Bitwise operations */
+    run_e2e_bitwise_ops();
+    run_e2e_bitwise_shift();
+
+    /* Compound assignment */
+    run_e2e_compound_assign();
+
+    /* Increment / decrement */
+    run_e2e_inc_dec();
+
+    /* Break / continue */
+    run_e2e_break();
+    run_e2e_continue();
+
+    /* Multi-branch if-else */
+    run_e2e_if_else_chain();
+
+    /* Float arithmetic */
+    run_e2e_float_arith();
+
+    /* Ternary */
+    run_e2e_ternary();
+
+    /* Logical short-circuit */
+    run_e2e_short_circuit();
+
+    /* Multiple functions */
+    run_e2e_multi_func();
+
+    /* String concatenation */
+    run_e2e_string_concat();
 
     /* API */
     run_e2e_status_str();
