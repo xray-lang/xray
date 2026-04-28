@@ -36,6 +36,14 @@ typedef struct {
     uint8_t next_reg;        /* next free register */
     uint8_t max_reg;         /* high-water mark */
 
+    /* Free register stack for register recycling */
+    uint8_t free_regs[MAX_REGS];
+    uint16_t nfree;          /* count of free registers on the stack */
+
+    /* Liveness: per-value last-use tracking (value_id -> last-use ordinal) */
+    uint32_t *last_use;      /* [next_value_id], 0 = unused/dead */
+    uint32_t current_ordinal;/* monotonic instruction counter */
+
     /* Block linearization */
     XiBlock **rpo_order;     /* blocks in RPO order */
     uint32_t rpo_count;
@@ -68,7 +76,16 @@ static void emit_inst(EmitCtx *ctx, XrInstruction inst) {
     xr_vm_proto_write(ctx->proto, inst, 0);
 }
 
-/* Get register for a value. Assigns one if not yet mapped. */
+/* Return a register to the free pool for reuse. */
+static void free_reg(EmitCtx *ctx, uint8_t reg) {
+    if (reg == NO_REG) return;
+    if (ctx->nfree < MAX_REGS) {
+        ctx->free_regs[ctx->nfree++] = reg;
+    }
+}
+
+/* Get register for a value. Assigns one if not yet mapped.
+ * Uses free register stack before allocating new ones. */
 static uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
     XR_DCHECK(v != NULL, "reg_of: NULL value");
 
@@ -78,15 +95,35 @@ static uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
     }
 
     if (ctx->reg_map[v->id] == NO_REG) {
-        if (ctx->next_reg >= MAX_REGS - 1) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return 0;
+        /* Try recycled register first */
+        if (ctx->nfree > 0) {
+            ctx->reg_map[v->id] = ctx->free_regs[--ctx->nfree];
+        } else {
+            if (ctx->next_reg >= MAX_REGS - 1) {
+                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                return 0;
+            }
+            ctx->reg_map[v->id] = ctx->next_reg++;
+            if (ctx->next_reg > ctx->max_reg)
+                ctx->max_reg = ctx->next_reg;
         }
-        ctx->reg_map[v->id] = ctx->next_reg++;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
     }
     return ctx->reg_map[v->id];
+}
+
+/* Release registers of input args whose last use is at the current ordinal.
+ * Called AFTER emitting an instruction that reads these args. */
+static void try_free_args(EmitCtx *ctx, const XiValue *v) {
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        const XiValue *arg = v->args[i];
+        if (!arg || arg->id >= ctx->reg_map_size) continue;
+        /* Free register if this is the last use of arg */
+        if (ctx->last_use[arg->id] == ctx->current_ordinal) {
+            uint8_t r = ctx->reg_map[arg->id];
+            ctx->reg_map[arg->id] = NO_REG;
+            free_reg(ctx, r);
+        }
+    }
 }
 
 /* Add a pending jump patch. */
@@ -131,9 +168,58 @@ static int add_const_string(EmitCtx *ctx, const char *str) {
     return idx;
 }
 
+/* ========== Last-Use Computation ========== */
+
+/* Pre-compute last-use ordinals for register recycling.
+ * Walks all blocks in RPO, assigning each value a monotonic ordinal.
+ * For each arg reference, updates last_use[arg_id] = max ordinal.
+ * Also accounts for block terminators that reference values. */
+static void compute_last_use(EmitCtx *ctx) {
+    uint32_t ord = 1;
+    for (uint32_t r = 1; r <= ctx->rpo_count; r++) {
+        XiBlock *blk = ctx->rpo_order[r];
+        if (!blk) continue;
+
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            /* Record ordinal for this value */
+            /* Update last-use of all args referenced by this value */
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                XiValue *arg = v->args[a];
+                if (arg && arg->id < ctx->reg_map_size)
+                    ctx->last_use[arg->id] = ord;
+            }
+            ord++;
+        }
+
+        /* Terminator references: control value and phi args in successors */
+        if (blk->control && blk->control->id < ctx->reg_map_size)
+            ctx->last_use[blk->control->id] = ord;
+
+        /* Phi args from this block's successors reference values too */
+        for (int s = 0; s < 2; s++) {
+            XiBlock *succ = blk->succs[s];
+            if (!succ) continue;
+            int pred_idx = -1;
+            for (uint16_t p = 0; p < succ->npreds; p++) {
+                if (succ->preds[p] == blk) { pred_idx = (int)p; break; }
+            }
+            if (pred_idx < 0) continue;
+            for (XiPhi *phi = succ->phis; phi; phi = phi->next) {
+                if ((uint16_t)pred_idx < phi->value.nargs) {
+                    XiValue *src = phi->value.args[pred_idx];
+                    if (src && src->id < ctx->reg_map_size)
+                        ctx->last_use[src->id] = ord;
+                }
+            }
+        }
+        ord++;  /* account for terminator */
+    }
+}
+
 /* ========== Register Allocation ========== */
 
-/* Simple allocation: params get R[0..nparams-1], then greedy assign. */
+/* Params get R[0..nparams-1], phis pre-assigned, last-use computed. */
 static void alloc_registers(EmitCtx *ctx) {
     XiFunc *f = ctx->func;
 
@@ -558,12 +644,17 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     XR_DCHECK(blk->id < ctx->block_pc_size, "block_id out of range");
     ctx->block_pc[blk->id] = current_pc(ctx);
 
-    /* Emit instruction values */
+    /* Emit instruction values with register recycling */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
+        ctx->current_ordinal++;
         emit_value(ctx, blk->values[i]);
         if (ctx->status != XI_EMIT_OK) return;
+        /* Recycle registers of args whose last use was this instruction */
+        if (ctx->last_use)
+            try_free_args(ctx, blk->values[i]);
     }
 
+    ctx->current_ordinal++;  /* ordinal for terminator */
     /* Emit terminator */
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
@@ -707,6 +798,17 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrProto **out_proto) {
     for (uint32_t i = 0; i < ctx.block_pc_size; i++)
         ctx.block_pc[i] = -1;
 
+    /* Allocate last-use ordinal map for register recycling */
+    ctx.last_use = (uint32_t *)xr_calloc(ctx.reg_map_size, sizeof(uint32_t));
+    if (!ctx.last_use) {
+        xr_free(ctx.block_pc);
+        xr_free(ctx.reg_map);
+        xr_vm_proto_free(ctx.proto);
+        xr_free(rpo_order);
+        return XI_EMIT_ERR_INTERNAL;
+    }
+    compute_last_use(&ctx);
+
     alloc_registers(&ctx);
     if (ctx.status != XI_EMIT_OK) goto cleanup;
 
@@ -746,6 +848,7 @@ cleanup:;
     } else {
         xr_vm_proto_free(ctx.proto);
     }
+    xr_free(ctx.last_use);
     xr_free(ctx.reg_map);
     xr_free(ctx.block_pc);
     xr_free(ctx.patches);

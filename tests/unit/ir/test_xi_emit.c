@@ -475,6 +475,68 @@ TEST(emit_after_optimization) {
     xi_func_free(f);
 }
 
+/* ========== Register Recycling ========== */
+
+TEST(emit_reg_recycling) {
+    /* Build a chain: p0, p1 are params.
+     * t1 = p0 + p1    (p0, p1 last used here -> freed)
+     * t2 = t1 + t1    (reuses recycled regs for t2)
+     * t3 = t2 + t2
+     * return t3
+     * With recycling, maxstacksize should be <= 4 (2 params + 2 temps)
+     * Without recycling it would be 6 (2 params + 4 temps). */
+    XiFunc *f = make_func("recyc", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *p0 = xi_param(f, entry, 0, &stub_int);
+    XiValue *p1 = xi_param(f, entry, 1, &stub_int);
+    XiValue *t1 = xi_binary(f, entry, XI_ADD, &stub_int, p0, p1);
+    XiValue *t2 = xi_binary(f, entry, XI_ADD, &stub_int, t1, t1);
+    XiValue *t3 = xi_binary(f, entry, XI_ADD, &stub_int, t2, t2);
+    xi_block_set_return(entry, t3);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* After recycling, dead temps' regs are reused.
+     * maxstacksize should be at most 4. */
+    assert(proto->maxstacksize <= 4 &&
+           "register recycling should keep maxstacksize <= 4");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_reg_pressure) {
+    /* Many independent values in sequence — all die immediately.
+     * With recycling, only need ~3 registers at any time. */
+    XiFunc *f = make_func("pressure", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *p0 = xi_param(f, entry, 0, &stub_int);
+    XiValue *p1 = xi_param(f, entry, 1, &stub_int);
+
+    /* Build 20 sequential adds: each uses prev + p1, prev dies */
+    XiValue *prev = p0;
+    for (int i = 0; i < 20; i++) {
+        prev = xi_binary(f, entry, XI_ADD, &stub_int, prev, p1);
+    }
+    xi_block_set_return(entry, prev);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* p1 is live throughout (used in every ADD), so we need:
+     * 2 params + at most 2 temps = 4 regs max. */
+    assert(proto->maxstacksize <= 4 &&
+           "sequential chain should recycle intermediates");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 /* ========== Error Handling ========== */
 
 TEST(emit_status_str) {
@@ -524,6 +586,10 @@ int main(void) {
 
     /* Optimization + emit */
     run_emit_after_optimization();
+
+    /* Register recycling */
+    run_emit_reg_recycling();
+    run_emit_reg_pressure();
 
     /* Error handling */
     run_emit_status_str();
