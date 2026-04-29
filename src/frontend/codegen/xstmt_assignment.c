@@ -312,8 +312,8 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
         }
     }
 
-    // CT_JSON (unified object type): decide behavior based on allow_extension
-    if (obj_type && obj_type->kind == XR_KIND_JSON) {
+    // CT_JSON / CT_OBJECT: decide behavior based on type kind
+    if (obj_type && (obj_type->kind == XR_KIND_JSON || obj_type->kind == XR_KIND_OBJECT)) {
         int field_idx = -1;
         int field_orig_idx = -1;
         int static_idx = 0;
@@ -340,9 +340,8 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
                 return;
             }
 
-            // Strict type alias (allow_extension=false): shape is stable,
-            // safe to use OP_TFIELD_SET for typed primitive fields
-            if (!obj_type->object.allow_extension && obj_type->object.field_types) {
+            // OBJECT kind: shape is stable, safe to use OP_TFIELD_SET for typed fields
+            if (obj_type->kind == XR_KIND_OBJECT && obj_type->object.field_types) {
                 XrType *ft =
                     (field_orig_idx >= 0) ? obj_type->object.field_types[field_orig_idx] : NULL;
                 bool use_tfield = false;
@@ -374,8 +373,8 @@ void compile_member_set(XrCompilerContext *ctx, XrCompiler *compiler, MemberSetN
             reg_free(compiler, value_reg);
             reg_free(compiler, obj_reg);
             return;
-        } else if (obj_type->object.allow_extension) {
-            // Allow extension: use OP_JSON_SETK (dynamic add, Shape transition)
+        } else if (obj_type->kind == XR_KIND_JSON) {
+            // Json is extensible: use OP_JSON_SETK (dynamic add, Shape transition)
             XrExprDesc obj_expr = xr_compile_expr(ctx, compiler, node->object);
             int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
             XrExprDesc val_expr = xr_compile_expr(ctx, compiler, node->value);

@@ -462,7 +462,7 @@ static bool is_bigint_type(XrType *type) {
 }
 
 static bool is_json_type(XrType *type) {
-    return type && (type->kind == XR_KIND_JSON);
+    return type && (type->kind == XR_KIND_JSON || type->kind == XR_KIND_OBJECT);
 }
 
 // ============================================================================

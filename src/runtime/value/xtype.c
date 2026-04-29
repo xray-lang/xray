@@ -70,14 +70,12 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
     init_singleton(&g_type_void, XR_KIND_VOID, id++, false, 0);
     init_singleton(&g_type_json, XR_KIND_JSON, id++, false, 0);
-    g_type_json.object.allow_extension = true;
 
     init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, 0);
     init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, 0);
     init_singleton(&g_type_string_nullable, XR_KIND_STRING, id++, true, 0);
     init_singleton(&g_type_bool_nullable, XR_KIND_BOOL, id++, true, 0);
     init_singleton(&g_type_json_nullable, XR_KIND_JSON, id++, true, 0);
-    g_type_json_nullable.object.allow_extension = true;
 }
 
 // Set current type pool on the active isolate (called by XaAnalyzer)
@@ -233,7 +231,6 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
     if (!type)
         return NULL;
     XrTypePool *pool = X->current_type_pool;
-    type->object.allow_extension = true;  // Json allows dynamic fields
     if (count > 0 && names && types) {
         type->object.field_count = count;
         type->object.field_names = (const char **) xr_pool_alloc(pool, sizeof(char *) * count);
@@ -246,11 +243,11 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
     return type;
 }
 
-// Structured object types (for JSON with known fields)
+// Structured object types (compile-time fixed fields, XR_KIND_OBJECT)
 XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **field_types,
-                           int field_count, bool allow_extension, const char *type_name) {
+                           int field_count, const char *type_name) {
     X = resolve_isolate(X);
-    XrType *type = type_alloc(X, XR_KIND_JSON);
+    XrType *type = type_alloc(X, XR_KIND_OBJECT);
     if (!type)
         return NULL;
     XrTypePool *pool = X->current_type_pool;
@@ -273,7 +270,6 @@ XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **fi
     }
 
     type->object.field_count = field_count;
-    type->object.allow_extension = allow_extension;
     type->object.type_name = type_name ? xr_pool_strdup(pool, type_name) : NULL;
     type->object.field_readonly = NULL;
 
@@ -282,7 +278,7 @@ XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **fi
 
 XrType *xr_type_new_object_anonymous(XrayIsolate *X, const char **field_names, XrType **field_types,
                                      int field_count) {
-    return xr_type_new_object(X, field_names, field_types, field_count, true, NULL);
+    return xr_type_new_object(X, field_names, field_types, field_count, NULL);
 }
 
 // Optional type (T?) - unified: uses is_nullable on the base type itself
@@ -813,9 +809,9 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
             copy->function.is_variadic = type->function.is_variadic;
             break;
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
             if (type->object.field_count > 0) {
                 copy->object.field_count = type->object.field_count;
-                copy->object.allow_extension = type->object.allow_extension;
                 copy->object.type_name =
                     type->object.type_name ? xr_pool_strdup(pool, type->object.type_name) : NULL;
                 if (type->object.field_names) {
@@ -1005,16 +1001,17 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
     }
 
-    // JSON object structural subtyping
-    if (XR_TYPE_IS_JSON(target) && XR_TYPE_IS_JSON(source)) {
-        // If target has no fields (plain Json), accept any object
-        if (target->object.field_count == 0)
+    // Structural object subtyping (JSON and OBJECT kinds)
+    bool target_is_struct = XR_TYPE_IS_JSON(target) || XR_TYPE_IS_OBJECT(target);
+    bool source_is_struct = XR_TYPE_IS_JSON(source) || XR_TYPE_IS_OBJECT(source);
+    if (target_is_struct && source_is_struct) {
+        // Plain Json (no fields) accepts any object-like source
+        if (target->object.field_count == 0 && XR_TYPE_IS_JSON(target))
             return true;
 
-        // If source has no fields (plain Json), accept assignment to structured
-        // Json. Json is the explicit dynamic data boundary; codegen inserts
+        // Plain Json source assigned to structured target: codegen inserts
         // runtime validation for downstream coercions.
-        if (source->object.field_count == 0)
+        if (source->object.field_count == 0 && XR_TYPE_IS_JSON(source))
             return true;
 
         // Check structural compatibility (source has all target fields)
@@ -1022,7 +1019,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             XrType *target_field_type =
                 target->object.field_types ? target->object.field_types[i] : NULL;
 
-            // Check if field is optional
             bool is_optional = target_field_type && target_field_type->is_nullable;
 
             bool found = false;
@@ -1030,7 +1026,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                 if (target->object.field_names && source->object.field_names &&
                     target->object.field_names[i] && source->object.field_names[j] &&
                     strcmp(target->object.field_names[i], source->object.field_names[j]) == 0) {
-                    // Check field type compatibility
                     if (target_field_type && source->object.field_types) {
                         XrType *source_field_type = source->object.field_types[j];
                         XrType *check_type = is_optional
@@ -1044,8 +1039,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     break;
                 }
             }
-            // Optional fields can be missing
-            if (!found && !is_optional && !target->object.allow_extension) {
+            // OBJECT: missing non-optional field is an error
+            // JSON: missing fields allowed (extensible at runtime)
+            if (!found && !is_optional && XR_TYPE_IS_OBJECT(target)) {
                 return false;
             }
         }
@@ -1339,8 +1335,7 @@ XrType *xr_type_non_nullable(XrayIsolate *X, XrType *type) {
             case XR_KIND_BOOL:
                 return xr_type_new_bool(X);
             case XR_KIND_JSON:
-                if (type == &g_type_json_nullable ||
-                    (type->object.field_count == 0 && type->object.allow_extension))
+                if (type == &g_type_json_nullable || type->object.field_count == 0)
                     return &g_type_json;
                 break;
             default:

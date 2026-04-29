@@ -57,6 +57,7 @@ typedef enum XrTypeKind {
     XR_KIND_BYTES,
     XR_KIND_CHANNEL,
     XR_KIND_JSON,
+    XR_KIND_OBJECT,  // Structured type with compile-time fixed fields (not extensible)
     XR_KIND_CLASS,
     XR_KIND_INSTANCE,
     XR_KIND_INTERFACE,
@@ -87,20 +88,20 @@ static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
            k == XR_KIND_BYTES;
 }
 static inline bool xr_kind_is_object_like(XrTypeKind k) {
-    return k == XR_KIND_JSON || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
+    return k == XR_KIND_JSON || k == XR_KIND_OBJECT || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
 }
 
 // Forward declarations
 typedef struct XrType XrType;
 typedef struct XrClassInfo XrClassInfo;
 
-// Object type: supports structured JSON fields (migrated from sema)
+// Object type: supports structured fields.
+// Used by both XR_KIND_JSON (dynamic, extensible) and XR_KIND_OBJECT (fixed fields).
 typedef struct XrObjectType {
     const char **field_names;  // Field names array
     XrType **field_types;      // Field types array (parallel to names)
     bool *field_readonly;      // Per-field readonly flags (optional)
     int field_count;           // Number of fields
-    bool allow_extension;      // true = anonymous object, false = strict type alias
     const char *type_name;     // NULL for anonymous, name for type alias
 } XrObjectType;
 
@@ -225,6 +226,7 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
 #define XR_TYPE_IS_INTERFACE(t) ((t)->kind == XR_KIND_INTERFACE)
 #define XR_TYPE_IS_NULLABLE(t) ((t)->is_nullable || ((t)->kind == XR_KIND_NULL))
 #define XR_TYPE_IS_JSON(t) ((t)->kind == XR_KIND_JSON)
+#define XR_TYPE_IS_OBJECT(t) ((t)->kind == XR_KIND_OBJECT)
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
 #define XR_TYPE_IS_OPTIONAL(t) ((t)->is_nullable)
@@ -253,6 +255,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_BYTES:
@@ -339,6 +342,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_BYTES:
@@ -389,6 +393,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_BYTES:
@@ -470,9 +475,11 @@ xr_type_new_named_instance(XrayIsolate *X,
                            const char *name);  // generic named class (Exception/Range/etc)
 XR_FUNC XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name);
 
-// API: Structured object types (for JSON with known fields)
+// API: Structured object types
+// xr_type_new_object: XR_KIND_OBJECT — compile-time fixed fields, not extensible
 XR_FUNC XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **field_types,
-                                   int field_count, bool allow_extension, const char *type_name);
+                                   int field_count, const char *type_name);
+// xr_type_new_object_anonymous: XR_KIND_OBJECT — anonymous object literal type
 XR_FUNC XrType *xr_type_new_object_anonymous(XrayIsolate *X, const char **field_names,
                                              XrType **field_types, int field_count);
 

@@ -1410,6 +1410,7 @@ static int xrtype_to_typeid(XrType *type) {
         case XR_KIND_BOOL:
             return XR_TID_BOOL;
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
             return XR_TID_JSON;
         case XR_KIND_ARRAY:
             return XR_TID_ARRAY;

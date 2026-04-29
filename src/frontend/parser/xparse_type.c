@@ -307,9 +307,11 @@ static XrType *parse_type_annotation_base(Parser *parser) {
 
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
-        // Create object type (allow_extension determines extensibility)
-        XrType *result = xr_type_new_object(parser->X, field_names, field_types, field_count,
-                                            allow_extension, NULL);
+        // With ... → dynamic Json type (extensible), without → fixed Object type
+        XrType *result =
+            allow_extension
+                ? xr_type_new_json_with_fields(parser->X, field_names, field_types, field_count)
+                : xr_type_new_object(parser->X, field_names, field_types, field_count, NULL);
 
         // Free temporary arrays (field_names strings are copied by xr_type_new_object)
         for (int i = 0; i < field_count; i++) {

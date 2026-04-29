@@ -304,7 +304,7 @@ static void xa_collect_returns(AstNode *node, AstNode **out, int *count, int cap
 }
 
 // Infer Json return type for a function whose returns are all same-shape object literals.
-// Returns an interned XrType (XR_KIND_JSON, allow_extension=true) or NULL.
+// Returns an interned XrType (XR_KIND_JSON) or NULL.
 static XrType *xa_infer_return_json_type(XrayIsolate *X, FunctionDeclNode *fn) {
     if (!fn->body || fn->return_type)
         return NULL;

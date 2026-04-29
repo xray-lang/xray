@@ -67,6 +67,8 @@ const char *xstmt_type_flag_name(XrType *type) {
         return "Set";
     if (type->kind == XR_KIND_JSON)
         return "Json";
+    if (type->kind == XR_KIND_OBJECT)
+        return type->object.type_name ? type->object.type_name : "Object";
     if (type->kind == XR_KIND_INSTANCE) {
         return type->instance.class_name ? type->instance.class_name : "instance";
     }
@@ -130,6 +132,7 @@ static int kind_to_tid(XrTypeKind kind) {
         case XR_KIND_BOOL:
             return XR_TID_BOOL;
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
             return XR_TID_JSON;
         case XR_KIND_ARRAY:
             return XR_TID_ARRAY;

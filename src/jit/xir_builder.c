@@ -86,6 +86,7 @@ int builder_derive_type_hint(XirBuilder *b, int recv_reg) {
             case XR_KIND_SET:
                 return 7;
             case XR_KIND_JSON:
+            case XR_KIND_OBJECT:
                 return 8;
             case XR_KIND_INSTANCE:
                 return 9;

@@ -123,6 +123,7 @@ static const char *xi_type_name(const struct XrType *type) {
         case XR_KIND_CLASS:    return "class";
         case XR_KIND_ENUM:     return "enum";
         case XR_KIND_JSON:     return "json";
+        case XR_KIND_OBJECT:   return "object";
         case XR_KIND_UNION:    return "union";
         case XR_KIND_TUPLE:    return "tuple";
         case XR_KIND_NEVER:    return "never";

@@ -458,7 +458,8 @@ XrType *get_expr_type(XrCompilerContext *ctx, XrCompiler *compiler, AstNode *exp
                 int si = shared_get_in_scope(ctx, compiler, fn_str);
                 if (si >= 0) {
                     XrType *ret_type = shared_get_type(ctx, si);
-                    if (ret_type && (ret_type->kind == XR_KIND_JSON)) {
+                    if (ret_type && (ret_type->kind == XR_KIND_JSON ||
+                                     ret_type->kind == XR_KIND_OBJECT)) {
                         return ret_type;
                     }
                 }

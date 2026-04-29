@@ -233,8 +233,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             ctx->current_key_tid = extract_key_tid(node->type_annotation);
             if (node->type_annotation) {
                 XrType *ta = node->type_annotation;
-                if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension &&
-                    ta->object.field_count > 0)
+                if (ta->kind == XR_KIND_OBJECT && ta->object.field_count > 0)
                     ctx->current_object_type = ta;
             }
 
@@ -343,8 +342,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                 ctx->current_key_tid = extract_key_tid(node->type_annotation);
                 if (node->type_annotation) {
                     XrType *ta = node->type_annotation;
-                    if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension &&
-                        ta->object.field_count > 0)
+                    if (ta->kind == XR_KIND_OBJECT && ta->object.field_count > 0)
                         ctx->current_object_type = ta;
                 }
 
@@ -630,8 +628,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
             ctx->current_key_tid = extract_key_tid(node->type_annotation);
             if (node->type_annotation) {
                 XrType *ta = node->type_annotation;
-                if ((ta->kind == XR_KIND_JSON) && !ta->object.allow_extension &&
-                    ta->object.field_count > 0)
+                if (ta->kind == XR_KIND_OBJECT && ta->object.field_count > 0)
                     ctx->current_object_type = ta;
             }
 

@@ -40,6 +40,7 @@ static int kind_to_tid_ret(XrTypeKind kind) {
         case XR_KIND_BOOL:
             return XR_TID_BOOL;
         case XR_KIND_JSON:
+        case XR_KIND_OBJECT:
             return XR_TID_JSON;
         case XR_KIND_NULL:
             return XR_TID_NULL;
