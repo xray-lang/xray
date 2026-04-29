@@ -187,6 +187,7 @@ typedef enum {
 typedef struct XiCapture {
     uint8_t source;        /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
     uint8_t index;         /* SRC_UPVAL: parent upvalue index */
+    bool needs_cell;       /* true if the captured variable is mutated in the child */
     const char *name;      /* variable name (debug; not owned) */
     struct XrType *type;   /* variable type */
     struct XiValue *value; /* SRC_REG: parent SSA value (register resolved at emit) */
