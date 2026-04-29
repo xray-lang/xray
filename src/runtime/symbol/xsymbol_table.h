@@ -247,6 +247,15 @@ enum {
     SYMBOL_FINDALL,
     SYMBOL_PATTERN,
 
+    // Json type-checking instance methods
+    SYMBOL_IS_NULL,
+    SYMBOL_IS_INT,
+    SYMBOL_IS_FLOAT,
+    SYMBOL_IS_STRING,
+    SYMBOL_IS_BOOL,
+    SYMBOL_IS_ARRAY,
+    SYMBOL_IS_OBJECT,
+
     SYMBOL_BUILTIN_COUNT  // sentinel
 };
 

@@ -218,6 +218,14 @@ static const char *xr_builtin_symbol_names[] = {
     "test",
     "findAll",
     "pattern",
+    // Json type-checking instance methods
+    "isNull",
+    "isInt",
+    "isFloat",
+    "isString",
+    "isBool",
+    "isArray",
+    "isObject",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \
