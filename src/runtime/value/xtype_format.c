@@ -117,7 +117,7 @@ const char *xr_type_to_string(XrType *type) {
         return xr_pool_strdup(pool, buf);
     }
 
-    if (type->kind == XR_KIND_JSON) {
+    if (type->kind == XR_KIND_JSON || type->kind == XR_KIND_OBJECT) {
         if (type->object.type_name) {
             return type->object.type_name;
         }
@@ -143,7 +143,7 @@ const char *xr_type_to_string(XrType *type) {
             snprintf(ptr, remaining, "}");
             return xr_pool_strdup(pool, buf);
         }
-        return TYPE_NAME_JSON;
+        return (type->kind == XR_KIND_JSON) ? TYPE_NAME_JSON : "{...}";
     }
 
     if (type->kind == XR_KIND_TYPE_PARAM) {
@@ -291,7 +291,7 @@ XrType *xr_type_make_const(XrayIsolate *X, XrType *base) {
 XrType *xr_type_object_get_field(XrType *type, const char *field_name) {
     if (!type || !field_name)
         return NULL;
-    if (type->kind != XR_KIND_JSON)
+    if (type->kind != XR_KIND_JSON && type->kind != XR_KIND_OBJECT)
         return NULL;
 
     for (int i = 0; i < type->object.field_count; i++) {

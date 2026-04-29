@@ -567,8 +567,8 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             obj_type = ast_type;
     }
 
-    // CT_JSON (unified object type): behavior depends on allow_extension
-    if (obj_type && obj_type->kind == XR_KIND_JSON) {
+    // CT_JSON / CT_OBJECT: behavior depends on type kind
+    if (obj_type && (obj_type->kind == XR_KIND_JSON || obj_type->kind == XR_KIND_OBJECT)) {
         // Search in known fields (skip NULL names from computed properties)
         int field_idx = -1;
         int field_orig_idx = -1;
@@ -588,9 +588,8 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
         int obj_reg = xexpr_to_anyreg_readonly(ctx, compiler, &obj_expr);
 
         if (field_idx >= 0) {
-            // Strict type alias (allow_extension=false): shape is stable,
-            // safe to use OP_TFIELD_GET for typed primitive fields
-            if (!obj_type->object.allow_extension && obj_type->object.field_types) {
+            // OBJECT kind: shape is stable, safe to use OP_TFIELD_GET for typed fields
+            if (obj_type->kind == XR_KIND_OBJECT && obj_type->object.field_types) {
                 XrType *ft =
                     (field_orig_idx >= 0) ? obj_type->object.field_types[field_orig_idx] : NULL;
                 if (ft && (ft->kind == XR_KIND_INT || ft->kind == XR_KIND_FLOAT)) {
@@ -608,8 +607,8 @@ static int compile_member_access_internal(XrCompilerContext *ctx, XrCompiler *co
             int pc = xemit_json_get(compiler->emitter, 0, obj_reg, field_idx);
             reg_free(compiler, obj_reg);
             return pc;
-        } else if (obj_type->object.allow_extension) {
-            // Allow extension: use OP_JSON_GETK (dynamic Symbol lookup)
+        } else if (obj_type->kind == XR_KIND_JSON) {
+            // Json is extensible: use OP_JSON_GETK (dynamic Symbol lookup)
             XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->X);
             int global_sym = xr_symbol_register_in_table(sym_table, node->name);
             int local_sym = emitter_add_symbol(compiler->emitter, global_sym);

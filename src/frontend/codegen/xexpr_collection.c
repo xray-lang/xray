@@ -414,7 +414,7 @@ static int compile_object_literal_internal(XrCompilerContext *ctx, XrCompiler *c
     // OP_JSON_GET/SET and OP_TFIELD_GET/SET.
     XrType *target_type = ctx->current_object_type;
     ctx->current_object_type = NULL;  // Consume: prevent nested literals from inheriting
-    bool needs_reorder = target_type && !target_type->object.allow_extension &&
+    bool needs_reorder = target_type && target_type->kind == XR_KIND_OBJECT &&
                          target_type->object.field_count > 0 && target_type->object.field_names;
 
     // reorder_map[target_idx] = literal_idx, or -1 if missing

@@ -360,14 +360,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Handle Json object field access.
+    // Handle Json/Object field access.
     // Json represents any JSON value (including null), so field access returns Json.
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count == 0) {
         // Bare Json type (e.g. function parameter) — no static field info,
         // return Json since any field access is valid at runtime.
         return xr_type_new_json(ctx->analyzer->isolate);
     }
-    if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
+    if ((XR_TYPE_IS_JSON(obj_type) || XR_TYPE_IS_OBJECT(obj_type)) &&
+        obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {
             for (int i = 0; i < obj_type->object.field_count; i++) {
                 if (obj_type->object.field_names[i] &&
@@ -375,12 +376,16 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     XrType *ft = obj_type->object.field_types[i];
                     if (!ft)
                         return xr_type_new_unknown(NULL);
-                    return xr_type_make_nullable(ctx->analyzer->isolate, ft);
+                    // JSON fields are always nullable (runtime dynamic);
+                    // OBJECT fields return exact type (compile-time fixed)
+                    if (XR_TYPE_IS_JSON(obj_type))
+                        return xr_type_make_nullable(ctx->analyzer->isolate, ft);
+                    return ft;
                 }
             }
         }
-        // Json allows extension, return unknown for unknown fields
-        if (obj_type->object.allow_extension) {
+        // Json is extensible, return unknown for unknown fields
+        if (XR_TYPE_IS_JSON(obj_type)) {
             return xr_type_new_unknown(NULL);
         }
     }
@@ -560,8 +565,6 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
 
     XrType *type =
         xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count);
-    type->object.allow_extension = true;  // Json objects allow extension by default
-
     xr_free(field_names);
     xr_free(field_types);
 

@@ -973,7 +973,7 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler, CallExp
         if (obj_type->kind == XR_KIND_ARRAY || obj_type->kind == XR_KIND_MAP ||
             obj_type->kind == XR_KIND_STRING || obj_type->kind == XR_KIND_SET ||
             obj_type->kind == XR_KIND_INT || obj_type->kind == XR_KIND_FLOAT ||
-            obj_type->kind == XR_KIND_JSON) {
+            obj_type->kind == XR_KIND_JSON || obj_type->kind == XR_KIND_OBJECT) {
             is_builtin = true;
         } else if ((obj_type->kind == XR_KIND_CLASS || obj_type->kind == XR_KIND_INSTANCE) &&
                    obj_type->instance.class_name) {
