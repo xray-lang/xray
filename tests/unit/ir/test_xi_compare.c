@@ -311,6 +311,61 @@ static void run_compare(CompareSpec spec) {
     xr_vm_proto_free(p_xi);
 }
 
+/* Check if a proto (or its sub-protos) contains at least one instance of
+ * an opcode.  Recursive to handle fn-in-fn patterns. */
+static bool proto_has_opcode(const XrProto *proto, OpCode target) {
+    int count = PROTO_CODE_COUNT(proto);
+    for (int i = 0; i < count; i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == target)
+            return true;
+    }
+    int nchildren = DYNARRAY_COUNT(&proto->protos);
+    for (int i = 0; i < nchildren; i++) {
+        XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto *);
+        if (proto_has_opcode(child, target))
+            return true;
+    }
+    return false;
+}
+
+/* Compile via Xi and assert a specific fused opcode is present.
+ * Also runs execution comparison if check_exec is set. */
+typedef struct {
+    const char *source;
+    const char *label;
+    OpCode expect_op;      /* opcode that must appear in Xi output */
+    bool check_exec;
+} FusionSpec;
+
+static void run_fusion(FusionSpec spec) {
+    XrProto *p_legacy = compile_legacy(spec.source);
+    assert(p_legacy != NULL && "legacy codegen must succeed");
+
+    XrProto *p_xi = compile_xi(spec.source);
+    assert(p_xi != NULL && "Xi pipeline must succeed");
+
+    bool has_op = proto_has_opcode(p_xi, spec.expect_op);
+    fprintf(stderr, "  xi has %s: %s\n",
+            xr_opcode_name(spec.expect_op), has_op ? "yes" : "NO");
+    assert(has_op && "expected fused opcode not found in Xi output");
+
+    if (spec.check_exec) {
+        char *out_l = execute_and_capture(p_legacy);
+        char *out_x = execute_and_capture(p_xi);
+        if (out_l && out_x) {
+            bool match = (strcmp(out_l, out_x) == 0);
+            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n",
+                    out_l, out_x, match ? "MATCH" : "MISMATCH");
+            assert(match && "execution output must match");
+        }
+        if (out_l) xr_free(out_l);
+        if (out_x) xr_free(out_x);
+    }
+
+    xr_vm_proto_free(p_legacy);
+    xr_vm_proto_free(p_xi);
+}
+
 /* ========== Test Cases ========== */
 
 /* --- Constants --- */
@@ -1605,6 +1660,143 @@ TEST(cmp_string_for_in) {
     });
 }
 
+/* ========== Instruction Fusion Tests ========== */
+
+TEST(fusion_addi) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x + 1 }\nprint(f(10))",
+        .label = "ADDI: x + small_const",
+        .expect_op = OP_ADDI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_addi_commutative) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return 3 + x }\nprint(f(10))",
+        .label = "ADDI commutative: small_const + x",
+        .expect_op = OP_ADDI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_subi) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x - 3 }\nprint(f(10))",
+        .label = "SUBI: x - small_const",
+        .expect_op = OP_SUBI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_muli) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x * 7 }\nprint(f(5))",
+        .label = "MULI: x * small_const",
+        .expect_op = OP_MULI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_muli_commutative) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return 7 * x }\nprint(f(5))",
+        .label = "MULI commutative: small_const * x",
+        .expect_op = OP_MULI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_addk) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x + 1000 }\nprint(f(10))",
+        .label = "ADDK: x + large_const",
+        .expect_op = OP_ADDK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_addk_commutative) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return 1000 + x }\nprint(f(10))",
+        .label = "ADDK commutative: large_const + x",
+        .expect_op = OP_ADDK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_subk) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x - 500 }\nprint(f(2000))",
+        .label = "SUBK: x - large_const",
+        .expect_op = OP_SUBK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_mulk) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x * 1000 }\nprint(f(3))",
+        .label = "MULK: x * large_const",
+        .expect_op = OP_MULK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_mulk_commutative) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return 1000 * x }\nprint(f(3))",
+        .label = "MULK commutative: large_const * x",
+        .expect_op = OP_MULK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_divk) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x / 500 }\nprint(f(5000))",
+        .label = "DIVK: x / large_const",
+        .expect_op = OP_DIVK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_modk) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int): int { return x % 1000 }\nprint(f(12345))",
+        .label = "MODK: x % large_const",
+        .expect_op = OP_MODK,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_lti_branch) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int) { if (x < 10) { print(1) } else { print(0) } }\nf(5)",
+        .label = "LTI: branch x < small_const",
+        .expect_op = OP_LTI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_eqi_branch) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int) { if (x == 5) { print(1) } else { print(0) } }\nf(5)",
+        .label = "EQI: branch x == small_const",
+        .expect_op = OP_EQI,
+        .check_exec = true,
+    });
+}
+
+TEST(fusion_lei_branch) {
+    run_fusion((FusionSpec){
+        .source = "fn f(x: int) { if (x <= 10) { print(1) } else { print(0) } }\nf(10)",
+        .label = "LEI: branch x <= small_const",
+        .expect_op = OP_LEI,
+        .check_exec = true,
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -1830,6 +2022,23 @@ int main(void) {
     /* Misc patterns */
     run_cmp_nested_closure();
     run_cmp_string_for_in();
+
+    /* Instruction fusion */
+    run_fusion_addi();
+    run_fusion_addi_commutative();
+    run_fusion_subi();
+    run_fusion_muli();
+    run_fusion_muli_commutative();
+    run_fusion_addk();
+    run_fusion_addk_commutative();
+    run_fusion_subk();
+    run_fusion_mulk();
+    run_fusion_mulk_commutative();
+    run_fusion_divk();
+    run_fusion_modk();
+    run_fusion_lti_branch();
+    run_fusion_eqi_branch();
+    run_fusion_lei_branch();
 
     teardown();
 

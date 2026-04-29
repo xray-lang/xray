@@ -515,12 +515,14 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                 break;
             }
 
-            /* Try constant-pool form: ADDK/SUBK/MULK/DIVK for larger constants */
+            /* Try constant-pool form: ADDK/SUBK/MULK/DIVK/MODK for larger constants */
             bool rhs_is_const_num = (rhs->op == XI_CONST && rhs->type &&
                 (rhs->type->kind == XR_KIND_INT || rhs->type->kind == XR_KIND_FLOAT));
+            bool lhs_is_const_num = (lhs->op == XI_CONST && lhs->type &&
+                (lhs->type->kind == XR_KIND_INT || lhs->type->kind == XR_KIND_FLOAT));
             if (rhs_is_const_num && !rhs_is_small_int &&
                 (v->op == XI_ADD || v->op == XI_SUB ||
-                 v->op == XI_MUL || v->op == XI_DIV)) {
+                 v->op == XI_MUL || v->op == XI_DIV || v->op == XI_MOD)) {
                 uint8_t b = reg_of(ctx, lhs);
                 if (ctx->status != XI_EMIT_OK) return;
                 int ki;
@@ -534,7 +536,26 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                 if (ctx->status != XI_EMIT_OK) return;
                 OpCode kop = v->op == XI_ADD ? OP_ADDK :
                              v->op == XI_SUB ? OP_SUBK :
-                             v->op == XI_MUL ? OP_MULK : OP_DIVK;
+                             v->op == XI_MUL ? OP_MULK :
+                             v->op == XI_DIV ? OP_DIVK : OP_MODK;
+                emit_inst(ctx, CREATE_ABC(kop, dst, b, (uint8_t)ki));
+                break;
+            }
+            /* Commutative constant-pool: swap lhs constant for ADD/MUL */
+            if (lhs_is_const_num && !lhs_is_small_int &&
+                (v->op == XI_ADD || v->op == XI_MUL)) {
+                uint8_t b = reg_of(ctx, rhs);
+                if (ctx->status != XI_EMIT_OK) return;
+                int ki;
+                if (lhs->type->kind == XR_KIND_INT) {
+                    ki = add_const_int(ctx, lhs->aux_int);
+                } else {
+                    double fval;
+                    memcpy(&fval, &lhs->aux_int, sizeof(double));
+                    ki = add_const_float(ctx, fval);
+                }
+                if (ctx->status != XI_EMIT_OK) return;
+                OpCode kop = v->op == XI_ADD ? OP_ADDK : OP_MULK;
                 emit_inst(ctx, CREATE_ABC(kop, dst, b, (uint8_t)ki));
                 break;
             }
