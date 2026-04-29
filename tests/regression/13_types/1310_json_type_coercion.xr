@@ -98,7 +98,7 @@ fn test_json_dot_access_coercion(): void {
     assert_eq(data.port, 9090)
 }
 
-// ===== Rule 6: Array is a valid JsonValue type =====
+// ===== Rule 6: Array is a valid Json field type =====
 @test
 fn test_json_to_array_coercion(): void {
     let data: Json = { "items": [1, 2, 3] }

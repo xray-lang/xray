@@ -15,7 +15,7 @@ fn make_tree(depth: int): Json {
     }
 }
 
-fn checksum(node: Json?): float {
+fn checksum(node: Json): float {
     if (node == null) { return 0 }
     return node.val + checksum(node.left) + checksum(node.right)
 }
