@@ -1224,13 +1224,16 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     obj->line = (uint32_t) node->line;
 
     for (int i = 0; i < n; i++) {
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
-                                     l->type_void, 2);
+        /* Use INDEX_SET with string key for map-backed struct literals.
+         * STORE_FIELD/SETPROP only works on class instances. */
+        XiValue *key = xi_const_str(l->func, l->cur_block,
+                                     sl->field_names[i], l->type_string);
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
+                                     l->type_void, 3);
         if (!set) break;
         set->args[0] = obj;
-        set->args[1] = val_vals[i];
-        if (sl->field_names[i])
-            set->aux = (void *) sl->field_names[i];
+        set->args[1] = key;
+        set->args[2] = val_vals[i];
         set->flags |= XI_FLAG_SIDE_EFFECT;
     }
     return obj;
@@ -1633,16 +1636,24 @@ static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     obj_val->args[0] = cap;
     obj_val->line = (uint32_t) node->line;
 
-    /* STORE_FIELD for each property */
+    /* INDEX_SET for each property — NEWMAP-backed objects require index
+     * access, not dot-syntax SETPROP (which the VM rejects on maps). */
     for (int i = 0; i < n; i++) {
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
-                                     l->type_void, 2);
+        XiValue *key = NULL;
+        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
+            key = xi_const_str(l->func, l->cur_block,
+                               obj->keys[i]->as.literal.raw_value.string_val,
+                               l->type_string);
+        } else if (obj->keys[i]) {
+            key = lower_expr(l, obj->keys[i]);
+        }
+        if (!key) continue;
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
+                                     l->type_void, 3);
         if (!set) break;
         set->args[0] = obj_val;
-        set->args[1] = val_vals[i];
-        /* Key is either a literal string or computed — use aux for name */
-        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING)
-            set->aux = (void *) obj->keys[i]->as.literal.raw_value.string_val;
+        set->args[1] = key;
+        set->args[2] = val_vals[i];
         set->flags |= XI_FLAG_SIDE_EFFECT;
     }
     return obj_val;
