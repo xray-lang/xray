@@ -1271,6 +1271,151 @@ TEST(cmp_fibonacci) {
     });
 }
 
+/* --- Transitive Closure Capture (3 levels deep) --- */
+
+TEST(cmp_transitive_capture) {
+    run_compare((CompareSpec){
+        .source = "fn outer(): int {\n"
+                  "    let x = 10\n"
+                  "    fn middle(): int {\n"
+                  "        fn inner(): int { return x + 1 }\n"
+                  "        return inner()\n"
+                  "    }\n"
+                  "    return middle()\n"
+                  "}\n"
+                  "print(outer())",
+        .label = "transitive closure capture (3 levels)",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Closure Counter (mutable capture via cell) --- */
+
+TEST(cmp_closure_counter) {
+    run_compare((CompareSpec){
+        .source = "fn counter(): fn(): int {\n"
+                  "    let n = 0\n"
+                  "    return fn(): int { n += 1; return n }\n"
+                  "}\n"
+                  "let c = counter()\n"
+                  "print(c())\n"
+                  "print(c())\n"
+                  "print(c())",
+        .label = "closure counter with mutable capture",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* mutable capture needs cell/shared protocol */
+    });
+}
+
+/* --- Function Composition (captures two function params) --- */
+
+TEST(cmp_compose) {
+    run_compare((CompareSpec){
+        .source = "fn compose(f: fn(int): int, g: fn(int): int): fn(int): int {\n"
+                  "    return fn(x: int): int { return f(g(x)) }\n"
+                  "}\n"
+                  "fn add1(x: int): int { return x + 1 }\n"
+                  "fn mul2(x: int): int { return x * 2 }\n"
+                  "let h = compose(add1, mul2)\n"
+                  "print(h(5))",
+        .label = "function composition capturing two params",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Callback / Higher-Order Apply --- */
+
+TEST(cmp_apply_fn) {
+    run_compare((CompareSpec){
+        .source = "fn apply(f: fn(int): int, x: int): int {\n"
+                  "    return f(x)\n"
+                  "}\n"
+                  "fn double(x: int): int { return x * 2 }\n"
+                  "fn square(x: int): int { return x * x }\n"
+                  "print(apply(double, 5))\n"
+                  "print(apply(square, 4))",
+        .label = "higher-order apply with function params",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Find Max in Array --- */
+
+TEST(cmp_find_max) {
+    run_compare((CompareSpec){
+        .source = "let nums = [5, 3, 8, 1, 9, 2]\n"
+                  "let max = nums[0]\n"
+                  "for (n in nums) {\n"
+                  "    if (n > max) { max = n }\n"
+                  "}\n"
+                  "print(max)",
+        .label = "find max in array using for-in",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Mutual Recursion (even/odd) --- */
+
+TEST(cmp_mutual_recursion) {
+    run_compare((CompareSpec){
+        .source = "fn is_even(n: int): bool {\n"
+                  "    if (n == 0) { return true }\n"
+                  "    return is_odd(n - 1)\n"
+                  "}\n"
+                  "fn is_odd(n: int): bool {\n"
+                  "    if (n == 0) { return false }\n"
+                  "    return is_even(n - 1)\n"
+                  "}\n"
+                  "print(is_even(10))\n"
+                  "print(is_odd(7))",
+        .label = "mutual recursion (even/odd)",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* forward reference needs SETSHARED/GETSHARED */
+    });
+}
+
+/* --- Power Function (recursive) --- */
+
+TEST(cmp_power) {
+    run_compare((CompareSpec){
+        .source = "fn power(base: int, exp: int): int {\n"
+                  "    if (exp == 0) { return 1 }\n"
+                  "    return base * power(base, exp - 1)\n"
+                  "}\n"
+                  "print(power(2, 10))",
+        .label = "recursive power function",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+/* --- GCD (Euclidean algorithm) --- */
+
+TEST(cmp_gcd) {
+    run_compare((CompareSpec){
+        .source = "fn gcd(a: int, b: int): int {\n"
+                  "    if (b == 0) { return a }\n"
+                  "    return gcd(b, a % b)\n"
+                  "}\n"
+                  "print(gcd(48, 18))",
+        .label = "recursive GCD (Euclidean)",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -1452,6 +1597,30 @@ int main(void) {
 
     /* Fibonacci */
     run_cmp_fibonacci();
+
+    /* Transitive closure capture */
+    run_cmp_transitive_capture();
+
+    /* Closure counter (mutable capture) */
+    run_cmp_closure_counter();
+
+    /* Function composition */
+    run_cmp_compose();
+
+    /* Higher-order apply */
+    run_cmp_apply_fn();
+
+    /* Find max in array */
+    run_cmp_find_max();
+
+    /* Mutual recursion */
+    run_cmp_mutual_recursion();
+
+    /* Recursive power */
+    run_cmp_power();
+
+    /* GCD */
+    run_cmp_gcd();
 
     teardown();
 
