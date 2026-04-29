@@ -128,8 +128,11 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
     {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true,
      false},
     {"utf16Decode", "(data: Bytes, endian?: int): string?", "UTF-16 decode to string", true, false},
+    // Endianness constants (is_method=false)
+    {"LE", ": int", "Little-endian byte order", false, false},
+    {"BE", ": int", "Big-endian byte order", false, false},
 };
-#define GEN_ENCODING_FUNCTION_COUNT 9
+#define GEN_ENCODING_FUNCTION_COUNT 11
 
 // gc module functions
 static const XaBuiltinMember g_gen_gc_functions[] = {
@@ -270,12 +273,12 @@ static const XaBuiltinMember g_gen_io_functions[] = {
 
 // json module functions
 static const XaBuiltinMember g_gen_json_functions[] = {
-    {"parse", "(s: string): unknown", "Parse JSON string", true, false},
+    {"parse", "(s: string): Json?", "Parse JSON string", true, false},
     {"stringify", "(value: unknown, indent?: int): string", "Convert value to JSON string", true,
      false},
     {"isValid", "(s: string): bool", "Check if string is valid JSON", true, false},
     {"typeof", "(value: unknown): string", "Get JSON type name", true, false},
-    {"tryParse", "(s: string): unknown", "Safe parse, returns {value, error}", true, false},
+    {"tryParse", "(s: string): Json?", "Safe parse, returns {value, error}", true, false},
     {"keys", "(obj: Json): Array<string>", "Get object keys", true, false},
     {"values", "(obj: Json): Array<unknown>", "Get object values", true, false},
 };
@@ -296,8 +299,14 @@ static const XaBuiltinMember g_gen_log_functions[] = {
     {"enableAsync", "(enabled: bool): void", "Enable async logging", true, false},
     {"flush", "(): void", "Flush log buffer", true, false},
     {"child", "(...fields: unknown): unknown", "Create child logger", true, false},
+    // Log level constants (is_method=false) — match stdlib/log/log.c exports
+    {"DEBUG", ": int", "Debug level (0)", false, false},
+    {"INFO", ": int", "Info level (1)", false, false},
+    {"WARN", ": int", "Warn level (2)", false, false},
+    {"ERROR", ": int", "Error level (3)", false, false},
+    {"FATAL", ": int", "Fatal level (4)", false, false},
 };
-#define GEN_LOG_FUNCTION_COUNT 13
+#define GEN_LOG_FUNCTION_COUNT 18
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
@@ -338,8 +347,23 @@ static const XaBuiltinMember g_gen_math_functions[] = {
     {"radToDeg", "(rad: float): float", "Radians to degrees", true, false},
     {"isNaN", "(x: float): bool", "Check if NaN", true, false},
     {"isFinite", "(x: float): bool", "Check if finite", true, false},
+    // Module constants (is_method=false) — names match stdlib/math/math.c exports
+    {"PI", ": float", "Pi (3.14159...)", false, false},
+    {"E", ": float", "Euler's number (2.71828...)", false, false},
+    {"TAU", ": float", "Tau = 2*PI (6.28318...)", false, false},
+    {"SQRT2", ": float", "Square root of 2", false, false},
+    {"LN2", ": float", "Natural logarithm of 2", false, false},
+    {"LN10", ": float", "Natural logarithm of 10", false, false},
+    {"LOG2E", ": float", "Base-2 logarithm of e", false, false},
+    {"LOG10E", ": float", "Base-10 logarithm of e", false, false},
+    {"EPSILON", ": float", "Machine epsilon (DBL_EPSILON)", false, false},
+    {"MAX_INT", ": int", "Maximum integer (INT64_MAX)", false, false},
+    {"MIN_INT", ": int", "Minimum integer (INT64_MIN)", false, false},
+    {"MAX_FLOAT", ": float", "Maximum float (DBL_MAX)", false, false},
+    {"INF", ": float", "Positive infinity", false, false},
+    {"NAN", ": float", "Not a number", false, false},
 };
-#define GEN_MATH_FUNCTION_COUNT 37
+#define GEN_MATH_FUNCTION_COUNT 51
 
 // net.Connection handle fields
 static const XaBuiltinHandleField g_gen_net_connection_fields[] = {

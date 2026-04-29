@@ -15,7 +15,7 @@ fn make_tree(depth: int): Json {
     }
 }
 
-fn checksum(node: Json): float {
+fn checksum(node: Json?): float {
     if (node == null) { return 0 }
     return node.val + checksum(node.left) + checksum(node.right)
 }
@@ -97,17 +97,17 @@ fn test_bool_toggle_loop(): void {
 // ===== Object field chain =====
 @test
 fn test_object_field_chain(): void {
-    let root = { "child": null }
-    let current = root
+    let root: Json = { "child": null }
+    let current: Json = root
     for (let i = 0; i < 10; i++) {
         current.child = { "child": null, "depth": i }
-        current = current.child
+        current = current.child!
     }
     // Walk the chain
-    let node = root
+    let node: Json = root
     let depth_sum = 0
     while (node.child != null) {
-        node = node.child
+        node = node.child!
         depth_sum = depth_sum + node.depth
     }
     // depths: 0+1+2+3+4+5+6+7+8+9 = 45

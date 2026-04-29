@@ -26,6 +26,10 @@
 
 #include "../../../src/vm/xvm_internal.h"
 #include "../../../src/runtime/xisolate_api.h"
+#include "../../../src/runtime/xisolate_internal.h"
+#include "../../../src/coro/xcoroutine.h"
+#include "../../../src/coro/xworker.h"
+#include "../../../src/runtime/closure/xclosure.h"
 
 /* ========== Test Infrastructure ========== */
 
@@ -33,6 +37,18 @@ static XrayIsolate *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 static int tests_skipped = 0;
+
+/* Protos passed to xr_execute create GC-managed closures that reference
+ * the proto.  Freeing the proto while closures remain on the GC heap is
+ * a use-after-free.  Defer proto frees until after isolate teardown. */
+#define DEFERRED_PROTO_CAP 512
+static XrProto *g_deferred_protos[DEFERRED_PROTO_CAP];
+static int g_deferred_count = 0;
+
+static void defer_proto_free(XrProto *p) {
+    if (p && g_deferred_count < DEFERRED_PROTO_CAP)
+        g_deferred_protos[g_deferred_count++] = p;
+}
 
 static void setup(void) {
     if (!g_iso) {
@@ -48,6 +64,10 @@ static void teardown(void) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
     }
+    /* Free deferred protos after isolate (and its GC heap) is gone */
+    for (int i = 0; i < g_deferred_count; i++)
+        xr_vm_proto_free(g_deferred_protos[i]);
+    g_deferred_count = 0;
 }
 
 /* ========== Compilation Helpers ========== */
@@ -132,15 +152,23 @@ static char *read_capture(void) {
     return buf;
 }
 
-/* Execute proto via xr_execute and capture stdout into a heap buffer. */
+/* Execute proto and capture stdout into a heap buffer.
+ * Uses xr_coro_reset_for_call (like xcmd_test.c) instead of
+ * xr_execute, which doesn't fully reset coro state between
+ * sequential runs on the same isolate. */
 static char *execute_and_capture(XrProto *proto) {
     if (!proto || !g_iso) return NULL;
+
+    XrCoroutine *main_coro = xr_isolate_get_main_coro(g_iso);
+    if (!main_coro) return NULL;
+    XrClosure *closure = xr_closure_new(g_iso, proto, main_coro);
+    if (!closure) return NULL;
+    xr_coro_reset_for_call(main_coro, g_iso, closure);
 
     fflush(stdout);
     if (!freopen(g_capture_path, "w", stdout)) return NULL;
 
-    int rc = xr_execute(g_iso, proto);
-    (void)rc;
+    xr_main_thread_run(g_iso, main_coro);
     fflush(stdout);
 
     if (!freopen("/dev/tty", "w", stdout)) return NULL;
@@ -307,8 +335,16 @@ static void run_compare(CompareSpec spec) {
         if (out_x) xr_free(out_x);
     }
 
-    xr_vm_proto_free(p_legacy);
-    xr_vm_proto_free(p_xi);
+    if (spec.check_exec) {
+        /* GC-managed closures created by xr_execute still reference these
+         * protos; freeing now would be a use-after-free on the next GC scan.
+         * Defer until after isolate teardown destroys the GC heap. */
+        defer_proto_free(p_legacy);
+        defer_proto_free(p_xi);
+    } else {
+        xr_vm_proto_free(p_legacy);
+        xr_vm_proto_free(p_xi);
+    }
 }
 
 /* Check if a proto (or its sub-protos) contains at least one instance of
@@ -362,8 +398,13 @@ static void run_fusion(FusionSpec spec) {
         if (out_x) xr_free(out_x);
     }
 
-    xr_vm_proto_free(p_legacy);
-    xr_vm_proto_free(p_xi);
+    if (spec.check_exec) {
+        defer_proto_free(p_legacy);
+        defer_proto_free(p_xi);
+    } else {
+        xr_vm_proto_free(p_legacy);
+        xr_vm_proto_free(p_xi);
+    }
 }
 
 /* ========== Test Cases ========== */
@@ -702,6 +743,22 @@ TEST(cmp_string_concat) {
         .source = "let a = \"hello\"\nlet b = \" world\"\n"
                   "let c = a + b\nprint(c)",
         .label = "string concatenation",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_string_concat_chain) {
+    /* Multi-operand chain: "a" + "b" + "c" + "d" flattened to single STRBUF */
+    run_compare((CompareSpec){
+        .source = "let a = \"hello\"\n"
+                  "let b = \" \"\n"
+                  "let c = \"world\"\n"
+                  "let d = \"!\"\n"
+                  "let result = a + b + c + d\n"
+                  "print(result)",
+        .label = "string concat chain: 4-way STRBUF flatten",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1069,19 +1126,56 @@ TEST(cmp_closure_capture) {
     });
 }
 
-/* --- Type Conversion --- */
+/* --- Type Assertion (as / as?) --- */
 
 TEST(cmp_type_convert) {
+    /* as cast: type matches -> value passes through */
     run_compare((CompareSpec){
-        .source = "let x = 42\n"
-                  "let s = x as string\n"
-                  "print(s)\n"
-                  "let f = 3.14\n"
-                  "let i = f as int\n"
-                  "print(i)",
-        .label = "type conversion int->string and float->int",
+        .source = "let x: Json = 42\n"
+                  "let y = x as int\n"
+                  "print(y)",
+        .label = "as cast: Json(int) as int succeeds",
         .expect_xi_success = true,
-        .min_similarity = 0.1,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_as_safe_match) {
+    /* as? (safe cast): type matches -> value passes through */
+    run_compare((CompareSpec){
+        .source = "let x: Json = \"hello\"\n"
+                  "let y = x as string?\n"
+                  "print(y)",
+        .label = "as? safe cast: Json(string) as string? succeeds",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_as_safe_mismatch) {
+    /* as? (safe cast): type mismatch -> null */
+    run_compare((CompareSpec){
+        .source = "let x: Json = \"hello\"\n"
+                  "let y = x as int?\n"
+                  "print(y)",
+        .label = "as? safe cast: Json(string) as int? -> null",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_as_unsafe_mismatch) {
+    /* as (unsafe cast): type mismatch -> throw (both legacy and Xi throw) */
+    run_compare((CompareSpec){
+        .source = "let x: Json = \"hello\"\n"
+                  "let y = x as int\n"
+                  "print(y)",
+        .label = "as unsafe cast: Json(string) as int -> throw",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
         .check_exec = true,
     });
 }
@@ -1491,7 +1585,7 @@ TEST(cmp_class_basic) {
         .label = "class basic: constructor + field access",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* needs OP_CLASS_CREATE_FROM_DESCRIPTOR */
+        .check_exec = true,
     });
 }
 
@@ -1512,7 +1606,7 @@ TEST(cmp_class_method) {
         .label = "class field: read + write",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* needs OP_CLASS_CREATE_FROM_DESCRIPTOR */
+        .check_exec = true,
     });
 }
 
@@ -1553,7 +1647,7 @@ TEST(cmp_class_inherit) {
         .label = "class inheritance + method override",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* needs OP_CLASS_CREATE_FROM_DESCRIPTOR */
+        .check_exec = true,
     });
 }
 
@@ -1572,7 +1666,7 @@ TEST(cmp_enum_basic) {
         .label = "enum basic: access name and value",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* needs enum class descriptor */
+        .check_exec = true,
     });
 }
 
@@ -1657,6 +1751,281 @@ TEST(cmp_string_for_in) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
+    });
+}
+
+/* ========== Destructuring / Multi-assign / Collection Tests ========== */
+
+TEST(cmp_destructure_array) {
+    run_compare((CompareSpec){
+        .source = "let arr = [10, 20, 30]\n"
+                  "let [a, b, c] = arr\n"
+                  "print(a)\n"
+                  "print(b)\n"
+                  "print(c)",
+        .label = "destructure array declaration",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_destructure_object) {
+    run_compare((CompareSpec){
+        .source = "let { name, age } = { name: \"alice\", age: 30 }\n"
+                  "print(name)\n"
+                  "print(age)",
+        .label = "destructure object declaration",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_multi_var_decl) {
+    run_compare((CompareSpec){
+        .source = "fn pair(): (int, int) { return 10, 20 }\n"
+                  "let x, y = pair()\n"
+                  "print(x)\n"
+                  "print(y)",
+        .label = "multi-value var declaration",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_multi_assign) {
+    run_compare((CompareSpec){
+        .source = "let x = 1\n"
+                  "let y = 2\n"
+                  "x, y = y, x\n"
+                  "print(x)\n"
+                  "print(y)",
+        .label = "multi-value swap assignment",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_set_literal) {
+    run_compare((CompareSpec){
+        .source = "let s = #[1, 2, 3, 2, 1]\n"
+                  "print(s.size())",
+        .label = "set literal with duplicates",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_object_literal) {
+    run_compare((CompareSpec){
+        .source = "let obj = { name: \"alice\", age: 30 }\n"
+                  "print(obj[\"name\"])\n"
+                  "print(obj[\"age\"])",
+        .label = "object literal bracket access",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true, /* Xi uses NEWMAP, legacy uses NEWJSON — bracket access works on both */
+    });
+}
+
+/* ========== Coroutine Tests ========== */
+
+TEST(cmp_defer_simple) {
+    /* Legacy analyzer doesn't recognize 'print' as a builtin inside defer
+     * expressions, so use a user-defined cleanup function instead. */
+    run_compare((CompareSpec){
+        .source =
+            "fn cleanup() { print(\"deferred\") }\n"
+            "fn f() {\n"
+            "  defer cleanup()\n"
+            "  print(\"body\")\n"
+            "}\n"
+            "f()",
+        .label = "defer: cleanup after function body",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_defer_lifo) {
+    run_compare((CompareSpec){
+        .source =
+            "fn first() { print(\"first\") }\n"
+            "fn second() { print(\"second\") }\n"
+            "fn f() {\n"
+            "  defer first()\n"
+            "  defer second()\n"
+            "  print(\"body\")\n"
+            "}\n"
+            "f()",
+        .label = "defer: LIFO ordering",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_yield_basic) {
+    /* yield in main should be a no-op (no other coroutines) */
+    run_compare((CompareSpec){
+        .source = "print(\"before\")\nyield\nprint(\"after\")",
+        .label = "yield: no-op without other coroutines",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_chan_new_unbuf) {
+    /* Channel() creates an unbuffered channel; just type-check */
+    run_compare((CompareSpec){
+        .source = "const ch = Channel()\nprint(typeof(ch))",
+        .label = "Channel(): unbuffered channel construction",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_chan_new_buffered) {
+    run_compare((CompareSpec){
+        .source = "const ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
+        .label = "Channel(N): buffered channel construction",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_chan_send_recv_buffered) {
+    /* Buffered channel: send then recv on same coro works without scheduling */
+    run_compare((CompareSpec){
+        .source =
+            "const ch: Channel<int> = Channel(2)\n"
+            "ch.send(10)\n"
+            "ch.send(20)\n"
+            "print(ch.recv())\n"
+            "print(ch.recv())",
+        .label = "Channel(2): single-coro send+recv",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_go_simple) {
+    /* go fn() — Xi uses OP_GO, legacy uses OP_SPAWN_CONT (different scheduling).
+     * Output ordering may differ; only verify Xi compiles and runs. */
+    run_compare((CompareSpec){
+        .source =
+            "fn worker() { print(\"worker\") }\n"
+            "let task = go worker()\n"
+            "await task\n"
+            "print(\"done\")",
+        .label = "go fn(): basic spawn + await",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false, /* OP_GO vs OP_SPAWN_CONT scheduling differs */
+    });
+}
+
+TEST(cmp_go_with_chan) {
+    /* go + channel: producer/consumer pattern */
+    run_compare((CompareSpec){
+        .source =
+            "fn producer(ch: Channel<int>) { ch.send(42) }\n"
+            "const ch: Channel<int> = Channel(1)\n"
+            "let task = go producer(ch)\n"
+            "print(ch.recv())\n"
+            "await task",
+        .label = "go + channel: producer/consumer",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false, /* scheduling differs */
+    });
+}
+
+TEST(cmp_cancelled) {
+    /* cancelled() returns false in main coroutine */
+    run_compare((CompareSpec){
+        .source = "print(cancelled())",
+        .label = "cancelled(): false in main",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_scope_basic) {
+    /* scope { body } — basic structured concurrency block */
+    run_compare((CompareSpec){
+        .source = "scope {\n"
+                  "  print(\"inside\")\n"
+                  "}\n"
+                  "print(\"after\")",
+        .label = "scope: basic block with print",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_select_recv) {
+    /* select with channel recv */
+    run_compare((CompareSpec){
+        .source = "fn producer(ch: Channel<int>) {\n"
+                  "  ch.send(42)\n"
+                  "}\n"
+                  "const ch: Channel<int> = Channel(1)\n"
+                  "go producer(ch)\n"
+                  "select {\n"
+                  "  msg from ch => {\n"
+                  "    print(msg)\n"
+                  "  }\n"
+                  "}",
+        .label = "select: recv from channel",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false, /* scheduling differs */
+    });
+}
+
+TEST(cmp_await_all) {
+    /* await [t1, t2] — wait for all */
+    run_compare((CompareSpec){
+        .source = "fn double(x: int): int {\n"
+                  "  return x * 2\n"
+                  "}\n"
+                  "let t1 = go double(10)\n"
+                  "let t2 = go double(20)\n"
+                  "let r = await [t1, t2]\n"
+                  "print(r)",
+        .label = "await.all: wait for multiple tasks",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false, /* scheduling differs */
+    });
+}
+
+TEST(cmp_await_any) {
+    /* await.any [t1, t2] — wait for first */
+    run_compare((CompareSpec){
+        .source = "fn double(x: int): int {\n"
+                  "  return x * 2\n"
+                  "}\n"
+                  "let t1 = go double(10)\n"
+                  "let t2 = go double(20)\n"
+                  "let r = await.any [t1, t2]\n"
+                  "print(r)",
+        .label = "await.any: wait for first task",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false, /* scheduling differs */
     });
 }
 
@@ -1871,6 +2240,7 @@ int main(void) {
 
     /* String operations */
     run_cmp_string_concat();
+    run_cmp_string_concat_chain();
 
     /* Mixed arithmetic */
     run_cmp_mixed_arith();
@@ -1933,8 +2303,11 @@ int main(void) {
     /* Closure with captures */
     run_cmp_closure_capture();
 
-    /* Type conversion */
+    /* Type assertion (as / as?) */
     run_cmp_type_convert();
+    run_cmp_as_safe_match();
+    run_cmp_as_safe_mismatch();
+    run_cmp_as_unsafe_mismatch();
 
     /* Nullish coalesce */
     run_cmp_nullish_coalesce();
@@ -2022,6 +2395,29 @@ int main(void) {
     /* Misc patterns */
     run_cmp_nested_closure();
     run_cmp_string_for_in();
+
+    /* Destructuring / multi-assign / collections */
+    run_cmp_destructure_array();
+    run_cmp_destructure_object();
+    run_cmp_multi_var_decl();
+    run_cmp_multi_assign();
+    run_cmp_set_literal();
+    run_cmp_object_literal();
+
+    /* Coroutine */
+    run_cmp_defer_simple();
+    run_cmp_defer_lifo();
+    run_cmp_yield_basic();
+    run_cmp_chan_new_unbuf();
+    run_cmp_chan_new_buffered();
+    run_cmp_chan_send_recv_buffered();
+    run_cmp_go_simple();
+    run_cmp_go_with_chan();
+    run_cmp_cancelled();
+    run_cmp_scope_basic();
+    run_cmp_select_recv();
+    run_cmp_await_all();
+    run_cmp_await_any();
 
     /* Instruction fusion */
     run_fusion_addi();

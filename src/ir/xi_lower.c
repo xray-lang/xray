@@ -21,6 +21,9 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/lexer/xlex.h"
 
+#include "../runtime/class/xenum.h"
+#include "../runtime/object/xstring.h"
+
 #include <string.h>
 #include <stdio.h>
 
@@ -376,10 +379,55 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
     }
 }
 
+/* Collect leaf operands from a string ADD chain (left-recursive flatten). */
+static int collect_str_concat_leaves(XiLower *l, AstNode *node,
+                                     AstNode **leaves, int max) {
+    if (!node) return 0;
+    if (node->type == AST_BINARY_ADD) {
+        /* Check if this ADD node has string result type */
+        struct XrType *t = xa_analyzer_get_node_type(l->analyzer, node);
+        if (t && t->kind == XR_KIND_STRING) {
+            int n = collect_str_concat_leaves(l, node->as.binary.left, leaves, max);
+            n += collect_str_concat_leaves(l, node->as.binary.right,
+                                           leaves + n, max - n);
+            return n;
+        }
+    }
+    /* Leaf node */
+    if (max <= 0) return 0;
+    leaves[0] = node;
+    return 1;
+}
+
 static XiValue *lower_binary(XiLower *l, AstNode *node) {
     /* Short-circuit AND/OR need special control flow */
     if (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) {
         return lower_short_circuit(l, node);
+    }
+
+    /* String concat optimization: flatten ADD chain → XI_STR_CONCAT
+     * which emits STRBUF_NEW/APPEND/FINISH (no intermediate allocs). */
+    if (node->type == AST_BINARY_ADD) {
+        struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
+        if (result_type && result_type->kind == XR_KIND_STRING) {
+            AstNode *leaves[64];
+            int nleaves = collect_str_concat_leaves(l, node, leaves, 64);
+            if (nleaves >= 2) {
+                XiValue *parts[64];
+                for (int i = 0; i < nleaves; i++) {
+                    parts[i] = lower_expr(l, leaves[i]);
+                    if (!parts[i]) return NULL;
+                }
+                XiValue *v = xi_value_new(l->func, l->cur_block,
+                                          XI_STR_CONCAT, l->type_string,
+                                          (uint16_t) nleaves);
+                if (!v) return NULL;
+                for (int i = 0; i < nleaves; i++)
+                    v->args[i] = parts[i];
+                v->line = (uint32_t) node->line;
+                return v;
+            }
+        }
     }
 
     XiValue *lhs = lower_expr(l, node->as.binary.left);
@@ -777,8 +825,158 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     return arr_val;
 }
 
+/* Generate a location string constant for assert diagnostics.
+ * Format: "line <N>" using the AST node's line number. */
+static const char *make_assert_loc(XiLower *l, int line) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "line %d", line);
+    /* Intern the string so it survives in the constant pool.
+     * Use the isolate's compile-time interning. */
+    XrString *s = xr_string_new(l->isolate, buf, strlen(buf));
+    return s ? s->data : "?";
+}
+
+/* Intercept known compile-time builtin function calls.
+ * Returns non-NULL XiValue if handled, NULL to fall through to generic CALL. */
+static XiValue *lower_builtin_call(XiLower *l, AstNode *node,
+                                    const char *fname, CallExprNode *call) {
+    struct XrType *rtype = node_type(l, node);
+    int line = node->line;
+
+    /* assert(cond) / assert(cond, msg) → XI_ASSERT */
+    if (strcmp(fname, "assert") == 0 && (call->arg_count == 1 || call->arg_count == 2)) {
+        XiValue *cond = lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_void, 1);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = cond;
+        v->aux = (void *)make_assert_loc(l, call->arguments[0]->line);
+        v->aux_int = 0;  /* 0 = assert_true */
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    /* assert_true(cond) → XI_ASSERT aux_int=0 */
+    if (strcmp(fname, "assert_true") == 0 && call->arg_count == 1) {
+        XiValue *cond = lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_void, 1);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = cond;
+        v->aux = (void *)make_assert_loc(l, call->arguments[0]->line);
+        v->aux_int = 0;
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    /* assert_false(cond) → XI_ASSERT aux_int=1 */
+    if (strcmp(fname, "assert_false") == 0 && call->arg_count == 1) {
+        XiValue *cond = lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_void, 1);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = cond;
+        v->aux = (void *)make_assert_loc(l, call->arguments[0]->line);
+        v->aux_int = 1;  /* 1 = assert_false */
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    /* assert_eq(actual, expected) → XI_ASSERT_EQ */
+    if (strcmp(fname, "assert_eq") == 0 && call->arg_count == 2) {
+        XiValue *actual = lower_expr(l, call->arguments[0]);
+        XiValue *expected = lower_expr(l, call->arguments[1]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_EQ, l->type_void, 2);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = actual;
+        v->args[1] = expected;
+        v->aux = (void *)make_assert_loc(l, call->arguments[0]->line);
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    /* assert_ne(actual, unexpected) → XI_ASSERT_NE */
+    if (strcmp(fname, "assert_ne") == 0 && call->arg_count == 2) {
+        XiValue *actual = lower_expr(l, call->arguments[0]);
+        XiValue *unexpected = lower_expr(l, call->arguments[1]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_NE, l->type_void, 2);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = actual;
+        v->args[1] = unexpected;
+        v->aux = (void *)make_assert_loc(l, call->arguments[0]->line);
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    /* typeof(x) → XI_TYPEOF */
+    if (strcmp(fname, "typeof") == 0 && call->arg_count == 1) {
+        XiValue *arg = lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_string, 1);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = arg;
+        v->line = (uint32_t)line;
+        return v;
+    }
+    /* typename(x) → XI_TYPEOF aux_int=1 (typename variant) */
+    if (strcmp(fname, "typename") == 0 && call->arg_count == 1) {
+        XiValue *arg = lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_string, 1);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = arg;
+        v->aux_int = 1;  /* typename variant */
+        v->line = (uint32_t)line;
+        return v;
+    }
+    /* Unary cast/conversion builtins: int(x), float(x), string(x), bool(x),
+     * chr(x), copy(x), dump(x) — emit as XI_CALL to a XI_GET_BUILTIN.
+     * These all map to single VM opcodes (OP_TOINT, OP_TOFLOAT, etc.)
+     * but for simplicity we treat them as generic calls via the globals
+     * table, which the VM resolves at runtime.
+     *
+     * Alternative: dedicated Xi ops for each. Not needed for correctness;
+     * the generic CALL path works because the legacy codegen registers
+     * them in the globals table as native functions. */
+
+    (void)rtype;
+    return NULL;  /* not a builtin — fall through to generic CALL */
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
+
+    /* Method call: callee is obj.method — emit XI_CALL_METHOD (→ OP_INVOKE).
+     * This is required for builtin methods (set.size, array.push, etc.)
+     * which rely on OP_INVOKE dispatch rather than GETPROP + CALL. */
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &call->callee->as.member_access;
+        XiValue *recv = lower_expr(l, ma->object);
+        if (!recv) return NULL;
+
+        XiValue *arg_vals[32];
+        int n = call->arg_count > 32 ? 32 : call->arg_count;
+        for (int i = 0; i < n; i++) {
+            arg_vals[i] = lower_expr(l, call->arguments[i]);
+        }
+
+        struct XrType *result_type = node_type(l, node);
+        uint16_t nargs = (uint16_t)(n + 1);  /* receiver + args */
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                   result_type, nargs);
+        if (!v) return NULL;
+        v->args[0] = recv;
+        for (int i = 0; i < n; i++)
+            v->args[i + 1] = arg_vals[i];
+        v->aux = (void *)ma->name;
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)node->line;
+        return v;
+    }
+
+    /* Compile-time builtin interception: detect calls to known builtins
+     * and emit specialized Xi ops instead of generic XI_CALL. */
+    if (call->callee && call->callee->type == AST_VARIABLE) {
+        const char *fname = call->callee->as.variable.name;
+        XiValue *bi = lower_builtin_call(l, node, fname, call);
+        if (bi) return bi;
+    }
+
     uint16_t nargs = (uint16_t)(call->arg_count + 1);  /* callee + args */
 
     /* Evaluate callee and all arguments before creating CALL */
@@ -995,45 +1193,118 @@ static XiValue *lower_function_decl(XiLower *l, AstNode *node) {
 
 static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     NewExprNode *ne = &node->as.new_expr;
+    struct XrType *result_type = node_type(l, node);
+    XR_DCHECK(ne->class_name != NULL, "new expr must have class name");
+    const char *cname = ne->class_name;
 
-    /* Evaluate arguments */
+    /* Built-in collection types: emit specialized ops (no constructor call) */
+    if (ne->module_name == NULL) {
+        if (strcmp(cname, "Map") == 0 && ne->arg_count == 0) {
+            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW,
+                                       result_type, 1);
+            if (!v) return NULL;
+            v->args[0] = cap;
+            v->aux_int = 0;
+            v->line = (uint32_t)node->line;
+            return v;
+        }
+        if (strcmp(cname, "WeakMap") == 0 && ne->arg_count == 0) {
+            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_MAP_NEW,
+                                       result_type, 1);
+            if (!v) return NULL;
+            v->args[0] = cap;
+            v->aux_int = 0x02;  /* weak flag in C field bit 1 */
+            v->line = (uint32_t)node->line;
+            return v;
+        }
+        if (strcmp(cname, "Array") == 0 && ne->arg_count == 0) {
+            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_ARRAY_NEW,
+                                       result_type, 1);
+            if (!v) return NULL;
+            v->args[0] = cap;
+            v->line = (uint32_t)node->line;
+            return v;
+        }
+        if (strcmp(cname, "Set") == 0 && ne->arg_count == 0) {
+            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW,
+                                       result_type, 1);
+            if (!v) return NULL;
+            v->args[0] = cap;
+            v->aux_int = 0;
+            v->line = (uint32_t)node->line;
+            return v;
+        }
+        if (strcmp(cname, "WeakSet") == 0 && ne->arg_count == 0) {
+            XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW,
+                                       result_type, 1);
+            if (!v) return NULL;
+            v->args[0] = cap;
+            v->aux_int = 0x02;  /* weak flag in B field bit 1 */
+            v->line = (uint32_t)node->line;
+            return v;
+        }
+    }
+
+    /* Generic class: resolve class name and invoke constructor */
     XiValue *arg_vals[32];
     int n = ne->arg_count > 32 ? 32 : ne->arg_count;
     for (int i = 0; i < n; i++) {
         arg_vals[i] = lower_expr(l, ne->arguments[i]);
     }
 
-    /* Allocate and call constructor */
-    struct XrType *result_type = node_type(l, node);
-    XiValue *obj = xi_value_new(l->func, l->cur_block, XI_ALLOC, result_type, 0);
-    if (!obj) return NULL;
-    obj->aux = (void *) ne->class_name;
-    obj->line = (uint32_t) node->line;
+    int var_id = var_lookup_or_create(l, cname, l->type_any);
+    XiValue *cls = braun_read(l, var_id, l->cur_block);
 
-    /* Constructor call: CALL_METHOD on the allocated object */
     uint16_t nargs = (uint16_t)(n + 1);
     XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
                                   result_type, nargs);
-    if (call) {
-        call->args[0] = obj;
-        for (int i = 0; i < n; i++)
-            call->args[i + 1] = arg_vals[i];
-        call->aux = (void *) "init";  /* constructor method name */
-        call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        call->line = (uint32_t) node->line;
-    }
-    return obj;
+    if (!call) return NULL;
+    call->args[0] = cls;
+    for (int i = 0; i < n; i++)
+        call->args[i + 1] = arg_vals[i];
+    call->aux = (void *)"constructor";
+    call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    call->line = (uint32_t)node->line;
+    return call;
 }
 
 static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
     GoExprNode *go = &node->as.go_expr;
-    XiValue *task_expr = lower_expr(l, go->expr);
-    if (!task_expr) return NULL;
-
+    AstNode *expr = go->expr;
     struct XrType *result_type = node_type(l, node);
+
+    if (expr->type == AST_CALL_EXPR) {
+        /* go fn(args): extract callee + args, don't execute the call.
+         * XI_GO args[0]=callee, args[1..n]=params (same as OP_GO layout). */
+        CallExprNode *call = &expr->as.call_expr;
+        XiValue *callee = lower_expr(l, call->callee);
+        if (!callee) return NULL;
+        uint16_t nargs = (uint16_t)(1 + call->arg_count);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, nargs);
+        if (!v) return NULL;
+        v->args[0] = callee;
+        for (int i = 0; i < call->arg_count; i++) {
+            XiValue *arg = lower_expr(l, call->arguments[i]);
+            if (!arg) return NULL;
+            v->args[1 + i] = arg;
+        }
+        v->aux_int = (int64_t) go->link_mode;
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
+    /* go fn — closure with no arguments */
+    XiValue *callee = lower_expr(l, expr);
+    if (!callee) return NULL;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, 1);
     if (!v) return NULL;
-    v->args[0] = task_expr;
+    v->args[0] = callee;
     v->aux_int = (int64_t) go->link_mode;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
@@ -1166,7 +1437,8 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, target, 1);
     if (!v) return NULL;
     v->args[0] = val;
-    v->aux = (void *) as->type;
+    v->aux = (void *) as->type;     /* target XrType* for TID lookup */
+    v->aux_int = as->is_safe ? 1 : 0; /* 0=unsafe (throw), 1=safe (null) */
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -1367,7 +1639,8 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     call->args[0] = this_val ? this_val : xi_const_null(l->func, l->cur_block, l->type_null);
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
-    call->aux = (void *)(sc->method_name ? sc->method_name : "init");
+    call->aux = (void *)(sc->method_name ? sc->method_name : "constructor");
+    call->aux_int = 1;  /* super call → emit OP_SUPERINVOKE */
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     return call;
@@ -1375,12 +1648,91 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
 
 static XiValue *lower_enum_access(XiLower *l, AstNode *node) {
     EnumAccessNode *ea = &node->as.enum_access;
+    XR_DCHECK(ea->enum_name != NULL, "enum access must have enum name");
+
+    /* Resolve the enum type variable, then GETPROP for the member */
+    int var_id = var_lookup_or_create(l, ea->enum_name, l->type_any);
+    XiValue *enum_val = braun_read(l, var_id, l->cur_block);
+
     struct XrType *result_type = node_type(l, node);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 0);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v) return NULL;
+    v->args[0] = enum_val;
     v->aux = (void *) ea->member_name;
     v->line = (uint32_t) node->line;
     return v;
+}
+
+/* Evaluate compile-time constant for enum member values. */
+static XrValue enum_eval_const(XiLower *l, AstNode *expr) {
+    if (!expr) return xr_null();
+    switch (expr->type) {
+        case AST_LITERAL_INT:    return xr_int(expr->as.literal.raw_value.int_val);
+        case AST_LITERAL_FLOAT:  return xr_float(expr->as.literal.raw_value.float_val);
+        case AST_LITERAL_STRING: {
+            const char *s = expr->as.literal.raw_value.string_val;
+            XrString *xs = xr_compile_time_intern(l->isolate, s, strlen(s));
+            return xr_string_value(xs);
+        }
+        case AST_LITERAL_TRUE:   return xr_bool(true);
+        case AST_LITERAL_FALSE:  return xr_bool(false);
+        default:                 return xr_null();
+    }
+}
+
+/* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
+ * shared variable so enum member access can find it. */
+static void lower_enum_decl(XiLower *l, AstNode *node) {
+    EnumDeclNode *ed = &node->as.enum_decl;
+    XR_DCHECK(ed->name != NULL, "enum name must not be NULL");
+    XR_DCHECK(l->isolate != NULL, "isolate required for enum creation");
+
+    int n = ed->member_count;
+    char **names = (char **)xr_malloc(sizeof(char *) * n);
+    XrValue *values = (XrValue *)xr_malloc(sizeof(XrValue) * n);
+    if (!names || !values) {
+        xr_free(names); xr_free(values);
+        return;
+    }
+
+    int64_t auto_val = 0;
+    for (int i = 0; i < n; i++) {
+        EnumMemberNode *m = &ed->members[i]->as.enum_member;
+        names[i] = strdup(m->name);
+        if (m->value) {
+            values[i] = enum_eval_const(l, m->value);
+            if (XR_IS_INT(values[i]))
+                auto_val = XR_TO_INT(values[i]) + 1;
+        } else {
+            values[i] = xr_int(auto_val);
+            auto_val++;
+        }
+    }
+
+    XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, XR_TID_INT,
+                                       names, values, n);
+    /* names/values ownership transferred to xr_enum_type_new */
+
+    /* Store as XI_CONST with type_any (emitter handles via LOADK) */
+    XiValue *cv = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
+    if (!cv) return;
+    cv->aux = (void *)et;
+    cv->line = (uint32_t)node->line;
+
+    /* Write to shared variable so enum access resolves correctly */
+    int var_id = var_lookup_or_create(l, ed->name, l->type_any);
+    braun_write(l, var_id, l->cur_block, cv);
+
+    if (l->is_program && var_id < l->var_count
+        && l->shared_map[var_id] >= 0) {
+        XiValue *ss = xi_value_new(l->func, l->cur_block,
+                                    XI_SET_SHARED, l->type_void, 1);
+        if (ss) {
+            ss->args[0] = cv;
+            ss->aux_int = l->shared_map[var_id];
+            ss->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+    }
 }
 
 static XiValue *lower_enum_convert(XiLower *l, AstNode *node) {
@@ -1502,10 +1854,31 @@ static void lower_select(XiLower *l, AstNode *node) {
     l->cur_block = (merge->npreds > 0) ? merge : NULL;
 }
 
-/* scope { body } — structured concurrency block */
+/* scope { body } — structured concurrency block.
+ * Emits SCOPE_ENTER/EXIT to bracket child coroutines. */
 static void lower_scope_block(XiLower *l, AstNode *node) {
     ScopeBlockNode *sb = &node->as.scope_block;
+
+    /* OP_SCOPE_ENTER A=scope_mode */
+    XiValue *enter = xi_value_new(l->func, l->cur_block,
+                                  XI_SCOPE_ENTER, l->type_void, 0);
+    if (enter) {
+        enter->aux_int = sb->scope_mode;
+        enter->flags |= XI_FLAG_SIDE_EFFECT;
+        enter->line = (uint32_t) node->line;
+    }
+
     lower_stmt(l, sb->body);
+
+    /* OP_SCOPE_EXIT A=scope_mode, B=result_reg (supervisor) */
+    struct XrType *res_type = (sb->scope_mode == 2) ? l->type_any : l->type_void;
+    XiValue *exit_v = xi_value_new(l->func, l->cur_block,
+                                   XI_SCOPE_EXIT, res_type, 0);
+    if (exit_v) {
+        exit_v->aux_int = sb->scope_mode;
+        exit_v->flags |= XI_FLAG_SIDE_EFFECT;
+        exit_v->line = (uint32_t) node->line;
+    }
 }
 
 static void lower_yield_stmt(XiLower *l) {
@@ -1543,9 +1916,13 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat,
                 char *fname = pat->as.object.field_names[i];
                 XrDestructurePattern *sub = pat->as.object.patterns[i];
                 if (!fname) continue;
+                /* Use INDEX_GET with string key — works for both JSON objects
+                 * and maps (Xi lowers object literals as NEWMAP). */
+                XiValue *key = xi_const_str(l->func, l->cur_block,
+                                             fname, l->type_string);
                 XiValue *val = xi_value_new(l->func, l->cur_block,
-                                             XI_LOAD_FIELD, l->type_any, 1);
-                if (val) { val->args[0] = src; val->aux = (void *) fname; }
+                                             XI_INDEX_GET, l->type_any, 2);
+                if (val) { val->args[0] = src; val->args[1] = key; }
                 lower_destructure_bind(l, sub, val);
             }
             break;
@@ -1578,10 +1955,44 @@ static void lower_destructure_assign(XiLower *l, AstNode *node) {
     lower_destructure_bind(l, da->pattern, rhs);
 }
 
-/* Multi-value declaration: let a, b = foo() */
+/* Multi-value declaration: let a, b = foo()
+ *
+ * When a single call expression provides all values, the VM returns
+ * multiple results to consecutive registers (OP_CALL C=nresults).
+ * We encode nresults in XI_CALL's aux_int bits 8-15 and use
+ * XI_EXTRACT to reference the i-th result register. */
 static void lower_multi_var_decl(XiLower *l, AstNode *node) {
     MultiVarDeclNode *mv = &node->as.multi_var_decl;
-    /* Evaluate all value expressions */
+
+    /* Single call returning multiple values: let x, y = pair() */
+    if (mv->value_count == 1 && mv->name_count > 1 &&
+        mv->values[0]->type == AST_CALL_EXPR) {
+        XiValue *call_val = lower_expr(l, mv->values[0]);
+        if (!call_val) return;
+
+        /* Encode return count in aux_int upper bits (preserving self_call flag) */
+        int flags = (int)(call_val->aux_int & 0xFF);
+        call_val->aux_int = flags | (mv->name_count << 8);
+
+        /* First name binds to the call result directly */
+        struct XrType *vtype = call_val->type ? call_val->type : l->type_any;
+        int var0 = var_lookup_or_create(l, mv->names[0], vtype);
+        braun_write(l, var0, l->cur_block, call_val);
+
+        /* Remaining names extracted from consecutive result registers */
+        for (int i = 1; i < mv->name_count; i++) {
+            XiValue *ext = xi_value_new(l->func, l->cur_block,
+                                         XI_EXTRACT, l->type_any, 1);
+            if (!ext) break;
+            ext->args[0] = call_val;
+            ext->aux_int = i;
+            int var_i = var_lookup_or_create(l, mv->names[i], l->type_any);
+            braun_write(l, var_i, l->cur_block, ext);
+        }
+        return;
+    }
+
+    /* General case: evaluate each value expression */
     for (int i = 0; i < mv->name_count && i < mv->value_count; i++) {
         XiValue *val = lower_expr(l, mv->values[i]);
         struct XrType *vtype = val ? val->type : l->type_any;
@@ -2075,12 +2486,28 @@ static void lower_return(XiLower *l, AstNode *node) {
     ReturnStmtNode *ret = &node->as.return_stmt;
     XiValue *val = NULL;
 
-    if (ret->value_count > 0 && ret->values[0]) {
+    if (ret->value_count == 1 && ret->values[0]) {
         val = lower_expr(l, ret->values[0]);
+    } else if (ret->value_count > 1) {
+        /* Multi-value return: evaluate all expressions first, then package */
+        int n = ret->value_count;
+        XiValue *vals[16];
+        XR_DCHECK(n <= 16, "multi-return exceeds local limit");
+        for (int i = 0; i < n && i < 16; i++) {
+            vals[i] = lower_expr(l, ret->values[i]);
+        }
+        XiValue *mret = xi_value_new(l->func, l->cur_block,
+                                      XI_MULTI_RET, l->type_any, (uint16_t)n);
+        if (mret) {
+            for (int i = 0; i < n; i++) {
+                mret->args[i] = vals[i];
+            }
+            val = mret;
+        }
     }
 
     xi_block_set_return(l->cur_block, val);
-    l->cur_block = NULL;  /* mark as terminated — subsequent stmts are dead */
+    l->cur_block = NULL;
 }
 
 static void lower_block(XiLower *l, AstNode *node) {
@@ -2550,6 +2977,16 @@ static void lower_try_catch(XiLower *l, AstNode *node) {
     XiBlock *finally_blk = tc->finally_body ? xi_block_new(l->func) : NULL;
     XiBlock *normal_target = finally_blk ? finally_blk : merge;
 
+    /* Emit XI_TRY: marks protected region start, catch_blk for handler */
+    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY,
+                                    l->type_void, 0);
+    if (try_op) {
+        try_op->aux = (void *)catch_blk;
+        try_op->aux_int = finally_blk ? 1 : 0;
+        try_op->flags |= XI_FLAG_SIDE_EFFECT;
+        try_op->line = (uint32_t)node->line;
+    }
+
     /* Jump into try block */
     xi_block_set_jump(l->cur_block, try_blk);
     braun_seal_block(l, try_blk);
@@ -2560,20 +2997,28 @@ static void lower_try_catch(XiLower *l, AstNode *node) {
     if (l->cur_block)
         xi_block_set_jump(l->cur_block, normal_target);
 
-    /* Seal catch block (1 pred: implicit exception edge) */
+    /* Model the implicit exception edge: the catch block inherits
+     * variable definitions from the pre-try block so that Braun SSA
+     * can resolve variables defined before the try statement. */
+    XiBlock *pretry_blk = try_blk->preds[0]; /* entry → try_blk */
+    XR_DCHECK(pretry_blk != NULL, "try block must have a predecessor");
+    xi_block_add_pred(catch_blk, pretry_blk);
     braun_seal_block(l, catch_blk);
     l->cur_block = catch_blk;
 
-    /* Bind catch variable to a PARAM-like placeholder */
-    if (tc->catch_var) {
-        struct XrType *err_type = l->type_any;
-        XiValue *exc_val = xi_value_new(l->func, l->cur_block, XI_PARAM, err_type, 0);
-        if (exc_val) {
-            exc_val->aux_int = -1;  /* sentinel: catch param, not function param */
-            exc_val->line = (uint32_t) tc->catch_var_line;
-        }
-        int var_id = var_lookup_or_create(l, tc->catch_var, err_type);
-        if (exc_val) braun_write(l, var_id, l->cur_block, exc_val);
+    /* Emit XI_CATCH: pops handler, stores exception value */
+    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH,
+                                      l->type_any, 0);
+    if (catch_op) {
+        catch_op->flags |= XI_FLAG_SIDE_EFFECT;
+        catch_op->line = tc->catch_var_line > 0
+                         ? (uint32_t)tc->catch_var_line : (uint32_t)node->line;
+    }
+
+    /* Bind catch variable */
+    if (tc->catch_var && catch_op) {
+        int var_id = var_lookup_or_create(l, tc->catch_var, l->type_any);
+        braun_write(l, var_id, l->cur_block, catch_op);
     }
 
     lower_stmt(l, tc->catch_body);
@@ -2584,14 +3029,43 @@ static void lower_try_catch(XiLower *l, AstNode *node) {
     if (finally_blk) {
         braun_seal_block(l, finally_blk);
         l->cur_block = finally_blk;
+
+        XiValue *fin_op = xi_value_new(l->func, l->cur_block, XI_FINALLY,
+                                        l->type_void, 0);
+        if (fin_op) {
+            fin_op->flags |= XI_FLAG_SIDE_EFFECT;
+            fin_op->line = (uint32_t)node->line;
+        }
+
         lower_stmt(l, tc->finally_body);
-        if (l->cur_block)
-            xi_block_set_jump(l->cur_block, merge);
+    }
+
+    /* Emit XI_END_TRY at merge point entry */
+    if (finally_blk && l->cur_block) {
+        xi_block_set_jump(l->cur_block, merge);
     }
 
     braun_seal_block(l, merge);
     l->cur_block = (merge->npreds > 0) ? merge : NULL;
+
+    if (l->cur_block) {
+        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY,
+                                        l->type_void, 0);
+        if (end_op) {
+            end_op->flags |= XI_FLAG_SIDE_EFFECT;
+            end_op->line = (uint32_t)node->line;
+        }
+    }
 }
+
+/* Forward declarations for class lowering helpers (defined below) */
+static void lower_init(XiLower *l, struct XaAnalyzer *analyzer,
+                        struct XrayIsolate *isolate);
+static void lower_cleanup(XiLower *l);
+
+/* Class declaration lowering (method compilation + XI_CLASS_CREATE).
+ * Factored into .inc.c to keep xi_lower.c within the 3000-line limit. */
+#include "xi_lower_class.inc.c"
 
 /* Main statement dispatcher */
 static void lower_stmt(XiLower *l, AstNode *node) {
@@ -2699,13 +3173,15 @@ static void lower_stmt(XiLower *l, AstNode *node) {
         case AST_EXPORT_STMT:
             break;
 
-        /* Type declarations are compile-time; no runtime IR needed.
-         * Class/struct/enum bodies are accessed via their methods and literals. */
         case AST_CLASS_DECL:
+            lower_class_decl(l, node);
+            break;
         case AST_STRUCT_DECL:
         case AST_INTERFACE_DECL:
-        case AST_ENUM_DECL:
         case AST_TYPE_ALIAS:
+            break;
+        case AST_ENUM_DECL:
+            lower_enum_decl(l, node);
             break;
 
         /* Match expression used as statement */
@@ -2813,6 +3289,31 @@ static XiFunc *lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
         if (!l.func->params) { xi_func_free(l.func); lower_cleanup(&l); return NULL; }
     }
 
+    /* Detect rest parameter and compute VM entry metadata */
+    bool has_rest = false;
+    for (int i = 0; i < fdecl->param_count; i++) {
+        if (fdecl->params[i] && fdecl->params[i]->is_rest) {
+            has_rest = true;
+            break;
+        }
+    }
+    l.func->is_vararg = has_rest;
+    l.func->min_params = (uint16_t) fdecl->required_count;
+
+    if (fdecl->is_generator) {
+        l.func->entry_type = 2;  /* XR_ENTRY_GENERATOR */
+    } else if (fdecl->required_count <
+               (has_rest ? fdecl->param_count - 1 : fdecl->param_count)) {
+        l.func->entry_type = 1;  /* XR_ENTRY_DEFAULTS */
+    } else {
+        l.func->entry_type = 0;  /* XR_ENTRY_NORMAL */
+    }
+
+    /* nparams excludes rest param (VM packs varargs into the rest slot) */
+    if (has_rest) {
+        l.func->nparams = (uint16_t)(fdecl->param_count - 1);
+    }
+
     for (int i = 0; i < fdecl->param_count; i++) {
         XrParamNode *p = fdecl->params[i];
         struct XrType *ptype = p->type ? p->type : l.type_any;
@@ -2881,6 +3382,9 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
             case AST_FUNCTION_DECL:
                 name = s->as.function_decl.name;
                 type = node_type(l, s);
+                break;
+            case AST_CLASS_DECL:
+                name = s->as.class_decl.name;
                 break;
             case AST_VAR_DECL:
             case AST_CONST_DECL:

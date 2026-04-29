@@ -839,6 +839,65 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_MOVE_EXPR:
             result = xa_visit_move_expr(ctx, node);
             break;
+        case AST_SUPER_CALL: {
+            /* Resolve super.method() return type by looking up the method
+             * in the base class chain via class_info. */
+            XaScope *s = ctx->analyzer->current_scope;
+            while (s && s->kind != XA_SCOPE_CLASS)
+                s = s->parent;
+            if (s && s->class_symbol) {
+                XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer,
+                                                           s->class_symbol);
+                if (cl && cl->class_info && cl->class_info->base) {
+                    const char *mname = node->as.super_call.method_name;
+                    if (mname) {
+                        XaSymbol *member = xa_class_info_lookup_member(
+                            cl->class_info->base, mname);
+                        if (member) {
+                            XaSymbolLinks *ml =
+                                xa_analyzer_get_links(ctx->analyzer, member);
+                            if (ml && ml->type) {
+                                /* Method type is a function type; extract
+                                 * return type for the call result. */
+                                if (XR_TYPE_IS_FUNCTION(ml->type) &&
+                                    ml->type->function.return_type) {
+                                    result = ml->type->function.return_type;
+                                } else {
+                                    result = ml->type;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            result = xr_type_new_unknown(NULL);
+            break;
+        }
+        case AST_THIS_EXPR: {
+            /* Walk up scopes to find the enclosing class scope and
+             * return the class instance type so this.field resolves. */
+            XaScope *s = ctx->analyzer->current_scope;
+            while (s && s->kind != XA_SCOPE_CLASS)
+                s = s->parent;
+            if (s && s->class_symbol) {
+                const char *cname = s->class_symbol->name;
+                if (cname) {
+                    XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer,
+                                                               s->class_symbol);
+                    bool is_struct = cl && cl->type && cl->type->is_value_type;
+                    result = xr_type_new_named_instance(ctx->analyzer->isolate,
+                                                         cname);
+                    if (result)
+                        result->is_value_type = is_struct;
+                } else {
+                    result = xr_type_new_unknown(NULL);
+                }
+            } else {
+                result = xr_type_new_unknown(NULL);
+            }
+            break;
+        }
         default:
             result = xr_type_new_unknown(NULL);
             break;

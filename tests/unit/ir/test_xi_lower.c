@@ -503,17 +503,18 @@ TEST(try_catch) {
     assert(f != NULL);
     /* try-catch generates: entry, try_blk, catch_blk, merge */
     assert(f->nblocks >= 3);
-    /* Verify catch variable binding (PARAM with aux_int == -1) */
-    int found_catch_param = 0;
+    /* Verify XI_TRY and XI_CATCH ops are present */
+    int found_try = 0, found_catch = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (v->op == XI_PARAM && v->aux_int == -1)
-                found_catch_param = 1;
+            if (v->op == XI_TRY)   found_try = 1;
+            if (v->op == XI_CATCH) found_catch = 1;
         }
     }
-    assert(found_catch_param && "should have catch PARAM binding");
+    assert(found_try && "should have XI_TRY op");
+    assert(found_catch && "should have XI_CATCH op");
     xi_func_free(f);
 }
 

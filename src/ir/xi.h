@@ -99,9 +99,13 @@ typedef enum {
     XI_MAP_NEW,     /* new map: args[0]=capacity */
 
     /* Function calls */
-    XI_CALL,        /* function call: args[0]=callee, args[1..n]=params */
+    XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
+                     * aux_int bits 0-7: flags (1=self_call)
+                     * aux_int bits 8-15: nresults (0 means 1) */
     XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=method_id, args[1..n]=params */
     XI_CALL_BUILTIN,/* builtin call: aux_int=builtin_id, args[0..n]=params */
+    XI_EXTRACT,     /* extract i-th result from multi-return call:
+                     * args[0]=call_value, aux_int=result_index (1-based offset) */
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
@@ -148,6 +152,9 @@ typedef enum {
     XI_SLICE,       /* slice: args[0]=source, args[1]=start, args[2]=end */
     XI_RANGE,       /* range: args[0]=start, args[1]=end */
 
+    /* Multi-value return packaging */
+    XI_MULTI_RET,   /* args[0..n]=return values, placed in consecutive regs */
+
     /* Null check */
     XI_ISNULL,      /* args[0]=value, returns bool (true if null) */
 
@@ -157,8 +164,36 @@ typedef enum {
     /* Identity / type narrowing */
     XI_COPY,        /* identity: dst = args[0], may carry narrowed type */
 
+    /* OOP: class creation */
+    XI_CLASS_CREATE, /* create class from descriptor: aux=XiClassData* */
+
+    /* Structured concurrency scope */
+    XI_SCOPE_ENTER, /* enter scope: aux_int=scope_mode (0=WAIT,1=LINKED,2=SUPERVISOR) */
+    XI_SCOPE_EXIT,  /* exit scope: aux_int=scope_mode, dst=result (supervisor) */
+
+    /* Exception handling */
+    XI_TRY,         /* begin try: marks start of protected region */
+    XI_CATCH,       /* catch: receive exception into dst register */
+    XI_FINALLY,     /* begin finally block */
+    XI_END_TRY,     /* end try-catch-finally region */
+
+    /* Builtin calls: compile-time recognized functions */
+    XI_ASSERT,      /* args[0]=cond; aux=loc_string; aux_int: 0=true,1=false */
+    XI_ASSERT_EQ,   /* args[0]=actual, args[1]=expected; aux=loc_string */
+    XI_ASSERT_NE,   /* args[0]=actual, args[1]=unexpected; aux=loc_string */
+    XI_TYPEOF,      /* args[0]=value; result=string typename */
+    XI_GET_BUILTIN, /* aux=name_string; aux_int=global_index; loads runtime global */
+
     XI_OP_COUNT     /* sentinel */
 } XiOp;
+
+/* Lowerer → emitter bridge for XI_CLASS_CREATE */
+typedef struct XiClassData {
+    struct AstNode *ast;     /* AST_CLASS_DECL node (not owned) */
+    uint16_t *child_idx;     /* maps method order → XiFunc::children index */
+    uint16_t ninst;          /* instance method count */
+    uint16_t nstat;          /* static method count */
+} XiClassData;
 
 /* ========== Block Kinds ========== */
 
@@ -324,6 +359,11 @@ typedef struct XiFunc {
      * and support forward references.  The proto's shared_offset is set
      * at emit time; shared indices are 0-based local to this func. */
     uint16_t nshared;
+
+    /* VM entry metadata (propagated to XrProto during emission) */
+    bool is_vararg;             /* has rest parameter (...args) */
+    uint8_t entry_type;         /* 0=normal, 1=has_defaults, 2=generator */
+    uint16_t min_params;        /* required parameter count (no defaults) */
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */

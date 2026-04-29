@@ -6,14 +6,14 @@
 
 class Shape {
     name: string
-    
+
     constructor(name) {
         this.name = name
     }
-    
+
     describe(): string {        return "Shape: " + this.name
     }
-    
+
     area(): int {        return 0
     }
 }
@@ -21,18 +21,18 @@ class Shape {
 class Rectangle extends Shape {
     width: int
     height: int
-    
+
     constructor(w, h) {
         super("Rectangle")
         this.width = w
         this.height = h
     }
-    
+
     describe(): string {        // 调用父类方法并扩展
         return super.describe() + " (${this.width}x${this.height})"
     }
-    
-    area(): void {        return this.width * this.height
+
+    area(): int {        return this.width * this.height
     }
 }
 
@@ -47,45 +47,45 @@ fn test_super_method_with_extension(): void {
 
 class A {
     value: int
-    
+
     constructor(v) {
         this.value = v
     }
-    
-    getValue(): void {        return this.value
+
+    getValue(): int {        return this.value
     }
-    
+
     describe(): string {        return "A:${this.value}"
     }
 }
 
 class B extends A {
     extra: int
-    
+
     constructor(v, e) {
         super(v)
         this.extra = e
     }
-    
-    getValue(): void {        return super.getValue() + this.extra
+
+    getValue(): int {        return super.getValue() + this.extra
     }
-    
-    describe(): void {        return super.describe() + ",B:${this.extra}"
+
+    describe(): string {        return super.describe() + ",B:${this.extra}"
     }
 }
 
 class C extends B {
     more: int
-    
+
     constructor(v, e, m) {
         super(v, e)
         this.more = m
     }
-    
-    getValue(): void {        return super.getValue() + this.more
+
+    getValue(): int {        return super.getValue() + this.more
     }
-    
-    describe(): void {        return super.describe() + ",C:${this.more}"
+
+    describe(): string {        return super.describe() + ",C:${this.more}"
     }
 }
 
@@ -103,26 +103,26 @@ fn test_three_level_inheritance(): void {
 
 class Logger {
     prefix: string
-    
+
     constructor(prefix) {
         this.prefix = prefix
     }
-    
-    log(msg: string): void {        return this.prefix + ": " + msg    }
-    
-    warn(msg: string): void {        return "[WARN] " + this.log(msg)    }
+
+    log(msg: string): string {        return this.prefix + ": " + msg    }
+
+    warn(msg: string): string {        return "[WARN] " + this.log(msg)    }
 }
 
 class FileLogger extends Logger {
     file: string
-    
+
     constructor(file) {
         super("FILE")
         this.file = file
     }
-    
-    log(msg: string): void {        return super.log(msg) + " -> " + this.file    }
-    
+
+    log(msg: string): string {        return super.log(msg) + " -> " + this.file    }
+
     // warn 继承自父类，但会调用子类的 log
 }
 
@@ -137,19 +137,19 @@ fn test_super_in_chain(): void {
 
 class Processor {
     factor: int
-    
+
     constructor(f) {
         this.factor = f
     }
-    
-    process(x: int): void {        return x * this.factor    }
+
+    process(x: int): int {        return x * this.factor    }
 }
 
 @test
 fn test_method_reference(): void {
     let p = new Processor(3)
     assert_eq(p.process(5), 15)
-    
+
     // 方法绑定到实例
     let fn_ref = p.process
     // 注意：这需要语言支持绑定方法
@@ -160,16 +160,16 @@ fn test_method_reference(): void {
 
 class Calculator {
     base: int
-    
+
     constructor(base) {
         this.base = base
     }
-    
-    add(x: int): void {        return this.base + x    }
-    
-    addTwice(x: int): void {        return this.add(x) + this.add(x)    }
-    
-    addChain(a: int, b: int, c: int): void {        return this.add(a) + this.add(b) + this.add(c) - this.base * 2    }
+
+    add(x: int): int {        return this.base + x    }
+
+    addTwice(x: int): int {        return this.add(x) + this.add(x)    }
+
+    addChain(a: int, b: int, c: int): int {        return this.add(a) + this.add(b) + this.add(c) - this.base * 2    }
 }
 
 @test
@@ -185,12 +185,12 @@ fn test_internal_method_calls(): void {
 class Initializer {
     data: string
     processed: string
-    
-    constructor(input) {
+
+    constructor(input: string) {
         this.data = input
         this.processed = this.transform(input)
     }
-    
+
     transform(s: string): string {        return "[" + s + "]"    }
 }
 
@@ -207,7 +207,7 @@ class Ordered {
     a: int
     b: int
     c: int
-    
+
     constructor() {
         this.a = 1
         this.b = this.a + 1
@@ -227,15 +227,15 @@ fn test_field_init_order(): void {
 
 class Box {
     value: int
-    
+
     constructor(v) {
         this.value = v
     }
-    
+
     add(other: Box): Box {
         return new Box(this.value + other.value)
     }
-    
+
     equals(other: Box): bool {
         return this.value == other.value
     }
@@ -246,7 +246,7 @@ fn test_object_as_param(): void {
     let b1 = new Box(10)
     let b2 = new Box(20)
     let b3 = b1.add(b2)
-    
+
     assert_eq(b3.value, 30)
     assert_eq(b1.equals(b2), false)
     assert_eq(b1.equals(new Box(10)), true)
@@ -257,7 +257,7 @@ fn test_object_as_param(): void {
 class Item {
     name: string
     price: int
-    
+
     constructor(n, p) {
         this.name = n
         this.price = p
@@ -271,11 +271,11 @@ fn test_object_array(): void {
         new Item("banana", 50),
         new Item("orange", 75)
     ]
-    
+
     assert_eq(items.length, 3)
     assert_eq(items[0].name, "apple")
     assert_eq(items[1].price, 50)
-    
+
     // 计算总价
     let total = 0
     for (item in items) {
@@ -289,7 +289,7 @@ fn test_object_array(): void {
 class MapUser {
     name: string
     level: int
-    
+
     constructor(n, l) {
         this.name = n
         this.level = l
@@ -301,7 +301,7 @@ fn test_object_in_map(): void {
     let users = #{}  // 使用 #{} 创建 Map，不是 {}
     users["alice"] = new MapUser("Alice", 10)
     users["bob"] = new MapUser("Bob", 5)
-    
+
     assert_eq(users["alice"].name, "Alice")
     assert_eq(users["alice"].level, 10)
     assert_eq(users["bob"].name, "Bob")

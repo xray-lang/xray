@@ -61,7 +61,7 @@ print("   PASS")
 // 7. 跨函数传播
 print("7. cross function")
 fn thr7(): void { throw "from_fn" }
-let c7 = null
+let c7: Exception? = null
 try { thr7() } catch (e) { c7 = e }
 assert_eq(c7, "from_fn")
 print("   PASS")
@@ -88,7 +88,7 @@ fn d4(): void { throw "deep" }
 fn d3(): void { d4() }
 fn d2(): void { d3() }
 fn d1(): void { d2() }
-let c10 = null
+let c10: Exception? = null
 try { d1() } catch (e) { c10 = e }
 assert_eq(c10, "deep")
 print("   PASS")

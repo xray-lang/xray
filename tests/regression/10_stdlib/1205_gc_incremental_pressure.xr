@@ -66,10 +66,10 @@ fn test_alloc_interleaved_with_gc(): void {
 @test
 fn test_deep_reference_chain(): void {
     gc.disable()
-    let head = {"value" => 0, "next" => null}
-    let current = head
+    let head: Json = {"value": 0, "next": null}
+    let current: Json = head
     for (let i = 1; i < 50; i++) {
-        let node = {"value" => i, "next" => null}
+        let node: Json = {"value": i, "next": null}
         current["next"] = node
         current = node
     }

@@ -7,12 +7,12 @@
 class Point {
     x: int
     y: int
-    
+
     constructor(x, y) {
         this.x = x
         this.y = y
     }
-    
+
     toString(): string {
         return "(${this.x}, ${this.y})"
     }
@@ -35,19 +35,19 @@ fn test_class_method(): void {
 
 class Counter {
     count: int
-    
+
     constructor() {
         this.count = 0
     }
-    
+
     increment(): void {
         this.count = this.count + 1
     }
-    
+
     decrement(): void {
         this.count = this.count - 1
     }
-    
+
     getValue(): int {
         return this.count
     }
@@ -57,11 +57,11 @@ class Counter {
 fn test_method_modifies_state(): void {
     let c = new Counter()
     assert_eq(c.getValue(), 0)
-    
+
     c.increment()
     c.increment()
     assert_eq(c.getValue(), 2)
-    
+
     c.decrement()
     assert_eq(c.getValue(), 1)
 }
@@ -72,11 +72,11 @@ fn test_method_modifies_state(): void {
 fn test_multiple_instances(): void {
     let c1 = new Counter()
     let c2 = new Counter()
-    
+
     c1.increment()
     c1.increment()
     c2.increment()
-    
+
     assert_eq(c1.getValue(), 2)
     assert_eq(c2.getValue(), 1)
 }
@@ -85,17 +85,17 @@ fn test_multiple_instances(): void {
 
 class Builder {
     value: string
-    
+
     constructor() {
         this.value = ""
     }
-    
-    append(s: string): string {
+
+    append(s: string): Builder {
         this.value += s
         return this
     }
-    
-    build(): int {
+
+    build(): string {
         return this.value
     }
 }
@@ -112,7 +112,7 @@ fn test_method_chaining(): void {
 class Config {
     name: string
     enabled: bool
-    
+
     constructor() {
         this.name = "default"
         this.enabled = true
@@ -131,7 +131,7 @@ fn test_default_values(): void {
 class Person {
     name: string
     age: int
-    
+
     constructor(name, age) {
         this.name = name
         this.age = age
@@ -160,7 +160,7 @@ class Calculator {
     add(a: int, b: int): int {
         return a + b
     }
-    
+
     multiply(a: int, b: int, c: int): int {
         return a * b * c
     }

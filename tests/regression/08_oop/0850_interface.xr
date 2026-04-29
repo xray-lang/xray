@@ -10,15 +10,15 @@ interface Drawable {
 
 class Circle implements Drawable {
     radius: float
-    
+
     constructor(radius: float) {
         this.radius = radius
     }
-    
+
     draw(): void {        // 实现接口方法
     }
-    
-    getRadius(): void {        return this.radius
+
+    getRadius(): float {        return this.radius
     }
 }
 
@@ -38,16 +38,16 @@ interface Shape {
 class Rectangle implements Shape {
     width: float
     height: float
-    
+
     constructor(w: float, h: float) {
         this.width = w
         this.height = h
     }
-    
-    area(): void {        return this.width * this.height
+
+    area(): float {        return this.width * this.height
     }
-    
-    perimeter(): void {        return 2 * (this.width + this.height)
+
+    perimeter(): float {        return 2 * (this.width + this.height)
     }
 }
 
@@ -62,15 +62,15 @@ fn test_multi_method_interface(): void {
 
 class Square implements Shape {
     side: float
-    
+
     constructor(s: float) {
         this.side = s
     }
-    
-    area(): void {        return this.side * this.side
+
+    area(): float {        return this.side * this.side
     }
-    
-    perimeter(): void {        return 4 * this.side
+
+    perimeter(): float {        return 4 * this.side
     }
 }
 
@@ -78,7 +78,7 @@ class Square implements Shape {
 fn test_multiple_implementations(): void {
     let rect = new Rectangle(2.0, 3.0)
     let square = new Square(4.0)
-    
+
     assert_eq(rect.area(), 6.0)
     assert_eq(square.area(), 16.0)
 }
@@ -92,15 +92,15 @@ interface Printable {
 class Person implements Printable {
     name: string
     age: int
-    
+
     constructor(name: string, age: int) {
         this.name = name
         this.age = age
     }
-    
-    toString(): void {        return this.name + " (" + this.age + ")"
+
+    toString(): string {        return this.name + " (" + this.age + ")"
     }
-    
+
     greet(): string {        return "Hello, " + this.name
     }
 }

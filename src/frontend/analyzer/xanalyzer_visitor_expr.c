@@ -235,10 +235,17 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 (sym_links && sym_links->module_name) ? sym_links->module_name : var_name;
             const XaBuiltinModule *mod = xa_builtin_get_module_info(mod_name);
             if (mod) {
-                // Look up function signature in module type table
+                // Look up member (function or constant) in module type table
                 const char *sig = xa_builtin_get_module_func_signature(mod_name, ma->name);
                 if (sig) {
-                    // Parse complete function signature (params + return type)
+                    // Constant property: signature is ": type" (no parens)
+                    if (sig[0] == ':') {
+                        const char *type_str = sig + 1;
+                        while (*type_str == ' ')
+                            type_str++;
+                        return xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                    }
+                    // Function: parse complete signature (params + return type)
                     return xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
                 }
                 // Known module but unknown member - still unknown for extensibility
@@ -250,7 +257,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // Class static member access: ClassName.staticMethod
     if (obj_type->kind == XR_KIND_CLASS && obj_type->instance.class_name) {
         XaSymbol *class_sym =
-            xa_scope_lookup(ctx->analyzer->global_scope, obj_type->instance.class_name);
+            xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
         if (class_sym && class_sym->kind == XA_SYM_CLASS) {
             XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
             if (class_links && class_links->class_info) {
@@ -322,7 +329,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // Handle class instance members
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_name) {
         XaSymbol *class_sym =
-            xa_scope_lookup(ctx->analyzer->global_scope, obj_type->instance.class_name);
+            xa_scope_lookup(ctx->analyzer->current_scope, obj_type->instance.class_name);
         if (class_sym) {
             XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
             if (class_links && class_links->class_info) {
@@ -356,6 +363,12 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // Handle Json object field access.
     // Json is the explicit dynamic data boundary: field values may vary at runtime,
     // including null, so the result type is always nullable.
+    if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count == 0) {
+        // Bare Json type (e.g. function parameter) — no static field info,
+        // return nullable Json since any field access is valid at runtime.
+        return xr_type_make_nullable(ctx->analyzer->isolate,
+                                      xr_type_new_json(ctx->analyzer->isolate));
+    }
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {
             for (int i = 0; i < obj_type->object.field_count; i++) {
@@ -721,14 +734,14 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         return inst_type;
     }
 
-    // Fallback: create class type with class name
+    // Fallback: create instance type with class name (new always produces instances)
     if (ne->class_name) {
-        XrType *cls_type = xr_type_new_class(ctx->analyzer->isolate, ne->class_name);
+        XrType *inst_type = xr_type_new_named_instance(ctx->analyzer->isolate, ne->class_name);
         // Propagate is_value_type from class declaration (struct)
         if (class_links && class_links->type && class_links->type->is_value_type) {
-            cls_type->is_value_type = true;
+            inst_type->is_value_type = true;
         }
-        return cls_type;
+        return inst_type;
     }
     return xr_type_new_unknown(NULL);
 }

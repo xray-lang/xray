@@ -524,4 +524,10 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
     xi_opt_copy_prop(f);
     xi_opt_phi_simplify(f);
     xi_opt_dce(f);
+
+    /* Recurse into nested functions / closures */
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            xi_opt_run(f->children[i]);
+    }
 }

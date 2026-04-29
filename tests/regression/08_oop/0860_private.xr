@@ -6,22 +6,22 @@
 
 class Account {
     private balance: int
-    
+
     constructor(initial: int) {
         this.balance = initial
     }
-    
+
     deposit(amount: int): void {        this.balance = this.balance + amount
     }
-    
+
     withdraw(amount: int): bool {        if (amount <= this.balance) {
             this.balance = this.balance - amount
             return true
         }
         return false
     }
-    
-    getBalance(): void {        return this.balance
+
+    getBalance(): int {        return this.balance
     }
 }
 
@@ -52,16 +52,16 @@ class User {
     private password: string
     private email: string
     name: string
-    
+
     constructor(name: string, email: string, password: string) {
         this.name = name
         this.email = email
         this.password = password
     }
-    
+
     checkPassword(pwd: string): bool {        return this.password == pwd
     }
-    
+
     getEmail(): string {        return this.email
     }
 }
@@ -78,26 +78,26 @@ fn test_multiple_private_fields(): void {
 
 class BankAccount {
     private balance: int
-    
+
     constructor(initial: int) {
         this.balance = initial
     }
-    
-    getBalance(): void {        return this.balance
+
+    getBalance(): int {        return this.balance
     }
-    
+
     addAmount(amount: int): void {        this.balance = this.balance + amount
     }
 }
 
 class SavingsAccount extends BankAccount {
     interestRate: float
-    
+
     constructor(initial: int, rate: float) {
         super(initial)
         this.interestRate = rate
     }
-    
+
     applyInterest(): void {        let interest = (this.getBalance() * this.interestRate).floor()
         this.addAmount(interest)
     }
