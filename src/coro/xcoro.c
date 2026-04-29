@@ -8,8 +8,9 @@
  * xcoro.c - VM coroutine implementation
  *
  * KEY CONCEPT:
- *   Simplified coroutine integrated with VM main loop.
- *   Coroutines and their data are managed by GC.
+ *   Native-stackless coroutine execution backed by per-coroutine VM state.
+ *   Each coroutine owns an XrVMContext with a value stack and bytecode frames.
+ *   Suspension resumes from VM frames, continuations, or JIT suspend state.
  */
 
 #include "xcoroutine.h"
@@ -34,8 +35,8 @@
 #include "xcoro_pool.h"
 #include "../runtime/object/xarray.h"
 
-// Initial capacities (balanced: fast malloc + minimal grow_stack for common cases)
-// 64 slots = 1024B stack + 288B frames = 1312B total per coroutine
+// Initial capacities (balanced: fast allocation + minimal grow_stack for common cases)
+// 64 VM slots = 1024B VM stack + 288B frames = 1312B total per coroutine
 #define INITIAL_STACK_CAPACITY 64
 #define INITIAL_FRAME_CAPACITY 4
 
@@ -325,16 +326,17 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     }
     // Clean path: recycle_local already set these to their sentinel values
 
-    // Cache worker pointer (single TLS lookup for stack slab + ID allocation)
+    // Cache worker pointer (single TLS lookup for VM stack slab + ID allocation)
     XrWorker *w = xr_current_worker();
 
-    // Allocate stack + frames if needed (coro_gc is created lazily on first heap alloc)
+    // Allocate VM stack and bytecode frames if needed.
+    // coro_gc is created lazily on first heap allocation.
     if (need_stack) {
         if (!coro->vm_ctx.stack) {
             size_t stack_bytes = sizeof(XrValue) * INITIAL_STACK_CAPACITY;
             size_t frames_bytes = sizeof(XrBcCallFrame) * INITIAL_FRAME_CAPACITY;
             char *block = NULL;
-            // Try per-Worker stack slab free list first (lock-free, no malloc)
+            // Try per-Worker VM stack slab free list first (lock-free, no malloc)
             if (w && w->p.stack_slab_free) {
                 block = (char *) w->p.stack_slab_free;
                 w->p.stack_slab_free = *(void **) block;
@@ -600,7 +602,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *a
     return coro;
 }
 
-// xr_coro_create_stackful removed — fully stackless now
+// Native-stackful coroutine creation was removed; coroutines resume from VM state.
 
 // Add coroutine to scheduler queue
 void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro) {
@@ -693,18 +695,18 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         return;
     }
 
-    // Release stack+frames
+    // Release VM stack and bytecode frames
     if (coro->vm_ctx.stack) {
         if (coro->gc_flags & 0x0001) {
-            // Slab-embedded stack: don't free, arena owns the memory.
-            // But if stack was grown (realloc'd), it's a separate allocation now.
+            // Slab-embedded VM stack: don't free, arena owns the memory.
+            // But if the VM stack was grown, it is a separate allocation now.
             if (coro->vm_ctx.stack_capacity != INITIAL_STACK_CAPACITY) {
-                // Stack was grown — now independently malloc'd
+                // VM stack was grown and is now independently allocated.
                 xr_free(coro->vm_ctx.stack);
             }
-            // If capacity matches initial, stack is still in slab — skip free
+            // If capacity matches initial, the VM stack is still in slab — skip free.
         } else {
-            // malloc'd stack — recycle to per-Worker slab free list or free
+            // Independently allocated VM stack — recycle to per-Worker slab free list or free.
             char *stack_end =
                 (char *) coro->vm_ctx.stack + sizeof(XrValue) * coro->vm_ctx.stack_capacity;
             bool combined = (coro->vm_ctx.frames && (char *) coro->vm_ctx.frames == stack_end);
@@ -775,10 +777,10 @@ void xr_coro_free(XrCoroutine *coro) {
         if (gc)
             xr_coro_gc_destroy(gc);
     }
-    // Free stack+frames (skip slab-embedded stacks — arena owns them)
+    // Free VM stack and bytecode frames (skip slab-embedded stacks — arena owns them)
     if (coro->vm_ctx.stack) {
         if (coro->gc_flags & 0x0001) {
-            // Slab stack: only free if grown beyond initial capacity
+            // Slab VM stack: only free if grown beyond initial capacity.
             if (coro->vm_ctx.stack_capacity != INITIAL_STACK_CAPACITY) {
                 xr_free(coro->vm_ctx.stack);
             }
@@ -1320,7 +1322,7 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
 // Multi-core parallel execution:
 // - Each Worker thread executes coroutines with independent vm_ctx
 // - Work stealing for load balancing across Workers
-// - Coroutines have independent stacks/frames, no global VM lock
+// - Coroutines have independent VM stacks/frames, no global VM lock
 void xr_multicore_init(XrayIsolate *X, int num_workers) {
     if (!X)
         return;
@@ -1569,7 +1571,7 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     }
 }
 
-/* ========== Stack Growth ========== */
+/* ========== VM Stack Growth ========== */
 
 bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
     if (!coro || !coro->vm_ctx.stack)
@@ -1606,19 +1608,19 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
         }
         memcpy(new_frames, coro->vm_ctx.frames, sizeof(XrBcCallFrame) * coro->vm_ctx.frame_count);
 
-        // Free old block only if it was malloc'd (not from arena slab)
+        // Free old block only if it is independently allocated.
         if (!slab_stack) {
             xr_free(coro->vm_ctx.stack);
         }
         coro->vm_ctx.stack = new_stack;
         coro->vm_ctx.stack_capacity = new_capacity;
         coro->vm_ctx.frames = new_frames;
-        // Clear slab flag: stack is now independently malloc'd
+        // Clear slab flag: VM stack is now independently allocated.
         coro->gc_flags &= ~0x0001;
     } else {
         // Already separate
         if (slab_stack) {
-            // Slab stack (not combined): malloc new, copy, don't free old
+            // Slab VM stack (not combined): allocate new storage, copy, don't free old.
             XrValue *new_stack = (XrValue *) xr_malloc(sizeof(XrValue) * new_capacity);
             if (!new_stack)
                 return false;
@@ -1640,11 +1642,9 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
 
     if (coro->vm_ctx.frame_count + 8 >= coro->vm_ctx.frame_capacity) {
         int new_frame_cap = coro->vm_ctx.frame_capacity * 2;
-        // If frames were from slab (now split out in combined path above),
-        // they may already be malloc'd. But if slab_stack was true and we
-        // only grew stack (not combined path), frames are still in slab.
-        // Check: after combined split, frames are always malloc'd.
-        // After non-combined slab grow, frames pointer still points to slab.
+        // If frames were from slab and split out in the combined path above,
+        // they may already be independently allocated. If only the VM stack
+        // grew in the non-combined slab path, frames still point to the slab.
         bool frames_in_slab = slab_stack && !combined;
         if (frames_in_slab) {
             XrBcCallFrame *new_frames =

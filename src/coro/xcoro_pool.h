@@ -32,12 +32,12 @@ struct XrCoroutine;
 #define XR_CORO_POOL_GROW_SIZE 4096          // Growth size per expansion
 #define XR_CORO_POOL_MAX_SIZE (1024 * 1024)  // Max pool size
 
-// Stack+frames embedded in arena (zero malloc per coroutine)
+// VM stack and bytecode frames embedded in arena (zero malloc per coroutine)
 #define XR_CORO_POOL_STACK_SLOTS 64  // Initial stack slots per coroutine
 #define XR_CORO_POOL_FRAME_SLOTS 4   // Initial frame slots per coroutine
 
 // gc_flags bit definitions (coroutine pool markers)
-#define XR_CORO_GC_SLAB_STACK 0x0001      // Stack+frames from slab (not malloc'd)
+#define XR_CORO_GC_SLAB_STACK 0x0001      // VM stack and frames from slab (not malloc'd)
 #define XR_CORO_GC_FROM_POOL 0x0002       // Struct allocated from pool block
 #define XR_CORO_GC_RECYCLABLE 0x0004      // Fire-and-forget, eligible for deferred recycle
 #define XR_CORO_GC_RECYCLED_CLEAN 0x0008  // Recycled with thorough field reset (skip memset)
@@ -45,12 +45,12 @@ struct XrCoroutine;
 // ========== Pool Block ==========
 
 // XrCoroPoolBlock - Pool memory block
-// Each block contains coroutine structs + embedded stack+frames memory.
-// Layout: [XrCoroutine array][stack+frames slab]
+// Each block contains coroutine structs plus embedded VM stack and frame memory.
+// Layout: [XrCoroutine array][VM stack and frame slab]
 typedef struct XrCoroPoolBlock {
     struct XrCoroutine *coros;     // Coroutine array
-    char *slab;                    // Stack+frames slab memory
-    size_t slab_entry_size;        // Size of each stack+frames entry
+    char *slab;                    // VM stack and frame slab memory
+    size_t slab_entry_size;        // Size of each VM stack and frame entry
     size_t capacity;               // Number of coroutines
     uint32_t base_idx;             // Global alloc_idx base for this block
     struct XrCoroPoolBlock *next;  // Next block

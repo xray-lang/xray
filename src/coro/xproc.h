@@ -164,8 +164,8 @@ typedef struct XrProc {
     uint32_t arena_cache_end;    // End of cached range (exclusive)
     void *arena_cache_block;     // Cached block pointer (invalidate if pool expands)
 
-    /* === Stack Slab Free List (avoids malloc/free per coroutine) === */
-    void *stack_slab_free;  // Free list of stack+frames blocks (1312B each)
+    /* === VM Stack Slab Free List (avoids malloc/free per coroutine) === */
+    void *stack_slab_free;  // Free list of VM stack and frame blocks (1312B each)
     int stack_slab_count;   // Number of blocks in free list
 
 /* === Immix Block Cache L1 (per-worker, no lock needed) === */

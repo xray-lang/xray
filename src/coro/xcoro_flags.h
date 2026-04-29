@@ -114,7 +114,7 @@
 #define XR_CORO_FLG_NO_AUTO_FREE (1 << 19)
 #define XR_CORO_FLG_STACK_SCANNED (1 << 20)
 #define XR_CORO_FLG_CANCEL_REQUESTED (1 << 21)  // sysmon requests cancellation
-#define XR_CORO_FLG_SLAB_STACK (1 << 22)        // stack+frames from arena slab (don't free)
+#define XR_CORO_FLG_SLAB_STACK (1 << 22)        // VM stack and frames from arena slab
 
 // Mask for state shadow bits (READY|RUNNING|BLOCKED|DONE)
 #define XR_CORO_STATE_FLAG_MASK                                                                    \
