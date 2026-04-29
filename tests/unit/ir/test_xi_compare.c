@@ -1007,7 +1007,7 @@ TEST(cmp_map_literal) {
         .label = "map literal and key access",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* STORE_FIELD emit uses field index, not name lookup */
+        .check_exec = true,
     });
 }
 
@@ -1082,7 +1082,7 @@ TEST(cmp_type_convert) {
         .label = "type conversion int->string and float->int",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* XI_AS emits MOVE, not runtime cast */
+        .check_exec = true,
     });
 }
 
@@ -1162,9 +1162,9 @@ TEST(cmp_nested_func_scope) {
                   "  return inner()\n"
                   "}\nprint(outer())",
         .label = "nested function accessing outer scope",
-        .expect_xi_success = false,
+        .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,
+        .check_exec = true,
     });
 }
 
@@ -1193,7 +1193,7 @@ TEST(cmp_optional_chain) {
         .label = "nullable with nullish coalesce fallback",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* nullable runtime behavior may differ */
+        .check_exec = true,
     });
 }
 
