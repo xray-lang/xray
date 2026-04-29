@@ -228,7 +228,7 @@ fn test_keys_empty_object(): void {
 
 @test
 fn test_keys_simple_object(): void {
-    let keys = json.keys(json.parse("{\"a\": 1, \"b\": 2, \"c\": 3}"))
+    let keys = json.keys(json.parse("{\"a\": 1, \"b\": 2, \"c\": 3}")!)
     assert_eq(keys.length, 3)
     // 键顺序可能不确定，检查是否包含
     let hasA = false
@@ -254,7 +254,7 @@ fn test_values_empty_object(): void {
 
 @test
 fn test_values_simple_object(): void {
-    let values = json.values(json.parse("{\"a\": 1, \"b\": 2, \"c\": 3}"))
+    let values = json.values(json.parse("{\"a\": 1, \"b\": 2, \"c\": 3}")!)
     assert_eq(values.length, 3)
     // 检查是否包含所有值
     let has1 = false

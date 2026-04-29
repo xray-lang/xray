@@ -43,10 +43,10 @@
 
 /* ========== Coroutine Constants ========== */
 
-// Per-coroutine stack size
+// Maximum per-coroutine VM stack slots
 #define XR_CORO_STACK_MAX 4096
 
-// Per-coroutine frame count
+// Maximum per-coroutine bytecode frame count
 #define XR_CORO_FRAMES_MAX 256
 
 // Reduction quantum per scheduling round
@@ -98,10 +98,10 @@
 
 /* ========== VM Stack Growth ========== */
 
-// Default extra slots when growing stack
+// Default extra slots when growing the VM stack
 #define XR_STACK_GROW_DEFAULT 128
 
-// Minimum padding slots when growing stack
+// Minimum padding slots when growing the VM stack
 #define XR_STACK_GROW_PADDING 64
 
 /* ========== Bit Width ========== */

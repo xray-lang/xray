@@ -18,11 +18,17 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xtype_names.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/object/xstring.h"
-#include "../../include/xray_isolate.h"
+#include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../runtime/class/xclass_descriptor.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xmethod.h"
+#include "../runtime/xexec_state.h"
+#include "../frontend/parser/xast_nodes.h"
 #include <string.h>
 
 /* ========== Emit Context ========== */
@@ -68,6 +74,14 @@ typedef struct {
     } *patches;
     uint32_t npatch;
     uint32_t patch_cap;
+
+    /* OP_TRY patches: absolute target PC patching (catch block) */
+    struct {
+        int pc;              /* OP_TRY instruction PC */
+        uint32_t target_bid; /* catch block ID */
+    } *try_patches;
+    uint32_t ntry_patch;
+    uint32_t try_patch_cap;
 
     /* Comparison-branch fusion: if the block control is a comparison with
      * no other consumers, skip emitting OP_CMP_* and instead emit the
@@ -175,6 +189,20 @@ static void add_patch(EmitCtx *ctx, int pc, uint32_t target_bid) {
     ctx->npatch++;
 }
 
+/* Add a pending OP_TRY patch (absolute PC target). */
+static void add_try_patch(EmitCtx *ctx, int pc, uint32_t target_bid) {
+    if (ctx->ntry_patch >= ctx->try_patch_cap) {
+        uint32_t new_cap = ctx->try_patch_cap ? ctx->try_patch_cap * 2 : 4;
+        void *tmp = xr_realloc(ctx->try_patches, new_cap * sizeof(ctx->try_patches[0]));
+        if (!tmp) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        ctx->try_patches = tmp;
+        ctx->try_patch_cap = new_cap;
+    }
+    ctx->try_patches[ctx->ntry_patch].pc = pc;
+    ctx->try_patches[ctx->ntry_patch].target_bid = target_bid;
+    ctx->ntry_patch++;
+}
+
 /* Add constant to pool, return index. */
 static int add_const_int(EmitCtx *ctx, int64_t val) {
     XrValue xv = xr_make_int_val(val, XR_TAG_I64);
@@ -200,7 +228,11 @@ static int add_const_string(EmitCtx *ctx, const char *str) {
         XrString *xs = xr_compile_time_intern(ctx->isolate, str, strlen(str));
         xv = xr_string_value(xs);
     } else {
-        xv = xr_make_ptr_val((void *)str);
+        /* No isolate: raw C string pointers are not valid GC objects,
+         * so xr_make_ptr_val would read garbage GC header bytes.
+         * Use null placeholder — callers without isolate only check
+         * instruction sequences, not constant pool values. */
+        xv = xr_null();
     }
     int idx = xr_vm_proto_add_constant(ctx->proto, xv);
     if (idx > MAXARG_Bx) {
@@ -388,6 +420,193 @@ static void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
     }
 }
 
+/* ========== Class Emission Helpers ========== */
+
+/* Convert an AST literal to XrValue for field default values. */
+static XrValue ast_field_default_to_value(EmitCtx *ctx, AstNode *init) {
+    if (!init) return xr_null();
+    if (init->type == AST_LITERAL_INT)
+        return xr_int(init->as.literal.raw_value.int_val);
+    if (init->type == AST_LITERAL_FLOAT)
+        return xr_float(init->as.literal.raw_value.float_val);
+    if (init->type == AST_LITERAL_TRUE)  return xr_bool(true);
+    if (init->type == AST_LITERAL_FALSE) return xr_bool(false);
+    if (init->type == AST_LITERAL_STRING && ctx->isolate) {
+        const char *s = init->as.literal.raw_value.string_val;
+        if (s) {
+            XrString *xs = xr_compile_time_intern(ctx->isolate, s, strlen(s));
+            if (xs) return xr_string_value(xs);
+        }
+    }
+    return xr_null();
+}
+
+/* Populate instance and static fields on the descriptor from AST. */
+static bool emit_class_collect_fields(EmitCtx *ctx, ClassDeclNode *cd,
+                                       XrClassDescriptor *desc) {
+    /* Instance fields */
+    uint32_t fc = 0;
+    for (int i = 0; i < cd->field_count; i++)
+        if (cd->fields[i]->type == AST_FIELD_DECL
+            && !cd->fields[i]->as.field_decl.is_static)
+            fc++;
+    if (fc > 0) {
+        desc->instance_fields = (XrFieldDescriptorEntry *)xr_calloc(
+            fc, sizeof(XrFieldDescriptorEntry));
+        if (!desc->instance_fields) return false;
+        desc->instance_field_count = fc;
+        uint32_t idx = 0;
+        for (int i = 0; i < cd->field_count; i++) {
+            if (cd->fields[i]->type != AST_FIELD_DECL) continue;
+            FieldDeclNode *f = &cd->fields[i]->as.field_decl;
+            if (f->is_static) continue;
+            desc->instance_fields[idx].name = strdup(f->name);
+            desc->instance_fields[idx].type_name =
+                f->field_type ? xr_type_to_string(f->field_type) : NULL;
+            desc->instance_fields[idx].default_value =
+                ast_field_default_to_value(ctx, f->initializer);
+            if (f->is_private) desc->instance_fields[idx].flags |= XR_FIELD_PRIVATE;
+            if (f->is_final)   desc->instance_fields[idx].flags |= XR_FIELD_FINAL;
+            idx++;
+        }
+    }
+    /* Static fields */
+    uint32_t sfc = 0;
+    for (int i = 0; i < cd->field_count; i++)
+        if (cd->fields[i]->type == AST_FIELD_DECL
+            && cd->fields[i]->as.field_decl.is_static)
+            sfc++;
+    if (sfc > 0) {
+        desc->static_fields = (XrFieldDescriptorEntry *)xr_calloc(
+            sfc, sizeof(XrFieldDescriptorEntry));
+        if (!desc->static_fields) return false;
+        desc->static_field_count = sfc;
+        uint32_t idx = 0;
+        for (int i = 0; i < cd->field_count; i++) {
+            if (cd->fields[i]->type != AST_FIELD_DECL) continue;
+            FieldDeclNode *f = &cd->fields[i]->as.field_decl;
+            if (!f->is_static) continue;
+            desc->static_fields[idx].name = strdup(f->name);
+            desc->static_fields[idx].flags = XR_FIELD_STATIC;
+            desc->static_fields[idx].default_value = xr_null();
+            idx++;
+        }
+    }
+    return true;
+}
+
+/* Emit a child XiFunc as a sub-proto and return the proto index.
+ * Also populates upvalue descriptors on the child proto. */
+static int emit_method_proto(EmitCtx *ctx, uint16_t child_func_idx) {
+    XR_DCHECK(child_func_idx < ctx->func->nchildren, "child index out of bounds");
+    XiFunc *child = ctx->func->children[child_func_idx];
+    XrProto *child_proto = NULL;
+    XiEmitStatus cst = xi_emit(child, ctx->isolate, &child_proto);
+    if (cst != XI_EMIT_OK || !child_proto) return -1;
+    child_proto->shared_offset = ctx->proto->shared_offset;
+
+    for (uint16_t ui = 0; ui < child->ncaptures; ui++) {
+        XiCapture *cap = &child->captures[ui];
+        uint8_t uv_idx = 0;
+        if (cap->source == XI_CAPTURE_SRC_REG) {
+            XR_DCHECK(cap->value != NULL,
+                      "SRC_REG capture must have parent SSA value");
+            uv_idx = reg_of(ctx, cap->value);
+            if (ctx->status != XI_EMIT_OK) return -1;
+        } else {
+            uv_idx = cap->index;
+        }
+        xr_vm_proto_add_upvalue(child_proto, uv_idx,
+                                 0, 0, 0, cap->source, cap->type);
+    }
+    return xr_vm_proto_add_proto(ctx->proto, child_proto);
+}
+
+/* Build XrClassDescriptor from AST, emit child method protos,
+ * and generate OP_CLASS_CREATE_FROM_DESCRIPTOR. */
+static void emit_class_create(EmitCtx *ctx, XiValue *v,
+                               XiClassData *cdata, uint8_t dst) {
+    (void)v;
+    ClassDeclNode *cd = &cdata->ast->as.class_decl;
+
+    XrClassDescriptor *desc = (XrClassDescriptor *)xr_calloc(
+        1, sizeof(XrClassDescriptor));
+    if (!desc) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+
+    desc->class_name = strdup(cd->name);
+    desc->super_name = (cd->super_name && !cd->super_module)
+                       ? strdup(cd->super_name) : NULL;
+    desc->super_global_index = -1;
+    desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
+    desc->clinit_proto_index = -1;
+    if (cd->is_abstract) desc->flags |= XR_CLASS_ABSTRACT;
+    if (cd->is_final)    desc->flags |= XR_CLASS_FINAL;
+
+    if (!emit_class_collect_fields(ctx, cd, desc)) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    /* Instance methods: fill descriptor entries and emit sub-protos */
+    if (cdata->ninst > 0) {
+        desc->instance_methods = (XrMethodDescriptorEntry *)xr_calloc(
+            cdata->ninst, sizeof(XrMethodDescriptorEntry));
+        if (!desc->instance_methods) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        desc->instance_method_count = cdata->ninst;
+        uint16_t mi = 0;
+        for (int i = 0; i < cd->method_count && mi < cdata->ninst; i++) {
+            if (cd->methods[i]->type != AST_METHOD_DECL) continue;
+            MethodDeclNode *m = &cd->methods[i]->as.method_decl;
+            if (m->is_static || m->is_static_constructor) continue;
+            desc->instance_methods[mi].name = strdup(m->name);
+            desc->instance_methods[mi].param_count = m->param_count;
+            if (m->is_constructor || strcmp(m->name, "constructor") == 0
+                || strcmp(m->name, "init") == 0)
+                desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
+            if (m->is_private)  desc->instance_methods[mi].flags |= XMETHOD_FLAG_PRIVATE;
+            if (m->is_abstract) desc->instance_methods[mi].flags |= XMETHOD_FLAG_ABSTRACT;
+            if (m->is_final)    desc->instance_methods[mi].flags |= XMETHOD_FLAG_FINAL;
+            XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");
+            int pi = emit_method_proto(ctx, cdata->child_idx[mi]);
+            if (pi < 0) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            desc->instance_methods[mi].closure_index = (uint32_t)pi;
+            mi++;
+        }
+    }
+
+    /* Static methods */
+    if (cdata->nstat > 0) {
+        desc->static_methods = (XrMethodDescriptorEntry *)xr_calloc(
+            cdata->nstat, sizeof(XrMethodDescriptorEntry));
+        if (!desc->static_methods) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        desc->static_method_count = cdata->nstat;
+        uint16_t mi = 0, off = cdata->ninst;
+        for (int i = 0; i < cd->method_count && mi < cdata->nstat; i++) {
+            if (cd->methods[i]->type != AST_METHOD_DECL) continue;
+            MethodDeclNode *m = &cd->methods[i]->as.method_decl;
+            if (!m->is_static || m->is_static_constructor) continue;
+            desc->static_methods[mi].name = strdup(m->name);
+            desc->static_methods[mi].param_count = m->param_count;
+            desc->static_methods[mi].flags = XMETHOD_FLAG_STATIC;
+            XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");
+            int pi = emit_method_proto(ctx, cdata->child_idx[off + mi]);
+            if (pi < 0) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            desc->static_methods[mi].closure_index = (uint32_t)pi;
+            mi++;
+        }
+    }
+
+    /* Add descriptor to constant pool and emit bytecode */
+    XrValue desc_val = XR_FROM_PTR(desc);
+    int desc_idx = xr_vm_proto_add_constant(ctx->proto, desc_val);
+    if (desc_idx < 0 || desc_idx > MAXARG_Bx) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+        return;
+    }
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+    emit_inst(ctx, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, dst, desc_idx));
+}
+
 /* ========== Instruction Selection ========== */
 
 static void emit_value(EmitCtx *ctx, XiValue *v) {
@@ -399,7 +618,8 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
     /* Call-like ops place args at dst+1..dst+nargs.  A recycled low register
      * for dst could overlap with live source arg registers (clobber bug).
      * Force fresh allocation so dst > all previously allocated registers. */
-    bool call_like = (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_GO);
+    bool call_like = (v->op == XI_CALL || v->op == XI_CALL_METHOD
+                      || v->op == XI_GO || v->op == XI_MULTI_RET);
     uint8_t dst = call_like ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK) return;
 
@@ -449,9 +669,22 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                     emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
                     break;
                 }
-                default:
-                    emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
-                    return;
+                default: {
+                    /* Generic pointer constant (enum type, etc.) → LOADK */
+                    void *ptr = v->aux;
+                    if (ptr) {
+                        XrValue xv = XR_FROM_PTR(ptr);
+                        int ki = xr_vm_proto_add_constant(ctx->proto, xv);
+                        if (ki > MAXARG_Bx) {
+                            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+                            return;
+                        }
+                        emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
+                    } else {
+                        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+                    }
+                    break;
+                }
             }
             break;
         }
@@ -700,15 +933,28 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
 
         /* Function calls */
         case XI_CALL: {
-            /* args[0]=callee, args[1..n]=params */
+            /* args[0]=callee, args[1..n]=params
+             * aux_int bits 0-7: flags (1=self_call)
+             * aux_int bits 8-15: nresults (0 means 1) */
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
             uint8_t nargs = (uint8_t)(v->nargs - 1);
-            bool self_call = (v->aux_int == 1);
+            bool self_call = ((v->aux_int & 0xFF) == 1);
+            int nresults = (int)((v->aux_int >> 8) & 0xFF);
+            if (nresults == 0) nresults = 1;
 
-            /* Account for arg registers (dst+1..dst+nargs) in maxstacksize */
+            /* Account for arg and result registers in maxstacksize */
             {
-                uint8_t call_top = (uint8_t)(dst + nargs + 1);
+                int span = nargs + 1;
+                if (nresults > span) span = nresults;
+                uint8_t call_top = (uint8_t)(dst + span);
                 if (call_top > ctx->max_reg) ctx->max_reg = call_top;
+            }
+
+            /* Reserve result registers so the allocator won't reuse them */
+            if (nresults > 1 && ctx->next_reg < (uint8_t)(dst + nresults)) {
+                ctx->next_reg = (uint8_t)(dst + nresults);
+                if (ctx->next_reg > ctx->max_reg)
+                    ctx->max_reg = ctx->next_reg;
             }
 
             if (self_call) {
@@ -722,13 +968,14 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                         emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
                     }
                 }
-                emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs, 1));
+                emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs,
+                                          (uint8_t)nresults));
             } else {
                 /* Use dst as call base: OP_CALL writes result to the base
                  * register, so using the callee's original register would
                  * clobber the closure (breaks nested calls to the same fn).
                  * dst is always beyond all source registers, so copying
-                 * callee→dst and args→dst+1..dst+n is safe. */
+                 * callee->dst and args->dst+1..dst+n is safe. */
                 uint8_t callee = reg_of(ctx, v->args[0]);
                 if (ctx->status != XI_EMIT_OK) return;
                 if (callee != dst) {
@@ -742,7 +989,38 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                         emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
                     }
                 }
-                emit_inst(ctx, CREATE_ABC(OP_CALL, dst, nargs, 1));
+                emit_inst(ctx, CREATE_ABC(OP_CALL, dst, nargs,
+                                          (uint8_t)nresults));
+            }
+            break;
+        }
+
+        /* Extract i-th result from a multi-return call.
+         * The call wrote results to consecutive registers starting at
+         * the call's dst; result index i is at call_dst + i. */
+        case XI_EXTRACT: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t base = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int idx = (int)v->aux_int;
+            uint8_t src = (uint8_t)(base + idx);
+            if (dst != src)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+            break;
+        }
+
+        /* Multi-value return: place args in consecutive registers.
+         * The block terminator reads base=reg_of(this) + nargs to emit
+         * OP_RETURN base, nret. */
+        case XI_MULTI_RET: {
+            uint8_t top = (uint8_t)(dst + v->nargs);
+            if (top > ctx->max_reg) ctx->max_reg = top;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                uint8_t arg_reg = reg_of(ctx, v->args[a]);
+                if (ctx->status != XI_EMIT_OK) return;
+                uint8_t target = (uint8_t)(dst + a);
+                if (arg_reg != target)
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
             break;
         }
@@ -761,7 +1039,8 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
                 cap = (uint8_t)v->args[0]->aux_int;
             }
-            emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, 0));
+            uint8_t c_field = (uint8_t)(v->aux_int & 0xFF);
+            emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, c_field));
             break;
         }
 
@@ -810,18 +1089,60 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
 
         /* Coroutine */
         case XI_GO: {
+            /* OP_GO: R[A]=task result, R[B]=closure, args at R[B+1..B+C].
+             * Use dst for both A and B — VM reads base[B] before writing
+             * base[A]. dst is fresh (call_like), so args can safely be
+             * placed at dst+1..dst+nargs without clobbering live regs. */
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t nargs = (uint8_t)(v->nargs - 1);
+
+            /* Account for arg registers in maxstacksize */
+            {
+                uint8_t call_top = (uint8_t)(dst + nargs + 1);
+                if (call_top > ctx->max_reg) ctx->max_reg = call_top;
+            }
+
+            /* Move callee to dst */
             uint8_t callee = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK) return;
-            uint8_t nargs = (uint8_t)(v->nargs - 1);
-            emit_inst(ctx, CREATE_ABC(OP_GO, dst, callee, nargs));
+            if (callee != dst)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+
+            /* Move args to dst+1..dst+nargs */
+            for (uint16_t a = 1; a < v->nargs; a++) {
+                uint8_t arg_reg = reg_of(ctx, v->args[a]);
+                if (ctx->status != XI_EMIT_OK) return;
+                uint8_t target = (uint8_t)(dst + a);
+                if (arg_reg != target)
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+            }
+
+            emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, nargs));
             break;
         }
         case XI_AWAIT: {
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
             uint8_t task = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, 0));
+            /* aux_int flags: bit0=is_any, bit1=is_all, bit2=is_any_success */
+            int flags = (int)v->aux_int;
+            bool is_any  = (flags & 1) != 0;
+            bool is_all  = (flags & 2) != 0;
+            bool is_any_success = (flags & 4) != 0;
+            if (is_any_success) {
+                emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 1));
+            } else if (is_any) {
+                emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 0));
+            } else if (is_all) {
+                emit_inst(ctx, CREATE_ABx(OP_AWAIT_ALL, dst, task));
+            } else if (v->nargs >= 2) {
+                /* Has timeout argument */
+                uint8_t timeout = reg_of(ctx, v->args[1]);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_AWAIT_TIMEOUT, dst, task, timeout));
+            } else {
+                emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, 0));
+            }
             break;
         }
         case XI_YIELD:
@@ -897,6 +1218,9 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                            ? child_st : XI_EMIT_ERR_INTERNAL);
                 return;
             }
+            /* Child inherits parent's shared_offset so nested
+             * GETSHARED/SETSHARED resolves to the same region. */
+            child_proto->shared_offset = ctx->proto->shared_offset;
 
             /* Populate upvalue descriptors on child proto from captures */
             for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
@@ -976,30 +1300,50 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Method call: args[0]=receiver, args[1..n]=params, aux=method name */
+        /* Method call: args[0]=receiver, args[1..n]=params, aux=method name
+         *
+         * OP_INVOKE calling convention:
+         *   R[A]   = return value position
+         *   R[A+1] = receiver (this)
+         *   R[A+2..A+1+C] = user arguments
+         *   B = method symbol, C = user arg count (excluding this) */
         case XI_CALL_METHOD: {
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
             uint8_t recv = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK) return;
             uint8_t nargs = (uint8_t)(v->nargs - 1);
 
-            /* Place receiver and args in consecutive registers */
+            /* Account for: dst, dst+1 (recv), dst+2..dst+1+nargs */
+            {
+                uint8_t call_top = (uint8_t)(dst + nargs + 2);
+                if (call_top > ctx->max_reg) ctx->max_reg = call_top;
+            }
+
+            /* R[dst+1] = receiver */
+            if (recv != (uint8_t)(dst + 1))
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst + 1, recv, 0));
+
+            /* R[dst+2...] = user arguments */
             for (uint16_t a = 1; a < v->nargs; a++) {
                 uint8_t arg_reg = reg_of(ctx, v->args[a]);
                 if (ctx->status != XI_EMIT_OK) return;
-                uint8_t target = (uint8_t)(recv + a);
+                uint8_t target = (uint8_t)(dst + 1 + a);
                 if (arg_reg != target)
                     emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
 
-            /* Method name -> proto symbol table -> INVOKE */
             const char *method_name = (const char *)v->aux;
-            int sym = add_symbol(ctx, method_name);
-            if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_INVOKE, recv, (uint8_t)sym, nargs + 1));
-
-            if (dst != recv)
-                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, recv, 0));
+            bool is_super = (v->aux_int == 1);
+            if (is_super) {
+                /* OP_SUPERINVOKE B = constant pool index (string) */
+                int ci = add_const_string(ctx, method_name);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_SUPERINVOKE, dst, (uint8_t)ci, nargs));
+            } else {
+                int sym = add_symbol(ctx, method_name);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_INVOKE, dst, (uint8_t)sym, nargs));
+            }
             break;
         }
 
@@ -1047,13 +1391,10 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Set creation */
+        /* Set creation: B = (elem_tid << 2) | flags */
         case XI_SET_NEW: {
-            uint8_t cap = 0;
-            if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
-                cap = (uint8_t)v->args[0]->aux_int;
-            }
-            emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, cap, 0));
+            uint8_t b_field = (uint8_t)(v->aux_int & 0xFF);
+            emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
             break;
         }
 
@@ -1067,6 +1408,14 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
+        /* Structured concurrency scope enter/exit */
+        case XI_SCOPE_ENTER:
+            emit_inst(ctx, CREATE_ABC(OP_SCOPE_ENTER, (uint8_t)v->aux_int, 0, 0));
+            break;
+        case XI_SCOPE_EXIT:
+            emit_inst(ctx, CREATE_ABC(OP_SCOPE_EXIT, (uint8_t)v->aux_int, dst, 0));
+            break;
+
         /* Type check: IS A B C — R[A] = (R[B] is Type[C]) */
         case XI_IS: {
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
@@ -1077,14 +1426,86 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Type cast: treated as assertion + move */
+        /* Type cast: runtime typeof check.
+         * Unsafe (as):  type mismatch -> throw TypeError
+         * Safe   (as?): type mismatch -> load null
+         * aux=(void*)XrType*, aux_int: 0=unsafe, 1=safe */
         case XI_AS: {
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
             uint8_t src = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK) return;
-            /* For now, cast is just a move (runtime check happens via IS) */
+            bool is_safe = (v->aux_int == 1);
+            struct XrType *target = (struct XrType *)v->aux;
+
+            /* Map compile-time XrType kind to runtime XrTypeId */
+            int tid = -1;
+            if (target) {
+                switch (target->kind) {
+                    case XR_KIND_INT:    tid = XR_TID_INT;    break;
+                    case XR_KIND_FLOAT:  tid = XR_TID_FLOAT;  break;
+                    case XR_KIND_STRING: tid = XR_TID_STRING; break;
+                    case XR_KIND_BOOL:   tid = XR_TID_BOOL;   break;
+                    case XR_KIND_JSON:   tid = XR_TID_JSON;   break;
+                    case XR_KIND_ARRAY:  tid = XR_TID_ARRAY;  break;
+                    default:             tid = -1;            break;
+                }
+            }
+
+            /* Unknown target type: degenerate to a move */
+            if (tid < 0) {
+                if (dst != src)
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+                break;
+            }
+
+            /* Move source to dst first so the mismatch path can
+             * overwrite dst with null (safe) or we throw (unsafe). */
             if (dst != src)
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+
+            /* OP_TYPEOF tmp, dst, 0 */
+            uint8_t tmp = ctx->next_reg++;
+            if (tmp >= ctx->max_reg) ctx->max_reg = (uint8_t)(tmp + 1);
+            emit_inst(ctx, CREATE_ABC(OP_TYPEOF, tmp, dst, 0));
+
+            /* OP_EQK tmp, K[tid], 1
+             *   match:    (1!=1)=false -> don't skip -> execute JMP to ok
+             *   mismatch: (0!=1)=true  -> skip JMP   -> fall into error */
+            int tid_k = add_const_int(ctx, tid);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_EQK, tmp, (uint8_t)tid_k, 1));
+            int ok_jmp_pc = current_pc(ctx);
+            emit_inst(ctx, CREATE_sJ(OP_JMP, 0));  /* placeholder */
+
+            if (is_safe) {
+                /* Mismatch: load null, then jump past ok */
+                emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+                int end_jmp_pc = current_pc(ctx);
+                emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+                /* Ok target: next instruction */
+                int ok_target = current_pc(ctx);
+                XrInstruction *ok_inst = PROTO_CODE_PTR(ctx->proto, ok_jmp_pc);
+                *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
+                /* End target: same as ok target (both resolve here) */
+                XrInstruction *end_inst = PROTO_CODE_PTR(ctx->proto, end_jmp_pc);
+                *end_inst = CREATE_sJ(OP_JMP, ok_target - (end_jmp_pc + 1));
+            } else {
+                /* Mismatch: throw TypeError */
+                const char *tname = target ? xr_type_to_string(target) : "unknown";
+                char err_buf[128];
+                snprintf(err_buf, sizeof(err_buf),
+                         "Type cast failed: expected %s", tname);
+                int err_k = add_const_string(ctx, err_buf);
+                if (ctx->status != XI_EMIT_OK) return;
+                uint8_t err_reg = ctx->next_reg++;
+                if (err_reg >= ctx->max_reg) ctx->max_reg = (uint8_t)(err_reg + 1);
+                emit_inst(ctx, CREATE_ABx(OP_LOADK, err_reg, err_k));
+                emit_inst(ctx, CREATE_ABC(OP_THROW, err_reg, 0, 0));
+                /* Ok target: after the throw */
+                int ok_target = current_pc(ctx);
+                XrInstruction *ok_inst = PROTO_CODE_PTR(ctx->proto, ok_jmp_pc);
+                *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
+            }
             break;
         }
 
@@ -1113,6 +1534,93 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t)sym, 1));
             break;
         }
+
+        /* Class creation: build XrClassDescriptor from AST, emit child
+         * method protos, then OP_CLASS_CREATE_FROM_DESCRIPTOR. */
+        case XI_CLASS_CREATE: {
+            XiClassData *cdata = (XiClassData *)v->aux;
+            XR_DCHECK(cdata != NULL && cdata->ast != NULL,
+                      "XI_CLASS_CREATE: missing class data");
+            emit_class_create(ctx, v, cdata, dst);
+            break;
+        }
+
+        /* Exception handling:
+         * XI_TRY  → OP_TRY (catch PC patched after emission)
+         *           OP_NOP (finally placeholder — 0 if no finally)
+         * XI_CATCH → OP_CATCH A=dst_reg
+         * XI_FINALLY → OP_FINALLY
+         * XI_END_TRY → OP_END_TRY */
+        case XI_TRY: {
+            XiBlock *catch_blk = (XiBlock *)v->aux;
+            XR_DCHECK(catch_blk != NULL, "XI_TRY: missing catch block");
+            int try_pc = current_pc(ctx);
+            emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0));  /* patched later */
+            emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0));   /* finally placeholder */
+            add_try_patch(ctx, try_pc, catch_blk->id);
+            break;
+        }
+        case XI_CATCH:
+            emit_inst(ctx, CREATE_ABC(OP_CATCH, dst, 0, 0));
+            break;
+        case XI_FINALLY:
+            emit_inst(ctx, CREATE_ABC(OP_FINALLY, 0, 0, 0));
+            break;
+        case XI_END_TRY:
+            emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
+            break;
+
+        /* Builtin assert family:
+         * XI_ASSERT    → OP_ASSERT  A=cond, B=loc_const, C=invert_flag
+         * XI_ASSERT_EQ → OP_ASSERT_EQ A=actual, B=expected, C=loc_const
+         * XI_ASSERT_NE → OP_ASSERT_NE A=actual, B=unexpected, C=loc_const */
+        case XI_ASSERT: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t cond = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int loc_k = add_const_string(ctx, (const char *)v->aux);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_ASSERT, cond, (uint8_t)loc_k,
+                                       (uint8_t)v->aux_int));
+            break;
+        }
+        case XI_ASSERT_EQ: {
+            if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t actual = reg_of(ctx, v->args[0]);
+            uint8_t expected = reg_of(ctx, v->args[1]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int loc_k = add_const_string(ctx, (const char *)v->aux);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_ASSERT_EQ, actual, expected,
+                                       (uint8_t)loc_k));
+            break;
+        }
+        case XI_ASSERT_NE: {
+            if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t actual = reg_of(ctx, v->args[0]);
+            uint8_t unexpected = reg_of(ctx, v->args[1]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int loc_k = add_const_string(ctx, (const char *)v->aux);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_ASSERT_NE, actual, unexpected,
+                                       (uint8_t)loc_k));
+            break;
+        }
+
+        /* typeof(x) → OP_TYPEOF; typename(x) → OP_TYPENAME (aux_int=1) */
+        case XI_TYPEOF: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t src = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            uint8_t tyop = v->aux_int == 1 ? OP_TYPENAME : OP_TYPEOF;
+            emit_inst(ctx, CREATE_ABC(tyop, dst, src, 0));
+            break;
+        }
+
+        /* Runtime global variable lookup → OP_GETBUILTIN A=dst, Bx=global_index */
+        case XI_GET_BUILTIN:
+            emit_inst(ctx, CREATE_ABx(OP_GETBUILTIN, dst, (int)v->aux_int));
+            break;
 
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
@@ -1169,7 +1677,13 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     /* Emit terminator */
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
-            if (blk->control) {
+            if (blk->control && blk->control->op == XI_MULTI_RET) {
+                /* Multi-value return: values in consecutive regs */
+                uint8_t base = reg_of(ctx, blk->control);
+                if (ctx->status != XI_EMIT_OK) return;
+                uint8_t nret = (uint8_t)blk->control->nargs;
+                emit_inst(ctx, CREATE_ABC(OP_RETURN, base, nret, 0));
+            } else if (blk->control) {
                 uint8_t r = reg_of(ctx, blk->control);
                 if (ctx->status != XI_EMIT_OK) return;
                 emit_inst(ctx, CREATE_ABC(OP_RETURN1, r, 0, 0));
@@ -1301,6 +1815,17 @@ static void patch_jumps(EmitCtx *ctx) {
         XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
         *inst = CREATE_sJ(OP_JMP, offset);
     }
+
+    /* Patch OP_TRY instructions: Bx = absolute catch PC */
+    for (uint32_t i = 0; i < ctx->ntry_patch; i++) {
+        int pc = ctx->try_patches[i].pc;
+        uint32_t bid = ctx->try_patches[i].target_bid;
+        XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad block id");
+        int target_pc = ctx->block_pc[bid];
+        if (target_pc < 0) target_pc = pc + 1;
+        XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
+        *inst = CREATE_ABx(OP_TRY, 0, target_pc);
+    }
 }
 
 /* ========== Public API ========== */
@@ -1314,6 +1839,28 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     /* Run prerequisite analyses */
     uint32_t rpo_count = xi_compute_rpo(f);
     if (rpo_count == 0) return XI_EMIT_ERR_INTERNAL;
+
+    /* Exception handler blocks are unreachable via normal CFG edges.
+     * Scan for XI_TRY ops and assign RPO numbers to their catch targets
+     * so they get emitted after the try body. */
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (v->op == XI_TRY && v->aux) {
+                XiBlock *catch_blk = (XiBlock *)v->aux;
+                if (catch_blk->rpo == 0) {
+                    catch_blk->rpo = ++rpo_count;
+                    /* Walk catch block successors too (catch body merges) */
+                    for (int s = 0; s < 2; s++) {
+                        XiBlock *succ = catch_blk->succs[s];
+                        if (succ && succ->rpo == 0)
+                            succ->rpo = ++rpo_count;
+                    }
+                }
+            }
+        }
+    }
 
     /* Build RPO order array */
     XiBlock **rpo_order = (XiBlock **)xr_calloc(rpo_count + 1,
@@ -1333,6 +1880,16 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     ctx.isolate = isolate;
     ctx.proto = xr_vm_proto_new();
     if (!ctx.proto) { xr_free(rpo_order); return XI_EMIT_ERR_INTERNAL; }
+
+    /* Allocate shared variable slots in the isolate's shared_array
+     * BEFORE emitting blocks, so child protos can inherit the offset. */
+    if (isolate && f->nshared > 0) {
+        ctx.proto->shared_offset = isolate->vm.shared.count;
+        int total = isolate->vm.shared.count + f->nshared;
+        isolate->vm.shared.count = total;
+        xr_shared_array_ensure(&isolate->vm.shared, total - 1);
+    }
+
     ctx.rpo_order = rpo_order;
     ctx.rpo_count = rpo_count;
 
@@ -1391,15 +1948,21 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
 
     /* Finalize proto metadata */
     ctx.proto->maxstacksize = ctx.max_reg;
-    /* Count params from entry block scan or f->nparams */
-    uint16_t param_count = 0;
-    if (f->entry) {
+    /* Use f->nparams if set by lowerer; otherwise count XI_PARAM ops.
+     * Vararg-only functions (e.g. fn(...nums)) have nparams=0 legitimately,
+     * so only fall back to counting when nparams==0 and NOT vararg. */
+    if (f->nparams > 0 || f->is_vararg) {
+        ctx.proto->numparams = f->nparams;
+    } else if (f->entry) {
+        uint16_t pc = 0;
         for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-            if (f->entry->values[i]->op == XI_PARAM)
-                param_count++;
+            if (f->entry->values[i]->op == XI_PARAM) pc++;
         }
+        ctx.proto->numparams = pc;
     }
-    ctx.proto->numparams = param_count;
+    ctx.proto->is_vararg = f->is_vararg;
+    ctx.proto->entry_type = f->entry_type;
+    ctx.proto->min_params = f->min_params;
 
 cleanup:;
     XiEmitStatus result = ctx.status;
@@ -1412,6 +1975,7 @@ cleanup:;
     xr_free(ctx.reg_map);
     xr_free(ctx.block_pc);
     xr_free(ctx.patches);
+    xr_free(ctx.try_patches);
     xr_free(rpo_order);
     return result;
 }

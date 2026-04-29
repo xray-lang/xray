@@ -684,6 +684,15 @@ const char *xa_builtin_get_type_name(XrType *type) {
 }
 
 // Parse a type string (e.g., "int", "string?", "Array<int>") to XrType
+static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len);
+
+// Public wrapper with NUL-terminated string.
+XrType *xa_builtin_parse_type_string(XrayIsolate *X, const char *s) {
+    if (!s)
+        return xr_type_new_unknown(NULL);
+    return parse_type_str(X, s, strlen(s));
+}
+
 static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_type_new_unknown(NULL);

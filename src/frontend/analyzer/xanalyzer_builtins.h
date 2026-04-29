@@ -117,6 +117,9 @@ XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_nam
 // Set script directory for .xrd file search
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);
 
+// Parse a type string (e.g., "float", "int?", "Array<string>") into XrType
+XR_FUNC XrType *xa_builtin_parse_type_string(XrayIsolate *X, const char *s);
+
 // Parse return type from signature string (e.g., "(x: int): string" -> string type)
 XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char *sig);
 

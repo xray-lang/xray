@@ -60,6 +60,7 @@ static const char *xi_op_name(uint16_t op) {
         case XI_CALL:        return "CALL";
         case XI_CALL_METHOD: return "CALL_METHOD";
         case XI_CALL_BUILTIN:return "CALL_BUILTIN";
+        case XI_EXTRACT:     return "EXTRACT";
         case XI_CLOSURE_NEW: return "CLOSURE_NEW";
         case XI_LOAD_UPVAL:  return "LOAD_UPVAL";
         case XI_STORE_UPVAL: return "STORE_UPVAL";
@@ -83,9 +84,22 @@ static const char *xi_op_name(uint16_t op) {
         case XI_AS:          return "AS";
         case XI_SLICE:       return "SLICE";
         case XI_RANGE:       return "RANGE";
+        case XI_MULTI_RET:   return "MULTI_RET";
         case XI_ISNULL:      return "ISNULL";
         case XI_PHI:         return "PHI";
         case XI_COPY:        return "COPY";
+        case XI_CLASS_CREATE:return "CLASS_CREATE";
+        case XI_SCOPE_ENTER: return "SCOPE_ENTER";
+        case XI_SCOPE_EXIT:  return "SCOPE_EXIT";
+        case XI_TRY:         return "TRY";
+        case XI_CATCH:       return "CATCH";
+        case XI_FINALLY:     return "FINALLY";
+        case XI_END_TRY:     return "END_TRY";
+        case XI_ASSERT:      return "ASSERT";
+        case XI_ASSERT_EQ:   return "ASSERT_EQ";
+        case XI_ASSERT_NE:   return "ASSERT_NE";
+        case XI_TYPEOF:      return "TYPEOF";
+        case XI_GET_BUILTIN: return "GET_BUILTIN";
         default:             return "???";
     }
 }

@@ -1,7 +1,7 @@
 /*
  * 0836_field_default_init.xr - 测试类字段默认值初始化
  * 作者：xingleixu@gmail.com
- * 
+ *
  * 验证类字段可以使用复杂表达式初始化：
  * - 简单字面量（null, bool, int, float, string）
  * - 复合类型（Array, Map）
@@ -14,7 +14,7 @@ class Simple {
     b = 3.14
     c = "hello"
     d = true
-    
+
     constructor() {
         // 字段已自动初始化
     }
@@ -31,26 +31,26 @@ print("Simple.d = ${s.d}")       // expect: true
 class Complex {
     _map = #{}
     _arr: Array<int> = []
-    _config = {"debug" => false, "port" => 8080}
-    
+    _config: Map<string, int> = {"debug" => 0, "port" => 8080}
+
     constructor() {
         // 字段已自动初始化
     }
-    
+
     addItem(key: string, value: int): void {
         this._map[key] = value
         this._arr.push(value)
     }
-    
+
     getMapSize(): int {
         return this._map.keys().length
     }
-    
+
     getArrSize(): int {
         return this._arr.length
     }
-    
-    getPort(): string {
+
+    getPort(): int {
         return this._config["port"]
     }
 }
@@ -71,16 +71,16 @@ print("添加后 arr size: ${c.getArrSize()}")  // expect: 2
 class Override {
     _name = "default"
     _count = 0
-    
+
     constructor(name, count) {
         this._name = name
         this._count = count
     }
-    
-    getName(): int {
+
+    getName(): string {
         return this._name
     }
-    
+
     getCount(): int {
         return this._count
     }
@@ -94,13 +94,13 @@ print("Override 覆盖 count: ${o2.getCount()}") // expect: 42
 /* 测试4：多实例独立性 */
 class Counter {
     _items: Array<string> = []
-    
+
     constructor() {}
-    
+
     add(item: string): void {
         this._items.push(item)
     }
-    
+
     count(): int {
         return this._items.length
     }

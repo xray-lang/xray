@@ -222,14 +222,14 @@ fn test_method_cross_tail(): void {
             this.steps = 0
         }
 
-        toggleOn(n: int): int {
+        toggleOn(n: int): bool {
             if (n <= 0) { return this.state }
             this.state = true
             this.steps = this.steps + 1
             return this.toggleOff(n - 1)
         }
 
-        toggleOff(n: int): int {
+        toggleOff(n: int): bool {
             if (n <= 0) { return this.state }
             this.state = false
             this.steps = this.steps + 1

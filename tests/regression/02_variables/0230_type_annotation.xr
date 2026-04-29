@@ -90,7 +90,7 @@ fn test_class_field_annotation(): void {
 @test
 fn test_nullable_type(): void {
     let x: int = 10
-    let y = null
+    let y: int? = null
     if (y == null) {
         y = x
     }

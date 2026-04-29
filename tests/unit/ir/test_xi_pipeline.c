@@ -309,13 +309,18 @@ TEST(e2e_const_prop_chain) {
 /* ========== Dead Code Elimination ========== */
 
 TEST(e2e_dce_unused_var) {
-    /* let x = 42; let y = 99; print(x)
-     * y is unused → should be eliminated */
+    /* Top-level vars are stored via SETSHARED (side effect) so DCE keeps
+     * them.  Test inside a function where locals are register-only.
+     *   fn f(): int { let x = 42; let y = 99; return x }
+     * y is unused → LOADI 99 should be eliminated from the child proto. */
     XrProto *p = compile_source(
-        "let x = 42\nlet y = 99\nprint(x)", NULL);
+        "fn f(): int { let x = 42\nlet y = 99\nreturn x }\nprint(f())", NULL);
     assert(p != NULL);
-    /* Only one LOADI needed (for x=42); y=99 should be dead */
-    int loads = count_opcode(p, OP_LOADI) + count_opcode(p, OP_LOADK);
+    /* Child proto (f) should have only one LOADI (for x=42); y=99 is dead */
+    int nch = DYNARRAY_COUNT(&p->protos);
+    assert(nch >= 1 && "need at least one child proto for f()");
+    XrProto *child = DYNARRAY_GET(&p->protos, 0, XrProto *);
+    int loads = count_opcode(child, OP_LOADI) + count_opcode(child, OP_LOADK);
     assert(loads <= 1 && "unused y should be eliminated by DCE");
     xr_vm_proto_free(p);
 }
@@ -470,7 +475,10 @@ TEST(e2e_string_concat) {
         "let a = \"hello\"\nlet b = \" world\"\n"
         "let c = a + b\nprint(c)", NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_ADD) && "string concat uses ADD");
+    /* Xi pipeline uses STRBUF optimization for typed string concat,
+     * or falls back to ADD when types are unknown. Accept either. */
+    assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_STRBUF_FINISH))
+           && "string concat uses ADD or STRBUF");
     xr_vm_proto_free(p);
 }
 

@@ -7,12 +7,12 @@
 
 class Animal {
     name: string
-    
+
     constructor(name) {
         this.name = name
     }
-    
-    speak(): void {        return this.name + " makes a sound"
+
+    speak(): string {        return this.name + " makes a sound"
     }
 }
 
@@ -20,8 +20,8 @@ class Dog extends Animal {
     constructor(name) {
         super(name)
     }
-    
-    speak(): void {        return this.name + " barks"
+
+    speak(): string {        return this.name + " barks"
     }
 }
 
@@ -38,8 +38,8 @@ class Cat extends Animal {
     constructor(name) {
         super(name)
     }
-    
-    speak(): void {        return this.name + " meows"
+
+    speak(): string {        return this.name + " meows"
     }
 }
 
@@ -53,37 +53,37 @@ fn test_method_override(): void {
 
 class Vehicle {
     brand: string
-    
+
     constructor(brand) {
         this.brand = brand
     }
-    
-    info(): void {        return this.brand
+
+    info(): string {        return this.brand
     }
 
     drive(): string {        return "test"
     }
 
-    
+
 
 }
 
 class Car extends Vehicle {
     model: string
-    
+
     constructor(brand, model) {
         super(brand)
         this.model = model
     }
-    
-    info(): void {        return this.brand + " " + this.model
+
+    info(): string {        return this.brand + " " + this.model
     }
 }
 
 @test
 fn test_multi_field_inheritance(): void {
     let car = new Car("Toyota", "Camry")
-    
+
     assert_eq(car.brand, "Toyota")
     assert_eq(car.model, "Camry")
     assert_eq(car.info(), "Toyota Camry")
@@ -95,7 +95,7 @@ fn test_multi_field_inheritance(): void {
 fn test_polymorphism(): void {
     let animal = new Animal("Generic")
     let dog = new Dog("Rex")
-    
+
     assert_eq(animal.speak(), "Generic makes a sound")
     assert_eq(dog.speak(), "Rex barks")
 }
@@ -104,24 +104,24 @@ fn test_polymorphism(): void {
 
 class Base {
     value: int
-    
+
     constructor(v) {
         this.value = v
     }
-    
-    getValue(): void {        return this.value
+
+    getValue(): int {        return this.value
     }
 }
 
 class Derived extends Base {
     extra: int
-    
+
     constructor(v, e) {
         super(v)
         this.extra = e
     }
-    
-    getSum(): void {        return this.value + this.extra
+
+    getSum(): int {        return this.value + this.extra
     }
 }
 
@@ -139,24 +139,24 @@ fn test_inherited_field_access(): void {
 class Person {
     name: string
     age: int
-    
+
     constructor(name: string, age: int) {
         this.name = name
         this.age = age
     }
-    
+
     info(): string {        return "${this.name}, ${this.age}"
     }
 }
 
 class Student extends Person {
     grade: int
-    
+
     constructor(name: string, age: int, grade: int) {
         super(name, age)
         this.grade = grade
     }
-    
+
     info(): string {        // super.method() 未实现，使用组合方式
         return "${this.name}, ${this.age}, grade ${this.grade}"
     }
@@ -184,11 +184,11 @@ class Bird extends Animal {
     constructor(name) {
         super(name)
     }
-    
+
     speak(): string {        return "Bird: " + this.name + " chirps"
     }
-    
-    parentSpeak(): void {        return super.speak()
+
+    parentSpeak(): string {        return super.speak()
     }
 }
 

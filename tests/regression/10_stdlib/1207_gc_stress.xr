@@ -209,7 +209,7 @@ fn test_instance_field_gc(): void {
     class Node {
         value: int
         label: string
-        children: Array<int>
+        children: Array<Node>
 
         constructor(v: int, l: string) {
             this.value = v

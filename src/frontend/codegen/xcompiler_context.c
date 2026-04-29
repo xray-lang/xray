@@ -82,6 +82,8 @@ XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
     ctx->const_entry_count = 0;
     ctx->const_entry_capacity = 0;
 
+    ctx->use_xi_pipeline = true;  /* Xi IR is default; falls back to legacy on failure */
+
     // Create unified type analyzer
     ctx->analyzer = xa_analyzer_new(ctx->X);
 

@@ -241,7 +241,7 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
     return XR_CFUNC_YIELD;
 }
 
-// Stackful yield API removed — fully stackless now
+// Native-stackful yield API was removed; suspension uses VM frames and continuations.
 
 // ========== Coroutine Helper Functions ==========
 

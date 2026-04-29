@@ -453,8 +453,12 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Return type mismatch: expected '%s', got '%s'",
+                         xr_type_to_string(ctx->expected_return_type),
+                         xr_type_to_string(return_type));
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, "Return type mismatch",
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
                                            &loc);
             }
         }
