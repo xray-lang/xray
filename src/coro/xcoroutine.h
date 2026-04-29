@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   - XrCoroutine: unified coroutine object (VM execution unit + user-visible task)
- *   - Per-coroutine execution context, stack, and frames
+ *   - Per-coroutine VM execution context, value stack, and bytecode frames
  *   - 3-level priority scheduling (LOW/NORMAL/HIGH)
  *   - Reduction-based fair scheduling
  *
@@ -295,7 +295,7 @@ typedef struct XrCoroutine {
     int id;                          //  4 bytes: coroutine ID
     int8_t schedule_count;           //  1 byte: schedule counter (max XR_RESCHEDULE_LOW=8)
     _Atomic(uint8_t) coro_state;  //  1 byte: authoritative state (R4: replaces state bits in flags)
-    uint16_t gc_flags;            //  2 bytes: GC flags (bit 0: slab stack)
+    uint16_t gc_flags;            //  2 bytes: GC flags (bit 0: VM stack slab)
     // --- 64 bytes boundary ---
 
     /* === Work Stealing Freshness (set on enqueue, read on steal peek) === */
@@ -466,9 +466,9 @@ XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, struct XrayIsolate *X, XrClos
 // Caller then calls xr_main_thread_run() which handles flag reset.
 XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
 
-// xr_coro_create_stackful removed — use xr_coro_create_cfunc instead
+// Native-stackful coroutine creation was removed; use xr_coro_create_cfunc instead.
 
-/* ========== Stack Growth ========== */
+/* ========== VM Stack Growth ========== */
 
 // Grow coroutine VM stack and/or frame array.
 // Pure stack management — no GC interaction.

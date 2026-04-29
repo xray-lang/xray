@@ -161,7 +161,7 @@ void xr_worker_destroy(XrWorker *worker) {
                                 : NULL;
     xr_coro_gc_flush_pool(gc_heap, &worker->p.gc_free_list, &worker->p.gc_free_count);
 
-    // Free Per-Worker stack slab free list
+    // Free Per-Worker VM stack slab free list
     while (worker->p.stack_slab_free) {
         void *block = worker->p.stack_slab_free;
         worker->p.stack_slab_free = *(void **) block;

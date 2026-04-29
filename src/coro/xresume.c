@@ -74,11 +74,11 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
                                 frame->u.c.result_slot, frame->base_offset,
                                 coro->vm_ctx.frame_count - 1);
 
-                    // Critical fix: if this is coroutine's last frame (frame_count=1),
-                    // store result in stack[0], as run_on_worker gets return value from there
+                    // If this is the coroutine's last frame (frame_count=1),
+                    // store result in VM stack[0]; run_on_worker reads it from there.
                     if (coro->vm_ctx.frame_count == 1 && coro->vm_ctx.stack != NULL) {
                         coro->vm_ctx.stack[0] = cfunc_result;
-                        XR_DBG_CORO("unroll: coroutine last frame, sync stack[0] tag=%u",
+                        XR_DBG_CORO("unroll: coroutine last frame, sync VM stack[0] tag=%u",
                                     cfunc_result.tag);
                     }
 

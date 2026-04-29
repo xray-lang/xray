@@ -558,9 +558,9 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 
 // ========== Worker Coroutine Execution ==========
 //
-// Executes directly on the coroutine's own stack — no copying.
-//   - Coroutine has an independent stack allocated at creation.
-//   - Worker uses ctx but points at the coroutine's stack.
+// Executes directly on the coroutine's own VM value stack — no state copying.
+//   - Each coroutine owns an independent XrVMContext stack and frame array.
+//   - No native stack switching is performed.
 //   - Eliminates state-copy race conditions across stealing.
 //
 // xr_coro_run_on_worker delegates execution to per-mode helpers,
@@ -644,7 +644,7 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
 
 // ========== run_first_exec: Frame Setup + JIT Entry + Interpreter ==========
 //
-// Builds the coroutine's first bytecode frame (stack/frame/args), then tries
+// Builds the coroutine's first bytecode frame (VM stack/frame/args), then tries
 // the JIT entry fast path (if proto has compiled code and hasn't deopted)
 // before falling back to the interpreter.
 //

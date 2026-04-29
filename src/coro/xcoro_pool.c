@@ -23,7 +23,7 @@
 
 // ========== Internal Functions ==========
 
-// Create new pool block with embedded stack+frames slab
+// Create new pool block with embedded VM stack and bytecode frame slab
 static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
     XR_DCHECK(capacity > 0, "coro_pool_block_create: zero capacity");
     XrCoroPoolBlock *block = xr_malloc(sizeof(XrCoroPoolBlock));
@@ -36,7 +36,7 @@ static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
         return NULL;
     }
 
-    // Allocate slab for embedded stack+frames (one entry per coroutine)
+    // Allocate slab for embedded VM stack and bytecode frames (one entry per coroutine)
     size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
     size_t frames_bytes = sizeof(XrBcCallFrame) * XR_CORO_POOL_FRAME_SLOTS;
     block->slab_entry_size = stack_bytes + frames_bytes;
