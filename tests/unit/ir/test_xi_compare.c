@@ -1589,7 +1589,7 @@ TEST(cmp_for_in_map) {
         .label = "for-in map with key-value",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* for-in map k-v binding needs value var fix */
+        .check_exec = true,
     });
 }
 

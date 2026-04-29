@@ -2366,8 +2366,127 @@ static void lower_for_in_loop(XiLower *l, AstNode *node,
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
 }
 
+/* Iterator-based for-in for map key-value: for (k, v in map) { ... }
+ *
+ * Desugars to:
+ *   __iter = map.entriesIterator()
+ *   while (__iter.hasNext()) {
+ *       __entry = __iter.next()      // returns [key, value] array
+ *       k = __entry[0]
+ *       v = __entry[1]
+ *       <body>
+ *   }
+ */
+static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+    uint32_t line = (uint32_t)node->line;
+
+    XiValue *coll = lower_expr(l, s->collection);
+    if (!coll || !l->cur_block) return;
+
+    /* __iter = coll.entriesIterator() */
+    XiValue *iter = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                 l->type_any, 1);
+    if (!iter) return;
+    iter->args[0] = coll;
+    iter->aux = (void *)"entriesIterator";
+    iter->flags |= XI_FLAG_SIDE_EFFECT;
+    iter->line = line;
+
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__kv_iter_%d", sid);
+    char *iter_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(iter_name != NULL, "arena alloc failed");
+    memcpy(iter_name, buf, strlen(buf) + 1);
+    int iter_var = var_lookup_or_create(l, iter_name, l->type_any);
+    braun_write(l, iter_var, l->cur_block, iter);
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    /* cond: if __iter.hasNext() -> body else -> exit */
+    l->cur_block = cond_blk;
+    XiValue *iter_cond = braun_read(l, iter_var, l->cur_block);
+    XiValue *has_next = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                     l->type_bool, 1);
+    if (!has_next) return;
+    has_next->args[0] = iter_cond;
+    has_next->aux = (void *)"hasNext";
+    has_next->flags |= XI_FLAG_SIDE_EFFECT;
+    has_next->line = line;
+    xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
+
+    braun_seal_block(l, body_blk);
+
+    /* body: __entry = __iter.next(); k = __entry[0]; v = __entry[1] */
+    XiBlock *prev_break = l->break_target;
+    XiBlock *prev_cont = l->continue_target;
+    l->break_target = exit_blk;
+    l->continue_target = cond_blk;
+
+    l->cur_block = body_blk;
+    XiValue *iter_body = braun_read(l, iter_var, l->cur_block);
+    XiValue *entry = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                  l->type_any, 1);
+    if (!entry) return;
+    entry->args[0] = iter_body;
+    entry->aux = (void *)"next";
+    entry->flags |= XI_FLAG_SIDE_EFFECT;
+    entry->line = line;
+
+    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+
+    /* key = __entry[0] */
+    XiValue *idx0 = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    XiValue *key_val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET,
+                                    item_type, 2);
+    if (key_val) {
+        key_val->args[0] = entry;
+        key_val->args[1] = idx0;
+        key_val->line = line;
+    }
+    int key_var = var_lookup_or_create(l, s->item_name, item_type);
+    if (key_val) braun_write(l, key_var, l->cur_block, key_val);
+
+    /* value = __entry[1] */
+    if (s->value_name) {
+        XiValue *idx1 = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        XiValue *val_val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET,
+                                        l->type_any, 2);
+        if (val_val) {
+            val_val->args[0] = entry;
+            val_val->args[1] = idx1;
+            val_val->line = line;
+        }
+        int val_var = var_lookup_or_create(l, s->value_name, l->type_any);
+        if (val_val) braun_write(l, val_var, l->cur_block, val_val);
+    }
+
+    lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    braun_seal_block(l, cond_blk);
+
+    l->break_target = prev_break;
+    l->continue_target = prev_cont;
+
+    braun_seal_block(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 static void lower_for_in(XiLower *l, AstNode *node) {
     ForInStmtNode *s = &node->as.for_in_stmt;
+
+    /* Key-value iteration: for (k, v in map) uses iterator protocol */
+    if (s->is_keyvalue) {
+        lower_for_in_keyvalue(l, node);
+        return;
+    }
 
     /* Range literal: for (i in start..end)
      * Desugar to: for (__idx = start; __idx < end; __idx++) { i = __idx }
