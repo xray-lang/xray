@@ -411,9 +411,10 @@ static XrType *parse_type_annotation_base(Parser *parser) {
         strncpy(temp_name, name_token.start, name_len);
         temp_name[name_len] = '\0';
 
-        // JsonValue — built-in union type for Json field values
+        // JsonValue has been removed — use Json instead
         if (strcmp(temp_name, "JsonValue") == 0) {
-            return xr_type_new_json_value(parser->X);
+            xr_parser_error(parser, "Type 'JsonValue' has been removed. Use 'Json' instead.");
+            return xr_type_new_json(parser->X);
         }
 
         // Built-in instance types — must create XR_KIND_INSTANCE (not XR_KIND_CLASS)

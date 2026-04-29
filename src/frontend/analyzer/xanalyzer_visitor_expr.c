@@ -361,13 +361,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     }
 
     // Handle Json object field access.
-    // Json is the explicit dynamic data boundary: field values may vary at runtime,
-    // including null, so the result type is always nullable.
+    // Json represents any JSON value (including null), so field access returns Json.
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count == 0) {
         // Bare Json type (e.g. function parameter) — no static field info,
-        // return nullable Json since any field access is valid at runtime.
-        return xr_type_make_nullable(ctx->analyzer->isolate,
-                                      xr_type_new_json(ctx->analyzer->isolate));
+        // return Json since any field access is valid at runtime.
+        return xr_type_new_json(ctx->analyzer->isolate);
     }
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {
@@ -423,8 +421,8 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
-        // No schema or unknown key → result is JsonValue (null|bool|int|float|string|Json)
-        return xr_type_new_json_value(ctx->analyzer->isolate);
+        // No schema or unknown key → result is Json (any JSON value including null)
+        return xr_type_new_json(ctx->analyzer->isolate);
     }
 
     return xr_type_new_unknown(NULL);

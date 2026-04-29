@@ -502,18 +502,12 @@ XR_FUNC XrType *xr_type_union_member(XrType *type, int index);
 XR_FUNC bool xr_type_union_contains(XrType *type, XrTypeKind kind);
 XR_FUNC XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind);
 
-// API: JsonValue — built-in union (null|bool|int|float|string|Json)
-// Represents a value extracted from a Json object with unknown field type.
-XR_FUNC XrType *xr_type_new_json_value(XrayIsolate *X);
-XR_FUNC bool xr_type_is_json_value(XrType *type);
-
 // Check if source type allows Json coercion to target (compile-time pass, runtime check).
-// Returns true when source is Json or JsonValue and target is a JsonValue-compatible type.
+// Returns true when source is Json and target is a Json-compatible type.
 static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     if (!target || !source)
         return false;
-    bool src_dynamic = (source->kind == XR_KIND_JSON) || xr_type_is_json_value(source);
-    if (!src_dynamic)
+    if (source->kind != XR_KIND_JSON)
         return false;
     // Single type: primitive, Json, or Array
     if (xr_kind_is_primitive(target->kind))
@@ -522,7 +516,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
         return true;
     if (target->kind == XR_KIND_ARRAY)
         return true;
-    // Union of JsonValue-compatible types
+    // Union of Json-compatible types
     if (target->kind == XR_KIND_UNION) {
         for (int i = 0; i < target->union_type.member_count; i++) {
             XrType *m = target->union_type.members[i];
