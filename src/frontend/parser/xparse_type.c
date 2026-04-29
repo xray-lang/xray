@@ -73,7 +73,14 @@ XrType *xr_parse_type_annotation(Parser *parser) {
     // xr_type_to_slot_type returns XR_SLOT_ANY because raw storage cannot
     // distinguish null from a valid integer/float value.
     if (xr_parser_match(parser, TK_QUESTION)) {
-        base = xr_type_new_optional(parser->X, base);
+        // Json already includes null — Json? is redundant and forbidden
+        if (base && base->kind == XR_KIND_JSON) {
+            xr_parser_error(parser,
+                            "'Json?' is not allowed — Json already includes null as a valid value. "
+                            "Use 'Json' instead.");
+        } else {
+            base = xr_type_new_optional(parser->X, base);
+        }
     }
 
     // Union type: Type | Type | ...
