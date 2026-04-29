@@ -61,6 +61,23 @@ static int var_find(XiLower *l, const char *name) {
 /* Forward declaration (defined below after braun_read_local) */
 static XiValue *braun_read(XiLower *l, int var_id, XiBlock *blk);
 
+/* ========== Shared Variable Lookup ========== */
+
+/* Walk the parent chain to find a program-level shared variable.
+ * Returns the shared index (>=0) if found, or -1 if not.
+ * Sets *out_type to the variable type when found. */
+static int find_shared_var(XiLower *l, const char *name, struct XrType **out_type) {
+    for (XiLower *p = l->parent; p; p = p->parent) {
+        if (!p->is_program) continue;
+        int var_id = var_find(p, name);
+        if (var_id >= 0 && p->shared_map[var_id] >= 0) {
+            if (out_type) *out_type = p->vars[var_id].type;
+            return p->shared_map[var_id];
+        }
+    }
+    return -1;
+}
+
 /* ========== Upvalue Resolution ========== */
 
 /*
@@ -72,10 +89,17 @@ static XiValue *braun_read(XiLower *l, int var_id, XiBlock *blk);
  *   1. Check parent's local variables → capture as SRC_REG.
  *   2. Recursively resolve in grandparent → capture as SRC_UPVAL.
  *   3. Each intermediate level records its own capture entry.
+ *
+ * For program-level shared variables, the caller uses find_shared_var()
+ * to emit XI_GET_SHARED directly (no upvalue capture needed).
  */
 static int resolve_upvalue(XiLower *l, const char *name, struct XrType **out_type) {
     XiLower *parent = l->parent;
     if (!parent) return -1;
+
+    /* Program-level shared variables are handled via XI_GET_SHARED
+     * in lower_variable/lower_assignment, not via upvalue capture. */
+    if (parent->is_program) return -1;
 
     /* Check if the variable exists as a local in the immediate parent */
     int var_id = var_find(parent, name);
@@ -440,6 +464,17 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         return braun_read(l, var_id, l->cur_block);
     }
 
+    /* Check for program-level shared variable (supports forward references) */
+    struct XrType *shared_type = NULL;
+    int shared_idx = find_shared_var(l, name, &shared_type);
+    if (shared_idx >= 0) {
+        if (!shared_type) shared_type = l->type_any;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                                   shared_type, 0);
+        if (v) v->aux_int = shared_idx;
+        return v;
+    }
+
     /* Not found locally — try upvalue capture from enclosing scope */
     struct XrType *upval_type = NULL;
     int upval_idx = resolve_upvalue(l, name, &upval_type);
@@ -463,6 +498,30 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     int var_id = var_find(l, name);
     if (var_id >= 0) {
         braun_write(l, var_id, l->cur_block, val);
+
+        /* If this is a program-level shared variable, also update shared array */
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            XiValue *store = xi_value_new(l->func, l->cur_block,
+                                           XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = val;
+                store->aux_int = l->shared_map[var_id];
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+        return val;
+    }
+
+    /* Check for program-level shared variable from nested scope */
+    int shared_idx = find_shared_var(l, name, NULL);
+    if (shared_idx >= 0) {
+        XiValue *store = xi_value_new(l->func, l->cur_block,
+                                       XI_SET_SHARED, l->type_void, 1);
+        if (store) {
+            store->args[0] = val;
+            store->aux_int = shared_idx;
+            store->flags |= XI_FLAG_SIDE_EFFECT;
+        }
         return val;
     }
 
@@ -830,6 +889,18 @@ static XiValue *lower_function_decl(XiLower *l, AstNode *node) {
     if (fdecl->name) {
         int var_id = var_lookup_or_create(l, fdecl->name, fn_type);
         braun_write(l, var_id, l->cur_block, v);
+
+        /* For program-level named functions, also store into shared array
+         * so nested functions can access via XI_GET_SHARED (forward refs). */
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            XiValue *store = xi_value_new(l->func, l->cur_block,
+                                           XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = v;
+                store->aux_int = l->shared_map[var_id];
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
     }
 
     return v;
@@ -1835,13 +1906,24 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
 
     int var_id = var_lookup_or_create(l, name, type);
 
+    XiValue *init_val;
     if (node->as.var_decl.initializer) {
-        XiValue *init = lower_expr(l, node->as.var_decl.initializer);
-        if (init) braun_write(l, var_id, l->cur_block, init);
+        init_val = lower_expr(l, node->as.var_decl.initializer);
+        if (!init_val) return;
     } else {
-        /* Uninitialized: default to null */
-        XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
-        braun_write(l, var_id, l->cur_block, null_val);
+        init_val = xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    braun_write(l, var_id, l->cur_block, init_val);
+
+    /* For program-level shared variables, also store into shared array */
+    if (l->is_program && l->shared_map[var_id] >= 0) {
+        XiValue *store = xi_value_new(l->func, l->cur_block,
+                                       XI_SET_SHARED, l->type_void, 1);
+        if (store) {
+            store->args[0] = init_val;
+            store->aux_int = l->shared_map[var_id];
+            store->flags |= XI_FLAG_SIDE_EFFECT;
+        }
     }
 }
 
@@ -2457,6 +2539,9 @@ static void lower_init(XiLower *l, struct XaAnalyzer *analyzer,
     l->var_defs = (XiValue **) xr_calloc(def_map_size, sizeof(XiValue *));
     XR_CHECK(l->var_defs != NULL, "xi_lower: failed to allocate var_defs");
 
+    /* Initialize shared_map to -1 (no shared index) */
+    memset(l->shared_map, -1, sizeof(l->shared_map));
+
     /* Cache singleton types */
     l->type_int = xr_type_new_int(isolate);
     l->type_float = xr_type_new_float(isolate);
@@ -2560,6 +2645,46 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
     return lower_func_impl(func_node, analyzer, isolate, NULL);
 }
 
+/*
+ * Pre-scan top-level statements to assign shared variable indices.
+ * Every named declaration (function, variable, const) at program level
+ * gets a shared slot so inner functions can reference them via
+ * GETSHARED — including forward references to not-yet-lowered functions.
+ */
+static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
+    XR_DCHECK(l->is_program, "prescan_shared_vars: not a program context");
+    uint16_t next_shared = 0;
+    for (int i = 0; i < count; i++) {
+        AstNode *s = stmts[i];
+        if (!s) continue;
+        const char *name = NULL;
+        struct XrType *type = l->type_any;
+
+        switch (s->type) {
+            case AST_FUNCTION_DECL:
+                name = s->as.function_decl.name;
+                type = node_type(l, s);
+                break;
+            case AST_VAR_DECL:
+            case AST_CONST_DECL:
+                name = s->as.var_decl.name;
+                type = node_type(l, s);
+                break;
+            default:
+                break;
+        }
+        if (!name) continue;
+
+        /* Create the Braun SSA variable entry (no definition yet) */
+        int var_id = var_lookup_or_create(l, name, type);
+        XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
+                  "prescan_shared_vars: var_id overflow");
+        l->shared_map[var_id] = (int16_t)next_shared;
+        next_shared++;
+    }
+    l->func->nshared = next_shared;
+}
+
 XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
                           struct XrayIsolate *isolate) {
     XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
@@ -2567,6 +2692,7 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
 
     XiLower l;
     lower_init(&l, analyzer, isolate);
+    l.is_program = true;
 
     l.func = xi_func_new("<main>", l.type_void);
     if (!l.func) { lower_cleanup(&l); return NULL; }
@@ -2578,15 +2704,20 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
     entry->sealed = true;
     l.cur_block = entry;
 
-    /* Lower all top-level statements */
+    /* Pre-scan: assign shared indices to all top-level declarations */
+    AstNode **stmts;
+    int count;
     if (program_node->type == AST_BLOCK) {
-        lower_stmts(&l, program_node->as.block.statements,
-                     program_node->as.block.count);
+        stmts = program_node->as.block.statements;
+        count = program_node->as.block.count;
     } else {
-        /* ProgramNode */
-        lower_stmts(&l, program_node->as.program.statements,
-                     program_node->as.program.count);
+        stmts = program_node->as.program.statements;
+        count = program_node->as.program.count;
     }
+    prescan_shared_vars(&l, stmts, count);
+
+    /* Lower all top-level statements */
+    lower_stmts(&l, stmts, count);
 
     if (l.cur_block) {
         xi_block_set_return(l.cur_block, NULL);

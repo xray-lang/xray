@@ -913,6 +913,21 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
+        /* Shared (module-level) variable access */
+        case XI_GET_SHARED: {
+            int shared_idx = (int)v->aux_int;
+            emit_inst(ctx, CREATE_ABx(OP_GETSHARED, dst, shared_idx));
+            break;
+        }
+        case XI_SET_SHARED: {
+            if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t val = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            int shared_idx = (int)v->aux_int;
+            emit_inst(ctx, CREATE_ABx(OP_SETSHARED, val, shared_idx));
+            break;
+        }
+
         /* Method call: args[0]=receiver, args[1..n]=params, aux=method name */
         case XI_CALL_METHOD: {
             if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
