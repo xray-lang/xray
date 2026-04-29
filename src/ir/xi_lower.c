@@ -101,6 +101,15 @@ static int resolve_upvalue(XiLower *l, const char *name, struct XrType **out_typ
      * in lower_variable/lower_assignment, not via upvalue capture. */
     if (parent->is_program) return -1;
 
+    /* Dedup: if this variable is already captured, return existing index */
+    for (uint16_t ci = 0; ci < l->func->ncaptures; ci++) {
+        if (l->func->captures[ci].name &&
+            strcmp(l->func->captures[ci].name, name) == 0) {
+            if (out_type) *out_type = l->func->captures[ci].type;
+            return (int)ci;
+        }
+    }
+
     /* Check if the variable exists as a local in the immediate parent */
     int var_id = var_find(parent, name);
     if (var_id >= 0) {
@@ -528,6 +537,13 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     /* Try upvalue store for captured mutable variable */
     int upval_idx = resolve_upvalue(l, name, NULL);
     if (upval_idx >= 0) {
+        /* Mark the capture as needing cell indirection because the child
+         * mutates the captured variable.  The emit stage uses this to
+         * emit CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */
+        XR_DCHECK(upval_idx < (int)l->func->ncaptures,
+                  "upval_idx out of range for needs_cell");
+        l->func->captures[upval_idx].needs_cell = true;
+
         XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
                                        l->type_void, 1);
         if (store) {
@@ -544,34 +560,105 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     return val;
 }
 
+/* Map compound assignment operator token to Xi binary op */
+static uint16_t compound_op_to_xi(int tok) {
+    switch (tok) {
+        case TK_PLUS_ASSIGN:  return XI_ADD;
+        case TK_MINUS_ASSIGN: return XI_SUB;
+        case TK_MUL_ASSIGN:   return XI_MUL;
+        case TK_DIV_ASSIGN:   return XI_DIV;
+        case TK_MOD_ASSIGN:   return XI_MOD;
+        default:              return XI_ADD;
+    }
+}
+
 static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
     const char *name = node->as.compound_assignment.name;
-    int var_id = var_find(l, name);
-    if (var_id < 0)
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-
-    XiValue *cur = braun_read(l, var_id, l->cur_block);
     XiValue *rhs = lower_expr(l, node->as.compound_assignment.value);
-    if (!cur || !rhs) return NULL;
+    if (!rhs) return NULL;
 
-    /* Map compound op token to Xi binary op */
-    uint16_t op;
-    switch (node->as.compound_assignment.op) {
-        case TK_PLUS_ASSIGN:  op = XI_ADD; break;
-        case TK_MINUS_ASSIGN: op = XI_SUB; break;
-        case TK_MUL_ASSIGN:   op = XI_MUL; break;
-        case TK_DIV_ASSIGN:   op = XI_DIV; break;
-        case TK_MOD_ASSIGN:   op = XI_MOD; break;
-        default: op = XI_ADD; break;
+    uint16_t op = compound_op_to_xi(node->as.compound_assignment.op);
+    struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
+
+    /* Local variable */
+    int var_id = var_find(l, name);
+    if (var_id >= 0) {
+        XiValue *cur = braun_read(l, var_id, l->cur_block);
+        if (!cur) return NULL;
+        if (!result_type)
+            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
+        if (result) {
+            braun_write(l, var_id, l->cur_block, result);
+
+            /* If program-level shared variable, also update shared array */
+            if (l->is_program && l->shared_map[var_id] >= 0) {
+                XiValue *store = xi_value_new(l->func, l->cur_block,
+                                               XI_SET_SHARED, l->type_void, 1);
+                if (store) {
+                    store->args[0] = result;
+                    store->aux_int = l->shared_map[var_id];
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            }
+        }
+        return result;
     }
 
-    struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
-    if (!result_type)
-        result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
-    XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
-    if (result)
-        braun_write(l, var_id, l->cur_block, result);
-    return result;
+    /* Program-level shared variable from nested scope */
+    int shared_idx = find_shared_var(l, name, NULL);
+    if (shared_idx >= 0) {
+        /* Read current value from shared array */
+        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                                     result_type ? result_type : l->type_any, 0);
+        if (!cur) return NULL;
+        cur->aux_int = shared_idx;
+
+        if (!result_type)
+            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
+        if (result) {
+            XiValue *store = xi_value_new(l->func, l->cur_block,
+                                           XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = result;
+                store->aux_int = shared_idx;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+        return result;
+    }
+
+    /* Upvalue: read via LOAD_UPVAL, compute, write via STORE_UPVAL */
+    struct XrType *upval_type = NULL;
+    int upval_idx = resolve_upvalue(l, name, &upval_type);
+    if (upval_idx >= 0) {
+        if (!upval_type) upval_type = l->type_any;
+        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                                     upval_type, 0);
+        if (!cur) return NULL;
+        cur->aux_int = upval_idx;
+
+        if (!result_type)
+            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
+        if (result) {
+            XR_DCHECK(upval_idx < (int)l->func->ncaptures,
+                      "upval_idx out of range for needs_cell");
+            l->func->captures[upval_idx].needs_cell = true;
+
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
+                                           l->type_void, 1);
+            if (store) {
+                store->args[0] = result;
+                store->aux_int = upval_idx;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+        return result;
+    }
+
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {

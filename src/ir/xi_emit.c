@@ -893,6 +893,19 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                                          0, 0, 0, cap->source, cap->type);
             }
 
+            /* For captures that need cell indirection (mutable captures),
+             * wrap the parent register value in a heap cell before the
+             * closure instruction reads it.  OP_CELL_NEW replaces the
+             * register content with a cell pointer in-place. */
+            for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
+                XiCapture *cap = &child_func->captures[ci];
+                if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
+                    uint8_t reg = reg_of(ctx, cap->value);
+                    if (ctx->status != XI_EMIT_OK) return;
+                    emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
+                }
+            }
+
             int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
             emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
             break;
@@ -902,6 +915,13 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
         case XI_LOAD_UPVAL: {
             int upval_idx = (int)v->aux_int;
             emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, dst, (uint8_t)upval_idx, 0));
+
+            /* If this capture uses cell indirection, dereference the cell
+             * to get the actual value.  The upvalue holds a cell pointer. */
+            if (upval_idx < (int)ctx->func->ncaptures &&
+                ctx->func->captures[upval_idx].needs_cell) {
+                emit_inst(ctx, CREATE_ABC(OP_CELL_GET, dst, dst, 0));
+            }
             break;
         }
         case XI_STORE_UPVAL: {
@@ -909,7 +929,14 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             uint8_t val = reg_of(ctx, v->args[0]);
             if (ctx->status != XI_EMIT_OK) return;
             int upval_idx = (int)v->aux_int;
-            emit_inst(ctx, CREATE_ABC(OP_CELL_SET, (uint8_t)upval_idx, val, 0));
+
+            /* Get cell reference from upvalue, then store value into cell.
+             * OP_UPVAL_GET(tmp, idx) loads the cell pointer;
+             * OP_CELL_SET(tmp, val) writes the new value into it. */
+            uint8_t cell_reg = dst;  /* reuse dst as temporary */
+            emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, cell_reg,
+                                       (uint8_t)upval_idx, 0));
+            emit_inst(ctx, CREATE_ABC(OP_CELL_SET, cell_reg, val, 0));
             break;
         }
 
