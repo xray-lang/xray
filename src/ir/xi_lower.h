@@ -106,6 +106,16 @@ typedef struct XiLower {
      * a self-call (OP_CALLSELF) instead of a regular call. */
     XiValue *self_value;
 
+    /* Parent lowering context for upvalue capture resolution.
+     * NULL for top-level program or standalone functions.
+     * When a variable is not found locally, walk up the parent chain;
+     * each traversed level records a capture entry on its XiFunc. */
+    struct XiLower *parent;
+
+    /* Monotonic counter for generating unique synthetic variable names
+     * (e.g. __for_idx_0, __for_idx_1) to avoid collisions in nested loops. */
+    int synthetic_id;
+
     /* Error tracking */
     bool had_error;
 } XiLower;

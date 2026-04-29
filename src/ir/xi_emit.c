@@ -862,7 +862,9 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
         }
 
         /* Closure creation: recursively emit child XiFunc, register sub-proto,
-         * then emit OP_CLOSURE(A, Bx=proto_index). */
+         * then emit OP_CLOSURE(A, Bx=proto_index).  If the child has
+         * captures, populate upvalue descriptors on the child proto using
+         * the parent's (current) register map to resolve SRC_REG indices. */
         case XI_CLOSURE_NEW: {
             XiFunc *child_func = (XiFunc *)v->aux;
             XR_DCHECK(child_func != NULL, "closure child func must not be NULL");
@@ -874,6 +876,23 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                            ? child_st : XI_EMIT_ERR_INTERNAL);
                 return;
             }
+
+            /* Populate upvalue descriptors on child proto from captures */
+            for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
+                XiCapture *cap = &child_func->captures[ci];
+                uint8_t uv_index = 0;
+                if (cap->source == XI_CAPTURE_SRC_REG) {
+                    XR_DCHECK(cap->value != NULL,
+                              "SRC_REG capture must have parent SSA value");
+                    uv_index = reg_of(ctx, cap->value);
+                    if (ctx->status != XI_EMIT_OK) return;
+                } else {
+                    uv_index = cap->index;
+                }
+                xr_vm_proto_add_upvalue(child_proto, uv_index,
+                                         0, 0, 0, cap->source, cap->type);
+            }
+
             int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
             emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
             break;
