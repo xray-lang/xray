@@ -63,6 +63,8 @@ static const char *xi_op_name(uint16_t op) {
         case XI_CLOSURE_NEW: return "CLOSURE_NEW";
         case XI_LOAD_UPVAL:  return "LOAD_UPVAL";
         case XI_STORE_UPVAL: return "STORE_UPVAL";
+        case XI_GET_SHARED:  return "GET_SHARED";
+        case XI_SET_SHARED:  return "SET_SHARED";
         case XI_PRINT:       return "PRINT";
         case XI_GO:          return "GO";
         case XI_AWAIT:       return "AWAIT";
@@ -165,7 +167,8 @@ static void dump_value(FILE *out, const XiValue *v) {
     if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
         fprintf(out, " .%s", (const char *) v->aux);
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN ||
-               v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
+               v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
+               v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
     }
 

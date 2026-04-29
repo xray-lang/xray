@@ -116,6 +116,14 @@ typedef struct XiLower {
      * (e.g. __for_idx_0, __for_idx_1) to avoid collisions in nested loops. */
     int synthetic_id;
 
+    /* Shared variable map: var_id → shared_index.
+     * -1 means the variable is not shared.  Only used in top-level program
+     * lowering to support forward references and cross-closure access. */
+    int16_t shared_map[XI_LOWER_MAX_VARS];
+
+    /* Whether this lowering context is for a top-level program */
+    bool is_program;
+
     /* Error tracking */
     bool had_error;
 } XiLower;

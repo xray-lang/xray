@@ -108,6 +108,10 @@ typedef enum {
     XI_LOAD_UPVAL,  /* load upvalue: aux_int=upval_index */
     XI_STORE_UPVAL, /* store upvalue: aux_int=upval_index, args[0]=val */
 
+    /* Shared (module-level) variables */
+    XI_GET_SHARED,  /* load from shared array: aux_int=shared_index */
+    XI_SET_SHARED,  /* store to shared array: aux_int=shared_index, args[0]=val */
+
     /* Print (builtin, kept as dedicated op for convenience) */
     XI_PRINT,       /* print: args[0..n]=values, aux_int=flags */
 
@@ -313,6 +317,12 @@ typedef struct XiFunc {
     /* Upvalue captures (populated during lowering for closures) */
     XiCapture captures[XI_MAX_CAPTURES];
     uint16_t ncaptures;
+
+    /* Shared (module-level) variable count.  Top-level program functions
+     * use shared_array for variables that must be visible across closures
+     * and support forward references.  The proto's shared_offset is set
+     * at emit time; shared indices are 0-based local to this func. */
+    uint16_t nshared;
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */

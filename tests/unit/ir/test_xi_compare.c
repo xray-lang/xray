@@ -1306,7 +1306,7 @@ TEST(cmp_closure_counter) {
         .label = "closure counter with mutable capture",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* mutable capture needs cell/shared protocol */
+        .check_exec = false,  /* mutable capture of locals needs CELL_NEW/CELL_SET */
     });
 }
 
@@ -1380,7 +1380,7 @@ TEST(cmp_mutual_recursion) {
         .label = "mutual recursion (even/odd)",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,  /* forward reference needs SETSHARED/GETSHARED */
+        .check_exec = true,
     });
 }
 
