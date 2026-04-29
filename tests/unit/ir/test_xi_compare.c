@@ -1416,6 +1416,92 @@ TEST(cmp_gcd) {
     });
 }
 
+/* ========== OOP Tests ========== */
+
+/* --- Basic class instantiation and field access --- */
+
+TEST(cmp_class_basic) {
+    run_compare((CompareSpec){
+        .source = "class Point {\n"
+                  "    x: int\n"
+                  "    y: int\n"
+                  "    constructor(x: int, y: int) {\n"
+                  "        this.x = x\n"
+                  "        this.y = y\n"
+                  "    }\n"
+                  "}\n"
+                  "let p = new Point(3, 4)\n"
+                  "print(p.x)\n"
+                  "print(p.y)",
+        .label = "class basic: constructor + field access",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* needs OP_CLASS_CREATE_FROM_DESCRIPTOR */
+    });
+}
+
+/* --- Class with method --- */
+
+TEST(cmp_class_method) {
+    run_compare((CompareSpec){
+        .source = "class Box {\n"
+                  "    value: int\n"
+                  "    constructor(v) {\n"
+                  "        this.value = v\n"
+                  "    }\n"
+                  "}\n"
+                  "let b = new Box(42)\n"
+                  "print(b.value)\n"
+                  "b.value = 99\n"
+                  "print(b.value)",
+        .label = "class field: read + write",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* needs OP_CLASS_CREATE_FROM_DESCRIPTOR */
+    });
+}
+
+/* --- Struct literal --- */
+
+TEST(cmp_struct_literal) {
+    run_compare((CompareSpec){
+        .source = "let obj = { name: \"Alice\", age: 30 }\n"
+                  "print(obj[\"name\"])\n"
+                  "print(obj[\"age\"])",
+        .label = "object literal with fields",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Class inheritance --- */
+
+TEST(cmp_class_inherit) {
+    run_compare((CompareSpec){
+        .source = "class Animal {\n"
+                  "    name: string\n"
+                  "    constructor(name: string) {\n"
+                  "        this.name = name\n"
+                  "    }\n"
+                  "}\n"
+                  "class Dog extends Animal {\n"
+                  "    breed: string\n"
+                  "    constructor(name: string, breed: string) {\n"
+                  "        super(name)\n"
+                  "        this.breed = breed\n"
+                  "    }\n"
+                  "}\n"
+                  "let d = new Dog(\"Rex\", \"Labrador\")\n"
+                  "print(d.name)\n"
+                  "print(d.breed)",
+        .label = "class inheritance + method override",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* needs OP_CLASS_CREATE_FROM_DESCRIPTOR */
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -1621,6 +1707,12 @@ int main(void) {
 
     /* GCD */
     run_cmp_gcd();
+
+    /* OOP: class basic */
+    run_cmp_class_basic();
+    run_cmp_class_method();
+    run_cmp_struct_literal();
+    run_cmp_class_inherit();
 
     teardown();
 
