@@ -71,8 +71,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                                                  "Variable initializer", &loc);
             // Check assignment compatibility
             if (!null_err && !xa_typecheck_assignable(links->declared_type, init_type)) {
-                // Json/JsonValue→concrete type: allowed at compile time, runtime check inserted by
-                // codegen. e.g. let x: int = json["key"] is legal but requires runtime validation.
+                // Json→concrete type: allowed at compile time, runtime check inserted by
+                // codegen. e.g. let x: int = data["key"] is legal but requires runtime validation.
                 if (!xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'",
@@ -221,8 +221,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         bool null_err =
             xa_check_null_safety(ctx->analyzer, var_type, value_type, "Assignment", &loc);
         if (!null_err && !xa_typecheck_assignable(var_type, value_type)) {
-            // Json/JsonValue→concrete type: allowed at compile time, runtime check inserted by
-            // codegen.
+            // Json→concrete type: allowed at compile time, runtime check inserted by codegen.
             if (!xr_is_json_coercion(var_type, value_type)) {
                 char msg[256];
                 snprintf(msg, sizeof(msg), "Type '%s' is not assignable to '%s' (type '%s')",
@@ -448,7 +447,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
     // Check against expected return type (strict: void and concrete types enforced)
     if (ctx->expected_return_type && !XR_TYPE_IS_UNKNOWN(ctx->expected_return_type)) {
         if (!xa_typecheck_assignable(ctx->expected_return_type, return_type)) {
-            // Json/JsonValue→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
+            // Json→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
             if (!xr_is_json_coercion(ctx->expected_return_type, return_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};

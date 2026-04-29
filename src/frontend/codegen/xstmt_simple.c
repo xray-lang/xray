@@ -236,8 +236,7 @@ void compile_assignment(XrCompilerContext *ctx, XrCompiler *compiler, Assignment
                         check_source = base;
                 }
                 if (check_source && !xa_typecheck_assignable(target_type, check_source)) {
-                    // Json/JsonValue→primitive/union: allowed with runtime type check
-                    // (OP_CHECKTYPE)
+                    // Json→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
                     if (!xr_is_json_coercion(target_type, check_source)) {
                         if (XR_TYPE_IS_INT(target_type) && XR_TYPE_IS_FLOAT(check_source)) {
                             xr_compiler_error(ctx, compiler,

@@ -471,8 +471,7 @@ void compile_var_decl(XrCompilerContext *ctx, XrCompiler *compiler, VarDeclNode 
                         check_init = base;
                 }
                 if (check_init && !xa_typecheck_assignable(inferred_compile_type, check_init)) {
-                    // Json/JsonValue→primitive/union: allowed with runtime type check
-                    // (OP_CHECKTYPE)
+                    // Json→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
                     if (!xr_is_json_coercion(inferred_compile_type, check_init)) {
                         xr_compiler_error(ctx, compiler,
                                           "Cannot initialize %s variable '%s' with %s value",
