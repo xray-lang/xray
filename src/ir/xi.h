@@ -172,6 +172,22 @@ typedef enum {
 #define XI_FLAG_MAY_GC      (1 << 2) /* may trigger GC */
 #define XI_FLAG_SAFEPOINT   (1 << 3) /* GC safepoint */
 
+/* ========== Upvalue Capture Info ========== */
+
+/* Source kinds matching the VM's UpvalInfo.source constants */
+#define XI_CAPTURE_SRC_REG   2  /* from enclosing frame's register */
+#define XI_CAPTURE_SRC_UPVAL 1  /* from enclosing closure's upvals[] */
+
+#define XI_MAX_CAPTURES 64
+
+typedef struct XiCapture {
+    uint8_t source;        /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
+    uint8_t index;         /* SRC_UPVAL: parent upvalue index */
+    const char *name;      /* variable name (debug; not owned) */
+    struct XrType *type;   /* variable type */
+    struct XiValue *value; /* SRC_REG: parent SSA value (register resolved at emit) */
+} XiCapture;
+
 /* ========== Core Structures ========== */
 
 /*
@@ -293,6 +309,10 @@ typedef struct XiFunc {
     struct XiFunc **children;
     uint16_t nchildren;
     uint16_t children_cap;
+
+    /* Upvalue captures (populated during lowering for closures) */
+    XiCapture captures[XI_MAX_CAPTURES];
+    uint16_t ncaptures;
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */

@@ -1008,9 +1008,9 @@ TEST(cmp_closure_capture) {
                   "let add5 = make_adder(5)\n"
                   "print(add5(3))",
         .label = "closure capturing outer variable",
-        .expect_xi_success = false,
+        .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false,
+        .check_exec = true,
     });
 }
 
@@ -1139,6 +1139,135 @@ TEST(cmp_optional_chain) {
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = false,  /* nullable runtime behavior may differ */
+    });
+}
+
+/* --- Method Calls on Builtins --- */
+
+TEST(cmp_array_push) {
+    run_compare((CompareSpec){
+        .source = "let arr = [10, 20]\n"
+                  "arr.push(30)\n"
+                  "print(arr.length)\nprint(arr[2])",
+        .label = "array push and length",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_string_method) {
+    run_compare((CompareSpec){
+        .source = "let s = \"hello\"\n"
+                  "print(s.length)\n"
+                  "print(s.toUpperCase())",
+        .label = "string length and toUpperCase",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Higher-Order Functions --- */
+
+TEST(cmp_higher_order) {
+    run_compare((CompareSpec){
+        .source = "fn makeAdder(x: int): fn(int): int {\n"
+                  "    return fn(y: int): int { return x + y }\n"
+                  "}\n"
+                  "let add5 = makeAdder(5)\n"
+                  "print(add5(3))\n"
+                  "print(add5(10))",
+        .label = "higher-order function (closure factory)",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Nested For-In --- */
+
+TEST(cmp_nested_for_in) {
+    run_compare((CompareSpec){
+        .source = "let total = 0\n"
+                  "let matrix = [[1, 2], [3, 4]]\n"
+                  "for (row in matrix) {\n"
+                  "    for (val in row) {\n"
+                  "        total += val\n"
+                  "    }\n"
+                  "}\n"
+                  "print(total)",
+        .label = "nested for-in over 2D array",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- For-In with String --- */
+
+TEST(cmp_for_in_string) {
+    run_compare((CompareSpec){
+        .source = "let count = 0\n"
+                  "for (c in \"hello\") {\n"
+                  "    count += 1\n"
+                  "}\n"
+                  "print(count)",
+        .label = "for-in over string characters",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Array Map/Filter-like Patterns --- */
+
+TEST(cmp_array_sum_func) {
+    run_compare((CompareSpec){
+        .source = "fn sum(arr: Array<int>): int {\n"
+                  "    let total = 0\n"
+                  "    for (x in arr) {\n"
+                  "        total += x\n"
+                  "    }\n"
+                  "    return total\n"
+                  "}\n"
+                  "print(sum([1, 2, 3, 4, 5]))",
+        .label = "function taking array param with for-in",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Multiple Closures --- */
+
+TEST(cmp_multi_closure) {
+    run_compare((CompareSpec){
+        .source = "let x = 10\n"
+                  "let add = fn(a: int): int { return a + x }\n"
+                  "let mul = fn(a: int): int { return a * x }\n"
+                  "print(add(5))\n"
+                  "print(mul(3))",
+        .label = "multiple closures capturing same variable",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* --- Fibonacci (complex recursion) --- */
+
+TEST(cmp_fibonacci) {
+    run_compare((CompareSpec){
+        .source = "fn fib(n: int): int {\n"
+                  "    if (n <= 1) { return n }\n"
+                  "    return fib(n - 1) + fib(n - 2)\n"
+                  "}\n"
+                  "print(fib(10))",
+        .label = "fibonacci recursive function",
+        .expect_xi_success = true,
+        .min_similarity = 0.2,
+        .check_exec = true,
     });
 }
 
@@ -1301,6 +1430,28 @@ int main(void) {
 
     /* Optional chaining */
     run_cmp_optional_chain();
+
+    /* Method calls on builtins */
+    run_cmp_array_push();
+    run_cmp_string_method();
+
+    /* Higher-order functions */
+    run_cmp_higher_order();
+
+    /* Nested for-in */
+    run_cmp_nested_for_in();
+
+    /* For-in with string */
+    run_cmp_for_in_string();
+
+    /* Array sum function */
+    run_cmp_array_sum_func();
+
+    /* Multiple closures */
+    run_cmp_multi_closure();
+
+    /* Fibonacci */
+    run_cmp_fibonacci();
 
     teardown();
 

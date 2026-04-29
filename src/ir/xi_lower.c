@@ -58,6 +58,59 @@ static int var_find(XiLower *l, const char *name) {
     return -1;
 }
 
+/* Forward declaration (defined below after braun_read_local) */
+static XiValue *braun_read(XiLower *l, int var_id, XiBlock *blk);
+
+/* ========== Upvalue Resolution ========== */
+
+/*
+ * Resolve a variable from an enclosing scope, recording captures at each
+ * level.  Returns the local upvalue index in the immediate child, or -1
+ * if the variable is not found in any ancestor.
+ *
+ * Algorithm (same as Lua/xray flat-upvalue scheme):
+ *   1. Check parent's local variables → capture as SRC_REG.
+ *   2. Recursively resolve in grandparent → capture as SRC_UPVAL.
+ *   3. Each intermediate level records its own capture entry.
+ */
+static int resolve_upvalue(XiLower *l, const char *name, struct XrType **out_type) {
+    XiLower *parent = l->parent;
+    if (!parent) return -1;
+
+    /* Check if the variable exists as a local in the immediate parent */
+    int var_id = var_find(parent, name);
+    if (var_id >= 0) {
+        /* Read the current SSA value from the parent's scope.  The value's
+         * register will be resolved at emit time via reg_of(). */
+        XiValue *parent_val = braun_read(parent, var_id, parent->cur_block);
+        if (l->func->ncaptures >= XI_MAX_CAPTURES) return -1;
+        int idx = l->func->ncaptures;
+        l->func->captures[idx].source = XI_CAPTURE_SRC_REG;
+        l->func->captures[idx].index = 0;
+        l->func->captures[idx].name = name;
+        l->func->captures[idx].type = parent->vars[var_id].type;
+        l->func->captures[idx].value = parent_val;
+        l->func->ncaptures++;
+        if (out_type) *out_type = parent->vars[var_id].type;
+        return idx;
+    }
+
+    /* Not a local in parent — try grandparent (transitive capture) */
+    int parent_upval = resolve_upvalue(parent, name, out_type);
+    if (parent_upval >= 0) {
+        if (l->func->ncaptures >= XI_MAX_CAPTURES) return -1;
+        int idx = l->func->ncaptures;
+        l->func->captures[idx].source = XI_CAPTURE_SRC_UPVAL;
+        l->func->captures[idx].index = (uint8_t)parent_upval;
+        l->func->captures[idx].name = name;
+        l->func->captures[idx].type = out_type ? *out_type : l->type_any;
+        l->func->ncaptures++;
+        return idx;
+    }
+
+    return -1;
+}
+
 /* Write: currentDef[var][block] = value */
 static void braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue *val) {
     XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
@@ -383,12 +436,23 @@ static XiValue *lower_unary(XiLower *l, AstNode *node) {
 static XiValue *lower_variable(XiLower *l, AstNode *node) {
     const char *name = node->as.variable.name;
     int var_id = var_find(l, name);
-    if (var_id < 0) {
-        /* Undeclared variable — semantic error caught earlier.
-         * Return null constant as fallback. */
-        return xi_const_null(l->func, l->cur_block, l->type_null);
+    if (var_id >= 0) {
+        return braun_read(l, var_id, l->cur_block);
     }
-    return braun_read(l, var_id, l->cur_block);
+
+    /* Not found locally — try upvalue capture from enclosing scope */
+    struct XrType *upval_type = NULL;
+    int upval_idx = resolve_upvalue(l, name, &upval_type);
+    if (upval_idx >= 0) {
+        if (!upval_type) upval_type = l->type_any;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                                   upval_type, 0);
+        if (v) v->aux_int = upval_idx;
+        return v;
+    }
+
+    /* Undeclared variable — semantic error caught earlier */
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static XiValue *lower_assignment(XiLower *l, AstNode *node) {
@@ -397,11 +461,26 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     if (!val) return NULL;
 
     int var_id = var_find(l, name);
-    if (var_id < 0) {
-        /* Create implicitly (shouldn't happen after semantic analysis) */
-        var_id = var_lookup_or_create(l, name, val->type);
+    if (var_id >= 0) {
+        braun_write(l, var_id, l->cur_block, val);
+        return val;
     }
 
+    /* Try upvalue store for captured mutable variable */
+    int upval_idx = resolve_upvalue(l, name, NULL);
+    if (upval_idx >= 0) {
+        XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
+                                       l->type_void, 1);
+        if (store) {
+            store->args[0] = val;
+            store->aux_int = upval_idx;
+            store->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+        return val;
+    }
+
+    /* Create implicitly (shouldn't happen after semantic analysis) */
+    var_id = var_lookup_or_create(l, name, val->type);
     braun_write(l, var_id, l->cur_block, val);
     return val;
 }
@@ -716,19 +795,32 @@ static void func_add_child(XiFunc *parent, XiFunc *child) {
  * Recursively lowers the function body into a child XiFunc,
  * then emits XI_CLOSURE_NEW in the parent to produce a callable value.
  */
+/* Internal: lower a function with optional parent context for upvalue capture */
+static XiFunc *lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
+                                struct XrayIsolate *isolate, XiLower *parent);
+
 static XiValue *lower_function_decl(XiLower *l, AstNode *node) {
-    /* Recursively lower the function body into a child XiFunc */
-    XiFunc *child = xi_lower_func(node, l->analyzer, l->isolate);
+    /* Recursively lower the function body into a child XiFunc,
+     * passing 'l' as parent so the child can resolve upvalue captures. */
+    XiFunc *child = lower_func_impl(node, l->analyzer, l->isolate, l);
     if (!child) return xi_const_null(l->func, l->cur_block, l->type_null);
 
     /* Register as child of parent function */
     func_add_child(l->func, child);
     uint16_t child_idx = (uint16_t)(l->func->nchildren - 1);
 
-    /* Emit CLOSURE_NEW with aux pointing to child func */
+    /* Emit CLOSURE_NEW with captured values as args.  Listing them as
+     * args ensures liveness analysis keeps their registers alive until
+     * the closure instruction executes (prevents premature recycling). */
     struct XrType *fn_type = node_type(l, node);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type, 0);
+    uint16_t ncap = child->ncaptures;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CLOSURE_NEW, fn_type, ncap);
     if (!v) return NULL;
+    for (uint16_t ci = 0; ci < ncap; ci++) {
+        XiCapture *cap = &child->captures[ci];
+        v->args[ci] = (cap->source == XI_CAPTURE_SRC_REG && cap->value)
+                       ? cap->value : NULL;
+    }
     v->aux = (void *) child;
     v->aux_int = child_idx;
     v->line = (uint32_t) node->line;
@@ -1989,14 +2081,33 @@ static void lower_for_in_loop(XiLower *l, AstNode *node,
     ForInStmtNode *s = &node->as.for_in_stmt;
     struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
 
-    int idx_var = var_lookup_or_create(l, "__for_idx", l->type_int);
-    int lim_var = var_lookup_or_create(l, "__for_lim", l->type_int);
+    /* Unique synthetic names per loop to avoid collisions in nested for-in.
+     * Allocate from function arena so pointers remain valid until XiFunc free. */
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__for_idx_%d", sid);
+    char *idx_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(idx_name != NULL, "arena alloc failed for idx_name");
+    memcpy(idx_name, buf, strlen(buf) + 1);
+
+    snprintf(buf, sizeof(buf), "__for_lim_%d", sid);
+    char *lim_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(lim_name != NULL, "arena alloc failed for lim_name");
+    memcpy(lim_name, buf, strlen(buf) + 1);
+
+    snprintf(buf, sizeof(buf), "__for_col_%d", sid);
+    char *col_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(col_name != NULL, "arena alloc failed for col_name");
+    memcpy(col_name, buf, strlen(buf) + 1);
+
+    int idx_var = var_lookup_or_create(l, idx_name, l->type_int);
+    int lim_var = var_lookup_or_create(l, lim_name, l->type_int);
     braun_write(l, idx_var, l->cur_block, init_val);
     braun_write(l, lim_var, l->cur_block, limit);
 
     int col_var = -1;
     if (get_item_coll) {
-        col_var = var_lookup_or_create(l, "__for_col", l->type_any);
+        col_var = var_lookup_or_create(l, col_name, l->type_any);
         braun_write(l, col_var, l->cur_block, get_item_coll);
     }
 
@@ -2363,20 +2474,21 @@ static void lower_cleanup(XiLower *l) {
     }
 }
 
-/* ========== Public API ========== */
+/* ========== Function Lowering Implementation ========== */
 
-XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
-                       struct XrayIsolate *isolate) {
-    XR_CHECK(func_node != NULL, "xi_lower_func: func_node is NULL");
-    XR_CHECK(analyzer != NULL, "xi_lower_func: analyzer is NULL");
-    XR_CHECK(func_node->type == AST_FUNCTION_DECL ||
-             func_node->type == AST_FUNCTION_EXPR,
-             "xi_lower_func: not a function node");
-
+/*
+ * Internal function lowering with optional parent context.
+ * When parent is non-NULL, the child can resolve variable references
+ * from enclosing scopes via the upvalue capture mechanism.
+ */
+static XiFunc *lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
+                                struct XrayIsolate *isolate, XiLower *parent_ctx) {
+    XR_DCHECK(func_node != NULL, "lower_func_impl: func_node is NULL");
     FunctionDeclNode *fdecl = &func_node->as.function_decl;
 
     XiLower l;
     lower_init(&l, analyzer, isolate);
+    l.parent = parent_ctx;
 
     /* Determine return type */
     struct XrType *ret_type = fdecl->return_type;
@@ -2434,6 +2546,18 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
 
     lower_cleanup(&l);
     return l.func;
+}
+
+/* ========== Public API ========== */
+
+XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
+                       struct XrayIsolate *isolate) {
+    XR_CHECK(func_node != NULL, "xi_lower_func: func_node is NULL");
+    XR_CHECK(analyzer != NULL, "xi_lower_func: analyzer is NULL");
+    XR_CHECK(func_node->type == AST_FUNCTION_DECL ||
+             func_node->type == AST_FUNCTION_EXPR,
+             "xi_lower_func: not a function node");
+    return lower_func_impl(func_node, analyzer, isolate, NULL);
 }
 
 XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
