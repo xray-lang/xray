@@ -1502,6 +1502,109 @@ TEST(cmp_class_inherit) {
     });
 }
 
+/* ========== Enum Tests ========== */
+
+TEST(cmp_enum_basic) {
+    run_compare((CompareSpec){
+        .source = "enum Color {\n"
+                  "    Red,\n"
+                  "    Green,\n"
+                  "    Blue\n"
+                  "}\n"
+                  "let c = Color.Red\n"
+                  "print(c.name)\n"
+                  "print(c.value)",
+        .label = "enum basic: access name and value",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* needs enum class descriptor */
+    });
+}
+
+/* ========== For-in Map Tests ========== */
+
+TEST(cmp_for_in_map) {
+    run_compare((CompareSpec){
+        .source = "let m = { a: 1, b: 2, c: 3 }\n"
+                  "let sum = 0\n"
+                  "for (k, v in m) {\n"
+                  "    sum += v\n"
+                  "}\n"
+                  "print(sum)",
+        .label = "for-in map with key-value",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = false,  /* for-in map k-v binding needs value var fix */
+    });
+}
+
+/* ========== Additional Closure Tests ========== */
+
+TEST(cmp_closure_adder) {
+    run_compare((CompareSpec){
+        .source = "fn make_adder(n: int): fn(int): int {\n"
+                  "    return fn(x: int): int { return x + n }\n"
+                  "}\n"
+                  "let add5 = make_adder(5)\n"
+                  "let add10 = make_adder(10)\n"
+                  "print(add5(3))\n"
+                  "print(add10(3))",
+        .label = "closure factory: make_adder",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_closure_accumulator) {
+    run_compare((CompareSpec){
+        .source = "fn make_acc(): fn(int): int {\n"
+                  "    let total = 0\n"
+                  "    return fn(n: int): int { total += n; return total }\n"
+                  "}\n"
+                  "let acc = make_acc()\n"
+                  "print(acc(5))\n"
+                  "print(acc(3))\n"
+                  "print(acc(2))",
+        .label = "closure accumulator with mutable capture",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+/* ========== Misc Pattern Tests ========== */
+
+TEST(cmp_nested_closure) {
+    run_compare((CompareSpec){
+        .source = "fn outer(): fn(): fn(): int {\n"
+                  "    let val = 42\n"
+                  "    return fn(): fn(): int {\n"
+                  "        return fn(): int { return val }\n"
+                  "    }\n"
+                  "}\n"
+                  "print(outer()()())",
+        .label = "triple-nested closure transitive capture",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
+TEST(cmp_string_for_in) {
+    run_compare((CompareSpec){
+        .source = "let count = 0\n"
+                  "for (ch in \"hello\") {\n"
+                  "    count += 1\n"
+                  "}\n"
+                  "print(count)",
+        .label = "for-in string char count",
+        .expect_xi_success = true,
+        .min_similarity = 0.1,
+        .check_exec = true,
+    });
+}
+
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
@@ -1713,6 +1816,20 @@ int main(void) {
     run_cmp_class_method();
     run_cmp_struct_literal();
     run_cmp_class_inherit();
+
+    /* Enum */
+    run_cmp_enum_basic();
+
+    /* For-in map */
+    run_cmp_for_in_map();
+
+    /* Additional closures */
+    run_cmp_closure_adder();
+    run_cmp_closure_accumulator();
+
+    /* Misc patterns */
+    run_cmp_nested_closure();
+    run_cmp_string_for_in();
 
     teardown();
 
