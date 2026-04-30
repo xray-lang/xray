@@ -1,9 +1,9 @@
-import json
+
 
 // 1001_json_cjson_compat.xr
 // 作者：xingleixu@gmail.com
 // 测试：JSON 库与 cJSON 测试用例兼容性验证
-// 
+//
 // 本文件基于 cJSON 测试用例设计，覆盖以下测试文件：
 //   - parse_number.c: 数字解析
 //   - parse_string.c: 字符串解析
@@ -21,68 +21,68 @@ import json
 @test
 fn test_parse_number_zero(): void {
     // parse_number_should_parse_zero
-    assert_eq(json.parse("0"), 0)
-    assert_eq(json.parse("0.0"), 0.0)
-    assert_eq(json.parse("-0"), 0)
+    assert_eq(Json.parse("0"), 0)
+    assert_eq(Json.parse("0.0"), 0.0)
+    assert_eq(Json.parse("-0"), 0)
 }
 
 @test
 fn test_parse_negative_integers(): void {
     // parse_number_should_parse_negative_integers
-    assert_eq(json.parse("-1"), -1)
-    assert_eq(json.parse("-32768"), -32768)
-    assert_eq(json.parse("-2147483648"), -2147483648)
+    assert_eq(Json.parse("-1"), -1)
+    assert_eq(Json.parse("-32768"), -32768)
+    assert_eq(Json.parse("-2147483648"), -2147483648)
 }
 
 @test
 fn test_parse_positive_integers(): void {
     // parse_number_should_parse_positive_integers
-    assert_eq(json.parse("1"), 1)
-    assert_eq(json.parse("32767"), 32767)
-    assert_eq(json.parse("2147483647"), 2147483647)
+    assert_eq(Json.parse("1"), 1)
+    assert_eq(Json.parse("32767"), 32767)
+    assert_eq(Json.parse("2147483647"), 2147483647)
 }
 
 @test
 fn test_parse_positive_reals(): void {
     // parse_number_should_parse_positive_reals
-    let v1 = json.parse("0.001")
+    let v1 = Json.parse("0.001")
     assert_true(v1 > 0.0009 && v1 < 0.0011)
-    
-    let v2 = json.parse("10e-10")
+
+    let v2 = Json.parse("10e-10")
     assert_true(v2 > 0 && v2 < 0.000001)
-    
-    let v3 = json.parse("10E-10")
+
+    let v3 = Json.parse("10E-10")
     assert_true(v3 > 0 && v3 < 0.000001)
-    
-    let v4 = json.parse("10e10")
+
+    let v4 = Json.parse("10e10")
     assert_true(v4 > 9e10)
-    
-    let v5 = json.parse("123e+127")
+
+    let v5 = Json.parse("123e+127")
     assert_true(v5 > 1e128)
-    
-    let v6 = json.parse("123e-128")
+
+    let v6 = Json.parse("123e-128")
     assert_true(v6 > 0 && v6 < 1e-125)
 }
 
 @test
 fn test_parse_negative_reals(): void {
     // parse_number_should_parse_negative_reals
-    let v1 = json.parse("-0.001")
+    let v1 = Json.parse("-0.001")
     assert_true(v1 < -0.0009 && v1 > -0.0011)
-    
-    let v2 = json.parse("-10e-10")
+
+    let v2 = Json.parse("-10e-10")
     assert_true(v2 < 0 && v2 > -0.000001)
-    
-    let v3 = json.parse("-10E-10")
+
+    let v3 = Json.parse("-10E-10")
     assert_true(v3 < 0 && v3 > -0.000001)
-    
-    let v4 = json.parse("-10e20")
+
+    let v4 = Json.parse("-10e20")
     assert_true(v4 < -9e20)
-    
-    let v5 = json.parse("-123e+127")
+
+    let v5 = Json.parse("-123e+127")
     assert_true(v5 < -1e128)
-    
-    let v6 = json.parse("-123e-128")
+
+    let v6 = Json.parse("-123e-128")
     assert_true(v6 < 0 && v6 > -1e-125)
 }
 
@@ -90,13 +90,13 @@ fn test_parse_negative_reals(): void {
 fn test_parse_big_numbers(): void {
     // parse_number_should_parse_big_numbers
     // Very large numbers overflow to Infinity (float) — just verify they parse without crash
-    let v1 = json.parse("9999999999999999999999999999999999999999999999912345678901234567")
+    let v1 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567")
     assert_eq(typeof(v1), Type.float)
-    
-    let v2 = json.parse("9999999999999999999999999999999999999999999999912345678901234567E10")
+
+    let v2 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567E10")
     assert_eq(typeof(v2), Type.float)
-    
-    let v3 = json.parse("999999999999999999999999999999999999999999999991234567890.1234567")
+
+    let v3 = Json.parse("999999999999999999999999999999999999999999999991234567890.1234567")
     assert_eq(typeof(v3), Type.float)
     assert_true(v3 > 0.0)
 }
@@ -108,13 +108,13 @@ fn test_parse_big_numbers(): void {
 @test
 fn test_parse_empty_string(): void {
     // parse_string_should_parse_strings - empty
-    let s = json.parse("\"\"")
+    let s = Json.parse("\"\"")
     assert_eq(s, "")
 }
 
 @test
 fn test_parse_simple_string(): void {
-    let s = json.parse("\"hello world\"")
+    let s = Json.parse("\"hello world\"")
     assert_eq(s, "hello world")
 }
 
@@ -122,28 +122,28 @@ fn test_parse_simple_string(): void {
 fn test_parse_escape_sequences(): void {
     // parse_string_should_parse_strings - escapes
     // 测试基本转义序列
-    let s1 = json.parse("\"\\\"\"")  // \"
+    let s1 = Json.parse("\"\\\"\"")  // \"
     assert_eq(s1, "\"")
-    
-    let s2 = json.parse("\"\\\\\"")  // \\
+
+    let s2 = Json.parse("\"\\\\\"")  // \\
     assert_eq(s2, "\\")
-    
-    let s3 = json.parse("\"\\/\"")   // \/
+
+    let s3 = Json.parse("\"\\/\"")   // \/
     assert_eq(s3, "/")
-    
-    let s4 = json.parse("\"\\b\"")   // \b
+
+    let s4 = Json.parse("\"\\b\"")   // \b
     assert_eq(s4.length, 1)
-    
-    let s5 = json.parse("\"\\f\"")   // \f
+
+    let s5 = Json.parse("\"\\f\"")   // \f
     assert_eq(s5.length, 1)
-    
-    let s6 = json.parse("\"\\n\"")   // \n
+
+    let s6 = Json.parse("\"\\n\"")   // \n
     assert_eq(s6, "\n")
-    
-    let s7 = json.parse("\"\\r\"")   // \r
+
+    let s7 = Json.parse("\"\\r\"")   // \r
     assert_eq(s7, "\r")
-    
-    let s8 = json.parse("\"\\t\"")   // \t
+
+    let s8 = Json.parse("\"\\t\"")   // \t
     assert_eq(s8, "\t")
 }
 
@@ -151,11 +151,11 @@ fn test_parse_escape_sequences(): void {
 fn test_parse_unicode_escape(): void {
     // parse_string_should_parse_strings - \uXXXX
     // €（欧元符号）= U+20AC
-    let s1 = json.parse("\"\\u20AC\"")
+    let s1 = Json.parse("\"\\u20AC\"")
     assert_eq(s1, "€")
-    
+
     // 猫 = U+732B
-    let s2 = json.parse("\"\\u732b\"")
+    let s2 = Json.parse("\"\\u732b\"")
     assert_eq(s2, "猫")
 }
 
@@ -163,14 +163,14 @@ fn test_parse_unicode_escape(): void {
 fn test_parse_utf16_surrogate_pairs(): void {
     // parse_string_should_parse_utf16_surrogate_pairs
     // 🐱 = U+1F431 = \uD83D\uDC31 (UTF-16 代理对)
-    let s = json.parse("\"\\uD83D\\udc31\"")
+    let s = Json.parse("\"\\uD83D\\udc31\"")
     assert_eq(s, "🐱")
 }
 
 @test
 fn test_parse_raw_control_characters(): void {
     // cJSON 允许解析原始控制字符
-    let s = json.parse("\"\\b\\f\\n\\r\\t\"")
+    let s = Json.parse("\"\\b\\f\\n\\r\\t\"")
     assert_eq(s.length, 5)
 }
 
@@ -178,15 +178,15 @@ fn test_parse_raw_control_characters(): void {
 fn test_parse_complex_escape(): void {
     // parse_string_should_parse_bug_94
     let jsonStr = "\"~!@\\\\#$%^&*()\\\\\\\\-\\\\+{}[]:\\\\;\\\\\\\"\\\\<\\\\>?/.,DC=ad,DC=com\""
-    let s = json.parse(jsonStr)
+    let s = Json.parse(jsonStr)
     assert_eq(s, "~!@\\#$%^&*()\\\\-\\+{}[]:\\;\\\"\\<\\>?/.,DC=ad,DC=com")
 }
 
 @test
 fn test_parse_invalid_string(): void {
     // parse_string_should_not_parse_non_strings
-    assert_eq(json.isValid("this\" is not a string\""), false)
-    assert_eq(json.isValid(""), false)
+    assert_eq(Json.isValid("this\" is not a string\""), false)
+    assert_eq(Json.isValid(""), false)
 }
 
 // ============================================================
@@ -196,29 +196,29 @@ fn test_parse_invalid_string(): void {
 @test
 fn test_parse_empty_arrays(): void {
     // parse_array_should_parse_empty_arrays
-    let arr1 = json.parse("[]")
+    let arr1 = Json.parse("[]")
     assert_eq(arr1.length, 0)
-    
-    let arr2 = json.parse("[\n\t]")
+
+    let arr2 = Json.parse("[\n\t]")
     assert_eq(arr2.length, 0)
 }
 
 @test
 fn test_parse_array_with_one_element(): void {
     // parse_array_should_parse_arrays_with_one_element
-    let arr1 = json.parse("[1]")
+    let arr1 = Json.parse("[1]")
     assert_eq(arr1.length, 1)
     assert_eq(arr1[0], 1)
-    
-    let arr2 = json.parse("[\"hello!\"]")
+
+    let arr2 = Json.parse("[\"hello!\"]")
     assert_eq(arr2.length, 1)
     assert_eq(arr2[0], "hello!")
-    
-    let arr3 = json.parse("[[]]")
+
+    let arr3 = Json.parse("[[]]")
     assert_eq(arr3.length, 1)
     assert_eq(arr3[0].length, 0)
-    
-    let arr4 = json.parse("[null]")
+
+    let arr4 = Json.parse("[null]")
     assert_eq(arr4.length, 1)
     assert_eq(arr4[0], null)
 }
@@ -226,14 +226,14 @@ fn test_parse_array_with_one_element(): void {
 @test
 fn test_parse_array_with_multiple_elements(): void {
     // parse_array_should_parse_arrays_with_multiple_elements
-    let arr1 = json.parse("[1\t,\n2, 3]")
+    let arr1 = Json.parse("[1\t,\n2, 3]")
     assert_eq(arr1.length, 3)
     assert_eq(arr1[0], 1)
     assert_eq(arr1[1], 2)
     assert_eq(arr1[2], 3)
-    
+
     // 混合类型数组
-    let arr2 = json.parse("[1, null, true, false, [], \"hello\", {}]")
+    let arr2 = Json.parse("[1, null, true, false, [], \"hello\", {}]")
     assert_eq(arr2.length, 7)
     assert_eq(arr2[0], 1)
     assert_eq(arr2[1], null)
@@ -247,9 +247,9 @@ fn test_parse_array_with_multiple_elements(): void {
 @test
 fn test_parse_invalid_arrays(): void {
     // parse_array_should_not_parse_non_arrays
-    assert_eq(json.isValid("["), false)
-    assert_eq(json.isValid("]"), false)
-    assert_eq(json.isValid("42"), true)  // 这是有效的 JSON，只是不是数组
+    assert_eq(Json.isValid("["), false)
+    assert_eq(Json.isValid("]"), false)
+    assert_eq(Json.isValid("42"), true)  // 这是有效的 JSON，只是不是数组
 }
 
 // ============================================================
@@ -259,39 +259,39 @@ fn test_parse_invalid_arrays(): void {
 @test
 fn test_parse_empty_objects(): void {
     // parse_object_should_parse_empty_objects
-    let obj1 = json.parse("{}")
+    let obj1 = Json.parse("{}")
     assert_true(obj1 != null)
-    
-    let obj2 = json.parse("{\n\t}")
+
+    let obj2 = Json.parse("{\n\t}")
     assert_true(obj2 != null)
 }
 
 @test
 fn test_parse_object_with_one_element(): void {
     // parse_object_should_parse_objects_with_one_element
-    let obj1 = json.parse("{\"one\":1}")
+    let obj1 = Json.parse("{\"one\":1}")
     assert_eq(obj1.one, 1)
-    
-    let obj2 = json.parse("{\"hello\":\"world!\"}")
+
+    let obj2 = Json.parse("{\"hello\":\"world!\"}")
     assert_eq(obj2.hello, "world!")
-    
-    let obj3 = json.parse("{\"array\":[]}")
+
+    let obj3 = Json.parse("{\"array\":[]}")
     assert_eq(obj3.array.length, 0)
-    
-    let obj4 = json.parse("{\"nullable\":null}")
+
+    let obj4 = Json.parse("{\"nullable\":null}")
     assert_eq(obj4.nullable, null)
 }
 
 @test
 fn test_parse_object_with_multiple_elements(): void {
     // parse_object_should_parse_objects_with_multiple_elements
-    let obj1 = json.parse("{\"one\":1\t,\t\"two\"\n:2, \"three\":3}")
+    let obj1 = Json.parse("{\"one\":1\t,\t\"two\"\n:2, \"three\":3}")
     assert_eq(obj1.one, 1)
     assert_eq(obj1.two, 2)
     assert_eq(obj1.three, 3)
-    
+
     // 混合类型对象
-    let obj2 = json.parse("{\"one\":1, \"nullval\":null, \"trueval\":true, \"falseval\":false, \"array\":[], \"world\":\"hello\", \"object\":{}}")
+    let obj2 = Json.parse("{\"one\":1, \"nullval\":null, \"trueval\":true, \"falseval\":false, \"array\":[], \"world\":\"hello\", \"object\":{}}")
     assert_eq(obj2.one, 1)
     assert_eq(obj2.nullval, null)
     assert_eq(obj2.trueval, true)
@@ -303,8 +303,8 @@ fn test_parse_object_with_multiple_elements(): void {
 @test
 fn test_parse_invalid_objects(): void {
     // parse_object_should_not_parse_non_objects
-    assert_eq(json.isValid("{"), false)
-    assert_eq(json.isValid("}"), false)
+    assert_eq(Json.isValid("{"), false)
+    assert_eq(Json.isValid("}"), false)
 }
 
 // ============================================================
@@ -314,46 +314,46 @@ fn test_parse_invalid_objects(): void {
 @test
 fn test_parse_value_null(): void {
     // parse_value_should_parse_null
-    assert_eq(json.parse("null"), null)
+    assert_eq(Json.parse("null"), null)
 }
 
 @test
 fn test_parse_value_true(): void {
     // parse_value_should_parse_true
-    assert_eq(json.parse("true"), true)
+    assert_eq(Json.parse("true"), true)
 }
 
 @test
 fn test_parse_value_false(): void {
     // parse_value_should_parse_false
-    assert_eq(json.parse("false"), false)
+    assert_eq(Json.parse("false"), false)
 }
 
 @test
 fn test_parse_value_number(): void {
     // parse_value_should_parse_number
-    let v = json.parse("1.5")
+    let v = Json.parse("1.5")
     assert_eq(v, 1.5)
 }
 
 @test
 fn test_parse_value_string(): void {
     // parse_value_should_parse_string
-    assert_eq(json.parse("\"\""), "")
-    assert_eq(json.parse("\"hello\""), "hello")
+    assert_eq(Json.parse("\"\""), "")
+    assert_eq(Json.parse("\"hello\""), "hello")
 }
 
 @test
 fn test_parse_value_array(): void {
     // parse_value_should_parse_array
-    let arr = json.parse("[]")
+    let arr = Json.parse("[]")
     assert_eq(arr.length, 0)
 }
 
 @test
 fn test_parse_value_object(): void {
     // parse_value_should_parse_object
-    let obj = json.parse("{}")
+    let obj = Json.parse("{}")
     assert_true(obj != null)
 }
 
@@ -364,39 +364,39 @@ fn test_parse_value_object(): void {
 @test
 fn test_stringify_number_zero(): void {
     // print_number_should_print_zero
-    assert_eq(json.stringify(0), "0")
+    assert_eq(Json.stringify(0), "0")
 }
 
 @test
 fn test_stringify_negative_integers(): void {
     // print_number_should_print_negative_integers
-    assert_eq(json.stringify(-1), "-1")
-    assert_eq(json.stringify(-32768), "-32768")
-    assert_eq(json.stringify(-2147483648), "-2147483648")
+    assert_eq(Json.stringify(-1), "-1")
+    assert_eq(Json.stringify(-32768), "-32768")
+    assert_eq(Json.stringify(-2147483648), "-2147483648")
 }
 
 @test
 fn test_stringify_positive_integers(): void {
     // print_number_should_print_positive_integers
-    assert_eq(json.stringify(1), "1")
-    assert_eq(json.stringify(32767), "32767")
-    assert_eq(json.stringify(2147483647), "2147483647")
+    assert_eq(Json.stringify(1), "1")
+    assert_eq(Json.stringify(32767), "32767")
+    assert_eq(Json.stringify(2147483647), "2147483647")
 }
 
 @test
 fn test_stringify_positive_reals(): void {
     // print_number_should_print_positive_reals
-    let s1 = json.stringify(0.123)
+    let s1 = Json.stringify(0.123)
     assert_true(s1.contains("0.123"))
-    
-    let s2 = json.stringify(3.1415926535897931)
+
+    let s2 = Json.stringify(3.1415926535897931)
     assert_true(s2.contains("3.14159"))
 }
 
 @test
 fn test_stringify_negative_reals(): void {
     // print_number_should_print_negative_reals
-    let s1 = json.stringify(-0.0123)
+    let s1 = Json.stringify(-0.0123)
     assert_true(s1.contains("-0.0123"))
 }
 
@@ -407,37 +407,37 @@ fn test_stringify_negative_reals(): void {
 @test
 fn test_stringify_empty_string(): void {
     // print_string_should_print_empty_strings
-    assert_eq(json.stringify(""), "\"\"")
+    assert_eq(Json.stringify(""), "\"\"")
 }
 
 @test
 fn test_stringify_simple_string(): void {
-    assert_eq(json.stringify("hello"), "\"hello\"")
+    assert_eq(Json.stringify("hello"), "\"hello\"")
 }
 
 @test
 fn test_stringify_escape_characters(): void {
     // 双引号需要转义
-    let s1 = json.stringify("\"")
+    let s1 = Json.stringify("\"")
     assert_true(s1.contains("\\\""))
-    
+
     // 反斜杠需要转义
-    let s2 = json.stringify("\\")
+    let s2 = Json.stringify("\\")
     assert_true(s2.contains("\\\\"))
-    
+
     // 换行符需要转义
-    let s3 = json.stringify("\n")
+    let s3 = Json.stringify("\n")
     assert_true(s3.contains("\\n"))
-    
+
     // Tab 需要转义
-    let s4 = json.stringify("\t")
+    let s4 = Json.stringify("\t")
     assert_true(s4.contains("\\t"))
 }
 
 @test
 fn test_stringify_utf8(): void {
     // print_string_should_print_utf8
-    let s = json.stringify("ü猫慕")
+    let s = Json.stringify("ü猫慕")
     assert_true(s.contains("ü猫慕"))
 }
 
@@ -450,7 +450,7 @@ fn test_deeply_nested_json(): void {
     // cjson_should_not_parse_to_deeply_nested_jsons
     // 测试深度嵌套的 JSON（应该能处理合理深度）
     let jsonStr = "[[[[[[[[[[1]]]]]]]]]]"  // 10 层嵌套
-    let arr = json.parse(jsonStr)
+    let arr = Json.parse(jsonStr)
     assert_true(arr != null)
 }
 
@@ -458,18 +458,18 @@ fn test_deeply_nested_json(): void {
 fn test_parse_big_numbers_no_error(): void {
     // cjson_parse_big_numbers_should_not_report_error
     let json1 = "{\"a\": true, \"b\": [ null,9999999999999999999999999999999999999999999999912345678901234567]}"
-    assert_eq(json.isValid(json1), true)
-    
+    assert_eq(Json.isValid(json1), true)
+
     let json2 = "{\"a\": true, \"b\": [ null,999999999999999999999999999999999999999999999991234567890.1234567E3]}"
-    assert_eq(json.isValid(json2), true)
-    
+    assert_eq(Json.isValid(json2), true)
+
     // 无效的大数字（多个小数点）
     let json3 = "{\"a\": true, \"b\": [ null,99999999999999999999999999999999999999999999999.1234567890.1234567]}"
-    assert_eq(json.isValid(json3), false)
-    
+    assert_eq(Json.isValid(json3), false)
+
     // 无效的大数字（多个指数）
     let json4 = "{\"a\": true, \"b\": [ null,99999999999999999999999999999999999999999999999E1234567890e1234567]}"
-    assert_eq(json.isValid(json4), false)
+    assert_eq(Json.isValid(json4), false)
 }
 
 @test
@@ -478,23 +478,12 @@ fn test_utf8_bom(): void {
     // UTF-8 BOM: \xEF\xBB\xBF
     // 注意：xray 的 JSON 库是否支持 BOM 取决于实现
     let jsonStr = "\u{FEFF}{}"  // BOM + {}
-    let result = json.isValid(jsonStr)
+    let result = Json.isValid(jsonStr)
     // BOM 处理是可选的，这里只验证不崩溃
     assert_true(result == true || result == false)
 }
 
-@test
-fn test_type_check(): void {
-    // typecheck_functions_should_check_type
-    assert_eq(json.typeof("null"), "null")
-    assert_eq(json.typeof("true"), "boolean")
-    assert_eq(json.typeof("false"), "boolean")
-    assert_eq(json.typeof("42"), "number")
-    assert_eq(json.typeof("3.14"), "number")
-    assert_eq(json.typeof("\"hello\""), "string")
-    assert_eq(json.typeof("[]"), "array")
-    assert_eq(json.typeof("{}"), "object")
-}
+// json.typeof removed — not migrated to Json builtin class
 
 // ============================================================
 // 第九部分：cJSON 输入文件测试 (tests/inputs/)
@@ -504,7 +493,7 @@ fn test_type_check(): void {
 fn test_cjson_input_test1(): void {
     // 测试 test1: 嵌套对象（glossary）
     let jsonStr = "{\"glossary\": {\"title\": \"example glossary\", \"GlossDiv\": {\"title\": \"S\", \"GlossList\": {\"GlossEntry\": {\"ID\": \"SGML\", \"SortAs\": \"SGML\", \"GlossTerm\": \"Standard Generalized Markup Language\", \"Acronym\": \"SGML\", \"Abbrev\": \"ISO 8879:1986\", \"GlossDef\": {\"para\": \"A meta-markup language, used to create markup languages such as DocBook.\", \"GlossSeeAlso\": [\"GML\", \"XML\"]}, \"GlossSee\": \"markup\"}}}}}"
-    let obj = json.parse(jsonStr)
+    let obj = Json.parse(jsonStr)
     assert_eq(obj.glossary.title, "example glossary")
     assert_eq(obj.glossary.GlossDiv.GlossList.GlossEntry.ID, "SGML")
     assert_eq(obj.glossary.GlossDiv.GlossList.GlossEntry.GlossDef.GlossSeeAlso[0], "GML")
@@ -514,7 +503,7 @@ fn test_cjson_input_test1(): void {
 fn test_cjson_input_test2(): void {
     // 测试 test2: 菜单对象
     let jsonStr = "{\"menu\": {\"id\": \"file\", \"value\": \"File\", \"popup\": {\"menuitem\": [{\"value\": \"New\", \"onclick\": \"CreateNewDoc()\"}, {\"value\": \"Open\", \"onclick\": \"OpenDoc()\"}, {\"value\": \"Close\", \"onclick\": \"CloseDoc()\"}]}}}"
-    let obj = json.parse(jsonStr)
+    let obj = Json.parse(jsonStr)
     assert_eq(obj.menu.id, "file")
     assert_eq(obj.menu.popup.menuitem.length, 3)
     assert_eq(obj.menu.popup.menuitem[0].value, "New")
@@ -524,7 +513,7 @@ fn test_cjson_input_test2(): void {
 fn test_cjson_input_test3(): void {
     // 测试 test3: widget 对象
     let jsonStr = "{\"widget\": {\"debug\": \"on\", \"window\": {\"title\": \"Sample Konfabulator Widget\", \"name\": \"main_window\", \"width\": 500, \"height\": 500}, \"image\": {\"src\": \"Images/Sun.png\", \"name\": \"sun1\", \"hOffset\": 250, \"vOffset\": 250, \"alignment\": \"center\"}, \"text\": {\"data\": \"Click Here\", \"size\": 36, \"style\": \"bold\", \"name\": \"text1\", \"hOffset\": 250, \"vOffset\": 100, \"alignment\": \"center\", \"onMouseUp\": \"sun1.opacity = (sun1.opacity / 100) * 90;\"}}}"
-    let obj = json.parse(jsonStr)
+    let obj = Json.parse(jsonStr)
     assert_eq(obj.widget.debug, "on")
     assert_eq(obj.widget.window.width, 500)
     assert_eq(obj.widget.image.alignment, "center")
@@ -534,7 +523,7 @@ fn test_cjson_input_test3(): void {
 fn test_cjson_input_test5(): void {
     // 测试 test5: 带 null 元素的数组
     let jsonStr = "{\"menu\": {\"header\": \"SVG Viewer\", \"items\": [{\"id\": \"Open\"}, {\"id\": \"OpenNew\", \"label\": \"Open New\"}, null, {\"id\": \"ZoomIn\", \"label\": \"Zoom In\"}, {\"id\": \"ZoomOut\", \"label\": \"Zoom Out\"}]}}"
-    let obj = json.parse(jsonStr)
+    let obj = Json.parse(jsonStr)
     assert_eq(obj.menu.header, "SVG Viewer")
     assert_eq(obj.menu.items.length, 5)
     assert_eq(obj.menu.items[0].id, "Open")
@@ -549,19 +538,19 @@ fn test_cjson_input_test5(): void {
 @test
 fn test_roundtrip_primitives(): void {
     // 原始类型往返
-    assert_eq(json.parse(json.stringify(42)), 42)
-    assert_eq(json.parse(json.stringify(3.14)), 3.14)
-    assert_eq(json.parse(json.stringify(true)), true)
-    assert_eq(json.parse(json.stringify(false)), false)
-    assert_eq(json.parse(json.stringify(null)), null)
-    assert_eq(json.parse(json.stringify("hello")), "hello")
+    assert_eq(Json.parse(Json.stringify(42)), 42)
+    assert_eq(Json.parse(Json.stringify(3.14)), 3.14)
+    assert_eq(Json.parse(Json.stringify(true)), true)
+    assert_eq(Json.parse(Json.stringify(false)), false)
+    assert_eq(Json.parse(Json.stringify(null)), null)
+    assert_eq(Json.parse(Json.stringify("hello")), "hello")
 }
 
 @test
 fn test_roundtrip_array(): void {
     let original = [1, 2, 3, "four", true, null]
-    let jsonStr = json.stringify(original)
-    let parsed = json.parse(jsonStr)
+    let jsonStr = Json.stringify(original)
+    let parsed = Json.parse(jsonStr)
     assert_eq(parsed.length, 6)
     assert_eq(parsed[0], 1)
     assert_eq(parsed[3], "four")
@@ -572,8 +561,8 @@ fn test_roundtrip_array(): void {
 @test
 fn test_roundtrip_object(): void {
     let original = { name: "Alice", age: 30, active: true }
-    let jsonStr = json.stringify(original)
-    let parsed = json.parse(jsonStr)
+    let jsonStr = Json.stringify(original)
+    let parsed = Json.parse(jsonStr)
     assert_eq(parsed.name, "Alice")
     assert_eq(parsed.age, 30)
     assert_eq(parsed.active, true)
@@ -588,8 +577,8 @@ fn test_roundtrip_nested(): void {
         ],
         metadata: { version: 1, valid: true }
     }
-    let jsonStr = json.stringify(original)
-    let parsed = json.parse(jsonStr)
+    let jsonStr = Json.stringify(original)
+    let parsed = Json.parse(jsonStr)
     assert_eq(parsed.users.length, 2)
     assert_eq(parsed.users[0].name, "Alice")
     assert_eq(parsed.users[0].scores[0], 100)
@@ -604,45 +593,45 @@ fn test_roundtrip_nested(): void {
 fn test_whitespace_handling(): void {
     // JSON 应该正确处理各种空白字符
     let json1 = "  {  \"key\"  :  \"value\"  }  "
-    let obj1 = json.parse(json1)
+    let obj1 = Json.parse(json1)
     assert_eq(obj1.key, "value")
-    
+
     let json2 = "[\n\t1,\n\t2,\n\t3\n]"
-    let arr2 = json.parse(json2)
+    let arr2 = Json.parse(json2)
     assert_eq(arr2.length, 3)
 }
 
 @test
 fn test_special_number_formats(): void {
     // 各种数字格式
-    assert_eq(json.parse("1e1"), 10.0)
-    assert_eq(json.parse("1E1"), 10.0)
-    assert_eq(json.parse("1e+1"), 10.0)
-    assert_eq(json.parse("1e-1"), 0.1)
-    
-    let v = json.parse("1.23456789012345678901234567890")
+    assert_eq(Json.parse("1e1"), 10.0)
+    assert_eq(Json.parse("1E1"), 10.0)
+    assert_eq(Json.parse("1e+1"), 10.0)
+    assert_eq(Json.parse("1e-1"), 0.1)
+
+    let v = Json.parse("1.23456789012345678901234567890")
     assert_true(v > 1.234 && v < 1.235)
 }
 
 @test
 fn test_empty_structures(): void {
-    assert_eq(json.stringify([]), "[]")
-    assert_eq(json.stringify({}), "{}")
-    
-    let emptyArr = json.parse("[]")
+    assert_eq(Json.stringify([]), "[]")
+    assert_eq(Json.stringify({}), "{}")
+
+    let emptyArr = Json.parse("[]")
     assert_eq(emptyArr.length, 0)
 }
 
 @test
 fn test_unicode_strings(): void {
     // 各种 Unicode 字符
-    let s1 = json.parse("\"Hello, 世界\"")
+    let s1 = Json.parse("\"Hello, 世界\"")
     assert_eq(s1, "Hello, 世界")
-    
-    let s2 = json.parse("\"🎉🎊🎁\"")
+
+    let s2 = Json.parse("\"🎉🎊🎁\"")
     assert_eq(s2, "🎉🎊🎁")
-    
-    let s3 = json.parse("\"日本語テスト\"")
+
+    let s3 = Json.parse("\"日本語テスト\"")
     assert_eq(s3, "日本語テスト")
 }
 
@@ -650,7 +639,7 @@ fn test_unicode_strings(): void {
 fn test_keys_with_special_characters(): void {
     // 键名中的特殊字符
     let jsonStr = "{\"key-with-dash\": 1, \"key.with.dot\": 2, \"key with space\": 3}"
-    let obj = json.parse(jsonStr)
+    let obj = Json.parse(jsonStr)
     // 注意：xray 可能需要使用索引访问这些特殊键名
     assert_true(obj != null)
 }
@@ -658,15 +647,15 @@ fn test_keys_with_special_characters(): void {
 @test
 fn test_invalid_json_detection(): void {
     // 各种无效 JSON
-    assert_eq(json.isValid(""), false)
-    assert_eq(json.isValid("{"), false)
-    assert_eq(json.isValid("}"), false)
-    assert_eq(json.isValid("["), false)
-    assert_eq(json.isValid("]"), false)
-    assert_eq(json.isValid("{\"key\"}"), false)
-    assert_eq(json.isValid("{\"key\":}"), false)
-    assert_eq(json.isValid("[1,]"), false)
-    assert_eq(json.isValid("undefined"), false)
-    assert_eq(json.isValid("NaN"), false)
+    assert_eq(Json.isValid(""), false)
+    assert_eq(Json.isValid("{"), false)
+    assert_eq(Json.isValid("}"), false)
+    assert_eq(Json.isValid("["), false)
+    assert_eq(Json.isValid("]"), false)
+    assert_eq(Json.isValid("{\"key\"}"), false)
+    assert_eq(Json.isValid("{\"key\":}"), false)
+    assert_eq(Json.isValid("[1,]"), false)
+    assert_eq(Json.isValid("undefined"), false)
+    assert_eq(Json.isValid("NaN"), false)
 }
 

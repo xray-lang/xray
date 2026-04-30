@@ -3,7 +3,7 @@
 // Test: Programmatic fuzz testing for JSON/YAML parsers
 // Generates random-ish structures and verifies roundtrip / no-crash behavior
 
-import json
+
 import yaml
 
 // ===== JSON fuzz: generated nested structures =====
@@ -16,7 +16,7 @@ fn test_json_fuzz_nested_arrays(): void {
         for (let i = 0; i < depth; i++) { s = s + "[" }
         s = s + "1"
         for (let i = 0; i < depth; i++) { s = s + "]" }
-        let result = json.parse(s)
+        let result = Json.parse(s)
         // Navigate to innermost value
         let val = result
         for (let i = 1; i < depth; i++) { val = val[0] }
@@ -34,7 +34,7 @@ fn test_json_fuzz_nested_objects(): void {
         }
         s = s + "42"
         for (let i = 0; i < depth; i++) { s = s + "}" }
-        let result = json.parse(s)
+        let result = Json.parse(s)
         let val = result
         for (let i = 0; i < depth; i++) {
             val = val["k" + i.toString()]
@@ -52,7 +52,7 @@ fn test_json_fuzz_wide_arrays(): void {
             parts.push(i.toString())
         }
         let s = "[" + parts.join(",") + "]"
-        let arr = json.parse(s)
+        let arr = Json.parse(s)
         assert_eq(arr.length, width)
         assert_eq(arr[0], 0)
         assert_eq(arr[width - 1], width - 1)
@@ -68,7 +68,7 @@ fn test_json_fuzz_wide_objects(): void {
             parts.push("\"f" + i.toString() + "\":" + i.toString())
         }
         let s = "{" + parts.join(",") + "}"
-        let obj = json.parse(s)
+        let obj = Json.parse(s)
         assert_eq(obj["f0"], 0)
         assert_eq(obj["f" + (width - 1).toString()], width - 1)
     }
@@ -93,8 +93,8 @@ fn test_json_roundtrip_stress(): void {
     }
     data.meta.count = 20
 
-    let s = json.stringify(data)
-    let parsed = json.parse(s)
+    let s = Json.stringify(data)
+    let parsed = Json.parse(s)
 
     assert_eq(parsed.users.length, 20)
     assert_eq(parsed.meta.count, 20)
@@ -123,7 +123,7 @@ fn test_json_fuzz_mixed_types(): void {
         else { parts.push("[" + i.toString() + "]") }
     }
     let s = "[" + parts.join(",") + "]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr.length, 30)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], "s1")
@@ -276,12 +276,12 @@ fn test_yaml_fuzz_mixed_block_flow_items(): void {
 fn test_json_fuzz_deep_mixed(): void {
     // Build: {"a": [{"b": [{"c": 42}]}]}
     let s = "{\"a\":[{\"b\":[{\"c\":42}]}]}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.a[0].b[0].c, 42)
 
     // Build: [{"k": [1, [2, [3]]]}]
     let s2 = "[{\"k\":[1,[2,[3]]]}]"
-    let obj2 = json.parse(s2)
+    let obj2 = Json.parse(s2)
     assert_eq(obj2[0].k[0], 1)
     assert_eq(obj2[0].k[1][0], 2)
     assert_eq(obj2[0].k[1][1][0], 3)
@@ -305,8 +305,8 @@ fn test_json_fuzz_complex_roundtrip(): void {
         flag: false,
         nothing: null
     }
-    let s = json.stringify(data)
-    let p = json.parse(s)
+    let s = Json.stringify(data)
+    let p = Json.parse(s)
     assert_eq(p.matrix[0][0], 1)
     assert_eq(p.matrix[1][1], 4)
     assert_eq(p.config.nested.deep, true)
@@ -320,13 +320,13 @@ fn test_json_fuzz_complex_roundtrip(): void {
 
 @test
 fn test_json_fuzz_stringify_special(): void {
-    assert_eq(json.stringify(null), "null")
-    assert_eq(json.stringify(true), "true")
-    assert_eq(json.stringify(false), "false")
-    assert_eq(json.stringify(42), "42")
-    assert_eq(json.stringify("hello"), "\"hello\"")
-    assert_eq(json.stringify([]), "[]")
-    assert_eq(json.stringify({}), "{}")
+    assert_eq(Json.stringify(null), "null")
+    assert_eq(Json.stringify(true), "true")
+    assert_eq(Json.stringify(false), "false")
+    assert_eq(Json.stringify(42), "42")
+    assert_eq(Json.stringify("hello"), "\"hello\"")
+    assert_eq(Json.stringify([]), "[]")
+    assert_eq(Json.stringify({}), "{}")
 }
 
 // ===== JSON fuzz: many nested arrays =====
@@ -341,7 +341,7 @@ fn test_json_fuzz_many_nested_arrays(): void {
         parts.push("[" + a.toString() + "," + b.toString() + "]")
     }
     let s = "[" + parts.join(",") + "]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr.length, 50)
     assert_eq(arr[0][0], 0)
     assert_eq(arr[0][1], 1)

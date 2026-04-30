@@ -8,7 +8,6 @@
 // NOTE: This starts a real server. Press Ctrl+C to stop.
 
 import http
-import json
 
 // === Define routes ===
 

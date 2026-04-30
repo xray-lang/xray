@@ -2,28 +2,28 @@
 // Author: xingleixu@gmail.com
 // Test: JSON parser edge cases, boundary conditions, and fuzz-like stress tests
 
-import json
+
 
 // ===== Deeply nested structures =====
 
 @test
 fn test_deep_nested_arrays(): void {
     let s = "[[[[[[[[[[42]]]]]]]]]]"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj[0][0][0][0][0][0][0][0][0][0], 42)
 }
 
 @test
 fn test_deep_nested_objects(): void {
     let s = "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":99}}}}}}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.a.b.c.d.e.f, 99)
 }
 
 @test
 fn test_alternating_array_object_nesting(): void {
     let s = "[{\"a\":[{\"b\":[1,2]},{\"c\":[3,4]}]}]"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj[0].a[0].b[0], 1)
     assert_eq(obj[0].a[0].b[1], 2)
     assert_eq(obj[0].a[1].c[0], 3)
@@ -34,20 +34,20 @@ fn test_alternating_array_object_nesting(): void {
 
 @test
 fn test_empty_object(): void {
-    let obj = json.parse("{}")
+    let obj = Json.parse("{}")
     assert(obj != null)
 }
 
 @test
 fn test_empty_array(): void {
-    let arr = json.parse("[]")
+    let arr = Json.parse("[]")
     assert_eq(arr.length, 0)
 }
 
 @test
 fn test_nested_empties(): void {
     let s = "{\"a\":[],\"b\":{},\"c\":[{},[]],\"d\":{\"e\":[]}}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.a.length, 0)
     assert_eq(obj.c.length, 2)
     assert_eq(obj.d.e.length, 0)
@@ -58,21 +58,21 @@ fn test_nested_empties(): void {
 @test
 fn test_escaped_characters(): void {
     let s = "{\"msg\":\"hello\\nworld\\ttab\\\\slash\"}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert(obj.msg.length > 0)
 }
 
 @test
 fn test_empty_string_value(): void {
     let s = "{\"key\":\"\"}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.key, "")
 }
 
 @test
 fn test_string_with_special_chars(): void {
     let s = "{\"data\":\"a/b:c@d#e\"}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.data, "a/b:c@d#e")
 }
 
@@ -81,7 +81,7 @@ fn test_string_with_special_chars(): void {
 @test
 fn test_zero_values(): void {
     let s = "[0, 0.0, -0]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], 0.0)
 }
@@ -89,7 +89,7 @@ fn test_zero_values(): void {
 @test
 fn test_large_integers(): void {
     let s = "[999999999, -999999999]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr[0], 999999999)
     assert_eq(arr[1], -999999999)
 }
@@ -97,7 +97,7 @@ fn test_large_integers(): void {
 @test
 fn test_float_precision(): void {
     let s = "[1.5, -2.5, 0.125, 100.001]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr[0], 1.5)
     assert_eq(arr[1], -2.5)
     assert_eq(arr[2], 0.125)
@@ -106,7 +106,7 @@ fn test_float_precision(): void {
 @test
 fn test_scientific_notation(): void {
     let s = "[1e2, 1.5e3, 2.5E-1]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr[0], 100.0)
     assert_eq(arr[1], 1500.0)
     assert_eq(arr[2], 0.25)
@@ -117,7 +117,7 @@ fn test_scientific_notation(): void {
 @test
 fn test_boolean_and_null_array(): void {
     let s = "[true, false, null, true, null, false]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr.length, 6)
     assert_eq(arr[0], true)
     assert_eq(arr[1], false)
@@ -132,7 +132,7 @@ fn test_boolean_and_null_array(): void {
 @test
 fn test_extra_whitespace(): void {
     let s = "  {  \"a\"  :  1  ,  \"b\"  :  [  2  ,  3  ]  }  "
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.a, 1)
     assert_eq(obj.b[0], 2)
     assert_eq(obj.b[1], 3)
@@ -141,7 +141,7 @@ fn test_extra_whitespace(): void {
 @test
 fn test_newlines_in_json(): void {
     let s = "{\n\"a\": 1,\n\"b\": 2\n}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj.a, 1)
     assert_eq(obj.b, 2)
 }
@@ -155,7 +155,7 @@ fn test_large_array_200(): void {
         parts.push(i.toString())
     }
     let s = "[" + parts.join(",") + "]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr.length, 200)
     assert_eq(arr[0], 0)
     assert_eq(arr[99], 99)
@@ -171,7 +171,7 @@ fn test_many_keys_object(): void {
         parts.push("\"k" + i.toString() + "\":" + i.toString())
     }
     let s = "{" + parts.join(",") + "}"
-    let obj = json.parse(s)
+    let obj = Json.parse(s)
     assert_eq(obj["k0"], 0)
     assert_eq(obj["k25"], 25)
     assert_eq(obj["k49"], 49)
@@ -186,8 +186,8 @@ fn test_roundtrip_nested(): void {
         values: [1, 2, 3],
         nested: { a: true, b: null, c: "hello" }
     }
-    let s = json.stringify(original)
-    let parsed = json.parse(s)
+    let s = Json.stringify(original)
+    let parsed = Json.parse(s)
     assert_eq(parsed.name, "test")
     assert_eq(parsed.values[0], 1)
     assert_eq(parsed.values[2], 3)
@@ -203,8 +203,8 @@ fn test_roundtrip_array_of_objects(): void {
         { id: 2, active: false },
         { id: 3, active: true }
     ]
-    let s = json.stringify(original)
-    let parsed = json.parse(s)
+    let s = Json.stringify(original)
+    let parsed = Json.parse(s)
     assert_eq(parsed.length, 3)
     assert_eq(parsed[0].id, 1)
     assert_eq(parsed[1].active, false)
@@ -216,7 +216,7 @@ fn test_roundtrip_array_of_objects(): void {
 @test
 fn test_heterogeneous_array(): void {
     let s = "[1, \"two\", true, null, 3.14, [\"nested\"], {\"key\": \"val\"}]"
-    let arr = json.parse(s)
+    let arr = Json.parse(s)
     assert_eq(arr.length, 7)
     assert_eq(arr[0], 1)
     assert_eq(arr[1], "two")
@@ -232,23 +232,23 @@ fn test_heterogeneous_array(): void {
 @test
 fn test_parse_single_string(): void {
     let s = "\"hello world\""
-    let result = json.parse(s)
+    let result = Json.parse(s)
     assert_eq(result, "hello world")
 }
 
 @test
 fn test_parse_single_number(): void {
-    assert_eq(json.parse("42"), 42)
-    assert_eq(json.parse("3.14"), 3.14)
+    assert_eq(Json.parse("42"), 42)
+    assert_eq(Json.parse("3.14"), 3.14)
 }
 
 @test
 fn test_parse_single_boolean(): void {
-    assert_eq(json.parse("true"), true)
-    assert_eq(json.parse("false"), false)
+    assert_eq(Json.parse("true"), true)
+    assert_eq(Json.parse("false"), false)
 }
 
 @test
 fn test_parse_single_null(): void {
-    assert_eq(json.parse("null"), null)
+    assert_eq(Json.parse("null"), null)
 }
