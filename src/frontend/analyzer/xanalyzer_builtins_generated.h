@@ -268,7 +268,7 @@ static const XaBuiltinMember g_gen_log_functions[] = {
     {"enableSource", "(enabled: bool): void", "Enable source location in logs", true, false},
     {"enableAsync", "(enabled: bool): void", "Enable async logging", true, false},
     {"flush", "(): void", "Flush log buffer", true, false},
-    {"child", "(...fields: any): any", "Create child logger", true, false},
+    {"child", "(...fields: any): Logger", "Create child logger", true, false},
     // Module constants (is_method=false)
     {"DEBUG", ": int", "", false, false},
     {"INFO", ": int", "", false, false},
@@ -337,20 +337,20 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
-    {"dial", "(host: string, port: int, timeout?: int): Json?", "Dial a TCP connection", true, false},
-    {"listen", "(port: int, backlog?: int): Json?", "Start listening on a port", true, false},
-    {"accept", "(listener: Json): Json?", "Accept a new connection", true, false},
-    {"read", "(conn: Json, maxlen?: int): string?", "Read data from connection", true, false},
-    {"write", "(conn: Json, data: string): int", "Write data to connection", true, false},
-    {"close", "(handle: Json): void", "Close a connection or listener", true, false},
-    {"fd", "(handle: Json): int", "Get fd from handle", true, false},
+    {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false},
+    {"listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true, false},
+    {"accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false},
+    {"read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false},
+    {"write", "(conn: NetConn, data: string): int", "Write data to connection", true, false},
+    {"close", "(handle: NetConn | NetListener): void", "Close a connection or listener", true, false},
+    {"fd", "(handle: NetConn | NetListener): int", "Get fd from handle", true, false},
     {"lookup", "(hostname: string): string?", "DNS lookup", true, false},
     {"hasTLS", "(): bool", "Check if TLS support is available", true, false},
-    {"dialTLS", "(host: string, port: int, timeout?: int): Json?", "Dial a TLS connection", true, false},
-    {"upgradeTLS", "(conn: Json, hostname: string): Json?", "Upgrade connection to TLS", true, false},
-    {"udpBind", "(port: int, addr?: string): Json?", "Bind a UDP socket", true, false},
-    {"sendTo", "(handle: Json, data: string, host: string, port: int): int", "Send UDP datagram", true, false},
-    {"recvFrom", "(handle: Json, maxlen?: int): Json?", "Receive UDP datagram", true, false},
+    {"dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", true, false},
+    {"upgradeTLS", "(conn: NetConn, hostname: string): NetConn?", "Upgrade connection to TLS", true, false},
+    {"udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false},
+    {"sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false},
+    {"recvFrom", "(handle: NetConn, maxlen?: int): Json?", "Receive UDP datagram", true, false},
 };
 #define GEN_NET_FUNCTION_COUNT 14
 

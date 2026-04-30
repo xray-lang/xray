@@ -14,6 +14,7 @@
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../base/xmalloc.h"
+#include "../../../stdlib/prelude/prelude.h"
 #include <string.h>
 
 // Generate XaBuiltinMember arrays from unified X-macro definitions
@@ -697,9 +698,75 @@ XrType *xa_builtin_parse_type_string(XrayIsolate *X, const char *s) {
     return parse_type_str(X, s, strlen(s));
 }
 
+// Helper: skip leading whitespace.
+static inline size_t parse_type_skip_ws(const char *s, size_t len, size_t i) {
+    while (i < len && (s[i] == ' ' || s[i] == '\t'))
+        i++;
+    return i;
+}
+
+// Helper: trim trailing whitespace from [start, end).
+static inline size_t parse_type_trim_right(const char *s, size_t start, size_t end) {
+    while (end > start && (s[end - 1] == ' ' || s[end - 1] == '\t'))
+        end--;
+    return end;
+}
+
+// Find a top-level pipe ('|') in s[0, len). Returns the index, or len
+// if not found. "Top level" means not inside <...> generic args. The
+// parser allows `int | string?` to mean `int | (string | null)`, so we
+// only need to match a literal '|' between balanced angle brackets.
+static size_t parse_type_find_top_pipe(const char *s, size_t len, size_t from) {
+    int depth = 0;
+    for (size_t i = from; i < len; i++) {
+        char c = s[i];
+        if (c == '<')
+            depth++;
+        else if (c == '>') {
+            if (depth > 0)
+                depth--;
+        } else if (c == '|' && depth == 0) {
+            return i;
+        }
+    }
+    return len;
+}
+
 static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
     if (!s || len == 0)
         return xr_type_new_unknown(NULL);
+
+    // Top-level union: T1 | T2 | ... . Mirrors the parser's union rule
+    // in xr_parse_type_annotation, except we work on the cfunc-signature
+    // string surface (no real tokens). Each member is parsed recursively
+    // so that `int | string?` parses as `int | (string|null)` exactly
+    // like xr_parse_type_annotation does.
+    size_t first_pipe = parse_type_find_top_pipe(s, len, 0);
+    if (first_pipe < len) {
+        XrType *members[XR_UNION_MAX_MEMBERS];
+        int count = 0;
+
+        size_t start = 0;
+        while (start <= len && count < XR_UNION_MAX_MEMBERS) {
+            size_t pipe = parse_type_find_top_pipe(s, len, start);
+            size_t mstart = parse_type_skip_ws(s, len, start);
+            size_t mend = parse_type_trim_right(s, mstart, pipe);
+            if (mend > mstart) {
+                XrType *m = parse_type_str(X, s + mstart, mend - mstart);
+                if (m)
+                    members[count++] = m;
+            }
+            if (pipe >= len)
+                break;
+            start = pipe + 1;
+        }
+
+        if (count == 0)
+            return xr_type_new_unknown(X);
+        if (count == 1)
+            return members[0];
+        return xr_type_new_union(X, members, count);
+    }
 
     // Strip trailing '?' for nullable check
     bool nullable = (s[len - 1] == '?');
@@ -797,7 +864,26 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         char name[2] = {s[0], '\0'};
         type = xr_type_new_type_param(X, name, s[0] - 'A');
     } else {
-        type = xr_type_new_unknown(X);
+        // Last resort: consult the prelude registry. SIMPLE entries
+        // (BigInt, DateTime, Logger, NetConn, NetListener, Range,
+        // StringBuilder) all surface here as named instances so that
+        // typed cfunc signatures like "(): NetConn?" round-trip
+        // through the analyzer. Generic / singleton kinds were already
+        // handled by the dedicated branches above.
+        if (X) {
+            const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
+            if (symbols) {
+                const XrPreludeTypeEntry *entry =
+                    xr_prelude_lookup_type(symbols, s, base_len);
+                if (entry && entry->kind == (int) XR_PRELUDE_KIND_SIMPLE) {
+                    type = xr_type_new_instance(X, NULL);
+                    if (type)
+                        type->instance.class_name = entry->name;
+                }
+            }
+        }
+        if (!type)
+            type = xr_type_new_unknown(X);
     }
 
     if (type && nullable) {

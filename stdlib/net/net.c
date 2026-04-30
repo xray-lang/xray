@@ -1381,39 +1381,39 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
 
 // @module net
 //
-// NOTE: cfunc return signatures still advertise Json? for handle types.
-// The runtime returns typed XrNetConn / XrNetListener objects (registered
-// via xr_register_native_type), so method dispatch (conn.fd(), l.close())
-// works at runtime via type inference. Promoting these signatures to
-// NetConn? / NetListener? is blocked on gen_stdlib_types.py learning to
-// preserve xr_module_add_export() constants — without that, regenerating
-// the analyzer header drops log.INFO / encoding.LE etc. and breaks
-// unrelated regression tests.
+// cfunc signatures use the typed prelude handle classes (NetConn /
+// NetListener), with union types where the cfunc accepts either kind
+// (close / fd / sendTo / recvFrom). The analyzer parses union types
+// in cfunc signature strings, and Json <-> instance coercion is
+// allowed at compile time with a runtime check, so user code can
+// freely mix the typed and untyped surfaces.
 
-XR_DEFINE_BUILTIN(net_dial_yieldable, "dial", "(host: string, port: int, timeout?: int): Json?",
+XR_DEFINE_BUILTIN(net_dial_yieldable, "dial", "(host: string, port: int, timeout?: int): NetConn?",
                   "Dial a TCP connection")
-XR_DEFINE_BUILTIN(net_listen_handle, "listen", "(port: int, backlog?: int): Json?",
+XR_DEFINE_BUILTIN(net_listen_handle, "listen", "(port: int, backlog?: int): NetListener?",
                   "Start listening on a port")
-XR_DEFINE_BUILTIN(net_accept_handle_yieldable, "accept", "(listener: Json): Json?",
+XR_DEFINE_BUILTIN(net_accept_handle_yieldable, "accept", "(listener: NetListener): NetConn?",
                   "Accept a new connection")
-XR_DEFINE_BUILTIN(net_read_handle_yieldable, "read", "(conn: Json, maxlen?: int): string?",
+XR_DEFINE_BUILTIN(net_read_handle_yieldable, "read", "(conn: NetConn, maxlen?: int): string?",
                   "Read data from connection")
-XR_DEFINE_BUILTIN(net_write_handle_yieldable, "write", "(conn: Json, data: string): int",
+XR_DEFINE_BUILTIN(net_write_handle_yieldable, "write", "(conn: NetConn, data: string): int",
                   "Write data to connection")
-XR_DEFINE_BUILTIN(net_close_handle, "close", "(handle: Json): void",
+XR_DEFINE_BUILTIN(net_close_handle, "close", "(handle: NetConn | NetListener): void",
                   "Close a connection or listener")
-XR_DEFINE_BUILTIN(net_fd_handle, "fd", "(handle: Json): int", "Get fd from handle")
+XR_DEFINE_BUILTIN(net_fd_handle, "fd", "(handle: NetConn | NetListener): int",
+                  "Get fd from handle")
 XR_DEFINE_BUILTIN(net_dns_lookup, "lookup", "(hostname: string): string?", "DNS lookup")
 XR_DEFINE_BUILTIN(net_has_tls, "hasTLS", "(): bool", "Check if TLS support is available")
 XR_DEFINE_BUILTIN(net_dial_tls_yieldable, "dialTLS",
-                  "(host: string, port: int, timeout?: int): Json?", "Dial a TLS connection")
-XR_DEFINE_BUILTIN(net_upgrade_tls_yieldable, "upgradeTLS", "(conn: Json, hostname: string): Json?",
-                  "Upgrade connection to TLS")
-XR_DEFINE_BUILTIN(net_udp_bind_handle, "udpBind", "(port: int, addr?: string): Json?",
+                  "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection")
+XR_DEFINE_BUILTIN(net_upgrade_tls_yieldable, "upgradeTLS",
+                  "(conn: NetConn, hostname: string): NetConn?", "Upgrade connection to TLS")
+XR_DEFINE_BUILTIN(net_udp_bind_handle, "udpBind", "(port: int, addr?: string): NetConn?",
                   "Bind a UDP socket")
 XR_DEFINE_BUILTIN(net_send_to_yieldable, "sendTo",
-                  "(handle: Json, data: string, host: string, port: int): int", "Send UDP datagram")
-XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: Json, maxlen?: int): Json?",
+                  "(handle: NetConn, data: string, host: string, port: int): int",
+                  "Send UDP datagram")
+XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: NetConn, maxlen?: int): Json?",
                   "Receive UDP datagram")
 
 /* ========== Native-type instance methods (synchronous) ==========

@@ -1083,7 +1083,7 @@ XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): void",
 XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void",
                   "Enable async logging")
 XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): void", "Flush log buffer")
-XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): any", "Create child logger")
+XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): Logger", "Create child logger")
 
 /* Logger native-type registration is invoked unconditionally during
  * isolate init by xr_prelude_register_all_native_types, so the XrClass

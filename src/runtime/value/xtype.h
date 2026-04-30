@@ -509,26 +509,77 @@ XR_FUNC XrType *xr_type_union_member(XrType *type, int index);
 XR_FUNC bool xr_type_union_contains(XrType *type, XrTypeKind kind);
 XR_FUNC XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind);
 
-// Check if source type allows Json coercion to target (compile-time pass, runtime check).
-// Returns true when source is Json and target is a Json-compatible type.
+// Check if a coercion through Json is allowed at compile time. Returns
+// true when the type checker should treat `target = source` as legal,
+// possibly with a runtime OP_CHECKTYPE inserted by the codegen.
+//
+// Two directions are recognised — both unavoidable in practice once
+// stdlib cfunc signatures advertise typed handles like NetConn?:
+//
+//   1. Json -> X (the historical direction). Stdlib factories that
+//      still return `Json?` flow into typed user variables; codegen
+//      inserts OP_CHECKTYPE so a wrong shape becomes a runtime error
+//      instead of silent UB.
+//
+//   2. X -> Json (the new direction). Native instance handles are
+//      passed back into module-level cfuncs that still take `Json` for
+//      multi-handle polymorphism (e.g. net.fd / net.close, which today
+//      accept either NetConn or NetListener). The runtime already
+//      stores instances inside the same XrValue tagged union as Json
+//      objects, so this is a label-only coercion with zero work.
+//
+// The coercion is intentionally permissive at compile time. Anything
+// that survives this check still goes through xa_typecheck_assignable
+// downstream when the constraints are tighter.
 static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     if (!target || !source)
         return false;
+
+    // Direction 2: any structured value flows into a Json sink. The
+    // sink is a dynamic object, so accepting an instance / array / map
+    // / set / bytes / channel here does not lose information.
+    if (target->kind == XR_KIND_JSON) {
+        switch (source->kind) {
+            case XR_KIND_INSTANCE:
+            case XR_KIND_OBJECT:
+            case XR_KIND_ARRAY:
+            case XR_KIND_MAP:
+            case XR_KIND_SET:
+            case XR_KIND_BYTES:
+            case XR_KIND_CHANNEL:
+            case XR_KIND_JSON:
+                return true;
+            default:
+                break;
+        }
+        if (xr_kind_is_primitive(source->kind))
+            return true;
+    }
+
+    // Direction 1: Json source flowing into a more specific target.
     if (source->kind != XR_KIND_JSON)
         return false;
-    // Single type: primitive, Json, or Array
     if (xr_kind_is_primitive(target->kind))
         return true;
     if (target->kind == XR_KIND_JSON)
         return true;
     if (target->kind == XR_KIND_ARRAY)
         return true;
-    // Union of Json-compatible types
+    // Json -> Instance: the stdlib pattern, e.g.
+    //   let conn: NetConn? = net.dial(...)
+    // The cfunc still types its return as Json? for back-compat, but
+    // user-side annotations should compile. Codegen inserts a runtime
+    // type check just like for primitives.
+    if (target->kind == XR_KIND_INSTANCE)
+        return true;
+    // Union of Json-compatible types.
     if (target->kind == XR_KIND_UNION) {
         for (int i = 0; i < target->union_type.member_count; i++) {
             XrType *m = target->union_type.members[i];
-            if (!m || (!xr_kind_is_primitive(m->kind) && m->kind != XR_KIND_JSON &&
-                       m->kind != XR_KIND_ARRAY))
+            if (!m)
+                return false;
+            if (!xr_kind_is_primitive(m->kind) && m->kind != XR_KIND_JSON &&
+                m->kind != XR_KIND_ARRAY && m->kind != XR_KIND_INSTANCE)
                 return false;
         }
         return target->union_type.member_count > 0;

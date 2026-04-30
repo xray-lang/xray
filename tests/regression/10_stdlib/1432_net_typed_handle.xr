@@ -47,14 +47,6 @@ fn test_module_and_method_interop(): void {
 
 // ============================================================
 // Method dispatch via type inference
-//
-// Explicit `let conn: NetConn = ...` annotation is intentionally not
-// exercised here: typed cfunc signatures (NetConn? / NetListener?) are
-// advertised to LSP for completion, but the analyzer treats unknown
-// class names as opaque until full first-class buy-in (lexer keyword
-// plus xr_type_new_*) lands across the pipeline. Inference is the
-// stable surface today and matches how Logger / DateTime are usually
-// written in the regression suite.
 // ============================================================
 
 @test
@@ -65,6 +57,31 @@ fn test_method_dispatch_via_inference(): void {
     let l = listener!
     assert_true(l.fd() >= 0)
     assert_true(l.port() > 0)
+
+    l.close()
+    assert_true(l.isClosed())
+}
+
+// ============================================================
+// Method dispatch via explicit typed annotations
+//
+// NetConn / NetListener are registered as prelude entries with the
+// XrClasses pre-installed by xr_prelude_register_all_native_types,
+// and the cfunc signatures advertise NetConn? / NetListener?, so a
+// user-side `let conn: NetConn? = net.dial(...)` annotation now
+// type-checks and dispatches methods through the same path that
+// inference uses.
+// ============================================================
+
+@test
+fn test_explicit_typed_listener(): void {
+    let listener: NetListener? = net.listen(0, 1)
+    assert_true(listener != null)
+
+    let l: NetListener = listener!
+    assert_true(l.fd() >= 0)
+    assert_true(l.port() > 0)
+    assert_true(!l.isClosed())
 
     l.close()
     assert_true(l.isClosed())

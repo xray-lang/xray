@@ -285,10 +285,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             {
-                // Check null safety then assignability
+                // Check null safety then assignability. Json coercion
+                // is the same compile-time fallback used by var-decl /
+                // assignment / return checks: typed instance -> Json
+                // sink (and Json -> typed instance with a runtime
+                // OP_CHECKTYPE) compiles, anything stricter errors.
                 bool null_err =
                     xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
-                if (!null_err && !xa_typecheck_assignable(param_type, arg_type)) {
+                if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
+                    !xr_is_json_coercion(param_type, arg_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
                              "Argument %d: type '%s' is not assignable to parameter type '%s'",
