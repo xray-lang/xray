@@ -44,3 +44,28 @@ fn test_module_and_method_interop(): void {
     assert_true(listener!.fd() == -1)
     assert_true(net.fd(listener!) == -1)
 }
+
+// ============================================================
+// Method dispatch via type inference
+//
+// Explicit `let conn: NetConn = ...` annotation is intentionally not
+// exercised here: typed cfunc signatures (NetConn? / NetListener?) are
+// advertised to LSP for completion, but the analyzer treats unknown
+// class names as opaque until full first-class buy-in (lexer keyword
+// plus xr_type_new_*) lands across the pipeline. Inference is the
+// stable surface today and matches how Logger / DateTime are usually
+// written in the regression suite.
+// ============================================================
+
+@test
+fn test_method_dispatch_via_inference(): void {
+    let listener = net.listen(0, 1)
+    assert_true(listener != null)
+
+    let l = listener!
+    assert_true(l.fd() >= 0)
+    assert_true(l.port() > 0)
+
+    l.close()
+    assert_true(l.isClosed())
+}
