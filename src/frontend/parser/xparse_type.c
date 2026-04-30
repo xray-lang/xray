@@ -154,8 +154,11 @@ XrType *xr_parse_type_annotation(Parser *parser) {
     // xr_type_to_slot_type returns XR_SLOT_ANY because raw storage cannot
     // distinguish null from a valid integer/float value.
     if (xr_parser_match(parser, TK_QUESTION)) {
-        // Json already includes null — Json? is redundant and forbidden
-        if (base && base->kind == XR_KIND_JSON) {
+        // Reject `T?` for any T whose value domain already includes
+        // null (today: Json). Such types have no separate
+        // non-nullable form, so the `?` would be pure noise. See
+        // xr_type_intrinsically_includes_null in xtype.h.
+        if (xr_type_intrinsically_includes_null(base)) {
             xr_parser_error(parser,
                             "'Json?' is not allowed — Json already includes null as a valid value. "
                             "Use 'Json' instead.");
