@@ -34,6 +34,8 @@
 #include "../xstring.h"
 #include "../../coro/xcoroutine.h"
 #include "../../symbol/xsymbol_table.h"
+#include "../xexception.h"
+#include "../../vm/xvm.h"
 #include <string.h>
 
 /* ========== Static Method Implementations ========== */
@@ -176,6 +178,27 @@ static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue *args, int n
     return xr_bool(xr_json_field_count(isolate, json) == 0);
 }
 
+// Json.stringify(value, indent?) — thin wrapper that calls the core
+// stringify engine and throws a TypeError on non-serializable types.
+static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
+
+    int indent = 0;
+    if (argc >= 2 && XR_IS_INT(args[1])) {
+        indent = (int) XR_TO_INT(args[1]);
+    }
+
+    XrJsonStringifyResult r = xr_json_stringify_core(X, args[0], indent);
+    if (r.has_error) {
+        XrValue exc = xr_exception_newf(X, XR_ERR_TYPE,
+                                        "Json.stringify: %s", r.error_msg);
+        xr_vm_unwind_with_trace(X, exc);
+        return xr_null();
+    }
+    return r.result;
+}
+
 /* ========== Class Creation ========== */
 
 static XrClass *create_json_utility_class(XrayIsolate *X) {
@@ -196,10 +219,10 @@ static XrClass *create_json_utility_class(XrayIsolate *X) {
     xr_class_builder_add_static_method(builder, "isEmpty", (XrCFunctionPtr) xr_json_static_isEmpty,
                                        1, 0);
 
-    // JSON parse/stringify — implemented in xjson_serde.c
+    // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
     xr_class_builder_add_static_method(builder, "parse", (XrCFunctionPtr) xr_json_fn_parse, 1, 0);
-    xr_class_builder_add_static_method(builder, "stringify", (XrCFunctionPtr) xr_json_fn_stringify, 1,
-                                       0);
+    xr_class_builder_add_static_method(builder, "stringify",
+                                       (XrCFunctionPtr) xr_json_builtin_stringify, 2, 0);
     xr_class_builder_add_static_method(builder, "isValid", (XrCFunctionPtr) xr_json_fn_is_valid, 1,
                                        0);
     xr_class_builder_add_static_method(builder, "tryParse", (XrCFunctionPtr) xr_json_fn_try_parse, 1,

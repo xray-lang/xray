@@ -11,7 +11,9 @@
  *   RFC 8259 compliant JSON parser and serializer. Handles escape sequences,
  *   Unicode (\uXXXX), and proper type conversion between JSON and xray values.
  *   Enum values serialize as member name strings; DateTime as ISO 8601.
- *   Non-serializable types (function, class, channel) cause stringify to throw.
+ *   Non-serializable types (function, class, channel) cause stringify to
+ *   return an error result; the caller (xjson_builtins.c) decides whether
+ *   to throw. This keeps the serde layer free of VM dependencies.
  */
 
 #include "xjson_serde.h"
@@ -34,17 +36,15 @@
 #include "xjson.h"
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
-#include "xexception.h"
 #include "../value/xtype_names.h"
-#include "../../../stdlib/datetime/datetime.h"
-#include "../../vm/xvm.h"
 
-/* ========== External Declarations ========== */
-
-extern XrValue xr_string_value(XrString *str);
-extern XrValue xr_value_from_array(XrArray *arr);
-extern XrValue xr_value_from_map(XrMap *map);
-extern XrValue xr_json_value(XrJson *json);
+/* Forward-declare XrDateTime — definition lives in stdlib/datetime/datetime.h
+ * but this L2 module must not depend on stdlib. We only need the pointer type
+ * and one formatting function (implemented in stdlib/datetime/datetime.c,
+ * linked into the same binary). */
+typedef struct XrDateTime XrDateTime;
+#define XR_TO_DATETIME(v) ((XrDateTime *) XR_TO_PTR(v))
+XR_FUNC int xr_datetime_to_iso_string(XrDateTime *dt, char *buf, size_t buf_size);
 
 /* ========== JSON Parser (delegates to src/base/xjson) ========== */
 
@@ -496,40 +496,34 @@ XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc) {
     return result;
 }
 
-// stringify(value, indent?) - Serialize to JSON string
-XrValue xr_json_fn_stringify(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
+// Core stringify: serialize value to string, return result + error info.
+// Does NOT throw — the caller decides how to handle errors.
+XrJsonStringifyResult xr_json_stringify_core(XrayIsolate *X, XrValue val, int indent) {
+    XrJsonStringifyResult out = {.result = xr_null(), .has_error = false};
+    out.error_msg[0] = '\0';
 
-    int indent = 0;
-    if (argc >= 2 && XR_IS_INT(args[1])) {
-        indent = (int) XR_TO_INT(args[1]);
-        if (indent < 0)
-            indent = 0;
-        if (indent > 8)
-            indent = 8;
-    }
+    if (indent < 0)
+        indent = 0;
+    if (indent > 8)
+        indent = 8;
 
     JsonWriter writer;
     writer_init(&writer, X, indent);
 
-    stringify_value(&writer, args[0]);
+    stringify_value(&writer, val);
 
     if (writer.has_error) {
-        // Non-serializable type encountered — throw instead of silent data loss
-        char msg_copy[128];
-        memcpy(msg_copy, writer.error_msg, sizeof(msg_copy));
+        out.has_error = true;
+        memcpy(out.error_msg, writer.error_msg, sizeof(out.error_msg));
         writer_free(&writer);
-        XrValue exc = xr_exception_newf(X, XR_ERR_TYPE,
-                                        "Json.stringify: %s", msg_copy);
-        xr_vm_unwind_with_trace(X, exc);
-        return xr_null();
+        return out;
     }
 
     XrString *str = xr_string_new(X, writer.data, writer.len);
     writer_free(&writer);
 
-    return xr_string_value(str);
+    out.result = xr_string_value(str);
+    return out;
 }
 
 // Serialize XrValue to JSON C-string.
