@@ -157,7 +157,7 @@ static void ready_list_push(XrReadyList *list, struct XrCoroutine *coro) {
 // The condition variable is signaled by xr_netpoll_unblock when I/O is ready.
 //
 // Returns true if I/O ready, false if closed
-bool xr_netpoll_block(XrPollDesc *pd, int mode, XrayIsolate *X) {
+bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
     (void) X;
     _Atomic uintptr_t *gpp = (mode == XR_POLL_READ) ? &pd->rg : &pd->wg;
 
@@ -200,7 +200,7 @@ bool xr_netpoll_block(XrPollDesc *pd, int mode, XrayIsolate *X) {
 
 // Unblock, wake waiting coroutine
 // Returns the woken coroutine (if any)
-// Also signals condition variable for threads blocked in xr_netpoll_block
+// Also signals condition variable for threads blocked in xr_netpoll_block_sync
 struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) {
     _Atomic uintptr_t *gpp = (mode == XR_POLL_READ) ? &pd->rg : &pd->wg;
 
@@ -732,7 +732,7 @@ int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, XrayIsolate *X) {
     atomic_fetch_add(&np->waiters, 1);
 
     // Block wait (supports coroutine suspend)
-    bool ready = xr_netpoll_block(pd, mode, X);
+    bool ready = xr_netpoll_block_sync(pd, mode, X);
 
     // Decrement waiter count
     atomic_fetch_sub(&np->waiters, 1);
@@ -794,7 +794,7 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
 
         if (old == XR_PD_WAIT) {
             if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
-                // Signal condition variable for threads in xr_netpoll_block
+                // Signal condition variable for threads in xr_netpoll_block_sync
                 xr_mutex_lock(&pd->block_mu);
                 xr_cond_signal(&pd->block_cond);
                 xr_mutex_unlock(&pd->block_mu);
@@ -1073,7 +1073,7 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
     return NULL;
 }
 
-bool xr_netpoll_block(XrPollDesc *pd, int mode, struct XrayIsolate *X) {
+bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, struct XrayIsolate *X) {
     (void) pd;
     (void) mode;
     (void) X;

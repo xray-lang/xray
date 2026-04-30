@@ -116,7 +116,7 @@ int xr_socket_accept(XrayIsolate *X, int listen_fd) {
 
         if (xr_socket_err_is_again(xr_get_socket_error())) {
             // Block until I/O ready (uses xr_cond_wait, not busy-wait)
-            if (xr_netpoll_block(pd, XR_POLL_READ, X)) {
+            if (xr_netpoll_block_sync(pd, XR_POLL_READ, X)) {
                 continue;
             }
             return -1;
@@ -198,7 +198,7 @@ int xr_socket_read(XrayIsolate *X, int fd, char *buf, size_t len) {
         }
 
         if (xr_socket_err_is_again(xr_get_socket_error())) {
-            if (xr_netpoll_block(pd, XR_POLL_READ, X)) {
+            if (xr_netpoll_block_sync(pd, XR_POLL_READ, X)) {
                 continue;
             }
             return -1;
@@ -242,7 +242,7 @@ int xr_socket_write(XrayIsolate *X, int fd, const char *buf, size_t len) {
         }
 
         if (xr_socket_err_is_again(xr_get_socket_error())) {
-            if (xr_netpoll_block(pd, XR_POLL_WRITE, X)) {
+            if (xr_netpoll_block_sync(pd, XR_POLL_WRITE, X)) {
                 continue;
             }
             return total > 0 ? (int) total : -1;
@@ -324,7 +324,7 @@ void xr_socket_set_read_timeout(XrayIsolate *X, int fd, int timeout_ms) {
 
 /*
  * Wait until fd is readable (or deadline fires) without consuming
- * bytes. Implemented as set-read-deadline + xr_netpoll_block(POLL_READ)
+ * bytes. Implemented as set-read-deadline + xr_netpoll_block_sync(POLL_READ)
  * — the same primitives xr_socket_read uses, just without the final
  * read() call that would truncate a datagram on SOCK_DGRAM fds.
  *
@@ -345,7 +345,7 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
         return -1;
 
     // Arm read deadline. timeout_ms == 0 leaves the fd without a
-    // deadline; xr_netpoll_block then sleeps until POLLIN.
+    // deadline; xr_netpoll_block_sync then sleeps until POLLIN.
     if (timeout_ms > 0) {
         int64_t deadline = (int64_t) xr_time_monotonic_ns() + (int64_t) timeout_ms * 1000000LL;
         XrTimerWheel *tw = NULL;
@@ -355,7 +355,7 @@ int xr_socket_wait_readable(XrayIsolate *X, int fd, int timeout_ms) {
         xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline, XR_POLL_READ, tw);
     }
 
-    bool ready = xr_netpoll_block(pd, XR_POLL_READ, X);
+    bool ready = xr_netpoll_block_sync(pd, XR_POLL_READ, X);
 
     // Always clear any deadline we may have armed.
     if (timeout_ms > 0) {
@@ -393,7 +393,7 @@ int xr_socket_wait_writable(XrayIsolate *X, int fd, int timeout_ms) {
         xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline, XR_POLL_WRITE, tw);
     }
 
-    bool ready = xr_netpoll_block(pd, XR_POLL_WRITE, X);
+    bool ready = xr_netpoll_block_sync(pd, XR_POLL_WRITE, X);
 
     if (timeout_ms > 0) {
         xr_netpoll_set_deadline(&runtime->netpoll, pd, 0, XR_POLL_WRITE, NULL);

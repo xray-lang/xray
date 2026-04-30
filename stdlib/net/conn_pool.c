@@ -54,7 +54,7 @@ static uint32_t hash_string(const char *str) {
 
 // Perform a non-blocking TCP connect that cooperates with the coroutine
 // scheduler. When called from a coroutine (X != NULL) and the fd blocks
-// on EINPROGRESS, we suspend on runtime->netpoll via xr_netpoll_block so
+// on EINPROGRESS, we suspend on runtime->netpoll via xr_netpoll_block_sync so
 // the worker can service other coroutines until the socket is writable.
 // Returns 0 on success, -1 on failure (socket closed by caller on error).
 static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
@@ -87,11 +87,11 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
     if (!pd)
         return -1;
 
-    // xr_netpoll_block sleeps the current coroutine until the fd is
+    // xr_netpoll_block_sync sleeps the current coroutine until the fd is
     // writable (connect completion) or the pd is closed. On spurious
     // wake it returns true but the SO_ERROR check below catches any real
     // failure, so a single check after resume is sufficient.
-    if (!xr_netpoll_block(pd, XR_POLL_WRITE, X))
+    if (!xr_netpoll_block_sync(pd, XR_POLL_WRITE, X))
         return -1;
 
     int soerr = 0;
@@ -184,7 +184,7 @@ static XrPooledConn *create_connection(struct XrayIsolate *X, XrConnPool *pool, 
     //
     // Use the non-blocking xr_tls_conn_handshake_try() in a loop.  On
     // WANT_READ / WANT_WRITE we suspend the current coroutine via
-    // xr_netpoll_block so the worker can service other goroutines
+    // xr_netpoll_block_sync so the worker can service other goroutines
     // while the TCP round-trips complete. Without a runtime (CLI /
     // tests) we fall back to poll() with a bounded timeout so the
     // caller never busy-loops or hangs indefinitely.
@@ -219,7 +219,7 @@ static XrPooledConn *create_connection(struct XrayIsolate *X, XrConnPool *pool, 
                     XrRuntime *rt = X ? (XrRuntime *) X->vm.runtime : NULL;
                     if (rt) {
                         XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, fd);
-                        if (!pd || !xr_netpoll_block(pd, mode, X)) {
+                        if (!pd || !xr_netpoll_block_sync(pd, mode, X)) {
                             break;  // Netpoll error → abort
                         }
                     } else {

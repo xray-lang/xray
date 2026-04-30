@@ -102,7 +102,7 @@ typedef struct XrPollDesc {
     XrTWheelTimer rt_storage;  // Read timer storage
     XrTWheelTimer wt_storage;  // Write timer storage
 
-    // Condition variable for xr_netpoll_block (thread-blocking wait)
+    // Condition variable for xr_netpoll_block_sync (thread-blocking wait)
     xr_mutex_t block_mu;
     xr_cond_t block_cond;
 
@@ -349,10 +349,23 @@ XR_FUNC void xr_poll_cache_free(XrPollCache *cache, XrPollDesc *pd);
 // Called by platform-specific netpoll backend
 XR_FUNC void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode);
 
-// Block current coroutine waiting for I/O
-// X: VM instance (for getting scheduler and current coroutine)
-// Returns true if I/O ready, false if timeout or closed
-XR_FUNC bool xr_netpoll_block(XrPollDesc *pd, int mode, struct XrayIsolate *X);
+/*
+ * Block the calling worker thread on a condition variable until I/O
+ * is ready (or the pd is closed). The X parameter is currently unused
+ * — pthread cond_wait suspends the OS thread, not the calling
+ * coroutine. Any other coroutine waiting on the same worker stalls
+ * until this one wakes.
+ *
+ * USE ONLY in paths that cannot be expressed as yieldable cfunc
+ * state machines: bootstrap, CLI tooling, and short-lived helpers
+ * deep inside synchronous C call chains (conn_pool TCP connect,
+ * TLS handshake fallback). Hot paths owned by stdlib clients
+ * (http / ws / cluster) must migrate to xr_yield_for_io to avoid
+ * head-of-line blocking on the worker.
+ *
+ * Returns true if I/O ready, false on timeout or fd close.
+ */
+XR_FUNC bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, struct XrayIsolate *X);
 
 // Unblock, wake waiting coroutine
 XR_FUNC struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready);
