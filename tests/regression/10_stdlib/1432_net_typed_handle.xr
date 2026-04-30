@@ -1,0 +1,46 @@
+// 1432_net_typed_handle.xr
+// 作者：xingleixu@gmail.com
+// 测试：net 模块的 typed native handle (XrNetConn / XrNetListener) 的方法
+//
+// 覆盖：
+//   - listener.fd() / listener.port() / listener.close() / listener.isClosed()
+//   - 模块层 net.close / net.fd 仍可与 typed handle 互操作
+
+import net
+
+@test
+fn test_listener_methods(): void {
+    // listen on an ephemeral port (0 → kernel picks)
+    const listener = net.listen(0, 16)
+    assert_true(listener != null)
+
+    // method-style accessors
+    const fd = listener!.fd()
+    assert_true(fd >= 0)
+    assert_true(listener!.port() > 0)
+    assert_true(!listener!.isClosed())
+
+    // close() is idempotent
+    listener!.close()
+    assert_true(listener!.isClosed())
+    assert_true(listener!.fd() == -1)
+
+    // Calling close again is a no-op
+    listener!.close()
+    assert_true(listener!.isClosed())
+}
+
+@test
+fn test_module_and_method_interop(): void {
+    // The module-level cfunc (net.fd) and the typed method must agree
+    // both before and after close.
+    const listener = net.listen(0, 1)
+    assert_true(listener != null)
+
+    assert_true(net.fd(listener!) == listener!.fd())
+
+    net.close(listener!)
+    assert_true(listener!.isClosed())
+    assert_true(listener!.fd() == -1)
+    assert_true(net.fd(listener!) == -1)
+}

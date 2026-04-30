@@ -18,6 +18,7 @@
 #include "tls.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"
+#include "../../src/runtime/object/xnative_type.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
@@ -1409,8 +1410,113 @@ XR_DEFINE_BUILTIN(net_send_to_yieldable, "sendTo",
 XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: Json, maxlen?: int): Json?",
                   "Receive UDP datagram")
 
+/* ========== Native-type instance methods (synchronous) ==========
+ *
+ * Yieldable operations (read / write / accept) stay as module-level
+ * cfuncs because the native-type method table currently only carries
+ * the synchronous XrCFunctionPtr signature. Once the dispatcher grows
+ * a yieldable variant, the matching wrappers can move here.
+ */
+
+static XrValue conn_method_fd(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetConn *c = unwrap_conn(args[0]);
+    return xr_int(c ? c->fd : -1);
+}
+
+static XrValue conn_method_close(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetConn *c = unwrap_conn(args[0]);
+    if (c)
+        xr_net_conn_close(c);
+    return XR_NULL_VAL;
+}
+
+static XrValue conn_method_is_closed(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetConn *c = unwrap_conn(args[0]);
+    return xr_bool(!c || c->closed);
+}
+
+static XrValue conn_method_is_tls(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetConn *c = unwrap_conn(args[0]);
+    return xr_bool(c && c->kind == XR_NETCONN_TLS);
+}
+
+static XrValue listener_method_fd(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetListener *l = unwrap_listener(args[0]);
+    return xr_int(l ? l->fd : -1);
+}
+
+static XrValue listener_method_port(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetListener *l = unwrap_listener(args[0]);
+    return xr_int(l ? l->port : -1);
+}
+
+static XrValue listener_method_close(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetListener *l = unwrap_listener(args[0]);
+    if (l)
+        xr_net_listener_close(l);
+    return XR_NULL_VAL;
+}
+
+static XrValue listener_method_is_closed(XrayIsolate *X, XrValue *args, int n) {
+    (void) X;
+    (void) n;
+    XrNetListener *l = unwrap_listener(args[0]);
+    return xr_bool(!l || l->closed);
+}
+
+static void register_handle_native_types(XrayIsolate *isolate) {
+    static XrNativeMethod conn_methods[] = {
+        {"fd", conn_method_fd, 1},
+        {"close", conn_method_close, 1},
+        {"isClosed", conn_method_is_closed, 1},
+        {"isTLS", conn_method_is_tls, 1},
+        {NULL, NULL, 0},
+    };
+    XrNativeTypeInfo conn_info = {
+        .name = "NetConn",
+        .gc_type = XR_TNETCONN,
+        .methods = conn_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &conn_info);
+
+    static XrNativeMethod listener_methods[] = {
+        {"fd", listener_method_fd, 1},
+        {"port", listener_method_port, 1},
+        {"close", listener_method_close, 1},
+        {"isClosed", listener_method_is_closed, 1},
+        {NULL, NULL, 0},
+    };
+    XrNativeTypeInfo listener_info = {
+        .name = "NetListener",
+        .gc_type = XR_TNETLISTENER,
+        .methods = listener_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &listener_info);
+}
+
 XrModule *xr_load_module_net(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "net");
+
+    // Register the typed handle methods (sync subset).
+    register_handle_native_types(isolate);
 
     // User-level API (handle-based)
     XRS_EXPORT_YIELDABLE(mod, isolate, "dial", net_dial_yieldable);
