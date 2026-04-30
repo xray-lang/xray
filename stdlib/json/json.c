@@ -425,7 +425,7 @@ static void stringify_value(JsonWriter *w, XrValue val) {
 /* ========== Module Functions ========== */
 
 // parse(str) - Parse JSON string
-static XrValue json_parse(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -441,7 +441,7 @@ static XrValue json_parse(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // stringify(value, indent?) - Serialize to JSON string
-static XrValue json_stringify(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_stringify(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
 
@@ -709,7 +709,7 @@ static void validate_value(JsonValidator *v) {
 // isValid(str, opts?) - Check if string is valid JSON (zero allocation).
 // opts.strict (bool, default false): when true, additionally reject
 // unescaped control bytes (< 0x20) inside strings, matching RFC 8259 §7.
-static XrValue json_is_valid(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
     }
@@ -802,7 +802,7 @@ static XrValue json_type_of(XrayIsolate *X, XrValue *args, int argc) {
 
 // tryParse(str) - Try to parse JSON
 // Returns Json: {value: parsed result, error: error message or null}
-static XrValue json_try_parse(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue *args, int argc) {
     XrJson *result = xr_json_new(xr_current_coro(X), 4);
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
@@ -933,12 +933,12 @@ static XrValue json_values(XrayIsolate *X, XrValue *args, int argc) {
 
 // @module json
 
-XR_DEFINE_BUILTIN(json_parse, "parse", "(s: string): any", "Parse JSON string")
-XR_DEFINE_BUILTIN(json_stringify, "stringify", "(value: any, indent?: int): string",
+XR_DEFINE_BUILTIN(xr_json_fn_parse, "parse", "(s: string): any", "Parse JSON string")
+XR_DEFINE_BUILTIN(xr_json_fn_stringify, "stringify", "(value: any, indent?: int): string",
                   "Convert value to JSON string")
-XR_DEFINE_BUILTIN(json_is_valid, "isValid", "(s: string): bool", "Check if string is valid JSON")
+XR_DEFINE_BUILTIN(xr_json_fn_is_valid, "isValid", "(s: string): bool", "Check if string is valid JSON")
 XR_DEFINE_BUILTIN(json_type_of, "typeof", "(value: any): string", "Get JSON type name")
-XR_DEFINE_BUILTIN(json_try_parse, "tryParse", "(s: string): Json",
+XR_DEFINE_BUILTIN(xr_json_fn_try_parse, "tryParse", "(s: string): Json",
                   "Safe parse, returns {value, error}")
 XR_DEFINE_BUILTIN(json_keys, "keys", "(obj: Json): Array<string>", "Get object keys")
 XR_DEFINE_BUILTIN(json_values, "values", "(obj: Json): Array<any>", "Get object values")
@@ -951,11 +951,11 @@ XrModule *xr_load_module_json(XrayIsolate *isolate) {
     if (!mod)
         return NULL;
 
-    XRS_EXPORT(mod, isolate, "parse", json_parse);
-    XRS_EXPORT(mod, isolate, "stringify", json_stringify);
-    XRS_EXPORT(mod, isolate, "isValid", json_is_valid);
+    XRS_EXPORT(mod, isolate, "parse", xr_json_fn_parse);
+    XRS_EXPORT(mod, isolate, "stringify", xr_json_fn_stringify);
+    XRS_EXPORT(mod, isolate, "isValid", xr_json_fn_is_valid);
     XRS_EXPORT(mod, isolate, "typeof", json_type_of);
-    XRS_EXPORT(mod, isolate, "tryParse", json_try_parse);
+    XRS_EXPORT(mod, isolate, "tryParse", xr_json_fn_try_parse);
     XRS_EXPORT(mod, isolate, "keys", json_keys);
     XRS_EXPORT(mod, isolate, "values", json_values);
 

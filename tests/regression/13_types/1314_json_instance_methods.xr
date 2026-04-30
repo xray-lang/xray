@@ -1,0 +1,58 @@
+// 1314_json_instance_methods.xr
+// Test: Json instance methods (keys, values, has, type checks)
+
+// ===== keys() =====
+@test
+fn test_keys(): void {
+    let obj = { name: "Alice", age: 30 }
+    let k = obj.keys()
+    assert_eq(k.length, 2)
+    assert_true(k[0] == "name" || k[1] == "name")
+    assert_true(k[0] == "age" || k[1] == "age")
+}
+
+@test
+fn test_keys_empty(): void {
+    let obj = {}
+    assert_eq(obj.keys().length, 0)
+}
+
+// ===== values() =====
+@test
+fn test_values(): void {
+    let obj = { x: 10, y: 20 }
+    let v = obj.values()
+    assert_eq(v.length, 2)
+    assert_true(v[0] == 10 || v[1] == 10)
+    assert_true(v[0] == 20 || v[1] == 20)
+}
+
+// ===== has() =====
+@test
+fn test_has(): void {
+    let obj = { name: "Alice", age: 30 }
+    assert_true(obj.has("name"))
+    assert_true(obj.has("age"))
+    assert_eq(obj.has("email"), false)
+}
+
+// ===== Combined =====
+@test
+fn test_combined(): void {
+    let data = { a: 1, b: "two", c: true }
+    assert_eq(data.keys().length, 3)
+    assert_eq(data.values().length, 3)
+    assert_true(data.has("a"))
+    assert_eq(data.has("z"), false)
+}
+
+// ===== Parsed Json =====
+@test
+fn test_parsed_json(): void {
+    let data = Json.parse("{\"x\": 1, \"y\": 2}")
+    assert_true(data.has("x"))
+    assert_eq(data.keys().length, 2)
+    assert_eq(data.values().length, 2)
+}
+
+print("json_instance_methods: all tests passed")

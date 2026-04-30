@@ -21,6 +21,7 @@
  */
 
 #include "xjson_builtins.h"
+#include "../../../../stdlib/json/json.h"
 #include "xchecks.h"
 #include "xclass.h"
 #include "xclass_builder.h"
@@ -194,6 +195,15 @@ static XrClass *create_json_utility_class(XrayIsolate *X) {
     xr_class_builder_add_static_method(builder, "size", (XrCFunctionPtr) xr_json_static_size, 1, 0);
     xr_class_builder_add_static_method(builder, "isEmpty", (XrCFunctionPtr) xr_json_static_isEmpty,
                                        1, 0);
+
+    // JSON parse/stringify — delegates to stdlib/json core implementations
+    xr_class_builder_add_static_method(builder, "parse", (XrCFunctionPtr) xr_json_fn_parse, 1, 0);
+    xr_class_builder_add_static_method(builder, "stringify", (XrCFunctionPtr) xr_json_fn_stringify, 1,
+                                       0);
+    xr_class_builder_add_static_method(builder, "isValid", (XrCFunctionPtr) xr_json_fn_is_valid, 1,
+                                       0);
+    xr_class_builder_add_static_method(builder, "tryParse", (XrCFunctionPtr) xr_json_fn_try_parse, 1,
+                                       0);
 
     return xr_class_builder_finalize(builder);
 }

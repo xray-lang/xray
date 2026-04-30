@@ -54,4 +54,11 @@ XR_FUNC char *xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out
 // Public API: parse JSON C-string to XrValue (returns xr_null() on error)
 XR_FUNC XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len);
 
+// Core functions used by both json stdlib module and Json builtin class.
+// Signature: (XrayIsolate*, XrValue* args, int argc) -> XrValue
+XR_FUNC XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_json_fn_stringify(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue *args, int argc);
+
 #endif
