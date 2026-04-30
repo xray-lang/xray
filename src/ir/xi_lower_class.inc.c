@@ -44,8 +44,8 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
     if (is_inst) {
         XiValue *th = xi_param(ml.func, entry, 0, ml.type_any);
         ml.func->params[0] = th;
-        braun_write(&ml,
-                    var_lookup_or_create(&ml, "this", ml.type_any),
+        xi_lower_braun_write(&ml,
+                    xi_lower_var_create(&ml, "this", ml.type_any),
                     entry, th);
         base = 1;
     }
@@ -58,12 +58,12 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         ml.func->params[base + i] = p;
         XR_DCHECK(m->parameters != NULL && m->parameters[i] != NULL,
                   "method param name must not be NULL");
-        braun_write(&ml,
-                    var_lookup_or_create(&ml, m->parameters[i], pt),
+        xi_lower_braun_write(&ml,
+                    xi_lower_var_create(&ml, m->parameters[i], pt),
                     entry, p);
     }
 
-    if (m->body) lower_stmt(&ml, m->body);
+    if (m->body) xi_lower_stmt(&ml, m->body);
 
     /* Constructors auto-return 'this' (param 0) so the caller gets
      * the freshly-created instance, matching the legacy codegen
@@ -72,8 +72,8 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         bool is_ctor = m->is_constructor
                        || (m->name && strcmp(m->name, "constructor") == 0);
         if (is_ctor && is_inst) {
-            int this_var = var_lookup_or_create(&ml, "this", ml.type_any);
-            XiValue *this_ret = braun_read(&ml, this_var, ml.cur_block);
+            int this_var = xi_lower_var_create(&ml, "this", ml.type_any);
+            XiValue *this_ret = xi_lower_braun_read(&ml, this_var, ml.cur_block);
             xi_block_set_return(ml.cur_block, this_ret);
         } else {
             xi_block_set_return(ml.cur_block, NULL);
@@ -135,8 +135,8 @@ static void lower_class_decl(XiLower *l, AstNode *node) {
     v->line = (uint32_t)node->line;
 
     /* Bind class to its name in SSA */
-    int var_id = var_lookup_or_create(l, cd->name, l->type_any);
-    braun_write(l, var_id, l->cur_block, v);
+    int var_id = xi_lower_var_create(l, cd->name, l->type_any);
+    xi_lower_braun_write(l, var_id, l->cur_block, v);
 
     /* Top-level classes: also store into shared array for cross-scope access */
     if (l->is_program && var_id < l->var_count
