@@ -1,0 +1,79 @@
+// 1316_json_decode.xr
+// Test: Json.decode<T>() compiler-generated typed decode
+
+type User = { name: string, age: int }
+
+@test
+fn test_sanity(): void {
+    assert_eq(1 + 1, 2)
+}
+
+@test
+fn test_decode_basic(): void {
+    let json = Json.parse('{"name": "Alice", "age": 30}')
+    let user = Json.decode<User>(json)
+    assert(user != null)
+    assert_eq(user.name, "Alice")
+    assert_eq(user.age, 30)
+}
+
+@test
+fn test_decode_missing_field(): void {
+    let partial = Json.parse('{"name": "Bob"}')
+    let bad = Json.decode<User>(partial)
+    assert_eq(bad, null)
+}
+
+@test
+fn test_decode_wrong_type(): void {
+    let wrong = Json.parse('{"name": 123, "age": 30}')
+    let bad = Json.decode<User>(wrong)
+    assert_eq(bad, null)
+}
+
+@test
+fn test_decode_extra_fields(): void {
+    let extra = Json.parse('{"name": "Carol", "age": 25, "email": "c@test.com"}')
+    let user = Json.decode<User>(extra)
+    assert(user != null)
+    assert_eq(user.name, "Carol")
+    assert_eq(user.age, 25)
+}
+
+@test
+fn test_decode_non_object(): void {
+    let arr = Json.parse("[1, 2, 3]")
+    let bad = Json.decode<User>(arr)
+    assert_eq(bad, null)
+}
+
+// Optional fields and more types
+type Config = { host: string, port: int, debug: bool }
+
+@test
+fn test_decode_bool_field(): void {
+    let json = Json.parse('{"host": "localhost", "port": 8080, "debug": true}')
+    let cfg = Json.decode<Config>(json)
+    assert(cfg != null)
+    assert_eq(cfg.host, "localhost")
+    assert_eq(cfg.port, 8080)
+    assert_eq(cfg.debug, true)
+}
+
+type Point = { x: float, y: float }
+
+@test
+fn test_decode_float_fields(): void {
+    let json = Json.parse('{"x": 1.5, "y": 2.7}')
+    let pt = Json.decode<Point>(json)
+    assert(pt != null)
+    assert_eq(pt.x, 1.5)
+    assert_eq(pt.y, 2.7)
+}
+
+@test
+fn test_decode_null_input(): void {
+    let n = Json.parse("null")
+    let bad = Json.decode<User>(n)
+    assert_eq(bad, null)
+}

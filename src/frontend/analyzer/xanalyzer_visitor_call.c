@@ -89,6 +89,55 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    // Recognize Json.decode<T>(data): compiler-generated typed decode
+    if (call->callee && call->callee->type == AST_MEMBER_ACCESS && call->type_arg_count == 1) {
+        MemberAccessNode *ma = &call->callee->as.member_access;
+        if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
+            ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0) {
+            XrType *target_type = call->type_args[0];
+
+            // Resolve type alias to its underlying object type
+            if (target_type && target_type->kind == XR_KIND_CLASS && target_type->instance.class_name) {
+                XaSymbol *alias_sym =
+                    xa_scope_lookup(ctx->analyzer->current_scope, target_type->instance.class_name);
+                if (alias_sym && alias_sym->kind == XA_SYM_TYPE_ALIAS && alias_sym->alias_type) {
+                    target_type = alias_sym->alias_type;
+                }
+            }
+
+            // Validate: target must be object type with known fields
+            if (!target_type || !XR_TYPE_IS_OBJECT(target_type) ||
+                target_type->object.field_count == 0) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
+                    "Json.decode<T>() requires T to be an object type (type alias with fields)",
+                    &loc);
+                return xr_type_new_unknown(NULL);
+            }
+
+            // Validate: exactly 1 argument
+            if (call->arg_count != 1) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_ARG_TYPE,
+                                           "Json.decode<T>() expects exactly 1 argument", &loc);
+                return xr_type_new_unknown(NULL);
+            }
+
+            // Visit argument to ensure it's analyzed
+            xa_visit_infer_expr(ctx, call->arguments[0]);
+
+            // Return T? (decode can fail, returning null)
+            XrType *result = xr_type_copy(ctx->analyzer->isolate, target_type);
+            if (result)
+                result->is_nullable = true;
+            return result;
+        }
+    }
+
     // Check for method call pattern: container.method(callback)
     // to enable generic type inference for callbacks
     XrType *container_elem_type = NULL;
