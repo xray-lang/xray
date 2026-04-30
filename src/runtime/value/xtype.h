@@ -513,20 +513,16 @@ XR_FUNC XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind ki
 // true when the type checker should treat `target = source` as legal,
 // possibly with a runtime OP_CHECKTYPE inserted by the codegen.
 //
-// Two directions are recognised — both unavoidable in practice once
-// stdlib cfunc signatures advertise typed handles like NetConn?:
+// Two directions are recognised — both routine in xray:
 //
-//   1. Json -> X (the historical direction). Stdlib factories that
-//      still return `Json?` flow into typed user variables; codegen
-//      inserts OP_CHECKTYPE so a wrong shape becomes a runtime error
-//      instead of silent UB.
+//   1. Json -> X. A `Json` source flows into a more specific target
+//      (primitive, container, instance, or a union of the above).
+//      Codegen inserts OP_CHECKTYPE so a wrong runtime shape becomes
+//      a clean exception instead of silent UB.
 //
-//   2. X -> Json (the new direction). Native instance handles are
-//      passed back into module-level cfuncs that still take `Json` for
-//      multi-handle polymorphism (e.g. net.fd / net.close, which today
-//      accept either NetConn or NetListener). The runtime already
-//      stores instances inside the same XrValue tagged union as Json
-//      objects, so this is a label-only coercion with zero work.
+//   2. X -> Json. A typed value is fed into a Json sink. The runtime
+//      already stores every kind of value inside the same XrValue
+//      tagged union, so this is a label-only coercion with zero work.
 //
 // The coercion is intentionally permissive at compile time. Anything
 // that survives this check still goes through xa_typecheck_assignable
@@ -570,11 +566,9 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
         return true;
     if (target->kind == XR_KIND_ARRAY)
         return true;
-    // Json -> Instance: the stdlib pattern, e.g.
-    //   let conn: NetConn? = net.dial(...)
-    // The cfunc still types its return as Json? for back-compat, but
-    // user-side annotations should compile. Codegen inserts a runtime
-    // type check just like for primitives.
+    // Json -> Instance: a Json source feeding a typed instance
+    // target, e.g. `let v: SomeClass = json_obj["key"]`. Codegen
+    // inserts a runtime type check just like for primitives.
     if (target->kind == XR_KIND_INSTANCE)
         return true;
     // Union of Json-compatible types.
