@@ -153,7 +153,7 @@ typedef enum {
     XIR_RT_INDEX_GET,   // dst = obj[key]:  args[0]=obj, args[1]=key
     XIR_RT_INDEX_SET,   // obj[key]=val: dst=val, args[0]=obj, args[1]=key
     XIR_RT_MAP_NEW,     // dst = xrt_map_new(args[0]=capacity)
-    XIR_RT_ISNULL,      // dst = (args[0].tag == XRT_TAG_NULL) ? 1 : 0
+    XIR_RT_ISNULL,      // dst = (args[0].tag == XR_TAG_NULL) ? 1 : 0
 
     // --- Runtime interaction ---
     XIR_SAFEPOINT,      // unified safepoint (GC + preemption via reductions)
