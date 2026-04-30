@@ -1396,6 +1396,11 @@ static bool class_names_match(const char *name_a, const char *name_b) {
 }
 
 // Class inheritance: walk up superclass chain
+// Walks two equivalent chains in tandem because not every code path linking
+// XrClassInfo also re-creates the corresponding XrType: the analyzer links
+// class_ref->base in Pass 1.5, while xr_type_new_instance() leaves
+// superclass NULL. Either chain alone is sufficient when populated; we
+// follow whichever has more reach.
 bool xr_type_is_subclass_of(XrType *type, XrType *target) {
     if (!type || !target)
         return false;
@@ -1408,7 +1413,7 @@ bool xr_type_is_subclass_of(XrType *type, XrType *target) {
     if (!target_name)
         return false;
 
-    // Walk up inheritance chain
+    // Walk up inheritance chain via XrType.superclass first
     XrType *current = type;
     while (current) {
         if (current->instance.class_name &&
@@ -1416,6 +1421,17 @@ bool xr_type_is_subclass_of(XrType *type, XrType *target) {
             return true;
         }
         current = current->instance.superclass;
+    }
+
+    // Fallback: walk via XrClassInfo.base chain (set by analyzer Pass 1.5).
+    // This is needed because xr_type_new_instance() doesn't propagate
+    // superclass from the class declaration's XrType.
+    XrClassInfo *info = type->instance.class_ref;
+    while (info) {
+        if (info->name && class_names_match(info->name, target_name)) {
+            return true;
+        }
+        info = info->base;
     }
     return false;
 }

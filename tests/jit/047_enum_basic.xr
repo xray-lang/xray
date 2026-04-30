@@ -11,7 +11,7 @@ enum Color {
 }
 
 fn get_val(c: Color) : int {
-    return c.value
+    return int(c)
 }
 
 let i = 0

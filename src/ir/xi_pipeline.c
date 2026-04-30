@@ -70,6 +70,13 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         xi_opt_run(ir);
     }
 
+    /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
+     * Run after general optimization so constants/copies are resolved first. */
+    if (cfg->run_select_rep) {
+        xi_opt_select_rep(ir);
+        xi_opt_box_elim(ir);
+    }
+
     /* Optional: dump IR after optimization */
     if (cfg->dump_ir_after) {
         fprintf(stderr, "=== Xi IR (after optimization) ===\n");

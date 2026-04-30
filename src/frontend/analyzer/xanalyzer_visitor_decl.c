@@ -1301,6 +1301,10 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
             if (base_links && base_links->class_info) {
                 info->base = base_links->class_info;
                 base_links->class_info->has_subclass = true;
+                // Link XrType inheritance chain for xr_type_is_subclass_of()
+                if (links->type && base_links->type) {
+                    links->type->instance.superclass = base_links->type;
+                }
             }
         } else {
             info->base = NULL;

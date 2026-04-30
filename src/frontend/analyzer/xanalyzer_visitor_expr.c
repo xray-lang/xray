@@ -134,6 +134,73 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     return declared_type;
 }
 
+// Compute arithmetic result for a single (left, right) pair of scalar types.
+// Handles ADD/SUB/MUL/DIV/MOD with the same rules used before union
+// distribution; returns NULL when the pair is incompatible so the caller
+// can decide whether the overall result must collapse to unknown.
+static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
+    if (!left || !right)
+        return NULL;
+    if (XR_TYPE_IS_UNKNOWN(left) || XR_TYPE_IS_UNKNOWN(right))
+        return NULL;
+
+    if (op == AST_BINARY_ADD) {
+        // string + string => string; string + (int|float|bool) => string
+        // (dynamic concat handled by OP_ADD)
+        if (XR_TYPE_IS_STRING(left) || XR_TYPE_IS_STRING(right))
+            return xr_type_new_string(NULL);
+    }
+
+    if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)) {
+        if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_INT(left)) {
+            if (XR_TYPE_IS_FLOAT(right) || XR_TYPE_IS_INT(right))
+                return xr_type_new_float(NULL);
+        }
+        return NULL;
+    }
+    if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right))
+        return xr_type_new_int(NULL);
+
+    // Generic body: preserve type parameter through arithmetic so
+    // `fn add_one<T>(x: T): T { return x + 1 }` type-checks before
+    // monomorphisation.
+    if (left->kind == XR_KIND_TYPE_PARAM)
+        return left;
+    if (right->kind == XR_KIND_TYPE_PARAM)
+        return right;
+
+    return NULL;
+}
+
+// Distribute a binary arithmetic op over union members so e.g.
+// (int|string) + (int|string) infers int|string instead of unknown.
+// Falls back to unknown if any member combination is incompatible
+// (caller already validated the operand-set against the operator).
+static XrType *binary_arith_distribute(XaInferContext *ctx, int op, XrType *left, XrType *right) {
+    int lc = XR_TYPE_IS_UNION(left) ? left->union_type.member_count : 1;
+    int rc = XR_TYPE_IS_UNION(right) ? right->union_type.member_count : 1;
+    XrType *single_l = XR_TYPE_IS_UNION(left) ? NULL : left;
+    XrType *single_r = XR_TYPE_IS_UNION(right) ? NULL : right;
+
+    XrType *acc = NULL;
+    XrayIsolate *X = ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL;
+    for (int i = 0; i < lc; i++) {
+        XrType *li = single_l ? single_l : left->union_type.members[i];
+        for (int j = 0; j < rc; j++) {
+            XrType *rj = single_r ? single_r : right->union_type.members[j];
+            XrType *r = binary_arith_pair(op, li, rj);
+            if (!r) {
+                // Skip incompatible pairs (e.g. string + int when both
+                // sides are int|string) — runtime narrowing eliminates
+                // these at the JIT/VM level.
+                continue;
+            }
+            acc = acc ? xr_type_union(X, acc, r) : r;
+        }
+    }
+    return acc ? acc : xr_type_new_unknown(NULL);
+}
+
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -175,36 +242,11 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
 
     switch (node->type) {
         case AST_BINARY_ADD:
-            // B+ rule: string + string => string (compiler rejects string + non-string)
-            if (XR_TYPE_IS_STRING(left) && XR_TYPE_IS_STRING(right)) {
-                return xr_type_new_string(NULL);
-            }
-            // string + unknown => string (dynamic concat) in OP_ADD)
-            if (XR_TYPE_IS_STRING(left) || XR_TYPE_IS_STRING(right)) {
-                return xr_type_new_string(NULL);
-            }
-            // fall through to numeric rules
         case AST_BINARY_SUB:
         case AST_BINARY_MUL:
         case AST_BINARY_DIV:
         case AST_BINARY_MOD:
-            if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)) {
-                return xr_type_new_float(NULL);
-            }
-            if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right)) {
-                return xr_type_new_int(NULL);
-            }
-            // Generic body: an arithmetic op against a type parameter
-            // preserves that type parameter, so a body like
-            // `fn add_one<T>(x: T): T { return x + 1 }` type-checks
-            // before monomorphisation. The instantiated copy will be
-            // re-checked with the concrete substitution applied.
-            if (left->kind == XR_KIND_TYPE_PARAM)
-                return left;
-            if (right->kind == XR_KIND_TYPE_PARAM)
-                return right;
-            return xr_type_new_unknown(NULL);
-
+            return binary_arith_distribute(ctx, node->type, left, right);
         default:
             return xr_type_new_unknown(NULL);
     }
@@ -284,11 +326,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                                  obj_type->enum_type.enum_name);
                     }
                 }
+                // Precise .value type: use the enum's actual backing type
+                // instead of the generic `: Json` from the builtin table.
+                if (strcmp(ma->name, "value") == 0 && el->enum_value_type) {
+                    return el->enum_value_type;
+                }
             }
         }
-        // Fall through: name/value/ordinal handled by EnumValue builtin
-        // table below; that path is correct because enum singletons and
-        // enum values share the same surface property set.
+        // Fall through: name/ordinal/toString handled by EnumValue
+        // builtin table below.
     }
 
     // Class static member access: ClassName.staticMethod

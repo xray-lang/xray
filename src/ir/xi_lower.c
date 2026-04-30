@@ -1704,20 +1704,28 @@ static void lower_enum_decl(XiLower *l, AstNode *node) {
     }
 
     int64_t auto_val = 0;
+    int detected_base = XR_TINT;  // default for auto-increment enums
     for (int i = 0; i < n; i++) {
         EnumMemberNode *m = &ed->members[i]->as.enum_member;
         names[i] = strdup(m->name);
         if (m->value) {
             values[i] = enum_eval_const(l, m->value);
-            if (XR_IS_INT(values[i]))
+            if (XR_IS_INT(values[i])) {
                 auto_val = XR_TO_INT(values[i]) + 1;
+            } else if (XR_IS_STRING(values[i])) {
+                detected_base = XR_TSTRING;
+            } else if (XR_IS_FLOAT(values[i])) {
+                detected_base = XR_TFLOAT;
+            } else if (XR_IS_BOOL(values[i])) {
+                detected_base = XR_TBOOL;
+            }
         } else {
             values[i] = xr_int(auto_val);
             auto_val++;
         }
     }
 
-    XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, XR_TID_INT,
+    XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, detected_base,
                                        names, values, n);
     /* names/values ownership transferred to xr_enum_type_new */
 

@@ -2,7 +2,7 @@
 // EXPECTED: done
 // Test: N-body style simulation - float arithmetic + array + Json in hot loop
 
-fn nbody_step(bodies, dt: float) {
+fn nbody_step(bodies: Array<Json>, dt: float) {
     let n = bodies.length
     let i = 0
     while (i < n) {

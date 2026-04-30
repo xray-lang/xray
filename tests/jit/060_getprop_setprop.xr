@@ -2,11 +2,11 @@
 // EXPECTED: world
 // Test: Property get/set (GETPROP, SETPROP) via dynamic key
 
-fn get_prop(obj, key) {
+fn get_prop(obj: Json, key: string) : int | string {
     return obj[key]
 }
 
-fn set_prop(obj, key, val) {
+fn set_prop(obj: Json, key: string, val: int | string) {
     obj[key] = val
 }
 

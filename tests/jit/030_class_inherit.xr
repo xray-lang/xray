@@ -11,7 +11,7 @@ class Shape {
 class Circle extends Shape {
     r: float
 
-    constructor(r) {
+    constructor(r: float) {
         this.r = r
     }
 
@@ -24,7 +24,7 @@ class Rect extends Shape {
     w: int
     h: int
 
-    constructor(w, h) {
+    constructor(w: int, h: int) {
         this.w = w
         this.h = h
     }
@@ -34,7 +34,7 @@ class Rect extends Shape {
     }
 }
 
-fn calc_area(shape) {
+fn calc_area(shape: Shape) : float {
     return shape.area()
 }
 

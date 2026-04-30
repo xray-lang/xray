@@ -4,7 +4,7 @@
 // EXPECTED: null
 // Test: Deopt at different code positions within same function
 
-fn process(x) {
+fn process(x: int | float | string | null) : int | float | string | null {
     if (x == null) {
         return null
     }

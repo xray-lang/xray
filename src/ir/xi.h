@@ -369,6 +369,9 @@ typedef struct XiFunc {
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
+
+    /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
+    int cgen_id;                /* unique name suffix for generated C functions */
 } XiFunc;
 
 /* ========== Arena Constants ========== */

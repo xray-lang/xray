@@ -46,6 +46,9 @@ typedef enum {
 typedef struct XiPipelineConfig {
     bool run_verify;        /* run IR verification after lowering (default: true) */
     bool run_optimize;      /* run optimization passes (default: true) */
+    bool run_select_rep;    /* run SelectRepresentations pass (BOX/UNBOX insertion,
+                             * needed by AOT/JIT backends for unboxed values;
+                             * default: false, VM bytecode backend does not need it) */
     bool dump_ir_before;    /* dump IR to stderr before optimization */
     bool dump_ir_after;     /* dump IR to stderr after optimization */
 } XiPipelineConfig;

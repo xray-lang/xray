@@ -1070,3 +1070,216 @@ fail_isolate:
     free_modules(modules, nmodules);
     return 1;
 }
+
+/* ========== Xi IR Pipeline (Source → AST → Xi IR → C) ========== */
+
+#include "../ir/xi_pipeline.h"
+#include "../ir/xi_cgen.h"
+#include "../frontend/parser/xparse.h"
+#include "../frontend/analyzer/xanalyzer.h"
+
+/* Compile one source file through the Xi IR pipeline.
+ * Returns the pipeline result (caller frees).  On failure, returns
+ * pres.status != XI_PIPE_OK and prints an error message. */
+static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
+    XiPipelineResult fail = { .status = XI_PIPE_ERR_INTERNAL };
+
+    char *source = read_source_file(path);
+    if (!source) {
+        fprintf(stderr, "Error: cannot read '%s'\n", path);
+        return fail;
+    }
+
+    XaAnalyzer *analyzer = xa_analyzer_new(X);
+    if (!analyzer) {
+        fprintf(stderr, "Error: failed to create analyzer\n");
+        xr_free(source);
+        return fail;
+    }
+
+    AstNode *program = xr_parse(X, source);
+    xr_free(source);
+    if (!program) {
+        fprintf(stderr, "Error: parse failed for '%s'\n", path);
+        xa_analyzer_free(analyzer);
+        return fail;
+    }
+
+    xa_analyzer_analyze(analyzer, path, program);
+
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.run_optimize = true;
+    cfg.run_select_rep = true;
+
+    XiPipelineResult pres = xi_pipeline_compile_program(
+        program, analyzer, X, &cfg);
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+
+    if (pres.status != XI_PIPE_OK) {
+        fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n",
+                path, xi_pipe_status_str(pres.status));
+        if (pres.error_msg)
+            fprintf(stderr, "  %s\n", pres.error_msg);
+    }
+    return pres;
+}
+
+XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
+    XR_DCHECK(input_path != NULL, "xaot_build_xi: NULL input_path");
+    XR_DCHECK(result != NULL, "xaot_build_xi: NULL result");
+    memset(result, 0, sizeof(*result));
+
+    printf("[xi-native] Building: %s\n", input_path);
+
+    /* --- Discover modules via bundle (topo order, entry last) --- */
+    int nmodules = 0;
+    int entry_index = -1;
+    char **paths = NULL;
+    char **mod_names = NULL;
+    {
+        XrayIsolate *Xb = create_isolate();
+        if (!Xb) {
+            fprintf(stderr, "Error: failed to create isolate\n");
+            return 1;
+        }
+        XrBundle *bundle = xr_bundle_create_ex(Xb, input_path, XR_BUNDLE_DEFAULT);
+        if (!bundle) {
+            fprintf(stderr, "Error: bundling failed\n");
+            xray_isolate_delete(Xb);
+            return 1;
+        }
+        nmodules = bundle->count;
+        paths = (char **)xr_calloc(nmodules, sizeof(char *));
+        mod_names = (char **)xr_calloc(nmodules, sizeof(char *));
+        if (!paths || !mod_names) {
+            xr_bundle_free(bundle);
+            xray_isolate_delete(Xb);
+            xr_free(paths);
+            xr_free(mod_names);
+            return 1;
+        }
+        for (int i = 0; i < nmodules; i++) {
+            paths[i] = xr_strdup(bundle->entries[i].path);
+            mod_names[i] = derive_module_name(bundle->entries[i].path);
+            if (bundle->entry_path &&
+                strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
+                entry_index = i;
+        }
+        xr_bundle_free(bundle);
+        xray_isolate_delete(Xb);
+    }
+    XR_DCHECK(entry_index >= 0, "xaot_build_xi: entry not found in bundle");
+
+    if (nmodules > 1) {
+        printf("[xi-native] %d modules (topo order):\n", nmodules);
+        for (int i = 0; i < nmodules; i++)
+            printf("  [%d] %s%s\n", i, paths[i],
+                   i == entry_index ? " (entry)" : "");
+    }
+
+    /* --- Compile all modules through Xi IR pipeline --- */
+    XrayIsolate *X = create_isolate();
+    if (!X) {
+        fprintf(stderr, "Error: failed to create isolate\n");
+        goto fail_free_names;
+    }
+
+    XiPipelineResult *pres_arr =
+        (XiPipelineResult *)xr_calloc(nmodules, sizeof(XiPipelineResult));
+    XiFunc **ir_funcs = (XiFunc **)xr_calloc(nmodules, sizeof(XiFunc *));
+    if (!pres_arr || !ir_funcs) {
+        xr_free(pres_arr);
+        xr_free(ir_funcs);
+        xray_isolate_delete(X);
+        goto fail_free_names;
+    }
+
+    int total_funcs = 0;
+    for (int m = 0; m < nmodules; m++) {
+        pres_arr[m] = xi_compile_one(paths[m], X);
+        if (pres_arr[m].status != XI_PIPE_OK) {
+            /* Clean up already-compiled modules */
+            for (int j = 0; j <= m; j++)
+                xi_pipeline_result_free(&pres_arr[j]);
+            xr_free(pres_arr);
+            xr_free(ir_funcs);
+            xray_isolate_delete(X);
+            goto fail_free_names;
+        }
+        ir_funcs[m] = pres_arr[m].ir;
+        XR_DCHECK(ir_funcs[m] != NULL, "xaot_build_xi: pipeline OK but NULL IR");
+        total_funcs += 1 + ir_funcs[m]->nchildren;
+    }
+    xray_isolate_delete(X);
+
+    /* --- Generate combined C source --- */
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = open_memstream(&buf, &bufsz);
+    if (!mem) {
+        fprintf(stderr, "Error: open_memstream failed\n");
+        goto fail_free_ir;
+    }
+
+    if (nmodules == 1) {
+        /* Single-module fast path: use xi_cgen_program for backward compat */
+        xi_cgen_program(mem, ir_funcs[0], mod_names[0]);
+    } else {
+        /* Multi-module: header + per-module sections + combined main */
+        xi_cgen_header(mem);
+        for (int m = 0; m < nmodules; m++)
+            xi_cgen_module(mem, ir_funcs[m], mod_names[m]);
+        xi_cgen_main(mem, (const char **)mod_names, ir_funcs,
+                     nmodules, entry_index);
+    }
+    fclose(mem);
+
+    /* Free IR (no longer needed after C generation) */
+    for (int m = 0; m < nmodules; m++)
+        xi_pipeline_result_free(&pres_arr[m]);
+    xr_free(pres_arr);
+    xr_free(ir_funcs);
+
+    printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules)\n",
+           bufsz, total_funcs, nmodules);
+
+    /* Copy from system-malloc'd open_memstream buffer to xr_malloc */
+    char *owned = (char *)xr_malloc(bufsz + 1);
+    if (!owned) {
+        free(buf);
+        goto fail_free_names;
+    }
+    memcpy(owned, buf, bufsz + 1);
+    free(buf);
+
+    result->c_source = owned;
+    result->total_compiled = total_funcs;
+    result->total_aot = total_funcs;
+    result->nmodules = nmodules;
+    memset(&result->features, 0, sizeof(result->features));
+
+    /* Cleanup module name arrays */
+    for (int i = 0; i < nmodules; i++) {
+        xr_free(paths[i]);
+        xr_free(mod_names[i]);
+    }
+    xr_free(paths);
+    xr_free(mod_names);
+    return 0;
+
+fail_free_ir:
+    for (int m = 0; m < nmodules; m++)
+        xi_pipeline_result_free(&pres_arr[m]);
+    xr_free(pres_arr);
+    xr_free(ir_funcs);
+fail_free_names:
+    for (int i = 0; i < nmodules; i++) {
+        xr_free(paths[i]);
+        xr_free(mod_names[i]);
+    }
+    xr_free(paths);
+    xr_free(mod_names);
+    return 1;
+}

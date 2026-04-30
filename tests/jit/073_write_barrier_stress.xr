@@ -1,8 +1,8 @@
 // EXPECTED: 0
 // Test: Write barrier stress - many reference stores in JIT to exercise GC barriers
 
-fn build_chain(n: int) {
-    let arr = []
+fn build_chain(n: int) : Array<Json> {
+    let arr: Array<Json> = []
     let i = 0
     while (i < n) {
         let obj = { "value": i, "next": null }
@@ -15,7 +15,7 @@ fn build_chain(n: int) {
     return arr
 }
 
-fn verify_chain(arr) : int {
+fn verify_chain(arr: Array<Json>) : int {
     let errors = 0
     let i = 0
     while (i < arr.length) {

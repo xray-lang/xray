@@ -309,8 +309,15 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         int64_t idx = key.i;
         if (idx < 0)
             idx += a->len;
-        if (idx >= 0 && idx < a->len)
+        if (idx >= 0 && idx < a->len) {
             a->data[idx] = val;
+        } else if (idx >= 0) {
+            /* Auto-grow: idx == len is append; idx > len fills gaps with null */
+            while (a->len < idx) {
+                xrt_array_push(obj, (XrValue){.i = 0, .tag = XR_TAG_NULL});
+            }
+            xrt_array_push(obj, val);
+        }
     } else if (obj.tag == XR_TAG_MAP) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
     }

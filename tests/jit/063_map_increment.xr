@@ -3,8 +3,8 @@
 // EXPECTED: 1
 // Test: Map increment and advanced map operations in JIT
 
-fn count_chars(s: string) {
-    let counts = new Map()
+fn count_chars(s: string) : Json {
+    let counts: Json = {}
     let i = 0
     while (i < s.length) {
         let ch = s.substring(i, i + 1)

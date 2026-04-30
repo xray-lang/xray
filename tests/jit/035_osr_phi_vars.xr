@@ -3,7 +3,7 @@
 // Test: OSR with PHI variables - regression test for bc_slot invalidation bug
 // This is the exact pattern that caused the nested3 crash
 
-fn step(arr, n: int) : int {
+fn step(arr: Array<Json>, n: int) : int {
     let count = 0
     let i = 0
     while (i < n) {

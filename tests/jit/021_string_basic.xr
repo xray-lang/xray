@@ -3,11 +3,11 @@
 // EXPECTED: hello
 // Test: String operations (CONCAT, TOSTRING, length)
 
-fn greet(name) {
+fn greet(name: string) : string {
     return "hello " + name
 }
 
-fn str_len(s) : int {
+fn str_len(s: string) : int {
     return s.length
 }
 
