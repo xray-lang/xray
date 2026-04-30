@@ -521,7 +521,7 @@ static XrValue http_read_chunk(XrayIsolate *X, XrValue *args, int argc) {
     if (!buf)
         return xr_null();
 
-    int n = xr_http_stream_read(ctx->streams[slot], buf, max_bytes);
+    int n = xr_http_stream_read(X, ctx->streams[slot], buf, max_bytes);
     if (n <= 0) {
         xr_free(buf);
         return xr_null();
@@ -546,7 +546,7 @@ static XrValue http_close_stream(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx || slot < 0 || slot >= XR_HTTP_MAX_STREAMS || !ctx->streams[slot])
         return xr_null();
 
-    xr_http_stream_close(ctx->streams[slot]);
+    xr_http_stream_close(X, ctx->streams[slot]);
     xr_http_result_free(ctx->streams[slot]);
     xr_free(ctx->streams[slot]);
     ctx->streams[slot] = NULL;
@@ -726,10 +726,13 @@ void xr_http_module_context_free(XrHttpContext *ctx) {
 
     // NOTE: WebSocket connections are now managed by the separate 'ws' module
 
-    // Close any active streaming responses
+    // Close any active streaming responses. Module teardown happens
+    // during isolate shutdown, when there is no live runtime to drive
+    // pool cleanup; passing NULL skips netpoll deregistration since
+    // those fds are about to be closed anyway.
     for (int i = 0; i < XR_HTTP_MAX_STREAMS; i++) {
         if (ctx->streams[i]) {
-            xr_http_stream_close(ctx->streams[i]);
+            xr_http_stream_close(NULL, ctx->streams[i]);
             xr_http_result_free(ctx->streams[i]);
             xr_free(ctx->streams[i]);
             ctx->streams[i] = NULL;
@@ -1117,7 +1120,7 @@ static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
     path_copy[path_len] = '\0';
 
     // Execute download
-    XrStreamResult result = xr_http_download(url_copy, path_copy, NULL, NULL);
+    XrStreamResult result = xr_http_download(X, url_copy, path_copy, NULL, NULL);
 
     URL_COPY_END();
     if (_path_need_free)

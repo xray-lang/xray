@@ -189,7 +189,7 @@ static int handle_tls_handshake(XrH2Server *server, XrH2FastConn *conn) {
         return 0;
     }
 
-    int result = xr_tls_conn_handshake_server(conn->tls);
+    int result = xr_tls_conn_handshake_server(NULL, conn->tls);
     if (result == XR_TLS_OK) {
         // Check ALPN
         const char *alpn = xr_tls_conn_get_alpn(conn->tls);
@@ -211,7 +211,7 @@ static int handle_preface(XrH2Server *server, XrH2FastConn *conn) {
     // Read data
     ssize_t n;
     if (conn->tls) {
-        n = xr_tls_conn_read(conn->tls, conn->recv_buf + conn->recv_len,
+        n = xr_tls_conn_read(NULL, conn->tls, conn->recv_buf + conn->recv_len,
                              H2_RECV_BUF_SIZE - conn->recv_len);
     } else {
         n = recv(conn->fd, conn->recv_buf + conn->recv_len, H2_RECV_BUF_SIZE - conn->recv_len, 0);

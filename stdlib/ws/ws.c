@@ -21,7 +21,7 @@
 #include "../../src/runtime/object/xutf8.h"
 #include "../base64/base64.h"
 #include "../net/io.h"
-#include "../net/dns.h"
+#include "../../src/io/xdns.h"
 #include "../net/tls.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -244,8 +244,8 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
  * Raw recv (TLS-aware).
  *
  * All reads route through coroutine-aware I/O: plain-TCP via xr_socket_read
- * (yields on EAGAIN via netpoll), TLS via xr_tls_conn_read (yields
- * internally when xr_io_get_isolate() is set).
+ * (yields on EAGAIN via netpoll), TLS via xr_tls_conn_read (yields when
+ * the supplied isolate has a runtime to suspend the calling coroutine).
  *
  * Requires ws->isolate to be bound (enforced by xr_ws_connect and
  * xr_ws_upgrade). There is no legacy fallback.
@@ -253,7 +253,7 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
 static ssize_t ws_raw_recv(XrWebSocket *ws, void *buf, size_t len) {
     XR_DCHECK(ws->isolate != NULL, "ws: isolate required for I/O");
     if (ws->is_secure && ws->tls_conn) {
-        return xr_tls_conn_read((XrTlsConn *) ws->tls_conn, buf, len);
+        return xr_tls_conn_read(ws->isolate, (XrTlsConn *) ws->tls_conn, buf, len);
     }
     int n = xr_socket_read(ws->isolate, ws->fd, (char *) buf, len);
     return (ssize_t) n;
@@ -275,8 +275,8 @@ static ssize_t ws_recv_timeout(XrWebSocket *ws, void *buf, size_t len, int timeo
  * Send all data (TLS-aware).
  *
  * Plain-TCP sends route through xr_socket_write which auto-yields on
- * EAGAIN via netpoll. TLS via xr_tls_conn_write (yields internally).
- * Requires ws->isolate to be bound.
+ * EAGAIN via netpoll. TLS via xr_tls_conn_write (yields when ws->isolate
+ * is bound to a runtime). Requires ws->isolate to be bound.
  */
 static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
     XR_DCHECK(ws->isolate != NULL, "ws: isolate required for send");
@@ -286,7 +286,7 @@ static int ws_send_all(XrWebSocket *ws, const void *buf, size_t len) {
     while (sent < len) {
         ssize_t n;
         if (ws->is_secure && ws->tls_conn) {
-            n = xr_tls_conn_write((XrTlsConn *) ws->tls_conn, p + sent, len - sent);
+            n = xr_tls_conn_write(ws->isolate, (XrTlsConn *) ws->tls_conn, p + sent, len - sent);
         } else {
             n = xr_socket_write(ws->isolate, ws->fd, p + sent, len - sent);
         }
@@ -413,7 +413,7 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode, const void *
             if (ws->is_secure && ws->tls_conn) {
                 // TLS doesn't support writev directly, fall back to buffered send
                 if (sent < header_len) {
-                    n = xr_tls_conn_write((XrTlsConn *) ws->tls_conn, header + sent,
+                    n = xr_tls_conn_write(ws->isolate, (XrTlsConn *) ws->tls_conn, header + sent,
                                           header_len - sent);
                     if (n > 0) {
                         sent += n;
@@ -421,8 +421,8 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode, const void *
                     }
                 } else {
                     size_t data_sent = sent - header_len;
-                    n = xr_tls_conn_write((XrTlsConn *) ws->tls_conn, (char *) data + data_sent,
-                                          len - data_sent);
+                    n = xr_tls_conn_write(ws->isolate, (XrTlsConn *) ws->tls_conn,
+                                          (char *) data + data_sent, len - data_sent);
                     if (n > 0) {
                         sent += n;
                         continue;
@@ -648,7 +648,7 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, s
     // Try non-blocking send
     ssize_t n;
     if (ws->is_secure && ws->tls_conn) {
-        n = xr_tls_conn_write((XrTlsConn *) ws->tls_conn, frame, frame_len);
+        n = xr_tls_conn_write(ws->isolate, (XrTlsConn *) ws->tls_conn, frame, frame_len);
     } else {
         n = send(ws->fd, frame, frame_len, 0);
     }
@@ -941,17 +941,12 @@ XrWebSocket *xr_ws_new(const XrWsConfig *config) {
 }
 
 void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X) {
-    // Bind the WS connection to the caller's coroutine scheduler so every
-    // plain-TCP / TLS I/O path that looks up the current isolate (either
-    // directly via ws->isolate or through xr_io_get_isolate) finds one.
-    // We also update the global thread-local tls_isolate here so the net/tls
-    // helper routines (xr_tls_conn_handshake_client etc.) can yield.
+    // Bind the WS connection to the caller's coroutine scheduler so
+    // every plain-TCP / TLS I/O path that needs to suspend can resolve
+    // the runtime via ws->isolate and yield.
     if (!ws)
         return;
     ws->isolate = X;
-    if (X) {
-        xr_io_set_isolate(X);
-    }
 }
 
 void xr_ws_free(XrWebSocket *ws) {
@@ -1004,14 +999,6 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     char *response = NULL;
     ws->state = WS_STATE_CONNECTING;
 
-    // Ensure the TLS and xr_io helper routines can locate the scheduler.
-    // xr_tls_conn_handshake_client / xr_tls_conn_read etc. all resolve the
-    // current isolate via xr_io_get_isolate(); without this, a stalled TLS
-    // peer would spin the worker thread instead of yielding.
-    if (ws->isolate) {
-        xr_io_set_isolate(ws->isolate);
-    }
-
     // DNS resolution (with cache, IPv4/IPv6 dual-stack).
     // NOTE: xr_dns_resolve is still synchronous — it calls getaddrinfo
     // which blocks the worker thread until the resolver returns.
@@ -1020,7 +1007,7 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     // getaddrinfo dependency today so improving here would be a net
     // improvement only when the full resolver path is revamped.
     XrSockAddr resolved_addr;
-    if (!xr_dns_resolve(ws->host, &resolved_addr, XR_AF_UNSPEC)) {
+    if (!xr_dns_resolve(ws->isolate, ws->host, &resolved_addr, XR_AF_UNSPEC)) {
         err = WS_ERR_DNS;
         goto fail_early;
     }
@@ -1130,7 +1117,7 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
 
         xr_tls_conn_set_hostname(tls_conn, ws->host);
 
-        XrTlsError tls_err = xr_tls_conn_handshake_client(tls_conn);
+        XrTlsError tls_err = xr_tls_conn_handshake_client(ws->isolate, tls_conn);
         if (tls_err != XR_TLS_OK) {
             err = WS_ERR_HANDSHAKE;
             goto fail_cleanup;
@@ -1527,7 +1514,7 @@ static ssize_t ws_rbuf_fill(XrWebSocket *ws) {
         char *wp = ws->rbuf + ws->rbuf_off + ws->rbuf_len;
         ssize_t n;
         if (ws->is_secure && ws->tls_conn) {
-            n = xr_tls_conn_read((XrTlsConn *) ws->tls_conn, wp, avail);
+            n = xr_tls_conn_read(ws->isolate, (XrTlsConn *) ws->tls_conn, wp, avail);
         } else {
             n = recv(ws->fd, wp, avail, 0);
         }
@@ -1733,8 +1720,8 @@ read_payload:
             size_t direct_max = ws->msg_remaining - WS_RBUF_INIT_CAP / 2;
             ssize_t n;
             if (ws->is_secure && ws->tls_conn) {
-                n = xr_tls_conn_read((XrTlsConn *) ws->tls_conn, ws->msg_buf + ws->msg_buf_len,
-                                     direct_max);
+                n = xr_tls_conn_read(ws->isolate, (XrTlsConn *) ws->tls_conn,
+                                     ws->msg_buf + ws->msg_buf_len, direct_max);
             } else {
                 n = recv(ws->fd, ws->msg_buf + ws->msg_buf_len, direct_max, 0);
             }

@@ -21,7 +21,7 @@
 #include "../net/tls.h"
 #include "http_cookie.h"
 #include "../compress/compress.h"
-#include "../net/dns.h"
+#include "../../src/io/xdns.h"
 #include "../net/io.h"
 #include "../net/xnetbuf.h"
 #include "../net/conn_pool.h"
@@ -307,9 +307,12 @@ void xr_http_result_free(XrHttpResult *result) {
         xr_free(result->error_msg);
         result->error_msg = NULL;
     }
-    // Clean up stream resources if caller forgot to close
+    // Clean up stream resources if caller forgot to close. Result-free
+    // is called during isolate teardown / GC finalize where the calling
+    // isolate is not in scope; pass NULL so the inner pool close skips
+    // netpoll deregistration (the fd is going away anyway).
     if (result->_stream_conn || result->_stream_buf) {
-        xr_http_stream_close(result);
+        xr_http_stream_close(NULL, result);
     }
 }
 
@@ -573,7 +576,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     }
 
     // Try to get pooled connection (handles DNS, connect, TLS internally)
-    pooled = xr_conn_pool_get(pool, url.host, (uint16_t) url.port, url.is_https);
+    pooled = xr_conn_pool_get(X, pool, url.host, (uint16_t) url.port, url.is_https);
     if (!pooled) {
         result.error = XR_HTTP_ERR_CONNECT;
         result.error_msg = xr_strdup("Connection failed");
@@ -593,7 +596,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
         // Send request via pooled connection (handles TCP/TLS transparently)
         size_t sent = 0;
         while (sent < request_len) {
-            int n = xr_pooled_conn_write(pooled, request_buf + sent, request_len - sent);
+            int n = xr_pooled_conn_write(X, pooled, request_buf + sent, request_len - sent);
             if (n <= 0) {
                 result.error = XR_HTTP_ERR_SEND;
                 result.error_msg = xr_strdup("Send failed");
@@ -633,7 +636,7 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
 
         // Receive data via pooled connection
         size_t avail = xr_netbuf_available(recv_buf);
-        int n = xr_pooled_conn_read(pooled, recv_buf->bytes + recv_buf->size,
+        int n = xr_pooled_conn_read(X, pooled, recv_buf->bytes + recv_buf->size,
                                     avail > 0 ? avail - 1 : 0);
         if (n < 0) {
             result.error = XR_HTTP_ERR_RECV;
@@ -854,9 +857,9 @@ cleanup:
     // successful http_client_pool() resolution.
     if (pooled) {
         if (result.error == XR_HTTP_OK && conn_ok) {
-            xr_conn_pool_put(pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
+            xr_conn_pool_put(X, pool, pooled, url.host, (uint16_t) url.port, url.is_https, true);
         } else {
-            xr_conn_pool_close(pool, pooled);
+            xr_conn_pool_close(X, pool, pooled);
         }
     }
     if (request_buf)
@@ -956,7 +959,7 @@ void xr_http_context_free(XrHttpReqContext *ctx) {
 
 /* ========== Streaming Response API ========== */
 
-int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes) {
+int xr_http_stream_read(XrayIsolate *X, XrHttpResult *result, char *buf, int max_bytes) {
     if (!result || !buf || max_bytes <= 0)
         return -1;
     if (!result->_stream_conn)
@@ -986,7 +989,7 @@ int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes) {
         return 0;
 
     // Read from connection
-    int n = xr_pooled_conn_read(conn, buf, max_bytes);
+    int n = xr_pooled_conn_read(X, conn, buf, max_bytes);
     if (n <= 0)
         return n == 0 ? 0 : -1;
 
@@ -998,7 +1001,7 @@ int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes) {
     return n;
 }
 
-void xr_http_stream_close(XrHttpResult *result) {
+void xr_http_stream_close(XrayIsolate *X, XrHttpResult *result) {
     if (!result)
         return;
 
@@ -1008,8 +1011,8 @@ void xr_http_stream_close(XrHttpResult *result) {
     }
     if (result->_stream_conn) {
         XrPooledConn *conn = (XrPooledConn *) result->_stream_conn;
-        // Don't return to pool — caller consumed partially, state unknown
-        xr_conn_pool_close(NULL, conn);
+        // Don't return to pool — caller consumed partially, state unknown.
+        xr_conn_pool_close(X, NULL, conn);
         result->_stream_conn = NULL;
     }
 }

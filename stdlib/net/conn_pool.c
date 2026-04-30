@@ -15,7 +15,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_time.h"
 #include "conn_pool.h"
-#include "dns.h"
+#include "../../src/io/xdns.h"
 #include "io.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xnetpoll.h"
@@ -105,8 +105,8 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
 // Create new connection with DNS resolution and optional TLS. Made fd
 // non-blocking from creation so all subsequent pooled_conn_read/write calls
 // can go through xr_socket_read/write and yield the coroutine cleanly.
-static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint16_t port,
-                                       bool is_https) {
+static XrPooledConn *create_connection(struct XrayIsolate *X, XrConnPool *pool, const char *host,
+                                       uint16_t port, bool is_https) {
 #ifndef XR_ENABLE_TLS
     // When TLS is compiled out the pool handle is only needed for the
     // tls_ctx lookup below; silence -Wunused-parameter without touching
@@ -123,11 +123,10 @@ static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint1
     // Note: on cache miss this still performs a blocking getaddrinfo;
     // an async DNS path is not yet implemented.
     XrSockAddr addrs[XR_DNS_MAX_ADDRS];
-    int n = xr_dns_resolve_all(host, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
+    int n = xr_dns_resolve_all(X, host, addrs, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
     if (n <= 0)
         return NULL;
 
-    struct XrayIsolate *X = xr_io_get_isolate();
     int fd = -1;
     for (int i = 0; i < n; i++) {
         int try_fd = socket(addrs[i].family, SOCK_STREAM, 0);
@@ -235,7 +234,7 @@ static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint1
                 }
 
                 if (!hs_ok) {
-                    close_connection(conn);
+                    close_connection(X, conn);
                     xr_free(conn);
                     return NULL;
                 }
@@ -250,7 +249,7 @@ static XrPooledConn *create_connection(XrConnPool *pool, const char *host, uint1
 // Close connection and cleanup TLS. Also deregisters the fd from the
 // runtime's netpoll (if the fd ever went through coro_tcp_connect or
 // xr_socket_read/write) so that no stale pollDesc survives the close.
-static void close_connection(XrPooledConn *conn) {
+static void close_connection(struct XrayIsolate *X, XrPooledConn *conn) {
     if (!conn)
         return;
 
@@ -266,7 +265,6 @@ static void close_connection(XrPooledConn *conn) {
         // Detach from netpoll before close() so we don't leak a
         // pollDesc keyed on a reused fd. xr_fdmap_get is O(1) and
         // returns NULL if the fd was never registered.
-        struct XrayIsolate *X = xr_io_get_isolate();
         XrRuntime *runtime = X ? (XrRuntime *) X->vm.runtime : NULL;
         if (runtime) {
             XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, conn->fd);
@@ -310,7 +308,9 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
 
     xr_mutex_lock(&pool->lock);
 
-    // Close all connections
+    // Close all connections. No isolate available at destroy time —
+    // pool destruction happens during isolate teardown when netpoll
+    // ownership has already been released, so a NULL X here is safe.
     for (int i = 0; i < XR_POOL_MAX_HOSTS; i++) {
         XrHostPool *hp = pool->buckets[i];
         while (hp) {
@@ -319,7 +319,7 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
             XrPooledConn *conn = hp->conns;
             while (conn) {
                 XrPooledConn *next_conn = conn->next;
-                close_connection(conn);
+                close_connection(NULL, conn);
                 xr_free(conn);
                 conn = next_conn;
             }
@@ -344,7 +344,8 @@ void xr_conn_pool_destroy(XrConnPool *pool) {
     xr_mutex_destroy(&pool->lock);
 }
 
-XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port, bool is_https) {
+XrPooledConn *xr_conn_pool_get(struct XrayIsolate *X, XrConnPool *pool, const char *host,
+                               uint16_t port, bool is_https) {
     if (!pool || !pool->initialized || !host)
         return NULL;
 
@@ -375,7 +376,7 @@ XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port
                 // Skip obviously expired (monotonic, no syscall)
                 if (now - conn->last_used_ms > pool->idle_timeout_ms) {
                     *pp = conn->next;
-                    close_connection(conn);
+                    close_connection(X, conn);
                     xr_free(conn);
                     hp->conn_count--;
                     hp->idle_count--;
@@ -396,20 +397,20 @@ XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port
 
     // No idle connection, create new one
     if (!result) {
-        result = create_connection(pool, host, port, is_https);
+        result = create_connection(X, pool, host, port, is_https);
     }
 
     return result;
 }
 
-void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, uint16_t port,
-                      bool is_https, bool keep_alive) {
+void xr_conn_pool_put(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn,
+                      const char *host, uint16_t port, bool is_https, bool keep_alive) {
     if (!pool || !pool->initialized || !conn)
         return;
 
     // Not keeping alive, close directly
     if (!keep_alive) {
-        close_connection(conn);
+        close_connection(X, conn);
         xr_free(conn);
         return;
     }
@@ -431,7 +432,7 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
         hp = (XrHostPool *) xr_calloc(1, sizeof(XrHostPool));
         if (!hp) {
             xr_mutex_unlock(&pool->lock);
-            close_connection(conn);
+            close_connection(X, conn);
             xr_free(conn);
             return;
         }
@@ -448,7 +449,7 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
     // Check connection limit
     if (hp->idle_count >= XR_POOL_MAX_CONNS_PER_HOST) {
         xr_mutex_unlock(&pool->lock);
-        close_connection(conn);
+        close_connection(X, conn);
         xr_free(conn);
         return;
     }
@@ -465,15 +466,15 @@ void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, ui
     xr_mutex_unlock(&pool->lock);
 }
 
-void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn) {
+void xr_conn_pool_close(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn) {
     (void) pool;
     if (!conn)
         return;
-    close_connection(conn);
+    close_connection(X, conn);
     xr_free(conn);
 }
 
-int xr_conn_pool_evict_idle(XrConnPool *pool) {
+int xr_conn_pool_evict_idle(struct XrayIsolate *X, XrConnPool *pool) {
     if (!pool || !pool->initialized)
         return 0;
 
@@ -491,7 +492,7 @@ int xr_conn_pool_evict_idle(XrConnPool *pool) {
                 if (conn->state == XR_CONN_IDLE &&
                     now - conn->last_used_ms > pool->idle_timeout_ms) {
                     *pp = conn->next;
-                    close_connection(conn);
+                    close_connection(X, conn);
                     xr_free(conn);
                     hp->conn_count--;
                     hp->idle_count--;
@@ -509,8 +510,8 @@ int xr_conn_pool_evict_idle(XrConnPool *pool) {
     return evicted;
 }
 
-void xr_conn_pool_cleanup(XrConnPool *pool) {
-    xr_conn_pool_evict_idle(pool);
+void xr_conn_pool_cleanup(struct XrayIsolate *X, XrConnPool *pool) {
+    xr_conn_pool_evict_idle(X, pool);
 }
 
 void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
@@ -544,45 +545,42 @@ void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle) {
 
 /* ========== Connection Read/Write Helpers ========== */
 
-int xr_pooled_conn_read(XrPooledConn *conn, void *buf, size_t len) {
+int xr_pooled_conn_read(struct XrayIsolate *X, XrPooledConn *conn, void *buf, size_t len) {
     if (!conn || conn->fd < 0 || !buf || len == 0)
         return -1;
 
 #ifdef XR_ENABLE_TLS
-    // TLS read path already yields via xr_socket_read internally.
+    // TLS read path yields via the TLS layer when a write/read direction
+    // change is requested by OpenSSL.
     if (conn->tls_conn) {
-        return xr_tls_conn_read(conn->tls_conn, buf, len);
+        return xr_tls_conn_read(X, conn->tls_conn, buf, len);
     }
 #endif
 
-    // Plain TCP: on a coroutine, hand off to xr_socket_read which handles
-    // EAGAIN by suspending on runtime->netpoll. Outside a coroutine (CLI /
-    // tests) drop to a plain recv — the fd is non-blocking since
-    // create_connection, so a caller without a scheduler either gets data
-    // or EAGAIN immediately, which preserves the old failure semantics
-    // instead of hanging a non-VM thread forever.
-    struct XrayIsolate *X = xr_io_get_isolate();
+    // Plain TCP: when called from a coroutine, hand off to xr_socket_read
+    // which suspends on runtime->netpoll for EAGAIN. Without an isolate
+    // (CLI / tests) drop to plain recv on the non-blocking fd — caller
+    // gets data or EAGAIN immediately, preserving non-VM failure
+    // semantics instead of hanging the calling thread.
     if (X) {
         return xr_socket_read(X, conn->fd, (char *) buf, len);
     }
     return (int) recv(conn->fd, buf, len, 0);
 }
 
-int xr_pooled_conn_write(XrPooledConn *conn, const void *buf, size_t len) {
+int xr_pooled_conn_write(struct XrayIsolate *X, XrPooledConn *conn, const void *buf, size_t len) {
     if (!conn || conn->fd < 0 || !buf || len == 0)
         return -1;
 
 #ifdef XR_ENABLE_TLS
-    // TLS write path already yields via xr_socket_write internally.
     if (conn->tls_conn) {
-        return xr_tls_conn_write(conn->tls_conn, buf, len);
+        return xr_tls_conn_write(X, conn->tls_conn, buf, len);
     }
 #endif
 
-    // Plain TCP: mirror the read path above. xr_socket_write loops until
-    // all bytes are drained or an error is hit, so a single call here is
-    // sufficient (no outer "keep writing" loop needed in http_client).
-    struct XrayIsolate *X = xr_io_get_isolate();
+    // xr_socket_write loops until all bytes are drained or an error is
+    // hit, so a single call here is sufficient (no outer "keep writing"
+    // loop needed in http_client).
     if (X) {
         return xr_socket_write(X, conn->fd, (const char *) buf, len);
     }

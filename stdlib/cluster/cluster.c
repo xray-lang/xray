@@ -112,7 +112,6 @@ static void cluster_heartbeat_coro(void *arg) {
     if (!c)
         return;
 
-    xr_io_set_isolate(c->isolate);
     atomic_store(&c->heartbeat_running, true);
 
     /* Use half the heartbeat interval for check frequency.
@@ -150,19 +149,13 @@ static void cluster_accept_loop(void *arg) {
         return;
     }
 
-    /* Bind the worker thread's tls_isolate so xr_io_accept /
-     * xr_io_read / xr_io_write inside this coroutine can resolve a
-     * runtime to yield against. Same pattern as stdlib/ws uses for
-     * its upgrade coroutine. */
-    xr_io_set_isolate(c->isolate);
-
     atomic_store(&c->accept_running, true);
 
     while (atomic_load(&c->running)) {
         XrIOConn *conn = NULL;
 
         if (c->tls_enabled && c->tls_server_ctx) {
-            conn = xr_io_accept_tls_with_ctx(c->listen_fd, c->tls_server_ctx);
+            conn = xr_io_accept_tls_with_ctx(c->isolate, c->listen_fd, c->tls_server_ctx);
         } else if (c->tls_enabled && !c->tls_server_ctx) {
             /* Operator asked for TLS but never supplied a cert+key. A
              * silent plaintext fallback would be a loud security hole;
@@ -170,7 +163,7 @@ static void cluster_accept_loop(void *arg) {
              * already surfaced this via build_cluster_tls. */
             break;
         } else {
-            conn = xr_io_accept(c->listen_fd);
+            conn = xr_io_accept(c->isolate, c->listen_fd);
         }
 
         if (!conn) {

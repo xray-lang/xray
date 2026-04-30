@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include "../../src/os/os_thread.h"
 
+struct XrayIsolate;
+
 /* ========== Constants ========== */
 
 #define XR_POOL_MAX_CONNS_PER_HOST 6  // Max connections per host
@@ -77,21 +79,23 @@ typedef struct XrConnPool {
 XR_FUNC void xr_conn_pool_init(XrConnPool *pool);
 XR_FUNC void xr_conn_pool_destroy(XrConnPool *pool);
 
-// Get connection from pool, creates new one if none available
-XR_FUNC XrPooledConn *xr_conn_pool_get(XrConnPool *pool, const char *host, uint16_t port,
-                                       bool is_https);
+// Get connection from pool, creates new one if none available. Requires
+// the calling isolate so DNS resolution and netpoll suspension can be
+// scheduled on the right runtime.
+XR_FUNC XrPooledConn *xr_conn_pool_get(struct XrayIsolate *X, XrConnPool *pool, const char *host,
+                                       uint16_t port, bool is_https);
 
-// Return connection to pool (closes if keep_alive=false)
-XR_FUNC void xr_conn_pool_put(XrConnPool *pool, XrPooledConn *conn, const char *host, uint16_t port,
-                              bool is_https, bool keep_alive);
+// Return connection to pool (closes if keep_alive=false).
+XR_FUNC void xr_conn_pool_put(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn,
+                              const char *host, uint16_t port, bool is_https, bool keep_alive);
 
-XR_FUNC void xr_conn_pool_close(XrConnPool *pool, XrPooledConn *conn);
+XR_FUNC void xr_conn_pool_close(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn);
 
 /* Evict idle connections older than pool->idle_timeout_ms.
  * Designed to be called from a timer wheel callback. */
-XR_FUNC int xr_conn_pool_evict_idle(XrConnPool *pool);
+XR_FUNC int xr_conn_pool_evict_idle(struct XrayIsolate *X, XrConnPool *pool);
 
-XR_FUNC void xr_conn_pool_cleanup(XrConnPool *pool);
+XR_FUNC void xr_conn_pool_cleanup(struct XrayIsolate *X, XrConnPool *pool);
 XR_FUNC void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle);
 
 /* ========== Per-Isolate Pool Creation ========== */
@@ -99,8 +103,11 @@ XR_FUNC void xr_conn_pool_stats(XrConnPool *pool, int *total, int *idle);
 // Create a new connection pool (per-isolate)
 XR_FUNC XrConnPool *xr_conn_pool_new(void);
 
-// Connection read/write helpers
-XR_FUNC int xr_pooled_conn_read(XrPooledConn *conn, void *buf, size_t len);
-XR_FUNC int xr_pooled_conn_write(XrPooledConn *conn, const void *buf, size_t len);
+// Connection read/write helpers. X is required to drive coroutine
+// suspension on EAGAIN; passing NULL falls back to a non-blocking
+// recv/send (used by CLI / tests outside any runtime).
+XR_FUNC int xr_pooled_conn_read(struct XrayIsolate *X, XrPooledConn *conn, void *buf, size_t len);
+XR_FUNC int xr_pooled_conn_write(struct XrayIsolate *X, XrPooledConn *conn, const void *buf,
+                                 size_t len);
 
 #endif  // XR_STDLIB_CONN_POOL_H

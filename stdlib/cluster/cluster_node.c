@@ -533,16 +533,10 @@ void xr_cluster_node_writer_loop(void *arg) {
         return;
 
     /*
-     * Bind the worker's thread-local isolate so xr_socket_read (and
-     * any downstream xr_io_write the batch path invokes) can resolve a
-     * runtime to yield against. node->isolate was recorded in
-     * xr_cluster_node_start_writer; NULL here just means we skip the
-     * coroutine-friendly drain and fall back to a raw nonblocking read
-     * (which returns EAGAIN and spins — acceptable in the degraded
-     * path since it implies the node was never properly attached).
+     * node->isolate was recorded in xr_cluster_node_start_writer.
+     * The drain helpers receive it explicitly; nothing thread-local
+     * to bind here anymore.
      */
-    if (node->isolate)
-        xr_io_set_isolate(node->isolate);
 
     while (atomic_load(&node->writer_running) && node->state == XR_NODE_CONNECTED && node->conn) {
         // Pop all queued frames in one lock acquisition
@@ -803,10 +797,10 @@ int xr_cluster_node_connect(XrCluster *cluster, XrClusterNode *node) {
     // Falls back to the legacy plain-TCP path when TLS is disabled so no
     // existing deployments are disrupted.
     if (cluster->tls_enabled && cluster->tls_client_ctx) {
-        node->conn =
-            xr_io_connect_tls_with_ctx(cluster->tls_client_ctx, node->host, node->port, 10000);
+        node->conn = xr_io_connect_tls_with_ctx(cluster->isolate, cluster->tls_client_ctx,
+                                                node->host, node->port, 10000);
     } else {
-        node->conn = xr_io_connect(node->host, node->port, 10000);
+        node->conn = xr_io_connect(cluster->isolate, node->host, node->port, 10000);
     }
     if (!node->conn) {
         node->state = XR_NODE_IDLE;

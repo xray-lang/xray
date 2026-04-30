@@ -159,13 +159,13 @@ XR_FUNC void xr_http_result_free(XrHttpResult *result);
  * Returns bytes read (>0), 0 on EOF, -1 on error.
  * buf must be at least max_bytes in size.
  */
-XR_FUNC int xr_http_stream_read(XrHttpResult *result, char *buf, int max_bytes);
+XR_FUNC int xr_http_stream_read(XrayIsolate *X, XrHttpResult *result, char *buf, int max_bytes);
 
 /*
  * Close a streaming response and return connection to pool.
  * Must be called after stream reading is complete.
  */
-XR_FUNC void xr_http_stream_close(XrHttpResult *result);
+XR_FUNC void xr_http_stream_close(XrayIsolate *X, XrHttpResult *result);
 
 /*
  * Get error description

@@ -238,8 +238,6 @@ static void discovery_coro(void *arg) {
         return;
     XrCluster *c = disc->cluster;
 
-    xr_io_set_isolate(c->isolate);
-
     struct sockaddr_in mcast_addr;
     memset(&mcast_addr, 0, sizeof(mcast_addr));
     mcast_addr.sin_family = AF_INET;

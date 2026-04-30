@@ -30,6 +30,10 @@
 #include "xmachine.h"                    // XrMachine
 #include "xbalance.h"                    // XrMigrationPath
 
+// Forward decl: full definition in src/io/xio_runtime.h. Coro is the
+// lower layer and must not include the IO header.
+struct XrIoRuntime;
+
 /* ========== Worker Structure (P + M* pointer) ========== */
 
 typedef struct XrWorker {
@@ -96,6 +100,7 @@ typedef struct XrRuntime {
     XrNetpoll netpoll;
     xr_thread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
     struct XrAsyncPool *async_pool;
+    struct XrIoRuntime *io;  // DNS cache + future handle registry / deadline policy
 
     /* === Scope & Migration === */
     XrScopeContext *current_scope;
