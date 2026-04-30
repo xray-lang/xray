@@ -1,0 +1,96 @@
+// 1313_json_static_methods.xr
+// Test: Json.parse/stringify/isValid/tryParse without import json
+
+// ===== Json.parse =====
+@test
+fn test_json_parse_number(): void {
+    assert_eq(Json.parse("42"), 42)
+    assert_eq(Json.parse("3.14"), 3.14)
+}
+
+@test
+fn test_json_parse_string(): void {
+    assert_eq(Json.parse("\"hello\""), "hello")
+}
+
+@test
+fn test_json_parse_bool_null(): void {
+    assert_eq(Json.parse("true"), true)
+    assert_eq(Json.parse("false"), false)
+    assert_eq(Json.parse("null"), null)
+}
+
+@test
+fn test_json_parse_object(): void {
+    let obj = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
+    assert_eq(obj.name, "Alice")
+    assert_eq(obj.age, 30)
+}
+
+@test
+fn test_json_parse_array(): void {
+    let arr = Json.parse("[1, 2, 3]")
+    assert_eq(arr.length, 3)
+    assert_eq(arr[0], 1)
+}
+
+// ===== Json.stringify =====
+@test
+fn test_json_stringify_primitives(): void {
+    assert_eq(Json.stringify(42), "42")
+    assert_eq(Json.stringify("hello"), "\"hello\"")
+    assert_eq(Json.stringify(true), "true")
+    assert_eq(Json.stringify(null), "null")
+}
+
+@test
+fn test_json_stringify_array(): void {
+    assert_eq(Json.stringify([1, 2, 3]), "[1,2,3]")
+}
+
+@test
+fn test_json_stringify_object(): void {
+    let obj = { name: "Bob" }
+    let s = Json.stringify(obj)
+    assert_eq(s.contains("name"), true)
+    assert_eq(s.contains("Bob"), true)
+}
+
+// ===== Json.isValid =====
+@test
+fn test_json_is_valid(): void {
+    assert_eq(Json.isValid("42"), true)
+    assert_eq(Json.isValid("[1,2]"), true)
+    assert_eq(Json.isValid("{\"a\":1}"), true)
+    assert_eq(Json.isValid("not json"), false)
+    assert_eq(Json.isValid("{broken"), false)
+}
+
+// ===== Json.tryParse =====
+@test
+fn test_json_try_parse_success(): void {
+    let result = Json.tryParse("{\"x\": 1}")
+    assert_eq(result.error, null)
+    assert_eq(result.value.x, 1)
+}
+
+@test
+fn test_json_try_parse_failure(): void {
+    let result = Json.tryParse("invalid")
+    assert_eq(result.error != null, true)
+}
+
+// ===== Roundtrip =====
+@test
+fn test_json_roundtrip(): void {
+    let original = [1, "two", true, null]
+    let s = Json.stringify(original)
+    let parsed = Json.parse(s)
+    assert_eq(parsed.length, 4)
+    assert_eq(parsed[0], 1)
+    assert_eq(parsed[1], "two")
+    assert_eq(parsed[2], true)
+    assert_eq(parsed[3], null)
+}
+
+print("json_static_methods: all tests passed")
