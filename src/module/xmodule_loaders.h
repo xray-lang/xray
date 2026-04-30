@@ -21,6 +21,7 @@ struct XrModule;
 
 /* ========== Core Modules (always available) ========== */
 
+XR_FUNC struct XrModule *xr_load_module_prelude(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_time(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_math(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);

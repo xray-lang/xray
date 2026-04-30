@@ -212,6 +212,7 @@ if(XR_STDLIB_COMPRESS)
 endif()
 add_xray_unit_test(test_xml_node stdlib/test_xml_node.c)
 add_xray_unit_test(test_buffer_pool stdlib/test_buffer_pool.c)
+add_xray_unit_test(test_prelude_init stdlib/test_prelude_init.c)
 
 # ============================================================================
 # regex/ — Regex engine

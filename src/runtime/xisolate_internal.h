@@ -200,6 +200,17 @@ struct XrayIsolate {
     // functions in `stdlib/stdlib_cache.h`.
     void *stdlib_cache;  // XrStdlibCache* (stdlib/stdlib_cache.h), lazily allocated
 
+    /* ========== Prelude type marker registry ==========
+     * Pointer to the process-wide constant XrPreludeSymbols table built
+     * by stdlib/prelude/prelude.c. Populated during isolate init by
+     * xr_load_module_prelude(). Read by the parser when resolving a
+     * type-context identifier that is neither a primitive keyword nor a
+     * user-defined class name. Kept as `void *` so the core header has
+     * no dependency on stdlib types; consumers cast via
+     * xr_prelude_get_symbols(). NULL means the prelude has not been
+     * loaded (minimal-runtime isolates that skipped setup_full). */
+    void *prelude_symbols;  // const XrPreludeSymbols* (stdlib/prelude/prelude.h)
+
     /* ========== VM profiler (opt-in, isolate-local) ==========
      * Bytecode execution counters collected during this isolate's
      * lifetime. NULL unless the build was configured with

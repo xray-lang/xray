@@ -100,6 +100,13 @@ static int isolate_init_full(XrayIsolate *isolate) {
     // Module system
     xr_module_system_init(isolate);
 
+    // Auto-load the prelude module so that built-in type names (Array,
+    // Map, Json, BigInt, ...) resolve via the unified prelude symbol
+    // table without requiring the user to write `import prelude`. Going
+    // through xr_module_import here ensures the registry caches the
+    // module exactly once, so a later explicit import hits the cache.
+    (void) xr_module_import(isolate, "prelude");
+
     // Compiler hooks for import
     {
         typedef void *(*GenFn3)(void *, const char *, const char *);

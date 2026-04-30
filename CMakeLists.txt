@@ -390,8 +390,10 @@ file(GLOB API_SRC "src/api/*.c")
 file(GLOB NEW_CLI_SRC "src/app/cli/*.c")
 
 # Standard Library (Native modules) - modular conditional compilation
-# Core modules (required): time, math, log, gc, regex, path, datetime, encoding, base64, url
+# Core modules (required): prelude (built-in type registry), time, math, log,
+# gc, regex, path, datetime, encoding, base64, url
 file(GLOB STDLIB_CORE_SRC
+    "stdlib/prelude/*.c"
     "stdlib/time/*.c"
     "stdlib/math/*.c"
     "stdlib/log/*.c"
