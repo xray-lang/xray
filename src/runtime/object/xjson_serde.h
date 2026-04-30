@@ -19,13 +19,22 @@
 
 #include "../value/xvalue.h"
 
+/* ========== Stringify Result (error-returning, no VM dependency) ========== */
+
+typedef struct {
+    XrValue result;       // serialized string, or xr_null() on error
+    bool has_error;       // true when a non-serializable type was encountered
+    char error_msg[128];  // human-readable description of the offending type
+} XrJsonStringifyResult;
+
 /* ========== Script-callable Functions ========== */
 
 // parse(str) → XrValue
 XR_FUNC XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc);
 
-// stringify(value, indent?) → string; throws on non-serializable types
-XR_FUNC XrValue xr_json_fn_stringify(XrayIsolate *X, XrValue *args, int argc);
+// Core stringify: returns result + error info without throwing.
+// Callers that need exception semantics should inspect has_error and throw.
+XR_FUNC XrJsonStringifyResult xr_json_stringify_core(XrayIsolate *X, XrValue val, int indent);
 
 // isValid(str, strict?) → bool (zero-allocation validator)
 XR_FUNC XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc);
