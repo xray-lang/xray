@@ -137,7 +137,7 @@
 /* ========== EnumValue ========== */
 #define XR_ENUM_VALUE_MEMBERS(M)                                                                   \
     M("name", ": string", "Member name", false)                                                    \
-    M("value", ": any", "Raw value", false)                                                        \
+    M("value", ": Json", "Raw value", false)                                                       \
     M("ordinal", ": int", "Member index", false)                                                   \
     M("toString", "(): string", "String representation (EnumName.MemberName)", true)
 
@@ -190,10 +190,10 @@
 /* ========== Json ========== */
 #define XR_JSON_MEMBERS(M)                                                                         \
     M("keys", "(): Array<string>", "Get all field names", true)                                    \
-    M("values", "(): Array<any>", "Get all values", true)                                          \
-    M("entries", "(): Array<[string, any]>", "Get all key-value pairs", true)                      \
+    M("values", "(): Array<Json>", "Get all values", true)                                         \
+    M("entries", "(): Array<[string, Json]>", "Get all key-value pairs", true)                     \
     M("has", "(key: string): bool", "Check if field exists", true)                                 \
-    M("get", "(key: string): any", "Get value by key", true)                                       \
+    M("get", "(key: string): Json", "Get value by key", true)                                      \
     M("isEmpty", "(): bool", "Check if empty", true)                                               \
     M("delete", "(key: string): void", "Delete a field", true)                                     \
     M("clear", "(): void", "Remove all fields", true)                                              \
@@ -217,14 +217,14 @@
 #define XR_COROUTINE_MEMBERS(M)                                                                    \
     M("done", ": bool", "Check if task completed", false)                                          \
     M("cancelled", ": bool", "Check if task was cancelled", false)                                 \
-    M("result", ": any", "Task return value (after await)", false)                                 \
+    M("result", ": Json", "Task return value (after await)", false)                                \
     M("error", ": string?", "Task error message", false)                                           \
     M("cancel", "(): void", "Cancel the task", true)
 
 /* ========== StringBuilder ========== */
 #define XR_STRINGBUILDER_MEMBERS(M)                                                                \
     M("length", ": int", "Current buffer length", false)                                           \
-    M("append", "(value: any): StringBuilder", "Append value (supports chaining)", true)           \
+    M("append", "(value: Json): StringBuilder", "Append value (supports chaining)", true)          \
     M("toString", "(): string", "Build final string", true)                                        \
     M("clear", "(): StringBuilder", "Clear buffer (supports chaining)", true)
 

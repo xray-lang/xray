@@ -575,10 +575,10 @@ static XrValue toml_write_file(XrayIsolate *X, XrValue *args, int argc) {
 
 // @module toml
 
-XR_DEFINE_BUILTIN(toml_parse, "parse", "(data: string): Json?", "Parse TOML string")
-XR_DEFINE_BUILTIN(toml_parse_strict, "parseStrict", "(data: string): Json?", "Parse TOML strictly")
+XR_DEFINE_BUILTIN(toml_parse, "parse", "(data: string): Json", "Parse TOML string")
+XR_DEFINE_BUILTIN(toml_parse_strict, "parseStrict", "(data: string): Json", "Parse TOML strictly")
 XR_DEFINE_BUILTIN(toml_stringify, "stringify", "(value: Json): string", "Convert to TOML string")
-XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json?", "Parse TOML file")
+XR_DEFINE_BUILTIN(toml_parse_file, "parseFile", "(path: string): Json", "Parse TOML file")
 XR_DEFINE_BUILTIN(toml_write_file, "writeFile", "(path: string, value: Json): bool",
                   "Write TOML file")
 

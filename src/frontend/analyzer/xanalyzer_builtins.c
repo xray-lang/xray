@@ -537,9 +537,9 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
     {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true},
     {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true},
     {"groupBy", "(field: string): Json", "Group coroutines by field", true, true},
-    {"setLocal", "(key: string, value: any): void", "Set coroutine-local storage", true, true},
-    {"getLocal", "(key: string): any", "Get coroutine-local storage", true, true},
-    {"setPriority", "(task: any, priority: int): void", "Set coroutine priority", true, true},
+    {"setLocal", "(key: string, value: Json): void", "Set coroutine-local storage", true, true},
+    {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true},
+    {"setPriority", "(task: Json, priority: int): void", "Set coroutine priority", true, true},
     {"lockThread", "(): void", "Lock current thread", true, true},
     {"unlockThread", "(): void", "Unlock current thread", true, true},
     {"dump", "(limit?: int): void", "Dump coroutine state", true, true},
@@ -553,22 +553,22 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
 #define RT_CORO_FUNCTION_COUNT 17
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
-    {"submit", "(fn: function): any", "Submit task to pool", true, false},
+    {"submit", "(fn: function): Json", "Submit task to pool", true, false},
     {"close", "(): void", "Close the pool", true, false},
 };
 #define RT_COROPOOL_FUNCTION_COUNT 2
 
 static const XaBuiltinMember g_rt_reflect_functions[] = {
-    {"getType", "(obj: any): Json", "Get type info of object", true, true},
+    {"getType", "(obj: Json): Json", "Get type info of object", true, true},
     {"getTypeByName", "(name: string): Json", "Get type info by name", true, true},
     {"getAllTypes", "(): Array<Json>", "Get all registered types", true, true},
-    {"isInstance", "(obj: any, cls: any): bool", "Check if obj is instance of cls", true, true},
-    {"isInstanceOf", "(obj: any, name: string): bool", "Check by class name", true, true},
-    {"fieldCount", "(obj: any): int", "Get field count of object", true, true},
-    {"elementType", "(obj: any): string", "Get element type of container", true, true},
-    {"keyType", "(obj: any): string", "Get key type of map", true, true},
-    {"valueType", "(obj: any): string", "Get value type of map", true, true},
-    {"typeOf", "(obj: any): string", "Get type name string", true, true},
+    {"isInstance", "(obj: Json, cls: Json): bool", "Check if obj is instance of cls", true, true},
+    {"isInstanceOf", "(obj: Json, name: string): bool", "Check by class name", true, true},
+    {"fieldCount", "(obj: Json): int", "Get field count of object", true, true},
+    {"elementType", "(obj: Json): string", "Get element type of container", true, true},
+    {"keyType", "(obj: Json): string", "Get key type of map", true, true},
+    {"valueType", "(obj: Json): string", "Get value type of map", true, true},
+    {"typeOf", "(obj: Json): string", "Get type name string", true, true},
 };
 #define RT_REFLECT_FUNCTION_COUNT 10
 
@@ -584,8 +584,8 @@ static const XaBuiltinMember g_rt_cluster_functions[] = {
     {"nodes", "(): Array<string>", "List cluster nodes", true, true},
     {"channel", "(name: string): Channel", "Get distributed channel", true, true},
     {"serve", "(name: string, handler: fn): void", "Register service handler", true, true},
-    {"call", "(node: string, service: string, data: any): any", "Call remote service", true, true},
-    {"reply", "(req: any, result: any): void", "Reply to service request", true, true},
+    {"call", "(node: string, service: string, data: Json): Json", "Call remote service", true, true},
+    {"reply", "(req: Json, result: Json): void", "Reply to service request", true, true},
     {"monitor", "(node: string): Channel", "Monitor node health", true, true},
     {"stop", "(): void", "Stop cluster node", true, true},
 };

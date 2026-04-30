@@ -587,9 +587,9 @@ XR_DEFINE_BUILTIN(regex_compile, "compile", "(pattern: string, flags?: string): 
                   "Compile a regex pattern")
 XR_DEFINE_BUILTIN(regex_test, "test", "(pattern: Regex, s: string): bool",
                   "Test if pattern matches string")
-XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): Json?",
+XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): Json",
                   "Find first match")
-XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): Json?",
+XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): Json",
                   "Full match with captures")
 XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Count matches")
 XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: Regex, s: string): Array<string>",

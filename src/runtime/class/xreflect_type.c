@@ -289,7 +289,7 @@ XrValue xr_type_getConstructor(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 /**
- * Type.newInstance(): any
+ * Type.newInstance(): Json
  */
 
 XrValue xr_type_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {

@@ -1413,7 +1413,7 @@ XR_DEFINE_BUILTIN(net_udp_bind_handle, "udpBind", "(port: int, addr?: string): N
 XR_DEFINE_BUILTIN(net_send_to_yieldable, "sendTo",
                   "(handle: NetConn, data: string, host: string, port: int): int",
                   "Send UDP datagram")
-XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: NetConn, maxlen?: int): Json?",
+XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: NetConn, maxlen?: int): Json",
                   "Receive UDP datagram")
 
 /* ========== Native-type instance methods (synchronous) ==========
