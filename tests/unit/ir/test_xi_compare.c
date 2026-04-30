@@ -86,7 +86,6 @@ static XrProto *compile_legacy(const char *source) {
 
     /* Use the context's built-in analyzer */
     xa_analyzer_analyze(ctx->analyzer, "compare.xr", program);
-    ctx->use_xi_pipeline = false;
 
     /* Re-install the parse arena: legacy codegen desugars some AST nodes
      * (e.g. for-in, match) which calls ast_alloc and needs the arena. */

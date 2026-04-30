@@ -167,15 +167,15 @@ void xcg_emit_ref(XcgenBuf *b, XirFunc *func, XirRef ref) {
 
 /* ========== Binary/Compare/Unary Operations ========== */
 
-// Emit a ref as a native numeric type, auto-unboxing XrtValue if needed
+// Emit a ref as a native numeric type, auto-unboxing XrValue if needed
 static void xcg_emit_ref_as_native(XcgenBuf *b, XirFunc *func, XirRef ref, uint8_t target_type) {
     uint8_t t = xcg_ref_type(func, ref);
     bool is_tagged = (t == XR_REP_STR || t == XR_REP_PTR || t == XR_REP_TAGGED);
     if (is_tagged) {
         if (target_type == XR_REP_F64) {
-            xcgen_buf_puts(b, "xrt_unbox_float(");
+            xcgen_buf_puts(b, "XR_TO_FLOAT(");
         } else {
-            xcgen_buf_puts(b, "xrt_unbox_int(");
+            xcgen_buf_puts(b, "XR_TO_INT(");
         }
         xcg_emit_ref(b, func, ref);
         xcgen_buf_puts(b, ")");
@@ -225,7 +225,7 @@ void xcg_emit_compare_op(XcgenBuf *b, XirFunc *func, XirIns *ins, const char *op
         if (b_is_zero) {
             xcgen_buf_printf(b, "    v%u = (int64_t)(", XIR_REF_INDEX(ins->dst));
             xcg_emit_ref(b, func, ins->args[0]);
-            xcgen_buf_printf(b, ".tag %s XRT_TAG_NULL);\n", op);
+            xcgen_buf_printf(b, ".tag %s XR_TAG_NULL);\n", op);
             return;
         }
     }
@@ -417,7 +417,7 @@ static void xcg_emit_collection_op(XcgenBuf *b, XirFunc *func, XirIns *ins, Xcge
         case XIR_RT_ISNULL:
             xcgen_buf_printf(b, "    v%u = (", dst_idx);
             xcg_emit_ref(b, func, ins->args[0]);
-            xcgen_buf_puts(b, ".tag == XRT_TAG_NULL) ? 1 : 0;\n");
+            xcgen_buf_puts(b, ".tag == XR_TAG_NULL) ? 1 : 0;\n");
             return;
         default:
             return;
@@ -465,7 +465,7 @@ static void xcg_emit_field_load(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenMo
                         EMIT_STRUCT_BASE(b, st, base_vi, func);
                         xcgen_buf_printf(b, "%s.f;\n", st->fields[fi].name);
                     } else {
-                        xcgen_buf_printf(b, "    v%u = xrt_unbox_float(", dst_idx);
+                        xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(", dst_idx);
                         EMIT_STRUCT_BASE(b, st, base_vi, func);
                         xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
                     }
@@ -479,15 +479,15 @@ static void xcg_emit_field_load(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenMo
                     xcgen_buf_printf(b, "%s; memcpy(&v%u, &_tmp, 8); }\n", st->fields[fi].name,
                                      dst_idx);
                 } else if (dst_t == XR_REP_I64 && fc == 2) {
-                    xcgen_buf_printf(b, "    v%u = xrt_unbox_int(", dst_idx);
+                    xcgen_buf_printf(b, "    v%u = XR_TO_INT(", dst_idx);
                     EMIT_STRUCT_BASE(b, st, base_vi, func);
                     xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
                 } else if ((dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED) && fc == 0) {
-                    xcgen_buf_printf(b, "    v%u = xrt_box_int(", dst_idx);
+                    xcgen_buf_printf(b, "    v%u = XR_FROM_INT(", dst_idx);
                     EMIT_STRUCT_BASE(b, st, base_vi, func);
                     xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
                 } else if ((dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED) && fc == 1) {
-                    xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
+                    xcgen_buf_printf(b, "    v%u = XR_FROM_FLOAT(", dst_idx);
                     EMIT_STRUCT_BASE(b, st, base_vi, func);
                     xcgen_buf_printf(b, "%s);\n", st->fields[fi].name);
                 } else {
@@ -499,7 +499,7 @@ static void xcg_emit_field_load(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenMo
             }
         }
     }
-    // Fallback: raw byte offset access into 16-byte XrtValue field slots
+    // Fallback: raw byte offset access into 16-byte XrValue field slots
     {
         uint8_t dst_t = xcg_ref_type(func, ins->dst);
         uint8_t base_t = xcg_ref_type(func, ins->args[0]);
@@ -552,11 +552,11 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenM
                 EMIT_STRUCT_BASE(b, st, base_vi, func);
                 xcgen_buf_printf(b, "%s = ", st->fields[fi].name);
                 if (st->fields[fi].c_type == 1 && val_tagged) {
-                    xcgen_buf_puts(b, "xrt_unbox_float(");
+                    xcgen_buf_puts(b, "XR_TO_FLOAT(");
                     xcg_emit_ref(b, func, ins->args[1]);
                     xcgen_buf_puts(b, ")");
                 } else if (st->fields[fi].c_type == 0 && val_tagged) {
-                    xcgen_buf_puts(b, "xrt_unbox_int(");
+                    xcgen_buf_puts(b, "XR_TO_INT(");
                     xcg_emit_ref(b, func, ins->args[1]);
                     xcgen_buf_puts(b, ")");
                 } else if (st->fields[fi].c_type == 2 && val_type == XR_REP_F64) {
@@ -583,7 +583,7 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenM
             }
         }
     }
-    // Fallback: raw byte offset store into 16-byte XrtValue field slots.
+    // Fallback: raw byte offset store into 16-byte XrValue field slots.
     // Always write a full 16-byte XrValue (with proper tag) so that the
     // LOAD_FIELD fallback (which reads *(XrValue*)) gets a complete value.
     {
@@ -604,12 +604,12 @@ static void xcg_emit_field_store(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenM
             xcg_emit_ref(b, func, ins->args[1]);
         } else if (val_type == XR_REP_F64) {
             // Raw double — box with float tag
-            xcgen_buf_puts(b, "    { XrValue _sv = xrt_box_float(");
+            xcgen_buf_puts(b, "    { XrValue _sv = XR_FROM_FLOAT(");
             xcg_emit_ref(b, func, ins->args[1]);
             xcgen_buf_puts(b, ")");
         } else {
             // Raw int64_t — box with int tag
-            xcgen_buf_puts(b, "    { XrValue _sv = xrt_box_int(");
+            xcgen_buf_puts(b, "    { XrValue _sv = XR_FROM_INT(");
             xcg_emit_ref(b, func, ins->args[1]);
             xcgen_buf_puts(b, ")");
         }
@@ -795,9 +795,9 @@ static void xcg_emit_raw_mem_op(XcgenBuf *b, XirFunc *func, XirIns *ins) {
         case XIR_ALLOC:
             if (!xir_ref_is_none(ins->dst)) {
                 // args[0] = type tag (unused in AOT), args[1] = byte size
-                xcgen_buf_printf(b, "    v%u = xrt_mkptr(xrt_arc_alloc((size_t)(", dst_idx);
+                xcgen_buf_printf(b, "    v%u = xr_mkptr(xrt_arc_alloc((size_t)(", dst_idx);
                 xcg_emit_ref(b, func, ins->args[1]);
-                xcgen_buf_puts(b, ")), XRT_TAG_PTR);\n");
+                xcgen_buf_puts(b, ")), XR_TAG_PTR);\n");
             }
             return;
         default:
@@ -813,22 +813,22 @@ static void xcg_emit_box_op(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *
     const char *tagged_type = "XrValue";
     switch (ins->op) {
         case XIR_BOX_I64:
-            xcgen_buf_printf(b, "    v%u = xrt_box_int(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_FROM_INT(", dst_idx);
             xcg_emit_ref(b, func, ins->args[0]);
             xcgen_buf_puts(b, ");\n");
             break;
         case XIR_BOX_F64:
-            xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_FROM_FLOAT(", dst_idx);
             xcg_emit_ref(b, func, ins->args[0]);
             xcgen_buf_puts(b, ");\n");
             break;
         case XIR_UNBOX_I64:
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_INT(", dst_idx);
             xcg_emit_ref(b, func, ins->args[0]);
             xcgen_buf_puts(b, ");\n");
             break;
         case XIR_UNBOX_F64:
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(", dst_idx);
             xcg_emit_ref(b, func, ins->args[0]);
             xcgen_buf_puts(b, ");\n");
             break;
@@ -875,7 +875,7 @@ static void xcg_emit_const_ptr(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFun
         }
     }
     if (vtype == XR_REP_STR || const_is_str) {
-        xcgen_buf_printf(b, "    v%u = xrt_box_str(", dst_idx);
+        xcgen_buf_printf(b, "    v%u = xr_box_str(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;
@@ -887,9 +887,9 @@ static void xcg_emit_const_ptr(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFun
                 raw = func->consts[ci].val.i64;
         }
         if (raw == 0) {
-            xcgen_buf_printf(b, "    v%u = xrt_mkptr(NULL, XRT_TAG_NULL);\n", dst_idx);
+            xcgen_buf_printf(b, "    v%u = xr_mkptr(NULL, XR_TAG_NULL);\n", dst_idx);
         } else {
-            xcgen_buf_printf(b, "    v%u = xrt_mkptr((void*)0x%" PRIx64 ", XRT_TAG_PTR);\n",
+            xcgen_buf_printf(b, "    v%u = xr_mkptr((void*)0x%" PRIx64 ", XR_TAG_PTR);\n",
                              dst_idx, (uint64_t) raw);
         }
         cf->needs_runtime = true;
@@ -910,22 +910,22 @@ static void xcg_emit_mov(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenFunc *cf)
     bool src_tagged = (src_t == XR_REP_STR || src_t == XR_REP_PTR || src_t == XR_REP_TAGGED);
     bool dst_tagged = (dst_t == XR_REP_STR || dst_t == XR_REP_PTR || dst_t == XR_REP_TAGGED);
     if (src_tagged && dst_t == XR_REP_I64) {
-        xcgen_buf_printf(b, "    v%u = xrt_unbox_int(", dst_idx);
+        xcgen_buf_printf(b, "    v%u = XR_TO_INT(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;
     } else if (src_tagged && dst_t == XR_REP_F64) {
-        xcgen_buf_printf(b, "    v%u = xrt_unbox_float(", dst_idx);
+        xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;
     } else if (!src_tagged && dst_tagged && src_t == XR_REP_I64) {
-        xcgen_buf_printf(b, "    v%u = xrt_box_int(", dst_idx);
+        xcgen_buf_printf(b, "    v%u = XR_FROM_INT(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;
     } else if (!src_tagged && dst_tagged && src_t == XR_REP_F64) {
-        xcgen_buf_printf(b, "    v%u = xrt_box_float(", dst_idx);
+        xcgen_buf_printf(b, "    v%u = XR_FROM_FLOAT(", dst_idx);
         xcg_emit_ref(b, func, ins->args[0]);
         xcgen_buf_puts(b, ");\n");
         cf->needs_runtime = true;

@@ -158,14 +158,14 @@ static inline void xrt_arc_init(void) {
 }
 
 // Allocate a heap string via bump allocator
-static inline XrtValue xrt_str_alloc(size_t len) {
+static inline XrValue xrt_str_alloc(size_t len) {
     char *p = (char *) xrt_arc_alloc(len + 1);
-    return xrt_mkptr(p, XRT_TAG_STR_ARC);
+    return xr_mkptr(p, XR_TAG_STR_ARC);
 }
 
-static inline XrtValue xrt_str_concat(const char *sa, const char *sb) {
+static inline XrValue xrt_str_concat(const char *sa, const char *sb) {
     size_t la = strlen(sa), lb = strlen(sb);
-    XrtValue v = xrt_str_alloc(la + lb);
+    XrValue v = xrt_str_alloc(la + lb);
     char *r = (char *) v.ptr;
     memcpy(r, sa, la);
     memcpy(r + la, sb, lb + 1);

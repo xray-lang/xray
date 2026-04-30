@@ -666,6 +666,23 @@ const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
     return NULL;
 }
 
+const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name) {
+    if (!handle_name)
+        return NULL;
+
+    // Search builtin (embedded) C modules
+    for (int i = 0; i < builtin_module_count; i++) {
+        const XaBuiltinModule *mod = &builtin_modules[i];
+        for (int j = 0; j < mod->handle_count; j++) {
+            if (strcmp(mod->handles[j].name, handle_name) == 0)
+                return &mod->handles[j];
+        }
+    }
+
+    // Search dynamically loaded .xrd modules
+    return xa_xrd_find_handle_by_name(handle_name);
+}
+
 // ============================================================================
 // Generic API (used by both compiler and LSP)
 // ============================================================================
@@ -880,6 +897,22 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
                     if (type)
                         type->instance.class_name = entry->name;
                 }
+            }
+        }
+        // Fall back to handle types from loaded modules (.xrd).
+        // Creates an instance type whose class_name matches the handle
+        // so that method resolution can find the handle's methods later.
+        if (!type) {
+            char name_buf[64];
+            size_t copy_len = base_len < sizeof(name_buf) - 1 ? base_len : sizeof(name_buf) - 1;
+            memcpy(name_buf, s, copy_len);
+            name_buf[copy_len] = '\0';
+
+            const XaBuiltinHandle *handle = xa_builtin_find_handle_by_name(name_buf);
+            if (handle) {
+                type = xr_type_new_instance(X, NULL);
+                if (type)
+                    type->instance.class_name = handle->name;
             }
         }
         if (!type)

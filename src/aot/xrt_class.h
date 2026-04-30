@@ -24,13 +24,13 @@
  *   _tid_Point = xrt_type_register("Point", 0, NULL, 0, NULL, nfields*16);
  *
  *   // --- constructor call ---
- *   { XrValue _inst = xrt_mkptr(xrt_obj_alloc(_tid_Point, nfields*16), XRT_TAG_PTR);
+ *   { XrValue _inst = xr_mkptr(xrt_obj_alloc(_tid_Point, nfields*16), XR_TAG_PTR);
  *     xr_constructor(xrt_ctx, _inst, ...);
  *     v5 = _inst; }
  *
  * RELATED MODULES:
  *   - xrt_arc.h: XrtArcHdr, bump allocator
- *   - xrt_value.h: XrtValue tagged union (PTR tag carries object pointer)
+ *   - xrt_value.h: XrValue tagged union (PTR tag carries object pointer)
  *   - xcgen.c: emits class type registration and constructor calls
  */
 
@@ -50,7 +50,7 @@
  * ========================================================================= */
 
 typedef void (*XrtDestructor)(void *obj);
-typedef XrtValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
+typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
 typedef struct {
     uint16_t type_id;
@@ -113,16 +113,16 @@ static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
     return obj;
 }
 
-/* Box an object pointer into XrtValue */
-static inline XrtValue xrt_box_obj(void *obj) {
-    XrtValue v;
+/* Box an object pointer into XrValue */
+static inline XrValue xrt_box_obj(void *obj) {
+    XrValue v;
     v.ptr = obj;
-    v.tag = obj ? XRT_TAG_PTR : XRT_TAG_NULL;
+    v.tag = obj ? XR_TAG_PTR : XR_TAG_NULL;
     return v;
 }
 
-/* Unbox XrtValue to object pointer (no type check) */
-static inline void *xrt_unbox_obj(XrtValue v) {
+/* Unbox XrValue to object pointer (no type check) */
+static inline void *xrt_unbox_obj(XrValue v) {
     return v.ptr;
 }
 

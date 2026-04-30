@@ -21,10 +21,10 @@
 typedef struct {
     int64_t len;
     int64_t cap;
-    XrtValue *data;
+    XrValue *data;
 } xrt_array_t;
 
-static inline XrtValue xrt_array_new(int64_t cap) {
+static inline XrValue xrt_array_new(int64_t cap) {
     if (cap < 4)
         cap = 4;
     xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
@@ -34,19 +34,19 @@ static inline XrtValue xrt_array_new(int64_t cap) {
     }
     a->len = 0;
     a->cap = cap;
-    a->data = (XrtValue *) XRT_CALLOC((size_t) cap, sizeof(XrtValue));
+    a->data = (XrValue *) XRT_CALLOC((size_t) cap, sizeof(XrValue));
     if (!a->data) {
         fprintf(stderr, "xrt_array_new: out of memory\n");
         abort();
     }
-    return xrt_mkptr(a, XRT_TAG_ARRAY);
+    return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
-static inline void xrt_array_push(XrtValue arr, XrtValue val) {
+static inline void xrt_array_push(XrValue arr, XrValue val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (a->len >= a->cap) {
         a->cap *= 2;
-        XrtValue *tmp = (XrtValue *) XRT_REALLOC(a->data, (size_t) a->cap * sizeof(XrtValue));
+        XrValue *tmp = (XrValue *) XRT_REALLOC(a->data, (size_t) a->cap * sizeof(XrValue));
         if (!tmp) {
             fprintf(stderr, "xrt_array_push: out of memory\n");
             abort();
@@ -56,79 +56,79 @@ static inline void xrt_array_push(XrtValue arr, XrtValue val) {
     a->data[a->len++] = val;
 }
 
-static inline void xrt_array_push_i(XrtValue arr, int64_t val) {
+static inline void xrt_array_push_i(XrValue arr, int64_t val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (a->len >= a->cap) {
         a->cap *= 2;
-        XrtValue *tmp = (XrtValue *) XRT_REALLOC(a->data, (size_t) a->cap * sizeof(XrtValue));
+        XrValue *tmp = (XrValue *) XRT_REALLOC(a->data, (size_t) a->cap * sizeof(XrValue));
         if (!tmp) {
             fprintf(stderr, "xrt_array_push_i: out of memory\n");
             abort();
         }
         a->data = tmp;
     }
-    a->data[a->len++] = (XrtValue){.i = val, .tag = XRT_TAG_I64};
+    a->data[a->len++] = (XrValue){.i = val, .tag = XR_TAG_I64};
 }
 
-static inline void xrt_array_push_f(XrtValue arr, double val) {
+static inline void xrt_array_push_f(XrValue arr, double val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (a->len >= a->cap) {
         a->cap *= 2;
-        XrtValue *tmp = (XrtValue *) XRT_REALLOC(a->data, (size_t) a->cap * sizeof(XrtValue));
+        XrValue *tmp = (XrValue *) XRT_REALLOC(a->data, (size_t) a->cap * sizeof(XrValue));
         if (!tmp) {
             fprintf(stderr, "xrt_array_push_f: out of memory\n");
             abort();
         }
         a->data = tmp;
     }
-    a->data[a->len++] = xrt_mkf64(val, XRT_TAG_F64);
+    a->data[a->len++] = xr_mkf64(val, XR_TAG_F64);
 }
 
-static inline int64_t xrt_array_len(XrtValue arr) {
+static inline int64_t xrt_array_len(XrValue arr) {
     return ((xrt_array_t *) arr.ptr)->len;
 }
 
 // Typed array access — raw payload, no tag check
-static inline int64_t xrt_tarray_get(XrtValue arr, int64_t idx) {
+static inline int64_t xrt_tarray_get(XrValue arr, int64_t idx) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (idx < 0 || idx >= a->len)
         return 0;
     return a->data[idx].i;
 }
 
-static inline void xrt_tarray_set(XrtValue arr, int64_t idx, int64_t val) {
+static inline void xrt_tarray_set(XrValue arr, int64_t idx, int64_t val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if (idx < 0 || idx >= a->len)
         return;
-    a->data[idx] = (XrtValue){.i = val, .tag = XRT_TAG_I64};
+    a->data[idx] = (XrValue){.i = val, .tag = XR_TAG_I64};
 }
 
-static inline int64_t xrt_array_get_i(XrtValue arr, int64_t idx) {
+static inline int64_t xrt_array_get_i(XrValue arr, int64_t idx) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if ((uint64_t) idx >= (uint64_t) a->len)
         return 0;
     return a->data[idx].i;
 }
 
-static inline double xrt_array_get_f(XrtValue arr, int64_t idx) {
+static inline double xrt_array_get_f(XrValue arr, int64_t idx) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if ((uint64_t) idx >= (uint64_t) a->len)
         return 0.0;
     return a->data[idx].f;
 }
 
-static inline void xrt_array_set_i(XrtValue arr, int64_t idx, int64_t val) {
+static inline void xrt_array_set_i(XrValue arr, int64_t idx, int64_t val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if ((uint64_t) idx >= (uint64_t) a->len)
         return;
-    a->data[idx] = (XrtValue){.i = val, .tag = XRT_TAG_I64};
+    a->data[idx] = (XrValue){.i = val, .tag = XR_TAG_I64};
 }
 
-static inline void xrt_array_set_f(XrtValue arr, int64_t idx, double val) {
+static inline void xrt_array_set_f(XrValue arr, int64_t idx, double val) {
     xrt_array_t *a = (xrt_array_t *) arr.ptr;
     if ((uint64_t) idx >= (uint64_t) a->len)
         return;
-    a->data[idx] = xrt_mkf64(val, XRT_TAG_F64);
+    a->data[idx] = xr_mkf64(val, XR_TAG_F64);
 }
 
 /* =========================================================================
@@ -141,7 +141,7 @@ typedef struct {
     int64_t cap;
 } xrt_strbuf_t;
 
-static inline XrtValue xrt_strbuf_new(void) {
+static inline XrValue xrt_strbuf_new(void) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) XRT_MALLOC(sizeof(xrt_strbuf_t));
     if (!sb) {
         fprintf(stderr, "xrt_strbuf_new: out of memory\n");
@@ -155,7 +155,7 @@ static inline XrtValue xrt_strbuf_new(void) {
         abort();
     }
     sb->buf[0] = 0;
-    return xrt_mkptr(sb, XRT_TAG_STRBUF);
+    return xr_mkptr(sb, XR_TAG_STRBUF);
 }
 
 static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
@@ -169,37 +169,37 @@ static inline void xrt_strbuf_grow(xrt_strbuf_t *sb, int64_t need) {
     sb->buf = tmp;
 }
 
-static inline void xrt_strbuf_append(XrtValue sbv, XrtValue val) {
+static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
-    if (val.tag == XRT_TAG_STR || val.tag == XRT_TAG_STR_ARC) {
+    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
         const char *s = (const char *) val.ptr;
         int64_t slen = (int64_t) strlen(s);
         xrt_strbuf_grow(sb, slen);
         memcpy(sb->buf + sb->len, s, (size_t) slen);
         sb->len += slen;
         sb->buf[sb->len] = 0;
-    } else if (val.tag == XRT_TAG_I64) {
+    } else if (val.tag == XR_TAG_I64) {
         char tmp[24];
         int n = snprintf(tmp, sizeof(tmp), "%lld", (long long) val.i);
         xrt_strbuf_grow(sb, n);
         memcpy(sb->buf + sb->len, tmp, (size_t) n);
         sb->len += n;
         sb->buf[sb->len] = 0;
-    } else if (val.tag == XRT_TAG_F64) {
+    } else if (val.tag == XR_TAG_F64) {
         char tmp[32];
         int n = snprintf(tmp, sizeof(tmp), "%g", val.f);
         xrt_strbuf_grow(sb, n);
         memcpy(sb->buf + sb->len, tmp, (size_t) n);
         sb->len += n;
         sb->buf[sb->len] = 0;
-    } else if (val.tag == XRT_TAG_BOOL) {
+    } else if (val.tag == XR_TAG_BOOL) {
         const char *bs = val.i ? "true" : "false";
         int blen = val.i ? 4 : 5;
         xrt_strbuf_grow(sb, blen);
         memcpy(sb->buf + sb->len, bs, (size_t) blen);
         sb->len += blen;
         sb->buf[sb->len] = 0;
-    } else if (val.tag == XRT_TAG_NULL) {
+    } else if (val.tag == XR_TAG_NULL) {
         xrt_strbuf_grow(sb, 4);
         memcpy(sb->buf + sb->len, "null", 4);
         sb->len += 4;
@@ -207,9 +207,9 @@ static inline void xrt_strbuf_append(XrtValue sbv, XrtValue val) {
     }
 }
 
-static inline XrtValue xrt_strbuf_finish(XrtValue sbv) {
+static inline XrValue xrt_strbuf_finish(XrValue sbv) {
     xrt_strbuf_t *sb = (xrt_strbuf_t *) sbv.ptr;
-    XrtValue v = xrt_str_alloc((size_t) sb->len);
+    XrValue v = xrt_str_alloc((size_t) sb->len);
     memcpy((char *) v.ptr, sb->buf, (size_t) (sb->len + 1));
     return v;
 }
@@ -219,8 +219,8 @@ static inline XrtValue xrt_strbuf_finish(XrtValue sbv) {
  * ========================================================================= */
 
 typedef struct {
-    XrtValue key;
-    XrtValue val;
+    XrValue key;
+    XrValue val;
 } xrt_map_entry_t;
 typedef struct {
     int64_t len;
@@ -228,7 +228,7 @@ typedef struct {
     xrt_map_entry_t *entries;
 } xrt_map_t;
 
-static inline XrtValue xrt_map_new(int64_t cap) {
+static inline XrValue xrt_map_new(int64_t cap) {
     if (cap < 8)
         cap = 8;
     xrt_map_t *m = (xrt_map_t *) XRT_MALLOC(sizeof(xrt_map_t));
@@ -243,27 +243,27 @@ static inline XrtValue xrt_map_new(int64_t cap) {
         fprintf(stderr, "xrt_map_new: out of memory\n");
         abort();
     }
-    return xrt_mkptr(m, XRT_TAG_MAP);
+    return xr_mkptr(m, XR_TAG_MAP);
 }
 
-static inline int xrt_key_eq(XrtValue a, XrtValue b) {
+static inline int xrt_key_eq(XrValue a, XrValue b) {
     if (a.tag != b.tag)
         return 0;
-    if (a.tag == XRT_TAG_I64)
+    if (a.tag == XR_TAG_I64)
         return a.i == b.i;
-    if (a.tag == XRT_TAG_STR)
+    if (a.tag == XR_TAG_STR)
         return strcmp((const char *) a.ptr, (const char *) b.ptr) == 0;
     return a.ptr == b.ptr;
 }
 
-static inline XrtValue xrt_map_get(xrt_map_t *m, XrtValue key) {
+static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
     for (int64_t i = 0; i < m->len; i++)
         if (xrt_key_eq(m->entries[i].key, key))
             return m->entries[i].val;
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
 }
 
-static inline void xrt_map_set(xrt_map_t *m, XrtValue key, XrtValue val) {
+static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
     for (int64_t i = 0; i < m->len; i++) {
         if (xrt_key_eq(m->entries[i].key, key)) {
             m->entries[i].val = val;
@@ -289,29 +289,29 @@ static inline void xrt_map_set(xrt_map_t *m, XrtValue key, XrtValue val) {
  * Generic index get / set  (Array[i] and Map[key])
  * ========================================================================= */
 
-static inline XrtValue xrt_index_get(XrtValue obj, XrtValue key) {
-    if (obj.tag == XRT_TAG_ARRAY && key.tag == XRT_TAG_I64) {
+static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
+    if (obj.tag == XR_TAG_ARRAY && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (idx < 0)
             idx += a->len;
         if (idx >= 0 && idx < a->len)
             return a->data[idx];
-    } else if (obj.tag == XRT_TAG_MAP) {
+    } else if (obj.tag == XR_TAG_MAP) {
         return xrt_map_get((xrt_map_t *) obj.ptr, key);
     }
-    return (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
+    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
 }
 
-static inline void xrt_index_set(XrtValue obj, XrtValue key, XrtValue val) {
-    if (obj.tag == XRT_TAG_ARRAY && key.tag == XRT_TAG_I64) {
+static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
+    if (obj.tag == XR_TAG_ARRAY && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (idx < 0)
             idx += a->len;
         if (idx >= 0 && idx < a->len)
             a->data[idx] = val;
-    } else if (obj.tag == XRT_TAG_MAP) {
+    } else if (obj.tag == XR_TAG_MAP) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
     }
 }
@@ -323,12 +323,12 @@ static inline void xrt_index_set(XrtValue obj, XrtValue key, XrtValue val) {
 typedef struct xrt_closure {
     void *fn;           // C function pointer
     int nupvals;        // number of captured upvalues
-    XrtValue upvals[];  // captured values (flexible array)
+    XrValue upvals[];  // captured values (flexible array)
 } xrt_closure_t;
 
-static inline XrtValue xrt_closure_new(void *fn, int nupvals) {
+static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     xrt_closure_t *c =
-        (xrt_closure_t *) XRT_MALLOC(sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrtValue));
+        (xrt_closure_t *) XRT_MALLOC(sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrValue));
     if (!c) {
         fprintf(stderr, "xrt_closure_new: out of memory\n");
         abort();
@@ -336,8 +336,8 @@ static inline XrtValue xrt_closure_new(void *fn, int nupvals) {
     c->fn = fn;
     c->nupvals = nupvals;
     for (int i = 0; i < nupvals; i++)
-        c->upvals[i] = (XrtValue){.i = 0, .tag = XRT_TAG_NULL};
-    return xrt_mkptr(c, XRT_TAG_CLOSURE);
+        c->upvals[i] = (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return xr_mkptr(c, XR_TAG_CLOSURE);
 }
 
 #endif  // XRT_COLL_H

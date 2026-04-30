@@ -78,11 +78,11 @@ typedef struct XcgenFunc {
     XcgenBuf body;             // function body buffer
     int tmp_count;             // temp variable counter
     bool needs_runtime;        // true if function calls runtime APIs
-    bool needs_closure_param;  // true if function accesses upvalues (needs XrtValue xrt_closure
+    bool needs_closure_param;  // true if function accesses upvalues (needs XrValue xrt_closure
                                // param)
     bool non_escaping;         // true if all callers pass upvalues inline (no closure object)
     int num_upvals;  // upvalue count for non-escaping closures (upval params after regular params)
-    bool needs_exception;  // true if function uses try/catch (needs XrtValue xrt_exception local)
+    bool needs_exception;  // true if function uses try/catch (needs XrValue xrt_exception local)
     bool void_return;      // true if function always returns null → emit as void
 
     // Exception frame tracking for finally support:
@@ -270,7 +270,7 @@ XR_FUNC void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, cons
 
 /* ========== Shared Emit Helpers ========== */
 
-// Auto-box int64_t/double vregs to XrtValue for runtime call arguments
+// Auto-box int64_t/double vregs to XrValue for runtime call arguments
 XR_FUNC void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref);
 
 /* ========== Intrinsic Lowering (xcgen_intrinsic.c) ========== */

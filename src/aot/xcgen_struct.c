@@ -211,7 +211,7 @@ static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_i
             return XR_REP_I64;  // immediate integer init
 
         if (op == OP_JSON_INIT_N && GETARG_A(inst) == a_reg && GETARG_B(inst) == field_idx)
-            return XR_REP_TAGGED;  // null → keep XrtValue
+            return XR_REP_TAGGED;  // null → keep XrValue
 
         if (op == OP_JSON_INIT && GETARG_A(inst) == a_reg && GETARG_B(inst) == field_idx) {
             int rc = GETARG_C(inst);
@@ -225,10 +225,10 @@ static uint8_t infer_field_type(XrProto *proto, uint32_t newjson_pc, int field_i
             op == OP_RETURN1)
             break;
     }
-    return XR_REP_TAGGED;  // default: keep as XrtValue
+    return XR_REP_TAGGED;  // default: keep as XrValue
 }
 
-// Map XIR type to C type index: 0=int64_t, 1=double, 2=XrtValue
+// Map XIR type to C type index: 0=int64_t, 1=double, 2=XrValue
 static uint8_t xir_type_to_c_type(uint8_t xir_type) {
     switch (xir_type) {
         case XR_REP_I64:
@@ -248,7 +248,7 @@ static int c_type_size(uint8_t c_type) {
         case 1:
             return 8;  // double
         case 2:
-            return 16;  // XrtValue
+            return 16;  // XrValue
         default:
             return 8;
     }
@@ -301,7 +301,7 @@ static bool xcgen_register_struct(XcgenStructRegistry *reg, XrShape *shape, void
 
         // Default type: will be refined by infer_field_type later
         st->fields[i].xir_type = XR_REP_TAGGED;
-        st->fields[i].c_type = 2;                     // XrtValue (layout preserved)
+        st->fields[i].c_type = 2;                     // XrValue (layout preserved)
         st->fields[i].val_hint_type = XR_REP_TAGGED;  // semantic hint, set later
 
         // Original byte offset in Json layout
@@ -357,7 +357,7 @@ void xcgen_collect_shapes(XrProto *proto, XcgenStructRegistry *reg, void *isolat
         // which is populated from 'type T = { field: float, ... }' declarations.
         //
         // Two outcomes are recorded per field:
-        //   xir_type / c_type: actual C struct storage type (XrtValue layout preserved
+        //   xir_type / c_type: actual C struct storage type (XrValue layout preserved
         //     unless the shape explicitly declares a compact type). This keeps
         //     field offsets consistent with the fallback path (16B per slot).
         //   val_hint_type: semantic type inferred from bytecode (e.g. F64 from LOADK

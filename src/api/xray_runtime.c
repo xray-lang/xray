@@ -23,7 +23,7 @@
 
 /* ========== Value → String Conversion ========== */
 
-static const char *xrt_to_cstr(XrtValue v, char *buf, size_t bufsz) {
+static const char *xrt_to_cstr(XrValue v, char *buf, size_t bufsz) {
     switch (v.tag) {
         case XRT_TAG_STR:
             return (const char *) v.ptr;
@@ -45,7 +45,7 @@ static const char *xrt_to_cstr(XrtValue v, char *buf, size_t bufsz) {
     }
 }
 
-static XrtValue xrt_str_concat(const char *sa, const char *sb) {
+static XrValue xrt_str_concat(const char *sa, const char *sb) {
     size_t la = strlen(sa), lb = strlen(sb);
     char *r = (char *) xr_malloc(la + lb + 1);
     if (!r)
@@ -57,7 +57,7 @@ static XrtValue xrt_str_concat(const char *sa, const char *sb) {
 
 /* ========== Mixed-type Arithmetic ========== */
 
-XrtValue xrt_add(XrtValue a, XrtValue b) {
+XrValue xrt_add(XrValue a, XrValue b) {
     XR_DCHECK(a.tag <= XRT_TAG_STR, "xrt_add: invalid tag a");
     XR_DCHECK(b.tag <= XRT_TAG_STR, "xrt_add: invalid tag b");
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
@@ -72,7 +72,7 @@ XrtValue xrt_add(XrtValue a, XrtValue b) {
 }
 
 // Self-contained arithmetic (no delegation to xrt_ops.c)
-XrtValue xrt_sub(XrtValue a, XrtValue b) {
+XrValue xrt_sub(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return xrt_box_int(a.i - b.i);
     double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
@@ -80,7 +80,7 @@ XrtValue xrt_sub(XrtValue a, XrtValue b) {
     return xrt_box_float(fa - fb);
 }
 
-XrtValue xrt_mul(XrtValue a, XrtValue b) {
+XrValue xrt_mul(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return xrt_box_int(a.i * b.i);
     double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
@@ -88,7 +88,7 @@ XrtValue xrt_mul(XrtValue a, XrtValue b) {
     return xrt_box_float(fa * fb);
 }
 
-XrtValue xrt_div(XrtValue a, XrtValue b) {
+XrValue xrt_div(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return b.i ? xrt_box_int(a.i / b.i) : xrt_box_int(0);
     double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
@@ -98,13 +98,13 @@ XrtValue xrt_div(XrtValue a, XrtValue b) {
     return xrt_box_float(fa / fb);
 }
 
-XrtValue xrt_mod(XrtValue a, XrtValue b) {
+XrValue xrt_mod(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return b.i ? xrt_box_int(a.i % b.i) : xrt_box_int(0);
     return xrt_box_int(0);
 }
 
-XrtValue xrt_neg(XrtValue a) {
+XrValue xrt_neg(XrValue a) {
     if (a.tag == XRT_TAG_I64)
         return xrt_box_int(-a.i);
     if (a.tag == XRT_TAG_F64)
@@ -114,7 +114,7 @@ XrtValue xrt_neg(XrtValue a) {
 
 /* ========== Mixed-type Comparison ========== */
 
-int64_t xrt_lt(XrtValue a, XrtValue b) {
+int64_t xrt_lt(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return a.i < b.i;
     double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
@@ -122,7 +122,7 @@ int64_t xrt_lt(XrtValue a, XrtValue b) {
     return fa < fb;
 }
 
-int64_t xrt_le(XrtValue a, XrtValue b) {
+int64_t xrt_le(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
         return a.i <= b.i;
     double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
@@ -130,7 +130,7 @@ int64_t xrt_le(XrtValue a, XrtValue b) {
     return fa <= fb;
 }
 
-int64_t xrt_eq(XrtValue a, XrtValue b) {
+int64_t xrt_eq(XrValue a, XrValue b) {
     if (a.tag == b.tag) {
         if (a.tag == XRT_TAG_I64)
             return a.i == b.i;
@@ -151,7 +151,7 @@ int64_t xrt_eq(XrtValue a, XrtValue b) {
 
 /* ========== Print ========== */
 
-void xrt_print(XrtValue v) {
+void xrt_print(XrValue v) {
     switch (v.tag) {
         case XRT_TAG_STR:
             printf("%s", (const char *) v.ptr);
@@ -177,28 +177,28 @@ void xrt_print(XrtValue v) {
     }
 }
 
-void xrt_println(XrtValue v) {
+void xrt_println(XrValue v) {
     xrt_print(v);
     printf("\n");
 }
 
 /* ========== String Operations ========== */
 
-XrtValue xrt_string_concat(XrtValue a, XrtValue b) {
+XrValue xrt_string_concat(XrValue a, XrValue b) {
     XR_DCHECK(a.tag <= XRT_TAG_STR, "xrt_string_concat: invalid tag a");
     XR_DCHECK(b.tag <= XRT_TAG_STR, "xrt_string_concat: invalid tag b");
     char ba[64], bb[64];
     return xrt_str_concat(xrt_to_cstr(a, ba, sizeof(ba)), xrt_to_cstr(b, bb, sizeof(bb)));
 }
 
-XrtValue xrt_string_len(XrtValue s) {
+XrValue xrt_string_len(XrValue s) {
     XR_DCHECK(s.tag == XRT_TAG_STR, "xrt_string_len: expected string");
     if (s.tag != XRT_TAG_STR || !s.ptr)
         return xrt_box_int(0);
     return xrt_box_int((int64_t) strlen((const char *) s.ptr));
 }
 
-XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end) {
+XrValue xrt_string_slice(XrValue s, int64_t start, int64_t end) {
     XR_DCHECK(s.tag == XRT_TAG_STR, "xrt_string_slice: expected string");
     if (s.tag != XRT_TAG_STR || !s.ptr)
         return XRT_NULL;
@@ -223,7 +223,7 @@ XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end) {
     return xrt_box_str(r);
 }
 
-int64_t xrt_string_eq(XrtValue a, XrtValue b) {
+int64_t xrt_string_eq(XrValue a, XrValue b) {
     if (a.tag == XRT_TAG_STR && b.tag == XRT_TAG_STR) {
         if (a.ptr == b.ptr)
             return 1;
@@ -237,66 +237,66 @@ int64_t xrt_string_eq(XrtValue a, XrtValue b) {
 /* Stub functions: AOT array/map/field operations not yet implemented.
  * These abort with a clear message rather than silently returning wrong results. */
 
-XrtValue xrt_array_new(int64_t cap) {
+XrValue xrt_array_new(int64_t cap) {
     (void) cap;
     fprintf(stderr, "xrt_array_new: not implemented\n");
     abort();
 }
-XrtValue xrt_array_get(XrtValue a, int64_t i) {
+XrValue xrt_array_get(XrValue a, int64_t i) {
     (void) a;
     (void) i;
     fprintf(stderr, "xrt_array_get: not implemented\n");
     abort();
 }
-void xrt_array_set(XrtValue a, int64_t i, XrtValue v) {
+void xrt_array_set(XrValue a, int64_t i, XrValue v) {
     (void) a;
     (void) i;
     (void) v;
     fprintf(stderr, "xrt_array_set: not implemented\n");
     abort();
 }
-int64_t xrt_array_len(XrtValue a) {
+int64_t xrt_array_len(XrValue a) {
     (void) a;
     fprintf(stderr, "xrt_array_len: not implemented\n");
     abort();
 }
-void xrt_array_push(XrtValue a, XrtValue v) {
+void xrt_array_push(XrValue a, XrValue v) {
     (void) a;
     (void) v;
     fprintf(stderr, "xrt_array_push: not implemented\n");
     abort();
 }
 
-XrtValue xrt_map_new(void) {
+XrValue xrt_map_new(void) {
     fprintf(stderr, "xrt_map_new: not implemented\n");
     abort();
 }
-XrtValue xrt_map_get(XrtValue m, XrtValue k) {
+XrValue xrt_map_get(XrValue m, XrValue k) {
     (void) m;
     (void) k;
     fprintf(stderr, "xrt_map_get: not implemented\n");
     abort();
 }
-void xrt_map_set(XrtValue m, XrtValue k, XrtValue v) {
+void xrt_map_set(XrValue m, XrValue k, XrValue v) {
     (void) m;
     (void) k;
     (void) v;
     fprintf(stderr, "xrt_map_set: not implemented\n");
     abort();
 }
-int64_t xrt_map_len(XrtValue m) {
+int64_t xrt_map_len(XrValue m) {
     (void) m;
     fprintf(stderr, "xrt_map_len: not implemented\n");
     abort();
 }
 
-XrtValue xrt_field_get(XrtValue o, const char *n) {
+XrValue xrt_field_get(XrValue o, const char *n) {
     (void) o;
     (void) n;
     fprintf(stderr, "xrt_field_get: not implemented\n");
     abort();
 }
-void xrt_field_set(XrtValue o, const char *n, XrtValue v) {
+void xrt_field_set(XrValue o, const char *n, XrValue v) {
     (void) o;
     (void) n;
     (void) v;

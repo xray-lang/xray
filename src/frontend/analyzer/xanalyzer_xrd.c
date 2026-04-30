@@ -29,6 +29,7 @@ typedef struct XrdModule {
     int function_cap;
     XaBuiltinHandle *handles;  // owned
     int handle_cap;
+    int *handle_method_caps;  // per-handle method capacity array
     char *name_buf;  // owned string storage
     struct XrdModule *next;
 } XrdModule;
@@ -151,6 +152,7 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
     xrd->functions = xr_calloc(xrd->function_cap, sizeof(XaBuiltinMember));
     xrd->handle_cap = 8;
     xrd->handles = xr_calloc(xrd->handle_cap, sizeof(XaBuiltinHandle));
+    xrd->handle_method_caps = xr_calloc(xrd->handle_cap, sizeof(int));
 
     const char *p = content;
     while (*p) {
@@ -184,17 +186,29 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             int field_count = 0;
             XaBuiltinHandleField *fields = parse_handle_fields(p, &field_count);
 
-            if (fields && field_count > 0) {
+            {
                 int idx = xrd->module.handle_count;
                 if (idx >= xrd->handle_cap) {
-                    xrd->handle_cap *= 2;
+                    int new_cap = xrd->handle_cap * 2;
                     XR_REALLOC_OR_ABORT(xrd->handles,
-                                        (size_t) xrd->handle_cap * sizeof(XaBuiltinHandle),
+                                        (size_t) new_cap * sizeof(XaBuiltinHandle),
                                         "xrd handles grow");
+                    XR_REALLOC_OR_ABORT(xrd->handle_method_caps,
+                                        (size_t) new_cap * sizeof(int),
+                                        "xrd handle_method_caps grow");
+                    // Zero-init new slots
+                    for (int k = xrd->handle_cap; k < new_cap; k++) {
+                        memset(&xrd->handles[k], 0, sizeof(XaBuiltinHandle));
+                        xrd->handle_method_caps[k] = 0;
+                    }
+                    xrd->handle_cap = new_cap;
                 }
                 xrd->handles[idx].name = xrd_strdup(handle_name);
-                xrd->handles[idx].fields = fields;
-                xrd->handles[idx].field_count = field_count;
+                xrd->handles[idx].fields = (fields && field_count > 0) ? fields : NULL;
+                xrd->handles[idx].field_count = (fields && field_count > 0) ? field_count : 0;
+                xrd->handles[idx].methods = NULL;
+                xrd->handles[idx].method_count = 0;
+                xrd->handle_method_caps[idx] = 0;
                 xrd->module.handle_count++;
             }
 
@@ -204,6 +218,67 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
             if (*p)
                 p++;
             continue;
+        }
+
+        // Parse "fn TypeName.method(sig)" — handle instance methods
+        if (strncmp(p, "fn ", 3) == 0 && p[3] != '\0') {
+            const char *start = p + 3;
+            start = skip_ws(start);
+
+            char first_ident[64];
+            const char *after_ident = read_ident(start, first_ident, sizeof(first_ident));
+
+            if (*after_ident == '.') {
+                // Handle method: fn TypeName.method(sig)
+                after_ident++;  // skip dot
+                char meth_name[64];
+                after_ident = read_ident(after_ident, meth_name, sizeof(meth_name));
+
+                char sig[256];
+                read_to_eol(after_ident, sig, sizeof(sig));
+
+                // Find handle by name
+                int handle_idx = -1;
+                for (int i = 0; i < xrd->module.handle_count; i++) {
+                    if (strcmp(xrd->handles[i].name, first_ident) == 0) {
+                        handle_idx = i;
+                        break;
+                    }
+                }
+
+                if (handle_idx >= 0 && meth_name[0] && sig[0]) {
+                    XaBuiltinHandle *h = &xrd->handles[handle_idx];
+                    int midx = h->method_count;
+                    if (midx >= xrd->handle_method_caps[handle_idx]) {
+                        int new_cap = xrd->handle_method_caps[handle_idx] * 2;
+                        if (new_cap < 8)
+                            new_cap = 8;
+                        XaBuiltinMember *new_methods =
+                            xr_realloc((void *) h->methods,
+                                       (size_t) new_cap * sizeof(XaBuiltinMember));
+                        if (new_methods) {
+                            h->methods = new_methods;
+                            xrd->handle_method_caps[handle_idx] = new_cap;
+                        }
+                    }
+                    if (midx < xrd->handle_method_caps[handle_idx]) {
+                        XaBuiltinMember *methods = (XaBuiltinMember *) h->methods;
+                        methods[midx].name = xrd_strdup(meth_name);
+                        methods[midx].signature = xrd_strdup(sig);
+                        methods[midx].doc = xrd_strdup("");
+                        methods[midx].is_method = (sig[0] == '(');
+                        methods[midx].is_static = false;
+                        h->method_count++;
+                    }
+                }
+
+                // Skip to next line
+                while (*p && *p != '\n')
+                    p++;
+                if (*p)
+                    p++;
+                continue;
+            }
         }
 
         // Parse "export fn name(...): type"
@@ -312,6 +387,7 @@ const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path) {
         if (xrd) {
             xr_free(xrd->functions);
             xr_free(xrd->handles);
+            xr_free(xrd->handle_method_caps);
             xr_free(xrd->name_buf);
             xr_free(xrd);
         }
@@ -368,6 +444,18 @@ const XaBuiltinModule *xa_xrd_find_module(const char *module_name, const char *s
     return NULL;
 }
 
+const XaBuiltinHandle *xa_xrd_find_handle_by_name(const char *handle_name) {
+    if (!handle_name)
+        return NULL;
+    for (XrdModule *m = g_xrd_modules; m; m = m->next) {
+        for (int i = 0; i < m->module.handle_count; i++) {
+            if (strcmp(m->handles[i].name, handle_name) == 0)
+                return &m->handles[i];
+        }
+    }
+    return NULL;
+}
+
 void xa_xrd_cleanup(void) {
     XrdModule *m = g_xrd_modules;
     while (m) {
@@ -381,7 +469,7 @@ void xa_xrd_cleanup(void) {
         }
         xr_free(m->functions);
 
-        // Free handle strings
+        // Free handle strings and methods
         for (int i = 0; i < m->module.handle_count; i++) {
             xr_free((void *) m->handles[i].name);
             for (int j = 0; j < m->handles[i].field_count; j++) {
@@ -389,8 +477,15 @@ void xa_xrd_cleanup(void) {
                 xr_free((void *) m->handles[i].fields[j].type_str);
             }
             xr_free((void *) m->handles[i].fields);
+            for (int j = 0; j < m->handles[i].method_count; j++) {
+                xr_free((void *) m->handles[i].methods[j].name);
+                xr_free((void *) m->handles[i].methods[j].signature);
+                xr_free((void *) m->handles[i].methods[j].doc);
+            }
+            xr_free((void *) m->handles[i].methods);
         }
         xr_free(m->handles);
+        xr_free(m->handle_method_caps);
 
         xr_free(m->name_buf);
         xr_free(m);

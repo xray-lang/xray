@@ -1149,6 +1149,12 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
         return xr_value_from_module(module);
     }
 
+    // 2b. Try to load third-party native package (owner/name format via dlopen)
+    module = try_load_native_package(isolate, module_name);
+    if (module) {
+        return xr_value_from_module(module);
+    }
+
     // 3. Try to load Script module (.xr file)
     char *path = xr_module_resolve_path(isolate, module_name);
     if (!path) {

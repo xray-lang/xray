@@ -48,6 +48,8 @@ typedef struct XaBuiltinHandle {
     const char *name;  // e.g., "Connection", "Listener"
     const XaBuiltinHandleField *fields;
     int field_count;
+    const XaBuiltinMember *methods;  // instance methods on this handle type
+    int method_count;
 } XaBuiltinHandle;
 
 // Built-in C module info (for net, ws, http, etc.)
@@ -113,6 +115,9 @@ XR_FUNC const char *xa_builtin_get_module_func_doc(const char *module_name, cons
 // Get module handle type info
 XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
                                                           const char *handle_name);
+
+// Find a handle type by name across all loaded modules (builtin + .xrd)
+XR_FUNC const XaBuiltinHandle *xa_builtin_find_handle_by_name(const char *handle_name);
 
 // Set script directory for .xrd file search
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);

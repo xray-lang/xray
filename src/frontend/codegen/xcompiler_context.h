@@ -15,7 +15,6 @@
 #define XCOMPILER_CONTEXT_H
 
 #include "xcompiler.h"
-#include "xcompiler_class_registry.h"
 #include "../../base/xarena.h"
 #include "../../runtime/object/xstring.h"
 #include "../analyzer/xanalyzer.h"
@@ -47,7 +46,6 @@ typedef struct ConstEntry {
 struct XrCompilerContext {
     XrayIsolate *X;
 
-    XrCompiler *current;
     int current_line;
     int current_column;
     const char *source_file;
@@ -71,7 +69,6 @@ struct XrCompilerContext {
     int enum_type_capacity;
 
     struct XrShapeCache *shape_cache;
-    ClassRegistry *class_registry;
 
     XaAnalyzer *analyzer;  // Static type analyzer (unified type system)
     XrArena arena;
@@ -90,16 +87,7 @@ struct XrCompilerContext {
     int const_entry_count;
     int const_entry_capacity;
 
-    bool use_xi_pipeline;  // opt-in: use Xi IR pipeline instead of legacy codegen
 };
-
-/*
- * REPL top-level check: true when compiling at top-level scope in REPL mode.
- * Used to decide: shared storage (vs local), allow redefinition, skip hoisting.
- */
-static inline bool is_repl_top_level(XrCompilerContext *ctx, XrCompiler *compiler) {
-    return ctx->repl_mode && compiler->scope_depth == 0;
-}
 
 XR_FUNC XrCompilerContext *xr_compiler_context_new(XrayIsolate *X);
 XR_FUNC void xr_compiler_context_free(XrCompilerContext *ctx);

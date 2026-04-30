@@ -121,11 +121,12 @@ def scan_file(filepath):
         return None
 
     result = {
-        'type': None,       # @type annotation (for builtin types)
-        'module': None,     # @module annotation (for C modules)
-        'handles': [],      # @handle annotations
-        'methods': [],      # XR_DEFINE_BUILTIN entries (functions/methods)
-        'constants': [],    # xr_module_add_export(...) entries (typed constants)
+        'type': None,          # @type annotation (for builtin types)
+        'module': None,        # @module annotation (for C modules)
+        'handles': [],         # @handle annotations
+        'methods': [],         # XR_DEFINE_BUILTIN entries (module-level functions)
+        'handle_methods': {},  # TypeName -> [methods] from "TypeName.method" convention
+        'constants': [],       # xr_module_add_export(...) entries (typed constants)
     }
 
     # Find @type annotation
@@ -145,15 +146,26 @@ def scan_file(filepath):
             'fields': fields,
         })
 
-    # Find XR_DEFINE_BUILTIN entries
+    # Find XR_DEFINE_BUILTIN entries.
+    # Names containing a dot (e.g. "SqliteDB.exec") denote instance methods
+    # on a handle type; they are grouped under handle_methods[TypeName].
     for match in METHOD_PATTERN.finditer(content):
         func_name, method_name, signature, doc = match.groups()
-        result['methods'].append({
-            'func': func_name,
-            'name': method_name,
-            'signature': signature,
-            'doc': doc,
-        })
+        if '.' in method_name:
+            type_name, meth = method_name.split('.', 1)
+            result['handle_methods'].setdefault(type_name, []).append({
+                'func': func_name,
+                'name': meth,
+                'signature': signature,
+                'doc': doc,
+            })
+        else:
+            result['methods'].append({
+                'func': func_name,
+                'name': method_name,
+                'signature': signature,
+                'doc': doc,
+            })
 
     # Find xr_module_add_export(...) constant registrations and surface them
     # as analyzer-visible members. These are *not* methods, so signature is
@@ -177,7 +189,8 @@ def scan_file(filepath):
             'doc': '',
         })
 
-    if not result['methods'] and not result['handles'] and not result['constants']:
+    if (not result['methods'] and not result['handles']
+            and not result['constants'] and not result['handle_methods']):
         return None
 
     return result
@@ -322,6 +335,14 @@ def generate_xrd(mod_data):
         type_name = c['signature'].lstrip(': ').strip()
         lines.append(f"export const {c['name']}: {type_name}")
 
+    # Handle instance methods (from "TypeName.method" convention)
+    handle_methods = mod_data.get('handle_methods', {})
+    if handle_methods:
+        lines.append("")
+        for type_name in sorted(handle_methods.keys()):
+            for m in handle_methods[type_name]:
+                lines.append(f"fn {type_name}.{m['name']}{m['signature']}")
+
     lines.append("")
     return "\n".join(lines)
 
@@ -346,6 +367,7 @@ def main():
             'module': result['module'] or filepath.stem,
             'handles': result['handles'],
             'methods': result['methods'],
+            'handle_methods': result['handle_methods'],
             'constants': result['constants'],
         }
         print(generate_xrd(mod_data))
@@ -372,9 +394,12 @@ def main():
                 module_results[mod_name] = {
                     'handles': result['handles'],
                     'methods': result['methods'],
+                    'handle_methods': result['handle_methods'],
                     'constants': result['constants'],
                 }
+                hm_count = sum(len(v) for v in result['handle_methods'].values())
                 print(f"  Module '{mod_name}': {len(result['methods'])} functions, "
+                      f"{hm_count} handle methods, "
                       f"{len(result['constants'])} constants, "
                       f"{len(result['handles'])} handles in {filepath.name}", file=sys.stderr)
             elif result['type']:

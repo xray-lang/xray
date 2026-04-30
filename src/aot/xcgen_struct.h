@@ -34,11 +34,11 @@
 typedef struct {
     const char *name;          // C-safe field name (from SymbolId lookup)
     uint8_t xir_type;          // XR_REP_I64 / XR_REP_F64 / XR_REP_PTR
-    uint8_t c_type;            // 0=int64_t, 1=double, 2=XrtValue
+    uint8_t c_type;            // 0=int64_t, 1=double, 2=XrValue
     uint8_t val_hint_type;     // Semantic type hint (XR_REP_*) from infer_field_type.
-                               // When c_type==2 (XrtValue layout preserved), this records
+                               // When c_type==2 (XrValue layout preserved), this records
                                // the actual value type so struct promotion path can avoid
-                               // xrt_box_float/xrt_unbox_float calls.
+                               // XR_FROM_FLOAT/XR_TO_FLOAT calls.
     uint16_t original_offset;  // Byte offset in original Json layout
     uint32_t symbol_id;        // SymbolId for field name resolution
 } XcgenStructField;
@@ -50,7 +50,7 @@ typedef struct {
     XcgenStructField fields[XCGEN_MAX_STRUCT_FIELDS];
     int field_count;
     int total_size;   // C struct byte size
-    bool all_native;  // true = all fields are native types (no XrtValue)
+    bool all_native;  // true = all fields are native types (no XrValue)
 } XcgenStruct;
 
 // Flat entry for symbol_id → struct/field lookup (sorted by symbol_id)

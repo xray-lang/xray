@@ -113,8 +113,12 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     // Get declared type
     XrType *declared_type = xa_analyzer_get_type(ctx->analyzer, sym);
 
-    // Apply flow-based type narrowing (only for variables, not functions/classes)
-    if (ctx->flow && ctx->flow->current_flow && declared_type && sym->kind == XA_SYM_VARIABLE) {
+    // Apply flow-based type narrowing for storage that can change type
+    // along control flow: locals AND parameters. Functions, classes,
+    // modules, type aliases never narrow because their type is the
+    // declared identity, not a value.
+    if (ctx->flow && ctx->flow->current_flow && declared_type &&
+        (sym->kind == XA_SYM_VARIABLE || sym->kind == XA_SYM_PARAMETER)) {
         XrType *narrowed = xa_flow_get_type_of_reference(ctx->flow, name, declared_type,
                                                          ctx->flow->current_flow, ctx->cache);
         // Never means unreachable flow path — fall back to declared type
@@ -190,6 +194,15 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
             if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right)) {
                 return xr_type_new_int(NULL);
             }
+            // Generic body: an arithmetic op against a type parameter
+            // preserves that type parameter, so a body like
+            // `fn add_one<T>(x: T): T { return x + 1 }` type-checks
+            // before monomorphisation. The instantiated copy will be
+            // re-checked with the concrete substitution applied.
+            if (left->kind == XR_KIND_TYPE_PARAM)
+                return left;
+            if (right->kind == XR_KIND_TYPE_PARAM)
+                return right;
             return xr_type_new_unknown(NULL);
 
         default:
@@ -254,6 +267,30 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    // Enum static member access: EnumName.Member -> enum value of EnumName.
+    // The member is checked against the declared enum_member_names so a
+    // typo like Color.Yellow is flagged here rather than handed to the
+    // EnumValue builtin probe below (which would also miss).
+    if (obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name) {
+        XaSymbol *enum_sym = xa_scope_lookup(ctx->analyzer->current_scope,
+                                             obj_type->enum_type.enum_name);
+        if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
+            XaSymbolLinks *el = xa_analyzer_get_links(ctx->analyzer, enum_sym);
+            if (el) {
+                for (int i = 0; i < el->enum_member_count; i++) {
+                    if (el->enum_member_names[i] &&
+                        strcmp(el->enum_member_names[i], ma->name) == 0) {
+                        return xr_type_new_enum(ctx->analyzer->isolate,
+                                                 obj_type->enum_type.enum_name);
+                    }
+                }
+            }
+        }
+        // Fall through: name/value/ordinal handled by EnumValue builtin
+        // table below; that path is correct because enum singletons and
+        // enum values share the same surface property set.
+    }
+
     // Class static member access: ClassName.staticMethod
     if (obj_type->kind == XR_KIND_CLASS && obj_type->instance.class_name) {
         XaSymbol *class_sym =
@@ -274,6 +311,42 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // Unknown preserves error recovery and IDE responsiveness after imprecise analysis.
     if (XR_TYPE_IS_UNKNOWN(obj_type)) {
         return xr_type_new_unknown(NULL);
+    }
+
+    // Union type member access: every member must declare the member with
+    // compatible types. Returns the joined function/field type so callers
+    // see a single coherent signature instead of `unknown`. This is what
+    // makes virtual-style dispatch over `Array<Dog | Cat>` type-check.
+    if (XR_TYPE_IS_UNION(obj_type)) {
+        XrType *joined = NULL;
+        for (int i = 0; i < obj_type->union_type.member_count; i++) {
+            XrType *m = obj_type->union_type.members[i];
+            if (!m) continue;
+            XrType *member_ty = NULL;
+            // Class instance: look up method/field by name in class info.
+            if (XR_TYPE_IS_INSTANCE(m) && m->instance.class_name) {
+                XaSymbol *cs = xa_scope_lookup(ctx->analyzer->current_scope,
+                                               m->instance.class_name);
+                if (cs) {
+                    XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, cs);
+                    if (cl && cl->class_info) {
+                        XaSymbol *mem = xa_class_info_lookup_member(cl->class_info, ma->name);
+                        if (mem) {
+                            XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, mem);
+                            if (ml && ml->type) member_ty = ml->type;
+                        }
+                    }
+                }
+            }
+            if (!member_ty) {
+                joined = NULL;
+                break;
+            }
+            joined = joined ? xr_type_union(ctx->analyzer->isolate, joined, member_ty)
+                            : member_ty;
+        }
+        if (joined)
+            return joined;
     }
 
     // Handle built-in properties
@@ -326,6 +399,21 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    // Built-in non-method properties (e.g. EnumValue.name/value/ordinal,
+    // Channel.closed). The signature for properties is just `: T` with
+    // no parameter list. Skip the method substitution machinery above
+    // because there are no type-parameter container fields exposed as
+    // property kind today.
+    {
+        const char *sig = xa_builtin_get_member_signature(obj_type, ma->name);
+        if (sig && sig[0] == ':') {
+            const char *type_str = sig + 1;
+            while (*type_str == ' ')
+                type_str++;
+            return xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+        }
+    }
+
     // Handle class instance members
     if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_name) {
         XaSymbol *class_sym =
@@ -355,6 +443,30 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         }
                         return member_type;
                     }
+                }
+            }
+        }
+    }
+
+    // Handle methods on module handle types (e.g. SqliteDB.exec from .xrd).
+    // The handle type is resolved as an instance type whose class_name
+    // matches a registered handle; look up methods on that handle.
+    if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_name) {
+        const XaBuiltinHandle *handle =
+            xa_builtin_find_handle_by_name(obj_type->instance.class_name);
+        if (handle) {
+            // Check handle fields first
+            for (int i = 0; i < handle->field_count; i++) {
+                if (strcmp(handle->fields[i].name, ma->name) == 0) {
+                    return xa_builtin_parse_type_string(
+                        ctx->analyzer->isolate, handle->fields[i].type_str);
+                }
+            }
+            // Check handle methods
+            for (int i = 0; i < handle->method_count; i++) {
+                if (strcmp(handle->methods[i].name, ma->name) == 0) {
+                    return xa_builtin_parse_full_signature(
+                        ctx->analyzer->isolate, handle->methods[i].signature);
                 }
             }
         }
@@ -1037,6 +1149,25 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         ctx->return_type_count = 0;
         ctx->return_type_capacity = 0;
 
+        // Isolate flow graph for lambda body (same reason as named functions)
+        XaFlowNode *saved_flow = NULL;
+        XrFlowLabel *saved_break = NULL;
+        XrFlowLabel *saved_continue = NULL;
+        XrFlowLabel *saved_return_tgt = NULL;
+        XrFlowLabel *saved_exception = NULL;
+        if (ctx->flow) {
+            saved_flow = ctx->flow->current_flow;
+            saved_break = ctx->flow->current_break_target;
+            saved_continue = ctx->flow->current_continue_target;
+            saved_return_tgt = ctx->flow->current_return_target;
+            saved_exception = ctx->flow->current_exception_target;
+            xa_flow_create_start(ctx->flow);
+            ctx->flow->current_break_target = NULL;
+            ctx->flow->current_continue_target = NULL;
+            ctx->flow->current_return_target = NULL;
+            ctx->flow->current_exception_target = NULL;
+        }
+
         // Enter function scope
         xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
 
@@ -1079,6 +1210,15 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         }
 
         xa_analyzer_exit_scope(ctx->analyzer);
+
+        // Restore flow state to enclosing function's context
+        if (ctx->flow) {
+            ctx->flow->current_flow = saved_flow;
+            ctx->flow->current_break_target = saved_break;
+            ctx->flow->current_continue_target = saved_continue;
+            ctx->flow->current_return_target = saved_return_tgt;
+            ctx->flow->current_exception_target = saved_exception;
+        }
 
         // Restore outer function's return type state
         if (ctx->return_types)

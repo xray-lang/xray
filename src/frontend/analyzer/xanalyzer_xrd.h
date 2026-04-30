@@ -34,6 +34,10 @@ XR_FUNC const XaBuiltinModule *xa_xrd_load_file(const char *xrd_path);
 // Returns NULL if no .xrd file found.
 XR_FUNC const XaBuiltinModule *xa_xrd_find_module(const char *module_name, const char *script_dir);
 
+// Find a handle type by name across all loaded .xrd modules.
+// Returns NULL if not found.
+XR_FUNC const XaBuiltinHandle *xa_xrd_find_handle_by_name(const char *handle_name);
+
 // Free all dynamically loaded .xrd modules (call at shutdown)
 XR_FUNC void xa_xrd_cleanup(void);
 

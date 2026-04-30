@@ -18,88 +18,88 @@
  * Tagged arithmetic — all inline, no extern dependency
  * ========================================================================= */
 
-static inline XrtValue xrt_add(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
-        return xrt_box_int(a.i + b.i);
-    if (XRT_IS_STR(a) || XRT_IS_STR(b)) {
+static inline XrValue xrt_add(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
+        return XR_FROM_INT(a.i + b.i);
+    if (XR_IS_STR(a) || XR_IS_STR(b)) {
         char ba[64], bb[64];
-        return xrt_str_concat(xrt_to_cstr(a, ba, sizeof(ba)), xrt_to_cstr(b, bb, sizeof(bb)));
+        return xrt_str_concat(xr_to_cstr(a, ba, sizeof(ba)), xr_to_cstr(b, bb, sizeof(bb)));
     }
-    double fa = a.tag == XRT_TAG_I64 ? (double) a.i : a.f;
-    double fb = b.tag == XRT_TAG_I64 ? (double) b.i : b.f;
-    return xrt_box_float(fa + fb);
+    double fa = a.tag == XR_TAG_I64 ? (double) a.i : a.f;
+    double fb = b.tag == XR_TAG_I64 ? (double) b.i : b.f;
+    return XR_FROM_FLOAT(fa + fb);
 }
 
-static inline int64_t xrt_eq(XrtValue a, XrtValue b) {
+static inline int64_t xrt_eq(XrValue a, XrValue b) {
     // Normalize STR_ARC to STR for comparison
-    uint32_t ta = (a.tag == XRT_TAG_STR_ARC) ? XRT_TAG_STR : a.tag;
-    uint32_t tb = (b.tag == XRT_TAG_STR_ARC) ? XRT_TAG_STR : b.tag;
+    uint32_t ta = (a.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : a.tag;
+    uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
     if (ta != tb)
         return 0;
-    if (ta == XRT_TAG_I64)
+    if (ta == XR_TAG_I64)
         return a.i == b.i;
-    if (ta == XRT_TAG_F64)
+    if (ta == XR_TAG_F64)
         return a.f == b.f;
-    if (ta == XRT_TAG_STR)
+    if (ta == XR_TAG_STR)
         return strcmp((const char *) a.ptr, (const char *) b.ptr) == 0;
     return a.ptr == b.ptr;
 }
 
-static inline XrtValue xrt_sub(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
-        return xrt_box_int(a.i - b.i);
-    double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XRT_TAG_I64) ? (double) b.i : b.f;
-    return xrt_box_float(fa - fb);
+static inline XrValue xrt_sub(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
+        return XR_FROM_INT(a.i - b.i);
+    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
+    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
+    return XR_FROM_FLOAT(fa - fb);
 }
 
-static inline XrtValue xrt_mul(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
-        return xrt_box_int(a.i * b.i);
-    double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XRT_TAG_I64) ? (double) b.i : b.f;
-    return xrt_box_float(fa * fb);
+static inline XrValue xrt_mul(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
+        return XR_FROM_INT(a.i * b.i);
+    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
+    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
+    return XR_FROM_FLOAT(fa * fb);
 }
 
-static inline XrtValue xrt_div(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
-        return b.i ? xrt_box_int(a.i / b.i) : xrt_box_int(0);
-    double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XRT_TAG_I64) ? (double) b.i : b.f;
-    return xrt_box_float(fa / fb);
+static inline XrValue xrt_div(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
+        return b.i ? XR_FROM_INT(a.i / b.i) : XR_FROM_INT(0);
+    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
+    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
+    return XR_FROM_FLOAT(fa / fb);
 }
 
-static inline XrtValue xrt_mod(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
-        return b.i ? xrt_box_int(a.i % b.i) : xrt_box_int(0);
-    return xrt_box_int(0);
+static inline XrValue xrt_mod(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
+        return b.i ? XR_FROM_INT(a.i % b.i) : XR_FROM_INT(0);
+    return XR_FROM_INT(0);
 }
 
-static inline XrtValue xrt_neg(XrtValue a) {
-    if (a.tag == XRT_TAG_I64)
-        return xrt_box_int(-a.i);
-    if (a.tag == XRT_TAG_F64)
-        return xrt_box_float(-a.f);
-    return xrt_box_int(0);
+static inline XrValue xrt_neg(XrValue a) {
+    if (a.tag == XR_TAG_I64)
+        return XR_FROM_INT(-a.i);
+    if (a.tag == XR_TAG_F64)
+        return XR_FROM_FLOAT(-a.f);
+    return XR_FROM_INT(0);
 }
 
 /* =========================================================================
  * Inline tagged comparisons
  * ========================================================================= */
 
-static inline int64_t xrt_lt(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
+static inline int64_t xrt_lt(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return a.i < b.i;
-    double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XRT_TAG_I64) ? (double) b.i : b.f;
+    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
+    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return fa < fb;
 }
 
-static inline int64_t xrt_le(XrtValue a, XrtValue b) {
-    if (a.tag == XRT_TAG_I64 && b.tag == XRT_TAG_I64)
+static inline int64_t xrt_le(XrValue a, XrValue b) {
+    if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return a.i <= b.i;
-    double fa = (a.tag == XRT_TAG_I64) ? (double) a.i : a.f;
-    double fb = (b.tag == XRT_TAG_I64) ? (double) b.i : b.f;
+    double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
+    double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return fa <= fb;
 }
 
@@ -107,22 +107,22 @@ static inline int64_t xrt_le(XrtValue a, XrtValue b) {
  * Inline print
  * ========================================================================= */
 
-static inline void xrt_print(XrtValue v) {
+static inline void xrt_print(XrValue v) {
     switch (v.tag) {
-        case XRT_TAG_STR:
-        case XRT_TAG_STR_ARC:
+        case XR_TAG_STR:
+        case XR_TAG_STR_ARC:
             printf("%s", (const char *) v.ptr);
             break;
-        case XRT_TAG_I64:
+        case XR_TAG_I64:
             printf("%lld", (long long) v.i);
             break;
-        case XRT_TAG_F64:
+        case XR_TAG_F64:
             printf("%g", v.f);
             break;
-        case XRT_TAG_BOOL:
+        case XR_TAG_BOOL:
             printf("%s", v.i ? "true" : "false");
             break;
-        case XRT_TAG_NULL:
+        case XR_TAG_NULL:
             printf("null");
             break;
         default:
@@ -131,7 +131,7 @@ static inline void xrt_print(XrtValue v) {
     }
 }
 
-static inline void xrt_println(XrtValue v) {
+static inline void xrt_println(XrValue v) {
     xrt_print(v);
     printf("\n");
 }

@@ -69,20 +69,20 @@ void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *from, Xi
 
             xcgen_buf_printf(b, "    phi_v%u = ", XIR_REF_INDEX(phi->dst));
             if (dst_tagged && !src_tagged) {
-                // Auto-box: int64_t/double → XrtValue
+                // Auto-box: int64_t/double → XrValue
                 if (src_type == XR_REP_I64) {
-                    xcgen_buf_puts(b, "xrt_box_int(");
+                    xcgen_buf_puts(b, "XR_FROM_INT(");
                     xcg_emit_ref(b, func, src);
                     xcgen_buf_puts(b, ")");
                 } else if (src_type == XR_REP_F64) {
-                    xcgen_buf_puts(b, "xrt_box_float(");
+                    xcgen_buf_puts(b, "XR_FROM_FLOAT(");
                     xcg_emit_ref(b, func, src);
                     xcgen_buf_puts(b, ")");
                 } else {
                     xcg_emit_ref(b, func, src);
                 }
             } else if (!dst_tagged && src_tagged) {
-                // Auto-unbox: XrtValue → int64_t/double
+                // Auto-unbox: XrValue → int64_t/double
                 // Special case: src is a struct (PTR or TAGGED call result) flowing into
                 // a native-typed phi. This arises from bytecode register reuse where the
                 // same slot carries different-typed values on different paths. When the
@@ -97,11 +97,11 @@ void xcg_emit_phi_copies_for_edge(XcgenBuf *b, XirFunc *func, XirBlock *from, Xi
                     else
                         xcgen_buf_puts(b, "INT64_C(0) /* dead-phi: struct!=int */");
                 } else if (dst_type == XR_REP_I64) {
-                    xcgen_buf_puts(b, "xrt_unbox_int(");
+                    xcgen_buf_puts(b, "XR_TO_INT(");
                     xcg_emit_ref(b, func, src);
                     xcgen_buf_puts(b, ")");
                 } else if (dst_type == XR_REP_F64) {
-                    xcgen_buf_puts(b, "xrt_unbox_float(");
+                    xcgen_buf_puts(b, "XR_TO_FLOAT(");
                     xcg_emit_ref(b, func, src);
                     xcgen_buf_puts(b, ")");
                 } else {
@@ -138,9 +138,9 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *
                 (br_type == XR_REP_STR || br_type == XR_REP_PTR || br_type == XR_REP_TAGGED);
             xcgen_buf_puts(b, "    if (");
             if (br_tagged) {
-                // XrtValue → truthy: matches VM semantics
+                // XrValue → truthy: matches VM semantics
                 // (null, false, 0, 0.0 are falsy; everything else is truthy)
-                xcgen_buf_puts(b, "xrt_truthy(");
+                xcgen_buf_puts(b, "xr_truthy(");
                 xcg_emit_ref(b, func, blk->jmp.arg);
                 xcgen_buf_puts(b, ")");
             } else {
@@ -195,15 +195,15 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *
                 (ret_type == XR_REP_STR || ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED);
 
             if (!ret_tagged && val_tagged) {
-                // Auto-unbox: XrtValue → int64_t/double
+                // Auto-unbox: XrValue → int64_t/double
                 if (ret_type == XR_REP_I64) {
-                    xcgen_buf_puts(b, "    return xrt_unbox_int(");
+                    xcgen_buf_puts(b, "    return XR_TO_INT(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
                     if (cf)
                         cf->needs_runtime = true;
                 } else if (ret_type == XR_REP_F64) {
-                    xcgen_buf_puts(b, "    return xrt_unbox_float(");
+                    xcgen_buf_puts(b, "    return XR_TO_FLOAT(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
                     if (cf)
@@ -214,15 +214,15 @@ void xcg_emit_terminator(XcgenBuf *b, XirFunc *func, XirBlock *blk, const char *
                     xcgen_buf_puts(b, ";\n");
                 }
             } else if (ret_tagged && !val_tagged) {
-                // Auto-box: int64_t/double → XrtValue
+                // Auto-box: int64_t/double → XrValue
                 if (val_type == XR_REP_I64) {
-                    xcgen_buf_puts(b, "    return xrt_box_int(");
+                    xcgen_buf_puts(b, "    return XR_FROM_INT(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
                     if (cf)
                         cf->needs_runtime = true;
                 } else if (val_type == XR_REP_F64) {
-                    xcgen_buf_puts(b, "    return xrt_box_float(");
+                    xcgen_buf_puts(b, "    return XR_FROM_FLOAT(");
                     xcg_emit_ref(b, func, blk->jmp.arg);
                     xcgen_buf_puts(b, ");\n");
                     if (cf)
