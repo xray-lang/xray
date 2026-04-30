@@ -54,6 +54,33 @@ static const XrPreludeSymbols g_prelude_symbols = {
     .type_count = XR_PRELUDE_TYPE_COUNT,
 };
 
+/* ========== Native-type registration forwards ==========
+ *
+ * Every stdlib module that owns a native XrClass exports a small
+ * register function. We declare them here so prelude.c does not need
+ * to drag in the full stdlib/{log,datetime,regex,net} headers.
+ */
+struct XrayIsolate;
+extern void xr_logger_register_native_type(XrayIsolate *isolate);
+extern void xr_datetime_register_native_type(XrayIsolate *isolate);
+extern void xr_regex_register_native_type(XrayIsolate *isolate);
+extern void xr_netconn_register_native_type(XrayIsolate *isolate);
+extern void xr_netlistener_register_native_type(XrayIsolate *isolate);
+
+void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
+    if (!isolate)
+        return;
+    /* xr_register_native_type itself is idempotent — repeated calls for
+     * the same gc_type return the existing XrClass — so the order here
+     * is mainly cosmetic. We list types in the same order they appear in
+     * prelude_types.def to make the correspondence obvious. */
+    xr_datetime_register_native_type(isolate);
+    xr_logger_register_native_type(isolate);
+    xr_regex_register_native_type(isolate);
+    xr_netconn_register_native_type(isolate);
+    xr_netlistener_register_native_type(isolate);
+}
+
 /* ========== Module loader ========== */
 
 XrModule *xr_load_module_prelude(XrayIsolate *isolate) {
@@ -64,13 +91,19 @@ XrModule *xr_load_module_prelude(XrayIsolate *isolate) {
      * pointer cache for downstream consumers. */
     isolate->prelude_symbols = (void *) &g_prelude_symbols;
 
+    /* Eagerly register every native XrClass that prelude entries refer
+     * to. This makes user-side annotations like `let dt: DateTime = ...`
+     * usable without a separate `import datetime`, at the cost of always
+     * linking those four stdlib modules into the binary. */
+    xr_prelude_register_all_native_types(isolate);
+
     XrModule *module = xr_module_create_native(isolate, "prelude");
     if (!module)
         return NULL;
 
-    /* No exports yet — the prelude module body is populated by subsequent
-     * phases. Marking loaded prevents the module subsystem from re-entering
-     * the loader if user code does an explicit `import prelude`. */
+    /* No exports yet. Marking loaded prevents the module subsystem from
+     * re-entering the loader if user code does an explicit
+     * `import prelude`. */
     module->loaded = true;
     return module;
 }

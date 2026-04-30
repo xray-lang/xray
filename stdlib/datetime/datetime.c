@@ -952,11 +952,11 @@ XR_DEFINE_BUILTIN(dt_equals, "equals", "(other: DateTime): bool",
 XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year")
 XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
 
-XrModule *xr_load_module_datetime(XrayIsolate *isolate) {
-    XR_DCHECK(isolate != NULL, "xr_load_module_datetime: NULL isolate");
-
-    // Register DateTime native type
-    XrNativeTypeInfo dt_info = {
+/* DateTime native-type registration is invoked unconditionally during
+ * isolate init by xr_prelude_register_all_native_types, so the XrClass
+ * is available even when user code never `import datetime`. */
+void xr_datetime_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeTypeInfo dt_info = {
         .name = "DateTime",
         .gc_type = XR_TDATETIME,
         .methods = datetime_methods,
@@ -964,8 +964,13 @@ XrModule *xr_load_module_datetime(XrayIsolate *isolate) {
         .static_methods = NULL,
     };
     xr_register_native_type(isolate, &dt_info);
+}
 
-    // Create module — only factory functions exported
+XrModule *xr_load_module_datetime(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_load_module_datetime: NULL isolate");
+
+    // Create module — only factory functions exported (the DateTime
+    // XrClass itself is registered up front by the prelude module).
     XrModule *mod = xr_module_create_native(isolate, "datetime");
     if (!mod)
         return NULL;

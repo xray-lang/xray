@@ -548,18 +548,22 @@ static XrNativeMethod regex_getters[] = {
     {NULL, NULL, 0}};
 
 /* ========================================================================
- * Native Type Registration (for regex literals without import)
- * ======================================================================== */
+ * Native Type Registration
+ * ========================================================================
+ *
+ * Registers the Regex XrClass so regex literals (`/foo/`) and
+ * `regex.compile(...)` results dispatch object methods through
+ * native_type_classes[XR_TREGEX]. Invoked unconditionally during
+ * isolate init by xr_prelude_register_all_native_types.
+ *
+ * xr_register_native_type is idempotent (returns the existing class on
+ * a second call for the same gc_type), so older xisolate_full.c / load
+ * paths that explicitly poke this function still work — they just turn
+ * into no-ops once prelude has already registered the class.
+ */
 
-void xr_regex_init_native_type(XrayIsolate *isolate) {
-#include "../../src/runtime/object/xnative_type.h"
-
-    // Check if already registered
-    if (xr_get_native_type_class(isolate, XR_TREGEX)) {
-        return;  // Already registered
-    }
-
-    XrNativeTypeInfo regex_info = {
+void xr_regex_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeTypeInfo regex_info = {
         .name = "regex",
         .gc_type = XR_TREGEX,
         .methods = regex_methods,
@@ -617,17 +621,8 @@ XrModule *xr_load_module_regex(XrayIsolate *isolate) {
     XRS_EXPORT(mod, isolate, "escape", regex_escape);
     XRS_EXPORT(mod, isolate, "isValid", regex_is_valid);
 
-    // 3. Register Regex native type (support object method syntax)
-    XrNativeTypeInfo regex_info = {
-        .name = "regex",
-        .gc_type = XR_TREGEX,
-        .methods = regex_methods,
-        .getters = regex_getters,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &regex_info);
-
-    // 4. Mark as loaded
+    // The Regex XrClass itself is registered up front by the prelude
+    // module — no need to do it again here.
     mod->loaded = true;
     return mod;
 }
