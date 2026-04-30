@@ -583,22 +583,24 @@ void xr_regex_register_native_type(XrayIsolate *isolate) {
 
 // @module regex
 
-XR_DEFINE_BUILTIN(regex_compile, "compile", "(pattern: string, flags?: string): any",
+XR_DEFINE_BUILTIN(regex_compile, "compile", "(pattern: string, flags?: string): Regex",
                   "Compile a regex pattern")
-XR_DEFINE_BUILTIN(regex_test, "test", "(pattern: any, s: string): bool",
+XR_DEFINE_BUILTIN(regex_test, "test", "(pattern: Regex, s: string): bool",
                   "Test if pattern matches string")
-XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: any, s: string, offset?: int): Json?",
+XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): Json?",
                   "Find first match")
-XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: any, s: string): Json?",
+XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): Json?",
                   "Full match with captures")
-XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: any, s: string): int", "Count matches")
-XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: any, s: string): Array<string>",
+XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Count matches")
+XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: Regex, s: string): Array<string>",
                   "Find all matches")
 XR_DEFINE_BUILTIN(regex_replace, "replace",
-                  "(pattern: any, s: string, replacement: string): string", "Replace first match")
+                  "(pattern: Regex, s: string, replacement: string): string",
+                  "Replace first match")
 XR_DEFINE_BUILTIN(regex_replace_all, "replaceAll",
-                  "(pattern: any, s: string, replacement: string): string", "Replace all matches")
-XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: any, s: string): Array<string>",
+                  "(pattern: Regex, s: string, replacement: string): string",
+                  "Replace all matches")
+XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string): Array<string>",
                   "Split by pattern")
 XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")
 XR_DEFINE_BUILTIN(regex_is_valid, "isValid", "(pattern: string): bool", "Check if pattern is valid")
