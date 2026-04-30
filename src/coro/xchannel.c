@@ -568,7 +568,7 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
         return;
 
     XrRuntime *runtime = current->p.runtime;
-    int target_id = atomic_load_explicit(&coro->affinity_p, memory_order_relaxed);
+    int target_id = xr_coro_wake_target_id(coro);
 
     // Ensure target Worker ID is valid
     if (target_id < 0 || target_id >= runtime->worker_count) {
@@ -576,6 +576,14 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     }
 
     XrWorker *target = &runtime->workers[target_id];
+    bool locked = xr_coro_is_thread_locked(coro);
+
+    // Thread-locked coroutines must return to their locked worker.
+    // Route via inbox if the locked worker is not the current worker.
+    if (locked && target != current) {
+        xr_worker_inbox_enqueue(runtime, target_id, coro);
+        return;
+    }
 
     // Wake strategy for channel send/recv completions:
     //
@@ -595,7 +603,7 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
         xr_worker_inbox_enqueue(runtime, target_id, coro);
         return;
     }
-    if (target != current) {
+    if (target != current && !locked) {
         atomic_store_explicit(&coro->affinity_p, current->p.id, memory_order_relaxed);
     }
     xr_worker_push_lifo(current, coro);

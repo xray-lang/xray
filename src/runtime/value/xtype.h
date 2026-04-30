@@ -538,7 +538,8 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
 
 // Check if a type is valid as a Json field value.
 // Rejects types that clearly don't belong in JSON: function, class, channel, interface.
-// Allows: primitives, null, Json, Array, Map (serializable to JSON object), unknown, etc.
+// Allows: primitives, null, Json, Array, Map, Enum, DateTime, unknown, etc.
+// Enum serializes as its member name string; DateTime as ISO 8601 string.
 static inline bool xr_type_is_json_field_compatible(XrType *type) {
     if (!type)
         return true;
@@ -548,7 +549,13 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
             return false;
+        case XR_KIND_ENUM:
+            return true;
         case XR_KIND_INSTANCE:
+            // DateTime is serializable (ISO 8601 string)
+            if (type->instance.class_name &&
+                strcmp(type->instance.class_name, "DateTime") == 0)
+                return true;
             return false;
         case XR_KIND_UNION:
             for (int i = 0; i < type->union_type.member_count; i++) {
