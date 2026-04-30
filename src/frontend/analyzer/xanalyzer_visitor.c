@@ -1341,13 +1341,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             /*
              * Unified for-in type inference rules:
              *   Array<T>   → item: T
-             *   Map<K,V>   → item: any (entry), or k: K, v: V
+             *   Map<K,V>   → item: Json (entry), or k: K, v: V
              *   Set<T>     → item: T
              *   Enum       → item: EnumValue
              *   Range      → item: int
              *   Channel<T> → item: T
              *   string     → item: string
-             *   other      → item: any
+             *   other      → item: unknown
              */
             XrType *item_type = xr_type_new_unknown(NULL);
             XrType *value_type = xr_type_new_unknown(NULL);

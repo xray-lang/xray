@@ -67,7 +67,7 @@ static XrJsonValue *make_enum_value_completions(const char *enum_name) {
     xjson_object_set(i1, "sortText", xjson_new_string("0"));
     xjson_array_push(items, i1);
 
-    snprintf(detail, sizeof(detail), "%s.value: any", enum_name);
+    snprintf(detail, sizeof(detail), "%s.value: Json", enum_name);
     XrJsonValue *i2 = make_completion_item("value", 10, detail);
     xjson_object_set(i2, "sortText", xjson_new_string("1"));
     xjson_array_push(items, i2);

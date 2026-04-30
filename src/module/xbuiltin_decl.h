@@ -32,7 +32,7 @@
  *
  * @param cfunc     C function name (unused at compile time)
  * @param name      Exported function name as seen by xray scripts
- * @param signature Type signature, e.g. "(host: string, port: int): Json?"
+ * @param signature Type signature, e.g. "(host: string, port: int): NetConn?"
  * @param doc       Short documentation string
  */
 #define XR_DEFINE_BUILTIN(cfunc, name, signature, doc)
