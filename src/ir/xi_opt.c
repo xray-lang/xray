@@ -14,6 +14,7 @@
 #include "xi_opt.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
 
@@ -511,6 +512,246 @@ XR_FUNC void xi_opt_strength_reduce(XiFunc *f) {
                     break;
             }
         }
+    }
+}
+
+/* ========== SelectRepresentations ========== */
+
+/*
+ * Determine the machine representation a value naturally produces.
+ * Constants and arithmetic with known numeric types produce I64/F64.
+ * Calls, loads, parameters, and polymorphic ops produce TAGGED.
+ */
+static XrRep sr_def_rep(const XiValue *v) {
+    if (!v || !v->type) return XR_REP_TAGGED;
+    switch (v->op) {
+        case XI_CONST: {
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
+        case XI_NEG:
+        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
+        case XI_SHL: case XI_SHR: {
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+        case XI_NOT: case XI_ISNULL: case XI_IS:
+            return XR_REP_I64;
+        case XI_BOX:
+            return XR_REP_TAGGED;
+        case XI_UNBOX:
+            return xr_type_base_rep(v->type);
+        case XI_CONVERT: {
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
+/*
+ * Determine what representation an instruction needs at a given arg position.
+ * Arithmetic and comparisons prefer unboxed; everything else wants tagged.
+ */
+static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
+    switch (user->op) {
+        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
+        case XI_NEG:
+        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
+        case XI_SHL: case XI_SHR: {
+            XrRep r = xr_type_base_rep(user->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+            if (arg_idx < user->nargs && user->args[arg_idx] &&
+                user->args[arg_idx]->type) {
+                XrRep r = xr_type_base_rep(user->args[arg_idx]->type);
+                return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            }
+            return XR_REP_TAGGED;
+        case XI_NOT:
+            return XR_REP_I64;
+        case XI_BOX:
+            if (user->args[0] && user->args[0]->type) {
+                XrRep r = xr_type_base_rep(user->args[0]->type);
+                return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            }
+            return XR_REP_TAGGED;
+        case XI_UNBOX:
+            return XR_REP_TAGGED;
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
+/* Allocate a BOX/UNBOX value in the arena without appending to the block. */
+static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op,
+                                 struct XrType *type, XiValue *arg) {
+    XR_DCHECK(f != NULL, "sr_make_convert: NULL func");
+    XR_DCHECK(blk != NULL, "sr_make_convert: NULL block");
+    XR_DCHECK(arg != NULL, "sr_make_convert: NULL arg");
+    XiValue *v = (XiValue *)xi_func_arena_alloc(f, sizeof(XiValue));
+    if (!v) return NULL;
+    memset(v, 0, sizeof(XiValue));
+    v->id = f->next_value_id++;
+    v->op = op;
+    v->type = type;
+    v->nargs = 1;
+    v->uses = -1;
+    v->block = blk;
+    v->args = (XiValue **)xi_func_arena_alloc(f, sizeof(XiValue *));
+    if (!v->args) return NULL;
+    v->args[0] = arg;
+    return v;
+}
+
+/* Rewrite a single arg reference if rep mismatches. */
+static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot,
+                            XrRep use_r, XiValue **box_of, XiValue **unbox_of,
+                            uint32_t max_id) {
+    XiValue *arg = *arg_slot;
+    if (!arg || arg->id >= max_id) return;
+    XrRep def_r = sr_def_rep(arg);
+    if (def_r == use_r) return;
+
+    if (def_r != XR_REP_TAGGED && use_r == XR_REP_TAGGED) {
+        /* Unboxed -> tagged: insert BOX */
+        if (!box_of[arg->id]) {
+            box_of[arg->id] = sr_make_convert(f, arg->block, XI_BOX,
+                                               arg->type, arg);
+        }
+        if (box_of[arg->id]) *arg_slot = box_of[arg->id];
+    } else if (def_r == XR_REP_TAGGED && use_r != XR_REP_TAGGED) {
+        /* Tagged -> unboxed: insert UNBOX */
+        if (!unbox_of[arg->id]) {
+            unbox_of[arg->id] = sr_make_convert(f, arg->block, XI_UNBOX,
+                                                  arg->type, arg);
+        }
+        if (unbox_of[arg->id]) *arg_slot = unbox_of[arg->id];
+    }
+}
+
+XR_FUNC void xi_opt_select_rep(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_select_rep: NULL func");
+
+    uint32_t max_id = f->next_value_id;
+    if (max_id == 0) return;
+
+    XiValue **box_of = (XiValue **)xr_calloc(max_id, sizeof(XiValue *));
+    XiValue **unbox_of = (XiValue **)xr_calloc(max_id, sizeof(XiValue *));
+    if (!box_of || !unbox_of) { xr_free(box_of); xr_free(unbox_of); return; }
+
+    /* Rewrite args of every instruction, phi, and block control. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v) continue;
+            for (uint16_t ai = 0; ai < v->nargs; ai++) {
+                XrRep use_r = sr_use_rep(v, ai);
+                sr_rewrite_arg(f, &v->args[ai], use_r,
+                               box_of, unbox_of, max_id);
+            }
+        }
+
+        /* Phi args: force TAGGED (merge point, safe default) */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                sr_rewrite_arg(f, &phi->value.args[ai], XR_REP_TAGGED,
+                               box_of, unbox_of, max_id);
+            }
+        }
+
+        /* Return control: must be TAGGED */
+        if (blk->kind == XI_BLOCK_RETURN && blk->control) {
+            sr_rewrite_arg(f, &blk->control, XR_REP_TAGGED,
+                           box_of, unbox_of, max_id);
+        }
+    }
+
+    /* Rebuild each block's value array to include BOX/UNBOX after source. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+
+        uint32_t extra = 0;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v) continue;
+            if (v->id < max_id && box_of[v->id] && box_of[v->id]->block == blk)
+                extra++;
+            if (v->id < max_id && unbox_of[v->id] && unbox_of[v->id]->block == blk)
+                extra++;
+        }
+        if (extra == 0) continue;
+
+        uint32_t new_cap = blk->nvalues + extra;
+        XiValue **nv = (XiValue **)xi_func_arena_alloc(f, new_cap * sizeof(XiValue *));
+        if (!nv) continue;
+
+        uint32_t ni = 0;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            nv[ni++] = v;
+            if (!v || v->id >= max_id) continue;
+            if (unbox_of[v->id] && unbox_of[v->id]->block == blk)
+                nv[ni++] = unbox_of[v->id];
+            if (box_of[v->id] && box_of[v->id]->block == blk)
+                nv[ni++] = box_of[v->id];
+        }
+        blk->values = nv;
+        blk->nvalues = ni;
+        blk->values_cap = new_cap;
+    }
+
+    xr_free(box_of);
+    xr_free(unbox_of);
+
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            xi_opt_select_rep(f->children[i]);
+    }
+}
+
+/* ========== BOX/UNBOX Peephole Elimination ========== */
+
+/*
+ * Eliminate inverse BOX/UNBOX pairs:
+ *   UNBOX(BOX(x)) -> COPY(x)
+ *   BOX(UNBOX(x)) -> COPY(x)
+ * Subsequent copy-prop and DCE clean up the COPY and dead BOX/UNBOX.
+ */
+XR_FUNC void xi_opt_box_elim(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_box_elim: NULL func");
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v || v->nargs < 1 || !v->args[0]) continue;
+
+            XiValue *inner = v->args[0];
+            if (inner->nargs < 1 || !inner->args[0]) continue;
+
+            bool elim = (v->op == XI_UNBOX && inner->op == XI_BOX) ||
+                        (v->op == XI_BOX && inner->op == XI_UNBOX);
+            if (elim) {
+                v->op = XI_COPY;
+                v->args[0] = inner->args[0];
+            }
+        }
+    }
+
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            xi_opt_box_elim(f->children[i]);
     }
 }
 
