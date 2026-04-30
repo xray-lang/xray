@@ -110,7 +110,7 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
     {"utf8Count", "(data: string): int", "Count UTF-8 characters", true, false},
     {"utf8ByteLength", "(data: string): int", "Get UTF-8 byte length", true, false},
     {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true, false},
-    {"utf16Decode", "(data: any, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", true, false},
+    {"utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", true, false},
     // Module constants (is_method=false)
     {"LE", ": int", "", false, false},
     {"BE", ": int", "", false, false},
@@ -256,11 +256,11 @@ static const XaBuiltinMember g_gen_io_functions[] = {
 
 // log module functions
 static const XaBuiltinMember g_gen_log_functions[] = {
-    {"debug", "(...args: any): void", "Log debug message", true, false},
-    {"info", "(...args: any): void", "Log info message", true, false},
-    {"warn", "(...args: any): void", "Log warning message", true, false},
-    {"error", "(...args: any): void", "Log error message", true, false},
-    {"fatal", "(...args: any): void", "Log fatal message", true, false},
+    {"debug", "(...args: unknown): void", "Log debug message", true, false},
+    {"info", "(...args: unknown): void", "Log info message", true, false},
+    {"warn", "(...args: unknown): void", "Log warning message", true, false},
+    {"error", "(...args: unknown): void", "Log error message", true, false},
+    {"fatal", "(...args: unknown): void", "Log fatal message", true, false},
     {"setLevel", "(level: int): void", "Set log level", true, false},
     {"setFormat", "(format: string): void", "Set log format", true, false},
     {"setOutput", "(path: string): void", "Set log output file", true, false},
@@ -268,7 +268,7 @@ static const XaBuiltinMember g_gen_log_functions[] = {
     {"enableSource", "(enabled: bool): void", "Enable source location in logs", true, false},
     {"enableAsync", "(enabled: bool): void", "Enable async logging", true, false},
     {"flush", "(): void", "Flush log buffer", true, false},
-    {"child", "(...fields: any): Logger", "Create child logger", true, false},
+    {"child", "(...fields: unknown): Logger", "Create child logger", true, false},
     // Module constants (is_method=false)
     {"DEBUG", ": int", "", false, false},
     {"INFO", ": int", "", false, false},
@@ -408,15 +408,15 @@ static const XaBuiltinMember g_gen_path_functions[] = {
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {
-    {"compile", "(pattern: string, flags?: string): any", "Compile a regex pattern", true, false},
-    {"test", "(pattern: any, s: string): bool", "Test if pattern matches string", true, false},
-    {"find", "(pattern: any, s: string, offset?: int): Json?", "Find first match", true, false},
-    {"fullFind", "(pattern: any, s: string): Json?", "Full match with captures", true, false},
-    {"count", "(pattern: any, s: string): int", "Count matches", true, false},
-    {"findAll", "(pattern: any, s: string): Array<string>", "Find all matches", true, false},
-    {"replace", "(pattern: any, s: string, replacement: string): string", "Replace first match", true, false},
-    {"replaceAll", "(pattern: any, s: string, replacement: string): string", "Replace all matches", true, false},
-    {"split", "(pattern: any, s: string): Array<string>", "Split by pattern", true, false},
+    {"compile", "(pattern: string, flags?: string): Regex", "Compile a regex pattern", true, false},
+    {"test", "(pattern: Regex, s: string): bool", "Test if pattern matches string", true, false},
+    {"find", "(pattern: Regex, s: string, offset?: int): Json?", "Find first match", true, false},
+    {"fullFind", "(pattern: Regex, s: string): Json?", "Full match with captures", true, false},
+    {"count", "(pattern: Regex, s: string): int", "Count matches", true, false},
+    {"findAll", "(pattern: Regex, s: string): Array<string>", "Find all matches", true, false},
+    {"replace", "(pattern: Regex, s: string, replacement: string): string", "Replace first match", true, false},
+    {"replaceAll", "(pattern: Regex, s: string, replacement: string): string", "Replace all matches", true, false},
+    {"split", "(pattern: Regex, s: string): Array<string>", "Split by pattern", true, false},
     {"escape", "(s: string): string", "Escape regex special chars", true, false},
     {"isValid", "(pattern: string): bool", "Check if pattern is valid", true, false},
 };

@@ -1068,11 +1068,11 @@ void xr_gc_destroy_logger(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
 
 // @module log
 
-XR_DEFINE_BUILTIN(xr_log_debug, "debug", "(...args: any): void", "Log debug message")
-XR_DEFINE_BUILTIN(xr_log_info, "info", "(...args: any): void", "Log info message")
-XR_DEFINE_BUILTIN(xr_log_warn, "warn", "(...args: any): void", "Log warning message")
-XR_DEFINE_BUILTIN(xr_log_error, "error", "(...args: any): void", "Log error message")
-XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: any): void", "Log fatal message")
+XR_DEFINE_BUILTIN(xr_log_debug, "debug", "(...args: unknown): void", "Log debug message")
+XR_DEFINE_BUILTIN(xr_log_info, "info", "(...args: unknown): void", "Log info message")
+XR_DEFINE_BUILTIN(xr_log_warn, "warn", "(...args: unknown): void", "Log warning message")
+XR_DEFINE_BUILTIN(xr_log_error, "error", "(...args: unknown): void", "Log error message")
+XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: unknown): void", "Log fatal message")
 XR_DEFINE_BUILTIN(xr_log_set_level, "setLevel", "(level: int): void", "Set log level")
 XR_DEFINE_BUILTIN(xr_log_set_format, "setFormat", "(format: string): void", "Set log format")
 XR_DEFINE_BUILTIN(xr_log_set_output, "setOutput", "(path: string): void", "Set log output file")
@@ -1083,7 +1083,7 @@ XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): void",
 XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void",
                   "Enable async logging")
 XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): void", "Flush log buffer")
-XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): Logger", "Create child logger")
+XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: unknown): Logger", "Create child logger")
 
 /* Logger native-type registration is invoked unconditionally during
  * isolate init by xr_prelude_register_all_native_types, so the XrClass

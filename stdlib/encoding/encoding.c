@@ -517,7 +517,7 @@ XR_DEFINE_BUILTIN(encoding_utf8_byte_length, "utf8ByteLength", "(data: string): 
 XR_DEFINE_BUILTIN(encoding_utf16_encode, "utf16Encode",
                   "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes")
 XR_DEFINE_BUILTIN(encoding_utf16_decode, "utf16Decode",
-                  "(data: any, endian?: int, stripBom?: bool): string?",
+                  "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
                   "UTF-16 decode to string (auto-detects BOM)")
 
 XrModule *xr_load_module_encoding(XrayIsolate *isolate) {
