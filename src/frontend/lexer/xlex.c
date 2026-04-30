@@ -980,7 +980,6 @@ static const char *token_names[] = {
     [TK_TYPE_ARRAY] = "Array",
     [TK_TYPE_MAP] = "Map",
     [TK_TYPE_SET] = "Set",
-    [TK_TYPE_JSON] = "Json",
     [TK_TYPE_CHANNEL] = "Channel",
     [TK_UNKNOWN] = "unknown",
 

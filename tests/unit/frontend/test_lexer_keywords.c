@@ -74,11 +74,10 @@ typedef struct { const char *spelling; XrTokenType type; } KwExpect;
 
 static const KwExpect kKnownKeywords[] = {
     /* Uppercase type names still owned by the lexer. BigInt / Bytes /
-     * DateTime / Range / Regex / StringBuilder are now resolved through
-     * the prelude registry as plain identifiers. */
+     * DateTime / Json / Range / Regex / StringBuilder are now resolved
+     * through the prelude registry as plain identifiers. */
     { "Array",       TK_TYPE_ARRAY    },
     { "Channel",     TK_TYPE_CHANNEL  },
-    { "Json",        TK_TYPE_JSON     },
     { "Map",         TK_TYPE_MAP      },
     { "Set",         TK_TYPE_SET      },
     { "abstract",    TK_ABSTRACT      },
