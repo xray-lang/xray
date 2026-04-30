@@ -93,6 +93,13 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TENUM_TYPE] = {xr_gc_destroy_enum_type, NULL, NULL, NULL},
     [XR_TENUM_VALUE] = {xr_gc_destroy_enum_value, NULL, NULL, NULL},
 
+    // Network handles. No GC children to traverse (fd is an int, the
+    // optional TLS pointer is opaque non-GC memory). Destroy hook
+    // closes the fd through netpoll so a forgotten close from the
+    // script side cannot leak the kernel resource.
+    [XR_TNETCONN] = {xr_gc_destroy_net_conn, NULL, NULL, NULL},
+    [XR_TNETLISTENER] = {xr_gc_destroy_net_listener, NULL, NULL, NULL},
+
     // XR_TRANGE / XR_TBLOB / XR_TSTRING are pure leaves with no
     // capabilities; their slots are zero-initialised by default.
 };

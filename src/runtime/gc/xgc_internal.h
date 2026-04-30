@@ -130,6 +130,8 @@ XR_FUNC void xr_gc_destroy_json(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_net_conn(XrGCHeader *obj, XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, XrCoroGC *owning_gc);
 
 // Traverse functions (non-static, referenced by g_type_ops).
 // Each marks the type's GC-traced children via xr_coro_gc_markvalue /
