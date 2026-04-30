@@ -825,9 +825,19 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_RANGE:
             result = xr_type_new_named_instance(ctx->analyzer->isolate, "Range");
             break;
-        case AST_SET_LITERAL:
-            result = xr_type_new_set(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
+        case AST_SET_LITERAL: {
+            XrType *elem = NULL;
+            if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_SET &&
+                ctx->expected_type->container.element_type) {
+                elem = ctx->expected_type->container.element_type;
+            } else if (node->as.set_literal.count > 0 && node->as.set_literal.elements[0]) {
+                elem = xa_visit_infer_expr(ctx, node->as.set_literal.elements[0]);
+            }
+            if (!elem)
+                elem = xr_type_new_unknown(NULL);
+            result = xr_type_new_set(ctx->analyzer->isolate, elem);
             break;
+        }
         case AST_CHANNEL_NEW:
             // Use expected_type if available (from type annotation: Channel<T>)
             if (ctx->expected_type && (ctx->expected_type->kind == XR_KIND_CHANNEL)) {
@@ -915,6 +925,11 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                 result->is_value_type = true;
             }
         }
+    }
+
+    // Track unknown type count for inference quality metric
+    if (result && XR_TYPE_IS_UNKNOWN(result)) {
+        ctx->analyzer->unknown_type_count++;
     }
 
     // Cache inferred type in the analyzer side table for codegen.
@@ -1350,6 +1365,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                             : xr_type_new_unknown(NULL);
                         value_type = coll_type->map.value_type ? coll_type->map.value_type
                                                                : xr_type_new_unknown(NULL);
+                    } else if (coll_type->map.key_type) {
+                        item_type = coll_type->map.key_type;
                     }
                 } else if (coll_type->kind == XR_KIND_SET) {
                     if (coll_type->container.element_type) {

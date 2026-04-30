@@ -379,8 +379,12 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_TRYSEND:
             case SYMBOL_IS_CLOSED:
                 return xr_type_new_bool(NULL);
-            case SYMBOL_TRYRECV:
-                return xr_type_new_unknown(NULL);
+            case SYMBOL_TRYRECV: {
+                XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
+                if (t)
+                    t->is_nullable = true;
+                return t;
+            }
             case SYMBOL_LENGTH:
             case SYMBOL_CAPACITY:
                 return xr_type_new_int(NULL);
