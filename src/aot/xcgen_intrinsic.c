@@ -33,18 +33,18 @@ static const char *const tagged_type = "XrValue";
 
 /* ========== Shared Emit Helper ========== */
 
-// Auto-box int64_t/double refs to XrtValue for runtime calls.
+// Auto-box int64_t/double refs to XrValue for runtime calls.
 // Defined here as the canonical implementation; declared in xcgen.h.
 XR_FUNC void xcg_emit_ref_as_tagged(XcgenBuf *b, XirFunc *func, XirRef ref) {
     XR_DCHECK(b != NULL, "xcg_emit_ref_as_tagged: NULL buf");
     XR_DCHECK(func != NULL, "xcg_emit_ref_as_tagged: NULL func");
     uint8_t t = xcg_ref_type(func, ref);
     if (t == XR_REP_I64) {
-        xcgen_buf_puts(b, "xrt_box_int(");
+        xcgen_buf_puts(b, "XR_FROM_INT(");
         xcg_emit_ref(b, func, ref);
         xcgen_buf_puts(b, ")");
     } else if (t == XR_REP_F64) {
-        xcgen_buf_puts(b, "xrt_box_float(");
+        xcgen_buf_puts(b, "XR_FROM_FLOAT(");
         xcg_emit_ref(b, func, ref);
         xcgen_buf_puts(b, ")");
     } else {
@@ -86,7 +86,7 @@ static bool emit_str_method_0(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, XirRef 
     }
     if ((dst_is_int || dst_vtype == XR_REP_TAGGED) && method_symbol == XRT_SYM_IS_EMPTY) {
         if (dst_vtype == XR_REP_TAGGED)
-            xcgen_buf_printf(b, "    v%u = xrt_box_bool(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_FROM_BOOL(", dst_idx);
         else
             xcgen_buf_printf(b, "    v%u = ", dst_idx);
         xcgen_buf_puts(b, "(((const char *)");
@@ -112,7 +112,7 @@ static bool emit_str_method_1(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, XirRef 
     bool a1_str = (a1t == XR_REP_STR);
     if ((dst_is_int || dst_vtype == XR_REP_TAGGED) && a1_str && method_symbol == XRT_SYM_CONTAINS) {
         if (dst_vtype == XR_REP_TAGGED)
-            xcgen_buf_printf(b, "    v%u = xrt_box_bool(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_FROM_BOOL(", dst_idx);
         else
             xcgen_buf_printf(b, "    v%u = ", dst_idx);
         xcgen_buf_puts(b, "strstr((const char *)");
@@ -148,7 +148,7 @@ static bool emit_str_method_1(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, XirRef 
         xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
         if (dst_vtype == XR_REP_TAGGED)
             xcgen_buf_printf(b,
-                             "v%u = xrt_box_bool((strlen(_s) >= _pl && "
+                             "v%u = XR_FROM_BOOL((strlen(_s) >= _pl && "
                              "memcmp(_s, _p, _pl) == 0) ? 1 : 0); }\n",
                              dst_idx);
         else
@@ -168,7 +168,7 @@ static bool emit_str_method_1(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, XirRef 
         xcgen_buf_puts(b, ".ptr; size_t _pl = strlen(_p); ");
         if (dst_vtype == XR_REP_TAGGED)
             xcgen_buf_printf(b,
-                             "v%u = xrt_box_bool((_sl >= _pl && memcmp(_s + "
+                             "v%u = XR_FROM_BOOL((_sl >= _pl && memcmp(_s + "
                              "_sl - _pl, _p, _pl) == 0) ? 1 : 0); }\n",
                              dst_idx);
         else
@@ -202,7 +202,7 @@ static bool emit_coll_method(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, XirRef r
         xcg_emit_ref(b, func, recv_ref);
         xcgen_buf_printf(b,
                          ".ptr; v%u = (_a->len > 0) ? _a->data[--_a->len] "
-                         ": (XrtValue){0}; }\n",
+                         ": (XrValue){0}; }\n",
                          dst_idx);
         cf->needs_runtime = true;
         cf->call_args_count = 0;
@@ -242,7 +242,7 @@ static bool emit_coll_method(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, XirRef r
         xcgen_buf_puts(b, "if (xrt_key_eq(_m->entries[_i].key, ");
         xcg_emit_ref_as_tagged(b, func, arg1);
         if (dst_vtype == XR_REP_TAGGED)
-            xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = xrt_box_bool(_found); }\n",
+            xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = XR_FROM_BOOL(_found); }\n",
                              dst_idx);
         else
             xcgen_buf_printf(b, ")) { _found = 1; break; } v%u = _found; }\n", dst_idx);
@@ -258,9 +258,9 @@ static void emit_method_fallback(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, uint
                                  bool dst_is_float, bool dst_is_int, int method_symbol, int nargs) {
     if (nargs == 0) {
         if (dst_is_float)
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_0(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(xrt_method_0(", dst_idx);
         else if (dst_is_int)
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_0(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_INT(xrt_method_0(", dst_idx);
         else
             xcgen_buf_printf(b, "    v%u = xrt_method_0(", dst_idx);
         if (cf->call_args_count > 0)
@@ -270,9 +270,9 @@ static void emit_method_fallback(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, uint
         xcgen_buf_printf(b, ", %d", method_symbol);
     } else if (nargs == 1) {
         if (dst_is_float)
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_1(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(xrt_method_1(", dst_idx);
         else if (dst_is_int)
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_1(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_INT(xrt_method_1(", dst_idx);
         else
             xcgen_buf_printf(b, "    v%u = xrt_method_1(", dst_idx);
         if (cf->call_args_count > 0)
@@ -288,9 +288,9 @@ static void emit_method_fallback(XcgenBuf *b, XirFunc *func, XcgenFunc *cf, uint
         }
     } else {
         if (dst_is_float)
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_method_2(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(xrt_method_2(", dst_idx);
         else if (dst_is_int)
-            xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_method_2(", dst_idx);
+            xcgen_buf_printf(b, "    v%u = XR_TO_INT(xrt_method_2(", dst_idx);
         else
             xcgen_buf_printf(b, "    v%u = xrt_method_2(", dst_idx);
         if (cf->call_args_count > 0)
@@ -340,7 +340,7 @@ XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, Xc
                 XcgenStruct *st = &mod->struct_reg->structs[sidx];
                 uint32_t dst_idx = XIR_REF_INDEX(ins->dst);
                 xcgen_buf_printf(
-                    b, "    v%u = (%s){.ptr = xrt_arc_alloc(sizeof(%s)), .tag = XRT_TAG_PTR};\n",
+                    b, "    v%u = (%s){.ptr = xrt_arc_alloc(sizeof(%s)), .tag = XR_TAG_PTR};\n",
                     dst_idx, tagged_type, st->c_name);
                 if (!st->all_native) {
                     xcgen_buf_printf(b,
@@ -407,7 +407,7 @@ XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, Xc
                 else if (dst_type == XR_REP_F64)
                     xcgen_buf_printf(b, "    v%u = 0.0;\n", dst_idx);
                 else {
-                    xcgen_buf_printf(b, "    v%u = (%s){.i = 0, .tag = XRT_TAG_NULL};\n", dst_idx,
+                    xcgen_buf_printf(b, "    v%u = (%s){.i = 0, .tag = XR_TAG_NULL};\n", dst_idx,
                                      tagged_type);
                     cf->needs_runtime = true;
                 }
@@ -435,13 +435,13 @@ XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, Xc
                     xcg_emit_ref(b, func, cf->call_args[1]);
                     xcgen_buf_puts(b, ");\n");
                 } else if (dst_type == XR_REP_I64) {
-                    xcgen_buf_printf(b, "    v%u = xrt_unbox_int(xrt_index_get(", dst_idx);
+                    xcgen_buf_printf(b, "    v%u = XR_TO_INT(xrt_index_get(", dst_idx);
                     xcg_emit_ref_as_tagged(b, func, cf->call_args[0]);
                     xcgen_buf_puts(b, ", ");
                     xcg_emit_ref_as_tagged(b, func, cf->call_args[1]);
                     xcgen_buf_puts(b, "));\n");
                 } else if (dst_type == XR_REP_F64) {
-                    xcgen_buf_printf(b, "    v%u = xrt_unbox_float(xrt_index_get(", dst_idx);
+                    xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(xrt_index_get(", dst_idx);
                     xcg_emit_ref_as_tagged(b, func, cf->call_args[0]);
                     xcgen_buf_puts(b, ", ");
                     xcg_emit_ref_as_tagged(b, func, cf->call_args[1]);
@@ -633,13 +633,13 @@ XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, Xc
             else
                 xcgen_buf_printf(b, "(%s){0}", tagged_type);
             xcgen_buf_puts(b, ".ptr; ");
-            xcgen_buf_puts(b, "XrtValue _k = ");
+            xcgen_buf_puts(b, "XrValue _k = ");
             if (cf->call_args_count > 1)
                 xcg_emit_ref_as_tagged(b, func, cf->call_args[1]);
             else
                 xcgen_buf_printf(b, "(%s){0}", tagged_type);
-            xcgen_buf_puts(b, "; XrtValue _cv = xrt_map_get(_m, _k); ");
-            xcgen_buf_puts(b, "xrt_map_set(_m, _k, xrt_box_int((_cv.tag == XRT_TAG_I64 ? _cv.i "
+            xcgen_buf_puts(b, "; XrValue _cv = xrt_map_get(_m, _k); ");
+            xcgen_buf_puts(b, "xrt_map_set(_m, _k, XR_FROM_INT((_cv.tag == XR_TAG_I64 ? _cv.i "
                               ": 0) + 1)); }\n");
             cf->needs_runtime = true;
             cf->call_args_count = 0;
@@ -783,9 +783,9 @@ XR_FUNC void xcg_emit_call_intrinsic(XcgenBuf *b, XirFunc *func, XirIns *ins, Xc
             bool di = (dst_type == XR_REP_I64);
             bool df = (dst_type == XR_REP_F64);
             if (di)
-                xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(", dst_idx, arith_name);
+                xcgen_buf_printf(b, "    v%u = XR_TO_INT(%s(", dst_idx, arith_name);
             else if (df)
-                xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(", dst_idx, arith_name);
+                xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(%s(", dst_idx, arith_name);
             else
                 xcgen_buf_printf(b, "    v%u = %s(", dst_idx, arith_name);
             if (cf->call_args_count > 0)

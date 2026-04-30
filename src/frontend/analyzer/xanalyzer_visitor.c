@@ -1124,13 +1124,34 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Already collected in pass 1, infer body
             FunctionDeclNode *fn_decl = &node->as.function_decl;
 
-            // P2-1: Save/restore return type state for nested functions
+            // Save/restore return type state for nested functions
             XrType **saved_return_types = ctx->return_types;
             int saved_return_count = ctx->return_type_count;
             int saved_return_cap = ctx->return_type_capacity;
             ctx->return_types = NULL;
             ctx->return_type_count = 0;
             ctx->return_type_capacity = 0;
+
+            // Isolate flow graph: each function gets a fresh start node
+            // so that flow facts from sibling/parent functions (e.g.
+            // `let name = p?.name`) do not leak into this function body.
+            XaFlowNode *saved_flow = NULL;
+            XrFlowLabel *saved_break = NULL;
+            XrFlowLabel *saved_continue = NULL;
+            XrFlowLabel *saved_return = NULL;
+            XrFlowLabel *saved_exception = NULL;
+            if (ctx->flow) {
+                saved_flow = ctx->flow->current_flow;
+                saved_break = ctx->flow->current_break_target;
+                saved_continue = ctx->flow->current_continue_target;
+                saved_return = ctx->flow->current_return_target;
+                saved_exception = ctx->flow->current_exception_target;
+                xa_flow_create_start(ctx->flow);
+                ctx->flow->current_break_target = NULL;
+                ctx->flow->current_continue_target = NULL;
+                ctx->flow->current_return_target = NULL;
+                ctx->flow->current_exception_target = NULL;
+            }
 
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, node);
 
@@ -1224,6 +1245,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->expected_return_type = saved_expected_ret;
 
             xa_analyzer_exit_scope(ctx->analyzer);
+
+            // Restore flow state to outer function's context
+            if (ctx->flow) {
+                ctx->flow->current_flow = saved_flow;
+                ctx->flow->current_break_target = saved_break;
+                ctx->flow->current_continue_target = saved_continue;
+                ctx->flow->current_return_target = saved_return;
+                ctx->flow->current_exception_target = saved_exception;
+            }
 
             // Restore outer function's return type state
             if (ctx->return_types)

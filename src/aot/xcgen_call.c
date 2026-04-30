@@ -281,7 +281,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
 
     if (is_ctor_call && callee_name) {
         // Class constructor call: allocate instance via xrt_obj_alloc + type registration
-        int inst_bytes = ctor_nfields * 16;  // sizeof(XrtValue) per field
+        int inst_bytes = ctor_nfields * 16;  // sizeof(XrValue) per field
         const char *tagged_type = "XrValue";
 
         // Lookup class metadata for type registration
@@ -302,11 +302,11 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                              cls->class_name, cls->class_name, cls->class_name, parent_tid,
                              inst_bytes);
             xcgen_buf_printf(
-                b, "      %s _inst = xrt_mkptr(xrt_obj_alloc(_tid_%s, %d), XRT_TAG_PTR);\n",
+                b, "      %s _inst = xr_mkptr(xrt_obj_alloc(_tid_%s, %d), XR_TAG_PTR);\n",
                 tagged_type, cls->class_name, inst_bytes);
         } else {
             // Fallback: no class info → raw allocation (legacy path)
-            xcgen_buf_printf(b, "    { %s _inst = xrt_mkptr(xrt_arc_alloc(%d), XRT_TAG_PTR);\n",
+            xcgen_buf_printf(b, "    { %s _inst = xr_mkptr(xrt_arc_alloc(%d), XR_TAG_PTR);\n",
                              tagged_type, inst_bytes);
         }
         xcgen_buf_printf(b, "      %s(xrt_ctx, _inst", callee_name);
@@ -353,13 +353,13 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                               (dst_rep == XR_REP_PTR || dst_rep == XR_REP_TAGGED));
         if (dst_used && xir_ref_is_vreg(ins->dst)) {
             if (needs_unbox_i64)
-                xcgen_buf_printf(b, "    v%u = xrt_unbox_int(%s(", dst_idx, callee_name);
+                xcgen_buf_printf(b, "    v%u = XR_TO_INT(%s(", dst_idx, callee_name);
             else if (needs_unbox_f64)
-                xcgen_buf_printf(b, "    v%u = xrt_unbox_float(%s(", dst_idx, callee_name);
+                xcgen_buf_printf(b, "    v%u = XR_TO_FLOAT(%s(", dst_idx, callee_name);
             else if (needs_box_i64)
-                xcgen_buf_printf(b, "    v%u = xrt_box_int(%s(", dst_idx, callee_name);
+                xcgen_buf_printf(b, "    v%u = XR_FROM_INT(%s(", dst_idx, callee_name);
             else if (needs_box_f64)
-                xcgen_buf_printf(b, "    v%u = xrt_box_float(%s(", dst_idx, callee_name);
+                xcgen_buf_printf(b, "    v%u = XR_FROM_FLOAT(%s(", dst_idx, callee_name);
             else
                 xcgen_buf_printf(b, "    v%u = %s(", dst_idx, callee_name);
         } else
@@ -397,7 +397,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
         if (callee_non_escaping && callee_nupvals > 0 &&
             callee_nupvals <= XCGEN_MAX_NONESC_UPVALS && cf->call_args_count > 0 &&
             !xir_ref_is_none(cf->call_args[0])) {
-            // Non-escaping callee: pass upvalue values as direct XrtValue args
+            // Non-escaping callee: pass upvalue values as direct XrValue args
             uint32_t cl_vreg = 0;
             if (xir_ref_is_vreg(cf->call_args[0]))
                 cl_vreg = XIR_REF_INDEX(cf->call_args[0]);
@@ -408,7 +408,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                 if (!xir_ref_is_none(upval_refs[u]))
                     xcg_emit_ref_as_tagged(b, func, upval_refs[u]);
                 else
-                    xcgen_buf_puts(b, "(XrtValue){0}");
+                    xcgen_buf_puts(b, "(XrValue){0}");
             }
         } else if (callee_needs_closure && cf->call_args_count > 0 &&
                    !xir_ref_is_none(cf->call_args[0])) {
@@ -446,7 +446,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                     }
                 }
 
-                // Check if the arg vreg is itself a struct-ptr param (already xrs_N*, not XrtValue)
+                // Check if the arg vreg is itself a struct-ptr param (already xrs_N*, not XrValue)
                 bool arg_is_struct_ptr_param = false;
                 if (xir_ref_is_vreg(arg_ref) && cf->vreg_struct_id && mod->struct_reg) {
                     uint32_t arg_vi = XIR_REF_INDEX(arg_ref);
@@ -461,7 +461,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                         // Caller param is already xrs_N*, pass directly (no .ptr needed)
                         xcg_emit_ref(b, func, arg_ref);
                     } else {
-                        // Callee expects xrs_N*, caller has XrtValue: cast .ptr
+                        // Callee expects xrs_N*, caller has XrValue: cast .ptr
                         xcgen_buf_printf(b, "(%s*)", callee_struct_name);
                         xcg_emit_ref(b, func, arg_ref);
                         xcgen_buf_puts(b, ".ptr");
@@ -470,7 +470,7 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                     // Caller has some native type, pass directly
                     xcg_emit_ref(b, func, arg_ref);
                 } else {
-                    // Normal type coercion: if arg is XrtValue but callee expects native type,
+                    // Normal type coercion: if arg is XrValue but callee expects native type,
                     // unbox
                     XrProto *cp = (XrProto *) callee_proto;
                     uint8_t param_type = 0;
@@ -480,21 +480,21 @@ static void emit_call_known(XcgenBuf *b, XirFunc *func, XirIns *ins, XcgenModule
                         (param_type == XR_SLOT_I64 || param_type == XR_SLOT_BOOL);
                     bool param_wants_f64 = (param_type == XR_SLOT_F64);
                     if (arg_is_tagged && param_wants_i64) {
-                        xcgen_buf_puts(b, "xrt_unbox_int(");
+                        xcgen_buf_puts(b, "XR_TO_INT(");
                         xcg_emit_ref(b, func, arg_ref);
                         xcgen_buf_puts(b, ")");
                     } else if (arg_is_tagged && param_wants_f64) {
-                        xcgen_buf_puts(b, "xrt_unbox_float(");
+                        xcgen_buf_puts(b, "XR_TO_FLOAT(");
                         xcg_emit_ref(b, func, arg_ref);
                         xcgen_buf_puts(b, ")");
                     } else if (!arg_is_tagged && !param_wants_i64 && !param_wants_f64) {
                         // Arg is native but callee expects XrValue: auto-box
                         if (arg_type == XR_REP_I64) {
-                            xcgen_buf_puts(b, "xrt_box_int(");
+                            xcgen_buf_puts(b, "XR_FROM_INT(");
                             xcg_emit_ref(b, func, arg_ref);
                             xcgen_buf_puts(b, ")");
                         } else if (arg_type == XR_REP_F64) {
-                            xcgen_buf_puts(b, "xrt_box_float(");
+                            xcgen_buf_puts(b, "XR_FROM_FLOAT(");
                             xcg_emit_ref(b, func, arg_ref);
                             xcgen_buf_puts(b, ")");
                         } else {

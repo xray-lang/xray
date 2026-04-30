@@ -149,7 +149,7 @@ assert_eq(message, "Not Found")
 
 // ===== Enum as function parameter =====
 
-fn getColorCode(c: int): string {
+fn getColorCode(c: Color): string {
     return match c {
         Color.Red => "#FF0000",
         Color.Green => "#00FF00",

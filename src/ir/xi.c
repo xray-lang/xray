@@ -21,33 +21,73 @@
 
 /* ========== Arena Allocator ========== */
 
+/* A linked list of fixed-size chunks. Once an allocation is handed
+ * out, the underlying memory is never moved, so XiValue/XiBlock/XiPhi
+ * pointers remain valid for the lifetime of the XiFunc. */
+typedef struct XiArenaChunk {
+    struct XiArenaChunk *next;
+    uint32_t used;
+    uint32_t cap;
+    /* data follows */
+} XiArenaChunk;
+
+static XiArenaChunk *arena_chunk_new(uint32_t cap) {
+    XiArenaChunk *c = (XiArenaChunk *) xr_malloc(sizeof(XiArenaChunk) + cap);
+    if (!c) return NULL;
+    c->next = NULL;
+    c->used = 0;
+    c->cap = cap;
+    return c;
+}
+
+static inline uint8_t *arena_chunk_data(XiArenaChunk *c) {
+    return (uint8_t *)(c + 1);
+}
+
 static void *arena_alloc(XiFunc *f, uint32_t size) {
     XR_DCHECK(f != NULL, "arena_alloc: f is NULL");
     /* Align to 8 bytes */
     size = (size + 7) & ~7u;
 
-    if (f->arena_used + size > f->arena_cap) {
-        /* Grow arena: double or at least fit the requested size */
-        uint32_t new_cap = f->arena_cap * 2;
-        if (new_cap < f->arena_used + size)
-            new_cap = f->arena_used + size + XI_ARENA_INITIAL_SIZE;
-        uint8_t *tmp = (uint8_t *) xr_realloc(f->arena, new_cap);
-        if (!tmp) {
-            fprintf(stderr, "xi: arena realloc failed (requested %u bytes)\n", new_cap);
+    XiArenaChunk *cur = f->arena_cur;
+    if (!cur || cur->used + size > cur->cap) {
+        /* Need a new chunk. Default chunk size is XI_ARENA_INITIAL_SIZE,
+         * but oversized requests get a dedicated chunk sized to fit. */
+        uint32_t new_cap = XI_ARENA_INITIAL_SIZE;
+        if (size > new_cap) new_cap = size;
+        XiArenaChunk *nc = arena_chunk_new(new_cap);
+        if (!nc) {
+            fprintf(stderr, "xi: arena chunk alloc failed (requested %u bytes)\n", new_cap);
             return NULL;
         }
-        f->arena = tmp;
-        f->arena_cap = new_cap;
+        if (cur) {
+            cur->next = nc;
+        } else {
+            f->arena_head = nc;
+        }
+        f->arena_cur = nc;
+        cur = nc;
     }
 
-    void *ptr = f->arena + f->arena_used;
+    void *ptr = arena_chunk_data(cur) + cur->used;
     memset(ptr, 0, size);
-    f->arena_used += size;
+    cur->used += size;
     return ptr;
 }
 
 void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
+}
+
+static void arena_free_all(XiFunc *f) {
+    XiArenaChunk *c = f->arena_head;
+    while (c) {
+        XiArenaChunk *next = c->next;
+        xr_free(c);
+        c = next;
+    }
+    f->arena_head = NULL;
+    f->arena_cur = NULL;
 }
 
 /* ========== Function Lifecycle ========== */
@@ -59,20 +99,20 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     f->name = name;
     f->return_type = return_type;
 
-    /* Initialize arena */
-    f->arena = (uint8_t *) xr_malloc(XI_ARENA_INITIAL_SIZE);
-    if (!f->arena) {
+    /* Initialize arena: allocate first chunk eagerly so the common
+     * fast path in arena_alloc avoids a NULL check on every call. */
+    f->arena_head = arena_chunk_new(XI_ARENA_INITIAL_SIZE);
+    if (!f->arena_head) {
         xr_free(f);
         return NULL;
     }
-    f->arena_cap = XI_ARENA_INITIAL_SIZE;
-    f->arena_used = 0;
+    f->arena_cur = f->arena_head;
 
     /* Initial block capacity */
     f->blocks_cap = 16;
     f->blocks = (XiBlock **) xr_calloc(f->blocks_cap, sizeof(XiBlock *));
     if (!f->blocks) {
-        xr_free(f->arena);
+        arena_free_all(f);
         xr_free(f);
         return NULL;
     }
@@ -89,10 +129,11 @@ void xi_func_free(XiFunc *f) {
     }
     xr_free(f->children);
 
-    /* Arena owns all XiValues, XiPhis, arg arrays.
-     * Blocks and block arrays are also arena-allocated if we switch,
-     * but currently blocks[] is heap-allocated for resizability. */
-    xr_free(f->arena);
+    /* Arena owns all XiValues, XiPhis, XiBlocks, and arg arrays.
+     * blocks[] (the index array) is heap-allocated separately because
+     * it must be resizable across realloc without invalidating IR
+     * pointers. */
+    arena_free_all(f);
     xr_free(f->blocks);
     xr_free(f->params);
     xr_free(f);

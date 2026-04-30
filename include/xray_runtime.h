@@ -29,7 +29,7 @@
 
 /* ========== Tagged Union Value (16 bytes) ========== */
 
-typedef struct XrtValue {
+typedef struct XrValue {
     union {
         int64_t i;
         double f;
@@ -37,7 +37,7 @@ typedef struct XrtValue {
     };
     uint32_t tag;
     uint32_t _pad;
-} XrtValue;
+} XrValue;
 
 /* ========== Value Tags ========== */
 
@@ -51,118 +51,118 @@ typedef struct XrtValue {
 
 /* ========== Singleton Values ========== */
 
-#define XRT_NULL ((XrtValue){.ptr = NULL, .tag = XRT_TAG_NULL})
-#define XRT_TRUE ((XrtValue){.i = 1, .tag = XRT_TAG_TRUE})
-#define XRT_FALSE ((XrtValue){.i = 0, .tag = XRT_TAG_FALSE})
+#define XRT_NULL ((XrValue){.ptr = NULL, .tag = XRT_TAG_NULL})
+#define XRT_TRUE ((XrValue){.i = 1, .tag = XRT_TAG_TRUE})
+#define XRT_FALSE ((XrValue){.i = 0, .tag = XRT_TAG_FALSE})
 
 /* ========== Box / Unbox (inline, zero overhead) ========== */
 
-static inline XrtValue xrt_box_int(int64_t v) {
-    return (XrtValue){.i = v, .tag = XRT_TAG_I64};
+static inline XrValue xrt_box_int(int64_t v) {
+    return (XrValue){.i = v, .tag = XRT_TAG_I64};
 }
 
-static inline XrtValue xrt_box_float(double v) {
-    return (XrtValue){.f = v, .tag = XRT_TAG_F64};
+static inline XrValue xrt_box_float(double v) {
+    return (XrValue){.f = v, .tag = XRT_TAG_F64};
 }
 
-static inline XrtValue xrt_box_bool(int64_t v) {
+static inline XrValue xrt_box_bool(int64_t v) {
     return v ? XRT_TRUE : XRT_FALSE;
 }
 
-static inline XrtValue xrt_box_ptr(void *p) {
-    return (XrtValue){.ptr = p, .tag = XRT_TAG_PTR};
+static inline XrValue xrt_box_ptr(void *p) {
+    return (XrValue){.ptr = p, .tag = XRT_TAG_PTR};
 }
 
-static inline int64_t xrt_unbox_int(XrtValue v) {
+static inline int64_t xrt_unbox_int(XrValue v) {
     return v.i;
 }
 
-static inline double xrt_unbox_float(XrtValue v) {
+static inline double xrt_unbox_float(XrValue v) {
     return v.f;
 }
 
-static inline void *xrt_unbox_ptr(XrtValue v) {
+static inline void *xrt_unbox_ptr(XrValue v) {
     return v.ptr;
 }
 
-static inline bool xrt_is_null(XrtValue v) {
+static inline bool xrt_is_null(XrValue v) {
     return v.tag == XRT_TAG_NULL;
 }
 
-static inline bool xrt_is_int(XrtValue v) {
+static inline bool xrt_is_int(XrValue v) {
     return v.tag == XRT_TAG_I64;
 }
 
-static inline bool xrt_is_float(XrtValue v) {
+static inline bool xrt_is_float(XrValue v) {
     return v.tag == XRT_TAG_F64;
 }
 
-static inline XrtValue xrt_box_str(const char *s) {
-    return (XrtValue){.ptr = (void *) s, .tag = XRT_TAG_STR};
+static inline XrValue xrt_box_str(const char *s) {
+    return (XrValue){.ptr = (void *) s, .tag = XRT_TAG_STR};
 }
 
-static inline bool xrt_is_str(XrtValue v) {
+static inline bool xrt_is_str(XrValue v) {
     return v.tag == XRT_TAG_STR;
 }
 
-static inline const char *xrt_unbox_str(XrtValue v) {
+static inline const char *xrt_unbox_str(XrValue v) {
     return (const char *) v.ptr;
 }
 
-static inline bool xrt_is_bool(XrtValue v) {
+static inline bool xrt_is_bool(XrValue v) {
     return v.tag == XRT_TAG_TRUE || v.tag == XRT_TAG_FALSE;
 }
 
-static inline bool xrt_to_bool(XrtValue v) {
+static inline bool xrt_to_bool(XrValue v) {
     return v.tag == XRT_TAG_TRUE;
 }
 
 /* ========== Mixed-type Arithmetic (requires libxray_rt) ========== */
 
-XRAY_API XrtValue xrt_add(XrtValue a, XrtValue b);
-XRAY_API XrtValue xrt_sub(XrtValue a, XrtValue b);
-XRAY_API XrtValue xrt_mul(XrtValue a, XrtValue b);
-XRAY_API XrtValue xrt_div(XrtValue a, XrtValue b);
-XRAY_API XrtValue xrt_mod(XrtValue a, XrtValue b);
-XRAY_API XrtValue xrt_neg(XrtValue a);
+XRAY_API XrValue xrt_add(XrValue a, XrValue b);
+XRAY_API XrValue xrt_sub(XrValue a, XrValue b);
+XRAY_API XrValue xrt_mul(XrValue a, XrValue b);
+XRAY_API XrValue xrt_div(XrValue a, XrValue b);
+XRAY_API XrValue xrt_mod(XrValue a, XrValue b);
+XRAY_API XrValue xrt_neg(XrValue a);
 
 /* ========== Mixed-type Comparison ========== */
 
-XRAY_API int64_t xrt_lt(XrtValue a, XrtValue b);
-XRAY_API int64_t xrt_le(XrtValue a, XrtValue b);
-XRAY_API int64_t xrt_eq(XrtValue a, XrtValue b);
+XRAY_API int64_t xrt_lt(XrValue a, XrValue b);
+XRAY_API int64_t xrt_le(XrValue a, XrValue b);
+XRAY_API int64_t xrt_eq(XrValue a, XrValue b);
 
 /* ========== String Operations ========== */
 
-XRAY_API XrtValue xrt_string_concat(XrtValue a, XrtValue b);
-XRAY_API XrtValue xrt_string_len(XrtValue s);
-XRAY_API XrtValue xrt_string_slice(XrtValue s, int64_t start, int64_t end);
-XRAY_API int64_t xrt_string_eq(XrtValue a, XrtValue b);
+XRAY_API XrValue xrt_string_concat(XrValue a, XrValue b);
+XRAY_API XrValue xrt_string_len(XrValue s);
+XRAY_API XrValue xrt_string_slice(XrValue s, int64_t start, int64_t end);
+XRAY_API int64_t xrt_string_eq(XrValue a, XrValue b);
 
 /* ========== Array Operations ========== */
 
-XRAY_API XrtValue xrt_array_new(int64_t capacity);
-XRAY_API XrtValue xrt_array_get(XrtValue arr, int64_t idx);
-XRAY_API void xrt_array_set(XrtValue arr, int64_t idx, XrtValue val);
-XRAY_API int64_t xrt_array_len(XrtValue arr);
-XRAY_API void xrt_array_push(XrtValue arr, XrtValue val);
+XRAY_API XrValue xrt_array_new(int64_t capacity);
+XRAY_API XrValue xrt_array_get(XrValue arr, int64_t idx);
+XRAY_API void xrt_array_set(XrValue arr, int64_t idx, XrValue val);
+XRAY_API int64_t xrt_array_len(XrValue arr);
+XRAY_API void xrt_array_push(XrValue arr, XrValue val);
 
 /* ========== Map Operations ========== */
 
-XRAY_API XrtValue xrt_map_new(void);
-XRAY_API XrtValue xrt_map_get(XrtValue map, XrtValue key);
-XRAY_API void xrt_map_set(XrtValue map, XrtValue key, XrtValue val);
-XRAY_API int64_t xrt_map_len(XrtValue map);
+XRAY_API XrValue xrt_map_new(void);
+XRAY_API XrValue xrt_map_get(XrValue map, XrValue key);
+XRAY_API void xrt_map_set(XrValue map, XrValue key, XrValue val);
+XRAY_API int64_t xrt_map_len(XrValue map);
 
 /* ========== Object Field Access ========== */
 
-XRAY_API XrtValue xrt_field_get(XrtValue obj, const char *name);
-XRAY_API void xrt_field_set(XrtValue obj, const char *name, XrtValue val);
+XRAY_API XrValue xrt_field_get(XrValue obj, const char *name);
+XRAY_API void xrt_field_set(XrValue obj, const char *name, XrValue val);
 
 /* ========== Print ========== */
 
-XRAY_API void xrt_print(XrtValue v);
-XRAY_API void xrt_println(XrtValue v);
+XRAY_API void xrt_print(XrValue v);
+XRAY_API void xrt_println(XrValue v);
 
 /* ========== GC ========== */
 

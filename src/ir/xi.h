@@ -340,10 +340,12 @@ typedef struct XiFunc {
     uint32_t next_value_id;
     uint32_t next_block_id;
 
-    /* Arena allocator for all IR nodes */
-    uint8_t *arena;
-    uint32_t arena_used;
-    uint32_t arena_cap;
+    /* Arena allocator for all IR nodes.
+     * Chunked free-list — once a pointer is returned it never moves,
+     * so previously allocated XiValue/XiBlock/XiPhi pointers stay valid
+     * across subsequent allocations even when the arena grows. */
+    struct XiArenaChunk *arena_head; /* head of chunk list (for free) */
+    struct XiArenaChunk *arena_cur;  /* current chunk for new allocations */
 
     /* Nested functions / closures lowered from this function */
     struct XiFunc **children;

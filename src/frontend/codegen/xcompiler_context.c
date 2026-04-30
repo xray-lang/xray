@@ -11,7 +11,6 @@
 #include "xcompiler_context.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/object/xshape_cache.h"
-#include "xcompiler_class_registry.h"
 #include "../../base/xmalloc.h"
 #include "../xdiag_fmt.h"
 #include <string.h>
@@ -49,7 +48,6 @@ XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
     }
 
     ctx->X = X;
-    ctx->current = NULL;
     ctx->current_line = 1;
     ctx->current_column = 0;
     ctx->source_file = NULL;
@@ -66,7 +64,6 @@ XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
     ctx->enum_type_capacity = 0;
 
     ctx->shape_cache = xr_shape_cache_new();
-    ctx->class_registry = xr_class_registry_new();
 
     xr_arena_init(&ctx->arena, 0);
 
@@ -81,8 +78,6 @@ XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
     ctx->const_entries = NULL;
     ctx->const_entry_count = 0;
     ctx->const_entry_capacity = 0;
-
-    ctx->use_xi_pipeline = true;  /* Xi IR is default; falls back to legacy on failure */
 
     // Create unified type analyzer
     ctx->analyzer = xa_analyzer_new(ctx->X);
@@ -115,10 +110,6 @@ void xr_compiler_context_free(XrCompilerContext *ctx) {
         xr_shape_cache_free(ctx->shape_cache);
     }
 
-    if (ctx->class_registry) {
-        xr_class_registry_free(ctx->class_registry);
-    }
-
     xr_arena_destroy(&ctx->arena);
 
     if (ctx->const_entries) {
@@ -140,7 +131,6 @@ void xr_compiler_context_reset(XrCompilerContext *ctx) {
     if (!ctx)
         return;
 
-    ctx->current = NULL;
     ctx->current_line = 1;
     ctx->global_var_count = 0;
     ctx->had_error = false;

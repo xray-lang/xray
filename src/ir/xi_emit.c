@@ -1347,13 +1347,39 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
-        /* Builtin call: aux_int=builtin_id */
+        /* Builtin call: aux_int=builtin_id or aux=name string */
         case XI_CALL_BUILTIN: {
+            /* Name-based dispatch (aux is a string identifier) */
+            const char *bname = (const char *)v->aux;
+            if (bname && strcmp(bname, "Bytes") == 0) {
+                /* Bytes(n [, fill]) → OP_BYTES_NEW A B 0
+                 * VM expects: R[A]=result, R[A+1..A+B]=args (consecutive).
+                 * Allocate a consecutive block: base=result, base+1..=args. */
+                uint8_t nargs = (uint8_t)v->nargs;
+                if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
+                    emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS); return;
+                }
+                uint8_t base = ctx->next_reg;
+                ctx->next_reg += 1 + nargs;
+                if (ctx->next_reg > ctx->max_reg)
+                    ctx->max_reg = ctx->next_reg;
+                for (uint16_t a = 0; a < nargs; a++) {
+                    uint8_t arg_r = reg_of(ctx, v->args[a]);
+                    if (ctx->status != XI_EMIT_OK) return;
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t)(base + 1 + a), arg_r, 0));
+                }
+                emit_inst(ctx, CREATE_ABC(OP_BYTES_NEW, base, nargs, 0));
+                /* Move result to the SSA-assigned dst register */
+                if (dst != base)
+                    emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+                break;
+            }
+            /* Numeric builtin_id dispatch */
             int builtin_id = (int)v->aux_int;
-            /* Special case: builtin 0 = cancelled() */
-            if (builtin_id == 0) {
+            if (builtin_id == 0 && !bname) {
+                /* cancelled() */
                 emit_inst(ctx, CREATE_ABC(OP_CANCELLED, dst, 0, 0));
-            } else {
+            } else if (!bname) {
                 /* Generic: INVOKE_BUILTIN A=base, B=builtin_idx, C=nargs */
                 if (v->nargs > 0) {
                     uint8_t base = reg_of(ctx, v->args[0]);

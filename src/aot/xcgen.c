@@ -348,7 +348,7 @@ static const char *xcg_param_c_type(XcgenModule *mod, XcgenFunc *cf, int param_i
     return "XrValue";
 }
 
-// Returns true if param i is a promoted struct (should be xrs_N*, not XrtValue)
+// Returns true if param i is a promoted struct (should be xrs_N*, not XrValue)
 static bool xcg_param_is_struct(XcgenModule *mod, XcgenFunc *cf, int param_idx) {
     if (!cf->vreg_struct_id || param_idx >= cf->num_params)
         return false;
@@ -370,9 +370,9 @@ static void xcgen_emit_forward_decl(XcgenModule *mod, XcgenFunc *cf) {
     if (cf->needs_closure_param) {
         xcgen_buf_puts(fwd, ", xrt_closure_t*");
     } else if (cf->non_escaping && cf->num_upvals > 0) {
-        // Non-escaping closure: upvalues passed as direct XrtValue params
+        // Non-escaping closure: upvalues passed as direct XrValue params
         for (int u = 0; u < cf->num_upvals; u++)
-            xcgen_buf_puts(fwd, ", XrtValue");
+            xcgen_buf_puts(fwd, ", XrValue");
     }
     for (int i = 0; i < func->num_params; i++) {
         if (has_params || i > 0)
@@ -437,7 +437,7 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     bool has_int_locals = false, has_float_locals = false, has_tagged_locals = false;
     for (uint32_t i = func->num_params; i < func->nvreg; i++) {
         if (cf->vreg_struct_id && cf->vreg_struct_id[i] >= 0) {
-            has_tagged_locals = true;  // promoted struct → XrtValue
+            has_tagged_locals = true;  // promoted struct → XrValue
             continue;
         }
         uint8_t vt = func->vregs[i].rep;
@@ -654,9 +654,9 @@ static void xcgen_compile_function_body(XcgenModule *mod, XcgenFunc *cf) {
     if (cf->needs_closure_param) {
         xcgen_buf_puts(b, ", xrt_closure_t *xrt_cl");
     } else if (cf->non_escaping && cf->num_upvals > 0) {
-        // Non-escaping closure: upvalues as direct XrtValue params (xrt_upv0, xrt_upv1, ...)
+        // Non-escaping closure: upvalues as direct XrValue params (xrt_upv0, xrt_upv1, ...)
         for (int u = 0; u < cf->num_upvals; u++)
-            xcgen_buf_printf(b, ", XrtValue xrt_upv%d", u);
+            xcgen_buf_printf(b, ", XrValue xrt_upv%d", u);
     }
     for (int i = 0; i < func->num_params; i++) {
         if (has_sig_params || i > 0)
@@ -768,7 +768,7 @@ XcgenFunc *xcgen_compile_func(XcgenModule *mod, XirFunc *xfunc, const char *c_na
         cf->vreg_struct_id = NULL;
     }
 
-    // Retype non-promoted LOAD_FIELD results to TAGGED (16-byte XrtValue slots).
+    // Retype non-promoted LOAD_FIELD results to TAGGED (16-byte XrValue slots).
     // Runs unconditionally — class instances skip struct registration.
     xcg_retype_field_loads(cf);
 

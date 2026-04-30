@@ -312,7 +312,7 @@ XR_FUNC void xcg_compute_used_vregs(XirFunc *func, bool *reachable, bool *used) 
 /* ========== Struct Promotion Prescan ========== */
 
 // Pre-scan XIR instructions to identify vregs that will be struct-promoted,
-// and retype getprop dst vregs from I64 to TAGGED (XrtValue).
+// and retype getprop dst vregs from I64 to TAGGED (XrValue).
 //
 // Also infers which parameter vregs are always used as a specific promoted struct.
 // When a param vreg appears as the base of LOAD_FIELD/STORE_FIELD with offsets that
@@ -321,7 +321,7 @@ XR_FUNC void xcg_compute_used_vregs(XirFunc *func, bool *reachable, bool *used) 
 // of raw byte pointer arithmetic, enabling cleaner code and better C optimizer hints.
 // Correctness: the named path ((xrs_N*)v.ptr)->field and the raw path
 // *(T*)((char*)v.ptr + offset) are bit-for-bit identical because the struct
-// preserves XrtValue (16B) layout for all XrtValue fields.
+// preserves XrValue (16B) layout for all XrValue fields.
 XR_FUNC void xcg_prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
     if (!mod->struct_reg || mod->struct_reg->nstructs == 0)
         return;
@@ -358,7 +358,7 @@ XR_FUNC void xcg_prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
             }
 
             // GETPROP: retype dst from I64 to TAGGED
-            // In AOT, getprop returns XrtValue (struct field) not raw int64
+            // In AOT, getprop returns XrValue (struct field) not raw int64
             if (intrin_id == XR_INTRIN_GETPROP) {
                 if (xir_ref_is_vreg(ins->dst)) {
                     uint32_t dst_vi = XIR_REF_INDEX(ins->dst);
@@ -455,7 +455,7 @@ XR_FUNC void xcg_prescan_struct_vregs(XcgenModule *mod, XcgenFunc *cf) {
 
 // Retype LOAD_FIELD dst vregs to TAGGED when the base object is NOT a
 // promoted struct.  Non-promoted instances store each field as a 16-byte
-// XrtValue slot; reading only 8 bytes (I64) loses the tag and breaks
+// XrValue slot; reading only 8 bytes (I64) loses the tag and breaks
 // string/ptr/array fields.  The auto-boxing/unboxing helpers
 // (xcg_emit_ref_as_tagged / xcg_emit_ref_as_native) handle downstream
 // conversions transparently, so this retyping is safe for all consumers.
@@ -506,11 +506,11 @@ static bool is_bool_method(int method_symbol) {
 }
 
 // Retype dst vregs of boolean-returning method calls from I64 to TAGGED.
-// Without this, the codegen path does xrt_unbox_int(xrt_method_N(...)) which
+// Without this, the codegen path does XR_TO_INT(xrt_method_N(...)) which
 // discards the BOOL tag, causing xrt_println to print "1"/"0" instead of
 // "true"/"false".  By retyping to TAGGED, the fallback xrt_method_N path
-// returns XrtValue directly (preserving the tag), and inline paths produce
-// xrt_box_bool() instead of raw 1/0.
+// returns XrValue directly (preserving the tag), and inline paths produce
+// XR_FROM_BOOL() instead of raw 1/0.
 XR_FUNC void xcg_retype_bool_method_results(XcgenFunc *cf) {
     XR_DCHECK(cf != NULL, "xcg_retype_bool_method_results: NULL cf");
     XirFunc *func = cf->xfunc;
@@ -551,7 +551,7 @@ XR_FUNC void xcg_retype_bool_method_results(XcgenFunc *cf) {
 
 // Returns true if every block terminator in this function is a JMP_RET returning null.
 // JMP_RET is a block terminator in blk->jmp, not an instruction in blk->ins[].
-// When true, the AOT function can be emitted as void instead of XrtValue.
+// When true, the AOT function can be emitted as void instead of XrValue.
 XR_FUNC bool xcg_detect_void_return(XirFunc *func) {
     // Only TAGGED returns can be void when every return value is null.
     XrRep ret_rep = (func->proto && func->proto->return_type_info)
@@ -617,7 +617,7 @@ XR_FUNC bool xcg_detect_void_return(XirFunc *func) {
 // Any other reference (returned, stored to heap, passed as regular arg,
 // indirect call via CALL_DIRECT) means the closure escapes.
 //
-// When non-escaping, the child function receives upvalues as extra XrtValue
+// When non-escaping, the child function receives upvalues as extra XrValue
 // parameters instead of through xrt_closure_t*, eliminating:
 //   - xrt_closure_new heap allocation
 //   - xrt_cl->upvals[i] indirect memory access

@@ -1797,7 +1797,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
                 XrProto *child = PROTO_PROTO(b->proto, bx);
                 int nupvals = (int) PROTO_UPVAL_COUNT(child);
 
-                // xrt_closure_new(child_proto_ptr, nupvals) → XrtValue closure
+                // xrt_closure_new(child_proto_ptr, nupvals) → XrValue closure
                 XirRef proto_ref = xir_const_ptr(b->func, (void *) child);
                 XirRef nupvals_ref = xir_const_i64(b->func, (int64_t) nupvals);
                 XirRef nupvals_val =
