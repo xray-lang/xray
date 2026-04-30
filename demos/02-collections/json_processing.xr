@@ -3,7 +3,6 @@
 //
 // Run: xray demos/02-collections/json_processing.xr
 
-import json
 
 // === Json literal ===
 let user: Json = {
@@ -36,10 +35,10 @@ print("missing == null: ${missing == null}")
 
 // === JSON parse and stringify ===
 let text = '{"x": 1, "y": 2, "label": "origin"}'
-let parsed = json.parse(text)
+let parsed = Json.parse(text)
 print("parsed: x=${parsed.x}, y=${parsed.y}")
 
-let back = json.stringify(parsed)
+let back = Json.stringify(parsed)
 print("stringified: ${back}")
 
 // === Build JSON dynamically ===
@@ -48,11 +47,11 @@ config.host = "localhost"
 config.port = 8080
 config.debug = true
 config.allowed = ["GET", "POST"]
-print("config: ${json.stringify(config)}")
+print("config: ${Json.stringify(config)}")
 
-// === Iterate JSON keys (via json module) ===
-let keys = json.keys(user)
+// === Iterate JSON keys (via instance methods) ===
+let keys = Json.keys(user)
 print("user keys: ${keys}")
 
-let values = json.values(config)
+let values = Json.values(config)
 print("config values: ${values}")

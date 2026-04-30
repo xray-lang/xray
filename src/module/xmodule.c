@@ -1293,7 +1293,6 @@ typedef struct {
 static const StdlibEntry stdlib_core[] = {
     {"time", xr_load_module_time},
     {"math", xr_load_module_math},
-    {"json", xr_load_module_json},
     {"path", xr_load_module_path},
     {"base64", xr_load_module_base64},
     {"regex", xr_load_module_regex},
