@@ -5,40 +5,39 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * json.c - JSON parsing and serialization implementation
+ * xjson_serde.c - JSON serialization/deserialization engine
  *
  * KEY CONCEPT:
  *   RFC 8259 compliant JSON parser and serializer. Handles escape sequences,
  *   Unicode (\uXXXX), and proper type conversion between JSON and xray values.
+ *   Enum values serialize as member name strings; DateTime as ISO 8601.
+ *   Non-serializable types (function, class, channel) cause stringify to throw.
  */
 
-#include "json.h"
-#include "../common.h"
+#include "xjson_serde.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
 
-#include "../common_writer.h"
-#include "../common_parser.h"
-#include "../../src/base/xmalloc.h"
+#include "../../base/xmalloc.h"
+#include "../../base/xsimd.h"
+#include "../../base/xjson.h"
 
-/* ========== Runtime Object Headers ========== */
-
-#include "../../src/runtime/object/xmap.h"
-#include "../../src/runtime/object/xarray.h"
-#include "../../src/runtime/class/xinstance.h"
-#include "../../src/runtime/class/xclass.h"
-#include "../../src/runtime/object/xjson.h"
-#include "../../src/runtime/symbol/xsymbol_table.h"
-#include "../../src/runtime/xisolate_internal.h"
-#include "../../src/runtime/class/xenum.h"
-#include "../datetime/datetime.h"
-#include "../../src/runtime/object/xexception.h"
-#include "../../src/runtime/value/xtype_names.h"
-#include "../../src/base/xsimd.h"
-#include "../../src/base/xjson.h"
+#include "xmap.h"
+#include "xarray.h"
+#include "../class/xinstance.h"
+#include "../class/xclass.h"
+#include "../class/xenum.h"
+#include "xjson.h"
+#include "../symbol/xsymbol_table.h"
+#include "../xisolate_internal.h"
+#include "xexception.h"
+#include "../value/xtype_names.h"
+#include "../../../stdlib/datetime/datetime.h"
+#include "../../vm/xvm.h"
 
 /* ========== External Declarations ========== */
 
@@ -49,8 +48,7 @@ extern XrValue xr_json_value(XrJson *json);
 
 /* ========== JSON Parser (delegates to src/base/xjson) ========== */
 
-// Depth limit shared with validator (defined in common_parser.h)
-#define JSON_MAX_DEPTH XR_STDLIB_MAX_DEPTH
+#define JSON_MAX_DEPTH 256
 
 /*
  * Convert a pure-C XrJsonValue DOM tree (from src/base/xjson) to runtime
@@ -109,16 +107,21 @@ static XrValue dom_to_xrvalue(XrayIsolate *X, XrJsonValue *v) {
 /* ========== JSON Serialization ========== */
 
 typedef struct {
-    XrSerWriter sw;  // shared buffer: sw.data / sw.len / sw.cap
+    char *data;
+    size_t len;
+    size_t cap;
     XrayIsolate *isolate;
     int indent;
     int depth;
-    bool has_error;        // set true on non-serializable type
-    char error_msg[128];   // description of the offending type
+    bool has_error;
+    char error_msg[128];
 } JsonWriter;
 
 static inline void writer_init(JsonWriter *w, XrayIsolate *isolate, int indent) {
-    xr_serw_init(&w->sw, 1024);
+    w->cap = 1024;
+    w->data = (char *) xr_malloc(w->cap);
+    XR_CHECK(w->data != NULL, "JsonWriter: allocation failed");
+    w->len = 0;
     w->isolate = isolate;
     w->indent = indent;
     w->depth = 0;
@@ -127,23 +130,47 @@ static inline void writer_init(JsonWriter *w, XrayIsolate *isolate, int indent) 
 }
 
 static inline void writer_free(JsonWriter *w) {
-    xr_serw_free(&w->sw);
+    if (w->data) {
+        xr_free(w->data);
+        w->data = NULL;
+    }
+}
+
+static inline void writer_grow(JsonWriter *w, size_t extra) {
+    size_t needed = w->len + extra + 1;
+    if (needed <= w->cap)
+        return;
+    size_t new_cap = w->cap * 2;
+    if (new_cap < needed)
+        new_cap = needed;
+    char *tmp = (char *) xr_realloc(w->data, new_cap);
+    XR_CHECK(tmp != NULL, "JsonWriter: realloc failed");
+    w->data = tmp;
+    w->cap = new_cap;
 }
 
 static inline void writer_append(JsonWriter *w, const char *s, size_t n) {
-    xr_serw_append(&w->sw, s, n);
+    writer_grow(w, n);
+    memcpy(w->data + w->len, s, n);
+    w->len += n;
 }
 
 static inline void writer_char(JsonWriter *w, char c) {
-    xr_serw_char(&w->sw, c);
+    writer_grow(w, 1);
+    w->data[w->len++] = c;
 }
 
 static inline void writer_str(JsonWriter *w, const char *s) {
-    xr_serw_str(&w->sw, s);
+    writer_append(w, s, strlen(s));
 }
 
 static inline void writer_newline(JsonWriter *w) {
-    xr_serw_newline(&w->sw, w->depth, w->indent);
+    if (w->indent <= 0)
+        return;
+    writer_char(w, '\n');
+    int n = w->depth * w->indent;
+    for (int i = 0; i < n; i++)
+        writer_char(w, ' ');
 }
 
 // Forward declaration
@@ -352,9 +379,6 @@ static void stringify_instance(JsonWriter *w, XrInstance *inst) {
         if (cls->fields[i].flags & XR_FIELD_STATIC)
             continue;
 
-        // Skip private fields (optional: can include them)
-        // if (cls->fields[i].flags & XR_FIELD_PRIVATE) continue;
-
         if (output_count > 0)
             writer_char(w, ',');
         writer_newline(w);
@@ -454,7 +478,7 @@ static void stringify_value(JsonWriter *w, XrValue val) {
     }
 }
 
-/* ========== Module Functions ========== */
+/* ========== Public Functions ========== */
 
 // parse(str) - Parse JSON string
 XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc) {
@@ -502,13 +526,13 @@ XrValue xr_json_fn_stringify(XrayIsolate *X, XrValue *args, int argc) {
         return xr_null();
     }
 
-    XrString *str = xr_string_new(X, writer.sw.data, writer.sw.len);
+    XrString *str = xr_string_new(X, writer.data, writer.len);
     writer_free(&writer);
 
     return xr_string_value(str);
 }
 
-// Public API: serialize XrValue to JSON C-string.
+// Serialize XrValue to JSON C-string.
 // Caller MUST release the returned pointer with xr_free() (not free()) so
 // that the debug allocator tracks the deallocation correctly.
 char *xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len) {
@@ -519,11 +543,14 @@ char *xr_json_stringify_to_cstr(XrayIsolate *X, XrValue val, size_t *out_len) {
     // Null-terminate
     writer_char(&writer, '\0');
     if (out_len)
-        *out_len = writer.sw.len - 1;  // exclude null terminator
-    return xr_serw_steal(&writer.sw);
+        *out_len = writer.len - 1;  // exclude null terminator
+
+    char *result = writer.data;
+    writer.data = NULL;  // prevent writer_free from freeing
+    return result;
 }
 
-// Public API: parse JSON C-string to XrValue
+// Parse JSON C-string to XrValue
 // Returns xr_null() on parse error. Input need not be null-terminated if len is provided.
 XrValue xr_json_parse_from_cstr(XrayIsolate *X, const char *json_str, size_t len) {
     if (!X || !json_str || len == 0)
@@ -563,10 +590,8 @@ static void validate_string(JsonValidator *v) {
     while (*v->ptr && *v->ptr != '"') {
         unsigned char c = (unsigned char) *v->ptr;
         // RFC 8259 §7: unescaped bytes <= 0x1F inside a string are
-        // forbidden. The previous validator silently accepted them so
-        // `isValid("\"\\x01\"")` returned true. Under the new strict
-        // flag we flag those while keeping the legacy non-strict path
-        // permissive for existing callers.
+        // forbidden. Under strict flag we reject them; the non-strict
+        // path stays permissive for existing callers.
         if (v->strict && c < 0x20) {
             v->ok = false;
             return;
@@ -749,21 +774,24 @@ static void validate_value(JsonValidator *v) {
     v->depth--;
 }
 
-// isValid(str, opts?) - Check if string is valid JSON (zero allocation).
-// opts.strict (bool, default false): when true, additionally reject
+// isValid(str, strict?) - Check if string is valid JSON (zero allocation).
+// strict (bool, default false): when true, additionally reject
 // unescaped control bytes (< 0x20) inside strings, matching RFC 8259 §7.
 XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc) {
+    (void) X;
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
     }
 
     bool strict = false;
-    if (argc >= 2) {
-        if (XR_IS_BOOL(args[1])) {
-            strict = XR_TO_BOOL(args[1]);
-        } else if (xr_value_is_json(args[1])) {
-            xrs_cfg_get_bool(X, xr_value_to_json(args[1]), "strict", &strict);
-        }
+    if (argc >= 2 && XR_IS_BOOL(args[1])) {
+        strict = XR_TO_BOOL(args[1]);
+    } else if (argc >= 2 && xr_value_is_json(args[1])) {
+        // Legacy: accept {strict: true} options object
+        XrJson *opts = xr_value_to_json(args[1]);
+        XrValue sv = xr_json_get_by_key(X, opts, "strict");
+        if (XR_IS_BOOL(sv))
+            strict = XR_TO_BOOL(sv);
     }
 
     XrString *str = XR_TO_STRING(args[0]);
@@ -778,69 +806,6 @@ XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc) {
         return xr_bool(false);
 
     return xr_bool(true);
-}
-
-// typeOf(value) - Get JSON type name from a JSON string
-// Returns: "null", "boolean", "number", "string", "array", "object", "invalid"
-static XrValue json_type_of(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1) {
-        return xr_string_value(xr_string_intern(X, "undefined", 9, 0));
-    }
-
-    XrValue val = args[0];
-    const char *type;
-
-    // If argument is a string, parse it as JSON and return the type.
-    // The previous implementation looked only at the first non-space
-    // byte, so `typeOf("truefalse")` reported "boolean". We now run
-    // the zero-allocation validator first and only then classify; any
-    // junk after the prefix token collapses to "invalid".
-    if (XR_IS_STRING(val)) {
-        XrString *str = XR_TO_STRING(val);
-        const char *s = str->data;
-
-        // Skip leading whitespace for dispatch without mutating `s` for
-        // the validator (which handles whitespace itself).
-        const char *first = s;
-        while (*first == ' ' || *first == '\t' || *first == '\n' || *first == '\r')
-            first++;
-
-        JsonValidator v = {.ptr = s, .depth = 0, .ok = true, .strict = false};
-        validate_value(&v);
-        if (v.ok) {
-            validate_skip_ws(&v);
-            if (*v.ptr != '\0')
-                v.ok = false;
-        }
-        if (!v.ok) {
-            type = "invalid";
-        } else if (*first == 'n')
-            type = "null";
-        else if (*first == 't' || *first == 'f')
-            type = "boolean";
-        else if (*first == '"')
-            type = "string";
-        else if (*first == '[')
-            type = "array";
-        else if (*first == '{')
-            type = "object";
-        else
-            type = "number";
-    } else if (XR_IS_NULL(val)) {
-        type = "null";
-    } else if (XR_IS_BOOL(val)) {
-        type = "boolean";
-    } else if (XR_IS_INT(val) || XR_IS_FLOAT(val)) {
-        type = "number";
-    } else if (XR_IS_ARRAY(val)) {
-        type = "array";
-    } else if (xr_value_is_json(val) || XR_IS_MAP(val) || xr_value_is_instance(val)) {
-        type = "object";
-    } else {
-        type = "unknown";
-    }
-
-    return xr_string_value(xr_string_intern(X, type, strlen(type), 0));
 }
 
 // tryParse(str) - Try to parse JSON
@@ -871,138 +836,4 @@ XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     return xr_json_value(result);
-}
-
-// keys(obj) - Get all keys of object
-static XrValue json_keys(XrayIsolate *X, XrValue *args, int argc) {
-    XrArray *keys = xr_array_new(xr_current_coro(X));
-
-    if (argc < 1)
-        return xr_value_from_array(keys);
-
-    XrValue val = args[0];
-    XrSymbolTable *symtab = (XrSymbolTable *) X->symbol_table;
-
-    if (xr_value_is_json(val)) {
-        // XrJson object
-        XrJson *json = xr_value_to_json(val);
-        if (json && xr_json_shape(X, json)) {
-            XrShape *shape = xr_json_shape(X, json);
-            for (uint16_t i = 0; i < shape->field_count; i++) {
-                SymbolId sym = shape->field_symbols[i];
-                const char *name = xr_symbol_get_name_in_table(symtab, sym);
-                if (name) {
-                    xr_array_push(keys,
-                                  xr_string_value(xr_string_intern(X, name, strlen(name), 0)));
-                }
-            }
-        }
-    } else if (XR_IS_MAP(val)) {
-        XrMap *map = XR_TO_MAP(val);
-        uint32_t size = (map->flags & XR_MAP_FLAG_DUMMY) ? 0 : xr_map_sizenode(map);
-
-        for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *node = xr_map_node(map, i);
-            if (node->key_tt > 0) {
-                xr_array_push(keys, node->key);
-            }
-        }
-    } else if (xr_value_is_instance(val)) {
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
-        XrClass *cls = xr_instance_get_class(inst);
-        if (cls) {
-            for (uint16_t i = 0; i < cls->field_count; i++) {
-                if (!(cls->fields[i].flags & XR_FIELD_STATIC)) {
-                    const char *name = cls->fields[i].name;
-                    if (name) {
-                        XrValue key = xr_string_value(xr_string_intern(X, name, strlen(name), 0));
-                        xr_array_push(keys, key);
-                    }
-                }
-            }
-        }
-    }
-
-    return xr_value_from_array(keys);
-}
-
-// values(obj) - Get all values of object
-static XrValue json_values(XrayIsolate *X, XrValue *args, int argc) {
-    XrArray *values = xr_array_new(xr_current_coro(X));
-
-    if (argc < 1)
-        return xr_value_from_array(values);
-
-    XrValue val = args[0];
-
-    if (xr_value_is_json(val)) {
-        // XrJson object
-        XrJson *json = xr_value_to_json(val);
-        if (json && xr_json_shape(X, json)) {
-            XrShape *shape = xr_json_shape(X, json);
-            for (uint16_t i = 0; i < shape->field_count; i++) {
-                xr_array_push(values, xr_json_get_field_any(X, json, i));
-            }
-        }
-    } else if (XR_IS_MAP(val)) {
-        XrMap *map = XR_TO_MAP(val);
-        uint32_t size = (map->flags & XR_MAP_FLAG_DUMMY) ? 0 : xr_map_sizenode(map);
-
-        for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *node = xr_map_node(map, i);
-            if (node->key_tt > 0) {
-                xr_array_push(values, node->value);
-            }
-        }
-    } else if (xr_value_is_instance(val)) {
-        XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
-        XrClass *cls = xr_instance_get_class(inst);
-        if (cls) {
-            for (uint16_t i = 0; i < cls->field_count; i++) {
-                if (!(cls->fields[i].flags & XR_FIELD_STATIC)) {
-                    XrValue field_val = xr_instance_get_field_fast(inst, i);
-                    xr_array_push(values, field_val);
-                }
-            }
-        }
-    }
-
-    return xr_value_from_array(values);
-}
-
-/* ========== Type Declarations (parsed by gen_stdlib_types.py) ========== */
-
-#include "../../src/module/xbuiltin_decl.h"
-
-// @module json
-
-XR_DEFINE_BUILTIN(xr_json_fn_parse, "parse", "(s: string): any", "Parse JSON string")
-XR_DEFINE_BUILTIN(xr_json_fn_stringify, "stringify", "(value: any, indent?: int): string",
-                  "Convert value to JSON string")
-XR_DEFINE_BUILTIN(xr_json_fn_is_valid, "isValid", "(s: string): bool", "Check if string is valid JSON")
-XR_DEFINE_BUILTIN(json_type_of, "typeof", "(value: any): string", "Get JSON type name")
-XR_DEFINE_BUILTIN(xr_json_fn_try_parse, "tryParse", "(s: string): Json",
-                  "Safe parse, returns {value, error}")
-XR_DEFINE_BUILTIN(json_keys, "keys", "(obj: Json): Array<string>", "Get object keys")
-XR_DEFINE_BUILTIN(json_values, "values", "(obj: Json): Array<any>", "Get object values")
-
-/* ========== Module Loading ========== */
-
-XrModule *xr_load_module_json(XrayIsolate *isolate) {
-    // Create native module
-    XrModule *mod = xr_module_create_native(isolate, "json");
-    if (!mod)
-        return NULL;
-
-    XRS_EXPORT(mod, isolate, "parse", xr_json_fn_parse);
-    XRS_EXPORT(mod, isolate, "stringify", xr_json_fn_stringify);
-    XRS_EXPORT(mod, isolate, "isValid", xr_json_fn_is_valid);
-    XRS_EXPORT(mod, isolate, "typeof", json_type_of);
-    XRS_EXPORT(mod, isolate, "tryParse", xr_json_fn_try_parse);
-    XRS_EXPORT(mod, isolate, "keys", json_keys);
-    XRS_EXPORT(mod, isolate, "values", json_values);
-
-    // Mark as loaded
-    mod->loaded = true;
-    return mod;
 }

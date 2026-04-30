@@ -26,8 +26,8 @@
 #include "http_stream.h"
 #include "http_multipart.h"
 #include "http_proxy.h"
-#include "../json/json.h"
 #include "../common.h"
+#include "../../src/runtime/object/xjson_serde.h"
 // NOTE: WebSocket moved to separate 'ws' module
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
