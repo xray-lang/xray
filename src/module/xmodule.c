@@ -1291,6 +1291,10 @@ typedef struct {
 } StdlibEntry;
 
 static const StdlibEntry stdlib_core[] = {
+    /* prelude is auto-loaded during isolate init by xisolate_full.c so users
+     * never need `import prelude`. Listed here so an explicit import is a
+     * harmless no-op that resolves through the same registry. */
+    {"prelude", xr_load_module_prelude},
     {"time", xr_load_module_time},
     {"math", xr_load_module_math},
     {"path", xr_load_module_path},

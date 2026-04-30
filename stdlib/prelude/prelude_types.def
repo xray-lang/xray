@@ -1,0 +1,33 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * prelude_types.def - X-macro registry of built-in type names visible
+ *                     without an explicit `import prelude`.
+ *
+ * USAGE:
+ *   This file is intentionally NOT a normal header. Consumers must define
+ *   XR_PRELUDE_TYPE(name, native_type, kind) before #include
+ *   "prelude_types.def" and #undef XR_PRELUDE_TYPE afterwards.
+ *
+ *   Example (build the static registry in prelude.c):
+ *     static const XrPreludeTypeEntry g_prelude_types[] = {
+ *     #define XR_PRELUDE_TYPE(name, native_type, kind) \
+ *         { name, XR_PRELUDE_KIND_##kind, (native_type) },
+ *     #include "prelude_types.def"
+ *     #undef XR_PRELUDE_TYPE
+ *     };
+ *
+ * PARAMETER GUIDE:
+ *   name         The literal type-name string the parser will match.
+ *   native_type  XrObjType GC type id (XR_TARRAY etc.), or 0 if none.
+ *                Used by analyzer method tables and runtime registration.
+ *   kind         XrPreludeKind suffix (SIMPLE / GENERIC_1 / GENERIC_2 /
+ *                BYTES / SINGLETON). Selects parser/constructor path.
+ */
+
+/* Subsequent phases populate this table. Keep entries sorted by `name`
+ * for human readability; lookup itself is a linear scan. */
