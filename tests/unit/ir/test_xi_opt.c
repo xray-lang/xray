@@ -889,6 +889,146 @@ TEST(verify_after_optimization) {
     xi_func_free(f);
 }
 
+/* ========== SelectRepresentations Tests ========== */
+
+TEST(select_rep_box_const_for_return) {
+    /* int constant returned: const(I64) -> return(TAGGED) needs BOX */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c42 = xi_const_int(f, blk, 42, &stub_int);
+    xi_block_set_return(blk, c42);
+
+    xi_opt_select_rep(f);
+
+    /* Return control should now be a BOX wrapping c42 */
+    assert(blk->control != c42 && "return should wrap const in BOX");
+    assert(blk->control->op == XI_BOX && "wrapper should be XI_BOX");
+    assert(blk->control->args[0] == c42 && "BOX arg should be the constant");
+    xi_func_free(f);
+}
+
+TEST(select_rep_unbox_param_for_arith) {
+    /* param(TAGGED) used by ADD(I64): needs UNBOX before ADD */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *p0 = xi_param(f, blk, 0, &stub_int);
+    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, p0, c1);
+    xi_block_set_return(blk, add);
+
+    xi_opt_select_rep(f);
+
+    /* ADD's first arg should now be an UNBOX of p0 */
+    assert(add->args[0] != p0 && "param should be unboxed for ADD");
+    assert(add->args[0]->op == XI_UNBOX && "should insert UNBOX");
+    assert(add->args[0]->args[0] == p0 && "UNBOX arg should be param");
+    /* ADD result is I64, return needs TAGGED: should have BOX */
+    assert(blk->control->op == XI_BOX && "return should BOX the ADD result");
+    xi_func_free(f);
+}
+
+TEST(select_rep_no_change_for_call) {
+    /* CALL args and result are all TAGGED: no BOX/UNBOX needed */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *p0 = xi_param(f, blk, 0, &stub_int);
+    XiValue *call = xi_value_new(f, blk, XI_CALL, &stub_int, 2);
+    call->args[0] = p0;  /* callee */
+    call->args[1] = p0;  /* arg */
+    call->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(blk, call);
+
+    uint32_t nv_before = blk->nvalues;
+    xi_opt_select_rep(f);
+
+    /* No conversions should be inserted (all TAGGED -> TAGGED) */
+    assert(blk->nvalues == nv_before && "no BOX/UNBOX for all-tagged path");
+    xi_func_free(f);
+}
+
+TEST(select_rep_arith_chain_stays_unboxed) {
+    /* a + b + c: all int arithmetic stays I64, only final return needs BOX */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *c2 = xi_const_int(f, blk, 2, &stub_int);
+    XiValue *c3 = xi_const_int(f, blk, 3, &stub_int);
+    XiValue *add1 = xi_binary(f, blk, XI_ADD, &stub_int, c1, c2);
+    XiValue *add2 = xi_binary(f, blk, XI_ADD, &stub_int, add1, c3);
+    xi_block_set_return(blk, add2);
+
+    xi_opt_select_rep(f);
+
+    /* Intermediate arithmetic: no conversions (I64 -> I64) */
+    assert(add1->args[0] == c1 && "const->add should stay direct");
+    assert(add1->args[1] == c2 && "const->add should stay direct");
+    assert(add2->args[0] == add1 && "add->add chain should stay unboxed");
+    /* Only return needs BOX */
+    assert(blk->control->op == XI_BOX && "return needs BOX");
+    assert(blk->control->args[0] == add2 && "BOX wraps final add");
+    xi_func_free(f);
+}
+
+/* ========== BOX/UNBOX Peephole Tests ========== */
+
+TEST(box_elim_unbox_of_box) {
+    /* UNBOX(BOX(x)) => COPY(x) */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *box = xi_value_new(f, blk, XI_BOX, &stub_int, 1);
+    box->args[0] = x;
+    XiValue *unbox = xi_value_new(f, blk, XI_UNBOX, &stub_int, 1);
+    unbox->args[0] = box;
+    xi_block_set_return(blk, unbox);
+
+    xi_opt_box_elim(f);
+
+    assert(unbox->op == XI_COPY && "UNBOX(BOX(x)) should become COPY");
+    assert(unbox->args[0] == x && "COPY should reference original x");
+    xi_func_free(f);
+}
+
+TEST(box_elim_box_of_unbox) {
+    /* BOX(UNBOX(x)) => COPY(x) */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *unbox = xi_value_new(f, blk, XI_UNBOX, &stub_int, 1);
+    unbox->args[0] = x;
+    XiValue *box = xi_value_new(f, blk, XI_BOX, &stub_int, 1);
+    box->args[0] = unbox;
+    xi_block_set_return(blk, box);
+
+    xi_opt_box_elim(f);
+
+    assert(box->op == XI_COPY && "BOX(UNBOX(x)) should become COPY");
+    assert(box->args[0] == x && "COPY should reference original x");
+    xi_func_free(f);
+}
+
+TEST(box_elim_no_false_positive) {
+    /* BOX(x) where x is not UNBOX: should NOT be eliminated */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *x = xi_param(f, blk, 0, &stub_int);
+    XiValue *box = xi_value_new(f, blk, XI_BOX, &stub_int, 1);
+    box->args[0] = x;
+    xi_block_set_return(blk, box);
+
+    xi_opt_box_elim(f);
+
+    assert(box->op == XI_BOX && "BOX(param) should NOT be eliminated");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -958,6 +1098,17 @@ int main(void) {
 
     /* Combined */
     run_opt_run_combined();
+
+    /* SelectRepresentations */
+    run_select_rep_box_const_for_return();
+    run_select_rep_unbox_param_for_arith();
+    run_select_rep_no_change_for_call();
+    run_select_rep_arith_chain_stays_unboxed();
+
+    /* BOX/UNBOX peephole */
+    run_box_elim_unbox_of_box();
+    run_box_elim_box_of_unbox();
+    run_box_elim_no_false_positive();
 
     printf("\n=== %d/%d Xi Opt tests passed ===\n",
            tests_passed, tests_passed + tests_failed);

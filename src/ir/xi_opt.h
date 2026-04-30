@@ -56,6 +56,18 @@ XR_FUNC void xi_opt_phi_simplify(XiFunc *f);
  * to their simpler equivalents. Single forward pass. O(n). */
 XR_FUNC void xi_opt_strength_reduce(XiFunc *f);
 
+/* SelectRepresentations: insert XI_BOX/XI_UNBOX at representation
+ * boundaries. Numeric constants and arithmetic stay unboxed (I64/F64);
+ * BOX wraps them to TAGGED for calls, stores, returns.
+ * UNBOX unwraps TAGGED values for arithmetic consumers.
+ * Opt-in: not part of xi_opt_run (adds overhead for VM bytecode backend).
+ * Intended for JIT/AOT backends that benefit from unboxed values. */
+XR_FUNC void xi_opt_select_rep(XiFunc *f);
+
+/* BOX/UNBOX peephole: collapse inverse BOX(UNBOX(x)) and UNBOX(BOX(x))
+ * pairs into XI_COPY. Run after select_rep for best results. */
+XR_FUNC void xi_opt_box_elim(XiFunc *f);
+
 /* ========== Combined Pass ========== */
 
 /* Run all optimization passes in the recommended order:
