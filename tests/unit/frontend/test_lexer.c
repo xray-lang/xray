@@ -480,12 +480,10 @@ TEST(lexer_keyword_table_completeness) {
         {"uint32", TK_UINT32}, {"uint64", TK_UINT64},
         {"unknown", TK_UNKNOWN},
         {"void", TK_VOID}, {"while", TK_WHILE}, {"yield", TK_YIELD},
-        // Uppercase type names. Channel is the only one still owned by
-        // the lexer (its prefix rule produces a dedicated AST node).
-        // Array / BigInt / Bytes / DateTime / Json / Map / Range /
-        // Regex / Set / StringBuilder are now resolved through the
+        // None of the uppercase native type names are lexer keywords:
+        // Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+        // Range / Regex / Set / StringBuilder all resolve through the
         // prelude registry as plain identifiers.
-        {"Channel", TK_TYPE_CHANNEL},
     };
     int n = (int)(sizeof(cases) / sizeof(cases[0]));
     for (int i = 0; i < n; i++) {

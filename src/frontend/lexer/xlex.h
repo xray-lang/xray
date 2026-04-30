@@ -162,15 +162,13 @@ typedef enum {
     TK_UINT64,         // uint64
     TK_FLOAT32,        // float32
     TK_FLOAT64,        // float64
-    TK_TYPE_CHANNEL,   // Channel (coroutine channel — kept as a keyword
-                       // because the parser's prefix rule routes it to a
-                       // dedicated AST_CHANNEL_NEW node that codegen
-                       // pattern-matches across the compiler / shared-
-                       // variable / select pipelines)
-    // Array / BigInt / Bytes / DateTime / Json / Map / Range / Regex /
-    // Set / StringBuilder are no longer lexer keywords — they are
-    // resolved through the prelude symbol table on the IDENT path. See
-    // stdlib/prelude/prelude.h.
+    // None of the uppercase native type names are lexer keywords any
+    // more. Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+    // Range / Regex / Set / StringBuilder all reach the parser as plain
+    // TK_NAME tokens and resolve through the prelude symbol table — see
+    // stdlib/prelude/prelude.h. Channel additionally gets a contextual
+    // intercept in xr_parse_variable so that `Channel(...)` still
+    // produces a dedicated AST_CHANNEL_NEW node.
     TK_UNKNOWN,        // unknown
     TK_LAST_KEYWORD = TK_UNKNOWN,
 

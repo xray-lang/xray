@@ -141,8 +141,9 @@ static ParseRule rules[] = {
     [TK_SELECT] = {NULL, NULL, PREC_NONE},                // select statement
     [TK_DEFER] = {NULL, NULL, PREC_NONE},                 // defer statement
     [TK_SCOPE] = {NULL, NULL, PREC_NONE},                 // scope block
-    // cancelled() and move are now contextual keywords, handled in xr_parse_variable
-    [TK_TYPE_CHANNEL] = {xr_parse_channel_new, NULL, PREC_NONE},  // Channel()
+    // cancelled(), move, and Channel(...) are all contextual keywords
+    // handled in xr_parse_variable — they reach the parser as plain
+    // TK_NAME tokens (the lexer no longer special-cases them).
 
     // Literals and identifiers
     [TK_LITERAL_INT] = {xr_parse_literal, NULL, PREC_NONE},
@@ -1175,6 +1176,16 @@ AstNode *xr_parse_variable(Parser *parser) {
     if (prev.length == 9 && memcmp(prev.start, "cancelled", 9) == 0 &&
         xr_parser_check(parser, TK_LPAREN)) {
         return xr_parse_cancelled_expr(parser);
+    }
+    // Contextual keyword intercept: "Channel(...)" constructs a dedicated
+    // AST_CHANNEL_NEW node that codegen / shared-variable preregister /
+    // select compilation pattern-match on. Plain references like
+    // `Channel.method(...)` (followed by '.') keep flowing through the
+    // regular variable path — this lookahead only triggers when the
+    // very next token is '('.
+    if (prev.length == 7 && memcmp(prev.start, "Channel", 7) == 0 &&
+        xr_parser_check(parser, TK_LPAREN)) {
+        return xr_parse_channel_new(parser);
     }
     // Contextual keyword intercept: "move var" expression
     // Only trigger when followed by an identifier (the variable to move)

@@ -73,12 +73,10 @@ static bool token_text_eq(Token t, const char *expected) {
 typedef struct { const char *spelling; XrTokenType type; } KwExpect;
 
 static const KwExpect kKnownKeywords[] = {
-    /* Uppercase type names. Channel is the only one still owned by the
-     * lexer (its prefix rule produces a dedicated AST_CHANNEL_NEW
-     * node). Array / BigInt / Bytes / DateTime / Json / Map / Range /
-     * Regex / Set / StringBuilder are now resolved through the prelude
-     * registry as plain identifiers. */
-    { "Channel",     TK_TYPE_CHANNEL  },
+    /* None of the uppercase native type names are lexer keywords any
+     * more: Array / BigInt / Bytes / Channel / DateTime / Json / Map /
+     * Range / Regex / Set / StringBuilder all resolve through the
+     * prelude registry as plain identifiers. */
     { "abstract",    TK_ABSTRACT      },
     { "as",          TK_AS            },
     { "await",       TK_AWAIT         },
