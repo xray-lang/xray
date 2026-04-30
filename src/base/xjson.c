@@ -8,8 +8,7 @@
  * xjson.c - Pure C JSON parser, builder, and serializer (L0)
  *
  * KEY CONCEPT:
- *   RFC 8259-compliant single-pass JSON parser with DOM output.
- *   Parser strictness from stdlib/json + pure C DOM from xlsp_json.
+ *   RFC 8259-compliant single-pass JSON parser with pure C DOM output.
  *   No runtime type dependencies — only xdefs.h + xmalloc.h.
  */
 

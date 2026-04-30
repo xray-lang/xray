@@ -23,7 +23,6 @@ struct XrModule;
 
 XR_FUNC struct XrModule *xr_load_module_time(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_math(struct XrayIsolate *isolate);
-XR_FUNC struct XrModule *xr_load_module_json(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_path(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_base64(struct XrayIsolate *isolate);
 XR_FUNC struct XrModule *xr_load_module_regex(struct XrayIsolate *isolate);
