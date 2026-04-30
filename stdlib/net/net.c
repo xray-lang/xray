@@ -17,6 +17,7 @@
 #include "io.h"
 #include "tls.h"
 #include "../../src/io/xdns.h"
+#include "../../src/io/xnet_handle.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
@@ -249,111 +250,86 @@ static bool set_tls_conn(int fd, XrTlsConn *tls) {
 static XR_THREAD_LOCAL char g_udp_recv_buf[65536];
 static XR_THREAD_LOCAL XrNetAddr g_udp_recv_addr;
 
-// ========== Json Handle Helpers ==========
+// ========== Typed Handle Helpers ==========
 
-extern XrCoroutine *xr_current_coro(XrayIsolate *X);
+/*
+ * Handle type checks. heap_type is cached on the XrValue so these are
+ * single-load comparisons; no shape lookup, no symbol table query.
+ */
+static inline bool is_conn_handle(XrValue v) {
+    return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TNETCONN;
+}
 
-// Cached symbol IDs for Json handle fields
-static SymbolId sym_fd = -1;
-static SymbolId sym_type = -1;
-static SymbolId sym_tls = -1;
-static SymbolId sym_port = -1;
+static inline bool is_listener_handle(XrValue v) {
+    return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TNETLISTENER;
+}
 
-// Handle type enum (replaces string for compact Level 0)
-#define NET_TYPE_CONN 0
-#define NET_TYPE_TLS_CONN 1
-#define NET_TYPE_LISTENER 2
-#define NET_TYPE_UDP 3
+static inline XrNetConn *unwrap_conn(XrValue v) {
+    return is_conn_handle(v) ? (XrNetConn *) XR_VALUE_GCPTR(v) : NULL;
+}
 
-static XrShape *shape_conn = NULL;      // {fd, type, tls}
-static XrShape *shape_listener = NULL;  // {fd, type, port}
-
-// Direct field indices
-#define HANDLE_FD_IDX 0
-#define HANDLE_TYPE_IDX 1
-#define HANDLE_TLS_IDX 2
-#define HANDLE_PORT_IDX 2
-
-// Called once per isolate during module load.
-// Must rebuild every time because SymbolIds are per-isolate.
-static void net_ensure_symbols(XrayIsolate *X) {
-    XrSymbolTable *table = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
-    if (!table)
-        return;
-    sym_fd = xr_symbol_register_in_table(table, "fd");
-    sym_type = xr_symbol_register_in_table(table, "type");
-    sym_tls = xr_symbol_register_in_table(table, "tls");
-    sym_port = xr_symbol_register_in_table(table, "port");
-
-    {
-        XrString *names[] = {
-            xr_compile_time_intern(X, "fd", 2),
-            xr_compile_time_intern(X, "type", 4),
-            xr_compile_time_intern(X, "tls", 3),
-        };
-        shape_conn = xr_shape_cache_get_or_create(X, NULL, names, 3);
-    }
-    {
-        XrString *names[] = {
-            xr_compile_time_intern(X, "fd", 2),
-            xr_compile_time_intern(X, "type", 4),
-            xr_compile_time_intern(X, "port", 4),
-        };
-        shape_listener = xr_shape_cache_get_or_create(X, NULL, names, 3);
-    }
+static inline XrNetListener *unwrap_listener(XrValue v) {
+    return is_listener_handle(v) ? (XrNetListener *) XR_VALUE_GCPTR(v) : NULL;
 }
 
 static XrValue make_conn_handle(XrayIsolate *X, int fd, bool is_tls) {
-    XrJson *json = xr_json_new_with_shape(xr_current_coro(X), shape_conn);
-    if (!json)
+    XrNetConnKind kind = is_tls ? XR_NETCONN_TLS : XR_NETCONN_TCP;
+    XrNetConn *c = xr_net_conn_new(X, fd, kind);
+    if (!c)
         return XR_NULL_VAL;
-    json->fields[HANDLE_FD_IDX] = xr_int((int64_t) fd);
-    json->fields[HANDLE_TYPE_IDX] = xr_int(is_tls ? NET_TYPE_TLS_CONN : NET_TYPE_CONN);
-    json->fields[HANDLE_TLS_IDX] = xr_bool(is_tls);
-    return xr_json_value(json);
+#ifdef XR_ENABLE_TLS
+    if (is_tls) {
+        /*
+         * Transfer ownership of the in-flight XrTlsConn from the
+         * fd-indexed g_tls_conns table into the typed handle. The
+         * handle is the sole owner from now on; xr_net_conn_close
+         * (or the GC destroy hook) will free the XrTlsConn so the
+         * legacy table no longer needs an entry for this fd.
+         */
+        XrTlsConn *tls = get_tls_conn(fd);
+        if (tls) {
+            xr_net_conn_set_tls(c, tls);
+            set_tls_conn(fd, NULL);
+        }
+    }
+#endif
+    return XR_FROM_PTR(c);
 }
 
 static XrValue make_listener_handle(XrayIsolate *X, int fd, int port_num) {
-    XrJson *json = xr_json_new_with_shape(xr_current_coro(X), shape_listener);
-    if (!json)
+    XrNetListener *l = xr_net_listener_new(X, fd, port_num);
+    if (!l)
         return XR_NULL_VAL;
-    json->fields[HANDLE_FD_IDX] = xr_int((int64_t) fd);
-    json->fields[HANDLE_TYPE_IDX] = xr_int(NET_TYPE_LISTENER);
-    json->fields[HANDLE_PORT_IDX] = xr_int((int64_t) port_num);
-    return xr_json_value(json);
+    return XR_FROM_PTR(l);
 }
 
 static XrValue make_udp_handle(XrayIsolate *X, int fd) {
-    XrJson *json = xr_json_new_with_shape(xr_current_coro(X), shape_conn);
-    if (!json)
+    XrNetConn *c = xr_net_conn_new(X, fd, XR_NETCONN_UDP);
+    if (!c)
         return XR_NULL_VAL;
-    json->fields[HANDLE_FD_IDX] = xr_int((int64_t) fd);
-    json->fields[HANDLE_TYPE_IDX] = xr_int(NET_TYPE_UDP);
-    json->fields[HANDLE_TLS_IDX] = xr_bool(false);
-    return xr_json_value(json);
+    return XR_FROM_PTR(c);
 }
 
+/*
+ * fd/tls accessors accept either an XrNetConn or an XrNetListener
+ * because net.fd / net.close treat them uniformly. Returns -1 when
+ * the handle is unknown or already closed.
+ */
 static int handle_get_fd(XrayIsolate *X, XrValue handle) {
-    if (!XR_IS_JSON(handle))
-        return -1;
-    XrJson *json = (XrJson *) XR_TO_PTR(handle);
-    XrValue v = xr_json_get(X, json, sym_fd);
-    return XR_IS_INT(v) ? (int) XR_TO_INT(v) : -1;
+    (void) X;
+    XrNetConn *c = unwrap_conn(handle);
+    if (c)
+        return c->closed ? -1 : c->fd;
+    XrNetListener *l = unwrap_listener(handle);
+    if (l)
+        return l->closed ? -1 : l->fd;
+    return -1;
 }
 
 static bool handle_is_tls(XrayIsolate *X, XrValue handle) {
-    if (!XR_IS_JSON(handle))
-        return false;
-    XrJson *json = (XrJson *) XR_TO_PTR(handle);
-    XrValue v = xr_json_get(X, json, sym_tls);
-    return XR_IS_BOOL(v) ? XR_TO_BOOL(v) : false;
-}
-
-static void handle_set_fd(XrayIsolate *X, XrValue handle, int new_fd) {
-    if (!XR_IS_JSON(handle))
-        return;
-    XrJson *json = (XrJson *) XR_TO_PTR(handle);
-    xr_json_set(X, json, sym_fd, xr_int(new_fd));
+    (void) X;
+    XrNetConn *c = unwrap_conn(handle);
+    return c && c->kind == XR_NETCONN_TLS;
 }
 
 // ========== Handle-based API Functions ==========
@@ -794,34 +770,19 @@ static XrValue net_listen_handle(XrayIsolate *X, XrValue *args, int nargs) {
  * Close connection, listener, or UDP socket. Safe to call multiple times.
  */
 static XrValue net_close_handle(XrayIsolate *X, XrValue *args, int nargs) {
+    (void) X;
     if (nargs < 1)
         return XR_NULL_VAL;
 
-    int fd = handle_get_fd(X, args[0]);
-    if (fd < 0)
+    XrNetConn *c = unwrap_conn(args[0]);
+    if (c) {
+        xr_net_conn_close(c);
         return XR_NULL_VAL;
-
-    // Mark handle as closed
-    handle_set_fd(X, args[0], -1);
-
-    bool is_tls = handle_is_tls(X, args[0]);
-
-#ifdef XR_ENABLE_TLS
-    // Close TLS layer first if present
-    if (is_tls) {
-        XrTlsConn *tls = get_tls_conn(fd);
-        if (tls) {
-            xr_tls_conn_close(tls);
-            xr_tls_conn_free(tls);
-            set_tls_conn(fd, NULL);
-        }
     }
-#else
-    (void) is_tls;
-#endif
-
-    net_close_fd(X, fd);
-
+    XrNetListener *l = unwrap_listener(args[0]);
+    if (l) {
+        xr_net_listener_close(l);
+    }
     return XR_NULL_VAL;
 }
 
@@ -1037,11 +998,16 @@ static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *st
     }
     int hs = xr_tls_conn_handshake_try(tls);
     if (hs == 0) {
-        // Update handle to reflect TLS
-        if (XR_IS_JSON(state->handle)) {
-            XrJson *json = (XrJson *) XR_TO_PTR(state->handle);
-            json->fields[HANDLE_TLS_IDX] = xr_bool(true);
-            json->fields[HANDLE_TYPE_IDX] = xr_int(NET_TYPE_TLS_CONN);
+        /*
+         * Handshake done: promote the existing conn to TLS in-place
+         * so the script keeps its handle reference intact. Ownership
+         * of the XrTlsConn moves from the legacy g_tls_conns slot
+         * into the typed handle.
+         */
+        XrNetConn *conn = unwrap_conn(state->handle);
+        if (conn) {
+            xr_net_conn_set_tls(conn, tls);
+            set_tls_conn(state->fd, NULL);
         }
         XrValue h = state->handle;
         xr_free(state);
@@ -1445,9 +1411,6 @@ XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: Json, maxlen?: 
 
 XrModule *xr_load_module_net(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "net");
-
-    // Initialize symbols and shapes once per isolate
-    net_ensure_symbols(isolate);
 
     // User-level API (handle-based)
     XRS_EXPORT_YIELDABLE(mod, isolate, "dial", net_dial_yieldable);
