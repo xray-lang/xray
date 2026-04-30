@@ -328,6 +328,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/closure
     ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/symbol
     ${CMAKE_CURRENT_SOURCE_DIR}/src/coro
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/io
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/lexer
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/parser
@@ -368,6 +369,7 @@ file(GLOB RUNTIME_CLASS_SRC "src/runtime/class/*.c")
 file(GLOB RUNTIME_CLOSURE_SRC "src/runtime/closure/*.c")
 file(GLOB RUNTIME_SYMBOL_SRC "src/runtime/symbol/*.c")
 file(GLOB CORO_SRC "src/coro/*.c")
+file(GLOB IO_SRC "src/io/*.c")
 
 # Stackful coroutine context switch removed — fully stackless now
 file(GLOB FRONTEND_LEXER_SRC "src/frontend/lexer/*.c")
@@ -495,6 +497,7 @@ set(CORE_ALL_SOURCES
     ${RUNTIME_CLOSURE_SRC}
     ${RUNTIME_SYMBOL_SRC}
     ${CORO_SRC}
+    ${IO_SRC}
     ${FRONTEND_LEXER_SRC}
     ${FRONTEND_PARSER_SRC}
     ${FRONTEND_CODEGEN_SRC}

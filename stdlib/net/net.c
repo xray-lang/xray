@@ -16,7 +16,7 @@
 #include "net.h"
 #include "io.h"
 #include "tls.h"
-#include "dns.h"
+#include "../../src/io/xdns.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
@@ -86,9 +86,9 @@ static void net_close_fd(XrayIsolate *X, int fd) {
  * On immediate connect (ret 0) the caller can proceed directly.
  * *out_ret receives the connect() return value (0 or -1 with errno).
  */
-static int net_tcp_connect(const char *host, int port, int *out_ret) {
+static int net_tcp_connect(XrayIsolate *X, const char *host, int port, int *out_ret) {
     XrSockAddr addr;
-    if (!xr_dns_resolve(host, &addr, XR_AF_UNSPEC))
+    if (!xr_dns_resolve(X, host, &addr, XR_AF_UNSPEC))
         return -1;
 
     int fd = socket(addr.family, SOCK_STREAM, 0);
@@ -122,145 +122,22 @@ static int net_tcp_connect(const char *host, int port, int *out_ret) {
     return -1;
 }
 
-// ========== UDP Implementation (IPv4/IPv6 dual-stack) ==========
+// ========== DNS resolve helper (used by net.lookup binding) ==========
 
-struct XrUdpConn {
-    int fd;
-    XrNetAddr local_addr;
-    sa_family_t family;  // current address family
-};
-
-XrUdpConn *xr_udp_new(const char *local_addr, int local_port) {
-    // Detect if address is IPv6
-    sa_family_t family = AF_INET;
-    if (local_addr && strchr(local_addr, ':')) {
-        family = AF_INET6;
-    }
-
-    int fd = socket(family, SOCK_DGRAM, 0);
-    if (fd < 0)
-        return NULL;
-
-    if (family == AF_INET) {
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(local_port);
-
-        if (local_addr && local_addr[0]) {
-            inet_pton(AF_INET, local_addr, &addr.sin_addr);
-        } else {
-            addr.sin_addr.s_addr = INADDR_ANY;
-        }
-
-        if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-            close(fd);
-            return NULL;
-        }
-    } else {
-        struct sockaddr_in6 addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin6_family = AF_INET6;
-        addr.sin6_port = htons(local_port);
-
-        if (local_addr && local_addr[0]) {
-            inet_pton(AF_INET6, local_addr, &addr.sin6_addr);
-        } else {
-            addr.sin6_addr = in6addr_any;
-        }
-
-        if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
-            close(fd);
-            return NULL;
-        }
-    }
-
-    XrUdpConn *conn = xr_malloc(sizeof(XrUdpConn));
-    if (!conn) {
-        close(fd);
-        return NULL;
-    }
-    conn->fd = fd;
-    conn->family = family;
-    conn->local_addr.family = (family == AF_INET) ? XR_NET_IPV4 : XR_NET_IPV6;
-    conn->local_addr.port = local_port;
-    if (local_addr) {
-        strncpy(conn->local_addr.host, local_addr, sizeof(conn->local_addr.host) - 1);
-    }
-    return conn;
-}
-
-int xr_udp_send_to(XrUdpConn *conn, const void *buf, size_t len, const char *host, int port) {
-    if (!conn || !buf)
-        return -1;
-
-    // Resolve target address (supports IPv4/IPv6)
-    XrSockAddr resolved;
-    XrAddrFamily family = (conn->family == AF_INET) ? XR_AF_INET : XR_AF_INET6;
-    if (!xr_dns_resolve(host, &resolved, family)) {
-        return -1;
-    }
-
-    if (resolved.family == AF_INET) {
-        resolved.addr.v4.sin_port = htons(port);
-        return (int) sendto(conn->fd, buf, len, 0, (struct sockaddr *) &resolved.addr.v4,
-                            sizeof(struct sockaddr_in));
-    } else {
-        resolved.addr.v6.sin6_port = htons(port);
-        return (int) sendto(conn->fd, buf, len, 0, (struct sockaddr *) &resolved.addr.v6,
-                            sizeof(struct sockaddr_in6));
-    }
-}
-
-int xr_udp_recv_from(XrUdpConn *conn, void *buf, size_t len, XrNetAddr *from) {
-    if (!conn || !buf)
-        return -1;
-
-    struct sockaddr_storage addr;
-    socklen_t addr_len = sizeof(addr);
-
-    ssize_t n = recvfrom(conn->fd, buf, len, 0, (struct sockaddr *) &addr, &addr_len);
-    if (n < 0)
-        return -1;
-
-    if (from) {
-        if (addr.ss_family == AF_INET) {
-            struct sockaddr_in *sin = (struct sockaddr_in *) &addr;
-            from->family = XR_NET_IPV4;
-            inet_ntop(AF_INET, &sin->sin_addr, from->host, sizeof(from->host));
-            from->port = ntohs(sin->sin_port);
-        } else {
-            struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) &addr;
-            from->family = XR_NET_IPV6;
-            inet_ntop(AF_INET6, &sin6->sin6_addr, from->host, sizeof(from->host));
-            from->port = ntohs(sin6->sin6_port);
-        }
-    }
-    return (int) n;
-}
-
-void xr_udp_close(XrUdpConn *conn) {
-    if (!conn)
-        return;
-    if (conn->fd >= 0) {
-        close(conn->fd);
-    }
-    xr_free(conn);
-}
-
-// ========== DNS Implementation (proxy to http_dns) ==========
-
-int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
+static int net_dns_lookup_to_addrs(XrayIsolate *X, const char *hostname, XrNetAddr *addrs,
+                                   int max_addrs) {
     if (!hostname || !addrs || max_addrs <= 0)
         return 0;
 
     XrSockAddr resolved[8];
-    int count = xr_dns_resolve_all(hostname, resolved, max_addrs > 8 ? 8 : max_addrs, XR_AF_UNSPEC);
+    int count = xr_dns_resolve_all(X, hostname, resolved, max_addrs > 8 ? 8 : max_addrs,
+                                   XR_AF_UNSPEC);
 
     for (int i = 0; i < count; i++) {
         if (resolved[i].family == AF_INET) {
             addrs[i].family = XR_NET_IPV4;
-            inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, addrs[i].host, sizeof(addrs[i].host));
+            inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, addrs[i].host,
+                      sizeof(addrs[i].host));
         } else {
             addrs[i].family = XR_NET_IPV6;
             inet_ntop(AF_INET6, &resolved[i].addr.v6.sin6_addr, addrs[i].host,
@@ -269,26 +146,6 @@ int xr_dns_lookup(const char *hostname, XrNetAddr *addrs, int max_addrs) {
         addrs[i].port = 0;
     }
     return count;
-}
-
-bool xr_net_resolve(const char *hostname, XrNetAddr *addr) {
-    if (!hostname || !addr)
-        return false;
-
-    XrSockAddr resolved;
-    if (!xr_dns_resolve(hostname, &resolved, XR_AF_UNSPEC)) {
-        return false;
-    }
-
-    if (resolved.family == AF_INET) {
-        addr->family = XR_NET_IPV4;
-        inet_ntop(AF_INET, &resolved.addr.v4.sin_addr, addr->host, sizeof(addr->host));
-    } else {
-        addr->family = XR_NET_IPV6;
-        inet_ntop(AF_INET6, &resolved.addr.v6.sin6_addr, addr->host, sizeof(addr->host));
-    }
-    addr->port = 0;
-    return true;
 }
 
 // ========== Utility Functions ==========
@@ -325,20 +182,6 @@ int xr_net_format_addr(const XrNetAddr *addr, char *buf, size_t buf_len) {
     if (!addr || !buf || buf_len == 0)
         return -1;
     return snprintf(buf, buf_len, "%s:%d", addr->host, addr->port);
-}
-
-// ========== Module Initialization ==========
-
-void xr_net_init(void) {
-    xr_io_init();
-    xr_dns_init();
-    xr_tls_init();
-}
-
-void xr_net_shutdown(void) {
-    xr_io_shutdown();
-    xr_dns_shutdown();
-    xr_tls_cleanup();
 }
 
 // ========== Script Bindings ==========
@@ -566,7 +409,7 @@ static XrCFuncResult net_dial_yieldable(XrayIsolate *X, XrValue *args, int nargs
     int port_num = (int) XR_TO_INT(args[1]);
 
     int conn_ret;
-    int fd = net_tcp_connect(XR_STRING_CHARS(host), port_num, &conn_ret);
+    int fd = net_tcp_connect(X, XR_STRING_CHARS(host), port_num, &conn_ret);
     if (fd < 0) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -1130,7 +973,7 @@ static XrCFuncResult net_dial_tls_yieldable(XrayIsolate *X, XrValue *args, int n
     int port_num = (int) XR_TO_INT(args[1]);
 
     int conn_ret;
-    int fd = net_tcp_connect(XR_STRING_CHARS(host), port_num, &conn_ret);
+    int fd = net_tcp_connect(X, XR_STRING_CHARS(host), port_num, &conn_ret);
     if (fd < 0) {
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -1385,7 +1228,7 @@ static XrCFuncResult net_send_to_yieldable(XrayIsolate *X, XrValue *args, int na
 
     // DNS resolve for dual-stack support
     XrSockAddr resolved;
-    if (!xr_dns_resolve(XR_STRING_CHARS(host), &resolved, XR_AF_UNSPEC)) {
+    if (!xr_dns_resolve(X, XR_STRING_CHARS(host), &resolved, XR_AF_UNSPEC)) {
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
@@ -1557,7 +1400,7 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     XrString *hostname = XR_TO_STRING(args[0]);
     XrNetAddr addrs[8];
-    int count = xr_dns_lookup(XR_STRING_CHARS(hostname), addrs, 8);
+    int count = net_dns_lookup_to_addrs(isolate, XR_STRING_CHARS(hostname), addrs, 8);
 
     if (count <= 0)
         return XR_NULL_VAL;

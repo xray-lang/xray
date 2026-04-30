@@ -1132,10 +1132,13 @@ XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
     return xr_h2_stream_hash_find(&conn->stream_hash, stream_id);
 }
 
-// Receive data
+// Receive data. H2 has no per-frame isolate context (the connection
+// runs inside its own event loop), so TLS reads cannot suspend a
+// coroutine here — a NULL X reproduces the old behaviour where
+// xr_io_get_isolate() returned NULL on these threads.
 static int h2_recv(XrH2Conn *conn, void *buf, size_t len) {
     if (conn->tls_conn) {
-        return xr_tls_conn_read(conn->tls_conn, buf, len);
+        return xr_tls_conn_read(NULL, conn->tls_conn, buf, len);
     }
     return (int) read(conn->fd, buf, len);
 }

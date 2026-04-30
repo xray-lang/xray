@@ -38,8 +38,7 @@
 
 /* ========== Internal: per-Isolate pool accessor ========== */
 
-static XrConnPool *stream_get_pool(void) {
-    struct XrayIsolate *X = xr_io_get_isolate();
+static XrConnPool *stream_get_pool(struct XrayIsolate *X) {
     if (!X)
         return NULL;
     XrHttpContext *ctx = xr_http_get_context(X);
@@ -78,7 +77,7 @@ void xr_stream_config_init(XrStreamConfig *config) {
     config->follow_redirects = true;
 }
 
-XrStreamResult xr_http_download(const char *url, const char *output_path,
+XrStreamResult xr_http_download(struct XrayIsolate *X, const char *url, const char *output_path,
                                 XrHttpProgressCallback on_progress, void *user_data) {
     XrStreamConfig config;
     xr_stream_config_init(&config);
@@ -87,10 +86,10 @@ XrStreamResult xr_http_download(const char *url, const char *output_path,
     config.on_progress = on_progress;
     config.user_data = user_data;
 
-    return xr_http_stream(&config);
+    return xr_http_stream(X, &config);
 }
 
-XrStreamResult xr_http_stream(const XrStreamConfig *config) {
+XrStreamResult xr_http_stream(struct XrayIsolate *X, const XrStreamConfig *config) {
     XrStreamResult result;
     memset(&result, 0, sizeof(result));
 
@@ -127,14 +126,14 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
     }
 
     // --- Acquire connection via conn_pool (coroutine-friendly) ---
-    pool = stream_get_pool();
+    pool = stream_get_pool(X);
     if (!pool) {
         result.error = XR_HTTP_ERR_CONNECT;
         result.error_msg = xr_strdup("HTTP pool unavailable");
         goto cleanup;
     }
 
-    conn = xr_conn_pool_get(pool, url.host, (uint16_t) url.port, url.is_https);
+    conn = xr_conn_pool_get(X, pool, url.host, (uint16_t) url.port, url.is_https);
     if (!conn) {
         result.error = XR_HTTP_ERR_CONNECT;
         result.error_msg = xr_strdup("Connection failed");
@@ -167,7 +166,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         p += sprintf(p, "\r\n");
 
         size_t req_len = (size_t) (p - request);
-        if (xr_pooled_conn_write(conn, request, req_len) < 0) {
+        if (xr_pooled_conn_write(X, conn, request, req_len) < 0) {
             result.error = XR_HTTP_ERR_SEND;
             result.error_msg = xr_strdup("Send failed");
             goto cleanup;
@@ -196,7 +195,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
         const char *body_start = NULL;
 
         while (!body_start && hdr_len < hdr_cap - 1) {
-            int n = xr_pooled_conn_read(conn, hdr_buf + hdr_len, hdr_cap - hdr_len - 1);
+            int n = xr_pooled_conn_read(X, conn, hdr_buf + hdr_len, hdr_cap - hdr_len - 1);
             if (n <= 0)
                 break;
             hdr_len += (size_t) n;
@@ -243,7 +242,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
 
     // --- Stream body ---
     while (1) {
-        int n = xr_pooled_conn_read(conn, buffer, buf_size);
+        int n = xr_pooled_conn_read(X, conn, buffer, buf_size);
         if (n <= 0)
             break;
 
@@ -269,7 +268,7 @@ XrStreamResult xr_http_stream(const XrStreamConfig *config) {
 cleanup:
     // Connection: close — don't return to pool, just close.
     if (conn && pool)
-        xr_conn_pool_close(pool, conn);
+        xr_conn_pool_close(X, pool, conn);
     if (out_fd >= 0)
         close(out_fd);
     xr_free(buffer);
@@ -278,7 +277,8 @@ cleanup:
     return result;
 }
 
-XrStreamResult xr_http_resume_download(const char *url, const char *output_path,
+XrStreamResult xr_http_resume_download(struct XrayIsolate *X, const char *url,
+                                       const char *output_path,
                                        XrHttpProgressCallback on_progress, void *user_data) {
     XrStreamConfig config;
     xr_stream_config_init(&config);
@@ -293,7 +293,7 @@ XrStreamResult xr_http_resume_download(const char *url, const char *output_path,
         config.range_start = (size_t) st.st_size;
     }
 
-    return xr_http_stream(&config);
+    return xr_http_stream(X, &config);
 }
 
 long long xr_http_get_content_length(XrayIsolate *X, const char *url) {

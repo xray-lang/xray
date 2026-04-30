@@ -341,106 +341,73 @@ void xr_tls_context_set_alpn_callback(XrTlsContext *ctx, XrAlpnSelectCallback cb
 extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
 extern int xr_socket_write(struct XrayIsolate *X, int fd, const char *buf, size_t len);
 
-// Thread-local: current VM instance
-extern struct XrayIsolate *xr_io_get_isolate(void);
-
-XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_client(struct XrayIsolate *X, XrTlsConn *conn) {
     if (!conn || !conn->ssl)
         return XR_TLS_ERR_INIT;
 
     while (1) {
         int ret = SSL_connect(conn->ssl);
-
-        if (ret == 1) {
+        if (ret == 1)
             return XR_TLS_OK;
-        }
 
         int err = SSL_get_error(conn->ssl, ret);
-
         switch (err) {
             case SSL_ERROR_WANT_READ:
-                // Wait for readable
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        char tmp[1];
-                        int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
-                        if (wait_ret == -2) {
-                            // Coroutine yielded
-                            return (XrTlsError) -2;
-                        }
-                    }
-                    continue;
+                if (X) {
+                    char tmp[1];
+                    int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
+                    if (wait_ret == -2)
+                        return (XrTlsError) -2;  // coroutine yielded
                 }
+                continue;
 
             case SSL_ERROR_WANT_WRITE:
-                // Wait for writable
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
-                        if (wait_ret == -2) {
-                            return (XrTlsError) -2;
-                        }
-                    }
-                    continue;
+                if (X) {
+                    int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
+                    if (wait_ret == -2)
+                        return (XrTlsError) -2;
                 }
+                continue;
 
             case SSL_ERROR_SSL:
-                if (SSL_get_verify_result(conn->ssl) != X509_V_OK) {
+                if (SSL_get_verify_result(conn->ssl) != X509_V_OK)
                     return XR_TLS_ERR_VERIFY;
-                }
                 return XR_TLS_ERR_HANDSHAKE;
 
             case SSL_ERROR_SYSCALL:
-                return XR_TLS_ERR_HANDSHAKE;
-
             default:
                 return XR_TLS_ERR_HANDSHAKE;
         }
     }
 }
 
-XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_server(struct XrayIsolate *X, XrTlsConn *conn) {
     if (!conn || !conn->ssl)
         return XR_TLS_ERR_INIT;
 
     while (1) {
         int ret = SSL_accept(conn->ssl);
-
-        if (ret == 1) {
+        if (ret == 1)
             return XR_TLS_OK;
-        }
 
         int err = SSL_get_error(conn->ssl, ret);
-
         switch (err) {
             case SSL_ERROR_WANT_READ:
-                // Wait for readable
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        char tmp[1];
-                        int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
-                        if (wait_ret == -2) {
-                            return (XrTlsError) -2;
-                        }
-                    }
-                    continue;
+                if (X) {
+                    char tmp[1];
+                    int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
+                    if (wait_ret == -2)
+                        return (XrTlsError) -2;
                 }
+                continue;
 
             case SSL_ERROR_WANT_WRITE:
-                // Wait for writable
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
-                        if (wait_ret == -2) {
-                            return (XrTlsError) -2;
-                        }
-                    }
-                    continue;
+                if (X) {
+                    int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
+                    if (wait_ret == -2)
+                        return (XrTlsError) -2;
                 }
+                continue;
 
             default:
                 return XR_TLS_ERR_HANDSHAKE;
@@ -448,106 +415,77 @@ XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
     }
 }
 
-int xr_tls_conn_read(XrTlsConn *conn, void *buf, size_t len) {
+int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -1;
 
     while (1) {
         int ret = SSL_read(conn->ssl, buf, (int) len);
-
-        if (ret > 0) {
+        if (ret > 0)
             return ret;
-        }
 
         int err = SSL_get_error(conn->ssl, ret);
-
         switch (err) {
             case SSL_ERROR_ZERO_RETURN:
-                // Peer closed
-                return 0;
+                return 0;  // peer closed
 
             case SSL_ERROR_WANT_READ:
-                // Wait for readable (coroutine-safe)
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        char tmp[1];
-                        int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
-                        if (wait_ret == -2) {
-                            // Coroutine yielded
-                            return -2;
-                        }
-                    }
-                    continue;
+                if (X) {
+                    char tmp[1];
+                    int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
+                    if (wait_ret == -2)
+                        return -2;  // coroutine yielded
                 }
+                continue;
 
             case SSL_ERROR_WANT_WRITE:
-                // Wait for writable (renegotiation)
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
-                        if (wait_ret == -2) {
-                            return -2;
-                        }
-                    }
-                    continue;
+                // TLS renegotiation requesting writability.
+                if (X) {
+                    int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
+                    if (wait_ret == -2)
+                        return -2;
                 }
+                continue;
 
             default:
-                // Other error
                 return -1;
         }
     }
 }
 
-int xr_tls_conn_write(XrTlsConn *conn, const void *buf, size_t len) {
+int xr_tls_conn_write(struct XrayIsolate *X, XrTlsConn *conn, const void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -1;
 
     while (1) {
         int ret = SSL_write(conn->ssl, buf, (int) len);
-
-        if (ret > 0) {
+        if (ret > 0)
             return ret;
-        }
 
         int err = SSL_get_error(conn->ssl, ret);
-
         switch (err) {
             case SSL_ERROR_WANT_WRITE:
-                // Wait for writable
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
-                        if (wait_ret == -2) {
-                            return -2;
-                        }
-                    }
-                    continue;
+                if (X) {
+                    int wait_ret = xr_socket_write(X, conn->fd, NULL, 0);
+                    if (wait_ret == -2)
+                        return -2;
                 }
+                continue;
 
             case SSL_ERROR_WANT_READ:
-                // Wait for readable (renegotiation)
-                {
-                    struct XrayIsolate *X = xr_io_get_isolate();
-                    if (X) {
-                        char tmp[1];
-                        int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
-                        if (wait_ret == -2) {
-                            return -2;
-                        }
-                    }
-                    continue;
+                // TLS renegotiation requesting readability.
+                if (X) {
+                    char tmp[1];
+                    int wait_ret = xr_socket_read(X, conn->fd, tmp, 0);
+                    if (wait_ret == -2)
+                        return -2;
                 }
+                continue;
 
             case SSL_ERROR_ZERO_RETURN:
-                // Connection closed
                 return 0;
 
             default:
-                // Other error
                 return -1;
         }
     }
@@ -768,11 +706,13 @@ const char *xr_tls_conn_get_alpn(XrTlsConn *conn) {
     (void) conn;
     return NULL;
 }
-XrTlsError xr_tls_conn_handshake_client(XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_client(struct XrayIsolate *X, XrTlsConn *conn) {
+    (void) X;
     (void) conn;
     return XR_TLS_ERR_INIT;
 }
-XrTlsError xr_tls_conn_handshake_server(XrTlsConn *conn) {
+XrTlsError xr_tls_conn_handshake_server(struct XrayIsolate *X, XrTlsConn *conn) {
+    (void) X;
     (void) conn;
     return XR_TLS_ERR_INIT;
 }
@@ -780,7 +720,8 @@ int xr_tls_conn_handshake_try(XrTlsConn *conn) {
     (void) conn;
     return -1;
 }
-int xr_tls_conn_read(XrTlsConn *conn, void *buf, size_t len) {
+int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t len) {
+    (void) X;
     (void) conn;
     (void) buf;
     (void) len;
@@ -792,7 +733,8 @@ int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) {
     (void) len;
     return -3;
 }
-int xr_tls_conn_write(XrTlsConn *conn, const void *buf, size_t len) {
+int xr_tls_conn_write(struct XrayIsolate *X, XrTlsConn *conn, const void *buf, size_t len) {
+    (void) X;
     (void) conn;
     (void) buf;
     (void) len;

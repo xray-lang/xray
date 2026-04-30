@@ -33,6 +33,7 @@
 #include "../base/xlog.h"
 #include "../runtime/gc/ximmix.h"
 #include "../runtime/gc/xcoro_gc.h"
+#include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include "xjit_hooks.h"
 #include <stdlib.h>
 #include <string.h>
@@ -232,6 +233,10 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
         // Netpoll init failure is not fatal, continue running
     }
 
+    // Initialize IO runtime (DNS cache today; future handle registry).
+    // Heap-allocated so xworker.h only forward-declares XrIoRuntime.
+    runtime->io = xr_io_runtime_new();
+
     // blocked queue fully Per-Worker, no global init needed
     atomic_store(&runtime->next_coro_id, 1);  // ID starts from 1
     runtime->current_scope = NULL;
@@ -347,6 +352,10 @@ void xr_runtime_destroy(XrRuntime *runtime) {
         xr_free(runtime->async_pool);
         runtime->async_pool = NULL;
     }
+
+    // Tear down IO runtime (DNS cache and any future IO state).
+    xr_io_runtime_free(runtime->io);
+    runtime->io = NULL;
 
     xr_free(runtime);
 }

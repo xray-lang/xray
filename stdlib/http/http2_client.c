@@ -18,7 +18,7 @@
 #include "http2_client.h"
 #include "http2.h"
 #include "../net/io.h"
-#include "../net/dns.h"
+#include "../../src/io/xdns.h"
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -224,9 +224,10 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
     entry->in_use = true;
     entry->last_used = get_time_ms();
 
-    // DNS resolution (with cache, IPv4/IPv6 dual-stack)
+    // DNS resolution (with cache, IPv4/IPv6 dual-stack). H2 client has
+    // no isolate plumbing yet, so this falls back to a cacheless resolve.
     XrSockAddr resolved_addr;
-    if (!xr_dns_resolve(host, &resolved_addr, XR_AF_UNSPEC)) {
+    if (!xr_dns_resolve(NULL, host, &resolved_addr, XR_AF_UNSPEC)) {
         xr_free(entry->host);
         xr_free(entry);
         return NULL;
@@ -288,7 +289,7 @@ static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_h
 
         xr_tls_conn_set_hostname(entry->tls_conn, host);
 
-        if (xr_tls_conn_handshake_client(entry->tls_conn) != XR_TLS_OK) {
+        if (xr_tls_conn_handshake_client(NULL, entry->tls_conn) != XR_TLS_OK) {
             xr_tls_conn_free(entry->tls_conn);
             xr_tls_context_free(entry->tls_ctx);
             xr_closesocket(fd);
@@ -638,9 +639,9 @@ bool xr_http_auto_version(const char *host, int port, bool is_https) {
 
     xr_tls_context_set_alpn(ctx, ALPN_PROTOS, ALPN_PROTOS_LEN);
 
-    // DNS resolution (with cache, IPv4/IPv6 dual-stack)
+    // DNS resolution (cacheless: caller has no isolate plumbing yet).
     XrSockAddr resolved_addr;
-    if (!xr_dns_resolve(host, &resolved_addr, XR_AF_UNSPEC)) {
+    if (!xr_dns_resolve(NULL, host, &resolved_addr, XR_AF_UNSPEC)) {
         xr_tls_context_free(ctx);
         return false;
     }
@@ -680,7 +681,7 @@ bool xr_http_auto_version(const char *host, int port, bool is_https) {
 
     xr_tls_conn_set_hostname(conn, host);
 
-    if (xr_tls_conn_handshake_client(conn) != XR_TLS_OK) {
+    if (xr_tls_conn_handshake_client(NULL, conn) != XR_TLS_OK) {
         xr_tls_conn_free(conn);
         xr_closesocket(fd);
         xr_tls_context_free(ctx);
