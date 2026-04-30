@@ -161,10 +161,12 @@ static ParseRule rules[] = {
     [TK_STRING] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_BOOL] = {xr_parse_type_cast, NULL, PREC_NONE},
 
-    // Container constructors
-    [TK_TYPE_ARRAY] = {xr_parse_container_constructor, NULL, PREC_NONE},
-    [TK_TYPE_MAP] = {xr_parse_container_constructor, NULL, PREC_NONE},
-    [TK_TYPE_SET] = {xr_parse_container_constructor, NULL, PREC_NONE},
+    // Container constructors. Array / Map / Set are no longer keywords;
+    // a call like `Array(1, 2, 3)` reaches xr_compile_call_builtin via
+    // the regular call_expr(variable("Array"), ...) path, which is
+    // semantically identical to the legacy xr_parse_container_constructor
+    // shortcut. Channel keeps its keyword because the parser folds
+    // Channel(...) into a dedicated AST_CHANNEL_NEW node.
 
     // Special
     [TK_EOF] = {NULL, NULL, PREC_NONE},

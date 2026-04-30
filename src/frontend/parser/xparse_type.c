@@ -101,8 +101,43 @@ static XrType *try_resolve_prelude_type(Parser *parser, const char *name, size_t
                 return xr_type_new_json(parser->X);
             return NULL;
         case XR_PRELUDE_KIND_GENERIC_1:
-        case XR_PRELUDE_KIND_GENERIC_2:
+        case XR_PRELUDE_KIND_GENERIC_2: {
+            // Container types with mandatory generic parameters in type
+            // annotation context. Without `<...>` we either error (the
+            // default) or fall back to unknown placeholders when the
+            // parser explicitly opted into bare-container mode (e.g.
+            // class-method bodies that synthesise generics from receivers).
+            int arity = (entry->kind == (int) XR_PRELUDE_KIND_GENERIC_1) ? 1 : 2;
+            XrType *args[2];
+            args[0] = xr_type_new_unknown(NULL);
+            args[1] = xr_type_new_unknown(NULL);
+            if (xr_parser_match(parser, TK_LT)) {
+                args[0] = xr_parse_type_annotation(parser);
+                if (arity == 2 && xr_parser_match(parser, TK_COMMA))
+                    args[1] = xr_parse_type_annotation(parser);
+                consume_gt_in_generic(parser);
+            } else if (!parser->allow_bare_container) {
+                if (arity == 1)
+                    xr_parser_error(parser,
+                                    "container type requires a type parameter, e.g. T<int>");
+                else
+                    xr_parser_error(
+                        parser, "container type requires type parameters, e.g. T<string, int>");
+            }
+            // Dispatch to the existing constructor for each native type.
+            // Adding a new GENERIC prelude entry is a one-line table edit
+            // plus a one-line case here; the parser machinery itself is
+            // unchanged.
+            if (strcmp(entry->name, "Array") == 0)
+                return xr_type_new_array(parser->X, args[0]);
+            if (strcmp(entry->name, "Set") == 0)
+                return xr_type_new_set(parser->X, args[0]);
+            if (strcmp(entry->name, "Channel") == 0)
+                return xr_type_new_channel(parser->X, args[0]);
+            if (strcmp(entry->name, "Map") == 0)
+                return xr_type_new_map(parser->X, args[0], args[1]);
             return NULL;
+        }
     }
     return NULL;
 }
@@ -226,49 +261,10 @@ static XrType *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_FLOAT64))
         return xr_type_new_float_width(parser->X, XR_NATIVE_F64);
 
-    // Array<T> — generic parameter is mandatory in type annotations
-    if (xr_parser_match(parser, TK_TYPE_ARRAY)) {
-        if (!xr_parser_match(parser, TK_LT)) {
-            if (!parser->allow_bare_container)
-                xr_parser_error(parser, "Array requires a type parameter, e.g. Array<int>");
-            return xr_type_new_array(parser->X, xr_type_new_unknown(NULL));
-        }
-        XrType *elem_type = xr_parse_type_annotation(parser);
-        consume_gt_in_generic(parser);
-        return xr_type_new_array(parser->X, elem_type);
-    }
-
-    // Map<K, V> — generic parameters are mandatory in type annotations
-    if (xr_parser_match(parser, TK_TYPE_MAP)) {
-        if (!xr_parser_match(parser, TK_LT)) {
-            if (!parser->allow_bare_container)
-                xr_parser_error(parser, "Map requires type parameters, e.g. Map<string, int>");
-            return xr_type_new_map(parser->X, xr_type_new_unknown(NULL), xr_type_new_unknown(NULL));
-        }
-        XrType *key_type = xr_parse_type_annotation(parser);
-        XrType *val_type = xr_type_new_unknown(NULL);
-        if (xr_parser_match(parser, TK_COMMA)) {
-            val_type = xr_parse_type_annotation(parser);
-        }
-        consume_gt_in_generic(parser);
-        return xr_type_new_map(parser->X, key_type, val_type);
-    }
-
-    // Set<T> — generic parameter is mandatory in type annotations
-    if (xr_parser_match(parser, TK_TYPE_SET)) {
-        if (!xr_parser_match(parser, TK_LT)) {
-            if (!parser->allow_bare_container)
-                xr_parser_error(parser, "Set requires a type parameter, e.g. Set<int>");
-            return xr_type_new_set(parser->X, xr_type_new_unknown(NULL));
-        }
-        XrType *elem_type = xr_parse_type_annotation(parser);
-        consume_gt_in_generic(parser);
-        return xr_type_new_set(parser->X, elem_type);
-    }
-
-    // BigInt / Bytes / DateTime / Json / Range / Regex / StringBuilder
-    // are all resolved by name through the prelude symbol table — see
-    // the try_resolve_prelude_type call inside the IDENT branch below.
+    // Array / Map / Set / Channel and the simple-name builtins (BigInt /
+    // Bytes / DateTime / Json / Range / Regex / StringBuilder) all
+    // resolve by name through the prelude symbol table — see the
+    // try_resolve_prelude_type call inside the IDENT branch below.
 
     // Struct type literal: { x: float, y: float } or { x: float, ... }
     if (xr_parser_match(parser, TK_LBRACE)) {

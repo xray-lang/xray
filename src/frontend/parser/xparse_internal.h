@@ -132,7 +132,6 @@ XR_FUNC AstNode *xr_parse_regex_literal(Parser *parser);
 XR_FUNC AstNode *xr_parse_fn_expression(Parser *parser);
 XR_FUNC AstNode *xr_parse_is(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_type_cast(Parser *parser);
-XR_FUNC AstNode *xr_parse_container_constructor(Parser *parser);
 XR_FUNC AstNode *xr_parse_template_string(Parser *parser);
 XR_FUNC AstNode *xr_parse_lt_or_generic(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_force_unwrap(Parser *parser, AstNode *operand);

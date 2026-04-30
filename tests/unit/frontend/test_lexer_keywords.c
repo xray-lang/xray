@@ -73,13 +73,12 @@ static bool token_text_eq(Token t, const char *expected) {
 typedef struct { const char *spelling; XrTokenType type; } KwExpect;
 
 static const KwExpect kKnownKeywords[] = {
-    /* Uppercase type names still owned by the lexer. BigInt / Bytes /
-     * DateTime / Json / Range / Regex / StringBuilder are now resolved
-     * through the prelude registry as plain identifiers. */
-    { "Array",       TK_TYPE_ARRAY    },
+    /* Uppercase type names. Channel is the only one still owned by the
+     * lexer (its prefix rule produces a dedicated AST_CHANNEL_NEW
+     * node). Array / BigInt / Bytes / DateTime / Json / Map / Range /
+     * Regex / Set / StringBuilder are now resolved through the prelude
+     * registry as plain identifiers. */
     { "Channel",     TK_TYPE_CHANNEL  },
-    { "Map",         TK_TYPE_MAP      },
-    { "Set",         TK_TYPE_SET      },
     { "abstract",    TK_ABSTRACT      },
     { "as",          TK_AS            },
     { "await",       TK_AWAIT         },
