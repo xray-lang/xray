@@ -509,6 +509,31 @@ XR_FUNC XrType *xr_type_union_member(XrType *type, int index);
 XR_FUNC bool xr_type_union_contains(XrType *type, XrTypeKind kind);
 XR_FUNC XrType *xr_type_union_remove(XrayIsolate *X, XrType *type, XrTypeKind kind);
 
+// Whether a type's value domain natively includes null, as a property
+// distinct from the `is_nullable` decoration.
+//
+// `is_nullable` describes the syntactic form `T | null` over a base
+// type T that itself does NOT include null — it carries a paired
+// non-nullable "base" form reachable via xr_type_non_nullable, and
+// printable forms render with a trailing `?`.
+//
+// "Intrinsically includes null" describes a type whose value domain
+// already contains null with no separate non-nullable form. Today
+// that is exactly Json: a Json value can be null without any
+// optional decoration, and `Json?` is rejected by the parser as
+// redundant.
+//
+// Three places need this distinction:
+//   - parser: reject `Json?` (and any future intrinsic-null type)
+//   - null-safety analyzer: skip the "null -> non-nullable" error
+//   - Json coercion: NULL source flows into a Json sink
+//
+// Keeping the rule in one helper avoids hard-coding `kind == JSON`
+// in three different files.
+static inline bool xr_type_intrinsically_includes_null(const XrType *t) {
+    return t && t->kind == XR_KIND_JSON;
+}
+
 // Check if a coercion through Json is allowed at compile time. Returns
 // true when the type checker should treat `target = source` as legal,
 // possibly with a runtime OP_CHECKTYPE inserted by the codegen.
