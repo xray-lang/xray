@@ -350,7 +350,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"upgradeTLS", "(conn: NetConn, hostname: string): NetConn?", "Upgrade connection to TLS", true, false},
     {"udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false},
     {"sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false},
-    {"recvFrom", "(handle: NetConn, maxlen?: int): Json?", "Receive UDP datagram", true, false},
+    {"recvFrom", "(handle: NetConn, maxlen?: int): Json", "Receive UDP datagram", true, false},
 };
 #define GEN_NET_FUNCTION_COUNT 14
 
@@ -410,8 +410,8 @@ static const XaBuiltinMember g_gen_path_functions[] = {
 static const XaBuiltinMember g_gen_regex_functions[] = {
     {"compile", "(pattern: string, flags?: string): Regex", "Compile a regex pattern", true, false},
     {"test", "(pattern: Regex, s: string): bool", "Test if pattern matches string", true, false},
-    {"find", "(pattern: Regex, s: string, offset?: int): Json?", "Find first match", true, false},
-    {"fullFind", "(pattern: Regex, s: string): Json?", "Full match with captures", true, false},
+    {"find", "(pattern: Regex, s: string, offset?: int): Json", "Find first match", true, false},
+    {"fullFind", "(pattern: Regex, s: string): Json", "Full match with captures", true, false},
     {"count", "(pattern: Regex, s: string): int", "Count matches", true, false},
     {"findAll", "(pattern: Regex, s: string): Array<string>", "Find all matches", true, false},
     {"replace", "(pattern: Regex, s: string, replacement: string): string", "Replace first match", true, false},
@@ -435,10 +435,10 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 
 // toml module functions
 static const XaBuiltinMember g_gen_toml_functions[] = {
-    {"parse", "(data: string): Json?", "Parse TOML string", true, false},
-    {"parseStrict", "(data: string): Json?", "Parse TOML strictly", true, false},
+    {"parse", "(data: string): Json", "Parse TOML string", true, false},
+    {"parseStrict", "(data: string): Json", "Parse TOML strictly", true, false},
     {"stringify", "(value: Json): string", "Convert to TOML string", true, false},
-    {"parseFile", "(path: string): Json?", "Parse TOML file", true, false},
+    {"parseFile", "(path: string): Json", "Parse TOML file", true, false},
     {"writeFile", "(path: string, value: Json): bool", "Write TOML file", true, false},
 };
 #define GEN_TOML_FUNCTION_COUNT 5
@@ -493,9 +493,9 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 
 // xml module functions
 static const XaBuiltinMember g_gen_xml_functions[] = {
-    {"parse", "(data: string, options?: Json): Json?", "Parse XML string", true, false},
-    {"parseDetailed", "(data: string): Json?", "Parse XML with details", true, false},
-    {"parseFile", "(path: string): Json?", "Parse XML file", true, false},
+    {"parse", "(data: string, options?: Json): Json", "Parse XML string", true, false},
+    {"parseDetailed", "(data: string): Json", "Parse XML with details", true, false},
+    {"parseFile", "(path: string): Json", "Parse XML file", true, false},
     {"stringify", "(node: Json, options?: Json): string", "Convert to XML string", true, false},
     {"writeFile", "(path: string, node: Json): bool", "Write XML file", true, false},
     {"document", "(): Json", "Create XML document node", true, false},
@@ -508,11 +508,11 @@ static const XaBuiltinMember g_gen_xml_functions[] = {
 
 // yaml module functions
 static const XaBuiltinMember g_gen_yaml_functions[] = {
-    {"parse", "(data: string): Json?", "Parse YAML string", true, false},
-    {"parseStrict", "(data: string): Json?", "Parse YAML strictly", true, false},
+    {"parse", "(data: string): Json", "Parse YAML string", true, false},
+    {"parseStrict", "(data: string): Json", "Parse YAML strictly", true, false},
     {"parseAll", "(data: string): Array<Json>", "Parse all YAML documents", true, false},
     {"stringify", "(value: Json): string", "Convert to YAML string", true, false},
-    {"parseFile", "(path: string): Json?", "Parse YAML file", true, false},
+    {"parseFile", "(path: string): Json", "Parse YAML file", true, false},
     {"writeFile", "(path: string, value: Json): bool", "Write YAML file", true, false},
 };
 #define GEN_YAML_FUNCTION_COUNT 6

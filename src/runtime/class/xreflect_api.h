@@ -29,7 +29,7 @@ XR_FUNC void xr_reflect_api_free(XrayIsolate *X);
 
 /* ========== Reflect Class ========== */
 
-// Reflect.getType(obj: any): Type
+// Reflect.getType(obj: Json): Type
 XR_FUNC XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs);
 
 // Reflect.getTypeByName(name: string): Type?
@@ -38,10 +38,10 @@ XR_FUNC XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue *args, in
 // Reflect.getAllTypes(): Array<Type>
 XR_FUNC XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue *args, int nargs);
 
-// Reflect.isInstance(obj: any, type: Type): bool
+// Reflect.isInstance(obj: Json, type: Type): bool
 XR_FUNC XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue *args, int nargs);
 
-// Reflect.isInstanceOf(obj: any, typeName: string): bool
+// Reflect.isInstanceOf(obj: Json, typeName: string): bool
 XR_FUNC XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs);
 
 // Reflect.fieldCount(obj: Json): int
@@ -56,7 +56,7 @@ XR_FUNC XrValue xr_reflect_keyType(XrayIsolate *isolate, XrValue *args, int narg
 // Reflect.valueType(obj: Map): string
 XR_FUNC XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue *args, int nargs);
 
-// Reflect.typeOf(obj: any): string  (full generic type string, e.g. "Array<int>")
+// Reflect.typeOf(obj: Json): string  (full generic type string, e.g. "Array<int>")
 XR_FUNC XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue *args, int nargs);
 
 /* ========== Type Class ========== */

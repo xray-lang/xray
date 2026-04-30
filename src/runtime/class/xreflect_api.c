@@ -264,7 +264,7 @@ XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs) 
     return xr_reflect_isInstance(isolate, new_args, 2);
 }
 
-// Reflect.fieldCount(obj: any): int
+// Reflect.fieldCount(obj: Json): int
 // Supports Json, struct (stack-allocated), and class instances
 XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (nargs < 1)
@@ -348,7 +348,7 @@ XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue *args, int nargs) {
     return tid_to_string_value(isolate, 0);
 }
 
-// Reflect.typeOf(obj: any): string
+// Reflect.typeOf(obj: Json): string
 // Returns full generic type string, e.g. "Array<int>", "Map<string, int>"
 XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "reflect_typeOf: NULL isolate");

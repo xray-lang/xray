@@ -537,7 +537,10 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
 
     // Direction 2: any structured value flows into a Json sink. The
     // sink is a dynamic object, so accepting an instance / array / map
-    // / set / bytes / channel here does not lose information.
+    // / set / bytes / channel / unknown / null here does not lose
+    // information. Json self-contains null, so `null` and the
+    // analyzer's `unknown` placeholder are deliberately accepted —
+    // forcing a manual `Json?` annotation would be redundant noise.
     if (target->kind == XR_KIND_JSON) {
         switch (source->kind) {
             case XR_KIND_INSTANCE:
@@ -548,6 +551,8 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
             case XR_KIND_BYTES:
             case XR_KIND_CHANNEL:
             case XR_KIND_JSON:
+            case XR_KIND_UNKNOWN:
+            case XR_KIND_NULL:
                 return true;
             default:
                 break;

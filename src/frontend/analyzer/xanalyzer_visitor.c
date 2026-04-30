@@ -119,8 +119,14 @@ bool xa_check_null_safety(XaAnalyzer *analyzer, XrType *target, XrType *source,
     // Null-safety violations are always errors (xray is a strongly-typed language).
     XrDiagSeverity null_sev = XR_DIAG_SEV_ERROR;
 
-    // null → T (non-nullable target)
+    // null → T (non-nullable target). Json is the one kind that
+    // semantically already contains null (it is a dynamic-value
+    // container), so passing `null` where a Json is expected must
+    // succeed without forcing the user to write `Json?` (which the
+    // parser also rejects as redundant).
     if (XR_TYPE_IS_NULL(source) && !target->is_nullable) {
+        if (target->kind == XR_KIND_JSON)
+            return false;
         char msg[256];
         snprintf(msg, sizeof(msg), "%s: cannot assign 'null' to non-nullable type '%s'",
                  context_msg, xr_type_to_string(target));
