@@ -89,9 +89,19 @@ static XrType *try_resolve_prelude_type(Parser *parser, const char *name, size_t
             return xr_type_new_named_instance(parser->X, entry->name);
         case XR_PRELUDE_KIND_BYTES:
             return xr_type_new_bytes(parser->X);
+        case XR_PRELUDE_KIND_SINGLETON:
+            // Json is the only singleton today: it has its own XrTypeKind
+            // (XR_KIND_JSON) plus a globally-cached singleton XrType, and
+            // a number of analyzer/runtime fast paths key off both. Other
+            // potential singletons would each need their own constructor
+            // wired here. The dispatch is keyed off entry->name so adding
+            // a singleton later is a one-line table edit + a one-line
+            // case below; no parser-level keyword churn.
+            if (strcmp(entry->name, "Json") == 0)
+                return xr_type_new_json(parser->X);
+            return NULL;
         case XR_PRELUDE_KIND_GENERIC_1:
         case XR_PRELUDE_KIND_GENERIC_2:
-        case XR_PRELUDE_KIND_SINGLETON:
             return NULL;
     }
     return NULL;
@@ -256,14 +266,9 @@ static XrType *parse_type_annotation_base(Parser *parser) {
         return xr_type_new_set(parser->X, elem_type);
     }
 
-    // Json dynamic object type
-    if (xr_parser_match(parser, TK_TYPE_JSON)) {
-        return xr_type_new_json(NULL);
-    }
-
-    // BigInt / DateTime / Bytes / Range / Regex / StringBuilder are now
-    // resolved by name through the prelude symbol table — see the
-    // try_resolve_prelude_type call inside the IDENT branch below.
+    // BigInt / Bytes / DateTime / Json / Range / Regex / StringBuilder
+    // are all resolved by name through the prelude symbol table — see
+    // the try_resolve_prelude_type call inside the IDENT branch below.
 
     // Struct type literal: { x: float, y: float } or { x: float, ... }
     if (xr_parser_match(parser, TK_LBRACE)) {

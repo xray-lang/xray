@@ -481,11 +481,10 @@ TEST(lexer_keyword_table_completeness) {
         {"unknown", TK_UNKNOWN},
         {"void", TK_VOID}, {"while", TK_WHILE}, {"yield", TK_YIELD},
         // Uppercase type keywords still owned by the lexer. BigInt /
-        // Bytes / DateTime / Range / Regex / StringBuilder are now
-        // resolved through the prelude registry as plain identifiers.
+        // Bytes / DateTime / Json / Range / Regex / StringBuilder are
+        // now resolved through the prelude registry as plain identifiers.
         {"Array", TK_TYPE_ARRAY}, {"Channel", TK_TYPE_CHANNEL},
-        {"Json", TK_TYPE_JSON}, {"Map", TK_TYPE_MAP},
-        {"Set", TK_TYPE_SET},
+        {"Map", TK_TYPE_MAP}, {"Set", TK_TYPE_SET},
     };
     int n = (int)(sizeof(cases) / sizeof(cases[0]));
     for (int i = 0; i < n; i++) {
