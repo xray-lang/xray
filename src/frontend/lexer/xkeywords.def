@@ -34,13 +34,9 @@
 
 /*           spelling       length  token             */
 XR_KW(       "Array",       5,      TK_TYPE_ARRAY    )
-XR_KW(       "BigInt",      6,      TK_TYPE_BIGINT   )
-XR_KW(       "Bytes",       5,      TK_TYPE_BYTES    )
 XR_KW(       "Channel",     7,      TK_TYPE_CHANNEL  )
-XR_KW(       "DateTime",    8,      TK_TYPE_DATETIME )
 XR_KW(       "Json",        4,      TK_TYPE_JSON     )
 XR_KW(       "Map",         3,      TK_TYPE_MAP      )
-XR_KW(       "Range",       5,      TK_TYPE_RANGE    )
 XR_KW(       "Set",         3,      TK_TYPE_SET      )
 XR_KW(       "abstract",    8,      TK_ABSTRACT      )
 XR_KW(       "as",          2,      TK_AS            )

@@ -18,6 +18,7 @@
 #include "xtype_scope.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../../stdlib/prelude/prelude.h"
 #include <stdlib.h>
 #include <string.h>
 #include "../../base/xmalloc.h"
@@ -63,6 +64,38 @@ static bool consume_gt_in_generic(Parser *parser) {
 // - Function types: fn(int, int): int
 // - Optional types: int?, string?, Array<int>?
 static XrType *parse_type_annotation_base(Parser *parser);
+
+/*
+ * Resolve `name` against the per-isolate prelude registry. Returns a
+ * freshly built XrType when prelude owns the name, or NULL when the
+ * caller should fall through to other identification paths (alias
+ * lookup, error-recovery strcmp, generic class fallback).
+ *
+ * GENERIC and SINGLETON kinds intentionally return NULL here — they need
+ * additional parsing (`<T>` arity / singleton wiring) and stay on the
+ * legacy TK_TYPE_* keyword path until subsequent phases migrate them.
+ */
+static XrType *try_resolve_prelude_type(Parser *parser, const char *name, size_t len) {
+    if (!parser || !name)
+        return NULL;
+    const XrPreludeSymbols *symbols = xr_prelude_get_symbols(parser->X);
+    if (!symbols)
+        return NULL;
+    const XrPreludeTypeEntry *entry = xr_prelude_lookup_type(symbols, name, len);
+    if (!entry)
+        return NULL;
+    switch ((XrPreludeKind) entry->kind) {
+        case XR_PRELUDE_KIND_SIMPLE:
+            return xr_type_new_named_instance(parser->X, entry->name);
+        case XR_PRELUDE_KIND_BYTES:
+            return xr_type_new_bytes(parser->X);
+        case XR_PRELUDE_KIND_GENERIC_1:
+        case XR_PRELUDE_KIND_GENERIC_2:
+        case XR_PRELUDE_KIND_SINGLETON:
+            return NULL;
+    }
+    return NULL;
+}
 
 XrType *xr_parse_type_annotation(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_annotation: NULL parser");
@@ -228,28 +261,9 @@ static XrType *parse_type_annotation_base(Parser *parser) {
         return xr_type_new_json(NULL);
     }
 
-    // BigInt type
-    if (xr_parser_match(parser, TK_TYPE_BIGINT)) {
-        return xr_type_new_bigint(parser->X);
-    }
-
-    // DateTime type
-    if (xr_parser_match(parser, TK_TYPE_DATETIME)) {
-        return xr_type_new_datetime(parser->X);
-    }
-
-    // Bytes type
-    if (xr_parser_match(parser, TK_TYPE_BYTES)) {
-        return xr_type_new_bytes(parser->X);
-    }
-
-    // Range type
-    if (xr_parser_match(parser, TK_TYPE_RANGE)) {
-        XrType *t = xr_type_new(parser->X, XR_KIND_INSTANCE);
-        if (t)
-            t->instance.class_name = "Range";
-        return t;
-    }
+    // BigInt / DateTime / Bytes / Range / Regex / StringBuilder are now
+    // resolved by name through the prelude symbol table — see the
+    // try_resolve_prelude_type call inside the IDENT branch below.
 
     // Struct type literal: { x: float, y: float } or { x: float, ... }
     if (xr_parser_match(parser, TK_LBRACE)) {
@@ -437,14 +451,16 @@ static XrType *parse_type_annotation_base(Parser *parser) {
             }
             return xr_type_new_task(parser->X, result_type);
         }
-        if (strcmp(temp_name, "BigInt") == 0)
-            return xr_type_new_bigint(parser->X);
-        if (strcmp(temp_name, "Regex") == 0)
-            return xr_type_new_regex(parser->X);
-        if (strcmp(temp_name, "StringBuilder") == 0)
-            return xr_type_new_stringbuilder(parser->X);
-        if (strcmp(temp_name, "DateTime") == 0)
-            return xr_type_new_datetime(parser->X);
+
+        // Look up the name in the prelude registry. Covers BigInt /
+        // DateTime / Bytes / Range / Regex / StringBuilder today; later
+        // phases extend the registry to also own Array / Map / Set /
+        // Channel / Json so this single lookup replaces the per-name
+        // strcmp ladder that used to live here.
+        XrType *prelude_type = try_resolve_prelude_type(parser, temp_name, (size_t) name_len);
+        if (prelude_type)
+            return prelude_type;
+
         if (strcmp(temp_name, "Exception") == 0)
             return xr_type_new_named_instance(parser->X, "Exception");
 

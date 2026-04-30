@@ -167,10 +167,9 @@ typedef enum {
     TK_TYPE_SET,       // Set (container type)
     TK_TYPE_JSON,      // Json (dynamic object type)
     TK_TYPE_CHANNEL,   // Channel (coroutine channel)
-    TK_TYPE_BIGINT,    // BigInt (arbitrary precision integer)
-    TK_TYPE_RANGE,     // Range (lazy integer range)
-    TK_TYPE_DATETIME,  // DateTime (date/time type)
-    TK_TYPE_BYTES,     // Bytes (byte array type)
+    // BigInt / Bytes / DateTime / Range / Regex / StringBuilder are no
+    // longer lexer keywords — they are resolved through the prelude
+    // symbol table on the IDENT path. See stdlib/prelude/prelude.h.
     TK_UNKNOWN,        // unknown
     TK_LAST_KEYWORD = TK_UNKNOWN,
 

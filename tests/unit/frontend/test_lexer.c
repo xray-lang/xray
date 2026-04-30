@@ -480,11 +480,12 @@ TEST(lexer_keyword_table_completeness) {
         {"uint32", TK_UINT32}, {"uint64", TK_UINT64},
         {"unknown", TK_UNKNOWN},
         {"void", TK_VOID}, {"while", TK_WHILE}, {"yield", TK_YIELD},
-        // Uppercase type keywords
-        {"Array", TK_TYPE_ARRAY}, {"BigInt", TK_TYPE_BIGINT},
-        {"Bytes", TK_TYPE_BYTES}, {"Channel", TK_TYPE_CHANNEL},
-        {"DateTime", TK_TYPE_DATETIME}, {"Json", TK_TYPE_JSON},
-        {"Map", TK_TYPE_MAP}, {"Range", TK_TYPE_RANGE}, {"Set", TK_TYPE_SET},
+        // Uppercase type keywords still owned by the lexer. BigInt /
+        // Bytes / DateTime / Range / Regex / StringBuilder are now
+        // resolved through the prelude registry as plain identifiers.
+        {"Array", TK_TYPE_ARRAY}, {"Channel", TK_TYPE_CHANNEL},
+        {"Json", TK_TYPE_JSON}, {"Map", TK_TYPE_MAP},
+        {"Set", TK_TYPE_SET},
     };
     int n = (int)(sizeof(cases) / sizeof(cases[0]));
     for (int i = 0; i < n; i++) {
