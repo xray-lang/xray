@@ -1484,15 +1484,19 @@ static XrValue listener_method_is_closed(XrayIsolate *X, XrValue *args, int n) {
     return xr_bool(!l || l->closed);
 }
 
-static void register_handle_native_types(XrayIsolate *isolate) {
-    static XrNativeMethod conn_methods[] = {
+/* NetConn and NetListener native-type registrations are invoked
+ * unconditionally during isolate init by
+ * xr_prelude_register_all_native_types, so the XrClasses are available
+ * even when user code never `import net`. */
+void xr_netconn_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod conn_methods[] = {
         {"fd", conn_method_fd, 1},
         {"close", conn_method_close, 1},
         {"isClosed", conn_method_is_closed, 1},
         {"isTLS", conn_method_is_tls, 1},
         {NULL, NULL, 0},
     };
-    XrNativeTypeInfo conn_info = {
+    static const XrNativeTypeInfo conn_info = {
         .name = "NetConn",
         .gc_type = XR_TNETCONN,
         .methods = conn_methods,
@@ -1500,15 +1504,17 @@ static void register_handle_native_types(XrayIsolate *isolate) {
         .static_methods = NULL,
     };
     xr_register_native_type(isolate, &conn_info);
+}
 
-    static XrNativeMethod listener_methods[] = {
+void xr_netlistener_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod listener_methods[] = {
         {"fd", listener_method_fd, 1},
         {"port", listener_method_port, 1},
         {"close", listener_method_close, 1},
         {"isClosed", listener_method_is_closed, 1},
         {NULL, NULL, 0},
     };
-    XrNativeTypeInfo listener_info = {
+    static const XrNativeTypeInfo listener_info = {
         .name = "NetListener",
         .gc_type = XR_TNETLISTENER,
         .methods = listener_methods,
@@ -1521,8 +1527,8 @@ static void register_handle_native_types(XrayIsolate *isolate) {
 XrModule *xr_load_module_net(XrayIsolate *isolate) {
     XrModule *mod = xr_module_create_native(isolate, "net");
 
-    // Register the typed handle methods (sync subset).
-    register_handle_native_types(isolate);
+    // NetConn / NetListener XrClasses are registered up front by the
+    // prelude module; nothing to do here.
 
     // User-level API (handle-based)
     XRS_EXPORT_YIELDABLE(mod, isolate, "dial", net_dial_yieldable);

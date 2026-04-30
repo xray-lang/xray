@@ -81,10 +81,11 @@ XrModule *xr_load_module_regex(XrayIsolate *isolate);
 XrValue xr_regex_wrap(XrayIsolate *X, XrRegex *re);
 
 /*
- * Initialize regex native type (for regex literals without import)
- * Call this during isolate initialization to enable r.test() syntax
+ * Register the Regex XrClass so regex literals and regex.compile(...)
+ * results can dispatch instance methods. Called unconditionally from
+ * xr_prelude_register_all_native_types during isolate init.
  */
-void xr_regex_init_native_type(XrayIsolate *isolate);
+void xr_regex_register_native_type(XrayIsolate *isolate);
 
 // Check if value is a Regex object
 bool xr_value_is_regex(XrValue v);

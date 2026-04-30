@@ -117,8 +117,11 @@ static int isolate_init_full(XrayIsolate *isolate) {
             (GenFn3) xr_compile_source_with_path, (GenFn1) xr_program_destroy);
     }
 
-    // Regex
-    xr_regex_init_native_type(isolate);
+    // Native XrClasses for Logger / DateTime / Regex / NetConn /
+    // NetListener are registered up front inside the prelude module
+    // loader (xr_prelude_register_all_native_types), so user code can
+    // write `let dt: DateTime = ...` and `r.test(...)` without a
+    // separate stdlib import.
 
     // Source cache
     isolate->source_cache = xr_source_cache_new();

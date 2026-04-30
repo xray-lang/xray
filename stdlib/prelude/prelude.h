@@ -96,4 +96,21 @@ XR_FUNC const XrPreludeSymbols *xr_prelude_get_symbols(XrayIsolate *isolate);
 XR_FUNC const XrPreludeTypeEntry *xr_prelude_lookup_type(const XrPreludeSymbols *symbols,
                                                          const char *name, size_t len);
 
+/*
+ * Eagerly register every native XrClass that prelude entries refer to:
+ * Logger (log), DateTime (datetime), Regex (regex), NetConn / NetListener
+ * (net). Called from inside xr_load_module_prelude during isolate init,
+ * so that user code can write `let dt: DateTime = ...` and have method
+ * dispatch work even when the user has not separately `import datetime`.
+ *
+ * The cost of this design is that the four stdlib modules above are
+ * always linked into the binary (their method handlers and class
+ * builders are reachable from the prelude). xray's "batteries included"
+ * stance accepts this in exchange for a single uniform registration
+ * point — there is no longer any per-module xr_register_native_type
+ * call. Each stdlib module exports a `xr_<type>_register_native_type`
+ * function that this routine forwards to.
+ */
+XR_FUNC void xr_prelude_register_all_native_types(XrayIsolate *isolate);
+
 #endif  // XR_STDLIB_PRELUDE_H

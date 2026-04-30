@@ -1085,6 +1085,25 @@ XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): void",
 XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): void", "Flush log buffer")
 XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: any): any", "Create child logger")
 
+/* Logger native-type registration is invoked unconditionally during
+ * isolate init by xr_prelude_register_all_native_types, so the XrClass
+ * is available even when user code never `import log`. */
+void xr_logger_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod logger_methods[] = {{"debug", xr_logger_debug, -1},
+                                                    {"info", xr_logger_info, -1},
+                                                    {"warn", xr_logger_warn, -1},
+                                                    {"error", xr_logger_error, -1},
+                                                    {"fatal", xr_logger_fatal, -1},
+                                                    {"child", xr_logger_child, -1},
+                                                    {NULL, NULL, 0}};
+    static const XrNativeTypeInfo logger_type_info = {.name = "Logger",
+                                                      .gc_type = XR_TLOGGER,
+                                                      .methods = logger_methods,
+                                                      .getters = NULL,
+                                                      .static_methods = NULL};
+    xr_register_native_type(isolate, &logger_type_info);
+}
+
 XrModule *xr_load_module_log(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
 
@@ -1119,23 +1138,5 @@ XrModule *xr_load_module_log(XrayIsolate *isolate) {
     xr_module_add_export(isolate, module, "FATAL", xr_int(XR_LOG_FATAL));
 
     module->loaded = true;
-
-    // Register Logger as native type for method dispatch via native_type_classes
-    static XrNativeMethod logger_methods[] = {{"debug", xr_logger_debug, -1},
-                                              {"info", xr_logger_info, -1},
-                                              {"warn", xr_logger_warn, -1},
-                                              {"error", xr_logger_error, -1},
-                                              {"fatal", xr_logger_fatal, -1},
-                                              {"child", xr_logger_child, -1},
-                                              {NULL, NULL, 0}};
-
-    XrNativeTypeInfo logger_type_info = {.name = "Logger",
-                                         .gc_type = XR_TLOGGER,
-                                         .methods = logger_methods,
-                                         .getters = NULL,
-                                         .static_methods = NULL};
-
-    xr_register_native_type(isolate, &logger_type_info);
-
     return module;
 }
