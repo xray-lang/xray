@@ -802,11 +802,6 @@ AstNode *xr_parse_new_expression(Parser *parser) {
             // Just a normal class name
             class_name = first_name;
         }
-    } else if (xr_parser_match(parser, TK_TYPE_CHANNEL)) {
-        // Channel is the only container that is still a lexer keyword,
-        // so the IDENT branch above never sees it; everything else
-        // (Array, Map, Set, user-defined classes) flows through TK_NAME.
-        class_name = ast_strdup(parser->X, "Channel");
     } else {
         // Support other built-in type names as new target
         xr_parser_error_expected_name(parser, "expected class name or type name");

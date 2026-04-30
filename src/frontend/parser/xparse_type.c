@@ -71,9 +71,12 @@ static XrType *parse_type_annotation_base(Parser *parser);
  * caller should fall through to other identification paths (alias
  * lookup, error-recovery strcmp, generic class fallback).
  *
- * GENERIC and SINGLETON kinds intentionally return NULL here — they need
- * additional parsing (`<T>` arity / singleton wiring) and stay on the
- * legacy TK_TYPE_* keyword path until subsequent phases migrate them.
+ * Each XrPreludeKind selects a concrete constructor:
+ *   SIMPLE      -> xr_type_new_named_instance(name)
+ *   BYTES       -> xr_type_new_bytes()
+ *   SINGLETON   -> dispatched by name (Json -> xr_type_new_json)
+ *   GENERIC_1/2 -> parses `<T>` / `<K, V>` and dispatches by name to
+ *                  xr_type_new_array / set / channel / map
  */
 static XrType *try_resolve_prelude_type(Parser *parser, const char *name, size_t len) {
     if (!parser || !name)
@@ -391,17 +394,8 @@ static XrType *parse_type_annotation_base(Parser *parser) {
         return xr_type_new_tuple(parser->X, types, count);
     }
 
-    // Channel<T> — generic parameter is mandatory in type annotations
-    if (xr_parser_match(parser, TK_TYPE_CHANNEL)) {
-        if (!xr_parser_match(parser, TK_LT)) {
-            if (!parser->allow_bare_container)
-                xr_parser_error(parser, "Channel requires a type parameter, e.g. Channel<int>");
-            return xr_type_new_channel(parser->X, xr_type_new_unknown(NULL));
-        }
-        XrType *elem_type = xr_parse_type_annotation(parser);
-        consume_gt_in_generic(parser);
-        return xr_type_new_channel(parser->X, elem_type);
-    }
+    // Channel<T> reaches us via the IDENT branch below — see the
+    // try_resolve_prelude_type call inside it.
 
     // Native-width integer types (first-class keywords)
     if (xr_parser_match(parser, TK_INT8))

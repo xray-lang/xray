@@ -224,12 +224,18 @@ AstNode *xr_parse_await_expr(Parser *parser) {
 }
 
 /*
- * Parse Channel creation
- * Channel() or Channel(10)
+ * Parse Channel creation: Channel() or Channel(10).
+ *
+ * Reached from xr_parse_variable's contextual intercept after the
+ * `Channel` identifier has been consumed and a `(` is the next token.
+ * Producing a dedicated AST_CHANNEL_NEW node (rather than letting the
+ * regular call_expr path take over) is what lets compile_channel_new,
+ * the shared-variable preregister pass, and the select compiler all
+ * recognise channel-typed variables by AST shape alone.
  */
 AstNode *xr_parse_channel_new(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_channel_new: NULL parser");
-    int line = parser->previous.line;  // Channel keyword already consumed
+    int line = parser->previous.line;  // `Channel` IDENT already consumed
 
     // Expect '('
     if (!xr_parser_match(parser, TK_LPAREN)) {
