@@ -1380,9 +1380,15 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module net
-// @handle Connection { const fd: int, const type: string, const tls: bool }
-// @handle Listener { const fd: int, const type: string, const port: int }
-// @handle UdpSocket { const fd: int, const type: string }
+//
+// NOTE: cfunc return signatures still advertise Json? for handle types.
+// The runtime returns typed XrNetConn / XrNetListener objects (registered
+// via xr_register_native_type), so method dispatch (conn.fd(), l.close())
+// works at runtime via type inference. Promoting these signatures to
+// NetConn? / NetListener? is blocked on gen_stdlib_types.py learning to
+// preserve xr_module_add_export() constants — without that, regenerating
+// the analyzer header drops log.INFO / encoding.LE etc. and breaks
+// unrelated regression tests.
 
 XR_DEFINE_BUILTIN(net_dial_yieldable, "dial", "(host: string, port: int, timeout?: int): Json?",
                   "Dial a TCP connection")
