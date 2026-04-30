@@ -5,15 +5,15 @@
 // EXPECTED: 4
 // Test: Array basic operations (NEWARRAY, INDEX_GET, INDEX_SET, ARRAY_LEN, ARRAY_PUSH)
 
-fn array_get(arr, idx: int) : int {
+fn array_get(arr: Array<int>, idx: int) : int {
     return arr[idx]
 }
 
-fn array_set(arr, idx: int, val: int) {
+fn array_set(arr: Array<int>, idx: int, val: int) {
     arr[idx] = val
 }
 
-fn array_sum(arr) : int {
+fn array_sum(arr: Array<int>) : int {
     let s = 0
     let i = 0
     while (i < arr.length) {

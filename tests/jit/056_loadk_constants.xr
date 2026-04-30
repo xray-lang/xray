@@ -15,7 +15,7 @@ fn use_constants() : int {
     return 0
 }
 
-fn get_str() {
+fn get_str() : string {
     return "hello constant"
 }
 

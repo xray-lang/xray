@@ -12,6 +12,7 @@
  */
 
 #include "xi_opt.h"
+#include "xi_rep.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -517,40 +518,8 @@ XR_FUNC void xi_opt_strength_reduce(XiFunc *f) {
 
 /* ========== SelectRepresentations ========== */
 
-/*
- * Determine the machine representation a value naturally produces.
- * Constants and arithmetic with known numeric types produce I64/F64.
- * Calls, loads, parameters, and polymorphic ops produce TAGGED.
- */
-static XrRep sr_def_rep(const XiValue *v) {
-    if (!v || !v->type) return XR_REP_TAGGED;
-    switch (v->op) {
-        case XI_CONST: {
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
-        }
-        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
-        case XI_NEG:
-        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
-        case XI_SHL: case XI_SHR: {
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
-        }
-        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
-        case XI_NOT: case XI_ISNULL: case XI_IS:
-            return XR_REP_I64;
-        case XI_BOX:
-            return XR_REP_TAGGED;
-        case XI_UNBOX:
-            return xr_type_base_rep(v->type);
-        case XI_CONVERT: {
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
-        }
-        default:
-            return XR_REP_TAGGED;
-    }
-}
+/* Shared implementation — see xi_rep.h */
+#define sr_def_rep xi_value_def_rep
 
 /*
  * Determine what representation an instruction needs at a given arg position.
@@ -674,18 +643,29 @@ XR_FUNC void xi_opt_select_rep(XiFunc *f) {
         }
     }
 
-    /* Rebuild each block's value array to include BOX/UNBOX after source. */
+    /* Rebuild each block's value array to include BOX/UNBOX after source.
+     * PHI nodes live on blk->phis, not in values[], so we must also
+     * check phi-sourced BOX/UNBOX and prepend them to the block. */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
         if (!blk) continue;
 
         uint32_t extra = 0;
+        /* Count conversions sourced from regular values */
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             if (!v) continue;
             if (v->id < max_id && box_of[v->id] && box_of[v->id]->block == blk)
                 extra++;
             if (v->id < max_id && unbox_of[v->id] && unbox_of[v->id]->block == blk)
+                extra++;
+        }
+        /* Count conversions sourced from phi nodes */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            uint32_t pid = phi->value.id;
+            if (pid < max_id && box_of[pid] && box_of[pid]->block == blk)
+                extra++;
+            if (pid < max_id && unbox_of[pid] && unbox_of[pid]->block == blk)
                 extra++;
         }
         if (extra == 0) continue;
@@ -695,6 +675,15 @@ XR_FUNC void xi_opt_select_rep(XiFunc *f) {
         if (!nv) continue;
 
         uint32_t ni = 0;
+        /* Prepend phi-sourced BOX/UNBOX before regular instructions */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            uint32_t pid = phi->value.id;
+            if (pid < max_id && unbox_of[pid] && unbox_of[pid]->block == blk)
+                nv[ni++] = unbox_of[pid];
+            if (pid < max_id && box_of[pid] && box_of[pid]->block == blk)
+                nv[ni++] = box_of[pid];
+        }
+        /* Then regular values with their conversions */
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             nv[ni++] = v;

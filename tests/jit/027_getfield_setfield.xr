@@ -3,15 +3,15 @@
 // EXPECTED: 99
 // Test: Object field access (GETFIELD, SETFIELD, GETFIELD_IC)
 
-fn get_x(obj) : int {
+fn get_x(obj: Json) : int {
     return obj.x
 }
 
-fn get_y(obj) : int {
+fn get_y(obj: Json) : int {
     return obj.y
 }
 
-fn set_x(obj, val: int) {
+fn set_x(obj: Json, val: int) {
     obj.x = val
 }
 

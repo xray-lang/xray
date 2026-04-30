@@ -2,8 +2,8 @@
 // EXPECTED: 50
 // Test: Nested closures with multi-level upvalue capture
 
-fn outer(x: int) {
-    fn middle(y: int) {
+fn outer(x: int) : fn(int): fn(int): int {
+    fn middle(y: int) : fn(int): int {
         fn inner(z: int) : int {
             return x + y + z
         }

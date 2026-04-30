@@ -3,14 +3,14 @@
 // EXPECTED: 111
 // Test: Closures and upvalues in JIT (CLOSURE, GETUPVAL, SETUPVAL)
 
-fn make_adder(x: int) {
+fn make_adder(x: int) : fn(int): int {
     fn adder(y: int) : int {
         return x + y
     }
     return adder
 }
 
-fn make_counter(start: int) {
+fn make_counter(start: int) : fn(): int {
     let count = start
     fn increment() : int {
         count = count + 1

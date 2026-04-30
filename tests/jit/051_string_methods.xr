@@ -3,15 +3,15 @@
 // EXPECTED: hello
 // Test: String method invocations in JIT
 
-fn str_ops(s) : int {
+fn str_ops(s: string) : int {
     return s.length
 }
 
-fn to_upper(s) {
+fn to_upper(s: string) : string {
     return s.toUpperCase()
 }
 
-fn to_lower(s) {
+fn to_lower(s: string) : string {
     return s.toLowerCase()
 }
 

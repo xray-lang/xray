@@ -484,17 +484,63 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
 
-                // Store enum member names for exhaustiveness checking
+                // Store enum member names for exhaustiveness checking and
+                // infer the backing value type from member initializers.
+                // All members must share the same value type (int, float,
+                // string, or bool); mixed types are a compile error.
                 if (edecl->member_count > 0) {
                     links->enum_member_names =
                         xr_malloc(sizeof(const char *) * edecl->member_count);
                     links->enum_member_count = 0;
+                    // Track which literal types appear: bit 0=int, 1=float,
+                    // 2=string, 3=bool
+                    unsigned seen_types = 0;
                     for (int m = 0; m < edecl->member_count; m++) {
                         AstNode *mem = edecl->members[m];
                         if (mem && mem->type == AST_ENUM_MEMBER && mem->as.enum_member.name) {
                             links->enum_member_names[links->enum_member_count++] =
                                 mem->as.enum_member.name;
+                            AstNode *val = mem->as.enum_member.value;
+                            if (!val) {
+                                seen_types |= 1;  // auto-increment → int
+                            } else if (val->type == AST_LITERAL_INT) {
+                                seen_types |= 1;
+                            } else if (val->type == AST_LITERAL_FLOAT) {
+                                seen_types |= 2;
+                            } else if (val->type == AST_LITERAL_STRING) {
+                                seen_types |= 4;
+                            } else if (val->type == AST_LITERAL_TRUE ||
+                                       val->type == AST_LITERAL_FALSE) {
+                                seen_types |= 8;
+                            } else {
+                                seen_types |= 1;  // unknown literal → treat as int
+                            }
                         }
+                    }
+                    // Default to int when no members have explicit values
+                    if (seen_types == 0)
+                        seen_types = 1;
+                    // Check for mixed types: seen_types must be a power of 2
+                    bool mixed = (seen_types & (seen_types - 1)) != 0;
+                    if (mixed) {
+                        XrLocation loc = {.file = ctx->file_path,
+                                          .line = node->line,
+                                          .column = node->column};
+                        xa_analyzer_add_diagnostic(
+                            ctx->analyzer, XR_DIAG_SEV_ERROR,
+                            XR_ERR_ANALYZE_ENUM_MIXED_TYPE,
+                            "Enum members must all have the same value type "
+                            "(int, float, string, or bool)",
+                            &loc);
+                        links->enum_value_type = xr_type_new_int(NULL);
+                    } else if (seen_types & 4) {
+                        links->enum_value_type = xr_type_new_string(NULL);
+                    } else if (seen_types & 2) {
+                        links->enum_value_type = xr_type_new_float(NULL);
+                    } else if (seen_types & 8) {
+                        links->enum_value_type = xr_type_new_bool(NULL);
+                    } else {
+                        links->enum_value_type = xr_type_new_int(NULL);
                     }
                 }
             }

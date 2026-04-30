@@ -197,6 +197,27 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
     }
 
+    // Union of function types: method dispatch on union (e.g. shape.area()
+    // where shape: Circle | Rect). Each union member resolves to a function
+    // type; extract each return type and union them.
+    if (XR_TYPE_IS_UNION(callee_type)) {
+        XrType *ret_union = NULL;
+        bool all_functions = true;
+        for (int i = 0; i < callee_type->union_type.member_count; i++) {
+            XrType *m = callee_type->union_type.members[i];
+            if (!m || !XR_TYPE_IS_FUNCTION(m)) {
+                all_functions = false;
+                break;
+            }
+            XrType *rt = m->function.return_type;
+            if (!rt)
+                rt = xr_type_new_unknown(NULL);
+            ret_union = ret_union ? xr_type_union(ctx->analyzer->isolate, ret_union, rt) : rt;
+        }
+        if (all_functions && ret_union)
+            return ret_union;
+    }
+
     // Check if callee is callable
     if (!XR_TYPE_IS_FUNCTION(callee_type)) {
         // Builtin method call: container.method() where member_access returned

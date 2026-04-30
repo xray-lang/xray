@@ -2,7 +2,7 @@
 // EXPECTED: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 // Test: StringBuilder operations in JIT (STRBUF_NEW/APPEND/FINISH)
 
-fn build_str(a, b, c) : string {
+fn build_str(a: string, b: string, c: string) : string {
     let sb = new StringBuilder()
     sb.append(a)
     sb.append(" ")

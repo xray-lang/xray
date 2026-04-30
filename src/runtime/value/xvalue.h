@@ -210,6 +210,7 @@ static inline uint16_t xr_struct_layout_id(XrValue v) {
 
 #define XR_FROM_INT(x) xr_make_int_val((int64_t) (x), XR_TAG_I64)
 #define XR_FROM_FLOAT(x) xr_make_float_val((double) (x), XR_TAG_F64)
+#define XR_FROM_BOOL(x) xr_make_int_val((x) ? 1 : 0, XR_TAG_BOOL)
 #define XR_FROM_PTR(p) xr_make_ptr_val((void *) (p))
 #define XR_FROM_STR(s) xr_make_ptr_val((void *) (s))
 

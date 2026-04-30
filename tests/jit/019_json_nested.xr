@@ -13,7 +13,7 @@ fn make_tree(depth: int) : Json {
     }
 }
 
-fn tree_sum(node) : int {
+fn tree_sum(node: Json) : int {
     if (node == null) { return 0 }
     let v = node.val
     if (node.left == null) { return v }

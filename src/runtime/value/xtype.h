@@ -582,8 +582,11 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
             return true;
     }
 
-    // Direction 1: Json source flowing into a more specific target.
-    if (source->kind != XR_KIND_JSON)
+    // Direction 1: Json or unknown source flowing into a more specific target.
+    // Unknown typically arises from Json field chains (e.g. node.val + ...)
+    // where the analyzer cannot determine a precise type. Codegen inserts
+    // runtime OP_CHECKTYPE, so this is safe.
+    if (source->kind != XR_KIND_JSON && source->kind != XR_KIND_UNKNOWN)
         return false;
     if (xr_kind_is_primitive(target->kind))
         return true;

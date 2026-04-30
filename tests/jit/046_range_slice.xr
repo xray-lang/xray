@@ -3,7 +3,7 @@
 // EXPECTED: 2
 // Test: Range and slice operations in JIT
 
-fn slice_len(arr, start: int, end: int) : int {
+fn slice_len(arr: Array<int>, start: int, end: int) : int {
     let s = arr[start:end]
     return s.length
 }

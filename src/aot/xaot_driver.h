@@ -88,4 +88,9 @@ typedef struct {
  * transpiled functions + main()).  Caller frees result->c_source. */
 XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result);
 
+/* Xi IR pipeline: Source → AST → Xi IR → C.
+ * Bypasses bytecode and legacy XIR entirely.
+ * Single-module only; for simple programs without advanced features. */
+XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result);
+
 #endif  // XAOT_DRIVER_H

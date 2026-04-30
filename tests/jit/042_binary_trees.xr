@@ -11,7 +11,7 @@ fn makeTree(depth: int) : Json {
     }
 }
 
-fn checksum(node) : int {
+fn checksum(node: Json) : int {
     if (node == null) { return 0 }
     if (node.left == null) { return 1 }
     return checksum(node.left) + checksum(node.right) + 1

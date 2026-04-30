@@ -97,6 +97,7 @@ typedef enum {
     XR_ERR_ANALYZE_CLOSURE_CAPTURE,     // Unsafe closure capture in coroutine
     XR_ERR_ANALYZE_AWAIT_TYPE,          // await expects Task type
     XR_ERR_ANALYZE_MISSING_TYPE,        // Variable needs type annotation or initializer
+    XR_ERR_ANALYZE_ENUM_MIXED_TYPE,     // Enum members must all have the same value type
 
     // Runtime errors (400-499) — most runtime codes in xerror_codes.h
     XR_ERR_RUNTIME = 400,
