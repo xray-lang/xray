@@ -249,47 +249,6 @@ AstNode *xr_parse_type_cast(Parser *parser) {
     return xr_ast_call_expr(parser->X, callee, arguments, 1, line);
 }
 
-AstNode *xr_parse_container_constructor(Parser *parser) {
-    XR_DCHECK(parser != NULL, "parse_container_constructor: NULL parser");
-    const char *type_name = NULL;
-    switch (parser->previous.type) {
-        case TK_TYPE_ARRAY:
-            type_name = "Array";
-            break;
-        case TK_TYPE_MAP:
-            type_name = "Map";
-            break;
-        case TK_TYPE_SET:
-            type_name = "Set";
-            break;
-        default:
-            xr_parser_error(parser, "expected container type keyword");
-            return NULL;
-    }
-
-    int line = parser->previous.line;
-
-    if (!xr_parser_match(parser, TK_LPAREN)) {
-        xr_parser_error(parser, "expected '(' after constructor");
-        return NULL;
-    }
-    AstNode **arguments = NULL;
-    int arg_count = 0;
-    int arg_capacity = 0;
-
-    if (!xr_parser_check(parser, TK_RPAREN)) {
-        do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
-        } while (xr_parser_match(parser, TK_COMMA));
-    }
-
-    xr_parser_consume(parser, TK_RPAREN, "expected ')' after constructor arguments");
-
-    AstNode *callee = xr_ast_variable(parser->X, type_name, line);
-
-    return xr_ast_call_expr(parser->X, callee, arguments, arg_count, line);
-}
-
 // Helper: create string literal node from a template string part.
 // For normal template strings, applies escape processing.
 // For raw template strings, copies verbatim.

@@ -33,10 +33,7 @@
  */
 
 /*           spelling       length  token             */
-XR_KW(       "Array",       5,      TK_TYPE_ARRAY    )
 XR_KW(       "Channel",     7,      TK_TYPE_CHANNEL  )
-XR_KW(       "Map",         3,      TK_TYPE_MAP      )
-XR_KW(       "Set",         3,      TK_TYPE_SET      )
 XR_KW(       "abstract",    8,      TK_ABSTRACT      )
 XR_KW(       "as",          2,      TK_AS            )
 XR_KW(       "await",       5,      TK_AWAIT         )

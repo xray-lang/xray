@@ -977,9 +977,6 @@ static const char *token_names[] = {
     [TK_UINT64] = "uint64",
     [TK_FLOAT32] = "float32",
     [TK_FLOAT64] = "float64",
-    [TK_TYPE_ARRAY] = "Array",
-    [TK_TYPE_MAP] = "Map",
-    [TK_TYPE_SET] = "Set",
     [TK_TYPE_CHANNEL] = "Channel",
     [TK_UNKNOWN] = "unknown",
 
