@@ -249,22 +249,20 @@ AstNode *xr_parse_type_cast(Parser *parser) {
     return xr_ast_call_expr(parser->X, callee, arguments, 1, line);
 }
 
-// Parse container constructor: Array(...), Map(), Set(...)
-// Parse type keyword as variable reference (e.g. Json.keys(obj))
+// Parse type keyword as variable reference (e.g. Json.keys(obj)).
+//
+// Only TK_TYPE_JSON still reaches this prefix rule — Json carries enough
+// special-case behaviour (singleton XrType, Json.parse / Json.keys static
+// methods, optional-? rejection) that it remains a lexer keyword for now.
+// BigInt / DateTime / Bytes are no longer keywords; they reach the
+// expression parser as plain TK_NAME and resolve via the regular
+// variable-reference path (their static methods live on a regular
+// XrClass that the analyzer / runtime registers by name).
 AstNode *xr_parse_type_keyword_as_variable(Parser *parser) {
     const char *name = NULL;
     switch (parser->previous.type) {
         case TK_TYPE_JSON:
             name = "Json";
-            break;
-        case TK_TYPE_DATETIME:
-            name = "DateTime";
-            break;
-        case TK_TYPE_BYTES:
-            name = "Bytes";
-            break;
-        case TK_TYPE_BIGINT:
-            name = "BigInt";
             break;
         default:
             xr_parser_error(parser, "unexpected type keyword in expression");

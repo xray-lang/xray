@@ -29,5 +29,13 @@
  *                BYTES / SINGLETON). Selects parser/constructor path.
  */
 
-/* Subsequent phases populate this table. Keep entries sorted by `name`
- * for human readability; lookup itself is a linear scan. */
+/* Entries are sorted by `name` for human readability; lookup itself is a
+ * linear scan over a small (< 16) table. */
+
+/*           name             native_type        kind           */
+XR_PRELUDE_TYPE("BigInt",        XR_TBIGINT,        SIMPLE)
+XR_PRELUDE_TYPE("Bytes",         XR_TBLOB,          BYTES)
+XR_PRELUDE_TYPE("DateTime",      XR_TDATETIME,      SIMPLE)
+XR_PRELUDE_TYPE("Range",         XR_TRANGE,         SIMPLE)
+XR_PRELUDE_TYPE("Regex",         XR_TREGEX,         SIMPLE)
+XR_PRELUDE_TYPE("StringBuilder", XR_TSTRINGBUILDER, SIMPLE)

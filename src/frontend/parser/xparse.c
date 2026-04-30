@@ -166,9 +166,6 @@ static ParseRule rules[] = {
     [TK_TYPE_MAP] = {xr_parse_container_constructor, NULL, PREC_NONE},
     [TK_TYPE_SET] = {xr_parse_container_constructor, NULL, PREC_NONE},
     [TK_TYPE_JSON] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
-    [TK_TYPE_DATETIME] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
-    [TK_TYPE_BYTES] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
-    [TK_TYPE_BIGINT] = {xr_parse_type_keyword_as_variable, NULL, PREC_NONE},
 
     // Special
     [TK_EOF] = {NULL, NULL, PREC_NONE},
