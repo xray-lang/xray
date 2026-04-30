@@ -34,6 +34,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../analyzer/xanalyzer_symbol.h"
+#include "xcodegen_json_decode.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -293,6 +294,24 @@ int xr_compile_call_method(XrCompilerContext *ctx, XrCompiler *compiler, CallExp
         if (strcmp(obj_name, GLOBAL_NAME_COROPOOL) == 0) {
             // Only handle variable access case here, like CoroPool.xxx()
             // Constructor CoroPool(4) needs to be handled in AST_CALL direct variable call
+        }
+
+        // Json.decode<T>(data): compiler-generated typed decode
+        if (strcmp(obj_name, "Json") == 0 && strcmp(member->name, "decode") == 0 &&
+            node->type_arg_count == 1 && node->arg_count == 1) {
+            XrType *target = node->type_args[0];
+
+            // Resolve type alias: type_arg is XR_KIND_CLASS with class_name
+            if (target && target->kind == XR_KIND_CLASS && target->instance.class_name &&
+                ctx->analyzer) {
+                XaSymbol *alias = xa_analyzer_lookup(ctx->analyzer, target->instance.class_name);
+                if (alias && alias->kind == XA_SYM_TYPE_ALIAS && alias->alias_type)
+                    target = alias->alias_type;
+            }
+
+            if (target && XR_TYPE_IS_OBJECT(target) && target->object.field_count > 0) {
+                return xr_compile_json_decode(ctx, compiler, node->arguments[0], target);
+            }
         }
     }
 
