@@ -1395,11 +1395,21 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
 
     XrWorker *worker = xr_current_worker();
     if (worker && next) {
+        // Thread-locked coro must go to locked worker, not current.
+        if (xr_coro_is_thread_locked(gp) && gp->ext->locked_worker != worker->p.id) {
+            int target_id = gp->ext->locked_worker;
+            if (target_id >= 0 && target_id < runtime->worker_count) {
+                xr_worker_inbox_enqueue(runtime, target_id, gp);
+                xr_runtime_wake_idle_worker(runtime);
+                return;
+            }
+        }
         // LIFO slot: woken coroutine runs immediately on current worker (DFS style)
         xr_worker_push_lifo(worker, gp);
     } else {
-        // No current worker or next=false: send to affinity worker's inbox
-        int target_id = atomic_load_explicit(&gp->affinity_p, memory_order_relaxed);
+        // No current worker or next=false: send to target worker's inbox.
+        // Respects Coro.lockThread(): locked coros return to their locked worker.
+        int target_id = xr_coro_wake_target_id(gp);
         if (target_id < 0 || target_id >= runtime->worker_count) {
             target_id = 0;
         }

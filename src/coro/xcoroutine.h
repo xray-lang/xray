@@ -396,6 +396,30 @@ static inline XrCoroExt *xr_coro_ensure_ext(XrCoroutine *coro) {
     return coro->ext;
 }
 
+/* ========== Thread-Lock Query Helpers ========== */
+
+// Check if coroutine is pinned to a specific worker via Coro.lockThread().
+static inline bool xr_coro_is_thread_locked(XrCoroutine *coro) {
+    if (!coro->ext)
+        return false;
+    return atomic_load_explicit(&coro->ext->lock_count, memory_order_relaxed) > 0 &&
+           coro->ext->locked_worker >= 0;
+}
+
+// Effective wake target: locked_worker if thread-locked, else affinity_p.
+// All wake-routing paths should use this instead of reading affinity_p directly,
+// so that Coro.lockThread() is respected across channel wake, sleep timeout,
+// async completion, netpoll, and scope wake.
+static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
+    if (coro->ext) {
+        int lc = atomic_load_explicit(&coro->ext->lock_count, memory_order_relaxed);
+        if (lc > 0 && coro->ext->locked_worker >= 0) {
+            return coro->ext->locked_worker;
+        }
+    }
+    return atomic_load_explicit(&coro->affinity_p, memory_order_relaxed);
+}
+
 /* ========== JIT Integration APIs ========== */
 
 // Check if coroutine should yield (for JIT loop back-edges)

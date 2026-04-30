@@ -33,6 +33,10 @@
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_internal.h"
+#include "../../src/runtime/class/xenum.h"
+#include "../datetime/datetime.h"
+#include "../../src/runtime/object/xexception.h"
+#include "../../src/runtime/value/xtype_names.h"
 #include "../../src/base/xsimd.h"
 #include "../../src/base/xjson.h"
 
@@ -109,6 +113,8 @@ typedef struct {
     XrayIsolate *isolate;
     int indent;
     int depth;
+    bool has_error;        // set true on non-serializable type
+    char error_msg[128];   // description of the offending type
 } JsonWriter;
 
 static inline void writer_init(JsonWriter *w, XrayIsolate *isolate, int indent) {
@@ -116,6 +122,8 @@ static inline void writer_init(JsonWriter *w, XrayIsolate *isolate, int indent) 
     w->isolate = isolate;
     w->indent = indent;
     w->depth = 0;
+    w->has_error = false;
+    w->error_msg[0] = '\0';
 }
 
 static inline void writer_free(JsonWriter *w) {
@@ -413,11 +421,35 @@ static void stringify_value(JsonWriter *w, XrValue val) {
         stringify_json(w, xr_value_to_json(val));
     } else if (XR_IS_MAP(val)) {
         stringify_map(w, XR_TO_MAP(val));
+    } else if (XR_IS_ENUM_VALUE(val)) {
+        // Enum value: serialize as member name string
+        XrEnumValue *ev = XR_TO_ENUM_VALUE(val);
+        const char *name = ev->member_name ? ev->member_name : "null";
+        if (ev->member_name)
+            stringify_string(w, name, strlen(name));
+        else
+            writer_str(w, "null");
+    } else if (XR_IS_DATETIME(val)) {
+        // DateTime: serialize as ISO 8601 string
+        XrDateTime *dt = XR_TO_DATETIME(val);
+        char buf[64];
+        int n = xr_datetime_to_iso_string(dt, buf, sizeof(buf));
+        if (n > 0)
+            stringify_string(w, buf, (size_t) n);
+        else
+            writer_str(w, "null");
     } else if (xr_value_is_instance(val)) {
         // Struct or Class instance
         stringify_instance(w, (XrInstance *) XR_TO_PTR(val));
     } else {
-        // Unsupported type
+        // Non-serializable type: record error
+        if (!w->has_error) {
+            w->has_error = true;
+            XrTypeId tid = xr_value_typeid(val);
+            snprintf(w->error_msg, sizeof(w->error_msg),
+                     "cannot serialize value of type '%s' to JSON",
+                     xr_typeid_name(tid));
+        }
         writer_str(w, "null");
     }
 }
@@ -458,6 +490,17 @@ XrValue xr_json_fn_stringify(XrayIsolate *X, XrValue *args, int argc) {
     writer_init(&writer, X, indent);
 
     stringify_value(&writer, args[0]);
+
+    if (writer.has_error) {
+        // Non-serializable type encountered — throw instead of silent data loss
+        char msg_copy[128];
+        memcpy(msg_copy, writer.error_msg, sizeof(msg_copy));
+        writer_free(&writer);
+        XrValue exc = xr_exception_newf(X, XR_ERR_TYPE,
+                                        "Json.stringify: %s", msg_copy);
+        xr_vm_unwind_with_trace(X, exc);
+        return xr_null();
+    }
 
     XrString *str = xr_string_new(X, writer.sw.data, writer.sw.len);
     writer_free(&writer);

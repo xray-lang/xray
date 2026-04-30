@@ -218,11 +218,12 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
         total_io_events += ready.count;
 
-        // Zero-copy fast path: single IO wakeup with affinity to this
-        // worker — skip queue push/pop, return directly for execution.
+        // Zero-copy fast path: single IO wakeup targeting this worker
+        // — skip queue push/pop, return directly for execution.
+        // Thread-locked coros must match this worker to use the fast path.
         if (ready.count == 1 && ready.head) {
             XrCoroutine *io_coro = ready.head;
-            int aff = atomic_load_explicit(&io_coro->affinity_p, memory_order_relaxed);
+            int aff = xr_coro_wake_target_id(io_coro);
             if (aff == p->id) {
                 io_coro->sched_link = NULL;
                 XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
@@ -383,8 +384,9 @@ static void worker_sleep_timeout_callback(void *arg) {
     // Set ready state
     xr_coro_flags_set(coro, XR_CORO_FLG_READY);
 
-    // Enqueue to coroutine's affinity worker inbox (with Dekker sync + wake)
-    int target_id = atomic_load_explicit(&coro->affinity_p, memory_order_relaxed);
+    // Enqueue to coroutine's target worker inbox (with Dekker sync + wake).
+    // Respects Coro.lockThread(): locked coros return to their locked worker.
+    int target_id = xr_coro_wake_target_id(coro);
     if (target_id < 0 || target_id >= runtime->worker_count) {
         target_id = 0;
     }
@@ -856,6 +858,19 @@ void *worker_loop(void *arg) {
             if (coro) {
                 if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
                     SCHED_TRACE_CORO(worker, coro, "skip_done");
+                    continue;
+                }
+                // Thread-lock gate: if this coro is pinned to a different
+                // worker (via Coro.lockThread()), forward it to the correct
+                // worker's inbox and continue looking for local work.
+                // This catches coros that arrived via work-stealing or
+                // migration and must not execute on this worker.
+                if (xr_coro_is_thread_locked(coro) &&
+                    coro->ext->locked_worker != worker->p.id) {
+                    int lw = coro->ext->locked_worker;
+                    if (lw >= 0 && lw < runtime->worker_count) {
+                        xr_worker_inbox_enqueue(runtime, lw, coro);
+                    }
                     continue;
                 }
                 worker_reset_spinning(worker, runtime);

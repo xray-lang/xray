@@ -547,7 +547,9 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         // Infer field type
         field_types[i] = xa_visit_infer_expr(ctx, obj->values[i]);
 
-        // Reject non-JSON-standard types in Json object literals
+        // Warn (not error) for non-serializable types in object literals.
+        // Object literals can hold any value at runtime, but non-JSON types
+        // will cause Json.stringify() to throw at runtime.
         if (field_types[i] && !xr_type_is_json_field_compatible(field_types[i])) {
             XrLocation loc = {.file = ctx->file_path,
                               .line = obj->values[i]->line,
@@ -555,10 +557,10 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             char msg[256];
             const char *fname = field_names[i] ? field_names[i] : "<computed>";
             snprintf(msg, sizeof(msg),
-                     "Json field '%s' has type '%s', which is not a valid JSON value type. "
-                     "Valid types: null, bool, int, float, string, Json, Array",
+                     "field '%s' has type '%s' which is not JSON-serializable; "
+                     "Json.stringify() will throw at runtime",
                      fname, xr_type_to_string(field_types[i]));
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_WARNING,
                                        XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
         }
     }

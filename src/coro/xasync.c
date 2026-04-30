@@ -286,10 +286,11 @@ int xr_async_check_ready(XrAsyncPool *pool, int worker_id) {
             xr_coro_flags_clear(job->coro, XR_CORO_FLG_BLOCKED);
             xr_coro_flags_set(job->coro, XR_CORO_FLG_READY);
 
-            // Put in coroutine's bound Worker inbox (no global queue)
+            // Put in coroutine's target Worker inbox (no global queue).
+            // Respects Coro.lockThread(): locked coros return to their locked worker.
             if (pool->runtime) {
                 XrRuntime *runtime = pool->runtime;
-                int target_id = atomic_load_explicit(&job->coro->affinity_p, memory_order_relaxed);
+                int target_id = xr_coro_wake_target_id(job->coro);
                 if (target_id < 0 || target_id >= runtime->worker_count) {
                     target_id = 0;  // Fallback: Worker 0
                 }

@@ -811,11 +811,12 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
             xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED);
             xr_coro_flags_set(coro, XR_CORO_FLG_READY);
 
-            // Add coroutine to Worker->p.inbox for scheduling
+            // Add coroutine to target Worker inbox for scheduling.
+            // Respects Coro.lockThread(): locked coros return to their locked worker.
             XrWorker *current_worker = xr_current_worker();
             if (current_worker && current_worker->p.runtime) {
                 XrRuntime *rt = current_worker->p.runtime;
-                int target_id = atomic_load_explicit(&coro->affinity_p, memory_order_relaxed);
+                int target_id = xr_coro_wake_target_id(coro);
                 if (target_id < 0 || target_id >= rt->worker_count) {
                     target_id = 0;
                 }
