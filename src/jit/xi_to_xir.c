@@ -20,12 +20,19 @@
 #include "xir_ops.h"
 #include "xir_jit_runtime.h"
 #include "xir_fold.h"
+#include "xir_codegen.h"
+#include "xir_offsets.h"
 #include "../ir/xi_rep.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xchunk.h"
+#include "../vm/xic_field.h"
+#include "../vm/xic_field_table.h"
+#include "../vm/xic_method.h"
+#include "../runtime/class/xmethod.h"
+#include "../runtime/closure/xclosure.h"
 #include <string.h>
 
 /* ========== Lowering Context ========== */
@@ -37,6 +44,8 @@ typedef struct {
     XirFunc *xir_func;
     XrProto *proto;
     XiSlotMap *slot_map;
+    const XirICSnapshot *ic;
+    struct XrayIsolate *isolate;
 
     /* Xi block id → XirBlock* mapping */
     XirBlock **block_map;
@@ -51,6 +60,9 @@ typedef struct {
         XirBlock *handler;   /* catch (or finally) XIR block */
     } try_stack[XI2XIR_MAX_TRY_DEPTH];
     int try_depth;
+
+    /* Deopt snapshot counter (monotonically increasing) */
+    uint16_t next_deopt_id;
 
     bool error;
 } LowerCtx;
@@ -93,6 +105,98 @@ static XirBlock *get_block(LowerCtx *ctx, XiBlock *blk) {
     XR_DCHECK(blk != NULL, "get_block: NULL block");
     XR_DCHECK(blk->id < ctx->block_map_size, "get_block: block id out of range");
     return ctx->block_map[blk->id];
+}
+
+/* ========== Slot Map / Deopt Helpers ========== */
+
+/* Look up the bytecode instruction offset for a given Xi value ID.
+ * Returns -1 if no mapping exists (value has no IC-relevant bytecode). */
+static int slot_map_bc_pc(const LowerCtx *ctx, uint32_t value_id) {
+    if (!ctx->slot_map) return -1;
+    for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
+        if (ctx->slot_map->entries[i].value_id == value_id)
+            return (int)ctx->slot_map->entries[i].bc_pc;
+    }
+    return -1;
+}
+
+/* Record a deopt snapshot at the current point for a guard instruction.
+ * bc_pc: bytecode PC to resume at on deopt.
+ * Returns the deopt_id, or 0xFFFF on failure. */
+static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
+    XirFunc *func = ctx->xir_func;
+    if (func->ndeopt >= XIR_MAX_DEOPT_POINTS)
+        return 0xFFFF;
+
+    uint16_t did = ctx->next_deopt_id++;
+
+    /* Grow deopt_infos if needed */
+    if (!func->deopt_infos) {
+        func->deopt_infos = (XirDeoptInfo *)xr_calloc(
+            XIR_MAX_DEOPT_POINTS, sizeof(XirDeoptInfo));
+        if (!func->deopt_infos) return 0xFFFF;
+    }
+
+    XR_DCHECK(func->ndeopt < XIR_MAX_DEOPT_POINTS,
+              "record_deopt: deopt table overflow");
+    XirDeoptInfo *info = &func->deopt_infos[func->ndeopt++];
+    info->bc_pc = bc_pc;
+    info->deopt_id = did;
+    info->nslots = 0;
+    info->slots = NULL;
+
+    /* Populate slots from slot_map: for each live Xi value with a bc_slot,
+     * record its current XIR ref so codegen can rebuild interpreter state. */
+    if (ctx->slot_map && ctx->slot_map->count > 0) {
+        uint32_t max_slots = ctx->slot_map->count;
+        if (max_slots > XIR_MAX_DEOPT_SLOTS)
+            max_slots = XIR_MAX_DEOPT_SLOTS;
+        XirDeoptSlot *slots = (XirDeoptSlot *)xr_calloc(
+            max_slots, sizeof(XirDeoptSlot));
+        if (slots) {
+            uint16_t ns = 0;
+            for (uint32_t i = 0; i < ctx->slot_map->count && ns < max_slots; i++) {
+                XiSlotMapEntry *e = &ctx->slot_map->entries[i];
+                if (e->value_id >= ctx->ref_map_size) continue;
+                XirRef ref = ctx->ref_map[e->value_id];
+                if (xir_ref_is_none(ref)) continue;
+                slots[ns].bc_slot = (int16_t)e->bc_slot;
+                slots[ns].rep = xir_ref_is_const(ref) ? XR_REP_I64
+                    : (e->xr_tag == 4 ? XR_REP_F64 : XR_REP_I64);
+                slots[ns].xr_tag = e->xr_tag;
+                slots[ns].value = ref;
+                ns++;
+            }
+            info->slots = slots;
+            info->nslots = ns;
+        }
+    }
+    return did;
+}
+
+/* ========== IC Query Helpers ========== */
+
+/* Look up field IC for a given bytecode instruction offset.
+ * Returns the IC entry if monomorphic Json shape is cached, NULL otherwise. */
+static const XrICField *ic_field_lookup(const LowerCtx *ctx, int bc_pc) {
+    if (!ctx->ic || !ctx->ic->ic_fields || bc_pc < 0) return NULL;
+    XrICField *ic = xr_ic_field_table_get(ctx->ic->ic_fields, bc_pc);
+    if (!ic) return NULL;
+    /* Only speculate on monomorphic Json shape access */
+    if (ic->json_shape_id == 0) return NULL;
+    return ic;
+}
+
+/* Look up method IC for a given bytecode instruction offset.
+ * Returns the IC entry if monomorphic (single klass), NULL otherwise. */
+static const XrICMethod *ic_method_lookup(const LowerCtx *ctx, int bc_pc) {
+    if (!ctx->ic || !ctx->ic->ic_methods || bc_pc < 0) return NULL;
+    XrICMethod *ic = xr_ic_method_table_get(ctx->ic->ic_methods, bc_pc);
+    if (!ic) return NULL;
+    /* Only speculate on monomorphic call sites (exactly 1 klass seen) */
+    if (ic->count != 1 || ic->is_megamorphic) return NULL;
+    if (!ic->entries[0].klass || !ic->entries[0].method) return NULL;
+    return ic;
 }
 
 /* ========== Constant Lowering ========== */
@@ -300,6 +404,51 @@ static XirRef lower_call(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
         }
     }
 
+    /* Method IC speculation: if call site is monomorphic, emit
+     * GUARD_KLASS(receiver, expected_klass) + CALL_KNOWN(proto). */
+    if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
+        int bc_pc = slot_map_bc_pc(ctx, v->id);
+        const XrICMethod *mic = ic_method_lookup(ctx, bc_pc);
+        if (mic) {
+            XR_DCHECK(mic->count == 1, "method IC must be monomorphic here");
+            XrClass *klass = mic->entries[0].klass;
+            XrMethod *method = mic->entries[0].method;
+            XR_DCHECK(klass != NULL && method != NULL,
+                      "method IC entry must be non-null");
+
+            /* Only speculate on closure methods with a valid proto */
+            if (method->type == XMETHOD_CLOSURE && method->as.closure &&
+                method->as.closure->proto) {
+                struct XrProto *callee_proto = method->as.closure->proto;
+
+                /* Emit GUARD_KLASS on receiver (args[0]) */
+                XirRef recv = call_args[0];
+                uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
+                XirRef klass_ref = xir_const_ptr(ctx->xir_func, (void *)klass);
+                XirRef deopt_ref = xir_const_i64(ctx->xir_func, (int64_t)did);
+                xir_emit(ctx->xir_func, blk, XIR_GUARD_KLASS, XR_REP_I64,
+                         recv, klass_ref);
+                blk->ins[blk->nins - 1].dst = deopt_ref;
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+
+                /* Emit CALL_KNOWN with the IC-resolved proto */
+                uint8_t ret_rep = callee_proto->return_type_info
+                    ? xr_type_rep(callee_proto->return_type_info)
+                    : XR_REP_TAGGED;
+                XirRef proto_ref = xir_const_ptr(ctx->xir_func,
+                                                  (void *)callee_proto);
+                XirRef nargs_c = xir_const_i64(ctx->xir_func, (int64_t)nargs);
+                XirRef result = xir_emit(ctx->xir_func, blk,
+                                          XIR_CALL_KNOWN, ret_rep,
+                                          proto_ref, nargs_c);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                xir_func_bind_call_args(ctx->xir_func, result,
+                                         call_args, total);
+                return result;
+            }
+        }
+    }
+
     /* Fallback: generic call via xr_jit_call_func bridge */
     XirRef nargs_ref = xir_const_i64(ctx->xir_func, (int64_t)nargs);
     XirRef nargs_val = xir_emit_unary(ctx->xir_func, blk, XIR_CONST_I64,
@@ -426,10 +575,35 @@ static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             return get_ref(ctx, v->args[0]);
         }
 
-        /* Field access */
+        /* Field access — with optional shape-guard speculation from IC */
         case XI_LOAD_FIELD: {
             XR_DCHECK(v->nargs >= 1, "load_field: need obj arg");
             XirRef obj = get_ref(ctx, v->args[0]);
+
+            /* IC speculation: if field IC has monomorphic Json shape,
+             * emit GUARD_SHAPE + direct LOAD_FIELD at known offset. */
+            int bc_pc = slot_map_bc_pc(ctx, v->id);
+            const XrICField *fic = ic_field_lookup(ctx, bc_pc);
+            if (fic) {
+                uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
+                XirRef shape_id = xir_const_i64(ctx->xir_func,
+                                                 (int64_t)fic->json_shape_id);
+                XirRef deopt_ref = xir_const_i64(ctx->xir_func, (int64_t)did);
+                xir_emit(ctx->xir_func, blk,
+                         XIR_GUARD_SHAPE, XR_REP_I64,
+                         obj, shape_id);
+                blk->ins[blk->nins - 1].dst = deopt_ref;
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+
+                /* Direct field load: offset = fields_base + idx * sizeof(XrValue) */
+                int64_t byte_off = XIR_JSON_FIELDS_OFFSET
+                                   + (int64_t)fic->json_field_idx * XIR_XRVALUE_SIZE;
+                XirRef off = xir_const_i64(ctx->xir_func, byte_off);
+                return xir_emit(ctx->xir_func, blk,
+                                 XIR_LOAD_FIELD, XR_REP_I64, obj, off);
+            }
+
+            /* Generic fallback: offset from aux_int */
             XirRef off = xir_const_i64(ctx->xir_func, v->aux_int);
             return xir_emit(ctx->xir_func, blk, XIR_LOAD_FIELD, XR_REP_I64, obj, off);
         }
@@ -709,9 +883,9 @@ static void lower_terminator(LowerCtx *ctx, XiBlock *xi_blk, XirBlock *xir_blk) 
 XR_FUNC struct XirFunc *xi_to_xir_lower(XiFunc *xi_func,
                                           struct XrProto *proto,
                                           XiSlotMap *slot_map,
+                                          const XirICSnapshot *ic,
                                           struct XrayIsolate *isolate) {
     XR_DCHECK(xi_func != NULL, "xi_to_xir_lower: NULL xi_func");
-    (void)isolate;
 
     XirFunc *func = xir_func_new(xi_func->name);
     if (!func) return NULL;
@@ -722,6 +896,8 @@ XR_FUNC struct XirFunc *xi_to_xir_lower(XiFunc *xi_func,
     ctx.xir_func = func;
     ctx.proto = proto;
     ctx.slot_map = slot_map;
+    ctx.ic = ic;
+    ctx.isolate = isolate;
     ctx.error = false;
 
     /* Allocate block map */

@@ -107,7 +107,7 @@ TEST(add_i64) {
     xi_block_set_return(entry, sum);
 
     /* Lower to XIR */
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "lowering must succeed");
 
     /* Run optimization pipeline */
@@ -143,7 +143,7 @@ TEST(sub_i64) {
     XiValue *diff = xi_binary(f, entry, XI_SUB, &stub_int, a, b);
     xi_block_set_return(entry, diff);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     xir_rebuild_preds(xir);
@@ -176,7 +176,7 @@ TEST(mul_i64) {
     XiValue *prod = xi_binary(f, entry, XI_MUL, &stub_int, a, b);
     xi_block_set_return(entry, prod);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     xir_rebuild_preds(xir);
@@ -205,7 +205,7 @@ TEST(const_return) {
     XiValue *c = xi_const_int(f, entry, 99, &stub_int);
     xi_block_set_return(entry, c);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     xir_rebuild_preds(xir);

@@ -89,6 +89,11 @@ typedef struct {
      * mutable variable. */
     bool *cell_wrapped;      /* [next_value_id] */
 
+    /* Per-value bytecode PC: records the instruction offset for IC-relevant
+     * ops (GETPROP/SETPROP/INVOKE).  Indexed by value_id; -1 = no mapping.
+     * Consumed by build_slot_map() for JIT IC-guided speculation. */
+    int *value_pc;           /* [next_value_id] */
+
     /* Comparison-branch fusion: if the block control is a comparison with
      * no other consumers, skip emitting OP_CMP_* and instead emit the
      * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
@@ -893,6 +898,9 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                 int sym = add_symbol(ctx, prop);
                 if (ctx->status != XI_EMIT_OK) return;
                 emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, (uint8_t)sym));
+                /* Record IC-relevant instruction offset for JIT */
+                if (v->id < ctx->reg_map_size)
+                    ctx->value_pc[v->id] = current_pc(ctx) - 1;
             } else {
                 /* Fallback: numeric field index from aux_int */
                 emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, obj, (uint8_t)v->aux_int));
@@ -909,6 +917,9 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                 int sym = add_symbol(ctx, prop);
                 if (ctx->status != XI_EMIT_OK) return;
                 emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, (uint8_t)sym, val));
+                /* Record IC-relevant instruction offset for JIT */
+                if (v->id < ctx->reg_map_size)
+                    ctx->value_pc[v->id] = current_pc(ctx) - 1;
             } else {
                 emit_inst(ctx, CREATE_ABC(OP_SETFIELD, obj, (uint8_t)v->aux_int, val));
             }
@@ -1370,6 +1381,9 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                 int sym = add_symbol(ctx, method_name);
                 if (ctx->status != XI_EMIT_OK) return;
                 emit_inst(ctx, CREATE_ABC(OP_INVOKE, dst, (uint8_t)sym, nargs));
+                /* Record IC-relevant instruction offset for JIT */
+                if (v->id < ctx->reg_map_size)
+                    ctx->value_pc[v->id] = current_pc(ctx) - 1;
             }
             break;
         }
@@ -1976,11 +1990,17 @@ static XiSlotMap *build_slot_map(EmitCtx *ctx) {
                 }
             }
             map->entries[idx].xr_tag = tag;
-            /* bc_pc: use block's start PC if available */
-            map->entries[idx].bc_pc = (blk->id < ctx->block_pc_size &&
-                                       ctx->block_pc[blk->id] >= 0)
-                                          ? (uint32_t)ctx->block_pc[blk->id]
-                                          : 0;
+            /* bc_pc: prefer per-value IC instruction offset when available
+             * (recorded for GETPROP/SETPROP/INVOKE), fallback to block start */
+            if (ctx->value_pc && v->id < ctx->reg_map_size &&
+                ctx->value_pc[v->id] >= 0) {
+                map->entries[idx].bc_pc = (uint32_t)ctx->value_pc[v->id];
+            } else {
+                map->entries[idx].bc_pc = (blk->id < ctx->block_pc_size &&
+                                           ctx->block_pc[blk->id] >= 0)
+                                              ? (uint32_t)ctx->block_pc[blk->id]
+                                              : 0;
+            }
             idx++;
         }
     }
@@ -2106,6 +2126,20 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
         return XI_EMIT_ERR_INTERNAL;
     }
 
+    /* Allocate per-value bytecode PC map for IC-guided JIT speculation */
+    ctx.value_pc = (int *)xr_malloc(ctx.reg_map_size * sizeof(int));
+    if (!ctx.value_pc) {
+        xr_free(ctx.cell_wrapped);
+        xr_free(ctx.last_use);
+        xr_free(ctx.block_pc);
+        xr_free(ctx.reg_map);
+        xr_vm_proto_free(ctx.proto);
+        xr_free(rpo_order);
+        return XI_EMIT_ERR_INTERNAL;
+    }
+    for (uint32_t i = 0; i < ctx.reg_map_size; i++)
+        ctx.value_pc[i] = -1;
+
     alloc_registers(&ctx);
     if (ctx.status != XI_EMIT_OK) goto cleanup;
 
@@ -2156,6 +2190,7 @@ cleanup:;
     } else {
         xr_vm_proto_free(ctx.proto);
     }
+    xr_free(ctx.value_pc);
     xr_free(ctx.cell_wrapped);
     xr_free(ctx.last_use);
     xr_free(ctx.reg_map);

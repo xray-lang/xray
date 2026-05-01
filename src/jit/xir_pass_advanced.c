@@ -1490,7 +1490,7 @@ XirPassChange xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
                 if (callee->xi_func)
                     callee_func = xi_to_xir_lower(
                         (XiFunc *)callee->xi_func, callee,
-                        (XiSlotMap *)callee->xi_slot_map, NULL);
+                        (XiSlotMap *)callee->xi_slot_map, NULL, NULL);
                 if (!callee_func)
                     continue;
                 int max_blk = is_tiny ? 8 : 32;
