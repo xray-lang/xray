@@ -20,12 +20,12 @@
  */
 
 #include "xi_cgen.h"
-#include "xi_rep.h"
+#include "../ir/xi_rep.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
-#include "../aot/xrt_method_symbols.h"
+#include "xrt_method_symbols.h"
 #include "../frontend/parser/xast_nodes.h"
 #include <string.h>
 #include <inttypes.h>

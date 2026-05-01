@@ -9,7 +9,7 @@
  */
 
 #include "../../../src/ir/xi.h"
-#include "../../../src/ir/xi_cgen.h"
+#include "../../../src/aot/xi_cgen.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/runtime/value/xtype.h"

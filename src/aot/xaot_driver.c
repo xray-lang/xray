@@ -29,7 +29,7 @@
 #include "../base/xmalloc.h"
 #include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
-#include "../ir/xi_cgen.h"
+#include "xi_cgen.h"
 #include "../frontend/parser/xparse.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include <stdio.h>
