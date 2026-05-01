@@ -45,8 +45,10 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
     if (!proto)
         return false;
 
-    // Must have bb_leaders for CFG construction
-    if (!proto->bb_leaders) {
+    // Must have bb_leaders for CFG construction (legacy builder path).
+    // xi_to_xir builds CFG directly from Xi IR SSA blocks, so bb_leaders
+    // is not required when proto carries attached Xi IR.
+    if (!proto->bb_leaders && !proto->xi_func) {
         if (verbose)
             fprintf(stderr, "[JIT] skip %s: no bb_leaders\n", name);
         return false;
@@ -182,7 +184,12 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
      * SUPPORTED and DEOPT_FALLBACK opcodes are allowed; only BAIL_OUT
      * or UNIMPLEMENTED causes the whole function to stay in interpreter.
      * DEOPT_FALLBACK opcodes generate unconditional deopt at that PC,
-     * allowing hot loops before the opcode to still run JIT-compiled. */
+     * allowing hot loops before the opcode to still run JIT-compiled.
+     *
+     * Skip when xi_func is attached: xi_to_xir works from Xi IR and
+     * handles unsupported ops by returning NULL at lowering time. */
+    if (proto->xi_func)
+        return true;
     int code_len = proto->code.count;
     for (int ci = 0; ci < code_len; ci++) {
         XrInstruction ins = PROTO_CODE(proto, ci);
