@@ -90,7 +90,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
      * - NULL isolate: class-registry dynarrays are not safe for bg
      *   concurrent access; builder works in a bg-safe subset. */
     XrProto **shared_protos = task->nshared > 0 ? (XrProto **) task->shared_protos : NULL;
-    XirAotOptions bg_opts;
+    XirBuildOptions bg_opts;
     memset(&bg_opts, 0, sizeof(bg_opts));
     bg_opts.ic_fields_snapshot = task->ic_fields_snapshot;
     bg_opts.ic_methods_snapshot = task->ic_methods_snapshot;

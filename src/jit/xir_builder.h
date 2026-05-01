@@ -52,31 +52,13 @@ typedef struct {
     uint32_t back_edge_pc;  // source of backward jump
 } BuilderLoop;
 
-/* ========== AOT Import / Export Resolution ========== */
+/* ========== Build Options ========== */
 
+// Bundled build options for background JIT (keeps the public API
+// parameter list <= 6). Background JIT uses the ic_*_snapshot fields
+// to ship pre-captured inline-cache state to the worker thread,
+// which has no live VM context to snapshot from.
 typedef struct {
-    const char *module_path;  // import path (e.g. "./math")
-    const char *export_name;  // export name (e.g. "add")
-    int shared_index;         // absolute shared index in xrt_shared[]
-} XirAotImportEntry;
-
-// Synthetic export slot: const exports without OP_SETSHARED in bytecode.
-// The builder emits a SETSHARED at the OP_EXPORT PC for these.
-typedef struct {
-    uint32_t export_pc;  // bytecode PC of the OP_EXPORT instruction
-    int value_reg;       // register holding the value at export time
-    int shared_index;    // absolute shared index to write to
-} XirAotExportSlot;
-
-// Bundled build options shared by AOT and background JIT (keeps the
-// public API parameter list <= 6). Background JIT additionally uses
-// the ic_*_snapshot fields to ship pre-captured inline-cache state to
-// the worker thread, which has no live VM context to snapshot from.
-typedef struct {
-    XirAotImportEntry *import_map;
-    int import_count;
-    XirAotExportSlot *export_slots;
-    int export_slot_count;
     // Caller-owned IC snapshots. NULL means "let the builder snapshot
     // from xr_vm_current_ctx(isolate) instead". Non-NULL means "the
     // caller already snapshotted on a thread that owns the live ctx;
@@ -84,7 +66,7 @@ typedef struct {
     struct XrICFieldTable *ic_fields_snapshot;
     struct XrICMethodTable *ic_methods_snapshot;
     struct XrICBuiltinTable *ic_builtin_snapshot;
-} XirAotOptions;
+} XirBuildOptions;
 
 /* ========== Builder State ========== */
 
@@ -162,19 +144,11 @@ typedef struct {
     uint32_t ops_skipped;
     const char *nyi_opcode;  // first NYI bytecode name (debug diagnostics)
 
-    // AOT mode: generate closure/upvalue XIR instead of skipping
+    // AOT mode flag (currently unused — AOT goes through Xi IR pipeline).
+    // Retained for JIT builder code paths that check it; always false.
     bool aot_mode;
 
-    // AOT import resolution: cross-module export map (non-owning)
-    XirAotImportEntry *aot_import_map;
-    int aot_import_count;
-    const char *import_modules[256];  // slot → module path (NULL = not import reg)
-
-    // AOT synthetic export slots: const exports needing SETSHARED injection
-    XirAotExportSlot *aot_export_slots;
-    int aot_export_slot_count;
-
-    // Inline-cache snapshots for type feedback. JIT/AOT use these read-only
+    // Inline-cache snapshots for type feedback. JIT uses these read-only
     // copies of the proto's IC state to drive speculative devirtualization
     // and Json shape guards. ic_snapshots_owned == true means the builder
     // took the snapshots itself (foreground JIT) and must free them at
@@ -216,18 +190,6 @@ XR_FUNC XirFunc *xir_build_from_proto_jit(XrProto *proto, XrProto **shared_proto
 XR_FUNC XirFunc *xir_build_from_proto_jit_ex(XrProto *proto, XrProto **shared_protos, int nshared,
                                              struct XrShape *dominant_shape,
                                              struct XrayIsolate *isolate,
-                                             const XirAotOptions *opts);
-
-// Build XIR in AOT mode: generates closure/upvalue XIR instead of skipping.
-// If isolate is non-NULL, enables CHA devirtualization for class method calls.
-XR_FUNC XirFunc *xir_build_from_proto_aot(XrProto *proto, XrProto **shared_protos, int nshared,
-                                          struct XrayIsolate *isolate);
-
-// Build XIR in AOT mode with cross-module import/export resolution.
-// opts->import_map allows OP_IMPORT+OP_GETPROP to resolve to GETSHARED.
-// opts->export_slots allows OP_EXPORT to emit synthetic SETSHARED.
-XR_FUNC XirFunc *xir_build_from_proto_aot_ex(XrProto *proto, XrProto **shared_protos, int nshared,
-                                             struct XrayIsolate *isolate,
-                                             const XirAotOptions *opts);
+                                             const XirBuildOptions *opts);
 
 #endif  // XIR_BUILDER_H

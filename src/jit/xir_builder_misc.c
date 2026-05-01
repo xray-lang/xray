@@ -857,27 +857,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             return true;
         }
 
-        /* === Module import (AOT: record module register; JIT: deopt) === */
+        /* === Module import (JIT: deopt-to-VM) === */
         case OP_IMPORT: {
-            int a = GETARG_A(inst);
-            if (b->aot_mode) {
-                // Record which register holds a module import result
-                int bx = GETARG_Bx(inst);
-                if (a < 256 && bx < (int) PROTO_CONST_COUNT(b->proto)) {
-                    XrValue name_val = PROTO_CONSTANT(b->proto, bx);
-                    if (XR_IS_STRING(name_val)) {
-                        b->import_modules[a] = XR_STRING_CHARS(XR_TO_STRING(name_val));
-                    }
-                }
-                // Emit null constant to satisfy SSA (module object not used)
-                XirRef zero = xir_const_i64(b->func, 0);
-                XirRef nv = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
-                builder_tag_vreg(b, nv, VTAG_PTR, 0);
-                builder_set_slot(b, a, nv);
-                b->ops_translated++;
-                return true;
-            }
-            // JIT: skip (deopt-to-VM)
             b->ops_skipped++;
             return true;
         }
@@ -1437,32 +1418,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             b->ops_translated++;
             return true;
 
-        /* === Export (emit synthetic SETSHARED for const exports in AOT) === */
+        /* === Export (no-op for JIT; AOT uses Xi IR pipeline) === */
         case OP_EXPORT: {
-            // In AOT mode, const exports without OP_SETSHARED need a
-            // synthetic shared write so other modules can read them.
-            if (b->aot_mode && b->aot_export_slots) {
-                uint32_t cur = b->cur_pc;
-                for (int ei = 0; ei < b->aot_export_slot_count; ei++) {
-                    if (b->aot_export_slots[ei].export_pc != cur)
-                        continue;
-                    int vreg = b->aot_export_slots[ei].value_reg;
-                    int sidx = b->aot_export_slots[ei].shared_index;
-                    XirRef val = builder_get_slot(b, blk, vreg);
-                    XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_set_shared);
-                    uint8_t val_tag = vtag_to_value_tag(builder_slot_xr_tag(b, vreg));
-                    uint8_t val_bc = (vreg >= 0 && vreg < 256) ? (uint8_t) vreg : 0xFF;
-                    int64_t enc =
-                        ((int64_t) val_bc << 24) | ((int64_t) val_tag << 16) | (sidx & 0xFFFF);
-                    XirRef idx_ref = xir_const_i64(b->func, enc);
-                    XirRef idx_val =
-                        xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_ref);
-                    XirRef ss_res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, idx_val);
-                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                    builder_bind_call_args(b, ss_res, &val, 1);
-                    break;
-                }
-            }
             b->ops_translated++;
             return true;
         }

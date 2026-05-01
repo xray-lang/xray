@@ -2525,19 +2525,19 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
 /* ========== Main Build Entry Point ========== */
 
 static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos, int nshared,
-                                         struct XrShape *dominant_shape, bool aot_mode,
-                                         XrayIsolate *isolate, const XirAotOptions *opts);
+                                         struct XrShape *dominant_shape,
+                                         XrayIsolate *isolate, const XirBuildOptions *opts);
 
 static XirFunc *build_from_proto_impl(XrProto *proto, XrProto **shared_protos, int nshared,
-                                      struct XrShape *dominant_shape, bool aot_mode,
+                                      struct XrShape *dominant_shape,
                                       XrayIsolate *isolate) {
-    return build_from_proto_impl_ex(proto, shared_protos, nshared, dominant_shape, aot_mode,
+    return build_from_proto_impl_ex(proto, shared_protos, nshared, dominant_shape,
                                     isolate, NULL);
 }
 
 static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos, int nshared,
-                                         struct XrShape *dominant_shape, bool aot_mode,
-                                         XrayIsolate *isolate, const XirAotOptions *opts) {
+                                         struct XrShape *dominant_shape,
+                                         XrayIsolate *isolate, const XirBuildOptions *opts) {
     if (!proto)
         return NULL;
 
@@ -2550,13 +2550,8 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos
     builder_init(&b, func, proto);
     b.shared_protos = shared_protos;
     b.nshared_protos = nshared;
-    b.aot_mode = aot_mode;
+    b.aot_mode = false;
     b.isolate = isolate;
-    b.aot_import_map = opts ? opts->import_map : NULL;
-    b.aot_import_count = opts ? opts->import_count : 0;
-    b.aot_export_slots = opts ? opts->export_slots : NULL;
-    b.aot_export_slot_count = opts ? opts->export_slot_count : 0;
-    memset(b.import_modules, 0, sizeof(b.import_modules));
 
     // Wire inline-cache snapshots for type-feedback-driven optimisations.
     // Three cases:
@@ -2576,7 +2571,7 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos
         b.ic_methods_snapshot = opts->ic_methods_snapshot;
         b.ic_builtin_snapshot = opts->ic_builtin_snapshot;
         b.ic_snapshots_owned = false;
-    } else if (!aot_mode && isolate) {
+    } else if (isolate) {
         XrVMContext *ctx = xr_vm_current_ctx(isolate);
         b.ic_fields_snapshot = xr_vm_ic_fields_snapshot(ctx, proto);
         b.ic_methods_snapshot = xr_vm_ic_methods_snapshot(ctx, proto);
@@ -2906,41 +2901,30 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos
 
 XirFunc *xir_build_from_proto(XrProto *proto) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto: proto is NULL");
-    return build_from_proto_impl(proto, NULL, 0, NULL, false, NULL);
+    return build_from_proto_impl(proto, NULL, 0, NULL, NULL);
 }
 
 XirFunc *xir_build_from_proto_ex(XrProto *proto, XrProto **shared_protos, int nshared) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_ex: proto is NULL");
-    return build_from_proto_impl(proto, shared_protos, nshared, NULL, false, NULL);
+    return build_from_proto_impl(proto, shared_protos, nshared, NULL, NULL);
 }
 
 XirFunc *xir_build_from_proto_shaped(XrProto *proto, struct XrShape *dominant_shape) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_shaped: proto is NULL");
-    return build_from_proto_impl(proto, NULL, 0, dominant_shape, false, NULL);
+    return build_from_proto_impl(proto, NULL, 0, dominant_shape, NULL);
 }
 
 XirFunc *xir_build_from_proto_jit_ex(XrProto *proto, XrProto **shared_protos, int nshared,
                                      struct XrShape *dominant_shape, XrayIsolate *isolate,
-                                     const XirAotOptions *opts) {
+                                     const XirBuildOptions *opts) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_jit_ex: proto is NULL");
-    return build_from_proto_impl_ex(proto, shared_protos, nshared, dominant_shape, false, isolate,
+    return build_from_proto_impl_ex(proto, shared_protos, nshared, dominant_shape, isolate,
                                     opts);
 }
 
 XirFunc *xir_build_from_proto_jit(XrProto *proto, XrProto **shared_protos, int nshared,
                                   struct XrShape *dominant_shape, XrayIsolate *isolate) {
     XR_DCHECK(proto != NULL, "xir_build_from_proto_jit: proto is NULL");
-    return build_from_proto_impl(proto, shared_protos, nshared, dominant_shape, false, isolate);
+    return build_from_proto_impl(proto, shared_protos, nshared, dominant_shape, isolate);
 }
 
-XirFunc *xir_build_from_proto_aot(XrProto *proto, XrProto **shared_protos, int nshared,
-                                  XrayIsolate *isolate) {
-    XR_DCHECK(proto != NULL, "xir_build_from_proto_aot: proto is NULL");
-    return build_from_proto_impl(proto, shared_protos, nshared, NULL, true, isolate);
-}
-
-XirFunc *xir_build_from_proto_aot_ex(XrProto *proto, XrProto **shared_protos, int nshared,
-                                     XrayIsolate *isolate, const XirAotOptions *opts) {
-    XR_DCHECK(proto != NULL, "xir_build_from_proto_aot_ex: proto is NULL");
-    return build_from_proto_impl_ex(proto, shared_protos, nshared, NULL, true, isolate, opts);
-}
