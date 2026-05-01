@@ -321,7 +321,47 @@ for bad_dep in vm jit frontend api app; do
         q12_count=$((q12_count + count))
     fi
 done
+# frontend/ should not include from jit/, aot/, app/
+for bad_dep in jit aot app; do
+    hits=$(grep -rn "#include.*/$bad_dep/\|#include.*\"$bad_dep/" --include='*.c' --include='*.h' "$SRC_DIR/frontend/" 2>/dev/null || true)
+    if [ -n "$hits" ]; then
+        count=$(echo "$hits" | wc -l | tr -d ' ')
+        fail "frontend/ → $bad_dep/: $count upward includes"
+        q12_count=$((q12_count + count))
+    fi
+done
+# ir/ should not include from jit/, aot/, app/ (except xrt_method_symbols.h used by cgen)
+for bad_dep in jit app; do
+    hits=$(grep -rn "#include.*/$bad_dep/\|#include.*\"$bad_dep/" --include='*.c' --include='*.h' "$SRC_DIR/ir/" 2>/dev/null || true)
+    if [ -n "$hits" ]; then
+        count=$(echo "$hits" | wc -l | tr -d ' ')
+        fail "ir/ → $bad_dep/: $count upward includes"
+        q12_count=$((q12_count + count))
+    fi
+done
 [ "$q12_count" -eq 0 ] && pass "No layer violations detected"
+echo ""
+
+# -----------------------------------------------
+# Q-14: Dead path regression guards
+# -----------------------------------------------
+echo "--- Q-14: Dead path regression guards ---"
+q14_count=0
+# M1: aot_mode must not exist in JIT builder
+hits=$(grep -rn "aot_mode" --include='*.c' --include='*.h' "$SRC_DIR/jit/" 2>/dev/null || true)
+if [ -n "$hits" ]; then
+    count=$(echo "$hits" | wc -l | tr -d ' ')
+    fail "aot_mode still present in src/jit/ ($count hits)"
+    q14_count=$((q14_count + count))
+fi
+# M2: old import API must not exist
+hits=$(grep -rn "xi_cgen_reset_imports\|xi_cgen_add_import" --include='*.c' --include='*.h' "$SRC_DIR/" 2>/dev/null || true)
+if [ -n "$hits" ]; then
+    count=$(echo "$hits" | wc -l | tr -d ' ')
+    fail "xi_cgen_reset_imports/xi_cgen_add_import still present ($count hits)"
+    q14_count=$((q14_count + count))
+fi
+[ "$q14_count" -eq 0 ] && pass "No dead path regressions"
 echo ""
 
 # -----------------------------------------------
