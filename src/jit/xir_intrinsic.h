@@ -21,14 +21,14 @@
  * ADDING A NEW INTRINSIC:
  *   1. Add an XR_INTRIN_* enum value below.
  *   2. Update the xir_intrinsic_name() switch in xir.c (for trace dumps).
- *   3. Update xcgen_call.c::emit_call_intrinsic to lower it to C.
+ *   3. Add the lowering case in the AOT codegen (xi_cgen.c).
  *   4. Update the XIR builder site to emit XIR_CALL_INTRINSIC instead of
  *      XIR_CALL_C(fn=helper, ...) in aot_mode.
  *
  * RELATED MODULES:
  *   - src/jit/xir.h           : XIR_CALL_INTRINSIC opcode
  *   - src/jit/xir_builder*.c  : emission sites
- *   - src/aot/xcgen_call.c    : AOT lowering of XIR_CALL_INTRINSIC
+ *   - src/ir/xi_cgen.c        : AOT C code generation
  */
 
 #ifndef XIR_INTRINSIC_H

@@ -12,8 +12,8 @@
  *   its own owning module (e.g. xint_methods.c, xstring_methods.c). The
  *   global `xr_builtin_method_tables[]` array maps XrTypeId -> per-type
  *   table pointer. VM dispatch (OP_INVOKE_BUILTIN) and AOT codegen
- *   (xcgen_call.c) both resolve through this single source of truth, so
- *   builtin implementations are never duplicated.
+ *   both resolve through this single source of truth, so builtin
+ *   implementations are never duplicated.
  *
  * INVARIANTS:
  *   - Every entry in `xr_builtin_method_tables` is either NULL (type has
