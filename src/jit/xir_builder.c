@@ -1650,7 +1650,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             int uv_idx = GETARG_B(inst);
             XirRef res;
             if (b->aot_mode) {
-                // AOT: emit LOAD_UPVAL (handled by xcgen_expr.c)
+                // AOT: emit LOAD_UPVAL
                 XirRef idx_ref = xir_const_i64(b->func, (int64_t) uv_idx);
                 res = xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL, XR_REP_TAGGED, idx_ref);
             } else {

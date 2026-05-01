@@ -19,7 +19,7 @@
  *   AOT-generated code includes only this header.
  *
  * RELATED MODULES:
- *   - xcgen.c: generates C code that includes this header
+ *   - xi_cgen.c: generates C code that includes this header
  */
 
 #ifndef XRT_H

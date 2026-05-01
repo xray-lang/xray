@@ -31,7 +31,7 @@
  * RELATED MODULES:
  *   - xrt_arc.h: XrtArcHdr, bump allocator
  *   - xrt_value.h: XrValue tagged union (PTR tag carries object pointer)
- *   - xcgen.c: emits class type registration and constructor calls
+ *   - xi_cgen.c: emits class type registration and constructor calls
  */
 
 #ifndef XRT_CLASS_H

@@ -1457,7 +1457,7 @@ bool xir_translate_call_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             int rb = GETARG_B(inst);
             XirRef arr = builder_get_slot(b, blk, a);
             XirRef val = builder_get_slot(b, blk, rb);
-            // When val slot is I64 but stored as TAGGED, unbox to let xcgen emit push_i
+            // When val slot is I64 but stored as TAGGED, unbox for codegen
             uint8_t vt = ref_xir_type(b->func, val);
             if (vt != XR_REP_I64 && b->slot_rep[rb] == XR_REP_I64) {
                 XirRef none = XIR_NONE;

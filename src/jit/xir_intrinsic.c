@@ -10,8 +10,8 @@
  * KEY CONCEPT:
  *   The resolve pass converts XIR_CALL_C instructions that reference known
  *   JIT helper function pointers into XIR_CALL_INTRINSIC instructions with
- *   a symbolic XirIntrinsicId.  This decouples the AOT C codegen from all
- *   JIT runtime symbols: xcgen_call.c dispatches on the intrinsic ID alone,
+ *   a symbolic XirIntrinsicId.  This decouples the AOT C codegen from
+ *   JIT runtime symbols: codegen dispatches on the intrinsic ID alone,
  *   never comparing void* addresses.
  *
  *   The pass rewrites args[0] in-place: the fn_ptr const is replaced with
@@ -21,7 +21,7 @@
  *   1. Add an XR_INTRIN_* value in xir_intrinsic.h.
  *   2. Add a {fn_ptr, id} entry to the intrinsic_map[] table below.
  *   3. Add the name string to xir_intrinsic_name() below.
- *   4. Add the lowering case in xcgen_call.c::emit_call_intrinsic().
+ *   4. Add the lowering case in the AOT codegen (xi_cgen.c).
  */
 
 #include "xir_intrinsic.h"
