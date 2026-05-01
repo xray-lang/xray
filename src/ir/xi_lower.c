@@ -2436,7 +2436,37 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
     XR_DCHECK(l != NULL, "lower_import_stmt: NULL lowerer");
     XR_DCHECK(node != NULL, "lower_import_stmt: NULL node");
     ImportStmtNode *imp = &node->as.import_stmt;
-    if (imp->member_count == 0) return;  /* whole-module import: no IR needed */
+
+    /* Whole-module import: import math / import math as m.
+     * Emit XI_IMPORT_REF with member_name=NULL so xi_emit generates
+     * OP_IMPORT without OP_GETPROP, binding the module object itself. */
+    if (imp->member_count == 0) {
+        const char *local_name = imp->alias ? imp->alias : imp->module_name;
+        if (!local_name) return;
+        struct XrType *type = xr_type_new_unknown(NULL);
+        XiImportRef *ref = (XiImportRef *)xi_func_arena_alloc(
+                                l->func, (uint32_t)sizeof(XiImportRef));
+        XR_DCHECK(ref != NULL, "lower_import_stmt: arena alloc failed");
+        ref->member_name = NULL;
+        ref->resolved_mod_index = -1;
+        ref->resolved_shared_slot = -1;
+        ref->module_path = NULL;
+        if (imp->module_name) {
+            uint32_t ml = (uint32_t)strlen(imp->module_name);
+            char *mc = (char *)xi_func_arena_alloc(l->func, ml + 1);
+            if (mc) { memcpy(mc, imp->module_name, ml + 1); ref->module_path = mc; }
+        }
+
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
+        if (!v) return;
+        v->aux = (void *)ref;
+        v->aux_int = -1;
+        v->line = (uint32_t)node->line;
+
+        int var_id = xi_lower_var_create(l, local_name, type);
+        xi_lower_braun_write(l, var_id, l->cur_block, v);
+        return;
+    }
 
     for (int i = 0; i < imp->member_count; i++) {
         ImportMember *m = &imp->members[i];
