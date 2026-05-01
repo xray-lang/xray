@@ -57,8 +57,6 @@ int64_t xrt_strbuf_finish_sentinel(struct XrCoroutine *c, int64_t x) {
 // 0=NONE, 1=INT, 2=FLOAT, 3=BOOL, 4=STRING, 5=ARRAY, 6=MAP, 7=SET, 8=JSON, 9=INSTANCE
 int builder_derive_type_hint(XirBuilder *b, int recv_reg) {
     XR_DCHECK(b != NULL, "derive_type_hint: NULL builder");
-    if (b->aot_mode)
-        return 0;
     if (recv_reg < 0 || recv_reg >= 256)
         return 0;
 
@@ -364,7 +362,6 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
     b->cur_blk_id = 0;
     b->cur_pc = UINT32_MAX;  // sentinel: not in translate loop
     b->narrow_slot = -1;     // no pending nullable narrowing
-    b->aot_mode = false;
     b->isolate = NULL;
     b->shared_protos = NULL;
     b->nshared_protos = 0;
@@ -399,47 +396,6 @@ static void builder_init(XirBuilder *b, XirFunc *func, XrProto *proto) {
     // fields and initialized to defaults by xir_new_vreg().
     for (int i = 0; i < 256; i++) {
         b->slot_map[i] = XIR_NONE;
-    }
-
-    // AOT: prescan bytecode to infer I64/F64 slot types from integer/float opcodes.
-    // This catches cases where param_types is ANY but the slot is clearly numeric
-    // (e.g. ARRAY_GETC result used by EQI/ADDI).
-    if (b->aot_mode && b->code_count > 0) {
-        for (uint32_t pc = 0; pc < b->code_count; pc++) {
-            XrInstruction inst = PROTO_CODE(proto, pc);
-            OpCode op = GET_OPCODE(inst);
-            int ra = GETARG_A(inst);
-            switch (op) {
-                // Opcodes that write I64 to R[A]
-                case OP_LOADI:
-                case OP_ADDI:
-                case OP_SUBI:
-                case OP_MULI:
-                case OP_BAND:
-                case OP_BOR:
-                case OP_BXOR:
-                case OP_SHL:
-                case OP_SHR:
-                case OP_BNOT:
-                    if (b->slot_rep[ra] == XR_REP_TAGGED)
-                        b->slot_rep[ra] = XR_REP_I64;
-                    break;
-                // Opcodes that read R[A] as I64 (comparison immediates)
-                case OP_EQI:
-                case OP_LTI:
-                case OP_LEI:
-                    if (b->slot_rep[ra] == XR_REP_TAGGED)
-                        b->slot_rep[ra] = XR_REP_I64;
-                    break;
-                // Opcodes that write F64 to R[A]
-                case OP_LOADF:
-                    if (b->slot_rep[ra] == XR_REP_TAGGED)
-                        b->slot_rep[ra] = XR_REP_F64;
-                    break;
-                default:
-                    break;
-            }
-        }
     }
 
     // Allocate pc → block map
@@ -1648,18 +1604,10 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             // Flat upvalue read: R[A] = cl->upvals[B]
             int a = GETARG_A(inst);
             int uv_idx = GETARG_B(inst);
-            XirRef res;
-            if (b->aot_mode) {
-                // AOT: emit LOAD_UPVAL
-                XirRef idx_ref = xir_const_i64(b->func, (int64_t) uv_idx);
-                res = xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL, XR_REP_TAGGED, idx_ref);
-            } else {
-                // JIT: use C bridge xr_jit_upval_get(coro, upval_index)
-                XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_upval_get);
-                XirRef idx_ref = xir_const_i64(b->func, (int64_t) uv_idx);
-                XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_ref);
-                res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, idx_val);
-            }
+            XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_upval_get);
+            XirRef idx_ref = xir_const_i64(b->func, (int64_t) uv_idx);
+            XirRef idx_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, idx_ref);
+            XirRef res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_I64, fn_ref, idx_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             // Tag result: mutable captures store cell pointers (always PTR),
             // const captures store the value directly (use slot_type).
@@ -1792,54 +1740,7 @@ static bool translate_instruction(XirBuilder *b, XirBlock **cur_blk, uint32_t pc
             int a = GETARG_A(inst);
             uint16_t bx = GETARG_Bx(inst);
 
-            if (b->aot_mode && bx < PROTO_PROTO_COUNT(b->proto)) {
-                // AOT: generate closure creation XIR
-                XrProto *child = PROTO_PROTO(b->proto, bx);
-                int nupvals = (int) PROTO_UPVAL_COUNT(child);
-
-                // xrt_closure_new(child_proto_ptr, nupvals) → XrValue closure
-                XirRef proto_ref = xir_const_ptr(b->func, (void *) child);
-                XirRef nupvals_ref = xir_const_i64(b->func, (int64_t) nupvals);
-                XirRef nupvals_val =
-                    xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, nupvals_ref);
-                XirRef closure =
-                    xir_emit(b->func, blk, XIR_CALL_C, XR_REP_TAGGED, proto_ref, nupvals_val);
-                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                builder_tag_vreg(b, closure, VTAG_PTR, 0);
-
-                // Populate upvals from current frame registers / enclosing closure
-                for (int j = 0; j < nupvals; j++) {
-                    UpvalInfo *uv = &((UpvalInfo *) child->upvalues.data)[j];
-                    XirRef idx_ref = xir_const_i64(b->func, (int64_t) j);
-                    XirRef src_val;
-                    if (uv->source == UPVAL_SRC_REG) {
-                        src_val = builder_get_slot(b, blk, uv->index);
-                    } else if (uv->source == UPVAL_SRC_UPVAL) {
-                        // Read from enclosing closure's upval
-                        XirRef enc_idx = xir_const_i64(b->func, (int64_t) uv->index);
-                        src_val =
-                            xir_emit_unary(b->func, blk, XIR_LOAD_UPVAL, XR_REP_TAGGED, enc_idx);
-                        blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                    } else {
-                        continue;
-                    }
-                    // Convention: dst=idx(const), args[0]=closure, args[1]=value
-                    // Avoids putting vreg in dst (which SSA defuse would
-                    // interpret as a re-definition of the closure).
-                    xir_emit_raw(b->func, blk, XIR_STORE_UPVAL, XR_REP_VOID, idx_ref, closure,
-                                 src_val);
-                    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                }
-
-                builder_set_slot(b, a, closure);
-                // Set callee_proto on the NEW closure vreg (after builder_set_slot)
-                {
-                    XirVReg *_cv = builder_vreg_for_slot(b, a);
-                    if (_cv)
-                        _cv->callee_proto = PROTO_PROTO(b->proto, bx);
-                }
-                b->ops_translated++;
-            } else if (bx < PROTO_PROTO_COUNT(b->proto)) {
+            if (bx < PROTO_PROTO_COUNT(b->proto)) {
                 // JIT: delegate to xr_jit_closure_new C bridge
                 // closure_new auto-populates UPVAL_SRC_UPVAL from enclosing closure.
                 XrProto *child = PROTO_PROTO(b->proto, bx);
@@ -2550,7 +2451,6 @@ static XirFunc *build_from_proto_impl_ex(XrProto *proto, XrProto **shared_protos
     builder_init(&b, func, proto);
     b.shared_protos = shared_protos;
     b.nshared_protos = nshared;
-    b.aot_mode = false;
     b.isolate = isolate;
 
     // Wire inline-cache snapshots for type-feedback-driven optimisations.

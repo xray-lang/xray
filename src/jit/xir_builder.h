@@ -144,10 +144,6 @@ typedef struct {
     uint32_t ops_skipped;
     const char *nyi_opcode;  // first NYI bytecode name (debug diagnostics)
 
-    // AOT mode flag (currently unused — AOT goes through Xi IR pipeline).
-    // Retained for JIT builder code paths that check it; always false.
-    bool aot_mode;
-
     // Inline-cache snapshots for type feedback. JIT uses these read-only
     // copies of the proto's IC state to drive speculative devirtualization
     // and Json shape guards. ic_snapshots_owned == true means the builder

@@ -272,78 +272,6 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, Xr
                 }
             }  // known_shape block
 
-            // AOT class field resolution: if receiver is a known class
-            // instance, resolve symbol → field offset for direct access.
-            if (b->aot_mode && b->isolate && rb < 256) {
-                XrType *recv_type = builder_find_reg_type(b, rb);
-// Fallback: check vreg's xrtype set by constructor CALL_KNOWN
-// (cross-module class instances where inst_types misses)
-// Accept both XR_KIND_INSTANCE (from aot_preregister) and
-// XR_KIND_CLASS (from parser type annotations) — they share
-// the same instance.class_name layout.
-#define IS_CLASS_OR_INSTANCE(t) ((t)->kind == XR_KIND_INSTANCE || (t)->kind == XR_KIND_CLASS)
-                if (!recv_type || !IS_CLASS_OR_INSTANCE(recv_type)) {
-                    XirVReg *recv_v = builder_vreg_for_slot(b, rb);
-                    if (recv_v && recv_v->xrtype && IS_CLASS_OR_INSTANCE(recv_v->xrtype))
-                        recv_type = recv_v->xrtype;
-                }
-                // Fallback: if receiver is 'this' (param 0) with known class
-                if (!recv_type || !IS_CLASS_OR_INSTANCE(recv_type)) {
-                    XrType *this_type = builder_find_reg_type(b, 0);
-                    if (this_type && IS_CLASS_OR_INSTANCE(this_type))
-                        recv_type = this_type;
-                }
-                const char *cname = recv_type ? xr_type_get_class_name(recv_type) : NULL;
-                if (cname && IS_CLASS_OR_INSTANCE(recv_type)) {
-#undef IS_CLASS_OR_INSTANCE
-                    XrClass *klass = xr_class_lookup_by_name(b->isolate, cname);
-                    if (klass) {
-                        int fi = xr_class_lookup_field(klass, (int) sym);
-                        if (fi >= 0 && fi < klass->field_count) {
-                            // Use same offset formula as OP_GETFIELD for
-                            // consistency with AOT codegen adj_offset logic.
-                            int32_t byte_off = XR_INSTANCE_FIELDS_OFFSET + fi * XR_XRVALUE_SIZE;
-                            XirRef obj2 = builder_get_slot(b, blk, rb);
-                            XirRef off2 = xir_const_i64(b->func, (int64_t) byte_off);
-                            // Determine load rep from field type
-                            uint8_t frep = XR_REP_I64;
-                            const char *ftype = klass->fields[fi].type_name;
-                            if (ftype &&
-                                (strcmp(ftype, "float") == 0 || strcmp(ftype, "double") == 0 ||
-                                 strcmp(ftype, "f64") == 0))
-                                frep = XR_REP_F64;
-                            XirRef fv = xir_emit(b->func, blk, XIR_LOAD_FIELD, frep, obj2, off2);
-                            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                            if (frep == XR_REP_F64)
-                                builder_tag_vreg(b, fv, VTAG_F64, 0);
-                            else
-                                builder_tag_vreg(b, fv, VTAG_TAGGED, 0);
-                            builder_set_slot(b, a, fv);
-                            b->ops_translated++;
-                            return true;
-                        }
-                        // Field not found — resolve as method.
-                        // Emit a null placeholder; attach method's XrProto so
-                        // the subsequent OP_CALL emits CALL_KNOWN (direct AOT
-                        // dispatch) instead of CALL_DIRECT (closure indirect).
-                        XrMethod *method = xr_class_lookup_method(klass, (int) sym);
-                        if (method && method->type == XMETHOD_CLOSURE && method->as.closure &&
-                            method->as.closure->proto) {
-                            XirRef null_c = xir_const_ptr(b->func, NULL);
-                            XirRef ph =
-                                xir_emit_unary(b->func, blk, XIR_CONST_PTR, XR_REP_PTR, null_c);
-                            builder_tag_vreg(b, ph, VTAG_TAGGED, 0);
-                            builder_set_slot(b, a, ph);
-                            XirVReg *mv = builder_vreg_for_slot(b, a);
-                            if (mv)
-                                mv->callee_proto = method->as.closure->proto;
-                            b->ops_translated++;
-                            return true;
-                        }
-                    }
-                }
-            }
-
             // Slow path: call runtime helper.
             XirRef obj = builder_get_slot(b, blk, rb);
             XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_getprop);
@@ -1081,23 +1009,14 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, Xr
 
             XirRef fn_ref;
             XirRef arg_val;
-            if (b->aot_mode) {
-                // AOT: use sentinel with negative encoded value
-                fn_ref = xir_const_ptr(b->func, (void *) xrt_invoke_method_sentinel);
-                int64_t enc2 = -(int64_t) (slot_hint + 1);
-                XirRef enc2_const = xir_const_i64(b->func, enc2);
-                arg_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, enc2_const);
-            } else {
-                // JIT: use xr_jit_tostring C bridge
-                // Pass precise xr_tag instead of slot_hint for exact reconstruction
-                fn_ref = xir_const_ptr(b->func, (void *) xr_jit_tostring);
-                uint8_t ts_tag = (slot_hint == 1) ? XR_TAG_I64
-                                 : (slot_hint == 2)
-                                     ? XR_TAG_F64
-                                     : vtag_to_value_tag(builder_slot_xr_tag(b, ra_b));
-                XirRef hint_const = xir_const_i64(b->func, (int64_t) ts_tag);
-                arg_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, hint_const);
-            }
+            // Pass precise xr_tag instead of slot_hint for exact reconstruction
+            fn_ref = xir_const_ptr(b->func, (void *) xr_jit_tostring);
+            uint8_t ts_tag = (slot_hint == 1) ? XR_TAG_I64
+                             : (slot_hint == 2)
+                                 ? XR_TAG_F64
+                                 : vtag_to_value_tag(builder_slot_xr_tag(b, ra_b));
+            XirRef hint_const = xir_const_i64(b->func, (int64_t) ts_tag);
+            arg_val = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, hint_const);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, arg_val);
             blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
             builder_bind_call_args(b, result, &vb, 1);
@@ -1117,8 +1036,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, Xr
                 return true;
             }
 
-            XirRef fn_ref = xir_const_ptr(b->func, b->aot_mode ? (void *) xrt_strbuf_new_sentinel
-                                                               : (void *) xr_jit_strbuf_new);
+            XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_strbuf_new);
             XirRef zero = xir_const_i64(b->func, 0);
             XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, zval);
@@ -1138,14 +1056,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, Xr
             sba_args[0] = builder_get_slot(b, blk, a);
             sba_args[1] = builder_get_slot(b, blk, ra_b);
 
-            if (b->aot_mode) {
-                XirRef fn_ref = xir_const_ptr(b->func, (void *) xrt_strbuf_append_sentinel);
-                XirRef zero = xir_const_i64(b->func, 0);
-                XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
-                XirRef sba_res = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, zval);
-                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                builder_bind_call_args(b, sba_res, sba_args, 2);
-            } else {
+            {
                 uint8_t val_tag = vtag_to_value_tag(builder_slot_xr_tag(b, ra_b));
                 uint8_t bc_slot_hint = 0xFF;
                 if (ra_b >= 0 && ra_b < 256 && !xir_ref_is_none(b->slot_tag_refs[ra_b])) {
@@ -1169,8 +1080,7 @@ bool xir_translate_object_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, Xr
             int a = GETARG_A(inst);
 
             XirRef sb_ref = builder_get_slot(b, blk, a);
-            XirRef fn_ref = xir_const_ptr(b->func, b->aot_mode ? (void *) xrt_strbuf_finish_sentinel
-                                                               : (void *) xr_jit_strbuf_finish);
+            XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_strbuf_finish);
             XirRef zero = xir_const_i64(b->func, 0);
             XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, zval);

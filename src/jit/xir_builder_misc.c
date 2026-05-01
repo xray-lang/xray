@@ -475,53 +475,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             int c_raw = GETARG_C(inst);
             int nargs = c_raw & 0x7F;
 
-            // AOT: resolve method proto at compile time via pre-registered class
-            if (b->aot_mode && b->isolate && (a + 1) < 256) {
-                XrType *recv_type = builder_find_reg_type(b, a + 1);
-                const char *cname = recv_type ? xr_type_get_class_name(recv_type) : NULL;
-                XrClass *klass = NULL;
-                if (cname &&
-                    (recv_type->kind == XR_KIND_INSTANCE || recv_type->kind == XR_KIND_CLASS))
-                    klass = xr_class_lookup_by_name(b->isolate, cname);
-                if (klass && method_idx < klass->method_count) {
-                    XrMethod *method = &klass->methods[method_idx];
-                    if (method->type == XMETHOD_CLOSURE && method->as.closure &&
-                        method->as.closure->proto) {
-                        XrProto *callee_proto = method->as.closure->proto;
-                        uint8_t ret_type = XR_REP_TAGGED;
-                        if (callee_proto->return_type_info)
-                            ret_type = xr_type_rep(callee_proto->return_type_info);
-                        // Collect args: [0]=closure(unused), [1]=receiver, [2..nargs+1]=args
-                        XirRef ck_args[16];
-                        XirRef cl_ptr = xir_const_ptr(b->func, (void *) method->as.closure);
-                        ck_args[0] =
-                            xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, cl_ptr);
-                        ck_args[1] = builder_get_slot(b, blk, a + 1);
-                        for (int j = 0; j < nargs && j < 13; j++)
-                            ck_args[2 + j] = builder_get_slot(b, blk, a + 2 + j);
-                        uint16_t ck_nca = (uint16_t) (2 + (nargs < 13 ? nargs : 13));
-                        XirRef proto_ref = xir_const_ptr(b->func, (void *) callee_proto);
-                        XirRef na_ref = xir_const_i64(b->func, (int64_t) (nargs + 1));
-                        XirRef na_val =
-                            xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, na_ref);
-                        XirRef result =
-                            xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type, proto_ref, na_val);
-                        blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                        builder_bind_call_args(b, result, ck_args, ck_nca);
-                        if (ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED)
-                            builder_tag_vreg(b, result, VTAG_PTR, 0);
-                        if (ret_type == XR_REP_I64 || ret_type == XR_REP_F64) {
-                            if (a < 256)
-                                b->slot_rep[a] = ret_type;
-                        }
-                        builder_set_slot(b, a, result);
-                        b->ops_translated++;
-                        return true;
-                    }
-                }
-            }
-
-            // JIT fallback: generic CALL_C bridge
+            // JIT: generic CALL_C bridge
             XirRef id_args[16];
             id_args[0] = builder_get_slot(b, blk, a + 1);
             for (int j = 0; j < nargs && j < 15; j++)
@@ -790,8 +744,7 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
         case OP_STRBUF_NEW: {
             // R[A] = new StringBuilder
             int a = GETARG_A(inst);
-            XirRef fn_ref = xir_const_ptr(b->func, b->aot_mode ? (void *) xrt_strbuf_new_sentinel
-                                                               : (void *) xr_jit_strbuf_new);
+            XirRef fn_ref = xir_const_ptr(b->func, (void *) xr_jit_strbuf_new);
             XirRef zero = xir_const_i64(b->func, 0);
             XirRef zval = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, zero);
             XirRef result = xir_emit(b->func, blk, XIR_CALL_C, XR_REP_PTR, fn_ref, zval);
@@ -803,56 +756,14 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             return true;
         }
 
-        /* === Class creation (AOT handles, JIT defers to VM) === */
+        /* === Class creation (JIT defers to VM) === */
         case OP_CLASS_CREATE_FROM_DESCRIPTOR: {
-            int a = GETARG_A(inst);
-            if (b->aot_mode) {
-                // AOT: find constructor proto from class descriptor.
-                // Set callee_proto on result so OP_CALL uses CALL_KNOWN
-                // (emit_call_known detects constructor and emits alloc+call).
-                int bx = GETARG_Bx(inst);
-                XrProto *ctor_proto = NULL;
-                if (bx < (int) PROTO_CONST_COUNT(b->proto)) {
-                    XrValue desc_val = PROTO_CONSTANT(b->proto, bx);
-                    XrClassDescriptor *desc = (XrClassDescriptor *) XR_TO_PTR(desc_val);
-                    if (desc) {
-                        for (uint32_t m = 0; m < desc->instance_method_count; m++) {
-                            if (strcmp(desc->instance_methods[m].name, "constructor") == 0) {
-                                uint32_t ci = desc->instance_methods[m].closure_index;
-                                if (ci < PROTO_PROTO_COUNT(b->proto))
-                                    ctor_proto = PROTO_PROTO(b->proto, ci);
-                                break;
-                            }
-                        }
-                    }
-                }
-                // Emit a tagged zero constant as placeholder class value.
-                // Use REP_I64 (CONST_I64 requires it), then set slot to TAGGED
-                // so codegen auto-boxes via emit_ref_as_tagged for CALL_KNOWN.
-                XirRef val = xir_const_i64(b->func, 0);
-                XirRef result = xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, val);
-                builder_tag_vreg(b, result, VTAG_PTR, 0);
-                builder_set_slot(b, a, result);
-                b->slot_rep[a] = XR_REP_TAGGED;
-                if (ctor_proto) {
-                    XirVReg *vr = builder_vreg_for_slot(b, a);
-                    if (vr)
-                        vr->callee_proto = ctor_proto;
-                }
-                b->ops_translated++;
-                return true;
-            }
             b->ops_skipped++;
             return true;
         }
 
         case OP_CLINIT_CALL: {
-            // AOT: static constructor — skip for now (no runtime class init)
             // JIT: deopt-to-VM
-            if (b->aot_mode) {
-                b->ops_translated++;
-                return true;
-            }
             b->ops_skipped++;
             return true;
         }
@@ -863,38 +774,14 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             return true;
         }
 
-        /* === Defer (AOT only) === */
+        /* === Defer (not supported in JIT) === */
         case OP_DEFER: {
-            if (!b->aot_mode) {
-                // JIT mode: bail out (defer not supported in JIT)
-                b->ops_skipped++;
-                b->nyi_opcode = "OP_DEFER";
-                return true;
-            }
-            // AOT mode: record deferred closure + args
-            int a = GETARG_A(inst);
-            int nargs = GETARG_B(inst);
-            XirRef closure_ref = builder_get_slot(b, blk, a);
-
-            // Emit XIR_DEFER_PUSH marker instruction
-            XirRef nargs_ref = xir_const_i64(b->func, (int64_t) nargs);
-            xir_emit(b->func, blk, XIR_DEFER_PUSH, XR_REP_I64, closure_ref, nargs_ref);
-            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-
-            // Record defer entry on XirFunc for codegen
-            XR_DCHECK(b->func->defer_count < 16, "OP_DEFER: too many defers (max 16)");
-            int di = b->func->defer_count++;
-            b->func->defer_entries[di].closure = closure_ref;
-            b->func->defer_entries[di].arg_count = nargs;
-            for (int j = 0; j < nargs && j < 8; j++) {
-                b->func->defer_entries[di].args[j] = builder_get_slot(b, blk, a + 1 + j);
-            }
-
-            b->ops_translated++;
+            b->ops_skipped++;
+            b->nyi_opcode = "OP_DEFER";
             return true;
         }
 
-        /* === Super invocation (AOT: compile-time resolution) === */
+        /* === Super invocation === */
         case OP_SUPERINVOKE: {
             // SUPERINVOKE A B C: call super method
             // A=call_base, B=method_name_const, C=nargs
@@ -902,64 +789,6 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
             int method_name_idx = GETARG_B(inst);
             int nargs = GETARG_C(inst);
 
-            if (b->aot_mode && b->isolate) {
-                // Resolve class from param 0 (this) type, or fallback to
-                // scanning enclosing module's class descriptors.
-                XrType *this_type = builder_find_reg_type(b, 0);
-                const char *cname = this_type ? xr_type_get_class_name(this_type) : NULL;
-                if (!cname)
-                    cname = find_class_name_for_proto(b->proto);
-                XrClass *klass = NULL;
-                if (cname)
-                    klass = xr_class_lookup_by_name(b->isolate, cname);
-                XrClass *super_class = klass ? klass->super : NULL;
-
-                if (super_class && method_name_idx < (int) PROTO_CONST_COUNT(b->proto)) {
-                    XrValue name_val = PROTO_CONSTANT(b->proto, method_name_idx);
-                    if (XR_IS_STRING(name_val)) {
-                        const char *mname = XR_TO_STRING(name_val)->data;
-                        XrSymbolTable *st =
-                            (XrSymbolTable *) xr_isolate_get_symbol_table(b->isolate);
-                        int method_sym = (int) xr_symbol_lookup_in_table(st, mname);
-                        XrMethod *method = xr_class_lookup_method(super_class, method_sym);
-
-                        if (method && method->type == XMETHOD_CLOSURE && method->as.closure &&
-                            method->as.closure->proto) {
-                            XrProto *callee = method->as.closure->proto;
-                            uint8_t ret_type = XR_REP_TAGGED;
-                            if (callee->return_type_info)
-                                ret_type = xr_type_rep(callee->return_type_info);
-
-                            // Args: [0]=closure, [1]=this, [2..nargs+1]=args
-                            XirRef ck_args[16];
-                            XirRef cl_ptr = xir_const_ptr(b->func, (void *) method->as.closure);
-                            ck_args[0] =
-                                xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, cl_ptr);
-                            // Compiler places this in R[a+1] via OP_MOVE
-                            ck_args[1] = builder_get_slot(b, blk, a + 1);
-                            for (int j = 0; j < nargs && j < 13; j++)
-                                ck_args[2 + j] = builder_get_slot(b, blk, a + 2 + j);
-                            uint16_t ck_nca = (uint16_t) (2 + (nargs < 13 ? nargs : 13));
-
-                            XirRef proto_ref = xir_const_ptr(b->func, (void *) callee);
-                            XirRef na_ref = xir_const_i64(b->func, (int64_t) (nargs + 1));
-                            XirRef na_val =
-                                xir_emit_unary(b->func, blk, XIR_CONST_I64, XR_REP_I64, na_ref);
-                            XirRef result =
-                                xir_emit(b->func, blk, XIR_CALL_KNOWN, ret_type, proto_ref, na_val);
-                            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-                            builder_bind_call_args(b, result, ck_args, ck_nca);
-                            if (ret_type == XR_REP_PTR || ret_type == XR_REP_TAGGED)
-                                builder_tag_vreg(b, result, VTAG_PTR, 0);
-                            if (a < 256 && (ret_type == XR_REP_I64 || ret_type == XR_REP_F64))
-                                b->slot_rep[a] = ret_type;
-                            builder_set_slot(b, a, result);
-                            b->ops_translated++;
-                            return true;
-                        }
-                    }
-                }
-            }
             // JIT: bail out (super calls are cold path)
             b->ops_skipped++;
             return true;
@@ -968,13 +797,8 @@ bool xir_translate_misc_ops(XirBuilder *b, XirBlock **cur_blk, uint32_t pc, XrIn
         /* === Abstract method error (runtime guard) === */
         case OP_ABSTRACT_ERROR: {
             // OP_ABSTRACT_ERROR A: throw "cannot call abstract method K[A]"
-            // In AOT: emit unconditional abort (abstract calls are compile-time errors).
-            // In JIT: deopt to VM so the interpreter raises the proper exception.
-            if (b->aot_mode) {
-                // Emit fprintf + abort via inline C (XIR_THROW → abort in C codegen)
-                xir_emit_unary(b->func, blk, XIR_THROW, XR_REP_VOID, XIR_NONE);
-                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
-            } else {
+            // Deopt to VM so the interpreter raises the proper exception.
+            {
                 int did = builder_add_deopt_info(b, pc);
                 XirRef did_ref = xir_const_i64(b->func, (int64_t) (did >= 0 ? did : 0xFFFF));
                 xir_emit_unary(b->func, blk, XIR_DEOPT, XR_REP_VOID, XIR_NONE);
