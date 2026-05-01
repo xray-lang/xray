@@ -94,3 +94,7 @@ _Static_assert(XRT_SYM_SQRT == SYMBOL_SQRT, "XRT_SYM_SQRT drift");
 _Static_assert(XRT_SYM_POW == SYMBOL_POW, "XRT_SYM_POW drift");
 _Static_assert(XRT_SYM_TOFIXED == SYMBOL_TOFIXED, "XRT_SYM_TOFIXED drift");
 _Static_assert(XRT_SYM_TOSTRING == SYMBOL_TOSTRING, "XRT_SYM_TOSTRING drift");
+_Static_assert(XRT_SYM_FOREACH == SYMBOL_FOREACH, "XRT_SYM_FOREACH drift");
+_Static_assert(XRT_SYM_MAP == SYMBOL_MAP, "XRT_SYM_MAP drift");
+_Static_assert(XRT_SYM_FILTER == SYMBOL_FILTER, "XRT_SYM_FILTER drift");
+_Static_assert(XRT_SYM_REDUCE == SYMBOL_REDUCE, "XRT_SYM_REDUCE drift");

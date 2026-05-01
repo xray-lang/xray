@@ -75,13 +75,19 @@ typedef struct {
     uint32_t npatch;
     uint32_t patch_cap;
 
-    /* OP_TRY patches: absolute target PC patching (catch block) */
+    /* OP_TRY patches: absolute target PC patching (catch + finally) */
     struct {
         int pc;              /* OP_TRY instruction PC */
         uint32_t target_bid; /* catch block ID */
+        uint32_t finally_bid;/* finally block ID (0 if none) */
     } *try_patches;
     uint32_t ntry_patch;
     uint32_t try_patch_cap;
+
+    /* Track which value IDs have been wrapped in a cell (OP_CELL_NEW).
+     * Prevents double-wrapping when multiple closures capture the same
+     * mutable variable. */
+    bool *cell_wrapped;      /* [next_value_id] */
 
     /* Comparison-branch fusion: if the block control is a comparison with
      * no other consumers, skip emitting OP_CMP_* and instead emit the
@@ -189,8 +195,9 @@ static void add_patch(EmitCtx *ctx, int pc, uint32_t target_bid) {
     ctx->npatch++;
 }
 
-/* Add a pending OP_TRY patch (absolute PC target). */
-static void add_try_patch(EmitCtx *ctx, int pc, uint32_t target_bid) {
+/* Add a pending OP_TRY patch (catch + finally absolute PC targets). */
+static void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid,
+                          uint32_t finally_bid) {
     if (ctx->ntry_patch >= ctx->try_patch_cap) {
         uint32_t new_cap = ctx->try_patch_cap ? ctx->try_patch_cap * 2 : 4;
         void *tmp = xr_realloc(ctx->try_patches, new_cap * sizeof(ctx->try_patches[0]));
@@ -199,7 +206,8 @@ static void add_try_patch(EmitCtx *ctx, int pc, uint32_t target_bid) {
         ctx->try_patch_cap = new_cap;
     }
     ctx->try_patches[ctx->ntry_patch].pc = pc;
-    ctx->try_patches[ctx->ntry_patch].target_bid = target_bid;
+    ctx->try_patches[ctx->ntry_patch].target_bid = catch_bid;
+    ctx->try_patches[ctx->ntry_patch].finally_bid = finally_bid;
     ctx->ntry_patch++;
 }
 
@@ -1241,13 +1249,17 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             /* For captures that need cell indirection (mutable captures),
              * wrap the parent register value in a heap cell before the
              * closure instruction reads it.  OP_CELL_NEW replaces the
-             * register content with a cell pointer in-place. */
+             * register content with a cell pointer in-place.
+             * Only emit once per value — skip if already cell-wrapped. */
             for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
                 XiCapture *cap = &child_func->captures[ci];
                 if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
                     uint8_t reg = reg_of(ctx, cap->value);
                     if (ctx->status != XI_EMIT_OK) return;
-                    emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
+                    if (!ctx->cell_wrapped[cap->value->id]) {
+                        emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
+                        ctx->cell_wrapped[cap->value->id] = true;
+                    }
                 }
             }
 
@@ -1584,7 +1596,24 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             int try_pc = current_pc(ctx);
             emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0));  /* patched later */
             emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0));   /* finally placeholder */
-            add_try_patch(ctx, try_pc, catch_blk->id);
+
+            /* Find the finally block: scan for XI_FINALLY in the function.
+             * Only needed when aux_int=1 (has finally). */
+            uint32_t fin_bid = 0;
+            if (v->aux_int) {
+                XiFunc *fn = ctx->func;
+                for (uint32_t fbi = 0; fbi < fn->nblocks && fin_bid == 0; fbi++) {
+                    const XiBlock *fb = fn->blocks[fbi];
+                    if (!fb) continue;
+                    for (uint32_t fvi = 0; fvi < fb->nvalues; fvi++) {
+                        if (fb->values[fvi] && fb->values[fvi]->op == XI_FINALLY) {
+                            fin_bid = fb->id;
+                            break;
+                        }
+                    }
+                }
+            }
+            add_try_patch(ctx, try_pc, catch_blk->id, fin_bid);
             break;
         }
         case XI_CATCH:
@@ -1713,6 +1742,12 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
             } else if (blk->control) {
                 uint8_t r = reg_of(ctx, blk->control);
                 if (ctx->status != XI_EMIT_OK) return;
+                /* If the return value was cell-wrapped for closure capture,
+                 * dereference the cell to return the actual value. */
+                if (blk->control->id < ctx->reg_map_size &&
+                    ctx->cell_wrapped[blk->control->id]) {
+                    emit_inst(ctx, CREATE_ABC(OP_CELL_GET, r, r, 0));
+                }
                 emit_inst(ctx, CREATE_ABC(OP_RETURN1, r, 0, 0));
             } else {
                 emit_inst(ctx, CREATE_ABC(OP_RETURN0, 0, 0, 0));
@@ -1843,15 +1878,26 @@ static void patch_jumps(EmitCtx *ctx) {
         *inst = CREATE_sJ(OP_JMP, offset);
     }
 
-    /* Patch OP_TRY instructions: Bx = absolute catch PC */
+    /* Patch OP_TRY instructions: Bx = absolute catch PC;
+     * Patch the following NOP with finally PC (Bx). */
     for (uint32_t i = 0; i < ctx->ntry_patch; i++) {
         int pc = ctx->try_patches[i].pc;
         uint32_t bid = ctx->try_patches[i].target_bid;
-        XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad block id");
+        uint32_t fbid = ctx->try_patches[i].finally_bid;
+        XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad catch block id");
         int target_pc = ctx->block_pc[bid];
         if (target_pc < 0) target_pc = pc + 1;
         XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
         *inst = CREATE_ABx(OP_TRY, 0, target_pc);
+
+        /* Patch NOP at pc+1 with finally absolute PC */
+        if (fbid > 0 && fbid < ctx->block_pc_size) {
+            int fin_pc = ctx->block_pc[fbid];
+            if (fin_pc >= 0) {
+                XrInstruction *fin_inst = PROTO_CODE_PTR(ctx->proto, pc + 1);
+                *fin_inst = CREATE_ABx(OP_NOP, 0, fin_pc);
+            }
+        }
     }
 }
 
@@ -1868,21 +1914,30 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     if (rpo_count == 0) return XI_EMIT_ERR_INTERNAL;
 
     /* Exception handler blocks are unreachable via normal CFG edges.
-     * Scan for XI_TRY ops and assign RPO numbers to their catch targets
-     * so they get emitted after the try body. */
+     * Scan for XI_TRY ops and assign RPO numbers to catch targets and
+     * all transitively reachable blocks (catch body, finally, merge). */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             if (v->op == XI_TRY && v->aux) {
                 XiBlock *catch_blk = (XiBlock *)v->aux;
+                /* BFS from catch block to assign RPO to all reachable
+                 * exception-related blocks (catch, finally, merge). */
+                XiBlock *queue[64];
+                int qhead = 0, qtail = 0;
                 if (catch_blk->rpo == 0) {
                     catch_blk->rpo = ++rpo_count;
-                    /* Walk catch block successors too (catch body merges) */
+                    queue[qtail++] = catch_blk;
+                }
+                while (qhead < qtail && qtail < 64) {
+                    XiBlock *cur = queue[qhead++];
                     for (int s = 0; s < 2; s++) {
-                        XiBlock *succ = catch_blk->succs[s];
-                        if (succ && succ->rpo == 0)
+                        XiBlock *succ = cur->succs[s];
+                        if (succ && succ->rpo == 0) {
                             succ->rpo = ++rpo_count;
+                            queue[qtail++] = succ;
+                        }
                     }
                 }
             }
@@ -1953,6 +2008,17 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     }
     compute_last_use(&ctx);
 
+    /* Allocate cell-wrapped tracker for dedup of OP_CELL_NEW */
+    ctx.cell_wrapped = (bool *)xr_calloc(ctx.reg_map_size, sizeof(bool));
+    if (!ctx.cell_wrapped) {
+        xr_free(ctx.last_use);
+        xr_free(ctx.block_pc);
+        xr_free(ctx.reg_map);
+        xr_vm_proto_free(ctx.proto);
+        xr_free(rpo_order);
+        return XI_EMIT_ERR_INTERNAL;
+    }
+
     alloc_registers(&ctx);
     if (ctx.status != XI_EMIT_OK) goto cleanup;
 
@@ -1998,6 +2064,7 @@ cleanup:;
     } else {
         xr_vm_proto_free(ctx.proto);
     }
+    xr_free(ctx.cell_wrapped);
     xr_free(ctx.last_use);
     xr_free(ctx.reg_map);
     xr_free(ctx.block_pc);

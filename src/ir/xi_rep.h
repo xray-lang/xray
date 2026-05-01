@@ -43,8 +43,18 @@ static inline XrRep xi_value_def_rep(const XiValue *v) {
             return XR_REP_I64;
         case XI_BOX:
             return XR_REP_TAGGED;
-        case XI_UNBOX:
-            return xr_type_base_rep(v->type);
+        case XI_UNBOX: {
+            /* Unbox yields a scalar when type is known (I64 or F64).
+             * If type is unknown, stay TAGGED — the consumer will use
+             * runtime dispatch (xrt_add etc.) which handles both int/float. */
+            XrRep ur = xr_type_base_rep(v->type);
+            if (ur == XR_REP_I64 || ur == XR_REP_F64) return ur;
+            if (v->nargs >= 1 && v->args[0] && v->args[0]->type) {
+                ur = xr_type_base_rep(v->args[0]->type);
+                if (ur == XR_REP_I64 || ur == XR_REP_F64) return ur;
+            }
+            return XR_REP_TAGGED;
+        }
         case XI_CONVERT: {
             XrRep r = xr_type_base_rep(v->type);
             return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
