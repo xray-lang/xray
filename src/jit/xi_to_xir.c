@@ -18,6 +18,7 @@
 #include "xi_to_xir.h"
 #include "xir.h"
 #include "xir_ops.h"
+#include "xir_jit_runtime.h"
 #include "../ir/xi_rep.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -27,6 +28,8 @@
 #include <string.h>
 
 /* ========== Lowering Context ========== */
+
+#define XI2XIR_MAX_TRY_DEPTH 8
 
 typedef struct {
     XiFunc *xi_func;
@@ -41,6 +44,12 @@ typedef struct {
     /* Xi value id → XirRef mapping */
     XirRef *ref_map;
     uint32_t ref_map_size;
+
+    /* EH: try nesting stack — tracks active exception handlers */
+    struct {
+        XirBlock *handler;   /* catch (or finally) XIR block */
+    } try_stack[XI2XIR_MAX_TRY_DEPTH];
+    int try_depth;
 
     bool error;
 } LowerCtx;
@@ -233,12 +242,6 @@ static XirRef lower_unbox(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
 }
 
 /* ========== Call / Closure / Print Lowering ========== */
-
-/* Forward-declare JIT runtime bridges used by codegen */
-struct XrCoroutine;
-typedef struct { int64_t val; uint8_t tag; } XrJitResult;
-XR_FUNC XrJitResult xr_jit_call_func(struct XrCoroutine *coro, int64_t nargs_encoded);
-XR_FUNC XrJitResult xr_jit_closure_new(struct XrCoroutine *coro, int64_t proto_raw);
 
 static XirRef lower_call(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
     /* Generic call lowering for XI_CALL and ops delegated to runtime.
@@ -444,12 +447,18 @@ static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             return acc;
         }
 
-        /* Exception throw */
+        /* Exception throw — delegates to xr_jit_throw runtime bridge.
+         * Codegen checks coro->jit_ctx->exception after the call and
+         * branches to exception_handler if non-NULL. */
         case XI_THROW: {
             XR_DCHECK(v->nargs >= 1, "throw: need value arg");
             XirRef val = get_ref(ctx, v->args[0]);
-            xir_emit_unary(ctx->xir_func, blk, XIR_THROW, XR_REP_I64, val);
-            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            XirRef fn_ptr = xir_const_ptr(ctx->xir_func,
+                                           (void *)xr_jit_throw);
+            xir_emit(ctx->xir_func, blk, XIR_CALL_C,
+                     XR_REP_I64, fn_ptr, val);
+            blk->ins[blk->nins - 1].flags |=
+                XIR_FLAG_SIDE_EFFECT | XIR_FLAG_MAY_THROW;
             return xir_const_i64(ctx->xir_func, 0);
         }
 
@@ -518,14 +527,41 @@ static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
         case XI_SCOPE_EXIT:
             return lower_call(ctx, blk, v);
 
-        /* Exception handling — JIT does not support try/catch regions;
-         * mark error so the caller falls back to interpreter. */
-        case XI_TRY:
-        case XI_CATCH:
-        case XI_FINALLY:
-        case XI_END_TRY:
-            ctx->error = true;
+        /* Exception handling */
+        case XI_TRY: {
+            /* aux = catch XiBlock*, aux_int = has_finally flag.
+             * Push handler onto try stack; exception_handler is set
+             * on blocks in the propagation pass after lowering. */
+            XiBlock *catch_xi = (XiBlock *)v->aux;
+            XR_DCHECK(catch_xi != NULL, "XI_TRY: missing catch block");
+            XirBlock *catch_xir = get_block(ctx, catch_xi);
+            if (ctx->try_depth < XI2XIR_MAX_TRY_DEPTH) {
+                ctx->try_stack[ctx->try_depth].handler = catch_xir;
+                ctx->try_depth++;
+            }
             return xir_const_i64(ctx->xir_func, 0);
+        }
+
+        case XI_CATCH: {
+            /* Load exception from coro->jit_ctx->exception, clear it */
+            XirRef exc = xir_emit_unary(ctx->xir_func, blk,
+                                         XIR_CATCH, XR_REP_I64, XIR_NONE);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            return exc;
+        }
+
+        case XI_FINALLY:
+            /* Marker only — no XIR instruction needed */
+            return xir_const_i64(ctx->xir_func, 0);
+
+        case XI_END_TRY: {
+            if (ctx->try_depth > 0)
+                ctx->try_depth--;
+            xir_emit(ctx->xir_func, blk, XIR_TRY_END,
+                     XR_REP_I64, XIR_NONE, XIR_NONE);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            return xir_const_i64(ctx->xir_func, 0);
+        }
 
         /* Cross-module import ref — resolved at AOT cgen time, not JIT */
         case XI_IMPORT_REF:
@@ -701,11 +737,23 @@ XR_FUNC struct XirFunc *xi_to_xir_lower(XiFunc *xi_func,
         lower_phis(&ctx, xi_blk, xir_blk);
     }
 
-    /* Lower all block instructions */
+    /* Lower all block instructions + propagate exception handlers.
+     * XI_TRY / XI_END_TRY push/pop ctx.try_stack during lowering.
+     * After lowering each block's values, the current try_depth tells
+     * us whether the block is inside a protected region.  We set
+     * exception_handler *before* lowering (from the depth that was
+     * active at block entry) so that codegen emits EH checks for
+     * calls within this block. */
     for (uint32_t i = 0; i < xi_func->nblocks; i++) {
         XiBlock *xi_blk = xi_func->blocks[i];
         if (!xi_blk) continue;
         XirBlock *xir_blk = get_block(&ctx, xi_blk);
+
+        /* Snapshot handler before lowering (XI_TRY may change depth) */
+        XirBlock *handler_before = (ctx.try_depth > 0)
+            ? ctx.try_stack[ctx.try_depth - 1].handler : NULL;
+        xir_blk->exception_handler = handler_before;
+
         lower_block_values(&ctx, xi_blk, xir_blk);
     }
 
