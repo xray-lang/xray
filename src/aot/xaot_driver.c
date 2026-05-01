@@ -1237,9 +1237,10 @@ XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
 
                 for (uint16_t slot = 0; slot < ef->nshared; slot++) {
                     if (!ef->export_names[slot]) continue;
-                    /* Find the child XiFunc for this export (if it's a function) */
-                    const XiFunc *target_fn = NULL;
                     const char *ename = ef->export_names[slot];
+
+                    /* Find child XiFunc matching export name (functions) */
+                    const XiFunc *target_fn = NULL;
                     for (uint16_t ci = 0; ci < ef->nchildren; ci++) {
                         if (ef->children[ci] && ef->children[ci]->name &&
                             strcmp(ef->children[ci]->name, ename) == 0) {
@@ -1247,9 +1248,46 @@ XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
                             break;
                         }
                     }
+
+                    /* Find XiClassData if this slot holds a class.
+                     * Scan exporter IR for SET_SHARED(slot, CLASS_CREATE). */
+                    const XiClassData *target_cd = NULL;
+                    for (uint32_t bi = 0; bi < ef->nblocks; bi++) {
+                        const XiBlock *blk = ef->blocks[bi];
+                        if (!blk) continue;
+                        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+                            const XiValue *sv = blk->values[vi];
+                            if (!sv || sv->op != XI_SET_SHARED) continue;
+                            if ((int)sv->aux_int != (int)slot) continue;
+                            if (sv->nargs < 1) continue;
+                            const XiValue *src = sv->args[0];
+                            if (src->op == XI_CLASS_CREATE && src->aux)
+                                target_cd = (const XiClassData *)src->aux;
+                            break;
+                        }
+                    }
+                    /* For class exports, also set target_fn to the constructor */
+                    if (target_cd && !target_fn) {
+                        const XiFunc *ctor = NULL;
+                        if (target_cd->methods) {
+                            for (uint16_t mi = 0; mi < target_cd->nmethod; mi++) {
+                                if (target_cd->methods[mi].is_constructor &&
+                                    target_cd->child_idx &&
+                                    mi < target_cd->ninst + target_cd->nstat) {
+                                    uint16_t idx = target_cd->child_idx[mi];
+                                    if (idx < ef->nchildren) {
+                                        ctor = ef->children[idx];
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        target_fn = ctor;
+                    }
+
                     xi_cgen_add_import(import_str, ename,
                                        mod_names[exporter], (int)slot,
-                                       target_fn);
+                                       target_fn, target_cd, ef);
                 }
                 /* import_str ownership: cgen stores pointer, keep alive until
                  * after C generation.  Leak is acceptable (short-lived process). */

@@ -69,6 +69,7 @@ typedef struct {
     const char *class_name;  /* owning class (e.g. "Rect") */
     const char *name;        /* method name (e.g. "area") */
     const XiFunc *func;
+    const char *module_prefix; /* C function name prefix (NULL = current module) */
 } CgMethodEntry;
 static CgMethodEntry g_methods[CG_MAX_METHODS];
 static int g_nmethod;
@@ -94,6 +95,8 @@ typedef struct {
     const char *target_mod_name; /* C identifier prefix (e.g. "math_lib") */
     int shared_slot;             /* slot in target's xrt_shared_<mod>[] */
     const XiFunc *target_func;   /* XiFunc* if this export is a function (for direct calls) */
+    const XiClassData *target_class; /* XiClassData* if this export is a class */
+    const XiFunc *exporter_func; /* exporter module XiFunc (for class child resolution) */
 } CgImportEntry;
 static CgImportEntry g_imports[CG_MAX_IMPORTS];
 static int g_nimports;
@@ -102,54 +105,43 @@ static int g_nimports;
  * Recognizes XI_SET_SHARED(slot, XI_CLOSURE_NEW(child)) pattern,
  * including XI_SET_SHARED(slot, XI_BOX(XI_CLOSURE_NEW(child))). */
 /* Find the constructor child XiFunc from a XiClassData descriptor.
- * The constructor is the instance method named "constructor". */
+ * Uses arena-safe XiClassMethod array (no AST dependency). */
 static const XiFunc *cg_find_constructor(const XiFunc *parent,
                                           const XiClassData *cd) {
-    if (!cd || !cd->ast || !parent) return NULL;
-    const ClassDeclNode *cls = &cd->ast->as.class_decl;
-    uint16_t ci = 0;
-    for (int i = 0; i < cls->method_count; i++) {
-        if (cls->methods[i]->type != AST_METHOD_DECL) continue;
-        const MethodDeclNode *m = &cls->methods[i]->as.method_decl;
-        if (m->is_static_constructor) continue;
-        if (m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0)) {
+    if (!cd || !cd->methods || !parent) return NULL;
+    for (uint16_t ci = 0; ci < cd->nmethod; ci++) {
+        if (cd->methods[ci].is_static_constructor) continue;
+        if (cd->methods[ci].is_constructor) {
             if (cd->child_idx && ci < cd->ninst + cd->nstat) {
                 uint16_t idx = cd->child_idx[ci];
                 if (idx < parent->nchildren)
                     return parent->children[idx];
             }
         }
-        ci++;
     }
     return NULL;
 }
 
 /* Register all instance methods from a class descriptor into g_methods.
  * Constructors are excluded — they are resolved via the XI_CALL class path.
- * Also records the constructor XiFunc for super() call resolution. */
+ * Uses arena-safe XiClassMethod array (no AST dependency). */
 static void cg_register_class_methods(const XiFunc *parent,
                                        const XiClassData *cd) {
-    if (!cd || !cd->ast || !parent) return;
-    const ClassDeclNode *cls = &cd->ast->as.class_decl;
-    uint16_t ci = 0;
-    for (int i = 0; i < cls->method_count; i++) {
-        if (cls->methods[i]->type != AST_METHOD_DECL) continue;
-        const MethodDeclNode *m = &cls->methods[i]->as.method_decl;
+    if (!cd || !cd->methods || !parent) return;
+    for (uint16_t ci = 0; ci < cd->nmethod; ci++) {
+        const XiClassMethod *m = &cd->methods[ci];
         if (m->is_static_constructor) continue;
-        bool is_ctor = m->is_constructor
-                       || (m->name && strcmp(m->name, "constructor") == 0);
-        if (!is_ctor && !m->is_static && m->name) {
+        if (!m->is_constructor && !m->is_static && m->name) {
             if (cd->child_idx && ci < cd->ninst + cd->nstat) {
                 uint16_t idx = cd->child_idx[ci];
                 if (idx < parent->nchildren && g_nmethod < CG_MAX_METHODS) {
-                    g_methods[g_nmethod].class_name = cls->name;
+                    g_methods[g_nmethod].class_name = cd->class_name;
                     g_methods[g_nmethod].name = m->name;
                     g_methods[g_nmethod].func = parent->children[idx];
                     g_nmethod++;
                 }
             }
         }
-        ci++;
     }
 }
 
@@ -165,9 +157,7 @@ static const XiFunc *cg_lookup_class_ctor(const XiFunc *parent,
             const XiValue *v = blk->values[vi];
             if (!v || v->op != XI_CLASS_CREATE || !v->aux) continue;
             const XiClassData *cd = (const XiClassData *)v->aux;
-            if (!cd->ast) continue;
-            const ClassDeclNode *cls = &cd->ast->as.class_decl;
-            if (cls->name && strcmp(cls->name, class_name) == 0)
+            if (cd->class_name && strcmp(cd->class_name, class_name) == 0)
                 return cg_find_constructor(parent, cd);
         }
     }
@@ -177,19 +167,27 @@ static const XiFunc *cg_lookup_class_ctor(const XiFunc *parent,
 /* Lookup a class instance method by name, optionally filtered by class.
  * If class_name is non-NULL, only match methods of that class.
  * If class_name is NULL, return the last match (most-derived class
- * is registered last due to topo-order scan). */
+ * is registered last due to topo-order scan).
+ * If out_prefix is non-NULL, stores the method's module prefix (for
+ * cross-module class methods; NULL means current module). */
 static const XiFunc *cg_lookup_method(const char *name,
-                                       const char *class_name) {
+                                       const char *class_name,
+                                       const char **out_prefix) {
     if (!name) return NULL;
     const XiFunc *last_match = NULL;
+    const char *last_prefix = NULL;
     for (int i = 0; i < g_nmethod; i++) {
         if (!g_methods[i].name || strcmp(g_methods[i].name, name) != 0)
             continue;
         if (class_name && g_methods[i].class_name &&
-            strcmp(g_methods[i].class_name, class_name) == 0)
+            strcmp(g_methods[i].class_name, class_name) == 0) {
+            if (out_prefix) *out_prefix = g_methods[i].module_prefix;
             return g_methods[i].func;
+        }
         last_match = g_methods[i].func;
+        last_prefix = g_methods[i].module_prefix;
     }
+    if (out_prefix) *out_prefix = class_name ? NULL : last_prefix;
     return class_name ? NULL : last_match;
 }
 
@@ -235,6 +233,23 @@ static void cg_prescan_shared(const XiFunc *f) {
                     g_shared_funcs[slot] = ctor;
             }
         }
+    }
+}
+
+/* Register imported class data and methods from the cross-module import
+ * table.  Called after cg_prescan_shared so that class imports from other
+ * modules are available for constructor-call and method resolution. */
+static void cg_register_imported_classes(void) {
+    for (int i = 0; i < g_nimports; i++) {
+        const CgImportEntry *imp = &g_imports[i];
+        if (!imp->target_class || !imp->exporter_func) continue;
+        /* Register the exporter's class methods into g_methods so that
+         * XI_CALL_METHOD on imported class instances can resolve them.
+         * Record the exporter's module prefix for correct C name emission. */
+        int base = g_nmethod;
+        cg_register_class_methods(imp->exporter_func, imp->target_class);
+        for (int m = base; m < g_nmethod; m++)
+            g_methods[m].module_prefix = imp->target_mod_name;
     }
 }
 
@@ -679,18 +694,22 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     target = g_shared_funcs[slot];
             }
 
-            /* XI_IMPORT_REF callee → cross-module imported function */
+            /* XI_IMPORT_REF callee → cross-module imported function or class */
             const char *import_prefix = NULL;
+            bool import_is_class = false;
             if (!target && callee->op == XI_IMPORT_REF && callee->aux) {
                 const XiImportRef *ref = (const XiImportRef *)callee->aux;
                 for (int ii = 0; ii < g_nimports; ii++) {
                     if (g_imports[ii].module_path && ref->module_path &&
                         strcmp(g_imports[ii].module_path, ref->module_path) == 0 &&
                         g_imports[ii].member_name && ref->member_name &&
-                        strcmp(g_imports[ii].member_name, ref->member_name) == 0 &&
-                        g_imports[ii].target_func) {
-                        target = g_imports[ii].target_func;
-                        import_prefix = g_imports[ii].target_mod_name;
+                        strcmp(g_imports[ii].member_name, ref->member_name) == 0) {
+                        if (g_imports[ii].target_func) {
+                            target = g_imports[ii].target_func;
+                            import_prefix = g_imports[ii].target_mod_name;
+                        }
+                        if (g_imports[ii].target_class)
+                            import_is_class = true;
                         break;
                     }
                 }
@@ -733,12 +752,15 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     is_class_call = true;
                 }
             }
+            /* Cross-module class import via XI_IMPORT_REF */
+            if (!is_class_call && import_is_class && target)
+                is_class_call = true;
 
             if (target && is_class_call) {
                 /* Class constructor call: alloc map instance + call ctor.
                  * xrt_map_new returns a tagged XrValue directly. */
                 fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
-                emit_fname(out, prefix, target);
+                emit_fname(out, import_prefix ? import_prefix : prefix, target);
                 fprintf(out, "(NULL, _inst");
                 for (uint16_t a = 1; a < v->nargs; a++) {
                     fprintf(out, ", ");
@@ -985,6 +1007,7 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             const char *method = (const char *)v->aux;
             bool is_super = (v->aux_int == 1);
             const XiFunc *mfunc = NULL;
+            const char *method_prefix = NULL;
 
             if (is_super && g_module_func) {
                 /* super call: find which class owns the current method,
@@ -998,13 +1021,11 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                         const XiValue *cv = blk2->values[vi2];
                         if (!cv || cv->op != XI_CLASS_CREATE || !cv->aux) continue;
                         const XiClassData *cd = (const XiClassData *)cv->aux;
-                        if (!cd->ast) continue;
-                        const ClassDeclNode *cls = &cd->ast->as.class_decl;
-                        if (!cls->super_name) continue;
+                        if (!cd->super_name) continue;
                         for (uint16_t ci = 0; ci < cd->ninst + cd->nstat; ci++) {
                             if (cd->child_idx && cd->child_idx[ci] < g_module_func->nchildren &&
                                 g_module_func->children[cd->child_idx[ci]] == f) {
-                                parent_class = cls->super_name;
+                                parent_class = cd->super_name;
                                 break;
                             }
                         }
@@ -1016,7 +1037,7 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     if (is_ctor_call)
                         mfunc = cg_lookup_class_ctor(g_module_func, parent_class);
                     else
-                        mfunc = cg_lookup_method(method, parent_class);
+                        mfunc = cg_lookup_method(method, parent_class, &method_prefix);
                 }
             }
             if (!mfunc && !is_super) {
@@ -1027,13 +1048,13 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                 if (v->args[0] && v->args[0]->type &&
                     v->args[0]->type->kind == XR_KIND_INSTANCE)
                     recv_class = v->args[0]->type->instance.class_name;
-                mfunc = cg_lookup_method(method, recv_class);
+                mfunc = cg_lookup_method(method, recv_class, &method_prefix);
             }
             uint16_t nargs = (uint16_t)(v->nargs - 1);
 
             if (mfunc) {
                 /* Direct class method call: NULL _cl, receiver is first visible param */
-                emit_fname(out, prefix, mfunc);
+                emit_fname(out, method_prefix ? method_prefix : prefix, mfunc);
                 fprintf(out, "(NULL");
                 for (uint16_t a = 0; a < v->nargs; a++) {
                     fprintf(out, ", ");
@@ -1578,7 +1599,9 @@ XR_FUNC void xi_cgen_add_import(const char *module_path,
                                  const char *member_name,
                                  const char *target_mod_name,
                                  int shared_slot,
-                                 const XiFunc *target_func) {
+                                 const XiFunc *target_func,
+                                 const XiClassData *target_class,
+                                 const XiFunc *exporter_func) {
     XR_DCHECK(module_path != NULL, "xi_cgen_add_import: NULL module_path");
     XR_DCHECK(member_name != NULL, "xi_cgen_add_import: NULL member_name");
     XR_DCHECK(g_nimports < CG_MAX_IMPORTS, "xi_cgen_add_import: table full");
@@ -1588,6 +1611,8 @@ XR_FUNC void xi_cgen_add_import(const char *module_path,
     g_imports[g_nimports].target_mod_name = target_mod_name;
     g_imports[g_nimports].shared_slot = shared_slot;
     g_imports[g_nimports].target_func = target_func;
+    g_imports[g_nimports].target_class = target_class;
+    g_imports[g_nimports].exporter_func = exporter_func;
     g_nimports++;
 }
 
@@ -1609,6 +1634,8 @@ XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
 
     /* Prescan to build shared-slot → XiFunc mapping */
     cg_prescan_shared(module_func);
+    /* Also register class methods from cross-module imports */
+    cg_register_imported_classes();
 
     /* Module-scoped shared variable array.
      * Multi-module builds use a prefixed name to avoid collisions. */

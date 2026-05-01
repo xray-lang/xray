@@ -203,9 +203,24 @@ typedef struct XiImportRef {
     int resolved_shared_slot;      /* shared slot in the target module, -1 = unresolved */
 } XiImportRef;
 
-/* Lowerer → emitter bridge for XI_CLASS_CREATE */
+/* Arena-safe method descriptor for XI_CLASS_CREATE.
+ * One entry per instance/static method, ordered as the class declares them.
+ * All strings are arena-allocated (survive AST destruction). */
+typedef struct XiClassMethod {
+    const char *name;          /* method name (arena copy) */
+    bool is_constructor;       /* true for constructor or "constructor" */
+    bool is_static;            /* true for static methods */
+    bool is_static_constructor; /* true for static constructor */
+} XiClassMethod;
+
+/* Lowerer → emitter bridge for XI_CLASS_CREATE.
+ * All data is arena-allocated; does NOT depend on AST after lowering. */
 typedef struct XiClassData {
-    struct AstNode *ast;     /* AST_CLASS_DECL node (not owned) */
+    struct AstNode *ast;     /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
+    const char *class_name;  /* arena copy of class name */
+    const char *super_name;  /* arena copy of parent class name (NULL if none) */
+    XiClassMethod *methods;  /* arena array [nmethod] of method descriptors */
+    uint16_t nmethod;        /* total method count (instance + static) */
     uint16_t *child_idx;     /* maps method order → XiFunc::children index */
     uint16_t ninst;          /* instance method count */
     uint16_t nstat;          /* static method count */
