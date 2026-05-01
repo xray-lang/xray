@@ -269,6 +269,96 @@ TEST(lower_void_return) {
     xi_func_free(f);
 }
 
+TEST(lower_call) {
+    /* fn(callee: fn, a: int) { return callee(a) } */
+    XiFunc *f = make_func("call_test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *callee = xi_param(f, entry, 0, &stub_int);
+    XiValue *arg = xi_param(f, entry, 1, &stub_int);
+
+    /* XI_CALL: args[0]=callee, args[1]=param */
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 2);
+    call->args[0] = callee;
+    call->args[1] = arg;
+    xi_block_set_return(entry, call);
+
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    assert(xir != NULL && "call lowering should succeed");
+
+    /* Verify: should have a CALL_DIRECT instruction */
+    XirBlock *blk0 = xir->blocks[0];
+    bool found_call = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XIR_CALL_DIRECT)
+            found_call = true;
+    }
+    assert(found_call && "should contain XIR_CALL_DIRECT");
+
+    xir_func_destroy(xir);
+    xi_func_free(f);
+}
+
+TEST(lower_print) {
+    /* fn(x: int) { print(x) } */
+    XiFunc *f = make_func("print_test", &stub_void);
+    XiBlock *entry = f->entry;
+
+    XiValue *x = xi_param(f, entry, 0, &stub_int);
+
+    XiValue *pr = xi_value_new(f, entry, XI_PRINT, &stub_void, 1);
+    pr->args[0] = x;
+    pr->aux_int = 1;  /* newline flag */
+    xi_block_set_return(entry, NULL);
+
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    assert(xir != NULL && "print lowering should succeed");
+
+    XirBlock *blk0 = xir->blocks[0];
+    bool found_print = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XIR_RT_PRINT)
+            found_print = true;
+    }
+    assert(found_print && "should contain XIR_RT_PRINT");
+
+    xir_func_destroy(xir);
+    xi_func_free(f);
+}
+
+TEST(lower_shared_var) {
+    /* fn() { var x = 42; return x } (shared) */
+    XiFunc *f = make_func("shared_test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    /* SET_SHARED slot 0 = 42 */
+    XiValue *c42 = xi_const_int(f, entry, 42, &stub_int);
+    XiValue *set = xi_value_new(f, entry, XI_SET_SHARED, &stub_int, 1);
+    set->args[0] = c42;
+    set->aux_int = 0;
+
+    /* GET_SHARED slot 0 */
+    XiValue *get = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    get->aux_int = 0;
+    xi_block_set_return(entry, get);
+
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    assert(xir != NULL && "shared var lowering should succeed");
+
+    /* Verify: should have LOAD and STORE instructions */
+    XirBlock *blk0 = xir->blocks[0];
+    bool found_store = false, found_load = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XIR_STORE) found_store = true;
+        if (blk0->ins[i].op == XIR_LOAD) found_load = true;
+    }
+    assert(found_store && "should contain XIR_STORE for SET_SHARED");
+    assert(found_load && "should contain XIR_LOAD for GET_SHARED");
+
+    xir_func_destroy(xir);
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -283,6 +373,9 @@ int main(void) {
     run_lower_phi();
     run_lower_neg_unary();
     run_lower_void_return();
+    run_lower_call();
+    run_lower_print();
+    run_lower_shared_var();
 
     printf("\n=== %d/%d tests passed ===\n", tests_passed, tests_passed);
     return 0;

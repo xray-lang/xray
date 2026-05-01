@@ -229,6 +229,62 @@ static XirRef lower_unbox(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
     return xir_emit_unary(ctx->xir_func, blk, XIR_UNBOX_I64, XR_REP_I64, arg);
 }
 
+/* ========== Call / Closure / Print Lowering ========== */
+
+/* Forward-declare JIT runtime bridges used by codegen */
+struct XrCoroutine;
+typedef struct { int64_t val; uint8_t tag; } XrJitResult;
+extern XR_FUNC XrJitResult xr_jit_call_func(struct XrCoroutine *coro, int64_t nargs_encoded);
+extern XR_FUNC XrJitResult xr_jit_closure_new(struct XrCoroutine *coro, int64_t proto_raw);
+
+static XirRef lower_call(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
+    /* XI_CALL: args[0]=callee, args[1..n]=params */
+    XR_DCHECK(v->nargs >= 1, "call: must have at least callee arg");
+    uint16_t nargs = v->nargs - 1;
+
+    /* Collect call args: [0]=closure/callee, [1..]=actual params */
+    XirRef call_args[17];
+    uint16_t total = (uint16_t)(1 + nargs);
+    if (total > 16) {
+        ctx->error = true;
+        return xir_const_i64(ctx->xir_func, 0);
+    }
+    for (uint16_t i = 0; i < v->nargs; i++)
+        call_args[i] = get_ref(ctx, v->args[i]);
+
+    /* Generic call via xr_jit_call_func bridge */
+    XirRef nargs_ref = xir_const_i64(ctx->xir_func, (int64_t)nargs);
+    XirRef nargs_val = xir_emit_unary(ctx->xir_func, blk, XIR_CONST_I64,
+                                       XR_REP_I64, nargs_ref);
+    XirRef fn_ref = xir_const_ptr(ctx->xir_func, (void *)xr_jit_call_func);
+    XirRef result = xir_emit(ctx->xir_func, blk, XIR_CALL_DIRECT,
+                              XR_REP_I64, nargs_val, fn_ref);
+    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+    xir_func_bind_call_args(ctx->xir_func, result, call_args, total);
+    return result;
+}
+
+static XirRef lower_closure_new(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
+    /* XI_CLOSURE_NEW: aux=child XiFunc*, args=capture values */
+    XirRef proto_ref = xir_const_ptr(ctx->xir_func, v->aux);
+    XirRef fn_ref = xir_const_ptr(ctx->xir_func, (void *)xr_jit_closure_new);
+    XirRef result = xir_emit(ctx->xir_func, blk, XIR_CALL_C,
+                              XR_REP_I64, proto_ref, fn_ref);
+    blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+    return result;
+}
+
+static XirRef lower_print(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
+    /* XI_PRINT: args[0..n]=values, aux_int=flags */
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        XirRef arg = get_ref(ctx, v->args[i]);
+        XirRef flags = xir_const_i64(ctx->xir_func, v->aux_int);
+        xir_emit(ctx->xir_func, blk, XIR_RT_PRINT, XR_REP_I64, arg, flags);
+        blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+    }
+    return xir_const_i64(ctx->xir_func, 0);
+}
+
 /* ========== Value Lowering Dispatch ========== */
 
 static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
@@ -268,6 +324,58 @@ static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             XirRef arg = get_ref(ctx, v->args[0]);
             XirRef zero = xir_const_i64(ctx->xir_func, 0);
             return xir_emit(ctx->xir_func, blk, XIR_EQ, XR_REP_I64, arg, zero);
+        }
+
+        /* Function call */
+        case XI_CALL:
+            return lower_call(ctx, blk, v);
+
+        /* Closure creation */
+        case XI_CLOSURE_NEW:
+            return lower_closure_new(ctx, blk, v);
+
+        /* Print */
+        case XI_PRINT:
+            return lower_print(ctx, blk, v);
+
+        /* Shared (module-level) variables — lowered to LOAD/STORE via
+         * the coro's shared_array pointer */
+        case XI_GET_SHARED: {
+            XirRef idx = xir_const_i64(ctx->xir_func, v->aux_int);
+            return xir_emit_unary(ctx->xir_func, blk, XIR_LOAD, XR_REP_I64, idx);
+        }
+        case XI_SET_SHARED: {
+            XR_DCHECK(v->nargs == 1, "set_shared: expected 1 arg");
+            XirRef val = get_ref(ctx, v->args[0]);
+            XirRef idx = xir_const_i64(ctx->xir_func, v->aux_int);
+            xir_emit(ctx->xir_func, blk, XIR_STORE, XR_REP_I64, idx, val);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            return val;
+        }
+
+        /* Upvalue access */
+        case XI_LOAD_UPVAL: {
+            XirRef idx = xir_const_i64(ctx->xir_func, v->aux_int);
+            return xir_emit_unary(ctx->xir_func, blk, XIR_LOAD, XR_REP_I64, idx);
+        }
+        case XI_STORE_UPVAL: {
+            XR_DCHECK(v->nargs == 1, "store_upval: expected 1 arg");
+            XirRef val = get_ref(ctx, v->args[0]);
+            XirRef idx = xir_const_i64(ctx->xir_func, v->aux_int);
+            xir_emit(ctx->xir_func, blk, XIR_STORE, XR_REP_I64, idx, val);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            return val;
+        }
+
+        /* Method call — same as generic call for now */
+        case XI_CALL_METHOD:
+        case XI_CALL_BUILTIN:
+            return lower_call(ctx, blk, v);
+
+        /* Extract multi-return result — placeholder (returns call ref) */
+        case XI_EXTRACT: {
+            XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
+            return get_ref(ctx, v->args[0]);
         }
 
         default:
