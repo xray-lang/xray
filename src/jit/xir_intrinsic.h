@@ -7,27 +7,18 @@
  *
  * xir_intrinsic.h - XIR intrinsic helper IDs
  *
- * KEY CONCEPT:
- *   When the XIR builder runs in AOT mode (b->aot_mode == true), it must
- *   not bake raw helper function pointers into the IR. Instead, it emits
- *   XIR_CALL_INTRINSIC with one of the IDs below as args[0] (encoded as a
- *   const i64). The AOT C codegen consults that ID directly, never the
- *   helper symbol name — that is what allows src/aot/ to be free of any
- *   reference to xr_jit_* / xrt_*_sentinel addresses.
- *
- *   JIT mode still emits XIR_CALL_C with raw fn_ptr; this enum is not
- *   used on that path.
+ * XIR_CALL_INTRINSIC uses one of the IDs below as args[0] (encoded as a
+ * const i64). The AOT C codegen (xi_cgen.c) consults that ID directly,
+ * never the helper symbol name — that allows src/aot/ to be free of any
+ * reference to xr_jit_* addresses.
  *
  * ADDING A NEW INTRINSIC:
  *   1. Add an XR_INTRIN_* enum value below.
  *   2. Update the xir_intrinsic_name() switch in xir.c (for trace dumps).
  *   3. Add the lowering case in the AOT codegen (xi_cgen.c).
- *   4. Update the XIR builder site to emit XIR_CALL_INTRINSIC instead of
- *      XIR_CALL_C(fn=helper, ...) in aot_mode.
  *
  * RELATED MODULES:
  *   - src/jit/xir.h           : XIR_CALL_INTRINSIC opcode
- *   - src/jit/xir_builder*.c  : emission sites
  *   - src/ir/xi_cgen.c        : AOT C code generation
  */
 
