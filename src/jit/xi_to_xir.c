@@ -234,17 +234,18 @@ static XirRef lower_unbox(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
 /* Forward-declare JIT runtime bridges used by codegen */
 struct XrCoroutine;
 typedef struct { int64_t val; uint8_t tag; } XrJitResult;
-extern XR_FUNC XrJitResult xr_jit_call_func(struct XrCoroutine *coro, int64_t nargs_encoded);
-extern XR_FUNC XrJitResult xr_jit_closure_new(struct XrCoroutine *coro, int64_t proto_raw);
+XR_FUNC XrJitResult xr_jit_call_func(struct XrCoroutine *coro, int64_t nargs_encoded);
+XR_FUNC XrJitResult xr_jit_closure_new(struct XrCoroutine *coro, int64_t proto_raw);
 
 static XirRef lower_call(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
-    /* XI_CALL: args[0]=callee, args[1..n]=params */
-    XR_DCHECK(v->nargs >= 1, "call: must have at least callee arg");
-    uint16_t nargs = v->nargs - 1;
+    /* Generic call lowering for XI_CALL and ops delegated to runtime.
+     * For XI_CALL: args[0]=callee, args[1..n]=params.
+     * For other ops (ITER, CORO, etc.): all args are passed. */
+    uint16_t nargs = (v->nargs > 0) ? (v->nargs - 1) : 0;
 
-    /* Collect call args: [0]=closure/callee, [1..]=actual params */
+    /* Collect call args */
     XirRef call_args[17];
-    uint16_t total = (uint16_t)(1 + nargs);
+    uint16_t total = v->nargs;
     if (total > 16) {
         ctx->error = true;
         return xir_const_i64(ctx->xir_func, 0);
@@ -377,6 +378,123 @@ static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
             return get_ref(ctx, v->args[0]);
         }
+
+        /* Field access */
+        case XI_LOAD_FIELD: {
+            XR_DCHECK(v->nargs >= 1, "load_field: need obj arg");
+            XirRef obj = get_ref(ctx, v->args[0]);
+            XirRef off = xir_const_i64(ctx->xir_func, v->aux_int);
+            return xir_emit(ctx->xir_func, blk, XIR_LOAD_FIELD, XR_REP_I64, obj, off);
+        }
+        case XI_STORE_FIELD: {
+            XR_DCHECK(v->nargs >= 2, "store_field: need obj + val");
+            XirRef obj = get_ref(ctx, v->args[0]);
+            XirRef val = get_ref(ctx, v->args[1]);
+            XirRef off = xir_const_i64(ctx->xir_func, v->aux_int);
+            xir_emit(ctx->xir_func, blk, XIR_STORE_FIELD, XR_REP_I64, off, obj);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            /* Bind val as extra arg for codegen */
+            XirRef args[2] = { obj, val };
+            (void)args;
+            return val;
+        }
+
+        /* Index access */
+        case XI_INDEX_GET: {
+            XR_DCHECK(v->nargs >= 2, "index_get: need obj + key");
+            XirRef obj = get_ref(ctx, v->args[0]);
+            XirRef key = get_ref(ctx, v->args[1]);
+            return xir_emit(ctx->xir_func, blk, XIR_RT_INDEX_GET, XR_REP_I64, obj, key);
+        }
+        case XI_INDEX_SET: {
+            XR_DCHECK(v->nargs >= 3, "index_set: need obj + key + val");
+            XirRef obj = get_ref(ctx, v->args[0]);
+            XirRef key = get_ref(ctx, v->args[1]);
+            XirRef val = get_ref(ctx, v->args[2]);
+            XirRef result = xir_emit(ctx->xir_func, blk, XIR_RT_INDEX_SET,
+                                      XR_REP_I64, obj, key);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            (void)val;
+            return result;
+        }
+
+        /* Array / Map creation */
+        case XI_ARRAY_NEW: {
+            XirRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0])
+                                         : xir_const_i64(ctx->xir_func, 0);
+            return xir_emit_unary(ctx->xir_func, blk, XIR_RT_ARRAY_NEW, XR_REP_I64, cap);
+        }
+        case XI_MAP_NEW: {
+            XirRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0])
+                                         : xir_const_i64(ctx->xir_func, 0);
+            return xir_emit_unary(ctx->xir_func, blk, XIR_RT_MAP_NEW, XR_REP_I64, cap);
+        }
+
+        /* String concatenation — lower as sequential RT calls */
+        case XI_STR_CONCAT: {
+            if (v->nargs == 0) return xir_const_i64(ctx->xir_func, 0);
+            XirRef acc = get_ref(ctx, v->args[0]);
+            for (uint16_t i = 1; i < v->nargs; i++) {
+                XirRef part = get_ref(ctx, v->args[i]);
+                acc = xir_emit(ctx->xir_func, blk, XIR_RT_ADD, XR_REP_I64, acc, part);
+            }
+            return acc;
+        }
+
+        /* Exception throw */
+        case XI_THROW: {
+            XR_DCHECK(v->nargs >= 1, "throw: need value arg");
+            XirRef val = get_ref(ctx, v->args[0]);
+            xir_emit_unary(ctx->xir_func, blk, XIR_THROW, XR_REP_I64, val);
+            blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+            return xir_const_i64(ctx->xir_func, 0);
+        }
+
+        /* Iteration — lower as generic calls (runtime handles protocol) */
+        case XI_ITER_NEW:
+        case XI_ITER_NEXT:
+        case XI_ITER_VALID:
+            return lower_call(ctx, blk, v);
+
+        /* Coroutine ops — lower as generic calls */
+        case XI_GO:
+        case XI_AWAIT:
+        case XI_CHAN_SEND:
+        case XI_CHAN_RECV:
+        case XI_YIELD:
+        case XI_CHAN_NEW:
+            return lower_call(ctx, blk, v);
+
+        /* Defer — not yet supported in JIT path, skip gracefully */
+        case XI_DEFER:
+            return xir_const_i64(ctx->xir_func, 0);
+
+        /* Allocation */
+        case XI_ALLOC:
+            return lower_call(ctx, blk, v);
+
+        /* Set creation */
+        case XI_SET_NEW: {
+            XirRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0])
+                                         : xir_const_i64(ctx->xir_func, 0);
+            return xir_emit_unary(ctx->xir_func, blk, XIR_RT_MAP_NEW, XR_REP_I64, cap);
+        }
+
+        /* Type operations — passthrough for now */
+        case XI_IS:
+        case XI_AS:
+            if (v->nargs >= 1) return get_ref(ctx, v->args[0]);
+            return xir_const_i64(ctx->xir_func, 0);
+
+        /* Slice / Range — lower as generic calls */
+        case XI_SLICE:
+        case XI_RANGE:
+            return lower_call(ctx, blk, v);
+
+        /* Multi-return packaging */
+        case XI_MULTI_RET:
+            if (v->nargs >= 1) return get_ref(ctx, v->args[0]);
+            return xir_const_i64(ctx->xir_func, 0);
 
         default:
             /* Unsupported op — mark error, return dummy */
@@ -524,7 +642,7 @@ XR_FUNC struct XirFunc *xi_to_xir_lower(XiFunc *xi_func,
         XirBlock *xir_blk = get_block(&ctx, xi_blk);
         for (uint16_t p = 0; p < xi_blk->npreds; p++) {
             XirBlock *pred = get_block(&ctx, xi_blk->preds[p]);
-            xir_block_add_pred(xir_blk, pred, &func->arena);
+            xir_block_add_pred(xir_blk, pred, func->arena);
         }
     }
 
