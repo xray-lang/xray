@@ -392,3 +392,130 @@ void xi_block_set_if(XiBlock *blk, XiValue *cond,
     xi_block_add_pred(then_blk, blk);
     xi_block_add_pred(else_blk, blk);
 }
+
+/* ========== Module ========== */
+
+XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init) {
+    XR_DCHECK(init != NULL, "xi_module_new: NULL init func");
+    XiModule *mod = (XiModule *)xr_calloc(1, sizeof(XiModule));
+    if (!mod) return NULL;
+    mod->path = path;
+    mod->name = name;
+    mod->init = init;
+    /* Populate functions array from init's children */
+    if (init->nchildren > 0) {
+        mod->functions = (XiFunc **)xr_calloc(init->nchildren, sizeof(XiFunc *));
+        if (mod->functions) {
+            for (uint16_t i = 0; i < init->nchildren; i++)
+                mod->functions[i] = init->children[i];
+            mod->nfuncs = init->nchildren;
+        }
+    }
+    return mod;
+}
+
+XR_FUNC void xi_module_free(XiModule *mod) {
+    if (!mod) return;
+    xr_free(mod->functions);
+    xr_free(mod->exports);
+    xr_free(mod->imports);
+    xr_free(mod->classes);
+    xr_free(mod);
+}
+
+XR_FUNC void xi_module_populate_exports(XiModule *mod) {
+    XR_DCHECK(mod != NULL, "xi_module_populate_exports: NULL module");
+    XR_DCHECK(mod->init != NULL, "xi_module_populate_exports: NULL init");
+    XiFunc *f = mod->init;
+
+    /* Temporary arrays sized to max shared slots */
+    uint16_t max_slots = f->nshared;
+    if (max_slots == 0) return;
+
+    XiFunc **slot_funcs = (XiFunc **)xr_calloc(max_slots, sizeof(XiFunc *));
+    XiClassData **slot_classes = (XiClassData **)xr_calloc(max_slots, sizeof(XiClassData *));
+    if (!slot_funcs || !slot_classes) {
+        xr_free(slot_funcs);
+        xr_free(slot_classes);
+        return;
+    }
+
+    /* Collect all class data for the classes array */
+    uint16_t class_count = 0;
+    XiClassData *class_buf[256];
+
+    /* Scan IR for SET_SHARED patterns (mirrors cg_prescan_shared logic) */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v) continue;
+
+            /* Track all CLASS_CREATE for module.classes */
+            if (v->op == XI_CLASS_CREATE && v->aux) {
+                if (class_count < 256)
+                    class_buf[class_count++] = (XiClassData *)v->aux;
+            }
+
+            if (v->op != XI_SET_SHARED) continue;
+            int slot = (int)v->aux_int;
+            if (slot < 0 || slot >= (int)max_slots || v->nargs < 1) continue;
+            const XiValue *src = v->args[0];
+
+            /* SET_SHARED(slot, CLOSURE_NEW(child)) */
+            if (src->op == XI_CLOSURE_NEW && src->aux) {
+                slot_funcs[slot] = (XiFunc *)src->aux;
+            }
+            /* SET_SHARED(slot, BOX(CLOSURE_NEW(child))) */
+            else if (src->op == XI_BOX && src->nargs >= 1 &&
+                     src->args[0]->op == XI_CLOSURE_NEW && src->args[0]->aux) {
+                slot_funcs[slot] = (XiFunc *)src->args[0]->aux;
+            }
+            /* SET_SHARED(slot, CLASS_CREATE(data)) */
+            else if (src->op == XI_CLASS_CREATE && src->aux) {
+                slot_classes[slot] = (XiClassData *)src->aux;
+            }
+        }
+    }
+
+    /* Build exports array from export_names + slot_funcs/slot_classes */
+    if (f->export_names) {
+        uint16_t nexports = 0;
+        for (uint16_t s = 0; s < max_slots; s++) {
+            if (f->export_names[s]) nexports++;
+        }
+        if (nexports > 0) {
+            XiModuleExport *exps = (XiModuleExport *)xr_calloc(
+                nexports, sizeof(XiModuleExport));
+            if (exps) {
+                uint16_t ei = 0;
+                for (uint16_t s = 0; s < max_slots && ei < nexports; s++) {
+                    if (!f->export_names[s]) continue;
+                    exps[ei].name = f->export_names[s];
+                    exps[ei].shared_slot = s;
+                    exps[ei].function = slot_funcs[s];
+                    exps[ei].class_data = slot_classes[s];
+                    ei++;
+                }
+                xr_free(mod->exports);
+                mod->exports = exps;
+                mod->nexports = nexports;
+            }
+        }
+    }
+
+    /* Build classes array */
+    if (class_count > 0) {
+        XiClassData **cls = (XiClassData **)xr_calloc(class_count, sizeof(XiClassData *));
+        if (cls) {
+            memcpy(cls, class_buf, class_count * sizeof(XiClassData *));
+            xr_free(mod->classes);
+            mod->classes = cls;
+            mod->nclasses = class_count;
+        }
+    }
+
+    xr_free(slot_funcs);
+    xr_free(slot_classes);
+}

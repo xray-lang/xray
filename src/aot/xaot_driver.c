@@ -27,6 +27,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../module/xbundle.h"
 #include "../base/xmalloc.h"
+#include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_cgen.h"
 #include "../frontend/parser/xparse.h"
@@ -243,6 +244,15 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         goto fail_free_names;
     }
 
+    /* Module metadata array (parallel to ir_funcs) */
+    XiModule **modules = (XiModule **)xr_calloc(nmodules, sizeof(XiModule *));
+    if (!modules) {
+        xr_free(pres_arr);
+        xr_free(ir_funcs);
+        xray_isolate_delete(X);
+        goto fail_free_names;
+    }
+
     int total_funcs = 0;
     for (int m = 0; m < nmodules; m++) {
         pres_arr[m] = xi_compile_one(paths[m], X);
@@ -250,6 +260,9 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
             /* Clean up already-compiled modules */
             for (int j = 0; j <= m; j++)
                 xi_pipeline_result_free(&pres_arr[j]);
+            for (int j = 0; j < m; j++)
+                xi_module_free(modules[j]);
+            xr_free(modules);
             xr_free(pres_arr);
             xr_free(ir_funcs);
             xray_isolate_delete(X);
@@ -258,6 +271,11 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         ir_funcs[m] = pres_arr[m].ir;
         XR_DCHECK(ir_funcs[m] != NULL, "xaot_build: pipeline OK but NULL IR");
         total_funcs += 1 + ir_funcs[m]->nchildren;
+
+        /* Build module metadata with explicit exports/classes */
+        modules[m] = xi_module_new(paths[m], mod_names[m], ir_funcs[m]);
+        if (modules[m])
+            xi_module_populate_exports(modules[m]);
     }
     xray_isolate_delete(X);
 
@@ -265,14 +283,12 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     xi_cgen_reset_imports();
     if (nmodules > 1) {
         for (int exporter = 0; exporter < nmodules; exporter++) {
-            XiFunc *ef = ir_funcs[exporter];
-            if (!ef || !ef->export_names || ef->nshared == 0) continue;
+            XiModule *emod = modules[exporter];
+            if (!emod || emod->nexports == 0) continue;
 
-            /* Compute the directory of each importer to derive relative paths */
+            /* For each importer, derive the relative import string */
             for (int importer = 0; importer < nmodules; importer++) {
                 if (importer == exporter) continue;
-                /* Derive the import string that the importer would use to
-                 * reference the exporter (e.g. "./math_lib") */
                 char importer_dir[1024];
                 strncpy(importer_dir, paths[importer], sizeof(importer_dir) - 1);
                 importer_dir[sizeof(importer_dir) - 1] = '\0';
@@ -282,62 +298,33 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
                 char *import_str = derive_import_string(paths[exporter], importer_dir);
                 if (!import_str) continue;
 
-                for (uint16_t slot = 0; slot < ef->nshared; slot++) {
-                    if (!ef->export_names[slot]) continue;
-                    const char *ename = ef->export_names[slot];
+                /* Use XiModule.exports[] directly — no IR scanning needed */
+                for (uint16_t ei = 0; ei < emod->nexports; ei++) {
+                    const XiModuleExport *exp = &emod->exports[ei];
+                    const XiFunc *target_fn = exp->function;
+                    const XiClassData *target_cd = exp->class_data;
 
-                    /* Find child XiFunc matching export name (functions) */
-                    const XiFunc *target_fn = NULL;
-                    for (uint16_t ci = 0; ci < ef->nchildren; ci++) {
-                        if (ef->children[ci] && ef->children[ci]->name &&
-                            strcmp(ef->children[ci]->name, ename) == 0) {
-                            target_fn = ef->children[ci];
-                            break;
-                        }
-                    }
-
-                    /* Find XiClassData if this slot holds a class.
-                     * Scan exporter IR for SET_SHARED(slot, CLASS_CREATE). */
-                    const XiClassData *target_cd = NULL;
-                    for (uint32_t bi = 0; bi < ef->nblocks; bi++) {
-                        const XiBlock *blk = ef->blocks[bi];
-                        if (!blk) continue;
-                        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-                            const XiValue *sv = blk->values[vi];
-                            if (!sv || sv->op != XI_SET_SHARED) continue;
-                            if ((int)sv->aux_int != (int)slot) continue;
-                            if (sv->nargs < 1) continue;
-                            const XiValue *src = sv->args[0];
-                            if (src->op == XI_CLASS_CREATE && src->aux)
-                                target_cd = (const XiClassData *)src->aux;
-                            break;
-                        }
-                    }
-                    /* For class exports, also set target_fn to the constructor */
+                    /* For class exports without explicit function, find constructor */
                     if (target_cd && !target_fn) {
-                        const XiFunc *ctor = NULL;
                         if (target_cd->methods) {
                             for (uint16_t mi = 0; mi < target_cd->nmethod; mi++) {
                                 if (target_cd->methods[mi].is_constructor &&
                                     target_cd->child_idx &&
                                     mi < target_cd->ninst + target_cd->nstat) {
                                     uint16_t idx = target_cd->child_idx[mi];
-                                    if (idx < ef->nchildren) {
-                                        ctor = ef->children[idx];
+                                    if (idx < emod->init->nchildren) {
+                                        target_fn = emod->init->children[idx];
                                         break;
                                     }
                                 }
                             }
                         }
-                        target_fn = ctor;
                     }
 
-                    xi_cgen_add_import(import_str, ename,
-                                       mod_names[exporter], (int)slot,
-                                       target_fn, target_cd, ef);
+                    xi_cgen_add_import(import_str, exp->name,
+                                       mod_names[exporter], (int)exp->shared_slot,
+                                       target_fn, target_cd, emod->init);
                 }
-                /* import_str ownership: cgen stores pointer, keep alive until
-                 * after C generation.  Leak is acceptable (short-lived process). */
             }
         }
     }
@@ -364,9 +351,12 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     }
     fclose(mem);
 
-    /* Free IR (no longer needed after C generation) */
-    for (int m = 0; m < nmodules; m++)
+    /* Free IR and module metadata (no longer needed after C generation) */
+    for (int m = 0; m < nmodules; m++) {
+        xi_module_free(modules[m]);
         xi_pipeline_result_free(&pres_arr[m]);
+    }
+    xr_free(modules);
     xr_free(pres_arr);
     xr_free(ir_funcs);
 
@@ -398,8 +388,11 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     return 0;
 
 fail_free_ir:
-    for (int m = 0; m < nmodules; m++)
+    for (int m = 0; m < nmodules; m++) {
+        xi_module_free(modules[m]);
         xi_pipeline_result_free(&pres_arr[m]);
+    }
+    xr_free(modules);
     xr_free(pres_arr);
     xr_free(ir_funcs);
 fail_free_names:
