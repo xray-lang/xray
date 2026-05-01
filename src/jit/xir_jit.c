@@ -76,6 +76,7 @@
 #include "../base/xmalloc.h"
 #include "xir_jit_runtime.h"
 #include "xir_jit_internal.h"
+#include "xi_to_xir.h"
 
 /* ========== Unified Install Helper ========== */
 
@@ -552,8 +553,23 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
         proto->type_feedback = NULL;
     }
     uint64_t compile_start_ms = xr_time_monotonic_ms();
-    XirFunc *func =
-        xir_build_from_proto_jit(proto, shared_protos, nshared, shape_hint, jit->isolate);
+    XirFunc *func = NULL;
+
+    /* Prefer Xi IR direct lowering when available (SSA → SSA, no bytecode
+     * reconstruction). Falls back to legacy builder on failure or absence. */
+    if (proto->xi_func) {
+        func = xi_to_xir_lower((XiFunc *)proto->xi_func, proto,
+                               (XiSlotMap *)proto->xi_slot_map, jit->isolate);
+        if (func) {
+            xr_log_debug("jit", "xi_to_xir lowered %s",
+                         proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        }
+    }
+
+    /* Legacy bytecode builder fallback */
+    if (!func) {
+        func = xir_build_from_proto_jit(proto, shared_protos, nshared, shape_hint, jit->isolate);
+    }
     if (saved_feedback)
         proto->type_feedback = saved_feedback;
     if (!func) {
