@@ -7,10 +7,8 @@
  *
  * xir_eligibility.c - Implementation of is_jit_eligible()
  *
- * The opcode whitelist scan delegates to jit_op_support_table[] in
- * xir_opcode_support.h, which is statically asserted to cover every
- * opcode — adding a new one will refuse to compile rather than silently
- * shipping with a gap.
+ * Determines whether a proto is eligible for JIT compilation based
+ * on heuristics (code size, deopt count, feedback, etc.).
  */
 
 #include "xir_eligibility.h"
@@ -19,7 +17,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "xir_opcode_support.h"
 #include "xir_target.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
@@ -179,46 +176,7 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
         return false;
     }
 
-    /* Whitelist scan — delegate to the single source of truth
-     * (jit_op_support_table[] in xir_opcode_support.h).
-     * SUPPORTED and DEOPT_FALLBACK opcodes are allowed; only BAIL_OUT
-     * or UNIMPLEMENTED causes the whole function to stay in interpreter.
-     * DEOPT_FALLBACK opcodes generate unconditional deopt at that PC,
-     * allowing hot loops before the opcode to still run JIT-compiled.
-     *
-     * Skip when xi_func is attached: xi_to_xir works from Xi IR and
-     * handles unsupported ops by returning NULL at lowering time. */
-    if (proto->xi_func)
-        return true;
-    int code_len = proto->code.count;
-    for (int ci = 0; ci < code_len; ci++) {
-        XrInstruction ins = PROTO_CODE(proto, ci);
-        OpCode op = GET_OPCODE(ins);
-        if ((unsigned) op >= NUM_OPCODES) {
-            if (verbose)
-                fprintf(stderr, "[JIT] skip %s: invalid opcode %d at pc=%d\n", name, op, ci);
-            return false;
-        }
-        JitOpcodeSupport sup = jit_op_support_table[op];
-        if (sup == JIT_OP_SUPPORTED || sup == JIT_OP_DEOPT_FALLBACK)
-            continue;
-        if (verbose) {
-            const char *why = "unsupported";
-            switch (sup) {
-                case JIT_OP_BAIL_OUT:
-                    why = "bail-out";
-                    break;
-                case JIT_OP_UNIMPLEMENTED:
-                    why = "NYI";
-                    break;
-                default:
-                    why = "unknown";
-                    break;
-            }
-            fprintf(stderr, "[JIT] skip %s: %s opcode %d at pc=%d\n", name, why, op, ci);
-        }
-        return false;
-    }
-
+    /* xi_to_xir handles unsupported ops by returning NULL at lowering
+     * time — no bytecode opcode whitelist needed. */
     return true;
 }

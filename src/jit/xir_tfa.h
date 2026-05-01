@@ -23,7 +23,7 @@
  * RELATED MODULES:
  *   - xr_type.h: static type system (XrType with bit flags)
  *   - xslot_type.h: runtime slot types (XrSlotType for JIT/AOT)
- *   - xir_builder.c: consumes param_types to set slot_rep/slot_tag
+ *   - xi_to_xir.c: consumes param_types for precise lowering
  */
 
 #ifndef XIR_TFA_H

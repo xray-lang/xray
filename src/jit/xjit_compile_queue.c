@@ -23,7 +23,6 @@
 
 #include "xjit_compile_queue.h"
 #include "xir_jit.h"
-#include "xir_builder.h"
 #include "xi_to_xir.h"
 #include "xir_pass.h"
 #include "xir_codegen.h"
@@ -79,42 +78,16 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     if (!is_jit_eligible(proto, false))
         goto fail_clear_sentinel;
 
-    /* Build XIR from the immutable proto bytecode.
-     *
-     * - shared_protos come from the task snapshot: builder can emit
-     *   CALL_KNOWN for module-level fn calls without touching shared state.
-     * - shape_hint also comes from the snapshot, captured on the main
-     *   thread from dominant_shape analysis.
-     * - IC snapshots are caller-owned (this task); the builder reads
-     *   them read-only. We free them after the build returns regardless
-     *   of success.
-     * - NULL isolate: class-registry dynarrays are not safe for bg
-     *   concurrent access; builder works in a bg-safe subset. */
-    XrProto **shared_protos = task->nshared > 0 ? (XrProto **) task->shared_protos : NULL;
-
-    /* Prefer Xi IR direct lowering (SSA → SSA).  proto->xi_func and
-     * proto->xi_slot_map are immutable after creation — safe for bg. */
+    /* Build XIR via Xi IR direct lowering (SSA → SSA).
+     * proto->xi_func and proto->xi_slot_map are immutable after
+     * creation — safe for background access.
+     * NULL isolate: class-registry dynarrays are not safe for bg. */
     XirFunc *func = NULL;
     if (proto->xi_func) {
         func = xi_to_xir_lower((XiFunc *)proto->xi_func, proto,
                                (XiSlotMap *)proto->xi_slot_map, NULL);
-        if (func)
-            xr_log_debug("jit-bg", "xi_to_xir lowered %s",
-                         proto->name ? XR_STRING_CHARS(proto->name) : "?");
     }
-
-    /* Legacy bytecode builder fallback */
-    if (!func) {
-        XirBuildOptions bg_opts;
-        memset(&bg_opts, 0, sizeof(bg_opts));
-        bg_opts.ic_fields_snapshot = task->ic_fields_snapshot;
-        bg_opts.ic_methods_snapshot = task->ic_methods_snapshot;
-        bg_opts.ic_builtin_snapshot = task->ic_builtin_snapshot;
-        func = xir_build_from_proto_jit_ex(proto, shared_protos, task->nshared,
-                                           task->shape_hint, NULL, &bg_opts);
-    }
-    // Snapshots are owned by the task; release them now that the
-    // builder has consumed (or rejected) them.
+    /* IC snapshots are owned by the task; release them unconditionally. */
     if (task->ic_fields_snapshot)
         xr_ic_field_table_free(task->ic_fields_snapshot);
     if (task->ic_methods_snapshot)

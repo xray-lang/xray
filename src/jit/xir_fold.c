@@ -8,7 +8,7 @@
  * xir_fold.c - On-the-fly peephole optimization (FOLD engine)
  *
  * KEY CONCEPT:
- *   Applied at IR construction time inside xir_builder. Each call to
+ *   Applied at IR construction time inside xi_to_xir. Each call to
  *   xir_fold_emit() checks a table of algebraic rules before delegating
  *   to xir_emit(). When a rule matches, the instruction is eliminated
  *   and an existing XirRef is returned instead.

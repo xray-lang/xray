@@ -84,7 +84,7 @@
  *                                     └─ If-conversion              └─► Executable code
  *
  * RELATED MODULES:
- *   - xir_builder.c: bytecode → XIR translation
+ *   - xi_to_xir.c: Xi IR → XIR lowering
  *   - xir_printer.c: text dump for debugging
  *   - xir_code_alloc.h: executable memory for emitted code
  */
@@ -505,7 +505,7 @@ typedef struct {
     uint16_t cost;        // spill cost (heuristic)
     uint32_t start, end;  // live range [start, end)
     XrType *xrtype;       // precise static type (NULL = unknown)
-    // Compiler hints for optimization (migrated from XirBuilder slot arrays)
+    // Compiler hints for optimization
     struct XrProto *callee_proto;   // known callee proto (from OP_CLOSURE/GETSHARED)
     struct XrShape *shape_hint;     // known Json shape (from OP_NEWJSON / Blueprint)
     struct XrStructLayout *layout;  // struct field layout (from OP_NEW_STRUCT / params)

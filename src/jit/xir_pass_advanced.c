@@ -1485,14 +1485,12 @@ XirPassChange xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
                 if (callee->entry_type != 0)
                     continue;
 
-                // --- Build callee XIR (prefer xi_to_xir, fallback to legacy) ---
+                // --- Build callee XIR via xi_to_xir ---
                 XirFunc *callee_func = NULL;
                 if (callee->xi_func)
                     callee_func = xi_to_xir_lower(
                         (XiFunc *)callee->xi_func, callee,
                         (XiSlotMap *)callee->xi_slot_map, NULL);
-                if (!callee_func)
-                    callee_func = xir_build_from_proto(callee);
                 if (!callee_func)
                     continue;
                 int max_blk = is_tiny ? 8 : 32;

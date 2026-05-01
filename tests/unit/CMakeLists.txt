@@ -118,7 +118,6 @@ add_xray_unit_test(test_symbol symbol/test_symbol.c)
 
 add_xray_unit_test(test_xir jit/test_xir.c)
 add_xray_unit_test(test_xir_bset jit/test_xir_bset.c)
-add_xray_unit_test(test_xir_builder jit/test_xir_builder.c)
 add_xray_unit_test(test_xir_defuse jit/test_xir_defuse.c)
 add_xray_unit_test(test_xir_fold jit/test_xir_fold.c)
 add_xray_unit_test(test_xir_liveness2 jit/test_xir_liveness2.c)
