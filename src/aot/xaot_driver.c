@@ -18,7 +18,7 @@
  * RELATED MODULES:
  *   - xi_cgen.h: Xi IR → C code generation
  *   - xaot_driver.h: public API
- *   - xcmd_build.c: CLI entry that invokes xaot_build_xi + CC
+ *   - xcmd_build.c: CLI entry that invokes xaot_build + CC
  */
 
 #include "xaot_driver.h"
@@ -173,9 +173,9 @@ static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
     return pres;
 }
 
-XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
-    XR_DCHECK(input_path != NULL, "xaot_build_xi: NULL input_path");
-    XR_DCHECK(result != NULL, "xaot_build_xi: NULL result");
+XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
+    XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
+    XR_DCHECK(result != NULL, "xaot_build: NULL result");
     memset(result, 0, sizeof(*result));
 
     printf("[xi-native] Building: %s\n", input_path);
@@ -217,7 +217,7 @@ XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
         xr_bundle_free(bundle);
         xray_isolate_delete(Xb);
     }
-    XR_DCHECK(entry_index >= 0, "xaot_build_xi: entry not found in bundle");
+    XR_DCHECK(entry_index >= 0, "xaot_build: entry not found in bundle");
 
     if (nmodules > 1) {
         printf("[xi-native] %d modules (topo order):\n", nmodules);
@@ -256,7 +256,7 @@ XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
             goto fail_free_names;
         }
         ir_funcs[m] = pres_arr[m].ir;
-        XR_DCHECK(ir_funcs[m] != NULL, "xaot_build_xi: pipeline OK but NULL IR");
+        XR_DCHECK(ir_funcs[m] != NULL, "xaot_build: pipeline OK but NULL IR");
         total_funcs += 1 + ir_funcs[m]->nchildren;
     }
     xray_isolate_delete(X);

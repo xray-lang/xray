@@ -224,7 +224,7 @@ static const char *make_opt_flag(const char *level) {
 
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, const char *sysroot);
-static int cmd_build_xi_native(const char *input, const char *output, const char *cc,
+static int cmd_build_native(const char *input, const char *output, const char *cc,
                                const char *opt_flag, bool c_only, bool strip, const char *sysroot);
 
 /* ========== CLI Entry Point ========== */
@@ -248,7 +248,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     const char *opt_flag = make_opt_flag(opt_level);
 
     if (native_mode) {
-        return cmd_build_xi_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
+        return cmd_build_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                                    sysroot);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
@@ -318,10 +318,10 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
 
 #include "../../aot/xaot_driver.h"
 
-static int cmd_build_xi_native(const char *input, const char *output, const char *cc,
+static int cmd_build_native(const char *input, const char *output, const char *cc,
                                const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
     XaotBuildResult aot_result;
-    int rc = xaot_build_xi(input, &aot_result);
+    int rc = xaot_build(input, &aot_result);
     if (rc != 0)
         return rc;
 

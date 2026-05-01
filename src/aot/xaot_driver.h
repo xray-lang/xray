@@ -17,7 +17,7 @@
  *
  * RELATED MODULES:
  *   - xi_cgen.h: Xi IR → C code generation
- *   - xcmd_build.c: CLI entry that invokes xaot_build_xi + CC
+ *   - xcmd_build.c: CLI entry that invokes xaot_build + CC
  */
 
 #ifndef XAOT_DRIVER_H
@@ -72,7 +72,7 @@ typedef struct {
 
 /* ========== Build API ========== */
 
-/* Result of xaot_build_xi().  Caller must free c_source via xr_free(). */
+/* Result of xaot_build().  Caller must free c_source via xr_free(). */
 typedef struct {
     char *c_source;          /* generated C program (malloc'd, caller frees) */
     int total_compiled;      /* number of functions successfully transpiled */
@@ -86,6 +86,6 @@ typedef struct {
  * Returns 0 on success, non-zero on failure.
  * On success, result->c_source is a complete C program.
  * Caller frees result->c_source via xr_free(). */
-XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result);
+XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H
