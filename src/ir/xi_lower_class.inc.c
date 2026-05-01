@@ -127,9 +127,35 @@ static void lower_class_decl(XiLower *l, AstNode *node) {
         l->func, sizeof(XiClassData));
     XR_DCHECK(data != NULL, "class data alloc failed");
     data->ast = node;
+    data->class_name = arena_strdup(l->func, cd->name);
+    data->super_name = arena_strdup(l->func, cd->super_name);
     data->child_idx = cidx;
     data->ninst = inst_n;
     data->nstat = stat_n;
+
+    /* Build arena-safe method descriptor array so cgen can resolve
+     * class methods without depending on AST after lowering. */
+    data->nmethod = total;
+    data->methods = NULL;
+    if (total > 0) {
+        data->methods = (XiClassMethod *)xi_func_arena_alloc(
+            l->func, total * sizeof(XiClassMethod));
+        if (data->methods) {
+            uint16_t mi = 0;
+            for (int i = 0; i < cd->method_count && mi < total; i++) {
+                if (cd->methods[i]->type != AST_METHOD_DECL) continue;
+                MethodDeclNode *m = &cd->methods[i]->as.method_decl;
+                if (m->is_static_constructor) continue;
+                data->methods[mi].name = arena_strdup(l->func, m->name);
+                data->methods[mi].is_constructor =
+                    m->is_constructor ||
+                    (m->name && strcmp(m->name, "constructor") == 0);
+                data->methods[mi].is_static = m->is_static;
+                data->methods[mi].is_static_constructor = false;
+                mi++;
+            }
+        }
+    }
     v->aux = data;
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t)node->line;

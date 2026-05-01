@@ -56,7 +56,9 @@ XR_FUNC void xi_cgen_add_import(const char *module_path,
                                  const char *member_name,
                                  const char *target_mod_name,
                                  int shared_slot,
-                                 const struct XiFunc *target_func);
+                                 const struct XiFunc *target_func,
+                                 const struct XiClassData *target_class,
+                                 const struct XiFunc *exporter_func);
 
 /* Reset the cross-module import table (call before a new compilation). */
 XR_FUNC void xi_cgen_reset_imports(void);
