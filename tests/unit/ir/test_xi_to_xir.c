@@ -52,7 +52,7 @@ TEST(lower_const_int) {
     XiValue *c = xi_const_int(f, entry, 42, &stub_int);
     xi_block_set_return(entry, c);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "lowering should succeed");
     assert(xir->nblk >= 1 && "should have at least 1 block");
 
@@ -67,7 +67,7 @@ TEST(lower_const_float) {
     XiValue *c = xi_const_float(f, entry, 3.14, &stub_float);
     xi_block_set_return(entry, c);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "lowering should succeed");
 
     xir_func_destroy(xir);
@@ -84,7 +84,7 @@ TEST(lower_add_int) {
     XiValue *sum = xi_binary(f, entry, XI_ADD, &stub_int, a, b);
     xi_block_set_return(entry, sum);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "lowering should succeed");
 
     /* Verify: should have at least an ADD instruction */
@@ -109,7 +109,7 @@ TEST(lower_add_float) {
     XiValue *sum = xi_binary(f, entry, XI_ADD, &stub_float, a, b);
     xi_block_set_return(entry, sum);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];
@@ -134,7 +134,7 @@ TEST(lower_comparison) {
     XiValue *cmp = xi_binary(f, entry, XI_LT, &stub_bool, a, b);
     xi_block_set_return(entry, cmp);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];
@@ -171,7 +171,7 @@ TEST(lower_if_branch) {
     XiValue *c2 = xi_const_int(f, else_blk, 2, &stub_int);
     xi_block_set_return(else_blk, c2);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
     assert(xir->nblk == 3 && "should have entry + then + else blocks");
 
@@ -218,7 +218,7 @@ TEST(lower_phi) {
     phi->value.args[1] = c20;
     xi_block_set_return(merge, &phi->value);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
     assert(xir->nblk == 4 && "should have 4 blocks");
 
@@ -239,7 +239,7 @@ TEST(lower_neg_unary) {
     XiValue *neg = xi_unary(f, entry, XI_NEG, &stub_int, a);
     xi_block_set_return(entry, neg);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];
@@ -259,7 +259,7 @@ TEST(lower_void_return) {
     XiBlock *entry = f->entry;
     xi_block_set_return(entry, NULL);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];
@@ -283,7 +283,7 @@ TEST(lower_call) {
     call->args[1] = arg;
     xi_block_set_return(entry, call);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "call lowering should succeed");
 
     /* Verify: should have a CALL_DIRECT instruction */
@@ -311,7 +311,7 @@ TEST(lower_print) {
     pr->aux_int = 1;  /* newline flag */
     xi_block_set_return(entry, NULL);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "print lowering should succeed");
 
     XirBlock *blk0 = xir->blocks[0];
@@ -342,7 +342,7 @@ TEST(lower_shared_var) {
     get->aux_int = 0;
     xi_block_set_return(entry, get);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL && "shared var lowering should succeed");
 
     /* Verify: should have LOAD and STORE instructions */
@@ -370,7 +370,7 @@ TEST(lower_load_field) {
     load->aux_int = 0;  /* field index */
     xi_block_set_return(entry, load);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];
@@ -397,7 +397,7 @@ TEST(lower_index_get) {
     get->args[1] = idx;
     xi_block_set_return(entry, get);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];
@@ -420,7 +420,7 @@ TEST(lower_array_new) {
     XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_int, 0);
     xi_block_set_return(entry, arr);
 
-    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL, NULL);
     assert(xir != NULL);
 
     XirBlock *blk0 = xir->blocks[0];

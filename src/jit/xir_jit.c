@@ -553,11 +553,29 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     uint64_t compile_start_ms = xr_time_monotonic_ms();
     XirFunc *func = NULL;
 
+    /* Snapshot IC tables for speculative guard insertion */
+    XirICSnapshot ic_snap = {NULL, NULL};
+    if (!conservative) {
+        XrVMContext *cur_ctx = xr_vm_current_ctx(jit->isolate);
+        if (cur_ctx) {
+            ic_snap.ic_fields = xr_vm_ic_fields_snapshot(cur_ctx, proto);
+            ic_snap.ic_methods = xr_vm_ic_methods_snapshot(cur_ctx, proto);
+        }
+    }
+
     /* Xi IR → XIR lowering (sole compilation path) */
     if (proto->xi_func) {
+        const XirICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods)
+                                       ? &ic_snap : NULL;
         func = xi_to_xir_lower((XiFunc *)proto->xi_func, proto,
-                               (XiSlotMap *)proto->xi_slot_map, jit->isolate);
+                               (XiSlotMap *)proto->xi_slot_map, ic_ptr,
+                               jit->isolate);
     }
+    /* Release IC snapshots (they were copied into deopt tables) */
+    if (ic_snap.ic_fields)
+        xr_ic_field_table_free(ic_snap.ic_fields);
+    if (ic_snap.ic_methods)
+        xr_ic_method_table_free(ic_snap.ic_methods);
     if (saved_feedback)
         proto->type_feedback = saved_feedback;
     if (!func) {
