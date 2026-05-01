@@ -41,14 +41,24 @@ typedef enum {
     XI_PIPE_ERR_INTERNAL,   /* unexpected internal error */
 } XiPipeStatus;
 
+/* ========== Pipeline Mode ========== */
+
+typedef enum {
+    XI_PIPE_VM,     /* lower → verify → opt → bytecode emit */
+    XI_PIPE_AOT,    /* lower → verify → opt → select_rep → box_elim (no emit) */
+    XI_PIPE_CHECK,  /* lower → verify only (no opt, no emit) */
+} XiPipelineMode;
+
 /* ========== Pipeline Configuration ========== */
 
 typedef struct XiPipelineConfig {
+    XiPipelineMode mode;    /* selects default pass sequence (can be overridden) */
     bool run_verify;        /* run IR verification after lowering (default: true) */
     bool run_optimize;      /* run optimization passes (default: true) */
     bool run_select_rep;    /* run SelectRepresentations pass (BOX/UNBOX insertion,
                              * needed by AOT/JIT backends for unboxed values;
-                             * default: false, VM bytecode backend does not need it) */
+                             * default: false for VM, true for AOT) */
+    bool run_emit;          /* emit bytecode (default: true for VM, false for AOT) */
     bool dump_ir_before;    /* dump IR to stderr before optimization */
     bool dump_ir_after;     /* dump IR to stderr after optimization */
 } XiPipelineConfig;
@@ -57,15 +67,19 @@ typedef struct XiPipelineConfig {
 
 typedef struct XiPipelineResult {
     XiPipeStatus status;
-    struct XrProto *proto;  /* output bytecode (owned by caller on success) */
+    struct XrProto *proto;  /* output bytecode (owned by caller; NULL in AOT/CHECK mode) */
     XiFunc *ir;             /* intermediate IR (freed on result_free) */
+    XiModule *module;       /* module metadata (populated in AOT mode; freed on result_free) */
     const char *error_msg;  /* human-readable error description */
 } XiPipelineResult;
 
 /* ========== API ========== */
 
-/* Default configuration: verify + optimize enabled, no dumps. */
+/* Default configuration: XI_PIPE_VM mode, verify + optimize + emit enabled. */
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void);
+
+/* AOT configuration: verify + optimize + select_rep, no bytecode emit. */
+XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void);
 
 /* Compile a function AST node through the full pipeline.
  * Returns pipeline result; caller must call xi_pipeline_result_free. */

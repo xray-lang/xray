@@ -121,9 +121,7 @@ static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
 
     xa_analyzer_analyze(analyzer, path, program);
 
-    XiPipelineConfig cfg = xi_pipeline_default_config();
-    cfg.run_optimize = true;
-    cfg.run_select_rep = true;
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
 
     XiPipelineResult pres = xi_pipeline_compile_program(
         program, analyzer, X, &cfg);
