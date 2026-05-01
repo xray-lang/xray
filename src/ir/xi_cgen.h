@@ -49,18 +49,11 @@ XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
 XR_FUNC void xi_cgen_main(FILE *out, const char **module_names,
                            XiFunc **module_funcs, int n, int entry_index);
 
-/* Register a cross-module import mapping.  Called by the AOT driver
- * after all modules are lowered, before calling xi_cgen_module().
- * The cgen resolves XI_IMPORT_REF values using this table. */
-XR_FUNC void xi_cgen_add_import(const char *module_path,
-                                 const char *member_name,
-                                 const char *target_mod_name,
-                                 int shared_slot,
-                                 const struct XiFunc *target_func,
-                                 const struct XiClassData *target_class,
-                                 const struct XiFunc *exporter_func);
-
-/* Reset the cross-module import table (call before a new compilation). */
-XR_FUNC void xi_cgen_reset_imports(void);
+/* Resolve cross-module imports from a module graph.  Builds the internal
+ * import table by matching each exporter's exports[] against all importers.
+ * Must be called after xi_module_populate_exports() on each module and
+ * before xi_cgen_module().  Requires nmodules > 1 to have any effect. */
+XR_FUNC void xi_cgen_resolve_module_imports(struct XiModule **modules,
+                                             int nmodules);
 
 #endif // XI_CGEN_H

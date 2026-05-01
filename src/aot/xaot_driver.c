@@ -89,40 +89,6 @@ static char *derive_module_name(const char *path) {
     return name;
 }
 
-/* Derive the import string to reach target_path from importer_dir.
- * E.g. "/a/b/math.xr" from "/a/b" → "./math".  Caller must free. */
-static char *derive_import_string(const char *target_path, const char *importer_dir) {
-    XR_DCHECK(target_path != NULL, "derive_import_string: NULL target");
-    XR_DCHECK(importer_dir != NULL, "derive_import_string: NULL dir");
-    size_t dir_len = strlen(importer_dir);
-    if (strncmp(target_path, importer_dir, dir_len) == 0 && target_path[dir_len] == '/') {
-        const char *filename = target_path + dir_len + 1;
-        size_t flen = strlen(filename);
-        if (flen > 3 && strcmp(filename + flen - 3, ".xr") == 0)
-            flen -= 3;
-        char *result = (char *) xr_malloc(2 + flen + 1);
-        if (!result)
-            return NULL;
-        result[0] = '.';
-        result[1] = '/';
-        memcpy(result + 2, filename, flen);
-        result[2 + flen] = '\0';
-        return result;
-    }
-    const char *base = strrchr(target_path, '/');
-    base = base ? base + 1 : target_path;
-    size_t blen = strlen(base);
-    if (blen > 3 && strcmp(base + blen - 3, ".xr") == 0)
-        blen -= 3;
-    char *result = (char *) xr_malloc(2 + blen + 1);
-    if (!result)
-        return NULL;
-    result[0] = '.';
-    result[1] = '/';
-    memcpy(result + 2, base, blen);
-    result[2 + blen] = '\0';
-    return result;
-}
 
 /* ========== Xi IR Pipeline (Source -> AST -> Xi IR -> C) ========== */
 
@@ -279,55 +245,8 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     }
     xray_isolate_delete(X);
 
-    /* --- Build cross-module import resolution table --- */
-    xi_cgen_reset_imports();
-    if (nmodules > 1) {
-        for (int exporter = 0; exporter < nmodules; exporter++) {
-            XiModule *emod = modules[exporter];
-            if (!emod || emod->nexports == 0) continue;
-
-            /* For each importer, derive the relative import string */
-            for (int importer = 0; importer < nmodules; importer++) {
-                if (importer == exporter) continue;
-                char importer_dir[1024];
-                strncpy(importer_dir, paths[importer], sizeof(importer_dir) - 1);
-                importer_dir[sizeof(importer_dir) - 1] = '\0';
-                char *last_slash = strrchr(importer_dir, '/');
-                if (last_slash) *last_slash = '\0';
-
-                char *import_str = derive_import_string(paths[exporter], importer_dir);
-                if (!import_str) continue;
-
-                /* Use XiModule.exports[] directly — no IR scanning needed */
-                for (uint16_t ei = 0; ei < emod->nexports; ei++) {
-                    const XiModuleExport *exp = &emod->exports[ei];
-                    const XiFunc *target_fn = exp->function;
-                    const XiClassData *target_cd = exp->class_data;
-
-                    /* For class exports without explicit function, find constructor */
-                    if (target_cd && !target_fn) {
-                        if (target_cd->methods) {
-                            for (uint16_t mi = 0; mi < target_cd->nmethod; mi++) {
-                                if (target_cd->methods[mi].is_constructor &&
-                                    target_cd->child_idx &&
-                                    mi < target_cd->ninst + target_cd->nstat) {
-                                    uint16_t idx = target_cd->child_idx[mi];
-                                    if (idx < emod->init->nchildren) {
-                                        target_fn = emod->init->children[idx];
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    xi_cgen_add_import(import_str, exp->name,
-                                       mod_names[exporter], (int)exp->shared_slot,
-                                       target_fn, target_cd, emod->init);
-                }
-            }
-        }
-    }
+    /* --- Resolve cross-module imports from module graph --- */
+    xi_cgen_resolve_module_imports(modules, nmodules);
 
     /* --- Generate combined C source --- */
     char *buf = NULL;
