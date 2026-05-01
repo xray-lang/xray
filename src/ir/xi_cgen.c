@@ -25,6 +25,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/value/xtype.h"
 #include "../aot/xrt_method_symbols.h"
+#include "../frontend/parser/xast_nodes.h"
 #include <string.h>
 #include <inttypes.h>
 
@@ -67,7 +68,27 @@ static int g_fname_counter;
  * and class constructors stored via XI_SET_SHARED(slot, XI_CLOSURE_NEW). */
 #define CG_MAX_SHARED 512
 static const XiFunc *g_shared_funcs[CG_MAX_SHARED];
+static const XiClassData *g_shared_class[CG_MAX_SHARED];
 static int g_nshared;
+
+/* Instance method registry: maps (method_name → XiFunc*).
+ * Populated by prescan from XI_CLASS_CREATE descriptors so that
+ * XI_CALL_METHOD can resolve class methods to direct calls. */
+#define CG_MAX_METHODS 256
+typedef struct {
+    const char *class_name;  /* owning class (e.g. "Rect") */
+    const char *name;        /* method name (e.g. "area") */
+    const XiFunc *func;
+} CgMethodEntry;
+static CgMethodEntry g_methods[CG_MAX_METHODS];
+static int g_nmethod;
+
+/* Module-level function pointer (set by prescan) for class lookups */
+static const XiFunc *g_module_func;
+
+/* Set when current function has exception handling; all SSA values
+ * are pre-declared so inline emit uses assignment instead of decl. */
+static bool g_pre_decl_all;
 
 /* Name of the current module's shared array in generated C.
  * Single-module: "xrt_shared".  Multi-module: "xrt_shared_<modname>". */
@@ -76,15 +97,119 @@ static const char *g_shared_name = "xrt_shared";
 /* Prescan a function's IR to populate g_shared_funcs.
  * Recognizes XI_SET_SHARED(slot, XI_CLOSURE_NEW(child)) pattern,
  * including XI_SET_SHARED(slot, XI_BOX(XI_CLOSURE_NEW(child))). */
+/* Find the constructor child XiFunc from a XiClassData descriptor.
+ * The constructor is the instance method named "constructor". */
+static const XiFunc *cg_find_constructor(const XiFunc *parent,
+                                          const XiClassData *cd) {
+    if (!cd || !cd->ast || !parent) return NULL;
+    const ClassDeclNode *cls = &cd->ast->as.class_decl;
+    uint16_t ci = 0;
+    for (int i = 0; i < cls->method_count; i++) {
+        if (cls->methods[i]->type != AST_METHOD_DECL) continue;
+        const MethodDeclNode *m = &cls->methods[i]->as.method_decl;
+        if (m->is_static_constructor) continue;
+        if (m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0)) {
+            if (cd->child_idx && ci < cd->ninst + cd->nstat) {
+                uint16_t idx = cd->child_idx[ci];
+                if (idx < parent->nchildren)
+                    return parent->children[idx];
+            }
+        }
+        ci++;
+    }
+    return NULL;
+}
+
+/* Register all instance methods from a class descriptor into g_methods.
+ * Constructors are excluded — they are resolved via the XI_CALL class path.
+ * Also records the constructor XiFunc for super() call resolution. */
+static void cg_register_class_methods(const XiFunc *parent,
+                                       const XiClassData *cd) {
+    if (!cd || !cd->ast || !parent) return;
+    const ClassDeclNode *cls = &cd->ast->as.class_decl;
+    uint16_t ci = 0;
+    for (int i = 0; i < cls->method_count; i++) {
+        if (cls->methods[i]->type != AST_METHOD_DECL) continue;
+        const MethodDeclNode *m = &cls->methods[i]->as.method_decl;
+        if (m->is_static_constructor) continue;
+        bool is_ctor = m->is_constructor
+                       || (m->name && strcmp(m->name, "constructor") == 0);
+        if (!is_ctor && !m->is_static && m->name) {
+            if (cd->child_idx && ci < cd->ninst + cd->nstat) {
+                uint16_t idx = cd->child_idx[ci];
+                if (idx < parent->nchildren && g_nmethod < CG_MAX_METHODS) {
+                    g_methods[g_nmethod].class_name = cls->name;
+                    g_methods[g_nmethod].name = m->name;
+                    g_methods[g_nmethod].func = parent->children[idx];
+                    g_nmethod++;
+                }
+            }
+        }
+        ci++;
+    }
+}
+
+/* Lookup constructor XiFunc for a class by name.
+ * Used to resolve super() calls to the parent class constructor. */
+static const XiFunc *cg_lookup_class_ctor(const XiFunc *parent,
+                                           const char *class_name) {
+    if (!class_name || !parent) return NULL;
+    for (uint32_t bi = 0; bi < parent->nblocks; bi++) {
+        const XiBlock *blk = parent->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_CLASS_CREATE || !v->aux) continue;
+            const XiClassData *cd = (const XiClassData *)v->aux;
+            if (!cd->ast) continue;
+            const ClassDeclNode *cls = &cd->ast->as.class_decl;
+            if (cls->name && strcmp(cls->name, class_name) == 0)
+                return cg_find_constructor(parent, cd);
+        }
+    }
+    return NULL;
+}
+
+/* Lookup a class instance method by name, optionally filtered by class.
+ * If class_name is non-NULL, only match methods of that class.
+ * If class_name is NULL, return the last match (most-derived class
+ * is registered last due to topo-order scan). */
+static const XiFunc *cg_lookup_method(const char *name,
+                                       const char *class_name) {
+    if (!name) return NULL;
+    const XiFunc *last_match = NULL;
+    for (int i = 0; i < g_nmethod; i++) {
+        if (!g_methods[i].name || strcmp(g_methods[i].name, name) != 0)
+            continue;
+        if (class_name && g_methods[i].class_name &&
+            strcmp(g_methods[i].class_name, class_name) == 0)
+            return g_methods[i].func;
+        last_match = g_methods[i].func;
+    }
+    return class_name ? NULL : last_match;
+}
+
 static void cg_prescan_shared(const XiFunc *f) {
     memset(g_shared_funcs, 0, sizeof(g_shared_funcs));
+    memset(g_shared_class, 0, sizeof(g_shared_class));
     g_nshared = f->nshared;
+    g_nmethod = 0;
+    g_module_func = f;
+
+    /* Also scan direct CLASS_CREATE values (not via SET_SHARED) */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk) continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!v || v->op != XI_SET_SHARED) continue;
+            if (!v) continue;
+
+            /* Register class methods from any CLASS_CREATE in the IR */
+            if (v->op == XI_CLASS_CREATE && v->aux) {
+                cg_register_class_methods(f, (const XiClassData *)v->aux);
+            }
+
+            if (v->op != XI_SET_SHARED) continue;
             int slot = (int)v->aux_int;
             if (slot < 0 || slot >= CG_MAX_SHARED || v->nargs < 1) continue;
             const XiValue *src = v->args[0];
@@ -96,6 +221,14 @@ static void cg_prescan_shared(const XiFunc *f) {
             else if (src->op == XI_BOX && src->nargs >= 1 &&
                      src->args[0]->op == XI_CLOSURE_NEW && src->args[0]->aux) {
                 g_shared_funcs[slot] = (const XiFunc *)src->args[0]->aux;
+            }
+            /* Class: SET_SHARED(slot, CLASS_CREATE(data)) */
+            else if (src->op == XI_CLASS_CREATE && src->aux) {
+                const XiClassData *cd = (const XiClassData *)src->aux;
+                g_shared_class[slot] = cd;
+                const XiFunc *ctor = cg_find_constructor(f, cd);
+                if (ctor)
+                    g_shared_funcs[slot] = ctor;
             }
         }
     }
@@ -212,6 +345,10 @@ static int cg_method_sym(const char *name) {
         {"iterator",    XRT_SYM_ITERATOR},
         {"hasNext",     XRT_SYM_HAS_NEXT},
         {"next",        XRT_SYM_NEXT},
+        {"forEach",     XRT_SYM_FOREACH},
+        {"map",         XRT_SYM_MAP},
+        {"filter",      XRT_SYM_FILTER},
+        {"reduce",      XRT_SYM_REDUCE},
     };
     for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
         if (strcmp(name, map[i].name) == 0)
@@ -270,16 +407,97 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             emit_vref(out, v->args[0]);
             break;
 
-        /* Arithmetic */
-        case XI_ADD: emit_binop(out, v, "+"); break;
-        case XI_SUB: emit_binop(out, v, "-"); break;
-        case XI_MUL: emit_binop(out, v, "*"); break;
-        case XI_DIV: emit_binop(out, v, "/"); break;
-        case XI_MOD: emit_binop(out, v, "%%"); break;
-        case XI_NEG:
-            fprintf(out, "-");
-            emit_vref(out, v->args[0]);
+        /* Arithmetic: use C operators when both operands are scalar.
+         * When any operand is tagged (XrValue), must use runtime functions.
+         * When result rep is scalar but operands are mixed, box each tagged
+         * operand before the C operation, or fall back to runtime dispatch. */
+        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD: {
+            XrRep result_rep = cg_rep(v);
+            XrRep a_rep = cg_rep(v->args[0]);
+            XrRep b_rep = cg_rep(v->args[1]);
+            bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
+            if (result_rep == XR_REP_TAGGED || any_tagged) {
+                /* Use runtime dispatch — handles int/float/mixed correctly */
+                const char *fn = NULL;
+                switch (v->op) {
+                    case XI_ADD: fn = "xrt_add"; break;
+                    case XI_SUB: fn = "xrt_sub"; break;
+                    case XI_MUL: fn = "xrt_mul"; break;
+                    case XI_DIV: fn = "xrt_div"; break;
+                    case XI_MOD: fn = "xrt_mod"; break;
+                    default: break;
+                }
+                /* xrt_* returns XrValue.  If result_rep is scalar,
+                 * extract with .f or .i after the runtime call. */
+                if (result_rep == XR_REP_F64) {
+                    fprintf(out, "%s(", fn);
+                    if (a_rep != XR_REP_TAGGED) {
+                        fprintf(out, "XR_FROM_FLOAT(");
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, ")");
+                    } else {
+                        emit_vref(out, v->args[0]);
+                    }
+                    fprintf(out, ", ");
+                    if (b_rep != XR_REP_TAGGED) {
+                        fprintf(out, "XR_FROM_FLOAT(");
+                        emit_vref(out, v->args[1]);
+                        fprintf(out, ")");
+                    } else {
+                        emit_vref(out, v->args[1]);
+                    }
+                    fprintf(out, ").f");
+                } else if (result_rep == XR_REP_I64) {
+                    fprintf(out, "%s(", fn);
+                    if (a_rep != XR_REP_TAGGED) {
+                        fprintf(out, "XR_FROM_INT(");
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, ")");
+                    } else {
+                        emit_vref(out, v->args[0]);
+                    }
+                    fprintf(out, ", ");
+                    if (b_rep != XR_REP_TAGGED) {
+                        fprintf(out, "XR_FROM_INT(");
+                        emit_vref(out, v->args[1]);
+                        fprintf(out, ")");
+                    } else {
+                        emit_vref(out, v->args[1]);
+                    }
+                    fprintf(out, ").i");
+                } else {
+                    fprintf(out, "%s(", fn);
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[1]);
+                    fprintf(out, ")");
+                }
+            } else {
+                const char *op = "+";
+                switch (v->op) {
+                    case XI_SUB: op = "-"; break;
+                    case XI_MUL: op = "*"; break;
+                    case XI_DIV: op = "/"; break;
+                    case XI_MOD: op = "%%"; break;
+                    default: break;
+                }
+                emit_binop(out, v, op);
+            }
             break;
+        }
+        case XI_NEG: {
+            XrRep result_rep = cg_rep(v);
+            XrRep a_rep = cg_rep(v->args[0]);
+            if (result_rep == XR_REP_TAGGED || a_rep == XR_REP_TAGGED) {
+                fprintf(out, "xrt_neg(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ")");
+            } else {
+                fprintf(out, "-");
+                emit_vref(out, v->args[0]);
+            }
+            break;
+        }
 
         /* Bitwise */
         case XI_BAND: emit_binop(out, v, "&"); break;
@@ -292,13 +510,48 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
         case XI_SHL: emit_binop(out, v, "<<"); break;
         case XI_SHR: emit_binop(out, v, ">>"); break;
 
-        /* Comparison */
-        case XI_EQ: emit_binop(out, v, "=="); break;
-        case XI_NE: emit_binop(out, v, "!="); break;
-        case XI_LT: emit_binop(out, v, "<");  break;
-        case XI_LE: emit_binop(out, v, "<="); break;
-        case XI_GT: emit_binop(out, v, ">");  break;
-        case XI_GE: emit_binop(out, v, ">="); break;
+        /* Comparison: scalar comparison uses C operators; tagged uses xrt_eq/lt/le.
+         * Result is always I64 (boolean 0/1). */
+        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE: {
+            XrRep a0_rep = cg_rep(v->args[0]);
+            XrRep a1_rep = cg_rep(v->args[1]);
+            XrRep arg_rep = (a0_rep == XR_REP_TAGGED || a1_rep == XR_REP_TAGGED)
+                            ? XR_REP_TAGGED : a0_rep;
+            if (arg_rep == XR_REP_TAGGED) {
+                switch (v->op) {
+                    case XI_EQ: fprintf(out, "xrt_eq("); break;
+                    case XI_NE: fprintf(out, "!xrt_eq("); break;
+                    case XI_LT: fprintf(out, "xrt_lt("); break;
+                    case XI_LE: fprintf(out, "xrt_le("); break;
+                    case XI_GT: fprintf(out, "xrt_lt("); break;
+                    case XI_GE: fprintf(out, "xrt_le("); break;
+                    default: break;
+                }
+                /* GT/GE: swap operands → xrt_lt(b,a) / xrt_le(b,a) */
+                if (v->op == XI_GT || v->op == XI_GE) {
+                    emit_vref(out, v->args[1]);
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[0]);
+                } else {
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[1]);
+                }
+                fprintf(out, ")");
+            } else {
+                const char *op = "==";
+                switch (v->op) {
+                    case XI_NE: op = "!="; break;
+                    case XI_LT: op = "<"; break;
+                    case XI_LE: op = "<="; break;
+                    case XI_GT: op = ">"; break;
+                    case XI_GE: op = ">="; break;
+                    default: break;
+                }
+                emit_binop(out, v, op);
+            }
+            break;
+        }
 
         /* Logical */
         case XI_NOT:
@@ -337,13 +590,18 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             break;
         }
 
-        case XI_UNBOX:
+        case XI_UNBOX: {
+            /* Determine unbox accessor based on result representation:
+             * I64 → .i, F64 → .f, TAGGED → pass through as XrValue. */
+            XrRep ur = cg_rep(v);
             emit_vref(out, v->args[0]);
-            if (v->type && v->type->kind == XR_KIND_FLOAT)
+            if (ur == XR_REP_F64)
                 fprintf(out, ".f");
-            else
+            else if (ur == XR_REP_I64)
                 fprintf(out, ".i");
+            /* else: TAGGED — no accessor, keep as XrValue */
             break;
+        }
 
         /* Convert */
         case XI_CONVERT:
@@ -417,7 +675,56 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     target = g_shared_funcs[slot];
             }
 
-            if (target) {
+            /* Detect class constructor call.
+             * Patterns:
+             *   a) CALL(GET_SHARED(slot))       — slot has class data
+             *   b) CALL(BOX/UNBOX(GET_SHARED))  — wrapped variant
+             *   c) CALL(CLASS_CREATE(data))      — direct (same scope)
+             *   d) CALL(BOX(CLASS_CREATE(data))) — boxed direct
+             * For (c)/(d), also resolve the constructor target. */
+            bool is_class_call = false;
+            if (callee->op == XI_GET_SHARED) {
+                int s = (int)callee->aux_int;
+                if (s >= 0 && s < CG_MAX_SHARED && g_shared_class[s])
+                    is_class_call = true;
+            }
+            if (!is_class_call && (callee->op == XI_BOX || callee->op == XI_UNBOX) &&
+                callee->nargs >= 1 && callee->args[0]->op == XI_GET_SHARED) {
+                int s = (int)callee->args[0]->aux_int;
+                if (s >= 0 && s < CG_MAX_SHARED && g_shared_class[s])
+                    is_class_call = true;
+            }
+            /* Direct CLASS_CREATE callee (not via shared slot) */
+            if (!is_class_call && callee->op == XI_CLASS_CREATE && callee->aux) {
+                const XiClassData *cd = (const XiClassData *)callee->aux;
+                const XiFunc *ctor = cg_find_constructor(f, cd);
+                if (ctor) {
+                    target = ctor;
+                    is_class_call = true;
+                }
+            }
+            if (!is_class_call && callee->op == XI_BOX && callee->nargs >= 1 &&
+                callee->args[0]->op == XI_CLASS_CREATE && callee->args[0]->aux) {
+                const XiClassData *cd = (const XiClassData *)callee->args[0]->aux;
+                const XiFunc *ctor = cg_find_constructor(f, cd);
+                if (ctor) {
+                    target = ctor;
+                    is_class_call = true;
+                }
+            }
+
+            if (target && is_class_call) {
+                /* Class constructor call: alloc map instance + call ctor.
+                 * xrt_map_new returns a tagged XrValue directly. */
+                fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+                emit_fname(out, prefix, target);
+                fprintf(out, "(_inst");
+                for (uint16_t a = 1; a < v->nargs; a++) {
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[a]);
+                }
+                fprintf(out, "); _inst; })");
+            } else if (target) {
                 emit_fname(out, prefix, target);
                 fprintf(out, "(");
                 for (uint16_t a = 1; a < v->nargs; a++) {
@@ -443,25 +750,29 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, ")");
             break;
 
-        /* Closure creation — emit function pointer (simplified) */
+        /* Closure creation — wrap C function pointer in AOT closure value.
+         * When the closure is called directly (XI_CALL), the cgen resolves
+         * the target and emits a direct C call.  This path handles the case
+         * where the closure is passed as an argument (e.g. to .map/.filter). */
         case XI_CLOSURE_NEW:
             if (v->aux) {
                 XiFunc *child = (XiFunc *)v->aux;
-                fprintf(out, "XR_NULL_VAL /* closure: ");
+                fprintf(out, "xrt_closure_new((void*)");
                 emit_fname(out, prefix, child);
-                fprintf(out, " */");
+                fprintf(out, ", 0)");
             } else {
                 fprintf(out, "XR_NULL_VAL /* closure: unknown */");
             }
             break;
 
-        /* Upvalue access */
+        /* Upvalue access: reads/writes the file-scope _xrt_upvals array.
+         * Non-reentrant but sufficient for defer and simple closures. */
         case XI_LOAD_UPVAL:
-            fprintf(out, "xrt_upvals[%d]", (int)v->aux_int);
+            fprintf(out, "_xrt_upvals[%d]", (int)v->aux_int);
             break;
 
         case XI_STORE_UPVAL:
-            fprintf(out, "(xrt_upvals[%d] = ", (int)v->aux_int);
+            fprintf(out, "(_xrt_upvals[%d] = ", (int)v->aux_int);
             emit_vref(out, v->args[0]);
             fprintf(out, ")");
             break;
@@ -633,34 +944,94 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
 
         /* ============ Method Call ============ */
 
-        /* Method dispatch: args[0]=recv, args[1..n]=params, aux=name string */
+        /* Method dispatch: args[0]=recv, args[1..n]=params, aux=name string.
+         * Resolution order:
+         *   1. Super call (aux_int=1) → find parent class constructor
+         *   2. Class instance method → direct C call
+         *   3. Builtin method → xrt_method_N runtime dispatch */
         case XI_CALL_METHOD: {
             XR_DCHECK(v->nargs >= 1, "XI_CALL_METHOD: need receiver");
             const char *method = (const char *)v->aux;
-            int sym = cg_method_sym(method);
-            uint16_t nargs = (uint16_t)(v->nargs - 1);  /* excluding receiver */
+            bool is_super = (v->aux_int == 1);
+            const XiFunc *mfunc = NULL;
 
-            if (nargs == 0) {
-                fprintf(out, "xrt_method_0(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ", %d)", sym >= 0 ? sym : 0);
-            } else if (nargs == 1) {
-                fprintf(out, "xrt_method_1(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ", %d, ", sym >= 0 ? sym : 0);
-                emit_vref(out, v->args[1]);
-                fprintf(out, ")");
-            } else if (nargs == 2) {
-                fprintf(out, "xrt_method_2(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ", %d, ", sym >= 0 ? sym : 0);
-                emit_vref(out, v->args[1]);
-                fprintf(out, ", ");
-                emit_vref(out, v->args[2]);
+            if (is_super && g_module_func) {
+                /* super call: find which class owns the current method,
+                 * look up its parent class name, resolve the target.
+                 * super() → parent constructor; super.m() → parent method. */
+                const char *parent_class = NULL;
+                for (uint32_t bi2 = 0; bi2 < g_module_func->nblocks && !parent_class; bi2++) {
+                    const XiBlock *blk2 = g_module_func->blocks[bi2];
+                    if (!blk2) continue;
+                    for (uint32_t vi2 = 0; vi2 < blk2->nvalues; vi2++) {
+                        const XiValue *cv = blk2->values[vi2];
+                        if (!cv || cv->op != XI_CLASS_CREATE || !cv->aux) continue;
+                        const XiClassData *cd = (const XiClassData *)cv->aux;
+                        if (!cd->ast) continue;
+                        const ClassDeclNode *cls = &cd->ast->as.class_decl;
+                        if (!cls->super_name) continue;
+                        for (uint16_t ci = 0; ci < cd->ninst + cd->nstat; ci++) {
+                            if (cd->child_idx && cd->child_idx[ci] < g_module_func->nchildren &&
+                                g_module_func->children[cd->child_idx[ci]] == f) {
+                                parent_class = cls->super_name;
+                                break;
+                            }
+                        }
+                        if (parent_class) break;
+                    }
+                }
+                if (parent_class) {
+                    bool is_ctor_call = (method && strcmp(method, "constructor") == 0);
+                    if (is_ctor_call)
+                        mfunc = cg_lookup_class_ctor(g_module_func, parent_class);
+                    else
+                        mfunc = cg_lookup_method(method, parent_class);
+                }
+            }
+            if (!mfunc && !is_super) {
+                /* Try receiver-type-specific lookup first.
+                 * XI_CALL_METHOD args[0] = receiver, whose type may carry
+                 * the class name (XR_KIND_INSTANCE → instance.class_name). */
+                const char *recv_class = NULL;
+                if (v->args[0] && v->args[0]->type &&
+                    v->args[0]->type->kind == XR_KIND_INSTANCE)
+                    recv_class = v->args[0]->type->instance.class_name;
+                mfunc = cg_lookup_method(method, recv_class);
+            }
+            uint16_t nargs = (uint16_t)(v->nargs - 1);
+
+            if (mfunc) {
+                /* Direct class method call: receiver is first param */
+                emit_fname(out, prefix, mfunc);
+                fprintf(out, "(");
+                for (uint16_t a = 0; a < v->nargs; a++) {
+                    if (a > 0) fprintf(out, ", ");
+                    emit_vref(out, v->args[a]);
+                }
                 fprintf(out, ")");
             } else {
-                /* >2 args: not currently supported by xrt_method_N */
-                fprintf(out, "XR_NULL_VAL /* TODO: method %d args */", nargs);
+                int sym = cg_method_sym(method);
+                if (nargs == 0) {
+                    fprintf(out, "xrt_method_0(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", %d)", sym >= 0 ? sym : 0);
+                } else if (nargs == 1) {
+                    fprintf(out, "xrt_method_1(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", %d, ", sym >= 0 ? sym : 0);
+                    emit_vref(out, v->args[1]);
+                    fprintf(out, ")");
+                } else if (nargs == 2) {
+                    fprintf(out, "xrt_method_2(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", %d, ", sym >= 0 ? sym : 0);
+                    emit_vref(out, v->args[1]);
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[2]);
+                    fprintf(out, ")");
+                } else {
+                    fprintf(out, "XR_NULL_VAL /* TODO: method %d args */", nargs);
+                }
             }
             break;
         }
@@ -768,30 +1139,47 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
 
         /* ============ Exception Handling ============ */
 
-        /* TRY: emitted structurally (setjmp pattern) in emit_value_stmt */
+        /* TRY/END_TRY/FINALLY: handled structurally in emit_value_stmt */
         case XI_TRY:
-            fprintf(out, "0 /* try-setup in stmt */");
-            break;
-
-        /* CATCH: destination receives caught exception */
-        case XI_CATCH:
-            fprintf(out, "xrt_exception");
-            break;
-
-        /* END_TRY: pop exception frame */
         case XI_END_TRY:
-            fprintf(out, "(xrt_exc_top = _ef.prev, XR_NULL_VAL)");
+        case XI_FINALLY:
+            fprintf(out, "XR_NULL_VAL");
             break;
 
-        /* Defer: save callee for scope-exit call (simplified) */
+        /* CATCH: destination receives caught exception from the frame.
+         * Find the matching XI_TRY to use the correct _efN. */
+        case XI_CATCH: {
+            uint32_t try_id = 0;
+            for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+                const XiBlock *blk2 = f->blocks[bi];
+                if (!blk2) continue;
+                for (uint32_t vi2 = 0; vi2 < blk2->nvalues; vi2++) {
+                    const XiValue *tv = blk2->values[vi2];
+                    if (tv && tv->op == XI_TRY) try_id = tv->id;
+                }
+            }
+            fprintf(out, "_ef%u.exception", try_id);
+            break;
+        }
+
+        /* Defer: no-op in emit_value_rhs — actual calls are emitted
+         * before RETURN terminators in emit_block(). */
         case XI_DEFER:
-            fprintf(out, "XR_NULL_VAL /* TODO: defer */");
+            fprintf(out, "XR_NULL_VAL");
             break;
 
         /* Builtin calls */
         case XI_CALL_BUILTIN:
             fprintf(out, "XR_NULL_VAL /* TODO: builtin '%s' */",
                     v->aux ? (const char *)v->aux : "?");
+            break;
+
+        /* Class creation: the value itself is not used at runtime in AOT.
+         * Constructor calls go through the XI_CALL class_slot path which
+         * allocates instances and calls the constructor directly.
+         * Emit NULL_VAL so the SSA value has a valid C definition. */
+        case XI_CLASS_CREATE:
+            fprintf(out, "XR_NULL_VAL /* class descriptor */");
             break;
 
         default:
@@ -805,11 +1193,10 @@ static void emit_value_stmt(FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
 
-    /* Side-effect-only values (PRINT, SET_SHARED, STORE_UPVAL) that
-     * produce XR_NULL_VAL: emit as expression statement if no uses. */
+    /* Side-effect-only values that don't produce a named result. */
     bool void_like = (v->op == XI_PRINT || v->op == XI_SET_SHARED ||
                       v->op == XI_STORE_UPVAL || v->op == XI_STORE_FIELD ||
-                      v->op == XI_INDEX_SET);
+                      v->op == XI_INDEX_SET || v->op == XI_THROW);
 
     if (void_like) {
         fprintf(out, "    ");
@@ -818,12 +1205,58 @@ static void emit_value_stmt(FILE *out, const XiFunc *f, const XiValue *v,
         return;
     }
 
-    XrRep rep = cg_rep(v);
-    fprintf(out, "    %s ", ctype_str(rep));
-    emit_vref(out, v);
-    fprintf(out, " = ");
-    emit_value_rhs(out, f, v, prefix);
-    fprintf(out, ";\n");
+    /* XI_TRY: emit setjmp/longjmp exception frame setup.
+     * The exception frame must be declared at function scope so it
+     * survives across goto labels.  Use the value ID for uniqueness. */
+    if (v->op == XI_TRY) {
+        const XiBlock *catch_blk = (const XiBlock *)v->aux;
+        fprintf(out, "    XrtExcFrame _ef%u;\n", v->id);
+        fprintf(out, "    _ef%u.prev = xrt_exc_top;\n", v->id);
+        fprintf(out, "    xrt_exc_top = &_ef%u;\n", v->id);
+        if (catch_blk) {
+            fprintf(out, "    if (setjmp(_ef%u.buf) != 0) {"
+                         " xrt_exc_top = _ef%u.prev; goto L%u; }\n",
+                         v->id, v->id, catch_blk->id);
+        } else {
+            fprintf(out, "    if (setjmp(_ef%u.buf) != 0) {"
+                         " xrt_exc_top = _ef%u.prev; }\n",
+                         v->id, v->id);
+        }
+        return;
+    }
+
+    /* XI_END_TRY / XI_FINALLY: pop the exception frame.
+     * Finds the matching XI_TRY by scanning earlier blocks. */
+    if (v->op == XI_END_TRY || v->op == XI_FINALLY) {
+        /* Find the TRY value ID for the matching _efN variable */
+        uint32_t try_id = 0;
+        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+            const XiBlock *blk = f->blocks[bi];
+            if (!blk) continue;
+            for (uint32_t vi2 = 0; vi2 < blk->nvalues; vi2++) {
+                const XiValue *tv = blk->values[vi2];
+                if (tv && tv->op == XI_TRY) try_id = tv->id;
+            }
+        }
+        fprintf(out, "    xrt_exc_top = _ef%u.prev;\n", try_id);
+        return;
+    }
+
+    if (g_pre_decl_all) {
+        /* Variable already declared at function top — emit assignment */
+        fprintf(out, "    ");
+        emit_vref(out, v);
+        fprintf(out, " = ");
+        emit_value_rhs(out, f, v, prefix);
+        fprintf(out, ";\n");
+    } else {
+        XrRep rep = cg_rep(v);
+        fprintf(out, "    %s ", ctype_str(rep));
+        emit_vref(out, v);
+        fprintf(out, " = ");
+        emit_value_rhs(out, f, v, prefix);
+        fprintf(out, ";\n");
+    }
 }
 
 /* ========== PHI Elimination ========== */
@@ -870,7 +1303,27 @@ static void emit_block(FILE *out, const XiFunc *f, const XiBlock *blk,
 
     /* Terminator */
     switch (blk->kind) {
-        case XI_BLOCK_RETURN:
+        case XI_BLOCK_RETURN: {
+            /* Call deferred closures in LIFO order before returning.
+             * Scan all blocks for XI_DEFER whose args[0] is CLOSURE_NEW. */
+            const XiFunc *deferred[32];
+            int ndeferred = 0;
+            for (uint32_t dbi = 0; dbi < f->nblocks && ndeferred < 32; dbi++) {
+                const XiBlock *db = f->blocks[dbi];
+                if (!db) continue;
+                for (uint32_t dvi = 0; dvi < db->nvalues; dvi++) {
+                    const XiValue *dv = db->values[dvi];
+                    if (!dv || dv->op != XI_DEFER || dv->nargs < 1) continue;
+                    const XiValue *callee = dv->args[0];
+                    if (callee && callee->op == XI_CLOSURE_NEW && callee->aux)
+                        deferred[ndeferred++] = (const XiFunc *)callee->aux;
+                }
+            }
+            for (int di = ndeferred - 1; di >= 0; di--) {
+                fprintf(out, "    ");
+                emit_fname(out, prefix, deferred[di]);
+                fprintf(out, "();\n");
+            }
             if (blk->control) {
                 fprintf(out, "    return ");
                 emit_vref(out, blk->control);
@@ -879,6 +1332,7 @@ static void emit_block(FILE *out, const XiFunc *f, const XiBlock *blk,
                 fprintf(out, "    return XR_NULL_VAL;\n");
             }
             break;
+        }
 
         case XI_BLOCK_PLAIN:
             if (blk->succs[0]) {
@@ -918,13 +1372,32 @@ static void emit_block(FILE *out, const XiFunc *f, const XiBlock *blk,
 
 /* ========== Function Emission ========== */
 
-/* Collect all values and phis to declare at function top. */
+/* Check whether a function contains any exception handling ops.
+ * If so, all variables must be pre-declared at function scope to
+ * avoid jumping over declarations with initializers via goto. */
+static bool cg_has_exception_handling(const XiFunc *f) {
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (blk->values[vi] && blk->values[vi]->op == XI_TRY)
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Collect all values and phis to declare at function top.
+ * When the function contains exception handling (setjmp/goto),
+ * ALL SSA values are pre-declared to avoid jumping over decls. */
 static void emit_declarations(FILE *out, const XiFunc *f) {
+    bool pre_decl_all = cg_has_exception_handling(f);
+
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk) continue;
 
-        /* Phi variables */
+        /* Phi variables (always pre-declared) */
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             XrRep rep = cg_rep(&phi->value);
             fprintf(out, "    %s ", ctype_str(rep));
@@ -933,6 +1406,28 @@ static void emit_declarations(FILE *out, const XiFunc *f) {
                 fprintf(out, " = XR_NULL_VAL;\n");
             else
                 fprintf(out, " = 0;\n");
+        }
+
+        /* SSA values (only pre-declared when exception handling present) */
+        if (pre_decl_all) {
+            for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+                const XiValue *v = blk->values[vi];
+                if (!v) continue;
+                /* Skip void-like ops and structural exception ops */
+                if (v->op == XI_PRINT || v->op == XI_SET_SHARED ||
+                    v->op == XI_STORE_UPVAL || v->op == XI_STORE_FIELD ||
+                    v->op == XI_INDEX_SET || v->op == XI_THROW ||
+                    v->op == XI_TRY || v->op == XI_END_TRY ||
+                    v->op == XI_FINALLY)
+                    continue;
+                XrRep rep = cg_rep(v);
+                fprintf(out, "    %s ", ctype_str(rep));
+                emit_vref(out, v);
+                if (rep == XR_REP_TAGGED)
+                    fprintf(out, " = XR_NULL_VAL;\n");
+                else
+                    fprintf(out, " = 0;\n");
+            }
         }
     }
 }
@@ -964,7 +1459,9 @@ XR_FUNC void xi_cgen_func(FILE *out, XiFunc *f, const char *prefix) {
     /* Shared array declared at file scope by xi_cgen_program(),
      * so child functions can reference it too. */
 
-    /* PHI variable declarations */
+    /* Pre-declare variables (phis always; all SSA values when
+     * exception handling is present to avoid goto-over-decl UB). */
+    g_pre_decl_all = cg_has_exception_handling(f);
     emit_declarations(out, f);
 
     /* Blocks in order */
@@ -1009,6 +1506,30 @@ XR_FUNC void xi_cgen_header(FILE *out) {
     fprintf(out, "#include \"xrt.h\"\n\n");
 }
 
+/* Find the maximum upvalue index referenced across a function and all
+ * its children.  Returns -1 if no upvalues are used. */
+static int cg_max_upval_index(const XiFunc *f) {
+    int mx = -1;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v) continue;
+            if (v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
+                int idx = (int)v->aux_int;
+                if (idx > mx) mx = idx;
+            }
+        }
+    }
+    for (uint16_t ci = 0; ci < f->nchildren; ci++) {
+        if (!f->children[ci]) continue;
+        int child_mx = cg_max_upval_index(f->children[ci]);
+        if (child_mx > mx) mx = child_mx;
+    }
+    return mx;
+}
+
 XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
                              const char *module_name) {
     XR_DCHECK(out != NULL, "xi_cgen_module: NULL output");
@@ -1026,7 +1547,12 @@ XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
     g_shared_name = shared_buf;
 
     if (module_func->nshared > 0)
-        fprintf(out, "static XrValue %s[%u];\n\n", g_shared_name, module_func->nshared);
+        fprintf(out, "static XrValue %s[%u];\n", g_shared_name, module_func->nshared);
+
+    int max_upval = cg_max_upval_index(module_func);
+    if (max_upval >= 0)
+        fprintf(out, "static XrValue _xrt_upvals[%d];\n", max_upval + 1);
+    fprintf(out, "\n");
 
     /* Forward declarations */
     emit_forward_decls(out, module_func, prefix);
@@ -1057,8 +1583,6 @@ XR_FUNC void xi_cgen_main(FILE *out, const char **module_names,
     fprintf(out, "}\n");
 }
 
-/* ========== Single-File Convenience ========== */
-
 XR_FUNC void xi_cgen_program(FILE *out, XiFunc *main_func,
                                const char *module_name) {
     XR_DCHECK(out != NULL, "xi_cgen_program: NULL output");
@@ -1080,7 +1604,14 @@ XR_FUNC void xi_cgen_program(FILE *out, XiFunc *main_func,
 
     /* File-scope shared variable array */
     if (main_func->nshared > 0)
-        fprintf(out, "static XrValue xrt_shared[%u];\n\n", main_func->nshared);
+        fprintf(out, "static XrValue xrt_shared[%u];\n", main_func->nshared);
+
+    /* File-scope upvalue array for closure/defer capture.
+     * Scan all children to find max upvalue index used. */
+    int max_upval = cg_max_upval_index(main_func);
+    if (max_upval >= 0)
+        fprintf(out, "static XrValue _xrt_upvals[%d];\n", max_upval + 1);
+    fprintf(out, "\n");
 
     /* Forward declarations */
     emit_forward_decls(out, main_func, prefix);

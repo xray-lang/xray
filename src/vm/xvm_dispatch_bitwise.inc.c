@@ -34,6 +34,11 @@ vmcase(OP_BAND) {
         R(a) = xr_int(XR_TO_INT(vb) & XR_TO_INT(vc));
         vmbreak;
     }
+    // Boolean AND (for pattern matching range tests)
+    if (XR_IS_BOOL(vb) && XR_IS_BOOL(vc)) {
+        R(a) = xr_bool(XR_TO_BOOL(vb) && XR_TO_BOOL(vc));
+        vmbreak;
+    }
     // BigInt bitwise AND
     if (XR_IS_BIGINT(vb) && XR_IS_BIGINT(vc)) {
         XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);
@@ -89,6 +94,11 @@ vmcase(OP_BOR) {
     // Fast path: integer bitwise operation
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
         R(a) = xr_int(XR_TO_INT(vb) | XR_TO_INT(vc));
+        vmbreak;
+    }
+    // Boolean OR (for pattern matching multi-value tests)
+    if (XR_IS_BOOL(vb) && XR_IS_BOOL(vc)) {
+        R(a) = xr_bool(XR_TO_BOOL(vb) || XR_TO_BOOL(vc));
         vmbreak;
     }
     // BigInt bitwise OR

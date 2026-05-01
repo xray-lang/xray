@@ -87,5 +87,9 @@
 #define XRT_SYM_FILL 168
 #define XRT_SYM_SORT 169
 #define XRT_SYM_INCLUDES 170
+#define XRT_SYM_FOREACH 12
+#define XRT_SYM_MAP 13
+#define XRT_SYM_FILTER 14
+#define XRT_SYM_REDUCE 15
 
 #endif  // XRT_METHOD_SYMBOLS_H

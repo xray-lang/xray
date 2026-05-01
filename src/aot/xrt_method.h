@@ -493,6 +493,33 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
                 ra->data[ra->len++] = a->data[start + i];
             return arr;
         }
+        /* Higher-order methods: callback is an AOT closure (XR_TAG_CLOSURE).
+         * The closure's fn pointer has signature: XrValue (*)(XrValue). */
+        if (arg0.tag == XR_TAG_CLOSURE) {
+            xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
+            typedef XrValue (*xrt_fn1_t)(XrValue);
+            xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
+            if (sym == XRT_SYM_MAP) {
+                XrValue arr = xrt_array_new(a->len);
+                for (int64_t i = 0; i < a->len; i++)
+                    xrt_array_push(arr, fn(a->data[i]));
+                return arr;
+            }
+            if (sym == XRT_SYM_FILTER) {
+                XrValue arr = xrt_array_new(a->len);
+                for (int64_t i = 0; i < a->len; i++) {
+                    XrValue r = fn(a->data[i]);
+                    if (xr_truthy(r))
+                        xrt_array_push(arr, a->data[i]);
+                }
+                return arr;
+            }
+            if (sym == XRT_SYM_FOREACH) {
+                for (int64_t i = 0; i < a->len; i++)
+                    fn(a->data[i]);
+                return XR_NULL_VAL;
+            }
+        }
     }
     if (recv.tag == XR_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
