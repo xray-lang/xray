@@ -13,6 +13,7 @@
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
@@ -74,6 +75,7 @@ static XiFunc *compile_to_ir(const char *source) {
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
+    cfg.run_emit = false;  /* cgen needs raw IR tree, not bytecode */
 
     XiPipelineResult res = xi_pipeline_compile_program(
         program, analyzer, g_iso, &cfg);
@@ -88,15 +90,8 @@ static XiFunc *compile_to_ir(const char *source) {
         return NULL;
     }
 
-    /* Steal the IR before freeing the result */
     XiFunc *ir = res.ir;
     res.ir = NULL;
-
-    /* Free proto (we don't need bytecode) */
-    if (res.proto) {
-        xr_free(res.proto);
-        res.proto = NULL;
-    }
     xi_pipeline_result_free(&res);
 
     return ir;

@@ -527,6 +527,12 @@ static int emit_method_proto(EmitCtx *ctx, uint16_t child_func_idx) {
         xr_vm_proto_add_upvalue(child_proto, uv_idx,
                                  0, 0, 0, cap->source, cap->type);
     }
+
+    /* Transfer Xi IR ownership to child proto for JIT direct lowering.
+     * NULL the parent's children slot to avoid double-free. */
+    child_proto->xi_func = child;
+    ctx->func->children[child_func_idx] = NULL;
+
     return xr_vm_proto_add_proto(ctx->proto, child_proto);
 }
 
@@ -1261,6 +1267,15 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
                         ctx->cell_wrapped[cap->value->id] = true;
                     }
                 }
+            }
+
+            /* Transfer Xi IR ownership to child proto for JIT direct lowering.
+             * NULL the parent's children slot to avoid double-free. */
+            child_proto->xi_func = child_func;
+            uint16_t cidx = (uint16_t)v->aux_int;
+            if (cidx < ctx->func->nchildren &&
+                ctx->func->children[cidx] == child_func) {
+                ctx->func->children[cidx] = NULL;
             }
 
             int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
