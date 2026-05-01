@@ -129,6 +129,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
             return res;
         }
         res.proto = proto;
+        /* Transfer Xi IR ownership to proto for JIT direct lowering.
+         * Null res.ir so xi_pipeline_result_free won't double-free. */
+        xi_emit_attach_ir(proto, ir);
+        res.ir = NULL;
     }
 
     res.status = XI_PIPE_OK;

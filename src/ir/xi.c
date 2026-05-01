@@ -519,3 +519,11 @@ XR_FUNC void xi_module_populate_exports(XiModule *mod) {
     xr_free(slot_funcs);
     xr_free(slot_classes);
 }
+
+/* ========== Slot Map ========== */
+
+XR_FUNC void xi_slot_map_free(XiSlotMap *map) {
+    if (!map) return;
+    xr_free(map->entries);
+    xr_free(map);
+}
