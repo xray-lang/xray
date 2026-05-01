@@ -33,6 +33,15 @@
 static XiValue *lower_short_circuit(XiLower *l, AstNode *node);
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
+/* Copy a string into the XiFunc arena so it survives AST destruction. */
+static const char *arena_strdup(XiFunc *f, const char *s) {
+    if (!s) return NULL;
+    uint32_t len = (uint32_t)strlen(s);
+    char *copy = (char *)xi_func_arena_alloc(f, len + 1);
+    if (copy) memcpy(copy, s, len + 1);
+    return copy;
+}
+
 /* ========== Braun SSA: Variable Management ========== */
 
 /* Find or create a variable ID for the given name. */
@@ -734,7 +743,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v) return NULL;
     v->args[0] = obj;
-    v->aux = (void *) ma->name;  /* field name (borrowed from AST) */
+    v->aux = (void *)arena_strdup(l->func, ma->name);
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -750,7 +759,7 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     if (!v) return NULL;
     v->args[0] = obj;
     v->args[1] = val;
-    v->aux = (void *) ms->member;
+    v->aux = (void *)arena_strdup(l->func, ms->member);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
@@ -970,7 +979,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->args[0] = recv;
         for (int i = 0; i < n; i++)
             v->args[i + 1] = arg_vals[i];
-        v->aux = (void *)ma->name;
+        v->aux = (void *)arena_strdup(l->func, ma->name);
         v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         v->line = (uint32_t)node->line;
         return v;
@@ -1666,7 +1675,7 @@ static XiValue *lower_enum_access(XiLower *l, AstNode *node) {
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v) return NULL;
     v->args[0] = enum_val;
-    v->aux = (void *) ea->member_name;
+    v->aux = (void *)arena_strdup(l->func, ea->member_name);
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -1759,7 +1768,7 @@ static XiValue *lower_enum_convert(XiLower *l, AstNode *node) {
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
     if (!v) return NULL;
     v->args[0] = val;
-    v->aux = (void *) ec->enum_name;
+    v->aux = (void *)arena_strdup(l->func, ec->enum_name);
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -2419,6 +2428,53 @@ static void lower_continue(XiLower *l) {
 }
 
 
+/* Selective import: import { square, cube } from "./math_lib"
+ * Creates XI_IMPORT_REF values for each member and binds them as local
+ * variables.  The AOT driver resolves module_path + member_name to the
+ * target module's shared slot after all modules are lowered. */
+static void lower_import_stmt(XiLower *l, AstNode *node) {
+    XR_DCHECK(l != NULL, "lower_import_stmt: NULL lowerer");
+    XR_DCHECK(node != NULL, "lower_import_stmt: NULL node");
+    ImportStmtNode *imp = &node->as.import_stmt;
+    if (imp->member_count == 0) return;  /* whole-module import: no IR needed */
+
+    for (int i = 0; i < imp->member_count; i++) {
+        ImportMember *m = &imp->members[i];
+        const char *local_name = m->alias ? m->alias : m->name;
+
+        /* Create XI_IMPORT_REF carrying module path and member name */
+        struct XrType *type = xr_type_new_unknown(NULL);
+        XiImportRef *ref = (XiImportRef *)xi_func_arena_alloc(
+                                l->func, (uint32_t)sizeof(XiImportRef));
+        XR_DCHECK(ref != NULL, "lower_import_stmt: arena alloc failed");
+        /* Copy strings into arena so they survive AST destruction */
+        ref->module_path = NULL;
+        ref->member_name = NULL;
+        if (imp->module_name) {
+            uint32_t ml = (uint32_t)strlen(imp->module_name);
+            char *mc = (char *)xi_func_arena_alloc(l->func, ml + 1);
+            if (mc) { memcpy(mc, imp->module_name, ml + 1); ref->module_path = mc; }
+        }
+        if (m->name) {
+            uint32_t nl = (uint32_t)strlen(m->name);
+            char *nc = (char *)xi_func_arena_alloc(l->func, nl + 1);
+            if (nc) { memcpy(nc, m->name, nl + 1); ref->member_name = nc; }
+        }
+        ref->resolved_mod_index = -1;
+        ref->resolved_shared_slot = -1;
+
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
+        if (!v) return;
+        v->aux = (void *)ref;
+        v->aux_int = -1;
+        v->line = (uint32_t)node->line;
+
+        /* Bind as a local variable so subsequent references resolve */
+        int var_id = xi_lower_var_create(l, local_name, type);
+        xi_lower_braun_write(l, var_id, l->cur_block, v);
+    }
+}
+
 /* Forward declarations for class lowering helpers (defined below) */
 static void lower_init(XiLower *l, struct XaAnalyzer *analyzer,
                         struct XrayIsolate *isolate);
@@ -2528,10 +2584,14 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             lower_multi_assign(l, node);
             break;
 
-        /* Module system: import/export are compile-time directives,
-         * no runtime IR needed. Skip silently. */
+        /* Module system: import creates XI_IMPORT_REF for selective imports.
+         * Export unwraps to lower the inner declaration. */
         case AST_IMPORT_STMT:
+            lower_import_stmt(l, node);
+            break;
         case AST_EXPORT_STMT:
+            if (node->as.export_stmt.declaration)
+                xi_lower_stmt(l, node->as.export_stmt.declaration);
             break;
 
         case AST_CLASS_DECL:
@@ -2733,11 +2793,23 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
 static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
     XR_DCHECK(l->is_program, "prescan_shared_vars: not a program context");
     uint16_t next_shared = 0;
+
+    /* Temporary array to track which names are exported */
+    const char *export_flags[512];
+    memset(export_flags, 0, sizeof(export_flags));
+
     for (int i = 0; i < count; i++) {
         AstNode *s = stmts[i];
         if (!s) continue;
         const char *name = NULL;
         struct XrType *type = l->type_any;
+        bool is_exported = false;
+
+        /* Unwrap AST_EXPORT_STMT to reach the inner declaration */
+        if (s->type == AST_EXPORT_STMT && s->as.export_stmt.declaration) {
+            s = s->as.export_stmt.declaration;
+            is_exported = true;
+        }
 
         switch (s->type) {
             case AST_FUNCTION_DECL:
@@ -2762,9 +2834,32 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
                   "prescan_shared_vars: var_id overflow");
         l->shared_map[var_id] = (int16_t)next_shared;
+        if (is_exported && next_shared < 512)
+            export_flags[next_shared] = name;
         next_shared++;
     }
     l->func->nshared = next_shared;
+
+    /* Populate export_names on XiFunc for cross-module resolution.
+     * Copy name strings into the arena so they survive AST destruction. */
+    if (next_shared > 0) {
+        const char **names = (const char **)xi_func_arena_alloc(
+            l->func, (uint32_t)(next_shared * sizeof(const char *)));
+        if (names) {
+            for (uint16_t si = 0; si < next_shared; si++) {
+                const char *src = (si < 512) ? export_flags[si] : NULL;
+                if (src) {
+                    uint32_t slen = (uint32_t)strlen(src);
+                    char *copy = (char *)xi_func_arena_alloc(l->func, slen + 1);
+                    if (copy) { memcpy(copy, src, slen + 1); }
+                    names[si] = copy;
+                } else {
+                    names[si] = NULL;
+                }
+            }
+            l->func->export_names = names;
+        }
+    }
 }
 
 XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,

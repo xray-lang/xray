@@ -100,6 +100,7 @@ static const char *xi_op_name(uint16_t op) {
         case XI_ASSERT_NE:   return "ASSERT_NE";
         case XI_TYPEOF:      return "TYPEOF";
         case XI_GET_BUILTIN: return "GET_BUILTIN";
+        case XI_IMPORT_REF:  return "IMPORT_REF";
         default:             return "???";
     }
 }

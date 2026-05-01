@@ -1678,6 +1678,13 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             emit_inst(ctx, CREATE_ABx(OP_GETBUILTIN, dst, (int)v->aux_int));
             break;
 
+        /* AOT-only: cross-module import reference.  VM handles imports via
+         * OP_IMPORT/OP_GETPROP so this op should never appear in the VM path.
+         * Emit LOADNULL as a safe fallback. */
+        case XI_IMPORT_REF:
+            emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
+            break;
+
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
             return;

@@ -184,8 +184,24 @@ typedef enum {
     XI_TYPEOF,      /* args[0]=value; result=string typename */
     XI_GET_BUILTIN, /* aux=name_string; aux_int=global_index; loads runtime global */
 
+    /* Cross-module import reference (resolved at cgen time).
+     * aux = XiImportRef* (module_path + member_name).
+     * aux_int = resolved shared index (set by driver post-lowering, -1 if unresolved). */
+    XI_IMPORT_REF,
+
     XI_OP_COUNT     /* sentinel */
 } XiOp;
+
+/* Import reference metadata for XI_IMPORT_REF.
+ * Stored in XiValue.aux, resolved by the AOT driver after all modules
+ * are lowered.  The resolved_mod_index + resolved_shared_slot fields
+ * are filled in by the driver's cross-module resolution pass. */
+typedef struct XiImportRef {
+    const char *module_path;       /* import source (e.g. "./math_lib") */
+    const char *member_name;       /* exported name (e.g. "square") */
+    int resolved_mod_index;        /* index into the driver's module array, -1 = unresolved */
+    int resolved_shared_slot;      /* shared slot in the target module, -1 = unresolved */
+} XiImportRef;
 
 /* Lowerer → emitter bridge for XI_CLASS_CREATE */
 typedef struct XiClassData {
@@ -361,6 +377,11 @@ typedef struct XiFunc {
      * and support forward references.  The proto's shared_offset is set
      * at emit time; shared indices are 0-based local to this func. */
     uint16_t nshared;
+
+    /* Export table: maps shared slot → exported name.  Populated during
+     * lowering for top-level declarations so the AOT driver can build
+     * cross-module import resolution tables.  NULL entries = not exported. */
+    const char **export_names;   /* array of nshared entries (arena-alloc'd) */
 
     /* VM entry metadata (propagated to XrProto during emission) */
     bool is_vararg;             /* has rest parameter (...args) */
