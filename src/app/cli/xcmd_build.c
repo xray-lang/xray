@@ -224,8 +224,6 @@ static const char *make_opt_flag(const char *level) {
 
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, const char *sysroot);
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, bool c_only, bool strip, const char *sysroot);
 static int cmd_build_xi_native(const char *input, const char *output, const char *cc,
                                const char *opt_flag, bool c_only, bool strip, const char *sysroot);
 
@@ -243,20 +241,15 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
     bool native_mode = xr_cli_opt_bool(&inv->options, "native");
-    bool xi_mode = xr_cli_opt_bool(&inv->options, "xi");
 
     if (!output_file)
         output_file = c_only ? "app.c" : "a.out";
 
     const char *opt_flag = make_opt_flag(opt_level);
 
-    if (xi_mode && native_mode) {
+    if (native_mode) {
         return cmd_build_xi_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                                    sysroot);
-    }
-    if (native_mode) {
-        return cmd_build_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
-                                sysroot);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                               sysroot);
@@ -321,66 +314,7 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
     return ret;
 }
 
-/* ========== Native Build (--native, standalone AOT) ========== */
-
-#ifdef XRAY_HAS_JIT
-
-#include "../../aot/xaot_driver.h"
-
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
-    XaotBuildResult aot_result;
-    int rc = xaot_build(input, &aot_result);
-    if (rc != 0)
-        return rc;
-
-    /* Write generated C to file */
-    char c_file[512];
-    if (c_only)
-        snprintf(c_file, sizeof(c_file), "%s", output);
-    else
-        snprintf(c_file, sizeof(c_file), "/tmp/xray_native_%d.c", (int) xr_proc_self_pid());
-
-    FILE *f = fopen(c_file, "w");
-    if (!f) {
-        fprintf(stderr, "Error: cannot create '%s'\n", c_file);
-        xr_free(aot_result.c_source);
-        return 1;
-    }
-    fprintf(f, "%s", aot_result.c_source);
-    fclose(f);
-    xr_free(aot_result.c_source);
-
-    if (c_only) {
-        printf("Generated: %s\n", output);
-        return 0;
-    }
-
-    int ret = invoke_cc_standalone(cc, opt_flag, output, c_file, strip, sysroot);
-    xr_fs_remove(c_file);
-    if (ret == 0)
-        printf("Generated: %s\n", output);
-    return ret;
-}
-
-#else
-
-static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
-    (void) input;
-    (void) output;
-    (void) cc;
-    (void) opt_flag;
-    (void) c_only;
-    (void) strip;
-    (void) sysroot;
-    fprintf(stderr, "Error: --native requires JIT support\n");
-    return 1;
-}
-
-#endif
-
-/* ========== Xi IR Native Build (--native --xi) ========== */
+/* ========== Native Build (--native, Xi IR AOT pipeline) ========== */
 
 #include "../../aot/xaot_driver.h"
 

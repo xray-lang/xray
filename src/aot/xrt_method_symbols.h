@@ -91,5 +91,8 @@
 #define XRT_SYM_MAP 13
 #define XRT_SYM_FILTER 14
 #define XRT_SYM_REDUCE 15
+#define XRT_SYM_ITERATOR 54
+#define XRT_SYM_HAS_NEXT 56
+#define XRT_SYM_NEXT 57
 
 #endif  // XRT_METHOD_SYMBOLS_H
