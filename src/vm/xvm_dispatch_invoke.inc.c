@@ -88,7 +88,6 @@ invoke_dispatch:;
 
     // Dereference local index → global symbol via per-function symbol table
     int method_symbol = PROTO_SYMBOL(cl->proto, b);
-
     // Method inline optimization (fast path)
     // Property access .length is the standard way to get collection size
 

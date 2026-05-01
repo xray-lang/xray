@@ -138,6 +138,114 @@ static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
     return pres;
 }
 
+/* ========== Feature Inference ========== */
+
+/* Map import module name to XaotStdlibSet flag.
+ * Import names are bare identifiers (e.g. "math", "crypto");
+ * relative paths (starting with "./") are user modules, not stdlib.
+ * Json is a builtin type and not an import module. */
+static XaotStdlibSet stdlib_flag_for_import(const char *name) {
+    if (!name || name[0] == '.') return 0;
+
+    struct { const char *name; XaotStdlibSet flag; } table[] = {
+        {"regex",    XAOT_STDLIB_REGEX},
+        {"math",     XAOT_STDLIB_MATH},
+        {"time",     XAOT_STDLIB_TIME},
+        {"datetime", XAOT_STDLIB_TIME},
+        {"path",     XAOT_STDLIB_PATH},
+        {"io",       XAOT_STDLIB_IO},
+        {"os",       XAOT_STDLIB_OS},
+        {"net",      XAOT_STDLIB_NET},
+        {"http",     XAOT_STDLIB_HTTP},
+        {"crypto",   XAOT_STDLIB_CRYPTO},
+        {"base64",   XAOT_STDLIB_BASE64},
+        {"csv",      XAOT_STDLIB_CSV},
+        {"toml",     XAOT_STDLIB_TOML},
+        {"yaml",     XAOT_STDLIB_YAML},
+        {"xml",      XAOT_STDLIB_XML},
+        {"compress", XAOT_STDLIB_COMPRESS},
+    };
+    for (int i = 0; i < (int)(sizeof(table) / sizeof(table[0])); i++) {
+        if (strcmp(name, table[i].name) == 0)
+            return table[i].flag;
+    }
+    return 0;
+}
+
+/* Scan a single XiFunc (non-recursive) for feature-indicating ops */
+static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
+    XR_DCHECK(f != NULL, "scan_func_features: NULL func");
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+            switch (v->op) {
+                case XI_YIELD:
+                    fs->need_coro = true;
+                    break;
+                case XI_GO:
+                    fs->need_coro = true;
+                    fs->need_netpoll = true;
+                    break;
+                case XI_CHAN_NEW:
+                case XI_CHAN_SEND:
+                case XI_CHAN_RECV:
+                    fs->need_channel = true;
+                    fs->need_coro = true;
+                    break;
+                case XI_SCOPE_ENTER:
+                case XI_SCOPE_EXIT:
+                    fs->need_scope = true;
+                    fs->need_coro = true;
+                    break;
+                case XI_AWAIT:
+                    fs->need_coro = true;
+                    break;
+                case XI_TRY:
+                case XI_THROW:
+                    fs->need_exception = true;
+                    break;
+                case XI_IS:
+                    fs->need_instanceof = true;
+                    break;
+                case XI_IMPORT_REF: {
+                    XiImportRef *ref = (XiImportRef *)v->aux;
+                    if (ref && ref->module_path) {
+                        XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
+                        if (flag) fs->stdlib |= flag;
+                        /* net/http imply netpoll runtime */
+                        if (flag & (XAOT_STDLIB_NET | XAOT_STDLIB_HTTP))
+                            fs->need_netpoll = true;
+                        /* time implies timer subsystem */
+                        if (flag & XAOT_STDLIB_TIME)
+                            fs->need_timer = true;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+    }
+}
+
+/* Recursively infer features from an Xi IR function tree */
+static void infer_features_recursive(XiFunc *f, XaotFeatureSet *fs) {
+    if (!f) return;
+    scan_func_features(f, fs);
+    for (uint16_t c = 0; c < f->nchildren; c++)
+        infer_features_recursive(f->children[c], fs);
+}
+
+/* Infer XaotFeatureSet for the entire compiled bundle */
+static void infer_features(XiFunc **ir_funcs, int nmodules, XaotFeatureSet *fs) {
+    memset(fs, 0, sizeof(*fs));
+    for (int m = 0; m < nmodules; m++)
+        infer_features_recursive(ir_funcs[m], fs);
+}
+
 XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
@@ -268,6 +376,10 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     }
     fclose(mem);
 
+    /* Infer runtime features before freeing IR */
+    XaotFeatureSet features;
+    infer_features(ir_funcs, nmodules, &features);
+
     /* Free IR and module metadata (no longer needed after C generation) */
     for (int m = 0; m < nmodules; m++) {
         xi_module_free(modules[m]);
@@ -293,7 +405,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     result->total_compiled = total_funcs;
     result->total_aot = total_funcs;
     result->nmodules = nmodules;
-    memset(&result->features, 0, sizeof(result->features));
+    result->features = features;
 
     /* Cleanup module name arrays */
     for (int i = 0; i < nmodules; i++) {

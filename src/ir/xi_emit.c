@@ -1707,12 +1707,31 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             emit_inst(ctx, CREATE_ABx(OP_GETBUILTIN, dst, (int)v->aux_int));
             break;
 
-        /* AOT-only: cross-module import reference.  VM handles imports via
-         * OP_IMPORT/OP_GETPROP so this op should never appear in the VM path.
-         * Emit LOADNULL as a safe fallback. */
-        case XI_IMPORT_REF:
-            emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
+        /* Module import.  Two forms:
+         *   Whole-module:   import math       → member_name == NULL
+         *                   OP_IMPORT only; module object bound to local
+         *   Selective:      import { f } from "m"  → member_name set
+         *                   OP_IMPORT + OP_GETPROP to extract named member
+         * The VM module cache ensures repeated imports are essentially free. */
+        case XI_IMPORT_REF: {
+            XiImportRef *ref = (XiImportRef *)v->aux;
+            if (!ref || !ref->module_path || !ctx->isolate) {
+                emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
+                break;
+            }
+            int mod_idx = add_const_string(ctx, ref->module_path);
+            if (ctx->status != XI_EMIT_OK) return;
+            /* R[dst] = import(K[mod_idx]) */
+            emit_inst(ctx, CREATE_ABx(OP_IMPORT, dst, mod_idx));
+            /* Selective import: extract named member from module */
+            if (ref->member_name) {
+                int sym_idx = add_symbol(ctx, ref->member_name);
+                if (ctx->status != XI_EMIT_OK) return;
+                emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, dst,
+                                          (uint8_t)sym_idx));
+            }
             break;
+        }
 
         default:
             emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
@@ -1737,6 +1756,33 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
         }
     }
     return true;
+}
+
+/* Emit OP_EXPORT instructions for all named exports in the module-level
+ * function.  Called just before the return terminator so that the VM's
+ * module system can record the exported values.  Uses a scratch register
+ * (next_reg) to load each shared variable before exporting it.
+ *
+ * Format:  OP_EXPORT A=const_idx(name), B=reg(value), C=0 */
+static void emit_module_exports(EmitCtx *ctx) {
+    XiFunc *f = ctx->func;
+    if (!f->export_names || f->nshared == 0 || !ctx->isolate)
+        return;
+
+    uint8_t tmp = ctx->next_reg;
+    if ((int)(tmp + 1) > ctx->max_reg)
+        ctx->max_reg = (uint8_t)(tmp + 1);
+
+    for (uint16_t i = 0; i < f->nshared; i++) {
+        const char *name = f->export_names[i];
+        if (!name) continue;
+        int name_idx = add_const_string(ctx, name);
+        if (ctx->status != XI_EMIT_OK) return;
+        /* OP_GETSHARED tmp, G[shared_offset + i] */
+        emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int)i));
+        /* OP_EXPORT K[name_idx], tmp, 0 */
+        emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t)name_idx, tmp, 0));
+    }
 }
 
 static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
@@ -1769,6 +1815,11 @@ static void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     /* Emit terminator */
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
+            /* Emit OP_EXPORT instructions for module-level exports
+             * before returning, so the VM's module system picks them up. */
+            emit_module_exports(ctx);
+            if (ctx->status != XI_EMIT_OK) return;
+
             if (blk->control && blk->control->op == XI_MULTI_RET) {
                 /* Multi-value return: values in consecutive regs */
                 uint8_t base = reg_of(ctx, blk->control);
