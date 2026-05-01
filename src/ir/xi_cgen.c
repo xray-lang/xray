@@ -45,50 +45,19 @@ static const char *ctype_str(XrRep rep) {
     }
 }
 
-/* ========== C Name Helpers ========== */
+/* ========== Codegen Context ========== */
 
-/* Global counter to disambiguate anonymous/duplicate function names.
- * Incremented each time a C function name is first assigned. */
-static int g_fname_counter;
-
-/* ========== Shared Slot → XiFunc Mapping ========== */
-
-/* Populated by xi_cgen_program() before emission.
- * Maps shared-variable index → XiFunc* for module-level functions
- * and class constructors stored via XI_SET_SHARED(slot, XI_CLOSURE_NEW). */
 #define CG_MAX_SHARED 512
-static const XiFunc *g_shared_funcs[CG_MAX_SHARED];
-static const XiClassData *g_shared_class[CG_MAX_SHARED];
-static int g_nshared;
-
-/* Instance method registry: maps (method_name → XiFunc*).
- * Populated by prescan from XI_CLASS_CREATE descriptors so that
- * XI_CALL_METHOD can resolve class methods to direct calls. */
 #define CG_MAX_METHODS 256
+#define CG_MAX_IMPORTS 256
+
 typedef struct {
     const char *class_name;  /* owning class (e.g. "Rect") */
     const char *name;        /* method name (e.g. "area") */
     const XiFunc *func;
     const char *module_prefix; /* C function name prefix (NULL = current module) */
 } CgMethodEntry;
-static CgMethodEntry g_methods[CG_MAX_METHODS];
-static int g_nmethod;
 
-/* Module-level function pointer (set by prescan) for class lookups */
-static const XiFunc *g_module_func;
-
-/* Set when current function has exception handling; all SSA values
- * are pre-declared so inline emit uses assignment instead of decl. */
-static bool g_pre_decl_all;
-
-/* Name of the current module's shared array in generated C.
- * Single-module: "xrt_shared".  Multi-module: "xrt_shared_<modname>". */
-static const char *g_shared_name = "xrt_shared";
-
-/* Cross-module import resolution table.  The AOT driver populates this
- * after all modules are lowered.  The cgen uses it to resolve XI_IMPORT_REF
- * values to reads from the target module's shared array. */
-#define CG_MAX_IMPORTS 256
 typedef struct {
     const char *module_path;     /* import source (e.g. "./math_lib") */
     const char *member_name;     /* exported name (e.g. "square") */
@@ -98,10 +67,26 @@ typedef struct {
     const XiClassData *target_class; /* XiClassData* if this export is a class */
     const XiFunc *exporter_func; /* exporter module XiFunc (for class child resolution) */
 } CgImportEntry;
-static CgImportEntry g_imports[CG_MAX_IMPORTS];
-static int g_nimports;
 
-/* Prescan a function's IR to populate g_shared_funcs.
+/* All mutable codegen state lives here. A future refactor can thread
+ * a pointer to this through function parameters for reentrancy. */
+typedef struct XiCgenCtx {
+    int fname_counter;
+    const XiFunc *shared_funcs[CG_MAX_SHARED];
+    const XiClassData *shared_class[CG_MAX_SHARED];
+    int nshared;
+    CgMethodEntry methods[CG_MAX_METHODS];
+    int nmethod;
+    const XiFunc *module_func;
+    bool pre_decl_all;
+    const char *shared_name;
+    CgImportEntry imports[CG_MAX_IMPORTS];
+    int nimports;
+} XiCgenCtx;
+
+static XiCgenCtx g_ctx;
+
+/* Prescan a function's IR to populate g_ctx.shared_funcs.
  * Recognizes XI_SET_SHARED(slot, XI_CLOSURE_NEW(child)) pattern,
  * including XI_SET_SHARED(slot, XI_BOX(XI_CLOSURE_NEW(child))). */
 /* Find the constructor child XiFunc from a XiClassData descriptor.
@@ -122,7 +107,7 @@ static const XiFunc *cg_find_constructor(const XiFunc *parent,
     return NULL;
 }
 
-/* Register all instance methods from a class descriptor into g_methods.
+/* Register all instance methods from a class descriptor into g_ctx.methods.
  * Constructors are excluded — they are resolved via the XI_CALL class path.
  * Uses arena-safe XiClassMethod array (no AST dependency). */
 static void cg_register_class_methods(const XiFunc *parent,
@@ -134,11 +119,11 @@ static void cg_register_class_methods(const XiFunc *parent,
         if (!m->is_constructor && !m->is_static && m->name) {
             if (cd->child_idx && ci < cd->ninst + cd->nstat) {
                 uint16_t idx = cd->child_idx[ci];
-                if (idx < parent->nchildren && g_nmethod < CG_MAX_METHODS) {
-                    g_methods[g_nmethod].class_name = cd->class_name;
-                    g_methods[g_nmethod].name = m->name;
-                    g_methods[g_nmethod].func = parent->children[idx];
-                    g_nmethod++;
+                if (idx < parent->nchildren && g_ctx.nmethod < CG_MAX_METHODS) {
+                    g_ctx.methods[g_ctx.nmethod].class_name = cd->class_name;
+                    g_ctx.methods[g_ctx.nmethod].name = m->name;
+                    g_ctx.methods[g_ctx.nmethod].func = parent->children[idx];
+                    g_ctx.nmethod++;
                 }
             }
         }
@@ -176,27 +161,27 @@ static const XiFunc *cg_lookup_method(const char *name,
     if (!name) return NULL;
     const XiFunc *last_match = NULL;
     const char *last_prefix = NULL;
-    for (int i = 0; i < g_nmethod; i++) {
-        if (!g_methods[i].name || strcmp(g_methods[i].name, name) != 0)
+    for (int i = 0; i < g_ctx.nmethod; i++) {
+        if (!g_ctx.methods[i].name || strcmp(g_ctx.methods[i].name, name) != 0)
             continue;
-        if (class_name && g_methods[i].class_name &&
-            strcmp(g_methods[i].class_name, class_name) == 0) {
-            if (out_prefix) *out_prefix = g_methods[i].module_prefix;
-            return g_methods[i].func;
+        if (class_name && g_ctx.methods[i].class_name &&
+            strcmp(g_ctx.methods[i].class_name, class_name) == 0) {
+            if (out_prefix) *out_prefix = g_ctx.methods[i].module_prefix;
+            return g_ctx.methods[i].func;
         }
-        last_match = g_methods[i].func;
-        last_prefix = g_methods[i].module_prefix;
+        last_match = g_ctx.methods[i].func;
+        last_prefix = g_ctx.methods[i].module_prefix;
     }
     if (out_prefix) *out_prefix = class_name ? NULL : last_prefix;
     return class_name ? NULL : last_match;
 }
 
 static void cg_prescan_shared(const XiFunc *f) {
-    memset(g_shared_funcs, 0, sizeof(g_shared_funcs));
-    memset(g_shared_class, 0, sizeof(g_shared_class));
-    g_nshared = f->nshared;
-    g_nmethod = 0;
-    g_module_func = f;
+    memset(g_ctx.shared_funcs, 0, sizeof(g_ctx.shared_funcs));
+    memset(g_ctx.shared_class, 0, sizeof(g_ctx.shared_class));
+    g_ctx.nshared = f->nshared;
+    g_ctx.nmethod = 0;
+    g_ctx.module_func = f;
 
     /* Also scan direct CLASS_CREATE values (not via SET_SHARED) */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -217,20 +202,20 @@ static void cg_prescan_shared(const XiFunc *f) {
             const XiValue *src = v->args[0];
             /* Direct: SET_SHARED(slot, CLOSURE_NEW(child)) */
             if (src->op == XI_CLOSURE_NEW && src->aux) {
-                g_shared_funcs[slot] = (const XiFunc *)src->aux;
+                g_ctx.shared_funcs[slot] = (const XiFunc *)src->aux;
             }
             /* Boxed: SET_SHARED(slot, BOX(CLOSURE_NEW(child))) */
             else if (src->op == XI_BOX && src->nargs >= 1 &&
                      src->args[0]->op == XI_CLOSURE_NEW && src->args[0]->aux) {
-                g_shared_funcs[slot] = (const XiFunc *)src->args[0]->aux;
+                g_ctx.shared_funcs[slot] = (const XiFunc *)src->args[0]->aux;
             }
             /* Class: SET_SHARED(slot, CLASS_CREATE(data)) */
             else if (src->op == XI_CLASS_CREATE && src->aux) {
                 const XiClassData *cd = (const XiClassData *)src->aux;
-                g_shared_class[slot] = cd;
+                g_ctx.shared_class[slot] = cd;
                 const XiFunc *ctor = cg_find_constructor(f, cd);
                 if (ctor)
-                    g_shared_funcs[slot] = ctor;
+                    g_ctx.shared_funcs[slot] = ctor;
             }
         }
     }
@@ -240,16 +225,16 @@ static void cg_prescan_shared(const XiFunc *f) {
  * table.  Called after cg_prescan_shared so that class imports from other
  * modules are available for constructor-call and method resolution. */
 static void cg_register_imported_classes(void) {
-    for (int i = 0; i < g_nimports; i++) {
-        const CgImportEntry *imp = &g_imports[i];
+    for (int i = 0; i < g_ctx.nimports; i++) {
+        const CgImportEntry *imp = &g_ctx.imports[i];
         if (!imp->target_class || !imp->exporter_func) continue;
-        /* Register the exporter's class methods into g_methods so that
+        /* Register the exporter's class methods into g_ctx.methods so that
          * XI_CALL_METHOD on imported class instances can resolve them.
          * Record the exporter's module prefix for correct C name emission. */
-        int base = g_nmethod;
+        int base = g_ctx.nmethod;
         cg_register_class_methods(imp->exporter_func, imp->target_class);
-        for (int m = base; m < g_nmethod; m++)
-            g_methods[m].module_prefix = imp->target_mod_name;
+        for (int m = base; m < g_ctx.nmethod; m++)
+            g_ctx.methods[m].module_prefix = imp->target_mod_name;
     }
 }
 
@@ -277,7 +262,7 @@ static void emit_fname(FILE *out, const char *prefix, const XiFunc *f) {
     /* Assign a stable unique ID on first use (cgen_id == 0 means unassigned) */
     XiFunc *mf = (XiFunc *)(uintptr_t)f; /* cast away const for cgen_id write */
     if (mf->cgen_id == 0)
-        mf->cgen_id = ++g_fname_counter;
+        mf->cgen_id = ++g_ctx.fname_counter;
 
     if (prefix && prefix[0])
         fprintf(out, "%s_%s_%d", prefix, buf, f->cgen_id);
@@ -683,15 +668,15 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             /* GET_SHARED(slot) → lookup in prescan table */
             if (!target && callee->op == XI_GET_SHARED) {
                 int slot = (int)callee->aux_int;
-                if (slot >= 0 && slot < g_nshared)
-                    target = g_shared_funcs[slot];
+                if (slot >= 0 && slot < g_ctx.nshared)
+                    target = g_ctx.shared_funcs[slot];
             }
             /* BOX(GET_SHARED(slot)) or UNBOX(GET_SHARED(slot)) */
             if (!target && (callee->op == XI_BOX || callee->op == XI_UNBOX) &&
                 callee->nargs >= 1 && callee->args[0]->op == XI_GET_SHARED) {
                 int slot = (int)callee->args[0]->aux_int;
-                if (slot >= 0 && slot < g_nshared)
-                    target = g_shared_funcs[slot];
+                if (slot >= 0 && slot < g_ctx.nshared)
+                    target = g_ctx.shared_funcs[slot];
             }
 
             /* XI_IMPORT_REF callee → cross-module imported function or class */
@@ -699,16 +684,16 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             bool import_is_class = false;
             if (!target && callee->op == XI_IMPORT_REF && callee->aux) {
                 const XiImportRef *ref = (const XiImportRef *)callee->aux;
-                for (int ii = 0; ii < g_nimports; ii++) {
-                    if (g_imports[ii].module_path && ref->module_path &&
-                        strcmp(g_imports[ii].module_path, ref->module_path) == 0 &&
-                        g_imports[ii].member_name && ref->member_name &&
-                        strcmp(g_imports[ii].member_name, ref->member_name) == 0) {
-                        if (g_imports[ii].target_func) {
-                            target = g_imports[ii].target_func;
-                            import_prefix = g_imports[ii].target_mod_name;
+                for (int ii = 0; ii < g_ctx.nimports; ii++) {
+                    if (g_ctx.imports[ii].module_path && ref->module_path &&
+                        strcmp(g_ctx.imports[ii].module_path, ref->module_path) == 0 &&
+                        g_ctx.imports[ii].member_name && ref->member_name &&
+                        strcmp(g_ctx.imports[ii].member_name, ref->member_name) == 0) {
+                        if (g_ctx.imports[ii].target_func) {
+                            target = g_ctx.imports[ii].target_func;
+                            import_prefix = g_ctx.imports[ii].target_mod_name;
                         }
-                        if (g_imports[ii].target_class)
+                        if (g_ctx.imports[ii].target_class)
                             import_is_class = true;
                         break;
                     }
@@ -725,13 +710,13 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             bool is_class_call = false;
             if (callee->op == XI_GET_SHARED) {
                 int s = (int)callee->aux_int;
-                if (s >= 0 && s < CG_MAX_SHARED && g_shared_class[s])
+                if (s >= 0 && s < CG_MAX_SHARED && g_ctx.shared_class[s])
                     is_class_call = true;
             }
             if (!is_class_call && (callee->op == XI_BOX || callee->op == XI_UNBOX) &&
                 callee->nargs >= 1 && callee->args[0]->op == XI_GET_SHARED) {
                 int s = (int)callee->args[0]->aux_int;
-                if (s >= 0 && s < CG_MAX_SHARED && g_shared_class[s])
+                if (s >= 0 && s < CG_MAX_SHARED && g_ctx.shared_class[s])
                     is_class_call = true;
             }
             /* Direct CLASS_CREATE callee (not via shared slot) */
@@ -785,11 +770,11 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
 
         /* Shared variables (module-level) */
         case XI_GET_SHARED:
-            fprintf(out, "%s[%d]", g_shared_name, (int)v->aux_int);
+            fprintf(out, "%s[%d]", g_ctx.shared_name, (int)v->aux_int);
             break;
 
         case XI_SET_SHARED:
-            fprintf(out, "(%s[%d] = ", g_shared_name, (int)v->aux_int);
+            fprintf(out, "(%s[%d] = ", g_ctx.shared_name, (int)v->aux_int);
             emit_vref(out, v->args[0]);
             fprintf(out, ")");
             break;
@@ -1009,13 +994,13 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             const XiFunc *mfunc = NULL;
             const char *method_prefix = NULL;
 
-            if (is_super && g_module_func) {
+            if (is_super && g_ctx.module_func) {
                 /* super call: find which class owns the current method,
                  * look up its parent class name, resolve the target.
                  * super() → parent constructor; super.m() → parent method. */
                 const char *parent_class = NULL;
-                for (uint32_t bi2 = 0; bi2 < g_module_func->nblocks && !parent_class; bi2++) {
-                    const XiBlock *blk2 = g_module_func->blocks[bi2];
+                for (uint32_t bi2 = 0; bi2 < g_ctx.module_func->nblocks && !parent_class; bi2++) {
+                    const XiBlock *blk2 = g_ctx.module_func->blocks[bi2];
                     if (!blk2) continue;
                     for (uint32_t vi2 = 0; vi2 < blk2->nvalues; vi2++) {
                         const XiValue *cv = blk2->values[vi2];
@@ -1023,8 +1008,8 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                         const XiClassData *cd = (const XiClassData *)cv->aux;
                         if (!cd->super_name) continue;
                         for (uint16_t ci = 0; ci < cd->ninst + cd->nstat; ci++) {
-                            if (cd->child_idx && cd->child_idx[ci] < g_module_func->nchildren &&
-                                g_module_func->children[cd->child_idx[ci]] == f) {
+                            if (cd->child_idx && cd->child_idx[ci] < g_ctx.module_func->nchildren &&
+                                g_ctx.module_func->children[cd->child_idx[ci]] == f) {
                                 parent_class = cd->super_name;
                                 break;
                             }
@@ -1035,7 +1020,7 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                 if (parent_class) {
                     bool is_ctor_call = (method && strcmp(method, "constructor") == 0);
                     if (is_ctor_call)
-                        mfunc = cg_lookup_class_ctor(g_module_func, parent_class);
+                        mfunc = cg_lookup_class_ctor(g_ctx.module_func, parent_class);
                     else
                         mfunc = cg_lookup_method(method, parent_class, &method_prefix);
                 }
@@ -1232,14 +1217,14 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             const XiImportRef *ref = (const XiImportRef *)v->aux;
             bool found = false;
             if (ref) {
-                for (int ii = 0; ii < g_nimports; ii++) {
-                    if (g_imports[ii].module_path && ref->module_path &&
-                        strcmp(g_imports[ii].module_path, ref->module_path) == 0 &&
-                        g_imports[ii].member_name && ref->member_name &&
-                        strcmp(g_imports[ii].member_name, ref->member_name) == 0) {
+                for (int ii = 0; ii < g_ctx.nimports; ii++) {
+                    if (g_ctx.imports[ii].module_path && ref->module_path &&
+                        strcmp(g_ctx.imports[ii].module_path, ref->module_path) == 0 &&
+                        g_ctx.imports[ii].member_name && ref->member_name &&
+                        strcmp(g_ctx.imports[ii].member_name, ref->member_name) == 0) {
                         fprintf(out, "xrt_shared_%s[%d]",
-                                g_imports[ii].target_mod_name,
-                                g_imports[ii].shared_slot);
+                                g_ctx.imports[ii].target_mod_name,
+                                g_ctx.imports[ii].shared_slot);
                         found = true;
                         break;
                     }
@@ -1321,7 +1306,7 @@ static void emit_value_stmt(FILE *out, const XiFunc *f, const XiValue *v,
         return;
     }
 
-    if (g_pre_decl_all) {
+    if (g_ctx.pre_decl_all) {
         /* Variable already declared at function top — emit assignment */
         fprintf(out, "    ");
         emit_vref(out, v);
@@ -1557,7 +1542,7 @@ XR_FUNC void xi_cgen_func(FILE *out, XiFunc *f, const char *prefix) {
 
     /* Pre-declare variables (phis always; all SSA values when
      * exception handling is present to avoid goto-over-decl UB). */
-    g_pre_decl_all = cg_has_exception_handling(f);
+    g_ctx.pre_decl_all = cg_has_exception_handling(f);
     emit_declarations(out, f);
 
     /* Blocks in order */
@@ -1591,8 +1576,8 @@ static void emit_forward_decls(FILE *out, const XiFunc *f,
 /* ========== Cross-module Import Resolution ========== */
 
 XR_FUNC void xi_cgen_reset_imports(void) {
-    g_nimports = 0;
-    memset(g_imports, 0, sizeof(g_imports));
+    g_ctx.nimports = 0;
+    memset(g_ctx.imports, 0, sizeof(g_ctx.imports));
 }
 
 XR_FUNC void xi_cgen_add_import(const char *module_path,
@@ -1604,16 +1589,16 @@ XR_FUNC void xi_cgen_add_import(const char *module_path,
                                  const XiFunc *exporter_func) {
     XR_DCHECK(module_path != NULL, "xi_cgen_add_import: NULL module_path");
     XR_DCHECK(member_name != NULL, "xi_cgen_add_import: NULL member_name");
-    XR_DCHECK(g_nimports < CG_MAX_IMPORTS, "xi_cgen_add_import: table full");
-    if (g_nimports >= CG_MAX_IMPORTS) return;
-    g_imports[g_nimports].module_path = module_path;
-    g_imports[g_nimports].member_name = member_name;
-    g_imports[g_nimports].target_mod_name = target_mod_name;
-    g_imports[g_nimports].shared_slot = shared_slot;
-    g_imports[g_nimports].target_func = target_func;
-    g_imports[g_nimports].target_class = target_class;
-    g_imports[g_nimports].exporter_func = exporter_func;
-    g_nimports++;
+    XR_DCHECK(g_ctx.nimports < CG_MAX_IMPORTS, "xi_cgen_add_import: table full");
+    if (g_ctx.nimports >= CG_MAX_IMPORTS) return;
+    g_ctx.imports[g_ctx.nimports].module_path = module_path;
+    g_ctx.imports[g_ctx.nimports].member_name = member_name;
+    g_ctx.imports[g_ctx.nimports].target_mod_name = target_mod_name;
+    g_ctx.imports[g_ctx.nimports].shared_slot = shared_slot;
+    g_ctx.imports[g_ctx.nimports].target_func = target_func;
+    g_ctx.imports[g_ctx.nimports].target_class = target_class;
+    g_ctx.imports[g_ctx.nimports].exporter_func = exporter_func;
+    g_ctx.nimports++;
 }
 
 /* ========== Multi-module API ========== */
@@ -1641,10 +1626,10 @@ XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
      * Multi-module builds use a prefixed name to avoid collisions. */
     char shared_buf[256];
     snprintf(shared_buf, sizeof(shared_buf), "xrt_shared_%s", prefix);
-    g_shared_name = shared_buf;
+    g_ctx.shared_name = shared_buf;
 
     if (module_func->nshared > 0)
-        fprintf(out, "static XrValue %s[%u];\n", g_shared_name, module_func->nshared);
+        fprintf(out, "static XrValue %s[%u];\n", g_ctx.shared_name, module_func->nshared);
 
     fprintf(out, "\n");
 
@@ -1656,7 +1641,7 @@ XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
     xi_cgen_func(out, module_func, prefix);
 
     /* Reset shared name to default */
-    g_shared_name = "xrt_shared";
+    g_ctx.shared_name = "xrt_shared";
 }
 
 XR_FUNC void xi_cgen_main(FILE *out, const char **module_names,
@@ -1688,13 +1673,13 @@ XR_FUNC void xi_cgen_program(FILE *out, XiFunc *main_func,
     const char *prefix = module_name ? module_name : "mod";
 
     /* Reset global function name counter for each compilation unit */
-    g_fname_counter = 0;
+    g_ctx.fname_counter = 0;
 
     /* Prescan shared slots for call resolution */
     cg_prescan_shared(main_func);
 
     /* Single-module uses the simple name */
-    g_shared_name = "xrt_shared";
+    g_ctx.shared_name = "xrt_shared";
 
     /* Header */
     xi_cgen_header(out);
