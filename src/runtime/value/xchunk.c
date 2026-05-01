@@ -25,6 +25,10 @@
 #include "../../base/xchecks.h"
 
 void xr_blueprint_free(struct XrBlueprint *bp);
+struct XiFunc;
+struct XiSlotMap;
+void xi_func_free(struct XiFunc *f);
+void xi_slot_map_free(struct XiSlotMap *map);
 
 /*
  * Monotonic proto-id allocator. Each XrProto gets a fresh, never-reused
@@ -163,6 +167,16 @@ void xr_vm_proto_free(XrProto *proto) {
     if (proto->blueprint != NULL) {
         xr_blueprint_free((struct XrBlueprint *) proto->blueprint);
         proto->blueprint = NULL;
+    }
+
+    // Free Xi IR metadata (retained for JIT direct lowering)
+    if (proto->xi_func != NULL) {
+        xi_func_free((struct XiFunc *)proto->xi_func);
+        proto->xi_func = NULL;
+    }
+    if (proto->xi_slot_map != NULL) {
+        xi_slot_map_free((struct XiSlotMap *)proto->xi_slot_map);
+        proto->xi_slot_map = NULL;
     }
 
     // Free type feedback

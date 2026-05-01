@@ -1908,6 +1908,71 @@ static void patch_jumps(EmitCtx *ctx) {
     }
 }
 
+/* ========== Slot Map Generation ========== */
+
+/* Build an XiSlotMap from the emitter's register assignment.
+ * Scans all Xi IR values and records their bytecode register mappings.
+ * Returns NULL on allocation failure (non-fatal). */
+static XiSlotMap *build_slot_map(EmitCtx *ctx) {
+    XiFunc *f = ctx->func;
+    XR_DCHECK(f != NULL, "build_slot_map: NULL func");
+
+    /* Count mapped values */
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < ctx->reg_map_size; i++) {
+        if (ctx->reg_map[i] != NO_REG)
+            count++;
+    }
+    if (count == 0) return NULL;
+
+    XiSlotMap *map = (XiSlotMap *)xr_calloc(1, sizeof(XiSlotMap));
+    if (!map) return NULL;
+
+    map->entries = (XiSlotMapEntry *)xr_malloc(count * sizeof(XiSlotMapEntry));
+    if (!map->entries) {
+        xr_free(map);
+        return NULL;
+    }
+    map->capacity = count;
+
+    /* Fill entries from all blocks' values */
+    uint32_t idx = 0;
+    for (uint32_t b = 0; b < f->nblocks && idx < count; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues && idx < count; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v || v->id >= ctx->reg_map_size) continue;
+            uint8_t reg = ctx->reg_map[v->id];
+            if (reg == NO_REG) continue;
+
+            map->entries[idx].value_id = v->id;
+            map->entries[idx].bc_slot = reg;
+            /* Derive XR_TAG from Xi IR type */
+            uint8_t tag = 5; /* XR_TAG_PTR default */
+            if (v->type) {
+                switch (v->type->kind) {
+                    case XR_KIND_INT:   tag = 3; break; /* XR_TAG_I64 */
+                    case XR_KIND_FLOAT: tag = 4; break; /* XR_TAG_F64 */
+                    case XR_KIND_BOOL:  tag = 1; break; /* XR_TAG_BOOL */
+                    case XR_KIND_NULL:
+                    case XR_KIND_VOID:  tag = 0; break; /* XR_TAG_NULL */
+                    default:            tag = 5; break; /* XR_TAG_PTR */
+                }
+            }
+            map->entries[idx].xr_tag = tag;
+            /* bc_pc: use block's start PC if available */
+            map->entries[idx].bc_pc = (blk->id < ctx->block_pc_size &&
+                                       ctx->block_pc[blk->id] >= 0)
+                                          ? (uint32_t)ctx->block_pc[blk->id]
+                                          : 0;
+            idx++;
+        }
+    }
+    map->count = idx;
+    return map;
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
@@ -2064,6 +2129,11 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     ctx.proto->entry_type = f->entry_type;
     ctx.proto->min_params = f->min_params;
 
+    /* Build slot map for JIT (non-fatal if allocation fails) */
+    XiSlotMap *slot_map = build_slot_map(&ctx);
+    if (slot_map)
+        ctx.proto->xi_slot_map = slot_map;
+
 cleanup:;
     XiEmitStatus result = ctx.status;
     if (result == XI_EMIT_OK) {
@@ -2079,6 +2149,12 @@ cleanup:;
     xr_free(ctx.try_patches);
     xr_free(rpo_order);
     return result;
+}
+
+XR_FUNC void xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
+    XR_DCHECK(proto != NULL, "xi_emit_attach_ir: NULL proto");
+    XR_DCHECK(proto->xi_func == NULL, "xi_emit_attach_ir: proto already has xi_func");
+    proto->xi_func = ir;
 }
 
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s) {

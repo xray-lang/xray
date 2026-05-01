@@ -358,6 +358,15 @@ typedef struct XrProto {
     // as a child. Used by JIT to walk up to module root and build
     // shared_protos mapping for CALL_KNOWN optimization.
     struct XrProto *enclosing;
+
+    // Xi IR metadata preserved for JIT (opaque to runtime layer).
+    // xi_func: retained SSA IR from compilation (XiFunc*); enables JIT
+    //   to lower directly from SSA instead of re-building from bytecode.
+    // xi_slot_map: value_id → bytecode slot mapping (XiSlotMap*); enables
+    //   JIT deopt snapshot generation from Xi IR values.
+    // Both freed in xr_proto_free(). NULL if Xi pipeline was not used.
+    void *xi_func;       // opaque XiFunc* (owned, freed via xi_func_free)
+    void *xi_slot_map;   // opaque XiSlotMap* (owned, freed via xi_slot_map_free)
 } XrProto;
 
 // Convenience macros
