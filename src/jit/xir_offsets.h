@@ -14,7 +14,7 @@
  * WHY THIS DESIGN:
  *   - Single source of truth for all struct offsets
  *   - _Static_assert catches silent breakage when fields are added/removed
- *   - Shared between xir_codegen.c, xir_codegen_aot.c, and xir_builder.c
+ *   - Shared between xir_codegen.c and xi_to_xir.c
  */
 
 #ifndef XIR_OFFSETS_H

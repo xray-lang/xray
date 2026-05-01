@@ -36,7 +36,7 @@
  *     headers that own the invariant.
  *   - Runtime ABI limits (XIR_SUSPEND_SPILL_MAX) — those belong with
  *     the struct definition they describe.
- *   - Opcode-support classifications — see xir_opcode_support.h.
+ *   - Eligibility checks — see xir_eligibility.h.
  */
 
 #ifndef XIR_PASS_LIMITS_H

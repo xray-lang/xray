@@ -18,10 +18,9 @@
  *   - Parameter and upvalue count limits
  *   - Deopt backoff retry policy
  *   - Parameter / return type slot_type eligibility
- *   - Bytecode opcode whitelist scan (via jit_op_support_table[])
  *
  * WHAT IT DOES NOT COVER (handled elsewhere):
- *   - Actual IR construction (xir_builder*.c)
+ *   - Actual IR construction (xi_to_xir.c)
  *   - Register allocation / codegen refusal (xir_regalloc.c / xir_codegen.c)
  *   - Background queue scheduling / task snapshotting (xjit_compile_queue.c)
  */

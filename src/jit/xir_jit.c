@@ -24,13 +24,11 @@
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
 #include "../runtime/value/xtype_feedback.h"
-#include "xir_builder.h"
 #include "xir_codegen.h"
 #include "xir_target.h"
 #include "xir_pass.h"
 #include "xir_printer.h"
 #include "../runtime/value/xchunk.h"
-#include "xir_opcode_support.h"
 #include "xir_eligibility.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
@@ -555,25 +553,15 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     uint64_t compile_start_ms = xr_time_monotonic_ms();
     XirFunc *func = NULL;
 
-    /* Prefer Xi IR direct lowering when available (SSA → SSA, no bytecode
-     * reconstruction). Falls back to legacy builder on failure or absence. */
+    /* Xi IR → XIR lowering (sole compilation path) */
     if (proto->xi_func) {
         func = xi_to_xir_lower((XiFunc *)proto->xi_func, proto,
                                (XiSlotMap *)proto->xi_slot_map, jit->isolate);
-        if (func) {
-            xr_log_debug("jit", "xi_to_xir lowered %s",
-                         proto->name ? XR_STRING_CHARS(proto->name) : "?");
-        }
-    }
-
-    /* Legacy bytecode builder fallback */
-    if (!func) {
-        func = xir_build_from_proto_jit(proto, shared_protos, nshared, shape_hint, jit->isolate);
     }
     if (saved_feedback)
         proto->type_feedback = saved_feedback;
     if (!func) {
-        xr_log_debug("jit", "builder failed for %s",
+        xr_log_debug("jit", "xi_to_xir failed for %s",
                      proto->name ? XR_STRING_CHARS(proto->name) : "?");
         xr_free(shared_protos);
         return false;
@@ -710,8 +698,6 @@ bool xir_jit_try_compile(XirJitState *jit, XrProto *proto) {
     // NOTE: deopt_table and osr_entries are now installed by
     // xir_jit_install_to_proto() above, with correct memory ordering.
 
-    // NOTE: param_types population from feedback is handled in xir_builder_init
-    // (line 250-263) which reads proto->type_feedback->arg_types directly.
     // Do NOT call xr_type_new_int/float/bool here — the type pool may be freed.
 
     // Promote feedback return type to return_type_info if not set

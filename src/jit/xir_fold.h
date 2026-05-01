@@ -24,7 +24,7 @@
  *
  * RELATED MODULES:
  *   - xir.h: XIR data structures and xir_emit()
- *   - xir_builder.c: bytecode → XIR translation (calls fold_emit)
+ *   - xi_to_xir.c: Xi IR → XIR lowering (calls fold_emit)
  *   - xir_pass.c: post-hoc optimization passes
  */
 

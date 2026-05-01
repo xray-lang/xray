@@ -13,7 +13,6 @@
 
 #include "xir_pass.h"
 #include "xir_defuse.h"
-#include "xir_builder.h"
 #include "xir_offsets.h"
 #include "../runtime/value/xchunk.h"
 #include "../base/xmalloc.h"
