@@ -1214,6 +1214,49 @@ XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result) {
     }
     xray_isolate_delete(X);
 
+    /* --- Build cross-module import resolution table --- */
+    xi_cgen_reset_imports();
+    if (nmodules > 1) {
+        for (int exporter = 0; exporter < nmodules; exporter++) {
+            XiFunc *ef = ir_funcs[exporter];
+            if (!ef || !ef->export_names || ef->nshared == 0) continue;
+
+            /* Compute the directory of each importer to derive relative paths */
+            for (int importer = 0; importer < nmodules; importer++) {
+                if (importer == exporter) continue;
+                /* Derive the import string that the importer would use to
+                 * reference the exporter (e.g. "./math_lib") */
+                char importer_dir[1024];
+                strncpy(importer_dir, paths[importer], sizeof(importer_dir) - 1);
+                importer_dir[sizeof(importer_dir) - 1] = '\0';
+                char *last_slash = strrchr(importer_dir, '/');
+                if (last_slash) *last_slash = '\0';
+
+                char *import_str = derive_import_string(paths[exporter], importer_dir);
+                if (!import_str) continue;
+
+                for (uint16_t slot = 0; slot < ef->nshared; slot++) {
+                    if (!ef->export_names[slot]) continue;
+                    /* Find the child XiFunc for this export (if it's a function) */
+                    const XiFunc *target_fn = NULL;
+                    const char *ename = ef->export_names[slot];
+                    for (uint16_t ci = 0; ci < ef->nchildren; ci++) {
+                        if (ef->children[ci] && ef->children[ci]->name &&
+                            strcmp(ef->children[ci]->name, ename) == 0) {
+                            target_fn = ef->children[ci];
+                            break;
+                        }
+                    }
+                    xi_cgen_add_import(import_str, ename,
+                                       mod_names[exporter], (int)slot,
+                                       target_fn);
+                }
+                /* import_str ownership: cgen stores pointer, keep alive until
+                 * after C generation.  Leak is acceptable (short-lived process). */
+            }
+        }
+    }
+
     /* --- Generate combined C source --- */
     char *buf = NULL;
     size_t bufsz = 0;

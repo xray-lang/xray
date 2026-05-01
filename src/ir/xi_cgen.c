@@ -29,18 +29,8 @@
 #include <string.h>
 #include <inttypes.h>
 
-/* Iterator/hasNext/next symbols not in xrt_method_symbols.h (no runtime
- * method dispatch for these — the VM uses OP_INVOKE with dynamic lookup).
- * Define local placeholders matching SYMBOL_ITERATOR(14)/HAS_NEXT(15)/NEXT(16). */
-#ifndef XRT_SYM_ITERATOR
-#define XRT_SYM_ITERATOR 14
-#endif
-#ifndef XRT_SYM_HAS_NEXT
-#define XRT_SYM_HAS_NEXT 15
-#endif
-#ifndef XRT_SYM_NEXT
-#define XRT_SYM_NEXT 16
-#endif
+/* Iterator/hasNext/next symbols defined in xrt_method_symbols.h
+ * with values matching SYMBOL_ITERATOR(54)/HASNEXT(56)/NEXT(57). */
 
 /* ========== Representation Helpers ========== */
 
@@ -93,6 +83,20 @@ static bool g_pre_decl_all;
 /* Name of the current module's shared array in generated C.
  * Single-module: "xrt_shared".  Multi-module: "xrt_shared_<modname>". */
 static const char *g_shared_name = "xrt_shared";
+
+/* Cross-module import resolution table.  The AOT driver populates this
+ * after all modules are lowered.  The cgen uses it to resolve XI_IMPORT_REF
+ * values to reads from the target module's shared array. */
+#define CG_MAX_IMPORTS 256
+typedef struct {
+    const char *module_path;     /* import source (e.g. "./math_lib") */
+    const char *member_name;     /* exported name (e.g. "square") */
+    const char *target_mod_name; /* C identifier prefix (e.g. "math_lib") */
+    int shared_slot;             /* slot in target's xrt_shared_<mod>[] */
+    const XiFunc *target_func;   /* XiFunc* if this export is a function (for direct calls) */
+} CgImportEntry;
+static CgImportEntry g_imports[CG_MAX_IMPORTS];
+static int g_nimports;
 
 /* Prescan a function's IR to populate g_shared_funcs.
  * Recognizes XI_SET_SHARED(slot, XI_CLOSURE_NEW(child)) pattern,
@@ -675,6 +679,23 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     target = g_shared_funcs[slot];
             }
 
+            /* XI_IMPORT_REF callee → cross-module imported function */
+            const char *import_prefix = NULL;
+            if (!target && callee->op == XI_IMPORT_REF && callee->aux) {
+                const XiImportRef *ref = (const XiImportRef *)callee->aux;
+                for (int ii = 0; ii < g_nimports; ii++) {
+                    if (g_imports[ii].module_path && ref->module_path &&
+                        strcmp(g_imports[ii].module_path, ref->module_path) == 0 &&
+                        g_imports[ii].member_name && ref->member_name &&
+                        strcmp(g_imports[ii].member_name, ref->member_name) == 0 &&
+                        g_imports[ii].target_func) {
+                        target = g_imports[ii].target_func;
+                        import_prefix = g_imports[ii].target_mod_name;
+                        break;
+                    }
+                }
+            }
+
             /* Detect class constructor call.
              * Patterns:
              *   a) CALL(GET_SHARED(slot))       — slot has class data
@@ -718,17 +739,18 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                  * xrt_map_new returns a tagged XrValue directly. */
                 fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
                 emit_fname(out, prefix, target);
-                fprintf(out, "(_inst");
+                fprintf(out, "(NULL, _inst");
                 for (uint16_t a = 1; a < v->nargs; a++) {
                     fprintf(out, ", ");
                     emit_vref(out, v->args[a]);
                 }
                 fprintf(out, "); _inst; })");
             } else if (target) {
-                emit_fname(out, prefix, target);
-                fprintf(out, "(");
+                /* Use the exporter's module prefix for cross-module calls */
+                emit_fname(out, import_prefix ? import_prefix : prefix, target);
+                fprintf(out, "(NULL");
                 for (uint16_t a = 1; a < v->nargs; a++) {
-                    if (a > 1) fprintf(out, ", ");
+                    fprintf(out, ", ");
                     emit_vref(out, v->args[a]);
                 }
                 fprintf(out, ")");
@@ -751,28 +773,37 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             break;
 
         /* Closure creation — wrap C function pointer in AOT closure value.
-         * When the closure is called directly (XI_CALL), the cgen resolves
-         * the target and emits a direct C call.  This path handles the case
-         * where the closure is passed as an argument (e.g. to .map/.filter). */
+         * Allocate xrt_closure_t with upvals[], initialize captured values
+         * from the XI_CLOSURE_NEW args (populated by xi_lower from XiCapture). */
         case XI_CLOSURE_NEW:
             if (v->aux) {
                 XiFunc *child = (XiFunc *)v->aux;
-                fprintf(out, "xrt_closure_new((void*)");
+                uint16_t ncap = child->ncaptures;
+                fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)");
                 emit_fname(out, prefix, child);
-                fprintf(out, ", 0)");
+                fprintf(out, ", %u).ptr; ", ncap);
+                for (uint16_t ci = 0; ci < ncap && ci < v->nargs; ci++) {
+                    if (v->args[ci]) {
+                        fprintf(out, "_c->upvals[%u] = ", ci);
+                        emit_vref(out, v->args[ci]);
+                        fprintf(out, "; ");
+                    }
+                }
+                fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
             } else {
                 fprintf(out, "XR_NULL_VAL /* closure: unknown */");
             }
             break;
 
-        /* Upvalue access: reads/writes the file-scope _xrt_upvals array.
-         * Non-reentrant but sufficient for defer and simple closures. */
+        /* Upvalue access: reads/writes from the hidden _cl parameter.
+         * Closure children with captures receive xrt_closure_t *_cl as
+         * their first C parameter; upvals are stored in _cl->upvals[]. */
         case XI_LOAD_UPVAL:
-            fprintf(out, "_xrt_upvals[%d]", (int)v->aux_int);
+            fprintf(out, "_cl->upvals[%d]", (int)v->aux_int);
             break;
 
         case XI_STORE_UPVAL:
-            fprintf(out, "(_xrt_upvals[%d] = ", (int)v->aux_int);
+            fprintf(out, "(_cl->upvals[%d] = ", (int)v->aux_int);
             emit_vref(out, v->args[0]);
             fprintf(out, ")");
             break;
@@ -1001,11 +1032,11 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             uint16_t nargs = (uint16_t)(v->nargs - 1);
 
             if (mfunc) {
-                /* Direct class method call: receiver is first param */
+                /* Direct class method call: NULL _cl, receiver is first visible param */
                 emit_fname(out, prefix, mfunc);
-                fprintf(out, "(");
+                fprintf(out, "(NULL");
                 for (uint16_t a = 0; a < v->nargs; a++) {
-                    if (a > 0) fprintf(out, ", ");
+                    fprintf(out, ", ");
                     emit_vref(out, v->args[a]);
                 }
                 fprintf(out, ")");
@@ -1174,6 +1205,33 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     v->aux ? (const char *)v->aux : "?");
             break;
 
+        /* Cross-module import reference: look up (module_path, member_name)
+         * in the global import table populated by the AOT driver. */
+        case XI_IMPORT_REF: {
+            const XiImportRef *ref = (const XiImportRef *)v->aux;
+            bool found = false;
+            if (ref) {
+                for (int ii = 0; ii < g_nimports; ii++) {
+                    if (g_imports[ii].module_path && ref->module_path &&
+                        strcmp(g_imports[ii].module_path, ref->module_path) == 0 &&
+                        g_imports[ii].member_name && ref->member_name &&
+                        strcmp(g_imports[ii].member_name, ref->member_name) == 0) {
+                        fprintf(out, "xrt_shared_%s[%d]",
+                                g_imports[ii].target_mod_name,
+                                g_imports[ii].shared_slot);
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) {
+                fprintf(out, "XR_NULL_VAL /* unresolved import: %s.%s */",
+                        ref && ref->module_path ? ref->module_path : "?",
+                        ref && ref->member_name ? ref->member_name : "?");
+            }
+            break;
+        }
+
         /* Class creation: the value itself is not used at runtime in AOT.
          * Constructor calls go through the XI_CALL class_slot path which
          * allocates instances and calls the constructor directly.
@@ -1305,8 +1363,10 @@ static void emit_block(FILE *out, const XiFunc *f, const XiBlock *blk,
     switch (blk->kind) {
         case XI_BLOCK_RETURN: {
             /* Call deferred closures in LIFO order before returning.
-             * Scan all blocks for XI_DEFER whose args[0] is CLOSURE_NEW. */
-            const XiFunc *deferred[32];
+             * Scan all blocks for XI_DEFER whose args[0] is CLOSURE_NEW.
+             * Pass the closure's xrt_closure_t* as hidden first arg so
+             * the deferred function can access captured upvalues. */
+            const XiValue *deferred_vals[32];
             int ndeferred = 0;
             for (uint32_t dbi = 0; dbi < f->nblocks && ndeferred < 32; dbi++) {
                 const XiBlock *db = f->blocks[dbi];
@@ -1316,13 +1376,21 @@ static void emit_block(FILE *out, const XiFunc *f, const XiBlock *blk,
                     if (!dv || dv->op != XI_DEFER || dv->nargs < 1) continue;
                     const XiValue *callee = dv->args[0];
                     if (callee && callee->op == XI_CLOSURE_NEW && callee->aux)
-                        deferred[ndeferred++] = (const XiFunc *)callee->aux;
+                        deferred_vals[ndeferred++] = callee;
                 }
             }
             for (int di = ndeferred - 1; di >= 0; di--) {
+                const XiValue *cv = deferred_vals[di];
+                const XiFunc *cf = (const XiFunc *)cv->aux;
                 fprintf(out, "    ");
-                emit_fname(out, prefix, deferred[di]);
-                fprintf(out, "();\n");
+                emit_fname(out, prefix, cf);
+                if (cf->ncaptures > 0) {
+                    fprintf(out, "((xrt_closure_t*)");
+                    emit_vref(out, cv);
+                    fprintf(out, ".ptr);\n");
+                } else {
+                    fprintf(out, "(NULL);\n");
+                }
             }
             if (blk->control) {
                 fprintf(out, "    return ");
@@ -1442,19 +1510,26 @@ XR_FUNC void xi_cgen_func(FILE *out, XiFunc *f, const char *prefix) {
             xi_cgen_func(out, f->children[i], prefix);
     }
 
-    /* Function signature */
+    /* Function signature.  Closure children with captures receive a hidden
+     * first parameter xrt_closure_t *_cl for per-closure upvalue access. */
+    bool has_cl = (f->ncaptures > 0);
     fprintf(out, "static XrValue ");
     emit_fname(out, prefix, f);
     fprintf(out, "(");
-    if (f->nparams == 0) {
-        fprintf(out, "void");
+    if (has_cl) {
+        fprintf(out, "xrt_closure_t *_cl");
+        for (uint16_t i = 0; i < f->nparams; i++)
+            fprintf(out, ", XrValue p%u", i);
+    } else if (f->nparams == 0) {
+        fprintf(out, "xrt_closure_t *_cl");
     } else {
-        for (uint16_t i = 0; i < f->nparams; i++) {
-            if (i > 0) fprintf(out, ", ");
-            fprintf(out, "XrValue p%u", i);
-        }
+        fprintf(out, "xrt_closure_t *_cl");
+        for (uint16_t i = 0; i < f->nparams; i++)
+            fprintf(out, ", XrValue p%u", i);
     }
     fprintf(out, ") {\n");
+    if (!has_cl)
+        fprintf(out, "    (void)_cl;\n");
 
     /* Shared array declared at file scope by xi_cgen_program(),
      * so child functions can reference it too. */
@@ -1486,15 +1561,34 @@ static void emit_forward_decls(FILE *out, const XiFunc *f,
     fprintf(out, "static XrValue ");
     emit_fname(out, prefix, f);
     fprintf(out, "(");
-    if (f->nparams == 0) {
-        fprintf(out, "void");
-    } else {
-        for (uint16_t i = 0; i < f->nparams; i++) {
-            if (i > 0) fprintf(out, ", ");
-            fprintf(out, "XrValue p%u", i);
-        }
-    }
+    fprintf(out, "xrt_closure_t *_cl");
+    for (uint16_t i = 0; i < f->nparams; i++)
+        fprintf(out, ", XrValue p%u", i);
     fprintf(out, ");\n");
+}
+
+/* ========== Cross-module Import Resolution ========== */
+
+XR_FUNC void xi_cgen_reset_imports(void) {
+    g_nimports = 0;
+    memset(g_imports, 0, sizeof(g_imports));
+}
+
+XR_FUNC void xi_cgen_add_import(const char *module_path,
+                                 const char *member_name,
+                                 const char *target_mod_name,
+                                 int shared_slot,
+                                 const XiFunc *target_func) {
+    XR_DCHECK(module_path != NULL, "xi_cgen_add_import: NULL module_path");
+    XR_DCHECK(member_name != NULL, "xi_cgen_add_import: NULL member_name");
+    XR_DCHECK(g_nimports < CG_MAX_IMPORTS, "xi_cgen_add_import: table full");
+    if (g_nimports >= CG_MAX_IMPORTS) return;
+    g_imports[g_nimports].module_path = module_path;
+    g_imports[g_nimports].member_name = member_name;
+    g_imports[g_nimports].target_mod_name = target_mod_name;
+    g_imports[g_nimports].shared_slot = shared_slot;
+    g_imports[g_nimports].target_func = target_func;
+    g_nimports++;
 }
 
 /* ========== Multi-module API ========== */
@@ -1504,30 +1598,6 @@ XR_FUNC void xi_cgen_header(FILE *out) {
     fprintf(out, "/* Generated by xi_cgen \xe2\x80\x94 do not edit */\n");
     fprintf(out, "#define XRT_IMPL\n");
     fprintf(out, "#include \"xrt.h\"\n\n");
-}
-
-/* Find the maximum upvalue index referenced across a function and all
- * its children.  Returns -1 if no upvalues are used. */
-static int cg_max_upval_index(const XiFunc *f) {
-    int mx = -1;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk) continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v) continue;
-            if (v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
-                int idx = (int)v->aux_int;
-                if (idx > mx) mx = idx;
-            }
-        }
-    }
-    for (uint16_t ci = 0; ci < f->nchildren; ci++) {
-        if (!f->children[ci]) continue;
-        int child_mx = cg_max_upval_index(f->children[ci]);
-        if (child_mx > mx) mx = child_mx;
-    }
-    return mx;
 }
 
 XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
@@ -1549,9 +1619,6 @@ XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
     if (module_func->nshared > 0)
         fprintf(out, "static XrValue %s[%u];\n", g_shared_name, module_func->nshared);
 
-    int max_upval = cg_max_upval_index(module_func);
-    if (max_upval >= 0)
-        fprintf(out, "static XrValue _xrt_upvals[%d];\n", max_upval + 1);
     fprintf(out, "\n");
 
     /* Forward declarations */
@@ -1572,13 +1639,16 @@ XR_FUNC void xi_cgen_main(FILE *out, const char **module_names,
     XR_DCHECK(entry_index >= 0 && entry_index < n, "xi_cgen_main: bad entry_index");
 
     fprintf(out, "int main(void) {\n");
+    fprintf(out, "    xrt_bump_enabled = 1;\n");
+    fprintf(out, "    xrt_arc_init();\n");
     /* Call each module init in topo order (entry module last) */
     for (int m = 0; m < n; m++) {
         if (!module_funcs[m]) continue;
         fprintf(out, "    ");
         emit_fname(out, module_names[m], module_funcs[m]);
-        fprintf(out, "();\n");
+        fprintf(out, "(NULL);\n");
     }
+    fprintf(out, "    xrt_bump_destroy();\n");
     fprintf(out, "    return 0;\n");
     fprintf(out, "}\n");
 }
@@ -1606,11 +1676,6 @@ XR_FUNC void xi_cgen_program(FILE *out, XiFunc *main_func,
     if (main_func->nshared > 0)
         fprintf(out, "static XrValue xrt_shared[%u];\n", main_func->nshared);
 
-    /* File-scope upvalue array for closure/defer capture.
-     * Scan all children to find max upvalue index used. */
-    int max_upval = cg_max_upval_index(main_func);
-    if (max_upval >= 0)
-        fprintf(out, "static XrValue _xrt_upvals[%d];\n", max_upval + 1);
     fprintf(out, "\n");
 
     /* Forward declarations */
@@ -1622,9 +1687,12 @@ XR_FUNC void xi_cgen_program(FILE *out, XiFunc *main_func,
 
     /* Entry point */
     fprintf(out, "int main(void) {\n");
+    fprintf(out, "    xrt_bump_enabled = 1;\n");
+    fprintf(out, "    xrt_arc_init();\n");
     fprintf(out, "    ");
     emit_fname(out, prefix, main_func);
-    fprintf(out, "();\n");
+    fprintf(out, "(NULL);\n");
+    fprintf(out, "    xrt_bump_destroy();\n");
     fprintf(out, "    return 0;\n");
     fprintf(out, "}\n");
 }

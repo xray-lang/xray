@@ -96,7 +96,6 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     XiFunc *f = (XiFunc *) xr_calloc(1, sizeof(XiFunc));
     if (!f) return NULL;
 
-    f->name = name;
     f->return_type = return_type;
 
     /* Initialize arena: allocate first chunk eagerly so the common
@@ -107,6 +106,16 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
         return NULL;
     }
     f->arena_cur = f->arena_head;
+
+    /* Copy name into arena so it survives AST destruction */
+    if (name) {
+        uint32_t len = (uint32_t)strlen(name);
+        char *copy = (char *)xi_func_arena_alloc(f, len + 1);
+        if (copy) {
+            memcpy(copy, name, len + 1);
+            f->name = copy;
+        }
+    }
 
     /* Initial block capacity */
     f->blocks_cap = 16;
@@ -282,7 +291,13 @@ XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str,
                        struct XrType *str_type) {
     XR_DCHECK(str_type != NULL, "xi_const_str: type is NULL");
     XiValue *v = xi_value_new(f, blk, XI_CONST, str_type, 0);
-    if (v) v->aux = (void *) str;
+    if (v && str) {
+        /* Copy into arena so the string survives AST destruction */
+        uint32_t len = (uint32_t)strlen(str);
+        char *copy = (char *)xi_func_arena_alloc(f, len + 1);
+        if (copy) memcpy(copy, str, len + 1);
+        v->aux = (void *)copy;
+    }
     return v;
 }
 
