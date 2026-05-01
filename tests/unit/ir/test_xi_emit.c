@@ -733,15 +733,29 @@ TEST(emit_closure_new) {
     XiValue *c42 = xi_const_int(child, child_entry, 42, &stub_int);
     xi_block_set_return(child_entry, c42);
 
+    /* Register child in parent's children array (mirrors real lowering) */
+    if (f->nchildren >= f->children_cap) {
+        uint16_t nc = f->children_cap ? f->children_cap * 2 : 4;
+        XiFunc **tmp = (XiFunc **)xr_realloc(f->children, nc * sizeof(XiFunc *));
+        assert(tmp != NULL);
+        f->children = tmp;
+        f->children_cap = nc;
+    }
+    f->children[f->nchildren++] = child;
+    uint16_t child_idx = (uint16_t)(f->nchildren - 1);
+
     XiValue *v = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_int, 0);
     assert(v != NULL);
-    v->aux = (void *)child;  /* child func for recursive emit */
-    v->aux_int = 0;
+    v->aux = (void *)child;
+    v->aux_int = child_idx;
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
     XiEmitStatus s = xi_emit(f, NULL, &proto);
     assert(s == XI_EMIT_OK && proto != NULL);
+
+    /* Child XiFunc ownership transferred to child_proto during emit */
+    assert(f->children[child_idx] == NULL && "child should be detached from parent");
 
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
@@ -753,7 +767,6 @@ TEST(emit_closure_new) {
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
-    xi_func_free(child);
 }
 
 TEST(emit_set_new) {
