@@ -5,20 +5,19 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xaot_driver.h - AOT native compilation driver
+ * xaot_driver.h - AOT native compilation driver (Xi IR pipeline)
  *
  * KEY CONCEPT:
- *   Encapsulates the full AOT pipeline: bundle discovery, per-module
- *   compilation to XrProto, XIR lowering, C code emission, and main()
- *   generation.  The CLI layer calls xaot_build() and receives
- *   a generated C source string ready for the system C compiler.
- *
- *   All bytecode scanning (shared_proto_map, class pre-registration,
- *   export collection) lives here rather than in the CLI.
+ *   Full pipeline from source to generated C:
+ *   1. Bundle discovery (topo-sorted module list)
+ *   2. Per-module: parse → analyze → Xi IR lower → optimize
+ *   3. Cross-module import resolution via export_names + import table
+ *   4. C code generation via xi_cgen
+ *   5. Main() generation calling module inits in topo order
  *
  * RELATED MODULES:
- *   - xcgen.h: per-function XIR → C lowering
- *   - xcmd_build.c: CLI entry that invokes xaot_build + CC
+ *   - xi_cgen.h: Xi IR → C code generation
+ *   - xcmd_build.c: CLI entry that invokes xaot_build_xi + CC
  */
 
 #ifndef XAOT_DRIVER_H
@@ -28,7 +27,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* ========== Feature Inference ========== */
+/* ========== Feature Set ========== */
 
 /* Bitfield of stdlib modules referenced by the compiled bundle.
  * One bit per module — used to decide which stdlib .o files to link. */
@@ -53,27 +52,27 @@ enum {
     XAOT_STDLIB_COMPRESS = 1 << 15,
 };
 
-/* Runtime feature set inferred from bytecode analysis.
+/* Runtime feature set inferred from analysis.
  * Each flag indicates whether the compiled bundle requires a particular
  * runtime subsystem.  Used to gate #define / link decisions so unused
  * subsystems can be stripped from the final binary. */
 typedef struct {
-    bool need_coro;       /* OP_GO / OP_GO_SCOPE / OP_AWAIT */
-    bool need_channel;    /* OP_CHAN_NEW / OP_CHAN_SEND / OP_CHAN_RECV / OP_SELECT */
-    bool need_scope;      /* OP_SCOPE_BEGIN */
-    bool need_timer;      /* time.sleep / time.after */
-    bool need_netpoll;    /* net.* / tcp.* / http.* */
-    bool need_deep_copy;  /* need_coro && (need_channel || GO with arguments) */
-    bool need_exception;  /* OP_TRY_BEGIN / OP_THROW */
-    bool need_reflection; /* typeof / class.fields() / class.name() */
-    bool need_stacktrace; /* need_exception && stack trace usage */
-    bool need_instanceof; /* OP_IS */
-    XaotStdlibSet stdlib; /* bitset of required stdlib modules */
+    bool need_coro;
+    bool need_channel;
+    bool need_scope;
+    bool need_timer;
+    bool need_netpoll;
+    bool need_deep_copy;
+    bool need_exception;
+    bool need_reflection;
+    bool need_stacktrace;
+    bool need_instanceof;
+    XaotStdlibSet stdlib;
 } XaotFeatureSet;
 
 /* ========== Build API ========== */
 
-/* Result of xaot_build().  Caller must free c_source via xr_free(). */
+/* Result of xaot_build_xi().  Caller must free c_source via xr_free(). */
 typedef struct {
     char *c_source;          /* generated C program (malloc'd, caller frees) */
     int total_compiled;      /* number of functions successfully transpiled */
@@ -82,15 +81,11 @@ typedef struct {
     XaotFeatureSet features; /* inferred feature set */
 } XaotBuildResult;
 
-/* Run the full AOT pipeline for a given source file.
+/* Full AOT pipeline: Source → AST → Xi IR → C.
+ * Supports single and multi-module bundles.
  * Returns 0 on success, non-zero on failure.
- * On success, result->c_source is a complete C program (includes +
- * transpiled functions + main()).  Caller frees result->c_source. */
-XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result);
-
-/* Xi IR pipeline: Source → AST → Xi IR → C.
- * Bypasses bytecode and legacy XIR entirely.
- * Single-module only; for simple programs without advanced features. */
+ * On success, result->c_source is a complete C program.
+ * Caller frees result->c_source via xr_free(). */
 XR_FUNC int xaot_build_xi(const char *input_path, XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

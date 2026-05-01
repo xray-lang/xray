@@ -98,3 +98,6 @@ _Static_assert(XRT_SYM_FOREACH == SYMBOL_FOREACH, "XRT_SYM_FOREACH drift");
 _Static_assert(XRT_SYM_MAP == SYMBOL_MAP, "XRT_SYM_MAP drift");
 _Static_assert(XRT_SYM_FILTER == SYMBOL_FILTER, "XRT_SYM_FILTER drift");
 _Static_assert(XRT_SYM_REDUCE == SYMBOL_REDUCE, "XRT_SYM_REDUCE drift");
+_Static_assert(XRT_SYM_ITERATOR == SYMBOL_ITERATOR, "XRT_SYM_ITERATOR drift");
+_Static_assert(XRT_SYM_HAS_NEXT == SYMBOL_HASNEXT, "XRT_SYM_HAS_NEXT drift");
+_Static_assert(XRT_SYM_NEXT == SYMBOL_NEXT, "XRT_SYM_NEXT drift");

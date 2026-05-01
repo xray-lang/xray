@@ -494,21 +494,23 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return arr;
         }
         /* Higher-order methods: callback is an AOT closure (XR_TAG_CLOSURE).
-         * The closure's fn pointer has signature: XrValue (*)(XrValue). */
+         * The closure's fn pointer has signature:
+         *   XrValue (*)(xrt_closure_t *_cl, XrValue elem)
+         * where _cl points to the closure itself (for upvalue access). */
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
-            typedef XrValue (*xrt_fn1_t)(XrValue);
+            typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
             xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
             if (sym == XRT_SYM_MAP) {
                 XrValue arr = xrt_array_new(a->len);
                 for (int64_t i = 0; i < a->len; i++)
-                    xrt_array_push(arr, fn(a->data[i]));
+                    xrt_array_push(arr, fn(cl, a->data[i]));
                 return arr;
             }
             if (sym == XRT_SYM_FILTER) {
                 XrValue arr = xrt_array_new(a->len);
                 for (int64_t i = 0; i < a->len; i++) {
-                    XrValue r = fn(a->data[i]);
+                    XrValue r = fn(cl, a->data[i]);
                     if (xr_truthy(r))
                         xrt_array_push(arr, a->data[i]);
                 }
@@ -516,7 +518,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
             if (sym == XRT_SYM_FOREACH) {
                 for (int64_t i = 0; i < a->len; i++)
-                    fn(a->data[i]);
+                    fn(cl, a->data[i]);
                 return XR_NULL_VAL;
             }
         }
