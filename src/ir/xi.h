@@ -477,4 +477,48 @@ XR_FUNC void xi_block_set_if(XiBlock *blk, XiValue *cond,
 /* Print human-readable text representation to FILE* (pass stdout for console) */
 XR_FUNC void xi_func_dump(const XiFunc *f, void *stream);
 
+/* ========== Module Metadata ========== */
+
+/* Explicit export entry: one per module-level exported binding. */
+typedef struct XiModuleExport {
+    const char *name;           /* exported identifier (e.g. "square") */
+    uint16_t shared_slot;       /* slot in module's shared array */
+    XiFunc *function;           /* non-NULL if this export is a function */
+    XiClassData *class_data;    /* non-NULL if this export is a class */
+} XiModuleExport;
+
+/* Explicit import entry: one per imported member from another module. */
+typedef struct XiModuleImport {
+    const char *module_path;    /* source path of exporting module (e.g. "./math_lib") */
+    const char *member_name;    /* imported name (e.g. "square") */
+    XiModuleExport *resolved;   /* resolved after module graph linking (NULL until then) */
+} XiModuleImport;
+
+/* Per-module compilation unit: holds init function and explicit metadata.
+ * Replaces the pattern of scanning IR blocks to infer exports/classes. */
+typedef struct XiModule {
+    const char *path;           /* source file path */
+    const char *name;           /* C-safe identifier (e.g. "math_lib") */
+    XiFunc *init;               /* module init function (top-level) */
+    XiFunc **functions;         /* all top-level functions (init's children) */
+    uint16_t nfuncs;
+    XiClassData **classes;      /* all class descriptors lowered in this module */
+    uint16_t nclasses;
+    XiModuleExport *exports;    /* explicit export table */
+    uint16_t nexports;
+    XiModuleImport *imports;    /* explicit import table */
+    uint16_t nimports;
+} XiModule;
+
+/* Allocate a new XiModule. Caller owns the returned pointer. */
+XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init);
+
+/* Free a module and its metadata arrays (does NOT free init/functions). */
+XR_FUNC void xi_module_free(XiModule *mod);
+
+/* Populate exports[] and classes[] by scanning init's IR for
+ * XI_SET_SHARED(slot, CLOSURE_NEW/CLASS_CREATE) patterns.
+ * Must be called after lowering, before C codegen or import resolution. */
+XR_FUNC void xi_module_populate_exports(XiModule *mod);
+
 #endif  // XI_H
