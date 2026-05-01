@@ -26,8 +26,24 @@
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     XiPipelineConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
+    cfg.mode = XI_PIPE_VM;
     cfg.run_verify = true;
     cfg.run_optimize = true;
+    cfg.run_select_rep = false;
+    cfg.run_emit = true;
+    cfg.dump_ir_before = false;
+    cfg.dump_ir_after = false;
+    return cfg;
+}
+
+XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
+    XiPipelineConfig cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.mode = XI_PIPE_AOT;
+    cfg.run_verify = true;
+    cfg.run_optimize = true;
+    cfg.run_select_rep = true;
+    cfg.run_emit = false;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     return cfg;
@@ -68,6 +84,16 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     /* Optimization passes */
     if (cfg->run_optimize) {
         xi_opt_run(ir);
+#ifndef NDEBUG
+        /* Re-verify after optimization in debug builds */
+        if (cfg->run_verify) {
+            char opt_errbuf[512];
+            if (!xi_verify(ir, opt_errbuf, sizeof(opt_errbuf)))
+                fprintf(stderr, "[xi_pipeline] post-opt verify: %s\n", opt_errbuf);
+            XR_DCHECK(xi_verify(ir, opt_errbuf, sizeof(opt_errbuf)),
+                      "post-opt verify failed");
+        }
+#endif
     }
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
@@ -75,6 +101,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     if (cfg->run_select_rep) {
         xi_opt_select_rep(ir);
         xi_opt_box_elim(ir);
+#ifndef NDEBUG
+        if (cfg->run_verify) {
+            char rep_errbuf[512];
+            if (!xi_verify(ir, rep_errbuf, sizeof(rep_errbuf)))
+                fprintf(stderr, "[xi_pipeline] post-select_rep verify: %s\n", rep_errbuf);
+            XR_DCHECK(xi_verify(ir, rep_errbuf, sizeof(rep_errbuf)),
+                      "post-select_rep verify failed");
+        }
+#endif
     }
 
     /* Optional: dump IR after optimization */
@@ -84,17 +119,19 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         fprintf(stderr, "==================================\n");
     }
 
-    /* Bytecode emission */
-    struct XrProto *proto = NULL;
-    XiEmitStatus emit_st = xi_emit(ir, X, &proto);  /* X needed for string interning */
-    if (emit_st != XI_EMIT_OK) {
-        res.status = XI_PIPE_ERR_EMIT;
-        res.error_msg = xi_emit_status_str(emit_st);
-        return res;
+    /* Bytecode emission (skipped in AOT/CHECK mode) */
+    if (cfg->run_emit) {
+        struct XrProto *proto = NULL;
+        XiEmitStatus emit_st = xi_emit(ir, X, &proto);
+        if (emit_st != XI_EMIT_OK) {
+            res.status = XI_PIPE_ERR_EMIT;
+            res.error_msg = xi_emit_status_str(emit_st);
+            return res;
+        }
+        res.proto = proto;
     }
 
     res.status = XI_PIPE_OK;
-    res.proto = proto;
     return res;
 }
 
@@ -141,6 +178,10 @@ XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res) {
     if (res->ir) {
         xi_func_free(res->ir);
         res->ir = NULL;
+    }
+    if (res->module) {
+        xi_module_free(res->module);
+        res->module = NULL;
     }
     /* proto is NOT freed — caller owns it */
 }
