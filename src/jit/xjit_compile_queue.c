@@ -24,6 +24,7 @@
 #include "xjit_compile_queue.h"
 #include "xir_jit.h"
 #include "xir_builder.h"
+#include "xi_to_xir.h"
 #include "xir_pass.h"
 #include "xir_codegen.h"
 #include "xir_code_alloc.h"
@@ -90,13 +91,28 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
      * - NULL isolate: class-registry dynarrays are not safe for bg
      *   concurrent access; builder works in a bg-safe subset. */
     XrProto **shared_protos = task->nshared > 0 ? (XrProto **) task->shared_protos : NULL;
-    XirBuildOptions bg_opts;
-    memset(&bg_opts, 0, sizeof(bg_opts));
-    bg_opts.ic_fields_snapshot = task->ic_fields_snapshot;
-    bg_opts.ic_methods_snapshot = task->ic_methods_snapshot;
-    bg_opts.ic_builtin_snapshot = task->ic_builtin_snapshot;
-    XirFunc *func = xir_build_from_proto_jit_ex(proto, shared_protos, task->nshared,
-                                                task->shape_hint, NULL, &bg_opts);
+
+    /* Prefer Xi IR direct lowering (SSA → SSA).  proto->xi_func and
+     * proto->xi_slot_map are immutable after creation — safe for bg. */
+    XirFunc *func = NULL;
+    if (proto->xi_func) {
+        func = xi_to_xir_lower((XiFunc *)proto->xi_func, proto,
+                               (XiSlotMap *)proto->xi_slot_map, NULL);
+        if (func)
+            xr_log_debug("jit-bg", "xi_to_xir lowered %s",
+                         proto->name ? XR_STRING_CHARS(proto->name) : "?");
+    }
+
+    /* Legacy bytecode builder fallback */
+    if (!func) {
+        XirBuildOptions bg_opts;
+        memset(&bg_opts, 0, sizeof(bg_opts));
+        bg_opts.ic_fields_snapshot = task->ic_fields_snapshot;
+        bg_opts.ic_methods_snapshot = task->ic_methods_snapshot;
+        bg_opts.ic_builtin_snapshot = task->ic_builtin_snapshot;
+        func = xir_build_from_proto_jit_ex(proto, shared_protos, task->nshared,
+                                           task->shape_hint, NULL, &bg_opts);
+    }
     // Snapshots are owned by the task; release them now that the
     // builder has consumed (or rejected) them.
     if (task->ic_fields_snapshot)

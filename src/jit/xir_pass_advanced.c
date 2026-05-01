@@ -17,6 +17,7 @@
 #include "xir_pass_limits.h"
 #include "xir_domtree.h"
 #include "xir_looptree.h"
+#include "xi_to_xir.h"
 #include "../base/xchecks.h"
 
 /* ========== Function Inlining ========== */
@@ -1484,8 +1485,14 @@ XirPassChange xir_pass_auto_inline(XirFunc *func, XrProto *caller_proto) {
                 if (callee->entry_type != 0)
                     continue;
 
-                // --- Build callee XIR ---
-                XirFunc *callee_func = xir_build_from_proto(callee);
+                // --- Build callee XIR (prefer xi_to_xir, fallback to legacy) ---
+                XirFunc *callee_func = NULL;
+                if (callee->xi_func)
+                    callee_func = xi_to_xir_lower(
+                        (XiFunc *)callee->xi_func, callee,
+                        (XiSlotMap *)callee->xi_slot_map, NULL);
+                if (!callee_func)
+                    callee_func = xir_build_from_proto(callee);
                 if (!callee_func)
                     continue;
                 int max_blk = is_tiny ? 8 : 32;
