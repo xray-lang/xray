@@ -87,26 +87,29 @@ static XirBlock *get_block(LowerCtx *ctx, XiBlock *blk) {
 
 /* ========== Constant Lowering ========== */
 
-static XirRef lower_const(LowerCtx *ctx, XiValue *v) {
+static XirRef lower_const(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
     XR_DCHECK(v->op == XI_CONST, "lower_const: not a constant");
     struct XrType *type = v->type;
-    if (!type) return xir_const_i64(ctx->xir_func, v->aux_int);
 
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_BOOL:
-        case XR_KIND_NULL:
-            return xir_const_i64(ctx->xir_func, v->aux_int);
-        case XR_KIND_FLOAT: {
-            union { int64_t i; double d; } u;
-            u.i = v->aux_int;
-            return xir_const_f64(ctx->xir_func, u.d);
-        }
-        case XR_KIND_STRING:
-            return xir_const_ptr(ctx->xir_func, v->aux);
-        default:
-            return xir_const_i64(ctx->xir_func, v->aux_int);
+    /* Constants must be materialized into vregs via XIR_CONST_* instructions.
+     * The codegen ret/branch handlers require vreg operands, not pool refs. */
+    if (!type || type->kind == XR_KIND_INT || type->kind == XR_KIND_BOOL ||
+        type->kind == XR_KIND_NULL) {
+        XirRef cref = xir_const_i64(ctx->xir_func, v->aux_int);
+        return xir_emit_unary(ctx->xir_func, blk, XIR_CONST_I64, XR_REP_I64, cref);
     }
+    if (type->kind == XR_KIND_FLOAT) {
+        union { int64_t i; double d; } u;
+        u.i = v->aux_int;
+        XirRef cref = xir_const_f64(ctx->xir_func, u.d);
+        return xir_emit_unary(ctx->xir_func, blk, XIR_CONST_F64, XR_REP_F64, cref);
+    }
+    if (type->kind == XR_KIND_STRING) {
+        XirRef cref = xir_const_ptr(ctx->xir_func, v->aux);
+        return xir_emit_unary(ctx->xir_func, blk, XIR_CONST_PTR, XR_REP_I64, cref);
+    }
+    XirRef cref = xir_const_i64(ctx->xir_func, v->aux_int);
+    return xir_emit_unary(ctx->xir_func, blk, XIR_CONST_I64, XR_REP_I64, cref);
 }
 
 /* ========== Arithmetic / Bitwise Lowering ========== */
@@ -291,7 +294,7 @@ static XirRef lower_print(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
 static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
     switch (v->op) {
         case XI_CONST:
-            return lower_const(ctx, v);
+            return lower_const(ctx, blk, v);
 
         case XI_PARAM: {
             /* Parameters are pre-mapped during initialization */
@@ -626,6 +629,18 @@ XR_FUNC struct XirFunc *xi_to_xir_lower(XiFunc *xi_func,
         return NULL;
     }
 
+    /* Allocate param vregs FIRST: codegen prologue assumes consecutive
+     * vregs 0..num_params-1 correspond to function arguments loaded from
+     * the args_ptr array. Must precede any other xir_new_vreg calls. */
+    func->num_params = xi_func->nparams;
+    for (uint16_t i = 0; i < xi_func->nparams; i++) {
+        XiValue *param = xi_func->params[i];
+        uint8_t rep = param ? xi_type_to_rep(param->type) : XR_REP_I64;
+        XirRef vreg = xir_new_vreg(func, rep);
+        if (param)
+            set_ref(&ctx, param->id, vreg);
+    }
+
     /* Create all XirBlocks upfront (so forward jumps resolve) */
     for (uint32_t i = 0; i < xi_func->nblocks; i++) {
         XiBlock *xi_blk = xi_func->blocks[i];
@@ -644,15 +659,6 @@ XR_FUNC struct XirFunc *xi_to_xir_lower(XiFunc *xi_func,
             XirBlock *pred = get_block(&ctx, xi_blk->preds[p]);
             xir_block_add_pred(xir_blk, pred, func->arena);
         }
-    }
-
-    /* Map parameters to XIR vregs */
-    for (uint16_t i = 0; i < xi_func->nparams; i++) {
-        XiValue *param = xi_func->params[i];
-        if (!param) continue;
-        uint8_t rep = xi_type_to_rep(param->type);
-        XirRef vreg = xir_new_vreg(func, rep);
-        set_ref(&ctx, param->id, vreg);
     }
 
     /* Lower phi nodes (create XirPhi with dst, defer arg resolution) */
