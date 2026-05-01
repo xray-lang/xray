@@ -499,8 +499,40 @@ static XirRef lower_value(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             if (v->nargs >= 1) return get_ref(ctx, v->args[0]);
             return xir_const_i64(ctx->xir_func, 0);
 
+        /* Identity / type narrowing — transparent passthrough */
+        case XI_COPY:
+            if (v->nargs >= 1) return get_ref(ctx, v->args[0]);
+            return xir_const_i64(ctx->xir_func, 0);
+
+        /* Builtins lowered as generic runtime calls */
+        case XI_ASSERT:
+        case XI_ASSERT_EQ:
+        case XI_ASSERT_NE:
+        case XI_TYPEOF:
+        case XI_GET_BUILTIN:
+        case XI_CLASS_CREATE:
+            return lower_call(ctx, blk, v);
+
+        /* Structured concurrency scope — runtime calls */
+        case XI_SCOPE_ENTER:
+        case XI_SCOPE_EXIT:
+            return lower_call(ctx, blk, v);
+
+        /* Exception handling — JIT does not support try/catch regions;
+         * mark error so the caller falls back to interpreter. */
+        case XI_TRY:
+        case XI_CATCH:
+        case XI_FINALLY:
+        case XI_END_TRY:
+            ctx->error = true;
+            return xir_const_i64(ctx->xir_func, 0);
+
+        /* Cross-module import ref — resolved at AOT cgen time, not JIT */
+        case XI_IMPORT_REF:
+            return xir_const_i64(ctx->xir_func, 0);
+
         default:
-            /* Unsupported op — mark error, return dummy */
+            /* Truly unknown op — mark error, return dummy */
             ctx->error = true;
             return xir_const_i64(ctx->xir_func, 0);
     }
