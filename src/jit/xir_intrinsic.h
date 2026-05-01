@@ -19,7 +19,7 @@
  *
  * RELATED MODULES:
  *   - src/jit/xir.h           : XIR_CALL_INTRINSIC opcode
- *   - src/ir/xi_cgen.c        : AOT C code generation
+ *   - src/aot/xi_cgen.c       : AOT C code generation
  */
 
 #ifndef XIR_INTRINSIC_H

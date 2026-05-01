@@ -15,7 +15,7 @@
 #ifndef XI_CGEN_H
 #define XI_CGEN_H
 
-#include "xi.h"
+#include "../ir/xi.h"
 #include <stdio.h>
 
 /* Generate a C function definition for a Xi IR function and all its
