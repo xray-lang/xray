@@ -19,6 +19,7 @@
 #include "xir.h"
 #include "xir_ops.h"
 #include "xir_jit_runtime.h"
+#include "xir_fold.h"
 #include "../ir/xi_rep.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -146,7 +147,7 @@ static XirRef lower_binary_arith(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             ctx->error = true;
             return xir_const_i64(ctx->xir_func, 0);
     }
-    return xir_emit(ctx->xir_func, blk, xir_op, rep, lhs, rhs);
+    return xir_fold_emit(ctx->xir_func, blk, xir_op, rep, lhs, rhs);
 }
 
 static XirRef lower_unary(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
@@ -164,7 +165,7 @@ static XirRef lower_unary(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
             ctx->error = true;
             return xir_const_i64(ctx->xir_func, 0);
     }
-    return xir_emit_unary(ctx->xir_func, blk, xir_op, rep, arg);
+    return xir_fold_emit_unary(ctx->xir_func, blk, xir_op, rep, arg);
 }
 
 /* ========== Comparison Lowering ========== */
@@ -197,7 +198,7 @@ static XirRef lower_comparison(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
         rhs = tmp;
     }
 
-    return xir_emit(ctx->xir_func, blk, xir_op, XR_REP_I64, lhs, rhs);
+    return xir_fold_emit(ctx->xir_func, blk, xir_op, XR_REP_I64, lhs, rhs);
 }
 
 /* ========== Type Conversion Lowering ========== */
@@ -243,6 +244,18 @@ static XirRef lower_unbox(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
 
 /* ========== Call / Closure / Print Lowering ========== */
 
+/* Find the XrProto for a child XiFunc by scanning parent proto's sub-protos.
+ * Returns NULL if not found (e.g. cross-module call). */
+static struct XrProto *find_callee_proto(LowerCtx *ctx, XiFunc *child_xi) {
+    if (!ctx->proto || !child_xi) return NULL;
+    uint32_t n = ctx->proto->protos.count;
+    for (uint32_t i = 0; i < n; i++) {
+        struct XrProto *sub = PROTO_PROTO(ctx->proto, i);
+        if (sub && sub->xi_func == child_xi) return sub;
+    }
+    return NULL;
+}
+
 static XirRef lower_call(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
     /* Generic call lowering for XI_CALL and ops delegated to runtime.
      * For XI_CALL: args[0]=callee, args[1..n]=params.
@@ -259,7 +272,35 @@ static XirRef lower_call(LowerCtx *ctx, XirBlock *blk, XiValue *v) {
     for (uint16_t i = 0; i < v->nargs; i++)
         call_args[i] = get_ref(ctx, v->args[i]);
 
-    /* Generic call via xr_jit_call_func bridge */
+    /* CALL_KNOWN optimization: if callee is a local XI_CLOSURE_NEW whose
+     * XrProto is known, emit a direct call.  Codegen loads proto->jit_entry
+     * for JIT→JIT fast path, falling back to xr_jit_call_func if the callee
+     * has not been JIT-compiled yet. */
+    if (v->op == XI_CALL && v->nargs >= 1) {
+        XiValue *callee_val = v->args[0];
+        if (callee_val && callee_val->op == XI_CLOSURE_NEW) {
+            XiFunc *child_xi = (XiFunc *)callee_val->aux;
+            struct XrProto *callee_proto = find_callee_proto(ctx, child_xi);
+            if (callee_proto) {
+                uint8_t ret_rep = callee_proto->return_type_info
+                    ? xr_type_rep(callee_proto->return_type_info)
+                    : XR_REP_TAGGED;
+                XirRef proto_ref = xir_const_ptr(ctx->xir_func,
+                                                  (void *)callee_proto);
+                XirRef nargs_ref = xir_const_i64(ctx->xir_func,
+                                                  (int64_t)nargs);
+                XirRef result = xir_emit(ctx->xir_func, blk,
+                                          XIR_CALL_KNOWN, ret_rep,
+                                          proto_ref, nargs_ref);
+                blk->ins[blk->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+                xir_func_bind_call_args(ctx->xir_func, result,
+                                         call_args, total);
+                return result;
+            }
+        }
+    }
+
+    /* Fallback: generic call via xr_jit_call_func bridge */
     XirRef nargs_ref = xir_const_i64(ctx->xir_func, (int64_t)nargs);
     XirRef nargs_val = xir_emit_unary(ctx->xir_func, blk, XIR_CONST_I64,
                                        XR_REP_I64, nargs_ref);
