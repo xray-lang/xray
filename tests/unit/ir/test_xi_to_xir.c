@@ -359,6 +359,82 @@ TEST(lower_shared_var) {
     xi_func_free(f);
 }
 
+TEST(lower_load_field) {
+    /* fn(obj: any) -> int { return obj.field_0 } */
+    XiFunc *f = make_func("load_field", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *obj = xi_param(f, entry, 0, &stub_int);
+    XiValue *load = xi_value_new(f, entry, XI_LOAD_FIELD, &stub_int, 1);
+    load->args[0] = obj;
+    load->aux_int = 0;  /* field index */
+    xi_block_set_return(entry, load);
+
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    assert(xir != NULL);
+
+    XirBlock *blk0 = xir->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XIR_LOAD_FIELD)
+            found = true;
+    }
+    assert(found && "should contain XIR_LOAD_FIELD");
+
+    xir_func_destroy(xir);
+    xi_func_free(f);
+}
+
+TEST(lower_index_get) {
+    /* fn(arr: any, idx: int) -> int { return arr[idx] } */
+    XiFunc *f = make_func("idx_get", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *arr = xi_param(f, entry, 0, &stub_int);
+    XiValue *idx = xi_param(f, entry, 1, &stub_int);
+    XiValue *get = xi_value_new(f, entry, XI_INDEX_GET, &stub_int, 2);
+    get->args[0] = arr;
+    get->args[1] = idx;
+    xi_block_set_return(entry, get);
+
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    assert(xir != NULL);
+
+    XirBlock *blk0 = xir->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XIR_RT_INDEX_GET)
+            found = true;
+    }
+    assert(found && "should contain XIR_RT_INDEX_GET");
+
+    xir_func_destroy(xir);
+    xi_func_free(f);
+}
+
+TEST(lower_array_new) {
+    /* fn() -> any { return [] } */
+    XiFunc *f = make_func("arr_new", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_int, 0);
+    xi_block_set_return(entry, arr);
+
+    XirFunc *xir = xi_to_xir_lower(f, NULL, NULL, NULL);
+    assert(xir != NULL);
+
+    XirBlock *blk0 = xir->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XIR_RT_ARRAY_NEW)
+            found = true;
+    }
+    assert(found && "should contain XIR_RT_ARRAY_NEW");
+
+    xir_func_destroy(xir);
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -376,6 +452,9 @@ int main(void) {
     run_lower_call();
     run_lower_print();
     run_lower_shared_var();
+    run_lower_load_field();
+    run_lower_index_get();
+    run_lower_array_new();
 
     printf("\n=== %d/%d tests passed ===\n", tests_passed, tests_passed);
     return 0;
