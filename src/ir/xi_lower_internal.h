@@ -27,6 +27,25 @@ XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue 
 XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk);
 XR_FUNC void xi_lower_braun_seal(XiLower *l, XiBlock *blk);
 
+/* ========== Variable / Scope Lookup (xi_lower.c) ========== */
+
+XR_FUNC int xi_lower_var_find(XiLower *l, const char *name);
+XR_FUNC int xi_lower_find_shared(XiLower *l, const char *name, struct XrType **out_type);
+XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, const char *name, struct XrType **out_type);
+
+/* ========== Context Init / Cleanup (xi_lower.c) ========== */
+
+XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer,
+                            struct XrayIsolate *isolate);
+XR_FUNC void xi_lower_cleanup(XiLower *l);
+
+/* ========== Function Lowering (xi_lower.c) ========== */
+
+XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node,
+                                     struct XaAnalyzer *analyzer,
+                                     struct XrayIsolate *isolate,
+                                     XiLower *parent_ctx);
+
 /* ========== AST Lowering Primitives ========== */
 
 XR_FUNC XiValue *xi_lower_expr(XiLower *l, struct AstNode *node);
