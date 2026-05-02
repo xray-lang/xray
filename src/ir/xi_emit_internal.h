@@ -107,8 +107,24 @@ XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
 XR_FUNC int add_const_float(EmitCtx *ctx, double val);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
+XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid);
 XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid,
                             uint32_t finally_bid);
+
+/* ========== Functions from xi_emit_reg.c ========== */
+XR_FUNC void compute_last_use(EmitCtx *ctx);
+XR_FUNC void alloc_registers(EmitCtx *ctx);
+
+/* ========== Functions from xi_emit_cf.c ========== */
+XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ);
+XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk);
+XR_FUNC void patch_jumps(EmitCtx *ctx);
+
+/* emit_value is defined in xi_emit.c (driver) and called by emit_block */
+XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v);
+
+/* ========== Functions from xi_emit_slotmap.c ========== */
+XR_FUNC XiSlotMap *build_slot_map(EmitCtx *ctx);
 
 /* ========== Emit Handler Type ========== */
 
