@@ -161,6 +161,9 @@ typedef enum {
     /* Phi node (not in value list — separate on XiBlock) */
     XI_PHI,         /* SSA phi: args[i] corresponds to block->preds[i] */
 
+    /* Conditional select (from if-conversion) */
+    XI_SELECT,      /* dst = args[0] ? args[1] : args[2] (cond, true_val, false_val) */
+
     /* Identity / type narrowing */
     XI_COPY,        /* identity: dst = args[0], may carry narrowed type */
 

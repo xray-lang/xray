@@ -1743,22 +1743,19 @@ static const XmPassDesc PG_BASIC[] = {
     {"dce", {.v = xm_pass_dce}, XM_PASS_VERIFY_SE},
 };
 
-/* Loop and cross-block optimisations.  Ordered so SCCP sees the
- * results of GVN/LICM, and canon + type_prop fire again before
- * ifconvert / phi_simp. */
+/* Loop and cross-block optimisations.  SCCP/GVN/LICM/if-conversion
+ * are now handled by the Xi IR layer before lowering to Xm; only
+ * Xm-specific passes (guard elim, GCM, propjnz, DSE, type_prop,
+ * specialize) remain here. */
 static const XmPassDesc PG_LOOP[] = {
-    {"licm", {.v = xm_pass_licm}, 0},
     {"elim_guards", {.v = xm_pass_elim_guards}, 0},
-    {"gvn", {.v = xm_pass_gvn}, XM_PASS_VERIFY_SE},
     {"gcm", {.v = xm_pass_gcm}, 0},
     {"propjnz", {.v = xm_pass_propjnz}, 0},
     {"store_to_load", {.v = xm_pass_store_to_load}, 0},
     {"dse", {.v = xm_pass_dse}, 0},
-    {"sccp", {.v = xm_pass_sccp}, 0},
     {"type_prop", {.v = xm_pass_type_prop}, 0},
     {"specialize", {.v = xm_pass_specialize}, 0},
     {"elim_guards", {.v = xm_pass_elim_guards}, 0},
-    {"ifconvert", {.v = xm_pass_ifconvert}, 0},
     {"phi_simp", {.v = xm_pass_phi_simp}, 0},
     {"copy_prop", {.v = xm_pass_copy_prop}, XM_PASS_VERIFY_SE},
 };

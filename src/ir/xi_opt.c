@@ -13,6 +13,8 @@
 
 #include "xi_opt.h"
 #include "xi_opt_gvn.h"
+#include "xi_opt_ifconv.h"
+#include "xi_opt_inline.h"
 #include "xi_opt_licm.h"
 #include "xi_opt_sccp.h"
 #include "xi_pass.h"
@@ -802,10 +804,8 @@ static const XiPassDesc xi_pass_table[] = {
     { "sccp",            xi_opt_sccp,             XI_OPT_FULL,  XI_PASS_NONE },
     { "gvn",             xi_opt_gvn,              XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
     { "licm",            xi_opt_licm,             XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
-    /* Future XI_OPT_FULL passes:
-     * { "inline",  xi_opt_inline,  XI_OPT_FULL, XI_PASS_NEEDS_DEFUSE },
-     * { "ifconv",  xi_opt_ifconv,  XI_OPT_FULL, XI_PASS_NEEDS_DOM },
-     */
+    { "inline",           xi_opt_inline,           XI_OPT_FULL,  XI_PASS_NONE },
+    { "ifconv",           xi_opt_ifconv,            XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
 };
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
