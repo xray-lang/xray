@@ -721,6 +721,25 @@ static void emit_value(EmitCtx *ctx, XiValue *v) {
             break;
         }
 
+        /* Conditional select: dst = cond ? true_val : false_val.
+         * Emitted as: MOVE dst, false_val; TEST cond, 0; MOVE dst, true_val.
+         * TEST skips the next instruction when cond is falsy. */
+        case XI_SELECT: {
+            if (v->nargs < 3) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            uint8_t cond_r = reg_of(ctx, v->args[0]);
+            uint8_t true_r = reg_of(ctx, v->args[1]);
+            uint8_t false_r = reg_of(ctx, v->args[2]);
+            if (ctx->status != XI_EMIT_OK) return;
+            /* Start with false value, conditionally overwrite with true */
+            if (dst != false_r)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, false_r, 0));
+            /* TEST A k: skip next if bool(R[A]) != k. k=0 means skip if falsy */
+            emit_inst(ctx, CREATE_ABC(OP_TEST, cond_r, 0, 0));
+            if (dst != true_r)
+                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, true_r, 0));
+            break;
+        }
+
         /* Binary arithmetic — with instruction fusion for constant operands.
          * ADDI/SUBI/MULI use signed 8-bit immediate (int8_t, -128..127).
          * ADDK/SUBK/MULK/DIVK use constant pool index. */
