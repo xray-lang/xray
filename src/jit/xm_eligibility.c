@@ -36,6 +36,34 @@ static bool check_slot_type_eligible(uint8_t st) {
 
 /* ========== Public API ========== */
 
+void xm_eligibility_prepare(struct XrProto *proto) {
+    if (!proto)
+        return;
+
+    /* Deopt backoff state machine: reset deopt_count when the backoff
+     * period has elapsed, giving the function another JIT attempt.
+     * This mutates proto fields and MUST run on the main thread only. */
+    uint32_t dc = atomic_load_explicit(&proto->deopt_count, memory_order_relaxed);
+    if (dc > 3 && dc < 5) {
+        uint32_t backoff = proto->deopt_backoff ? proto->deopt_backoff : 10;
+        uint32_t current = atomic_load_explicit(&proto->call_count, memory_order_relaxed);
+        if (current - proto->deopt_reset_at >= backoff) {
+            atomic_store_explicit(&proto->deopt_count, 0, memory_order_relaxed);
+            proto->deopt_reset_at = current;
+            proto->deopt_backoff = backoff * 2 < 10000 ? backoff * 2 : 10000;
+        }
+    }
+
+    /* Promote feedback return type to return_type_info if not set.
+     * This write is only safe on the main thread. */
+    if (!proto->return_type_info && proto->type_feedback && proto->type_feedback->stable) {
+        uint8_t fb_ret = xfb_to_slot_type(proto->type_feedback->return_type);
+        if (fb_ret != XR_SLOT_ANY) {
+            proto->return_type_info = xr_slot_type_to_type(NULL, fb_ret);
+        }
+    }
+}
+
 bool is_jit_eligible(struct XrProto *proto, bool verbose) {
     const char *name = (proto && proto->name) ? XR_STRING_CHARS(proto->name) : "?";
 
@@ -94,7 +122,9 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
         return false;
     }
     if (dc > 3 && dc < 5) {
-        // Backoff retry for mild deopt failures
+        /* Backoff window: xm_eligibility_prepare() resets deopt_count when
+         * the backoff period elapses.  If we still see dc in (3,5) here,
+         * the backoff has not yet elapsed — skip. */
         uint32_t backoff = proto->deopt_backoff ? proto->deopt_backoff : 10;
         uint32_t current = atomic_load_explicit(&proto->call_count, memory_order_relaxed);
         if (current - proto->deopt_reset_at < backoff) {
@@ -103,12 +133,9 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
                         current - proto->deopt_reset_at, backoff);
             return false;
         }
-        // Backoff elapsed: give one retry, double interval for next failure
-        atomic_store_explicit(&proto->deopt_count, 0, memory_order_relaxed);
-        proto->deopt_reset_at = current;
-        proto->deopt_backoff = backoff * 2 < 10000 ? backoff * 2 : 10000;
-        if (verbose)
-            fprintf(stderr, "[JIT] retry %s after backoff (next=%u)\n", name, proto->deopt_backoff);
+        /* Backoff elapsed but prepare() hasn't run yet (bg re-check path).
+         * Allow compilation — the reset will happen on the next main-thread
+         * trigger. */
     }
     // deopt_count >= 5: eligible, but caller should use conservative mode
 
@@ -157,14 +184,8 @@ bool is_jit_eligible(struct XrProto *proto, bool verbose) {
         }
     }
 
-    // Only JIT functions with typed return values that xm_jit_call can reconstruct.
-    // Promote feedback return type to return_type_info if not set.
-    if (!proto->return_type_info && proto->type_feedback && proto->type_feedback->stable) {
-        uint8_t fb_ret = xfb_to_slot_type(proto->type_feedback->return_type);
-        if (fb_ret != XR_SLOT_ANY) {
-            proto->return_type_info = xr_slot_type_to_type(NULL, fb_ret);
-        }
-    }
+    /* Return type eligibility: xm_eligibility_prepare() promotes feedback
+     * return type on the main thread; here we only read. */
     uint8_t rt =
         proto->return_type_info ? xr_type_to_slot_type(proto->return_type_info) : XR_SLOT_ANY;
     // XR_SLOT_ANY is allowed: void functions and untyped returns

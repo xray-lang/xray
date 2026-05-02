@@ -379,6 +379,10 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         is_recompile = true;
     }
 
+    // Main-thread-only: promote return type from feedback and handle
+    // deopt backoff resets before any eligibility check or bg enqueue.
+    xm_eligibility_prepare(proto);
+
     // Background compilation: enqueue and return immediately.
     // The VM continues interpreting; compiled code is picked up at next call
     // when jit_entry_pending becomes non-NULL.
