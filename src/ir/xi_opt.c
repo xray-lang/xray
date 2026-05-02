@@ -13,6 +13,7 @@
 
 #include "xi_opt.h"
 #include "xi_opt_gvn.h"
+#include "xi_opt_licm.h"
 #include "xi_opt_sccp.h"
 #include "xi_pass.h"
 #include "xi_rep.h"
@@ -800,8 +801,8 @@ static const XiPassDesc xi_pass_table[] = {
     { "dce",             xi_opt_dce,              XI_OPT_LIGHT, XI_PASS_NONE },
     { "sccp",            xi_opt_sccp,             XI_OPT_FULL,  XI_PASS_NONE },
     { "gvn",             xi_opt_gvn,              XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
+    { "licm",            xi_opt_licm,             XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
     /* Future XI_OPT_FULL passes:
-     * { "licm",    xi_opt_licm,    XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP },
      * { "inline",  xi_opt_inline,  XI_OPT_FULL, XI_PASS_NEEDS_DEFUSE },
      * { "ifconv",  xi_opt_ifconv,  XI_OPT_FULL, XI_PASS_NEEDS_DOM },
      */
