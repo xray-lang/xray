@@ -26,7 +26,7 @@
 
 /* ========== XrRep - Machine Representation ========== */
 /*
- * Replaces XirType. Derived from XrType via xr_type_rep().
+ * Replaces XmType. Derived from XrType via xr_type_rep().
  * Only 5 values — no value-level hints (NULL/TRUE/FALSE are xr_tag).
  */
 typedef enum {

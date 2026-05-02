@@ -22,7 +22,7 @@
  *
  * NAMING:
  *   Xi prefix (Xray IR, new generation) avoids collision with the legacy
- *   Xir prefix in src/jit/. After the legacy IR is retired, Xi -> Xir.
+ *   Xm prefix in src/jit/ (Xray Machine IR, low-level SSA for JIT).
  *
  * INVARIANTS:
  *   1. SSA form: each XiValue has exactly one definition point.

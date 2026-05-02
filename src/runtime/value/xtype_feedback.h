@@ -16,7 +16,7 @@
  *   Lives at runtime/value. It is a per-XrProto profile written by the VM
  *   and read by JIT/AOT consumers — strictly runtime data, never a jit-only
  *   concept. Placing it here eliminates the runtime -> jit upward include
- *   previously caused by xchunk.c destroying feedback from xir_feedback.h.
+ *   previously caused by xchunk.c destroying feedback from xm_feedback.h.
  *
  * WHY THIS DESIGN:
  *   - Does NOT depend on XRAY_HAS_JIT — always compiled, all platforms
@@ -58,13 +58,13 @@
  * Lazily allocated when call_count exceeds XFB_ALLOC_THRESHOLD.
  * Stored in XrProto.type_feedback.
  */
-typedef struct XirTypeFeedback {
+typedef struct XmTypeFeedback {
     uint8_t arg_types[XFB_MAX_PARAMS];  // observed param types (OR-accumulated)
     uint8_t return_type;                // observed return type (OR-accumulated)
     uint32_t sample_count;              // total samples collected
     uint16_t stable_count;              // consecutive samples with no change
     bool stable;                        // true if profile is considered stable
-} XirTypeFeedback;
+} XmTypeFeedback;
 
 // Threshold: start collecting profile after this many calls
 #define XFB_ALLOC_THRESHOLD 10
@@ -91,7 +91,7 @@ static inline uint8_t xfb_value_type_flag(XrValue val) {
 }
 
 // Record argument type at call site
-static inline void xfb_record_arg(XirTypeFeedback *fb, int idx, XrValue val) {
+static inline void xfb_record_arg(XmTypeFeedback *fb, int idx, XrValue val) {
     if (!fb || idx >= XFB_MAX_PARAMS)
         return;
     uint8_t flag = xfb_value_type_flag(val);
@@ -99,7 +99,7 @@ static inline void xfb_record_arg(XirTypeFeedback *fb, int idx, XrValue val) {
 }
 
 // Record return value type
-static inline void xfb_record_return(XirTypeFeedback *fb, XrValue val) {
+static inline void xfb_record_return(XmTypeFeedback *fb, XrValue val) {
     if (!fb)
         return;
     uint8_t flag = xfb_value_type_flag(val);
@@ -125,10 +125,10 @@ static inline void xfb_record_return(XirTypeFeedback *fb, XrValue val) {
 /* ========== API (implemented in xtype_feedback.c) ========== */
 
 // Allocate and initialize a new TypeFeedback (zero-filled)
-XR_FUNC XirTypeFeedback *xfb_create(void);
+XR_FUNC XmTypeFeedback *xfb_create(void);
 
 // Free a TypeFeedback
-XR_FUNC void xfb_destroy(XirTypeFeedback *fb);
+XR_FUNC void xfb_destroy(XmTypeFeedback *fb);
 
 // Check if a specific arg_type is monomorphic (single type)
 XR_FUNC bool xfb_is_monomorphic(uint8_t type_flags);
@@ -137,6 +137,6 @@ XR_FUNC bool xfb_is_monomorphic(uint8_t type_flags);
 XR_FUNC uint8_t xfb_to_slot_type(uint8_t type_flags);
 
 // Debug: print feedback summary
-XR_FUNC void xfb_dump(const XirTypeFeedback *fb, int nparams, const char *func_name);
+XR_FUNC void xfb_dump(const XmTypeFeedback *fb, int nparams, const char *func_name);
 
 #endif  // XTYPE_FEEDBACK_H

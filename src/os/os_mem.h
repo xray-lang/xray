@@ -24,7 +24,7 @@
  *   - General-purpose anonymous memory (GC large objects, etc.)
  *   - JIT executable pages with their macOS MAP_JIT / pthread W^X
  *     fast-toggle semantics are handled separately by
- *     src/jit/xir_code_alloc.c, which keeps the platform-specific
+ *     src/jit/xm_code_alloc.c, which keeps the platform-specific
  *     toggle logic next to the JIT itself.
  *
  * RELATED MODULES:

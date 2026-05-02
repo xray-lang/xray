@@ -9,26 +9,26 @@
  *
  * KEY CONCEPT:
  *   N background worker threads consume compilation tasks from an MPSC
- *   ring buffer via CAS on the tail index. Each task runs the full XIR
+ *   ring buffer via CAS on the tail index. Each task runs the full Xm
  *   pipeline (build → optimize → codegen) and publishes the result via
  *   proto->jit_entry_pending.  Main thread installs pending code at
  *   GC safepoints.
  *
  * THREAD SAFETY:
  *   - XrProto fields read by builder are immutable after creation
- *   - Each worker owns a private XirCodeAlloc (no sharing)
+ *   - Each worker owns a private XmCodeAlloc (no sharing)
  *   - Only jit_entry_pending is written by bg threads (atomic)
  *   - Main thread reads jit_entry_pending and writes jit_entry (at safepoint)
  */
 
 #include "xjit_compile_queue.h"
-#include "xir_jit.h"
-#include "xi_to_xir.h"
-#include "xir_pass.h"
-#include "xir_codegen.h"
-#include "xir_code_alloc.h"
-#include "xir_tfa.h"
-#include "xir_eligibility.h"
+#include "xm_jit.h"
+#include "xi_to_xm.h"
+#include "xm_pass.h"
+#include "xm_codegen.h"
+#include "xm_code_alloc.h"
+#include "xm_tfa.h"
+#include "xm_eligibility.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/object/xstring.h"
@@ -44,7 +44,7 @@
 /* ========== Worker context (passed via thread arg) ========== */
 
 typedef struct {
-    XirCompileQueue *queue;
+    XmCompileQueue *queue;
     uint32_t worker_id;  // 0..n_workers-1
 } BgWorkerArg;
 
@@ -57,8 +57,8 @@ typedef struct {
 // IMPORTANT: this function must never write back to |proto|; every field it
 // needs is already present in |task| or is a truly immutable proto field
 // (bytecode array, constants pool, child protos, etc.).
-static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTask *task) {
-    XirJitState *jit = q->jit;
+static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask *task) {
+    XmJitState *jit = q->jit;
     if (!task || !task->proto || !jit)
         return;
     XR_DCHECK(worker_id < XJIT_MAX_WORKERS, "worker_id out of range");
@@ -69,7 +69,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     // Skip if already compiled at target level
     if (!is_recompile && proto->jit_entry)
         return;
-    if (is_recompile && proto->jit_opt_level >= XIR_OPT_FULL)
+    if (is_recompile && proto->jit_opt_level >= XM_OPT_FULL)
         return;
 
     // Eligibility re-check: the main thread already ran this, but a
@@ -78,20 +78,20 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
     if (!is_jit_eligible(proto, false))
         goto fail_clear_sentinel;
 
-    /* Build XIR via Xi IR direct lowering (SSA → SSA).
+    /* Build Xm via Xi IR direct lowering (SSA → SSA).
      * proto->xi_func and proto->xi_slot_map are immutable after
      * creation — safe for background access.
      * NULL isolate: class-registry dynarrays are not safe for bg.
      * IC snapshots captured on main thread are read-only here. */
-    XirICSnapshot ic_snap = {
+    XmICSnapshot ic_snap = {
         .ic_fields  = task->ic_fields_snapshot,
         .ic_methods = task->ic_methods_snapshot,
     };
-    const XirICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods)
+    const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods)
                                    ? &ic_snap : NULL;
-    XirFunc *func = NULL;
+    XmFunc *func = NULL;
     if (proto->xi_func) {
-        func = xi_to_xir_lower((XiFunc *)proto->xi_func, proto,
+        func = xi_to_xm_lower((XiFunc *)proto->xi_func, proto,
                                (XiSlotMap *)proto->xi_slot_map,
                                ic_ptr, NULL);
     }
@@ -110,37 +110,37 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
 
     // Guard: reject oversized functions
     if (func->nvreg > 4096) {
-        xir_func_destroy(func);
+        xm_func_destroy(func);
         goto fail_clear_sentinel;
     }
 
     // Optimization passes
-    XirOptLevel opt = is_recompile ? XIR_OPT_FULL : XIR_OPT_BASIC;
-    xir_run_pipeline_ex(func, opt, proto);
+    XmOptLevel opt = is_recompile ? XM_OPT_FULL : XM_OPT_BASIC;
+    xm_run_pipeline_ex(func, opt, proto);
 
     // Codegen — each worker uses its own dedicated code_alloc.
     // This eliminates data races between workers and the main thread.
 #if defined(__aarch64__)
-    XirCodegenResult res = xir_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
+    XmCodegenResult res = xm_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
 #elif defined(__x86_64__) || defined(_M_X64)
-    XirCodegenResult res = xir_codegen_x64(func, &q->worker_code_alloc[worker_id]);
+    XmCodegenResult res = xm_codegen_x64(func, &q->worker_code_alloc[worker_id]);
 #else
-    XirCodegenResult res = {.success = false, .error = "unsupported architecture"};
+    XmCodegenResult res = {.success = false, .error = "unsupported architecture"};
 #endif
     if (!res.success) {
         xr_log_debug("jit-bg", "codegen failed for %s: %s",
                      proto->name ? XR_STRING_CHARS(proto->name) : "?",
                      res.error ? res.error : "unknown");
-        xir_func_destroy(func);
+        xm_func_destroy(func);
         goto fail_clear_sentinel;
     }
 
     // Bundle ALL compilation outputs into a heap-allocated result struct.
     // The bg thread MUST NOT write any proto fields directly (data race).
     // The main thread installs everything atomically at OP_CALL time.
-    XirBgResult *bgr = (XirBgResult *) xr_calloc(1, sizeof(XirBgResult));
+    XmBgResult *bgr = (XmBgResult *) xr_calloc(1, sizeof(XmBgResult));
     if (!bgr) {
-        xir_func_destroy(func);
+        xm_func_destroy(func);
         goto fail_clear_sentinel;
     }
 
@@ -153,8 +153,8 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
 
     // Copy deopt table
     if (res.ndeopt > 0) {
-        size_t deopt_size = res.ndeopt * sizeof(XirRtDeoptEntry);
-        XirRtDeoptEntry *entries = (XirRtDeoptEntry *) xr_malloc(deopt_size);
+        size_t deopt_size = res.ndeopt * sizeof(XmRtDeoptEntry);
+        XmRtDeoptEntry *entries = (XmRtDeoptEntry *) xr_malloc(deopt_size);
         if (entries) {
             memcpy(entries, res.deopt_entries, deopt_size);
             bgr->deopt_table = entries;
@@ -164,8 +164,8 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
 
     // Copy OSR entries
     if (res.nosr > 0) {
-        size_t osr_size = res.nosr * sizeof(XirOsrEntry);
-        XirOsrEntry *entries = (XirOsrEntry *) xr_malloc(osr_size);
+        size_t osr_size = res.nosr * sizeof(XmOsrEntry);
+        XmOsrEntry *entries = (XmOsrEntry *) xr_malloc(osr_size);
         if (entries) {
             memcpy(entries, res.osr_entries, osr_size);
             bgr->osr_entries = entries;
@@ -184,7 +184,7 @@ static void bg_compile_one(XirCompileQueue *q, uint32_t worker_id, const XirBgTa
                        func->nvreg);
     }
 
-    xir_func_destroy(func);
+    xm_func_destroy(func);
     return;
 
 fail_clear_sentinel:
@@ -200,7 +200,7 @@ fail_clear_sentinel:
 // CAS on tail ensures exactly-once delivery across multiple workers.
 static void *bg_worker_main(void *arg) {
     BgWorkerArg *wa = (BgWorkerArg *) arg;
-    XirCompileQueue *q = wa->queue;
+    XmCompileQueue *q = wa->queue;
     uint32_t wid = wa->worker_id;
     xr_free(wa);  // heap-allocated by init, owned by this thread
 
@@ -236,7 +236,7 @@ static void *bg_worker_main(void *arg) {
             }
 
             // Copy the snapshot out of the ring buffer before compiling
-            XirBgTask task = q->tasks[tail & (XJIT_QUEUE_CAPACITY - 1)];
+            XmBgTask task = q->tasks[tail & (XJIT_QUEUE_CAPACITY - 1)];
             bg_compile_one(q, wid, &task);
         }
     }
@@ -246,7 +246,7 @@ static void *bg_worker_main(void *arg) {
 
 /* ========== Public API ========== */
 
-void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
+void xjit_queue_init(XmCompileQueue *q, XmJitState *jit) {
     XR_DCHECK(q != NULL, "xjit_queue_init: q is NULL");
     XR_DCHECK(jit != NULL, "xjit_queue_init: jit is NULL");
 
@@ -269,7 +269,7 @@ void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
 
     // Initialize per-worker code allocators
     for (uint32_t i = 0; i < nw; i++) {
-        xir_code_alloc_init(&q->worker_code_alloc[i]);
+        xm_code_alloc_init(&q->worker_code_alloc[i]);
     }
 
     // Start worker threads
@@ -295,7 +295,7 @@ void xjit_queue_init(XirCompileQueue *q, XirJitState *jit) {
     }
 }
 
-void xjit_queue_destroy(XirCompileQueue *q) {
+void xjit_queue_destroy(XmCompileQueue *q) {
     if (!q)
         return;
 
@@ -316,14 +316,14 @@ void xjit_queue_destroy(XirCompileQueue *q) {
 
     // Destroy per-worker code allocators
     for (uint32_t i = 0; i < XJIT_MAX_WORKERS; i++) {
-        xir_code_alloc_destroy(&q->worker_code_alloc[i]);
+        xm_code_alloc_destroy(&q->worker_code_alloc[i]);
     }
 
     xr_mutex_destroy(&q->mutex);
     xr_cond_destroy(&q->cond);
 }
 
-bool xjit_queue_push(XirCompileQueue *q, const XirBgTask *task) {
+bool xjit_queue_push(XmCompileQueue *q, const XmBgTask *task) {
     if (!q || !q->started || !task || !task->proto)
         return false;
 

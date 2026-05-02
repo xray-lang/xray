@@ -8,14 +8,14 @@
  * test_peephole.c - Unit tests for ARM64 peephole optimiser patterns
  *
  * Each test constructs a small instruction buffer encoding a specific
- * pattern, runs xir_peephole(), and verifies the expected transformation.
+ * pattern, runs xm_peephole(), and verifies the expected transformation.
  * Encodings are derived from the ARM Architecture Reference Manual.
  */
 
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "../../../src/jit/xir_peephole.h"
+#include "../../../src/jit/xm_peephole.h"
 #include "../test_win_compat.h"
 
 #define A64_NOP 0xD503201Fu
@@ -116,7 +116,7 @@ static uint32_t run_peephole(uint32_t *code, uint32_t count) {
     memset(&buf, 0, sizeof(buf));
     buf.code = code;
     buf.count = count;
-    return xir_peephole(&buf);
+    return xm_peephole(&buf);
 }
 
 /* ========== Pattern 1: STR+LDR â†?NOP the LDR (64-bit) ========== */
@@ -481,7 +481,7 @@ static void test_empty(void) {
     memset(&buf, 0, sizeof(buf));
     buf.code = NULL;
     buf.count = 0;
-    uint32_t nops = xir_peephole(&buf);
+    uint32_t nops = xm_peephole(&buf);
     assert(nops == 0);
 
     fprintf(stderr, " PASS\n");

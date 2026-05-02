@@ -21,7 +21,7 @@
 
 #include <stdint.h>
 
-#define XIR_MAX_STACK_MAP_ENTRIES 256
+#define XM_MAX_STACK_MAP_ENTRIES 256
 
 /* One safepoint entry: records which registers and spill slots hold GC pointers.
  * Generated at compile time, queried by GC at runtime via safepoint_id index. */

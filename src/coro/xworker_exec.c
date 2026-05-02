@@ -721,7 +721,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
 // ========== run_jit_resume: Extracted JIT Resume Logic ==========
 //
 // Prepares resume state (channel recv value or await task result) in
-// jit_suspend, then re-enters compiled code via xir_jit_resume.
+// jit_suspend, then re-enters compiled code via xm_jit_resume.
 //
 // Returns: XR_JIT_OK, XR_JIT_SUSPEND, XR_JIT_DEOPT (fall through), or
 // -1 for channel-close (caller should clear jit_resume_entry and deopt).

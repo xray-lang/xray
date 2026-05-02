@@ -32,7 +32,7 @@
 #include "../coro/xworker.h"
 #include "../runtime/gc/xgc.h"
 #ifdef XRAY_HAS_JIT
-#include "../jit/xir_jit.h"
+#include "../jit/xm_jit.h"
 #endif
 #include "../runtime/object/xstring.h"
 #include <stdio.h>
@@ -197,7 +197,7 @@ void xr_free_code(XrayIsolate *isolate, XrProto *proto) {
     // Drain bg compilation queue before freeing protos — the bg thread
     // may still be reading proto fields (use-after-free otherwise).
     if (isolate && isolate->vm.jit) {
-        XirJitState *jit = isolate->vm.jit;
+        XmJitState *jit = isolate->vm.jit;
         if (jit->bg_queue) {
             xjit_queue_destroy(jit->bg_queue);
             xr_free(jit->bg_queue);
@@ -302,7 +302,7 @@ int xr_vm_init(XrayIsolate *isolate) {
 #ifdef XRAY_HAS_JIT
     if (isolate->params.enable_jit) {
         int thr = isolate->params.jit_threshold > 0 ? isolate->params.jit_threshold : 100;
-        isolate->vm.jit = xir_jit_init(isolate, thr);
+        isolate->vm.jit = xm_jit_init(isolate, thr);
         isolate->vm.jit_threshold = thr;
         if (isolate->vm.jit && isolate->params.jit_stats)
             isolate->vm.jit->stats_enabled = true;
@@ -328,7 +328,7 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
 
 #ifdef XRAY_HAS_JIT
     if (isolate->vm.jit) {
-        xir_jit_destroy(isolate->vm.jit);
+        xm_jit_destroy(isolate->vm.jit);
         isolate->vm.jit = NULL;
     }
 #endif

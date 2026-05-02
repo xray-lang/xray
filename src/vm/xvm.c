@@ -78,7 +78,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xtype_feedback.h"
 #ifdef XRAY_HAS_JIT
-#include "../jit/xir_jit.h"
+#include "../jit/xm_jit.h"
 #endif
 
 #include "../coro/xworker.h"

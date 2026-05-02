@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Cross-function exception propagation uses setjmp/longjmp.
- *   Same-function try/catch uses goto (structured by XIR builder).
+ *   Same-function try/catch uses goto (structured by Xm builder).
  *
  *   Each try block pushes an XrtExcFrame on the thread-local stack.
  *   xrt_throw() longjmps to the nearest frame. If no frame exists,

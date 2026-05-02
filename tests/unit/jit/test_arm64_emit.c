@@ -14,8 +14,8 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
-#include "../../../src/jit/xir_arm64.h"
-#include "../../../src/jit/xir_code_alloc.h"
+#include "../../../src/jit/xm_arm64.h"
+#include "../../../src/jit/xm_code_alloc.h"
 #include "../test_win_compat.h"
 
 /* ========== Encoding Tests ========== */
@@ -148,71 +148,71 @@ static void test_load_store(void) {
 static void test_emit_and_execute(void) {
     fprintf(stderr, "  test_emit_and_execute...");
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
     // Generate: fn() -> int { return 42; }
     // MOVZ X0, #42
     // RET
-    void *code = xir_code_alloc(&alloc, 64, 16);
+    void *code = xm_code_alloc(&alloc, 64, 16);
     assert(code != NULL);
 
 #ifdef __APPLE__
-    xir_code_make_writable(code, 64);
+    xm_code_make_writable(code, 64);
 #endif
 
     uint32_t *p = (uint32_t *)code;
     p[0] = a64_movz(A64_X0, 42, 0);
     p[1] = a64_ret();
 
-    xir_code_make_executable(code, 64);
-    xir_code_flush_icache(code, 64);
+    xm_code_make_executable(code, 64);
+    xm_code_flush_icache(code, 64);
 
     typedef int64_t (*Func)(void);
     int64_t result = ((Func)code)();
     assert(result == 42);
 
-    xir_code_alloc_destroy(&alloc);
+    xm_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
 
 static void test_emit_add_function(void) {
     fprintf(stderr, "  test_emit_add_function...");
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
     // Generate: fn(a: int, b: int) -> int { return a + b; }
     // ADD X0, X0, X1
     // RET
-    void *code = xir_code_alloc(&alloc, 64, 16);
+    void *code = xm_code_alloc(&alloc, 64, 16);
     assert(code != NULL);
 
 #ifdef __APPLE__
-    xir_code_make_writable(code, 64);
+    xm_code_make_writable(code, 64);
 #endif
 
     uint32_t *p = (uint32_t *)code;
     p[0] = a64_add(A64_X0, A64_X0, A64_X1);
     p[1] = a64_ret();
 
-    xir_code_make_executable(code, 64);
-    xir_code_flush_icache(code, 64);
+    xm_code_make_executable(code, 64);
+    xm_code_flush_icache(code, 64);
 
     typedef int64_t (*AddFunc)(int64_t, int64_t);
     assert(((AddFunc)code)(10, 20) == 30);
     assert(((AddFunc)code)(100, -58) == 42);
     assert(((AddFunc)code)(0, 0) == 0);
 
-    xir_code_alloc_destroy(&alloc);
+    xm_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
 
 static void test_emit_factorial_like(void) {
     fprintf(stderr, "  test_emit_factorial_like...");
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
     // Generate: fn(n: int) -> int { result=1; while(n>0) { result*=n; n--; } return result; }
     //
@@ -227,11 +227,11 @@ static void test_emit_factorial_like(void) {
     //   MOV X0, X1           ; return result
     //   RET
 
-    void *code = xir_code_alloc(&alloc, 128, 16);
+    void *code = xm_code_alloc(&alloc, 128, 16);
     assert(code != NULL);
 
 #ifdef __APPLE__
-    xir_code_make_writable(code, 128);
+    xm_code_make_writable(code, 128);
 #endif
 
     A64Buf buf;
@@ -247,8 +247,8 @@ static void test_emit_factorial_like(void) {
     a64_buf_emit(&buf, a64_ret());                       // 7: ret
 
     uint32_t code_size = a64_buf_offset(&buf);
-    xir_code_make_executable(code, code_size);
-    xir_code_flush_icache(code, code_size);
+    xm_code_make_executable(code, code_size);
+    xm_code_flush_icache(code, code_size);
 
     typedef int64_t (*FactFunc)(int64_t);
     FactFunc fact = (FactFunc)code;
@@ -258,21 +258,21 @@ static void test_emit_factorial_like(void) {
     assert(fact(5) == 120);
     assert(fact(10) == 3628800);
 
-    xir_code_alloc_destroy(&alloc);
+    xm_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
 
 static void test_load_imm64(void) {
     fprintf(stderr, "  test_load_imm64...");
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
-    void *code = xir_code_alloc(&alloc, 128, 16);
+    void *code = xm_code_alloc(&alloc, 128, 16);
     assert(code != NULL);
 
 #ifdef __APPLE__
-    xir_code_make_writable(code, 128);
+    xm_code_make_writable(code, 128);
 #endif
 
     A64Buf buf;
@@ -285,14 +285,14 @@ static void test_load_imm64(void) {
     assert(count == 4);  // all 4 chunks are non-zero
 
     uint32_t code_size = a64_buf_offset(&buf);
-    xir_code_make_executable(code, code_size);
-    xir_code_flush_icache(code, code_size);
+    xm_code_make_executable(code, code_size);
+    xm_code_flush_icache(code, code_size);
 
     typedef uint64_t (*U64Func)(void);
     uint64_t result = ((U64Func)code)();
     assert(result == 0xDEADBEEFCAFEBABEULL);
 
-    xir_code_alloc_destroy(&alloc);
+    xm_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
 #endif // __aarch64__

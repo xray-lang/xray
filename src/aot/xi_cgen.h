@@ -8,7 +8,7 @@
  * xi_cgen.h - Xi IR to C code generation
  *
  * Translates typed SSA IR (XiFunc) directly to C source code,
- * bypassing bytecode and the legacy XIR builder entirely.
+ * bypassing bytecode and the legacy Xm builder entirely.
  * Generated code includes xrt.h for the value representation.
  */
 

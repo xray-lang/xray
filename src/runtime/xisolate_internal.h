@@ -235,7 +235,7 @@ struct XrayIsolate {
 //
 // JIT fields (if enabled) are in the same struct:
 //   #ifdef XRAY_HAS_JIT
-//   isolate->vm.jit              // XirJitState* (compile queue, code cache)
+//   isolate->vm.jit              // XmJitState* (compile queue, code cache)
 //   isolate->vm.jit_threshold    // Tier 1 trigger threshold
 //   #endif // ========== Compilation and Execution API ==========
 
