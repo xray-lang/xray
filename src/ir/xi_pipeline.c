@@ -14,6 +14,7 @@
 #include "xi_lower.h"
 #include "xi_verify.h"
 #include "xi_opt.h"
+#include "xi_pass.h"
 #include "xi_emit.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -29,6 +30,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.mode = XI_PIPE_VM;
     cfg.run_verify = true;
     cfg.run_optimize = true;
+    cfg.opt_level = XI_OPT_LIGHT;
     cfg.run_select_rep = false;
     cfg.run_emit = true;
     cfg.dump_ir_before = false;
@@ -42,6 +44,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.mode = XI_PIPE_AOT;
     cfg.run_verify = true;
     cfg.run_optimize = true;
+    cfg.opt_level = XI_OPT_FULL;
     cfg.run_select_rep = true;
     cfg.run_emit = false;
     cfg.dump_ir_before = false;
@@ -81,19 +84,11 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         }
     }
 
-    /* Optimization passes */
+    /* Optimization passes (pipeline driver handles per-round verify) */
     if (cfg->run_optimize) {
-        xi_opt_run(ir);
-#ifndef NDEBUG
-        /* Re-verify after optimization in debug builds */
-        if (cfg->run_verify) {
-            char opt_errbuf[512];
-            if (!xi_verify(ir, opt_errbuf, sizeof(opt_errbuf)))
-                fprintf(stderr, "[xi_pipeline] post-opt verify: %s\n", opt_errbuf);
-            XR_DCHECK(xi_verify(ir, opt_errbuf, sizeof(opt_errbuf)),
-                      "post-opt verify failed");
-        }
-#endif
+        XiOptLevel level = cfg->opt_level;
+        if (level == XI_OPT_NONE) level = XI_OPT_LIGHT;
+        xi_opt_run_pipeline(ir, level);
     }
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.

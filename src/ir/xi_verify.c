@@ -145,9 +145,13 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f,
         return;
     }
 
-    /* Each arg should be a plausible value (non-NULL, has type) */
+    /* Each arg should be a plausible value (non-NULL, has type).
+     * Exception: CLOSURE_NEW args may be NULL for upvalue-chain captures
+     * that have no local SSA value (source is parent's upvalue, not a reg). */
     for (uint16_t a = 0; a < v->nargs; a++) {
         if (!v->args[a]) {
+            if (v->op == XI_CLOSURE_NEW)
+                continue;  /* NULL capture arg is valid */
             verr(ctx, "func '%s': value v%u in b%u arg[%u] is NULL",
                  f->name, v->id, blk->id, a);
             return;
