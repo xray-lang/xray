@@ -2144,6 +2144,11 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_MOVE_EXPR:
             return lower_move_expr(l, node);
 
+        /* Scope block in expression context: lower as statement, return null */
+        case AST_SCOPE_BLOCK:
+            xi_lower_scope_block(l, node);
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+
         /* BigInt / Regex: lowered as const values */
         case AST_LITERAL_BIGINT:
             return xi_const_int(l->func, l->cur_block,
@@ -2160,7 +2165,11 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
             return xi_lower_expr(l, node->as.expr_stmt);
 
         default:
-            /* Unsupported expression: emit null placeholder */
+            /* Every analyzer-accepted AST node must be lowerable.
+             * Reaching here indicates a compiler bug, not a user error. */
+            XR_DCHECK_FMT(false, "unsupported expr AST kind %d in lowering",
+                          (int)node->type);
+            l->had_error = true;
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
 }
@@ -2658,7 +2667,11 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             break;
 
         default:
-            /* Unsupported statement: skip */
+            /* Every analyzer-accepted AST node must be lowerable.
+             * Reaching here indicates a compiler bug, not a user error. */
+            XR_DCHECK_FMT(false, "unsupported stmt AST kind %d in lowering",
+                          (int)node->type);
+            l->had_error = true;
             break;
     }
 }
@@ -2798,8 +2811,9 @@ static XiFunc *lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
         xi_block_set_return(l.cur_block, NULL);
     }
 
+    XiFunc *result = l.had_error ? NULL : l.func;
     lower_cleanup(&l);
-    return l.func;
+    return result;
 }
 
 /* ========== Public API ========== */
@@ -2930,6 +2944,7 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
         xi_block_set_return(l.cur_block, NULL);
     }
 
+    XiFunc *result = l.had_error ? NULL : l.func;
     lower_cleanup(&l);
-    return l.func;
+    return result;
 }
