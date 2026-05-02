@@ -12,6 +12,7 @@
  */
 
 #include "xi_opt.h"
+#include "xi_opt_sccp.h"
 #include "xi_pass.h"
 #include "xi_rep.h"
 #include "xi_verify.h"
@@ -796,8 +797,8 @@ static const XiPassDesc xi_pass_table[] = {
     { "copy_prop",       xi_opt_copy_prop,        XI_OPT_LIGHT, XI_PASS_NONE },
     { "phi_simplify",    xi_opt_phi_simplify,     XI_OPT_LIGHT, XI_PASS_NONE },
     { "dce",             xi_opt_dce,              XI_OPT_LIGHT, XI_PASS_NONE },
-    /* XI_OPT_FULL passes will be added here as they are ported:
-     * { "sccp",    xi_opt_sccp,    XI_OPT_FULL, XI_PASS_NEEDS_DOM },
+    { "sccp",            xi_opt_sccp,             XI_OPT_FULL,  XI_PASS_NONE },
+    /* Future XI_OPT_FULL passes:
      * { "gvn",     xi_opt_gvn,     XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_DEFUSE },
      * { "licm",    xi_opt_licm,    XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP },
      * { "inline",  xi_opt_inline,  XI_OPT_FULL, XI_PASS_NEEDS_DEFUSE },
