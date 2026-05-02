@@ -22,7 +22,7 @@
  *
  * LIMITATIONS:
  *   - Single-level inlining per pass invocation (no recursive inlining).
- *   - No inlining of calls with variadic args or multi-return.
+ *   - No inlining of calls with variadic args.
  *   - Callee must not capture upvalues that alias caller locals.
  */
 
@@ -263,30 +263,93 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk,
     call_blk->succs[0] = cloned_blks[0];
     call_blk->succs[1] = NULL;
 
-    /* Replace uses of the call result with the return value.
-     * If single return, use directly.  If multiple, would need a phi
-     * (simplified: use first return value for now). */
-    if (nret >= 1 && ret_values[0]) {
-        /* Replace all uses of the call's result with the inlined return value */
-        for (uint32_t b = 0; b < caller->nblocks; b++) {
-            XiBlock *blk = caller->blocks[b];
-            for (uint32_t i = 0; i < blk->nvalues; i++) {
-                XiValue *v = blk->values[i];
-                if (!v) continue;
-                for (uint16_t a = 0; a < v->nargs; a++) {
-                    if (v->args[a] == call_val)
-                        v->args[a] = ret_values[0];
-                }
-            }
-            for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-                for (uint16_t a = 0; a < phi->value.nargs; a++) {
-                    if (phi->value.args[a] == call_val)
-                        phi->value.args[a] = ret_values[0];
-                }
-            }
-            if (blk->control == call_val)
-                blk->control = ret_values[0];
+    /* Set up cont_blk predecessors so phi nodes (if any) are well-formed. */
+    for (uint32_t r = 0; r < nret; r++)
+        xi_block_add_pred(cont_blk, ret_blocks[r]);
+
+    /* Determine if the callee uses multi-value return (XI_MULTI_RET). */
+    bool is_multi_ret = false;
+    uint16_t nresult_elems = 1;
+    for (uint32_t r = 0; r < nret; r++) {
+        if (ret_values[r] && ret_values[r]->op == XI_MULTI_RET) {
+            is_multi_ret = true;
+            nresult_elems = ret_values[r]->nargs;
+            break;
         }
+    }
+    XR_DCHECK(nresult_elems <= 16, "inline: too many multi-return elements");
+    if (nresult_elems > 16) nresult_elems = 16;
+
+    /* Build per-element result values.
+     * Single return block  → use value directly.
+     * Multiple return blocks → create a phi per element in cont_blk. */
+    XiValue *results[16];
+    memset(results, 0, sizeof(results));
+
+    for (uint16_t ei = 0; ei < nresult_elems; ei++) {
+        if (nret == 0) {
+            results[ei] = NULL;
+        } else if (nret == 1) {
+            results[ei] = is_multi_ret ? ret_values[0]->args[ei] : ret_values[0];
+        } else {
+            /* Multiple return paths: merge via phi in cont_blk. */
+            XiValue *first = is_multi_ret
+                ? ret_values[0]->args[ei] : ret_values[0];
+            struct XrType *phi_type = first ? first->type : call_val->type;
+            XiPhi *join = phi_type
+                ? xi_phi_new(caller, cont_blk, phi_type, (uint16_t)nret)
+                : NULL;
+            if (join) {
+                for (uint32_t r = 0; r < nret; r++) {
+                    join->value.args[r] = is_multi_ret
+                        ? ret_values[r]->args[ei] : ret_values[r];
+                }
+                results[ei] = &join->value;
+            } else {
+                results[ei] = first; /* fallback: first path */
+            }
+        }
+    }
+
+    /* Replace uses of call_val and its XI_EXTRACT dependents.
+     *
+     * For multi-return: XI_EXTRACT(call_val, idx) → results[idx],
+     *                   direct uses of call_val   → results[0].
+     * For single-return: all uses of call_val     → results[0]. */
+    for (uint32_t b = 0; b < caller->nblocks; b++) {
+        XiBlock *blk = caller->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+
+            /* Rewrite XI_EXTRACT into XI_COPY forwarding the element value.
+             * DCE will clean up the now-redundant copy. */
+            if (is_multi_ret && v->op == XI_EXTRACT &&
+                v->nargs >= 1 && v->args[0] == call_val) {
+                uint32_t idx = (uint32_t)v->aux_int;
+                XiValue *elem = (idx < nresult_elems) ? results[idx] : NULL;
+                if (elem) {
+                    v->op = XI_COPY;
+                    v->args[0] = elem;
+                    v->nargs = 1;
+                    v->aux_int = 0;
+                }
+                continue;
+            }
+
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] == call_val && results[0])
+                    v->args[a] = results[0];
+            }
+        }
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == call_val && results[0])
+                    phi->value.args[a] = results[0];
+            }
+        }
+        if (blk->control == call_val && results[0])
+            blk->control = results[0];
     }
 
     xr_free(value_map);
