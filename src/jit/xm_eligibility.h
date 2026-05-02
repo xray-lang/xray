@@ -34,6 +34,15 @@
 struct XrProto;
 
 /*
+ * Main-thread-only: mutate proto state ahead of eligibility checks.
+ *
+ * Handles deopt backoff resets and feedback-based return type promotion.
+ * Must be called from the main thread before is_jit_eligible() or before
+ * enqueuing a background compile task.
+ */
+XR_FUNC void xm_eligibility_prepare(struct XrProto *proto);
+
+/*
  * Return true iff |proto| can be JIT-compiled under the current target.
  *
  * This function performs *only* read-only checks on |proto| and global
