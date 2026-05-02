@@ -25,12 +25,12 @@
 
 /* ========== Allocation ========== */
 
-XirTypeFeedback *xfb_create(void) {
-    XirTypeFeedback *fb = xr_calloc(1, sizeof(XirTypeFeedback));
+XmTypeFeedback *xfb_create(void) {
+    XmTypeFeedback *fb = xr_calloc(1, sizeof(XmTypeFeedback));
     return fb;
 }
 
-void xfb_destroy(XirTypeFeedback *fb) {
+void xfb_destroy(XmTypeFeedback *fb) {
     if (!fb)
         return;
     xr_free(fb);
@@ -81,7 +81,7 @@ static const char *xfb_type_name(uint8_t flags) {
     return "mixed";
 }
 
-void xfb_dump(const XirTypeFeedback *fb, int nparams, const char *func_name) {
+void xfb_dump(const XmTypeFeedback *fb, int nparams, const char *func_name) {
     if (!fb) {
         fprintf(stderr, "[feedback] %s: no profile\n", func_name ? func_name : "?");
         return;

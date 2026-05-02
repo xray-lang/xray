@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_jit_e2e.c - End-to-end JIT tests: XIR → ARM64 → Execute
+ * test_jit_e2e.c - End-to-end JIT tests: Xm → ARM64 → Execute
  */
 
 #include <stdio.h>
@@ -20,29 +20,29 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #endif
-#include "../../../src/jit/xir.h"
-#include "../../../src/jit/xir_printer.h"
-#include "../../../src/jit/xir_codegen.h"
-#include "../../../src/jit/xir_pass.h"
-#include "../../../src/jit/xir_pass_sccp.h"
-#include "../../../src/jit/xir_jit.h"
-#include "../../../src/jit/xir_jit_runtime.h"
-#include "../../../src/jit/xir_offsets.h"
+#include "../../../src/jit/xm.h"
+#include "../../../src/jit/xm_printer.h"
+#include "../../../src/jit/xm_codegen.h"
+#include "../../../src/jit/xm_pass.h"
+#include "../../../src/jit/xm_pass_sccp.h"
+#include "../../../src/jit/xm_jit.h"
+#include "../../../src/jit/xm_jit_runtime.h"
+#include "../../../src/jit/xm_offsets.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/coro/xcoroutine.h"
 
 /*
- * Pick the native JIT backend for this host. xir_codegen_arm64 and
- * xir_codegen_x64 live in separate translation units that the build
+ * Pick the native JIT backend for this host. xm_codegen_arm64 and
+ * xm_codegen_x64 live in separate translation units that the build
  * conditionally compiles; only the host arch's symbol is linked, so
  * the test must dispatch through this alias instead of hardcoding one
  * backend (otherwise the Linux x86_64 link fails on undefined
- * xir_codegen_arm64).
+ * xm_codegen_arm64).
  */
 #if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
-#  define xir_codegen_native(func, alloc) xir_codegen_arm64((func), (alloc))
+#  define xm_codegen_native(func, alloc) xm_codegen_arm64((func), (alloc))
 #elif defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
-#  define xir_codegen_native(func, alloc) xir_codegen_x64((func), (alloc))
+#  define xm_codegen_native(func, alloc) xm_codegen_x64((func), (alloc))
 #else
 #  error "test_jit_e2e: unsupported architecture"
 #endif
@@ -156,22 +156,22 @@ static inline int64_t jit_call2_f64(void *code, double a0, double a1) {
 
 /*
  * Helper: ensure pipeline runs before codegen.
- * Tests that already call xir_run_pipeline should set skip_auto_pipeline=true.
+ * Tests that already call xm_run_pipeline should set skip_auto_pipeline=true.
  *
- * Many tests build CFG with xir_block_set_br / xir_block_set_jmp but rely on
+ * Many tests build CFG with xm_block_set_br / xm_block_set_jmp but rely on
  * the codegen to derive preds from s1/s2. The optimisation pipeline now runs
- * xir_verify_cfg between pass groups, which DCHECKs that every successor lists
+ * xm_verify_cfg between pass groups, which DCHECKs that every successor lists
  * the predecessor block. We therefore rebuild preds from s1/s2 here before
  * running the pipeline; tests that already wired preds explicitly (loop / OSR
- * tests with phis) are unaffected because xir_rebuild_preds remaps phi args
+ * tests with phis) are unaffected because xm_rebuild_preds remaps phi args
  * to match the new pred ordering.
  */
 static bool skip_auto_pipeline = false;
-static XirCodegenResult safe_codegen(XirFunc *f, XirCodeAlloc *a) {
-    xir_rebuild_preds(f);
-    if (!skip_auto_pipeline) xir_run_pipeline(f, XIR_OPT_BASIC);
+static XmCodegenResult safe_codegen(XmFunc *f, XmCodeAlloc *a) {
+    xm_rebuild_preds(f);
+    if (!skip_auto_pipeline) xm_run_pipeline(f, XM_OPT_BASIC);
     skip_auto_pipeline = false;
-    return xir_codegen_native(f, a);
+    return xm_codegen_native(f, a);
 }
 
 static void crash_handler(int sig) {
@@ -187,7 +187,7 @@ static void crash_handler(int sig) {
 
 /*
  * Test 1: fn() -> int { return 42; }
- * XIR:
+ * Xm:
  *   @entry:
  *     v0 =i64 const.i64 #42
  *     ret v0
@@ -195,21 +195,21 @@ static void crash_handler(int sig) {
 static void test_return_constant(void) {
     fprintf(stderr, "  test_return_constant...");
 
-    XirFunc *func = xir_func_new("ret42");
+    XmFunc *func = xm_func_new("ret42");
     func->num_params = 0;
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef c42 = xir_const_i64(func, 42);
-    XirRef v0 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c42);
-    xir_block_set_ret(entry, v0);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef c42 = xm_const_i64(func, 42);
+    XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c42);
+    xm_block_set_ret(entry, v0);
 
-    fprintf(stderr, " XIR:");
-    xir_print_func(stderr, func);
+    fprintf(stderr, " Xm:");
+    xm_print_func(stderr, func);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     assert(res.code != NULL);
     fprintf(stderr, "    code_size=%u bytes\n", res.code_size);
@@ -218,14 +218,14 @@ static void test_return_constant(void) {
     fprintf(stderr, "    result=%lld\n", (long long)result);
     assert(result == 42);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "  PASS\n");
 }
 
 /*
  * Test 2: fn(a: int, b: int) -> int { return a + b; }
- * XIR:
+ * Xm:
  *   @entry:
  *     v2 =i64 add v0, v1
  *     ret v2
@@ -233,21 +233,21 @@ static void test_return_constant(void) {
 static void test_add_two_params(void) {
     fprintf(stderr, "  test_add_two_params...");
 
-    XirFunc *func = xir_func_new("add");
+    XmFunc *func = xm_func_new("add");
     func->num_params = 2;
 
     // Create param vregs
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = param a
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);  // v1 = param b
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = param a
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);  // v1 = param b
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v2 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, p0, p1);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v2 = xm_emit(func, entry, XM_ADD, XR_REP_I64, p0, p1);
+    xm_block_set_ret(entry, v2);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 10, 20) == 30);
@@ -255,8 +255,8 @@ static void test_add_two_params(void) {
     assert(jit_call2(res.code, -5, 5) == 0);
     assert(jit_call2(res.code, 100, -42) == 58);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -266,25 +266,25 @@ static void test_add_two_params(void) {
 static void test_sub(void) {
     fprintf(stderr, "  test_sub...");
 
-    XirFunc *func = xir_func_new("sub");
+    XmFunc *func = xm_func_new("sub");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v2 = xir_emit(func, entry, XIR_SUB, XR_REP_I64, p0, p1);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v2 = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, p1);
+    xm_block_set_ret(entry, v2);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 30, 10) == 20);
     assert(jit_call2(res.code, 10, 30) == -20);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -294,26 +294,26 @@ static void test_sub(void) {
 static void test_mul(void) {
     fprintf(stderr, "  test_mul...");
 
-    XirFunc *func = xir_func_new("mul");
+    XmFunc *func = xm_func_new("mul");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v2 = xir_emit(func, entry, XIR_MUL, XR_REP_I64, p0, p1);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v2 = xm_emit(func, entry, XM_MUL, XR_REP_I64, p0, p1);
+    xm_block_set_ret(entry, v2);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 6, 7) == 42);
     assert(jit_call2(res.code, 0, 999) == 0);
     assert(jit_call2(res.code, -3, 4) == -12);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -324,32 +324,32 @@ static void test_mul(void) {
 static void test_add_with_const(void) {
     fprintf(stderr, "  test_add_with_const...");
 
-    XirFunc *func = xir_func_new("add_const");
+    XmFunc *func = xm_func_new("add_const");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // v2 = a + b
-    XirRef v2 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, p0, p1);
+    XmRef v2 = xm_emit(func, entry, XM_ADD, XR_REP_I64, p0, p1);
     // v3 = const 10
-    XirRef c10 = xir_const_i64(func, 10);
-    XirRef v3 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c10);
+    XmRef c10 = xm_const_i64(func, 10);
+    XmRef v3 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c10);
     // v4 = v2 + v3
-    XirRef v4 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, v2, v3);
-    xir_block_set_ret(entry, v4);
+    XmRef v4 = xm_emit(func, entry, XM_ADD, XR_REP_I64, v2, v3);
+    xm_block_set_ret(entry, v4);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 5, 3) == 18);
     assert(jit_call2(res.code, 0, 0) == 10);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -360,18 +360,18 @@ static void test_add_with_const(void) {
 static void test_compare(void) {
     fprintf(stderr, "  test_compare...");
 
-    XirFunc *func = xir_func_new("lt");
+    XmFunc *func = xm_func_new("lt");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v2 = xir_emit(func, entry, XIR_LT, XR_REP_I64, p0, p1);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v2 = xm_emit(func, entry, XM_LT, XR_REP_I64, p0, p1);
+    xm_block_set_ret(entry, v2);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 1, 2) == 1);
@@ -379,8 +379,8 @@ static void test_compare(void) {
     assert(jit_call2(res.code, 5, 5) == 0);
     assert(jit_call2(res.code, -1, 0) == 1);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -390,25 +390,25 @@ static void test_compare(void) {
 static void test_negate(void) {
     fprintf(stderr, "  test_negate...");
 
-    XirFunc *func = xir_func_new("neg");
+    XmFunc *func = xm_func_new("neg");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v1 = xir_emit_unary(func, entry, XIR_NEG, XR_REP_I64, p0);
-    xir_block_set_ret(entry, v1);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v1 = xm_emit_unary(func, entry, XM_NEG, XR_REP_I64, p0);
+    xm_block_set_ret(entry, v1);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call1(res.code, 42) == -42);
     assert(jit_call1(res.code, -10) == 10);
     assert(jit_call1(res.code, 0) == 0);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -419,25 +419,25 @@ static void test_negate(void) {
 static void test_bitwise(void) {
     fprintf(stderr, "  test_bitwise...");
 
-    XirFunc *func = xir_func_new("bitand");
+    XmFunc *func = xm_func_new("bitand");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v2 = xir_emit(func, entry, XIR_AND, XR_REP_I64, p0, p1);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v2 = xm_emit(func, entry, XM_AND, XR_REP_I64, p0, p1);
+    xm_block_set_ret(entry, v2);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 0xFF, 0x0F) == 0x0F);
     assert(jit_call2(res.code, 0xFF, 0x00) == 0x00);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -445,7 +445,7 @@ static void test_bitwise(void) {
  * Test 9: fn(a: int, b: int) -> int { if (a > b) return a; else return b; }
  * Tests multi-block if/else with branch patching
  *
- * XIR:
+ * Xm:
  *   @entry: v2 = gt v0, v1; br v2 @then @else
  *   @then:  ret v0
  *   @else:  ret v1
@@ -453,24 +453,24 @@ static void test_bitwise(void) {
 static void test_if_else_max(void) {
     fprintf(stderr, "  test_if_else_max...");
 
-    XirFunc *func = xir_func_new("max");
+    XmFunc *func = xm_func_new("max");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = a
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);  // v1 = b
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = a
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);  // v1 = b
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *then_blk = xir_func_add_block(func, "then");
-    XirBlock *else_blk = xir_func_add_block(func, "else");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *then_blk = xm_func_add_block(func, "then");
+    XmBlock *else_blk = xm_func_add_block(func, "else");
 
-    XirRef v2 = xir_emit(func, entry, XIR_GT, XR_REP_I64, p0, p1);
-    xir_block_set_br(entry, v2, then_blk, else_blk);
+    XmRef v2 = xm_emit(func, entry, XM_GT, XR_REP_I64, p0, p1);
+    xm_block_set_br(entry, v2, then_blk, else_blk);
 
-    xir_block_set_ret(then_blk, p0);
-    xir_block_set_ret(else_blk, p1);
+    xm_block_set_ret(then_blk, p0);
+    xm_block_set_ret(else_blk, p1);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 10, 5) == 10);
@@ -479,8 +479,8 @@ static void test_if_else_max(void) {
     assert(jit_call2(res.code, -3, -5) == -3);
     assert(jit_call2(res.code, -1, 1) == 1);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -491,29 +491,29 @@ static void test_if_else_max(void) {
 static void test_if_else_abs(void) {
     fprintf(stderr, "  test_if_else_abs...");
 
-    XirFunc *func = xir_func_new("abs");
+    XmFunc *func = xm_func_new("abs");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *neg_blk = xir_func_add_block(func, "neg");
-    XirBlock *pos_blk = xir_func_add_block(func, "pos");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *neg_blk = xm_func_add_block(func, "neg");
+    XmBlock *pos_blk = xm_func_add_block(func, "pos");
 
-    XirRef czero = xir_const_i64(func, 0);
-    XirRef v_zero = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, czero);
-    XirRef v_cmp = xir_emit(func, entry, XIR_LT, XR_REP_I64, p0, v_zero);
-    xir_block_set_br(entry, v_cmp, neg_blk, pos_blk);
+    XmRef czero = xm_const_i64(func, 0);
+    XmRef v_zero = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, czero);
+    XmRef v_cmp = xm_emit(func, entry, XM_LT, XR_REP_I64, p0, v_zero);
+    xm_block_set_br(entry, v_cmp, neg_blk, pos_blk);
 
     // neg: return -a
-    XirRef v_neg = xir_emit_unary(func, neg_blk, XIR_NEG, XR_REP_I64, p0);
-    xir_block_set_ret(neg_blk, v_neg);
+    XmRef v_neg = xm_emit_unary(func, neg_blk, XM_NEG, XR_REP_I64, p0);
+    xm_block_set_ret(neg_blk, v_neg);
 
     // pos: return a
-    xir_block_set_ret(pos_blk, p0);
+    xm_block_set_ret(pos_blk, p0);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call1(res.code, 42) == 42);
@@ -521,8 +521,8 @@ static void test_if_else_abs(void) {
     assert(jit_call1(res.code, 0) == 0);
     assert(jit_call1(res.code, -1) == 1);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -533,18 +533,18 @@ static void test_if_else_abs(void) {
 static void test_mod(void) {
     fprintf(stderr, "  test_mod...");
 
-    XirFunc *func = xir_func_new("mod");
+    XmFunc *func = xm_func_new("mod");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v2 = xir_emit(func, entry, XIR_MOD, XR_REP_I64, p0, p1);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v2 = xm_emit(func, entry, XM_MOD, XR_REP_I64, p0, p1);
+    xm_block_set_ret(entry, v2);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 10, 3) == 1);
@@ -553,8 +553,8 @@ static void test_mod(void) {
     assert(jit_call2(res.code, 100, 7) == 2);
     assert(jit_call2(res.code, -7, 3) == -1);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -562,7 +562,7 @@ static void test_mod(void) {
  * Test 12: fn(n: int) -> int { sum=0; i=1; while(i<=n) { sum+=i; i+=1; } return sum; }
  * Tests loop with Phi nodes and backward branch
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v1 =i64 const.i64 #0     // sum = 0
  *     v2 =i64 const.i64 #1     // i = 1
@@ -583,60 +583,60 @@ static void test_mod(void) {
 static void test_loop_sum(void) {
     fprintf(stderr, "  test_loop_sum...");
 
-    XirFunc *func = xir_func_new("sum");
+    XmFunc *func = xm_func_new("sum");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = n
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = n
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *loop = xir_func_add_block(func, "loop");
-    XirBlock *body = xir_func_add_block(func, "body");
-    XirBlock *exit_blk = xir_func_add_block(func, "exit");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *loop = xm_func_add_block(func, "loop");
+    XmBlock *body = xm_func_add_block(func, "body");
+    XmBlock *exit_blk = xm_func_add_block(func, "exit");
 
     // @entry: sum=0, i=1, jmp @loop
-    XirRef c0 = xir_const_i64(func, 0);
-    XirRef v_sum_init = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c0);
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef v_i_init = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
-    xir_block_set_jmp(entry, loop);
+    XmRef c0 = xm_const_i64(func, 0);
+    XmRef v_sum_init = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c0);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef v_i_init = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    xm_block_set_jmp(entry, loop);
 
     // Set up predecessors for @loop before adding Phis
-    xir_block_add_pred(loop, entry, func->arena);
-    xir_block_add_pred(loop, body, func->arena);
+    xm_block_add_pred(loop, entry, func->arena);
+    xm_block_add_pred(loop, body, func->arena);
 
     // @loop: Phi nodes
-    XirPhi *phi_sum = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_i = xir_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_sum = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_i = xm_add_phi(func, loop, XR_REP_I64);
 
     // Pre-allocate registers for Phi dsts so they have known mappings
-    XirRef sum_ref = phi_sum->dst;
-    XirRef i_ref = phi_i->dst;
+    XmRef sum_ref = phi_sum->dst;
+    XmRef i_ref = phi_i->dst;
 
     // le v4, v0
-    XirRef v_cond = xir_emit(func, loop, XIR_LE, XR_REP_I64, i_ref, p0);
-    xir_block_set_br(loop, v_cond, body, exit_blk);
+    XmRef v_cond = xm_emit(func, loop, XM_LE, XR_REP_I64, i_ref, p0);
+    xm_block_set_br(loop, v_cond, body, exit_blk);
 
     // @body: sum += i, i += 1, jmp @loop
-    XirRef v_new_sum = xir_emit(func, body, XIR_ADD, XR_REP_I64, sum_ref, i_ref);
-    XirRef c1_body = xir_const_i64(func, 1);
-    XirRef v_one = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, c1_body);
-    XirRef v_new_i = xir_emit(func, body, XIR_ADD, XR_REP_I64, i_ref, v_one);
-    xir_block_set_jmp(body, loop);
+    XmRef v_new_sum = xm_emit(func, body, XM_ADD, XR_REP_I64, sum_ref, i_ref);
+    XmRef c1_body = xm_const_i64(func, 1);
+    XmRef v_one = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1_body);
+    XmRef v_new_i = xm_emit(func, body, XM_ADD, XR_REP_I64, i_ref, v_one);
+    xm_block_set_jmp(body, loop);
 
     // @exit: ret sum
-    xir_block_set_ret(exit_blk, sum_ref);
+    xm_block_set_ret(exit_blk, sum_ref);
 
     // Set Phi args: [entry_val, body_val]
-    xir_phi_set_arg(phi_sum, 0, v_sum_init);  // from entry
-    xir_phi_set_arg(phi_sum, 1, v_new_sum);   // from body
-    xir_phi_set_arg(phi_i, 0, v_i_init);      // from entry
-    xir_phi_set_arg(phi_i, 1, v_new_i);       // from body
+    xm_phi_set_arg(phi_sum, 0, v_sum_init);  // from entry
+    xm_phi_set_arg(phi_sum, 1, v_new_sum);   // from body
+    xm_phi_set_arg(phi_i, 0, v_i_init);      // from entry
+    xm_phi_set_arg(phi_i, 1, v_new_i);       // from body
 
-    fprintf(stderr, " XIR:\n");
-    xir_print_func(stderr, func);
+    fprintf(stderr, " Xm:\n");
+    xm_print_func(stderr, func);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, "    code_size=%u bytes\n", res.code_size);
 
@@ -648,8 +648,8 @@ static void test_loop_sum(void) {
     r = jit_call1(res.code,10); fprintf(stderr, "    sum(10)=%lld\n", (long long)r); assert(r == 55);
     r = jit_call1(res.code,100);fprintf(stderr, "    sum(100)=%lld\n", (long long)r);assert(r == 5050);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "  PASS\n");
 }
 
@@ -660,27 +660,27 @@ static void test_loop_sum(void) {
 static void test_if_else_diff(void) {
     fprintf(stderr, "  test_if_else_diff...");
 
-    XirFunc *func = xir_func_new("diff");
+    XmFunc *func = xm_func_new("diff");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *then_blk = xir_func_add_block(func, "then");
-    XirBlock *else_blk = xir_func_add_block(func, "else");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *then_blk = xm_func_add_block(func, "then");
+    XmBlock *else_blk = xm_func_add_block(func, "else");
 
-    XirRef v_cmp = xir_emit(func, entry, XIR_GT, XR_REP_I64, p0, p1);
-    xir_block_set_br(entry, v_cmp, then_blk, else_blk);
+    XmRef v_cmp = xm_emit(func, entry, XM_GT, XR_REP_I64, p0, p1);
+    xm_block_set_br(entry, v_cmp, then_blk, else_blk);
 
-    XirRef v_then = xir_emit(func, then_blk, XIR_SUB, XR_REP_I64, p0, p1);
-    xir_block_set_ret(then_blk, v_then);
+    XmRef v_then = xm_emit(func, then_blk, XM_SUB, XR_REP_I64, p0, p1);
+    xm_block_set_ret(then_blk, v_then);
 
-    XirRef v_else = xir_emit(func, else_blk, XIR_SUB, XR_REP_I64, p1, p0);
-    xir_block_set_ret(else_blk, v_else);
+    XmRef v_else = xm_emit(func, else_blk, XM_SUB, XR_REP_I64, p1, p0);
+    xm_block_set_ret(else_blk, v_else);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     assert(jit_call2(res.code, 10, 3) == 7);
@@ -688,8 +688,8 @@ static void test_if_else_diff(void) {
     assert(jit_call2(res.code, 5, 5) == 0);
     assert(jit_call2(res.code, -2, 3) == 5);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, " PASS\n");
 }
 
@@ -700,7 +700,7 @@ static void test_if_else_diff(void) {
  *   a=0; b=1; i=2; while(i<=n) { t=a+b; a=b; b=t; i++; } return b;
  * }
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v1 =i64 const.i64 #1
  *     v2 =i64 le v0, v1          // n <= 1?
@@ -728,71 +728,71 @@ static void test_if_else_diff(void) {
 static void test_fibonacci(void) {
     fprintf(stderr, "  test_fibonacci...");
 
-    XirFunc *func = xir_func_new("fib");
+    XmFunc *func = xm_func_new("fib");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = n
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = n
 
-    XirBlock *entry     = xir_func_add_block(func, "entry");
-    XirBlock *base      = xir_func_add_block(func, "base");
-    XirBlock *loop_init = xir_func_add_block(func, "loop_init");
-    XirBlock *loop      = xir_func_add_block(func, "loop");
-    XirBlock *body      = xir_func_add_block(func, "body");
-    XirBlock *done      = xir_func_add_block(func, "done");
+    XmBlock *entry     = xm_func_add_block(func, "entry");
+    XmBlock *base      = xm_func_add_block(func, "base");
+    XmBlock *loop_init = xm_func_add_block(func, "loop_init");
+    XmBlock *loop      = xm_func_add_block(func, "loop");
+    XmBlock *body      = xm_func_add_block(func, "body");
+    XmBlock *done      = xm_func_add_block(func, "done");
 
     // @entry: if (n <= 1) goto base else goto loop_init
-    XirRef c1_entry = xir_const_i64(func, 1);
-    XirRef v1 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1_entry);
-    XirRef v_cmp = xir_emit(func, entry, XIR_LE, XR_REP_I64, p0, v1);
-    xir_block_set_br(entry, v_cmp, base, loop_init);
+    XmRef c1_entry = xm_const_i64(func, 1);
+    XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1_entry);
+    XmRef v_cmp = xm_emit(func, entry, XM_LE, XR_REP_I64, p0, v1);
+    xm_block_set_br(entry, v_cmp, base, loop_init);
 
     // @base: return n
-    xir_block_set_ret(base, p0);
+    xm_block_set_ret(base, p0);
 
     // @loop_init: a=0, b=1, i=2
-    XirRef c0 = xir_const_i64(func, 0);
-    XirRef v_a_init = xir_emit_unary(func, loop_init, XIR_CONST_I64, XR_REP_I64, c0);
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef v_b_init = xir_emit_unary(func, loop_init, XIR_CONST_I64, XR_REP_I64, c1);
-    XirRef c2 = xir_const_i64(func, 2);
-    XirRef v_i_init = xir_emit_unary(func, loop_init, XIR_CONST_I64, XR_REP_I64, c2);
-    xir_block_set_jmp(loop_init, loop);
+    XmRef c0 = xm_const_i64(func, 0);
+    XmRef v_a_init = xm_emit_unary(func, loop_init, XM_CONST_I64, XR_REP_I64, c0);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef v_b_init = xm_emit_unary(func, loop_init, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef c2 = xm_const_i64(func, 2);
+    XmRef v_i_init = xm_emit_unary(func, loop_init, XM_CONST_I64, XR_REP_I64, c2);
+    xm_block_set_jmp(loop_init, loop);
 
     // Set up preds for @loop
-    xir_block_add_pred(loop, loop_init, func->arena);
-    xir_block_add_pred(loop, body, func->arena);
+    xm_block_add_pred(loop, loop_init, func->arena);
+    xm_block_add_pred(loop, body, func->arena);
 
     // @loop: Phi nodes
-    XirPhi *phi_a = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_b = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_i = xir_add_phi(func, loop, XR_REP_I64);
-    XirRef a_ref = phi_a->dst;
-    XirRef b_ref = phi_b->dst;
-    XirRef i_ref = phi_i->dst;
+    XmPhi *phi_a = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_b = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_i = xm_add_phi(func, loop, XR_REP_I64);
+    XmRef a_ref = phi_a->dst;
+    XmRef b_ref = phi_b->dst;
+    XmRef i_ref = phi_i->dst;
 
-    XirRef v_loop_cmp = xir_emit(func, loop, XIR_LE, XR_REP_I64, i_ref, p0);
-    xir_block_set_br(loop, v_loop_cmp, body, done);
+    XmRef v_loop_cmp = xm_emit(func, loop, XM_LE, XR_REP_I64, i_ref, p0);
+    xm_block_set_br(loop, v_loop_cmp, body, done);
 
     // @body: t = a+b, a'=b, b'=t, i'=i+1
-    XirRef v_t = xir_emit(func, body, XIR_ADD, XR_REP_I64, a_ref, b_ref);
-    XirRef c1_body = xir_const_i64(func, 1);
-    XirRef v_one = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, c1_body);
-    XirRef v_i_next = xir_emit(func, body, XIR_ADD, XR_REP_I64, i_ref, v_one);
-    xir_block_set_jmp(body, loop);
+    XmRef v_t = xm_emit(func, body, XM_ADD, XR_REP_I64, a_ref, b_ref);
+    XmRef c1_body = xm_const_i64(func, 1);
+    XmRef v_one = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1_body);
+    XmRef v_i_next = xm_emit(func, body, XM_ADD, XR_REP_I64, i_ref, v_one);
+    xm_block_set_jmp(body, loop);
 
     // @done: return b
-    xir_block_set_ret(done, b_ref);
+    xm_block_set_ret(done, b_ref);
 
     // Set Phi args
-    xir_phi_set_arg(phi_a, 0, v_a_init);   // from loop_init
-    xir_phi_set_arg(phi_a, 1, b_ref);      // from body: a' = b
-    xir_phi_set_arg(phi_b, 0, v_b_init);   // from loop_init
-    xir_phi_set_arg(phi_b, 1, v_t);        // from body: b' = t = a+b
-    xir_phi_set_arg(phi_i, 0, v_i_init);   // from loop_init
-    xir_phi_set_arg(phi_i, 1, v_i_next);   // from body
+    xm_phi_set_arg(phi_a, 0, v_a_init);   // from loop_init
+    xm_phi_set_arg(phi_a, 1, b_ref);      // from body: a' = b
+    xm_phi_set_arg(phi_b, 0, v_b_init);   // from loop_init
+    xm_phi_set_arg(phi_b, 1, v_t);        // from body: b' = t = a+b
+    xm_phi_set_arg(phi_i, 0, v_i_init);   // from loop_init
+    xm_phi_set_arg(phi_i, 1, v_i_next);   // from body
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code_size=%u\n", res.code_size);
 
@@ -807,17 +807,17 @@ static void test_fibonacci(void) {
     r = jit_call1(res.code,30); fprintf(stderr, "    fib(30)=%lld\n", (long long)r);  assert(r == 832040);
     r = jit_call1(res.code,40); fprintf(stderr, "    fib(40)=%lld\n", (long long)r);  assert(r == 102334155);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "  PASS\n");
 }
 
 /*
  * Test 15: Loop sum with safepoint at back-edge
- * Same as test_loop_sum but with XIR_SAFEPOINT before jmp @loop
+ * Same as test_loop_sum but with XM_SAFEPOINT before jmp @loop
  * Verifies safepoint codegen (reductions decrement) doesn't break loops
  *
- * XIR:
+ * Xm:
  *   @entry: v1=0, v2=1, jmp @loop
  *   @loop: phi sum/i, le i<=n, br → @body/@exit
  *   @body: sum+=i, i+=1, safepoint, jmp @loop
@@ -826,55 +826,55 @@ static void test_fibonacci(void) {
 static void test_loop_sum_safepoint(void) {
     fprintf(stderr, "  test_loop_sum_safepoint...");
 
-    XirFunc *func = xir_func_new("sum_sp");
+    XmFunc *func = xm_func_new("sum_sp");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = n
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = n
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *loop = xir_func_add_block(func, "loop");
-    XirBlock *body = xir_func_add_block(func, "body");
-    XirBlock *exit_blk = xir_func_add_block(func, "exit");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *loop = xm_func_add_block(func, "loop");
+    XmBlock *body = xm_func_add_block(func, "body");
+    XmBlock *exit_blk = xm_func_add_block(func, "exit");
 
     // @entry
-    XirRef c0 = xir_const_i64(func, 0);
-    XirRef v_sum_init = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c0);
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef v_i_init = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
-    xir_block_set_jmp(entry, loop);
+    XmRef c0 = xm_const_i64(func, 0);
+    XmRef v_sum_init = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c0);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef v_i_init = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    xm_block_set_jmp(entry, loop);
 
-    xir_block_add_pred(loop, entry, func->arena);
-    xir_block_add_pred(loop, body, func->arena);
+    xm_block_add_pred(loop, entry, func->arena);
+    xm_block_add_pred(loop, body, func->arena);
 
     // @loop: Phi + condition
-    XirPhi *phi_sum = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_i = xir_add_phi(func, loop, XR_REP_I64);
-    XirRef sum_ref = phi_sum->dst;
-    XirRef i_ref = phi_i->dst;
-    XirRef v_cond = xir_emit(func, loop, XIR_LE, XR_REP_I64, i_ref, p0);
-    xir_block_set_br(loop, v_cond, body, exit_blk);
+    XmPhi *phi_sum = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_i = xm_add_phi(func, loop, XR_REP_I64);
+    XmRef sum_ref = phi_sum->dst;
+    XmRef i_ref = phi_i->dst;
+    XmRef v_cond = xm_emit(func, loop, XM_LE, XR_REP_I64, i_ref, p0);
+    xm_block_set_br(loop, v_cond, body, exit_blk);
 
     // @body: sum+=i, i+=1, safepoint, jmp @loop
-    XirRef v_new_sum = xir_emit(func, body, XIR_ADD, XR_REP_I64, sum_ref, i_ref);
-    XirRef c1_body = xir_const_i64(func, 1);
-    XirRef v_one = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, c1_body);
-    XirRef v_new_i = xir_emit(func, body, XIR_ADD, XR_REP_I64, i_ref, v_one);
+    XmRef v_new_sum = xm_emit(func, body, XM_ADD, XR_REP_I64, sum_ref, i_ref);
+    XmRef c1_body = xm_const_i64(func, 1);
+    XmRef v_one = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1_body);
+    XmRef v_new_i = xm_emit(func, body, XM_ADD, XR_REP_I64, i_ref, v_one);
     // Safepoint at loop back-edge
-    XirRef none = XIR_REF_NONE;
-    xir_emit(func, body, XIR_SAFEPOINT, XR_REP_VOID, none, none);
-    xir_block_set_jmp(body, loop);
+    XmRef none = XM_REF_NONE;
+    xm_emit(func, body, XM_SAFEPOINT, XR_REP_VOID, none, none);
+    xm_block_set_jmp(body, loop);
 
     // @exit
-    xir_block_set_ret(exit_blk, sum_ref);
+    xm_block_set_ret(exit_blk, sum_ref);
 
     // Phi args
-    xir_phi_set_arg(phi_sum, 0, v_sum_init);
-    xir_phi_set_arg(phi_sum, 1, v_new_sum);
-    xir_phi_set_arg(phi_i, 0, v_i_init);
-    xir_phi_set_arg(phi_i, 1, v_new_i);
+    xm_phi_set_arg(phi_sum, 0, v_sum_init);
+    xm_phi_set_arg(phi_sum, 1, v_new_sum);
+    xm_phi_set_arg(phi_i, 0, v_i_init);
+    xm_phi_set_arg(phi_i, 1, v_new_i);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code_size=%u\n", res.code_size);
 
@@ -888,18 +888,18 @@ static void test_loop_sum_safepoint(void) {
     r = jit_call1(res.code, 10000); assert(r == 50005000);
     fprintf(stderr, "    sum_sp(10000)=%lld\n", (long long)r);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "  PASS\n");
 }
 
 /*
  * Test: InsertWriteBarriers pass + codegen for BARRIER_FWD
  *
- * Build XIR with a STORE_FIELD, run the pass, verify a BARRIER_FWD was
+ * Build Xm with a STORE_FIELD, run the pass, verify a BARRIER_FWD was
  * inserted, then codegen and execute to confirm the barrier stub is reachable.
  *
- * XIR (before pass):
+ * Xm (before pass):
  *   @entry:
  *     v1 =ptr store_field v0, v0   // dummy store (obj field write)
  *     v2 =i64 const.i64 #99
@@ -915,39 +915,39 @@ static void test_loop_sum_safepoint(void) {
 static void test_write_barrier(void) {
     fprintf(stderr, "  test_write_barrier...");
 
-    XirFunc *func = xir_func_new("wb_test");
+    XmFunc *func = xm_func_new("wb_test");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_PTR);  // v0 = dummy ptr param
+    XmRef p0 = xm_new_vreg(func, XR_REP_PTR);  // v0 = dummy ptr param
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
-    // Emit a STORE_FIELD: ins->rep carries XrValue tag (not XIR machine type).
+    // Emit a STORE_FIELD: ins->rep carries XrValue tag (not Xm machine type).
     // Must use XR_TAG_PTR (13) to trigger barrier insertion.
-    xir_emit(func, entry, XIR_STORE_FIELD, XR_TAG_PTR, p0, p0);
+    xm_emit(func, entry, XM_STORE_FIELD, XR_TAG_PTR, p0, p0);
 
     // Load a constant and return it
-    XirRef c99 = xir_const_i64(func, 99);
-    XirRef v2  = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c99);
-    xir_block_set_ret(entry, v2);
+    XmRef c99 = xm_const_i64(func, 99);
+    XmRef v2  = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c99);
+    xm_block_set_ret(entry, v2);
 
     // Verify: before pass, nins == 2 (STORE_FIELD + CONST_I64)
     assert(entry->nins == 2);
 
     // Run InsertWriteBarriers pass
-    xir_insert_write_barriers(func);
+    xm_insert_write_barriers(func);
 
     // Verify: after pass, nins == 3 (STORE_FIELD + BARRIER_FWD + CONST_I64)
     assert(entry->nins == 3);
-    assert(entry->ins[0].op == XIR_STORE_FIELD);
-    assert(entry->ins[1].op == XIR_BARRIER_FWD);
-    assert(entry->ins[2].op == XIR_CONST_I64);
+    assert(entry->ins[0].op == XM_STORE_FIELD);
+    assert(entry->ins[1].op == XM_BARRIER_FWD);
+    assert(entry->ins[2].op == XM_CONST_I64);
     fprintf(stderr, " pass OK");
 
     // Codegen and execute (coro=0 → barrier CBZ skips the stub call)
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
 
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " codegen OK (size=%u)", res.code_size);
 
@@ -959,15 +959,15 @@ static void test_write_barrier(void) {
     assert(result == 99);
     fprintf(stderr, " exec OK (ret=%lld)", (long long)result);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
  * Test: DCE removes dead instructions
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v1 =i64 const.i64 #10     // dead (unused)
  *     v2 =i64 const.i64 #20     // dead (unused)
@@ -979,39 +979,39 @@ static void test_write_barrier(void) {
 static void test_dce(void) {
     fprintf(stderr, "  test_dce...");
 
-    XirFunc *func = xir_func_new("dce_test");
+    XmFunc *func = xm_func_new("dce_test");
     func->num_params = 0;
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef c10 = xir_const_i64(func, 10);
-    XirRef c20 = xir_const_i64(func, 20);
-    XirRef c42 = xir_const_i64(func, 42);
-    xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c10);  // v0 dead
-    xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c20);  // v1 dead
-    XirRef v2 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c42);
-    xir_block_set_ret(entry, v2);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef c10 = xm_const_i64(func, 10);
+    XmRef c20 = xm_const_i64(func, 20);
+    XmRef c42 = xm_const_i64(func, 42);
+    xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c10);  // v0 dead
+    xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c20);  // v1 dead
+    XmRef v2 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c42);
+    xm_block_set_ret(entry, v2);
 
     assert(entry->nins == 3);
-    xir_pass_dce(func);
+    xm_pass_dce(func);
     assert(entry->nins == 1);
-    assert(entry->ins[0].op == XIR_CONST_I64);
+    assert(entry->ins[0].op == XM_CONST_I64);
     fprintf(stderr, " nins: 3→%u", entry->nins);
 
     // Execute to verify correctness
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     assert(jit_call0(res.code) == 42);
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
  * Test: Constant Propagation + Folding
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v0 =i64 const.i64 #10
  *     v1 =i64 const.i64 #20
@@ -1023,95 +1023,95 @@ static void test_dce(void) {
 static void test_const_fold(void) {
     fprintf(stderr, "  test_const_fold...");
 
-    XirFunc *func = xir_func_new("fold_test");
+    XmFunc *func = xm_func_new("fold_test");
     func->num_params = 0;
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef c10 = xir_const_i64(func, 10);
-    XirRef c20 = xir_const_i64(func, 20);
-    XirRef c5  = xir_const_i64(func, 5);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef c10 = xm_const_i64(func, 10);
+    XmRef c20 = xm_const_i64(func, 20);
+    XmRef c5  = xm_const_i64(func, 5);
 
-    XirRef v0 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c10);
-    XirRef v1 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c20);
-    XirRef v2 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, v0, v1);
-    XirRef v3 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c5);
-    XirRef v4 = xir_emit(func, entry, XIR_MUL, XR_REP_I64, v2, v3);
-    xir_block_set_ret(entry, v4);
+    XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c10);
+    XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c20);
+    XmRef v2 = xm_emit(func, entry, XM_ADD, XR_REP_I64, v0, v1);
+    XmRef v3 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c5);
+    XmRef v4 = xm_emit(func, entry, XM_MUL, XR_REP_I64, v2, v3);
+    xm_block_set_ret(entry, v4);
 
     assert(entry->nins == 5);
 
     // Run constant propagation + folding (SCCP is the drop-in replacement
-    // for the older xir_pass_const_prop / branch_simp / remove_unreachable trio)
-    xir_pass_sccp(func);
+    // for the older xm_pass_const_prop / branch_simp / remove_unreachable trio)
+    xm_pass_sccp(func);
 
     // v2 (ADD) should be folded to CONST_I64, v4 (MUL) also
-    assert(entry->ins[2].op == XIR_CONST_I64);  // ADD → CONST
-    assert(entry->ins[4].op == XIR_CONST_I64);  // MUL → CONST
+    assert(entry->ins[2].op == XM_CONST_I64);  // ADD → CONST
+    assert(entry->ins[4].op == XM_CONST_I64);  // MUL → CONST
     fprintf(stderr, " folded OK");
 
     // Run DCE to clean up dead intermediates
-    xir_pass_dce(func);
+    xm_pass_dce(func);
     fprintf(stderr, " dce→%u ins", entry->nins);
 
     // Execute
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     int64_t result = jit_call0(res.code);
     assert(result == 150);
     fprintf(stderr, " exec=%lld", (long long)result);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
- * Test: Full pipeline (xir_run_pipeline at -O1)
+ * Test: Full pipeline (xm_run_pipeline at -O1)
  * Same as const_fold but via the pipeline runner.
  */
 static void test_pipeline(void) {
     fprintf(stderr, "  test_pipeline...");
 
-    XirFunc *func = xir_func_new("pipe_test");
+    XmFunc *func = xm_func_new("pipe_test");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = param
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = param
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef c3 = xir_const_i64(func, 3);
-    XirRef c7 = xir_const_i64(func, 7);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef c3 = xm_const_i64(func, 3);
+    XmRef c7 = xm_const_i64(func, 7);
 
-    XirRef v1 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c3);
-    XirRef v2 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c7);
-    XirRef v3 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, v1, v2);  // 3+7=10
-    XirRef v4 = xir_emit(func, entry, XIR_MUL, XR_REP_I64, p0, v3);  // param * 10
-    xir_block_set_ret(entry, v4);
+    XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c3);
+    XmRef v2 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c7);
+    XmRef v3 = xm_emit(func, entry, XM_ADD, XR_REP_I64, v1, v2);  // 3+7=10
+    XmRef v4 = xm_emit(func, entry, XM_MUL, XR_REP_I64, p0, v3);  // param * 10
+    xm_block_set_ret(entry, v4);
 
     uint32_t orig_nins = entry->nins;
-    xir_rebuild_preds(func);
-    xir_run_pipeline(func, XIR_OPT_BASIC);
+    xm_rebuild_preds(func);
+    xm_run_pipeline(func, XM_OPT_BASIC);
     fprintf(stderr, " nins: %u→%u", orig_nins, entry->nins);
 
     // Execute: param=5, expect 5*10=50
     skip_auto_pipeline = true;
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     int64_t result = jit_call1(res.code, 5);
     assert(result == 50);
     fprintf(stderr, " exec=%lld", (long long)result);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
  * Test: CSE eliminates duplicate computations
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v1 =i64 add v0, v0       // param + param
  *     v2 =i64 add v0, v0       // same computation → CSE replaces with MOV from v1
@@ -1123,33 +1123,33 @@ static void test_pipeline(void) {
 static void test_cse(void) {
     fprintf(stderr, "  test_cse...");
 
-    XirFunc *func = xir_func_new("cse_test");
+    XmFunc *func = xm_func_new("cse_test");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = param
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = param
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef v1 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, p0, p0);  // p + p
-    XirRef v2 = xir_emit(func, entry, XIR_ADD, XR_REP_I64, p0, p0);  // same
-    XirRef v3 = xir_emit(func, entry, XIR_MUL, XR_REP_I64, v1, v2);
-    xir_block_set_ret(entry, v3);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef v1 = xm_emit(func, entry, XM_ADD, XR_REP_I64, p0, p0);  // p + p
+    XmRef v2 = xm_emit(func, entry, XM_ADD, XR_REP_I64, p0, p0);  // same
+    XmRef v3 = xm_emit(func, entry, XM_MUL, XR_REP_I64, v1, v2);
+    xm_block_set_ret(entry, v3);
 
     assert(entry->nins == 3);
-    xir_rebuild_preds(func);
-    xir_run_pipeline(func, XIR_OPT_FULL);
+    xm_rebuild_preds(func);
+    xm_run_pipeline(func, XM_OPT_FULL);
     fprintf(stderr, " nins: 3→%u", entry->nins);
 
     // Execute: param=5, expect (5+5)*(5+5) = 100
     skip_auto_pipeline = true;
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     int64_t result = jit_call1(res.code, 5);
     assert(result == 100);
     fprintf(stderr, " exec=%lld", (long long)result);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1160,7 +1160,7 @@ static void test_cse(void) {
  * The multiply (3*7=21) is loop-invariant and should be hoisted.
  * Result: n * 21
  *
- * XIR (before LICM):
+ * Xm (before LICM):
  *   @entry: jmp @loop
  *   @loop:  phi i, sum; if i<=n goto @body else @exit
  *   @body:  c3=const 3; c7=const 7; t=mul c3,c7; sum+=t; i++; jmp @loop
@@ -1171,72 +1171,72 @@ static void test_cse(void) {
 static void test_licm(void) {
     fprintf(stderr, "  test_licm...");
 
-    XirFunc *func = xir_func_new("licm_test");
+    XmFunc *func = xm_func_new("licm_test");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = n
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = n
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *loop  = xir_func_add_block(func, "loop");
-    XirBlock *body  = xir_func_add_block(func, "body");
-    XirBlock *exit_ = xir_func_add_block(func, "exit");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *loop  = xm_func_add_block(func, "loop");
+    XmBlock *body  = xm_func_add_block(func, "body");
+    XmBlock *exit_ = xm_func_add_block(func, "exit");
 
     // @entry: init sum=0, i=1, jmp @loop
-    XirRef c0 = xir_const_i64(func, 0);
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef init_sum = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c0);
-    XirRef init_i   = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
-    xir_block_set_jmp(entry, loop);
+    XmRef c0 = xm_const_i64(func, 0);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef init_sum = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c0);
+    XmRef init_i   = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    xm_block_set_jmp(entry, loop);
 
     // @loop: add predecessors first, then create phi nodes
-    xir_block_add_pred(loop, entry, func->arena);
-    xir_block_add_pred(loop, body, func->arena);
-    XirPhi *phi_i_node   = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_sum_node = xir_add_phi(func, loop, XR_REP_I64);
-    XirRef phi_i   = phi_i_node->dst;
-    XirRef phi_sum = phi_sum_node->dst;
-    XirRef cmp = xir_emit(func, loop, XIR_LE, XR_REP_I64, phi_i, p0);
-    xir_block_set_br(loop, cmp, body, exit_);
+    xm_block_add_pred(loop, entry, func->arena);
+    xm_block_add_pred(loop, body, func->arena);
+    XmPhi *phi_i_node   = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_sum_node = xm_add_phi(func, loop, XR_REP_I64);
+    XmRef phi_i   = phi_i_node->dst;
+    XmRef phi_sum = phi_sum_node->dst;
+    XmRef cmp = xm_emit(func, loop, XM_LE, XR_REP_I64, phi_i, p0);
+    xm_block_set_br(loop, cmp, body, exit_);
 
     // @body: invariant computation 3*7, then sum += result, i++
-    XirRef c3_ref = xir_const_i64(func, 3);
-    XirRef c7_ref = xir_const_i64(func, 7);
-    XirRef vc3 = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, c3_ref);
-    XirRef vc7 = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, c7_ref);
-    XirRef product = xir_emit(func, body, XIR_MUL, XR_REP_I64, vc3, vc7);
-    XirRef new_sum = xir_emit(func, body, XIR_ADD, XR_REP_I64, phi_sum, product);
-    XirRef inc_ref = xir_const_i64(func, 1);
-    XirRef vc1 = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, inc_ref);
-    XirRef new_i = xir_emit(func, body, XIR_ADD, XR_REP_I64, phi_i, vc1);
-    xir_block_set_jmp(body, loop);
+    XmRef c3_ref = xm_const_i64(func, 3);
+    XmRef c7_ref = xm_const_i64(func, 7);
+    XmRef vc3 = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c3_ref);
+    XmRef vc7 = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c7_ref);
+    XmRef product = xm_emit(func, body, XM_MUL, XR_REP_I64, vc3, vc7);
+    XmRef new_sum = xm_emit(func, body, XM_ADD, XR_REP_I64, phi_sum, product);
+    XmRef inc_ref = xm_const_i64(func, 1);
+    XmRef vc1 = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, inc_ref);
+    XmRef new_i = xm_emit(func, body, XM_ADD, XR_REP_I64, phi_i, vc1);
+    xm_block_set_jmp(body, loop);
 
     // Wire phi args: pred 0 = entry, pred 1 = body
-    xir_phi_set_arg(phi_i_node, 0, init_i);
-    xir_phi_set_arg(phi_i_node, 1, new_i);
-    xir_phi_set_arg(phi_sum_node, 0, init_sum);
-    xir_phi_set_arg(phi_sum_node, 1, new_sum);
+    xm_phi_set_arg(phi_i_node, 0, init_i);
+    xm_phi_set_arg(phi_i_node, 1, new_i);
+    xm_phi_set_arg(phi_sum_node, 0, init_sum);
+    xm_phi_set_arg(phi_sum_node, 1, new_sum);
 
     // @exit: ret sum
-    xir_block_set_ret(exit_, phi_sum);
+    xm_block_set_ret(exit_, phi_sum);
 
     uint32_t body_nins_before = body->nins;
 
     // Run full pipeline (includes LICM at -O2)
-    xir_rebuild_preds(func);
-    xir_run_pipeline(func, XIR_OPT_FULL);
+    xm_rebuild_preds(func);
+    xm_run_pipeline(func, XM_OPT_FULL);
     fprintf(stderr, " body: %u→%u", body_nins_before, body->nins);
 
     // Execute: n=10, expect 10*21=210
     skip_auto_pipeline = true;
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     int64_t result = jit_call1(res.code, 10);
     fprintf(stderr, " exec=%lld", (long long)result);
     assert(result == 210);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1248,26 +1248,26 @@ static void test_licm(void) {
 static void test_fp_basic(void) {
     fprintf(stderr, "  test_fp_basic...");
 
-    XirFunc *func = xir_func_new("fp_basic");
+    XmFunc *func = xm_func_new("fp_basic");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_F64);  // v0 = x (in d0)
+    XmRef p0 = xm_new_vreg(func, XR_REP_F64);  // v0 = x (in d0)
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
-    XirRef c2 = xir_const_f64(func, 2.0);
-    XirRef c1 = xir_const_f64(func, 1.0);
+    XmRef c2 = xm_const_f64(func, 2.0);
+    XmRef c1 = xm_const_f64(func, 1.0);
 
-    XirRef two = xir_emit_unary(func, entry, XIR_CONST_F64, XR_REP_F64, c2);
-    XirRef mul = xir_emit(func, entry, XIR_FMUL, XR_REP_F64, p0, two);
+    XmRef two = xm_emit_unary(func, entry, XM_CONST_F64, XR_REP_F64, c2);
+    XmRef mul = xm_emit(func, entry, XM_FMUL, XR_REP_F64, p0, two);
 
-    XirRef one = xir_emit_unary(func, entry, XIR_CONST_F64, XR_REP_F64, c1);
-    XirRef add = xir_emit(func, entry, XIR_FADD, XR_REP_F64, mul, one);
+    XmRef one = xm_emit_unary(func, entry, XM_CONST_F64, XR_REP_F64, c1);
+    XmRef add = xm_emit(func, entry, XM_FADD, XR_REP_F64, mul, one);
 
-    xir_block_set_ret(entry, add);
+    xm_block_set_ret(entry, add);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1279,36 +1279,36 @@ static void test_fp_basic(void) {
     fprintf(stderr, " result=%.1f", val);
     assert(val == 7.0);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
- * Test: mixed-type arithmetic via XIR_RT_ADD
+ * Test: mixed-type arithmetic via XM_RT_ADD
  * f(x: i64, y: f64) = x + y  (integer + float → float)
  * f(3, 2.5) = 5.5
  */
 static void test_rt_mixed_add(void) {
     fprintf(stderr, "  test_rt_mixed_add...");
 
-    XirFunc *func = xir_func_new("rt_mixed_add");
+    XmFunc *func = xm_func_new("rt_mixed_add");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);   // x: i64
-    XirRef p1 = xir_new_vreg(func, XR_REP_F64);   // y: f64
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);   // x: i64
+    XmRef p1 = xm_new_vreg(func, XR_REP_F64);   // y: f64
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // result = RT_ADD(p0, p1)  — mixed i64 + f64 → f64
-    XirRef result = xir_emit(func, entry, XIR_RT_ADD, XR_REP_F64, p0, p1);
-    entry->ins[entry->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+    XmRef result = xm_emit(func, entry, XM_RT_ADD, XR_REP_F64, p0, p1);
+    entry->ins[entry->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
 
     // Return result as raw bits (FMOV to GPR handled by codegen)
-    xir_block_set_ret(entry, result);
+    xm_block_set_ret(entry, result);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1323,31 +1323,31 @@ static void test_rt_mixed_add(void) {
 
     // Actually, the param assignment: p0 is i64 → GP (x1), p1 is f64 → FP (d0)
     // We need to call with the right registers. Use inline asm or a trampoline.
-    // For simplicity, let's construct the XIR differently: load constants directly.
+    // For simplicity, let's construct the Xm differently: load constants directly.
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
 
     // Re-create with constants to avoid calling convention issues
-    func = xir_func_new("rt_mixed_add2");
+    func = xm_func_new("rt_mixed_add2");
     func->num_params = 0;
-    entry = xir_func_add_block(func, "entry");
+    entry = xm_func_add_block(func, "entry");
 
     // v0 = 3 (i64)
-    XirRef ci = xir_const_i64(func, 3);
-    XirRef vi = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, ci);
+    XmRef ci = xm_const_i64(func, 3);
+    XmRef vi = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, ci);
 
     // v1 = 2.5 (f64)
-    XirRef cf = xir_const_f64(func, 2.5);
-    XirRef vf = xir_emit_unary(func, entry, XIR_CONST_F64, XR_REP_F64, cf);
+    XmRef cf = xm_const_f64(func, 2.5);
+    XmRef vf = xm_emit_unary(func, entry, XM_CONST_F64, XR_REP_F64, cf);
 
     // v2 = RT_ADD(vi, vf) → f64 (3 + 2.5 = 5.5)
-    result = xir_emit(func, entry, XIR_RT_ADD, XR_REP_F64, vi, vf);
-    entry->ins[entry->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+    result = xm_emit(func, entry, XM_RT_ADD, XR_REP_F64, vi, vf);
+    entry->ins[entry->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
 
-    xir_block_set_ret(entry, result);
+    xm_block_set_ret(entry, result);
 
-    xir_code_alloc_init(&alloc);
+    xm_code_alloc_init(&alloc);
     res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code2=%u", res.code_size);
@@ -1359,8 +1359,8 @@ static void test_rt_mixed_add(void) {
     fprintf(stderr, " result=%.1f", val);
     assert(val == 5.5);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1373,50 +1373,50 @@ static void test_rt_mixed_add(void) {
 static void test_select_rep(void) {
     fprintf(stderr, "  test_select_rep...");
 
-    XirFunc *func = xir_func_new("select_rep");
+    XmFunc *func = xm_func_new("select_rep");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // v1 = x + 1
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef one = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
-    XirRef add = xir_emit(func, entry, XIR_ADD, XR_REP_I64, p0, one);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef one = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef add = xm_emit(func, entry, XM_ADD, XR_REP_I64, p0, one);
 
     // v2 = BOX_I64(v1)
-    XirRef boxed = xir_emit_unary(func, entry, XIR_BOX_I64, XR_REP_TAGGED, add);
+    XmRef boxed = xm_emit_unary(func, entry, XM_BOX_I64, XR_REP_TAGGED, add);
 
     // v3 = UNBOX_I64(v2) — should be eliminated by select_rep
-    XirRef unboxed = xir_emit_unary(func, entry, XIR_UNBOX_I64, XR_REP_I64, boxed);
+    XmRef unboxed = xm_emit_unary(func, entry, XM_UNBOX_I64, XR_REP_I64, boxed);
 
-    xir_block_set_ret(entry, unboxed);
+    xm_block_set_ret(entry, unboxed);
 
     // Run pass: should convert UNBOX(BOX(x+1)) → MOV(x+1)
-    xir_pass_select_rep(func);
+    xm_pass_select_rep(func);
 
     // Count remaining BOX/UNBOX instructions
     uint32_t box_count = 0;
-    XirBlock *blk = func->blocks[0];
+    XmBlock *blk = func->blocks[0];
     for (uint32_t i = 0; i < blk->nins; i++) {
-        if (blk->ins[i].op == XIR_BOX_I64 || blk->ins[i].op == XIR_UNBOX_I64)
+        if (blk->ins[i].op == XM_BOX_I64 || blk->ins[i].op == XM_UNBOX_I64)
             box_count++;
     }
     fprintf(stderr, " box_count=%u", box_count);
     assert(box_count <= 1);  // UNBOX should be eliminated, BOX may remain
 
     // Compile and execute
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
 
     int64_t result = jit_call1(res.code, 10);
     fprintf(stderr, " f(10)=%lld", (long long)result);
     assert(result == 11);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1431,41 +1431,41 @@ static void test_inline_basic(void) {
     fprintf(stderr, "  test_inline_basic...");
 
     // Build callee: g(y) = y * 2
-    XirFunc *callee = xir_func_new("g");
+    XmFunc *callee = xm_func_new("g");
     callee->num_params = 1;
-    // return type now derived from callee->proto->return_type_info (no field on XirFunc)
-    XirRef g_p0 = xir_new_vreg(callee, XR_REP_I64);  // param y
+    // return type now derived from callee->proto->return_type_info (no field on XmFunc)
+    XmRef g_p0 = xm_new_vreg(callee, XR_REP_I64);  // param y
 
-    XirBlock *g_entry = xir_func_add_block(callee, "g.entry");
-    XirRef c2 = xir_const_i64(callee, 2);
-    XirRef two = xir_emit_unary(callee, g_entry, XIR_CONST_I64, XR_REP_I64, c2);
-    XirRef g_result = xir_emit(callee, g_entry, XIR_MUL, XR_REP_I64, g_p0, two);
-    xir_block_set_ret(g_entry, g_result);
+    XmBlock *g_entry = xm_func_add_block(callee, "g.entry");
+    XmRef c2 = xm_const_i64(callee, 2);
+    XmRef two = xm_emit_unary(callee, g_entry, XM_CONST_I64, XR_REP_I64, c2);
+    XmRef g_result = xm_emit(callee, g_entry, XM_MUL, XR_REP_I64, g_p0, two);
+    xm_block_set_ret(g_entry, g_result);
 
     // Build caller: f(x) = x + <placeholder for g(x)>
-    XirFunc *caller = xir_func_new("f");
+    XmFunc *caller = xm_func_new("f");
     caller->num_params = 1;
-    XirRef f_p0 = xir_new_vreg(caller, XR_REP_I64);  // param x
+    XmRef f_p0 = xm_new_vreg(caller, XR_REP_I64);  // param x
 
-    XirBlock *f_entry = xir_func_add_block(caller, "f.entry");
+    XmBlock *f_entry = xm_func_add_block(caller, "f.entry");
 
     // Emit a NOP as placeholder for the call (will be replaced by inlining)
-    XirRef call_result = xir_emit_unary(caller, f_entry, XIR_NOP, XR_REP_I64, f_p0);
+    XmRef call_result = xm_emit_unary(caller, f_entry, XM_NOP, XR_REP_I64, f_p0);
 
     // f_result = x + call_result
-    XirRef f_result = xir_emit(caller, f_entry, XIR_ADD, XR_REP_I64, f_p0, call_result);
-    xir_block_set_ret(f_entry, f_result);
+    XmRef f_result = xm_emit(caller, f_entry, XM_ADD, XR_REP_I64, f_p0, call_result);
+    xm_block_set_ret(f_entry, f_result);
 
     // Inline g into f at the NOP instruction (index 0)
-    XirRef call_args[] = { f_p0 };  // g(x) — pass x as argument
-    XirRef inlined = xir_inline_function(caller, f_entry, 0, callee, call_args, 1);
-    fprintf(stderr, " inlined=%s", xir_ref_is_none(inlined) ? "NONE" : "ok");
-    assert(!xir_ref_is_none(inlined));
+    XmRef call_args[] = { f_p0 };  // g(x) — pass x as argument
+    XmRef inlined = xm_inline_function(caller, f_entry, 0, callee, call_args, 1);
+    fprintf(stderr, " inlined=%s", xm_ref_is_none(inlined) ? "NONE" : "ok");
+    assert(!xm_ref_is_none(inlined));
 
     // Patch: replace call_result references with inlined result
     // The ADD instruction is now in the continuation block (inline.cont)
     // Find the continuation block and patch its ADD's arg
-    XirBlock *cont = NULL;
+    XmBlock *cont = NULL;
     for (uint32_t bi = 0; bi < caller->nblk; bi++) {
         if (caller->blocks[bi]->label &&
             strstr(caller->blocks[bi]->label, "inline.cont")) {
@@ -1484,9 +1484,9 @@ static void test_inline_basic(void) {
     }
 
     // Compile and execute
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(caller, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(caller, &alloc);
     fprintf(stderr, " success=%d", res.success);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
@@ -1495,9 +1495,9 @@ static void test_inline_basic(void) {
     fprintf(stderr, " f(10)=%lld", (long long)r);
     assert(r == 30);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(caller);
-    xir_func_destroy(callee);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(caller);
+    xm_func_destroy(callee);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1519,62 +1519,62 @@ static void test_osr_entry(void) {
     fprintf(stderr, "  test_osr_entry...");
 
     // Build: f(count, step, idx_start) → sum
-    XirFunc *func = xir_func_new("sum_loop");
+    XmFunc *func = xm_func_new("sum_loop");
     func->num_params = 3;
-    XirRef p_count = xir_new_vreg(func, XR_REP_I64);  // vreg 0: count
-    XirRef p_step  = xir_new_vreg(func, XR_REP_I64);  // vreg 1: step
-    XirRef p_idx   = xir_new_vreg(func, XR_REP_I64);  // vreg 2: idx_start
+    XmRef p_count = xm_new_vreg(func, XR_REP_I64);  // vreg 0: count
+    XmRef p_step  = xm_new_vreg(func, XR_REP_I64);  // vreg 1: step
+    XmRef p_idx   = xm_new_vreg(func, XR_REP_I64);  // vreg 2: idx_start
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *loop  = xir_func_add_block(func, "loop");
-    XirBlock *exit  = xir_func_add_block(func, "exit");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *loop  = xm_func_add_block(func, "loop");
+    XmBlock *exit  = xm_func_add_block(func, "exit");
 
     // entry: sum=0, goto loop
-    XirRef c0 = xir_const_i64(func, 0);
-    XirRef zero = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c0);
-    xir_block_set_jmp(entry, loop);
-    xir_block_add_pred(loop, entry, func->arena);
+    XmRef c0 = xm_const_i64(func, 0);
+    XmRef zero = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c0);
+    xm_block_set_jmp(entry, loop);
+    xm_block_add_pred(loop, entry, func->arena);
 
     // Add back-edge pred BEFORE creating Phis (so narg=2)
-    xir_block_add_pred(loop, loop, func->arena);
+    xm_block_add_pred(loop, loop, func->arena);
 
     // loop: Phi nodes for count, idx, sum
     loop->is_loop_header = true;
-    XirPhi *phi_count = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_idx   = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_sum   = xir_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_count = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_idx   = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_sum   = xm_add_phi(func, loop, XR_REP_I64);
 
     // pred 0 = entry, pred 1 = loop (back-edge)
-    xir_phi_set_arg(phi_count, 0, p_count);
-    xir_phi_set_arg(phi_idx, 0, p_idx);
-    xir_phi_set_arg(phi_sum, 0, zero);
+    xm_phi_set_arg(phi_count, 0, p_count);
+    xm_phi_set_arg(phi_idx, 0, p_idx);
+    xm_phi_set_arg(phi_sum, 0, zero);
 
     // count--
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef one = xir_emit_unary(func, loop, XIR_CONST_I64, XR_REP_I64, c1);
-    XirRef new_count = xir_emit(func, loop, XIR_SUB, XR_REP_I64, phi_count->dst, one);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef one = xm_emit_unary(func, loop, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef new_count = xm_emit(func, loop, XM_SUB, XR_REP_I64, phi_count->dst, one);
 
     // idx += step
-    XirRef new_idx = xir_emit(func, loop, XIR_ADD, XR_REP_I64, phi_idx->dst, p_step);
+    XmRef new_idx = xm_emit(func, loop, XM_ADD, XR_REP_I64, phi_idx->dst, p_step);
 
     // sum += new_idx
-    XirRef new_sum = xir_emit(func, loop, XIR_ADD, XR_REP_I64, phi_sum->dst, new_idx);
+    XmRef new_sum = xm_emit(func, loop, XM_ADD, XR_REP_I64, phi_sum->dst, new_idx);
 
     // if new_count > 0: loop, else exit
-    XirRef c0b = xir_const_i64(func, 0);
-    XirRef zero2 = xir_emit_unary(func, loop, XIR_CONST_I64, XR_REP_I64, c0b);
-    XirRef cond = xir_emit(func, loop, XIR_LT, XR_REP_I64, zero2, new_count);
+    XmRef c0b = xm_const_i64(func, 0);
+    XmRef zero2 = xm_emit_unary(func, loop, XM_CONST_I64, XR_REP_I64, c0b);
+    XmRef cond = xm_emit(func, loop, XM_LT, XR_REP_I64, zero2, new_count);
 
     // Back-edge phi args (pred already added above)
-    xir_phi_set_arg(phi_count, 1, new_count);
-    xir_phi_set_arg(phi_idx, 1, new_idx);
-    xir_phi_set_arg(phi_sum, 1, new_sum);
+    xm_phi_set_arg(phi_count, 1, new_count);
+    xm_phi_set_arg(phi_idx, 1, new_idx);
+    xm_phi_set_arg(phi_sum, 1, new_sum);
 
-    xir_block_set_br(loop, cond, loop, exit);
-    xir_block_add_pred(exit, loop, func->arena);
+    xm_block_set_br(loop, cond, loop, exit);
+    xm_block_add_pred(exit, loop, func->arena);
 
     // exit: return sum
-    xir_block_set_ret(exit, new_sum);
+    xm_block_set_ret(exit, new_sum);
 
     // Set bc_slot for each vreg so OSR stub can load from values[] array.
     // Without this, OSR stub sees bc_slot=-1 and skips loading live vregs.
@@ -1582,13 +1582,13 @@ static void test_osr_entry(void) {
         func->vregs[v].bc_slot = (int16_t)v;
     }
 
-    // Compile. We call xir_codegen_arm64 directly because preds+phis are
-    // already wired manually, and xir_rebuild_preds (run by safe_codegen)
+    // Compile. We call xm_codegen_arm64 directly because preds+phis are
+    // already wired manually, and xm_rebuild_preds (run by safe_codegen)
     // would re-allocate phi args while OSR snapshot collection runs inside
     // codegen — keep them consistent by skipping the rebuild.
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = xir_codegen_native(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = xm_codegen_native(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u nosr=%u", res.code_size, res.nosr);
 
@@ -1600,7 +1600,7 @@ static void test_osr_entry(void) {
     // Test 2: OSR entry — enter loop with count=3, step=1, idx=7, sum=10
     // Expected: iteration 1: idx=8,sum=18; iter 2: idx=9,sum=27; iter 3: idx=10,sum=37
     if (res.nosr > 0) {
-        XirOsrEntry *osr = &res.osr_entries[0];
+        XmOsrEntry *osr = &res.osr_entries[0];
         void *osr_code = (uint8_t *)res.code + osr->entry_offset;
 
         // Prepare values array indexed by vreg
@@ -1610,18 +1610,18 @@ static void test_osr_entry(void) {
         // The stub loads based on whatever vregs are live at the loop header.
         int64_t values[32] = {0};
         // Map: p_count(vreg0)=doesn't matter, p_step(vreg1)=1, p_idx(vreg2)=doesn't matter
-        values[XIR_REF_INDEX(p_step)] = 1;
+        values[XM_REF_INDEX(p_step)] = 1;
         // phi vregs: phi_count->dst, phi_idx->dst, phi_sum->dst
-        values[XIR_REF_INDEX(phi_count->dst)] = 3;
-        values[XIR_REF_INDEX(phi_idx->dst)] = 7;
-        values[XIR_REF_INDEX(phi_sum->dst)] = 10;
+        values[XM_REF_INDEX(phi_count->dst)] = 3;
+        values[XM_REF_INDEX(phi_idx->dst)] = 7;
+        values[XM_REF_INDEX(phi_sum->dst)] = 10;
         // Also set constant "1" vreg and "0" vreg
-        values[XIR_REF_INDEX(one)] = 1;
-        values[XIR_REF_INDEX(zero2)] = 0;
+        values[XM_REF_INDEX(one)] = 1;
+        values[XM_REF_INDEX(zero2)] = 0;
 
         XrValue osr_result;
         jit_env_reset();
-        bool ok = xir_jit_osr_enter(osr_code, &g_jit_coro, values, XR_SLOT_I64, &osr_result);
+        bool ok = xm_jit_osr_enter(osr_code, &g_jit_coro, values, XR_SLOT_I64, &osr_result);
         fprintf(stderr, " osr_ok=%d osr=%lld", ok, (long long)osr_result.i);
         assert(ok);
         assert(osr_result.i == 37);
@@ -1629,8 +1629,8 @@ static void test_osr_entry(void) {
         fprintf(stderr, " (no OSR entries)");
     }
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1643,24 +1643,24 @@ static void test_osr_entry(void) {
 static void test_deopt_guard(void) {
     fprintf(stderr, "  test_deopt_guard...");
 
-    XirFunc *func = xir_func_new("deopt_guard");
+    XmFunc *func = xm_func_new("deopt_guard");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // guard_nonnull(p0): deopt if p0 == 0
-    xir_emit_unary(func, entry, XIR_GUARD_NONNULL, XR_REP_VOID, p0);
+    xm_emit_unary(func, entry, XM_GUARD_NONNULL, XR_REP_VOID, p0);
 
     // return p0 + 1
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef one = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
-    XirRef result = xir_emit(func, entry, XIR_ADD, XR_REP_I64, p0, one);
-    xir_block_set_ret(entry, result);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef one = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef result = xm_emit(func, entry, XM_ADD, XR_REP_I64, p0, one);
+    xm_block_set_ret(entry, result);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1674,8 +1674,8 @@ static void test_deopt_guard(void) {
     fprintf(stderr, " f(0)=0x%llx", (unsigned long long)r2);
     assert(r2 == (int64_t)0xDEAD0001DEAD0001LL);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1686,7 +1686,7 @@ static void test_deopt_guard(void) {
  * Each XrValue = 16B (8B payload + 4B tag + 4B pad)
  * fields[1].payload is at byte_offset 32 (= 16 + 1*16)
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v1 =i64 load.field v0, #32   // load at byte_offset 32
  *     ret v1
@@ -1694,25 +1694,25 @@ static void test_deopt_guard(void) {
 static void test_load_field(void) {
     fprintf(stderr, "  test_load_field...");
 
-    XirFunc *func = xir_func_new("load_field");
+    XmFunc *func = xm_func_new("load_field");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_PTR);  // v0 = obj ptr
+    XmRef p0 = xm_new_vreg(func, XR_REP_PTR);  // v0 = obj ptr
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // Json field[1] byte_offset = GCHeader(16) + 1 * XrValue(16) = 32
-    XirRef byte_off = xir_const_i64(func, 32);
-    XirRef v1 = xir_emit(func, entry, XIR_LOAD_FIELD, XR_REP_I64, p0, byte_off);
-    xir_block_set_ret(entry, v1);
+    XmRef byte_off = xm_const_i64(func, 32);
+    XmRef v1 = xm_emit(func, entry, XM_LOAD_FIELD, XR_REP_I64, p0, byte_off);
+    xm_block_set_ret(entry, v1);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
     // Build a fake Json object: GCHeader(16B) + field[0](16B) + field[1](16B)
-    // XIR_LOAD_FIELD codegen loads at (byte_off + XIR_XRVALUE_PAYLOAD_OFFSET),
+    // XM_LOAD_FIELD codegen loads at (byte_off + XM_XRVALUE_PAYLOAD_OFFSET),
     // so byte_off=32 reads fields[1].payload at byte 32+8=40.
     uint8_t fake_obj[64];
     memset(fake_obj, 0, sizeof(fake_obj));
@@ -1723,8 +1723,8 @@ static void test_load_field(void) {
     fprintf(stderr, " result=0x%llx", (long long)result);
     assert(result == expected);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1733,7 +1733,7 @@ static void test_load_field(void) {
  *
  * Json field[2] byte_offset = GCHeader(16) + 2 * XrValue(16) = 48
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v2 =i64 const.i64 #999
  *     store.field v0, v2 [byte_offset=48]
@@ -1743,32 +1743,32 @@ static void test_load_field(void) {
 static void test_store_load_field(void) {
     fprintf(stderr, "  test_store_load_field...");
 
-    XirFunc *func = xir_func_new("store_load_field");
+    XmFunc *func = xm_func_new("store_load_field");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_PTR);  // v0 = obj ptr
+    XmRef p0 = xm_new_vreg(func, XR_REP_PTR);  // v0 = obj ptr
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // v2 = 999
-    XirRef c999 = xir_const_i64(func, 999);
-    XirRef v2 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c999);
+    XmRef c999 = xm_const_i64(func, 999);
+    XmRef v2 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c999);
 
     // Json field[2] byte_offset = 16 + 2*16 = 48
     // STORE_FIELD: args[0]=obj, args[1]=value, dst=const(byte_offset)
-    XirRef off_store = xir_const_i64(func, 48);
-    xir_emit_raw(func, entry, XIR_STORE_FIELD, XR_REP_VOID, off_store, p0, v2);
+    XmRef off_store = xm_const_i64(func, 48);
+    xm_emit_raw(func, entry, XM_STORE_FIELD, XR_REP_VOID, off_store, p0, v2);
 
     // LOAD_FIELD: args[0]=obj, args[1]=const(byte_offset)
-    XirRef off_load = xir_const_i64(func, 48);
-    XirRef v3 = xir_emit(func, entry, XIR_LOAD_FIELD, XR_REP_I64, p0, off_load);
-    xir_block_set_ret(entry, v3);
+    XmRef off_load = xm_const_i64(func, 48);
+    XmRef v3 = xm_emit(func, entry, XM_LOAD_FIELD, XR_REP_I64, p0, off_load);
+    xm_block_set_ret(entry, v3);
 
     // Run write barrier pass (STORE_FIELD triggers it)
-    xir_insert_write_barriers(func);
+    xm_insert_write_barriers(func);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1781,13 +1781,13 @@ static void test_store_load_field(void) {
     assert(result == 999);
 
     // Verify the store actually wrote payload at byte 48+8=56
-    // (STORE_FIELD writes at byte_offset + XIR_XRVALUE_PAYLOAD_OFFSET).
+    // (STORE_FIELD writes at byte_offset + XM_XRVALUE_PAYLOAD_OFFSET).
     int64_t stored;
     memcpy(&stored, fake_obj + 48 + 8, 8);
     assert(stored == 999);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1795,7 +1795,7 @@ static void test_store_load_field(void) {
  * Test: CALL_C — call a C function from JIT code
  *
  * C helper: jit_test_add42(coro, x) -> x + 42
- * XIR:
+ * Xm:
  *   @entry:
  *     v1 =i64 call.c @jit_test_add42, v0
  *     ret v1
@@ -1808,20 +1808,20 @@ static XrJitResult jit_test_add42(void *coro, int64_t x) {
 static void test_call_c(void) {
     fprintf(stderr, "  test_call_c...");
 
-    XirFunc *func = xir_func_new("call_c_test");
+    XmFunc *func = xm_func_new("call_c_test");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);  // v0 = arg
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = arg
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // CALL_C: args[0] = func ptr (const), args[1] = extra arg (v0)
-    XirRef fn_ref = xir_const_ptr(func, (void *)jit_test_add42);
-    XirRef v1 = xir_emit(func, entry, XIR_CALL_C, XR_REP_I64, fn_ref, p0);
-    xir_block_set_ret(entry, v1);
+    XmRef fn_ref = xm_const_ptr(func, (void *)jit_test_add42);
+    XmRef v1 = xm_emit(func, entry, XM_CALL_C, XR_REP_I64, fn_ref, p0);
+    xm_block_set_ret(entry, v1);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1838,8 +1838,8 @@ static void test_call_c(void) {
     fprintf(stderr, " f(-10)=%lld", (long long)r3);
     assert(r3 == 32);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1847,7 +1847,7 @@ static void test_call_c(void) {
  * Test: GUARD_CLASS — check shape_id, deopt on mismatch
  *
  * Fake object: GCHeader with extra=42 (shape_id)
- * XIR:
+ * Xm:
  *   @entry:
  *     guard.class v0, #42        // deopt if shape_id != 42
  *     v1 =i64 const.i64 #1
@@ -1859,23 +1859,23 @@ static void test_call_c(void) {
 static void test_guard_class(void) {
     fprintf(stderr, "  test_guard_class...");
 
-    XirFunc *func = xir_func_new("guard_class");
+    XmFunc *func = xm_func_new("guard_class");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_PTR);  // v0 = obj ptr
+    XmRef p0 = xm_new_vreg(func, XR_REP_PTR);  // v0 = obj ptr
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // GUARD_CLASS: args[0]=obj, args[1]=expected_shape_id
-    XirRef expected_shape = xir_const_i64(func, 42);
-    xir_emit_void(func, entry, XIR_GUARD_CLASS, p0, expected_shape);
+    XmRef expected_shape = xm_const_i64(func, 42);
+    xm_emit_void(func, entry, XM_GUARD_CLASS, p0, expected_shape);
 
-    XirRef c1 = xir_const_i64(func, 1);
-    XirRef v1 = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, c1);
-    xir_block_set_ret(entry, v1);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    xm_block_set_ret(entry, v1);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1899,8 +1899,8 @@ static void test_guard_class(void) {
     fprintf(stderr, " mismatch=0x%llx", (unsigned long long)r2);
     assert(r2 == (int64_t)0xDEAD0001DEAD0001LL);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1910,7 +1910,7 @@ static void test_guard_class(void) {
  * C helper: jit_test_make_obj(coro, shape_ptr) -> shape_ptr + 100
  *   (simulates object allocation returning a pointer)
  *
- * XIR:
+ * Xm:
  *   @entry:
  *     v0 =ptr call.c @jit_test_make_obj, @shape_ptr_const
  *     v1 =i64 load.field v0, #16  // read at byte_offset 16 (Json field[0])
@@ -1930,28 +1930,28 @@ static void test_call_c_const_arg(void) {
     static uint8_t fake_buf[64];
     memset(fake_buf, 0, sizeof(fake_buf));
     int64_t magic = 0xCAFE;
-    // LOAD_FIELD reads at byte_offset + XIR_XRVALUE_PAYLOAD_OFFSET (8),
+    // LOAD_FIELD reads at byte_offset + XM_XRVALUE_PAYLOAD_OFFSET (8),
     // so for byte_off=16 we must place the payload at byte 16+8=24.
     memcpy(fake_buf + 16 + 8, &magic, 8);
 
-    XirFunc *func = xir_func_new("call_c_const_arg");
+    XmFunc *func = xm_func_new("call_c_const_arg");
     func->num_params = 0;
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // CALL_C with both args as const_ptr
-    XirRef fn_ref = xir_const_ptr(func, (void *)jit_test_make_obj);
-    XirRef shape_ref = xir_const_ptr(func, (void *)fake_buf);
-    XirRef v0 = xir_emit(func, entry, XIR_CALL_C, XR_REP_PTR, fn_ref, shape_ref);
+    XmRef fn_ref = xm_const_ptr(func, (void *)jit_test_make_obj);
+    XmRef shape_ref = xm_const_ptr(func, (void *)fake_buf);
+    XmRef v0 = xm_emit(func, entry, XM_CALL_C, XR_REP_PTR, fn_ref, shape_ref);
 
     // LOAD_FIELD at byte_offset 16 (Json field[0])
-    XirRef off = xir_const_i64(func, 16);
-    XirRef v1 = xir_emit(func, entry, XIR_LOAD_FIELD, XR_REP_I64, v0, off);
-    xir_block_set_ret(entry, v1);
+    XmRef off = xm_const_i64(func, 16);
+    XmRef v1 = xm_emit(func, entry, XM_LOAD_FIELD, XR_REP_I64, v0, off);
+    xm_block_set_ret(entry, v1);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -1959,8 +1959,8 @@ static void test_call_c_const_arg(void) {
     fprintf(stderr, " result=0x%llx", (long long)result);
     assert(result == 0xCAFE);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -1968,7 +1968,7 @@ static void test_call_c_const_arg(void) {
  * Phase 8: x64 / ARM64 codegen hardening regressions (docs/tasks/010)
  *
  * The JIT runs on whatever the host machine provides (ARM64 here); on
- * x64 hosts the same XIR exercises the §10.1–§10.6 fixes (FP scratch
+ * x64 hosts the same Xm exercises the §10.1–§10.6 fixes (FP scratch
  * contract, non-commutative SUB/FSUB/FDIV alias-aware emission, double-
  * scratch fallback, deopt+spill copy, CALL_SELF_DIRECT fast path, OSR
  * multi-entry under pressure). When run on ARM64 they still validate
@@ -1986,19 +1986,19 @@ static void test_call_c_const_arg(void) {
 static void test_int_sub_chain(void) {
     fprintf(stderr, "  test_int_sub_chain...");
 
-    XirFunc *func = xir_func_new("int_sub_chain");
+    XmFunc *func = xm_func_new("int_sub_chain");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef inner = xir_emit(func, entry, XIR_SUB, XR_REP_I64, p0, p1);  // x - y
-    XirRef outer = xir_emit(func, entry, XIR_SUB, XR_REP_I64, p0, inner); // x - (x-y)
-    xir_block_set_ret(entry, outer);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef inner = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, p1);  // x - y
+    XmRef outer = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, inner); // x - (x-y)
+    xm_block_set_ret(entry, outer);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2011,8 +2011,8 @@ static void test_int_sub_chain(void) {
     assert(r2 == -10);
     assert(r3 == 42);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -2025,19 +2025,19 @@ static void test_int_sub_chain(void) {
 static void test_fp_noncommutative_chain(void) {
     fprintf(stderr, "  test_fp_noncommutative_chain...");
 
-    XirFunc *func = xir_func_new("fp_noncomm_chain");
+    XmFunc *func = xm_func_new("fp_noncomm_chain");
     func->num_params = 2;
-    XirRef p0 = xir_new_vreg(func, XR_REP_F64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_F64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_F64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_F64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef diff = xir_emit(func, entry, XIR_FSUB, XR_REP_F64, p0, p1);   // x - y
-    XirRef quo  = xir_emit(func, entry, XIR_FDIV, XR_REP_F64, diff, p1); // (x-y)/y
-    xir_block_set_ret(entry, quo);
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef diff = xm_emit(func, entry, XM_FSUB, XR_REP_F64, p0, p1);   // x - y
+    XmRef quo  = xm_emit(func, entry, XM_FDIV, XR_REP_F64, diff, p1); // (x-y)/y
+    xm_block_set_ret(entry, quo);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2051,8 +2051,8 @@ static void test_fp_noncommutative_chain(void) {
     assert(f2 == 2.0);
     assert(f3 == -2.0);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -2088,31 +2088,31 @@ static void test_call_c_fp_live_across_call(void) {
     fprintf(stderr, " SKIP (x64-specific: ARM64 FP regalloc has no spill)\n");
     return;
 #endif
-    XirFunc *func = xir_func_new("fp_live_call_c");
+    XmFunc *func = xm_func_new("fp_live_call_c");
     func->num_params = 16;
-    XirRef ps[16];
-    for (int i = 0; i < 16; i++) ps[i] = xir_new_vreg(func, XR_REP_F64);
+    XmRef ps[16];
+    for (int i = 0; i < 16; i++) ps[i] = xm_new_vreg(func, XR_REP_F64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // CALL_C(jit_test_fp16_const, 8.0) -> 16.0; result kept live too.
-    XirRef fn   = xir_const_ptr(func, (void *)jit_test_fp16_const);
-    XirRef c8   = xir_const_f64(func, 8.0);
-    XirRef c8v  = xir_emit_unary(func, entry, XIR_CONST_F64, XR_REP_F64, c8);
-    XirRef call_res = xir_emit(func, entry, XIR_CALL_C, XR_REP_F64, fn, c8v);
+    XmRef fn   = xm_const_ptr(func, (void *)jit_test_fp16_const);
+    XmRef c8   = xm_const_f64(func, 8.0);
+    XmRef c8v  = xm_emit_unary(func, entry, XM_CONST_F64, XR_REP_F64, c8);
+    XmRef call_res = xm_emit(func, entry, XM_CALL_C, XR_REP_F64, fn, c8v);
 
     // Now sum p0..p15 + call_res. All 16 ps[i] must remain live across
     // the CALL_C above; the regalloc decides where to spill them.
-    XirRef acc = ps[0];
+    XmRef acc = ps[0];
     for (int i = 1; i < 16; i++) {
-        acc = xir_emit(func, entry, XIR_FADD, XR_REP_F64, acc, ps[i]);
+        acc = xm_emit(func, entry, XM_FADD, XR_REP_F64, acc, ps[i]);
     }
-    acc = xir_emit(func, entry, XIR_FADD, XR_REP_F64, acc, call_res);
-    xir_block_set_ret(entry, acc);
+    acc = xm_emit(func, entry, XM_FADD, XR_REP_F64, acc, call_res);
+    xm_block_set_ret(entry, acc);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2128,8 +2128,8 @@ static void test_call_c_fp_live_across_call(void) {
     // 0+1+...+15 = 120; helper(8.0) = 16.0; total 136.0
     assert(result == 136.0);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -2148,29 +2148,29 @@ static void test_call_c_fp_live_across_call(void) {
 static void test_binop_pressure_chain(void) {
     fprintf(stderr, "  test_binop_pressure_chain...");
 
-    XirFunc *func = xir_func_new("binop_pressure");
+    XmFunc *func = xm_func_new("binop_pressure");
     func->num_params = 12;
-    XirRef ps[12];
-    for (int i = 0; i < 12; i++) ps[i] = xir_new_vreg(func, XR_REP_I64);
+    XmRef ps[12];
+    for (int i = 0; i < 12; i++) ps[i] = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
     // pair-add: a01, a23, ... a1011
-    XirRef pair[6];
+    XmRef pair[6];
     for (int i = 0; i < 6; i++)
-        pair[i] = xir_emit(func, entry, XIR_ADD, XR_REP_I64,
+        pair[i] = xm_emit(func, entry, XM_ADD, XR_REP_I64,
                            ps[i*2], ps[i*2 + 1]);
     // sub-pair: pair[0]-pair[1], pair[2]-pair[3], pair[4]-pair[5]
-    XirRef diff0 = xir_emit(func, entry, XIR_SUB, XR_REP_I64, pair[0], pair[1]);
-    XirRef diff1 = xir_emit(func, entry, XIR_SUB, XR_REP_I64, pair[2], pair[3]);
-    XirRef diff2 = xir_emit(func, entry, XIR_SUB, XR_REP_I64, pair[4], pair[5]);
+    XmRef diff0 = xm_emit(func, entry, XM_SUB, XR_REP_I64, pair[0], pair[1]);
+    XmRef diff1 = xm_emit(func, entry, XM_SUB, XR_REP_I64, pair[2], pair[3]);
+    XmRef diff2 = xm_emit(func, entry, XM_SUB, XR_REP_I64, pair[4], pair[5]);
     // sum the three diffs
-    XirRef s01  = xir_emit(func, entry, XIR_ADD, XR_REP_I64, diff0, diff1);
-    XirRef total = xir_emit(func, entry, XIR_ADD, XR_REP_I64, s01, diff2);
-    xir_block_set_ret(entry, total);
+    XmRef s01  = xm_emit(func, entry, XM_ADD, XR_REP_I64, diff0, diff1);
+    XmRef total = xm_emit(func, entry, XM_ADD, XR_REP_I64, s01, diff2);
+    xm_block_set_ret(entry, total);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2189,8 +2189,8 @@ static void test_binop_pressure_chain(void) {
     int64_t r2 = jit_calln(res.code, buf);
     assert(r2 == 0);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -2204,32 +2204,32 @@ static void test_binop_pressure_chain(void) {
 static void test_deopt_with_spill_pressure(void) {
     fprintf(stderr, "  test_deopt_with_spill_pressure...");
 
-    XirFunc *func = xir_func_new("deopt_spill_pressure");
+    XmFunc *func = xm_func_new("deopt_spill_pressure");
     func->num_params = 12;
-    XirRef ps[12];
-    for (int i = 0; i < 12; i++) ps[i] = xir_new_vreg(func, XR_REP_I64);
+    XmRef ps[12];
+    for (int i = 0; i < 12; i++) ps[i] = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
     // Sum half before the guard so the regalloc keeps all 12 ps live
     // through the guard, which is when the deopt-spill copy matters.
-    XirRef partial = ps[0];
+    XmRef partial = ps[0];
     for (int i = 1; i < 6; i++)
-        partial = xir_emit(func, entry, XIR_ADD, XR_REP_I64, partial, ps[i]);
+        partial = xm_emit(func, entry, XM_ADD, XR_REP_I64, partial, ps[i]);
 
     // Guard: deopt if p0 == 0
-    xir_emit_unary(func, entry, XIR_GUARD_NONNULL, XR_REP_VOID, ps[0]);
+    xm_emit_unary(func, entry, XM_GUARD_NONNULL, XR_REP_VOID, ps[0]);
 
     // After guard, fold in the rest. ps[6..11] must remain live across
     // the guard, which is exactly what the spill-copy loop handles.
-    XirRef acc = partial;
+    XmRef acc = partial;
     for (int i = 6; i < 12; i++)
-        acc = xir_emit(func, entry, XIR_ADD, XR_REP_I64, acc, ps[i]);
-    xir_block_set_ret(entry, acc);
+        acc = xm_emit(func, entry, XM_ADD, XR_REP_I64, acc, ps[i]);
+    xm_block_set_ret(entry, acc);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2246,56 +2246,56 @@ static void test_deopt_with_spill_pressure(void) {
     fprintf(stderr, " deopt=0x%llx", (unsigned long long)r2);
     assert(r2 == (int64_t)0xDEAD0001DEAD0001LL);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
  * test_call_self_direct: f(n) = (n == 0) ? 0 : n + f(n - 1)
  *
- * Exercises XIR_CALL_SELF_DIRECT register-passing → fast_entry path
+ * Exercises XM_CALL_SELF_DIRECT register-passing → fast_entry path
  * (PATCH_CALL_SELF_FAST). Both the safepoint id write and the
- * frame stack-map restore at lines 374-376 of xir_codegen_call.c are
+ * frame stack-map restore at lines 374-376 of xm_codegen_call.c are
  * verified by every recursive iteration completing successfully.
  */
 static void test_call_self_direct(void) {
     fprintf(stderr, "  test_call_self_direct...");
 
-    XirFunc *func = xir_func_new("call_self");
+    XmFunc *func = xm_func_new("call_self");
     func->num_params = 1;
-    XirRef p0 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *base  = xir_func_add_block(func, "base");
-    XirBlock *rec   = xir_func_add_block(func, "rec");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *base  = xm_func_add_block(func, "base");
+    XmBlock *rec   = xm_func_add_block(func, "rec");
 
     // entry: cmp = (p0 == 0); br cmp, @base, @rec
-    XirRef cz   = xir_const_i64(func, 0);
-    XirRef zero = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, cz);
-    XirRef cmp  = xir_emit(func, entry, XIR_EQ, XR_REP_I64, p0, zero);
-    xir_block_set_br(entry, cmp, base, rec);
+    XmRef cz   = xm_const_i64(func, 0);
+    XmRef zero = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, cz);
+    XmRef cmp  = xm_emit(func, entry, XM_EQ, XR_REP_I64, p0, zero);
+    xm_block_set_br(entry, cmp, base, rec);
 
     // @base: ret 0
-    xir_block_set_ret(base, zero);
+    xm_block_set_ret(base, zero);
 
     // @rec: n_minus_1 = p0 - 1; rec = CALL_SELF_DIRECT(n_minus_1); ret p0 + rec
-    XirRef c1   = xir_const_i64(func, 1);
-    XirRef one  = xir_emit_unary(func, rec, XIR_CONST_I64, XR_REP_I64, c1);
-    XirRef nm1  = xir_emit(func, rec, XIR_SUB, XR_REP_I64, p0, one);
-    XirRef call_res = xir_emit(func, rec, XIR_CALL_SELF_DIRECT, XR_REP_I64,
-                               nm1, XIR_NONE);
-    rec->ins[rec->nins - 1].flags |= XIR_FLAG_SIDE_EFFECT;
+    XmRef c1   = xm_const_i64(func, 1);
+    XmRef one  = xm_emit_unary(func, rec, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef nm1  = xm_emit(func, rec, XM_SUB, XR_REP_I64, p0, one);
+    XmRef call_res = xm_emit(func, rec, XM_CALL_SELF_DIRECT, XR_REP_I64,
+                               nm1, XM_NONE);
+    rec->ins[rec->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
     // Bind the single argument in the call_arg_pool so emit_call_args_from_pool
     // sets up the correct tag-pack and (for x64) jit_ctx->call_args[0].
-    XirRef pool_args[1] = { nm1 };
-    xir_func_bind_call_args(func, call_res, pool_args, 1);
-    XirRef sum = xir_emit(func, rec, XIR_ADD, XR_REP_I64, p0, call_res);
-    xir_block_set_ret(rec, sum);
+    XmRef pool_args[1] = { nm1 };
+    xm_func_bind_call_args(func, call_res, pool_args, 1);
+    XmRef sum = xm_emit(func, rec, XM_ADD, XR_REP_I64, p0, call_res);
+    xm_block_set_ret(rec, sum);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = safe_codegen(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u fast=%u", res.code_size, res.fast_entry_offset);
 
@@ -2310,8 +2310,8 @@ static void test_call_self_direct(void) {
     assert(r5 == 15);   // 5+4+3+2+1
     assert(r10 == 55);  // 1+...+10
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -2331,65 +2331,65 @@ static void test_call_self_direct(void) {
 static void test_osr_entry_pressure(void) {
     fprintf(stderr, "  test_osr_entry_pressure...");
 
-    XirFunc *func = xir_func_new("osr_pressure");
+    XmFunc *func = xm_func_new("osr_pressure");
     func->num_params = 5;
-    XirRef p_count = xir_new_vreg(func, XR_REP_I64);
-    XirRef p1 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p2 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p3 = xir_new_vreg(func, XR_REP_I64);
-    XirRef p4 = xir_new_vreg(func, XR_REP_I64);
+    XmRef p_count = xm_new_vreg(func, XR_REP_I64);
+    XmRef p1 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p2 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p3 = xm_new_vreg(func, XR_REP_I64);
+    XmRef p4 = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirBlock *loop  = xir_func_add_block(func, "loop");
-    XirBlock *body  = xir_func_add_block(func, "body");
-    XirBlock *exit_ = xir_func_add_block(func, "exit");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *loop  = xm_func_add_block(func, "loop");
+    XmBlock *body  = xm_func_add_block(func, "body");
+    XmBlock *exit_ = xm_func_add_block(func, "exit");
 
     // entry: sum = 0; jmp @loop
-    XirRef cz   = xir_const_i64(func, 0);
-    XirRef zero = xir_emit_unary(func, entry, XIR_CONST_I64, XR_REP_I64, cz);
-    xir_block_set_jmp(entry, loop);
-    xir_block_add_pred(loop, entry, func->arena);
-    xir_block_add_pred(loop, body, func->arena);  // back-edge, declared early
+    XmRef cz   = xm_const_i64(func, 0);
+    XmRef zero = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, cz);
+    xm_block_set_jmp(entry, loop);
+    xm_block_add_pred(loop, entry, func->arena);
+    xm_block_add_pred(loop, body, func->arena);  // back-edge, declared early
 
     // @loop (header): phi nodes
     loop->is_loop_header = true;
-    XirPhi *phi_count = xir_add_phi(func, loop, XR_REP_I64);
-    XirPhi *phi_sum   = xir_add_phi(func, loop, XR_REP_I64);
-    xir_phi_set_arg(phi_count, 0, p_count);  // entry value
-    xir_phi_set_arg(phi_sum,   0, zero);
+    XmPhi *phi_count = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_sum   = xm_add_phi(func, loop, XR_REP_I64);
+    xm_phi_set_arg(phi_count, 0, p_count);  // entry value
+    xm_phi_set_arg(phi_sum,   0, zero);
 
     // cond = (phi_count > 0) ? body : exit
-    XirRef cz_b = xir_const_i64(func, 0);
-    XirRef zb   = xir_emit_unary(func, loop, XIR_CONST_I64, XR_REP_I64, cz_b);
-    XirRef cond = xir_emit(func, loop, XIR_LT, XR_REP_I64, zb, phi_count->dst);
-    xir_block_set_br(loop, cond, body, exit_);
-    xir_block_add_pred(body, loop, func->arena);
-    xir_block_add_pred(exit_, loop, func->arena);
+    XmRef cz_b = xm_const_i64(func, 0);
+    XmRef zb   = xm_emit_unary(func, loop, XM_CONST_I64, XR_REP_I64, cz_b);
+    XmRef cond = xm_emit(func, loop, XM_LT, XR_REP_I64, zb, phi_count->dst);
+    xm_block_set_br(loop, cond, body, exit_);
+    xm_block_add_pred(body, loop, func->arena);
+    xm_block_add_pred(exit_, loop, func->arena);
 
     // @body: sum += p1+p2+p3+p4 ; count -= 1 ; jmp @loop
     // Chain ADDs to keep p1..p4 + intermediates all live at end of body.
-    XirRef s12   = xir_emit(func, body, XIR_ADD, XR_REP_I64, p1, p2);
-    XirRef s34   = xir_emit(func, body, XIR_ADD, XR_REP_I64, p3, p4);
-    XirRef delta = xir_emit(func, body, XIR_ADD, XR_REP_I64, s12, s34);
-    XirRef new_sum = xir_emit(func, body, XIR_ADD, XR_REP_I64,
+    XmRef s12   = xm_emit(func, body, XM_ADD, XR_REP_I64, p1, p2);
+    XmRef s34   = xm_emit(func, body, XM_ADD, XR_REP_I64, p3, p4);
+    XmRef delta = xm_emit(func, body, XM_ADD, XR_REP_I64, s12, s34);
+    XmRef new_sum = xm_emit(func, body, XM_ADD, XR_REP_I64,
                               phi_sum->dst, delta);
-    XirRef c1   = xir_const_i64(func, 1);
-    XirRef one  = xir_emit_unary(func, body, XIR_CONST_I64, XR_REP_I64, c1);
-    XirRef new_count = xir_emit(func, body, XIR_SUB, XR_REP_I64,
+    XmRef c1   = xm_const_i64(func, 1);
+    XmRef one  = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef new_count = xm_emit(func, body, XM_SUB, XR_REP_I64,
                                 phi_count->dst, one);
-    xir_block_set_jmp(body, loop);
-    xir_phi_set_arg(phi_count, 1, new_count);
-    xir_phi_set_arg(phi_sum,   1, new_sum);
+    xm_block_set_jmp(body, loop);
+    xm_phi_set_arg(phi_count, 1, new_count);
+    xm_phi_set_arg(phi_sum,   1, new_sum);
 
     // @exit: ret phi_sum
-    xir_block_set_ret(exit_, phi_sum->dst);
+    xm_block_set_ret(exit_, phi_sum->dst);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
     // Match test_osr_entry: bypass safe_codegen because phi args are
-    // already wired manually and xir_rebuild_preds would re-allocate
+    // already wired manually and xm_rebuild_preds would re-allocate
     // them mid-snapshot.
-    XirCodegenResult res = xir_codegen_native(func, &alloc);
+    XmCodegenResult res = xm_codegen_native(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u nosr=%u", res.code_size, res.nosr);
 
@@ -2408,8 +2408,8 @@ static void test_osr_entry_pressure(void) {
         assert(r == cases[i].expected);
     }
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
@@ -2438,20 +2438,20 @@ static void test_spill_only_param_init(void) {
     fprintf(stderr, "  test_spill_only_param_init...");
 
     enum { NPARAM = 24 };
-    XirFunc *func = xir_func_new("spill_only_param");
+    XmFunc *func = xm_func_new("spill_only_param");
     func->num_params = NPARAM;
-    XirRef ps[NPARAM];
-    for (int i = 0; i < NPARAM; i++) ps[i] = xir_new_vreg(func, XR_REP_I64);
+    XmRef ps[NPARAM];
+    for (int i = 0; i < NPARAM; i++) ps[i] = xm_new_vreg(func, XR_REP_I64);
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
-    XirRef acc = ps[0];
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef acc = ps[0];
     for (int i = 1; i < NPARAM; i++)
-        acc = xir_emit(func, entry, XIR_ADD, XR_REP_I64, acc, ps[i]);
-    xir_block_set_ret(entry, acc);
+        acc = xm_emit(func, entry, XM_ADD, XR_REP_I64, acc, ps[i]);
+    xm_block_set_ret(entry, acc);
 
-    XirCodeAlloc alloc;
-    xir_code_alloc_init(&alloc);
-    XirCodegenResult res = xir_codegen_native(func, &alloc);
+    XmCodeAlloc alloc;
+    xm_code_alloc_init(&alloc);
+    XmCodegenResult res = xm_codegen_native(func, &alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2472,15 +2472,15 @@ static void test_spill_only_param_init(void) {
     fprintf(stderr, " mix=%lld", (long long)r3);
     assert(r3 == 12);
 
-    xir_code_alloc_destroy(&alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 
 /*
- * test_alloc_inline: XIR_ALLOC with inline bump-pointer fast path
+ * test_alloc_inline: XM_ALLOC with inline bump-pointer fast path
  *
- * XIR:
+ * Xm:
  *     v0 =ptr alloc const(5), const(48)  // type=5(Json), size=48
  *     ret v0
  *
@@ -2507,26 +2507,26 @@ static void test_alloc_inline(void) {
     // gc->immix.limit at offset 8
     char *limit = (char*)heap_buf + 16384;
     memcpy(fake_gc + 8, &limit, 8);
-    // gc->currentwhite = 0x01 at XIR_GC_CURRENTWHITE_OFFSET (109)
+    // gc->currentwhite = 0x01 at XM_GC_CURRENTWHITE_OFFSET (109)
     fake_gc[109] = 0x01;
 
     jit_env_reset();
     g_jit_coro.coro_gc = (struct XrCoroGC *)fake_gc;
 
-    XirFunc *func = xir_func_new("alloc_inline");
+    XmFunc *func = xm_func_new("alloc_inline");
     func->num_params = 0;
 
-    XirBlock *entry = xir_func_add_block(func, "entry");
+    XmBlock *entry = xm_func_add_block(func, "entry");
 
-    // XIR_ALLOC: type=5 (Json), size=48
-    XirRef type_ref = xir_const_i64(func, 5);
-    XirRef size_ref = xir_const_i64(func, 48);
-    XirRef v0 = xir_emit(func, entry, XIR_ALLOC, XR_REP_PTR, type_ref, size_ref);
-    xir_block_set_ret(entry, v0);
+    // XM_ALLOC: type=5 (Json), size=48
+    XmRef type_ref = xm_const_i64(func, 5);
+    XmRef size_ref = xm_const_i64(func, 48);
+    XmRef v0 = xm_emit(func, entry, XM_ALLOC, XR_REP_PTR, type_ref, size_ref);
+    xm_block_set_ret(entry, v0);
 
-    XirCodeAlloc code_alloc;
-    xir_code_alloc_init(&code_alloc);
-    XirCodegenResult res = safe_codegen(func, &code_alloc);
+    XmCodeAlloc code_alloc;
+    xm_code_alloc_init(&code_alloc);
+    XmCodegenResult res = safe_codegen(func, &code_alloc);
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
@@ -2563,8 +2563,8 @@ static void test_alloc_inline(void) {
     assert(objsize == 48);
     fprintf(stderr, " header_ok");
 
-    xir_code_alloc_destroy(&code_alloc);
-    xir_func_destroy(func);
+    xm_code_alloc_destroy(&code_alloc);
+    xm_func_destroy(func);
     fprintf(stderr, "\n  PASS\n");
 }
 

@@ -69,7 +69,7 @@ vmcase(OP_JMP) {
                     atomic_load_explicit(&_osr_proto->jit_entry_pending, memory_order_acquire);
                 if (_pend && (uintptr_t) _pend > 1) {
                     // Background compilation done → install + try OSR
-                    xir_jit_install_bg_result(_osr_proto);
+                    xm_jit_install_bg_result(_osr_proto);
                     _do_osr = (_osr_proto->jit_entry != NULL);
                 } else if (!_pend) {
                     // Not yet queued: count and trigger at threshold
@@ -88,13 +88,13 @@ vmcase(OP_JMP) {
                 coro->jit_ctx->call_closure = cl;
                 coro->jit_ctx->osr_deopt_pc = -1;
                 XrValue _osr_result;
-                int _osr_rc = xir_jit_osr_trigger(
+                int _osr_rc = xm_jit_osr_trigger(
                     isolate->vm.jit, _osr_proto, coro, _target_pc, base, _osr_proto->maxstacksize,
                     _osr_proto->return_type_info
                         ? xr_type_to_slot_type(_osr_proto->return_type_info)
                         : XR_SLOT_ANY,
                     &_osr_result);
-                if (_osr_rc == XIR_JIT_OK) {
+                if (_osr_rc == XM_JIT_OK) {
                     _osr_proto->osr_pending = false;
                     vm_ctx->last_nret = 1;
                     if (ci->base_offset > 0) {
@@ -112,7 +112,7 @@ vmcase(OP_JMP) {
                     VM_SET_STACK_TOP(VM_STACK + ci->base_offset + ci->closure->proto->maxstacksize);
                     goto startfunc;
                 }
-                if (_osr_rc == XIR_JIT_SUSPEND) {
+                if (_osr_rc == XM_JIT_SUSPEND) {
                     savepc();
                     return XR_VM_BLOCKED;
                 }

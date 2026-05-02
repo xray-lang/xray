@@ -166,8 +166,8 @@ typedef struct XrVMState {
     int ctor_call_depth;
 
 #ifdef XRAY_HAS_JIT
-    // JIT compiler state (v3: self-hosted XIR pipeline)
-    struct XirJitState *jit;  // JIT compiler state (compile queue, code cache)
+    // JIT compiler state (v3: self-hosted Xm pipeline)
+    struct XmJitState *jit;  // JIT compiler state (compile queue, code cache)
     int jit_threshold;        // call count threshold for Tier 1 compilation
     int jit_opt_threshold;    // exec count threshold for Tier 2 optimization
 #endif

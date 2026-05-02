@@ -1,7 +1,7 @@
 /*
  * test_x64_emit.c - Unit tests for x86-64 instruction encoding
  *
- * Each test encodes one instruction via the xir_x64.h API, then asserts
+ * Each test encodes one instruction via the xm_x64.h API, then asserts
  * the emitted bytes match the reference encoding from the Intel SDM.
  *
  * Coverage: integer ALU, logical, compare, move, branch, stack, SSE2.
@@ -13,7 +13,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include "../../src/jit/xir_x64.h"
+#include "../../src/jit/xm_x64.h"
 #include "../test_win_compat.h"
 
 /* ========== Test Helpers ========== */

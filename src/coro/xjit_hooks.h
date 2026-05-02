@@ -27,7 +27,7 @@ struct XrCoroutine;
 struct XrProto;
 struct XrType;
 
-/* ========== JIT result codes (mirror jit/xir_jit.h constants) ========== */
+/* ========== JIT result codes (mirror jit/xm_jit.h constants) ========== */
 
 #define XR_JIT_OK 0
 #define XR_JIT_DEOPT 1
@@ -39,16 +39,16 @@ typedef struct XrJitHooks {
     /* --- Execution --- */
 
     // Call compiled code for a function entry.
-    // Mirrors xir_jit_call() signature.
+    // Mirrors xm_jit_call() signature.
     int (*call)(void *entry, struct XrCoroutine *coro, XrValue *args, int nargs,
                 struct XrType *return_type_info, XrValue *result);
 
     // Resume from a JIT suspend point.
-    // Mirrors xir_jit_resume() signature.
+    // Mirrors xm_jit_resume() signature.
     int (*resume)(struct XrCoroutine *coro, XrValue *result);
 
     // Install background-compiled JIT result into proto.
-    // Mirrors xir_jit_install_bg_result() signature.
+    // Mirrors xm_jit_install_bg_result() signature.
     void (*install_bg_result)(struct XrProto *proto);
 
     /* --- Guard page safepoint --- */

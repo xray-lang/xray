@@ -121,7 +121,7 @@ typedef struct XrJitScratch {
     uint32_t deopt_id;  // Deopt point ID (set by deopt stub)
     uint32_t invoke_deopt_id;  // Valid deopt_id for CALL_C invoke recovery (deopt_id=0 safe)
 
-    /* Param tags: runtime XrValue.tag for each argument, set by xir_jit_call.
+    /* Param tags: runtime XrValue.tag for each argument, set by xm_jit_call.
      * Used by JIT null-check codegen to distinguish int(0) from null
      * for nullable primitive params (int?/float?/bool?). */
     int64_t param_tags[8];
@@ -142,7 +142,7 @@ typedef struct XrJitScratch {
     /* Spill slot snapshot: copied from frame by deopt stub BEFORE epilogue.
      * Indexed by spill slot number: deopt_spill_save[slot] = frame[SPILL_BASE + slot*8].
      * Recovery reads from here instead of the frame (which is deallocated after epilogue).
-     * Max slots = XIR_MAX_SPILL_SLOTS (32). */
+     * Max slots = XM_MAX_SPILL_SLOTS (32). */
     int64_t deopt_spill_save[32];
 
     int32_t osr_deopt_pc;  // OSR deopt recovery: bytecode PC to resume (-1 = none)
@@ -178,7 +178,7 @@ typedef struct XrJitScratch {
     /* Tag returned by the last call_c_stub invocation.
      * call_c_stub stores the C helper's x1 here instead of returning it in
      * x1, so that x1 (alloc_regs[0]) is not clobbered by the stub return
-     * sequence.  XIR_CALL_C codegen reads this field to populate
+     * sequence.  XM_CALL_C codegen reads this field to populate
      * slot_runtime_tags[bc_slot]. */
     int64_t call_result_tag;
 
@@ -188,7 +188,7 @@ typedef struct XrJitScratch {
      * populates the VM stack, pre-pushes an interpreter frame, and calls
      * the yieldable in normal mode. If BLOCKED/YIELD, these fields signal
      * the VM to skip deopt recovery and return the appropriate result. */
-    int32_t call_base_offset;  // callee base_offset (set by VM before xir_jit_call)
+    int32_t call_base_offset;  // callee base_offset (set by VM before xm_jit_call)
     bool yield_frame_pushed;   // helper pre-pushed frame, yieldable blocked/yielded
     uint8_t yield_vm_result;   // XR_VM_BLOCKED or XR_VM_YIELD
 
@@ -255,29 +255,29 @@ typedef struct XrCoroExt {
  *     slots than this must be refused JIT compilation (otherwise the
  *     extra slots would be lost across the suspend bridge).
  *
- * If this value is raised, the _Static_assert in xir_offsets.h that checks
- * XIR_SUSPEND_SPILL_OFF also needs to be revisited because sizeof the
+ * If this value is raised, the _Static_assert in xm_offsets.h that checks
+ * XM_SUSPEND_SPILL_OFF also needs to be revisited because sizeof the
  * containing struct changes.
  */
-#define XIR_SUSPEND_SPILL_MAX 15
+#define XM_SUSPEND_SPILL_MAX 15
 
 /*
  * JIT suspend state: saved registers across suspend/resume.
  * Heap-allocated on demand (lazy) to save 320 bytes per non-JIT coroutine.
  *
  * MEMORY LAYOUT (320 bytes = 40 * int64_t):
- *   +0    caller_saved[15]  x1-x15  (scratch regs, saved by XIR_SUSPEND)
+ *   +0    caller_saved[15]  x1-x15  (scratch regs, saved by XM_SUSPEND)
  *   +120  callee_saved[8]   x20-x27 (callee-saved, for cross-worker resume)
  *   +184  result            await/channel return value slot
  *   +192  result_tag        XR_TAG_* for result (written alongside result by waker)
- *   +200  spill[XIR_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
+ *   +200  spill[XM_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
  */
 typedef struct XrJitSuspendState {
     int64_t caller_saved[15];  // x1-x15
     int64_t callee_saved[8];   // x20-x27
     int64_t result;            // await/channel result (written by block helper or waker)
     int64_t result_tag;        // XR_TAG_* for result (resume writes to runtime_tags)
-    int64_t spill[XIR_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
+    int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
 } XrJitSuspendState;
 
 typedef struct XrCoroutine {
@@ -343,7 +343,7 @@ typedef struct XrCoroutine {
 
     /* === JIT Suspend/Resume ===
      * When JIT code hits AWAIT and the child isn't done, it saves live
-     * registers here and returns XIR_SUSPEND_MARKER. On resume, the
+     * registers here and returns XM_SUSPEND_MARKER. On resume, the
      * worker calls jit_resume_entry which reloads registers and jumps
      * to the continuation point via jit_suspend_id. */
     void *jit_resume_entry;        // resume code address (NULL = not JIT-suspended)
