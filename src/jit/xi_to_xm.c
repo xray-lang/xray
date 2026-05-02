@@ -126,7 +126,12 @@ static int slot_map_bc_pc(const LowerCtx *ctx, uint32_t value_id) {
 
 /* Record a deopt snapshot at the current point for a guard instruction.
  * bc_pc: bytecode PC to resume at on deopt.
- * Returns the deopt_id, or 0xFFFF on failure. */
+ * Returns the deopt_id, or 0xFFFF on failure.
+ *
+ * Deduplicates by bc_slot: when multiple Xi values map to the same
+ * bytecode register, only the latest (in slot_map order = RPO lowering
+ * order) is kept.  This prevents stale entries from wasting slots and
+ * ensures each bc_slot has exactly one unambiguous value at deopt. */
 static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
     XmFunc *func = ctx->xm_func;
     if (func->ndeopt >= XM_MAX_DEOPT_POINTS)
@@ -149,38 +154,46 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
     info->nslots = 0;
     info->slots = NULL;
 
-    /* Populate slots from slot_map: for each live Xi value with a bc_slot,
-     * record its current Xm ref so codegen can rebuild interpreter state.
-     * Count live entries first; refuse to speculate if > XM_MAX_DEOPT_SLOTS
-     * (avoids silent truncation that could restore partial state). */
     if (ctx->slot_map && ctx->slot_map->count > 0) {
-        /* Pass 1: count live entries */
-        uint32_t live_count = 0;
+        /* Pass 1: deduplicate by bc_slot — keep latest entry per slot.
+         * Entries later in the array are from later RPO blocks, so they
+         * represent the most recent definition of that bytecode register. */
+        int32_t latest_for_slot[256];
+        memset(latest_for_slot, -1, sizeof(latest_for_slot));
+
         for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
             XiSlotMapEntry *e = &ctx->slot_map->entries[i];
             if (e->value_id >= ctx->ref_map_size) continue;
             XmRef ref = ctx->ref_map[e->value_id];
             if (xm_ref_is_none(ref)) continue;
-            live_count++;
+            latest_for_slot[e->bc_slot] = (int32_t)i;
         }
+
+        /* Count unique live bc_slots */
+        uint32_t live_count = 0;
+        for (int s = 0; s < 256; s++) {
+            if (latest_for_slot[s] >= 0)
+                live_count++;
+        }
+
         if (live_count > XM_MAX_DEOPT_SLOTS) {
             /* Too many live slots — refuse this deopt point so the
              * caller falls back to the generic (unspecialized) path
              * rather than restoring a truncated snapshot. */
-            func->ndeopt--;  /* undo the slot we just claimed */
+            func->ndeopt--;
             return 0xFFFF;
         }
 
-        /* Pass 2: populate slots (guaranteed to fit) */
+        /* Pass 2: populate slots from deduplicated entries */
         XmDeoptSlot *slots = (XmDeoptSlot *)xr_calloc(
             live_count ? live_count : 1, sizeof(XmDeoptSlot));
         if (slots) {
             uint16_t ns = 0;
-            for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
-                XiSlotMapEntry *e = &ctx->slot_map->entries[i];
-                if (e->value_id >= ctx->ref_map_size) continue;
+            for (int s = 0; s < 256; s++) {
+                if (latest_for_slot[s] < 0) continue;
+                XiSlotMapEntry *e =
+                    &ctx->slot_map->entries[latest_for_slot[s]];
                 XmRef ref = ctx->ref_map[e->value_id];
-                if (xm_ref_is_none(ref)) continue;
                 XR_DCHECK(ns < live_count,
                           "record_deopt: slot count mismatch");
                 slots[ns].bc_slot = (int16_t)e->bc_slot;

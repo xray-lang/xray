@@ -17,11 +17,11 @@
 static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
                                      bool is_inst) {
     XiLower ml;
-    lower_init(&ml, l->analyzer, l->isolate);
+    xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
 
     ml.func = xi_func_new(m->name, m->return_type ? m->return_type : ml.type_void);
-    if (!ml.func) { lower_cleanup(&ml); return NULL; }
+    if (!ml.func) { xi_lower_cleanup(&ml); return NULL; }
     ml.func->analyzer = l->analyzer;
 
     XiBlock *entry = xi_block_new(ml.func);
@@ -34,7 +34,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         ml.func->params = (XiValue **)xr_calloc(np, sizeof(XiValue *));
         if (!ml.func->params) {
             xi_func_free(ml.func);
-            lower_cleanup(&ml);
+            xi_lower_cleanup(&ml);
             return NULL;
         }
     }
@@ -80,7 +80,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         }
     }
 
-    lower_cleanup(&ml);
+    xi_lower_cleanup(&ml);
     return ml.func;
 }
 

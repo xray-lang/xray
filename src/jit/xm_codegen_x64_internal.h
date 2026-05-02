@@ -270,10 +270,29 @@ XR_FUNC void x64_emit_deopt_jcc(X64CodegenCtx *ctx, X64Cond cc);
 /* Emit epilogue sequence (restore callee-saved regs, leave, ret) */
 XR_FUNC void x64_emit_epilogue(X64CodegenCtx *ctx);
 
+/* Check whether a vreg holds a float-rep value */
+static inline bool x64_is_fp_vreg(X64CodegenCtx *ctx, XmRef ref) {
+    if (!xm_ref_is_vreg(ref))
+        return false;
+    uint32_t idx = XM_REF_INDEX(ref);
+    if (idx >= ctx->func->nvreg)
+        return false;
+    return ctx->func->vregs[idx].rep == XR_REP_F64;
+}
+
 /* ========== Sub-emit functions (defined in split files) ========== */
 
 /* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */
 XR_FUNC bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd);
+
+/* Stubs: call_c, barriers, deopt (xm_codegen_x64_stub.c) */
+XR_FUNC void x64_emit_call_c_stub(X64CodegenCtx *ctx);
+XR_FUNC void x64_emit_barrier_stubs(X64CodegenCtx *ctx);
+XR_FUNC void x64_emit_deopt_stub(X64CodegenCtx *ctx);
+
+/* OSR + resume entry (xm_codegen_x64_osr.c) */
+XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result);
+XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result);
 
 /* Bail out of codegen on invariant violation instead of abort().
  * Sets had_error and longjmps to the entry point of xm_codegen_x64
