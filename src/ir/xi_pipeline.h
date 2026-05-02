@@ -25,6 +25,7 @@
 #define XI_PIPELINE_H
 
 #include "xi.h"
+#include "xi_pass.h"
 
 struct AstNode;
 struct XaAnalyzer;
@@ -55,6 +56,8 @@ typedef struct XiPipelineConfig {
     XiPipelineMode mode;    /* selects default pass sequence (can be overridden) */
     bool run_verify;        /* run IR verification after lowering (default: true) */
     bool run_optimize;      /* run optimization passes (default: true) */
+    XiOptLevel opt_level;   /* optimization aggressiveness (XI_OPT_LIGHT for VM,
+                             * XI_OPT_FULL for AOT/JIT Tier 2) */
     bool run_select_rep;    /* run SelectRepresentations pass (BOX/UNBOX insertion,
                              * needed by AOT/JIT backends for unboxed values;
                              * default: false for VM, true for AOT) */

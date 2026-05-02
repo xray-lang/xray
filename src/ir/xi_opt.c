@@ -12,12 +12,15 @@
  */
 
 #include "xi_opt.h"
+#include "xi_pass.h"
 #include "xi_rep.h"
+#include "xi_verify.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
+#include <stdio.h>
 
 /* ========== Helpers ========== */
 
@@ -149,8 +152,9 @@ static bool fold_float_compare(uint16_t op, double a, double b,
     }
 }
 
-XR_FUNC void xi_opt_const_fold(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_const_fold: NULL func");
+    XiPassChange chg = xi_pass_no_change();
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
@@ -164,6 +168,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                 v->op = XI_CONST;
                 v->aux_int = -(v->args[0]->aux_int);
                 v->nargs = 0;
+                chg.values_changed = true;
                 continue;
             }
 
@@ -176,6 +181,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                 v->op = XI_CONST;
                 memcpy(&v->aux_int, &val, sizeof(double));
                 v->nargs = 0;
+                chg.values_changed = true;
                 continue;
             }
 
@@ -185,6 +191,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                 v->op = XI_CONST;
                 v->aux_int = v->args[0]->aux_int ? 0 : 1;
                 v->nargs = 0;
+                chg.values_changed = true;
                 continue;
             }
 
@@ -194,6 +201,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                 v->op = XI_CONST;
                 v->aux_int = ~(v->args[0]->aux_int);
                 v->nargs = 0;
+                chg.values_changed = true;
                 continue;
             }
 
@@ -210,6 +218,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                     v->op = XI_CONST;
                     v->aux_int = result;
                     v->nargs = 0;
+                    chg.values_changed = true;
                     continue;
                 }
                 bool bres;
@@ -218,6 +227,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                     v->op = XI_CONST;
                     v->aux_int = bres ? 1 : 0;
                     v->nargs = 0;
+                    chg.values_changed = true;
                     continue;
                 }
             }
@@ -233,6 +243,7 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                     v->op = XI_CONST;
                     memcpy(&v->aux_int, &dresult, sizeof(double));
                     v->nargs = 0;
+                    chg.values_changed = true;
                     continue;
                 }
                 bool bres;
@@ -240,11 +251,13 @@ XR_FUNC void xi_opt_const_fold(XiFunc *f) {
                     v->op = XI_CONST;
                     v->aux_int = bres ? 1 : 0;
                     v->nargs = 0;
+                    chg.values_changed = true;
                     continue;
                 }
             }
         }
     }
+    return chg;
 }
 
 /* ========== Copy Propagation ========== */
@@ -256,8 +269,9 @@ static XiValue *resolve_copy(XiValue *v) {
     return v;
 }
 
-XR_FUNC void xi_opt_copy_prop(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_copy_prop: NULL func");
+    XiPassChange chg = xi_pass_no_change();
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
@@ -267,8 +281,10 @@ XR_FUNC void xi_opt_copy_prop(XiFunc *f) {
             XiValue *v = blk->values[i];
             for (uint16_t a = 0; a < v->nargs; a++) {
                 XiValue *resolved = resolve_copy(v->args[a]);
-                if (resolved && resolved != v->args[a])
+                if (resolved && resolved != v->args[a]) {
                     v->args[a] = resolved;
+                    chg.values_changed = true;
+                }
             }
         }
 
@@ -276,18 +292,23 @@ XR_FUNC void xi_opt_copy_prop(XiFunc *f) {
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 XiValue *resolved = resolve_copy(phi->value.args[a]);
-                if (resolved && resolved != phi->value.args[a])
+                if (resolved && resolved != phi->value.args[a]) {
                     phi->value.args[a] = resolved;
+                    chg.values_changed = true;
+                }
             }
         }
 
         /* Rewrite block control */
         if (blk->control) {
             XiValue *resolved = resolve_copy(blk->control);
-            if (resolved && resolved != blk->control)
+            if (resolved && resolved != blk->control) {
                 blk->control = resolved;
+                chg.values_changed = true;
+            }
         }
     }
+    return chg;
 }
 
 /* ========== Dead Code Elimination ========== */
@@ -330,8 +351,9 @@ static void compute_use_counts(XiFunc *f) {
     }
 }
 
-XR_FUNC void xi_opt_dce(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_dce: NULL func");
+    XiPassChange chg = xi_pass_no_change();
 
     compute_use_counts(f);
 
@@ -360,16 +382,20 @@ XR_FUNC void xi_opt_dce(XiFunc *f) {
 
                 block_remove_value(blk, i);
                 changed = true;
+                chg.values_changed = true;
+                chg.n_removed++;
                 /* Don't increment i: next value shifted into position */
             }
         }
     }
+    return chg;
 }
 
 /* ========== Phi Simplification ========== */
 
-XR_FUNC void xi_opt_phi_simplify(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_phi_simplify(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_phi_simplify: NULL func");
+    XiPassChange chg = xi_pass_no_change();
 
     bool changed = true;
     while (changed) {
@@ -404,6 +430,8 @@ XR_FUNC void xi_opt_phi_simplify(XiFunc *f) {
                     /* Remove phi from linked list */
                     *prev_ptr = next;
                     changed = true;
+                    chg.values_changed = true;
+                    chg.n_removed++;
                 } else {
                     prev_ptr = &phi->next;
                 }
@@ -412,6 +440,7 @@ XR_FUNC void xi_opt_phi_simplify(XiFunc *f) {
             }
         }
     }
+    return chg;
 }
 
 /* ========== Strength Reduction ========== */
@@ -433,8 +462,9 @@ XR_FUNC void xi_opt_phi_simplify(XiFunc *f) {
  *   x - x = 0
  *   x ^ x = 0
  */
-XR_FUNC void xi_opt_strength_reduce(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_strength_reduce(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_strength_reduce: NULL func");
+    XiPassChange chg = xi_pass_no_change();
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
@@ -454,59 +484,59 @@ XR_FUNC void xi_opt_strength_reduce(XiFunc *f) {
             switch (v->op) {
                 case XI_ADD:
                     /* x + 0 = x */
-                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     /* 0 + x = x */
-                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; chg.values_changed = true; }
                     break;
 
                 case XI_SUB:
                     /* x - 0 = x */
-                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     /* x - x = 0 */
-                    else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
                     break;
 
                 case XI_MUL:
                     /* x * 0 = 0 */
-                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
                     /* x * 1 = x */
-                    else if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    else if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     /* 1 * x = x */
-                    else if (l_one) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    else if (l_one) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; chg.values_changed = true; }
                     break;
 
                 case XI_DIV:
                     /* x / 1 = x */
-                    if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     break;
 
                 case XI_BAND:
                     /* x & 0 = 0 */
-                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
                     /* x & x = x */
-                    else if (same) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    else if (same) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     break;
 
                 case XI_BOR:
                     /* x | 0 = x */
-                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
-                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
+                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; chg.values_changed = true; }
                     /* x | x = x */
-                    else if (same) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    else if (same) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     break;
 
                 case XI_BXOR:
                     /* x ^ 0 = x */
-                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
-                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; }
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
+                    else if (l_zero) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; chg.values_changed = true; }
                     /* x ^ x = 0 */
-                    else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; }
+                    else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
                     break;
 
                 case XI_SHL:
                 case XI_SHR:
                     /* x << 0 = x, x >> 0 = x */
-                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; }
+                    if (r_zero) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     break;
 
                 default:
@@ -514,6 +544,7 @@ XR_FUNC void xi_opt_strength_reduce(XiFunc *f) {
             }
         }
     }
+    return chg;
 }
 
 /* ========== SelectRepresentations ========== */
@@ -603,15 +634,15 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot,
     }
 }
 
-XR_FUNC void xi_opt_select_rep(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_select_rep: NULL func");
 
     uint32_t max_id = f->next_value_id;
-    if (max_id == 0) return;
+    if (max_id == 0) return xi_pass_no_change();
 
     XiValue **box_of = (XiValue **)xr_calloc(max_id, sizeof(XiValue *));
     XiValue **unbox_of = (XiValue **)xr_calloc(max_id, sizeof(XiValue *));
-    if (!box_of || !unbox_of) { xr_free(box_of); xr_free(unbox_of); return; }
+    if (!box_of || !unbox_of) { xr_free(box_of); xr_free(unbox_of); return xi_pass_no_change(); }
 
     /* Rewrite args of every instruction, phi, and block control. */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -705,6 +736,7 @@ XR_FUNC void xi_opt_select_rep(XiFunc *f) {
         if (f->children[i])
             xi_opt_select_rep(f->children[i]);
     }
+    return xi_pass_change_all();
 }
 
 /* ========== BOX/UNBOX Peephole Elimination ========== */
@@ -715,8 +747,9 @@ XR_FUNC void xi_opt_select_rep(XiFunc *f) {
  *   BOX(UNBOX(x)) -> COPY(x)
  * Subsequent copy-prop and DCE clean up the COPY and dead BOX/UNBOX.
  */
-XR_FUNC void xi_opt_box_elim(XiFunc *f) {
+XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_box_elim: NULL func");
+    XiPassChange chg = xi_pass_no_change();
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -734,6 +767,7 @@ XR_FUNC void xi_opt_box_elim(XiFunc *f) {
             if (elim) {
                 v->op = XI_COPY;
                 v->args[0] = inner->args[0];
+                chg.values_changed = true;
             }
         }
     }
@@ -742,22 +776,83 @@ XR_FUNC void xi_opt_box_elim(XiFunc *f) {
         if (f->children[i])
             xi_opt_box_elim(f->children[i]);
     }
+    return chg;
 }
 
 /* ========== Combined Pass ========== */
 
 XR_FUNC void xi_opt_run(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_run: NULL func");
+    xi_opt_run_pipeline(f, XI_OPT_LIGHT);
+}
 
-    xi_opt_const_fold(f);
-    xi_opt_strength_reduce(f);
-    xi_opt_copy_prop(f);
-    xi_opt_phi_simplify(f);
-    xi_opt_dce(f);
+/* ========== Pipeline Driver ========== */
+
+/* Pass table: ordered by recommended execution sequence.
+ * The driver runs all passes whose min_level <= requested level. */
+static const XiPassDesc xi_pass_table[] = {
+    { "constfold",       xi_opt_const_fold,      XI_OPT_LIGHT, XI_PASS_NONE },
+    { "strength_reduce", xi_opt_strength_reduce,  XI_OPT_LIGHT, XI_PASS_NONE },
+    { "copy_prop",       xi_opt_copy_prop,        XI_OPT_LIGHT, XI_PASS_NONE },
+    { "phi_simplify",    xi_opt_phi_simplify,     XI_OPT_LIGHT, XI_PASS_NONE },
+    { "dce",             xi_opt_dce,              XI_OPT_LIGHT, XI_PASS_NONE },
+    /* XI_OPT_FULL passes will be added here as they are ported:
+     * { "sccp",    xi_opt_sccp,    XI_OPT_FULL, XI_PASS_NEEDS_DOM },
+     * { "gvn",     xi_opt_gvn,     XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_DEFUSE },
+     * { "licm",    xi_opt_licm,    XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP },
+     * { "inline",  xi_opt_inline,  XI_OPT_FULL, XI_PASS_NEEDS_DEFUSE },
+     * { "ifconv",  xi_opt_ifconv,  XI_OPT_FULL, XI_PASS_NEEDS_DOM },
+     */
+};
+
+#define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
+
+XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
+    XR_DCHECK(f != NULL, "xi_opt_run_pipeline: NULL func");
+
+    if (level == XI_OPT_NONE)
+        return xi_pass_no_change();
+
+    XiPassChange total = xi_pass_no_change();
+
+    /* Fixed-point iteration: repeat until no pass reports a change */
+    for (int round = 0; round < XI_OPT_MAX_ROUNDS; round++) {
+        XiPassChange round_chg = xi_pass_no_change();
+
+        for (size_t p = 0; p < XI_PASS_TABLE_SIZE; p++) {
+            const XiPassDesc *desc = &xi_pass_table[p];
+            if (desc->min_level > level)
+                continue;
+
+            XiPassChange pc = desc->fn(f);
+            round_chg = xi_pass_merge(round_chg, pc);
+        }
+
+        total = xi_pass_merge(total, round_chg);
+
+        /* Converged: no pass changed anything this round */
+        if (!round_chg.cfg_changed && !round_chg.values_changed &&
+            !round_chg.types_changed)
+            break;
+
+#ifndef NDEBUG
+        /* Re-verify after each round in debug builds */
+        char errbuf[512];
+        if (!xi_verify(f, errbuf, sizeof(errbuf))) {
+            fprintf(stderr, "[xi_pass] verify failed after round %d for '%s': %s\n",
+                    round, f->name ? f->name : "?", errbuf);
+            XR_DCHECK(false, "xi_pass: post-round verify failed");
+        }
+#endif
+    }
 
     /* Recurse into nested functions / closures */
     for (uint16_t i = 0; i < f->nchildren; i++) {
-        if (f->children[i])
-            xi_opt_run(f->children[i]);
+        if (f->children[i]) {
+            XiPassChange child_chg = xi_opt_run_pipeline(f->children[i], level);
+            total = xi_pass_merge(total, child_chg);
+        }
     }
+
+    return total;
 }
