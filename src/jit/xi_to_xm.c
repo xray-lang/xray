@@ -64,6 +64,11 @@ typedef struct {
     /* Deopt snapshot counter (monotonically increasing) */
     uint16_t next_deopt_id;
 
+    /* Direct-mapped index: value_id → slot_map entry index.
+     * -1 = no entry.  Replaces linear scan in slot_map_bc_pc(). */
+    int32_t *slot_idx;
+    uint32_t slot_idx_size;
+
     bool error;
 } LowerCtx;
 
@@ -110,14 +115,13 @@ static XmBlock *get_block(LowerCtx *ctx, XiBlock *blk) {
 /* ========== Slot Map / Deopt Helpers ========== */
 
 /* Look up the bytecode instruction offset for a given Xi value ID.
- * Returns -1 if no mapping exists (value has no IC-relevant bytecode). */
+ * Returns -1 if no mapping exists (value has no IC-relevant bytecode).
+ * O(1) via direct-mapped slot_idx table built at init. */
 static int slot_map_bc_pc(const LowerCtx *ctx, uint32_t value_id) {
-    if (!ctx->slot_map) return -1;
-    for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
-        if (ctx->slot_map->entries[i].value_id == value_id)
-            return (int)ctx->slot_map->entries[i].bc_pc;
-    }
-    return -1;
+    if (!ctx->slot_idx || value_id >= ctx->slot_idx_size) return -1;
+    int32_t idx = ctx->slot_idx[value_id];
+    if (idx < 0) return -1;
+    return (int)ctx->slot_map->entries[idx].bc_pc;
 }
 
 /* Record a deopt snapshot at the current point for a guard instruction.
@@ -146,20 +150,39 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
     info->slots = NULL;
 
     /* Populate slots from slot_map: for each live Xi value with a bc_slot,
-     * record its current Xm ref so codegen can rebuild interpreter state. */
+     * record its current Xm ref so codegen can rebuild interpreter state.
+     * Count live entries first; refuse to speculate if > XM_MAX_DEOPT_SLOTS
+     * (avoids silent truncation that could restore partial state). */
     if (ctx->slot_map && ctx->slot_map->count > 0) {
-        uint32_t max_slots = ctx->slot_map->count;
-        if (max_slots > XM_MAX_DEOPT_SLOTS)
-            max_slots = XM_MAX_DEOPT_SLOTS;
+        /* Pass 1: count live entries */
+        uint32_t live_count = 0;
+        for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
+            XiSlotMapEntry *e = &ctx->slot_map->entries[i];
+            if (e->value_id >= ctx->ref_map_size) continue;
+            XmRef ref = ctx->ref_map[e->value_id];
+            if (xm_ref_is_none(ref)) continue;
+            live_count++;
+        }
+        if (live_count > XM_MAX_DEOPT_SLOTS) {
+            /* Too many live slots — refuse this deopt point so the
+             * caller falls back to the generic (unspecialized) path
+             * rather than restoring a truncated snapshot. */
+            func->ndeopt--;  /* undo the slot we just claimed */
+            return 0xFFFF;
+        }
+
+        /* Pass 2: populate slots (guaranteed to fit) */
         XmDeoptSlot *slots = (XmDeoptSlot *)xr_calloc(
-            max_slots, sizeof(XmDeoptSlot));
+            live_count ? live_count : 1, sizeof(XmDeoptSlot));
         if (slots) {
             uint16_t ns = 0;
-            for (uint32_t i = 0; i < ctx->slot_map->count && ns < max_slots; i++) {
+            for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
                 XiSlotMapEntry *e = &ctx->slot_map->entries[i];
                 if (e->value_id >= ctx->ref_map_size) continue;
                 XmRef ref = ctx->ref_map[e->value_id];
                 if (xm_ref_is_none(ref)) continue;
+                XR_DCHECK(ns < live_count,
+                          "record_deopt: slot count mismatch");
                 slots[ns].bc_slot = (int16_t)e->bc_slot;
                 slots[ns].rep = xm_ref_is_const(ref) ? XR_REP_I64
                     : (e->xr_tag == 4 ? XR_REP_F64 : XR_REP_I64);
@@ -424,6 +447,7 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 /* Emit GUARD_KLASS on receiver (args[0]) */
                 XmRef recv = call_args[0];
                 uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
+                if (did == 0xFFFF) goto generic_call;  /* deopt overflow */
                 XmRef klass_ref = xm_const_ptr(ctx->xm_func, (void *)klass);
                 XmRef deopt_ref = xm_const_i64(ctx->xm_func, (int64_t)did);
                 xm_emit(ctx->xm_func, blk, XM_GUARD_KLASS, XR_REP_I64,
@@ -449,6 +473,7 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         }
     }
 
+generic_call:
     /* Fallback: generic call via xr_jit_call_func bridge */
     XmRef nargs_ref = xm_const_i64(ctx->xm_func, (int64_t)nargs);
     XmRef nargs_val = xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64,
@@ -586,21 +611,24 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             const XrICField *fic = ic_field_lookup(ctx, bc_pc);
             if (fic) {
                 uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
-                XmRef shape_id = xm_const_i64(ctx->xm_func,
-                                                 (int64_t)fic->json_shape_id);
-                XmRef deopt_ref = xm_const_i64(ctx->xm_func, (int64_t)did);
-                xm_emit(ctx->xm_func, blk,
-                         XM_GUARD_SHAPE, XR_REP_I64,
-                         obj, shape_id);
-                blk->ins[blk->nins - 1].dst = deopt_ref;
-                blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+                if (did != 0xFFFF) {
+                    XmRef shape_id = xm_const_i64(ctx->xm_func,
+                                                     (int64_t)fic->json_shape_id);
+                    XmRef deopt_ref = xm_const_i64(ctx->xm_func, (int64_t)did);
+                    xm_emit(ctx->xm_func, blk,
+                             XM_GUARD_SHAPE, XR_REP_I64,
+                             obj, shape_id);
+                    blk->ins[blk->nins - 1].dst = deopt_ref;
+                    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
 
-                /* Direct field load: offset = fields_base + idx * sizeof(XrValue) */
-                int64_t byte_off = XM_JSON_FIELDS_OFFSET
-                                   + (int64_t)fic->json_field_idx * XM_XRVALUE_SIZE;
-                XmRef off = xm_const_i64(ctx->xm_func, byte_off);
-                return xm_emit(ctx->xm_func, blk,
-                                 XM_LOAD_FIELD, XR_REP_I64, obj, off);
+                    /* Direct field load at known offset */
+                    int64_t byte_off = XM_JSON_FIELDS_OFFSET
+                                       + (int64_t)fic->json_field_idx * XM_XRVALUE_SIZE;
+                    XmRef off = xm_const_i64(ctx->xm_func, byte_off);
+                    return xm_emit(ctx->xm_func, blk,
+                                     XM_LOAD_FIELD, XR_REP_I64, obj, off);
+                }
+                /* deopt overflow: fall through to generic path */
             }
 
             /* Generic fallback: offset from aux_int */
@@ -914,6 +942,25 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
         return NULL;
     }
 
+    /* Build direct-mapped index: value_id → slot_map entry.
+     * Replaces O(n) linear scan with O(1) lookup per IC query. */
+    ctx.slot_idx = NULL;
+    ctx.slot_idx_size = 0;
+    if (slot_map && slot_map->count > 0) {
+        ctx.slot_idx_size = ctx.ref_map_size;
+        ctx.slot_idx = (int32_t *)xr_malloc(
+            ctx.slot_idx_size * sizeof(int32_t));
+        if (ctx.slot_idx) {
+            memset(ctx.slot_idx, 0xFF,
+                   ctx.slot_idx_size * sizeof(int32_t));
+            for (uint32_t i = 0; i < slot_map->count; i++) {
+                uint32_t vid = slot_map->entries[i].value_id;
+                if (vid < ctx.slot_idx_size)
+                    ctx.slot_idx[vid] = (int32_t)i;
+            }
+        }
+    }
+
     /* Allocate param vregs FIRST: codegen prologue assumes consecutive
      * vregs 0..num_params-1 correspond to function arguments loaded from
      * the args_ptr array. Must precede any other xm_new_vreg calls. */
@@ -991,6 +1038,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
     }
 
     /* Cleanup */
+    xr_free(ctx.slot_idx);
     xr_free(ctx.block_map);
     xr_free(ctx.ref_map);
 
