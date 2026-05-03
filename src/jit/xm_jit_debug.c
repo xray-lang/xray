@@ -13,46 +13,55 @@
  *   name, offset, and surrounding disassembly for quick diagnosis.
  */
 
-#ifdef __aarch64__
-
 #include "xm_jit_debug.h"
 #include "../base/xchecks.h"
+#include "xm_offsets.h"
+#include "xm_jit_runtime.h"
+
+#ifdef __aarch64__
 #include "xm_arm64_disasm.h"
 #include "xm_arm64.h"
 #include "xm_codegen.h"
-#include "xm_offsets.h"
-#include "xm_jit_runtime.h"
+#endif
 
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 #include "../os/os_codemem.h"
 #include "../os/os_proc.h"
 #include "../os/os_thread.h"
 
 // ========== Code Region Registry ==========
 
+/* Region registry — accessed from background compile thread and signal
+ * handler; g_nregions uses atomic_uint for safe concurrent registration. */
 static JitCodeRegion g_regions[JIT_DEBUG_MAX_REGIONS];
-static uint32_t g_nregions = 0;
+static atomic_uint g_nregions = 0;
 
-void jit_debug_register(const char *name, void *code, uint32_t size, uint32_t fast_entry_offset) {
+XR_FUNC void jit_debug_register(const char *name, void *code, uint32_t size,
+                                uint32_t fast_entry_offset) {
     XR_DCHECK(name != NULL, "jit_debug_register: NULL name");
     XR_DCHECK(code != NULL, "jit_debug_register: NULL code");
-    if (g_nregions >= JIT_DEBUG_MAX_REGIONS) {
+    uint32_t idx = atomic_fetch_add_explicit(&g_nregions, 1, memory_order_relaxed);
+    if (idx >= JIT_DEBUG_MAX_REGIONS) {
+        atomic_fetch_sub_explicit(&g_nregions, 1, memory_order_relaxed);
         fprintf(stderr, "[JIT-debug] region registry full, cannot register %s\n",
                 name ? name : "?");
         return;
     }
-    JitCodeRegion *r = &g_regions[g_nregions++];
+    JitCodeRegion *r = &g_regions[idx];
     r->name = name;
     r->code = code;
     r->code_size = size;
     r->fast_entry_offset = fast_entry_offset;
+    atomic_thread_fence(memory_order_release);
 }
 
-const JitCodeRegion *jit_debug_lookup(const void *pc) {
-    for (uint32_t i = 0; i < g_nregions; i++) {
+XR_FUNC const JitCodeRegion *jit_debug_lookup(const void *pc) {
+    uint32_t n = atomic_load_explicit(&g_nregions, memory_order_acquire);
+    for (uint32_t i = 0; i < n; i++) {
         const JitCodeRegion *r = &g_regions[i];
         uintptr_t start = (uintptr_t) r->code;
         uintptr_t end = start + r->code_size;
@@ -64,25 +73,38 @@ const JitCodeRegion *jit_debug_lookup(const void *pc) {
 
 /* ========== Disassembly Dump ========== */
 
-void jit_debug_dump(const char *name, const void *code, uint32_t size, uint32_t fast_entry_offset) {
+XR_FUNC void jit_debug_dump(const char *name, const void *code, uint32_t size,
+                            uint32_t fast_entry_offset) {
     XR_DCHECK(code != NULL, "jit_debug_dump: NULL code");
-    uint32_t n_inst = size / 4;
-    const uint32_t *insts = (const uint32_t *) code;
 
-    fprintf(stderr, "\n===== JIT disasm: %s (%u bytes, %u instructions) =====\n", name ? name : "?",
-            size, n_inst);
+    fprintf(stderr, "\n===== JIT disasm: %s (%u bytes) =====\n", name ? name : "?", size);
     fprintf(stderr, "  normal_entry: 0x0000\n");
     fprintf(stderr, "  fast_entry:   0x%04x\n", fast_entry_offset);
     fprintf(stderr, "-----\n");
 
+#if defined(__aarch64__)
+    uint32_t n_inst = size / 4;
+    const uint32_t *insts = (const uint32_t *) code;
     a64_disasm_dump(stderr, insts, n_inst, 0);
+#elif defined(__x86_64__)
+    /* No x64 disassembler yet — dump raw hex bytes */
+    const uint8_t *bytes = (const uint8_t *) code;
+    for (uint32_t off = 0; off < size; off += 16) {
+        fprintf(stderr, "  %04x:", off);
+        for (uint32_t j = 0; j < 16 && off + j < size; j++)
+            fprintf(stderr, " %02x", bytes[off + j]);
+        fprintf(stderr, "\n");
+    }
+#endif
 
     fprintf(stderr, "===== end %s =====\n\n", name ? name : "?");
 }
 
-/* ========== Guard Page Safepoint ========== */
+/* ========== Guard Page Safepoint (ARM64 only — uses x28/x19 registers) ========== */
 
-static void *g_safepoint_trampoline = NULL;  // global trampoline code (mmap'd executable)
+#ifdef __aarch64__
+
+static void *g_safepoint_trampoline = NULL;  /* global trampoline code (mmap'd executable) */
 static uint32_t g_trampoline_size = 0;
 
 void *jit_guard_page_alloc(void) {
@@ -181,6 +203,8 @@ void jit_guard_page_init_trampoline(void) {
     xr_os_codemem_make_executable(g_safepoint_trampoline, 4096);
     xr_os_codemem_flush_icache(g_safepoint_trampoline, g_trampoline_size);
 }
+
+#endif  /* __aarch64__ guard page safepoint */
 
 /* ========== Crash Handler ========== */
 
@@ -307,39 +331,68 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
             fprintf(stderr, "[JIT-CRASH] Code range: %p - %p (%u bytes)\n", r->code,
                     (char *) r->code + r->code_size, r->code_size);
 
-            // Dump surrounding context: 5 instructions before and after
-            uint32_t crash_inst = offset / 4;
-            uint32_t n_inst = r->code_size / 4;
-            uint32_t start = (crash_inst > 10) ? crash_inst - 10 : 0;
-            uint32_t end = (crash_inst + 10 < n_inst) ? crash_inst + 10 : n_inst;
-
-            fprintf(stderr, "[JIT-CRASH] Disassembly around crash point:\n");
-            const uint32_t *code = (const uint32_t *) r->code;
-            char line[256];
-            for (uint32_t i = start; i < end; i++) {
-                uint32_t off = i * 4;
-                a64_disasm_one(line, sizeof(line), code[i], off);
-                fprintf(stderr, "  %s %04x: %08x  %s\n", (i == crash_inst) ? ">>>" : "   ", off,
-                        code[i], line);
+            /* Dump surrounding code context around crash point */
+            fprintf(stderr, "[JIT-CRASH] Code around crash point:\n");
+#if defined(__aarch64__)
+            {
+                uint32_t crash_inst = offset / 4;
+                uint32_t n_inst = r->code_size / 4;
+                uint32_t dstart = (crash_inst > 10) ? crash_inst - 10 : 0;
+                uint32_t dend = (crash_inst + 10 < n_inst) ? crash_inst + 10 : n_inst;
+                const uint32_t *code = (const uint32_t *) r->code;
+                char line[256];
+                for (uint32_t i = dstart; i < dend; i++) {
+                    uint32_t off = i * 4;
+                    a64_disasm_one(line, sizeof(line), code[i], off);
+                    fprintf(stderr, "  %s %04x: %08x  %s\n",
+                            (i == crash_inst) ? ">>>" : "   ", off, code[i], line);
+                }
             }
+#elif defined(__x86_64__)
+            {
+                /* x64: variable-length instructions, dump hex bytes */
+                uint32_t dstart = (offset > 32) ? offset - 32 : 0;
+                uint32_t dend = (offset + 32 < r->code_size) ? offset + 32 : r->code_size;
+                const uint8_t *bytes = (const uint8_t *) r->code;
+                for (uint32_t off = dstart; off < dend; off += 16) {
+                    fprintf(stderr, "  %s %04x:",
+                            (off <= offset && offset < off + 16) ? ">>>" : "   ", off);
+                    for (uint32_t j = 0; j < 16 && off + j < dend; j++)
+                        fprintf(stderr, " %02x", bytes[off + j]);
+                    fprintf(stderr, "\n");
+                }
+            }
+#endif
 
-            // Also dump full disassembly to /tmp
+            /* Save full code dump to /tmp */
             char fname[256];
             snprintf(fname, sizeof(fname), "/tmp/jit_crash_%s.txt", r->name ? r->name : "unknown");
             FILE *f = fopen(fname, "w");
             if (f) {
                 fprintf(f, "JIT crash in '%s' at offset 0x%04x\n\n", r->name ? r->name : "?",
                         offset);
-                a64_disasm_dump(f, code, n_inst, 0);
+#if defined(__aarch64__)
+                uint32_t n_inst = r->code_size / 4;
+                a64_disasm_dump(f, (const uint32_t *) r->code, n_inst, 0);
+#elif defined(__x86_64__)
+                const uint8_t *bytes = (const uint8_t *) r->code;
+                for (uint32_t off = 0; off < r->code_size; off += 16) {
+                    fprintf(f, "  %04x:", off);
+                    for (uint32_t j = 0; j < 16 && off + j < r->code_size; j++)
+                        fprintf(f, " %02x", bytes[off + j]);
+                    fprintf(f, "\n");
+                }
+#endif
                 fclose(f);
-                fprintf(stderr, "[JIT-CRASH] Full disassembly saved to %s\n", fname);
+                fprintf(stderr, "[JIT-CRASH] Full dump saved to %s\n", fname);
             }
         } else {
             fprintf(stderr, "[JIT-CRASH] PC not in any known JIT region\n");
 
             // Print all known regions for reference
-            fprintf(stderr, "[JIT-CRASH] Known JIT regions (%u):\n", g_nregions);
-            for (uint32_t i = 0; i < g_nregions; i++) {
+            uint32_t nr = atomic_load_explicit(&g_nregions, memory_order_acquire);
+            fprintf(stderr, "[JIT-CRASH] Known JIT regions (%u):\n", nr);
+            for (uint32_t i = 0; i < nr; i++) {
                 const JitCodeRegion *ri = &g_regions[i];
                 fprintf(stderr, "  [%u] %s: %p - %p (%u bytes)\n", i, ri->name ? ri->name : "?",
                         ri->code, (char *) ri->code + ri->code_size, ri->code_size);
@@ -347,23 +400,59 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
         }
     }
 
-#if defined(__aarch64__) || defined(__arm64__)
-    // Print key registers for diagnosis
-    ucontext_t *uc2 = (ucontext_t *) ucontext;
-#if defined(XR_OS_MACOS)
-    fprintf(stderr, "[JIT-CRASH] Registers:\n");
-    for (int i = 0; i < 29; i++) {
-        fprintf(stderr, "  x%-2d = 0x%016llx", i,
-                (unsigned long long) uc2->uc_mcontext->__ss.__x[i]);
-        if (i % 4 == 3)
-            fprintf(stderr, "\n");
+    /* Print key registers for diagnosis */
+    {
+        ucontext_t *uc2 = (ucontext_t *) ucontext;
+        (void) uc2;
+#if defined(__aarch64__) && defined(XR_OS_MACOS)
+        fprintf(stderr, "[JIT-CRASH] Registers:\n");
+        for (int i = 0; i < 29; i++) {
+            fprintf(stderr, "  x%-2d = 0x%016llx", i,
+                    (unsigned long long) uc2->uc_mcontext->__ss.__x[i]);
+            if (i % 4 == 3)
+                fprintf(stderr, "\n");
+        }
+        fprintf(stderr, "\n  fp  = 0x%016llx  lr  = 0x%016llx  sp  = 0x%016llx\n",
+                (unsigned long long) uc2->uc_mcontext->__ss.__fp,
+                (unsigned long long) uc2->uc_mcontext->__ss.__lr,
+                (unsigned long long) uc2->uc_mcontext->__ss.__sp);
+#elif defined(__x86_64__) && defined(XR_OS_MACOS)
+        fprintf(stderr, "[JIT-CRASH] Registers:\n");
+        fprintf(stderr, "  rax = 0x%016llx  rbx = 0x%016llx  rcx = 0x%016llx\n",
+                uc2->uc_mcontext->__ss.__rax,
+                uc2->uc_mcontext->__ss.__rbx,
+                uc2->uc_mcontext->__ss.__rcx);
+        fprintf(stderr, "  rdx = 0x%016llx  rsi = 0x%016llx  rdi = 0x%016llx\n",
+                uc2->uc_mcontext->__ss.__rdx,
+                uc2->uc_mcontext->__ss.__rsi,
+                uc2->uc_mcontext->__ss.__rdi);
+        fprintf(stderr, "  rbp = 0x%016llx  rsp = 0x%016llx  rip = 0x%016llx\n",
+                uc2->uc_mcontext->__ss.__rbp,
+                uc2->uc_mcontext->__ss.__rsp,
+                uc2->uc_mcontext->__ss.__rip);
+        fprintf(stderr, "  r8  = 0x%016llx  r9  = 0x%016llx  r10 = 0x%016llx\n",
+                uc2->uc_mcontext->__ss.__r8,
+                uc2->uc_mcontext->__ss.__r9,
+                uc2->uc_mcontext->__ss.__r10);
+        fprintf(stderr, "  r11 = 0x%016llx  r12 = 0x%016llx  r13 = 0x%016llx\n",
+                uc2->uc_mcontext->__ss.__r11,
+                uc2->uc_mcontext->__ss.__r12,
+                uc2->uc_mcontext->__ss.__r13);
+        fprintf(stderr, "  r14 = 0x%016llx  r15 = 0x%016llx\n",
+                uc2->uc_mcontext->__ss.__r14,
+                uc2->uc_mcontext->__ss.__r15);
+#elif defined(__x86_64__) && defined(XR_OS_LINUX)
+        fprintf(stderr, "[JIT-CRASH] Registers:\n");
+        fprintf(stderr, "  rax = 0x%016lx  rbx = 0x%016lx  rcx = 0x%016lx\n",
+                (unsigned long) uc2->uc_mcontext.gregs[13],
+                (unsigned long) uc2->uc_mcontext.gregs[11],
+                (unsigned long) uc2->uc_mcontext.gregs[14]);
+        fprintf(stderr, "  rip = 0x%016lx  rsp = 0x%016lx  rbp = 0x%016lx\n",
+                (unsigned long) uc2->uc_mcontext.gregs[16],
+                (unsigned long) uc2->uc_mcontext.gregs[15],
+                (unsigned long) uc2->uc_mcontext.gregs[10]);
+#endif
     }
-    fprintf(stderr, "\n  fp  = 0x%016llx  lr  = 0x%016llx  sp  = 0x%016llx\n",
-            (unsigned long long) uc2->uc_mcontext->__ss.__fp,
-            (unsigned long long) uc2->uc_mcontext->__ss.__lr,
-            (unsigned long long) uc2->uc_mcontext->__ss.__sp);
-#endif
-#endif
 
     fprintf(stderr, "[JIT-CRASH] Aborting.\n");
     fflush(stderr);
@@ -377,7 +466,7 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
     raise(sig);
 }
 
-void jit_debug_install_crash_handler(void) {
+XR_FUNC void jit_debug_install_crash_handler(void) {
     if (getenv("XRAY_NO_JIT_CRASH_HANDLER")) {
         fprintf(stderr, "[JIT-debug] crash handler disabled by XRAY_NO_JIT_CRASH_HANDLER\n");
         return;
@@ -411,4 +500,3 @@ void jit_debug_install_crash_handler(void) {
     fprintf(stderr, "[JIT-debug] crash handler installed (with alt stack)\n");
 }
 
-#endif  // __aarch64__
