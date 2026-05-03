@@ -1623,12 +1623,4 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     xa_infer_context_free(ctx);
 
-#ifdef XR_ENABLE_JIT
-    // Pass 3: Generate JIT/AOT metadata (type stability, func summaries, etc.)
-    // This metadata is stored on analyzer->jit_metadata for the compiler to use.
-    if (!analyzer->jit_metadata) {
-        analyzer->jit_metadata = xa_jit_metadata_new();
-    }
-    xa_generate_jit_metadata(analyzer, ast, analyzer->jit_metadata);
-#endif
 }
