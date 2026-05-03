@@ -789,12 +789,7 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     /* Establish bail-out point: any CODEGEN_CHECK failure longjmps here */
     if (setjmp(ctx.bail_jmp) != 0) {
         result.error = ctx.error_reason ? ctx.error_reason : "codegen invariant violation";
-        xr_free(ctx.block_offsets);
-        xr_free(ctx.patches);
-        xr_free(ctx.vreg_override);
-        if (ctx.xra)
-            xra_result_free(ctx.xra);
-        return result;
+        goto cleanup;
     }
 
     /* Pre-RA: aggressive MOV coalescing */
@@ -804,9 +799,7 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     ctx.xra = xra_run(func);
     if (ctx.xra && ctx.xra->had_error) {
         result.error = "regalloc refused: spill slot limit exceeded";
-        xr_free(ctx.patches);
-        xra_result_free(ctx.xra);
-        return result;
+        goto cleanup;
     }
 
     /* Gap-move override array */
@@ -837,11 +830,7 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     void *code_mem = xm_code_alloc(alloc, alloc_size, 16);
     if (!code_mem) {
         result.error = "failed to allocate executable memory";
-        xr_free(ctx.block_offsets);
-        xr_free(ctx.patches);
-        xr_free(ctx.vreg_override);
-        xra_result_free(ctx.xra);
-        return result;
+        goto cleanup;
     }
 
 #ifdef XR_OS_MACOS
@@ -903,11 +892,7 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
 
     if (ctx.had_error) {
         result.error = "x64 codegen: unsupported opcode or regalloc error";
-        xr_free(ctx.block_offsets);
-        xr_free(ctx.patches);
-        xr_free(ctx.vreg_override);
-        xra_result_free(ctx.xra);
-        return result;
+        goto cleanup;
     }
 
     result.code = code_mem;
@@ -915,10 +900,12 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     result.fast_entry_offset = ctx.fast_entry_offset;
     result.success = true;
 
+cleanup:
     xr_free(ctx.block_offsets);
     xr_free(ctx.patches);
     xr_free(ctx.vreg_override);
-    xra_result_free(ctx.xra);
+    if (ctx.xra)
+        xra_result_free(ctx.xra);
     return result;
 }
 
