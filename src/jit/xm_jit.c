@@ -443,7 +443,6 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
             XrVMContext *cur_ctx = xr_vm_current_ctx(jit->isolate);
             task.ic_fields_snapshot = xr_vm_ic_fields_snapshot(cur_ctx, proto);
             task.ic_methods_snapshot = xr_vm_ic_methods_snapshot(cur_ctx, proto);
-            task.ic_builtin_snapshot = xr_vm_ic_builtin_snapshot(cur_ctx, proto);
         }
 
         // Set sentinel (0x1) to prevent duplicate queue entries from OSR triggers.
