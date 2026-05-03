@@ -92,6 +92,13 @@ typedef struct {
      * no other consumers, skip emitting OP_CMP_* and instead emit the
      * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
     XiValue *fused_cmp;
+
+    /* Variable-based register coalescing: all SSA definitions of the same
+     * source variable share one VM register.  This is required for correct
+     * exception semantics — the VM's OP_THROW bypasses SSA phi resolution,
+     * so catch-block modifications must write to the same register that
+     * post-try-catch code reads from. */
+    uint8_t var_reg[MAX_REGS];  /* var_id -> pinned register (NO_REG = unassigned) */
 } EmitCtx;
 
 /* ========== Shared Utility Functions ========== */

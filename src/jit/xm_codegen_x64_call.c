@@ -843,4 +843,78 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     return true;
 }
 
+/* ========== Call Helpers ========== */
+
+/* const_rep_to_value_tag: moved to xm_codegen_x64_internal.h */
+
+/* Store call arguments from the pool to jit_ctx->call_args[] and
+ * compile-time type tags to jit_ctx->call_arg_tags[]. */
+void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XmIns *ins) {
+    CODEGEN_CHECK(ctx, ctx != NULL && ins != NULL, "call_args: NULL");
+    uint32_t vi = XM_REF_INDEX(ins->dst);
+    if (vi >= ctx->func->nvreg)
+        return;
+    XmVReg *vreg = &ctx->func->vregs[vi];
+    if (vreg->call_nargs == 0)
+        return;
+    XmRef *pool = ctx->func->call_arg_pool;
+    uint32_t start = vreg->call_arg_start;
+
+    uint64_t tag_pack[2] = {0, 0};
+
+    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+        XmRef arg = pool[start + i];
+        int32_t off = (int32_t) (XM_JIT_CALL_ARGS_OFFSET + i * 8);
+        uint8_t tag = XR_RTAG_UNKNOWN;
+        if (xm_ref_is_none(arg))
+            goto store_tag;
+        if (xm_ref_is_const(arg)) {
+            uint32_t ci = XM_REF_INDEX(arg);
+            uint64_t val = (uint64_t) ctx->func->consts[ci].val.raw;
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, val);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off, X64_SCRATCH_REG);
+            tag = const_rep_to_value_tag(ctx->func->consts[ci].rep);
+        } else {
+            X64Reg reg = x64_get_operand(ctx, arg, X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, off, reg);
+            XmType ct = xm_ref_ctype(ctx->func, arg);
+            tag = vtag_to_value_tag(type_kind_to_vtag(ct.kind));
+        }
+    store_tag:
+        if (i < 8)
+            tag_pack[0] |= ((uint64_t) tag << (i * 8));
+        else
+            tag_pack[1] |= ((uint64_t) tag << ((i - 8) * 8));
+    }
+
+    /* Store packed tags as compile-time constants */
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack[0]);
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
+    if (vreg->call_nargs > 8) {
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack[1]);
+        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + 8),
+                   X64_SCRATCH_REG);
+    }
+
+    /* Dynamic tag patch: overwrite unknown tags from slot_runtime_tags */
+    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+        uint8_t ct = (i < 8) ? (uint8_t) ((tag_pack[0] >> (i * 8)) & 0xFF)
+                             : (uint8_t) ((tag_pack[1] >> ((i - 8) * 8)) & 0xFF);
+        if (ct != XR_RTAG_UNKNOWN)
+            continue;
+        XmRef arg = pool[start + i];
+        if (!xm_ref_is_vreg(arg))
+            continue;
+        uint32_t ai = XM_REF_INDEX(arg);
+        if (ai >= ctx->func->nvreg)
+            continue;
+        int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
+        if (bc_slot < 0 || bc_slot >= 256)
+            continue;
+        int32_t src_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+        int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
+        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
+        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst_off, X64_SCRATCH_REG);
+    }
+}
 #endif /* __x86_64__ || _M_X64 */

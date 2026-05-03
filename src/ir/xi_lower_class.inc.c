@@ -86,7 +86,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
 
 /* Lower AST_CLASS_DECL: compile methods as child XiFuncs,
  * emit XI_CLASS_CREATE carrying XiClassData for the emitter. */
-static void lower_class_decl(XiLower *l, AstNode *node) {
+XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     ClassDeclNode *cd = &node->as.class_decl;
     XR_DCHECK(cd->name != NULL, "class name must not be NULL");
 

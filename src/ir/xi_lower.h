@@ -124,6 +124,11 @@ typedef struct XiLower {
     /* Whether this lowering context is for a top-level program */
     bool is_program;
 
+    /* Nesting depth of try-catch blocks.  When > 0, throw keeps the
+     * block alive (PLAIN) so SSA phi nodes correctly include variable
+     * modifications made before the throw. */
+    int try_depth;
+
     /* Error tracking */
     bool had_error;
 } XiLower;

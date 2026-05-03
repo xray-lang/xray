@@ -47,7 +47,10 @@ XR_FUNC void free_reg(EmitCtx *ctx, uint8_t reg) {
 }
 
 /* Get register for a value. Assigns one if not yet mapped.
- * Uses free register stack before allocating new ones. */
+ * Uses free register stack before allocating new ones.
+ * Values annotated with a source var_id are coalesced to share
+ * the same register, which is necessary for correct exception
+ * handling where OP_THROW bypasses SSA phi resolution. */
 XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
     XR_DCHECK(v != NULL, "reg_of: NULL value");
 
@@ -57,6 +60,11 @@ XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
     }
 
     if (ctx->reg_map[v->id] == NO_REG) {
+        /* Variable coalescing: reuse the pinned register for this var_id */
+        if (v->var_id != 0xFF && ctx->var_reg[v->var_id] != NO_REG) {
+            ctx->reg_map[v->id] = ctx->var_reg[v->var_id];
+            return ctx->reg_map[v->id];
+        }
         /* Try recycled register first */
         if (ctx->nfree > 0) {
             ctx->reg_map[v->id] = ctx->free_regs[--ctx->nfree];
@@ -69,6 +77,9 @@ XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
             if (ctx->next_reg > ctx->max_reg)
                 ctx->max_reg = ctx->next_reg;
         }
+        /* Record as the pinned register for this variable */
+        if (v->var_id != 0xFF)
+            ctx->var_reg[v->var_id] = ctx->reg_map[v->id];
     }
     return ctx->reg_map[v->id];
 }
@@ -95,11 +106,14 @@ XR_FUNC uint8_t alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
 }
 
 /* Release registers of input args whose last use is at the current ordinal.
- * Called AFTER emitting an instruction that reads these args. */
+ * Called AFTER emitting an instruction that reads these args.
+ * Coalesced registers (var_id != 0xFF) are never freed — they must remain
+ * pinned so all SSA definitions of the variable share one VM register. */
 XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v) {
     for (uint16_t i = 0; i < v->nargs; i++) {
         const XiValue *arg = v->args[i];
         if (!arg || arg->id >= ctx->reg_map_size) continue;
+        if (arg->var_id != 0xFF) continue;  /* pinned by coalescing */
         /* Free register if this is the last use of arg */
         if (ctx->last_use[arg->id] == ctx->current_ordinal) {
             uint8_t r = ctx->reg_map[arg->id];
@@ -415,30 +429,39 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     if (rpo_count == 0) return XI_EMIT_ERR_INTERNAL;
 
     /* Exception handler blocks are unreachable via normal CFG edges.
-     * Scan for XI_TRY ops and assign RPO numbers to catch targets and
-     * all transitively reachable blocks (catch body, finally, merge). */
+     * Scan for XI_TRY ops and assign RPO numbers to catch/finally targets
+     * and all transitively reachable blocks (catch body, finally, merge). */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
-            if (v->op == XI_TRY && v->aux) {
-                XiBlock *catch_blk = (XiBlock *)v->aux;
-                /* BFS from catch block to assign RPO to all reachable
-                 * exception-related blocks (catch, finally, merge). */
-                XiBlock *queue[64];
-                int qhead = 0, qtail = 0;
-                if (catch_blk->rpo == 0) {
-                    catch_blk->rpo = ++rpo_count;
-                    queue[qtail++] = catch_blk;
-                }
-                while (qhead < qtail && qtail < 64) {
-                    XiBlock *cur = queue[qhead++];
-                    for (int s = 0; s < 2; s++) {
-                        XiBlock *succ = cur->succs[s];
-                        if (succ && succ->rpo == 0) {
-                            succ->rpo = ++rpo_count;
-                            queue[qtail++] = succ;
-                        }
+            if (v->op != XI_TRY) continue;
+
+            /* Determine the BFS seed: catch block if present, otherwise
+             * the finally block.  For try-finally without catch, the
+             * finally block is unreachable via normal CFG (throw sets
+             * cur_block = NULL), so it needs RPO assignment here. */
+            XiBlock *seed = (XiBlock *)v->aux;  /* catch block or NULL */
+            if (!seed && v->aux_int >= 0) {
+                uint32_t fid = (uint32_t)v->aux_int;
+                if (fid < f->nblocks)
+                    seed = f->blocks[fid];
+            }
+            if (!seed) continue;
+
+            XiBlock *queue[64];
+            int qhead = 0, qtail = 0;
+            if (seed->rpo == 0) {
+                seed->rpo = ++rpo_count;
+                queue[qtail++] = seed;
+            }
+            while (qhead < qtail && qtail < 64) {
+                XiBlock *cur = queue[qhead++];
+                for (int s = 0; s < 2; s++) {
+                    XiBlock *succ = cur->succs[s];
+                    if (succ && succ->rpo == 0) {
+                        succ->rpo = ++rpo_count;
+                        queue[qtail++] = succ;
                     }
                 }
             }
@@ -475,6 +498,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
 
     ctx.rpo_order = rpo_order;
     ctx.rpo_count = rpo_count;
+    memset(ctx.var_reg, NO_REG, sizeof(ctx.var_reg));
 
     /* Allocate register map */
     ctx.reg_map_size = f->next_value_id;

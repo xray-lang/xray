@@ -217,6 +217,7 @@ static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op,
     v->id = f->next_value_id++;
     v->op = op;
     v->type = type;
+    v->var_id = 0xFF;  /* no source variable */
     v->nargs = nargs;
     v->uses = -1;  /* not yet computed */
     v->block = blk;

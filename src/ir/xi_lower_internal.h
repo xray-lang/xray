@@ -52,6 +52,12 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_stmt(XiLower *l, struct AstNode *node);
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
 
+/* ========== Cross-boundary helpers (xi_lower_expr.c, called from stmt) ========== */
+
+XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
+XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
+XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
+
 /* ========== Compound Statement Lowering (xi_lower_stmt.c) ========== */
 
 XR_FUNC void xi_lower_select(XiLower *l, struct AstNode *node);
