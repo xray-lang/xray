@@ -300,9 +300,11 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 x64_emit32(&ctx->buf, 0);
             }
 
-            /* Restore active stack map in jit_ctx */
+            /* Restore caller's active stack map in jit_ctx after JIT→JIT return */
             x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
-                       -(int32_t) X64_JIT_FRAME_BASE); /* TODO: frame smap ptr slot */
+                       -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET,
+                       X64_SCRATCH_REG);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);
 
             /* Save return value (RAX) to R11 before deopt check */
@@ -435,6 +437,14 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_lea(&ctx->buf, X64_ABI_ARG2, X64_JIT_CTX_REG,
                     (int32_t) (XM_JIT_CALL_ARGS_OFFSET + 8));
             x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+            /* Restore caller's smap + frame_sp after JIT→JIT return.
+             * Use R11 (scratch) to avoid clobbering RCX which holds callee tag. */
+            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
+                       -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET,
+                       X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);
 
             /* Store RCX (callee tag from epilogue) to jit_ctx->call_result_tag */
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_RESULT_TAG_OFFSET,
@@ -614,6 +624,14 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_mov_rr(&ctx->buf, X64_ABI_ARG1, X64_CORO_REG);
             /* CALL R11 (jit_fast_entry) */
             x64_call_r(&ctx->buf, X64_SCRATCH_REG);
+
+            /* Restore caller's smap + frame_sp after JIT→JIT return.
+             * Use R11 (scratch) to avoid clobbering RCX which holds callee tag. */
+            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
+                       -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET,
+                       X64_SCRATCH_REG);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);
 
             /* Store callee tag (RCX) to call_result_tag */
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_RESULT_TAG_OFFSET,

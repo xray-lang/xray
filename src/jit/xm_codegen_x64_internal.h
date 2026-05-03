@@ -102,6 +102,12 @@
  *
  * SPILL_BASE = frame metadata + XMM save area
  */
+/* Frame-embedded GC stack map metadata (negative offsets from RBP).
+ * These mirror ARM64's FRAME_SMAP_PTR_OFFSET / FRAME_SMAP_ID_OFFSET.
+ * Usage: x64_mov_rm(buf, reg, RBP, -(int32_t)X64_FRAME_SMAP_PTR_OFFSET) */
+#define X64_FRAME_SMAP_PTR_OFFSET  8   /* [rbp - 8]:  XrStackMapTable* for this JIT function */
+#define X64_FRAME_SMAP_ID_OFFSET  16   /* [rbp - 16]: safepoint_id (uint32_t) at current point */
+
 #ifdef _WIN32
 #define X64_SPILL_BASE (16 + X64_CALLEE_XMM_BYTES) /* 16 + 72 = 88 */
 #define X64_JIT_FRAME_BASE (16 + X64_CALLEE_XMM_BYTES)

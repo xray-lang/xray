@@ -351,6 +351,15 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     /* Load jit_ctx from coro */
     x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET);
 
+    /* Save stack_map_ptr from jit_ctx into frame for GC and smap restoration
+     * after JIT→JIT calls. Mirrors ARM64's FRAME_SMAP_PTR_OFFSET store. */
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+               (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
+    x64_mov_mr(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET, X64_SCRATCH_REG);
+    /* Initialize safepoint_id = UINT32_MAX (no active safepoint) */
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, 0xFFFFFFFF);
+    x64_mov_mr32(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_ID_OFFSET, X64_SCRATCH_REG);
+
     /* Load params from args array (ABI_ARG2 = args pointer).
      * Use xra_reg_at_pos with the entry block start position to get the
      * correct register at function entry (xra_vreg_first_reg returns
@@ -464,6 +473,14 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
 
     /* Load jit_ctx pointer */
     x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET);
+
+    /* Save stack_map_ptr from jit_ctx into frame */
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+               (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
+    x64_mov_mr(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET, X64_SCRATCH_REG);
+    /* Initialize safepoint_id = UINT32_MAX */
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, 0xFFFFFFFF);
+    x64_mov_mr32(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_ID_OFFSET, X64_SCRATCH_REG);
 
     /* Move params from alloc_regs[i] → RA-assigned registers.
      * Self-calls place arg i in alloc_regs[i]; if RA assigned param i
