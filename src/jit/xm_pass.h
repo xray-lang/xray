@@ -69,8 +69,15 @@ typedef enum {
 // Run the optimization pipeline on a function at the given level
 XR_FUNC void xm_run_pipeline(XmFunc *func, XmOptLevel opt);
 
-// Extended pipeline with caller proto (enables auto-inlining at -O2)
-XR_FUNC void xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto);
+// Extended pipeline with caller proto (enables auto-inlining at -O2).
+// budget_ms: wall-clock cap in milliseconds (0 = unlimited).
+// Returns true if the budget was exceeded (caller should bail out).
+XR_FUNC bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
+                                  uint32_t budget_ms);
+
+// Budget constants (milliseconds)
+#define XM_BUDGET_SYNC_MS  10   // Tier 1 JIT on main thread
+#define XM_BUDGET_BG_MS    50   // background worker compilation
 
 /* ========== Declarative Pipeline Driver ==========
  *
