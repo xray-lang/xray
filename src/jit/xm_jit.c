@@ -605,7 +605,17 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     // Conservative recompile: still use basic optimization (safe passes only)
     if (conservative)
         opt = XM_OPT_BASIC;
-    xm_run_pipeline_ex(func, opt, proto);
+    // Sync compile on main thread: tight budget to avoid stalling execution.
+    // Recompile (Tier 2) gets more headroom for heavier optimizations.
+    uint32_t budget = is_recompile ? XM_BUDGET_BG_MS : XM_BUDGET_SYNC_MS;
+    bool timed_out = xm_run_pipeline_ex(func, opt, proto, budget);
+    if (timed_out) {
+        xr_log_debug("jit", "pipeline budget exceeded for %s, bailing out",
+                     proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        xm_func_destroy(func);
+        xr_free(shared_protos);
+        return false;
+    }
 
     // Generate platform-specific machine code
 #if defined(__aarch64__)

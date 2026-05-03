@@ -111,9 +111,15 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
         goto fail_clear_sentinel;
     }
 
-    // Optimization passes
+    // Optimization passes (background worker: 50ms budget)
     XmOptLevel opt = is_recompile ? XM_OPT_FULL : XM_OPT_BASIC;
-    xm_run_pipeline_ex(func, opt, proto);
+    bool timed_out = xm_run_pipeline_ex(func, opt, proto, XM_BUDGET_BG_MS);
+    if (timed_out) {
+        xr_log_debug("jit-bg", "pipeline budget exceeded for %s, bailing out",
+                     proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        xm_func_destroy(func);
+        goto fail_clear_sentinel;
+    }
 
     // Codegen — each worker uses its own dedicated code_alloc.
     // This eliminates data races between workers and the main thread.

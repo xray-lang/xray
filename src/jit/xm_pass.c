@@ -1807,14 +1807,18 @@ static void run_group(const char *group_name, XmFunc *func, XrProto *proto,
     }
 }
 
-void xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto) {
+bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
+                         uint32_t budget_ms) {
     if (!func)
-        return;
+        return false;
 
-    // Compile-time budget: 50ms default (skip remaining groups on timeout)
+    /* Compile-time budget: skip remaining groups on timeout.
+     * budget_ms == 0 means unlimited (deadline set to UINT64_MAX). */
     XmCompileBudget budget;
     budget.start_ns = xr_time_monotonic_ns();
-    budget.deadline_ns = budget.start_ns + 50ULL * 1000000ULL;  // 50ms
+    budget.deadline_ns = budget_ms > 0
+        ? budget.start_ns + (uint64_t)budget_ms * 1000000ULL
+        : UINT64_MAX;
     budget.timed_out = false;
 
     /* Canon group: initial type/rep analysis + DCE. Runs even at -O0
@@ -1869,8 +1873,10 @@ void xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto) {
     XM_RESET_ANALYSIS(func);
     (void) xm_pass_elim_write_barriers(func);
     XM_RESET_ANALYSIS(func);
+
+    return budget.timed_out;
 }
 
 void xm_run_pipeline(XmFunc *func, XmOptLevel opt) {
-    xm_run_pipeline_ex(func, opt, NULL);
+    (void) xm_run_pipeline_ex(func, opt, NULL, 0);
 }
