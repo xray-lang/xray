@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 /* ========== Configuration ========== */
 
@@ -88,7 +89,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     if (cfg->run_optimize) {
         XiOptLevel level = cfg->opt_level;
         if (level == XI_OPT_NONE) level = XI_OPT_LIGHT;
-        xi_opt_run_pipeline(ir, level);
+
+        XiPipelineStats stats;
+        xi_opt_run_pipeline_ex(ir, level, &stats, cfg->budget_ns);
+
+        /* Optional dump: XRAY_XI_STATS=1 prints per-function stats */
+        const char *env = getenv("XRAY_XI_STATS");
+        if (env && env[0] == '1') {
+            xi_pipeline_stats_dump(&stats, ir->name);
+        }
     }
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.

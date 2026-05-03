@@ -52,6 +52,9 @@ typedef enum {
 
 /* ========== Pipeline Configuration ========== */
 
+/* Time budget for JIT Tier 1 optimization: 5 ms in nanoseconds. */
+#define XI_BUDGET_JIT_TIER1_NS (5ULL * 1000 * 1000)
+
 typedef struct XiPipelineConfig {
     XiPipelineMode mode;    /* selects default pass sequence (can be overridden) */
     bool run_verify;        /* run IR verification after lowering (default: true) */
@@ -64,6 +67,8 @@ typedef struct XiPipelineConfig {
     bool run_emit;          /* emit bytecode (default: true for VM, false for AOT) */
     bool dump_ir_before;    /* dump IR to stderr before optimization */
     bool dump_ir_after;     /* dump IR to stderr after optimization */
+    uint64_t budget_ns;     /* optimization time budget in nanoseconds
+                             * (0 = unlimited; use XI_BUDGET_JIT_TIER1_NS for JIT) */
 } XiPipelineConfig;
 
 /* ========== Pipeline Result ========== */

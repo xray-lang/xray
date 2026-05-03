@@ -90,6 +90,27 @@ typedef struct XiPassDesc {
     uint32_t flags;         /* XI_PASS_* flags */
 } XiPassDesc;
 
+/* ========== Per-Pass Statistics ========== */
+
+/* Maximum number of distinct passes tracked in a single pipeline run. */
+#define XI_MAX_PASS_STATS 16
+
+typedef struct XiPassStats {
+    const char *name;       /* pass name (from XiPassDesc) */
+    uint32_t invocations;   /* how many times this pass was called */
+    uint32_t n_removed;     /* total values eliminated */
+    uint32_t n_added;       /* total values inserted */
+    uint64_t elapsed_ns;    /* cumulative wall-clock nanoseconds */
+} XiPassStats;
+
+/* Aggregate statistics for the entire pipeline execution. */
+typedef struct XiPipelineStats {
+    XiPassStats passes[XI_MAX_PASS_STATS];
+    uint32_t npass;         /* number of distinct passes tracked */
+    uint32_t total_rounds;  /* fixed-point iterations completed */
+    uint64_t total_ns;      /* wall-clock nanoseconds for the whole pipeline */
+} XiPipelineStats;
+
 /* ========== Pipeline API ========== */
 
 /* Run the optimization pipeline at the given level.
@@ -97,6 +118,18 @@ typedef struct XiPassDesc {
  * Recurses into nested functions (children) at the same level.
  * Returns merged change record across all rounds and children. */
 XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level);
+
+/* Extended pipeline driver with per-pass statistics and optional time budget.
+ *   stats     — if non-NULL, filled with per-pass timing and counters.
+ *   budget_ns — if > 0, pipeline aborts early when cumulative wall-clock
+ *               time exceeds this limit (0 = no limit). */
+XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
+                                             XiPipelineStats *stats,
+                                             uint64_t budget_ns);
+
+/* Dump pipeline stats to stderr (human-readable, one line per pass). */
+XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats,
+                                     const char *func_name);
 
 /* Maximum rounds before the fixed-point driver gives up.
  * Convergence is typically reached in 2-3 rounds. */
