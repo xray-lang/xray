@@ -274,7 +274,7 @@ typedef struct XiValue {
     uint32_t id;            /* dense SSA value ID (unique within function) */
     uint16_t op;            /* XiOp */
     uint8_t flags;          /* XI_FLAG_* */
-    uint8_t _pad;
+    uint8_t var_id;         /* source variable ID for register coalescing (0xFF = none) */
     struct XrType *type;    /* authoritative compile-time type (never NULL) */
     int64_t aux_int;        /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;              /* auxiliary pointer: proto, string literal, etc. */

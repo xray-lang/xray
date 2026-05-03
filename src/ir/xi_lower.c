@@ -146,6 +146,9 @@ XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue 
     XR_DCHECK(blk->id < XI_LOWER_MAX_BLOCKS,
               "braun_write: block_id out of range");
     l->var_defs[var_id * XI_LOWER_MAX_BLOCKS + blk->id] = val;
+    /* Tag value with source variable for register coalescing */
+    if (val && var_id >= 0 && var_id < 255)
+        val->var_id = (uint8_t)var_id;
 }
 
 /* Read: get currentDef[var][block], may be NULL. */
@@ -207,6 +210,7 @@ static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk) {
         /* Block not sealed: create an incomplete phi placeholder.
          * Operands will be filled in braun_seal_block(). */
         XiPhi *phi = xi_phi_new(l->func, blk, type, 0);
+        phi->value.var_id = (var_id < 255) ? (uint8_t)var_id : 0xFF;
         val = &phi->value;
 
         /* Record for later completion */
@@ -225,6 +229,7 @@ static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk) {
     } else {
         /* Multiple predecessors: insert phi, then fill operands. */
         XiPhi *phi = xi_phi_new(l->func, blk, type, blk->npreds);
+        phi->value.var_id = (var_id < 255) ? (uint8_t)var_id : 0xFF;
         /* Write before filling to break recursive cycles */
         xi_lower_braun_write(l, var_id, blk, &phi->value);
         val = add_phi_operands(l, var_id, phi);

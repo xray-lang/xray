@@ -282,6 +282,19 @@ static inline bool x64_is_fp_vreg(X64CodegenCtx *ctx, XmRef ref) {
 
 /* ========== Sub-emit functions (defined in split files) ========== */
 
+/* Per-instruction emission (xm_codegen_x64_ins.c) */
+XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins);
+
+/* Inline alloc fast path (xm_codegen_x64_mem.c) */
+XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd,
+                                 uint8_t gc_type, uint16_t gc_extra,
+                                 uint32_t alloc_size);
+
+/* Edge copies + branch patching (xm_codegen_x64_patch.c) */
+XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target,
+                                    XmBlock *from);
+XR_FUNC void x64_patch_branches(X64CodegenCtx *ctx);
+
 /* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */
 XR_FUNC bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd);
 

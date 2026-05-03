@@ -79,7 +79,7 @@ print("9. throw types")
 try { throw "str" } catch (e) { assert_eq(e, "str") }
 try { throw 42 } catch (e) { assert_eq(e, 42) }
 try { throw [1, 2] } catch (e) { assert_eq(e.length, 2) }
-try { throw {a: 1} } catch (e) { assert_eq(e.a, 1) }
+try { throw {a: 1} } catch (e) { assert_eq(e["a"], 1) }
 print("   PASS")
 
 // 10. 深层调用栈
@@ -98,8 +98,8 @@ print("11. re-throw chain")
 let n11 = 0
 try {
     try {
-        try { throw "a" } catch (e) { n11 = n11 + 1; throw string(e) + "b" }
-    } catch (e) { n11 = n11 + 1; throw string(e) + "c" }
+        try { throw "a" } catch (e) { n11 = n11 + 1; throw e + "b" }
+    } catch (e) { n11 = n11 + 1; throw e + "c" }
 } catch (e) { n11 = n11 + 1; assert_eq(e, "abc") }
 assert_eq(n11, 3)
 print("   PASS")

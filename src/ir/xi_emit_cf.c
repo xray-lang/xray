@@ -103,15 +103,28 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
 
     /* Emit instruction values with register recycling */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
+        XiValue *v = blk->values[i];
         ctx->current_ordinal++;
-        ctx->current_line = (int)blk->values[i]->line;
-        emit_value(ctx, blk->values[i]);
+        ctx->current_line = (int)v->line;
+        emit_value(ctx, v);
         if (ctx->status != XI_EMIT_OK) return;
         /* Recycle registers of args whose last use was this instruction.
          * Skip recycling for the fused comparison's args — they are still
          * needed by the branch-form opcode in the terminator. */
-        if (ctx->last_use && blk->values[i] != ctx->fused_cmp)
-            try_free_args(ctx, blk->values[i]);
+        if (ctx->last_use && v != ctx->fused_cmp)
+            try_free_args(ctx, v);
+        /* Dead values (never referenced as an arg by any later instruction)
+         * still need a destination register for bytecode emission, but that
+         * register can be freed immediately for reuse.
+         * Coalesced registers (var_id != 0xFF) are never freed. */
+        if (ctx->last_use && v->id < ctx->reg_map_size
+            && ctx->last_use[v->id] == 0 && v->var_id == 0xFF) {
+            uint8_t r = ctx->reg_map[v->id];
+            if (r != NO_REG) {
+                ctx->reg_map[v->id] = NO_REG;
+                free_reg(ctx, r);
+            }
+        }
     }
 
     ctx->current_ordinal++;  /* ordinal for terminator */
@@ -268,21 +281,28 @@ XR_FUNC void patch_jumps(EmitCtx *ctx) {
         *inst = CREATE_sJ(OP_JMP, offset);
     }
 
-    /* Patch OP_TRY instructions: Bx = absolute catch PC;
+    /* Patch OP_TRY instructions: Bx = absolute catch PC (0 = no catch);
      * Patch the following NOP with finally PC (Bx). */
     for (uint32_t i = 0; i < ctx->ntry_patch; i++) {
         int pc = ctx->try_patches[i].pc;
         uint32_t bid = ctx->try_patches[i].target_bid;
         uint32_t fbid = ctx->try_patches[i].finally_bid;
-        XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad catch block id");
-        int target_pc = ctx->block_pc[bid];
-        if (target_pc < 0) target_pc = pc + 1;
+
+        /* catch_offset: 0 means "no catch clause" — the VM will skip to
+         * the finally handler on exception instead of running OP_CATCH. */
+        int target_pc = 0;
+        if (bid > 0) {
+            XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad catch block id");
+            target_pc = ctx->block_pc[bid];
+            if (target_pc < 0) target_pc = pc + 1;
+        }
         XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
         *inst = CREATE_ABx(OP_TRY, 0, target_pc);
 
         /* Patch NOP at pc+1 with finally absolute PC */
+        int fin_pc = -1;
         if (fbid > 0 && fbid < ctx->block_pc_size) {
-            int fin_pc = ctx->block_pc[fbid];
+            fin_pc = ctx->block_pc[fbid];
             if (fin_pc >= 0) {
                 XrInstruction *fin_inst = PROTO_CODE_PTR(ctx->proto, pc + 1);
                 *fin_inst = CREATE_ABx(OP_NOP, 0, fin_pc);

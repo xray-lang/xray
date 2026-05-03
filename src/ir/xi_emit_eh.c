@@ -22,31 +22,20 @@ XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_THROW, src, 0, 0));
 }
 
-/* Try: emit OP_TRY + NOP (finally placeholder), register for patching */
+/* Try: emit OP_TRY + NOP (finally placeholder), register for patching.
+ * aux = catch block (NULL for try-finally without catch).
+ * aux_int = finally block ID (>=0) or -1 if no finally. */
 XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void)dst;
-    XiBlock *catch_blk = (XiBlock *)v->aux;
-    XR_DCHECK(catch_blk != NULL, "XI_TRY: missing catch block");
+    XiBlock *catch_blk = (XiBlock *)v->aux;  /* NULL when no catch clause */
     int try_pc = current_pc(ctx);
     emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0));     /* patched later */
     emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0));      /* finally placeholder */
 
-    /* Find the finally block if aux_int=1 (has finally) */
-    uint32_t fin_bid = 0;
-    if (v->aux_int) {
-        XiFunc *fn = ctx->func;
-        for (uint32_t fbi = 0; fbi < fn->nblocks && fin_bid == 0; fbi++) {
-            const XiBlock *fb = fn->blocks[fbi];
-            if (!fb) continue;
-            for (uint32_t fvi = 0; fvi < fb->nvalues; fvi++) {
-                if (fb->values[fvi] && fb->values[fvi]->op == XI_FINALLY) {
-                    fin_bid = fb->id;
-                    break;
-                }
-            }
-        }
-    }
-    add_try_patch(ctx, try_pc, catch_blk->id, fin_bid);
+    /* aux_int = finally block ID (>=0) or -1 if no finally */
+    uint32_t fin_bid = (v->aux_int >= 0) ? (uint32_t)v->aux_int : 0;
+    uint32_t catch_bid = catch_blk ? catch_blk->id : 0;
+    add_try_patch(ctx, try_pc, catch_bid, fin_bid);
 }
 
 /* Catch */

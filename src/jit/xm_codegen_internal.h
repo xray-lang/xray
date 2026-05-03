@@ -176,4 +176,13 @@ XR_FUNC void emit_epilogue(CodegenCtx *ctx);
 XR_FUNC bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd);
 XR_FUNC bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd);
 
+/* Stubs, OSR, patching, deopt table, resume (xm_codegen_stub.c) */
+XR_FUNC void a64_emit_barrier_stubs(CodegenCtx *ctx);
+XR_FUNC void a64_emit_deopt_stub(CodegenCtx *ctx);
+XR_FUNC void a64_emit_call_c_stub(CodegenCtx *ctx);
+XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result);
+XR_FUNC void a64_patch_branches(CodegenCtx *ctx);
+XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *result);
+XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result);
+
 #endif  // XM_CODEGEN_INTERNAL_H
