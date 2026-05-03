@@ -88,7 +88,6 @@ typedef struct XmBgTask {
      */
     struct XrICFieldTable *ic_fields_snapshot;
     struct XrICMethodTable *ic_methods_snapshot;
-    struct XrICBuiltinTable *ic_builtin_snapshot;
 } XmBgTask;
 
 /* ========== MPSC Ring Buffer ========== */

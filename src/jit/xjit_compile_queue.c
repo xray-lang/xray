@@ -34,7 +34,6 @@
 #include "../runtime/object/xstring.h"
 #include "../vm/xic_field_table.h"  // xr_ic_field_table_free
 #include "../vm/xic_method.h"       // xr_ic_method_table_free
-#include "../vm/xic_builtin.h"      // xr_ic_builtin_table_free
 #include "../base/xmalloc.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
@@ -100,8 +99,6 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
         xr_ic_field_table_free(task->ic_fields_snapshot);
     if (task->ic_methods_snapshot)
         xr_ic_method_table_free(task->ic_methods_snapshot);
-    if (task->ic_builtin_snapshot)
-        xr_ic_builtin_table_free(task->ic_builtin_snapshot);
     if (!func) {
         xr_log_debug("jit-bg", "builder failed for %s",
                      proto->name ? XR_STRING_CHARS(proto->name) : "?");
