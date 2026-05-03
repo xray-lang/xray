@@ -16,7 +16,6 @@
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_incremental.h"
 #include "xanalyzer_builtin_interfaces.h"
-#include "xanalyzer_jit.h"
 #include "xa_node_table.h"
 #include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
@@ -261,10 +260,6 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         analyzer->node_table = NULL;
     }
 
-    // Free JIT metadata
-    if (analyzer->jit_metadata) {
-        xa_jit_metadata_free(analyzer->jit_metadata);
-    }
 
     // Free type pool
     if (analyzer->type_pool) {

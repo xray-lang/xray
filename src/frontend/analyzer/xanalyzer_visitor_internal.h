@@ -14,7 +14,6 @@
 #include "xanalyzer_visitor.h"
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_incremental.h"
-#include "xanalyzer_jit.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include <stdlib.h>
