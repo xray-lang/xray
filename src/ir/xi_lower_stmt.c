@@ -69,11 +69,19 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                         recv->args[0] = chan;
                         recv->flags |= XI_FLAG_SIDE_EFFECT;
                     }
+                    /* Try-recv returns null on empty channel.
+                     * Branch: null→next_blk (try next case),
+                     *         non-null→body_blk (handle this case). */
+                    XiValue *is_null = xi_value_new(l->func, l->cur_block,
+                                                     XI_ISNULL, l->type_bool, 1);
+                    if (is_null && recv) {
+                        is_null->args[0] = recv;
+                        xi_block_set_if(l->cur_block, is_null, next_blk, body_blk);
+                    }
                     if (sc->var_name && recv) {
                         int var_id = xi_lower_var_create(l, sc->var_name, val_type);
-                        xi_lower_braun_write(l, var_id, l->cur_block, recv);
+                        xi_lower_braun_write(l, var_id, body_blk, recv);
                     }
-                    xi_block_set_jump(l->cur_block, body_blk);
                 }
             }
 
