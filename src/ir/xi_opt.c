@@ -23,9 +23,11 @@
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../os/os_time.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 /* ========== Helpers ========== */
 
@@ -810,16 +812,36 @@ static const XiPassDesc xi_pass_table[] = {
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
-XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
-    XR_DCHECK(f != NULL, "xi_opt_run_pipeline: NULL func");
+/* Find or create a stats slot for the given pass name. */
+static XiPassStats *stats_slot(XiPipelineStats *st, const char *name) {
+    if (!st) return NULL;
+    for (uint32_t i = 0; i < st->npass; i++) {
+        if (st->passes[i].name == name)
+            return &st->passes[i];
+    }
+    if (st->npass >= XI_MAX_PASS_STATS) return NULL;
+    XiPassStats *s = &st->passes[st->npass++];
+    memset(s, 0, sizeof(*s));
+    s->name = name;
+    return s;
+}
+
+XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
+                                             XiPipelineStats *stats,
+                                             uint64_t budget_ns) {
+    XR_DCHECK(f != NULL, "xi_opt_run_pipeline_ex: NULL func");
 
     if (level == XI_OPT_NONE)
         return xi_pass_no_change();
 
+    if (stats) memset(stats, 0, sizeof(*stats));
+
+    uint64_t pipeline_start = xr_time_monotonic_ns();
     XiPassChange total = xi_pass_no_change();
 
     /* Fixed-point iteration: repeat until no pass reports a change */
-    for (int round = 0; round < XI_OPT_MAX_ROUNDS; round++) {
+    int round;
+    for (round = 0; round < XI_OPT_MAX_ROUNDS; round++) {
         XiPassChange round_chg = xi_pass_no_change();
 
         for (size_t p = 0; p < XI_PASS_TABLE_SIZE; p++) {
@@ -827,7 +849,26 @@ XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
             if (desc->min_level > level)
                 continue;
 
+            /* Budget check before each pass */
+            if (budget_ns > 0) {
+                uint64_t elapsed = xr_time_monotonic_ns() - pipeline_start;
+                if (elapsed >= budget_ns)
+                    goto done;
+            }
+
+            uint64_t t0 = xr_time_monotonic_ns();
             XiPassChange pc = desc->fn(f);
+            uint64_t dt = xr_time_monotonic_ns() - t0;
+
+            /* Record per-pass stats */
+            XiPassStats *ps = stats_slot(stats, desc->name);
+            if (ps) {
+                ps->invocations++;
+                ps->n_removed += pc.n_removed;
+                ps->n_added += pc.n_added;
+                ps->elapsed_ns += dt;
+            }
+
             round_chg = xi_pass_merge(round_chg, pc);
         }
 
@@ -835,8 +876,10 @@ XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
 
         /* Converged: no pass changed anything this round */
         if (!round_chg.cfg_changed && !round_chg.values_changed &&
-            !round_chg.types_changed)
+            !round_chg.types_changed) {
+            round++;  /* count final round */
             break;
+        }
 
 #ifndef NDEBUG
         /* Re-verify after each round in debug builds */
@@ -849,13 +892,43 @@ XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
 #endif
     }
 
+done:
+    if (stats) {
+        stats->total_rounds = (uint32_t)round;
+        stats->total_ns = xr_time_monotonic_ns() - pipeline_start;
+    }
+
     /* Recurse into nested functions / closures */
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i]) {
-            XiPassChange child_chg = xi_opt_run_pipeline(f->children[i], level);
+            XiPassChange child_chg = xi_opt_run_pipeline_ex(
+                f->children[i], level, NULL, budget_ns);
             total = xi_pass_merge(total, child_chg);
         }
     }
 
     return total;
+}
+
+XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {
+    return xi_opt_run_pipeline_ex(f, level, NULL, 0);
+}
+
+/* ========== Stats Dump ========== */
+
+XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats,
+                                     const char *func_name) {
+    if (!stats) return;
+    fprintf(stderr, "[xi_stats] func '%s': %u rounds, %.3f ms total\n",
+            func_name ? func_name : "?",
+            stats->total_rounds,
+            (double)stats->total_ns / 1e6);
+    for (uint32_t i = 0; i < stats->npass; i++) {
+        const XiPassStats *ps = &stats->passes[i];
+        if (ps->invocations == 0) continue;
+        fprintf(stderr, "  %-18s  %3u calls  %5u rem  %5u add  %7.3f ms\n",
+                ps->name, ps->invocations,
+                ps->n_removed, ps->n_added,
+                (double)ps->elapsed_ns / 1e6);
+    }
 }
