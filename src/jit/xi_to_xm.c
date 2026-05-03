@@ -21,6 +21,7 @@
 #include "xm_jit_runtime.h"
 #include "xm_fold.h"
 #include "xm_codegen.h"
+#include "xm_liveness2.h"
 #include "xm_offsets.h"
 #include "../ir/xi_rep.h"
 #include "../base/xdefs.h"
@@ -197,8 +198,13 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
                 XR_DCHECK(ns < live_count,
                           "record_deopt: slot count mismatch");
                 slots[ns].bc_slot = (int16_t)e->bc_slot;
-                slots[ns].rep = xm_ref_is_const(ref) ? XR_REP_I64
-                    : (e->xr_tag == 4 ? XR_REP_F64 : XR_REP_I64);
+                if (xm_ref_is_vreg(ref)) {
+                    uint32_t vi = XM_REF_INDEX(ref);
+                    slots[ns].rep = (vi < ctx->xm_func->nvreg)
+                        ? ctx->xm_func->vregs[vi].rep : XR_REP_I64;
+                } else {
+                    slots[ns].rep = XR_REP_I64;
+                }
                 slots[ns].xr_tag = e->xr_tag;
                 slots[ns].value = ref;
                 ns++;
@@ -919,6 +925,115 @@ static void lower_terminator(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
     }
 }
 
+/* ========== Deopt Snapshot Liveness Refinement ========== */
+
+/* Return true if opcode is a guard that carries a deopt_id in its dst field. */
+static bool is_guard_op(uint16_t op) {
+    return op == XM_GUARD_TAG || op == XM_GUARD_BOUNDS ||
+           op == XM_GUARD_NONNULL || op == XM_GUARD_CLASS ||
+           op == XM_GUARD_KLASS || op == XM_GUARD_SHAPE ||
+           op == XM_TAG_CHECK || op == XM_DEOPT;
+}
+
+/* Extract deopt_id from a guard instruction's dst const ref.
+ * Returns 0xFFFF if no valid deopt_id is found. */
+static uint16_t guard_deopt_id(const XmFunc *func, const XmIns *ins) {
+    if (xm_ref_is_none(ins->dst) || !xm_ref_is_const(ins->dst))
+        return 0xFFFF;
+    uint32_t ci = XM_REF_INDEX(ins->dst);
+    if (ci >= func->nconst)
+        return 0xFFFF;
+    return (uint16_t)func->consts[ci].val.raw;
+}
+
+/* Trim deopt snapshots to values live at each guard point.
+ *
+ * Algorithm:
+ *   1. Compute per-block live_in / live_out via standard backward dataflow.
+ *   2. For each block, walk instructions backward computing a running live
+ *      set.  When a guard instruction is encountered, intersect its deopt
+ *      snapshot with the current live set — removing dead slots.
+ *
+ * Soundness: a slot whose Xm vreg is dead at the guard cannot be
+ * needed after deopt, because the optimized code has no further use
+ * and the interpreter resumes at the guard's bc_pc where the value
+ * is equally unreachable.  Constants are always retained (they have
+ * no vreg liveness). */
+static void refine_deopt_liveness(XmFunc *func) {
+    XR_DCHECK(func != NULL, "refine_deopt_liveness: NULL func");
+    if (func->ndeopt == 0 || func->nblk == 0)
+        return;
+
+    /* Compute dataflow liveness */
+    XmLive live;
+    memset(&live, 0, sizeof(live));
+    xm_live_compute(&live, func);
+    if (!live.blocks) return;  /* allocation failure — skip refinement */
+
+    /* Per-instruction live set (reused across blocks) */
+    XmBSet cur;
+    xm_bset_init(&cur, func->nvreg);
+
+    for (uint32_t bi = 0; bi < func->nblk; bi++) {
+        XmBlock *blk = func->blocks[bi];
+        if (!blk || blk->nins == 0) continue;
+
+        /* Start from live_out of this block */
+        xm_bset_copy(&cur, &live.blocks[bi].live_out);
+
+        /* Walk instructions backward */
+        for (int32_t ii = (int32_t)blk->nins - 1; ii >= 0; ii--) {
+            XmIns *ins = &blk->ins[ii];
+
+            /* If this is a guard, refine its deopt snapshot NOW
+             * (cur contains liveness AFTER this instruction) */
+            if (is_guard_op(ins->op)) {
+                uint16_t did = guard_deopt_id(func, ins);
+                if (did < func->ndeopt) {
+                    XmDeoptInfo *info = &func->deopt_infos[did];
+                    if (info->slots && info->nslots > 0) {
+                        /* Compact: keep only live or constant slots */
+                        uint16_t w = 0;
+                        for (uint16_t r = 0; r < info->nslots; r++) {
+                            XmRef ref = info->slots[r].value;
+                            bool keep = true;
+                            if (xm_ref_is_vreg(ref)) {
+                                uint32_t vi = XM_REF_INDEX(ref);
+                                keep = (vi < func->nvreg) &&
+                                       xm_bset_has(&cur, vi);
+                            }
+                            /* Constants always kept (no vreg) */
+                            if (keep) {
+                                if (w != r)
+                                    info->slots[w] = info->slots[r];
+                                w++;
+                            }
+                        }
+                        info->nslots = w;
+                    }
+                }
+            }
+
+            /* Update liveness: remove def, add uses */
+            if (xm_ref_is_vreg(ins->dst)) {
+                uint32_t dv = XM_REF_INDEX(ins->dst);
+                if (dv < func->nvreg)
+                    xm_bset_clr(&cur, dv);
+            }
+            for (int a = 0; a < 2; a++) {
+                if (xm_ref_is_vreg(ins->args[a])) {
+                    uint32_t av = XM_REF_INDEX(ins->args[a]);
+                    if (av < func->nvreg)
+                        xm_bset_set(&cur, av);
+                }
+            }
+        }
+    }
+
+    xm_bset_free(&cur);
+    xm_live_free(&live);
+}
+
 /* ========== Main Entry Point ========== */
 
 XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
@@ -1059,6 +1174,11 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
         xm_func_destroy(func);
         return NULL;
     }
+
+    /* Post-pass: trim deopt snapshots to only live values.
+     * Compute Xm-level liveness, then for each guard's snapshot
+     * remove slots whose value vreg is dead at the guard point. */
+    refine_deopt_liveness(func);
 
     return func;
 }
