@@ -9,8 +9,10 @@
  */
 
 #include "xanalyzer_flow.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../parser/xast.h"
+#include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
@@ -151,20 +153,16 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
         if (is_expr->expr && is_expr->expr->type == AST_VARIABLE &&
             is_expr->expr->as.variable.name &&
             strcmp(is_expr->expr->as.variable.name, var_name) == 0 && is_expr->type) {
-            // Extract class name from the type
-            const char *class_name = NULL;
-            if (XR_TYPE_IS_INSTANCE(is_expr->type) && is_expr->type->instance.class_name) {
-                class_name = is_expr->type->instance.class_name;
-            } else if (is_expr->type->instance.class_name) {
-                class_name = is_expr->type->instance.class_name;
-            }
-            if (class_name) {
-                return xa_narrow_by_instanceof(base_type, class_name, assume_true);
+            XrTypeRef *tref = is_expr->type;
+            // Extract class name from NAMED / GENERIC type refs
+            if ((tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) &&
+                tref->name) {
+                return xa_narrow_by_instanceof(base_type, tref->name, assume_true);
             }
             // For primitive type checks (x is int, x is string, etc.)
-            // narrow directly to that type
+            // resolve the type ref and narrow directly
             if (assume_true) {
-                return is_expr->type;
+                return xr_tref_resolve(NULL, tref);
             }
         }
     }

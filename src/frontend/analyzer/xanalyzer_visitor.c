@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
@@ -244,8 +245,17 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
     bool inferred = false;
 
     if (call->type_arg_count > 0) {
-        actual_types = call->type_args;
+        actual_types = xr_malloc(sizeof(XrType *) * (size_t)call->type_arg_count);
+        if (!actual_types) {
+            xr_free(param_names);
+            return return_type;
+        }
+        for (int i = 0; i < call->type_arg_count; i++)
+            actual_types[i] = call->type_args[i]
+                ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
+                : xr_type_new_unknown(NULL);
         actual_count = call->type_arg_count;
+        inferred = true;  /* mark for free */
     } else {
         actual_types = xr_malloc(sizeof(XrType *) * type_param_count);
         if (!actual_types) {
@@ -556,7 +566,9 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 // TypeAliasNode::resolved_type. Mirror it into the side
                 // table so downstream readers (codegen, LSP) get the
                 // same answer through the canonical lookup path.
-                XrType *resolved = ta->resolved_type;
+                XrType *resolved = ta->resolved_type
+                    ? xr_tref_resolve(ctx->analyzer->isolate, ta->resolved_type)
+                    : NULL;
                 if (resolved) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
@@ -579,6 +591,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(fi->item_name, XA_SYM_VARIABLE);
                 sym->location.line = node->line;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                fi->item_symbol_id = sym->id;
                 XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (item_links)
                     item_links->is_definitely_assigned = true;
@@ -587,6 +600,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *vsym = xa_symbol_new(fi->value_name, XA_SYM_VARIABLE);
                 vsym->location.line = node->line;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, vsym);
+                fi->value_symbol_id = vsym->id;
                 XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, vsym);
                 if (val_links)
                     val_links->is_definitely_assigned = true;
@@ -648,6 +662,36 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 xa_visit_collect(ctx, tc->finally_body);
             break;
         }
+        case AST_SELECT_STMT: {
+            SelectStmtNode *sel = &node->as.select_stmt;
+            for (int i = 0; i < sel->case_count; i++) {
+                if (sel->cases[i]) xa_visit_collect(ctx, sel->cases[i]);
+            }
+            break;
+        }
+        case AST_SELECT_CASE: {
+            SelectCaseNode *sc = &node->as.select_case;
+            /* Recv cases introduce a variable: `msg from ch => ...`
+             * Enter a block scope for the case body so `msg` is visible. */
+            if (sc->var_name && !sc->is_send && !sc->is_default) {
+                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+                XaSymbol *sym = xa_symbol_new(sc->var_name, XA_SYM_VARIABLE);
+                sym->location.line = node->line;
+                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                sc->var_symbol_id = sym->id;
+                XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+                if (links) links->is_definitely_assigned = true;
+                if (sc->body) xa_visit_collect(ctx, sc->body);
+                xa_analyzer_exit_scope(ctx->analyzer);
+            } else {
+                if (sc->body) xa_visit_collect(ctx, sc->body);
+            }
+            break;
+        }
+        case AST_SCOPE_BLOCK:
+            if (node->as.scope_block.body)
+                xa_visit_collect(ctx, node->as.scope_block.body);
+            break;
         case AST_EXPR_STMT:
             // Recurse into expression statements (may contain function expressions etc.)
             break;
@@ -666,6 +710,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
                             xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                            elem->as.identifier.symbol_id = sym->id;
                         }
                     }
                 } else if (pat->type == PATTERN_OBJECT) {
@@ -676,6 +721,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
                             xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                            vp->as.identifier.symbol_id = sym->id;
                         }
                     }
                 }
@@ -769,7 +815,14 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xr_type_new_float(NULL);
             break;
         case AST_LITERAL_STRING:
+            result = xr_type_new_string(NULL);
+            break;
         case AST_TEMPLATE_STRING:
+            /* Visit all interpolation parts to resolve variable symbol_ids. */
+            for (int ti = 0; ti < node->as.template_str.part_count; ti++) {
+                if (node->as.template_str.parts[ti])
+                    xa_visit_infer_expr(ctx, node->as.template_str.parts[ti]);
+            }
             result = xr_type_new_string(NULL);
             break;
         case AST_LITERAL_BIGINT:
@@ -870,9 +923,15 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xa_visit_as_expr(ctx, node);
             break;
         case AST_IS_EXPR:
+            if (node->as.is_expr.expr)
+                xa_visit_infer_expr(ctx, node->as.is_expr.expr);
             result = xr_type_new_bool(NULL);
             break;
         case AST_RANGE:
+            if (node->as.range.start)
+                xa_visit_infer_expr(ctx, node->as.range.start);
+            if (node->as.range.end)
+                xa_visit_infer_expr(ctx, node->as.range.end);
             result = xr_type_new_named_instance(ctx->analyzer->isolate, "Range");
             break;
         case AST_SET_LITERAL: {
@@ -880,8 +939,13 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             if (ctx->expected_type && ctx->expected_type->kind == XR_KIND_SET &&
                 ctx->expected_type->container.element_type) {
                 elem = ctx->expected_type->container.element_type;
-            } else if (node->as.set_literal.count > 0 && node->as.set_literal.elements[0]) {
-                elem = xa_visit_infer_expr(ctx, node->as.set_literal.elements[0]);
+            }
+            /* Visit ALL elements to resolve symbol_ids; infer elem type from first. */
+            for (int si = 0; si < node->as.set_literal.count; si++) {
+                if (node->as.set_literal.elements[si]) {
+                    XrType *et = xa_visit_infer_expr(ctx, node->as.set_literal.elements[si]);
+                    if (!elem && si == 0) elem = et;
+                }
             }
             if (!elem)
                 elem = xr_type_new_unknown(NULL);
@@ -889,6 +953,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_CHANNEL_NEW:
+            // Visit buffer size expression to resolve variable symbol_ids
+            if (node->as.channel_new.buffer_size)
+                xa_visit_infer_expr(ctx, node->as.channel_new.buffer_size);
             // Use expected_type if available (from type annotation: Channel<T>)
             if (ctx->expected_type && (ctx->expected_type->kind == XR_KIND_CHANNEL)) {
                 result = ctx->expected_type;
@@ -900,6 +967,11 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             result = xa_visit_move_expr(ctx, node);
             break;
         case AST_SUPER_CALL: {
+            /* Visit all arguments to resolve symbol_ids. */
+            for (int si = 0; si < node->as.super_call.arg_count; si++) {
+                if (node->as.super_call.arguments[si])
+                    xa_visit_infer_expr(ctx, node->as.super_call.arguments[si]);
+            }
             /* Resolve super.method() return type by looking up the method
              * in the base class chain via class_info. */
             XaScope *s = ctx->analyzer->current_scope;
@@ -958,6 +1030,41 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             }
             break;
         }
+        case AST_SLICE_EXPR: {
+            SliceExprNode *sl = &node->as.slice_expr;
+            XrType *src = sl->source ? xa_visit_infer_expr(ctx, sl->source) : NULL;
+            if (sl->start) xa_visit_infer_expr(ctx, sl->start);
+            if (sl->end) xa_visit_infer_expr(ctx, sl->end);
+            /* Slice of array/string returns same container type. */
+            if (src && XR_TYPE_IS_ARRAY(src)) {
+                result = src;
+            } else if (src && XR_TYPE_IS_STRING(src)) {
+                result = xr_type_new_string(NULL);
+            } else {
+                result = xr_type_new_unknown(NULL);
+            }
+            break;
+        }
+        case AST_ENUM_CONVERT: {
+            if (node->as.enum_convert.value_expr)
+                xa_visit_infer_expr(ctx, node->as.enum_convert.value_expr);
+            result = node->as.enum_convert.enum_name
+                         ? xr_type_new_enum(ctx->analyzer->isolate, node->as.enum_convert.enum_name)
+                         : xr_type_new_unknown(NULL);
+            break;
+        }
+        case AST_ENUM_ACCESS:
+            result = node->as.enum_access.enum_name
+                         ? xr_type_new_enum(ctx->analyzer->isolate, node->as.enum_access.enum_name)
+                         : xr_type_new_unknown(NULL);
+            break;
+        case AST_CANCELLED_EXPR:
+            result = xr_type_new_bool(NULL);
+            break;
+        case AST_AWAIT_ALL_EXPR:
+        case AST_AWAIT_ANY_EXPR:
+            result = xa_visit_await_expr(ctx, node);
+            break;
         default:
             result = xr_type_new_unknown(NULL);
             break;
@@ -1036,13 +1143,34 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_ASSIGNMENT:
             xa_visit_assignment_stmt(ctx, node);
             break;
+        case AST_INC:
+        case AST_DEC: {
+            IncDecNode *id = &node->as.inc;
+            XaSymbol *id_sym = xa_scope_lookup(ctx->analyzer->current_scope, id->name);
+            if (id_sym)
+                id->symbol_id = id_sym->id;
+            if (id_sym && id_sym->is_const) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[128];
+                snprintf(msg, sizeof(msg), "Cannot modify const '%s'", id->name);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
+            break;
+        }
         case AST_COMPOUND_ASSIGNMENT: {
             // Infer value expression so its type is recorded in the side table
             CompoundAssignmentNode *ca = &node->as.compound_assignment;
             if (ca->value)
                 xa_visit_infer_expr(ctx, ca->value);
+            // Visit object expression for member compound assign (obj.field += ...)
+            if (ca->object)
+                xa_visit_infer_expr(ctx, ca->object);
             // Check const/in-param immutability
             XaSymbol *ca_sym = xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
+            if (ca_sym)
+                ca->symbol_id = ca_sym->id;
             if (ca_sym && ca_sym->is_const) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
@@ -1159,7 +1287,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             if (inner && (inner->type == AST_MEMBER_SET ||
                           inner->type == AST_ASSIGNMENT ||
-                          inner->type == AST_COMPOUND_ASSIGNMENT)) {
+                          inner->type == AST_COMPOUND_ASSIGNMENT ||
+                          inner->type == AST_INC ||
+                          inner->type == AST_DEC)) {
                 xa_visit_infer_stmt(ctx, inner);
             } else {
                 xa_visit_infer_expr(ctx, inner);
@@ -1235,7 +1365,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // (e.g. return true in :int fn, or return 42 in :void fn).
             XrType *saved_expected_ret = ctx->expected_return_type;
             if (fn_decl->return_type) {
-                ctx->expected_return_type = (XrType *) fn_decl->return_type;
+                ctx->expected_return_type = xr_tref_resolve(ctx->analyzer->isolate, fn_decl->return_type);
             } else {
                 ctx->expected_return_type = xr_type_new_void(NULL);
             }
@@ -1329,7 +1459,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     XrType *saved_ret = ctx->expected_return_type;
                     MethodDeclNode *md = &cls->methods[i]->as.method_decl;
                     if (md->return_type) {
-                        ctx->expected_return_type = (XrType *) md->return_type;
+                        ctx->expected_return_type = xr_tref_resolve(ctx->analyzer->isolate, md->return_type);
                     } else {
                         ctx->expected_return_type = NULL;
                     }
@@ -1392,14 +1522,20 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
             if (fi->collection) {
                 if (fi->collection->type == AST_RANGE) {
-                    // Range literal: 0..N → int
-                    coll_type = xr_type_new_int(NULL);  // placeholder, item is int
+                    // Visit range sub-expressions so variables get symbol_id resolved
+                    if (fi->collection->as.range.start)
+                        xa_visit_infer_expr(ctx, fi->collection->as.range.start);
+                    if (fi->collection->as.range.end)
+                        xa_visit_infer_expr(ctx, fi->collection->as.range.end);
+                    coll_type = xr_type_new_int(NULL);
                 } else if (fi->collection->type == AST_VARIABLE) {
                     // Check if variable is an enum
                     XaSymbol *coll_sym = xa_scope_lookup(ctx->analyzer->current_scope,
                                                          fi->collection->as.variable.name);
                     if (coll_sym && coll_sym->kind == XA_SYM_ENUM) {
                         is_enum_iter = true;
+                        // Visit the collection variable so its symbol_id is resolved
+                        xa_visit_infer_expr(ctx, fi->collection);
                         XaSymbolLinks *coll_links = xa_analyzer_get_links(ctx->analyzer, coll_sym);
                         if (coll_links && coll_links->type) {
                             enum_name = coll_links->type->enum_type.enum_name;
@@ -1475,6 +1611,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (fi->item_name) {
                 XaSymbol *item_sym = xa_scope_lookup(ctx->analyzer->current_scope, fi->item_name);
                 if (item_sym) {
+                    if (fi->item_symbol_id == 0)
+                        fi->item_symbol_id = item_sym->id;
                     XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, item_sym);
                     if (item_links)
                         item_links->type = item_type;
@@ -1485,6 +1623,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (fi->is_keyvalue && fi->value_name) {
                 XaSymbol *val_sym = xa_scope_lookup(ctx->analyzer->current_scope, fi->value_name);
                 if (val_sym) {
+                    if (fi->value_symbol_id == 0)
+                        fi->value_symbol_id = val_sym->id;
                     XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, val_sym);
                     if (val_links)
                         val_links->type = value_type;
@@ -1590,7 +1730,106 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, node->as.print_stmt.exprs[i]);
             }
             break;
+        case AST_INDEX_SET: {
+            IndexSetNode *is = &node->as.index_set;
+            if (is->array) xa_visit_infer_expr(ctx, is->array);
+            if (is->index) xa_visit_infer_expr(ctx, is->index);
+            if (is->value) xa_visit_infer_expr(ctx, is->value);
+            break;
+        }
+        case AST_DEFER_STMT:
+            if (node->as.defer_stmt.expr)
+                xa_visit_infer_expr(ctx, node->as.defer_stmt.expr);
+            break;
+        case AST_SCOPE_BLOCK:
+            if (node->as.scope_block.body)
+                xa_visit_infer_stmt(ctx, node->as.scope_block.body);
+            break;
+        case AST_SELECT_STMT: {
+            SelectStmtNode *sel = &node->as.select_stmt;
+            for (int i = 0; i < sel->case_count; i++) {
+                if (sel->cases[i]) xa_visit_infer_stmt(ctx, sel->cases[i]);
+            }
+            break;
+        }
+        case AST_SELECT_CASE: {
+            SelectCaseNode *sc = &node->as.select_case;
+            if (sc->channel) xa_visit_infer_expr(ctx, sc->channel);
+            if (sc->value) xa_visit_infer_expr(ctx, sc->value);
+            /* Recv cases have a block scope from pass 1 for the variable. */
+            if (sc->var_name && !sc->is_send && !sc->is_default) {
+                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+                if (sc->body) {
+                    if (sc->body->type == AST_BLOCK) {
+                        BlockNode *blk = &sc->body->as.block;
+                        for (int si = 0; si < blk->count; si++)
+                            xa_visit_infer_stmt(ctx, blk->statements[si]);
+                    } else {
+                        xa_visit_infer_stmt(ctx, sc->body);
+                    }
+                }
+                xa_analyzer_exit_scope(ctx->analyzer);
+            } else {
+                if (sc->body) xa_visit_infer_stmt(ctx, sc->body);
+            }
+            break;
+        }
+        case AST_DESTRUCTURE_ASSIGN: {
+            DestructureAssignNode *da = &node->as.destructure_assign;
+            if (da->value) xa_visit_infer_expr(ctx, da->value);
+            /* Resolve symbol_ids on pattern target identifiers so the
+             * lowerer can find existing variables via Braun SSA. */
+            if (da->pattern) {
+                XrDestructurePattern *pat = da->pattern;
+                if (pat->type == PATTERN_ARRAY) {
+                    for (int i = 0; i < pat->as.array.element_count; i++) {
+                        XrDestructurePattern *elem = pat->as.array.elements[i];
+                        if (elem && elem->type == PATTERN_IDENTIFIER &&
+                            elem->as.identifier.name) {
+                            XaSymbol *sym = xa_scope_lookup(
+                                ctx->analyzer->current_scope,
+                                elem->as.identifier.name);
+                            if (sym)
+                                elem->as.identifier.symbol_id = sym->id;
+                        }
+                    }
+                } else if (pat->type == PATTERN_OBJECT) {
+                    for (int i = 0; i < pat->as.object.field_count; i++) {
+                        XrDestructurePattern *vp = pat->as.object.patterns[i];
+                        if (vp && vp->type == PATTERN_IDENTIFIER &&
+                            vp->as.identifier.name) {
+                            XaSymbol *sym = xa_scope_lookup(
+                                ctx->analyzer->current_scope,
+                                vp->as.identifier.name);
+                            if (sym)
+                                vp->as.identifier.symbol_id = sym->id;
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        case AST_MULTI_ASSIGN: {
+            MultiAssignNode *ma = &node->as.multi_assign;
+            for (int i = 0; i < ma->target_count; i++) {
+                if (ma->targets[i]) xa_visit_infer_expr(ctx, ma->targets[i]);
+            }
+            for (int i = 0; i < ma->value_count; i++) {
+                if (ma->values[i]) xa_visit_infer_expr(ctx, ma->values[i]);
+            }
+            break;
+        }
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT:
+        case AST_YIELD_STMT:
+        case AST_IMPORT_STMT:
+        case AST_ENUM_DECL:
+        case AST_INTERFACE_DECL:
+            break;
         default:
+            /* Expressions used as statements (go, await, call, etc.)
+             * fall through to xa_visit_infer_expr. */
+            xa_visit_infer_expr(ctx, node);
             break;
     }
 }

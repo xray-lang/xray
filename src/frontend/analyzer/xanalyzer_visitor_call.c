@@ -20,6 +20,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
 /* ----------------------------------------------------------------------------
@@ -71,7 +72,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         // Check constraints
         for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
-            XrType *type_arg = call->type_args[i];
+            XrType *type_arg = call->type_args[i]
+                ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
+                : NULL;
             XrType *constraint = xa_symbol_links_get_type_param_constraint(fn_links, i);
 
             if (constraint && type_arg && !xr_type_satisfies_constraint(type_arg, constraint)) {
@@ -94,7 +97,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
             ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0) {
-            XrType *target_type = call->type_args[0];
+            XrType *target_type = call->type_args[0]
+                ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0])
+                : NULL;
 
             // Resolve type alias to its underlying object type
             if (target_type && target_type->kind == XR_KIND_CLASS && target_type->instance.class_name) {
@@ -165,6 +170,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     XrType *callee_type = xa_visit_infer_expr(ctx, call->callee);
 
+    /* Resolve symbol_ids in non-lambda arguments before any early-return path.
+     * Skip AST_FUNCTION_EXPR args: they require expected_type context from
+     * the callee's parameter signature (set in the detailed loop below).
+     * Visiting them eagerly without context triggers spurious E0365. */
+    for (int i = 0; i < call->arg_count; i++) {
+        if (call->arguments[i] &&
+            call->arguments[i]->type != AST_FUNCTION_EXPR)
+            xa_visit_infer_expr(ctx, call->arguments[i]);
+    }
+
     // Unknown callee type preserves error recovery after imprecise analysis.
     if (XR_TYPE_IS_UNKNOWN(callee_type)) {
         // Check if callee is a class name - if so, return instance type
@@ -177,6 +192,30 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     return xr_type_new_instance(ctx->analyzer->isolate, links->class_info);
                 }
             }
+        }
+        // Container method with callback: infer fn expr arg types even though
+        // the method's own return type resolved to unknown (e.g. reduce).
+        if (container_elem_type && method_name) {
+            XrType *saved_elem = ctx->callback_element_type;
+            XrType *saved_idx = ctx->callback_index_type;
+            XrType *saved_acc = ctx->callback_accumulator_type;
+            XrType *saved_arr = ctx->callback_array_type;
+            ctx->callback_element_type = container_elem_type;
+            ctx->callback_index_type = xr_type_new_int(NULL);
+            if (strcmp(method_name, "reduce") == 0 && call->arg_count >= 2 &&
+                call->arguments[1]) {
+                ctx->callback_accumulator_type =
+                    xa_visit_infer_expr(ctx, call->arguments[1]);
+                ctx->callback_array_type = callee_obj_type;
+            }
+            for (int i = 0; i < call->arg_count; i++) {
+                if (call->arguments[i])
+                    xa_visit_infer_expr(ctx, call->arguments[i]);
+            }
+            ctx->callback_element_type = saved_elem;
+            ctx->callback_index_type = saved_idx;
+            ctx->callback_accumulator_type = saved_acc;
+            ctx->callback_array_type = saved_arr;
         }
         return xr_type_new_unknown(NULL);
     }

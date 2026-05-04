@@ -61,9 +61,9 @@ XR_FUNC void xfmt_write_trailing_comment(XrFmtContext *ctx, XrTrivia *trivia);
 // (defined in xfmt_type.c)
 // ---------------------------------------------------------------------------
 
-XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrType *type);
+XR_FUNC void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref);
 XR_FUNC void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count);
-XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrType **args, int count);
+XR_FUNC void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count);
 XR_FUNC void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern);
 XR_FUNC const char *xfmt_binary_op(AstNodeType type);
 XR_FUNC const char *xfmt_compound_op(XrTokenType type);

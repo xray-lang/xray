@@ -302,6 +302,22 @@ XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str,
     return v;
 }
 
+XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk,
+                          const char *digits,
+                          struct XrType *bigint_type) {
+    XR_DCHECK(bigint_type != NULL, "xi_const_bigint: type is NULL");
+    XR_DCHECK(digits != NULL, "xi_const_bigint: digits is NULL");
+    XiValue *v = xi_value_new(f, blk, XI_CONST, bigint_type, 0);
+    if (v && digits) {
+        /* Copy decimal digit string into arena (same approach as xi_const_str) */
+        uint32_t len = (uint32_t)strlen(digits);
+        char *copy = (char *)xi_func_arena_alloc(f, len + 1);
+        if (copy) memcpy(copy, digits, len + 1);
+        v->aux = (void *)copy;
+    }
+    return v;
+}
+
 /* ========== Convenience Constructors ========== */
 
 XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op,

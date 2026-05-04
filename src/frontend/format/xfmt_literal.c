@@ -133,9 +133,17 @@ static void emit_payload(XrFmtContext *ctx, const char *value, int len, bool esc
 /* ========== Public API ========== */
 
 void xfmt_emit_string(XrFmtContext *ctx, const char *value, int len) {
-    lit_byte(ctx, '"');
-    emit_payload(ctx, value, len, /*escape_dollar=*/false);
-    lit_byte(ctx, '"');
+    if (ctx->in_template_expr) {
+        // Inside template interpolation: use single quotes to avoid
+        // breaking the enclosing double-quoted template string.
+        lit_byte(ctx, '\'');
+        emit_payload(ctx, value, len, /*escape_dollar=*/false);
+        lit_byte(ctx, '\'');
+    } else {
+        lit_byte(ctx, '"');
+        emit_payload(ctx, value, len, /*escape_dollar=*/false);
+        lit_byte(ctx, '"');
+    }
 }
 
 void xfmt_emit_raw_string(XrFmtContext *ctx, const char *value, int len) {
@@ -158,8 +166,14 @@ void xfmt_emit_template_string(XrFmtContext *ctx, AstNode *node, XrFmtExprEmitte
             emit_payload(ctx, s, n, /*escape_dollar=*/true);
         } else {
             lit_str(ctx, "${");
-            if (emit_expr)
+            if (emit_expr) {
+                // String literals inside interpolation must use single
+                // quotes to avoid breaking the outer double-quoted string.
+                int saved = ctx->in_template_expr;
+                ctx->in_template_expr = 1;
                 emit_expr(ctx, part);
+                ctx->in_template_expr = saved;
+            }
             lit_byte(ctx, '}');
         }
     }

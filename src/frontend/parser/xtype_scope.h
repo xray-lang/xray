@@ -24,8 +24,8 @@
 
 #include "../../base/xdefs.h"
 
-// Forward declaration of the language type (defined in runtime/value/xtype.h).
-typedef struct XrType XrType;
+// Forward declaration of the AST type reference (defined in xtype_ref.h).
+typedef struct XrTypeRef XrTypeRef;
 
 typedef struct XrTypeScope XrTypeScope;
 
@@ -34,7 +34,7 @@ typedef struct XrTypeScope XrTypeScope;
 // guard); callers patch `type` directly once the RHS is parsed.
 typedef struct XrTypeAlias {
     const char *name;
-    XrType *type;
+    XrTypeRef *type_ref;
     struct XrTypeAlias *next;
 } XrTypeAlias;
 
@@ -49,7 +49,7 @@ XR_FUNC void xr_type_scope_free(XrTypeScope *scope);
 // `name` is already defined locally (caller should report duplicate). The
 // returned pointer is stable until the scope is freed; callers may mutate
 // `entry->type` to patch forward-declared placeholders.
-XR_FUNC XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrType *type);
+XR_FUNC XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrTypeRef *type_ref);
 
 // Walk the scope chain to find an alias. Returns NULL if not found.
 XR_FUNC XrTypeAlias *xr_type_scope_lookup(XrTypeScope *scope, const char *name);
@@ -57,7 +57,7 @@ XR_FUNC XrTypeAlias *xr_type_scope_lookup(XrTypeScope *scope, const char *name);
 // Lookup only in the innermost scope (no chain walk).
 XR_FUNC XrTypeAlias *xr_type_scope_lookup_local(XrTypeScope *scope, const char *name);
 
-// Convenience: walks the chain and returns just the type pointer (or NULL).
-XR_FUNC XrType *xr_type_scope_resolve(XrTypeScope *scope, const char *name);
+// Convenience: walks the chain and returns just the type ref pointer (or NULL).
+XR_FUNC XrTypeRef *xr_type_scope_resolve(XrTypeScope *scope, const char *name);
 
 #endif  // XTYPE_SCOPE_H

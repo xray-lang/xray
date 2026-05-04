@@ -123,6 +123,10 @@ struct XrayIsolate {
     // Current arena for AST allocation (set by parser, NULL = use malloc)
     struct XrArena *current_arena;
 
+    // Compile-time string pool for deduplication during parsing.
+    // Lifetime matches current_arena — set/cleared together.
+    struct XrCompileStringPool *compile_string_pool;
+
     // Native type mapping table
     XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];  // GC type ID -> XrClass mapping
 

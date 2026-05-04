@@ -146,8 +146,9 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_indent(ctx);
         xfmt_emit_expression(ctx, ma->pattern);
         if (ma->guard) {
-            xfmt_write_str(ctx, " if ");
+            xfmt_write_str(ctx, " if (");
             xfmt_emit_expression(ctx, ma->guard);
+            xfmt_write_char(ctx, ')');
         }
         xfmt_write_str(ctx, " => ");
 
@@ -296,7 +297,13 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 for (int i = 0; i < obj->count; i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
-                    xfmt_emit_expression(ctx, obj->keys[i]);
+                    if (obj->computed && obj->computed[i]) {
+                        xfmt_write_char(ctx, '[');
+                        xfmt_emit_expression(ctx, obj->keys[i]);
+                        xfmt_write_char(ctx, ']');
+                    } else {
+                        xfmt_emit_expression(ctx, obj->keys[i]);
+                    }
                     xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, obj->values[i]);
                 }
@@ -557,12 +564,13 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, ".any");
             if (aw->is_all)
                 xfmt_write_str(ctx, ".all");
+            if (aw->timeout) {
+                xfmt_write_str(ctx, "(timeout: ");
+                xfmt_emit_expression(ctx, aw->timeout);
+                xfmt_write_char(ctx, ')');
+            }
             xfmt_write_space(ctx);
             xfmt_emit_expression(ctx, aw->expr);
-            if (aw->timeout) {
-                xfmt_write_str(ctx, " timeout ");
-                xfmt_emit_expression(ctx, aw->timeout);
-            }
             break;
         }
 
@@ -605,6 +613,55 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, pm->patterns[i]);
             }
+            break;
+        }
+
+        // Force unwrap: expr!
+        case AST_FORCE_UNWRAP:
+            xfmt_emit_expression(ctx, node->as.unary.operand);
+            xfmt_write_char(ctx, '!');
+            break;
+
+        // As expression: expr as Type / expr as Type?
+        // The ? for safe cast is already part of the stored type ref.
+        case AST_AS_EXPR:
+            xfmt_emit_expression(ctx, node->as.as_expr.expr);
+            xfmt_write_str(ctx, " as ");
+            xfmt_emit_type(ctx, node->as.as_expr.type);
+            break;
+
+        // Struct literal: Name{field: val, ...}
+        case AST_STRUCT_LITERAL: {
+            StructLiteralNode *sl = &node->as.struct_literal;
+            xfmt_write_str(ctx, sl->struct_name);
+            xfmt_emit_generic_args(ctx, sl->type_args, sl->type_arg_count);
+            xfmt_write_char(ctx, '{');
+            for (int i = 0; i < sl->field_count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_write_str(ctx, sl->field_names[i]);
+                xfmt_write_str(ctx, ": ");
+                xfmt_emit_expression(ctx, sl->field_values[i]);
+            }
+            xfmt_write_char(ctx, '}');
+            break;
+        }
+
+        // Move expression: move var
+        case AST_MOVE_EXPR:
+            xfmt_write_str(ctx, "move ");
+            xfmt_emit_expression(ctx, node->as.move_expr.expr);
+            break;
+
+        // Scope block used as expression
+        case AST_SCOPE_BLOCK: {
+            ScopeBlockNode *sb = &node->as.scope_block;
+            if (sb->scope_mode == XR_SCOPE_LINKED)
+                xfmt_write_str(ctx, "linked ");
+            else if (sb->scope_mode == XR_SCOPE_SUPERVISOR)
+                xfmt_write_str(ctx, "supervisor ");
+            xfmt_write_str(ctx, "scope ");
+            xfmt_emit_block(ctx, sb->body);
             break;
         }
 

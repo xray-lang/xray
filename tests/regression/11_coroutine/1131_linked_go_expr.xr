@@ -1,12 +1,11 @@
 // Test linked go as expressions and task.monitor() API
-
 fn ok(): int {
     return 42
 }
 
 // Test 1: linked go as expression returns Task
 fn test_linked_go_expr() {
-    let t = linked go ok()
+    let t = go ok()
     let r = await t
     assert(r == 42, "linked go should return result via await")
 }
@@ -23,8 +22,8 @@ fn test_go_with_monitor() {
 // Test 3: linked go inside linked scope
 fn test_linked_go_in_scope() {
     let result = 0
-    linked scope {
-        let t = linked go ok()
+    scope.linked {
+        let t = go ok()
         result = await t
     }
     assert(result == 42, "linked go in linked scope should work")

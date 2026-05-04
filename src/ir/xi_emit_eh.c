@@ -56,14 +56,34 @@ XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
 }
 
-/* Defer: args[0]=callee; OP_DEFER A=callee_reg B=nargs */
+/* Defer: args[0]=callee, args[1..n]=call arguments.
+ * OP_DEFER A B — closure at R[A], arguments at R[A+1]..R[A+B]. */
 XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
     if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t nargs = (uint8_t)(v->nargs - 1);
+
+    /* Reserve consecutive register window: dst, dst+1, ..., dst+nargs */
+    {
+        uint8_t top = (uint8_t)(dst + nargs + 1);
+        if (top > ctx->max_reg) ctx->max_reg = top;
+    }
+
+    /* Move callee into dst */
     uint8_t callee = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK) return;
-    uint8_t nargs = (uint8_t)(v->nargs > 1 ? v->nargs - 1 : 0);
-    emit_inst(ctx, CREATE_ABC(OP_DEFER, callee, nargs, 0));
+    if (callee != dst)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+
+    /* Move arguments into consecutive slots after callee */
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        uint8_t arg_reg = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK) return;
+        uint8_t target = (uint8_t)(dst + a);
+        if (arg_reg != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+    }
+
+    emit_inst(ctx, CREATE_ABC(OP_DEFER, dst, nargs, 0));
 }
 
 /* ========== Coroutine ========== */

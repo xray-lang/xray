@@ -50,7 +50,8 @@ struct XrayIsolate;
 #define XI_LOWER_MAX_INCOMPLETE 256
 
 typedef struct XiVarEntry {
-    const char *name;   /* variable name (not owned, points into AST) */
+    uint32_t symbol_id; /* unique ID from analyzer (0 = unresolved / synthetic) */
+    const char *name;   /* variable name (debug only, not owned, points into AST) */
     struct XrType *type;/* declared type */
 } XiVarEntry;
 
@@ -75,7 +76,10 @@ typedef struct XiLower {
     struct XaAnalyzer *analyzer;
     struct XrayIsolate *isolate;
 
-    /* Braun SSA variable tracking */
+    /* Braun SSA variable tracking.
+     * Each entry is keyed by symbol_id from the analyzer.  Scope resolution
+     * is done by the analyzer (which assigns unique IDs even for same-named
+     * variables in different scopes), so no scope stack is needed here. */
     XiVarEntry vars[XI_LOWER_MAX_VARS];
     int var_count;
 
@@ -99,6 +103,7 @@ typedef struct XiLower {
     struct XrType *type_null;
     struct XrType *type_void;
     struct XrType *type_any;
+    struct XrType *type_bigint;
 
     /* Self-reference for recursive named functions.
      * Set to a dummy XI_CONST in xi_lower_func so the function body

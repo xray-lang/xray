@@ -48,13 +48,13 @@
 /* Dummy types -- pointer-equality is all the test needs                   */
 /* ====================================================================== */
 
-// xtype_scope stores `XrType *`; it never derefs. We use stack-
+// xtype_scope stores `XrTypeRef *`; it never derefs. We use stack-
 // allocated dummies cast through an explicit pointer so the type
 // system stays happy.
 typedef struct DummyType { int marker; } DummyType;
 
-static struct XrType *as_type(DummyType *p) {
-    return (struct XrType *)p;
+static struct XrTypeRef *as_tref(DummyType *p) {
+    return (struct XrTypeRef *)p;
 }
 
 /* ====================================================================== */
@@ -66,16 +66,16 @@ TEST(define_then_lookup_returns_same_type) {
     ASSERT_NOT_NULL(scope);
 
     DummyType t = { 1 };
-    XrTypeAlias *e = xr_type_scope_define(scope, "Foo", as_type(&t));
+    XrTypeAlias *e = xr_type_scope_define(scope, "Foo", as_tref(&t));
     ASSERT_NOT_NULL(e);
     ASSERT_STR_EQ(e->name, "Foo");
-    ASSERT_EQ_PTR(e->type, &t);
+    ASSERT_EQ_PTR(e->type_ref, &t);
 
     // lookup chain (no parent) and resolve match.
     XrTypeAlias *got = xr_type_scope_lookup(scope, "Foo");
     ASSERT_EQ_PTR(got, e);
 
-    XrType *resolved = xr_type_scope_resolve(scope, "Foo");
+    XrTypeRef *resolved = xr_type_scope_resolve(scope, "Foo");
     ASSERT_EQ_PTR(resolved, &t);
 
     xr_type_scope_free(scope);
@@ -86,18 +86,18 @@ TEST(duplicate_define_returns_null) {
     ASSERT_NOT_NULL(scope);
 
     DummyType t1 = { 1 }, t2 = { 2 };
-    XrTypeAlias *first  = xr_type_scope_define(scope, "T", as_type(&t1));
+    XrTypeAlias *first  = xr_type_scope_define(scope, "T", as_tref(&t1));
     ASSERT_NOT_NULL(first);
 
     // Duplicate in the SAME scope must fail -- the parser uses this
     // signal to emit a "duplicate alias" diagnostic.
-    XrTypeAlias *dup = xr_type_scope_define(scope, "T", as_type(&t2));
+    XrTypeAlias *dup = xr_type_scope_define(scope, "T", as_tref(&t2));
     ASSERT_NULL(dup);
 
     // Original entry must still be intact.
     XrTypeAlias *got = xr_type_scope_lookup(scope, "T");
     ASSERT_EQ_PTR(got, first);
-    ASSERT_EQ_PTR(got->type, &t1);
+    ASSERT_EQ_PTR(got->type_ref, &t1);
 
     xr_type_scope_free(scope);
 }
@@ -109,13 +109,13 @@ TEST(lookup_walks_to_parent_scope) {
     ASSERT_NOT_NULL(inner);
 
     DummyType t = { 42 };
-    xr_type_scope_define(outer, "Foo", as_type(&t));
+    xr_type_scope_define(outer, "Foo", as_tref(&t));
 
     // Inner does not have Foo; chained lookup must find it on the
     // outer scope.
     XrTypeAlias *via_chain = xr_type_scope_lookup(inner, "Foo");
     ASSERT_NOT_NULL(via_chain);
-    ASSERT_EQ_PTR(via_chain->type, &t);
+    ASSERT_EQ_PTR(via_chain->type_ref, &t);
 
     // lookup_local must NOT find it -- this is the API the parser
     // uses to detect re-declaration in the current scope only.
@@ -125,7 +125,7 @@ TEST(lookup_walks_to_parent_scope) {
     xr_type_scope_free(inner);
     XrTypeAlias *still_there = xr_type_scope_lookup(outer, "Foo");
     ASSERT_NOT_NULL(still_there);
-    ASSERT_EQ_PTR(still_there->type, &t);
+    ASSERT_EQ_PTR(still_there->type_ref, &t);
 
     xr_type_scope_free(outer);
 }
@@ -142,26 +142,26 @@ TEST(generic_param_shadow_outer_alias) {
     DummyType outer_t = { 100 };
     DummyType inner_t = { 200 };
 
-    xr_type_scope_define(outer, "T", as_type(&outer_t));
+    xr_type_scope_define(outer, "T", as_tref(&outer_t));
 
     XrTypeScope *inner = xr_type_scope_new(outer);
-    xr_type_scope_define(inner, "T", as_type(&inner_t));
+    xr_type_scope_define(inner, "T", as_tref(&inner_t));
 
     // Inside the inner scope, T resolves to the inner type
     // (generic-parameter shadow).
-    XrType *inner_view = xr_type_scope_resolve(inner, "T");
+    XrTypeRef *inner_view = xr_type_scope_resolve(inner, "T");
     ASSERT_EQ_PTR(inner_view, &inner_t);
 
     // lookup_local on inner returns the inner entry (not the outer).
     XrTypeAlias *local = xr_type_scope_lookup_local(inner, "T");
     ASSERT_NOT_NULL(local);
-    ASSERT_EQ_PTR(local->type, &inner_t);
+    ASSERT_EQ_PTR(local->type_ref, &inner_t);
 
     // Pop the inner scope (mirroring the parser's "fn body finished"
     // step). The outer T must still resolve to the outer type.
     xr_type_scope_free(inner);
 
-    XrType *outer_view = xr_type_scope_resolve(outer, "T");
+    XrTypeRef *outer_view = xr_type_scope_resolve(outer, "T");
     ASSERT_EQ_PTR(outer_view, &outer_t);
 
     xr_type_scope_free(outer);
@@ -201,14 +201,14 @@ TEST(forward_declared_alias_can_be_patched) {
 
     XrTypeAlias *e = xr_type_scope_define(scope, "A", NULL);
     ASSERT_NOT_NULL(e);
-    ASSERT_NULL(e->type);
+    ASSERT_NULL(e->type_ref);
 
     // Patch.
     DummyType t = { 7 };
-    e->type = as_type(&t);
+    e->type_ref = as_tref(&t);
 
     // Subsequent lookups see the patched value.
-    XrType *now = xr_type_scope_resolve(scope, "A");
+    XrTypeRef *now = xr_type_scope_resolve(scope, "A");
     ASSERT_EQ_PTR(now, &t);
 
     xr_type_scope_free(scope);
