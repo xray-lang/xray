@@ -427,12 +427,52 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     uint8_t dst = call_like ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK) return;
 
+    /* Cell unwrapping: when an arg was wrapped in a cell for mutable closure
+     * capture, reading its register returns the XrCell object, not the value.
+     * Emit CELL_GET to a temp register for each such arg and temporarily
+     * redirect reg_map so the handler sees the unwrapped value.
+     * Closure captures access cells via captures[] (not v->args), so they
+     * correctly get the cell itself. */
+    #define CELL_UNWRAP_MAX 8
+    uint32_t saved_ids[CELL_UNWRAP_MAX];
+    uint8_t  saved_regs[CELL_UNWRAP_MAX];
+    uint8_t  temp_regs[CELL_UNWRAP_MAX];
+    int nsaved = 0;
+
+    for (uint16_t ai = 0; ai < v->nargs && nsaved < CELL_UNWRAP_MAX; ai++) {
+        XiValue *arg = v->args[ai];
+        if (!arg || arg->id >= ctx->reg_map_size) continue;
+        if (!ctx->cell_wrapped[arg->id]) continue;
+        uint8_t cell_reg = reg_of(ctx, arg);
+        if (ctx->status != XI_EMIT_OK) return;
+        if (ctx->next_reg >= MAX_REGS - 1) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        uint8_t tmp = ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, cell_reg, 0));
+        saved_ids[nsaved]  = arg->id;
+        saved_regs[nsaved] = ctx->reg_map[arg->id];
+        temp_regs[nsaved]  = tmp;
+        ctx->reg_map[arg->id] = tmp;
+        nsaved++;
+    }
+    #undef CELL_UNWRAP_MAX
+
     XR_DCHECK(v->op >= 0 && v->op < XI_OP_COUNT, "emit_value: op out of range");
     XiEmitHandler handler = xi_emit_handlers[v->op];
     if (handler) {
         handler(ctx, v, dst);
     } else {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+    }
+
+    /* Restore original reg_map and free temp registers */
+    for (int ri = 0; ri < nsaved; ri++) {
+        ctx->reg_map[saved_ids[ri]] = saved_regs[ri];
+        free_reg(ctx, temp_regs[ri]);
     }
 }
 
