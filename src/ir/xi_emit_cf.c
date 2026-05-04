@@ -45,7 +45,9 @@ XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
 /* ========== Block Emission ========== */
 
 /* Check if a comparison value is only used as the block control (no other
- * consumers).  If so, we can fuse it into the branch-form opcode. */
+ * consumers).  If so, we can fuse it into the branch-form opcode.
+ * Must also check successor blocks' phi nodes — a phi can reference the
+ * comparison as a cross-block operand (e.g. && short-circuit merge). */
 static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
     XR_DCHECK(ctrl != NULL, "ctrl must not be NULL");
     uint16_t op = ctrl->op;
@@ -56,6 +58,20 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
         if (v == ctrl) continue;
         for (uint16_t a = 0; a < v->nargs; a++) {
             if (v->args[a] == ctrl) return false;
+        }
+    }
+    /* Ensure no phi anywhere in the function references this comparison.
+     * The && short-circuit pattern creates phis two hops away
+     * (IF → skip → merge), so checking only direct successors is
+     * insufficient. Walking all blocks is O(n) but n is small. */
+    XiFunc *f = blk->func;
+    XR_DCHECK(f != NULL, "block must belong to a function");
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *b = f->blocks[bi];
+        for (XiPhi *phi = b->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == ctrl) return false;
+            }
         }
     }
     return true;
