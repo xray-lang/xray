@@ -478,21 +478,82 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
 static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
     const char *name = node->as.inc.name;
     uint32_t sid = node->as.inc.symbol_id;
-    int var_id = xi_lower_var_find(l, sid, name);
-    if (var_id < 0)
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-
-    XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
-    if (!cur) return NULL;
-
-    XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
     uint16_t op = (node->type == AST_INC) ? XI_ADD : XI_SUB;
-    struct XrType *result_type = cur->type ? cur->type : l->type_int;
 
-    XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
-    if (result)
-        xi_lower_braun_write(l, var_id, l->cur_block, result);
-    return result;
+    /* Local variable */
+    int var_id = xi_lower_var_find(l, sid, name);
+    if (var_id >= 0) {
+        XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
+        if (!cur) return NULL;
+        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        struct XrType *result_type = cur->type ? cur->type : l->type_int;
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
+        if (result) {
+            xi_lower_braun_write(l, var_id, l->cur_block, result);
+            /* If program-level shared variable, also update shared array */
+            if (l->is_program && l->shared_map[var_id] >= 0) {
+                XiValue *store = xi_value_new(l->func, l->cur_block,
+                                               XI_SET_SHARED, l->type_void, 1);
+                if (store) {
+                    store->args[0] = result;
+                    store->aux_int = l->shared_map[var_id];
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            }
+        }
+        return result;
+    }
+
+    /* Shared variable from nested scope */
+    int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
+    if (shared_idx >= 0) {
+        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                                     l->type_any, 0);
+        if (!cur) return NULL;
+        cur->aux_int = shared_idx;
+        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        struct XrType *result_type = cur->type ? cur->type : l->type_int;
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
+        if (result) {
+            XiValue *store = xi_value_new(l->func, l->cur_block,
+                                           XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = result;
+                store->aux_int = shared_idx;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+        return result;
+    }
+
+    /* Upvalue: read via LOAD_UPVAL, compute, write via STORE_UPVAL */
+    struct XrType *upval_type = NULL;
+    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
+    if (upval_idx >= 0) {
+        if (!upval_type) upval_type = l->type_any;
+        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                                     upval_type, 0);
+        if (!cur) return NULL;
+        cur->aux_int = upval_idx;
+        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        struct XrType *result_type = cur->type ? cur->type : l->type_int;
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
+        if (result) {
+            XR_DCHECK(upval_idx < (int)l->func->ncaptures,
+                      "upval_idx out of range for needs_cell");
+            l->func->captures[upval_idx].needs_cell = true;
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
+                                           l->type_void, 1);
+            if (store) {
+                store->args[0] = result;
+                store->aux_int = upval_idx;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
+        return result;
+    }
+
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
