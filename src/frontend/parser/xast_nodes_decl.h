@@ -22,7 +22,7 @@
 // Generic type parameter (for <T: Constraint> syntax)
 typedef struct XrGenericParam {
     char *name;          // Type parameter name: T, U, K, V
-    XrType *constraint;  // Constraint type (can be NULL)
+    XrTypeRef *constraint;  // Constraint type (can be NULL)
 } XrGenericParam;
 
 // Function parameter passing mode for struct value types
@@ -36,10 +36,11 @@ typedef struct XrParamNode {
     int line;                       // Line number (1-indexed)
     int column;                     // Column number (1-indexed, for LSP)
     uint8_t passing_mode;           // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF
-    XrType *type;                   // Type annotation (can be NULL)
+    XrTypeRef *type;                   // Type annotation (can be NULL)
     AstNode *default_value;         // Default value expression (can be NULL)
     XrDestructurePattern *pattern;  // Destructure pattern (can be NULL)
     bool is_rest;                   // Is this a rest parameter (...args)?
+    uint32_t symbol_id;             // Unique ID from analyzer; 0 = unresolved
 } XrParamNode;
 
 /* ========== Function Declarations ========== */
@@ -49,13 +50,14 @@ typedef struct FunctionDeclNode {
     XrParamNode **params;
     int param_count;
     int required_count;  // Number of required params (without defaults)
-    XrType *return_type;
+    XrTypeRef *return_type;
     AstNode *body;
     bool is_generator;
     XrAttribute **attributes;
     int attr_count;
     XrGenericParam **type_params;
     int type_param_count;
+    uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved / anonymous
 } FunctionDeclNode;
 
 /* ========== OOP: class / struct / interface / methods ========== */
@@ -74,14 +76,15 @@ typedef struct ClassDeclNode {
     bool is_final;
     XrGenericParam **type_params;  // Generic type parameters
     int type_param_count;
+    uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved
 } ClassDeclNode;
 
 typedef struct InterfaceMethodNode {
     char *name;
     char **parameters;
-    XrType **param_types;
+    XrTypeRef **param_types;
     int param_count;
-    XrType *return_type;
+    XrTypeRef *return_type;
 } InterfaceMethodNode;
 
 typedef struct InterfaceDeclNode {
@@ -94,7 +97,7 @@ typedef struct InterfaceDeclNode {
 
 typedef struct FieldDeclNode {
     char *name;
-    XrType *field_type;
+    XrTypeRef *field_type;
     bool is_private;
     bool is_static;
     bool is_final;
@@ -106,10 +109,10 @@ typedef struct FieldDeclNode {
 typedef struct MethodDeclNode {
     char *name;
     char **parameters;
-    XrType **param_types;
+    XrTypeRef **param_types;
     uint8_t *param_passing_modes;  // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF per param
     int param_count;
-    XrType *return_type;
+    XrTypeRef *return_type;
     AstNode *body;
     bool is_constructor;
     bool is_static;
@@ -137,7 +140,7 @@ typedef struct NewExprNode {
     char *class_name;
     AstNode **arguments;
     int arg_count;
-    XrType **type_args;
+    XrTypeRef **type_args;
     int type_arg_count;
 } NewExprNode;
 
@@ -156,14 +159,14 @@ typedef struct SuperCallNode {
 typedef struct TypeAliasNode {
     char *name;
     char **field_names;
-    XrType **field_types;
+    XrTypeRef **field_types;
     bool *field_optional;
     int field_count;
     // Parser stores the fully-resolved RHS type here so the analyzer
     // can pick it up without re-resolving. May be NULL when the alias
     // body is anonymous-object only (in which case field_names /
     // field_types describe the shape).
-    XrType *resolved_type;
+    XrTypeRef *resolved_type;
 } TypeAliasNode;
 
 /* ========== Enum ========== */

@@ -22,16 +22,19 @@ struct XrType;
 
 /* ========== Braun SSA Primitives ========== */
 
-XR_FUNC int xi_lower_var_create(XiLower *l, const char *name, struct XrType *type);
+XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id,
+                                 const char *name, struct XrType *type);
 XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue *val);
 XR_FUNC XiValue *xi_lower_braun_read(XiLower *l, int var_id, XiBlock *blk);
 XR_FUNC void xi_lower_braun_seal(XiLower *l, XiBlock *blk);
 
 /* ========== Variable / Scope Lookup (xi_lower.c) ========== */
 
-XR_FUNC int xi_lower_var_find(XiLower *l, const char *name);
-XR_FUNC int xi_lower_find_shared(XiLower *l, const char *name, struct XrType **out_type);
-XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, const char *name, struct XrType **out_type);
+XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name);
+XR_FUNC int xi_lower_find_shared(XiLower *l, uint32_t symbol_id,
+                                  const char *name, struct XrType **out_type);
+XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id,
+                                      const char *name, struct XrType **out_type);
 
 /* ========== Context Init / Cleanup (xi_lower.c) ========== */
 

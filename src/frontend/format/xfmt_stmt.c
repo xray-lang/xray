@@ -145,13 +145,13 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
 
         xfmt_write_indent(ctx);
         if (sc->is_default) {
-            xfmt_write_str(ctx, "default");
+            xfmt_write_char(ctx, '_');
         } else if (sc->is_timeout) {
-            xfmt_write_str(ctx, "timeout ");
+            xfmt_write_str(ctx, "after ");
             xfmt_emit_expression(ctx, sc->value);
         } else if (sc->is_send) {
             xfmt_emit_expression(ctx, sc->value);
-            xfmt_write_str(ctx, " -> ");
+            xfmt_write_str(ctx, " to ");
             xfmt_emit_expression(ctx, sc->channel);
         } else {
             xfmt_write_str(ctx, sc->var_name);
@@ -368,6 +368,29 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             if (exp->declaration) {
                 ctx->line_start = 0;
                 xfmt_emit_statement(ctx, exp->declaration);
+            } else if (exp->from_path) {
+                // Re-export: export { a, b as c } from "./file"
+                //        or: export * from "./file"
+                if (exp->is_reexport_all) {
+                    xfmt_write_str(ctx, "* from \"");
+                    xfmt_write_str(ctx, exp->from_path);
+                    xfmt_write_char(ctx, '"');
+                } else {
+                    xfmt_write_str(ctx, "{ ");
+                    for (int i = 0; i < exp->reexport_count; i++) {
+                        if (i > 0)
+                            xfmt_write_str(ctx, ", ");
+                        xfmt_write_str(ctx, exp->reexport_members[i].name);
+                        if (exp->reexport_members[i].alias) {
+                            xfmt_write_str(ctx, " as ");
+                            xfmt_write_str(ctx, exp->reexport_members[i].alias);
+                        }
+                    }
+                    xfmt_write_str(ctx, " } from \"");
+                    xfmt_write_str(ctx, exp->from_path);
+                    xfmt_write_char(ctx, '"');
+                }
+                xfmt_write_newline(ctx);
             } else if (exp->export_count > 0) {
                 for (int i = 0; i < exp->export_count; i++) {
                     if (i > 0)
@@ -390,12 +413,18 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_newline(ctx);
             break;
 
-        case AST_SCOPE_BLOCK:
+        case AST_SCOPE_BLOCK: {
             xfmt_write_indent(ctx);
+            ScopeBlockNode *sb = &node->as.scope_block;
+            if (sb->scope_mode == XR_SCOPE_LINKED)
+                xfmt_write_str(ctx, "linked ");
+            else if (sb->scope_mode == XR_SCOPE_SUPERVISOR)
+                xfmt_write_str(ctx, "supervisor ");
             xfmt_write_str(ctx, "scope ");
-            xfmt_emit_block(ctx, node->as.scope_block.body);
+            xfmt_emit_block(ctx, sb->body);
             xfmt_write_newline(ctx);
             break;
+        }
 
         case AST_YIELD_STMT:
             xfmt_write_indent(ctx);

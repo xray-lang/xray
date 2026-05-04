@@ -160,6 +160,19 @@ void xr_isolate_set_current_arena(XrayIsolate *X, struct XrArena *arena) {
     }
 }
 
+/* ========== Compile-time String Pool ========== */
+
+struct XrCompileStringPool *xr_isolate_get_string_pool_compile(XrayIsolate *X) {
+    return X ? X->compile_string_pool : NULL;
+}
+
+void xr_isolate_set_string_pool_compile(XrayIsolate *X,
+                                         struct XrCompileStringPool *pool) {
+    if (X) {
+        X->compile_string_pool = pool;
+    }
+}
+
 /* ========== Type System (Compiler) ========== */
 
 XrTypeInferContext *xr_isolate_get_type_infer_context(XrayIsolate *X) {

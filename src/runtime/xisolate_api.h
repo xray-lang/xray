@@ -76,6 +76,11 @@ XR_FUNC const char *xr_isolate_get_script_file(XrayIsolate *X);
 XR_FUNC struct XrArena *xr_isolate_get_current_arena(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_current_arena(XrayIsolate *X, struct XrArena *arena);
 
+// Compile-time string pool (deduplication during parsing)
+XR_FUNC struct XrCompileStringPool *xr_isolate_get_string_pool_compile(XrayIsolate *X);
+XR_FUNC void xr_isolate_set_string_pool_compile(XrayIsolate *X,
+                                                  struct XrCompileStringPool *pool);
+
 // Type system (compiler)
 XR_FUNC XrTypeInferContext *xr_isolate_get_type_infer_context(XrayIsolate *X);
 XR_FUNC XrTypeTable *xr_isolate_get_type_table(XrayIsolate *X);

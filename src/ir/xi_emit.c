@@ -18,6 +18,7 @@
 #include "xi_analysis.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/object/xbigint.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -262,6 +263,25 @@ static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
             break;
         }
+        case XR_KIND_INSTANCE: {
+            /* BigInt: aux holds decimal digit string, create XrBigInt object */
+            if (xr_type_is_named_class(ty, "BigInt") && v->aux) {
+                const char *digits = (const char *)v->aux;
+                XrBigInt *bi = xr_bigint_from_string_on_gc(
+                    &ctx->isolate->gc, digits);
+                if (!bi) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+                XrValue xv = XR_FROM_PTR(bi);
+                int ki = xr_vm_proto_add_constant(ctx->proto, xv);
+                if (ki > MAXARG_Bx) {
+                    emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+                    return;
+                }
+                emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
+                break;
+            }
+            /* Other instance constants: fall through to default */
+        }
+        /* fall through */
         default: {
             /* Generic pointer constant (enum type, etc.) */
             void *ptr = v->aux;
@@ -595,6 +615,8 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     ctx.proto->is_vararg = f->is_vararg;
     ctx.proto->entry_type = f->entry_type;
     ctx.proto->min_params = f->min_params;
+    ctx.proto->test_attr = f->test_attr;
+    ctx.proto->test_timeout = f->test_timeout;
 
     /* Build slot map for JIT (non-fatal if allocation fails) */
     XiSlotMap *slot_map = build_slot_map(&ctx);

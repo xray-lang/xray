@@ -81,12 +81,12 @@ XR_FUNC AstNode *xr_ast_for_stmt(XrayIsolate *X, AstNode *initializer, AstNode *
                                  AstNode *increment, AstNode *body, int line);
 
 // Create for-in loop node
-XR_FUNC AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name, XrType *item_type,
+XR_FUNC AstNode *xr_ast_for_in_stmt(XrayIsolate *X, const char *item_name, XrTypeRef *item_type,
                                     AstNode *collection, AstNode *body, int line);
 
 // Create for-in key-value loop node
 XR_FUNC AstNode *xr_ast_for_in_keyvalue_stmt(XrayIsolate *X, const char *key_name,
-                                             const char *value_name, XrType *item_type,
+                                             const char *value_name, XrTypeRef *item_type,
                                              AstNode *collection, AstNode *body, int line);
 
 // Create break statement node
@@ -112,17 +112,17 @@ XR_FUNC AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee, AstNode **arg
 
 // Create function call node with generic type arguments
 XR_FUNC AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee, AstNode **arguments,
-                                          int arg_count, XrType **type_args, int type_arg_count,
+                                          int arg_count, XrTypeRef **type_args, int type_arg_count,
                                           int line);
 
 // Create return statement node
 XR_FUNC AstNode *xr_ast_return_stmt(XrayIsolate *X, AstNode **values, int count, int line);
 
 // Create is expression node (runtime type check)
-XR_FUNC AstNode *xr_ast_is_expr(XrayIsolate *X, AstNode *expr, XrType *type, int line);
+XR_FUNC AstNode *xr_ast_is_expr(XrayIsolate *X, AstNode *expr, XrTypeRef *type, int line);
 
 // Create as expression node (explicit type cast)
-XR_FUNC AstNode *xr_ast_as_expr(XrayIsolate *X, AstNode *expr, XrType *type, bool is_safe,
+XR_FUNC AstNode *xr_ast_as_expr(XrayIsolate *X, AstNode *expr, XrTypeRef *type, bool is_safe,
                                 int line);
 
 // Create array literal node
@@ -173,22 +173,22 @@ XR_FUNC AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **
 
 // Create interface method signature node
 XR_FUNC AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name, char **parameters,
-                                         XrType **param_types, int param_count, XrType *return_type,
+                                         XrTypeRef **param_types, int param_count, XrTypeRef *return_type,
                                          int line);
 
 // Create field declaration node
-XR_FUNC AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrType *field_type,
+XR_FUNC AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrTypeRef *field_type,
                                    bool is_private, bool is_static, AstNode *initializer, int line);
 
 // Create method declaration node
 XR_FUNC AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name, char **parameters,
-                                    XrType **param_types, int param_count, XrType *return_type,
+                                    XrTypeRef **param_types, int param_count, XrTypeRef *return_type,
                                     AstNode *body, bool is_constructor, bool is_static,
                                     bool is_private, bool is_getter, bool is_setter, int line);
 
 // Create new expression node (supports new module.Class() and new Box<int>() syntax)
 XR_FUNC AstNode *xr_ast_new_expr(XrayIsolate *X, const char *module_name, const char *class_name,
-                                 AstNode **arguments, int arg_count, XrType **type_args,
+                                 AstNode **arguments, int arg_count, XrTypeRef **type_args,
                                  int type_arg_count, int line);
 
 // Create this expression node
@@ -270,7 +270,7 @@ XR_FUNC XrDestructurePattern *xr_pattern_array(XrayIsolate *X, XrDestructurePatt
 XR_FUNC XrDestructurePattern *xr_pattern_object(XrayIsolate *X, char **fields,
                                                 XrDestructurePattern **patterns, int count,
                                                 bool use_shorthand);
-XR_FUNC XrDestructurePattern *xr_pattern_identifier(XrayIsolate *X, const char *name, XrType *type);
+XR_FUNC XrDestructurePattern *xr_pattern_identifier(XrayIsolate *X, const char *name, XrTypeRef *type);
 XR_FUNC XrDestructurePattern *xr_pattern_skip(XrayIsolate *iso);
 
 // Create destructure nodes
@@ -309,7 +309,7 @@ XR_FUNC AstNode *xr_ast_pattern_multi(XrayIsolate *X, AstNode **patterns, int co
 
 // Create type alias node
 XR_FUNC AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
-                                   XrType **field_types, bool *field_optional, int field_count,
+                                   XrTypeRef **field_types, bool *field_optional, int field_count,
                                    int line);
 
 // Create go expression node (supports name, priority, and link mode)

@@ -16,6 +16,7 @@
 
 #include "xfmt_internal.h"
 #include "../../runtime/value/xtype.h"
+#include "../parser/xtype_ref.h"
 
 // ----------------------------------------------------------------------------
 // Operator strings
@@ -99,12 +100,14 @@ const char *xfmt_compound_op(XrTokenType type) {
 // Type
 // ----------------------------------------------------------------------------
 
-void xfmt_emit_type(XrFmtContext *ctx, XrType *type) {
-    if (!type)
+void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
+    if (!tref)
         return;
-    const char *type_str = xr_type_to_string(type);
-    if (type_str) {
-        xfmt_write_str(ctx, type_str);
+    /* Use the buffer variant — no arena required at format time. */
+    char buf[256];
+    int n = xr_tref_to_string_buf(tref, buf, (int)sizeof(buf));
+    if (n > 0) {
+        xfmt_write_str(ctx, buf);
     } else {
         xfmt_write_str(ctx, "unknown");
     }
@@ -129,7 +132,7 @@ void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int co
 }
 
 // Format generic type arguments <int, string>
-void xfmt_emit_generic_args(XrFmtContext *ctx, XrType **args, int count) {
+void xfmt_emit_generic_args(XrFmtContext *ctx, XrTypeRef **args, int count) {
     if (count <= 0)
         return;
 

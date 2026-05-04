@@ -191,7 +191,7 @@ XR_FUNC AstNode *xr_parse_export_declaration(Parser *parser);
 
 /* ========== Type Annotations ========== */
 
-XR_FUNC XrType *xr_parse_type_annotation(Parser *parser);
+XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
 
 /* ========== Destructuring ========== */
 

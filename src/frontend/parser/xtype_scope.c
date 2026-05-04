@@ -51,7 +51,7 @@ void xr_type_scope_free(XrTypeScope *scope) {
     xr_free(scope);
 }
 
-XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrType *type) {
+XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrTypeRef *type_ref) {
     XR_DCHECK(scope != NULL, "xr_type_scope_define: NULL scope");
     XR_DCHECK(name != NULL, "xr_type_scope_define: NULL name");
 
@@ -70,7 +70,7 @@ XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrType *
     }
 
     a->name = name_copy;
-    a->type = type;
+    a->type_ref = type_ref;
     a->next = scope->aliases;
     scope->aliases = a;
     return a;
@@ -91,7 +91,7 @@ XrTypeAlias *xr_type_scope_lookup_local(XrTypeScope *scope, const char *name) {
     return find_local(scope, name);
 }
 
-XrType *xr_type_scope_resolve(XrTypeScope *scope, const char *name) {
+XrTypeRef *xr_type_scope_resolve(XrTypeScope *scope, const char *name) {
     XrTypeAlias *a = xr_type_scope_lookup(scope, name);
-    return a ? a->type : NULL;
+    return a ? a->type_ref : NULL;
 }

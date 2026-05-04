@@ -135,6 +135,7 @@ void xfmt_init(XrFmtContext *ctx, XrFmtConfig *config, XrayIsolate *X) {
     ctx->indent_level = 0;
     ctx->line_start = 1;
     ctx->column = 0;
+    ctx->in_template_expr = 0;
     ctx->config = config ? config : &xfmt_default_config;
     ctx->X = X;
 }
@@ -161,8 +162,8 @@ void xfmt_node(XrFmtContext *ctx, AstNode *node) {
     }
 }
 
-void xfmt_type(XrFmtContext *ctx, XrType *type) {
-    xfmt_emit_type(ctx, type);
+void xfmt_type(XrFmtContext *ctx, XrTypeRef *tref) {
+    xfmt_emit_type(ctx, tref);
 }
 
 char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrayIsolate *X) {

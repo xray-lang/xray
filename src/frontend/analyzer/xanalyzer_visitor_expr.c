@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
 /* ============================================================================
@@ -86,6 +87,9 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
                                    msg, &loc);
         return xr_type_new_unknown(NULL);
     }
+
+    /* Write back resolved symbol ID for Xi lowering (Braun SSA key). */
+    node->as.variable.symbol_id = sym->id;
 
     // Record dependency: current function depends on this symbol
     if (ctx->current_function && ctx->analyzer->incremental) {
@@ -558,6 +562,11 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
     XrType *container = xa_visit_infer_expr(ctx, ig->array);
 
+    /* Visit the index expression so variable references get their symbol_id resolved */
+    if (ig->index) {
+        xa_visit_infer_expr(ctx, ig->index);
+    }
+
     if (XR_TYPE_IS_ARRAY(container) && container->container.element_type) {
         return container->container.element_type;
     }
@@ -768,6 +777,16 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
     // If we have generic type arguments, create a generic instance type
     if (ne->type_arg_count > 0) {
+        // Resolve XrTypeRef** to XrType** for runtime use
+        XrType *resolved_targs_buf[8];
+        XrType **resolved_targs = (ne->type_arg_count <= 8)
+            ? resolved_targs_buf
+            : xr_malloc(sizeof(XrType *) * (size_t)ne->type_arg_count);
+        for (int i = 0; i < ne->type_arg_count; i++)
+            resolved_targs[i] = ne->type_args[i]
+                ? xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[i])
+                : xr_type_new_unknown(NULL);
+
         // Check constructor argument types against substituted parameter types
         if (class_info && class_links && ne->arg_count > 0) {
             int type_param_count = xa_symbol_links_get_type_param_count(class_links);
@@ -797,7 +816,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                             // Substitute T -> actual type arg
                             XrType *resolved =
                                 xr_type_substitute(ctx->analyzer->isolate, expected, param_names,
-                                                   ne->type_args, ne->type_arg_count);
+                                                   resolved_targs, ne->type_arg_count);
                             if (resolved && !XR_TYPE_IS_UNKNOWN(resolved)) {
                                 XrType *arg_type = xa_visit_infer_expr(ctx, ne->arguments[i]);
                                 if (arg_type && !xa_typecheck_assignable(resolved, arg_type)) {
@@ -822,8 +841,11 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
-        return xr_type_new_generic_instance(ctx->analyzer->isolate, ne->class_name, class_info,
-                                            ne->type_args, ne->type_arg_count);
+        XrType *gi = xr_type_new_generic_instance(ctx->analyzer->isolate, ne->class_name, class_info,
+                                            resolved_targs, ne->type_arg_count);
+        if (resolved_targs != resolved_targs_buf)
+            xr_free(resolved_targs);
+        return gi;
     }
 
     // Infer type arguments from constructor parameters: new Box(42) -> Box<int>
@@ -952,6 +974,8 @@ XrType *xa_visit_ternary(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
 
     TernaryNode *tern = &node->as.ternary;
+    // Visit condition to resolve variable symbol_ids
+    xa_visit_infer_expr(ctx, tern->condition);
     // Bidirectional inference: propagate outer expected_type to both branches
     // (expected_type is already set by the caller, just pass through)
     XrType *then_type = xa_visit_infer_expr(ctx, tern->true_expr);
@@ -1087,7 +1111,9 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_unknown(NULL);
     // Visit operand to ensure it's analyzed (side effects, narrowing)
     xa_visit_infer_expr(ctx, node->as.as_expr.expr);
-    XrType *target = node->as.as_expr.type;
+    XrType *target = node->as.as_expr.type
+        ? xr_tref_resolve(ctx->analyzer->isolate, node->as.as_expr.type)
+        : NULL;
     if (!target)
         return xr_type_new_unknown(NULL);
     return target;
@@ -1139,7 +1165,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             XrParamNode *p = fn->params[i];
             // Check for explicit type annotation first
             if (p && p->type) {
-                param_types[i] = (XrType *) p->type;
+                param_types[i] = xr_tref_resolve(ctx->analyzer->isolate, p->type);
             }
             // Use expected function type (bidirectional inference)
             else if (expected_fn && i < expected_fn->function.param_count &&
@@ -1179,7 +1205,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     // Use expected return type if not explicitly declared
-    XrType *return_type = fn->return_type ? (XrType *) fn->return_type : xr_type_new_unknown(NULL);
+    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type) : xr_type_new_unknown(NULL);
     if (XR_TYPE_IS_UNKNOWN(return_type) && expected_fn && expected_fn->function.return_type) {
         return_type = expected_fn->function.return_type;
     }
@@ -1224,6 +1250,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *param_sym = xa_symbol_new(p->name, XA_SYM_PARAMETER);
                 param_sym->location.line = p->line > 0 ? p->line : node->line;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, param_sym);
+                p->symbol_id = param_sym->id;
                 XaSymbolLinks *pl = xa_analyzer_get_links(ctx->analyzer, param_sym);
                 pl->type = param_types ? param_types[i] : xr_type_new_unknown(NULL);
                 pl->is_definitely_assigned = true;
@@ -1239,7 +1266,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             !XR_TYPE_IS_UNKNOWN(expected_fn->function.return_type)) {
             ctx->expected_return_type = expected_fn->function.return_type;
         } else if (fn->return_type) {
-            ctx->expected_return_type = (XrType *) fn->return_type;
+            ctx->expected_return_type = xr_tref_resolve(ctx->analyzer->isolate, fn->return_type);
         } else {
             ctx->expected_return_type = NULL;
         }

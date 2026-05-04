@@ -65,6 +65,7 @@ add_xray_unit_test(test_diag_fmt frontend/test_diag_fmt.c)
 add_xray_unit_test(test_xfmt_literal frontend/test_xfmt_literal.c)
 add_xray_unit_test(test_formatter_comments frontend/test_formatter_comments.c)
 add_xray_unit_test(test_formatter_strings frontend/test_formatter_strings.c)
+add_xray_unit_test(test_fmt_roundtrip frontend/test_fmt_roundtrip.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 # Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.

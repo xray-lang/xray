@@ -14,6 +14,7 @@
  */
 
 #include "xparse_internal.h"
+#include "xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../runtime/xisolate_api.h"
@@ -155,7 +156,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             param_name[param_token.length] = '\0';
 
             // Parse optional constraint <T: Interface>
-            XrType *constraint = NULL;
+            XrTypeRef *constraint = NULL;
             if (xr_parser_match(parser, TK_COLON)) {
                 constraint = xr_parse_type_annotation(parser);
             }
@@ -176,7 +177,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     if (type_param_count > 0) {
         XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
         for (int i = 0; i < type_param_count; i++) {
-            XrType *type_param = xr_type_new_type_param(parser->X, type_params[i]->name, i);
+            XrTypeRef *type_param = xr_tref_type_param(parser->X, type_params[i]->name);
             xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
         }
         parser->type_scope = generic_scope;
@@ -272,32 +273,30 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                         AstNode *dv = param->default_value;
                         switch (dv->type) {
                             case AST_LITERAL_INT:
-                                param->type = xr_type_new_int(NULL);
+                                param->type = xr_tref_int(parser->X);
                                 break;
                             case AST_LITERAL_FLOAT:
-                                param->type = xr_type_new_float(NULL);
+                                param->type = xr_tref_float(parser->X);
                                 break;
                             case AST_LITERAL_STRING:
                             case AST_TEMPLATE_STRING:
-                                param->type = xr_type_new_string(NULL);
+                                param->type = xr_tref_string(parser->X);
                                 break;
                             case AST_LITERAL_TRUE:
                             case AST_LITERAL_FALSE:
-                                param->type = xr_type_new_bool(NULL);
+                                param->type = xr_tref_bool(parser->X);
                                 break;
                             case AST_ARRAY_LITERAL:
-                                param->type =
-                                    xr_type_new_array(parser->X, xr_type_new_unknown(NULL));
+                                param->type = xr_tref_named(parser->X, "Array");
                                 break;
                             case AST_MAP_LITERAL:
-                                param->type = xr_type_new_map(parser->X, xr_type_new_unknown(NULL),
-                                                              xr_type_new_unknown(NULL));
+                                param->type = xr_tref_named(parser->X, "Map");
                                 break;
                             case AST_SET_LITERAL:
-                                param->type = xr_type_new_set(parser->X, xr_type_new_unknown(NULL));
+                                param->type = xr_tref_named(parser->X, "Set");
                                 break;
                             case AST_OBJECT_LITERAL:
-                                param->type = xr_type_new_json(NULL);
+                                param->type = xr_tref_named(parser->X, "Json");
                                 break;
                             default:
                                 break;
@@ -320,7 +319,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
 
     // Parse optional return type annotation
-    XrType *return_type = NULL;
+    XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
         return_type = xr_parse_type_annotation(parser);
     } else if (xr_parser_check(parser, TK_MINUS)) {
@@ -928,15 +927,15 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
         return NULL;
     }
 
-    // Parse type definition (self-reference will resolve to NULL → class type fallback)
-    XrType *type_definition = xr_parse_type_annotation(parser);
+    // Parse type definition (self-reference will resolve to NULL → named type fallback)
+    XrTypeRef *type_definition = xr_parse_type_annotation(parser);
     if (!type_definition) {
         xr_parser_error(parser, "invalid type definition");
         return NULL;
     }
 
     // Patch the placeholder with the actual type definition.
-    alias_entry->type = type_definition;
+    alias_entry->type_ref = type_definition;
 
     // Create AST node so analyzer/LSP can see the declaration.
     // Stash the resolved type in TypeAliasNode::resolved_type so that

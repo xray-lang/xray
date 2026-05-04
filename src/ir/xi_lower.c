@@ -30,27 +30,54 @@
 
 /* ========== Braun SSA: Variable Management ========== */
 
-/* Find or create a variable ID for the given name. */
-XR_FUNC int xi_lower_var_create(XiLower *l, const char *name, struct XrType *type) {
-    XR_DCHECK(name != NULL, "var_lookup_or_create: name is NULL");
+/* Register a variable by its analyzer-assigned symbol_id.
+ * Each unique symbol_id gets exactly one var_id slot.  If the same
+ * symbol_id is registered again (e.g. redeclaration in the same scope),
+ * the existing var_id is reused.  Different symbol_ids with the same
+ * name (shadows) naturally get distinct var_ids because the analyzer
+ * assigned them different IDs during scope resolution. */
+XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id,
+                                 const char *name, struct XrType *type) {
+    XR_DCHECK(name != NULL, "var_create: name is NULL");
 
-    for (int i = 0; i < l->var_count; i++) {
-        if (strcmp(l->vars[i].name, name) == 0)
-            return i;
+    /* If symbol_id is resolved (non-zero), look up by ID — O(n) but n < 256. */
+    if (symbol_id != 0) {
+        for (int i = 0; i < l->var_count; i++) {
+            if (l->vars[i].symbol_id == symbol_id)
+                return i;
+        }
+    } else {
+        /* Fallback for synthetic variables (no analyzer symbol): match by name. */
+        for (int i = l->var_count - 1; i >= 0; i--) {
+            if (l->vars[i].symbol_id == 0 &&
+                l->vars[i].name && strcmp(l->vars[i].name, name) == 0)
+                return i;
+        }
     }
 
     XR_CHECK(l->var_count < XI_LOWER_MAX_VARS, "xi_lower: too many variables");
     int id = l->var_count++;
+    l->vars[id].symbol_id = symbol_id;
     l->vars[id].name = name;
     l->vars[id].type = type;
     return id;
 }
 
-/* Find variable ID by name. Returns -1 if not found. */
-XR_FUNC int xi_lower_var_find(XiLower *l, const char *name) {
-    for (int i = 0; i < l->var_count; i++) {
-        if (strcmp(l->vars[i].name, name) == 0)
-            return i;
+/* Find variable by symbol_id (primary) or name (fallback for synthetics).
+ * Returns the var_id, or -1 if not found. */
+XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name) {
+    if (symbol_id != 0) {
+        for (int i = 0; i < l->var_count; i++) {
+            if (l->vars[i].symbol_id == symbol_id)
+                return i;
+        }
+    } else if (name) {
+        /* Fallback for synthetics / unresolved: search backwards by name */
+        for (int i = l->var_count - 1; i >= 0; i--) {
+            if (l->vars[i].symbol_id == 0 &&
+                l->vars[i].name && strcmp(l->vars[i].name, name) == 0)
+                return i;
+        }
     }
     return -1;
 }
@@ -61,10 +88,11 @@ XR_FUNC int xi_lower_var_find(XiLower *l, const char *name) {
 /* Walk the parent chain to find a program-level shared variable.
  * Returns the shared index (>=0) if found, or -1 if not.
  * Sets *out_type to the variable type when found. */
-XR_FUNC int xi_lower_find_shared(XiLower *l, const char *name, struct XrType **out_type) {
+XR_FUNC int xi_lower_find_shared(XiLower *l, uint32_t symbol_id,
+                                  const char *name, struct XrType **out_type) {
     for (XiLower *p = l->parent; p; p = p->parent) {
         if (!p->is_program) continue;
-        int var_id = xi_lower_var_find(p, name);
+        int var_id = xi_lower_var_find(p, symbol_id, name);
         if (var_id >= 0 && p->shared_map[var_id] >= 0) {
             if (out_type) *out_type = p->vars[var_id].type;
             return p->shared_map[var_id];
@@ -88,7 +116,8 @@ XR_FUNC int xi_lower_find_shared(XiLower *l, const char *name, struct XrType **o
  * For program-level shared variables, the caller uses find_shared_var()
  * to emit XI_GET_SHARED directly (no upvalue capture needed).
  */
-XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, const char *name, struct XrType **out_type) {
+XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id,
+                                      const char *name, struct XrType **out_type) {
     XiLower *parent = l->parent;
     if (!parent) return -1;
 
@@ -106,7 +135,7 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, const char *name, struct XrType
     }
 
     /* Check if the variable exists as a local in the immediate parent */
-    int var_id = xi_lower_var_find(parent, name);
+    int var_id = xi_lower_var_find(parent, symbol_id, name);
     if (var_id >= 0) {
         /* Read the current SSA value from the parent's scope.  The value's
          * register will be resolved at emit time via reg_of(). */
@@ -124,7 +153,7 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, const char *name, struct XrType
     }
 
     /* Not a local in parent — try grandparent (transitive capture) */
-    int parent_upval = xi_lower_resolve_upvalue(parent, name, out_type);
+    int parent_upval = xi_lower_resolve_upvalue(parent, symbol_id, name, out_type);
     if (parent_upval >= 0) {
         if (l->func->ncaptures >= XI_MAX_CAPTURES) return -1;
         int idx = l->func->ncaptures;
@@ -310,6 +339,7 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer,
     l->type_null = xr_type_new_null(isolate);
     l->type_void = xr_type_new_void(isolate);
     l->type_any = xr_type_new_unknown(isolate);
+    l->type_bigint = xr_type_new_bigint(isolate);
 }
 
 XR_FUNC void xi_lower_cleanup(XiLower *l) {
@@ -388,8 +418,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         XiValue *param_val = xi_param(l.func, entry, (uint16_t) i, ptype);
         l.func->params[i] = param_val;
 
-        /* Register parameter in Braun SSA */
-        int var_id = xi_lower_var_create(&l, p->name, ptype);
+        /* Register parameter in Braun SSA using analyzer-assigned symbol_id */
+        int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
         xi_lower_braun_write(&l, var_id, entry, param_val);
     }
 
@@ -400,8 +430,21 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         struct XrType *fn_type = ret_type;  /* approximate; exact type unused */
         XiValue *self = xi_const_null(l.func, entry, l.type_null);
         l.self_value = self;
-        int self_var = xi_lower_var_create(&l, fdecl->name, fn_type);
+        int self_var = xi_lower_var_create(&l, fdecl->symbol_id,
+                                              fdecl->name, fn_type);
         xi_lower_braun_write(&l, self_var, entry, self);
+    }
+
+    /* Propagate @test / @before_each / etc. attributes to XiFunc */
+    if (fdecl->attr_count > 0 && fdecl->attributes) {
+        for (int i = 0; i < fdecl->attr_count; i++) {
+            XrAttribute *a = fdecl->attributes[i];
+            if (a && a->kind != ATTR_NONE) {
+                l.func->test_attr = (uint8_t) a->kind;
+                l.func->test_timeout = a->timeout;
+                break;
+            }
+        }
     }
 
     /* Lower function body */
@@ -458,17 +501,21 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
             is_exported = true;
         }
 
+        uint32_t sid = 0;
         switch (s->type) {
             case AST_FUNCTION_DECL:
                 name = s->as.function_decl.name;
+                sid = s->as.function_decl.symbol_id;
                 type = xi_lower_node_type(l, s);
                 break;
             case AST_CLASS_DECL:
                 name = s->as.class_decl.name;
+                sid = s->as.class_decl.symbol_id;
                 break;
             case AST_VAR_DECL:
             case AST_CONST_DECL:
                 name = s->as.var_decl.name;
+                sid = s->as.var_decl.symbol_id;
                 type = xi_lower_node_type(l, s);
                 break;
             default:
@@ -477,7 +524,7 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
         if (!name) continue;
 
         /* Create the Braun SSA variable entry (no definition yet) */
-        int var_id = xi_lower_var_create(l, name, type);
+        int var_id = xi_lower_var_create(l, sid, name, type);
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
                   "prescan_shared_vars: var_id overflow");
         l->shared_map[var_id] = (int16_t)next_shared;

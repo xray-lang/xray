@@ -20,6 +20,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../frontend/parser/xast_nodes.h"
+#include "../frontend/analyzer/xtype_ref_resolve.h"
 
 /* Forward declaration for class helpers (defined later in this file) */
 static void emit_class_create_impl(EmitCtx *ctx, XiValue *v,
@@ -327,7 +328,8 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
             if (f->is_static) continue;
             desc->instance_fields[idx].name = strdup(f->name);
             desc->instance_fields[idx].type_name =
-                f->field_type ? xr_type_to_string(f->field_type) : NULL;
+                f->field_type ? xr_type_to_string(
+                    xr_tref_resolve(ctx->isolate, f->field_type)) : NULL;
             desc->instance_fields[idx].default_value =
                 ast_field_default_to_value(ctx, f->initializer);
             if (f->is_private) desc->instance_fields[idx].flags |= XR_FIELD_PRIVATE;

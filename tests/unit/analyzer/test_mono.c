@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "../../../src/frontend/analyzer/xanalyzer_mono.h"
+#include "../../../src/frontend/parser/xtype_ref.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -201,15 +202,16 @@ TEST(ast_clone_with_type_substitution) {
     // field; mono substitutes types only through legitimate per-node
     // type fields (param types, var-decl annotations, return types, ...).
     // This test now exercises that path via VarDeclNode::type_annotation.
-    XrType param_t = { .kind = XR_KIND_TYPE_PARAM };
-    param_t.type_param.name = "T";
+    // type_annotation is now XrTypeRef*; a NAMED ref matching the type param
+    // name will be substituted by the mono clone.
+    XrTypeRef param_tref = { .kind = XR_TREF_NAMED, .name = "T" };
 
     AstNode node = { .type = AST_VAR_DECL, .line = 1 };
     node.as.var_decl.name = "result";
     node.as.var_decl.initializer = NULL;
     node.as.var_decl.is_const = false;
     node.as.var_decl.storage_mode = 0;
-    node.as.var_decl.type_annotation = &param_t;
+    node.as.var_decl.type_annotation = &param_tref;
 
     XrType int_t = { .kind = XR_KIND_INT };
     XrMonoTypeMap map[] = { { "T", &int_t } };
@@ -217,7 +219,8 @@ TEST(ast_clone_with_type_substitution) {
     AstNode *clone = xr_ast_clone(&node, map, 1);
     ASSERT(clone != NULL);
     ASSERT(clone->as.var_decl.type_annotation != NULL);
-    ASSERT_EQ(clone->as.var_decl.type_annotation->kind, XR_KIND_INT);
+    ASSERT_EQ(clone->as.var_decl.type_annotation->kind, XR_TREF_INT);
+    free(clone->as.var_decl.type_annotation);
     free(clone->as.var_decl.name);
     free(clone);
 }

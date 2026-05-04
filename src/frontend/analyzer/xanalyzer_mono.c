@@ -23,6 +23,8 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xtype.h"
 #include "../parser/xast_nodes.h"
+#include "../parser/xtype_ref.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xmalloc.h"
 
 #include <stdio.h>
@@ -274,6 +276,58 @@ static XrType *sub_type(XrType *t, XrMonoTypeMap *map, int mc) {
     return (map && mc > 0) ? xr_mono_type_substitute(t, map, mc) : t;
 }
 
+/* Convert a concrete XrType* to a heap-allocated XrTypeRef for mono clones.
+ * Covers the common cases needed by monomorphization substitution. */
+static XrTypeRef *tref_from_xrtype(XrType *t) {
+    if (!t) return NULL;
+    XrTypeRef *r = (XrTypeRef *)xr_calloc(1, sizeof(XrTypeRef));
+    if (!r) return NULL;
+    switch (t->kind) {
+        case XR_KIND_INT:    r->kind = XR_TREF_INT; break;
+        case XR_KIND_FLOAT:  r->kind = XR_TREF_FLOAT; break;
+        case XR_KIND_STRING: r->kind = XR_TREF_STRING; break;
+        case XR_KIND_BOOL:   r->kind = XR_TREF_BOOL; break;
+        case XR_KIND_VOID:   r->kind = XR_TREF_VOID; break;
+        case XR_KIND_NULL:   r->kind = XR_TREF_NULL; break;
+        default:
+            /* For named/class types, use NAMED with the best name available */
+            r->kind = XR_TREF_NAMED;
+            if (t->kind == XR_KIND_CLASS && t->instance.class_name)
+                r->name = xr_strdup(t->instance.class_name);
+            else if (t->kind == XR_KIND_INSTANCE && t->instance.class_name)
+                r->name = xr_strdup(t->instance.class_name);
+            else
+                r->kind = XR_TREF_UNKNOWN;
+            break;
+    }
+    return r;
+}
+
+/* Substitute type parameters in an XrTypeRef tree.
+ * Returns a new XrTypeRef (heap-allocated) if substitution occurred,
+ * or the original pointer unchanged. */
+static XrTypeRef *sub_tref(XrTypeRef *t, XrMonoTypeMap *map, int mc) {
+    if (!t || !map || mc <= 0) return t;
+    /* NAMED or TYPE_PARAM refs can match type params */
+    if ((t->kind == XR_TREF_NAMED || t->kind == XR_TREF_TYPE_PARAM) && t->name) {
+        for (int i = 0; i < mc; i++) {
+            if (map[i].param_name && strcmp(t->name, map[i].param_name) == 0) {
+                return tref_from_xrtype(map[i].concrete_type);
+            }
+        }
+    }
+    return t;
+}
+
+static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count,
+                                     XrMonoTypeMap *map, int mc) {
+    if (!arr || count <= 0) return NULL;
+    XrTypeRef **result = (XrTypeRef **)xr_calloc((size_t)count, sizeof(XrTypeRef *));
+    for (int i = 0; i < count; i++)
+        result[i] = sub_tref(arr[i], map, mc);
+    return result;
+}
+
 static XrParamNode **clone_params(XrParamNode **params, int count, XrMonoTypeMap *map, int mc) {
     if (!params || count <= 0)
         return NULL;
@@ -282,7 +336,7 @@ static XrParamNode **clone_params(XrParamNode **params, int count, XrMonoTypeMap
         XrParamNode *p = (XrParamNode *) xr_calloc(1, sizeof(XrParamNode));
         *p = *params[i];
         p->name = clone_str(params[i]->name);
-        p->type = sub_type(params[i]->type, map, mc);
+        p->type = sub_tref(params[i]->type, map, mc);
         p->default_value = xr_ast_clone(params[i]->default_value, map, mc);
         // pattern clone omitted (not used in generic contexts)
         result[i] = p;
@@ -411,7 +465,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.var_decl.initializer = xr_ast_clone(node->as.var_decl.initializer, map, mc);
             n->as.var_decl.is_const = node->as.var_decl.is_const;
             n->as.var_decl.storage_mode = node->as.var_decl.storage_mode;
-            n->as.var_decl.type_annotation = sub_type(node->as.var_decl.type_annotation, map, mc);
+            n->as.var_decl.type_annotation = sub_tref(node->as.var_decl.type_annotation, map, mc);
             break;
         case AST_VARIABLE:
             n->as.variable.name = clone_str(node->as.variable.name);
@@ -453,7 +507,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.for_in_stmt.item_name = clone_str(node->as.for_in_stmt.item_name);
             n->as.for_in_stmt.value_name = clone_str(node->as.for_in_stmt.value_name);
             n->as.for_in_stmt.is_keyvalue = node->as.for_in_stmt.is_keyvalue;
-            n->as.for_in_stmt.item_type = sub_type(node->as.for_in_stmt.item_type, map, mc);
+            n->as.for_in_stmt.item_type = sub_tref(node->as.for_in_stmt.item_type, map, mc);
             n->as.for_in_stmt.collection = xr_ast_clone(node->as.for_in_stmt.collection, map, mc);
             n->as.for_in_stmt.body = xr_ast_clone(node->as.for_in_stmt.body, map, mc);
             break;
@@ -470,7 +524,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->params = clone_params(src->params, src->param_count, map, mc);
             dst->param_count = src->param_count;
             dst->required_count = src->required_count;
-            dst->return_type = sub_type(src->return_type, map, mc);
+            dst->return_type = sub_tref(src->return_type, map, mc);
             dst->body = xr_ast_clone(src->body, map, mc);
             dst->is_generator = src->is_generator;
             dst->attributes = NULL;  // Attributes not cloned for mono
@@ -486,7 +540,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.call_expr.arg_count = node->as.call_expr.arg_count;
             n->as.call_expr.arguments = clone_node_array(node->as.call_expr.arguments,
                                                          node->as.call_expr.arg_count, map, mc);
-            n->as.call_expr.type_args = clone_type_array(
+            n->as.call_expr.type_args = clone_tref_array(
                 node->as.call_expr.type_args, node->as.call_expr.type_arg_count, map, mc);
             n->as.call_expr.type_arg_count = node->as.call_expr.type_arg_count;
             break;
@@ -500,11 +554,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         // === Type check ===
         case AST_IS_EXPR:
             n->as.is_expr.expr = xr_ast_clone(node->as.is_expr.expr, map, mc);
-            n->as.is_expr.type = sub_type(node->as.is_expr.type, map, mc);
+            n->as.is_expr.type = sub_tref(node->as.is_expr.type, map, mc);
             break;
         case AST_AS_EXPR:
             n->as.as_expr.expr = xr_ast_clone(node->as.as_expr.expr, map, mc);
-            n->as.as_expr.type = sub_type(node->as.as_expr.type, map, mc);
+            n->as.as_expr.type = sub_tref(node->as.as_expr.type, map, mc);
             n->as.as_expr.is_safe = node->as.as_expr.is_safe;
             break;
 
@@ -616,7 +670,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.new_expr.arg_count = node->as.new_expr.arg_count;
             n->as.new_expr.arguments =
                 clone_node_array(node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc);
-            n->as.new_expr.type_args = clone_type_array(node->as.new_expr.type_args,
+            n->as.new_expr.type_args = clone_tref_array(node->as.new_expr.type_args,
                                                         node->as.new_expr.type_arg_count, map, mc);
             n->as.new_expr.type_arg_count = node->as.new_expr.type_arg_count;
             break;
@@ -732,8 +786,8 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->name = clone_str(src->name);
             dst->param_count = src->param_count;
             dst->parameters = clone_str_array(src->parameters, src->param_count);
-            dst->param_types = clone_type_array(src->param_types, src->param_count, map, mc);
-            dst->return_type = sub_type(src->return_type, map, mc);
+            dst->param_types = clone_tref_array(src->param_types, src->param_count, map, mc);
+            dst->return_type = sub_tref(src->return_type, map, mc);
             dst->body = xr_ast_clone(src->body, map, mc);
             dst->is_constructor = src->is_constructor;
             dst->is_static = src->is_static;
@@ -758,7 +812,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             FieldDeclNode *src = &node->as.field_decl;
             FieldDeclNode *dst = &n->as.field_decl;
             dst->name = clone_str(src->name);
-            dst->field_type = sub_type(src->field_type, map, mc);
+            dst->field_type = sub_tref(src->field_type, map, mc);
             dst->is_private = src->is_private;
             dst->is_static = src->is_static;
             dst->is_final = src->is_final;
@@ -774,7 +828,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->field_count = src->field_count;
             dst->field_names = clone_str_array(src->field_names, src->field_count);
             dst->field_values = clone_node_array(src->field_values, src->field_count, map, mc);
-            dst->type_args = clone_type_array(src->type_args, src->type_arg_count, map, mc);
+            dst->type_args = clone_tref_array(src->type_args, src->type_arg_count, map, mc);
             dst->type_arg_count = src->type_arg_count;
             break;
         }

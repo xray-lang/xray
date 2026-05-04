@@ -79,7 +79,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                         xi_block_set_if(l->cur_block, is_null, next_blk, body_blk);
                     }
                     if (sc->var_name && recv) {
-                        int var_id = xi_lower_var_create(l, sc->var_name, val_type);
+                        int var_id = xi_lower_var_create(l, sc->var_symbol_id,
+                                                          sc->var_name, val_type);
                         xi_lower_braun_write(l, var_id, body_blk, recv);
                     }
                 }
@@ -296,14 +297,14 @@ static void lower_for_in_loop(XiLower *l, AstNode *node,
     XR_DCHECK(col_name != NULL, "arena alloc failed for col_name");
     memcpy(col_name, buf, strlen(buf) + 1);
 
-    int idx_var = xi_lower_var_create(l, idx_name, l->type_int);
-    int lim_var = xi_lower_var_create(l, lim_name, l->type_int);
+    int idx_var = xi_lower_var_create(l, 0, idx_name, l->type_int);
+    int lim_var = xi_lower_var_create(l, 0, lim_name, l->type_int);
     xi_lower_braun_write(l, idx_var, l->cur_block, init_val);
     xi_lower_braun_write(l, lim_var, l->cur_block, limit);
 
     int col_var = -1;
     if (get_item_coll) {
-        col_var = xi_lower_var_create(l, col_name, l->type_any);
+        col_var = xi_lower_var_create(l, 0, col_name, l->type_any);
         xi_lower_braun_write(l, col_var, l->cur_block, get_item_coll);
     }
 
@@ -347,7 +348,7 @@ static void lower_for_in_loop(XiLower *l, AstNode *node,
         item = body_idx;
     }
 
-    int item_var = xi_lower_var_create(l, s->item_name, item_type);
+    int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
     if (item) xi_lower_braun_write(l, item_var, l->cur_block, item);
 
     xi_lower_stmt(l, s->body);
@@ -399,7 +400,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     char *iter_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
     XR_DCHECK(iter_name != NULL, "arena alloc failed");
     memcpy(iter_name, buf, strlen(buf) + 1);
-    int iter_var = xi_lower_var_create(l, iter_name, l->type_any);
+    int iter_var = xi_lower_var_create(l, 0, iter_name, l->type_any);
     xi_lower_braun_write(l, iter_var, l->cur_block, iter);
 
     XiBlock *cond_blk = xi_block_new(l->func);
@@ -446,7 +447,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
         key_val->args[1] = idx0;
         key_val->line = line;
     }
-    int key_var = xi_lower_var_create(l, s->item_name, item_type);
+    int key_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
     if (key_val) xi_lower_braun_write(l, key_var, l->cur_block, key_val);
 
     if (s->value_name) {
@@ -458,7 +459,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
             val_val->args[1] = idx1;
             val_val->line = line;
         }
-        int val_var = xi_lower_var_create(l, s->value_name, l->type_any);
+        int val_var = xi_lower_var_create(l, s->value_symbol_id, s->value_name, l->type_any);
         if (val_val) xi_lower_braun_write(l, val_var, l->cur_block, val_val);
     }
 
@@ -636,7 +637,8 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc,
     }
 
     if (tc->catch_var && catch_op) {
-        int var_id = xi_lower_var_create(l, tc->catch_var, l->type_any);
+        int var_id = xi_lower_var_create(l, tc->catch_symbol_id,
+                                          tc->catch_var, l->type_any);
         xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
     }
 
@@ -690,14 +692,44 @@ XR_FUNC void xi_lower_try_catch(XiLower *l, AstNode *node) {
 
 static void lower_defer(XiLower *l, AstNode *node) {
     DeferStmtNode *d = &node->as.defer_stmt;
-    XiValue *expr = xi_lower_expr(l, d->expr);
+    AstNode *expr = d->expr;
     if (!expr || !l->cur_block) return;
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_void, 1);
-    if (!v) return;
-    v->args[0] = expr;
-    v->flags |= XI_FLAG_SIDE_EFFECT;
-    v->line = (uint32_t) node->line;
+    /* OP_DEFER expects: args[0]=callee, args[1..n]=call arguments.
+     * The parser stores either a call expression (defer fn(a, b))
+     * or a closure (defer { block }).  Decompose accordingly. */
+    if (expr->type == AST_CALL_EXPR) {
+        CallExprNode *call = &expr->as.call_expr;
+        XiValue *callee = xi_lower_expr(l, call->callee);
+        if (!callee || !l->cur_block) return;
+
+        int nargs = call->arg_count;
+        XR_DCHECK(nargs <= 250, "lower_defer: too many arguments");
+
+        XiValue *v = xi_value_new(l->func, l->cur_block,
+                                  XI_DEFER, l->type_void,
+                                  (uint16_t)(1 + nargs));
+        if (!v) return;
+        v->args[0] = callee;
+        for (int i = 0; i < nargs; i++) {
+            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
+            if (!arg) return;
+            v->args[1 + i] = arg;
+        }
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t) node->line;
+    } else {
+        /* defer { block } — parser wraps in anonymous function expr */
+        XiValue *callee = xi_lower_expr(l, expr);
+        if (!callee || !l->cur_block) return;
+
+        XiValue *v = xi_value_new(l->func, l->cur_block,
+                                  XI_DEFER, l->type_void, 1);
+        if (!v) return;
+        v->args[0] = callee;
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t) node->line;
+    }
 }
 
 
@@ -752,7 +784,8 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat,
         case PATTERN_IDENTIFIER: {
             const char *name = pat->as.identifier.name;
             if (!name) break;
-            int var_id = xi_lower_var_create(l, name, l->type_any);
+            uint32_t sid = pat->as.identifier.symbol_id;
+            int var_id = xi_lower_var_create(l, sid, name, l->type_any);
             xi_lower_braun_write(l, var_id, l->cur_block, src);
             break;
         }
@@ -798,7 +831,7 @@ static void lower_multi_var_decl(XiLower *l, AstNode *node) {
 
         /* First name binds to the call result directly */
         struct XrType *vtype = call_val->type ? call_val->type : l->type_any;
-        int var0 = xi_lower_var_create(l, mv->names[0], vtype);
+        int var0 = xi_lower_var_create(l, 0, mv->names[0], vtype);
         xi_lower_braun_write(l, var0, l->cur_block, call_val);
 
         /* Remaining names extracted from consecutive result registers */
@@ -808,7 +841,7 @@ static void lower_multi_var_decl(XiLower *l, AstNode *node) {
             if (!ext) break;
             ext->args[0] = call_val;
             ext->aux_int = i;
-            int var_i = xi_lower_var_create(l, mv->names[i], l->type_any);
+            int var_i = xi_lower_var_create(l, 0, mv->names[i], l->type_any);
             xi_lower_braun_write(l, var_i, l->cur_block, ext);
         }
         return;
@@ -818,12 +851,12 @@ static void lower_multi_var_decl(XiLower *l, AstNode *node) {
     for (int i = 0; i < mv->name_count && i < mv->value_count; i++) {
         XiValue *val = xi_lower_expr(l, mv->values[i]);
         struct XrType *vtype = val ? val->type : l->type_any;
-        int var_id = xi_lower_var_create(l, mv->names[i], vtype);
+        int var_id = xi_lower_var_create(l, 0, mv->names[i], vtype);
         if (val) xi_lower_braun_write(l, var_id, l->cur_block, val);
     }
     /* Names without values get null */
     for (int i = mv->value_count; i < mv->name_count; i++) {
-        int var_id = xi_lower_var_create(l, mv->names[i], l->type_any);
+        int var_id = xi_lower_var_create(l, 0, mv->names[i], l->type_any);
         XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
         xi_lower_braun_write(l, var_id, l->cur_block, null_val);
     }
@@ -844,7 +877,8 @@ static void lower_multi_assign(XiLower *l, AstNode *node) {
         if (tgt && tgt->type == AST_VARIABLE) {
             const char *name = tgt->as.variable.name;
             struct XrType *vtype = rhs_vals[i] ? rhs_vals[i]->type : l->type_any;
-            int var_id = xi_lower_var_create(l, name, vtype);
+            uint32_t sid = tgt->as.variable.symbol_id;
+            int var_id = xi_lower_var_create(l, sid, name, vtype);
             if (rhs_vals[i]) xi_lower_braun_write(l, var_id, l->cur_block, rhs_vals[i]);
         }
     }
@@ -857,9 +891,10 @@ static void lower_multi_assign(XiLower *l, AstNode *node) {
 
 static void lower_var_decl(XiLower *l, AstNode *node) {
     const char *name = node->as.var_decl.name;
+    uint32_t sid = node->as.var_decl.symbol_id;
     struct XrType *type = xi_lower_node_type(l, node);
 
-    int var_id = xi_lower_var_create(l, name, type);
+    int var_id = xi_lower_var_create(l, sid, name, type);
 
     XiValue *init_val;
     if (node->as.var_decl.initializer) {
@@ -965,6 +1000,9 @@ static void lower_return(XiLower *l, AstNode *node) {
 }
 
 static void lower_block(XiLower *l, AstNode *node) {
+    /* No scope push/pop needed: the analyzer assigns unique symbol_ids
+     * to variables in different scopes, so shadowed variables naturally
+     * get distinct var_id slots in the Braun SSA. */
     lower_stmts(l, node->as.block.statements, node->as.block.count);
 }
 
@@ -1159,7 +1197,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         v->aux_int = -1;
         v->line = (uint32_t)node->line;
 
-        int var_id = xi_lower_var_create(l, local_name, type);
+        int var_id = xi_lower_var_create(l, 0, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
         return;
     }
@@ -1196,7 +1234,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         v->line = (uint32_t)node->line;
 
         /* Bind as a local variable so subsequent references resolve */
-        int var_id = xi_lower_var_create(l, local_name, type);
+        int var_id = xi_lower_var_create(l, 0, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
     }
 }

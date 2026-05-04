@@ -20,6 +20,7 @@
 #include "../../base/xlog.h"
 #include "../../runtime/xisolate_api.h"
 #include "xtype_scope.h"
+#include "xstring_pool.h"
 #include "../xdiag_fmt.h"
 
 /* ========== Forward Declarations ========== */
@@ -786,11 +787,14 @@ static XrArena *xr_parse_setup_arena(XrayIsolate *X, XrArena **saved_out) {
     xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
     *saved_out = xr_isolate_get_current_arena(X);
     xr_isolate_set_current_arena(X, arena);
+    XrCompileStringPool *pool = xr_string_pool_new(arena);
+    xr_isolate_set_string_pool_compile(X, pool);
     return arena;
 }
 
 // Restore previous arena on failure, destroying the owned arena.
 static void xr_parse_discard_arena(XrayIsolate *X, XrArena *owned, XrArena *saved) {
+    xr_isolate_set_string_pool_compile(X, NULL);
     xr_isolate_set_current_arena(X, saved);
     xr_arena_destroy(owned);
     xr_free(owned);
@@ -873,6 +877,7 @@ AstNode *xr_parse_with_source(XrayIsolate *X, const char *source, const char *so
     // Transfer arena ownership to the program node.
     program->as.program.arena = arena;
     program->as.program.owns_arena = true;
+    xr_isolate_set_string_pool_compile(X, NULL);
     xr_isolate_set_current_arena(X, saved_arena);
     return program;
 }
@@ -962,6 +967,7 @@ AstNode *xr_parse_with_trivia(XrayIsolate *X, const char *source, const char *so
     // Transfer arena ownership to the program node.
     program->as.program.arena = arena;
     program->as.program.owns_arena = true;
+    xr_isolate_set_string_pool_compile(X, NULL);
     xr_isolate_set_current_arena(X, saved_arena);
     return program;
 }
@@ -1007,6 +1013,7 @@ AstNode *xr_parse_expression_string(XrayIsolate *X, const char *source, const ch
     // Transfer arena ownership to the program node.
     program->as.program.arena = arena;
     program->as.program.owns_arena = true;
+    xr_isolate_set_string_pool_compile(X, NULL);
     xr_isolate_set_current_arena(X, saved_arena);
     return program;
 }
@@ -1079,7 +1086,8 @@ AstNode *xr_parse_recoverable(Parser *parser) {
     xr_type_scope_free(parser->type_scope);
     parser->type_scope = NULL;
 
-    // Restore previous arena
+    // Restore previous arena and clear compile-time pool
+    xr_isolate_set_string_pool_compile(parser->X, NULL);
     xr_isolate_set_current_arena(parser->X, saved_arena);
 
     // Return partial AST even if there were errors

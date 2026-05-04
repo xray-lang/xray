@@ -48,6 +48,7 @@ typedef struct XrFmtContext {
     int indent_level;     // Current indent level
     int line_start;       // At line start flag
     int column;           // Current column (for line length tracking)
+    int in_template_expr; // Inside ${...} interpolation — use single quotes
     XrFmtConfig *config;  // Configuration
     XrayIsolate *X;       // Isolate for type printing
 } XrFmtContext;
@@ -66,6 +67,6 @@ XR_FUNC char *xfmt_format_ast(AstNode *ast, XrFmtConfig *config, XrayIsolate *X)
 XR_FUNC void xfmt_node(XrFmtContext *ctx, AstNode *node);
 
 // Format type annotation
-XR_FUNC void xfmt_type(XrFmtContext *ctx, XrType *type);
+XR_FUNC void xfmt_type(XrFmtContext *ctx, XrTypeRef *tref);
 
 #endif  // XFMT_H

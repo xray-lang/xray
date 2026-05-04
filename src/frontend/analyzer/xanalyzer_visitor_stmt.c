@@ -13,6 +13,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
 /* ============================================================================
@@ -36,6 +37,10 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         if (!sym)
             return;
     }
+
+    /* Ensure symbol_id is set (covers late-discovered declarations). */
+    if (var->symbol_id == 0)
+        var->symbol_id = sym->id;
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
 
@@ -163,6 +168,9 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
                                    msg, &loc);
         return;
     }
+
+    /* Write back resolved symbol ID for Xi lowering (Braun SSA key). */
+    assign->symbol_id = sym->id;
 
     // Record write reference for Find References
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -409,10 +417,10 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 if (s && s->ast_node) {
                     AstNode *fn_node = (AstNode *) s->ast_node;
                     XrType *decl_ret = NULL;
-                    if (fn_node->type == AST_FUNCTION_DECL) {
-                        decl_ret = (XrType *) fn_node->as.function_decl.return_type;
-                    } else if (fn_node->type == AST_METHOD_DECL) {
-                        decl_ret = (XrType *) fn_node->as.method_decl.return_type;
+                    if (fn_node->type == AST_FUNCTION_DECL && fn_node->as.function_decl.return_type) {
+                        decl_ret = xr_tref_resolve(ctx->analyzer->isolate, fn_node->as.function_decl.return_type);
+                    } else if (fn_node->type == AST_METHOD_DECL && fn_node->as.method_decl.return_type) {
+                        decl_ret = xr_tref_resolve(ctx->analyzer->isolate, fn_node->as.method_decl.return_type);
                     }
                     if (decl_ret && !XR_TYPE_IS_UNKNOWN(decl_ret)) {
                         ctx->expected_type = decl_ret;

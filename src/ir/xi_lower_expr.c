@@ -270,7 +270,8 @@ static XiValue *lower_unary(XiLower *l, AstNode *node) {
 
 static XiValue *lower_variable(XiLower *l, AstNode *node) {
     const char *name = node->as.variable.name;
-    int var_id = xi_lower_var_find(l, name);
+    uint32_t sid = node->as.variable.symbol_id;
+    int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
         /* Program-level shared variables must be read from the shared array
          * because called functions can modify them via XI_SET_SHARED,
@@ -288,7 +289,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
 
     /* Check for program-level shared variable (supports forward references) */
     struct XrType *shared_type = NULL;
-    int shared_idx = xi_lower_find_shared(l, name, &shared_type);
+    int shared_idx = xi_lower_find_shared(l, sid, name, &shared_type);
     if (shared_idx >= 0) {
         if (!shared_type) shared_type = l->type_any;
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
@@ -299,7 +300,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
 
     /* Not found locally — try upvalue capture from enclosing scope */
     struct XrType *upval_type = NULL;
-    int upval_idx = xi_lower_resolve_upvalue(l, name, &upval_type);
+    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
     if (upval_idx >= 0) {
         if (!upval_type) upval_type = l->type_any;
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
@@ -314,10 +315,11 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
 
 static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     const char *name = node->as.assignment.name;
+    uint32_t sid = node->as.assignment.symbol_id;
     XiValue *val = xi_lower_expr(l, node->as.assignment.value);
     if (!val) return NULL;
 
-    int var_id = xi_lower_var_find(l, name);
+    int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
         xi_lower_braun_write(l, var_id, l->cur_block, val);
 
@@ -335,7 +337,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     }
 
     /* Check for program-level shared variable from nested scope */
-    int shared_idx = xi_lower_find_shared(l, name, NULL);
+    int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
     if (shared_idx >= 0) {
         XiValue *store = xi_value_new(l->func, l->cur_block,
                                        XI_SET_SHARED, l->type_void, 1);
@@ -348,7 +350,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     }
 
     /* Try upvalue store for captured mutable variable */
-    int upval_idx = xi_lower_resolve_upvalue(l, name, NULL);
+    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, NULL);
     if (upval_idx >= 0) {
         /* Mark the capture as needing cell indirection because the child
          * mutates the captured variable.  The emit stage uses this to
@@ -368,7 +370,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     }
 
     /* Create implicitly (shouldn't happen after semantic analysis) */
-    var_id = xi_lower_var_create(l, name, val->type);
+    var_id = xi_lower_var_create(l, sid, name, val->type);
     xi_lower_braun_write(l, var_id, l->cur_block, val);
     return val;
 }
@@ -387,13 +389,14 @@ static uint16_t compound_op_to_xi(int tok) {
 
 static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
     const char *name = node->as.compound_assignment.name;
+    uint32_t sid = node->as.compound_assignment.symbol_id;
     XiValue *rhs = xi_lower_expr(l, node->as.compound_assignment.value);
     if (!rhs) return NULL;
     uint16_t op = compound_op_to_xi(node->as.compound_assignment.op);
     struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
 
     /* Local variable */
-    int var_id = xi_lower_var_find(l, name);
+    int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
         XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
         if (!cur) return NULL;
@@ -418,7 +421,7 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
     }
 
     /* Shared variable from nested scope */
-    int shared_idx = xi_lower_find_shared(l, name, NULL);
+    int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
     if (shared_idx >= 0) {
         XiValue *cur = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
                                      l->type_any, 0);
@@ -442,7 +445,7 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
 
     /* Upvalue: read via LOAD_UPVAL, compute, write via STORE_UPVAL */
     struct XrType *upval_type = NULL;
-    int upval_idx = xi_lower_resolve_upvalue(l, name, &upval_type);
+    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
     if (upval_idx >= 0) {
         if (!upval_type) upval_type = l->type_any;
         XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
@@ -474,7 +477,8 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
 
 static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
     const char *name = node->as.inc.name;
-    int var_id = xi_lower_var_find(l, name);
+    uint32_t sid = node->as.inc.symbol_id;
+    int var_id = xi_lower_var_find(l, sid, name);
     if (var_id < 0)
         return xi_const_null(l->func, l->cur_block, l->type_null);
 
@@ -963,7 +967,7 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     /* If named, register in SSA so the function can be called by name */
     FunctionDeclNode *fdecl = &node->as.function_decl;
     if (fdecl->name) {
-        int var_id = xi_lower_var_create(l, fdecl->name, fn_type);
+        int var_id = xi_lower_var_create(l, fdecl->symbol_id, fdecl->name, fn_type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
         /* For program-level named functions, also store into shared array
@@ -1048,7 +1052,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
         arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
     }
 
-    int var_id = xi_lower_var_create(l, cname, l->type_any);
+    int var_id = xi_lower_var_create(l, 0, cname, l->type_any);
     XiValue *cls = xi_lower_braun_read(l, var_id, l->cur_block);
 
     uint16_t nargs = (uint16_t)(n + 1);
@@ -1395,7 +1399,7 @@ static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
     (void) node;
     /* 'this' is the first implicit parameter (index 0) in methods */
     struct XrType *this_type = xi_lower_node_type(l, node);
-    int var_id = xi_lower_var_create(l, "this", this_type);
+    int var_id = xi_lower_var_create(l, 0, "this", this_type);
     return xi_lower_braun_read(l, var_id, l->cur_block);
 }
 
@@ -1408,7 +1412,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
 
     /* 'this' is receiver for super call */
     struct XrType *this_type = l->type_any;
-    int var_id = xi_lower_var_create(l, "this", this_type);
+    int var_id = xi_lower_var_create(l, 0, "this", this_type);
     XiValue *this_val = xi_lower_braun_read(l, var_id, l->cur_block);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
@@ -1431,7 +1435,7 @@ static XiValue *lower_enum_access(XiLower *l, AstNode *node) {
     XR_DCHECK(ea->enum_name != NULL, "enum access must have enum name");
 
     /* Resolve the enum type variable, then GETPROP for the member */
-    int var_id = xi_lower_var_create(l, ea->enum_name, l->type_any);
+    int var_id = xi_lower_var_create(l, 0, ea->enum_name, l->type_any);
     XiValue *enum_val = xi_lower_braun_read(l, var_id, l->cur_block);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
@@ -1508,7 +1512,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     cv->line = (uint32_t)node->line;
 
     /* Write to shared variable so enum access resolves correctly */
-    int var_id = xi_lower_var_create(l, ed->name, l->type_any);
+    int var_id = xi_lower_var_create(l, 0, ed->name, l->type_any);
     xi_lower_braun_write(l, var_id, l->cur_block, cv);
 
     if (l->is_program && var_id < l->var_count
@@ -1763,11 +1767,12 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
             xi_lower_scope_block(l, node);
             return xi_const_null(l->func, l->cur_block, l->type_null);
 
-        /* BigInt / Regex: lowered as const values */
+        /* BigInt: lowered as a BigInt constant (string digits + BigInt type) */
         case AST_LITERAL_BIGINT:
-            return xi_const_int(l->func, l->cur_block,
-                                node->as.literal.raw_value.int_val,
-                                l->type_int);
+            return xi_const_bigint(l->func, l->cur_block,
+                                   node->as.literal.raw_value.bigint_val ?
+                                   node->as.literal.raw_value.bigint_val : "0",
+                                   l->type_bigint);
         case AST_LITERAL_REGEX:
             return xi_const_str(l->func, l->cur_block,
                                 node->as.literal.raw_value.string_val ?

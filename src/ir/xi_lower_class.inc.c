@@ -45,7 +45,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         XiValue *th = xi_param(ml.func, entry, 0, ml.type_any);
         ml.func->params[0] = th;
         xi_lower_braun_write(&ml,
-                    xi_lower_var_create(&ml, "this", ml.type_any),
+                    xi_lower_var_create(&ml, 0, "this", ml.type_any),
                     entry, th);
         base = 1;
     }
@@ -59,7 +59,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         XR_DCHECK(m->parameters != NULL && m->parameters[i] != NULL,
                   "method param name must not be NULL");
         xi_lower_braun_write(&ml,
-                    xi_lower_var_create(&ml, m->parameters[i], pt),
+                    xi_lower_var_create(&ml, 0, m->parameters[i], pt),
                     entry, p);
     }
 
@@ -72,7 +72,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
         bool is_ctor = m->is_constructor
                        || (m->name && strcmp(m->name, "constructor") == 0);
         if (is_ctor && is_inst) {
-            int this_var = xi_lower_var_create(&ml, "this", ml.type_any);
+            int this_var = xi_lower_var_create(&ml, 0, "this", ml.type_any);
             XiValue *this_ret = xi_lower_braun_read(&ml, this_var, ml.cur_block);
             xi_block_set_return(ml.cur_block, this_ret);
         } else {
@@ -161,7 +161,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     v->line = (uint32_t)node->line;
 
     /* Bind class to its name in SSA */
-    int var_id = xi_lower_var_create(l, cd->name, l->type_any);
+    int var_id = xi_lower_var_create(l, 0, cd->name, l->type_any);
     xi_lower_braun_write(l, var_id, l->cur_block, v);
 
     /* Top-level classes: also store into shared array for cross-scope access */

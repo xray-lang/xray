@@ -405,6 +405,8 @@ typedef struct XiFunc {
     bool is_vararg;             /* has rest parameter (...args) */
     uint8_t entry_type;         /* 0=normal, 1=has_defaults, 2=generator */
     uint16_t min_params;        /* required parameter count (no defaults) */
+    uint8_t test_attr;          /* AttributeKind: @test / @before_each / etc. */
+    int test_timeout;           /* @test(timeout: N) seconds, 0 = no timeout */
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
@@ -450,6 +452,9 @@ XR_FUNC XiValue *xi_const_null(XiFunc *f, XiBlock *blk,
                                 struct XrType *null_type);
 XR_FUNC XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str,
                                struct XrType *str_type);
+XR_FUNC XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk,
+                                  const char *digits,
+                                  struct XrType *bigint_type);
 
 /* Convenience: binary op */
 XR_FUNC XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op,

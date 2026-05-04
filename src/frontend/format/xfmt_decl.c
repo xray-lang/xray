@@ -16,6 +16,7 @@
 
 #include "xfmt_internal.h"
 #include "../../runtime/value/xtype_names.h"
+#include <string.h>
 
 void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
@@ -161,10 +162,123 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_newline(ctx);
     }
 
-    // Methods
+    // Methods — getter/setter pairs are emitted as property accessor syntax:
+    //   propname: type { fn() { ... } fn(v: type) { ... } }
     for (int i = 0; i < cls->method_count; i++) {
         AstNode *method = cls->methods[i];
         MethodDeclNode *m = &method->as.method_decl;
+
+        // Property accessor: emit getter/setter pair in fn() block syntax
+        if (m->is_getter || m->is_setter) {
+            // Extract base property name (strip "get:" or "set:" prefix)
+            const char *prop_name = m->name;
+            if (prop_name && (strncmp(prop_name, "get:", 4) == 0 ||
+                              strncmp(prop_name, "set:", 4) == 0)) {
+                prop_name = prop_name + 4;
+            }
+
+            // Find the matching setter (if we are the getter) or skip if
+            // we already emitted this property from a preceding getter
+            MethodDeclNode *getter = m->is_getter ? m : NULL;
+            MethodDeclNode *setter = m->is_setter ? m : NULL;
+            int pair_idx = -1;
+
+            for (int j = i + 1; j < cls->method_count; j++) {
+                MethodDeclNode *other = &cls->methods[j]->as.method_decl;
+                if ((other->is_getter || other->is_setter) && other->name) {
+                    const char *oname = other->name;
+                    if (strncmp(oname, "get:", 4) == 0 || strncmp(oname, "set:", 4) == 0)
+                        oname = oname + 4;
+                    if (strcmp(oname, prop_name) == 0) {
+                        if (other->is_getter) getter = other;
+                        if (other->is_setter) setter = other;
+                        pair_idx = j;
+                        break;
+                    }
+                }
+            }
+
+            // If this is a setter and its getter already emitted it, skip
+            if (m->is_setter && i > 0) {
+                int already_emitted = 0;
+                for (int j = 0; j < i; j++) {
+                    MethodDeclNode *prev = &cls->methods[j]->as.method_decl;
+                    if (prev->is_getter && prev->name) {
+                        const char *pname = prev->name;
+                        if (strncmp(pname, "get:", 4) == 0) pname = pname + 4;
+                        if (strcmp(pname, prop_name) == 0) {
+                            already_emitted = 1;
+                            break;
+                        }
+                    }
+                }
+                if (already_emitted) {
+                    if (i < cls->method_count - 1)
+                        xfmt_write_newline(ctx);
+                    continue;
+                }
+            }
+
+            xfmt_write_indent(ctx);
+            if (m->is_private)
+                xfmt_write_str(ctx, "private ");
+            if (m->is_static)
+                xfmt_write_str(ctx, "static ");
+            xfmt_write_str(ctx, prop_name);
+
+            // Property type from getter return type or setter param type
+            XrTypeRef *prop_type = getter ? getter->return_type : NULL;
+            if (!prop_type && setter && setter->param_count > 0 && setter->param_types)
+                prop_type = setter->param_types[0];
+            if (prop_type) {
+                xfmt_write_str(ctx, ": ");
+                xfmt_emit_type(ctx, prop_type);
+            }
+
+            xfmt_write_str(ctx, " {");
+            xfmt_write_newline(ctx);
+            ctx->indent_level++;
+
+            // Emit getter fn
+            if (getter && getter->body) {
+                xfmt_write_indent(ctx);
+                xfmt_write_str(ctx, "fn() ");
+                xfmt_emit_block(ctx, getter->body);
+                xfmt_write_newline(ctx);
+            }
+
+            // Emit setter fn
+            if (setter && setter->body) {
+                xfmt_write_indent(ctx);
+                xfmt_write_str(ctx, "fn(");
+                for (int j = 0; j < setter->param_count; j++) {
+                    if (j > 0) xfmt_write_str(ctx, ", ");
+                    xfmt_write_str(ctx, setter->parameters[j]);
+                    if (setter->param_types && setter->param_types[j]) {
+                        xfmt_write_str(ctx, ": ");
+                        xfmt_emit_type(ctx, setter->param_types[j]);
+                    }
+                }
+                xfmt_write_str(ctx, ") ");
+                xfmt_emit_block(ctx, setter->body);
+                xfmt_write_newline(ctx);
+            }
+
+            ctx->indent_level--;
+            xfmt_write_indent(ctx);
+            xfmt_write_char(ctx, '}');
+            xfmt_write_newline(ctx);
+
+            // Skip the paired method index
+            if (pair_idx > i) {
+                // Mark it so the loop skips — swap with i+1 not feasible,
+                // rely on the "already_emitted" check above for the setter
+            }
+
+            if (i < cls->method_count - 1)
+                xfmt_write_newline(ctx);
+            continue;
+        }
 
         xfmt_write_indent(ctx);
         if (m->is_private)
@@ -173,13 +287,12 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "static ");
         if (m->is_abstract)
             xfmt_write_str(ctx, "abstract ");
-        if (m->is_getter)
-            xfmt_write_str(ctx, "get ");
-        if (m->is_setter)
-            xfmt_write_str(ctx, "set ");
 
         if (m->is_constructor) {
             xfmt_write_str(ctx, XR_KEYWORD_CONSTRUCTOR);
+        } else if (m->is_operator) {
+            xfmt_write_str(ctx, "operator");
+            xfmt_write_str(ctx, m->name);
         } else {
             xfmt_write_str(ctx, m->name);
         }

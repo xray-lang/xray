@@ -29,6 +29,7 @@
 
 typedef struct AstNode AstNode;
 typedef struct XrType XrType;
+typedef struct XrTypeRef XrTypeRef;
 struct XrArena;
 
 /* ========== Leaf / shared primitives ========== */
@@ -83,7 +84,8 @@ typedef struct XrDestructurePattern {
 
         struct {
             char *name;
-            XrType *type;
+            XrTypeRef *type;
+            uint32_t symbol_id;
         } identifier;
     } as;
 } XrDestructurePattern;

@@ -42,6 +42,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
@@ -171,7 +172,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *param = fn->params[i];
             param_types[i] =
-                (param && param->type) ? (XrType *) param->type : xr_type_new_unknown(NULL);
+                (param && param->type) ? xr_tref_resolve(ctx->analyzer->isolate, param->type) : xr_type_new_unknown(NULL);
             param_names[i] = param ? param->name : NULL;
             if (param && param->is_rest)
                 has_rest = true;
@@ -191,7 +192,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
 
     // Omitted return type defaults to void; error if body has 'return <expr>'
-    XrType *return_type = fn->return_type ? (XrType *) fn->return_type : xr_type_new_void(NULL);
+    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type) : xr_type_new_void(NULL);
     if (!fn->return_type && fn->name && fn->body) {
         if (xa_body_has_return_expr(fn->body)) {
             char msg[256];
@@ -229,6 +230,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     // Add to scope
     xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    fn->symbol_id = sym->id;
 
     // Create symbol links with type and param names
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -247,7 +249,9 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
         if (type_param_names && type_param_constraints) {
             for (int i = 0; i < fn->type_param_count; i++) {
                 type_param_names[i] = fn->type_params[i]->name;
-                type_param_constraints[i] = fn->type_params[i]->constraint;
+                type_param_constraints[i] = fn->type_params[i]->constraint
+                    ? xr_tref_resolve(ctx->analyzer->isolate, fn->type_params[i]->constraint)
+                    : NULL;
             }
 
             xa_symbol_links_set_type_params(links, type_param_names, type_param_constraints,
@@ -420,6 +424,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
             param->location.line = p->line > 0 ? p->line : node->line;
             param->passing_mode = p->passing_mode;
             xa_scope_add_symbol(ctx->analyzer->current_scope, param);
+            p->symbol_id = param->id;
 
             XaSymbolLinks *param_links = xa_analyzer_get_links(ctx->analyzer, param);
             if (p->is_rest) {
@@ -694,6 +699,9 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
     xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
 
+    /* Write back resolved symbol ID for Xi lowering (shared var key). */
+    cls->symbol_id = sym->id;
+
     // Create class info
     XrClassInfo *info = xa_class_info_new(cls->name);
     if (cls->super_name) {
@@ -723,7 +731,9 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
         for (int i = 0; i < cls->type_param_count; i++) {
             type_param_names[i] = cls->type_params[i]->name;
-            type_param_constraints[i] = cls->type_params[i]->constraint;
+            type_param_constraints[i] = cls->type_params[i]->constraint
+                ? xr_tref_resolve(ctx->analyzer->isolate, cls->type_params[i]->constraint)
+                : NULL;
         }
 
         xa_symbol_links_set_type_params(links, type_param_names, type_param_constraints,
@@ -753,7 +763,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
             // Try explicit type annotation first
             if (fd->field_type) {
                 field_links->type =
-                    fd->field_type ? (XrType *) fd->field_type : xr_type_new_unknown(NULL);
+                    fd->field_type ? xr_tref_resolve(ctx->analyzer->isolate, fd->field_type) : xr_type_new_unknown(NULL);
             } else if (fd->initializer) {
                 // Infer type from initializer
                 field_links->type = xa_visit_infer(ctx, fd->initializer);
@@ -956,7 +966,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                 param_names = xr_malloc(sizeof(char *) * md->param_count);
                 for (int j = 0; j < md->param_count; j++) {
                     param_types[j] = (md->param_types && md->param_types[j])
-                                         ? (XrType *) md->param_types[j]
+                                         ? xr_tref_resolve(ctx->analyzer->isolate, md->param_types[j])
                                          : xr_type_new_unknown(NULL);
                     param_names[j] = md->parameters ? md->parameters[j] : NULL;
 
@@ -1008,7 +1018,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
             // Skip getter/setter (set:xxx, get:xxx) - return types are implicit
             bool is_accessor = md->name && (strncmp(md->name, "set:", 4) == 0 ||
                                             strncmp(md->name, "get:", 4) == 0);
-            XrType *ret_type = md->return_type ? (XrType *) md->return_type : NULL;
+            XrType *ret_type = md->return_type ? xr_tref_resolve(ctx->analyzer->isolate, md->return_type) : NULL;
             if (!ret_type && is_accessor && md->body) {
                 ret_type = xa_infer_function_return_type(ctx, md->body);
             }
@@ -1129,7 +1139,8 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         }
 
         // Visit body for nested declarations (variables, nested functions, etc.)
-        xa_visit_collect(ctx, md->body);
+        if (md->body)
+            xa_visit_collect(ctx, md->body);
 
         xa_analyzer_exit_scope(ctx->analyzer);
     }
@@ -1151,10 +1162,16 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
 
     xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
 
+    /* Write back unique symbol ID so Xi lowering can use it as Braun SSA key
+     * instead of name-based lookup (eliminates scope ambiguity). */
+    var->symbol_id = sym->id;
+
     // Type will be inferred in pass 2
     // Keep NULL when no annotation (distinguishes "no annotation" from "annotated as any")
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    links->declared_type = var->type_annotation;
+    links->declared_type = var->type_annotation
+        ? xr_tref_resolve(ctx->analyzer->isolate, var->type_annotation)
+        : NULL;
 
     // Mark const types as immutable for concurrency safety
     if (sym->is_shared && sym->is_const && links->declared_type) {
