@@ -234,7 +234,6 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             case XR_KIND_STRING: tid = XR_TID_STRING; break;
             case XR_KIND_BOOL:   tid = XR_TID_BOOL;   break;
             case XR_KIND_JSON:   tid = XR_TID_JSON;   break;
-            case XR_KIND_OBJECT: tid = XR_TID_JSON;   break;
             case XR_KIND_ARRAY:  tid = XR_TID_ARRAY;  break;
             default:             tid = -1;            break;
         }

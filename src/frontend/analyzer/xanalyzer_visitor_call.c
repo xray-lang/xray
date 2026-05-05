@@ -110,9 +110,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
-            // Validate: target must be object type with known fields
-            if (!target_type || !XR_TYPE_IS_OBJECT(target_type) ||
-                target_type->object.field_count == 0) {
+            // Validate: target must be sealed Json type with known fields
+            if (!target_type || !XR_TYPE_IS_JSON(target_type) ||
+                !target_type->object.is_sealed || target_type->object.field_count == 0) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
