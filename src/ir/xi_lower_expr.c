@@ -1444,9 +1444,22 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
             case XR_TREF_NULL:        tid = 0;  break;  /* XR_TID_NULL */
             default: break;
         }
+        /* Generic containers: Array<T> → XR_TID_ARRAY, Map<K,V> → XR_TID_MAP, etc. */
+        if (tid < 0 && tref->kind == XR_TREF_GENERIC && tref->name) {
+            if (strcmp(tref->name, "Array") == 0)      tid = 14; /* XR_TID_ARRAY */
+            else if (strcmp(tref->name, "Map") == 0)   tid = 16; /* XR_TID_MAP */
+            else if (strcmp(tref->name, "Set") == 0)   tid = 15; /* XR_TID_SET */
+        }
+        /* Bare container names without generic args (Array, Map, etc.) */
+        if (tid < 0 && tref->kind == XR_TREF_NAMED && tref->name) {
+            if (strcmp(tref->name, "Array") == 0)      tid = 14;
+            else if (strcmp(tref->name, "Map") == 0)   tid = 16;
+            else if (strcmp(tref->name, "Set") == 0)   tid = 15;
+            else if (strcmp(tref->name, "Json") == 0)  tid = 18;
+        }
         if (tid >= 0) {
             type_val = xi_value_new(l->func, l->cur_block,
-                                     XI_CONST, l->type_any, 0);
+                                     XI_CONST, l->type_int, 0);
             if (type_val) type_val->aux_int = tid;
         } else if (tref->kind == XR_TREF_NAMED && tref->name) {
             /* Resolve class from scope chain */
