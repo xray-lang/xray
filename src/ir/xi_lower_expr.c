@@ -356,6 +356,25 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         }
         xi_lower_braun_write(l, var_id, l->cur_block, val);
 
+        /* If a child closure already captured this variable, retroactively
+         * enable cell indirection so the closure sees the updated value.
+         * Also mark captured_by_child so the new SSA value survives DCE
+         * (the emitter redirects it through CELL_SET at emit time). */
+        for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
+            XiFunc *child = l->func->children[ci_fn];
+            if (!child) continue;
+            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                if (child->captures[ci].source == XI_CAPTURE_SRC_REG &&
+                    child->captures[ci].name && name &&
+                    strcmp(child->captures[ci].name, name) == 0) {
+                    child->captures[ci].needs_cell = true;
+                    if (var_id < l->var_count)
+                        l->vars[var_id].captured_by_child = true;
+                    val->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            }
+        }
+
         /* If this is a program-level shared variable, also update shared array */
         if (l->is_program && l->shared_map[var_id] >= 0) {
             XiValue *store = xi_value_new(l->func, l->cur_block,
@@ -475,6 +494,22 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
         XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
         if (result) {
             xi_lower_braun_write(l, var_id, l->cur_block, result);
+
+            /* Retroactive cell indirection for captured variables */
+            for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
+                XiFunc *child = l->func->children[ci_fn];
+                if (!child) continue;
+                for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                    if (child->captures[ci].source == XI_CAPTURE_SRC_REG &&
+                        child->captures[ci].name && name &&
+                        strcmp(child->captures[ci].name, name) == 0) {
+                        child->captures[ci].needs_cell = true;
+                        if (var_id < l->var_count)
+                            l->vars[var_id].captured_by_child = true;
+                        result->flags |= XI_FLAG_SIDE_EFFECT;
+                    }
+                }
+            }
 
             /* If program-level shared variable, also update shared array */
             if (l->is_program && l->shared_map[var_id] >= 0) {
