@@ -23,6 +23,7 @@
 
 #include "../runtime/class/xenum.h"
 #include "../runtime/object/xstring.h"
+#include "../frontend/analyzer/xtype_ref_resolve.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -841,6 +842,43 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * which rely on OP_INVOKE dispatch rather than GETPROP + CALL. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
+
+        /* Json.decode<T>(data) → XI_JSON_DECODE with compile-time field info.
+         * The analyzer already validated T is a sealed Json type with fields
+         * and stored the result type as T? in the node table. */
+        if (ma->name && strcmp(ma->name, "decode") == 0 &&
+            ma->object && ma->object->type == AST_VARIABLE &&
+            strcmp(ma->object->as.variable.name, "Json") == 0 &&
+            call->type_arg_count == 1 && call->arg_count == 1) {
+
+            struct XrType *result_type = xi_lower_node_type(l, node);
+            if (result_type && XR_TYPE_IS_JSON(result_type) &&
+                result_type->object.is_sealed && result_type->object.field_count > 0) {
+
+                int fc = result_type->object.field_count;
+                XiValue *data_val = xi_lower_expr(l, call->arguments[0]);
+                if (!data_val) return NULL;
+
+                /* Arena-copy field names so they survive AST destruction */
+                const char **names = (const char **)xi_func_arena_alloc(
+                    l->func, (uint32_t)(fc * (int)sizeof(const char *)));
+                XR_DCHECK(names != NULL, "json_decode: arena alloc failed");
+                for (int i = 0; i < fc; i++) {
+                    names[i] = arena_strdup(l->func, result_type->object.field_names[i]);
+                }
+
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_DECODE,
+                                           result_type, 1);
+                if (!v) return NULL;
+                v->args[0] = data_val;
+                v->aux = (void *)names;
+                v->aux_int = fc;
+                v->flags |= XI_FLAG_SIDE_EFFECT;
+                v->line = (uint32_t)node->line;
+                return v;
+            }
+        }
+
         XiValue *recv = xi_lower_expr(l, ma->object);
         if (!recv) return NULL;
 

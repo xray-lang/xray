@@ -179,6 +179,49 @@ XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, (uint8_t)field_idx, val_reg));
 }
 
+/* Typed JSON decode: OP_JSON_DECODE A B C
+ * A=dst (result: T? sealed Json or null)
+ * B=data register (string to parse)
+ * C=Shape constant index (built from field names)
+ *
+ * Reuses the same Shape-building logic as xi_emit_json_new. */
+XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+
+    int n = (int)v->aux_int;
+    const char **field_names = (const char **)v->aux;
+    XR_DCHECK(n > 0 && field_names != NULL, "json_decode: no field info");
+
+    uint8_t data_reg = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK) return;
+
+    /* Build Shape from field names (identical to json_new) */
+    XrSymbolTable *st = (XrSymbolTable *)xr_isolate_get_symbol_table(ctx->isolate);
+    XR_DCHECK(st != NULL, "json_decode: no symbol table");
+
+    SymbolId symbols[256];
+    XR_DCHECK(n <= 256, "json_decode: too many fields");
+    for (int i = 0; i < n; i++) {
+        symbols[i] = xr_symbol_register_in_table(st, field_names[i]);
+    }
+
+    XrShape *shape = xr_shape_build_fixed(ctx->isolate, symbols, (uint16_t)n);
+    if (!shape) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    /* Propagate sealed flag from compile-time type */
+    if (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed) {
+        shape->is_sealed = true;
+    }
+
+    int kidx = add_const_int(ctx, (int64_t)(intptr_t)shape);
+    if (ctx->status != XI_EMIT_OK) return;
+
+    emit_inst(ctx, CREATE_ABC(OP_JSON_DECODE, dst, data_reg, (uint8_t)kidx));
+}
+
 /* Range creation */
 XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }

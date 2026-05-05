@@ -198,6 +198,7 @@
     _(JSON_INIT, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                            \
     _(JSON_INIT_I, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = C")                                     \
     _(JSON_INIT_N, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = null")                                  \
+    _(JSON_DECODE, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = decode(R[B]:string, K[C]:Shape)")             \
     _(GETBUILTIN, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = builtins[Bx]")                               \
     _(PRINT, FMT_A, KOP_PRINT, "print(R[A], add_space=B, packed=C)")                               \
     _(TYPEOF, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = typeof(R[B]) -> int")                             \

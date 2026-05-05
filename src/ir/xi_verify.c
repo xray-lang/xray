@@ -389,6 +389,7 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_JSON_INIT_F] = 2,     /* args[0]=json, args[1]=val */
     [XI_JSON_GET_F]  = 1,     /* args[0]=json */
     [XI_JSON_SET_F]  = 2,     /* args[0]=json, args[1]=val */
+    [XI_JSON_DECODE] = 1,     /* args[0]=string_data */
     [XI_ARRAY_NEW]   = 0xFF,
     [XI_MAP_NEW]     = 0xFF,
     [XI_CALL]        = 0xFF,  /* callee + params: variadic */
