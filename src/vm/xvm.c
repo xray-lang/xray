@@ -63,6 +63,8 @@
 #include "../runtime/object/xstringbuilder.h"
 #include "../runtime/object/xslice.h"
 #include "../runtime/object/xjson.h"
+#include "../runtime/object/xjson_serde.h"
+#include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../module/xmodule.h"
 #include "../coro/xchannel.h"

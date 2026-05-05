@@ -179,6 +179,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst);

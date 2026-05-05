@@ -994,6 +994,11 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, ", %d)", (int)v->aux_int);
             break;
         }
+        case XI_JSON_DECODE: {
+            /* AOT: not yet supported — emit null placeholder */
+            fprintf(out, "((XrValue){.i = 0, .tag = XR_TAG_NULL})");
+            break;
+        }
 
         /* ============ Method Call ============ */
 

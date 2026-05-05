@@ -366,6 +366,72 @@ vmcase(OP_JSON_INIT_N) {
     vmbreak;
 }
 
+vmcase(OP_JSON_DECODE) {
+    /* OP_JSON_DECODE: typed JSON deserialization
+    ** A = destination register (result: sealed Json or null)
+    ** B = data register (string to parse)
+    ** C = Shape constant index (pre-built from compile-time field names)
+    **
+    ** Semantics:
+    **   1. Parse R[B] as JSON string → temporary raw Json
+    **   2. For each field in Shape: lookup by name in parsed data
+    **   3. If all required fields exist → construct sealed Json with O(1) fields
+    **   4. If any field missing → result = null
+    */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+
+    XrValue data = R(b);
+    XrValue shape_val = k[c];
+    XrShape *shape = (XrShape *)(intptr_t)XR_TO_INT(shape_val);
+    XR_DCHECK(shape != NULL, "OP_JSON_DECODE: null shape");
+
+    /* Must be a string */
+    if (!XR_IS_STRING(data)) {
+        R(a) = xr_null();
+        vmbreak;
+    }
+
+    XrString *str = XR_TO_STRING(data);
+    XrValue parsed = xr_json_parse_from_cstr(isolate, str->data, str->length);
+
+    /* Parse failure → null */
+    if (XR_IS_NULL(parsed) || !xr_value_is_json(parsed)) {
+        R(a) = xr_null();
+        vmbreak;
+    }
+
+    /* Validate fields: each field in Shape must exist in parsed data */
+    XrJson *src = xr_value_to_json(parsed);
+    uint16_t field_count = shape->field_count;
+
+    XrJson *result = xr_json_new_with_shape(VM_CURRENT_CORO, shape);
+    if (!result) {
+        R(a) = xr_null();
+        vmbreak;
+    }
+
+    XrSymbolTable *symtab = (XrSymbolTable *)xr_isolate_get_symbol_table(isolate);
+    bool valid = true;
+    for (uint16_t fi = 0; fi < field_count; fi++) {
+        SymbolId sym = shape->field_symbols[fi];
+        const char *fname = xr_symbol_get_name_in_table(symtab, sym);
+        if (!fname) { valid = false; break; }
+
+        XrValue field_val = xr_json_get_by_key(isolate, src, fname);
+        if (XR_IS_NULL(field_val) && !xr_json_has_field(isolate, src, sym)) {
+            valid = false;
+            break;
+        }
+        xr_json_set_field(result, fi, field_val);
+    }
+
+    R(a) = valid ? xr_json_value(result) : xr_null();
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
 /* ========================================================
 ** Property access instructions
 ** ======================================================== */

@@ -748,6 +748,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_JSON_INIT_F:
         case XI_JSON_GET_F:
         case XI_JSON_SET_F:
+        case XI_JSON_DECODE:
             return lower_call(ctx, blk, v);
 
         /* Set creation */

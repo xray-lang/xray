@@ -365,6 +365,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_JSON_INIT_F]  = xi_emit_json_init_f,
     [XI_JSON_GET_F]   = xi_emit_json_get_f,
     [XI_JSON_SET_F]   = xi_emit_json_set_f,
+    [XI_JSON_DECODE]  = xi_emit_json_decode,
     [XI_ARRAY_NEW]    = xi_emit_array_new,
     [XI_MAP_NEW]      = xi_emit_map_new,
     [XI_CALL]         = xi_emit_call,
