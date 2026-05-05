@@ -175,9 +175,14 @@ XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue 
     XR_DCHECK(blk->id < XI_LOWER_MAX_BLOCKS,
               "braun_write: block_id out of range");
     l->var_defs[var_id * XI_LOWER_MAX_BLOCKS + blk->id] = val;
-    /* Tag value with source variable for register coalescing */
-    if (val && var_id >= 0 && var_id < 255)
-        val->var_id = (uint8_t)var_id;
+    /* Tag value with source variable for register coalescing.
+     * Skip if the value already belongs to a different variable:
+     * overwriting would merge two unrelated variables onto one
+     * physical register, corrupting phi operands at loop edges. */
+    if (val && var_id >= 0 && var_id < 255) {
+        if (val->var_id == 0xFF || val->var_id == (uint8_t)var_id)
+            val->var_id = (uint8_t)var_id;
+    }
 }
 
 /* Read: get currentDef[var][block], may be NULL. */

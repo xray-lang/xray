@@ -322,6 +322,20 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
+        /* When assigning from a different variable (e.g. x = i), insert
+         * an explicit copy so the target gets its own SSA value.  Without
+         * this, braun_write stores the source variable's value directly,
+         * and the shared SSA value causes two variables to coalesce to
+         * the same physical register — corrupting loop-carried values
+         * when the source variable is subsequently modified. */
+        if (val->var_id != 0xFF && val->var_id != (uint8_t)var_id) {
+            XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY,
+                                          val->type, 1);
+            if (copy) {
+                copy->args[0] = val;
+                val = copy;
+            }
+        }
         xi_lower_braun_write(l, var_id, l->cur_block, val);
 
         /* If this is a program-level shared variable, also update shared array */
@@ -379,12 +393,17 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 /* Map compound assignment operator token to Xi binary op */
 static uint16_t compound_op_to_xi(int tok) {
     switch (tok) {
-        case TK_PLUS_ASSIGN:  return XI_ADD;
-        case TK_MINUS_ASSIGN: return XI_SUB;
-        case TK_MUL_ASSIGN:   return XI_MUL;
-        case TK_DIV_ASSIGN:   return XI_DIV;
-        case TK_MOD_ASSIGN:   return XI_MOD;
-        default:              return XI_ADD;
+        case TK_PLUS_ASSIGN:   return XI_ADD;
+        case TK_MINUS_ASSIGN:  return XI_SUB;
+        case TK_MUL_ASSIGN:    return XI_MUL;
+        case TK_DIV_ASSIGN:    return XI_DIV;
+        case TK_MOD_ASSIGN:    return XI_MOD;
+        case TK_AND_ASSIGN:    return XI_BAND;
+        case TK_OR_ASSIGN:     return XI_BOR;
+        case TK_XOR_ASSIGN:    return XI_BXOR;
+        case TK_LSHIFT_ASSIGN: return XI_SHL;
+        case TK_RSHIFT_ASSIGN: return XI_SHR;
+        default:               return XI_ADD;
     }
 }
 
