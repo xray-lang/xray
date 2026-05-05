@@ -28,7 +28,7 @@ fn test_null_in_condition(): void {
 fn test_empty_array_operations(): void {
     let arr: Array<int> = []
     assert_eq(arr.length, 0)
-    
+
     // 对空数组的 map/filter
     let mapped = arr.map((x) => x * 2)
     assert_eq(mapped.length, 0)
@@ -61,7 +61,7 @@ fn test_recursion_base_case(): void {
         if (n <= 1) { return 1 }
         return n * factorial(n - 1)
     }
-    
+
     assert_eq(factorial(0), 1)
     assert_eq(factorial(1), 1)
     assert_eq(factorial(5), 120)
@@ -98,13 +98,7 @@ fn test_negative_numbers(): void {
 
 @test
 fn test_zero_division_float(): void {
-    let caught = false
-    try {
-        let x = 1.0 / 0.0
-    } catch (e) {
-        caught = true
-    }
-    assert_eq(caught, true)
+    assert_throws(fn() { let x = 1.0 / 0.0; print(x) })
 }
 
 // ===== 字符串边界 =====
@@ -146,7 +140,7 @@ fn test_closure_capture(): void {
     let x = 10
     let f = () => x
     assert_eq(f(), 10)
-    
+
     // 修改外部变量后闭包应该看到新值
     x = 20
     assert_eq(f(), 20)

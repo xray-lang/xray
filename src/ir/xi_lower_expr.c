@@ -1379,6 +1379,15 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t)node->line;
             return v;
         }
+        if (strcmp(cname, "StringBuilder") == 0 && ne->arg_count == 0) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                       result_type, 0);
+            if (!v) return NULL;
+            v->aux = (void *)"StringBuilder";
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t)node->line;
+            return v;
+        }
     }
 
     /* Generic class: resolve class name and invoke constructor */

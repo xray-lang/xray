@@ -163,6 +163,11 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
         return;
     }
+    if (bname && strcmp(bname, "StringBuilder") == 0) {
+        /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
+        emit_inst(ctx, CREATE_ABC(OP_NEWSTRINGBUILDER, dst, 0, 0));
+        return;
+    }
     if (bname && strcmp(bname, "Bytes") == 0) {
         uint8_t nargs = (uint8_t)v->nargs;
         if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
