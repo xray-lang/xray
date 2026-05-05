@@ -1392,9 +1392,107 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
     }
 }
 
-static void lower_stmts(XiLower *l, AstNode **stmts, int count) {
+static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {
+    /* Pre-register declarations as Braun SSA variables so hoisted function
+     * bodies can resolve forward references.
+     *
+     * Functions: get a null placeholder value (needed for register allocation
+     * and cell-based upvalue capture) marked with SIDE_EFFECT to survive DCE.
+     *
+     * Variables (let/const): only create the variable slot without writing a
+     * null placeholder — the actual let/const initializer assigns the register.
+     * This avoids cell-wrapping conflicts where the null occupies the register
+     * before the real initialization overwrites it. */
     for (int i = 0; i < count; i++) {
-        if (!l->cur_block) break;  /* dead code after return/break */
-        xi_lower_stmt(l, stmts[i]);
+        AstNode *s = stmts[i];
+        if (!s) continue;
+        const char *name = NULL;
+        uint32_t sid = 0;
+        struct XrType *type = NULL;
+        bool is_func = false;
+        switch (s->type) {
+            case AST_FUNCTION_DECL:
+                name = s->as.function_decl.name;
+                sid  = s->as.function_decl.symbol_id;
+                type = xi_lower_node_type(l, s);
+                is_func = true;
+                break;
+            case AST_VAR_DECL:
+            case AST_CONST_DECL:
+                name = s->as.var_decl.name;
+                sid  = s->as.var_decl.symbol_id;
+                type = xi_lower_node_type(l, s);
+                break;
+            default:
+                break;
+        }
+        if (!name) continue;
+        int var_id = xi_lower_var_find(l, sid, name);
+        if (var_id < 0) {
+            var_id = xi_lower_var_create(l, sid, name, type);
+            if (is_func) {
+                XiValue *null_val = xi_const_null(l->func, l->cur_block,
+                                                    l->type_null);
+                if (null_val)
+                    null_val->flags |= XI_FLAG_SIDE_EFFECT;
+                xi_lower_braun_write(l, var_id, l->cur_block, null_val);
+            }
+        }
+        if (is_func)
+            l->vars[var_id].hoisted = true;
+    }
+}
+
+static void lower_stmts(XiLower *l, AstNode **stmts, int count) {
+    /* Pre-register declarations and hoist function bodies.
+     * Function bodies are lowered first so same-scope forward calls
+     * (e.g. calling greetBlock before its declaration) resolve to an
+     * actual closure rather than the null placeholder. */
+    /* At module level, shared variables already handle forward references
+     * for program-level functions.  Hoisting only applies inside function
+     * bodies where nested functions capture sibling function variables. */
+    if (l->cur_block && !l->is_program) {
+        prescan_block_decls(l, stmts, count);
+        for (int i = 0; i < count; i++) {
+            if (!l->cur_block) break;
+            AstNode *s = stmts[i];
+            if (s && s->type == AST_FUNCTION_DECL &&
+                s->as.function_decl.name != NULL)
+                xi_lower_stmt(l, s);
+        }
+        /* After hoisting, mark parent variables that are captured by any
+         * hoisted child. Hoisting reorders closures before variable
+         * initializers, so the initializer has no IR uses (the capture
+         * already bound to the braun-read null placeholder). Marking
+         * keeps the initializer alive through DCE. */
+        for (uint16_t ci = 0; ci < l->func->nchildren; ci++) {
+            XiFunc *child = l->func->children[ci];
+            if (!child) continue;
+            for (uint16_t cj = 0; cj < child->ncaptures; cj++) {
+                XiCapture *cap = &child->captures[cj];
+                if (cap->source != XI_CAPTURE_SRC_REG) continue;
+                /* Resolve capture name back to parent var_id */
+                int vid = -1;
+                if (cap->value && cap->value->var_id != 0xFF)
+                    vid = (int)cap->value->var_id;
+                else if (cap->name)
+                    vid = xi_lower_var_find(l, 0, cap->name);
+                if (vid >= 0 && vid < l->var_count)
+                    l->vars[vid].captured_by_child = true;
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            if (!l->cur_block) break;  /* dead code after return/break */
+            AstNode *s = stmts[i];
+            if (s && s->type == AST_FUNCTION_DECL &&
+                s->as.function_decl.name != NULL)
+                continue;  /* already hoisted */
+            xi_lower_stmt(l, s);
+        }
+    } else {
+        for (int i = 0; i < count; i++) {
+            if (!l->cur_block) break;
+            xi_lower_stmt(l, stmts[i]);
+        }
     }
 }

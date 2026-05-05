@@ -85,6 +85,23 @@ XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
     return ctx->reg_map[v->id];
 }
 
+/* Like reg_of, but if the value's var_id maps to a cell-wrapped register,
+ * emit OP_CELL_GET to a temporary and return that.  Use this for reads
+ * where the raw register might hold a cell instead of the actual value
+ * (e.g. calling a hoisted function, reading a mutable captured variable). */
+XR_FUNC uint8_t reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
+    uint8_t r = reg_of(ctx, v);
+    if (ctx->status != XI_EMIT_OK) return r;
+    if (v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
+        uint8_t tmp = ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, r, 0));
+        return tmp;
+    }
+    return r;
+}
+
 /* Like reg_of but never uses the free list — always allocates from next_reg.
  * Call instructions place args at dst+1..dst+nargs; a recycled low register
  * for dst could overlap with live source registers and cause clobber bugs. */
@@ -443,10 +460,15 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     uint8_t  temp_regs[CELL_UNWRAP_MAX];
     int nsaved = 0;
 
+    bool skip_unwrap = (v->op == XI_CLOSURE_NEW);
     for (uint16_t ai = 0; ai < v->nargs && nsaved < CELL_UNWRAP_MAX; ai++) {
         XiValue *arg = v->args[ai];
         if (!arg || arg->id >= ctx->reg_map_size) continue;
-        if (!ctx->cell_wrapped[arg->id]) continue;
+        if (skip_unwrap) continue;
+        if (!ctx->cell_wrapped[arg->id] &&
+            !(arg->var_id != 0xFF &&
+              ctx->cell_side_reg[arg->var_id] != NO_REG))
+            continue;
         uint8_t cell_reg = reg_of(ctx, arg);
         if (ctx->status != XI_EMIT_OK) return;
         if (ctx->next_reg >= MAX_REGS - 1) {
@@ -465,12 +487,39 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     }
     #undef CELL_UNWRAP_MAX
 
+    /* If the destination register is cell-wrapped and this is not a closure
+     * (closures handle cell-set internally), redirect the handler to write
+     * into a temp register and then CELL_SET into the real cell register.
+     * This prevents overwriting cell pointers when a variable is re-assigned
+     * after being cell-wrapped by a hoisted function's capture. */
+    uint8_t real_dst = dst;
+    bool need_cell_set = false;
+    if (v->op != XI_CLOSURE_NEW && v->var_id != 0xFF &&
+        ctx->cell_side_reg[v->var_id] != NO_REG) {
+        if (ctx->next_reg >= MAX_REGS - 1) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        uint8_t tmp = ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        ctx->reg_map[v->id] = tmp;
+        dst = tmp;
+        need_cell_set = true;
+    }
+
     XR_DCHECK(v->op >= 0 && v->op < XI_OP_COUNT, "emit_value: op out of range");
     XiEmitHandler handler = xi_emit_handlers[v->op];
     if (handler) {
         handler(ctx, v, dst);
     } else {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+    }
+
+    if (need_cell_set && ctx->status == XI_EMIT_OK) {
+        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, real_dst, dst, 0));
+        ctx->reg_map[v->id] = real_dst;
+        free_reg(ctx, dst);
     }
 
     /* Restore original reg_map and free temp registers */
@@ -607,6 +656,9 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
+
+    /* Initialize side cell register map for hoisted function captures */
+    memset(ctx.cell_side_reg, NO_REG, sizeof(ctx.cell_side_reg));
 
     /* Allocate per-value bytecode PC map for IC-guided JIT speculation */
     ctx.value_pc = (int *)xr_malloc(ctx.reg_map_size * sizeof(int));

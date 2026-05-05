@@ -1125,6 +1125,11 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_create(l, fdecl->symbol_id, fdecl->name, fn_type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
+        /* Hoisted closures must survive DCE: they are stored into cells
+         * at emit time for mutable upvalue capture by sibling functions. */
+        if (var_id >= 0 && var_id < l->var_count && l->vars[var_id].hoisted)
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+
         /* For program-level named functions, also store into shared array
          * so nested functions can access via XI_GET_SHARED (forward refs). */
         if (l->is_program && l->shared_map[var_id] >= 0) {
