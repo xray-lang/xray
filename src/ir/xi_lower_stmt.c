@@ -1566,7 +1566,8 @@ static void lower_stmts(XiLower *l, AstNode **stmts, int count) {
     /* At module level, shared variables already handle forward references
      * for program-level functions.  Hoisting only applies inside function
      * bodies where nested functions capture sibling function variables. */
-    if (l->cur_block && !l->is_program) {
+    bool in_loop = (l->break_target != NULL);
+    if (l->cur_block && !l->is_program && !in_loop) {
         prescan_block_decls(l, stmts, count);
         for (int i = 0; i < count; i++) {
             if (!l->cur_block) break;
