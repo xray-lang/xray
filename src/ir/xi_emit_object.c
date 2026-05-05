@@ -136,6 +136,11 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
 
+    /* Propagate sealed flag from compile-time type to runtime shape */
+    if (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed) {
+        shape->is_sealed = true;
+    }
+
     /* Store Shape pointer as integer constant in pool */
     int kidx = add_const_int(ctx, (int64_t)(intptr_t)shape);
     if (ctx->status != XI_EMIT_OK) return;
