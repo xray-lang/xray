@@ -927,6 +927,18 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node,
         v->line = (uint32_t)line;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
+    /* assert_throws(fn) → XI_ASSERT_THROWS */
+    if (strcmp(fname, "assert_throws") == 0 && call->arg_count == 1) {
+        XiValue *fn_val = xi_lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_THROWS,
+                                   l->type_void, 1);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = fn_val;
+        v->aux = (void *)make_assert_loc(l, call->arguments[0]->line);
+        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
     /* typeof(x) → XI_TYPEOF */
     if (strcmp(fname, "typeof") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);

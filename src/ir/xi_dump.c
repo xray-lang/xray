@@ -104,6 +104,7 @@ static const char *xi_op_name(uint16_t op) {
         case XI_ASSERT:      return "ASSERT";
         case XI_ASSERT_EQ:   return "ASSERT_EQ";
         case XI_ASSERT_NE:   return "ASSERT_NE";
+        case XI_ASSERT_THROWS: return "ASSERT_THROWS";
         case XI_TYPEOF:      return "TYPEOF";
         case XI_GET_BUILTIN: return "GET_BUILTIN";
         case XI_IMPORT_REF:  return "IMPORT_REF";

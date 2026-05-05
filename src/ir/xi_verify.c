@@ -435,6 +435,7 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_ASSERT]      = 1,
     [XI_ASSERT_EQ]   = 2,
     [XI_ASSERT_NE]   = 2,
+    [XI_ASSERT_THROWS] = 1,
     [XI_TYPEOF]      = 1,
     [XI_GET_BUILTIN] = 0,
     [XI_IMPORT_REF]  = 0,
@@ -556,6 +557,7 @@ static bool op_must_have_side_effect(uint16_t op) {
         case XI_ASSERT:
         case XI_ASSERT_EQ:
         case XI_ASSERT_NE:
+        case XI_ASSERT_THROWS:
             return true;
         default:
             return false;
