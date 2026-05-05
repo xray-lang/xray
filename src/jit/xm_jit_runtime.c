@@ -687,7 +687,9 @@ XrJitResult xr_jit_setprop(XrCoroutine *coro, int64_t extra_arg) {
 
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
-        xr_json_set(coro->isolate, json, sym, value);
+        if (!xr_json_set(coro->isolate, json, sym, value)) {
+            return (XrJitResult){XM_DEOPT_MARKER, 0};
+        }
     }
 
     return XR_JIT_OK();
@@ -864,7 +866,9 @@ XrJitResult xr_jit_map_set(XrCoroutine *coro, int64_t extra_arg) {
     } else if (hdr->type == XR_TJSON && XR_IS_PTR(key)) {
         XrJson *json = (XrJson *) obj;
         XrString *key_str = (XrString *) key.ptr;
-        xr_json_set_by_key(coro->isolate, json, key_str->data, val);
+        if (!xr_json_set_by_key(coro->isolate, json, key_str->data, val)) {
+            return (XrJitResult){XM_DEOPT_MARKER, 0};
+        }
     }
     return XR_JIT_OK();
 }

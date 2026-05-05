@@ -114,9 +114,19 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     int field_count = (int)v->aux_int;
     const char **field_names = (const char **)v->aux;
 
-    if (!ctx->isolate || field_count <= 0 || !field_names) {
-        /* Fallback: zero-field Json (bare OP_NEWMAP) */
+    if (!ctx->isolate) {
+        /* No isolate: cannot build Shape, fall back to Map */
         emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
+        return;
+    }
+    if (field_count <= 0 || !field_names) {
+        /* Empty Json object {} — create root Shape with no fields.
+         * xr_shape_new requires capacity>=1, so pass 1 as min capacity. */
+        XrShape *shape = xr_shape_new(ctx->isolate, 1);
+        if (!shape) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        int kidx = add_const_int(ctx, (int64_t)(intptr_t)shape);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, (uint8_t)kidx, 0));
         return;
     }
 
@@ -134,11 +144,6 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (!shape) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
-    }
-
-    /* Propagate sealed flag from compile-time type to runtime shape */
-    if (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed) {
-        shape->is_sealed = true;
     }
 
     /* Store Shape pointer as integer constant in pool */

@@ -211,18 +211,18 @@ static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
     return ov;
 }
 
-// Set field by Symbol
-void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
+// Set field by Symbol.  Returns true on success, false if field addition
+// was rejected (sealed shape or max field limit reached).
+bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     XR_DCHECK(X != NULL, "json_set: NULL isolate");
     if (!json)
-        return;
+        return false;
 
     XrShape *shape = xr_json_shape(X, json);
 
-    // Check if field already exists
+    // Check if field already exists — update always succeeds
     int idx = xr_shape_field_index(shape, symbol);
     if (idx >= 0) {
-        // Existing field: update in-object or overflow
         if (idx < shape->in_object_capacity) {
             json->fields[idx] = value;
         } else {
@@ -235,36 +235,37 @@ void xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
             }
         }
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
-        return;
+        return true;
     }
 
-    // Field doesn't exist: try Shape transition
+    // Field doesn't exist: try Shape transition (returns NULL for sealed/full)
     XrShape *new_shape = xr_shape_transition(X, shape, symbol);
+    if (!new_shape) {
+        return false;
+    }
 
-    if (new_shape) {
-        // Zero-copy transition: just swap shape_id
-        xr_json_set_shape(json, new_shape);
-        int new_idx = new_shape->field_count - 1;
-        if (new_idx < shape->in_object_capacity) {
-            // Fits in-object
-            json->fields[new_idx] = value;
-        } else {
-            // Overflow: allocate/grow overflow array
-            uint16_t ov_idx = (uint16_t) (new_idx - shape->in_object_capacity);
-            XrJsonOverflow *ov = json->overflow;
-            if (!ov || ov_idx >= ov->capacity) {
-                ov = overflow_grow(ov, ov_idx + 1);
-                json->overflow = ov;
-            }
-            if (ov) {
-                ov->values[ov_idx] = value;
-                if (ov_idx >= ov->length) {
-                    ov->length = ov_idx + 1;
-                }
+    // Zero-copy transition: swap shape_id and store value
+    xr_json_set_shape(json, new_shape);
+    int new_idx = new_shape->field_count - 1;
+    if (new_idx < shape->in_object_capacity) {
+        json->fields[new_idx] = value;
+    } else {
+        // Overflow: allocate/grow overflow array
+        uint16_t ov_idx = (uint16_t) (new_idx - shape->in_object_capacity);
+        XrJsonOverflow *ov = json->overflow;
+        if (!ov || ov_idx >= ov->capacity) {
+            ov = overflow_grow(ov, ov_idx + 1);
+            json->overflow = ov;
+        }
+        if (ov) {
+            ov->values[ov_idx] = value;
+            if (ov_idx >= ov->length) {
+                ov->length = ov_idx + 1;
             }
         }
     }
     XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
+    return true;
 }
 
 // Get field by string key
@@ -280,17 +281,16 @@ XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
     return xr_json_get(X, json, symbol);
 }
 
-// Set field by string key
-void xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value) {
+// Set field by string key.  Returns true on success.
+bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value) {
     XR_DCHECK(X != NULL, "json_set_by_key: NULL isolate");
     if (!json || !key)
-        return;
+        return false;
 
-    // Intern key as Symbol
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
 
-    xr_json_set(X, json, symbol, value);
+    return xr_json_set(X, json, symbol, value);
 }
 
 /* ========== GC Related Implementation ========== */

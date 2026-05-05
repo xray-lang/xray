@@ -160,10 +160,10 @@ fn test_reduce_build_nested_map(): void {
         acc[e.group].push(e.item)
         return acc
     }, {})
-    assert_eq(grouped["fruit"].length, 2)
-    assert_eq(grouped["veg"].length, 2)
-    assert_eq(grouped["fruit"][0], "apple")
-    assert_eq(grouped["veg"][1], "pea")
+    assert_eq(grouped.fruit.length, 2)
+    assert_eq(grouped.veg.length, 2)
+    assert_eq(grouped.fruit[0], "apple")
+    assert_eq(grouped.veg[1], "pea")
 }
 
 // ===== Chain with closure capturing loop variable =====

@@ -431,6 +431,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         if (sym) {
             sym->location.line = node->line;
             xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+            import->symbol_id = sym->id;
 
             XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
             if (links) {
@@ -451,6 +452,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             if (sym) {
                 sym->location.line = node->line;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                member->symbol_id = sym->id;
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {

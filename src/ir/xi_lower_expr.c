@@ -25,6 +25,7 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/parser/xtype_ref.h"
+#include "../base/xglobal_indices.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -42,6 +43,44 @@ static const char *arena_strdup(XiFunc *f, const char *s) {
 /* ========== Forward Declarations ========== */
 
 static XiValue *lower_short_circuit(XiLower *l, AstNode *node);
+
+/* Propagate needs_cell along the transitive upvalue capture chain.
+ * When an inner closure mutates a captured variable through SRC_UPVAL,
+ * every intermediate level up to the defining SRC_REG capture needs
+ * needs_cell=true so the emitter generates OP_CELL_NEW at the origin
+ * and OP_CELL_GET/OP_CELL_SET at each forwarding level. */
+static void propagate_needs_cell(XiLower *l, int upval_idx) {
+    if (upval_idx < 0 || upval_idx >= (int)l->func->ncaptures) return;
+    XiCapture *cap = &l->func->captures[upval_idx];
+    if (cap->needs_cell) return;  /* already propagated */
+    cap->needs_cell = true;
+
+    /* Propagate upward through the transitive capture chain */
+    if (cap->source == XI_CAPTURE_SRC_UPVAL && l->parent) {
+        propagate_needs_cell(l->parent, (int)cap->index);
+    } else if (cap->source == XI_CAPTURE_SRC_REG && l->parent && cap->name) {
+        /* Mark the defining scope's variable so definitions survive DCE
+         * and the emitter redirects writes through CELL_SET. */
+        int parent_var = xi_lower_var_find(l->parent, 0, cap->name);
+        if (parent_var >= 0 && parent_var < l->parent->var_count)
+            l->parent->vars[parent_var].captured_by_child = true;
+    }
+
+    /* Propagate downward: child closures that already captured this
+     * upvalue via SRC_UPVAL may have inherited needs_cell=false at
+     * creation time.  Update them so the emitter generates CELL_GET. */
+    for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
+        XiFunc *child = l->func->children[ci_fn];
+        if (!child) continue;
+        for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+            if (child->captures[ci].source == XI_CAPTURE_SRC_UPVAL &&
+                (int)child->captures[ci].index == upval_idx &&
+                !child->captures[ci].needs_cell) {
+                child->captures[ci].needs_cell = true;
+            }
+        }
+    }
+}
 
 /* Local type inference for binary ops when side table has no entry.
  * Mirrors the analyzer's xa_visit_binary() rules. */
@@ -328,6 +367,32 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         return v;
     }
 
+    /* Builtin class names resolve to runtime global variables.
+     * This enables static method calls like Json.size(obj). */
+    if (name) {
+        static const struct { const char *name; int index; } builtin_classes[] = {
+            {"Reflect", XR_GLOBAL_VAR_REFLECT},
+            {"Array",   XR_GLOBAL_VAR_ARRAY},
+            {"Set",     XR_GLOBAL_VAR_SET},
+            {"Map",     XR_GLOBAL_VAR_MAP},
+            {"String",  XR_GLOBAL_VAR_STRING},
+            {"Json",    XR_GLOBAL_VAR_JSON},
+        };
+        for (int i = 0; i < (int)(sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
+            if (strcmp(name, builtin_classes[i].name) == 0) {
+                struct XrType *cls_type = xr_type_new_class(NULL, name);
+                XiValue *v = xi_value_new(l->func, l->cur_block,
+                                           XI_GET_BUILTIN, cls_type, 0);
+                if (v) {
+                    v->aux_int = builtin_classes[i].index;
+                    v->aux = (void *)name;
+                    v->line = (uint32_t)node->line;
+                }
+                return v;
+            }
+        }
+    }
+
     /* Undeclared variable — semantic error caught earlier */
     return xi_const_null(l->func, l->cur_block, l->type_null);
 }
@@ -409,7 +474,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * emit CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */
         XR_DCHECK(upval_idx < (int)l->func->ncaptures,
                   "upval_idx out of range for needs_cell");
-        l->func->captures[upval_idx].needs_cell = true;
+        propagate_needs_cell(l, upval_idx);
 
         XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
                                        l->type_void, 1);
@@ -564,7 +629,7 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
         if (result) {
             XR_DCHECK(upval_idx < (int)l->func->ncaptures,
                       "upval_idx out of range for needs_cell");
-            l->func->captures[upval_idx].needs_cell = true;
+            propagate_needs_cell(l, upval_idx);
 
             XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
                                            l->type_void, 1);
@@ -646,7 +711,7 @@ static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
         if (result) {
             XR_DCHECK(upval_idx < (int)l->func->ncaptures,
                       "upval_idx out of range for needs_cell");
-            l->func->captures[upval_idx].needs_cell = true;
+            propagate_needs_cell(l, upval_idx);
             XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
                                            l->type_void, 1);
             if (store) {
@@ -2026,43 +2091,71 @@ static XiValue *lower_move_expr(XiLower *l, AstNode *node) {
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     int count = obj->count;
-
-    /* Evaluate all values first */
-    XiValue *val_vals[32];
     int n = count > 32 ? 32 : count;
+
+    /* Evaluate all values and computed key expressions first */
+    XiValue *val_vals[32];
+    XiValue *key_vals[32];
     for (int i = 0; i < n; i++) {
         val_vals[i] = xi_lower_expr(l, obj->values[i]);
+        bool is_computed = obj->computed && obj->computed[i];
+        key_vals[i] = is_computed ? xi_lower_expr(l, obj->keys[i]) : NULL;
     }
 
-    /* Collect string key names for Shape construction (arena-allocated) */
-    const char **key_names = (const char **)xi_func_arena_alloc(
-        l->func, (uint32_t)(sizeof(const char *) * n));
-    if (!key_names) return NULL;
+    /* Count static (non-computed) keys for Shape construction */
+    int static_count = 0;
     for (int i = 0; i < n; i++) {
-        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
-            key_names[i] = obj->keys[i]->as.literal.raw_value.string_val;
+        if (!key_vals[i]) static_count++;
+    }
+
+    /* Collect static key names (arena-allocated) */
+    const char **key_names = (const char **)xi_func_arena_alloc(
+        l->func, (uint32_t)(sizeof(const char *) * (static_count > 0 ? static_count : 1)));
+    if (!key_names) return NULL;
+    int si = 0;
+    int static_idx_map[32];  /* maps static slot → Shape field index */
+    for (int i = 0; i < n; i++) {
+        if (!key_vals[i]) {
+            if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING)
+                key_names[si] = obj->keys[i]->as.literal.raw_value.string_val;
+            else
+                key_names[si] = "?";
+            static_idx_map[i] = si;
+            si++;
         } else {
-            key_names[i] = "?";
+            static_idx_map[i] = -1;
         }
     }
 
-    /* Create Json object with known shape */
+    /* Create Json object with Shape built from static keys only */
     struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
     if (!obj_val) return NULL;
-    obj_val->aux_int = n;
+    obj_val->aux_int = static_count;
     obj_val->aux = (void *)key_names;
     obj_val->line = (uint32_t) node->line;
 
-    /* Init each field by index */
+    /* Init static fields by index, computed fields by dynamic key */
     for (int i = 0; i < n; i++) {
-        XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F,
-                                      l->type_void, 2);
-        if (!init) break;
-        init->args[0] = obj_val;
-        init->args[1] = val_vals[i];
-        init->aux_int = i;
-        init->flags |= XI_FLAG_SIDE_EFFECT;
+        if (!key_vals[i]) {
+            /* Static key → indexed init */
+            XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F,
+                                          l->type_void, 2);
+            if (!init) break;
+            init->args[0] = obj_val;
+            init->args[1] = val_vals[i];
+            init->aux_int = static_idx_map[i];
+            init->flags |= XI_FLAG_SIDE_EFFECT;
+        } else {
+            /* Computed key → dynamic index-set: obj[key] = val */
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
+                                         l->type_void, 3);
+            if (!set) break;
+            set->args[0] = obj_val;
+            set->args[1] = key_vals[i];
+            set->args[2] = val_vals[i];
+            set->flags |= XI_FLAG_SIDE_EFFECT;
+        }
     }
     return obj_val;
 }

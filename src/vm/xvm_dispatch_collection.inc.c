@@ -810,7 +810,10 @@ vmcase(OP_MAP_SETK) {
         XrJson *json = xr_value_to_json(map_val);
         XrValue key_val = k[b];
         XrString *key_str = XR_TO_STRING(key_val);
-        xr_json_set_by_key(isolate, json, key_str->data, R(c));
+        if (!xr_json_set_by_key(isolate, json, key_str->data, R(c))) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                             "cannot add property to sealed Json object");
+        }
         VM_BARRIER_BACK(json);
         vmbreak;
     }
@@ -1134,7 +1137,10 @@ vmcase(OP_INDEX_SET) {
         if (XR_IS_STRING(key_val)) {
             XrJson *json = xr_value_to_json(obj_val);
             XrString *key_str = XR_TO_STRING(key_val);
-            xr_json_set_by_key(isolate, json, key_str->data, val);
+            if (!xr_json_set_by_key(isolate, json, key_str->data, val)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                                 "cannot add property to sealed Json object");
+            }
             VM_BARRIER_BACK(json);
             vmbreak;
         }

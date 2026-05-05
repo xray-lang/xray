@@ -205,6 +205,7 @@ typedef struct EnumIndexNode {
 typedef struct ImportMember {
     char *name;   // Original name
     char *alias;  // Alias (optional, import { foo as bar })
+    uint32_t symbol_id;  // Analyzer-assigned unique ID (for upvalue capture)
 } ImportMember;
 
 // Import statement node — supports two forms:
@@ -216,6 +217,7 @@ typedef struct ImportStmtNode {
     ImportType import_type;
     ImportMember *members;  // Selective import member list
     int member_count;       // 0 means whole module import
+    uint32_t symbol_id;     // Analyzer-assigned unique ID (whole-module import)
 } ImportStmtNode;
 
 // Re-export member structure: export { a, b as c } from "./file"

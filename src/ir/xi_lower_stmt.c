@@ -1335,8 +1335,19 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         v->aux_int = -1;
         v->line = (uint32_t)node->line;
 
-        int var_id = xi_lower_var_create(l, 0, local_name, type);
+        int var_id = xi_lower_var_create(l, imp->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
+
+        /* Store into shared array so nested functions can access via XI_GET_SHARED */
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            XiValue *store = xi_value_new(l->func, l->cur_block,
+                                           XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = v;
+                store->aux_int = l->shared_map[var_id];
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
         return;
     }
 
@@ -1372,8 +1383,19 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         v->line = (uint32_t)node->line;
 
         /* Bind as a local variable so subsequent references resolve */
-        int var_id = xi_lower_var_create(l, 0, local_name, type);
+        int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
+
+        /* Store into shared array so nested functions can access via XI_GET_SHARED */
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            XiValue *store = xi_value_new(l->func, l->cur_block,
+                                           XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = v;
+                store->aux_int = l->shared_map[var_id];
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        }
     }
 }
 

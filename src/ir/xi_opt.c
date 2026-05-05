@@ -391,8 +391,9 @@ XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
             for (uint32_t i = 0; i < blk->nvalues; /* no increment */) {
                 XiValue *v = blk->values[i];
 
-                /* Keep if: has uses, has side effects, or is a terminator-related */
-                if (v->uses > 0 || (v->flags & XI_FLAG_SIDE_EFFECT)) {
+                /* Keep if: has uses, has side effects, or may throw */
+                if (v->uses > 0 ||
+                    (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))) {
                     i++;
                     continue;
                 }
