@@ -589,6 +589,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
             return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
         }
         case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+        case XI_EQ_STRICT: case XI_NE_STRICT:
             if (arg_idx < user->nargs && user->args[arg_idx] &&
                 user->args[arg_idx]->type) {
                 XrRep r = xr_type_base_rep(user->args[arg_idx]->type);

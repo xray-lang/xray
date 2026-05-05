@@ -380,6 +380,7 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_BNOT]        = 1,  [XI_SHL]    = 2,  [XI_SHR]   = 2,
     [XI_EQ]          = 2,  [XI_NE]     = 2,  [XI_LT]    = 2,
     [XI_LE]          = 2,  [XI_GT]     = 2,  [XI_GE]    = 2,
+    [XI_EQ_STRICT]   = 2,  [XI_NE_STRICT] = 2,
     [XI_NOT]         = 1,
     [XI_CONVERT]     = 1,
     [XI_BOX]         = 1,  [XI_UNBOX]  = 1,
@@ -464,7 +465,8 @@ static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
 /* ========== Check 10: Type Contracts ========== */
 
 static bool is_comparison_op(uint16_t op) {
-    return op >= XI_EQ && op <= XI_GE;
+    return (op >= XI_EQ && op <= XI_GE)
+        || op == XI_EQ_STRICT || op == XI_NE_STRICT;
 }
 
 static bool is_bool_producing_op(uint16_t op) {

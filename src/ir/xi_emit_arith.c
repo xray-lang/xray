@@ -156,6 +156,9 @@ XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         /* GT/GE: swap args */
         case XI_GT: emit_inst(ctx, CREATE_ABC(OP_CMP_LT, dst, c, b)); break;
         case XI_GE: emit_inst(ctx, CREATE_ABC(OP_CMP_LE, dst, c, b)); break;
+        /* Strict (identity) comparison */
+        case XI_EQ_STRICT: emit_inst(ctx, CREATE_ABC(OP_CMP_EQ_STRICT, dst, b, c)); break;
+        case XI_NE_STRICT: emit_inst(ctx, CREATE_ABC(OP_CMP_NE_STRICT, dst, b, c)); break;
         default: break;
     }
 }
