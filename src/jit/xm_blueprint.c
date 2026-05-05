@@ -180,8 +180,9 @@ static bool opcode_reads_slot(XrInstruction inst, int reg) {
         case OP_TFIELD_SET:
             return reg == a || reg == c;
 
-        // IS/ISNULL reads B
+        // IS reads B and C; ISNULL_SET reads B
         case OP_IS:
+            return reg == b || reg == c;
         case OP_ISNULL_SET:
             return reg == b;
 

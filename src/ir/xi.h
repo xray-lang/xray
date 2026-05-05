@@ -152,7 +152,7 @@ typedef enum {
     XI_STR_CONCAT,  /* concat: args[0..n]=parts, produces string */
 
     /* Type operations */
-    XI_IS,          /* runtime type check: args[0]=value, aux=target type, returns bool */
+    XI_IS,          /* runtime type check: args[0]=value, args[1]=type (tid int or class), returns bool */
     XI_AS,          /* type cast: args[0]=value, aux=target type */
     XI_SLICE,       /* slice: args[0]=source, args[1]=start, args[2]=end */
     XI_RANGE,       /* range: args[0]=start, args[1]=end */
@@ -232,6 +232,7 @@ typedef struct XiClassData {
     uint16_t *child_idx;     /* maps method order → XiFunc::children index */
     uint16_t ninst;          /* instance method count */
     uint16_t nstat;          /* static method count */
+    int clinit_child_idx;    /* children index for static constructor (-1 if none) */
 } XiClassData;
 
 /* ========== Block Kinds ========== */

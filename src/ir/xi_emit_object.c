@@ -472,7 +472,11 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
             if (!f->is_static) continue;
             desc->static_fields[idx].name = strdup(f->name);
             desc->static_fields[idx].flags = XR_FIELD_STATIC;
-            desc->static_fields[idx].default_value = xr_null();
+            desc->static_fields[idx].type_name =
+                f->field_type ? xr_type_to_string(
+                    xr_tref_resolve(ctx->isolate, f->field_type)) : NULL;
+            desc->static_fields[idx].default_value =
+                ast_field_default_to_value(ctx, f->initializer);
             idx++;
         }
     }
@@ -553,6 +557,10 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v,
             if (m->is_private)  desc->instance_methods[mi].flags |= XMETHOD_FLAG_PRIVATE;
             if (m->is_abstract) desc->instance_methods[mi].flags |= XMETHOD_FLAG_ABSTRACT;
             if (m->is_final)    desc->instance_methods[mi].flags |= XMETHOD_FLAG_FINAL;
+            if (m->is_operator) {
+                desc->instance_methods[mi].is_operator = true;
+                desc->instance_methods[mi].op_type = m->op_type;
+            }
             XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");
             int pi = emit_method_proto_impl(ctx, cdata->child_idx[mi]);
             if (pi < 0) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
@@ -590,6 +598,28 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v,
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
         return;
     }
-    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+    /* Compile static constructor (<clinit>) if present */
+    if (cdata->clinit_child_idx >= 0) {
+        int clinit_pi = emit_method_proto_impl(ctx, cdata->clinit_child_idx);
+        if (clinit_pi >= 0)
+            desc->clinit_proto_index = clinit_pi;
+    }
+
+    /* If the lowerer resolved a super class, emit it into R[A] so the
+     * VM uses the scope-resolved class instead of a name-based registry
+     * lookup that may find a same-named builtin. */
+    if (v->nargs >= 1 && v->args[0]) {
+        uint8_t super_reg = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+        if (super_reg != dst)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, super_reg, 0));
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
+    }
     emit_inst(ctx, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, dst, desc_idx));
+
+    /* Emit OP_CLINIT_CALL to run static field initializers */
+    if (cdata->clinit_child_idx >= 0) {
+        emit_inst(ctx, CREATE_ABx(OP_CLINIT_CALL, dst, desc_idx));
+    }
 }

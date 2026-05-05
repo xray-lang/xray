@@ -240,21 +240,26 @@ vmcase(OP_CMP_LE) {
 }
 
 vmcase(OP_IS) {
-    // OP_IS: runtime type check - R[A] = (R[B] is Type[C])
+    // OP_IS: runtime type check - R[A] = (R[B] is R[C])
+    // R[C] is either an int (XrTypeId for primitive check) or a class value
     int dest = GETARG_A(i);
     int src = GETARG_B(i);
-    int type_idx = GETARG_C(i);
+    int type_reg = GETARG_C(i);
     XrValue val = R(src);
-
-    // Get type info from constant pool
-    XrValue type_val = K(type_idx);
+    XrValue type_val = R(type_reg);
     bool result = false;
 
-    // Basic type checking based on value type
-    XrTypeId val_tid = xr_value_typeid(val);
     if (XR_IS_INT(type_val)) {
+        /* Primitive type ID check */
         int expected_type = (int) XR_TO_INT(type_val);
-        result = (val_tid == (XrTypeId) expected_type);
+        result = (xr_value_typeid(val) == (XrTypeId) expected_type);
+    } else if (xr_value_is_class(type_val)) {
+        /* Class instanceof check via inheritance chain */
+        XrClass *target_cls = xr_value_to_class(type_val);
+        if (xr_value_is_instance(val)) {
+            XrClass *inst_cls = xr_instance_get_class(xr_value_to_instance(val));
+            result = xr_class_instanceof(inst_cls, target_cls);
+        }
     }
 
     R(dest) = xr_bool(result);

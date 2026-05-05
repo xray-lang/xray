@@ -118,10 +118,52 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         ci++;
     }
 
-    /* Create XI_CLASS_CREATE value with XiClassData metadata */
+    /* Resolve super class from scope chain so the VM uses the
+     * locally-defined class, not a same-named builtin. */
+    XiValue *super_val = NULL;
+    if (cd->super_name && !cd->super_module) {
+        int svar = xi_lower_var_find(l, 0, cd->super_name);
+        if (svar >= 0) {
+            if (l->is_program && l->shared_map[svar] >= 0) {
+                super_val = xi_value_new(l->func, l->cur_block,
+                                          XI_GET_SHARED, l->type_any, 0);
+                if (super_val) super_val->aux_int = l->shared_map[svar];
+            } else {
+                super_val = xi_lower_braun_read(l, svar, l->cur_block);
+            }
+        }
+        if (!super_val) {
+            struct XrType *stype = NULL;
+            int sidx = xi_lower_find_shared(l, 0, cd->super_name, &stype);
+            if (sidx >= 0) {
+                super_val = xi_value_new(l->func, l->cur_block,
+                                          XI_GET_SHARED, l->type_any, 0);
+                if (super_val) super_val->aux_int = sidx;
+            }
+        }
+    }
+
+    /* Create XI_CLASS_CREATE value with XiClassData metadata.
+     * args[0] = resolved super class (NULL if none or unresolved). */
+    uint16_t nclass_args = super_val ? 1 : 0;
     XiValue *v = xi_value_new(l->func, l->cur_block,
-                               XI_CLASS_CREATE, l->type_any, 0);
+                               XI_CLASS_CREATE, l->type_any, nclass_args);
     if (!v) return;
+    if (super_val) v->args[0] = super_val;
+
+    /* Lower static constructor (<clinit>) if present */
+    int clinit_idx = -1;
+    for (int i = 0; i < cd->method_count; i++) {
+        if (cd->methods[i]->type != AST_METHOD_DECL) continue;
+        MethodDeclNode *m = &cd->methods[i]->as.method_decl;
+        if (!m->is_static_constructor) continue;
+        XiFunc *cf = lower_method_as_func(l, m, false);
+        if (cf) {
+            func_add_child(l->func, cf);
+            clinit_idx = (int)(l->func->nchildren - 1);
+        }
+        break;
+    }
 
     XiClassData *data = (XiClassData *)xi_func_arena_alloc(
         l->func, sizeof(XiClassData));
@@ -132,6 +174,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->child_idx = cidx;
     data->ninst = inst_n;
     data->nstat = stat_n;
+    data->clinit_child_idx = clinit_idx;
 
     /* Build arena-safe method descriptor array so cgen can resolve
      * class methods without depending on AST after lowering. */
@@ -161,7 +204,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     v->line = (uint32_t)node->line;
 
     /* Bind class to its name in SSA */
-    int var_id = xi_lower_var_create(l, 0, cd->name, l->type_any);
+    int var_id = xi_lower_var_create(l, cd->symbol_id, cd->name, l->type_any);
     xi_lower_braun_write(l, var_id, l->cur_block, v);
 
     /* Top-level classes: also store into shared array for cross-scope access */

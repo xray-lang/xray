@@ -133,7 +133,7 @@
     _(CMP_NE_STRICT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] !== R[C])")                               \
     _(CMP_LT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] < R[C])")                                        \
     _(CMP_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] <= R[C])")                                       \
-    _(IS, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = (R[B] is Type[C])")                                    \
+    _(IS, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] is R[C])")                                    \
     _(CHECKTYPE, FMT_AB, KOP_AB_K, "assert R[A] is Type[K(B)]")                                    \
     _(ISNULL, FMT_AB_IMM, KOP_AB_FLAG, "if (R[A]==null) != k then PC++")                           \
     _(ISNULL_SET, FMT_AB, KOP_AB_UNARY, "R[A] = (R[B] == null)")                                   \
