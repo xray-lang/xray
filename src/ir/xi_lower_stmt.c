@@ -146,14 +146,15 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
         }
 
         case AST_PATTERN_RANGE: {
+            /* Half-open interval [start, end), consistent with for-in range. */
             XiValue *start = xi_lower_expr(l, pattern->as.pattern_range.start);
             XiValue *end = xi_lower_expr(l, pattern->as.pattern_range.end);
             if (!start || !end) return NULL;
             XiValue *ge = xi_binary(l->func, l->cur_block, XI_GE,
                                      l->type_bool, subject, start);
-            XiValue *le = xi_binary(l->func, l->cur_block, XI_LE,
+            XiValue *lt = xi_binary(l->func, l->cur_block, XI_LT,
                                      l->type_bool, subject, end);
-            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, le);
+            return xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, ge, lt);
         }
 
         case AST_PATTERN_MULTI: {
@@ -197,13 +198,35 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         AstNode *arm_node = m->arms[i];
         MatchArmNode *arm = &arm_node->as.match_arm;
 
-        XiValue *test = xi_lower_pattern_test(l, subject, arm->pattern);
+        /* Detect binding pattern: AST_PATTERN_LITERAL wrapping AST_VARIABLE.
+         * Bind the match subject to the named variable so guard expressions
+         * (and the arm body) can reference it. The pattern test is always
+         * true — selection is determined entirely by the guard. */
+        bool is_binding = false;
+        if (arm->pattern && arm->pattern->type == AST_PATTERN_LITERAL) {
+            AstNode *pval = arm->pattern->as.pattern_literal.value;
+            if (pval && pval->type == AST_VARIABLE) {
+                is_binding = true;
+                const char *bname = pval->as.variable.name;
+                uint32_t bsid = pval->as.variable.symbol_id;
+                int var_id = xi_lower_var_create(l, bsid, bname,
+                                                  subject->type ? subject->type : l->type_any);
+                xi_lower_braun_write(l, var_id, l->cur_block, subject);
+            }
+        }
 
-        if (arm->guard && test) {
-            XiValue *guard = xi_lower_expr(l, arm->guard);
-            if (guard)
-                test = xi_binary(l->func, l->cur_block, XI_BAND,
-                                  l->type_bool, test, guard);
+        XiValue *test;
+        if (is_binding) {
+            /* Binding always matches; guard narrows. */
+            test = arm->guard ? xi_lower_expr(l, arm->guard) : NULL;
+        } else {
+            test = xi_lower_pattern_test(l, subject, arm->pattern);
+            if (arm->guard && test) {
+                XiValue *guard = xi_lower_expr(l, arm->guard);
+                if (guard)
+                    test = xi_binary(l->func, l->cur_block, XI_BAND,
+                                      l->type_bool, test, guard);
+            }
         }
 
         bool is_last = (i == max_arms - 1);

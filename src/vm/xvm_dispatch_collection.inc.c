@@ -1008,6 +1008,20 @@ vmcase(OP_INDEX_GET) {
         }
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "Json object only supports string keys");
     }
+    // Set indexing: materialize values array, then index by position.
+    // Enables for-in iteration over sets via INDEX_GET.
+    if (XR_IS_SET(obj_val) && XR_IS_INT(key_val)) {
+        XrSet *set = XR_TO_SET(obj_val);
+        XrArray *vals = xr_set_values(VM_CURRENT_CORO, set);
+        int idx = (int) XR_TO_INT(key_val);
+        if (vals && (unsigned) idx < (unsigned) vals->length) {
+            R(a) = (vals->elem_type == XR_ELEM_ANY) ? ((XrValue *) vals->data)[idx]
+                                                     : xr_array_get_element(vals, idx);
+        } else {
+            R(a) = xr_null();
+        }
+        vmbreak;
+    }
     // Operator overload
     if (xr_value_is_instance(obj_val)) {
         XrInstance *_inst = xr_value_to_instance(obj_val);

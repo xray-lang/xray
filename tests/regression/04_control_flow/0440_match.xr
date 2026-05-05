@@ -2,6 +2,7 @@
 // 作者：xingleixu@gmail.com
 // 测试：match 表达式
 // ===== 字面量匹配 =====
+@test
 fn test_match_literal_int(): void {
     let x = 2
     let result = match x {
@@ -13,6 +14,7 @@ fn test_match_literal_int(): void {
     assert_eq(result, "two")
 }
 
+@test
 fn test_match_literal_string(): void {
     let cmd = "start"
     let result = match cmd {
@@ -24,6 +26,7 @@ fn test_match_literal_string(): void {
     assert_eq(result, 1)
 }
 
+@test
 fn test_match_default(): void {
     let x = 100
     let result = match x {
@@ -35,6 +38,7 @@ fn test_match_default(): void {
 }
 
 // ===== 范围匹配 =====
+@test
 fn test_match_range(): void {
     let score = 85
     let grade = match score {
@@ -47,6 +51,7 @@ fn test_match_range(): void {
     assert_eq(grade, "B")
 }
 
+@test
 fn test_match_range_boundary(): void {
     let x = 10
     let result = match x {
@@ -58,6 +63,7 @@ fn test_match_range_boundary(): void {
 }
 
 // ===== 多值匹配 =====
+@test
 fn test_match_multi_value(): void {
     let day = "Sat"
     let result = match day {
@@ -68,6 +74,7 @@ fn test_match_multi_value(): void {
     assert_eq(result, "weekend")
 }
 
+@test
 fn test_match_multi_number(): void {
     let x = 5
     let result = match x {
@@ -79,37 +86,39 @@ fn test_match_multi_number(): void {
 }
 
 // ===== 守卫条件 =====
+@test
 fn test_match_guard(): void {
     let x = 15
     let result = match x {
-        n if n < 0 => "negative"
-        n if n == 0 => "zero"
-        n if n < 10 => "small"
-        n if n < 100 => "medium"
+        n if (n < 0) => "negative"
+        n if (n == 0) => "zero"
+        n if (n < 10) => "small"
+        n if (n < 100) => "medium"
         _ => "large"
     }
     assert_eq(result, "medium")
 }
 
+@test
 fn test_match_guard_complex(): void {
     let x = 42
     let result = match x {
-        n if n % 2 == 0 && n > 40 => "even and big"
-        n if n % 2 == 0 => "even"
-        n if n > 40 => "odd and big"
+        n if (n % 2 == 0 && n > 40) => "even and big"
+        n if (n % 2 == 0) => "even"
+        n if (n > 40) => "odd and big"
         _ => "odd and small"
     }
     assert_eq(result, "even and big")
 }
 
 // ===== 枚举匹配 =====
-enum Color {
-    Red,
-    Green,
-    Blue
-}
-
+@test
 fn test_match_enum(): void {
+    enum Color {
+        Red,
+        Green,
+        Blue
+    }
     let c = Color.Green
     let result = match c {
         Color.Red => "red"
@@ -120,12 +129,13 @@ fn test_match_enum(): void {
 }
 
 // ===== 嵌套 match =====
+@test
 fn test_match_nested(): void {
     let x = 5
     let y = 10
     let result = match x {
-        n if n > 0 => match y {
-            m if m > 5 => "x>0, y>5"
+        n if (n > 0) => match y {
+            m if (m > 5) => "x>0, y>5"
             _ => "x>0, y<=5"
         }
         _ => "x<=0"
@@ -134,6 +144,7 @@ fn test_match_nested(): void {
 }
 
 // ===== match 表达式求值 =====
+@test
 fn test_match_expression_result(): void {
     let x = 3
     let doubled = match x {
@@ -146,11 +157,12 @@ fn test_match_expression_result(): void {
     assert_eq(doubled, 12)
 }
 
+@test
 fn test_match_in_function(): void {
     fn classify(n: int): string {
         return match n {
             0 => "zero"
-            n if n > 0 => "positive"
+            n if (n > 0) => "positive"
             _ => "negative"
         }
     }
@@ -160,21 +172,23 @@ fn test_match_in_function(): void {
 }
 
 // ===== 边界条件 =====
+@test
 fn test_match_first_wins(): void {
     let x = 5
     let result = match x {
-        n if n > 0 => "first"
+        n if (n > 0) => "first"
         5 => "five"
         _ => "default"
     }
     assert_eq(result, "first")
 }
 
+@test
 fn test_match_all_guards_fail(): void {
     let x = 0
     let result = match x {
-        n if n > 10 => "big"
-        n if n < -10 => "small"
+        n if (n > 10) => "big"
+        n if (n < -10) => "small"
         _ => "middle"
     }
     assert_eq(result, "middle")
