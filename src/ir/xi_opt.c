@@ -269,10 +269,20 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
 /* ========== Copy Propagation ========== */
 
-/* Resolve through XI_COPY chains to find the original source. */
+/* Resolve through XI_COPY chains to find the original source.
+ * Stops at variable domain boundaries: when a COPY's var_id differs
+ * from its source's var_id, the copy separates two coalescing domains
+ * (e.g. `let temp = b`).  Resolving through it would merge the
+ * domains, causing loop-carried variables to share a physical
+ * register and corrupt each other on reassignment. */
 static XiValue *resolve_copy(XiValue *v) {
-    while (v && v->op == XI_COPY && v->nargs >= 1)
-        v = v->args[0];
+    while (v && v->op == XI_COPY && v->nargs >= 1) {
+        XiValue *src = v->args[0];
+        if (v->var_id != 0xFF && src &&
+            src->var_id != 0xFF && v->var_id != src->var_id)
+            break;
+        v = src;
+    }
     return v;
 }
 
