@@ -733,7 +733,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *type =
-        xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count, true);
+        xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count, false);
     xr_free(field_names);
     xr_free(field_types);
 

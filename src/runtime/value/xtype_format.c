@@ -122,26 +122,45 @@ const char *xr_type_to_string(XrType *type) {
             return type->object.type_name;
         }
         if (type->object.field_count > 0 && type->object.field_names) {
-            char *ptr = buf;
-            size_t remaining = TYPE_STR_BUF_SIZE;
-            int n = snprintf(ptr, remaining, "{");
-            ptr += n;
-            remaining -= n;
+            /* Count named (non-computed) fields */
+            int named = 0;
+            bool has_computed = false;
+            for (int i = 0; i < type->object.field_count; i++) {
+                if (type->object.field_names[i])
+                    named++;
+                else
+                    has_computed = true;
+            }
+            /* All fields computed → fall through to plain "Json" */
+            if (named > 0) {
+                char *ptr = buf;
+                size_t remaining = TYPE_STR_BUF_SIZE;
+                int n = snprintf(ptr, remaining, "{");
+                ptr += n;
+                remaining -= n;
 
-            for (int i = 0; i < type->object.field_count && remaining > 2; i++) {
-                if (i > 0) {
-                    n = snprintf(ptr, remaining, ",");
-                    ptr += n;
-                    remaining -= n;
-                }
-                if (type->object.field_names[i]) {
+                int printed = 0;
+                for (int i = 0; i < type->object.field_count && remaining > 2; i++) {
+                    if (!type->object.field_names[i])
+                        continue;
+                    if (printed > 0) {
+                        n = snprintf(ptr, remaining, ",");
+                        ptr += n;
+                        remaining -= n;
+                    }
                     n = snprintf(ptr, remaining, "%s", type->object.field_names[i]);
                     ptr += n;
                     remaining -= n;
+                    printed++;
                 }
+                if (has_computed && remaining > 5) {
+                    n = snprintf(ptr, remaining, ",...");
+                    ptr += n;
+                    remaining -= n;
+                }
+                snprintf(ptr, remaining, "}");
+                return xr_pool_strdup(pool, buf);
             }
-            snprintf(ptr, remaining, "}");
-            return xr_pool_strdup(pool, buf);
         }
         return (type->kind == XR_KIND_JSON) ? TYPE_NAME_JSON : "{...}";
     }

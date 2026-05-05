@@ -550,6 +550,27 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
                 sid = s->as.var_decl.symbol_id;
                 type = xi_lower_node_type(l, s);
                 break;
+            case AST_IMPORT_STMT:
+                if (s->as.import_stmt.member_count == 0) {
+                    name = s->as.import_stmt.alias
+                         ? s->as.import_stmt.alias
+                         : s->as.import_stmt.module_name;
+                    sid = s->as.import_stmt.symbol_id;
+                } else {
+                    /* Selective import: each member gets a shared slot */
+                    for (int mi = 0; mi < s->as.import_stmt.member_count; mi++) {
+                        ImportMember *m = &s->as.import_stmt.members[mi];
+                        const char *mname = m->alias ? m->alias : m->name;
+                        if (!mname) continue;
+                        int vid = xi_lower_var_create(l, m->symbol_id, mname, type);
+                        XR_DCHECK(vid >= 0 && vid < XI_LOWER_MAX_VARS,
+                                  "prescan_shared_vars: var_id overflow (import member)");
+                        l->shared_map[vid] = (int16_t)next_shared;
+                        next_shared++;
+                    }
+                    continue;
+                }
+                break;
             default:
                 break;
         }

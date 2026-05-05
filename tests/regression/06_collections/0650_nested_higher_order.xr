@@ -168,9 +168,9 @@ fn test_reduce_to_map(): void {
         acc[pair[0]] = pair[1]
         return acc
     }, {})
-    assert_eq(obj["a"], 1)
-    assert_eq(obj["b"], 2)
-    assert_eq(obj["c"], 3)
+    assert_eq(obj.a, 1)
+    assert_eq(obj.b, 2)
+    assert_eq(obj.c, 3)
 }
 
 // ===== Higher-Order Functions with Closures =====
@@ -430,9 +430,9 @@ fn test_count_by_reduce(): void {
         acc[word] = acc[word] + 1
         return acc
     }, {})
-    assert_eq(counts["apple"], 3)
-    assert_eq(counts["banana"], 2)
-    assert_eq(counts["cherry"], 1)
+    assert_eq(counts.apple, 3)
+    assert_eq(counts.banana, 2)
+    assert_eq(counts.cherry, 1)
 }
 
 // ===== Return Type Inference Through Chains =====
@@ -469,14 +469,14 @@ fn test_complex_data_pipeline(): void {
     let users = [{ "name": "Alice", "purchases": [100, 200, 300] }, { "name": "Bob", "purchases": [50, 150] }, { "name": "Carol", "purchases": [500, 600, 700, 800] }]
     // Calculate total per user, filter high spenders, get names
     let highSpenders = users.map(fn(user) {
-        let total = user["purchases"].reduce(fn(a, b) {
+        let total = user.purchases.reduce(fn(a, b) {
             return a + b
         }, 0)
-        return { "name": user["name"], "total": total }
+        return { "name": user.name, "total": total }
     }).filter(fn(user) {
-        return user["total"] > 500
+        return user.total > 500
     }).map(fn(user) {
-        return user["name"]
+        return user.name
     })
     assert_eq(highSpenders.length, 2)
     assert_eq(highSpenders[0], "Alice")

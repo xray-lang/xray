@@ -328,6 +328,9 @@ XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op,
     if (v) {
         v->args[0] = lhs;
         v->args[1] = rhs;
+        /* Division/modulo may throw on zero divisor — must not be DCE'd */
+        if (op == XI_DIV || op == XI_MOD)
+            v->flags |= XI_FLAG_MAY_THROW;
     }
     return v;
 }

@@ -330,7 +330,10 @@ vmcase(OP_JSON_SETK) {
     int c = GETARG_C(i);
     XrJson *json = xr_value_to_json(R(a));
     XrValue val = R(c);
-    xr_json_set(isolate, json, (SymbolId) PROTO_SYMBOL(cl->proto, b), val);
+    if (!xr_json_set(isolate, json, (SymbolId) PROTO_SYMBOL(cl->proto, b), val)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                         "cannot add property to sealed Json object");
+    }
     VM_BARRIER_VAL(json, val);
     vmbreak;
 }
@@ -387,23 +390,22 @@ vmcase(OP_JSON_DECODE) {
     XrShape *shape = (XrShape *)(intptr_t)XR_TO_INT(shape_val);
     XR_DCHECK(shape != NULL, "OP_JSON_DECODE: null shape");
 
-    /* Must be a string */
-    if (!XR_IS_STRING(data)) {
+    /* Accept string (parse first) or Json object (validate directly) */
+    XrJson *src = NULL;
+    if (XR_IS_STRING(data)) {
+        XrString *str = XR_TO_STRING(data);
+        XrValue parsed = xr_json_parse_from_cstr(isolate, str->data, str->length);
+        if (XR_IS_NULL(parsed) || !xr_value_is_json(parsed)) {
+            R(a) = xr_null();
+            vmbreak;
+        }
+        src = xr_value_to_json(parsed);
+    } else if (xr_value_is_json(data)) {
+        src = xr_value_to_json(data);
+    } else {
         R(a) = xr_null();
         vmbreak;
     }
-
-    XrString *str = XR_TO_STRING(data);
-    XrValue parsed = xr_json_parse_from_cstr(isolate, str->data, str->length);
-
-    /* Parse failure → null */
-    if (XR_IS_NULL(parsed) || !xr_value_is_json(parsed)) {
-        R(a) = xr_null();
-        vmbreak;
-    }
-
-    /* Validate fields: each field in Shape must exist in parsed data */
-    XrJson *src = xr_value_to_json(parsed);
     uint16_t field_count = shape->field_count;
 
     XrJson *result = xr_json_new_with_shape(VM_CURRENT_CORO, shape);
@@ -695,7 +697,10 @@ vmcase(OP_SETPROP) {
         }
 
         // Slow path: overflow field, new field addition
-        xr_json_set(isolate, json, prop_symbol, value);
+        if (!xr_json_set(isolate, json, prop_symbol, value)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                             "cannot add property to sealed Json object");
+        }
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
         vmbreak;
     }

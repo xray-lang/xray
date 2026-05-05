@@ -98,7 +98,13 @@ fn test_negative_numbers(): void {
 
 @test
 fn test_zero_division_float(): void {
-    assert_throws(fn() { let x = 1.0 / 0.0; print(x) })
+    let caught = false
+    try {
+        let x = 1.0 / 0.0
+    } catch (e) {
+        caught = true
+    }
+    assert_eq(caught, true)
 }
 
 // ===== 字符串边界 =====
