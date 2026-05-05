@@ -797,15 +797,18 @@ TEST(emit_set_new) {
 }
 
 TEST(emit_is_check) {
-    /* IS -> OP_IS */
+    /* IS -> OP_IS: args[0]=value, args[1]=type constant */
     XiFunc *f = make_func("typecheck", &stub_bool);
     XiBlock *entry = f->entry;
 
     XiValue *p0 = xi_param(f, entry, 0, &stub_int);
-    XiValue *v = xi_value_new(f, entry, XI_IS, &stub_bool, 1);
+    XiValue *type_const = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    assert(type_const != NULL);
+    type_const->aux_int = 8;  /* XR_TID_INT */
+    XiValue *v = xi_value_new(f, entry, XI_IS, &stub_bool, 2);
     assert(v != NULL);
     v->args[0] = p0;
-    v->aux_int = 1;  /* type_id for int */
+    v->args[1] = type_const;
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;

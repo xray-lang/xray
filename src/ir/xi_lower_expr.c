@@ -24,6 +24,7 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
+#include "../frontend/parser/xtype_ref.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -414,6 +415,38 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
     if (!rhs) return NULL;
     uint16_t op = compound_op_to_xi(node->as.compound_assignment.op);
     struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
+
+    /* Member compound assignment: obj.field op= rhs */
+    if (node->as.compound_assignment.object) {
+        XiValue *obj = xi_lower_expr(l, node->as.compound_assignment.object);
+        if (!obj) return NULL;
+
+        /* Load current field value */
+        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
+                                     result_type ? result_type : l->type_any, 1);
+        if (!cur) return NULL;
+        cur->args[0] = obj;
+        cur->aux = (void *)arena_strdup(l->func, name);
+        cur->line = (uint32_t)node->line;
+
+        if (!result_type)
+            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
+
+        /* Compute new value */
+        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
+        if (!result) return NULL;
+
+        /* Store back to field */
+        XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
+                                       result_type, 2);
+        if (!store) return NULL;
+        store->args[0] = obj;
+        store->args[1] = result;
+        store->aux = (void *)arena_strdup(l->func, name);
+        store->flags |= XI_FLAG_SIDE_EFFECT;
+        store->line = (uint32_t)node->line;
+        return result;
+    }
 
     /* Local variable */
     int var_id = xi_lower_var_find(l, sid, name);
@@ -1212,8 +1245,40 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
         arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
     }
 
-    int var_id = xi_lower_var_create(l, 0, cname, l->type_any);
-    XiValue *cls = xi_lower_braun_read(l, var_id, l->cur_block);
+    /* Resolve class name using the same chain as lower_variable:
+     * local variable → program-level shared → upvalue capture. */
+    XiValue *cls = NULL;
+    int var_id = xi_lower_var_find(l, 0, cname);
+    if (var_id >= 0) {
+        if (l->is_program && l->shared_map[var_id] >= 0) {
+            cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                               l->type_any, 0);
+            if (cls) cls->aux_int = l->shared_map[var_id];
+        } else {
+            cls = xi_lower_braun_read(l, var_id, l->cur_block);
+        }
+    }
+    if (!cls) {
+        struct XrType *shared_type = NULL;
+        int shared_idx = xi_lower_find_shared(l, 0, cname, &shared_type);
+        if (shared_idx >= 0) {
+            cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                               l->type_any, 0);
+            if (cls) cls->aux_int = shared_idx;
+        }
+    }
+    if (!cls) {
+        struct XrType *upval_type = NULL;
+        int upval_idx = xi_lower_resolve_upvalue(l, 0, cname, &upval_type);
+        if (upval_idx >= 0) {
+            cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                               l->type_any, 0);
+            if (cls) cls->aux_int = upval_idx;
+        }
+    }
+    if (!cls) {
+        cls = xi_const_null(l->func, l->cur_block, l->type_null);
+    }
 
     uint16_t nargs = (uint16_t)(n + 1);
     XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
@@ -1363,10 +1428,57 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
     XiValue *val = xi_lower_expr(l, is->expr);
     if (!val) return NULL;
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, 1);
+    /* Resolve the target type to a runtime value so the VM can use it
+     * directly from a register:
+     *   - Primitive types → XI_CONST with XrTypeId
+     *   - Named types (classes) → scope-resolved class value */
+    XiValue *type_val = NULL;
+    XrTypeRef *tref = is->type;
+    if (tref) {
+        int tid = -1;
+        switch (tref->kind) {
+            case XR_TREF_INT:         tid = 8;  break;  /* XR_TID_INT */
+            case XR_TREF_FLOAT:       tid = 11; break;  /* XR_TID_FLOAT */
+            case XR_TREF_STRING:      tid = 12; break;  /* XR_TID_STRING */
+            case XR_TREF_BOOL:        tid = 1;  break;  /* XR_TID_BOOL */
+            case XR_TREF_NULL:        tid = 0;  break;  /* XR_TID_NULL */
+            default: break;
+        }
+        if (tid >= 0) {
+            type_val = xi_value_new(l->func, l->cur_block,
+                                     XI_CONST, l->type_any, 0);
+            if (type_val) type_val->aux_int = tid;
+        } else if (tref->kind == XR_TREF_NAMED && tref->name) {
+            /* Resolve class from scope chain */
+            int var = xi_lower_var_find(l, 0, tref->name);
+            if (var >= 0) {
+                if (l->is_program && l->shared_map &&
+                    var < l->var_count && l->shared_map[var] >= 0) {
+                    type_val = xi_value_new(l->func, l->cur_block,
+                                             XI_GET_SHARED, l->type_any, 0);
+                    if (type_val) type_val->aux_int = l->shared_map[var];
+                } else {
+                    type_val = xi_lower_braun_read(l, var, l->cur_block);
+                }
+            }
+            if (!type_val) {
+                struct XrType *stype = NULL;
+                int sidx = xi_lower_find_shared(l, 0, tref->name, &stype);
+                if (sidx >= 0) {
+                    type_val = xi_value_new(l->func, l->cur_block,
+                                             XI_GET_SHARED, l->type_any, 0);
+                    if (type_val) type_val->aux_int = sidx;
+                }
+            }
+        }
+    }
+
+    uint16_t nargs = (type_val != NULL) ? 2 : 1;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, nargs);
     if (!v) return NULL;
     v->args[0] = val;
-    v->aux = (void *) is->type;  /* target type for runtime check */
+    if (type_val) v->args[1] = type_val;
+    v->aux = (void *) is->type;
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -1560,10 +1672,26 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
 
 static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
     (void) node;
-    /* 'this' is the first implicit parameter (index 0) in methods */
     struct XrType *this_type = xi_lower_node_type(l, node);
-    int var_id = xi_lower_var_create(l, 0, "this", this_type);
-    return xi_lower_braun_read(l, var_id, l->cur_block);
+
+    /* Try local scope first (direct method context) */
+    int var_id = xi_lower_var_find(l, 0, "this");
+    if (var_id >= 0)
+        return xi_lower_braun_read(l, var_id, l->cur_block);
+
+    /* Not local — capture from enclosing method via upvalue */
+    struct XrType *upval_type = NULL;
+    int upval_idx = xi_lower_resolve_upvalue(l, 0, "this", &upval_type);
+    if (upval_idx >= 0) {
+        if (!upval_type) upval_type = this_type;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                                   upval_type, 0);
+        if (v) v->aux_int = upval_idx;
+        return v;
+    }
+
+    /* No 'this' in scope (e.g. top-level code) — return null */
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static XiValue *lower_super_call(XiLower *l, AstNode *node) {

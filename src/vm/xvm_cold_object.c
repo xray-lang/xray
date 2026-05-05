@@ -277,9 +277,11 @@ XR_NOINLINE int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm
         VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
     }
 
-    int setter_base = c + 1;
-    base[setter_base] = obj;
-    base[setter_base + 1] = value;
+    /* Place setter frame above caller's maxstacksize to avoid
+     * clobbering caller registers. */
+    int safe_base = (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
+    vm_ctx->stack[safe_base] = obj;
+    vm_ctx->stack[safe_base + 1] = value;
 
     frame->pc = pc;  // savepc
 
@@ -289,7 +291,7 @@ XR_NOINLINE int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm
     XrBcCallFrame *new_frame = &vm_ctx->frames[_fidx];
     new_frame->closure = closure;
     new_frame->pc = PROTO_CODE_BASE(proto);
-    new_frame->base_offset = (int) ((base + setter_base) - vm_ctx->stack);
+    new_frame->base_offset = safe_base;
 
     return VM_COLD_STARTFUNC;
 }
@@ -884,7 +886,11 @@ XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm
         VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
     }
 
-    base[a + 1] = obj;  // this
+    /* Place getter frame above caller's maxstacksize to avoid
+     * clobbering caller registers (same strategy as operator
+     * overload calls). */
+    int safe_base = (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
+    vm_ctx->stack[safe_base] = obj;  // this
 
     frame->pc = pc;  // savepc
 
@@ -894,7 +900,9 @@ XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm
     XrBcCallFrame *new_frame = &vm_ctx->frames[_fidx];
     new_frame->closure = closure;
     new_frame->pc = PROTO_CODE_BASE(proto);
-    new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
+    new_frame->base_offset = safe_base;
+    new_frame->result_offset = (int) ((base + a) - vm_ctx->stack);
+    new_frame->call_status = XR_CALL_KEEP_FUNC;
 
     return VM_COLD_STARTFUNC;
 }

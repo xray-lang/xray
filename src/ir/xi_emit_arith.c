@@ -208,13 +208,15 @@ XR_FUNC void xi_emit_isnull(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_ISNULL_SET, dst, src, 0));
 }
 
-/* Type check: IS A B C */
+/* Type check: IS A B C — R[A] = (R[B] is R[C])
+ * args[0] = value to check, args[1] = type value (int type-id or class) */
 XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
     uint8_t src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK) return;
-    int type_id = (int)v->aux_int;
-    emit_inst(ctx, CREATE_ABC(OP_IS, dst, src, (uint8_t)type_id));
+    uint8_t type_reg = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK) return;
+    emit_inst(ctx, CREATE_ABC(OP_IS, dst, src, type_reg));
 }
 
 /* Type cast (as / as?) with runtime typeof check */

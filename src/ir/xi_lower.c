@@ -63,19 +63,24 @@ XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id,
     return id;
 }
 
-/* Find variable by symbol_id (primary) or name (fallback for synthetics).
- * Returns the var_id, or -1 if not found. */
+/* Find variable by symbol_id (primary) or name (fallback).
+ * Returns the var_id, or -1 if not found.
+ *
+ * Fallback to name match handles two cases:
+ *  - Caller has sid=0 (new-expressions, enum-access): searches by name.
+ *  - Caller has non-zero sid but no match: variable was created without
+ *    an analyzer sid (method params via MethodDeclNode.parameters[]).  */
 XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name) {
     if (symbol_id != 0) {
         for (int i = 0; i < l->var_count; i++) {
             if (l->vars[i].symbol_id == symbol_id)
                 return i;
         }
-    } else if (name) {
-        /* Fallback for synthetics / unresolved: search backwards by name */
+    }
+    /* Name-based fallback (needed when sid doesn't match or is 0) */
+    if (name) {
         for (int i = l->var_count - 1; i >= 0; i--) {
-            if (l->vars[i].symbol_id == 0 &&
-                l->vars[i].name && strcmp(l->vars[i].name, name) == 0)
+            if (l->vars[i].name && strcmp(l->vars[i].name, name) == 0)
                 return i;
         }
     }

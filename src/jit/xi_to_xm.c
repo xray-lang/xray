@@ -262,7 +262,7 @@ static XmRef lower_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
     if (type->kind == XR_KIND_STRING) {
         XmRef cref = xm_const_ptr(ctx->xm_func, v->aux);
-        return xm_emit_unary(ctx->xm_func, blk, XM_CONST_PTR, XR_REP_I64, cref);
+        return xm_emit_unary(ctx->xm_func, blk, XM_CONST_PTR, XR_REP_PTR, cref);
     }
     XmRef cref = xm_const_i64(ctx->xm_func, v->aux_int);
     return xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64, XR_REP_I64, cref);
