@@ -401,8 +401,17 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
             }
         } else if (stmt->type != AST_CLASS_DECL && stmt->type != AST_STRUCT_DECL &&
                    stmt->type != AST_ENUM_DECL) {
-            // Classes and enums already handled in phase 1
-            xa_visit_collect(ctx, stmt);
+            /* Bare block statements need a scope so inner let/const
+             * declarations get distinct symbol_ids from outer variables
+             * with the same name (variable shadowing).  Matches Pass 2's
+             * xa_visit_block_stmt which enters BLOCK_SCOPE. */
+            if (stmt->type == AST_BLOCK) {
+                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, stmt);
+                xa_visit_collect(ctx, stmt);
+                xa_analyzer_exit_scope(ctx->analyzer);
+            } else {
+                xa_visit_collect(ctx, stmt);
+            }
         }
     }
 }
@@ -612,7 +621,11 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_BLOCK:
-            // Use hoisting for blocks too (supports mutual recursion in nested functions)
+            /* Bare block statements (standalone { ... }) get a scope from
+             * xa_visit_collect_statements_with_hoisting which wraps them.
+             * Structural blocks (while/for/if body) call here directly
+             * and must NOT get an extra scope — their enclosing construct
+             * already manages scoping in Pass 2. */
             xa_visit_collect_statements_with_hoisting(ctx, node->as.block.statements,
                                                       node->as.block.count);
             break;
