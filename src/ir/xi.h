@@ -191,6 +191,7 @@ typedef enum {
     XI_ASSERT,      /* args[0]=cond; aux=loc_string; aux_int: 0=true,1=false */
     XI_ASSERT_EQ,   /* args[0]=actual, args[1]=expected; aux=loc_string */
     XI_ASSERT_NE,   /* args[0]=actual, args[1]=unexpected; aux=loc_string */
+    XI_ASSERT_THROWS, /* args[0]=fn; aux=loc_string; emits try-catch sequence */
     XI_TYPEOF,      /* args[0]=value; result=string typename */
     XI_GET_BUILTIN, /* aux=name_string; aux_int=global_index; loads runtime global */
 

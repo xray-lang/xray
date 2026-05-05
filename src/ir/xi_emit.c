@@ -429,6 +429,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_ASSERT]       = xi_emit_assert,
     [XI_ASSERT_EQ]    = xi_emit_assert_eq,
     [XI_ASSERT_NE]    = xi_emit_assert_ne,
+    [XI_ASSERT_THROWS] = xi_emit_assert_throws,
     [XI_TYPEOF]       = xi_emit_typeof,
     [XI_GET_BUILTIN]  = xi_emit_get_builtin,
     [XI_IMPORT_REF]   = xi_emit_import_ref,
