@@ -225,7 +225,7 @@ XrType *xr_type_new_json(XrayIsolate *X) {
 }
 
 XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types,
-                                     int count) {
+                                     int count, bool is_sealed) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type)
@@ -240,45 +240,8 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
             type->object.field_types[i] = types[i];
         }
     }
+    type->object.is_sealed = is_sealed;
     return type;
-}
-
-// Structured object types (compile-time fixed fields, XR_KIND_OBJECT)
-XrType *xr_type_new_object(XrayIsolate *X, const char **field_names, XrType **field_types,
-                           int field_count, const char *type_name) {
-    X = resolve_isolate(X);
-    XrType *type = type_alloc(X, XR_KIND_OBJECT);
-    if (!type)
-        return NULL;
-    XrTypePool *pool = X->current_type_pool;
-
-    if (field_count > 0 && field_names) {
-        type->object.field_names = xr_pool_alloc(pool, sizeof(const char *) * field_count);
-        if (type->object.field_names) {
-            for (int i = 0; i < field_count; i++) {
-                type->object.field_names[i] =
-                    field_names[i] ? xr_pool_strdup(pool, field_names[i]) : NULL;
-            }
-        }
-    }
-
-    if (field_count > 0 && field_types) {
-        type->object.field_types = xr_pool_alloc(pool, sizeof(XrType *) * field_count);
-        if (type->object.field_types) {
-            memcpy(type->object.field_types, field_types, sizeof(XrType *) * field_count);
-        }
-    }
-
-    type->object.field_count = field_count;
-    type->object.type_name = type_name ? xr_pool_strdup(pool, type_name) : NULL;
-    type->object.field_readonly = NULL;
-
-    return type;
-}
-
-XrType *xr_type_new_object_anonymous(XrayIsolate *X, const char **field_names, XrType **field_types,
-                                     int field_count) {
-    return xr_type_new_object(X, field_names, field_types, field_count, NULL);
 }
 
 // Optional type (T?) - unified: uses is_nullable on the base type itself
@@ -809,7 +772,6 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
             copy->function.is_variadic = type->function.is_variadic;
             break;
         case XR_KIND_JSON:
-        case XR_KIND_OBJECT:
             if (type->object.field_count > 0) {
                 copy->object.field_count = type->object.field_count;
                 copy->object.type_name =
@@ -835,6 +797,7 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
                     }
                 }
             }
+            copy->object.is_sealed = type->object.is_sealed;
             break;
         case XR_KIND_TYPE_PARAM:
             copy->type_param.name =
@@ -1026,9 +989,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
     }
 
-    // Structural object subtyping (JSON and OBJECT kinds)
-    bool target_is_struct = XR_TYPE_IS_JSON(target) || XR_TYPE_IS_OBJECT(target);
-    bool source_is_struct = XR_TYPE_IS_JSON(source) || XR_TYPE_IS_OBJECT(source);
+    // Structural object subtyping
+    bool target_is_struct = XR_TYPE_IS_JSON(target);
+    bool source_is_struct = XR_TYPE_IS_JSON(source);
     if (target_is_struct && source_is_struct) {
         // Plain Json (no fields) accepts any object-like source
         if (target->object.field_count == 0 && XR_TYPE_IS_JSON(target))
@@ -1064,9 +1027,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     break;
                 }
             }
-            // OBJECT: missing non-optional field is an error
-            // JSON: missing fields allowed (extensible at runtime)
-            if (!found && !is_optional && XR_TYPE_IS_OBJECT(target)) {
+            // Sealed Json: missing non-optional field is an error
+            // Open Json: missing fields allowed (extensible at runtime)
+            if (!found && !is_optional && target->object.is_sealed) {
                 return false;
             }
         }

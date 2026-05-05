@@ -79,6 +79,8 @@ struct XrShape {
     struct XrShape *parent;
     XrTransitionTable *transitions;  // symbol -> child shape
 
+    bool is_sealed;              // true = reject field additions via transition
+
     // Compact mode (fields stored as native C types, not XrValue)
     bool is_compact;             // true = compact layout
     bool has_gc_fields;          // true = at least one PTR field (Level 1)

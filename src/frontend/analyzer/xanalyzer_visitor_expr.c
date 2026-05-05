@@ -529,7 +529,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         // return Json since any field access is valid at runtime.
         return xr_type_new_json(ctx->analyzer->isolate);
     }
-    if ((XR_TYPE_IS_JSON(obj_type) || XR_TYPE_IS_OBJECT(obj_type)) &&
+    if (XR_TYPE_IS_JSON(obj_type) &&
         obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {
             for (int i = 0; i < obj_type->object.field_count; i++) {
@@ -733,7 +733,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     }
 
     XrType *type =
-        xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count);
+        xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count, true);
     xr_free(field_names);
     xr_free(field_types);
 

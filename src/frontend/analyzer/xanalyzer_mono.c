@@ -64,7 +64,6 @@ const char *xr_mono_type_tag(XrType *t) {
         case XR_KIND_BYTES:
             return "bytes";
         case XR_KIND_JSON:
-        case XR_KIND_OBJECT:
             return "json";
         case XR_KIND_CHANNEL:
             return "chan";

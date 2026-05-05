@@ -397,7 +397,7 @@ static XrType *xa_infer_return_json_type(XrayIsolate *X, FunctionDeclNode *fn) {
         }
         idx++;
     }
-    return xr_type_new_object_anonymous(X, names, types, fc);
+    return xr_type_new_json_with_fields(X, names, types, fc, true);
 }
 
 // Phase 2: Collect function body (parameters and body declarations).
