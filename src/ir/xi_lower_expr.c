@@ -201,7 +201,9 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     return xi_binary(l->func, l->cur_block, op, result_type, lhs, rhs);
 }
 
-/* Short-circuit && and || use control flow (like if-expressions). */
+/* Short-circuit && and || use control flow (like if-expressions).
+ * Always produces a bool result (xray semantics: && / || never leak
+ * raw operand values — they return true/false). */
 static XiValue *lower_short_circuit(XiLower *l, AstNode *node) {
     bool is_and = (node->type == AST_BINARY_AND);
 
@@ -222,13 +224,30 @@ static XiValue *lower_short_circuit(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, eval_rhs);
     xi_lower_braun_seal(l, skip);
 
-    /* Evaluate RHS */
+    /* Evaluate RHS and coerce to bool if not already bool-typed */
     l->cur_block = eval_rhs;
     XiValue *rhs = xi_lower_expr(l, node->as.binary.right);
+    if (rhs && !(rhs->type && rhs->type->kind == XR_KIND_BOOL)) {
+        XiValue *not1 = xi_value_new(l->func, l->cur_block, XI_NOT,
+                                      l->type_bool, 1);
+        if (not1) {
+            not1->args[0] = rhs;
+            XiValue *not2 = xi_value_new(l->func, l->cur_block, XI_NOT,
+                                          l->type_bool, 1);
+            if (not2) {
+                not2->args[0] = not1;
+                rhs = not2;
+            }
+        }
+    }
     XiBlock *rhs_exit = l->cur_block;
     xi_block_set_jump(rhs_exit, merge);
 
-    /* Skip block just jumps to merge */
+    /* Skip block: short-circuit result is a known boolean constant.
+     * AND skips when LHS is falsy → result = false.
+     * OR  skips when LHS is truthy → result = true. */
+    l->cur_block = skip;
+    XiValue *skip_val = xi_const_bool(l->func, skip, !is_and, l->type_bool);
     xi_block_set_jump(skip, merge);
 
     xi_lower_braun_seal(l, merge);
@@ -237,13 +256,11 @@ static XiValue *lower_short_circuit(XiLower *l, AstNode *node) {
     l->cur_block = merge;
     XiPhi *phi = xi_phi_new(l->func, merge, l->type_bool, merge->npreds);
     if (phi) {
-        /* Operand order matches preds order.
-         * rhs_exit jumps first, skip second -> preds[0]=rhs_exit, preds[1]=skip */
         for (uint16_t i = 0; i < merge->npreds; i++) {
             if (merge->preds[i] == rhs_exit)
-                phi->value.args[i] = rhs ? rhs : lhs;
+                phi->value.args[i] = rhs ? rhs : skip_val;
             else
-                phi->value.args[i] = lhs;
+                phi->value.args[i] = skip_val;
         }
     }
     return phi ? &phi->value : lhs;
