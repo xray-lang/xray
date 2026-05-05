@@ -182,13 +182,41 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 }
 
-/* String concatenation: STRBUF_NEW + STRBUF_APPEND*n + STRBUF_FINISH */
+/* String concatenation: STRBUF_NEW + STRBUF_APPEND*n + STRBUF_FINISH.
+ *
+ * STRBUF_NEW writes a StringBuilder into dst, destroying whatever was
+ * there.  When the result is coalesced to the same register as one of
+ * the operands (e.g. `result = result + "a"`), we must read that
+ * operand into a temp register BEFORE STRBUF_NEW clobbers it. */
 XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
-    for (uint16_t a = 0; a < v->nargs; a++) {
-        uint8_t part = reg_of(ctx, v->args[a]);
+    XR_DCHECK(v->nargs <= 64, "xi_emit_str_concat: too many parts");
+    uint16_t n = v->nargs > 64 ? 64 : v->nargs;
+
+    /* Pre-resolve all arg registers before STRBUF_NEW */
+    uint8_t parts[64];
+    for (uint16_t a = 0; a < n; a++) {
+        parts[a] = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK) return;
-        emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, part, 0));
+    }
+
+    /* Save args that alias dst to fresh temp registers */
+    for (uint16_t a = 0; a < n; a++) {
+        if (parts[a] == dst) {
+            if (ctx->next_reg >= MAX_REGS - 1) {
+                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                return;
+            }
+            uint8_t tmp = ctx->next_reg++;
+            if (ctx->next_reg > ctx->max_reg)
+                ctx->max_reg = ctx->next_reg;
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, tmp, dst, 0));
+            parts[a] = tmp;
+        }
+    }
+
+    emit_inst(ctx, CREATE_ABC(OP_STRBUF_NEW, dst, 0, 0));
+    for (uint16_t a = 0; a < n; a++) {
+        emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, parts[a], 0));
     }
     emit_inst(ctx, CREATE_ABC(OP_STRBUF_FINISH, dst, 0, 0));
 }
