@@ -911,6 +911,33 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node,
         v->line = (uint32_t)line;
         return v;
     }
+    /* dump(x) / dump(x, indent) → XI_CALL_BUILTIN aux="dump" → OP_DUMP */
+    if (strcmp(fname, "dump") == 0 &&
+        (call->arg_count == 1 || call->arg_count == 2)) {
+        XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+        int nargs = (int)call->arg_count;
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                   l->type_void, (uint16_t)nargs);
+        if (!v) return xi_const_null(l->func, l->cur_block, l->type_null);
+        v->args[0] = arg;
+        if (nargs == 2)
+            v->args[1] = xi_lower_expr(l, call->arguments[1]);
+        v->aux = (void *)"dump";
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t)line;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    /* copy(x) → XI_CALL_BUILTIN aux="copy" → OP_COPY */
+    if (strcmp(fname, "copy") == 0 && call->arg_count == 1) {
+        XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                   rtype ? rtype : l->type_any, 1);
+        if (!v) return NULL;
+        v->args[0] = arg;
+        v->aux = (void *)"copy";
+        v->line = (uint32_t)line;
+        return v;
+    }
     /* Bytes(n) / Bytes(n, fill) → XI_CALL_BUILTIN with aux_int encoding
      * the opcode OP_BYTES_NEW so the emitter produces the right instruction. */
     if (strcmp(fname, "Bytes") == 0 && call->arg_count >= 1 && call->arg_count <= 2) {

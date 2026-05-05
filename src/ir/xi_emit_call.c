@@ -144,6 +144,25 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* Name-based dispatch (aux is a string identifier) */
     const char *bname = (const char *)v->aux;
+    if (bname && strcmp(bname, "dump") == 0) {
+        if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        uint8_t src = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+        uint8_t indent = 0;
+        if (v->nargs >= 2) {
+            indent = reg_of(ctx, v->args[1]);
+            if (ctx->status != XI_EMIT_OK) return;
+        }
+        emit_inst(ctx, CREATE_ABC(OP_DUMP, src, indent, 0));
+        return;
+    }
+    if (bname && strcmp(bname, "copy") == 0) {
+        if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        uint8_t src = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
+        return;
+    }
     if (bname && strcmp(bname, "Bytes") == 0) {
         uint8_t nargs = (uint8_t)v->nargs;
         if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
