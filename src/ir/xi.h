@@ -78,6 +78,8 @@ typedef enum {
     XI_LE,
     XI_GT,
     XI_GE,
+    XI_EQ_STRICT,   /* === identity/reference equality */
+    XI_NE_STRICT,   /* !== identity/reference inequality */
 
     /* Logical */
     XI_NOT,         /* ! (unary) */

@@ -332,6 +332,8 @@ static XmRef lower_comparison(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_LE: xm_op = is_float ? XM_FLE : XM_LE; break;
         case XI_GT: xm_op = is_float ? XM_FLT : XM_LT; break;
         case XI_GE: xm_op = is_float ? XM_FLE : XM_LE; break;
+        case XI_EQ_STRICT: xm_op = XM_EQ; break;
+        case XI_NE_STRICT: xm_op = XM_NE; break;
         default:
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
@@ -549,6 +551,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
         /* Comparison */
         case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+        case XI_EQ_STRICT: case XI_NE_STRICT:
             return lower_comparison(ctx, blk, v);
 
         /* Type conversion */

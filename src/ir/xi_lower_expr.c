@@ -98,8 +98,8 @@ static uint16_t binary_ast_to_xi_op(AstNodeType ast_type) {
         case AST_BINARY_RSHIFT: return XI_SHR;
         case AST_BINARY_EQ:     return XI_EQ;
         case AST_BINARY_NE:     return XI_NE;
-        case AST_BINARY_EQ_STRICT: return XI_EQ;
-        case AST_BINARY_NE_STRICT: return XI_NE;
+        case AST_BINARY_EQ_STRICT: return XI_EQ_STRICT;
+        case AST_BINARY_NE_STRICT: return XI_NE_STRICT;
         case AST_BINARY_LT:    return XI_LT;
         case AST_BINARY_LE:    return XI_LE;
         case AST_BINARY_GT:    return XI_GT;

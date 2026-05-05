@@ -46,6 +46,8 @@ static const char *xi_op_name(uint16_t op) {
         case XI_LE:          return "LE";
         case XI_GT:          return "GT";
         case XI_GE:          return "GE";
+        case XI_EQ_STRICT:   return "EQ_STRICT";
+        case XI_NE_STRICT:   return "NE_STRICT";
         case XI_NOT:         return "NOT";
         case XI_CONVERT:     return "CONVERT";
         case XI_BOX:         return "BOX";
