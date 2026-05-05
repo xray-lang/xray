@@ -260,6 +260,10 @@ XrShape *xr_shape_transition(XrayIsolate *X, XrShape *from, SymbolId symbol) {
     if (!from)
         return NULL;
 
+    if (from->is_sealed) {
+        return NULL;  /* sealed shapes reject dynamic field additions */
+    }
+
     if (from->field_count >= SHAPE_MAX_TOTAL_FIELDS) {
         return NULL;
     }

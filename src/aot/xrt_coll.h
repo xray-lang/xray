@@ -286,6 +286,41 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
 }
 
 /* =========================================================================
+ * Json object runtime (flat field array, O(1) indexed access)
+ * ========================================================================= */
+
+typedef struct {
+    int64_t field_count;
+    XrValue fields[];       /* flexible array of field values */
+} xrt_json_t;
+
+static inline XrValue xrt_json_new(int64_t field_count) {
+    xrt_json_t *j = (xrt_json_t *) XRT_MALLOC(
+        sizeof(xrt_json_t) + (size_t)field_count * sizeof(XrValue));
+    if (!j) {
+        fprintf(stderr, "xrt_json_new: out of memory\n");
+        abort();
+    }
+    j->field_count = field_count;
+    for (int64_t i = 0; i < field_count; i++)
+        j->fields[i] = (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return xr_mkptr(j, XR_TAG_PTR);
+}
+
+static inline XrValue xrt_json_get_field(XrValue obj, int field_idx) {
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    if (field_idx >= 0 && field_idx < j->field_count)
+        return j->fields[field_idx];
+    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+}
+
+static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    if (field_idx >= 0 && field_idx < j->field_count)
+        j->fields[field_idx] = val;
+}
+
+/* =========================================================================
  * Generic index get / set  (Array[i] and Map[key])
  * ========================================================================= */
 

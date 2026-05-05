@@ -973,10 +973,10 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             break;
         }
 
-        /* Json object creation (AOT placeholder — full impl in Round 4) */
+        /* Json object: flat field array with O(1) indexed access */
         case XI_JSON_NEW: {
-            int64_t cap = v->aux_int > 0 ? v->aux_int : 8;
-            fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+            int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
+            fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
             break;
         }
         case XI_JSON_INIT_F:
