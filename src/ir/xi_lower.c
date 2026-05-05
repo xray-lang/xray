@@ -147,6 +147,17 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id,
         l->func->captures[idx].name = name;
         l->func->captures[idx].type = parent->vars[var_id].type;
         l->func->captures[idx].value = parent_val;
+        /* Cell indirection is needed when the capture cannot see the final
+         * value at closure creation time:
+         *  - Hoisted function variables: initially null, replaced by the
+         *    actual closure later.
+         *  - Variables captured during function hoisting that have no real
+         *    definition yet (braun_read returned a null placeholder): the
+         *    actual initializer runs after the closure is created. */
+        bool forward_ref = (parent_val && parent_val->op == XI_CONST &&
+                            parent_val->type == parent->type_null);
+        l->func->captures[idx].needs_cell =
+            parent->vars[var_id].hoisted || forward_ref;
         l->func->ncaptures++;
         if (out_type) *out_type = parent->vars[var_id].type;
         return idx;
@@ -161,6 +172,11 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id,
         l->func->captures[idx].index = (uint8_t)parent_upval;
         l->func->captures[idx].name = name;
         l->func->captures[idx].type = out_type ? *out_type : l->type_any;
+        /* Inherit needs_cell from the parent capture so CELL_GET is emitted
+         * at every level in the transitive capture chain. */
+        if (parent_upval < (int)parent->func->ncaptures)
+            l->func->captures[idx].needs_cell =
+                parent->func->captures[parent_upval].needs_cell;
         l->func->ncaptures++;
         return idx;
     }
@@ -182,6 +198,10 @@ XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue 
     if (val && var_id >= 0 && var_id < 255) {
         if (val->var_id == 0xFF || val->var_id == (uint8_t)var_id)
             val->var_id = (uint8_t)var_id;
+        /* Definitions of variables captured by hoisted children must survive
+         * DCE: the emitter redirects them through CELL_SET at emit time. */
+        if (var_id < l->var_count && l->vars[var_id].captured_by_child)
+            val->flags |= XI_FLAG_SIDE_EFFECT;
     }
 }
 
@@ -257,6 +277,8 @@ static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk) {
     } else if (blk->npreds == 0) {
         /* Entry block or unreachable — variable used before definition. */
         val = xi_const_null(l->func, blk, l->type_null);
+        if (val && var_id >= 0 && var_id < 255)
+            val->var_id = (uint8_t)var_id;
     } else if (blk->npreds == 1) {
         /* Single predecessor: no phi needed, recurse. */
         val = xi_lower_braun_read(l, var_id, blk->preds[0]);

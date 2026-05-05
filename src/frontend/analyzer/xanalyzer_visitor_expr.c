@@ -1210,9 +1210,20 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         return_type = expected_fn->function.return_type;
     }
 
-    // Infer return type by entering function scope, registering params, and
-    // analyzing body — same as named functions in Pass 3.
-    if (XR_TYPE_IS_UNKNOWN(return_type) && fn->body) {
+    // Enter function scope, register params, and analyze body.
+    // This is required even when return_type is already known (from
+    // expected context) — the body visit resolves variable symbol_ids
+    // and validates scope constraints.  Without it, captured variables
+    // get symbol_id=0 and upvalue resolution fails.
+    bool need_return_infer = XR_TYPE_IS_UNKNOWN(return_type);
+    if (fn->body) {
+        // When visiting purely for symbol resolution (return type already
+        // known), suppress diagnostics: closure bodies execute lazily, so
+        // definite-assignment checks produce false positives for variables
+        // from enclosing scopes that are assigned after the closure literal.
+        int saved_diag_count = ctx->analyzer->diagnostic_count;
+        XaDiagnostic *saved_diag_tail = ctx->analyzer->diagnostics_tail;
+
         // Save outer function's return type collection state
         XrType **saved_return_types = ctx->return_types;
         int saved_return_count = ctx->return_type_count;
@@ -1277,12 +1288,33 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
         ctx->expected_return_type = saved_expected_ret;
 
         // Compute unified return type from all collected return statements
-        XrType *inferred_ret = xa_infer_compute_return_type(ctx);
-        if (inferred_ret && !XR_TYPE_IS_UNKNOWN(inferred_ret)) {
-            return_type = inferred_ret;
+        if (need_return_infer) {
+            XrType *inferred_ret = xa_infer_compute_return_type(ctx);
+            if (inferred_ret && !XR_TYPE_IS_UNKNOWN(inferred_ret)) {
+                return_type = inferred_ret;
+            }
         }
 
         xa_analyzer_exit_scope(ctx->analyzer);
+
+        // Discard diagnostics from symbol-resolution-only body visit
+        if (!need_return_infer && ctx->analyzer->diagnostic_count > saved_diag_count) {
+            XaDiagnostic *first_new = saved_diag_tail ? saved_diag_tail->next : ctx->analyzer->diagnostics;
+            XaDiagnostic *d = first_new;
+            while (d) {
+                XaDiagnostic *next = d->next;
+                if (d->message) xr_free((void *)d->message);
+                xr_free(d);
+                d = next;
+            }
+            if (saved_diag_tail) {
+                saved_diag_tail->next = NULL;
+            } else {
+                ctx->analyzer->diagnostics = NULL;
+            }
+            ctx->analyzer->diagnostics_tail = saved_diag_tail;
+            ctx->analyzer->diagnostic_count = saved_diag_count;
+        }
 
         // Restore flow state to enclosing function's context
         if (ctx->flow) {

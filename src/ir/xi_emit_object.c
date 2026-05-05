@@ -289,6 +289,8 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             if (!ctx->cell_wrapped[cap->value->id]) {
                 emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
                 ctx->cell_wrapped[cap->value->id] = true;
+                if (cap->value->var_id != 0xFF)
+                    ctx->cell_side_reg[cap->value->var_id] = reg;
             }
         }
     }
@@ -302,7 +304,17 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
-    emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
+    if (v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
+        /* The destination register is cell-wrapped (hoisted function).
+         * Emit closure to a temp register, then store into the cell. */
+        uint8_t tmp = ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        emit_inst(ctx, CREATE_ABx(OP_CLOSURE, tmp, proto_idx));
+        emit_inst(ctx, CREATE_ABC(OP_CELL_SET, dst, tmp, 0));
+    } else {
+        emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
+    }
 }
 
 /* Upvalue load */

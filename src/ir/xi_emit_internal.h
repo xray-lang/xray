@@ -93,6 +93,12 @@ typedef struct {
      * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
     XiValue *fused_cmp;
 
+    /* Side cell register map: maps var_id → cell register for hoisted
+     * function captures.  The cell is allocated in a separate register
+     * so the original register remains usable for direct parent calls.
+     * NO_REG (0xFF) means no cell allocated for this variable. */
+    uint8_t cell_side_reg[MAX_REGS];  /* var_id → cell register */
+
     /* Variable-based register coalescing: all SSA definitions of the same
      * source variable share one VM register.  This is required for correct
      * exception semantics — the VM's OP_THROW bypasses SSA phi resolution,
@@ -108,6 +114,7 @@ XR_FUNC int current_pc(EmitCtx *ctx);
 XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst);
 XR_FUNC void free_reg(EmitCtx *ctx, uint8_t reg);
 XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v);
+XR_FUNC uint8_t reg_of_cell_deref(EmitCtx *ctx, const XiValue *v);
 XR_FUNC uint8_t alloc_reg_fresh(EmitCtx *ctx, const XiValue *v);
 XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v);
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);

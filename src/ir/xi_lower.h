@@ -53,6 +53,14 @@ typedef struct XiVarEntry {
     uint32_t symbol_id; /* unique ID from analyzer (0 = unresolved / synthetic) */
     const char *name;   /* variable name (debug only, not owned, points into AST) */
     struct XrType *type;/* declared type */
+    bool hoisted;       /* true if pre-registered by function hoisting; captures
+                         * of this variable need cell indirection because the
+                         * actual closure is assigned after sibling captures. */
+    bool captured_by_child; /* true if a hoisted child function captures this
+                            * variable — definitions must survive DCE because
+                            * hoisting reorders the closure before the actual
+                            * initializer, and the upvalue/cell must see the
+                            * real value rather than the braun-read null. */
 } XiVarEntry;
 
 /*

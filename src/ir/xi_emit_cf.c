@@ -163,8 +163,10 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 if (ctx->status != XI_EMIT_OK) return;
                 /* If the return value was cell-wrapped for closure capture,
                  * dereference the cell to return the actual value. */
-                if (blk->control->id < ctx->reg_map_size &&
-                    ctx->cell_wrapped[blk->control->id]) {
+                if ((blk->control->id < ctx->reg_map_size &&
+                     ctx->cell_wrapped[blk->control->id]) ||
+                    (blk->control->var_id != 0xFF &&
+                     ctx->cell_side_reg[blk->control->var_id] != NO_REG)) {
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, r, r, 0));
                 }
                 emit_inst(ctx, CREATE_ABC(OP_RETURN1, r, 0, 0));
