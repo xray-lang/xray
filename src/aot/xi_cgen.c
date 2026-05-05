@@ -973,11 +973,25 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             break;
         }
 
-        /* Object allocation: creates a map to hold fields */
-        case XI_ALLOC: {
-            int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST)
-                          ? v->args[0]->aux_int : 8;
+        /* Json object creation (AOT placeholder — full impl in Round 4) */
+        case XI_JSON_NEW: {
+            int64_t cap = v->aux_int > 0 ? v->aux_int : 8;
             fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+            break;
+        }
+        case XI_JSON_INIT_F:
+        case XI_JSON_SET_F: {
+            fprintf(out, "xrt_json_set_field(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", %d, ", (int)v->aux_int);
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")");
+            break;
+        }
+        case XI_JSON_GET_F: {
+            fprintf(out, "xrt_json_get_field(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", %d)", (int)v->aux_int);
             break;
         }
 

@@ -385,7 +385,10 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_BOX]         = 1,  [XI_UNBOX]  = 1,
     [XI_LOAD_FIELD]  = 1,  [XI_STORE_FIELD] = 2,
     [XI_INDEX_GET]   = 2,  [XI_INDEX_SET]   = 3,
-    [XI_ALLOC]       = 0xFF,  /* 0 or 1 (capacity arg optional) */
+    [XI_JSON_NEW]    = 0,     /* no args; aux carries field count + names */
+    [XI_JSON_INIT_F] = 2,     /* args[0]=json, args[1]=val */
+    [XI_JSON_GET_F]  = 1,     /* args[0]=json */
+    [XI_JSON_SET_F]  = 2,     /* args[0]=json, args[1]=val */
     [XI_ARRAY_NEW]   = 0xFF,
     [XI_MAP_NEW]     = 0xFF,
     [XI_CALL]        = 0xFF,  /* callee + params: variadic */
@@ -532,6 +535,8 @@ static bool op_must_have_side_effect(uint16_t op) {
     switch (op) {
         case XI_STORE_FIELD:
         case XI_INDEX_SET:
+        case XI_JSON_INIT_F:
+        case XI_JSON_SET_F:
         case XI_STORE_UPVAL:
         case XI_SET_SHARED:
         case XI_PRINT:

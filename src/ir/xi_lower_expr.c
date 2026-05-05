@@ -1332,26 +1332,29 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         val_vals[i] = xi_lower_expr(l, sl->field_values[i]);
     }
 
+    /* Arena-copy field names so they survive AST destruction */
+    const char **names_copy = (const char **)xi_func_arena_alloc(
+        l->func, (uint32_t)(sizeof(const char *) * n));
+    if (!names_copy) return NULL;
+    for (int i = 0; i < n; i++) {
+        names_copy[i] = sl->field_names[i];
+    }
+
     struct XrType *result_type = xi_lower_node_type(l, node);
-    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
-    XiValue *obj = xi_value_new(l->func, l->cur_block, XI_ALLOC, result_type, 1);
+    XiValue *obj = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
     if (!obj) return NULL;
-    obj->args[0] = cap;
-    obj->aux = (void *) sl->struct_name;
+    obj->aux_int = n;
+    obj->aux = (void *)names_copy;
     obj->line = (uint32_t) node->line;
 
     for (int i = 0; i < n; i++) {
-        /* Use INDEX_SET with string key for map-backed struct literals.
-         * STORE_FIELD/SETPROP only works on class instances. */
-        XiValue *key = xi_const_str(l->func, l->cur_block,
-                                     sl->field_names[i], l->type_string);
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
-                                     l->type_void, 3);
-        if (!set) break;
-        set->args[0] = obj;
-        set->args[1] = key;
-        set->args[2] = val_vals[i];
-        set->flags |= XI_FLAG_SIDE_EFFECT;
+        XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F,
+                                      l->type_void, 2);
+        if (!init) break;
+        init->args[0] = obj;
+        init->args[1] = val_vals[i];
+        init->aux_int = i;
+        init->flags |= XI_FLAG_SIDE_EFFECT;
     }
     return obj;
 }
@@ -1639,33 +1642,35 @@ static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
         val_vals[i] = xi_lower_expr(l, obj->values[i]);
     }
 
-    /* Allocate object */
+    /* Collect string key names for Shape construction (arena-allocated) */
+    const char **key_names = (const char **)xi_func_arena_alloc(
+        l->func, (uint32_t)(sizeof(const char *) * n));
+    if (!key_names) return NULL;
+    for (int i = 0; i < n; i++) {
+        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
+            key_names[i] = obj->keys[i]->as.literal.raw_value.string_val;
+        } else {
+            key_names[i] = "?";
+        }
+    }
+
+    /* Create Json object with known shape */
     struct XrType *result_type = xi_lower_node_type(l, node);
-    XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
-    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_ALLOC, result_type, 1);
+    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
     if (!obj_val) return NULL;
-    obj_val->args[0] = cap;
+    obj_val->aux_int = n;
+    obj_val->aux = (void *)key_names;
     obj_val->line = (uint32_t) node->line;
 
-    /* INDEX_SET for each property — NEWMAP-backed objects require index
-     * access, not dot-syntax SETPROP (which the VM rejects on maps). */
+    /* Init each field by index */
     for (int i = 0; i < n; i++) {
-        XiValue *key = NULL;
-        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
-            key = xi_const_str(l->func, l->cur_block,
-                               obj->keys[i]->as.literal.raw_value.string_val,
-                               l->type_string);
-        } else if (obj->keys[i]) {
-            key = xi_lower_expr(l, obj->keys[i]);
-        }
-        if (!key) continue;
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET,
-                                     l->type_void, 3);
-        if (!set) break;
-        set->args[0] = obj_val;
-        set->args[1] = key;
-        set->args[2] = val_vals[i];
-        set->flags |= XI_FLAG_SIDE_EFFECT;
+        XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F,
+                                      l->type_void, 2);
+        if (!init) break;
+        init->args[0] = obj_val;
+        init->args[1] = val_vals[i];
+        init->aux_int = i;
+        init->flags |= XI_FLAG_SIDE_EFFECT;
     }
     return obj_val;
 }

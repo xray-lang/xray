@@ -12,6 +12,7 @@
 #include "xi_emit_internal.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/object/xshape.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xmethod.h"
@@ -108,13 +109,69 @@ XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
 
-/* Object allocation (as NEWMAP with capacity) */
-XR_FUNC void xi_emit_alloc(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    uint8_t cap = 0;
-    if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
-        cap = (uint8_t)v->args[0]->aux_int;
+/* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
+XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    int field_count = (int)v->aux_int;
+    const char **field_names = (const char **)v->aux;
+
+    if (!ctx->isolate || field_count <= 0 || !field_names) {
+        /* Fallback: zero-field Json (bare OP_NEWMAP) */
+        emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
+        return;
     }
-    emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, 0));
+
+    /* Build Shape via symbol table + xr_shape_build_fixed */
+    XrSymbolTable *st = (XrSymbolTable *)xr_isolate_get_symbol_table(ctx->isolate);
+    XR_DCHECK(st != NULL, "isolate must have a symbol table");
+
+    SymbolId symbols[32];
+    int n = field_count > 32 ? 32 : field_count;
+    for (int i = 0; i < n; i++) {
+        symbols[i] = xr_symbol_register_in_table(st, field_names[i]);
+    }
+
+    XrShape *shape = xr_shape_build_fixed(ctx->isolate, symbols, (uint16_t)n);
+    if (!shape) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    /* Store Shape pointer as integer constant in pool */
+    int kidx = add_const_int(ctx, (int64_t)(intptr_t)shape);
+    if (ctx->status != XI_EMIT_OK) return;
+
+    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, (uint8_t)kidx, 0));
+}
+
+/* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */
+XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void)dst;  /* dst unused; this is a store op */
+    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t json_reg = reg_of(ctx, v->args[0]);
+    uint8_t val_reg = reg_of(ctx, v->args[1]);
+    int field_idx = (int)v->aux_int;
+    if (ctx->status != XI_EMIT_OK) return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_INIT, json_reg, (uint8_t)field_idx, val_reg));
+}
+
+/* Json field read by index: OP_JSON_GET A B C (A=dst, B=json, C=field_idx) */
+XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t json_reg = reg_of(ctx, v->args[0]);
+    int field_idx = (int)v->aux_int;
+    if (ctx->status != XI_EMIT_OK) return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_GET, dst, json_reg, (uint8_t)field_idx));
+}
+
+/* Json field write by index: OP_JSON_SET A B C (A=json, B=field_idx, C=val) */
+XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void)dst;  /* dst unused; this is a store op */
+    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t json_reg = reg_of(ctx, v->args[0]);
+    uint8_t val_reg = reg_of(ctx, v->args[1]);
+    int field_idx = (int)v->aux_int;
+    if (ctx->status != XI_EMIT_OK) return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, (uint8_t)field_idx, val_reg));
 }
 
 /* Range creation */

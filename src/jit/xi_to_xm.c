@@ -743,8 +743,11 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_DEFER:
             return xm_const_i64(ctx->xm_func, 0);
 
-        /* Allocation */
-        case XI_ALLOC:
+        /* Json allocation (treated as generic call for now) */
+        case XI_JSON_NEW:
+        case XI_JSON_INIT_F:
+        case XI_JSON_GET_F:
+        case XI_JSON_SET_F:
             return lower_call(ctx, blk, v);
 
         /* Set creation */
