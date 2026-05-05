@@ -295,11 +295,17 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
             }
         }
 
-        /* Rewrite phi operands */
+        /* Rewrite phi operands — but preserve variable-boundary copies.
+         * A COPY with a var_id different from its source separates two
+         * coalescing domains (e.g. from `x = i`).  Resolving it would
+         * merge the domains and corrupt phi moves at loop back-edges. */
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
-                XiValue *resolved = resolve_copy(phi->value.args[a]);
-                if (resolved && resolved != phi->value.args[a]) {
+                XiValue *arg = phi->value.args[a];
+                if (!arg || arg->op != XI_COPY || arg->nargs < 1) continue;
+                XiValue *resolved = resolve_copy(arg);
+                if (resolved && resolved != arg &&
+                    (arg->var_id == 0xFF || arg->var_id == resolved->var_id)) {
                     phi->value.args[a] = resolved;
                     chg.values_changed = true;
                 }
