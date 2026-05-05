@@ -637,8 +637,60 @@ static int json_field_index(struct XrType *type, const char *name) {
     return -1;
 }
 
+/* Map Type.<member> names to XrTypeId constants at compile time.
+ * Returns -1 if the name is not a known Type member. */
+static int type_member_to_tid(const char *name) {
+    if (!name) return -1;
+    struct { const char *n; int tid; } table[] = {
+        {"null",      0},  /* XR_TID_NULL */
+        {"bool",      1},  /* XR_TID_BOOL */
+        {"int8",      2},  /* XR_TID_INT8 */
+        {"uint8",     3},  /* XR_TID_UINT8 */
+        {"int16",     4},  /* XR_TID_INT16 */
+        {"uint16",    5},  /* XR_TID_UINT16 */
+        {"int32",     6},  /* XR_TID_INT32 */
+        {"uint32",    7},  /* XR_TID_UINT32 */
+        {"int",       8},  /* XR_TID_INT */
+        {"uint64",    9},  /* XR_TID_UINT64 */
+        {"float32",  10},  /* XR_TID_FLOAT32 */
+        {"float",    11},  /* XR_TID_FLOAT */
+        {"string",   12},  /* XR_TID_STRING */
+        {"function", 13},  /* XR_TID_FUNCTION */
+        {"Array",    14},  /* XR_TID_ARRAY */
+        {"Set",      15},  /* XR_TID_SET */
+        {"Map",      16},  /* XR_TID_MAP */
+        {"object",   17},  /* XR_TID_INSTANCE */
+        {"Json",     18},  /* XR_TID_JSON */
+        {"BigInt",   19},  /* XR_TID_BIGINT */
+        {"Channel",  21},  /* XR_TID_CHANNEL */
+        {"Regex",    22},  /* XR_TID_REGEX */
+        {"DateTime", 23},  /* XR_TID_DATETIME */
+        {"Bytes",    33},  /* XR_TID_BYTES */
+        {"TypedArray",34}, /* XR_TID_TYPED_ARRAY */
+    };
+    for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+        if (strcmp(name, table[i].n) == 0)
+            return table[i].tid;
+    }
+    return -1;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
+
+    /* Type.<member> → compile-time XrTypeId constant (int) */
+    if (ma->object && ma->object->type == AST_VARIABLE &&
+        ma->object->as.variable.name &&
+        strcmp(ma->object->as.variable.name, "Type") == 0 && ma->name) {
+        int tid = type_member_to_tid(ma->name);
+        if (tid >= 0) {
+            XiValue *v = xi_const_int(l->func, l->cur_block, (int64_t)tid,
+                                       l->type_int);
+            if (v) v->line = (uint32_t)node->line;
+            return v;
+        }
+    }
+
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj) return NULL;
 
