@@ -556,12 +556,35 @@ static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
     return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
+static int json_field_index(struct XrType *type, const char *name) {
+    if (!type || type->kind != XR_KIND_JSON || !type->object.is_sealed)
+        return -1;
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names && type->object.field_names[i] &&
+            strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj) return NULL;
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+
+    /* Sealed Json with known field → direct indexed access */
+    int fidx = json_field_index(obj->type, ma->name);
+    if (fidx >= 0) {
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, result_type, 1);
+        if (!v) return NULL;
+        v->args[0] = obj;
+        v->aux_int = fidx;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v) return NULL;
     v->args[0] = obj;
@@ -577,6 +600,20 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     if (!obj || !val) return NULL;
 
     struct XrType *result_type = val->type;
+
+    /* Sealed Json with known field → direct indexed store */
+    int fidx = json_field_index(obj->type, ms->member);
+    if (fidx >= 0) {
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, result_type, 2);
+        if (!v) return NULL;
+        v->args[0] = obj;
+        v->args[1] = val;
+        v->aux_int = fidx;
+        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = (uint32_t) node->line;
+        return v;
+    }
+
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, result_type, 2);
     if (!v) return NULL;
     v->args[0] = obj;
