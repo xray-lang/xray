@@ -93,8 +93,11 @@ typedef enum {
     XI_INDEX_GET,   /* obj[key]: args[0]=obj, args[1]=key */
     XI_INDEX_SET,   /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
 
-    /* Allocation */
-    XI_ALLOC,       /* GC allocation: aux=type info */
+    /* Json / Allocation */
+    XI_JSON_NEW,    /* Create Json object: aux=field_count, aux_ptr=field_names[] */
+    XI_JSON_INIT_F, /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_JSON_GET_F,  /* Read field by index: args[0]=json, aux_int=field_idx */
+    XI_JSON_SET_F,  /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
     XI_ARRAY_NEW,   /* new array: args[0]=capacity */
     XI_MAP_NEW,     /* new map: args[0]=capacity */
 

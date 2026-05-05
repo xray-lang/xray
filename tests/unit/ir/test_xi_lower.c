@@ -543,10 +543,10 @@ TEST(object_literal) {
     assert(f != NULL);
     int found_alloc = 0;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_ALLOC)
+        if (f->entry->values[i]->op == XI_JSON_NEW)
             found_alloc = 1;
     }
-    assert(found_alloc && "should have ALLOC for object literal");
+    assert(found_alloc && "should have JSON_NEW for object literal");
     xi_func_free(f);
 }
 
@@ -746,10 +746,10 @@ TEST(struct_literal) {
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_ALLOC) found_alloc = 1;
+            if (blk->values[i]->op == XI_JSON_NEW) found_alloc = 1;
         }
     }
-    assert(found_alloc && "should have ALLOC for struct literal");
+    assert(found_alloc && "should have JSON_NEW for struct literal");
     xi_func_free(f);
 }
 
