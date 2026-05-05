@@ -1006,6 +1006,18 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     } else {
         init_val = xi_const_null(l->func, l->cur_block, l->type_null);
     }
+    /* When the initializer comes from a different variable, insert an
+     * explicit copy so the new variable gets its own SSA value.  Without
+     * this, both variables map to the same physical register and
+     * loop-carried updates to the source corrupt the snapshot. */
+    if (init_val->var_id != 0xFF && init_val->var_id != (uint8_t)var_id) {
+        XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY,
+                                      init_val->type, 1);
+        if (copy) {
+            copy->args[0] = init_val;
+            init_val = copy;
+        }
+    }
     xi_lower_braun_write(l, var_id, l->cur_block, init_val);
 
     /* For program-level shared variables, also store into shared array */
