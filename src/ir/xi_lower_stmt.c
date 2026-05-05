@@ -476,7 +476,104 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
 }
 
+/* ========== For-In: Custom Iterator Protocol ========== */
+
+/* Lower `for (item in obj)` where obj has an iterator() method returning
+ * an object with hasNext(): bool and next(): T.
+ *
+ * Desugars to:
+ *   let __iter = obj.iterator()
+ *   while (__iter.hasNext()) {
+ *       let item = __iter.next()
+ *       <body>
+ *   }
+ */
+static void lower_for_in_custom_iterator(XiLower *l, AstNode *node,
+                                          XiValue *coll) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+    uint32_t line = (uint32_t)node->line;
+
+    /* Call iterator() on the collection */
+    XiValue *iter = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                 l->type_any, 1);
+    if (!iter) return;
+    iter->args[0] = coll;
+    iter->aux = (void *)"iterator";
+    iter->flags |= XI_FLAG_SIDE_EFFECT;
+    iter->line = line;
+
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__ci_iter_%d", sid);
+    char *iter_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(iter_name != NULL, "arena alloc failed");
+    memcpy(iter_name, buf, strlen(buf) + 1);
+    int iter_var = xi_lower_var_create(l, 0, iter_name, l->type_any);
+    xi_lower_braun_write(l, iter_var, l->cur_block, iter);
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    /* Condition: __iter.hasNext() */
+    l->cur_block = cond_blk;
+    XiValue *iter_cond = xi_lower_braun_read(l, iter_var, l->cur_block);
+    XiValue *has_next = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                     l->type_bool, 1);
+    if (!has_next) return;
+    has_next->args[0] = iter_cond;
+    has_next->aux = (void *)"hasNext";
+    has_next->flags |= XI_FLAG_SIDE_EFFECT;
+    has_next->line = line;
+    xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
+
+    xi_lower_braun_seal(l, body_blk);
+
+    XiBlock *prev_break = l->break_target;
+    XiBlock *prev_cont = l->continue_target;
+    l->break_target = exit_blk;
+    l->continue_target = cond_blk;
+
+    /* Body: let item = __iter.next(); <body> */
+    l->cur_block = body_blk;
+    XiValue *iter_body = xi_lower_braun_read(l, iter_var, l->cur_block);
+    XiValue *next_val = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                      l->type_any, 1);
+    if (!next_val) return;
+    next_val->args[0] = iter_body;
+    next_val->aux = (void *)"next";
+    next_val->flags |= XI_FLAG_SIDE_EFFECT;
+    next_val->line = line;
+
+    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+    int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
+    xi_lower_braun_write(l, item_var, l->cur_block, next_val);
+
+    xi_lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    xi_lower_braun_seal(l, cond_blk);
+
+    l->break_target = prev_break;
+    l->continue_target = prev_cont;
+
+    xi_lower_braun_seal(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 /* ========== For-In Dispatcher ========== */
+
+/* Check if collection type uses builtin length+index iteration (array,
+ * string, map, set, bytes) or needs the custom iterator protocol. */
+static bool is_builtin_iterable_collection(XiLower *l, AstNode *coll_node) {
+    struct XrType *t = xi_lower_node_type(l, coll_node);
+    if (!t || t->kind == XR_KIND_UNKNOWN)
+        return true;  /* unknown: assume builtin for backward compat */
+    return xr_kind_is_builtin_iterable(t->kind);
+}
 
 XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
     ForInStmtNode *s = &node->as.for_in_stmt;
@@ -498,6 +595,12 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
 
     XiValue *coll = xi_lower_expr(l, s->collection);
     if (!coll || !l->cur_block) return;
+
+    /* Class instances with iterator() use the custom protocol */
+    if (!is_builtin_iterable_collection(l, s->collection)) {
+        lower_for_in_custom_iterator(l, node, coll);
+        return;
+    }
 
     XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
                                 l->type_int, 1);
