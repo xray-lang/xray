@@ -1,0 +1,76 @@
+// 0101_int_boundary.xr
+// Regression: sBx encoding boundary for OP_LOADI
+// Validates that integers near the sBx bias boundary
+// are correctly encoded and decoded without sign flips.
+
+@test
+fn test_sbx_boundary_positive(): void {
+    // MAXARG_sBx = 32767, should use LOADI
+    assert_eq(32767, 32767)
+    let x = 32767
+    assert_eq(x, 32767)
+    assert_eq(x + 1, 32768)
+}
+
+@test
+fn test_sbx_boundary_negative(): void {
+    // -MAXARG_sBx = -32767, should use LOADI
+    assert_eq(-32767, -32767)
+    let x = -32767
+    assert_eq(x, -32767)
+    assert_eq(x - 1, -32768)
+}
+
+@test
+fn test_beyond_sbx_positive(): void {
+    // 32768 exceeds LOADI range, must use LOADK constant pool
+    let x = 32768
+    assert_eq(x, 32768)
+    assert_eq(x > 0, true)
+    assert_eq(x - 1, 32767)
+}
+
+@test
+fn test_beyond_sbx_negative(): void {
+    // -32768 exceeds LOADI range, must use LOADK constant pool
+    let x = -32768
+    assert_eq(x, -32768)
+    assert_eq(x < 0, true)
+    assert_eq(x + 1, -32767)
+    // Critical: -32768 must NOT be decoded as +32768 (sign flip bug)
+    assert_eq(x != 32768, true)
+    assert_eq(x + 32768, 0)
+}
+
+@test
+fn test_sbx_zero_crossing(): void {
+    // Verify small negative values are correct
+    assert_eq(-1, -1)
+    assert_eq(-128, -128)
+    assert_eq(-256, -256)
+    assert_eq(-1000, -1000)
+}
+
+@test
+fn test_large_constants(): void {
+    // Values well beyond sBx range, always use LOADK
+    let a = 65535
+    assert_eq(a, 65535)
+    let b = -65535
+    assert_eq(b, -65535)
+    let c = 100000
+    assert_eq(c, 100000)
+    let d = -100000
+    assert_eq(d, -100000)
+}
+
+@test
+fn test_sbx_in_json(): void {
+    // The original bug manifested when -32768 appeared in JSON context
+    let obj = {"min": -32768, "max": 32767, "beyond": 32768}
+    assert_eq(obj["min"], -32768)
+    assert_eq(obj["max"], 32767)
+    assert_eq(obj["beyond"], 32768)
+    assert_eq(obj["min"] + obj["max"], -1)
+    assert_eq(obj["min"] + obj["beyond"], 0)
+}

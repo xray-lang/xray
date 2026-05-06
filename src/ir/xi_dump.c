@@ -75,8 +75,10 @@ static const char *xi_op_name(uint16_t op) {
         case XI_PRINT:       return "PRINT";
         case XI_GO:          return "GO";
         case XI_AWAIT:       return "AWAIT";
-        case XI_CHAN_SEND:   return "CHAN_SEND";
-        case XI_CHAN_RECV:   return "CHAN_RECV";
+        case XI_CHAN_SEND:       return "CHAN_SEND";
+        case XI_CHAN_RECV:       return "CHAN_RECV";
+        case XI_CHAN_TRY_SEND:   return "CHAN_TRY_SEND";
+        case XI_CHAN_TRY_RECV:   return "CHAN_TRY_RECV";
         case XI_YIELD:       return "YIELD";
         case XI_THROW:       return "THROW";
         case XI_ITER_NEW:    return "ITER_NEW";

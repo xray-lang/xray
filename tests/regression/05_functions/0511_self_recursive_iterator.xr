@@ -1,0 +1,83 @@
+// 0511_self_recursive_iterator.xr
+// Regression: self-recursive function + for-in iteration.
+// Bug: tail call detection compared XiValue pointers (which differ
+// across PHI nodes) instead of stable var_id, breaking self-call
+// detection in loops that use iterators.
+
+@test
+fn test_recursive_sum_with_forin(): void {
+    fn sum_list(arr: Array<int>, idx: int): int {
+        if (idx >= arr.length) {
+            return 0
+        }
+        return arr[idx] + sum_list(arr, idx + 1)
+    }
+    let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    assert_eq(sum_list(arr, 0), 55)
+}
+
+@test
+fn test_recursive_flatten(): void {
+    fn flatten(arr: Array<Array<int>>): Array<int> {
+        let result: Array<int> = []
+        for (sub in arr) {
+            for (v in sub) {
+                result.push(v)
+            }
+        }
+        return result
+    }
+    let nested = [[1, 2], [3, 4], [5, 6]]
+    let flat = flatten(nested)
+    assert_eq(flat.length, 6)
+    assert_eq(flat[0], 1)
+    assert_eq(flat[5], 6)
+}
+
+@test
+fn test_recursive_fibonacci(): void {
+    fn fib(n: int): int {
+        if (n <= 1) { return n }
+        return fib(n - 1) + fib(n - 2)
+    }
+    assert_eq(fib(0), 0)
+    assert_eq(fib(1), 1)
+    assert_eq(fib(10), 55)
+    assert_eq(fib(15), 610)
+}
+
+@test
+fn test_recursive_with_array_iteration(): void {
+    fn count_nested(arr: Array<int>, depth: int): int {
+        if (depth <= 0) {
+            return arr.length
+        }
+        let total = 0
+        for (v in arr) {
+            total = total + count_nested(arr, depth - 1)
+        }
+        return total
+    }
+    let data = [1, 2, 3]
+    assert_eq(count_nested(data, 0), 3)
+    assert_eq(count_nested(data, 1), 9)
+}
+
+@test
+fn test_mutual_recursion_with_loop(): void {
+    fn is_even(n: int): bool {
+        if (n == 0) { return true }
+        return is_odd(n - 1)
+    }
+    fn is_odd(n: int): bool {
+        if (n == 0) { return false }
+        return is_even(n - 1)
+    }
+    let even_count = 0
+    for (i in 0..10) {
+        if (is_even(i)) {
+            even_count = even_count + 1
+        }
+    }
+    assert_eq(even_count, 5)
+}

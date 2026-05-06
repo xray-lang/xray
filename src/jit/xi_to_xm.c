@@ -898,6 +898,8 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_AWAIT:
         case XI_CHAN_SEND:
         case XI_CHAN_RECV:
+        case XI_CHAN_TRY_SEND:
+        case XI_CHAN_TRY_RECV:
         case XI_YIELD:
         case XI_CHAN_NEW:
             return lower_call(ctx, blk, v);

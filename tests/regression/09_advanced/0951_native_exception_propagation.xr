@@ -1,0 +1,68 @@
+// 0951_native_exception_propagation.xr
+// Regression: C primitive methods must propagate exceptions to try/catch
+
+@test
+fn test_json_stringify_catches_function(): void {
+    let f = fn(): void {}
+    let obj = { handler: f }
+    let caught = false
+    try {
+        Json.stringify(obj)
+    } catch (e) {
+        caught = true
+    }
+    assert_eq(caught, true)
+}
+
+@test
+fn test_json_stringify_catches_nested(): void {
+    let inner = fn(): void {}
+    let obj = { callback: inner }
+    let caught = false
+    let msg = ""
+    try {
+        Json.stringify(obj)
+    } catch (e) {
+        caught = true
+        msg = string(e)
+    }
+    assert_eq(caught, true)
+    assert_eq(msg.length > 0, true)
+}
+
+@test
+fn test_json_stringify_normal_succeeds(): void {
+    let result = Json.stringify({a: 1, b: "hello"})
+    assert_eq(result.length > 0, true)
+}
+
+@test
+fn test_exception_after_catch_continues(): void {
+    let f = fn(): void {}
+    let obj = { handler: f }
+    let step1 = false
+    let step2 = false
+    try {
+        Json.stringify(obj)
+    } catch (e) {
+        step1 = true
+    }
+    step2 = true
+    assert_eq(step1, true)
+    assert_eq(step2, true)
+}
+
+@test
+fn test_multiple_catch_blocks(): void {
+    let f = fn(): void {}
+    let count = 0
+    for (i in 0..3) {
+        let obj = { handler: f }
+        try {
+            Json.stringify(obj)
+        } catch (e) {
+            count = count + 1
+        }
+    }
+    assert_eq(count, 3)
+}

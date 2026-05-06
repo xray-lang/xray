@@ -43,7 +43,6 @@ XR_FUNC uint32_t xi_compute_rpo(XiFunc *f) {
         f->blocks[b]->rpo = 0;
     }
 
-    /* Stack-based approach for small functions, heap for large */
     XiBlock **post_order = (XiBlock **)xr_calloc(f->nblocks,
                                                    sizeof(XiBlock *));
     if (!post_order) return 0;
@@ -59,6 +58,43 @@ XR_FUNC uint32_t xi_compute_rpo(XiFunc *f) {
 
     uint32_t reachable = post_idx;
     xr_free(post_order);
+
+    /* Exception handler blocks (catch / finally targets from XI_TRY)
+     * are unreachable via normal successor edges.  BFS-assign RPO
+     * numbers AFTER normal blocks so they appear later in RPO order
+     * than their containing try blocks.  This ensures the dominator
+     * algorithm processes predecessors before exception handlers. */
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_TRY) continue;
+
+            /* v->aux = catch block, v->aux_int = finally block id */
+            XiBlock *seed = (XiBlock *)v->aux;
+            if (!seed && v->aux_int >= 0 && (uint32_t)v->aux_int < f->nblocks)
+                seed = f->blocks[(uint32_t)v->aux_int];
+            if (!seed) continue;
+
+            /* BFS from seed, assigning RPO numbers to unvisited blocks */
+            XiBlock *queue[64];
+            int qhead = 0, qtail = 0;
+            if (seed->rpo == 0) {
+                seed->rpo = ++reachable;
+                queue[qtail++] = seed;
+            }
+            while (qhead < qtail && qtail < 64) {
+                XiBlock *cur = queue[qhead++];
+                for (int s = 0; s < 2; s++) {
+                    XiBlock *succ = cur->succs[s];
+                    if (succ && succ->rpo == 0) {
+                        succ->rpo = ++reachable;
+                        queue[qtail++] = succ;
+                    }
+                }
+            }
+        }
+    }
 
     /* Clear visited flags */
     for (uint32_t b = 0; b < f->nblocks; b++)
