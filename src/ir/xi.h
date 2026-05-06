@@ -50,6 +50,43 @@ struct XaAnalyzer;
 
 /* ========== Operation Kinds ========== */
 
+/*
+ * aux / aux_int semantic contract per op (authoritative reference):
+ *
+ *  Op               aux                  aux_int
+ *  ──────────────── ──────────────────── ────────────────────────────
+ *  XI_CONST         string: char*        int/bool/null literal value
+ *                   (other: unused)
+ *  XI_PARAM         —                    parameter index
+ *  XI_LOAD_FIELD    —                    field index
+ *  XI_STORE_FIELD   —                    field index
+ *  XI_JSON_NEW      char** field_names   field count
+ *  XI_JSON_INIT_F   —                    field index
+ *  XI_JSON_GET_F    —                    field index
+ *  XI_JSON_SET_F    —                    field index
+ *  XI_JSON_DECODE   char** field_names   field count
+ *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
+ *  XI_CALL_METHOD   method name (char*)  0=normal, 1=super  (NOT SymbolId)
+ *  XI_CALL_BUILTIN  —                    builtin_id
+ *  XI_EXTRACT       —                    result index (1-based)
+ *  XI_LOAD_UPVAL    —                    upvalue index
+ *  XI_STORE_UPVAL   —                    upvalue index
+ *  XI_GET_SHARED    —                    shared slot index (relative)
+ *  XI_SET_SHARED    —                    shared slot index (relative)
+ *  XI_PRINT         —                    print flags
+ *  XI_CLOSURE_NEW   XiFunc* (child)      —
+ *  XI_CLASS_CREATE  XiClassData*         —
+ *  XI_SCOPE_ENTER   —                    scope mode
+ *  XI_SCOPE_EXIT    —                    scope mode
+ *  XI_ASSERT        loc string (char*)   0=assert_true, 1=assert_false
+ *  XI_GET_BUILTIN   name string (char*)  global index
+ *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
+ *
+ *  Consumers: xi_emit.c (VM bytecode), xi_to_xm.c (JIT), xi_cgen.c (AOT).
+ *  WARNING: XI_CALL_METHOD.aux_int is NOT the method SymbolId.
+ *  JIT resolves SymbolId from proto bytecode; AOT resolves from method name.
+ */
+
 typedef enum {
     /* Constants */
     XI_CONST = 0,   /* constant value (int/float/bool/null/string in aux) */

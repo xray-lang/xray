@@ -280,6 +280,9 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     int deopt_id = (int) ((encoded >> 16) & 0xFFFF);
     int type_hint = (int) ((encoded >> 8) & 0xFF);
     int nargs = (int) (encoded & 0xFF);
+    XR_DCHECK(method_symbol > 0,
+              "xr_jit_invoke_method: method_symbol=0 — "
+              "xi_to_xm failed to resolve method name from bytecode");
 
     // Reconstruct receiver and args from call_args[] payloads and
     // call_arg_tags[] type bytes. The codegen stores per-byte tags in
