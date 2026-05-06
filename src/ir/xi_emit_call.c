@@ -167,6 +167,13 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
         return;
     }
+    if (bname && strcmp(bname, "chr") == 0) {
+        if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+        uint8_t src = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_CHR, dst, src, 0));
+        return;
+    }
     if (bname && strcmp(bname, "StringBuilder") == 0) {
         /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
         emit_inst(ctx, CREATE_ABC(OP_NEWSTRINGBUILDER, dst, 0, 0));
