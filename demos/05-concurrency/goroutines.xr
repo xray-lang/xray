@@ -1,5 +1,5 @@
 // Demo: Goroutines (Coroutines)
-// go, await, await.all, await.any, Task API
+// go, await, await all, await any, Task API
 //
 // Run: xray demos/05-concurrency/goroutines.xr
 
@@ -23,11 +23,11 @@ let t1 = go compute("alpha", 50)
 let t2 = go compute("beta", 75)
 let t3 = go compute("gamma", 100)
 
-// await.all waits for all tasks
-let results = await.all [t1, t2, t3]
+// await all waits for all tasks
+let results = await all [t1, t2, t3]
 print("all results: ${results}")
 
-// === await.any (first to finish wins) ===
+// === await any (first to finish wins) ===
 fn slowTask(name: string, delay: int): string {
     time.sleep(delay)
     return "${name} done after ${delay}ms"
@@ -35,7 +35,7 @@ fn slowTask(name: string, delay: int): string {
 
 let fast = go slowTask("fast", 10)
 let slow = go slowTask("slow", 200)
-let first = await.any [fast, slow]
+let first = await any [fast, slow]
 print("first finished: ${first}")
 
 // === Task properties ===

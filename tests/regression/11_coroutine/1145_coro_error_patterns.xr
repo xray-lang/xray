@@ -1,6 +1,6 @@
 // Test coroutine error handling patterns
-// Covers: task.error, task.result, try-catch behavior, await.all errors,
-//         await.any, Coro.monitor error notification
+// Covers: task.error, task.result, try-catch behavior, await all errors,
+//         await any, Coro.monitor error notification
 
 import time
 
@@ -72,7 +72,7 @@ fn test_manual_error_check(): void {
     }
 }
 
-// ========== Pattern 5: await.all with errors ==========
+// ========== Pattern 5: await all with errors ==========
 fn test_await_all_with_errors(): void {
     let tasks = [
         go { return "ok-1" },
@@ -80,7 +80,7 @@ fn test_await_all_with_errors(): void {
         go { return "ok-3" }
     ]
 
-    let results = await.all(tasks)
+    let results = await all(tasks)
     for (let i = 0; i < tasks.length; i++) {
         let t = tasks[i]
         if (t.error != null) {
@@ -91,13 +91,13 @@ fn test_await_all_with_errors(): void {
     }
 }
 
-// ========== Pattern 6: await.any - first success wins ==========
+// ========== Pattern 6: await any - first success wins ==========
 fn test_await_any(): void {
     let tasks = [
         go { time.sleep(100); return "slow" },
         go { return "fast" }
     ]
-    let r = await.any(tasks)
+    let r = await any(tasks)
     print("First result:", r)
 }
 

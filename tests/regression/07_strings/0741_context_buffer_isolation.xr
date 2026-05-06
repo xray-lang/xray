@@ -33,7 +33,7 @@ fn test_concurrent_concat_isolation(): void {
         tasks.push(go concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果都是独立且正确的
     for (let i = 0; i < n; i++) {
@@ -62,7 +62,7 @@ fn test_long_string_isolation(): void {
         tasks.push(go long_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果
     for (let i = 0; i < n; i++) {
@@ -99,7 +99,7 @@ fn test_interleaved_concat_isolation(): void {
         tasks.push(go interleaved_task(i))
     }
     
-    let all_results = await.all tasks
+    let all_results = await all tasks
     
     // 验证每个协程的每次迭代结果
     for (let i = 0; i < n; i++) {
@@ -136,7 +136,7 @@ fn test_buffer_content_no_leak(): void {
         tasks.push(go marker_task(marker))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果只包含自己的标记
     for (let i = 0; i < n; i++) {
@@ -207,7 +207,7 @@ fn test_high_concurrency_isolation(): void {
         tasks.push(go stress_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果
     for (let i = 0; i < n; i++) {
@@ -251,7 +251,7 @@ fn test_mixed_length_isolation(): void {
         tasks.push(go mixed_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果
     for (let i = 0; i < n; i++) {
@@ -289,7 +289,7 @@ fn test_property_random_isolation(): void {
         tasks.push(go random_concat(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果
     for (let i = 0; i < n; i++) {

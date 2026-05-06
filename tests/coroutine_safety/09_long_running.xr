@@ -30,7 +30,7 @@ fn test_cpu_intensive_fairness() {
     let heavy2 = go cpu_heavy(2)
     let light2 = go light_task(102)
     // 等待所有任务完成
-    await.all [heavy1, heavy2, light1, light2]
+    await all [heavy1, heavy2, light1, light2]
     // 验证所有任务都完成了
     let completed = []
     for (let i = 0; i < 4; i++) {
@@ -92,7 +92,7 @@ fn test_multiple_long_running() {
     let t3 = go work(3, 2000)
     let t4 = go work(4, 3000)
     let t5 = go work(5, 1000)
-    await.all [t1, t2, t3, t4, t5]
+    await all [t1, t2, t3, t4, t5]
     // 收集完成顺序
     let order = []
     for (let i = 0; i < 5; i++) {
@@ -118,7 +118,7 @@ fn test_yield_behavior() {
     }
     let t1 = go cooperative_task(1)
     let t2 = go cooperative_task(2)
-    await.all [t1, t2]
+    await all [t1, t2]
     // 验证两个任务的步骤交替执行
     let entries = []
     for (let i = 0; i < 10; i++) {

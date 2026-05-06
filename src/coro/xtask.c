@@ -390,7 +390,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             break;
         }
         case -3: {
-            // await.any: wake on first completion
+            // await any: wake on first completion
             bool expected = false;
             if (atomic_compare_exchange_strong(&waiter->any_done, &expected, true)) {
                 waiter->result = task->result;
@@ -402,7 +402,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             break;
         }
         case -4: {
-            // await.anySuccess: wake only on first success
+            // await anySuccess: wake only on first success
             bool is_success = !XR_IS_STRING(task->error);
             if (is_success) {
                 bool expected = false;
@@ -423,7 +423,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             break;
         }
         default:
-            // await.all (idx >= 0): store result at index, wake when all done
+            // await all (idx >= 0): store result at index, wake when all done
             if (waiter->await_results && idx < waiter->await_results->length) {
                 xr_array_set_direct(waiter->await_results, idx, task->result);
             }

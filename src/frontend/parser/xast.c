@@ -1887,7 +1887,7 @@ AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, AstNode
 }
 
 // Create await expression node
-// await task, await(timeout: N) task, await.all/await.any/await.anySuccess [tasks]
+// await task, await(timeout: N) task, await all/await any/await anySuccess [tasks]
 AstNode *xr_ast_await_expr(XrayIsolate *X, AstNode *expr, AstNode *timeout, bool is_any,
                            bool is_all, bool is_any_success, int line) {
     AstNode *node = alloc_node(X, AST_AWAIT_EXPR, line);

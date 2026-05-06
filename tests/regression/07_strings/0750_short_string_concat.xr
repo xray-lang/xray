@@ -271,7 +271,7 @@ fn test_concurrent_short_concat(): void {
         tasks.push(go short_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     for (let i = 0; i < n; i++) {
         assert_eq(results[i], "task" + string(i) + "_done")
@@ -293,7 +293,7 @@ fn test_concurrent_long_concat(): void {
         tasks.push(go long_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     for (let i = 0; i < n; i++) {
         let result = results[i]
@@ -321,7 +321,7 @@ fn test_concurrent_mixed_concat(): void {
         tasks.push(go mixed_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     for (let i = 0; i < n; i++) {
         if (i % 2 == 0) {

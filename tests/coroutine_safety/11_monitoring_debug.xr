@@ -139,7 +139,7 @@ fn test_coro_priority() {
     let low = go(name: "low-priority") task(1, 0)
     let normal = go(name: "normal-priority") task(2, 1)
     let high = go(name: "high-priority") task(3, 2)
-    await.all [low, normal, high]
+    await all [low, normal, high]
     // 收集完成顺序
     let order = []
     for (let i = 0; i < 3; i++) {
@@ -193,7 +193,7 @@ fn test_execution_trace() {
     let t1 = go traced_task(1)
     let t2 = go traced_task(2)
     let t3 = go traced_task(3)
-    await.all [t1, t2, t3]
+    await all [t1, t2, t3]
     // 收集追踪事件
     let events = []
     for (let i = 0; i < 6; i++) {

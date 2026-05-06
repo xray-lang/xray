@@ -985,7 +985,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
     XrValue arr_val = base[b];
     if (!xr_value_is_array(arr_val)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await.all: expected array");
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await all: expected array");
     }
 
     XrArray *tasks = xr_value_to_array(arr_val);
@@ -1028,7 +1028,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
     XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
     if (!rt) {
-        VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "await.all: runtime not initialized");
+        VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all: runtime not initialized");
     }
 
     if (caller) {
@@ -1067,7 +1067,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
     int total_spins = 0, spin_count = 0;
     for (;;) {
         if (++total_spins > AWAIT_TIMEOUT_SPINS) {
-            fprintf(stderr, "[xray] warn: await.all: timeout\n");
+            fprintf(stderr, "[xray] warn: await all: timeout\n");
             break;
         }
         if (!atomic_load(&rt->running))
@@ -1103,7 +1103,7 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
     XrValue arr_val = base[b];
     if (!xr_value_is_array(arr_val)) {
         VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                      mode == 0 ? "await.any: expected array" : "await.anySuccess: expected array");
+                      mode == 0 ? "await any: expected array" : "await anySuccess: expected array");
     }
 
     XrArray *tasks = xr_value_to_array(arr_val);

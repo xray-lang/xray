@@ -141,9 +141,9 @@ AstNode *xr_parse_go_expr_with_link(Parser *parser, uint8_t link_mode) {
  * Parse await expression
  * await task
  * await(timeout: N) task
- * await.all [tasks]
- * await.any [tasks]
- * await.anySuccess [tasks]
+ * await all [tasks]
+ * await any [tasks]
+ * await anySuccess [tasks]
  */
 AstNode *xr_parse_await_expr(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_await_expr: NULL parser");
@@ -186,31 +186,21 @@ AstNode *xr_parse_await_expr(Parser *parser) {
         }
     }
 
-    // Check if await.all / await.any / await.anySuccess
+    // Check if await all / await any / await anySuccess (context keywords)
     bool is_any = false;
     bool is_all = false;
     bool is_any_success = false;
-    if (xr_parser_check(parser, TK_DOT)) {
-        xr_parser_advance(parser);  // Consume '.'
-
-        if (xr_parser_check(parser, TK_NAME)) {
-            Token name = parser->current;
-            if (name.length == 3 && memcmp(name.start, "any", 3) == 0) {
-                is_any = true;
-                xr_parser_advance(parser);  // Consume 'any' keyword (await.any)
-            } else if (name.length == 3 && memcmp(name.start, "all", 3) == 0) {
-                is_all = true;
-                xr_parser_advance(parser);  // Consume 'all'
-            } else if (name.length == 10 && memcmp(name.start, "anySuccess", 10) == 0) {
-                is_any_success = true;
-                xr_parser_advance(parser);  // Consume 'anySuccess'
-            } else {
-                xr_parser_error(parser, "expected 'all', 'any' or 'anySuccess' after await.");
-                return NULL;
-            }
-        } else {
-            xr_parser_error(parser, "expected 'all', 'any' or 'anySuccess' after await.");
-            return NULL;
+    if (xr_parser_check(parser, TK_NAME)) {
+        Token name = parser->current;
+        if (name.length == 3 && memcmp(name.start, "all", 3) == 0) {
+            is_all = true;
+            xr_parser_advance(parser);  // Consume 'all'
+        } else if (name.length == 3 && memcmp(name.start, "any", 3) == 0) {
+            is_any = true;
+            xr_parser_advance(parser);  // Consume 'any'
+        } else if (name.length == 10 && memcmp(name.start, "anySuccess", 10) == 0) {
+            is_any_success = true;
+            xr_parser_advance(parser);  // Consume 'anySuccess'
         }
     }
     // Parse awaited expression

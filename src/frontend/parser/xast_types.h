@@ -190,7 +190,7 @@ typedef enum {
 
     // Coroutine nodes
     AST_GO_EXPR,         // go fn() or go { block }
-    AST_AWAIT_EXPR,      // await / await.all / await.any (flags distinguish)
+    AST_AWAIT_EXPR,      // await / await all / await any (flags distinguish)
     AST_CHANNEL_NEW,     // Channel() or Channel(10)
     AST_CHAN_SEND,       // ch.send(value)
     AST_CHAN_RECV,       // ch.recv()

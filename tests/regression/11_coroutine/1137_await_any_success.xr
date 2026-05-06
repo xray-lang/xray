@@ -1,5 +1,5 @@
 /*
-** 测试 await.anySuccess - 等待任一协程成功完成
+** 测试 await anySuccess - 等待任一协程成功完成
 ** 作者：xingleixu@gmail.com
 */
 
@@ -15,21 +15,21 @@ fn success_b(): int {
 // 测试1：单个成功协程
 print("test1: single success")
 let t1 = go success_a()
-let r1 = await.anySuccess [t1]
+let r1 = await anySuccess [t1]
 print("  result:", r1)
 
 // 测试2：多个成功协程，返回第一个
 print("test2: multiple success, returns first")
 let t2 = go success_a()
 let t3 = go success_b()
-let r2 = await.anySuccess [t2, t3]
+let r2 = await anySuccess [t2, t3]
 print("  result:", r2)
 
-// 测试3：对比 await.any
-print("test3: await.any comparison")
+// 测试3：对比 await any
+print("test3: await any comparison")
 let t4 = go success_a()
 let t5 = go success_b()
-let r3 = await.any [t4, t5]
+let r3 = await any [t4, t5]
 print("  result:", r3)
 
 print("done")

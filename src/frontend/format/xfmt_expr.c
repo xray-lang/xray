@@ -559,9 +559,9 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             AwaitExprNode *aw = &node->as.await_expr;
             xfmt_write_str(ctx, "await");
             if (aw->is_any)
-                xfmt_write_str(ctx, ".any");
+                xfmt_write_str(ctx, " any");
             if (aw->is_all)
-                xfmt_write_str(ctx, ".all");
+                xfmt_write_str(ctx, " all");
             if (aw->timeout) {
                 xfmt_write_str(ctx, "(timeout: ");
                 xfmt_emit_expression(ctx, aw->timeout);

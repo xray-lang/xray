@@ -33,7 +33,7 @@ fn test_concurrent_short_concat(): void {
         tasks.push(go short_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {
@@ -70,7 +70,7 @@ fn test_concurrent_long_concat(): void {
         tasks.push(go long_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {
@@ -115,7 +115,7 @@ fn test_concurrent_mixed_concat(): void {
         tasks.push(go mixed_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {
@@ -163,7 +163,7 @@ fn test_concurrent_loop_concat(): void {
         tasks.push(go loop_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {
@@ -207,7 +207,7 @@ fn test_concurrent_threshold_boundary(): void {
         tasks.push(go boundary_concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {
@@ -262,7 +262,7 @@ fn test_concurrent_data_isolation(): void {
         tasks.push(go isolation_task(i, unique_char))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {
@@ -309,7 +309,7 @@ fn test_stress_concurrent_concat(): void {
         tasks.push(go stress_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     let correct = 0
     for (let i = 0; i < n; i++) {

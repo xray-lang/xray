@@ -41,7 +41,7 @@ fn test_property_concurrent_intern_safety(): void {
         tasks.push(go intern_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程的结果都正确
     for (let i = 0; i < n; i++) {
@@ -68,7 +68,7 @@ fn test_property_concurrent_global_pool_readonly(): void {
         tasks.push(go global_access_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程都能正确访问全局池
     for (let i = 0; i < n; i++) {
@@ -100,7 +100,7 @@ fn test_property_concurrent_local_pool_isolation(): void {
         tasks.push(go local_pool_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程的本地池独立且正确
     for (let i = 0; i < n; i++) {
@@ -134,7 +134,7 @@ fn test_property_concurrent_long_string_no_intern(): void {
         tasks.push(go long_string_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程的长字符串都正确
     for (let i = 0; i < n; i++) {
@@ -170,7 +170,7 @@ fn test_property_concurrent_mixed_operations(): void {
         tasks.push(go mixed_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程的混合操作都正确
     for (let i = 0; i < n; i++) {
@@ -205,7 +205,7 @@ fn test_property_concurrent_string_compare(): void {
         tasks.push(go compare_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程的比较结果都正确
     for (let i = 0; i < n; i++) {
@@ -235,7 +235,7 @@ fn test_property_concurrent_intern_consistency(): void {
         tasks.push(go consistency_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程的驻留一致性
     for (let i = 0; i < n; i++) {
@@ -268,7 +268,7 @@ fn test_property_concurrent_stress_200(): void {
         tasks.push(go stress_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证所有协程都正确完成
     for (let i = 0; i < n; i++) {
