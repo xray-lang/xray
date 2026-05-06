@@ -181,6 +181,7 @@ typedef struct EnumDeclNode {
     char *type_hint;
     AstNode **members;
     int member_count;
+    uint32_t symbol_id;  /* Analyzer-assigned unique ID */
 } EnumDeclNode;
 
 typedef struct EnumAccessNode {

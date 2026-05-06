@@ -501,6 +501,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 sym->location.line = node->line;
                 sym->is_const = true;
                 xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                edecl->symbol_id = sym->id;
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;

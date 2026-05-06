@@ -1340,13 +1340,13 @@ static const StdlibEntry stdlib_crypto[] = {
 };
 #endif
 
-#if XR_HAS_COMPRESS
+#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
 static const StdlibEntry stdlib_compress[] = {
     {"compress", xr_load_module_compress},
 };
 #endif
 
-#if XR_HAS_CLUSTER
+#if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
 static const StdlibEntry stdlib_cluster[] = {
     {"cluster", xr_load_module_cluster},
 };
@@ -1387,10 +1387,10 @@ void xr_module_register_stdlib(XrayIsolate *isolate) {
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
     REGISTER_TABLE(stdlib_crypto);
 #endif
-#if XR_HAS_COMPRESS
+#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
     REGISTER_TABLE(stdlib_compress);
 #endif
-#if XR_HAS_CLUSTER
+#if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
     REGISTER_TABLE(stdlib_cluster);
 #endif
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)

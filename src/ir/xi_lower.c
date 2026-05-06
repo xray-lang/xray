@@ -550,6 +550,10 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
                 sid = s->as.var_decl.symbol_id;
                 type = xi_lower_node_type(l, s);
                 break;
+            case AST_ENUM_DECL:
+                name = s->as.enum_decl.name;
+                sid = s->as.enum_decl.symbol_id;
+                break;
             case AST_IMPORT_STMT:
                 if (s->as.import_stmt.member_count == 0) {
                     name = s->as.import_stmt.alias
