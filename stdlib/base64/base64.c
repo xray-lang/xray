@@ -14,7 +14,7 @@
 
 #include "base64.h"
 #include "../common.h"
-#include "../../src/vm/xvm_internal.h"
+#include "../../src/coro/xcoroutine.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -50,6 +50,12 @@ static const unsigned char BASE64_DECODE_TABLE[256] = {
 // Internal encoding function
 static char *base64_encode_internal(const unsigned char *data, size_t len, const char *chars,
                                     bool padding, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+    // Guard against size_t overflow in ((len+2)/3)*4
+    if (len > (SIZE_MAX / 4) * 3)
+        return NULL;
+
     // Calculate output length
     size_t encoded_len = ((len + 2) / 3) * 4;
     if (!padding) {
@@ -120,6 +126,8 @@ static int count_padding(const char *data, size_t len) {
 
 // Internal decoding function
 static unsigned char *base64_decode_internal(const char *data, size_t len, size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
     // Validate and strip trailing padding
     int pad = count_padding(data, len);
     if (pad < 0)
@@ -215,24 +223,24 @@ static bool base64_is_valid_internal(const char *data, size_t len) {
 
 /* ========== C-level API implementation ========== */
 
-char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len) {
+XR_FUNC char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len) {
     return base64_encode_internal(data, len, BASE64_CHARS, true, out_len);
 }
 
-char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len) {
+XR_FUNC char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len) {
     return base64_encode_internal(data, len, BASE64_URL_CHARS, false, out_len);
 }
 
-unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len) {
+XR_FUNC unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len) {
     return base64_decode_internal(data, len, out_len);
 }
 
-unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len) {
+XR_FUNC unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len) {
     // Decode table already handles both standard (+/) and URL-safe (-_) characters
     return base64_decode_internal(data, len, out_len);
 }
 
-bool xr_base64_is_valid(const char *data, size_t len) {
+XR_FUNC bool xr_base64_is_valid(const char *data, size_t len) {
     return base64_is_valid_internal(data, len);
 }
 
@@ -364,6 +372,11 @@ static XrValue base64_decodeToBytes(XrayIsolate *X, XrValue *args, int argc) {
     if (!decoded)
         return xr_null();
 
+    if (out_len > INT32_MAX) {
+        xr_free(decoded);
+        return xr_null();
+    }
+
     XrArray *arr = xr_array_bytes_new(xr_current_coro(X), (int32_t) out_len);
     if (!arr) {
         xr_free(decoded);
@@ -410,7 +423,7 @@ XR_DEFINE_BUILTIN(base64_decodeToBytes, "decodeToBytes", "(data: string): Array<
                   "Decode Base64 to byte array")
 XR_DEFINE_BUILTIN(base64_isValid, "isValid", "(data: string): bool", "Check if valid base64")
 
-XrModule *xr_load_module_base64(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_base64(XrayIsolate *isolate) {
     // Create native module
     XrModule *mod = xr_module_create_native(isolate, "base64");
     if (!mod)

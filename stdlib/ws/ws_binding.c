@@ -363,6 +363,8 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
 
     // Copy URL
     char *url_copy = (char *) xr_malloc(url_len + 1);
+    if (!url_copy)
+        return xr_null();
     memcpy(url_copy, url, url_len);
     url_copy[url_len] = '\0';
 
@@ -1861,7 +1863,7 @@ XR_DEFINE_BUILTIN(ws_recvdata, "recvData", "(conn: WsConn, timeout?: int): strin
 XR_DEFINE_BUILTIN(ws_echo_serve_yieldable, "echoServe", "(port: int): bool",
                   "Pure C echo server with zero VM/GC overhead per message")
 
-XrModule *xr_load_module_ws(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_ws(XrayIsolate *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "ws");
     if (!mod)

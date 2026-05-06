@@ -22,8 +22,7 @@
 #define XR_STDLIB_DATETIME_H
 
 #include "../../src/base/xdefs.h"
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/runtime/value/xvalue.h"
 #include <time.h>
 
 /* ========== DateTime Structure ========== */
@@ -102,6 +101,8 @@ static inline XrValue xr_datetime_value(XrDateTime *dt) {
 
 /* ========== Module Loading ========== */
 
-XrModule *xr_load_module_datetime(XrayIsolate *isolate);
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_datetime(XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_DATETIME_H

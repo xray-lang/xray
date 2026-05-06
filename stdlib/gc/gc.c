@@ -17,6 +17,7 @@
 
 #include "gc.h"
 #include "../common.h"
+#include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/gc/xcoro_gc.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/xexec_frame.h"
@@ -132,7 +133,7 @@ static XrValue gc_isrunning(XrayIsolate *isolate, XrValue *args, int argc) {
 
 // Upper bound for pause/stepmul: values above this break generational
 // heuristics by stretching cycle periods to the point of starving the
-// allocator. Chosen to match the documented sane range in docs/rules/gc.
+// allocator.
 #define GC_PARAM_MAX 10000
 
 // Set GC pause multiplier, returns old value
@@ -246,10 +247,7 @@ static XrValue gc_fragmentation(XrayIsolate *isolate, XrValue *args, int argc) {
 
 /* ========== gc.info() ========== */
 
-// NOTE: Map keys in gc.info() use camelCase for every field. Earlier
-// iterations of this module mixed snake_case (`totalbytes`, `gccount`) with
-// camelCase (`totalKB`, `gctimeMs`) which caused churn in callers; the
-// unified convention is documented in stdlib_basic_tools.md §2.10.
+// Map keys in gc.info() use camelCase for every field.
 #define MAP_SET(map, key_str, val) xr_map_set((map), xrs_string_value_c(isolate, (key_str)), (val))
 
 // Return comprehensive GC info as a Map
@@ -331,7 +329,7 @@ XR_DEFINE_BUILTIN(gc_setpause, "setpause", "(pause: int): int",
 XR_DEFINE_BUILTIN(gc_setstepmul, "setstepmul", "(mul: int): int",
                   "Set GC step multiplier, return old value")
 
-XrModule *xr_load_module_gc(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_gc(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_gc: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "gc");

@@ -380,36 +380,39 @@ struct XrMatchIter {
  * ======================================================================== */
 
 // Parser
-XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser);
-void xr_regex_ast_free(XrAstNode *node);
-void xr_regex_ast_dump(XrAstNode *node, int indent);
+XR_FUNC XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser);
+XR_FUNC void xr_regex_ast_dump(XrAstNode *node, int indent);
 
 // Compiler
-XrProg *xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags);
-void xr_prog_free(XrProg *prog);
-void xr_prog_dump(XrProg *prog);
+XR_FUNC XrProg *xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags);
+XR_FUNC void xr_prog_free(XrProg *prog);
+XR_FUNC void xr_prog_dump(XrProg *prog);
 
 // ByteMap
-void xr_prog_compute_bytemap(XrProg *prog);
+XR_FUNC void xr_prog_compute_bytemap(XrProg *prog);
 
 // Zero-width assertion check (shared by NFA and DFA)
-bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p, const char *end);
+XR_FUNC bool xr_re_check_empty_width(uint32_t flags, const char *text, const char *p,
+                                     const char *end);
 
 // Execution engine
-bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures, int ncaptures);
-bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures, int ncaptures);
-bool xr_dfa_match(XrDFA *dfa, const char *text, int len, const char **match_end, bool anchored);
+XR_FUNC bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **captures,
+                          int ncaptures);
+XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char **captures,
+                           int ncaptures);
+XR_FUNC bool xr_dfa_match(XrDFA *dfa, const char *text, int len, const char **match_end,
+                          bool anchored);
 
 // DFA
-XrDFA *xr_dfa_new(XrProg *prog);
-void xr_dfa_free(XrDFA *dfa);
-void xr_dfa_reset(XrDFA *dfa);
-int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
-                  const char **match_end);
-int xr_dfa_test(XrDFA *dfa, const char *text, int len);
+XR_FUNC XrDFA *xr_dfa_new(XrProg *prog);
+XR_FUNC void xr_dfa_free(XrDFA *dfa);
+XR_FUNC void xr_dfa_reset(XrDFA *dfa);
+XR_FUNC int xr_dfa_search(XrDFA *dfa, const char *text, int len, const char **match_start,
+                          const char **match_end);
+XR_FUNC int xr_dfa_test(XrDFA *dfa, const char *text, int len);
 
 // Optimization
-void xr_prog_optimize(XrProg *prog);
-bool xr_prog_is_onepass(XrProg *prog);
+XR_FUNC void xr_prog_optimize(XrProg *prog);
+XR_FUNC bool xr_prog_is_onepass(XrProg *prog);
 
 #endif  // XREGEX_INTERNAL_H

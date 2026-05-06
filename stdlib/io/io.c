@@ -1002,7 +1002,7 @@ XR_DEFINE_BUILTIN(io_tempDir, "tempDir", "(): string?", "Create temporary direct
 XR_DEFINE_BUILTIN(io_readDirRecursive, "readDirRecursive", "(path: string): Array<string>",
                   "List directory entries recursively")
 
-XrModule *xr_load_module_io(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_io(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_io: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "io");

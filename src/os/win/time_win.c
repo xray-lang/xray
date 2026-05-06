@@ -65,6 +65,20 @@ uint64_t xr_time_realtime_ns(void) {
     return (u.QuadPart - XR_FILETIME_TO_UNIX_100NS) * 100ULL;
 }
 
+uint64_t xr_time_process_cpu_ns(void) {
+    FILETIME creation, exit, kernel, user;
+    if (GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user)) {
+        ULARGE_INTEGER uk, uu;
+        uk.LowPart = kernel.dwLowDateTime;
+        uk.HighPart = kernel.dwHighDateTime;
+        uu.LowPart = user.dwLowDateTime;
+        uu.HighPart = user.dwHighDateTime;
+        /* FILETIME ticks are 100ns each. */
+        return (uk.QuadPart + uu.QuadPart) * 100ULL;
+    }
+    return 0;
+}
+
 void xr_time_sleep_ns(uint64_t ns) {
     // Sleep() resolution is 1ms. Round up: the contract is
     // "at least ns nanoseconds", so over-sleeping is allowed but

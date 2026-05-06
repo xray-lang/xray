@@ -20,8 +20,7 @@
  * DESIGN NOTE — this module is the CANONICAL compression entry point.
  * ====================================================================
  *
- * As of the P15 audit item, three separate compression layers exist
- * in the codebase for historical reasons:
+ * Three separate compression layers exist for historical reasons:
  *
  *   1. stdlib/compress/         — this module. Full-featured gzip +
  *                                 deflate + zlib + CRC32 + Adler32,
@@ -32,50 +31,20 @@
  *
  *   2. stdlib/http/http_compress — HTTP-specific gzip/deflate with
  *                                  Content-Encoding auto-detect and
- *                                  a compressor object pool for
- *                                  allocation-heavy HTTP pipelines.
- *                                  Duplicates the core zlib calls
- *                                  this module already wraps.
+ *                                  a compressor object pool.
  *
  *   3. stdlib/ws/ws_deflate     — RFC 7692 permessage-deflate with
- *                                  Z_SYNC_FLUSH + 0x00 0x00 0xff
- *                                  0xff trailer strip/append. The
- *                                  trailer handling is specific
- *                                  enough that wrapping it as a
- *                                  one-liner over this module
- *                                  requires adding a "sync flush"
- *                                  variant here first.
+ *                                  Z_SYNC_FLUSH trailer handling.
  *
- * Migration plan (tracked as a separate cleanup item — NOT done in
- * the current phase to avoid destabilising three production paths
- * at once):
- *
- *   Step A: Expose a stateful stream API in this module
- *           (xr_compress_stream_{new,feed,finish,free}) that takes
- *           an explicit flush flag (Z_FULL_FLUSH / Z_SYNC_FLUSH /
- *           Z_FINISH). ws_deflate's current fork-and-call pattern
- *           can then become a 10-line wrapper over that.
- *
- *   Step B: Move http_compress.c's pooled gzip path into this
- *           module (xr_gzip_compress_pooled) and reduce
- *           http_compress to a thin "detect + route" layer.
- *
- *   Step C: Once both wrappers are ≤ 50 LoC each, fold them into
- *           this module as `compress_http.c` and `compress_ws.c`
- *           under the same compilation unit boundary. The xray
- *           module surface (`compress.gzip`, `compress.gunzip`, …)
- *           stays unchanged.
- *
- * Until the migration lands, new features should go HERE — the other
- * two layers are maintenance-only.
+ * Consolidation: expose a stateful stream API here, then reduce
+ * http_compress and ws_deflate to thin wrappers. New features
+ * should go HERE — the other two layers are maintenance-only.
  */
 
 #ifndef XR_STDLIB_COMPRESS_H
 #define XR_STDLIB_COMPRESS_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/runtime/object/xstring.h"
+#include "../../src/base/xdefs.h"
 
 /* ========== Compression Levels ========== */
 
@@ -99,74 +68,74 @@ typedef enum {
 /* ========== Deflate Compression/Decompression ========== */
 
 // Raw deflate compression (no header)
-XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                           size_t *out_len, int level);
+XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len, int level);
 
 // Raw deflate decompression
-XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                           size_t *out_len);
+XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output,
+                                   size_t out_cap, size_t *out_len);
 
 // Estimate maximum compressed size
-size_t xr_deflate_bound(size_t in_len);
+XR_FUNC size_t xr_deflate_bound(size_t in_len);
 
 /* ========== Gzip Compression/Decompression ========== */
 
 // Gzip compression
-XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                        size_t *out_len, int level);
+XR_FUNC XrCompressError xr_gzip(const uint8_t *input, size_t in_len, uint8_t *output,
+                                size_t out_cap, size_t *out_len, int level);
 
 // Gzip decompression
-XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
-                          size_t *out_len);
+XR_FUNC XrCompressError xr_gunzip(const uint8_t *input, size_t in_len, uint8_t *output,
+                                  size_t out_cap, size_t *out_len);
 
 // Check if data is valid gzip format
-bool xr_is_gzip(const uint8_t *data, size_t len);
+XR_FUNC bool xr_is_gzip(const uint8_t *data, size_t len);
 
 // Get original size from gzip trailer (only lower 32 bits for large files)
-uint32_t xr_gzip_original_size(const uint8_t *data, size_t len);
+XR_FUNC uint32_t xr_gzip_original_size(const uint8_t *data, size_t len);
 
 /* ========== Zlib Format Compression/Decompression ========== */
 
 // Zlib compression (with header and checksum)
-XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, uint8_t *output,
-                                 size_t out_cap, size_t *out_len, int level);
+XR_FUNC XrCompressError xr_zlib_compress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                         size_t out_cap, size_t *out_len, int level);
 
 // Zlib decompression
-XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
-                                   size_t out_cap, size_t *out_len);
+XR_FUNC XrCompressError xr_zlib_decompress(const uint8_t *input, size_t in_len, uint8_t *output,
+                                           size_t out_cap, size_t *out_len);
 
 // Check if data is valid zlib format
-bool xr_is_zlib(const uint8_t *data, size_t len);
+XR_FUNC bool xr_is_zlib(const uint8_t *data, size_t len);
 
 /* ========== CRC32 Checksum ========== */
 
 // Compute CRC32 checksum (used by gzip)
-uint32_t xr_crc32(const uint8_t *data, size_t len);
+XR_FUNC uint32_t xr_crc32(const uint8_t *data, size_t len);
 
 // Incremental CRC32 computation
-uint32_t xr_crc32_update(uint32_t crc, const uint8_t *data, size_t len);
+XR_FUNC uint32_t xr_crc32_update(uint32_t crc, const uint8_t *data, size_t len);
 
 /* ========== Adler32 Checksum ========== */
 
 // Compute Adler32 checksum (used by zlib)
-uint32_t xr_adler32(const uint8_t *data, size_t len);
+XR_FUNC uint32_t xr_adler32(const uint8_t *data, size_t len);
 
 // Incremental Adler32 computation
-uint32_t xr_adler32_update(uint32_t adler, const uint8_t *data, size_t len);
+XR_FUNC uint32_t xr_adler32_update(uint32_t adler, const uint8_t *data, size_t len);
 
 /* ========== Heap-Allocated Versions ========== */
 
 // Gzip compression with automatic memory allocation
 // Returns compressed data (caller must free), NULL on failure
-uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level);
+XR_FUNC uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level);
 
 // Gunzip decompression with automatic memory allocation
 // Returns decompressed data (caller must free), NULL on failure
-uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
+XR_FUNC uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
 
 /* ========== Error Message ========== */
 
-const char *xr_compress_error_str(XrCompressError err);
+XR_FUNC const char *xr_compress_error_str(XrCompressError err);
 
 /* ========== Zlib-Backed Stream API (compress_zlib.c) ========== */
 
@@ -231,6 +200,9 @@ XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding);
 
 /* ========== Module Loading ========== */
 
-XR_FUNC XrModule *xr_load_module_compress(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
+
+XR_FUNC struct XrModule *xr_load_module_compress(struct XrayIsolate *isolate);
 
 #endif  // XR_STDLIB_COMPRESS_H

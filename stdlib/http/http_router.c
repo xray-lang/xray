@@ -26,6 +26,10 @@ static XrRouterNode *node_new(const char *path, size_t path_len) {
 
     if (path && path_len > 0) {
         node->path = (char *) xr_malloc(path_len + 1);
+        if (!node->path) {
+            xr_free(node);
+            return NULL;
+        }
         memcpy(node->path, path, path_len);
         node->path[path_len] = '\0';
         node->path_len = path_len;
@@ -112,6 +116,8 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
             node->param_child = node_new(NULL, 0);
             node->param_child->is_param = true;
             node->param_child->param_name = (char *) xr_malloc(param_end);
+            if (!node->param_child->param_name)
+                return false;
             memcpy(node->param_child->param_name, path + 1, param_end - 1);
             node->param_child->param_name[param_end - 1] = '\0';
             node->param_child->param_name_len = param_end - 1;
@@ -140,6 +146,8 @@ static bool insert_route(XrRouterNode *node, const char *path, size_t path_len,
 
             if (path_len > 1) {
                 node->wildcard_child->param_name = (char *) xr_malloc(path_len);
+                if (!node->wildcard_child->param_name)
+                    return false;
                 memcpy(node->wildcard_child->param_name, path + 1, path_len - 1);
                 node->wildcard_child->param_name[path_len - 1] = '\0';
                 node->wildcard_child->param_name_len = path_len - 1;

@@ -18,6 +18,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
+#include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -761,7 +762,7 @@ XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in secon
 // Process execution
 XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): Map<string, any>?", "Execute shell command")
 
-XrModule *xr_load_module_os(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_os(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");
 
     // 1. Create native module

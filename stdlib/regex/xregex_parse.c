@@ -156,17 +156,6 @@ static XrAstNode *ast_capture(XrArena *arena, XrAstNode *child, int index, const
 }
 
 /* ========================================================================
- * AST Free
- * ======================================================================== */
-
-void xr_regex_ast_free(XrAstNode *node) {
-    // AST nodes are managed by Arena, this function is a no-op.
-    // Interface kept for compatibility with old code calls.
-    // Arena is freed at once via xr_arena_destroy() after compilation.
-    (void) node;
-}
-
-/* ========================================================================
  * Parser Helper Functions
  * ======================================================================== */
 
@@ -493,7 +482,6 @@ static XrAstNode *parse_char_class(XrParser *p) {
     while (!at_end(p) && peek(p) != ']') {
         int c1 = parse_cc_char(p);
         if (c1 < 0) {
-            xr_regex_ast_free(cc);
             return NULL;
         }
 
@@ -502,12 +490,10 @@ static XrAstNode *parse_char_class(XrParser *p) {
             advance(p);  // skip '-'
             int c2 = parse_cc_char(p);
             if (c2 < 0) {
-                xr_regex_ast_free(cc);
                 return NULL;
             }
             if (c1 > c2) {
                 parser_error(p, XR_RE_ERR_INVALID_RANGE, "invalid char range [z-a]");
-                xr_regex_ast_free(cc);
                 return NULL;
             }
             ast_cc_add_range(arena, cc, (uint8_t) c1, (uint8_t) c2);
@@ -518,7 +504,6 @@ static XrAstNode *parse_char_class(XrParser *p) {
 
     if (!match(p, ']')) {
         parser_error(p, XR_RE_ERR_UNMATCHED_BRACKET, "unclosed character class");
-        xr_regex_ast_free(cc);
         return NULL;
     }
 
@@ -676,7 +661,6 @@ static XrAstNode *parse_group(XrParser *p) {
 
     if (!match(p, ')')) {
         parser_error(p, XR_RE_ERR_UNMATCHED_PAREN, "unclosed group");
-        xr_regex_ast_free(expr);
         xr_re_free(name);
         p->flags = saved_flags;
         return NULL;
@@ -792,7 +776,6 @@ static XrAstNode *parse_quantified(XrParser *p) {
         case '{':
             advance(p);
             if (!parse_repeat_range(p, &min, &max)) {
-                xr_regex_ast_free(atom);
                 return NULL;
             }
             has_quantifier = true;
@@ -825,7 +808,6 @@ static XrAstNode *parse_concat(XrParser *p) {
         XrAstNode *item = parse_quantified(p);
         if (!item) {
             if (p->error != XR_RE_OK) {
-                xr_regex_ast_free(concat);
                 return NULL;
             }
             break;  // No more atoms
@@ -835,14 +817,12 @@ static XrAstNode *parse_concat(XrParser *p) {
 
     // Simplify: if only one child, return child itself
     if (concat->list.count == 0) {
-        xr_regex_ast_free(concat);
         return ast_new(arena, XR_AST_EMPTY);
     }
     if (concat->list.count == 1) {
         XrAstNode *child = concat->list.children[0];
         concat->list.children[0] = NULL;
         concat->list.count = 0;
-        xr_regex_ast_free(concat);
         return child;
     }
 
@@ -869,7 +849,6 @@ static XrAstNode *parse_expr(XrParser *p) {
                 // Empty alternation branch
                 right = ast_new(arena, XR_AST_EMPTY);
             } else {
-                xr_regex_ast_free(alt);
                 return NULL;
             }
         }
@@ -881,7 +860,6 @@ static XrAstNode *parse_expr(XrParser *p) {
         XrAstNode *child = alt->list.children[0];
         alt->list.children[0] = NULL;
         alt->list.count = 0;
-        xr_regex_ast_free(alt);
         return child;
     }
 
@@ -892,7 +870,7 @@ static XrAstNode *parse_expr(XrParser *p) {
  * Public Interface
  * ======================================================================== */
 
-XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser) {
+XR_FUNC XrAstNode *xr_regex_parse(const char *pattern, XrRegexFlags flags, XrParser *parser) {
     memset(parser, 0, sizeof(XrParser));
     parser->pattern = pattern;
     parser->p = pattern;
@@ -931,7 +909,7 @@ static void print_indent(int indent) {
         printf("  ");
 }
 
-void xr_regex_ast_dump(XrAstNode *node, int indent) {
+XR_FUNC void xr_regex_ast_dump(XrAstNode *node, int indent) {
     if (!node) {
         print_indent(indent);
         printf("(null)\n");

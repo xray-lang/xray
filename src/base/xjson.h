@@ -44,12 +44,14 @@ typedef struct XrJsonValue XrJsonValue;
 
 typedef struct XrJsonMember {
     char *key;
+    size_t key_len;
     XrJsonValue *value;
 } XrJsonMember;
 
 struct XrJsonValue {
     XrJsonType type;
-    bool is_integer; /* true when number was parsed without '.' or 'e/E' */
+    bool is_integer;   /* true when number was parsed without '.' or 'e/E' */
+    size_t string_len; /* valid when type==XR_JSON_STRING; byte length of string */
     union {
         bool boolean;
         double number;
@@ -111,6 +113,7 @@ XR_FUNC XrJsonValue *xjson_new_null(void);
 XR_FUNC XrJsonValue *xjson_new_bool(bool value);
 XR_FUNC XrJsonValue *xjson_new_number(double value);
 XR_FUNC XrJsonValue *xjson_new_string(const char *value);
+XR_FUNC XrJsonValue *xjson_new_string_n(const char *value, size_t len);
 XR_FUNC XrJsonValue *xjson_new_array(void);
 XR_FUNC XrJsonValue *xjson_new_object(void);
 

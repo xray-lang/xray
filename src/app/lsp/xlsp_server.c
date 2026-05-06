@@ -34,7 +34,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
-#include <unistd.h>
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_time.h"

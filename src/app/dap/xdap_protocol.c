@@ -20,7 +20,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <unistd.h>  // chdir
+#ifdef XR_OS_WINDOWS
+#include <direct.h>
+#define chdir _chdir
+static inline int setenv(const char *name, const char *value, int overwrite) {
+    (void) overwrite;
+    return _putenv_s(name, value);
+}
+static inline int unsetenv(const char *name) {
+    return _putenv_s(name, "");
+}
+#else
+#include <unistd.h>
+#endif
 #include "../../vm/xvm_internal.h"
 #include "xray.h"
 

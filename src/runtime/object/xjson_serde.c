@@ -76,7 +76,7 @@ static XrValue dom_to_xrvalue(XrayIsolate *X, XrJsonValue *v) {
             return xr_float(v->as.number);
 
         case XR_JSON_STRING: {
-            size_t len = strlen(v->as.string);
+            size_t len = v->string_len;
             XrString *str = xr_string_intern(X, v->as.string, len, 0);
             return xr_string_value(str);
         }

@@ -49,6 +49,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../src/base/xmalloc.h"
@@ -109,12 +110,22 @@ static inline char *xr_ctxbuf_steal(XrCtxBuf *b) {
 // diagnostic message on allocator failure (see XR_REALLOC_OR_ABORT
 // rationale in src/base/xmalloc.h).
 static inline void xr_ctxbuf_reserve(XrCtxBuf *b, size_t extra) {
+    if (extra > SIZE_MAX - b->len - 1) {
+        fprintf(stderr, "[FATAL] %s:%d: xr_ctxbuf_reserve overflow (len=%zu extra=%zu)\n", __FILE__,
+                __LINE__, b->len, extra);
+        abort();
+    }
     size_t need = b->len + extra + 1;  // +1 for the NUL terminator
     if (need <= b->cap)
         return;
     size_t ncap = b->cap ? b->cap : 64;
-    while (ncap < need)
+    while (ncap < need) {
+        if (ncap > SIZE_MAX / 2) {
+            ncap = need;  // clamp to exact need to avoid overflow
+            break;
+        }
         ncap *= 2;
+    }
     XR_REALLOC_OR_ABORT(b->data, ncap, "xr_ctxbuf_reserve");
     b->cap = ncap;
 }

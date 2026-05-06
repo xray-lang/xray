@@ -19,9 +19,28 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
+
+#ifdef XR_OS_WINDOWS
+#include <io.h>
+#include <fcntl.h>
+#define xr_pipe(fds) _pipe((fds), 4096, _O_BINARY)
+#define xr_pipe_read(fd, buf, n) _read((fd), (buf), (unsigned) (n))
+#define xr_pipe_write(fd, buf, n) _write((fd), (buf), (unsigned) (n))
+#define xr_pipe_close(fd) _close(fd)
+#define xr_pipe_set_nonblocking(fd) /* Windows _pipe fds polled eagerly */
+#else
 #include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
+#define xr_pipe(fds) pipe(fds)
+#define xr_pipe_read(fd, buf, n) read((fd), (buf), (n))
+#define xr_pipe_write(fd, buf, n) write((fd), (buf), (n))
+#define xr_pipe_close(fd) close(fd)
+static inline void xr_pipe_set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+#endif
 #include "../../base/xmalloc.h"
 
 // lsp_log declared in xlsp_server.h
@@ -323,7 +342,7 @@ static void *worker_thread(void *arg) {
 
             // Notify main thread
             char byte = 1;
-            ssize_t n = write(pool->notify_fd[1], &byte, 1);
+            ssize_t n = xr_pipe_write(pool->notify_fd[1], &byte, 1);
             (void) n;
         }
 
@@ -352,14 +371,13 @@ XrLspIndexPool *xlsp_index_pool_new(XrLspServer *server) {
     pool->server = server;
 
     // Create notification pipe
-    if (pipe(pool->notify_fd) < 0) {
+    if (xr_pipe(pool->notify_fd) < 0) {
         xr_free(pool);
         return NULL;
     }
 
     // Set read end to non-blocking
-    int flags = fcntl(pool->notify_fd[0], F_GETFL, 0);
-    fcntl(pool->notify_fd[0], F_SETFL, flags | O_NONBLOCK);
+    xr_pipe_set_nonblocking(pool->notify_fd[0]);
 
     // Initialize mutexes and condition variables
     xr_mutex_init(&pool->work_mutex);
@@ -417,8 +435,8 @@ void xlsp_index_pool_free(XrLspIndexPool *pool) {
     xlsp_index_result_free_list(pool->result_head);
 
     // Cleanup
-    close(pool->notify_fd[0]);
-    close(pool->notify_fd[1]);
+    xr_pipe_close(pool->notify_fd[0]);
+    xr_pipe_close(pool->notify_fd[1]);
     xr_mutex_destroy(&pool->work_mutex);
     xr_cond_destroy(&pool->work_cond);
     xr_mutex_destroy(&pool->result_mutex);
@@ -505,7 +523,7 @@ XrLspIndexResult *xlsp_index_pool_poll(XrLspIndexPool *pool) {
 
     // Drain notification pipe
     char buf[64];
-    while (read(pool->notify_fd[0], buf, sizeof(buf)) > 0) {
+    while (xr_pipe_read(pool->notify_fd[0], buf, sizeof(buf)) > 0) {
         // Consume all notifications
     }
 

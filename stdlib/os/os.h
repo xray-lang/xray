@@ -15,9 +15,10 @@
 #ifndef XR_STDLIB_OS_H
 #define XR_STDLIB_OS_H
 
-#include "../../src/module/xmodule.h"
-#include "../../src/vm/xvm.h"
-#include "../../src/runtime/object/xstring.h"
+#include "../../src/base/xdefs.h"
+
+struct XrayIsolate;
+struct XrModule;
 
 /*
  * Environment variables:
@@ -58,6 +59,6 @@
  *   sep                  - Path separator ("/" or "\\")
  *   eol                  - Line ending ("\n" or "\r\n")
  */
-XrModule *xr_load_module_os(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_os(struct XrayIsolate *isolate);
 
-#endif
+#endif  // XR_STDLIB_OS_H
