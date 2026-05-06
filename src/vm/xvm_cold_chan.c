@@ -243,6 +243,7 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     XrValue ch_val = base[b];
     if (!xr_value_is_channel(ch_val)) {
         base[a] = xr_null();
+        base[a + 1] = xr_bool(false);
         return VM_COLD_BREAK;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -259,15 +260,18 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     XrValue value = xr_channel_try_recv(ch, &ok);
     if (ok) {
         base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
+        base[a + 1] = xr_bool(true);
         xr_runtime_wake_channel(isolate, ch, true);
         return VM_COLD_BREAK;
     }
     if (xr_channel_is_closed(ch)) {
         base[a] = xr_null();
+        base[a + 1] = xr_bool(false);
         return VM_COLD_BREAK;
     }
     if (timeout_ms <= 0) {
         base[a] = xr_null();
+        base[a + 1] = xr_bool(false);
         return VM_COLD_BREAK;
     }
 
@@ -281,18 +285,21 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         if (now_us >= current->channel_deadline) {
             current->channel_deadline = 0;
             base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
             return VM_COLD_BREAK;
         }
         value = xr_channel_try_recv(ch, &ok);
         if (ok) {
             current->channel_deadline = 0;
             base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
+            base[a + 1] = xr_bool(true);
             xr_runtime_wake_channel(isolate, ch, true);
             return VM_COLD_BREAK;
         }
         if (xr_channel_is_closed(ch)) {
             current->channel_deadline = 0;
             base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
             return VM_COLD_BREAK;
         }
 
@@ -306,16 +313,19 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
         if (elapsed_ms >= timeout_ms) {
             base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
             break;
         }
         value = xr_channel_try_recv(ch, &ok);
         if (ok) {
             base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
+            base[a + 1] = xr_bool(true);
             xr_runtime_wake_channel(isolate, ch, true);
             break;
         }
         if (xr_channel_is_closed(ch)) {
             base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
             break;
         }
         xr_thread_yield();

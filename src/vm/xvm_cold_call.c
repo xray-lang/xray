@@ -217,15 +217,20 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
             xr_coro_resume_store(current, XR_RESUME_OK);
             current->wait_channel = NULL;
             base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
             return VM_COLD_BREAK;
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            return VM_COLD_BREAK;  // Value already in recv_slot
+            base[a + 1] = xr_bool(true);  // Value already in recv_slot
+            return VM_COLD_BREAK;
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
             xr_coro_resume_store(current, XR_RESUME_OK);
             current->wait_channel = NULL;
+            base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
+            return VM_COLD_BREAK;
         }
 
         // Set recv_slot
@@ -238,9 +243,11 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
         XrChanResult result = xr_channel_recv(ch, &value, current);
         if (result == XR_CHAN_OK) {
             base[a] = value;
+            base[a + 1] = xr_bool(true);
             return VM_COLD_BREAK;
         } else if (result == XR_CHAN_CLOSED) {
             base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
             return VM_COLD_BREAK;
         } else if (result == XR_CHAN_BLOCK) {
             // Blocked: set timeout timer
@@ -254,6 +261,7 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
             return VM_COLD_BLOCKED;
         }
         base[a] = xr_null();
+        base[a + 1] = xr_bool(false);
         return VM_COLD_BREAK;
     }
 

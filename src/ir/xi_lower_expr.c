@@ -1050,6 +1050,17 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node,
         v->line = (uint32_t)line;
         return v;
     }
+    /* chr(x) → XI_CALL_BUILTIN aux="chr" → OP_CHR */
+    if (strcmp(fname, "chr") == 0 && call->arg_count == 1) {
+        XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN,
+                                   l->type_string, 1);
+        if (!v) return NULL;
+        v->args[0] = arg;
+        v->aux = (void *)"chr";
+        v->line = (uint32_t)line;
+        return v;
+    }
     /* Bytes(n) / Bytes(n, fill) → XI_CALL_BUILTIN with aux_int encoding
      * the opcode OP_BYTES_NEW so the emitter produces the right instruction. */
     if (strcmp(fname, "Bytes") == 0 && call->arg_count >= 1 && call->arg_count <= 2) {
