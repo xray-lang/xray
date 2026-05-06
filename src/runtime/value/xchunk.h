@@ -70,9 +70,10 @@ typedef uint32_t XrInstruction;
 #define MAXARG_Ax ((1 << SIZE_Ax) - 1)
 #define MAXARG_sJ ((1 << (SIZE_Ax - 1)) - 1)
 
-// OP_LOADI immediate range (sBx format)
+// OP_LOADI immediate range (sBx format, bias=MAXARG_sBx)
+// Representable signed range: [-MAXARG_sBx, MAXARG_sBx]
 #define LOADI_MAX MAXARG_sBx
-#define LOADI_MIN (-(MAXARG_sBx) - 1)
+#define LOADI_MIN (-MAXARG_sBx)
 
 /* ========== Opcode Enum ========== */
 

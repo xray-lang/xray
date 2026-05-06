@@ -24,6 +24,8 @@
 
 #include "../runtime/class/xenum.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/symbol/xsymbol_table.h"
+#include "../runtime/xisolate_api.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -354,6 +356,7 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer,
     memset(l, 0, sizeof(XiLower));
     l->analyzer = analyzer;
     l->isolate = isolate;
+    l->self_var_id = -1;
 
     /* Heap-allocate the 2D def map (256*256 pointers = 512KB) */
     size_t def_map_size = (size_t)XI_LOWER_MAX_VARS * XI_LOWER_MAX_BLOCKS;
@@ -380,6 +383,15 @@ XR_FUNC void xi_lower_cleanup(XiLower *l) {
         xr_free(l->var_defs);
         l->var_defs = NULL;
     }
+}
+
+/* ========== Method Symbol Resolution ========== */
+
+XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
+    if (!l->isolate || !method_name) return 0;
+    XrSymbolTable *st = (XrSymbolTable *)xr_isolate_get_symbol_table(l->isolate);
+    if (!st) return 0;
+    return (int32_t)xr_symbol_register_in_table(st, method_name);
 }
 
 /* ========== Function Lowering Implementation ========== */
@@ -465,6 +477,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         l.self_value = self;
         int self_var = xi_lower_var_create(&l, fdecl->symbol_id,
                                               fdecl->name, fn_type);
+        l.self_var_id = self_var;
         xi_lower_braun_write(&l, self_var, entry, self);
     }
 
@@ -532,6 +545,22 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
         if (s->type == AST_EXPORT_STMT && s->as.export_stmt.declaration) {
             s = s->as.export_stmt.declaration;
             is_exported = true;
+        }
+
+        /* Export-list form: export a, b, c — mark already-assigned shared
+         * slots as exported (the declarations were processed earlier). */
+        if (s->type == AST_EXPORT_STMT && s->as.export_stmt.export_names) {
+            ExportStmtNode *exp = &s->as.export_stmt;
+            for (int ei = 0; ei < exp->export_count; ei++) {
+                const char *ename = exp->export_names[ei];
+                if (!ename) continue;
+                int vid = xi_lower_var_find(l, 0, ename);
+                if (vid >= 0 && l->shared_map[vid] >= 0) {
+                    int slot = l->shared_map[vid];
+                    if (slot < 512) export_flags[slot] = ename;
+                }
+            }
+            continue;
         }
 
         uint32_t sid = 0;

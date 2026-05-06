@@ -1157,6 +1157,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         for (int i = 0; i < n; i++)
             v->args[i + 1] = arg_vals[i];
         v->aux = (void *)arena_strdup(l->func, ma->name);
+        v->aux_int = (int64_t)xi_lower_method_symbol(l, ma->name) << 1;
         v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         v->line = (uint32_t)node->line;
         return v;
@@ -1180,9 +1181,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
     }
 
-    /* Detect self-call: callee resolves to the self-reference dummy.
+    /* Detect self-call: callee resolves to the self-reference variable.
+     * Use var_id comparison (not pointer equality) because braun_read
+     * in loop bodies returns a PHI node distinct from l->self_value.
      * Mark with aux_int=1 so xi_emit produces OP_CALLSELF. */
-    bool is_self_call = (l->self_value != NULL && callee_val == l->self_value);
+    bool is_self_call = (l->self_var_id >= 0 && l->self_var_id < 255 &&
+                         callee_val->var_id == (uint8_t)l->self_var_id);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
@@ -1505,6 +1509,7 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
     call->aux = (void *)"constructor";
+    call->aux_int = (int64_t)xi_lower_method_symbol(l, "constructor") << 1;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t)node->line;
     return call;
@@ -1641,6 +1646,7 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
         add->args[0] = set_val;
         add->args[1] = elem_vals[i];
         add->aux = (void *) "add";
+        add->aux_int = (int64_t)xi_lower_method_symbol(l, "add") << 1;
         add->flags |= XI_FLAG_SIDE_EFFECT;
     }
     return set_val;
@@ -1985,7 +1991,8 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     for (int i = 0; i < n; i++)
         call->args[i + 1] = arg_vals[i];
     call->aux = (void *)(sc->method_name ? sc->method_name : "constructor");
-    call->aux_int = 1;  /* super call → emit OP_SUPERINVOKE */
+    call->aux_int = ((int64_t)xi_lower_method_symbol(
+                         l, sc->method_name ? sc->method_name : "constructor") << 1) | 1;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     call->line = (uint32_t) node->line;
     return call;

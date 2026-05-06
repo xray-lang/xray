@@ -1015,13 +1015,13 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
 
         /* Method dispatch: args[0]=recv, args[1..n]=params, aux=name string.
          * Resolution order:
-         *   1. Super call (aux_int=1) → find parent class constructor
+         *   1. Super call (aux_int bit 0) → find parent class constructor
          *   2. Class instance method → direct C call
          *   3. Builtin method → xrt_method_N runtime dispatch */
         case XI_CALL_METHOD: {
             XR_DCHECK(v->nargs >= 1, "XI_CALL_METHOD: need receiver");
             const char *method = (const char *)v->aux;
-            bool is_super = (v->aux_int == 1);
+            bool is_super = (v->aux_int & 1) != 0;
             const XiFunc *mfunc = NULL;
             const char *method_prefix = NULL;
 

@@ -520,6 +520,11 @@ XR_NOINLINE int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVal
         if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
             XrValue result = method->as.primitive(isolate, &base[a + 2], nargs);
             base[a] = result;
+            /* Check if the builtin raised an exception (e.g. Json.stringify
+             * on non-serializable types calls xr_vm_unwind_with_trace). */
+            if (!XR_IS_NULL(vm_ctx->current_exception)) {
+                return VM_COLD_ERROR;
+            }
             return VM_COLD_BREAK;
         } else if (method->type == XMETHOD_CLOSURE && method->as.closure != NULL) {
             XrClosure *closure = method->as.closure;

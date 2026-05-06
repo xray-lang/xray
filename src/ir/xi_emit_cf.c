@@ -104,6 +104,48 @@ static void emit_module_exports(EmitCtx *ctx) {
     }
 }
 
+/* Emit re-export bytecodes: OP_IMPORT + OP_EXPORT or OP_EXPORT_ALL.
+ * Uses two scratch registers (next_reg, next_reg+1) for the module
+ * and the extracted member value. */
+static void emit_reexports(EmitCtx *ctx) {
+    XiFunc *f = ctx->func;
+    if (!f->reexports || f->reexport_count == 0 || !ctx->isolate)
+        return;
+
+    uint8_t mod_reg = ctx->next_reg;
+    uint8_t val_reg = (uint8_t)(mod_reg + 1);
+    if ((int)(val_reg + 1) > ctx->max_reg)
+        ctx->max_reg = (uint8_t)(val_reg + 1);
+
+    for (uint16_t i = 0; i < f->reexport_count; i++) {
+        XiReexportEntry *re = &f->reexports[i];
+        if (!re->from_path) continue;
+        if (ctx->status != XI_EMIT_OK) return;
+
+        /* OP_IMPORT mod_reg, K[path_idx] */
+        int path_idx = add_const_string(ctx, re->from_path);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABx(OP_IMPORT, mod_reg, path_idx));
+
+        if (!re->name) {
+            /* Star re-export: export * from "..." → OP_EXPORT_ALL */
+            emit_inst(ctx, CREATE_ABx(OP_EXPORT_ALL, mod_reg, 0));
+        } else {
+            /* Selective re-export: get member, then export with alias */
+            int sym_idx = add_symbol(ctx, re->name);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_GETPROP, val_reg, mod_reg,
+                                      (uint8_t)sym_idx));
+
+            const char *export_name = re->alias ? re->alias : re->name;
+            int name_idx = add_const_string(ctx, export_name);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t)name_idx,
+                                      val_reg, 0));
+        }
+    }
+}
+
 XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     if (ctx->status != XI_EMIT_OK) return;
 
@@ -150,6 +192,8 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
             /* Emit OP_EXPORT instructions for module-level exports
              * before returning, so the VM's module system picks them up. */
             emit_module_exports(ctx);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_reexports(ctx);
             if (ctx->status != XI_EMIT_OK) return;
 
             if (blk->control && blk->control->op == XI_MULTI_RET) {
