@@ -235,10 +235,8 @@
     _(ASSERT_EQ, FMT_ABC, KOP_SPECIAL, "if R[A] != R[B] throw AssertError(K[C])")                  \
     _(ASSERT_NE, FMT_ABC, KOP_SPECIAL, "if R[A] == R[B] throw AssertError(K[C])")                  \
     _(REGEX_COMPILE, FMT_ABC, KOP_ABC_BIN_K, "R[A] = regex.compile(K[B], K[C])")                   \
-    _(GO, FMT_ABC, KOP_SPECIAL, "R[A] = go R[B](R[B+1]..R[B+C])")                                  \
-    _(GO_INVOKE, FMT_ABC, KOP_SPECIAL, "R[A] = go R[B].method(args)")                              \
     _(SPAWN_CONT, FMT_ABC, KOP_ABC_BIN_LIT,                                                        \
-      "spawn continuation: R[A]=task, R[B]=fn, C=nargs|flags")                                     \
+      "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                         \
     _(AWAIT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B], C=discard")                             \
     _(AWAIT_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = await(timeout: R[C]) R[B]")                     \
     _(AWAIT_ALL, FMT_AB, KOP_AB_UNARY, "R[A] = await R[B]:Array")                                  \

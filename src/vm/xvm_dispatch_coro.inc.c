@@ -17,21 +17,8 @@
  * Owns the spawn / await / yield family plus the coroutine
  * thread-affinity, coroutine-local, and priority opcodes that
  * sit alongside them. Heavy variants delegate to cold-path
- * helpers (vm_go / vm_await / vm_await_timeout / ...).
+ * helpers (vm_spawn_cont / vm_await / vm_await_timeout / ...).
  */
-
-vmcase(OP_GO) {
-    TRACE_EXECUTION();
-    ci->pc = pc;
-    int _go_cr = vm_go(isolate, vm_ctx, i, base, ci);
-    pc = ci->pc;
-    VM_DISPATCH_COLD(_go_cr);
-}
-
-vmcase(OP_GO_INVOKE) {
-    TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_go_invoke(isolate, vm_ctx, i, base, ci, pc));
-}
 
 vmcase(OP_SPAWN_CONT) {
     TRACE_EXECUTION();

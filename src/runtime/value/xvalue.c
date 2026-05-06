@@ -164,6 +164,7 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TREGEX] = XR_TID_REGEX,
     [XR_TLOGGER] = XR_TID_NULL,
     [XR_TRANGE] = XR_TID_RANGE,
+    [XR_TTASK] = XR_TID_TASK,
 };
 
 XrTypeId xr_value_typeid(XrValue v) {
@@ -212,6 +213,7 @@ XR_DATA const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_MODULE] = TYPE_NAME_MODULE,
     [XR_TID_COROUTINE] = TYPE_NAME_COROUTINE,
     [XR_TID_RANGE] = TYPE_NAME_RANGE,
+    [XR_TID_TASK] = TYPE_NAME_TASK,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {

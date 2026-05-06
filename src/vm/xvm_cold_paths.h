@@ -155,10 +155,6 @@ XR_FUNC int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx
 XR_FUNC int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
                              int method_symbol, int nargs, XrValue *base, int a,
                              XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr, XrValue *base,
-                  XrBcCallFrame *frame);
-XR_FUNC int vm_go_invoke(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                         XrValue *base, XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                           XrValue *base, XrBcCallFrame *frame);
 XR_FUNC int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr, XrValue *base,

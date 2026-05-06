@@ -1517,18 +1517,24 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
 
     if (expr->type == AST_CALL_EXPR) {
         /* go fn(args): extract callee + args, don't execute the call.
-         * XI_GO args[0]=callee, args[1..n]=params (same as OP_GO layout). */
+         * XI_GO args[0]=callee, args[1..n]=params → emits OP_SPAWN_CONT.
+         * Lower ALL operands before creating XI_GO so they precede it
+         * in the block's values array (same pattern as lower_call). */
         CallExprNode *call = &expr->as.call_expr;
         XiValue *callee = xi_lower_expr(l, call->callee);
         if (!callee) return NULL;
-        uint16_t nargs = (uint16_t)(1 + call->arg_count);
+        XiValue *arg_vals[32];
+        int n = call->arg_count > 32 ? 32 : call->arg_count;
+        for (int i = 0; i < n; i++) {
+            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
+            if (!arg_vals[i]) return NULL;
+        }
+        uint16_t nargs = (uint16_t)(1 + n);
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, nargs);
         if (!v) return NULL;
         v->args[0] = callee;
-        for (int i = 0; i < call->arg_count; i++) {
-            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
-            if (!arg) return NULL;
-            v->args[1 + i] = arg;
+        for (int i = 0; i < n; i++) {
+            v->args[1 + i] = arg_vals[i];
         }
         v->aux_int = (int64_t) go->link_mode;
         v->flags |= XI_FLAG_SIDE_EFFECT;
@@ -2033,7 +2039,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     cv->line = (uint32_t)node->line;
 
     /* Write to shared variable so enum access resolves correctly */
-    int var_id = xi_lower_var_create(l, 0, ed->name, l->type_any);
+    int var_id = xi_lower_var_create(l, ed->symbol_id, ed->name, l->type_any);
     xi_lower_braun_write(l, var_id, l->cur_block, cv);
 
     if (l->is_program && var_id < l->var_count
