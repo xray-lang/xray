@@ -2004,7 +2004,7 @@ TEST(cmp_await_all) {
                   "let t2 = go double(20)\n"
                   "let r = await [t1, t2]\n"
                   "print(r)",
-        .label = "await.all: wait for multiple tasks",
+        .label = "await all: wait for multiple tasks",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = false, /* scheduling differs */
@@ -2012,16 +2012,16 @@ TEST(cmp_await_all) {
 }
 
 TEST(cmp_await_any) {
-    /* await.any [t1, t2] — wait for first */
+    /* await any [t1, t2] — wait for first */
     run_compare((CompareSpec){
         .source = "fn double(x: int): int {\n"
                   "  return x * 2\n"
                   "}\n"
                   "let t1 = go double(10)\n"
                   "let t2 = go double(20)\n"
-                  "let r = await.any [t1, t2]\n"
+                  "let r = await any [t1, t2]\n"
                   "print(r)",
-        .label = "await.any: wait for first task",
+        .label = "await any: wait for first task",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = false, /* scheduling differs */
