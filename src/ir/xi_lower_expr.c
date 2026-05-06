@@ -18,13 +18,13 @@
 #include "../runtime/value/xtype.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
+#include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/lexer/xlex.h"
 
 #include "../runtime/class/xenum.h"
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
-#include "../frontend/parser/xtype_ref.h"
 #include "../base/xglobal_indices.h"
 
 #include <string.h>
@@ -1724,12 +1724,46 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     XiValue *val = xi_lower_expr(l, as->expr);
     if (!val) return NULL;
 
-    struct XrType *target = as->type ? as->type : l->type_any;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, target, 1);
+    /* Resolve XrTypeRef kind to runtime XrTypeId.
+     * AsExprNode.type is XrTypeRef*, not XrType*. */
+    XrTypeRef *tref = as->type;
+    int tid = -1;
+    const char *tname = "unknown";
+    if (tref) {
+        /* Optional wrapper: unwrap to get inner type */
+        XrTypeRef *inner = tref;
+        if (tref->kind == XR_TREF_OPTIONAL && tref->nchildren > 0)
+            inner = tref->children[0];
+        switch (inner->kind) {
+            case XR_TREF_INT:    tid = 8;  tname = "int";    break;  /* XR_TID_INT */
+            case XR_TREF_FLOAT:  tid = 11; tname = "float";  break;  /* XR_TID_FLOAT */
+            case XR_TREF_STRING: tid = 12; tname = "string"; break;  /* XR_TID_STRING */
+            case XR_TREF_BOOL:   tid = 1;  tname = "bool";   break;  /* XR_TID_BOOL */
+            case XR_TREF_NULL:   tid = 0;  tname = "null";   break;  /* XR_TID_NULL */
+            default: break;
+        }
+        if (tid < 0 && inner->kind == XR_TREF_NAMED && inner->name) {
+            if (strcmp(inner->name, "Array") == 0)      { tid = 14; tname = "Array"; }
+            else if (strcmp(inner->name, "Map") == 0)   { tid = 16; tname = "Map"; }
+            else if (strcmp(inner->name, "Set") == 0)   { tid = 15; tname = "Set"; }
+            else if (strcmp(inner->name, "Json") == 0)  { tid = 18; tname = "Json"; }
+            else tname = inner->name;
+        }
+        if (tid < 0 && inner->kind == XR_TREF_GENERIC && inner->name) {
+            if (strcmp(inner->name, "Array") == 0)      { tid = 14; tname = "Array"; }
+            else if (strcmp(inner->name, "Map") == 0)   { tid = 16; tname = "Map"; }
+            else if (strcmp(inner->name, "Set") == 0)   { tid = 15; tname = "Set"; }
+        }
+    }
+
+    bool is_safe = as->is_safe;
+    struct XrType *result_type = is_safe ? l->type_any : l->type_any;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
     if (!v) return NULL;
     v->args[0] = val;
-    v->aux = (void *) as->type;     /* target XrType* for TID lookup */
-    v->aux_int = as->is_safe ? 1 : 0; /* 0=unsafe (throw), 1=safe (null) */
+    /* Pack tid and is_safe into aux_int: bits[31:1]=tid, bit[0]=is_safe */
+    v->aux_int = (tid << 1) | (is_safe ? 1 : 0);
+    v->aux = (void *)arena_strdup(l->func, tname);
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -2062,6 +2096,9 @@ static XiValue *lower_enum_convert(XiLower *l, AstNode *node) {
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, result_type, 1);
     if (!v) return NULL;
     v->args[0] = val;
+    /* tid=-1 (unknown) → emitter degenerates to move, which is correct
+     * for enum conversions (runtime handles via enum type metadata). */
+    v->aux_int = (-1 << 1) | 0;
     v->aux = (void *)arena_strdup(l->func, ec->enum_name);
     v->line = (uint32_t) node->line;
     return v;
@@ -2310,10 +2347,6 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_ENUM_INDEX:
             return lower_enum_access(l, node);  /* same pattern: load field */
 
-        /* Coroutine expressions */
-        case AST_AWAIT_ALL_EXPR:
-        case AST_AWAIT_ANY_EXPR:
-            return lower_await_expr(l, node);  /* reuse: flags distinguish */
         case AST_CANCELLED_EXPR:
             return lower_cancelled_expr(l, node);
         case AST_MOVE_EXPR:

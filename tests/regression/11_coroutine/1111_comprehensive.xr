@@ -26,16 +26,16 @@ fn consumer(ch: Channel<int>, expected: int): int {
 @test
 fn test_producer_consumer(): void {
     shared const ch = Channel(10)
-    
+
     // 启动多个生产者
     let p1 = go producer(ch, 1, 3)
     let p2 = go producer(ch, 2, 3)
-    
+
     // 等待所有生产者完成
-    let producer_ids = await [p1, p2]
+    let producer_ids = await.all [p1, p2]
     print(producer_ids[0])  // 1
     print(producer_ids[1])  // 2
-    
+
     // 消费者获取消息
     let c1 = go consumer(ch, 6)
     let received = await c1
@@ -60,9 +60,9 @@ fn test_defer(): void {
 fn test_select(): void {
     shared const ch1 = Channel(1)
     shared const ch2 = Channel(1)
-    
+
     ch1.trySend(100)
-    
+
     select {
         msg from ch1 => { print(msg) }
         msg from ch2 => { print(msg) }

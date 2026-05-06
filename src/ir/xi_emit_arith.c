@@ -222,27 +222,18 @@ XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_IS, dst, src, type_reg));
 }
 
-/* Type cast (as / as?) with runtime typeof check */
+/* Type cast (as / as?) with runtime typeof check.
+ * Encoding from lowerer:
+ *   aux_int = (tid << 1) | is_safe   — tid is XrTypeId, -1 if unknown
+ *   aux     = type name string (arena-allocated) for error messages */
 XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
     uint8_t src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK) return;
-    bool is_safe = (v->aux_int == 1);
-    struct XrType *target = (struct XrType *)v->aux;
 
-    /* Map compile-time XrType kind to runtime XrTypeId */
-    int tid = -1;
-    if (target) {
-        switch (target->kind) {
-            case XR_KIND_INT:    tid = XR_TID_INT;    break;
-            case XR_KIND_FLOAT:  tid = XR_TID_FLOAT;  break;
-            case XR_KIND_STRING: tid = XR_TID_STRING; break;
-            case XR_KIND_BOOL:   tid = XR_TID_BOOL;   break;
-            case XR_KIND_JSON:   tid = XR_TID_JSON;   break;
-            case XR_KIND_ARRAY:  tid = XR_TID_ARRAY;  break;
-            default:             tid = -1;            break;
-        }
-    }
+    bool is_safe = (v->aux_int & 1) != 0;
+    int tid = v->aux_int >> 1;
+    const char *tname = v->aux ? (const char *)v->aux : "unknown";
 
     /* Unknown target type: degenerate to a move */
     if (tid < 0) {
@@ -275,7 +266,6 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         XrInstruction *end_inst = PROTO_CODE_PTR(ctx->proto, end_jmp_pc);
         *end_inst = CREATE_sJ(OP_JMP, ok_target - (end_jmp_pc + 1));
     } else {
-        const char *tname = target ? xr_type_to_string(target) : "unknown";
         char err_buf[128];
         snprintf(err_buf, sizeof(err_buf),
                  "Type cast failed: expected %s", tname);

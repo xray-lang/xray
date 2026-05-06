@@ -13,6 +13,7 @@
  */
 
 #include "xparse_internal.h"
+#include "xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../runtime/xisolate_api.h"
@@ -824,15 +825,15 @@ AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     // Allow bare container types for runtime type casts
     bool saved = parser->allow_bare_container;
     parser->allow_bare_container = true;
-    XrType *target_type = xr_parse_type_annotation(parser);
+    XrTypeRef *target_type = xr_parse_type_annotation(parser);
     parser->allow_bare_container = saved;
     if (!target_type) {
         xr_parser_error(parser, "expected type after 'as'");
         return left;
     }
-    // Check for safe cast: as Type?
-    bool is_safe = target_type->is_nullable;
-    return xr_ast_as_expr(parser->X, left, target_type, is_safe, line);
+    // Check for safe cast: as Type? (XrTypeRef uses XR_TREF_OPTIONAL kind)
+    bool is_safe = xr_tref_is_nullable(target_type);
+    return xr_ast_as_expr(parser->X, left, (XrType *)target_type, is_safe, line);
 }
 
 // Parse optional chain: obj?.prop, obj?.[index], obj?.method()

@@ -554,9 +554,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         }
 
         // Await expression
-        case AST_AWAIT_EXPR:
-        case AST_AWAIT_ALL_EXPR:
-        case AST_AWAIT_ANY_EXPR: {
+        case AST_AWAIT_EXPR: {
             xfmt_write_indent(ctx);
             AwaitExprNode *aw = &node->as.await_expr;
             xfmt_write_str(ctx, "await");

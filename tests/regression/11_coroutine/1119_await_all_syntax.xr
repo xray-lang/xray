@@ -28,12 +28,12 @@ print("  r1:", results[1])
 print("  r2:", results[2])
 print("  sum:", results[0] + results[1] + results[2])
 
-// 测试2：await [tasks] 也是等待所有
-print("test2: await [tasks] syntax")
+// 测试2：await.all with two tasks
+print("test2: await.all two tasks")
 let t4 = go task1()
 let t5 = go task2()
 
-let results2 = await [t4, t5]
+let results2 = await.all [t4, t5]
 print("  r0:", results2[0])
 print("  r1:", results2[1])
 
