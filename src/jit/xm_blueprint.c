@@ -165,7 +165,7 @@ static bool opcode_reads_slot(XrInstruction inst, int reg) {
             return reg == b;
 
         // Go spawn: reads func + args
-        case OP_SPAWN_CONT:
+        case OP_GO:
             return reg >= a && reg <= a + (c & 0x7F);
 
         // Typed array/field

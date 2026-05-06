@@ -320,7 +320,7 @@ void xr_task_link(XrTask *a, XrTask *b) {
     add_link_entry(b, a);
 
     /* If either task already failed, cancel the other immediately.
-     * Handles SPAWN_CONT case where children complete before link() is called. */
+     * Handles case where children complete before link() is called. */
     uint8_t sa = atomic_load_explicit(&a->state, memory_order_acquire);
     uint8_t sb = atomic_load_explicit(&b->state, memory_order_acquire);
     if (sa == XR_TASK_FAILED && xr_task_is_active(b)) {

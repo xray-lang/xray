@@ -90,7 +90,7 @@ XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 /* ========== Coroutine ========== */
 
 /* Go: spawn coroutine, return Task handle for await.
- * Uses OP_SPAWN_CONT which creates an XrTask and supports
+ * Uses OP_GO which creates an XrTask and supports
  * scope tracking, link mode, and continuation stealing. */
 XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
@@ -115,9 +115,9 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     /* C field: bits[0:6] = nargs, bit 7 = fire-and-forget (0 for now) */
-    emit_inst(ctx, CREATE_ABC(OP_SPAWN_CONT, dst, dst, nargs));
+    emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, nargs));
 
-    /* NOP A=3: link_mode annotation (read by vm_spawn_cont) */
+    /* NOP A=3: link_mode annotation (read by vm_go) */
     int link_mode = (int)v->aux_int;
     if (link_mode != 0) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 3, link_mode));

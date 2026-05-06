@@ -1918,8 +1918,8 @@ TEST(cmp_chan_send_recv_buffered) {
 }
 
 TEST(cmp_go_simple) {
-    /* go fn() — Xi uses OP_GO, legacy uses OP_SPAWN_CONT (different scheduling).
-     * Output ordering may differ; only verify Xi compiles and runs. */
+    /* go fn() — basic coroutine spawn + await.
+     * Output ordering may differ; only verify compiles and runs. */
     run_compare((CompareSpec){
         .source =
             "fn worker() { print(\"worker\") }\n"
@@ -1929,7 +1929,7 @@ TEST(cmp_go_simple) {
         .label = "go fn(): basic spawn + await",
         .expect_xi_success = true,
         .min_similarity = 0.1,
-        .check_exec = false, /* OP_GO vs OP_SPAWN_CONT scheduling differs */
+        .check_exec = false, /* scheduling non-deterministic */
     });
 }
 

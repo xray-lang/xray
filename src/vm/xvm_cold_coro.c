@@ -14,7 +14,7 @@
  * Owns:
  *   - vm_collect_all_coros / vm_coro_ctrl
  *   - vm_cold_get_coro (helper)
- *   - vm_spawn_cont
+ *   - vm_go
  *   - vm_await_recycle_coro / vm_task_consume_result /
  *     vm_await_read_result (helpers)
  *   - vm_await / vm_await_timeout / vm_await_all / vm_await_any
@@ -591,8 +591,8 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 // cold-object / cold-chan TUs can call it without an owning .c
 // file having to re-export it.
 
-XR_NOINLINE int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                              XrValue *base, XrBcCallFrame *frame) {
+XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                      XrValue *base, XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c_raw = GETARG_C(instr);
@@ -723,7 +723,7 @@ XR_NOINLINE int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstr
     }
 
     parent->pending_spawn = coro;
-    return VM_COLD_SPAWN_CONT;
+    return VM_COLD_GO_CHILD;
 }
 
 #define AWAIT_TIMEOUT_SPINS 100000000

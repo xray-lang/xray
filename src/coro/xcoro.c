@@ -57,7 +57,7 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
 
     // Bump worker heartbeat so sysmon doesn't misdetect long-running
     // JIT code as stuck (JIT stays inside run_on_worker across many
-    // C helper calls like spawn_cont/await without returning to worker loop)
+    // C helper calls like go/await without returning to worker loop)
     if (coro->jit_ctx && coro->jit_ctx->heartbeat_ptr) {
         atomic_fetch_add_explicit(coro->jit_ctx->heartbeat_ptr, 1, memory_order_relaxed);
     }

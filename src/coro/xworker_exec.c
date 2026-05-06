@@ -275,7 +275,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // Children that yield (compute-heavy) go back to run queue where workers
     // can steal them. Children that block (channel I/O) go to blocked queue
     // and are not stealable — preserving cache locality for channel patterns.
-    if (result == XR_VM_SPAWN_CONT) {
+    if (result == XR_VM_GO_CHILD) {
         XrCoroutine *child = coro->pending_spawn;
         coro->pending_spawn = NULL;
         xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
@@ -287,7 +287,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Reset yield_streak: yields during spawn loop don't count
         // toward compute-bound pressure detection.
         p->yield_streak = 0;
-        // Clear jit_ctx: parent exited JIT (SPAWN_CONT returns from interpreter).
+        // Clear jit_ctx: parent exited JIT (OP_GO returns from interpreter).
         // Prevents GC from scanning stale jit_scratch (child will overwrite it).
         // Re-set by xr_coro_run_on_worker when parent resumes.
         coro->jit_ctx = NULL;
@@ -374,7 +374,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     worker_handle_vm_result(worker, coro, result);
 
     // Deferred recycle: fire-and-forget coro completed, defer to next pool_get.
-    // gc_flags bit 2 = recyclable (set by vm_spawn_cont for fire-and-forget go).
+    // gc_flags bit 2 = recyclable (set by vm_go for fire-and-forget go).
     // Push to pending linked list (via coro->next) — flushed in pool_get.
     if (result == XR_VM_OK && (coro->gc_flags & XR_CORO_GC_RECYCLABLE) &&
         !xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
@@ -576,7 +576,7 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
                                XrVMContext *ctx, XrVMContext *coro_ctx, XrVMResult result) {
     (void) worker;
-    if (result == XR_VM_SPAWN_CONT) {
+    if (result == XR_VM_GO_CHILD) {
         // Continuation stealing: parent saved state, child ready to run inline.
         ctx->current_coro = NULL;
         return result;

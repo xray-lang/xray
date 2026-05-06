@@ -63,7 +63,7 @@
 #define VM_COLD_YIELD 3
 #define VM_COLD_ERROR 4
 #define VM_COLD_FATAL 5
-#define VM_COLD_SPAWN_CONT 6
+#define VM_COLD_GO_CHILD 6
 
 // Cold-path throw helper
 #define VM_COLD_THROW(frame_ptr, pc_ptr, code, ...)                                                \
@@ -155,8 +155,8 @@ XR_FUNC int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx
 XR_FUNC int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
                              int method_symbol, int nargs, XrValue *base, int a,
                              XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC int vm_spawn_cont(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                          XrValue *base, XrBcCallFrame *frame);
+XR_FUNC int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                  XrValue *base, XrBcCallFrame *frame);
 XR_FUNC int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr, XrValue *base,
                      XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
