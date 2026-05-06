@@ -1,0 +1,9 @@
+// Self-test fixture: valid file with NO @test functions
+// Expected: 0 tests discovered, exit code non-zero (empty test file is an error)
+
+fn helper(): int {
+    return 42
+}
+
+const x = helper()
+print(x)

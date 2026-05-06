@@ -823,23 +823,37 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     /* Aggregate stats */
     int file_count = 0, total_passed = 0, total_failed = 0;
     int total_errors = 0, total_skipped = 0, total_timeout = 0;
+    int empty_file_count = 0;
     for (int i = 0; i < fl.count; i++) {
         if (results[i].test_count > 0 || results[i].has_error)
             file_count++;
+        else
+            empty_file_count++;
         total_passed += results[i].passed;
         total_failed += results[i].failed;
         total_errors += results[i].errors;
         total_skipped += results[i].skipped;
         total_timeout += results[i].timeout;
     }
+    int total_executed = total_passed + total_failed + total_errors + total_timeout;
 
     if (!quiet) {
         print_summary(file_count, total_passed, total_failed, total_errors, total_skipped,
                       total_timeout, total_time, filter, results, fl.count);
     }
 
-    int exit_code =
-        (total_failed + total_errors + total_timeout) > 0 ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
+    int exit_code;
+    if ((total_failed + total_errors + total_timeout) > 0) {
+        exit_code = XR_CLI_EXIT_FAIL;
+    } else if (total_executed == 0) {
+        /* No tests were executed at all — treat as error to prevent
+         * silent false-pass when test files lack @test functions. */
+        if (!quiet)
+            fprintf(stderr, "Error: 0 tests executed across %d file(s)\n", fl.count);
+        exit_code = XR_CLI_EXIT_FAIL;
+    } else {
+        exit_code = XR_CLI_EXIT_OK;
+    }
 
     for (int i = 0; i < fl.count; i++)
         file_result_free(&results[i]);

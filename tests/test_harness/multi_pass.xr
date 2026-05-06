@@ -1,0 +1,18 @@
+// Self-test fixture: multiple @test functions that all pass
+// Expected: 3 tests executed, 3 passed, exit code 0
+
+@test
+fn test_addition() {
+    assert_eq(2 + 3, 5)
+}
+
+@test
+fn test_string() {
+    assert_eq("hello".length, 5)
+}
+
+@test
+fn test_array() {
+    const arr = [1, 2, 3]
+    assert_eq(arr.length, 3)
+}
