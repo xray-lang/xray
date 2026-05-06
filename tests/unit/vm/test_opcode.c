@@ -55,7 +55,7 @@ TEST(opcode_name_container) {
 }
 
 TEST(opcode_name_coroutine) {
-    ASSERT_STR_EQ(xr_opcode_name(OP_GO), "GO");
+    ASSERT_STR_EQ(xr_opcode_name(OP_SPAWN_CONT), "SPAWN_CONT");
     ASSERT_STR_EQ(xr_opcode_name(OP_AWAIT), "AWAIT");
     ASSERT_STR_EQ(xr_opcode_name(OP_YIELD), "YIELD");
 }
@@ -152,18 +152,18 @@ static void run_all_tests(void) {
     RUN_TEST(opcode_name_coroutine);
     RUN_TEST(opcode_name_channel);
     RUN_TEST(opcode_name_nop);
-    
+
     RUN_TEST_SUITE("Opcode Count");
     RUN_TEST(opcode_count);
     RUN_TEST(opcode_fits_8bits);
-    
+
     RUN_TEST_SUITE("Instruction Constants");
     RUN_TEST(instruction_size_constants);
     RUN_TEST(instruction_max_constants);
-    
+
     RUN_TEST_SUITE("Builtin Type Hints");
     RUN_TEST(builtin_type_hints);
-    
+
     RUN_TEST_SUITE("Opcode Ordering");
     RUN_TEST(opcode_load_range);
     RUN_TEST(opcode_arithmetic_grouping);

@@ -716,6 +716,9 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     ctx.proto->min_params = f->min_params;
     ctx.proto->test_attr = f->test_attr;
     ctx.proto->test_timeout = f->test_timeout;
+    /* Compile-time escape analysis is the authority on coroutine safety.
+     * If compilation succeeds, all functions are safe to call via go. */
+    ctx.proto->is_coro_safe = true;
 
     /* Build slot map for JIT (non-fatal if allocation fails) */
     XiSlotMap *slot_map = build_slot_map(&ctx);

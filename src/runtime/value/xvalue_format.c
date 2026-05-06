@@ -19,6 +19,7 @@
 #include "../../base/xconstants.h"
 #include "../../coro/xchannel.h"
 #include "../../coro/xcoroutine.h"
+#include "../../coro/xtask.h"
 #include "../../module/xmodule.h"
 #include "../class/xclass.h"
 #include "../class/xenum.h"
@@ -256,6 +257,18 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 xr_strbuf_append_cstr(sb, coro->name, strlen(coro->name));
             else
                 xr_strbuf_append_cstr(sb, "anonymous", 9);
+            xr_strbuf_append_cstr(sb, ")", 1);
+            break;
+        }
+        case XR_TTASK: {
+            XrTask *task = (XrTask *) gc;
+            static const char *const task_state_names[] = {
+                "active", "completing", "cancelling", "completed", "failed", "cancelled",
+            };
+            uint8_t st = atomic_load_explicit(&task->state, memory_order_relaxed);
+            const char *sn = (st < 6) ? task_state_names[st] : "unknown";
+            xr_strbuf_append_cstr(sb, "Task(", 5);
+            xr_strbuf_append_cstr(sb, sn, strlen(sn));
             xr_strbuf_append_cstr(sb, ")", 1);
             break;
         }
