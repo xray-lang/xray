@@ -88,6 +88,8 @@ extern XrValue xr_value_from_array(XrArray *arr);
         url_copy = _url_stack_buf;                                                                 \
     } else {                                                                                       \
         url_copy = (char *) xr_malloc((url_len) + 1);                                              \
+        if (!url_copy)                                                                             \
+            return xr_null();                                                                      \
         _url_need_free = true;                                                                     \
     }                                                                                              \
     memcpy(url_copy, (url), (url_len));                                                            \
@@ -145,6 +147,8 @@ static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
         XrHttpHeader *h = &result->headers[i];
         // Header name needs null-termination
         char *header_name = (char *) xr_malloc(h->name_len + 1);
+        if (!header_name)
+            break;
         memcpy(header_name, h->name, h->name_len);
         header_name[h->name_len] = '\0';
 
@@ -373,6 +377,10 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             if (custom_header_count > 0) {
                 custom_headers =
                     (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * custom_header_count);
+                if (!custom_headers) {
+                    URL_COPY_END();
+                    return xr_null();
+                }
 
                 int idx = 0;
                 uint32_t map_size = xr_map_sizenode(headers_map);
@@ -403,6 +411,10 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             XrSymbolTable *symtab = (XrSymbolTable *) X->symbol_table;
             custom_header_count = shape->field_count;
             custom_headers = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * custom_header_count);
+            if (!custom_headers) {
+                URL_COPY_END();
+                return xr_null();
+            }
 
             int idx = 0;
             for (uint16_t i = 0; i < shape->field_count; i++) {
@@ -458,6 +470,13 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             return xr_null();
         }
         XrHttpResult *sr = (XrHttpResult *) xr_malloc(sizeof(XrHttpResult));
+        if (!sr) {
+            xr_http_result_free(&result);
+            URL_COPY_END();
+            if (custom_headers)
+                xr_free(custom_headers);
+            return xr_null();
+        }
         *sr = result;
         ctx->streams[slot] = sr;
 
@@ -566,6 +585,8 @@ static XrValue http_url_encode(XrayIsolate *X, XrValue *args, int argc) {
     // Estimate output size (worst case: each char becomes %XX)
     size_t out_cap = src_len * 3 + 1;
     char *out = (char *) xr_malloc(out_cap);
+    if (!out)
+        return xr_null();
     char *p = out;
 
     static const char hex[] = "0123456789ABCDEF";
@@ -598,6 +619,8 @@ static XrValue http_url_decode(XrayIsolate *X, XrValue *args, int argc) {
     size_t src_len = input->length;
 
     char *out = (char *) xr_malloc(src_len + 1);
+    if (!out)
+        return xr_null();
     char *p = out;
 
     for (size_t i = 0; i < src_len; i++) {
@@ -775,6 +798,8 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
 
     // Copy path (needs persistence, will be owned by router)
     char *path_copy = (char *) xr_malloc(path_len + 1);
+    if (!path_copy)
+        return xr_null();
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
 
@@ -792,6 +817,10 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
         if (response && response_len > 0) {
             // Copy response (will be owned by router)
             char *response_copy = (char *) xr_malloc(response_len + 1);
+            if (!response_copy) {
+                xr_free(path_copy);
+                return xr_null();
+            }
             memcpy(response_copy, response, response_len);
             response_copy[response_len] = '\0';
 
@@ -853,6 +882,8 @@ static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
 
     // Copy path (needs persistence)
     char *path_copy = (char *) xr_malloc(path_len + 1);
+    if (!path_copy)
+        return xr_null();
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
 
@@ -866,6 +897,10 @@ static XrValue http_static(XrayIsolate *X, XrValue *args, int argc) {
 
     // Copy response content
     char *response_copy = (char *) xr_malloc(response_len + 1);
+    if (!response_copy) {
+        xr_free(path_copy);
+        return xr_null();
+    }
     memcpy(response_copy, response, response_len);
     response_copy[response_len] = '\0';
 
@@ -899,6 +934,8 @@ static XrValue http_ws_route(XrayIsolate *X, XrValue *args, int argc) {
     XrClosure *closure = (XrClosure *) XR_TO_PTR(args[1]);
 
     char *path_copy = (char *) xr_malloc(path_len + 1);
+    if (!path_copy)
+        return xr_null();
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
 
@@ -1204,6 +1241,8 @@ static XrValue http_form_data_append(XrayIsolate *X, XrValue *args, int argc) {
 
     // Need null-terminated string
     char *name_copy = (char *) xr_malloc(name_len + 1);
+    if (!name_copy)
+        return xr_null();
     memcpy(name_copy, name, name_len);
     name_copy[name_len] = '\0';
 
@@ -1226,7 +1265,13 @@ static XrValue http_form_data_append_file(XrayIsolate *X, XrValue *args, int arg
         return xr_bool(false);
 
     char *name_copy = (char *) xr_malloc(name_len + 1);
+    if (!name_copy)
+        return xr_bool(false);
     char *path_copy = (char *) xr_malloc(path_len + 1);
+    if (!path_copy) {
+        xr_free(name_copy);
+        return xr_bool(false);
+    }
     memcpy(name_copy, name, name_len);
     memcpy(path_copy, path, path_len);
     name_copy[name_len] = '\0';
@@ -1375,7 +1420,7 @@ XR_DEFINE_BUILTIN(h2_request, "h2Request",
 
 /* ========== Module Loading ========== */
 
-XrModule *xr_load_module_http(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_http(XrayIsolate *isolate) {
     // 1. Create Native module
     XrModule *mod = xr_module_create_native(isolate, "http");
     if (!mod)

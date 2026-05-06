@@ -884,7 +884,7 @@ static bool compile_node(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
 // Forward declaration
 static void xr_prog_analyze(XrProg *prog, XrAstNode *ast);
 
-XrProg *xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags) {
+XR_FUNC XrProg *xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags) {
     XrProg *prog = (XrProg *) xr_re_alloc(sizeof(XrProg));
     memset(prog, 0, sizeof(XrProg));
     prog->flags = flags;
@@ -939,7 +939,7 @@ XrProg *xr_regex_compile_prog(XrAstNode *ast, XrRegexFlags flags) {
     return prog;
 }
 
-void xr_prog_free(XrProg *prog) {
+XR_FUNC void xr_prog_free(XrProg *prog) {
     if (!prog)
         return;
 
@@ -970,7 +970,7 @@ void xr_prog_free(XrProg *prog) {
  * ByteMap Computation
  * ======================================================================== */
 
-void xr_prog_compute_bytemap(XrProg *prog) {
+XR_FUNC void xr_prog_compute_bytemap(XrProg *prog) {
     // Initial: all bytes map to class 0
     memset(prog->bytemap, 0, sizeof(prog->bytemap));
 
@@ -1273,7 +1273,7 @@ static const char *opcode_name(XrOpcode op) {
     }
 }
 
-void xr_prog_dump(XrProg *prog) {
+XR_FUNC void xr_prog_dump(XrProg *prog) {
     printf("=== Prog (%d instructions, %d captures) ===\n", prog->inst_count, prog->capture_count);
     printf("start: %d, bytemap_range: %d\n", prog->start, prog->bytemap_range);
 

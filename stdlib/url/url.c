@@ -27,6 +27,7 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/runtime/value/xvalue_format.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -449,10 +450,10 @@ static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
                        parts.password ? make_str(X, parts.password, parts.password_len)
                                       : make_cstr(X, ""));
 
-    // Derived: host = hostname[:port]
+    // Derived: host = hostname[:port] (only include validated port)
     XrCtxBuf host_buf;
     xr_ctxbuf_init(&host_buf, 64);
-    if (parts.port && parts.port_len > 0) {
+    if (port_is_valid) {
         xr_ctxbuf_appendf(&host_buf, "%.*s:%.*s", (int) parts.hostname_len,
                           parts.hostname ? parts.hostname : "", (int) parts.port_len, parts.port);
     } else {
@@ -670,7 +671,12 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
             xr_ctxbuf_putc(&buf, '=');
             ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
         } else if (!XR_IS_NULL(val)) {
+            // Stringify non-string primitives (int, float, bool) so
+            // buildQuery({page: 1}) produces "page=1" not "page=".
+            XrString *vs = xr_value_to_string(X, val);
             xr_ctxbuf_putc(&buf, '=');
+            if (vs)
+                ctxbuf_append_url_form(&buf, XR_STRING_CHARS(vs), vs->length);
         }
     }
 
@@ -797,16 +803,35 @@ static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
     XrCtxBuf result;
     xr_ctxbuf_init(&result, 128);
 
+    // Track where the path portion lives in the result buffer so
+    // remove_dot_segments operates only on the path, never on
+    // the scheme, authority, query, or fragment.
+    size_t path_start = 0, path_end = 0;
+
     if (rel_len > 1 && rel[0] == '/' && rel[1] == '/') {
         // Network-path reference: "//host/...": keep base scheme only.
         if (bp.protocol && bp.protocol_len > 0) {
             xr_ctxbuf_appendf(&result, "%.*s", (int) bp.protocol_len, bp.protocol);
         }
-        xr_ctxbuf_append(&result, rel, rel_len);
+        // Append reference authority: skip "//" then find path start.
+        xr_ctxbuf_append(&result, rel, 2);  // "//"
+        size_t a = 2;
+        while (a < rel_no_hash_len && rel[a] != '/' && rel[a] != '?')
+            a++;
+        xr_ctxbuf_append(&result, rel + 2, a - 2);  // authority
+        path_start = result.len;
+        xr_ctxbuf_append(&result, rel + a, rel_path_len > a ? rel_path_len - a : 0);
+        path_end = result.len;
+        if (rel_query)
+            xr_ctxbuf_append(&result, rel_query, rel_query_len);
+        if (rel_hash)
+            xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
     } else if (rel_path_len > 0 && rel[0] == '/') {
         // Absolute-path reference: keep base authority, take reference path.
         url_emit_base_authority(&result, &bp);
+        path_start = result.len;
         xr_ctxbuf_append(&result, rel, rel_path_len);
+        path_end = result.len;
         if (rel_query)
             xr_ctxbuf_append(&result, rel_query, rel_query_len);
         if (rel_hash)
@@ -814,9 +839,11 @@ static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
     } else if (rel_path_len == 0) {
         // Empty-path reference (query-only and/or fragment-only).
         url_emit_base_authority(&result, &bp);
+        path_start = result.len;
         if (bp.pathname && bp.pathname_len > 0) {
             xr_ctxbuf_append(&result, bp.pathname, bp.pathname_len);
         }
+        path_end = result.len;
         if (rel_query) {
             xr_ctxbuf_append(&result, rel_query, rel_query_len);
         } else if (bp.search && bp.search_len > 0) {
@@ -829,6 +856,7 @@ static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
     } else {
         // Relative-path reference: merge base path with reference path.
         url_emit_base_authority(&result, &bp);
+        path_start = result.len;
 
         size_t merge_prefix = 0;
         if (bp.pathname && bp.pathname_len > 0) {
@@ -853,17 +881,32 @@ static XrValue url_resolve_fn(XrayIsolate *X, XrValue *args, int nargs) {
         }
         (void) merge_prefix;
         xr_ctxbuf_append(&result, rel, rel_path_len);
+        path_end = result.len;
         if (rel_query)
             xr_ctxbuf_append(&result, rel_query, rel_query_len);
         if (rel_hash)
             xr_ctxbuf_append(&result, rel_hash, rel_hash_len);
     }
 
-    // Apply remove_dot_segments to the path portion of the resolved URI.
-    // The helper works in-place and never grows, so operating directly on
-    // the buffer storage is safe.
-    int new_len = remove_dot_segments(result.data, (int) result.len);
-    result.len = (size_t) (new_len > 0 ? new_len : 0);
+    // Apply remove_dot_segments only to the path portion.
+    // The helper works in-place and never grows, so operating directly
+    // on the buffer storage is safe. Shift the query+fragment tail
+    // leftward by the number of bytes the path shrank.
+    if (path_end > path_start) {
+        size_t old_path_len = path_end - path_start;
+        int new_path_len = remove_dot_segments(result.data + path_start, (int) old_path_len);
+        if (new_path_len < 0)
+            new_path_len = 0;
+        size_t shrink = old_path_len - (size_t) new_path_len;
+        if (shrink > 0) {
+            size_t tail_len = result.len - path_end;
+            if (tail_len > 0)
+                memmove(result.data + path_start + new_path_len, result.data + path_end, tail_len);
+            result.len -= shrink;
+        }
+    }
+    if (result.data)
+        result.data[result.len] = '\0';
     return ctxbuf_to_value(X, &result);
 }
 
@@ -925,7 +968,7 @@ XR_DEFINE_BUILTIN(url_join_fn, "join", "(...parts: string): string", "Join URL p
 
 /* ========== Module Registration ========== */
 
-XrModule *xr_load_module_url(XrayIsolate *X) {
+XR_FUNC XrModule *xr_load_module_url(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "xr_load_module_url: NULL isolate");
 
     XrModule *mod = xr_module_create_native(X, "url");

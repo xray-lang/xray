@@ -491,7 +491,9 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, 
             XrValue val = attrs[i * 2 + 1];
 
             const char *key_str = value_to_string(key, vbuf, sizeof(vbuf));
-            ctxbuf_printf(&b, ",\"%s\":", key_str);
+            ctxbuf_putc(&b, ',');
+            write_json_string_buf(&b, key_str);
+            ctxbuf_putc(&b, ':');
 
             if (XR_IS_STRING(val)) {
                 write_json_string_buf(&b, XR_STRING_CHARS(XR_TO_STRING(val)));
@@ -549,16 +551,20 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, 
         ctxbuf_putc(&b, '\n');
     }
 
-    // Async: transfer buffer ownership to queue; Sync: write and free
+    // Async: transfer buffer ownership to queue; Sync: write and free.
+    // The mutex prevents setOutput() from closing the FILE* between our
+    // read of logger->output and the fwrite/fflush that uses it.
     if (logger->async_mode && ls && ls->async_initialized) {
         async_log_write(ls, b.data);  // ownership transferred
     } else {
+        xr_mutex_lock(&ls->mutex);
         FILE *out = logger->output ? logger->output : stderr;
         fwrite(b.data, 1, b.len, out);
-        // Only flush for WARN+ level (P2-3: smart flush)
+        // Flush immediately for WARN+ to avoid buffered loss on crash
         if (level >= XR_LOG_WARN) {
             fflush(out);
         }
+        xr_mutex_unlock(&ls->mutex);
         xr_free(b.data);
     }
 }
@@ -905,9 +911,8 @@ static XrLogger *create_child_logger(XrLogger *parent, XrValue *attrs, int nattr
         // === JSON context ===
         if (jbuf.len > 0)
             ctxbuf_putc(&jbuf, ',');
-        ctxbuf_putc(&jbuf, '"');
-        ctxbuf_append(&jbuf, key_str, (int) strlen(key_str));
-        ctxbuf_append(&jbuf, "\":", 2);
+        write_json_string_buf(&jbuf, key_str);
+        ctxbuf_putc(&jbuf, ':');
 
         if (XR_IS_STRING(val)) {
             write_json_string_buf(&jbuf, XR_STRING_CHARS(XR_TO_STRING(val)));
@@ -1104,7 +1109,7 @@ void xr_logger_register_native_type(XrayIsolate *isolate) {
     xr_register_native_type(isolate, &logger_type_info);
 }
 
-XrModule *xr_load_module_log(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_log(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_log: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "log");

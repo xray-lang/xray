@@ -151,6 +151,8 @@ void xr_form_data_append(XrFormData *form, const char *name, const char *value, 
 
     if (value && value_len > 0) {
         field->value = (char *) xr_malloc(value_len + 1);
+        if (!field->value)
+            return;
         memcpy(field->value, value, value_len);
         field->value[value_len] = '\0';
         field->value_len = value_len;
@@ -190,6 +192,8 @@ void xr_form_data_append_file(XrFormData *form, const char *name, const char *fi
     field->content_type = xr_strdup(content_type ? content_type : guess_mime_type(filename));
 
     field->file_data = (char *) xr_malloc(size);
+    if (!field->file_data)
+        return;
     memcpy(field->file_data, data, size);
     field->file_size = size;
 

@@ -5,19 +5,21 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * gc.h - GC monitoring module header
+ * gc.h - GC control and monitoring module header
  *
  * KEY CONCEPT:
- *   Provides GC status query, memory statistics, and info functions.
- *   Per-coroutine GC is automatic, manual control functions are no-ops.
+ *   Per-coroutine GC control and statistics. All operations target
+ *   the current coroutine's GC instance, not a global collector.
  */
 
 #ifndef XR_STDLIB_GC_H
 #define XR_STDLIB_GC_H
 
-#include "../../src/runtime/xisolate_internal.h"
+#include "../../src/base/xdefs.h"
 
-// Load gc module, registers for 'import gc'
-struct XrModule *xr_load_module_gc(XrayIsolate *isolate);
+struct XrayIsolate;
+struct XrModule;
 
-#endif
+XR_FUNC struct XrModule *xr_load_module_gc(struct XrayIsolate *isolate);
+
+#endif  // XR_STDLIB_GC_H

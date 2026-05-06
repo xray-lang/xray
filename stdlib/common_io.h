@@ -49,6 +49,13 @@
 
 #include "../src/base/xmalloc.h"
 
+// Default cap for xrs_file_read_all_sync. Prevents accidental OOM when
+// a stdlib parseFile binding is pointed at a multi-GB file. Callers
+// that genuinely need larger reads should use the io module directly.
+#ifndef XR_STDLIB_MAX_FILE_SIZE
+#define XR_STDLIB_MAX_FILE_SIZE (64u * 1024u * 1024u)  // 64 MB
+#endif
+
 // Read the entire file at `path` into a freshly-xr_malloc'd, NUL-
 // terminated buffer. On success, `*out_data` points at the contents
 // (ownership transferred to the caller — free with `xr_free`) and
@@ -56,10 +63,9 @@
 //
 // Returns true on success, false on any I/O failure. Failure modes
 // leave `*out_data = NULL` and `*out_len = 0`. No partial buffer is
-// returned.
+// returned. Files exceeding XR_STDLIB_MAX_FILE_SIZE are rejected.
 //
-// NOTE: synchronous. Blocks the worker thread for large files. See the
-// header comment for the P9 plan.
+// NOTE: synchronous. Blocks the worker thread on slow storage.
 static inline bool xrs_file_read_all_sync(const char *path, char **out_data, size_t *out_len) {
     if (!path || !out_data || !out_len)
         return false;
@@ -85,6 +91,10 @@ static inline bool xrs_file_read_all_sync(const char *path, char **out_data, siz
     }
 
     size_t size = (size_t) raw;
+    if (size > XR_STDLIB_MAX_FILE_SIZE) {
+        fclose(f);
+        return false;
+    }
     char *buf = (char *) xr_malloc(size + 1);
     if (!buf) {
         fclose(f);

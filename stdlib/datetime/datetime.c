@@ -71,20 +71,25 @@ static inline time_t datetime_mktime(struct tm *tm, int is_utc) {
 
 /* ========== Timezone ========== */
 
-int xr_datetime_local_offset(void) {
-    time_t now = time(NULL);
+// Compute local UTC offset in minutes for a specific point in time.
+// Uses localtime/gmtime to obtain the DST-aware offset at `t`.
+static int local_offset_at(time_t t) {
     struct tm local_tm, utc_tm;
 #ifdef XR_OS_WINDOWS
-    localtime_s(&local_tm, &now);
-    gmtime_s(&utc_tm, &now);
+    localtime_s(&local_tm, &t);
+    gmtime_s(&utc_tm, &t);
 #else
-    localtime_r(&now, &local_tm);
-    gmtime_r(&now, &utc_tm);
+    localtime_r(&t, &local_tm);
+    gmtime_r(&t, &utc_tm);
 #endif
     local_tm.tm_isdst = 0;
     utc_tm.tm_isdst = 0;
     double diff_sec = difftime(mktime(&local_tm), mktime(&utc_tm));
     return (int) (diff_sec / 60.0);
+}
+
+int xr_datetime_local_offset(void) {
+    return local_offset_at(time(NULL));
 }
 
 /* ========== Creation API ========== */
@@ -124,7 +129,7 @@ XrDateTime *xr_datetime_create(XrayIsolate *isolate, int year, int month, int da
     XrDateTime *dt = datetime_alloc(isolate);
     dt->timestamp = (int64_t) t;
     dt->milliseconds = 0;
-    dt->tz_offset = is_utc ? 0 : xr_datetime_local_offset();
+    dt->tz_offset = is_utc ? 0 : local_offset_at(t);
     dt->is_utc = (uint8_t) is_utc;
     return dt;
 }
@@ -140,8 +145,16 @@ XrDateTime *xr_datetime_from_timestamp(XrayIsolate *isolate, int64_t timestamp) 
 
 XrDateTime *xr_datetime_from_timestamp_ms(XrayIsolate *isolate, int64_t timestamp_ms) {
     XrDateTime *dt = datetime_alloc(isolate);
-    dt->timestamp = timestamp_ms / 1000;
-    dt->milliseconds = (int32_t) (timestamp_ms % 1000);
+    // Floor division: milliseconds must be in [0, 999].
+    // C truncation toward zero gives negative remainder for negative inputs.
+    int64_t sec = timestamp_ms / 1000;
+    int32_t ms = (int32_t) (timestamp_ms % 1000);
+    if (ms < 0) {
+        sec -= 1;
+        ms += 1000;
+    }
+    dt->timestamp = sec;
+    dt->milliseconds = ms;
     dt->tz_offset = 0;
     dt->is_utc = 1;
     return dt;
@@ -270,7 +283,7 @@ XrDateTime *xr_datetime_parse(XrayIsolate *isolate, const char *str, const char 
         return NULL;
     dt->timestamp = (int64_t) t;
     dt->milliseconds = ms;
-    dt->tz_offset = is_utc ? 0 : xr_datetime_local_offset();
+    dt->tz_offset = is_utc ? 0 : local_offset_at(t);
     dt->is_utc = is_utc;
     return dt;
 }
@@ -582,7 +595,7 @@ XrDateTime *xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt) {
     } else {
         result->timestamp = dt->timestamp;
         result->milliseconds = dt->milliseconds;
-        result->tz_offset = xr_datetime_local_offset();
+        result->tz_offset = local_offset_at((time_t) dt->timestamp);
         result->is_utc = 0;
     }
     return result;

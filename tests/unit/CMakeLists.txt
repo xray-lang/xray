@@ -248,6 +248,8 @@ if(XR_BUILD_LSP)
     file(GLOB LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
 
+    # LSP full-source tests require POSIX pipe/fcntl (not yet ported to Windows)
+    if(NOT WIN32)
     add_executable(test_lsp_document
         lsp/test_lsp_document.c
         ${LSP_SOURCES}
@@ -299,6 +301,7 @@ if(XR_BUILD_LSP)
     )
     target_link_libraries(test_lsp_diagnostics PRIVATE xray_core)
     add_test(NAME test_lsp_diagnostics COMMAND test_lsp_diagnostics)
+    endif() # NOT WIN32
 endif()
 
 # ============================================================================

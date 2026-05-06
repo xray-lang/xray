@@ -17,8 +17,14 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <string.h>
-#include <strings.h>
 #include <ctype.h>
+
+#ifdef XR_OS_WINDOWS
+#define strcasecmp _stricmp
+#define strncasecmp _strnicmp
+#else
+#include <strings.h>
+#endif
 #include <stdio.h>
 
 /* ======================================================================

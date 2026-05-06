@@ -8,27 +8,25 @@
  * time.h - Time module for xray standard library
  *
  * KEY CONCEPT:
- *   Provides time-related functions: timestamps, high-precision timing,
- *   and sleep control. All time units are in milliseconds.
+ *   Provides wall-clock timestamps (now, milliseconds), monotonic
+ *   timing (monotonic/nanos/micros), process CPU time (clock), and
+ *   coroutine-friendly sleep.
  *
  * USAGE:
  *   import time
- *   let now = time.now()    // millisecond timestamp
- *   time.sleep(1500)        // sleep 1500 milliseconds
+ *   let now = time.now()       // epoch milliseconds (wall clock)
+ *   let t   = time.nanos()     // monotonic nanoseconds
+ *   time.sleep(1500)           // yield for 1500 ms
  */
 
 #ifndef XR_STDLIB_TIME_H
 #define XR_STDLIB_TIME_H
 
-#include "../../src/runtime/value/xvalue.h"
+#include "../../src/base/xdefs.h"
 
+struct XrayIsolate;
 struct XrModule;
 
-/*
- * Native module loader.
- * The per-function C bindings (time.now, time.clock, etc.) are file-private
- * to time.c; callers reach them through the registered module export table.
- */
-struct XrModule *xr_load_module_time(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_time(struct XrayIsolate *isolate);
 
 #endif  // XR_STDLIB_TIME_H

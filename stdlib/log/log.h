@@ -72,6 +72,6 @@ typedef struct XrLoggerRef {
 
 /* ========== Module Loader ========== */
 
-struct XrModule *xr_load_module_log(XrayIsolate *isolate);
+XR_FUNC struct XrModule *xr_load_module_log(struct XrayIsolate *isolate);
 
 #endif  // XR_STDLIB_LOG_H

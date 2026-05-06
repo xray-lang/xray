@@ -16,6 +16,8 @@
 #include "encoding.h"
 #include "../common.h"
 #include "../../src/runtime/object/xarray.h"
+#include "../../src/runtime/object/xutf8.h"
+#include "../../src/base/xsimd.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/runtime/gc/xgc.h"
@@ -25,7 +27,7 @@
 
 static const char HEX_CHARS_LOWER[] = "0123456789abcdef";
 
-int xr_hex_encode(const uint8_t *data, size_t len, char *output) {
+XR_FUNC int xr_hex_encode(const uint8_t *data, size_t len, char *output) {
     if (!data || !output)
         return 0;
     XR_DCHECK(len <= (SIZE_MAX / 2), "xr_hex_encode: len must not overflow output index");
@@ -38,7 +40,7 @@ int xr_hex_encode(const uint8_t *data, size_t len, char *output) {
     return (int) (len * 2);
 }
 
-int xr_hex_decode(const char *hex, size_t len, uint8_t *output) {
+XR_FUNC int xr_hex_decode(const char *hex, size_t len, uint8_t *output) {
     if (!hex || !output)
         return -1;
     if (len % 2 != 0)
@@ -55,7 +57,7 @@ int xr_hex_decode(const char *hex, size_t len, uint8_t *output) {
     return (int) out_len;
 }
 
-bool xr_hex_valid(const char *hex, size_t len) {
+XR_FUNC bool xr_hex_valid(const char *hex, size_t len) {
     if (!hex)
         return false;
     if (len % 2 != 0)
@@ -70,8 +72,8 @@ bool xr_hex_valid(const char *hex, size_t len) {
 
 /* ========== UTF-16 Implementation ========== */
 
-int xr_utf16_encode(const uint8_t *utf8, size_t utf8_len, uint8_t *output, size_t out_cap,
-                    XrUtf16Endian endian) {
+XR_FUNC int xr_utf16_encode(const uint8_t *utf8, size_t utf8_len, uint8_t *output, size_t out_cap,
+                            XrUtf16Endian endian) {
     if (!utf8 || !output)
         return -1;
 
@@ -171,8 +173,8 @@ static inline uint16_t xr_utf16_read_be(const uint8_t *p) {
 XR_UTF16_DECODE_IMPL(le, xr_utf16_read_le)
 XR_UTF16_DECODE_IMPL(be, xr_utf16_read_be)
 
-int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len, uint8_t *output, size_t out_cap,
-                    XrUtf16Endian endian) {
+XR_FUNC int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len, uint8_t *output, size_t out_cap,
+                            XrUtf16Endian endian) {
     if (!utf16 || !output)
         return -1;
     if (utf16_len % 2 != 0)
@@ -181,7 +183,7 @@ int xr_utf16_decode(const uint8_t *utf16, size_t utf16_len, uint8_t *output, siz
                                    : xr_utf16_decode_be(utf16, utf16_len, output, out_cap);
 }
 
-int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len) {
+XR_FUNC int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len) {
     if (!utf8)
         return 0;
 
@@ -198,7 +200,7 @@ int xr_utf16_encoded_len(const uint8_t *utf8, size_t utf8_len) {
     return len;
 }
 
-int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16Endian endian) {
+XR_FUNC int xr_utf16_to_utf8_len(const uint8_t *utf16, size_t utf16_len, XrUtf16Endian endian) {
     if (!utf16 || utf16_len % 2 != 0)
         return -1;
     XR_DCHECK(endian == XR_UTF16_LE || endian == XR_UTF16_BE,
@@ -520,7 +522,7 @@ XR_DEFINE_BUILTIN(encoding_utf16_decode, "utf16Decode",
                   "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
                   "UTF-16 decode to string (auto-detects BOM)")
 
-XrModule *xr_load_module_encoding(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_encoding(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_encoding: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "encoding");

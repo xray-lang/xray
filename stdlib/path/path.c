@@ -15,9 +15,10 @@
 #include "path.h"
 #include "../common.h"
 #include "../ctxbuf.h"
-#include "../../src/vm/xvm_internal.h"
+#include "../../src/runtime/object/xmap.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/coro/xcoroutine.h"  // xr_current_coro
 #include <limits.h>
 #include "../../src/os/os_fs.h"
 
@@ -315,6 +316,7 @@ static XrValue path_normalize(XrayIsolate *X, XrValue *args, int argc) {
     result[pos] = '\0';
 
     XrValue ret = xrs_string_value_c(X, result);
+    xr_free(result);
     xr_free(seg_buf);
     return ret;
 }
@@ -582,7 +584,7 @@ XR_DEFINE_BUILTIN(path_relative, "relative", "(from: string, to: string): string
 XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): Json", "Parse path into components")
 XR_DEFINE_BUILTIN(path_format, "format", "(obj: Json): string", "Format path from components")
 
-XrModule *xr_load_module_path(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_path(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_path: NULL isolate");
 
     XrModule *mod = xr_module_create_native(isolate, "path");

@@ -10,17 +10,10 @@
 
 #include "time.h"
 #include "../common.h"
-#include "../../src/base/xplatform.h"
-#include "../../src/vm/xvm_internal.h"  // XrCoroState, XrCoroutine
-#include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
+#include "../../src/coro/xyieldable.h"
+#include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
-#include <time.h>
-#include <stdio.h>
-
-#ifndef XR_OS_WINDOWS
-#include <unistd.h>
-#endif
 
 // ========== Helper functions ==========
 
@@ -42,25 +35,12 @@ static XrValue xr_time_now(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_int(get_timestamp_ms());
 }
 
-// time.clock() -> int (milliseconds)
-//
-// POSIX `clock_t` is a 32-bit type at 1 MHz on Linux/macOS, so `clock()`
-// overflows after ~70 minutes. Prefer CLOCK_PROCESS_CPUTIME_ID when
-// available, which is monotonic across the full 64-bit range.
+// time.clock() -> int (milliseconds of process CPU time)
 static XrValue xr_time_clock(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-#if defined(XR_OS_MACOS) || defined(XR_OS_LINUX)
-    struct timespec ts;
-    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
-        int64_t ms = (int64_t) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-        return xr_int(ms);
-    }
-#endif
-    clock_t t = clock();
-    int64_t milliseconds = (int64_t) t * 1000 / CLOCKS_PER_SEC;
-    return xr_int(milliseconds);
+    return xr_int((int64_t) (xr_time_process_cpu_ns() / 1000000ULL));
 }
 
 // time.monotonic() -> int (milliseconds)
@@ -120,16 +100,16 @@ static XrCFuncResult xr_time_sleep(XrayIsolate *X, XrValue *args, int nargs, XrV
         return XR_CFUNC_DONE;
     }
 
+    /* Cap at 24 hours to prevent timer-wheel overflow or scheduler
+     * starvation from accidentally huge values. */
+    static const int64_t MAX_SLEEP_MS = 24LL * 60 * 60 * 1000;
+    if (ms > MAX_SLEEP_MS)
+        ms = MAX_SLEEP_MS;
+
     return xr_yield_for_timeout(X, ms, time_sleep_done, NULL, result);
 }
 
 // ========== Module loader ==========
-
-/*
- * Native module loader
- * Loads time module
- * Returns: Module object
- */
 
 // ========== Type Declarations (parsed by gen_stdlib_types.py) ==========
 
@@ -144,14 +124,13 @@ XR_DEFINE_BUILTIN(xr_time_nanos, "nanos", "(): int", "Monotonic time in nanoseco
 XR_DEFINE_BUILTIN(xr_time_micros, "micros", "(): int", "Monotonic time in microseconds")
 XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int): void", "Sleep for milliseconds")
 
-XrModule *xr_load_module_time(XrayIsolate *isolate) {
+XR_FUNC XrModule *xr_load_module_time(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_time: NULL isolate");
 
     XrModule *module = xr_module_create_native(isolate, "time");
     if (!module)
         return NULL;
 
-    // 2. Add exported functions
     XRS_EXPORT(module, isolate, "now", xr_time_now);
     XRS_EXPORT(module, isolate, "clock", xr_time_clock);
     XRS_EXPORT(module, isolate, "monotonic", xr_time_monotonic);
@@ -159,7 +138,6 @@ XrModule *xr_load_module_time(XrayIsolate *isolate) {
     XRS_EXPORT(module, isolate, "micros", xr_time_micros);
     XRS_EXPORT_YIELDABLE(module, isolate, "sleep", xr_time_sleep);
 
-    // 3. Mark as loaded
     module->loaded = true;
     return module;
 }
