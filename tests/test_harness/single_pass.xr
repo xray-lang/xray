@@ -1,0 +1,7 @@
+// Self-test fixture: single @test that passes
+// Expected: 1 test executed, 1 passed, exit code 0
+
+@test
+fn test_simple_pass() {
+    assert_eq(1 + 1, 2)
+}
