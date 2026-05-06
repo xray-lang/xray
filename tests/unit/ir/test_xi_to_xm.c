@@ -345,15 +345,15 @@ TEST(lower_shared_var) {
     XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
     assert(xm != NULL && "shared var lowering should succeed");
 
-    /* Verify: should have LOAD and STORE instructions */
+    /* Verify: GET_SHARED → XM_CALL_C, SET_SHARED → XM_STORE */
     XmBlock *blk0 = xm->blocks[0];
-    bool found_store = false, found_load = false;
+    bool found_store = false, found_call_c = false;
     for (uint32_t i = 0; i < blk0->nins; i++) {
         if (blk0->ins[i].op == XM_STORE) found_store = true;
-        if (blk0->ins[i].op == XM_LOAD) found_load = true;
+        if (blk0->ins[i].op == XM_CALL_C) found_call_c = true;
     }
     assert(found_store && "should contain XM_STORE for SET_SHARED");
-    assert(found_load && "should contain XM_LOAD for GET_SHARED");
+    assert(found_call_c && "should contain XM_CALL_C for GET_SHARED");
 
     xm_func_destroy(xm);
     xi_func_free(f);

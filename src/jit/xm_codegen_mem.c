@@ -62,7 +62,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     fa = 30;
                     // Load saved tag
                     a64_buf_emit(&ctx->buf,
-                                 a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_LOAD_TAG_SCRATCH));
+                                 a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_TAG_SCRATCH_OFFSET));
                     // fmov d30, x_ga (bit reinterpret: correct if float)
                     a64_buf_emit(&ctx->buf, a64_fmov_gp_to_fp(fa, ga));
                     // cmp tag, #4 (XR_TAG_F64)
@@ -89,7 +89,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     A64Reg gb = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
                     fb = 31;
                     a64_buf_emit(&ctx->buf,
-                                 a64_ldr(SCRATCH_REG, JIT_CTX_REG, XM_JIT_LOAD_TAG_SCRATCH));
+                                 a64_ldr(SCRATCH_REG, JIT_CTX_REG, XM_JIT_TAG_SCRATCH_OFFSET));
                     a64_buf_emit(&ctx->buf, a64_fmov_gp_to_fp(fb, gb));
                     // cmp tag, #4 (XR_TAG_F64)
                     a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, 4));
@@ -409,7 +409,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     a64_buf_emit(&ctx->buf,
                                  a64_ldrb(SCRATCH_REG2, obj, offset + XM_XRVALUE_TAG_OFFSET));
                     a64_buf_emit(&ctx->buf,
-                                 a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_LOAD_TAG_SCRATCH));
+                                 a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_TAG_SCRATCH_OFFSET));
                 }
             }
             // Payload sits at byte 8 within the XrValue struct

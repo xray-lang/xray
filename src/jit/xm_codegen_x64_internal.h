@@ -119,10 +119,10 @@
 
 /* ========== Branch Patch ========== */
 
-/* Extra-arg scratch: reuse call_args[15] slot to pass extra_arg to call_c_stub.
- * This slot is safe because call_args are written before the call and the
- * extra_arg is consumed before any call_args are read by the callee. */
-#define X64_EXTRA_ARG_OFFSET XM_JIT_LOAD_TAG_SCRATCH
+/* Extra-arg scratch: reuse the call_args[15] slot to pass extra_arg to
+ * call_c_stub. Safe because call_args are written before the call and
+ * the extra_arg is consumed before any call_args are read by the callee. */
+#define X64_EXTRA_ARG_OFFSET XM_JIT_TAG_SCRATCH_OFFSET
 
 typedef enum {
     X64_PATCH_JMP,             // unconditional JMP rel32
