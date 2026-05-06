@@ -55,7 +55,7 @@ TEST(opcode_name_container) {
 }
 
 TEST(opcode_name_coroutine) {
-    ASSERT_STR_EQ(xr_opcode_name(OP_SPAWN_CONT), "SPAWN_CONT");
+    ASSERT_STR_EQ(xr_opcode_name(OP_GO), "GO");
     ASSERT_STR_EQ(xr_opcode_name(OP_AWAIT), "AWAIT");
     ASSERT_STR_EQ(xr_opcode_name(OP_YIELD), "YIELD");
 }

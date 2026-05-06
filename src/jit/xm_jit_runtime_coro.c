@@ -1003,14 +1003,14 @@ XrJitResult xr_jit_scope_exit(XrCoroutine *coro, int64_t extra_arg) {
     return XR_JIT_OK();
 }
 
-// Called from JIT via CALL_C for OP_SPAWN_CONT.
+// Called from JIT via CALL_C for OP_GO.
 // jit_call_args[0] = closure raw (XrValue tagged as PTR)
 // jit_call_args[1..nargs] = argument values (raw payloads)
 // extra_arg = nargs | (fire_and_forget << 7)
 // Creates the coroutine, sets up scope, schedules via xr_runtime_spawn.
 // Returns the coroutine XrValue raw payload (for R[A]).
 // Note: skips continuation stealing for simplicity — coro scheduled normally.
-XrJitResult xr_jit_spawn_cont(XrCoroutine *coro, int64_t extra_arg) {
+XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     int c_raw = (int) (extra_arg & 0xFF);
     bool fire_and_forget = (c_raw & 0x80) != 0;
     int nargs = c_raw & 0x7F;

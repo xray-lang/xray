@@ -1517,7 +1517,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
 
     if (expr->type == AST_CALL_EXPR) {
         /* go fn(args): extract callee + args, don't execute the call.
-         * XI_GO args[0]=callee, args[1..n]=params → emits OP_SPAWN_CONT.
+         * XI_GO args[0]=callee, args[1..n]=params → emits OP_GO.
          * Lower ALL operands before creating XI_GO so they precede it
          * in the block's values array (same pattern as lower_call). */
         CallExprNode *call = &expr->as.call_expr;

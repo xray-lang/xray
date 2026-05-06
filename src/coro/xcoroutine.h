@@ -195,7 +195,7 @@ typedef struct XrJitScratch {
     /* Heartbeat pointer: set by run_on_worker to &machine->heartbeat.
      * Bumped by xr_coro_gc_safepoint so sysmon doesn't misdetect
      * long-running JIT code as stuck (JIT doesn't return to worker
-     * loop between C helper calls like spawn_cont/await). */
+     * loop between C helper calls like go/await). */
     _Atomic uint64_t *heartbeat_ptr;
 
     /* Guard page safepoint: x20 (SAFEPT_PAGE_REG) points here.

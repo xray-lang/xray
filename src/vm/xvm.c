@@ -150,8 +150,8 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
             return XR_VM_YIELD;                                                                    \
         if (_cr == VM_COLD_FATAL)                                                                  \
             return XR_VM_RUNTIME_ERROR;                                                            \
-        if (_cr == VM_COLD_SPAWN_CONT)                                                             \
-            return XR_VM_SPAWN_CONT;                                                               \
+        if (_cr == VM_COLD_GO_CHILD)                                                               \
+            return XR_VM_GO_CHILD;                                                               \
         if (_cr == VM_COLD_ERROR) {                                                                \
             if (vm_ctx->handler_count == 0)                                                        \
                 return XR_VM_RUNTIME_ERROR;                                                        \
@@ -580,7 +580,7 @@ startfunc:
     }
 
     // Record defer start position for current frame.
-    // Only on first entry (pc at proto start).  Re-entries (SPAWN_CONT
+    // Only on first entry (pc at proto start).  Re-entries (GO_CHILD
     // continuation, exception handler, OSR) must keep the original mark
     // so defers registered before the suspension point are not lost.
     if (vm_ctx->defer_frame_marks && pc == PROTO_CODE_BASE(cl->proto)) {

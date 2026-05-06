@@ -146,7 +146,7 @@
     _(chan_recv_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                             \
     _(scope_enter, 0, XR_REP_VOID, 0)                                                              \
     _(scope_exit, 0, XR_REP_VOID, 0)                                                               \
-    _(spawn_cont, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                    \
+    _(go, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                    \
     _(await, 0, XR_REP_TAGGED, XM_HF_SUSPEND)                                                     \
     _(await_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                                 \
     // ---- end ----

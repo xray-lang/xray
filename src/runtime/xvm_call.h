@@ -34,7 +34,7 @@ typedef enum {
     XR_VM_YIELD,        // Coroutine yielded (preemptive scheduling)
     XR_VM_DEBUG_BREAK,  // Stopped at breakpoint
     XR_VM_CANCELLED,    // Coroutine cancelled (sysmon or user cancel)
-    XR_VM_SPAWN_CONT    // Continuation stealing: child ready, parent saved
+    XR_VM_GO_CHILD      // Continuation stealing: child ready, parent saved
 } XrVMResult;
 
 /* ========== VM Call Interface ========== */
