@@ -1077,10 +1077,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_CANCELLED_EXPR:
             result = xr_type_new_bool(NULL);
             break;
-        case AST_AWAIT_ALL_EXPR:
-        case AST_AWAIT_ANY_EXPR:
-            result = xa_visit_await_expr(ctx, node);
-            break;
         default:
             result = xr_type_new_unknown(NULL);
             break;

@@ -3,7 +3,7 @@ test1: await.all basic
   r1: 20
   r2: 30
   sum: 60
-test2: await [tasks] syntax
+test2: await.all two tasks
   r0: 10
   r1: 20
 all tests passed

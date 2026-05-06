@@ -761,11 +761,10 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
         }
 
-        /* Type operations — passthrough for now */
+        /* Type operations — deopt to VM for runtime type checks */
         case XI_IS:
         case XI_AS:
-            if (v->nargs >= 1) return get_ref(ctx, v->args[0]);
-            return xm_const_i64(ctx->xm_func, 0);
+            return lower_call(ctx, blk, v);
 
         /* Slice / Range — lower as generic calls */
         case XI_SLICE:

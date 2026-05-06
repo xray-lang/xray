@@ -14,7 +14,7 @@ fn main(): int {
     print("=== 基本 go/await ===")
     let task1 = go { return 42 }
     print("task1 result:", await task1)
-    
+
     // === 2. 状态检查 ===
     print("=== 状态检查 ===")
     let task2 = go { return 100 }
@@ -22,7 +22,7 @@ fn main(): int {
     await task2
     print("after await - done:", task2.done)
     print("result:", task2.result)
-    
+
     // === 3. 取消协程 ===
     print("=== 取消协程 ===")
     let task3 = go { return 200 }
@@ -30,7 +30,7 @@ fn main(): int {
     print("cancelled:", task3.cancelled)
     let result3 = await task3
     print("cancelled result:", result3)
-    
+
     // === 4. Channel 通信 ===
     print("=== Channel 通信 ===")
     shared const ch = Channel(3)
@@ -38,7 +38,7 @@ fn main(): int {
     ch.trySend(2)
     ch.trySend(3)
     print("recv:", ch.tryRecv(), ch.tryRecv(), ch.tryRecv())
-    
+
     // === 5. defer 清理 ===
     print("=== defer 清理 ===")
     fn cleanup(): void { print("cleanup!") }
@@ -48,22 +48,22 @@ fn main(): int {
         return 42
     }
     with_defer()
-    
+
     // === 6. await.all ===
     print("=== await.all ===")
     let t1 = go { return 1 }
     let t2 = go { return 2 }
     let t3 = go { return 3 }
-    let results = await [t1, t2, t3]
+    let results = await.all [t1, t2, t3]
     print("all results:", results)
-    
+
     // === 7. await.any ===
     print("=== await.any ===")
     let t4 = go { return "first" }
     let t5 = go { return "second" }
     let first = await.any [t4, t5]
     print("first result:", first)
-    
+
     print("=== 完成 ===")
 }
 

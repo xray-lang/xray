@@ -1535,8 +1535,6 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
         case AST_INDEX_SET:
         case AST_GO_EXPR:
         case AST_AWAIT_EXPR:
-        case AST_AWAIT_ALL_EXPR:
-        case AST_AWAIT_ANY_EXPR:
         case AST_NEW_EXPR:
         case AST_MOVE_EXPR:
             xi_lower_expr(l, node);
