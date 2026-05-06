@@ -127,7 +127,7 @@ static const char CONCURRENCY_SYSTEM[] =
     "3. scope: structured concurrency (wait for all)\n"
     "4. select: multiplex channels with timeout\n"
     "5. shared const: read-only shared config\n"
-    "6. await.all / await.any: fan-out patterns\n"
+    "6. await all / await any: fan-out patterns\n"
     "Rules: Channel must be const. go closures deep-copy params. "
     "Cannot capture let variables in go closures.\n";
 

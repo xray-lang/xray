@@ -49,19 +49,19 @@ fn main(): int {
     }
     with_defer()
 
-    // === 6. await.all ===
-    print("=== await.all ===")
+    // === 6. await all ===
+    print("=== await all ===")
     let t1 = go { return 1 }
     let t2 = go { return 2 }
     let t3 = go { return 3 }
-    let results = await.all [t1, t2, t3]
+    let results = await all [t1, t2, t3]
     print("all results:", results)
 
-    // === 7. await.any ===
-    print("=== await.any ===")
+    // === 7. await any ===
+    print("=== await any ===")
     let t4 = go { return "first" }
     let t5 = go { return "second" }
-    let first = await.any [t4, t5]
+    let first = await any [t4, t5]
     print("first result:", first)
 
     print("=== 完成 ===")

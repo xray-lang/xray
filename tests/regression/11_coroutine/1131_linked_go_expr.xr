@@ -22,7 +22,7 @@ fn test_go_with_monitor() {
 // Test 3: linked go inside linked scope
 fn test_linked_go_in_scope() {
     let result = 0
-    scope.linked {
+    linked scope {
         let t = go ok()
         result = await t
     }

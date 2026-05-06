@@ -16,7 +16,7 @@ fn test_go_block(): void {
         return 300
     }
 
-    let results = await.all [t2, t3]
+    let results = await all [t2, t3]
     print(results[0])  // 200
     print(results[1])  // 300
 

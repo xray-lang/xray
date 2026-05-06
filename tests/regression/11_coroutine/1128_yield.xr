@@ -32,7 +32,7 @@ fn worker(id: int): int {
 
 let w1 = go worker(1)
 let w2 = go worker(2)
-await.all [w1, w2]
+await all [w1, w2]
 print("test3: all done")
 
 // 测试4：yield 在循环中
@@ -64,7 +64,7 @@ fn intensive_yield(id: int, count: int): int {
 let t5a = go intensive_yield(1, 10)
 let t5b = go intensive_yield(2, 10)
 let t5c = go intensive_yield(3, 10)
-await.all [t5a, t5b, t5c]
+await all [t5a, t5b, t5c]
 print("test5: sums =", t5a.result, t5b.result, t5c.result)
 
 print("all tests passed")

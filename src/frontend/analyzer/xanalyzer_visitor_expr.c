@@ -1563,7 +1563,7 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
             return result_type ? result_type : xr_type_new_unknown(NULL);
         }
 
-        // await [arr] is syntactic sugar for await.all — treat array as Task array
+        // await [arr] is syntactic sugar for await all — treat array as Task array
         if (XR_TYPE_IS_ARRAY(expr_type)) {
             XrType *elem = expr_type->container.element_type;
             XrType *result_elem = xr_type_new_unknown(NULL);

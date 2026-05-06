@@ -1,4 +1,4 @@
-// 测试 await.any - 等待任一协程完成
+// 测试 await any - 等待任一协程完成
 
 fn slow(n: int): int {
     return n * 100
@@ -15,13 +15,13 @@ fn test_await_any(): void {
     let t2 = go fast(2)
     let t3 = go slow(3)
     
-    // await.any 返回第一个完成的协程结果
+    // await any 返回第一个完成的协程结果
     // 由于是按序执行，返回 t1 的结果
-    let first = await.any [t1, t2, t3]
+    let first = await any [t1, t2, t3]
     print(first)  // 100 (slow(1))
     
-    // 如果第一个已完成，await.any 直接返回
-    let second = await.any [t1, t2, t3]
+    // 如果第一个已完成，await any 直接返回
+    let second = await any [t1, t2, t3]
     print(second)  // 100 (t1 已完成)
     
     print("done")

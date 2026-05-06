@@ -149,7 +149,7 @@ XR_FUNC XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *element
 XR_FUNC XrValue xr_array_get(XrArray *arr, int index);  // Returns null if out of bounds
 XR_FUNC void xr_array_set(XrArray *arr, int index, XrValue value);
 
-// Direct set without locking (for multi-threaded scenarios like await.all)
+// Direct set without locking (for multi-threaded scenarios like await all)
 XR_FUNC void xr_array_set_direct(XrArray *arr, int index, XrValue value);
 
 XR_FUNC int xr_array_size(XrArray *arr);

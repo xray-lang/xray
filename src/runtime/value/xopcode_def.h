@@ -240,7 +240,7 @@
     _(AWAIT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B], C=discard")                             \
     _(AWAIT_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = await(timeout: R[C]) R[B]")                     \
     _(AWAIT_ALL, FMT_AB, KOP_AB_UNARY, "R[A] = await R[B]:Array")                                  \
-    _(AWAIT_ANY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await.any R[B]:Array, C=mode")                  \
+    _(AWAIT_ANY, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await any R[B]:Array, C=mode")                  \
     _(YIELD, FMT_A, KOP_A_LIT, "yield (A=poll_threshold for select default)")                      \
     _(CANCELLED, FMT_A, KOP_A_LOAD, "R[A] = cancelled()")                                          \
     _(LOCK_THREAD, FMT_NONE, KOP_NONE, "Coro.lockThread()")                                        \

@@ -33,7 +33,7 @@ fn test_property_concurrent_concat_short(): void {
         tasks.push(go concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果独立且正确
     for (let i = 0; i < n; i++) {
@@ -62,7 +62,7 @@ fn test_property_concurrent_concat_long(): void {
         tasks.push(go concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果独立且正确
     for (let i = 0; i < n; i++) {
@@ -95,7 +95,7 @@ fn test_property_concurrent_concat_mixed(): void {
         tasks.push(go concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果独立且正确
     for (let i = 0; i < n; i++) {
@@ -130,7 +130,7 @@ fn test_property_concurrent_concat_isolation(): void {
         tasks.push(go isolation_task(i, char))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果只包含该协程的唯一字符
     for (let i = 0; i < n; i++) {
@@ -168,7 +168,7 @@ fn test_property_concurrent_concat_threshold_boundary(): void {
         tasks.push(go boundary_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证每个结果长度正确
     for (let i = 0; i < n; i++) {
@@ -202,7 +202,7 @@ fn test_property_concurrent_concat_correctness(): void {
         tasks.push(go concat_task(i))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     // 验证并发结果与串行结果一致
     for (let i = 0; i < 30; i++) {

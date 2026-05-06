@@ -143,7 +143,7 @@ XrValue xr_array_get(XrArray *arr, int index) {
     return xr_array_get_element(arr, index);
 }
 
-// Direct set without bounds check (for multi-threaded scenarios like await.all)
+// Direct set without bounds check (for multi-threaded scenarios like await all)
 // Thread-safe when each thread writes to different, non-overlapping indices
 void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
     XR_DCHECK(arr != NULL, "array_set_direct: NULL array");

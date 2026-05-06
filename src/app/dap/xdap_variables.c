@@ -611,7 +611,7 @@ static const char *coro_state_string(XrCoroutine *coro) {
                 case XR_CORO_WAIT_AWAIT:
                     return "blocked (await)";
                 case XR_CORO_WAIT_AWAIT_ALL:
-                    return "blocked (await.all)";
+                    return "blocked (await all)";
                 case XR_CORO_WAIT_SLEEP:
                     return "blocked (sleep)";
                 case XR_CORO_WAIT_IO:

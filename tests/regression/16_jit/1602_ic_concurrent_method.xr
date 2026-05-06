@@ -44,7 +44,7 @@ for (let i = 0; i < NCORO; i++) {
     tasks.push(go worker(a, ITERS))
 }
 
-let results = await.all tasks
+let results = await all tasks
 let want = expected(7, ITERS)
 for (let i = 0; i < NCORO; i++) {
     assert(results[i] == want,

@@ -46,7 +46,7 @@ Xray's core differentiator. **If it compiles, it's concurrency-safe.**
 
 | File | Topics |
 |------|--------|
-| [goroutines.xr](05-concurrency/goroutines.xr) | go, await, await.all, await.any, Task |
+| [goroutines.xr](05-concurrency/goroutines.xr) | go, await, await all, await any, Task |
 | [channels.xr](05-concurrency/channels.xr) | Channel, send/recv, producer-consumer, fan-out |
 | [select_and_scope.xr](05-concurrency/select_and_scope.xr) | select, defer, scope (structured concurrency) |
 | [shared_data.xr](05-concurrency/shared_data.xr) | shared const, Channel, parameter passing — the 3 sharing rules |

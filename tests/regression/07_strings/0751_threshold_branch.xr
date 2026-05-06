@@ -267,7 +267,7 @@ fn test_concurrent_threshold_boundary(): void {
         tasks.push(go concat_task(len_a, len_b))
     }
     
-    let results = await.all tasks
+    let results = await all tasks
     
     for (let i = 0; i < results.length; i++) {
         let expected_len = test_cases[i][0] + test_cases[i][1]

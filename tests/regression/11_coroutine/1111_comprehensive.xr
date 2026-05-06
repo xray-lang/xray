@@ -32,7 +32,7 @@ fn test_producer_consumer(): void {
     let p2 = go producer(ch, 2, 3)
 
     // 等待所有生产者完成
-    let producer_ids = await.all [p1, p2]
+    let producer_ids = await all [p1, p2]
     print(producer_ids[0])  // 1
     print(producer_ids[1])  // 2
 
