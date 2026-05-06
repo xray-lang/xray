@@ -200,6 +200,8 @@ typedef enum {
      * aux_int = resolved shared index (set by driver post-lowering, -1 if unresolved). */
     XI_IMPORT_REF,
 
+    XI_REGEX_COMPILE, /* args[0]=pattern(str), args[1]=flags(str); compiles regex literal */
+
     XI_OP_COUNT     /* sentinel */
 } XiOp;
 

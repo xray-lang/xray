@@ -372,6 +372,7 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer,
     l->type_void = xr_type_new_void(isolate);
     l->type_any = xr_type_new_unknown(isolate);
     l->type_bigint = xr_type_new_bigint(isolate);
+    l->type_regex = xr_type_new_regex(isolate);
 }
 
 XR_FUNC void xi_lower_cleanup(XiLower *l) {
