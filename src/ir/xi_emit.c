@@ -433,6 +433,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_TYPEOF]       = xi_emit_typeof,
     [XI_GET_BUILTIN]  = xi_emit_get_builtin,
     [XI_IMPORT_REF]   = xi_emit_import_ref,
+    [XI_REGEX_COMPILE] = xi_emit_regex_compile,
 };
 
 /* ========== Instruction Selection ========== */

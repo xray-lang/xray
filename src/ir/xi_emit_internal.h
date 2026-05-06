@@ -218,5 +218,6 @@ XR_FUNC void xi_emit_assert(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_assert_eq(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_assert_ne(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_regex_compile(EmitCtx *ctx, XiValue *v, uint8_t dst);
 
 #endif  // XI_EMIT_INTERNAL_H

@@ -1277,6 +1277,16 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, "XR_NULL_VAL /* class descriptor */");
             break;
 
+        case XI_REGEX_COMPILE: {
+            XR_DCHECK(v->nargs >= 2, "XI_REGEX_COMPILE: need 2 args");
+            fprintf(out, "xr_regex_compile_literal(iso, ");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")");
+            break;
+        }
+
         default:
             fprintf(out, "XR_NULL_VAL /* TODO: op %d */", v->op);
             break;

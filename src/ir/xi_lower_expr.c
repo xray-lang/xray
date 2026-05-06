@@ -2363,11 +2363,18 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
                                    node->as.literal.raw_value.bigint_val ?
                                    node->as.literal.raw_value.bigint_val : "0",
                                    l->type_bigint);
-        case AST_LITERAL_REGEX:
-            return xi_const_str(l->func, l->cur_block,
-                                node->as.literal.raw_value.string_val ?
-                                node->as.literal.raw_value.string_val : "",
-                                l->type_string);
+        case AST_LITERAL_REGEX: {
+            const char *pattern = node->as.literal.raw_value.regex.pattern;
+            const char *flags = node->as.literal.raw_value.regex.flags;
+            XiValue *pat_v = xi_const_str(l->func, l->cur_block,
+                                          pattern ? pattern : "", l->type_string);
+            XiValue *flg_v = xi_const_str(l->func, l->cur_block,
+                                          flags ? flags : "", l->type_string);
+            XiValue *v = xi_value_new(l->func, l->cur_block,
+                                      XI_REGEX_COMPILE, l->type_regex, 2);
+            if (v) { v->args[0] = pat_v; v->args[1] = flg_v; }
+            return v;
+        }
 
         /* Expression statement wrapper: unwrap */
         case AST_EXPR_STMT:

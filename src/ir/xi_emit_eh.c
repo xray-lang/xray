@@ -285,3 +285,25 @@ XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     free_reg(ctx, call_reg);
     free_reg(ctx, err_reg);
 }
+
+/* ========== Regex Literal ========== */
+
+XR_FUNC void xi_emit_regex_compile(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+
+    /* args[0] = pattern string constant, args[1] = flags string constant */
+    XiValue *pat = v->args[0];
+    XiValue *flg = v->args[1];
+    XR_DCHECK(pat->op == XI_CONST, "regex pattern must be XI_CONST");
+    XR_DCHECK(flg->op == XI_CONST, "regex flags must be XI_CONST");
+
+    const char *pattern = (const char *)pat->aux;
+    const char *flags   = (const char *)flg->aux;
+
+    int ki_pat = add_const_string(ctx, pattern ? pattern : "");
+    if (ctx->status != XI_EMIT_OK) return;
+    int ki_flg = add_const_string(ctx, flags ? flags : "");
+    if (ctx->status != XI_EMIT_OK) return;
+
+    emit_inst(ctx, CREATE_ABC(OP_REGEX_COMPILE, dst, (uint8_t)ki_pat, (uint8_t)ki_flg));
+}
