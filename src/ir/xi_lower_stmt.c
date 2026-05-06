@@ -414,6 +414,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     if (!iter) return;
     iter->args[0] = coll;
     iter->aux = (void *)"entriesIterator";
+    iter->aux_int = (int64_t)xi_lower_method_symbol(l, "entriesIterator") << 1;
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
 
@@ -439,6 +440,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     if (!has_next) return;
     has_next->args[0] = iter_cond;
     has_next->aux = (void *)"hasNext";
+    has_next->aux_int = (int64_t)xi_lower_method_symbol(l, "hasNext") << 1;
     has_next->flags |= XI_FLAG_SIDE_EFFECT;
     has_next->line = line;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
@@ -457,6 +459,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     if (!entry) return;
     entry->args[0] = iter_body;
     entry->aux = (void *)"next";
+    entry->aux_int = (int64_t)xi_lower_method_symbol(l, "next") << 1;
     entry->flags |= XI_FLAG_SIDE_EFFECT;
     entry->line = line;
 
@@ -522,6 +525,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node,
     if (!iter) return;
     iter->args[0] = coll;
     iter->aux = (void *)"iterator";
+    iter->aux_int = (int64_t)xi_lower_method_symbol(l, "iterator") << 1;
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
 
@@ -548,6 +552,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node,
     if (!has_next) return;
     has_next->args[0] = iter_cond;
     has_next->aux = (void *)"hasNext";
+    has_next->aux_int = (int64_t)xi_lower_method_symbol(l, "hasNext") << 1;
     has_next->flags |= XI_FLAG_SIDE_EFFECT;
     has_next->line = line;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
@@ -567,6 +572,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node,
     if (!next_val) return;
     next_val->args[0] = iter_body;
     next_val->aux = (void *)"next";
+    next_val->aux_int = (int64_t)xi_lower_method_symbol(l, "next") << 1;
     next_val->flags |= XI_FLAG_SIDE_EFFECT;
     next_val->line = line;
 
@@ -1115,6 +1121,25 @@ static void lower_return(XiLower *l, AstNode *node) {
 
     if (ret->value_count == 1 && ret->values[0]) {
         val = xi_lower_expr(l, ret->values[0]);
+        /* Tail-call detection: mark calls in return position so the emitter
+         * uses OP_TAILCALL / OP_INVOKE_TAIL (constant-space recursion).
+         *
+         * XI_CALL_METHOD → always safe (OP_INVOKE_TAIL handles all types).
+         * XI_CALL with self_call flag → always safe (same closure).
+         * XI_CALL with callee typed as function → safe.
+         * Other XI_CALL (class constructors, etc.) → NOT safe; OP_TAILCALL
+         * only handles closures and would fail on class objects. */
+        if (val && val->op == XI_CALL_METHOD) {
+            val->flags |= XI_FLAG_TAIL;
+        } else if (val && val->op == XI_CALL) {
+            bool is_self = (val->aux_int & 0xFF) == 1;
+            bool callee_is_func = val->nargs >= 1 && val->args[0] &&
+                                  val->args[0]->type &&
+                                  val->args[0]->type->kind == XR_KIND_FUNCTION;
+            if (is_self || callee_is_func) {
+                val->flags |= XI_FLAG_TAIL;
+            }
+        }
     } else if (ret->value_count > 1) {
         /* Multi-value return: evaluate all expressions first, then package */
         int n = ret->value_count;
@@ -1299,6 +1324,78 @@ static void lower_continue(XiLower *l) {
     }
 }
 
+
+/* Re-export: "export { a, b as c } from './file'" or "export * from './file'".
+ * Records XiReexportEntry on XiFunc; emit_reexports() generates bytecodes. */
+static void lower_reexport_stmt(XiLower *l, AstNode *node) {
+    XR_DCHECK(l != NULL, "lower_reexport_stmt: NULL lowerer");
+    XR_DCHECK(node != NULL, "lower_reexport_stmt: NULL node");
+    ExportStmtNode *exp = &node->as.export_stmt;
+    if (!exp->from_path) return;
+
+    XiFunc *f = l->func;
+    if (exp->is_reexport_all) {
+        /* export * from "./file" — single entry with name=NULL */
+        XiReexportEntry *e = (XiReexportEntry *)xi_func_arena_alloc(
+            f, (uint32_t)sizeof(XiReexportEntry));
+        if (!e) return;
+        uint32_t pl = (uint32_t)strlen(exp->from_path);
+        char *pc = (char *)xi_func_arena_alloc(f, pl + 1);
+        if (pc) memcpy(pc, exp->from_path, pl + 1);
+        e->from_path = pc;
+        e->name = NULL;
+        e->alias = NULL;
+
+        /* Append to reexports array (grow by doubling) */
+        uint16_t idx = f->reexport_count;
+        if (idx == 0 || !f->reexports) {
+            uint16_t cap = 4;
+            f->reexports = (XiReexportEntry *)xi_func_arena_alloc(
+                f, (uint32_t)(cap * sizeof(XiReexportEntry)));
+            if (!f->reexports) return;
+        }
+        f->reexports[idx] = *e;
+        f->reexport_count = idx + 1;
+        return;
+    }
+
+    /* Selective re-export: export { a, b as c } from "./file" */
+    for (int i = 0; i < exp->reexport_count; i++) {
+        ReexportMember *m = &exp->reexport_members[i];
+        if (!m->name) continue;
+
+        uint16_t idx = f->reexport_count;
+        /* Ensure array capacity (initial alloc or grow) */
+        if (idx == 0 || !f->reexports) {
+            uint16_t cap = (uint16_t)(exp->reexport_count > 4 ? exp->reexport_count : 4);
+            f->reexports = (XiReexportEntry *)xi_func_arena_alloc(
+                f, (uint32_t)(cap * sizeof(XiReexportEntry)));
+            if (!f->reexports) return;
+        }
+
+        XiReexportEntry *e = &f->reexports[idx];
+        /* Arena-copy strings */
+        uint32_t pl = (uint32_t)strlen(exp->from_path);
+        char *pc = (char *)xi_func_arena_alloc(f, pl + 1);
+        if (pc) memcpy(pc, exp->from_path, pl + 1);
+        e->from_path = pc;
+
+        uint32_t nl = (uint32_t)strlen(m->name);
+        char *nc = (char *)xi_func_arena_alloc(f, nl + 1);
+        if (nc) memcpy(nc, m->name, nl + 1);
+        e->name = nc;
+
+        if (m->alias) {
+            uint32_t al = (uint32_t)strlen(m->alias);
+            char *ac = (char *)xi_func_arena_alloc(f, al + 1);
+            if (ac) memcpy(ac, m->alias, al + 1);
+            e->alias = ac;
+        } else {
+            e->alias = NULL;
+        }
+        f->reexport_count = idx + 1;
+    }
+}
 
 /* Selective import: import { square, cube } from "./math_lib"
  * Creates XI_IMPORT_REF values for each member and binds them as local
@@ -1505,8 +1602,13 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             lower_import_stmt(l, node);
             break;
         case AST_EXPORT_STMT:
-            if (node->as.export_stmt.declaration)
+            if (node->as.export_stmt.declaration) {
                 xi_lower_stmt(l, node->as.export_stmt.declaration);
+            } else if (node->as.export_stmt.from_path) {
+                lower_reexport_stmt(l, node);
+            }
+            /* export-list form (export a, b) is handled purely via
+             * prescan_shared_vars export_flags → emit_module_exports. */
             break;
 
         case AST_CLASS_DECL:

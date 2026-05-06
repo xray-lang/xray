@@ -119,6 +119,7 @@ typedef struct XiLower {
      * can resolve its own name; lower_call detects this and emits
      * a self-call (OP_CALLSELF) instead of a regular call. */
     XiValue *self_value;
+    int self_var_id;  /* Braun var_id of the self-reference (-1 = none) */
 
     /* Parent lowering context for upvalue capture resolution.
      * NULL for top-level program or standalone functions.

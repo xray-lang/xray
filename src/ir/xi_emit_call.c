@@ -37,7 +37,9 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     if (self_call) {
-        /* Recursive self-call: OP_CALLSELF uses frame->closure */
+        /* Recursive self-call: OP_CALLSELF uses frame->closure.
+         * nresults == 0 signals tail call (reuse current frame). */
+        int self_nresults = (v->flags & XI_FLAG_TAIL) ? 0 : nresults;
         for (uint16_t a = 1; a < v->nargs; a++) {
             uint8_t arg_reg = reg_of(ctx, v->args[a]);
             if (ctx->status != XI_EMIT_OK) return;
@@ -47,7 +49,7 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             }
         }
         emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs,
-                                  (uint8_t)nresults));
+                                  (uint8_t)self_nresults));
     } else {
         uint8_t callee = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK) return;
@@ -62,7 +64,8 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
         }
-        emit_inst(ctx, CREATE_ABC(OP_CALL, dst, nargs,
+        OpCode call_op = (v->flags & XI_FLAG_TAIL) ? OP_TAILCALL : OP_CALL;
+        emit_inst(ctx, CREATE_ABC(call_op, dst, nargs,
                                   (uint8_t)nresults));
     }
 }
@@ -124,7 +127,7 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     const char *method_name = (const char *)v->aux;
-    bool is_super = (v->aux_int == 1);
+    bool is_super = (v->aux_int & 1) != 0;
     if (is_super) {
         /* OP_SUPERINVOKE B = constant pool index (string) */
         int ci = add_const_string(ctx, method_name);
@@ -133,7 +136,8 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     } else {
         int sym = add_symbol(ctx, method_name);
         if (ctx->status != XI_EMIT_OK) return;
-        emit_inst(ctx, CREATE_ABC(OP_INVOKE, dst, (uint8_t)sym, nargs));
+        OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
+        emit_inst(ctx, CREATE_ABC(invoke_op, dst, (uint8_t)sym, nargs));
         /* Record IC-relevant instruction offset for JIT */
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;

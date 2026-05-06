@@ -61,6 +61,13 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_enum_decl(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_class_decl(XiLower *l, struct AstNode *node);
 
+/* ========== Method Symbol Resolution ========== */
+
+/* Resolve a method name to a global SymbolId through the isolate's symbol
+ * table.  Runs during lowering (main thread), so the isolate is always
+ * available.  Returns 0 on failure. */
+XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name);
+
 /* ========== Compound Statement Lowering (xi_lower_stmt.c) ========== */
 
 XR_FUNC void xi_lower_select(XiLower *l, struct AstNode *node);

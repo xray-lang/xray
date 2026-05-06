@@ -66,7 +66,7 @@ struct XaAnalyzer;
  *  XI_JSON_SET_F    —                    field index
  *  XI_JSON_DECODE   char** field_names   field count
  *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
- *  XI_CALL_METHOD   method name (char*)  0=normal, 1=super  (NOT SymbolId)
+ *  XI_CALL_METHOD   method name (char*)  (global_symbol_id << 1) | is_super
  *  XI_CALL_BUILTIN  —                    builtin_id
  *  XI_EXTRACT       —                    result index (1-based)
  *  XI_LOAD_UPVAL    —                    upvalue index
@@ -83,8 +83,8 @@ struct XaAnalyzer;
  *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
  *
  *  Consumers: xi_emit.c (VM bytecode), xi_to_xm.c (JIT), xi_cgen.c (AOT).
- *  WARNING: XI_CALL_METHOD.aux_int is NOT the method SymbolId.
- *  JIT resolves SymbolId from proto bytecode; AOT resolves from method name.
+ *  XI_CALL_METHOD.aux_int carries SymbolId (resolved at lowering time).
+ *  xi_emit reads it for OP_INVOKE; xi_to_xm reads it for JIT dispatch.
  */
 
 typedef enum {
@@ -146,7 +146,7 @@ typedef enum {
     XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
                      * aux_int bits 0-7: flags (1=self_call)
                      * aux_int bits 8-15: nresults (0 means 1) */
-    XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=method_id, args[1..n]=params */
+    XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
     XI_CALL_BUILTIN,/* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_EXTRACT,     /* extract i-th result from multi-return call:
                      * args[0]=call_value, aux_int=result_index (1-based offset) */
@@ -253,6 +253,14 @@ typedef struct XiImportRef {
     int resolved_shared_slot;      /* shared slot in the target module, -1 = unresolved */
 } XiImportRef;
 
+/* Re-export entry for "export { a } from './file'" and "export * from './file'".
+ * Stored on XiFunc during lowering, emitted as OP_IMPORT + OP_EXPORT / OP_EXPORT_ALL. */
+typedef struct XiReexportEntry {
+    const char *from_path;   /* source module path (arena copy) */
+    const char *name;        /* original export name (NULL = star re-export) */
+    const char *alias;       /* export alias (NULL = same as name) */
+} XiReexportEntry;
+
 /* Arena-safe method descriptor for XI_CLASS_CREATE.
  * One entry per instance/static method, ordered as the class declares them.
  * All strings are arena-allocated (survive AST destruction). */
@@ -292,6 +300,7 @@ typedef enum {
 #define XI_FLAG_MAY_THROW   (1 << 1) /* may raise exception */
 #define XI_FLAG_MAY_GC      (1 << 2) /* may trigger GC */
 #define XI_FLAG_SAFEPOINT   (1 << 3) /* GC safepoint */
+#define XI_FLAG_TAIL        (1 << 4) /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
 
 /* ========== Upvalue Capture Info ========== */
 
@@ -448,6 +457,12 @@ typedef struct XiFunc {
      * lowering for top-level declarations so the AOT driver can build
      * cross-module import resolution tables.  NULL entries = not exported. */
     const char **export_names;   /* array of nshared entries (arena-alloc'd) */
+
+    /* Re-export table: entries from "export { a } from './file'" and
+     * "export * from './file'" statements. Populated during lowering,
+     * emitted as OP_IMPORT + OP_EXPORT/OP_EXPORT_ALL by emit_reexports. */
+    XiReexportEntry *reexports;  /* arena-allocated array */
+    uint16_t reexport_count;
 
     /* VM entry metadata (propagated to XrProto during emission) */
     bool is_vararg;             /* has rest parameter (...args) */

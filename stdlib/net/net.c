@@ -761,6 +761,18 @@ static XrValue net_listen_handle(XrayIsolate *X, XrValue *args, int nargs) {
     if (fd < 0)
         return XR_NULL_VAL;
 
+    /* Ephemeral port: query the kernel-assigned port via getsockname */
+    if (port_num == 0) {
+        struct sockaddr_storage ss;
+        socklen_t sslen = sizeof(ss);
+        if (getsockname(fd, (struct sockaddr *)&ss, &sslen) == 0) {
+            if (ss.ss_family == AF_INET6)
+                port_num = ntohs(((struct sockaddr_in6 *)&ss)->sin6_port);
+            else
+                port_num = ntohs(((struct sockaddr_in *)&ss)->sin_port);
+        }
+    }
+
     return make_listener_handle(X, fd, port_num);
 }
 

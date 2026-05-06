@@ -76,16 +76,30 @@ typedef struct {
 
 /* ========== Helpers ========== */
 
-/* Map Xi IR type to Xm machine representation */
+/* Map Xi IR type to Xm machine representation.
+ * Heap-allocated types (string, array, etc.) use PTR rep so codegen
+ * correctly emits XR_TAG_PTR in call_arg_tags[]. */
 static uint8_t xi_type_to_rep(struct XrType *type) {
     if (!type) return XR_REP_I64;
     switch (type->kind) {
-        case XR_KIND_INT:   return XR_REP_I64;
-        case XR_KIND_FLOAT: return XR_REP_F64;
-        case XR_KIND_BOOL:  return XR_REP_I64;
-        case XR_KIND_NULL:  return XR_REP_I64;
-        case XR_KIND_VOID:  return XR_REP_I64;
-        default:            return XR_REP_I64;  /* tagged as i64 in JIT */
+        case XR_KIND_INT:       return XR_REP_I64;
+        case XR_KIND_FLOAT:     return XR_REP_F64;
+        case XR_KIND_BOOL:      return XR_REP_I64;
+        case XR_KIND_NULL:      return XR_REP_I64;
+        case XR_KIND_VOID:      return XR_REP_I64;
+        case XR_KIND_STRING:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_BYTES:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_JSON:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_INTERFACE:
+        case XR_KIND_CLASS:
+        case XR_KIND_FUNCTION:
+        case XR_KIND_ENUM:      return XR_REP_PTR;
+        default:                return XR_REP_TAGGED;
     }
 }
 
@@ -290,6 +304,31 @@ static XmRef lower_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 /* ========== Arithmetic / Bitwise Lowering ========== */
 
+/* Get the machine rep of a ref (vreg rep or const rep). */
+static uint8_t ref_rep(LowerCtx *ctx, XmRef ref) {
+    if (xm_ref_is_vreg(ref)) {
+        uint32_t vi = XM_REF_INDEX(ref);
+        if (vi < ctx->xm_func->nvreg)
+            return ctx->xm_func->vregs[vi].rep;
+    } else if (xm_ref_is_const(ref)) {
+        uint32_t ci = XM_REF_INDEX(ref);
+        if (ci < ctx->xm_func->nconst)
+            return ctx->xm_func->consts[ci].rep;
+    }
+    return XR_REP_I64;
+}
+
+/* Coerce a ref to F64 rep if it isn't already.
+ * I64 → I2F (int-to-float); TAGGED/PTR → UNBOX_F64 (dynamic unbox). */
+static XmRef coerce_to_f64(LowerCtx *ctx, XmBlock *blk, XmRef ref) {
+    uint8_t rr = ref_rep(ctx, ref);
+    if (rr == XR_REP_F64)
+        return ref;
+    if (rr == XR_REP_I64)
+        return xm_emit_unary(ctx->xm_func, blk, XM_I2F, XR_REP_F64, ref);
+    return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_F64, XR_REP_F64, ref);
+}
+
 static XmRef lower_binary_arith(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 2, "binary arith: expected 2 args");
     XmRef lhs = get_ref(ctx, v->args[0]);
@@ -313,6 +352,14 @@ static XmRef lower_binary_arith(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
     }
+
+    /* Float operations require F64 operands; coerce if needed
+     * (e.g. Json property access returns I64/TAGGED). */
+    if (is_float) {
+        lhs = coerce_to_f64(ctx, blk, lhs);
+        rhs = coerce_to_f64(ctx, blk, rhs);
+    }
+
     return xm_fold_emit(ctx->xm_func, blk, xm_op, rep, lhs, rhs);
 }
 
@@ -331,6 +378,11 @@ static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
     }
+
+    /* Float unary needs F64 operand */
+    if (is_float)
+        arg = coerce_to_f64(ctx, blk, arg);
+
     return xm_fold_emit_unary(ctx->xm_func, blk, xm_op, rep, arg);
 }
 
@@ -364,6 +416,12 @@ static XmRef lower_comparison(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         XmRef tmp = lhs;
         lhs = rhs;
         rhs = tmp;
+    }
+
+    /* Float comparisons require F64 operands */
+    if (is_float) {
+        lhs = coerce_to_f64(ctx, blk, lhs);
+        rhs = coerce_to_f64(ctx, blk, rhs);
     }
 
     return xm_fold_emit(ctx->xm_func, blk, xm_op, XR_REP_I64, lhs, rhs);
@@ -515,27 +573,30 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
 
 generic_call:
-    /* Method calls (XI_CALL_METHOD / XI_CALL_BUILTIN) must go through
-     * xr_jit_invoke_method which resolves the method on the receiver.
-     * xr_jit_call_func expects call_args[0] to be a closure, but for
-     * method calls it is the receiver (module, instance, etc.). */
-    if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN) {
-        /* XI_CALL_METHOD stores the method name in v->aux (v->aux_int is
-         * 0 or 1-for-super, NOT the symbol ID).  Resolve the global
-         * SymbolId from the bytecode OP_INVOKE instruction at the mapped
-         * bc_pc — proto->code and proto->symbols are immutable, so this
-         * is safe on background compilation threads (isolate may be NULL). */
-        int method_sym = 0;
+    /* XI_CALL_BUILTIN (dump, copy, StringBuilder, Bytes, cancelled):
+     * these are specialized VM ops that don't use xr_jit_invoke_method.
+     * Emit unconditional deopt so the interpreter handles them. */
+    if (v->op == XI_CALL_BUILTIN) {
         int bc_pc = slot_map_bc_pc(ctx, v->id);
-        if (bc_pc >= 0 && ctx->proto) {
-            uint32_t inst = PROTO_CODE_BASE(ctx->proto)[bc_pc];
-            int local_sym = GETARG_B(inst);
-            if (local_sym < PROTO_SYMBOL_COUNT(ctx->proto))
-                method_sym = (int)PROTO_SYMBOL(ctx->proto, local_sym);
-        }
+        uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
+        XmRef deopt_id = xm_const_i64(ctx->xm_func, (int64_t)did);
+        xm_emit(ctx->xm_func, blk, XM_DEOPT, XR_REP_I64,
+                 deopt_id, XM_NONE);
+        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+
+    /* Method calls (XI_CALL_METHOD) go through xr_jit_invoke_method
+     * which resolves the method on the receiver at runtime. */
+    if (v->op == XI_CALL_METHOD) {
+        /* aux_int = (global_symbol_id << 1) | is_super.
+         * The SymbolId is resolved at lowering time (main thread) so the
+         * JIT background thread does not need isolate access. */
+        int method_sym = (int)(v->aux_int >> 1);
         XR_DCHECK(method_sym > 0,
-                  "XI_CALL_METHOD: cannot resolve method symbol from "
-                  "proto bytecode");
+                  "XI_CALL_METHOD: method_sym=0, lowering failed to "
+                  "resolve SymbolId");
+        int bc_pc = slot_map_bc_pc(ctx, v->id);
         uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
         int64_t encoded = ((int64_t)method_sym << 32) |
                           ((int64_t)(did & 0xFFFF) << 16) |
