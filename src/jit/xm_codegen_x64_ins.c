@@ -692,7 +692,7 @@ static void x64_h_field_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         if (vi < ctx->func->nvreg && ins->ctype.kind == XM_TK_UNKNOWN &&
             ins->rep == XR_REP_I64) {
             x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, obj, offset + XM_XRVALUE_TAG_OFFSET);
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_LOAD_TAG_SCRATCH,
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_TAG_SCRATCH_OFFSET,
                        X64_SCRATCH_REG);
         }
     }

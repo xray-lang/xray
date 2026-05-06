@@ -266,8 +266,8 @@ static inline void jit_build_this_args(XrValue *call_args, XrValue receiver, XrV
         call_args[1 + i] = args[i];
 }
 
-// jit_call_args[0] = receiver (raw XrValue.i), jit_call_args[1..n] = args.
-// jit_call_args[15] = tag bitmap (4 bits per slot, set by builder).
+// call_args[0] = receiver payload, call_args[1..n] = arg payloads.
+// call_arg_tags[0..n] = per-slot XR_TAG_* bytes (set by codegen's emit_call_args_from_pool).
 // encoded = (method_symbol << 32) | (deopt_id << 16) | (type_hint << 8) | nargs.
 // deopt_id: builder-provided deopt snapshot index for yieldable recovery.
 // type_hint: IC-derived receiver type (0=none, classify at runtime).
@@ -281,26 +281,21 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     int type_hint = (int) ((encoded >> 8) & 0xFF);
     int nargs = (int) (encoded & 0xFF);
 
-    // Read tag bitmap from call_args[15] (written by builder)
-    int64_t tag_bitmap = coro->jit_ctx->call_args[15];
-
-    // Reconstruct receiver XrValue using bitmap tag (ground truth from builder).
-    // Previously used type_hint for INT/FLOAT/BOOL cases, but type_hint can be
-    // wrong when slot_rep doesn't match runtime type (e.g., upvalue-loaded array
-    // with I64 rep → type_hint=INT). Bitmap tag is always set from vreg xr_tag
-    // and correctly identifies the actual value type.
-    uint8_t recv_tag = jit_bitmap_tag(tag_bitmap, 0);
-    if (recv_tag == XR_RTAG_UNKNOWN)
-        recv_tag = coro->jit_ctx->call_arg_tags[0];
+    // Reconstruct receiver and args from call_args[] payloads and
+    // call_arg_tags[] type bytes. The codegen stores per-byte tags in
+    // call_arg_tags[] (compile-time known or dynamically patched from
+    // slot_runtime_tags[] at each call site).
+    uint8_t recv_tag = coro->jit_ctx->call_arg_tags[0];
+    // Invoke receivers are always heap objects (module, instance, class, etc.).
+    // When the compile-time tag is unknown, reconstruct as PTR to avoid
+    // misclassifying a pointer payload as integer.
+    if (recv_tag == XR_RTAG_UNKNOWN || recv_tag == XR_RTAG_NUMERIC)
+        recv_tag = XR_TAG_PTR;
     XrValue receiver = jit_value_from_tag(coro->jit_ctx->call_args[0], recv_tag);
-    // Build args array: bitmap tag preferred, fallback to call_arg_tags[]
-    // (dynamic-patched from slot_runtime_tags at each call site)
     XrValue args[16];
     for (int i = 0; i < nargs && i < 15; i++) {
         int64_t raw = coro->jit_ctx->call_args[1 + i];
-        uint8_t tag = jit_bitmap_tag(tag_bitmap, 1 + i);
-        if (tag == XR_RTAG_UNKNOWN)
-            tag = coro->jit_ctx->call_arg_tags[1 + i];
+        uint8_t tag = coro->jit_ctx->call_arg_tags[1 + i];
         args[i] = jit_value_from_tag(raw, tag);
     }
 

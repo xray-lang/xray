@@ -70,8 +70,9 @@
 #define XM_JIT_SLOT_RUNTIME_TAGS_OFFSET offsetof(XrJitScratch, slot_runtime_tags)
 // Tag from last call_c_stub: stored here instead of x1 to avoid clobbering alloc_regs[0]
 #define XM_JIT_CALL_RESULT_TAG_OFFSET offsetof(XrJitScratch, call_result_tag)
-// Scratch slot for saving/loading runtime tags (call_args[15])
-#define XM_JIT_LOAD_TAG_SCRATCH (XM_JIT_CALL_ARGS_OFFSET + 15 * 8)
+// Scratch slot reusing call_args[15] for temporary tag save/restore
+// during field load/store codegen. Not a tag bitmap channel.
+#define XM_JIT_TAG_SCRATCH_OFFSET (XM_JIT_CALL_ARGS_OFFSET + 15 * 8)
 // Guard page safepoint fields
 #define XM_JIT_SAFEPOINT_PAGE_OFFSET offsetof(XrJitScratch, safepoint_page)
 #define XM_JIT_SAFEPOINT_RETURN_PC_OFFSET offsetof(XrJitScratch, safepoint_return_pc)

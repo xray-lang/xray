@@ -29,6 +29,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xchunk.h"
+#include "../runtime/object/xstring.h"
 #include "../vm/xic_field.h"
 #include "../vm/xic_field_table.h"
 #include "../vm/xic_method.h"
@@ -261,7 +262,26 @@ static XmRef lower_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         return xm_emit_unary(ctx->xm_func, blk, XM_CONST_F64, XR_REP_F64, cref);
     }
     if (type->kind == XR_KIND_STRING) {
-        XmRef cref = xm_const_ptr(ctx->xm_func, v->aux);
+        /* v->aux is a raw C string from the Xi arena.  The JIT needs the
+         * XrString* heap object (with GC header) so that jit_value_from_tag
+         * can set heap_type correctly for runtime type checks (XR_IS_STRING).
+         * Look up the matching XrString from the proto's constant pool. */
+        const char *raw = (const char *)v->aux;
+        void *xr_str = NULL;
+        if (raw && ctx->proto) {
+            XrValue *kpool = (XrValue *)ctx->proto->constants.data;
+            int nk = ctx->proto->constants.count;
+            for (int j = 0; j < nk; j++) {
+                if (XR_IS_STRING(kpool[j])) {
+                    XrString *s = XR_TO_STRING(kpool[j]);
+                    if (s && strcmp(XR_STRING_CHARS(s), raw) == 0) {
+                        xr_str = (void *)s;
+                        break;
+                    }
+                }
+            }
+        }
+        XmRef cref = xm_const_ptr(ctx->xm_func, xr_str ? xr_str : v->aux);
         return xm_emit_unary(ctx->xm_func, blk, XM_CONST_PTR, XR_REP_PTR, cref);
     }
     XmRef cref = xm_const_i64(ctx->xm_func, v->aux_int);
@@ -495,6 +515,56 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
 
 generic_call:
+    /* Method calls (XI_CALL_METHOD / XI_CALL_BUILTIN) must go through
+     * xr_jit_invoke_method which resolves the method on the receiver.
+     * xr_jit_call_func expects call_args[0] to be a closure, but for
+     * method calls it is the receiver (module, instance, etc.). */
+    if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN) {
+        /* XI_CALL_METHOD stores the method name in v->aux (v->aux_int is
+         * 0 or 1-for-super, NOT the symbol ID).  Resolve the global
+         * SymbolId from the bytecode OP_INVOKE instruction at the mapped
+         * bc_pc — proto->code and proto->symbols are immutable, so this
+         * is safe on background compilation threads (isolate may be NULL). */
+        int method_sym = 0;
+        int bc_pc = slot_map_bc_pc(ctx, v->id);
+        if (bc_pc >= 0 && ctx->proto) {
+            uint32_t inst = PROTO_CODE_BASE(ctx->proto)[bc_pc];
+            int local_sym = GETARG_B(inst);
+            if (local_sym < PROTO_SYMBOL_COUNT(ctx->proto))
+                method_sym = (int)PROTO_SYMBOL(ctx->proto, local_sym);
+        }
+        uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
+        int64_t encoded = ((int64_t)method_sym << 32) |
+                          ((int64_t)(did & 0xFFFF) << 16) |
+                          ((int64_t)nargs & 0xFF);
+        XmRef encoded_ref = xm_const_i64(ctx->xm_func, encoded);
+        XmRef fn_ref = xm_const_ptr(ctx->xm_func,
+                                       (void *)xr_jit_invoke_method);
+        /* Method returns are polymorphic (int, bool, string, null, ptr).
+         * Use I64 rep (raw payload in GP register) + TAGGED ctype so
+         * the type pass does not narrow, allowing the dynamic tag patch
+         * to read the correct runtime tag from slot_runtime_tags[]. */
+        XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C,
+                                  XR_REP_I64, fn_ref, encoded_ref);
+        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+        blk->ins[blk->nins - 1].ctype = (XmType){XM_TK_TAGGED, 0, 0};
+        xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
+        /* Propagate bc_slot from Xi slot_map so the codegen can store
+         * the dynamic return tag into slot_runtime_tags[]. Without this,
+         * Xi IR vregs default to bc_slot=-1 and the tag is lost. */
+        if (xm_ref_is_vreg(result) && ctx->slot_idx &&
+            v->id < ctx->slot_idx_size) {
+            int32_t si = ctx->slot_idx[v->id];
+            if (si >= 0) {
+                uint32_t vi = XM_REF_INDEX(result);
+                if (vi < ctx->xm_func->nvreg)
+                    ctx->xm_func->vregs[vi].bc_slot =
+                        (int16_t)ctx->slot_map->entries[si].bc_slot;
+            }
+        }
+        return result;
+    }
+
     /* Fallback: generic call via xr_jit_call_func bridge */
     XmRef nargs_ref = xm_const_i64(ctx->xm_func, (int64_t)nargs);
     XmRef nargs_val = xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64,
@@ -582,11 +652,37 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_PRINT:
             return lower_print(ctx, blk, v);
 
-        /* Shared (module-level) variables — lowered to LOAD/STORE via
-         * the coro's shared_array pointer */
+        /* Shared (module-level) variables — loaded via runtime bridge.
+         * XM_LOAD with a const-ref arg is wrong: xra_arg returns XZR for
+         * non-vreg refs, and ARM64 LDR treats XZR-base as SP, loading
+         * garbage from the stack instead of the shared array. */
         case XI_GET_SHARED: {
-            XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            return xm_emit_unary(ctx->xm_func, blk, XM_LOAD, XR_REP_I64, idx);
+            /* aux_int is the relative shared slot; the runtime bridge
+             * needs the absolute index (relative + shared_offset). */
+            int so = ctx->proto ? ctx->proto->shared_offset : 0;
+            int64_t abs_idx = v->aux_int + so;
+            XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func,
+                                           (void *)xr_jit_get_shared);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C,
+                                      XR_REP_I64, fn_ref, idx);
+            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            /* Shared vars are dynamically typed: set XM_TK_TAGGED to
+             * prevent the type pass from narrowing to I64, which would
+             * skip the slot_runtime_tags[] dynamic tag patch. */
+            blk->ins[blk->nins - 1].ctype = (XmType){XM_TK_TAGGED, 0, 0};
+            /* Propagate bc_slot for runtime tag resolution */
+            if (xm_ref_is_vreg(result) && ctx->slot_idx &&
+                v->id < ctx->slot_idx_size) {
+                int32_t si = ctx->slot_idx[v->id];
+                if (si >= 0) {
+                    uint32_t vi = XM_REF_INDEX(result);
+                    if (vi < ctx->xm_func->nvreg)
+                        ctx->xm_func->vregs[vi].bc_slot =
+                            (int16_t)ctx->slot_map->entries[si].bc_slot;
+                }
+            }
+            return result;
         }
         case XI_SET_SHARED: {
             XR_DCHECK(v->nargs == 1, "set_shared: expected 1 arg");

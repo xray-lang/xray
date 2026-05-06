@@ -169,15 +169,4 @@ static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xm_type, uint8_t xr
     return v;
 }
 
-/* ========== Tag bitmap decode ========== */
-
-// Decode xr_tag from a 64-bit tag bitmap stored in call_args[15].
-// Each slot occupies 4 bits: slot i is at bits[(i+1)*4-1 : i*4].
-static inline uint8_t jit_bitmap_tag(int64_t bitmap, int slot) {
-    uint8_t nibble = (uint8_t) ((bitmap >> (slot * 4)) & 0xF);
-    if (nibble <= 7)
-        return nibble;
-    return XR_RTAG_UNKNOWN;
-}
-
 #endif  // XM_JIT_INTERNAL_H
