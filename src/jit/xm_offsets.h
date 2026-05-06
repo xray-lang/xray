@@ -163,6 +163,14 @@ _Static_assert(offsetof(XrValue, tag) == XM_XRVALUE_TAG_OFFSET, "XrValue.tag off
 _Static_assert(sizeof(XrGCHeader) == XM_GC_HEADER_SIZE, "GCHeader size mismatch");
 _Static_assert(offsetof(XrGCHeader, type) == XM_GC_TYPE_OFFSET, "GCHeader.type offset mismatch");
 
+/* call_arg_tags[] must immediately follow call_args[] in XrJitScratch.
+ * Codegen writes per-byte XR_TAG_* here; runtime reads from the same offset.
+ * Tag scratch slot reuses call_args[15] and must not alias call_arg_tags. */
+_Static_assert(XM_JIT_CALL_ARGS_OFFSET + 16 * 8 == XM_JIT_CALL_ARG_TAGS_OFFSET,
+               "call_arg_tags must immediately follow call_args[16]");
+_Static_assert(sizeof(((XrJitScratch *) 0)->call_arg_tags) == 16,
+               "call_arg_tags must be 16 bytes (one tag per call_arg slot)");
+
 /* JIT multi-return scratch: ret_vals[] and ret_tags[] must be 8-byte aligned
  * for ARM64 STR/LDR instructions. Using int64_t elements guarantees this. */
 _Static_assert(XM_JIT_RET_COUNT_OFFSET % 8 == 0, "ret_count must be 8-byte aligned for ARM64 STR");

@@ -533,6 +533,9 @@ generic_call:
             if (local_sym < PROTO_SYMBOL_COUNT(ctx->proto))
                 method_sym = (int)PROTO_SYMBOL(ctx->proto, local_sym);
         }
+        XR_DCHECK(method_sym > 0,
+                  "XI_CALL_METHOD: cannot resolve method symbol from "
+                  "proto bytecode");
         uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
         int64_t encoded = ((int64_t)method_sym << 32) |
                           ((int64_t)(did & 0xFFFF) << 16) |
