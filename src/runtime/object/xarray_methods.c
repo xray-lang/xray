@@ -52,6 +52,7 @@ static XrValue m_push(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
         }
         if (arr->elem_type == XR_ELEM_ANY) {
             ((XrValue *) arr->data)[arr->length++] = args[0];
+            XR_ARRAY_MARK_GC_PTRS(arr, args[0]);
             /* Notify incremental GC the (possibly black) container was mutated. */
             XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
         } else {

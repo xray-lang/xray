@@ -1,0 +1,69 @@
+// 0681_gc_container_write.xr
+// Regression: Array push/set must mark GC pointers and run write barriers.
+// Bug: XR_ELEM_ANY fast path in Array.push stored raw value without
+// calling XR_ARRAY_MARK_GC_PTRS, so GC could collect live objects.
+
+@test
+fn test_array_push_json_objects(): void {
+    let arr: Array<Json> = []
+    for (i in 0..100) {
+        arr.push({ id: i, name: "item" + string(i) })
+    }
+    assert_eq(arr.length, 100)
+    assert_eq(arr[0]["id"], 0)
+    assert_eq(arr[99]["id"], 99)
+}
+
+@test
+fn test_array_push_strings(): void {
+    let arr: Array<string> = []
+    for (i in 0..200) {
+        arr.push("string_" + string(i))
+    }
+    assert_eq(arr.length, 200)
+    assert_eq(arr[0], "string_0")
+    assert_eq(arr[199], "string_199")
+}
+
+@test
+fn test_array_push_mixed_types(): void {
+    let arr: Array<Json> = []
+    for (i in 0..50) {
+        arr.push(i)
+        arr.push("s" + string(i))
+        arr.push({ v: i })
+        arr.push(true)
+    }
+    assert_eq(arr.length, 200)
+    assert_eq(arr[0], 0)
+    assert_eq(arr[1], "s0")
+    assert_eq(arr[2]["v"], 0)
+    assert_eq(arr[3], true)
+}
+
+@test
+fn test_array_set_overwrites(): void {
+    let arr: Array<Json> = [{}, {}, {}, {}, {}]
+    for (i in 0..5) {
+        arr[i] = { index: i, data: "value_" + string(i) }
+    }
+    for (i in 0..5) {
+        assert_eq(arr[i]["index"], i)
+    }
+}
+
+@test
+fn test_nested_array_push(): void {
+    let outer: Array<Array<int>> = []
+    for (i in 0..20) {
+        let inner: Array<int> = []
+        for (j in 0..10) {
+            inner.push(i * 10 + j)
+        }
+        outer.push(inner)
+    }
+    assert_eq(outer.length, 20)
+    assert_eq(outer[0].length, 10)
+    assert_eq(outer[0][0], 0)
+    assert_eq(outer[19][9], 199)
+}

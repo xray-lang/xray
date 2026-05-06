@@ -52,7 +52,7 @@ TIMEOUT_SECS=${XRAY_TEST_TIMEOUT:-10}
 PARALLEL_JOBS=${XRAY_TEST_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}
 
 # Known-skip list (colon-separated for export to subshells)
-SKIP_TESTS="1106_select.xr:1113_select_send.xr:1114_select_after.xr"
+SKIP_TESTS=""
 
 # Tests requiring --no-jit flag (colon-separated)
 NOJIT_TESTS="1148_scope_race_stress.xr:1205_gc_incremental_pressure.xr:1207_gc_stress.xr"

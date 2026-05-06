@@ -181,6 +181,27 @@ XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_CHAN_RECV, dst, ch, 0));
 }
 
+/* Non-blocking channel try-send: returns bool (success/failure) */
+XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t ch = reg_of(ctx, v->args[0]);
+    uint8_t val = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK) return;
+    emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_SEND, dst, ch, val));
+}
+
+/* Non-blocking channel try-recv: returns value or null.
+ * OP_CHAN_TRY_RECV writes R[dst] (value) and R[dst+1] (ok bool).
+ * Reserve dst+1 so subsequent allocations do not reuse it. */
+XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t ch = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK) return;
+    emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_RECV, dst, ch, 0));
+    if (dst + 2 > ctx->next_reg) ctx->next_reg = dst + 2;
+    if (ctx->next_reg > ctx->max_reg) ctx->max_reg = ctx->next_reg;
+}
+
 /* ========== Scope ========== */
 
 /* Scope enter */

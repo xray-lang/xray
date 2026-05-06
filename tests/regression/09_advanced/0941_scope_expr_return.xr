@@ -1,0 +1,59 @@
+// 0941_scope_expr_return.xr
+// Regression: supervisor scope used as expression must return errors array.
+// Bug: xi_lower_scope_block returned NULL instead of the exit value,
+// so `let errors = supervisor scope { ... }` got null instead of Array.
+
+fn child_ok(): int {
+    return 42
+}
+
+fn child_fail(msg: string): int {
+    throw msg
+    return 0
+}
+
+@test
+fn test_supervisor_scope_returns_errors(): void {
+    let errors = supervisor scope {
+        go child_fail("err_a")
+        go child_fail("err_b")
+    }
+    assert_eq(errors.length > 0, true)
+}
+
+@test
+fn test_supervisor_scope_no_errors(): void {
+    let errors = supervisor scope {
+        go child_ok()
+        go child_ok()
+    }
+    assert_eq(errors.length, 0)
+}
+
+@test
+fn test_supervisor_scope_mixed(): void {
+    let errors = supervisor scope {
+        go child_ok()
+        go child_fail("mixed_err")
+        go child_ok()
+    }
+    assert_eq(errors.length, 1)
+}
+
+@test
+fn test_supervisor_scope_single_failure(): void {
+    let errors = supervisor scope {
+        go child_fail("single")
+    }
+    assert_eq(errors.length, 1)
+    assert_eq(errors[0], "single")
+}
+
+@test
+fn test_supervisor_scope_as_statement(): void {
+    supervisor scope {
+        go child_ok()
+        go child_fail("ignored")
+    }
+    assert_eq(true, true)
+}

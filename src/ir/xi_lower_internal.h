@@ -71,7 +71,7 @@ XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name);
 /* ========== Compound Statement Lowering (xi_lower_stmt.c) ========== */
 
 XR_FUNC void xi_lower_select(XiLower *l, struct AstNode *node);
-XR_FUNC void xi_lower_scope_block(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_for_in(XiLower *l, struct AstNode *node);
 XR_FUNC void xi_lower_try_catch(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_match(XiLower *l, struct AstNode *node);

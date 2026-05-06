@@ -173,8 +173,11 @@ vmcase(OP_TARRAY_SET) {
             ((uint8_t *) arr->data)[idx] = (uint8_t) R(c).i;
             break;
         default:
-            // ANY array: BOX raw int64 to tagged XrValue
-            ((XrValue *) arr->data)[idx] = xr_int(R(c).i);
+            // XR_ELEM_ANY: store full tagged XrValue (preserves tag for GC)
+            ((XrValue *) arr->data)[idx] = R(c);
+            XR_ARRAY_MARK_GC_PTRS(arr, R(c));
+            if (XR_ARRAY_IS_GC_TRACED(arr))
+                XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
             break;
     }
     vmbreak;
@@ -227,8 +230,11 @@ vmcase(OP_TARRAY_PUSH) {
             ((uint8_t *) arr->data)[idx] = (uint8_t) R(b).i;
             break;
         default:
-            // ANY array: BOX raw int64 to tagged XrValue
-            ((XrValue *) arr->data)[idx] = xr_int(R(b).i);
+            // XR_ELEM_ANY: store full tagged XrValue (preserves tag for GC)
+            ((XrValue *) arr->data)[idx] = R(b);
+            XR_ARRAY_MARK_GC_PTRS(arr, R(b));
+            if (XR_ARRAY_IS_GC_TRACED(arr))
+                XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
             break;
     }
     vmbreak;

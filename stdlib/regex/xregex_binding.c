@@ -28,6 +28,8 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
+#include "../../src/coro/xcoroutine.h"
+#include "../../src/runtime/gc/xcoro_gc.h"
 
 /* ========================================================================
  * Helper Functions
@@ -83,7 +85,14 @@ static XrRegexFlags parse_flags(const char *flags_str) {
  * identically shaped match objects.
  */
 XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match) {
-    XrJson *result = xr_json_new(xr_current_coro(isolate), 4);
+    /* Temporarily disable GC: multiple allocations below (Json, String,
+     * Array) are not rooted from the VM stack — only held in C locals.
+     * A GC step triggered by any intermediate alloc could collect them. */
+    XrCoroutine *coro = xr_current_coro(isolate);
+    XrCoroGC *gc = coro ? coro->coro_gc : NULL;
+    if (gc) gc->gc_disabled++;
+
+    XrJson *result = xr_json_new(coro, 4);
 
     // start
     int start_offset = match->groups[0].start ? (int) (match->groups[0].start - text) : 0;
@@ -115,6 +124,7 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
     }
     xr_json_set_by_key(isolate, result, "groups", xr_value_from_array(groups));
 
+    if (gc) gc->gc_disabled--;
     return xr_json_value(result);
 }
 

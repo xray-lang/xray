@@ -657,6 +657,16 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
     XrClosure *closure = coro->entry.closure;
     XrProto *proto = closure->proto;
 
+    // Ensure stack capacity covers the entry function's register file.
+    // The module init proto may require more slots than the initial 64.
+    int needed = 1 + proto->maxstacksize;  // 1 reserved return slot + registers
+    if (needed > coro_ctx->stack_capacity) {
+        int extra = needed - coro_ctx->stack_capacity + 64;
+        if (!xr_coro_grow_stack(coro, extra)) {
+            return XR_VM_RUNTIME_ERROR;
+        }
+    }
+
     // Initialize frame directly on coroutine stack.
     XrValue *stack_base = coro_ctx->stack;
     stack_base[0] = xr_null();  // Reserved return slot.

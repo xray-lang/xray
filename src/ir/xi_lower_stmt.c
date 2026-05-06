@@ -38,7 +38,9 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
         AstNode *case_node = sel->cases[i];
         SelectCaseNode *sc = &case_node->as.select_case;
 
-        if (sc->is_default) {
+        if (sc->is_default || sc->is_timeout) {
+            /* Default and after-timeout cases execute when no channel case
+             * fired in the non-blocking try-recv/try-send chain above. */
             xi_lower_stmt(l, sc->body);
             if (l->cur_block)
                 xi_block_set_jump(l->cur_block, merge);
@@ -51,7 +53,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                 XiValue *val = xi_lower_expr(l, sc->value);
                 if (chan && val) {
                     XiValue *send = xi_value_new(l->func, l->cur_block,
-                                                  XI_CHAN_SEND, l->type_bool, 2);
+                                                  XI_CHAN_TRY_SEND, l->type_bool, 2);
                     if (send) {
                         send->args[0] = chan;
                         send->args[1] = val;
@@ -64,7 +66,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                 if (chan) {
                     struct XrType *val_type = l->type_any;
                     XiValue *recv = xi_value_new(l->func, l->cur_block,
-                                                  XI_CHAN_RECV, val_type, 1);
+                                                  XI_CHAN_TRY_RECV, val_type, 1);
                     if (recv) {
                         recv->args[0] = chan;
                         recv->flags |= XI_FLAG_SIDE_EFFECT;
@@ -107,7 +109,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
 
 /* ========== Scope Block ========== */
 
-XR_FUNC void xi_lower_scope_block(XiLower *l, AstNode *node) {
+XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
     ScopeBlockNode *sb = &node->as.scope_block;
 
     XiValue *enter = xi_value_new(l->func, l->cur_block,
@@ -128,6 +130,7 @@ XR_FUNC void xi_lower_scope_block(XiLower *l, AstNode *node) {
         exit_v->flags |= XI_FLAG_SIDE_EFFECT;
         exit_v->line = (uint32_t) node->line;
     }
+    return exit_v;
 }
 
 /* ========== Pattern Test ========== */

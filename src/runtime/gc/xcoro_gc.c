@@ -432,8 +432,43 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 #if XR_GC_STRESS
     // Stress mode: trigger a GC step on every allocation to expose
     // write barrier bugs that only manifest under tight GC pressure.
-    if (gc->gc_disabled == 0 && !gc->in_gc)
+    if (gc->gc_disabled == 0 && !gc->in_gc) {
+        // Protect the just-allocated object from the GC step's sweep.
+        // Mark BLACK so sweep_block's slow path keeps it alive, and set
+        // has_black on the block so the fast-path (which bulk-frees all
+        // objects without checking colors) is bypassed.
+        obj->marked = XGC_BLACK;
+        if (total <= XR_LARGE_OBJECT_THRESHOLD) {
+            XR_IMMIX_BLOCK_FROM_PTR(obj)->has_black = 1;
+        }
+
+        // Invalidate top frame's PC to force conservative stack scanning.
+        // The precise stackmap path requires an accurate PC (set by the
+        // VM's savepc() at safepoints).  Allocations happen mid-instruction
+        // where savepc() has not been called, so frame->pc is stale.
+        // A stale PC can cause the stackmap to omit live registers,
+        // leading to premature collection of stack-referenced objects.
+        XrBcCallFrame *_top_frame = NULL;
+        XrInstruction *_saved_pc = NULL;
+        if (gc->owner) {
+            int fc = gc->owner->vm_ctx.frame_count;
+            if (fc > 0) {
+                _top_frame = &gc->owner->vm_ctx.frames[fc - 1];
+                _saved_pc = _top_frame->pc;
+                _top_frame->pc = NULL;
+            }
+        }
+
         xr_coro_gc_step(gc);
+
+        if (_top_frame)
+            _top_frame->pc = _saved_pc;
+
+        // Restore to current alive white. The sweep slow path may have
+        // already done this for us; the explicit assignment covers the
+        // case where sweep hasn't reached this block yet.
+        obj->marked = gc->currentwhite;
+    }
 #endif
 
     return obj;
@@ -827,6 +862,16 @@ static void mark_coro_roots(XrCoroGC *gc) {
     // causing use-after-free in worker_handle_vm_result → xr_task_complete.
     if (coro->task) {
         xr_coro_gc_markobject(gc, (XrGCHeader *) coro->task);
+    }
+
+    // Mark scope context roots: errors[] and first_error live in malloc'd
+    // XrScopeContext but reference objects on this coroutine's GC heap.
+    // Walk the full scope chain (scopes can nest).
+    for (XrScopeContext *sc = coro->current_scope; sc; sc = sc->parent) {
+        if (sc->errors) {
+            xr_coro_gc_markobject(gc, (XrGCHeader *) sc->errors);
+        }
+        xr_coro_gc_markvalue(gc, sc->first_error);
     }
 
     // Mark coroutine result/error/pending_closure_result

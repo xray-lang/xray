@@ -405,8 +405,10 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_PRINT]       = 0xFF,  /* one arg per print, but lowerer can vary */
     [XI_GO]          = 0xFF,
     [XI_AWAIT]       = 0xFF,  /* 1 or 2 (optional timeout arg) */
-    [XI_CHAN_SEND]   = 2,
-    [XI_CHAN_RECV]   = 1,
+    [XI_CHAN_SEND]       = 2,
+    [XI_CHAN_RECV]       = 1,
+    [XI_CHAN_TRY_SEND]   = 2,
+    [XI_CHAN_TRY_RECV]   = 1,
     [XI_YIELD]       = 0,
     [XI_THROW]       = 1,
     [XI_ITER_NEW]    = 1,
@@ -587,6 +589,132 @@ static void verify_flags(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* ========== Check 12: XI_CALL_METHOD aux_int Contract ========== */
+
+/* XI_CALL_METHOD.aux_int encodes (global_symbol_id << 1) | is_super.
+ * A zero symbol_id means the lowerer failed to resolve the method name
+ * at lowering time (only valid when isolate is NULL during AOT).
+ * The is_super bit must be 0 or 1.  aux (method name) must be non-NULL. */
+static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_CALL_METHOD) continue;
+
+            /* aux must carry the method name string */
+            if (!v->aux) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD v%u in b%u has NULL aux "
+                     "(expected method name string)",
+                     f->name, v->id, blk->id);
+                return;
+            }
+
+            /* aux_int low bit is is_super (0 or 1) */
+            int64_t ai = v->aux_int;
+            int is_super = (int)(ai & 1);
+            int64_t sym_id = ai >> 1;
+            (void)is_super;  /* always valid: 0 or 1 */
+
+            /* symbol_id must be non-negative */
+            if (sym_id < 0) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD v%u in b%u has negative "
+                     "symbol_id=%lld (aux_int=%lld)",
+                     f->name, v->id, blk->id,
+                     (long long)sym_id, (long long)ai);
+                return;
+            }
+
+            /* Must have at least 1 arg (receiver) */
+            if (v->nargs < 1) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD v%u in b%u has 0 args "
+                     "(needs at least receiver)",
+                     f->name, v->id, blk->id);
+                return;
+            }
+        }
+    }
+}
+
+/* ========== Check 13: Tail Call Safety ========== */
+
+/* XI_FLAG_TAIL may only appear on XI_CALL or XI_CALL_METHOD.
+ * XI_CALL with tail flag must either be a self-call (aux_int & 0xFF == 1)
+ * or the callee must be typed as a function.  Class constructors etc.
+ * are not safe tail-call targets because OP_TAILCALL only handles closures. */
+static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || !(v->flags & XI_FLAG_TAIL)) continue;
+
+            /* Only call ops may carry tail flag */
+            if (v->op != XI_CALL && v->op != XI_CALL_METHOD) {
+                verr(ctx,
+                     "func '%s': v%u (op %u) in b%u has XI_FLAG_TAIL "
+                     "but is not a call op",
+                     f->name, v->id, v->op, blk->id);
+                return;
+            }
+
+            /* XI_CALL: must be self-call or callee typed as function */
+            if (v->op == XI_CALL) {
+                bool is_self = (v->aux_int & 0xFF) == 1;
+                bool callee_is_func = v->nargs >= 1 && v->args[0] &&
+                                      v->args[0]->type &&
+                                      v->args[0]->type->kind == XR_KIND_FUNCTION;
+                if (!is_self && !callee_is_func) {
+                    verr(ctx,
+                         "func '%s': XI_CALL v%u in b%u has XI_FLAG_TAIL "
+                         "but callee is not a function (kind=%u) and "
+                         "not a self-call",
+                         f->name, v->id, blk->id,
+                         v->args[0] && v->args[0]->type
+                             ? v->args[0]->type->kind : 0);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/* ========== Check 14: Channel Try Ops Side-Effect ========== */
+
+/* XI_CHAN_TRY_RECV and XI_CHAN_TRY_SEND perform I/O-like operations.
+ * They must carry XI_FLAG_SIDE_EFFECT so the optimizer cannot
+ * eliminate them. */
+static void verify_chan_try_flags(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+            if (v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_TRY_SEND) {
+                if (!(v->flags & XI_FLAG_SIDE_EFFECT)) {
+                    verr(ctx,
+                         "func '%s': v%u (op %u) in b%u is a channel "
+                         "try op but lacks XI_FLAG_SIDE_EFFECT",
+                         f->name, v->id, v->op, blk->id);
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
@@ -664,6 +792,21 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
      * (rpo, idom, dom_depth) but do not modify the IR semantics. */
     if (!ctx.failed) {
         verify_dominance(&ctx, (XiFunc *)f);
+    }
+
+    /* XI_CALL_METHOD aux_int encoding contract */
+    if (!ctx.failed) {
+        verify_call_method_contract(&ctx, f);
+    }
+
+    /* Tail call safety: only on call ops with valid callee */
+    if (!ctx.failed) {
+        verify_tail_calls(&ctx, f);
+    }
+
+    /* Channel try ops must have side-effect flag */
+    if (!ctx.failed) {
+        verify_chan_try_flags(&ctx, f);
     }
 
     return !ctx.failed;
