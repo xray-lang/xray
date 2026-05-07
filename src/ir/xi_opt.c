@@ -18,7 +18,6 @@
 #include "xi_opt_licm.h"
 #include "xi_opt_sccp.h"
 #include "xi_pass.h"
-#include "xi_rep.h"
 #include "xi_verify.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -573,8 +572,48 @@ XR_FUNC XiPassChange xi_opt_strength_reduce(XiFunc *f) {
 
 /* ========== SelectRepresentations ========== */
 
-/* Shared implementation — see xi_rep.h */
-#define sr_def_rep xi_value_def_rep
+/* Determine the machine representation a value naturally produces.
+ * Constants and arithmetic with known numeric types produce I64/F64.
+ * Calls, loads, parameters, and polymorphic ops produce TAGGED. */
+static XrRep sr_def_rep(const XiValue *v) {
+    if (!v || !v->type) return XR_REP_TAGGED;
+    switch (v->op) {
+        case XI_CONST: {
+            if (v->type->kind == XR_KIND_NULL ||
+                v->type->kind == XR_KIND_STRING)
+                return XR_REP_TAGGED;
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
+        case XI_NEG:
+        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
+        case XI_SHL: case XI_SHR: {
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+        case XI_NOT: case XI_ISNULL: case XI_IS:
+            return XR_REP_I64;
+        case XI_BOX:
+            return XR_REP_TAGGED;
+        case XI_UNBOX: {
+            XrRep ur = xr_type_base_rep(v->type);
+            if (ur == XR_REP_I64 || ur == XR_REP_F64) return ur;
+            if (v->nargs >= 1 && v->args[0] && v->args[0]->type) {
+                ur = xr_type_base_rep(v->args[0]->type);
+                if (ur == XR_REP_I64 || ur == XR_REP_F64) return ur;
+            }
+            return XR_REP_TAGGED;
+        }
+        case XI_CONVERT: {
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
+        default:
+            return XR_REP_TAGGED;
+    }
+}
 
 /*
  * Determine what representation an instruction needs at a given arg position.
@@ -764,14 +803,14 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
     }
 
     /* Populate v->rep for every value and phi in this function.
-     * After BOX/UNBOX insertion, xi_value_def_rep returns the
-     * correct concrete representation for each value. */
+     * After BOX/UNBOX insertion, sr_def_rep returns the correct
+     * concrete representation for each value. */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
         if (!blk) continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
-            if (v) v->rep = (uint8_t)xi_value_def_rep(v);
+            if (v) v->rep = (uint8_t)sr_def_rep(v);
         }
         for (XiPhi *phi = blk->phis; phi; phi = phi->next)
             phi->value.rep = XR_REP_TAGGED;
