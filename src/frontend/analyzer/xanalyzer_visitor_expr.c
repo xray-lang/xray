@@ -15,7 +15,27 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
+#include "xa_selection.h"
 #include "../../base/xchecks.h"
+
+/* Record a selection fact for a member/index access node. */
+static void record_selection(XaInferContext *ctx, AstNode *node,
+                             XaSelectionKind kind, XrType *receiver,
+                             XaSymbol *target, int32_t field_idx,
+                             XrType *result, bool is_optional) {
+    XaSelectionTable *st = (XaSelectionTable *)ctx->analyzer->selection_table;
+    if (!st) return;
+    XaSelection sel = {
+        .kind = kind,
+        .receiver_type = receiver,
+        .target_symbol = target,
+        .field_index = field_idx,
+        .result_type = result,
+        .is_indirect = false,
+        .is_optional = is_optional,
+    };
+    xa_selection_table_set(st, node, &sel);
+}
 
 /* ============================================================================
  * Pass 2: Expression Visitors
@@ -297,15 +317,22 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 // Look up member (function or constant) in module type table
                 const char *sig = xa_builtin_get_module_func_signature(mod_name, ma->name);
                 if (sig) {
+                    XrType *mod_result = NULL;
                     // Constant property: signature is ": type" (no parens)
                     if (sig[0] == ':') {
                         const char *type_str = sig + 1;
                         while (*type_str == ' ')
                             type_str++;
-                        return xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                        mod_result = xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                    } else {
+                        // Function: parse complete signature (params + return type)
+                        mod_result = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
                     }
-                    // Function: parse complete signature (params + return type)
-                    return xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+                    if (mod_result) {
+                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT,
+                                         obj_type, sym, -1, mod_result, false);
+                    }
+                    return mod_result;
                 }
                 // Known module but unknown member - still unknown for extensibility
                 return xr_type_new_unknown(NULL);
@@ -326,8 +353,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 for (int i = 0; i < el->enum_member_count; i++) {
                     if (el->enum_member_names[i] &&
                         strcmp(el->enum_member_names[i], ma->name) == 0) {
-                        return xr_type_new_enum(ctx->analyzer->isolate,
-                                                 obj_type->enum_type.enum_name);
+                        XrType *enum_type = xr_type_new_enum(ctx->analyzer->isolate,
+                                                              obj_type->enum_type.enum_name);
+                        record_selection(ctx, node, XA_SEL_ENUM_MEMBER,
+                                         obj_type, enum_sym, i, enum_type, false);
+                        return enum_type;
                     }
                 }
                 // Precise .value type: use the enum's actual backing type
@@ -351,8 +381,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *member = xa_class_info_lookup_member(class_links->class_info, ma->name);
                 if (member) {
                     XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
-                    if (ml && ml->type)
+                    if (ml && ml->type) {
+                        record_selection(ctx, node, XA_SEL_STATIC_MEMBER,
+                                         obj_type, member, -1, ml->type, false);
                         return ml->type;
+                    }
                 }
             }
         }
@@ -491,6 +524,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                 obj_type->instance.type_args, obj_type->instance.type_arg_count);
                             xr_free(param_names);
                         }
+                        XaSelectionKind sk = (member->kind == XA_SYM_METHOD)
+                                                 ? XA_SEL_METHOD : XA_SEL_FIELD;
+                        record_selection(ctx, node, sk, obj_type, member,
+                                         -1, member_type, false);
                         return member_type;
                     }
                 }
@@ -540,9 +577,11 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         return xr_type_new_unknown(NULL);
                     // JSON fields are always nullable (runtime dynamic);
                     // OBJECT fields return exact type (compile-time fixed)
-                    if (XR_TYPE_IS_JSON(obj_type))
-                        return xr_type_make_nullable(ctx->analyzer->isolate, ft);
-                    return ft;
+                    XrType *result_ft = XR_TYPE_IS_JSON(obj_type)
+                        ? xr_type_make_nullable(ctx->analyzer->isolate, ft) : ft;
+                    record_selection(ctx, node, XA_SEL_FIELD, obj_type,
+                                     NULL, i, result_ft, false);
+                    return result_ft;
                 }
             }
         }

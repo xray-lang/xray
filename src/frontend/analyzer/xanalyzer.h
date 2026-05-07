@@ -113,6 +113,11 @@ struct XaAnalyzer {
     // analyzer header free of frontend-internal types.
     void *node_table;  // XaNodeTable* (forward declared)
 
+    // AST -> selection facts table. Populated during Pass 2 for
+    // member access, method call, index, and module export nodes.
+    // Consumed by lowerer/backend instead of re-discovering member info.
+    void *selection_table;  // XaSelectionTable* (forward declared)
+
     // Type inference quality metric: how many expressions resolved to unknown
     int unknown_type_count;
 };
@@ -155,6 +160,12 @@ XR_FUNC void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC void xa_analyzer_set_node_type(XaAnalyzer *analyzer, struct AstNode *node,
                                        struct XrType *type);
 XR_FUNC struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstNode *node);
+
+// API: Selection facts (member/method/index resolution).
+// Recorded during Pass 2. Consumed by lowerer to avoid re-resolving members.
+struct XaSelection;
+XR_FUNC const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer,
+                                                            const struct AstNode *node);
 
 // API: Cross-file incremental analysis
 XR_FUNC const char **xa_analyzer_get_dirty_files(XaAnalyzer *analyzer, int *count);
