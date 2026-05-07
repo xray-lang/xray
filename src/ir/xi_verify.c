@@ -13,6 +13,7 @@
 
 #include "xi_verify.h"
 #include "xi_effect.h"
+#include "xi_backend.h"
 #include "xi_analysis.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
@@ -752,6 +753,33 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* ========== Check 16: Backend Op Legality (STAGE_BACKEND) ========== */
+
+/* At STAGE_BACKEND, all ops must be in the backend-legal whitelist.
+ * Non-legal ops should have been lowered by xi_backend_lower(). */
+static void verify_backend(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+    if (f->stage < XI_STAGE_BACKEND) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+
+            if (!xi_op_is_backend_legal(v->op)) {
+                verr(ctx,
+                     "func '%s': v%u has non-backend op %u in b%u "
+                     "(must be lowered before STAGE_BACKEND)",
+                     f->name, v->id, v->op, blk->id);
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
@@ -846,6 +874,11 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     /* Representation consistency (only at STAGE_REPPED and above) */
     if (!ctx.failed) {
         verify_repped(&ctx, f);
+    }
+
+    /* Backend op legality (only at STAGE_BACKEND) */
+    if (!ctx.failed) {
+        verify_backend(&ctx, f);
     }
 
     return !ctx.failed;

@@ -48,6 +48,29 @@ static const char *ctype_str(XrRep rep) {
     }
 }
 
+/* Check whether an op is void-like (produces no named result).
+ * Handles both pre-lowered ops (XI_PRINT etc.) and post-lowered
+ * XI_CALL_BUILTIN with aux name. */
+static bool cg_is_void_like(const XiValue *v) {
+    switch (v->op) {
+    case XI_PRINT: case XI_SET_SHARED: case XI_STORE_UPVAL:
+    case XI_STORE_FIELD: case XI_INDEX_SET: case XI_THROW:
+    case XI_JSON_INIT_F: case XI_JSON_SET_F:
+        return true;
+    case XI_CALL_BUILTIN:
+        if (v->aux) {
+            const char *n = (const char *)v->aux;
+            if (strcmp(n, "print") == 0 || strcmp(n, "json_init_f") == 0 ||
+                strcmp(n, "json_set_f") == 0 || strcmp(n, "assert") == 0 ||
+                strcmp(n, "assert_eq") == 0 || strcmp(n, "assert_ne") == 0)
+                return true;
+        }
+        return false;
+    default:
+        return false;
+    }
+}
+
 /* ========== Codegen Context ========== */
 
 #define CG_MAX_SHARED 512
@@ -1238,11 +1261,115 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, "XR_NULL_VAL");
             break;
 
-        /* Builtin calls */
-        case XI_CALL_BUILTIN:
-            fprintf(out, "XR_NULL_VAL /* TODO: builtin '%s' */",
-                    v->aux ? (const char *)v->aux : "?");
+        /* Builtin calls: dispatches both AST-lowered builtins (dump, copy,
+         * chr, etc.) and backend-lowered builtins (print, iter_*, etc.). */
+        case XI_CALL_BUILTIN: {
+            const char *bn = v->aux ? (const char *)v->aux : "";
+
+            if (strcmp(bn, "print") == 0) {
+                int flags = (int)v->aux_int;
+                bool add_space = (flags & 1) != 0;
+                bool newline   = (flags & 2) != 0;
+                if (add_space) fprintf(out, "(putchar(' '), ");
+                fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ")");
+                if (add_space) fprintf(out, ")");
+            } else if (strcmp(bn, "str_concat") == 0) {
+                if (v->nargs == 2) {
+                    fprintf(out, "xrt_add(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[1]);
+                    fprintf(out, ")");
+                } else {
+                    fprintf(out, "xrt_str_concat(%u", v->nargs);
+                    for (uint16_t i = 0; i < v->nargs; i++) {
+                        fprintf(out, ", ");
+                        emit_vref(out, v->args[i]);
+                    }
+                    fprintf(out, ")");
+                }
+            } else if (strcmp(bn, "array_new") == 0) {
+                int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST)
+                              ? v->args[0]->aux_int : 4;
+                fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
+            } else if (strcmp(bn, "map_new") == 0) {
+                int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST)
+                              ? v->args[0]->aux_int : 8;
+                fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+            } else if (strcmp(bn, "set_new") == 0) {
+                fprintf(out, "xrt_map_new(8)");
+            } else if (strcmp(bn, "json_new") == 0) {
+                int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
+                fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
+            } else if (strcmp(bn, "json_init_f") == 0 ||
+                       strcmp(bn, "json_set_f") == 0) {
+                fprintf(out, "xrt_json_set_field(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", %d, ", (int)v->aux_int);
+                emit_vref(out, v->args[1]);
+                fprintf(out, ")");
+            } else if (strcmp(bn, "json_get_f") == 0) {
+                fprintf(out, "xrt_json_get_field(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", %d)", (int)v->aux_int);
+            } else if (strcmp(bn, "iter_new") == 0) {
+                XR_DCHECK(v->nargs >= 1, "builtin iter_new: need arg");
+                fprintf(out, "xrt_method_0(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", %d)", XRT_SYM_ITERATOR);
+            } else if (strcmp(bn, "iter_valid") == 0) {
+                XR_DCHECK(v->nargs >= 1, "builtin iter_valid: need arg");
+                fprintf(out, "xr_truthy(xrt_method_0(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", %d))", XRT_SYM_HAS_NEXT);
+            } else if (strcmp(bn, "iter_next") == 0) {
+                XR_DCHECK(v->nargs >= 1, "builtin iter_next: need arg");
+                fprintf(out, "xrt_method_0(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", %d)", XRT_SYM_NEXT);
+            } else if (strcmp(bn, "slice") == 0) {
+                XR_DCHECK(v->nargs >= 3, "builtin slice: need 3 args");
+                fprintf(out, "xrt_slice(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", ");
+                emit_vref(out, v->args[1]);
+                fprintf(out, ", ");
+                emit_vref(out, v->args[2]);
+                fprintf(out, ")");
+            } else if (strcmp(bn, "range") == 0) {
+                XR_DCHECK(v->nargs >= 2, "builtin range: need 2 args");
+                fprintf(out, "xrt_range(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", ");
+                emit_vref(out, v->args[1]);
+                fprintf(out, ")");
+            } else if (strcmp(bn, "typeof") == 0) {
+                XR_DCHECK(v->nargs >= 1, "builtin typeof: need arg");
+                if (v->aux_int == 1) {
+                    fprintf(out, "xr_typename(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ")");
+                } else {
+                    fprintf(out, "XR_FROM_INT(xr_typeof_id(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, "))");
+                }
+            } else if (strcmp(bn, "regex_compile") == 0) {
+                XR_DCHECK(v->nargs >= 2, "builtin regex_compile: need 2 args");
+                fprintf(out, "xr_regex_compile_literal(iso, ");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", ");
+                emit_vref(out, v->args[1]);
+                fprintf(out, ")");
+            } else {
+                /* Pre-lowered builtins (dump, copy, chr, etc.)
+                 * and unknown — emit null placeholder. */
+                fprintf(out, "XR_NULL_VAL /* builtin '%s' */", bn);
+            }
             break;
+        }
 
         /* Cross-module import reference: look up (module_path, member_name)
          * in the global import table populated by the AOT driver. */
@@ -1301,9 +1428,7 @@ static void emit_value_stmt(FILE *out, const XiFunc *f, const XiValue *v,
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
 
     /* Side-effect-only values that don't produce a named result. */
-    bool void_like = (v->op == XI_PRINT || v->op == XI_SET_SHARED ||
-                      v->op == XI_STORE_UPVAL || v->op == XI_STORE_FIELD ||
-                      v->op == XI_INDEX_SET || v->op == XI_THROW);
+    bool void_like = cg_is_void_like(v);
 
     if (void_like) {
         fprintf(out, "    ");
@@ -1531,9 +1656,7 @@ static void emit_declarations(FILE *out, const XiFunc *f) {
                 const XiValue *v = blk->values[vi];
                 if (!v) continue;
                 /* Skip void-like ops and structural exception ops */
-                if (v->op == XI_PRINT || v->op == XI_SET_SHARED ||
-                    v->op == XI_STORE_UPVAL || v->op == XI_STORE_FIELD ||
-                    v->op == XI_INDEX_SET || v->op == XI_THROW ||
+                if (cg_is_void_like(v) ||
                     v->op == XI_TRY || v->op == XI_END_TRY ||
                     v->op == XI_FINALLY)
                     continue;

@@ -64,6 +64,8 @@ typedef struct XiPipelineConfig {
     bool run_select_rep;    /* run SelectRepresentations pass (BOX/UNBOX insertion,
                              * needed by AOT/JIT backends for unboxed values;
                              * default: false for VM, true for AOT) */
+    bool run_backend_lower; /* lower high-level ops to XI_CALL_BUILTIN, advancing
+                             * to STAGE_BACKEND (default: false for VM, true for AOT) */
     bool run_emit;          /* emit bytecode (default: true for VM, false for AOT) */
     bool dump_ir_before;    /* dump IR to stderr before optimization */
     bool dump_ir_after;     /* dump IR to stderr after optimization */
