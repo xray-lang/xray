@@ -23,7 +23,6 @@
 #include "xm_codegen.h"
 #include "xm_liveness2.h"
 #include "xm_offsets.h"
-#include "../ir/xi_rep.h"
 #include "../ir/xi_opt.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
