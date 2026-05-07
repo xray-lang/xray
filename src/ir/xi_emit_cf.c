@@ -254,6 +254,24 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 uint8_t b = reg_of(ctx, rhs);
                 if (ctx->status != XI_EMIT_OK) return;
 
+                /* Unwrap cells: fused cmp bypasses emit_value arg unwrap */
+                if (lhs->var_id != 0xFF &&
+                    ctx->cell_side_reg[lhs->var_id] != NO_REG) {
+                    uint8_t tmp = ctx->next_reg++;
+                    if (ctx->next_reg > ctx->max_reg)
+                        ctx->max_reg = ctx->next_reg;
+                    emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, a, 0));
+                    a = tmp;
+                }
+                if (rhs->var_id != 0xFF &&
+                    ctx->cell_side_reg[rhs->var_id] != NO_REG) {
+                    uint8_t tmp = ctx->next_reg++;
+                    if (ctx->next_reg > ctx->max_reg)
+                        ctx->max_reg = ctx->next_reg;
+                    emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, b, 0));
+                    b = tmp;
+                }
+
                 /* Determine branch-form opcode and sense.  GT/GE swap args. */
                 OpCode branch_op;
                 int k = 0;
@@ -272,15 +290,14 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 /* Try immediate form (OP_LTI/LEI/EQI) when RHS is small int */
                 bool is_imm = false;
                 XiValue *imm_arg = swap ? lhs : rhs;   /* the "B" operand */
-                XiValue *reg_arg = swap ? rhs : lhs;    /* the "A" operand */
                 if (imm_arg->op == XI_CONST && imm_arg->type &&
                     imm_arg->type->kind == XR_KIND_INT &&
                     imm_arg->aux_int >= -128 && imm_arg->aux_int <= 127 &&
                     (branch_op == OP_LT || branch_op == OP_LE || branch_op == OP_EQ)) {
                     OpCode imm_op = branch_op == OP_LT ? OP_LTI :
                                    branch_op == OP_LE ? OP_LEI : OP_EQI;
-                    uint8_t ra = reg_of(ctx, reg_arg);
-                    if (ctx->status != XI_EMIT_OK) return;
+                    /* Use already cell-unwrapped 'a' register (post-swap). */
+                    uint8_t ra = a;
                     int8_t imm = (int8_t)imm_arg->aux_int;
                     emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint8_t)imm, (uint8_t)k));
                     is_imm = true;

@@ -99,6 +99,11 @@ typedef struct {
      * NO_REG (0xFF) means no cell allocated for this variable. */
     uint8_t cell_side_reg[MAX_REGS];  /* var_id → cell register */
 
+    /* Tracks whether OP_CELL_NEW has been emitted for a given var_id.
+     * First write to a cell_side_reg variable emits CELL_NEW; subsequent
+     * writes emit CELL_SET. */
+    bool cell_created[MAX_REGS];      /* var_id → true if CELL_NEW emitted */
+
     /* Variable-based register coalescing: all SSA definitions of the same
      * source variable share one VM register.  This is required for correct
      * exception semantics — the VM's OP_THROW bypasses SSA phi resolution,
