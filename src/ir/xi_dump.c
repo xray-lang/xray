@@ -197,8 +197,12 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
     }
 
-    /* Type annotation */
+    /* Type + rep annotation */
     fprintf(out, "  ; %s", xi_type_name(v->type));
+
+    /* Show explicit rep when it differs from TAGGED (i.e. after select_rep) */
+    if (v->rep == XR_REP_I64) fprintf(out, " :i64");
+    else if (v->rep == XR_REP_F64) fprintf(out, " :f64");
 
     if (v->line > 0)
         fprintf(out, " L%u", v->line);
