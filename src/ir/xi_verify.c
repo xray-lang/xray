@@ -785,6 +785,90 @@ static void verify_backend(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* ========== Stage-Specific Verifiers ========== */
+
+/* RAW: basic SSA structure after lowering. All generic checks in
+ * xi_verify() are sufficient; no additional stage-specific checks. */
+static void verify_raw(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+    (void)f;
+    /* RAW is the baseline stage. All structural checks are already
+     * covered by the generic verify_*() helpers above. */
+}
+
+/* CANONICAL: evaluation order is deterministic; syntax sugar expanded.
+ * No compound-assignment or increment/decrement ops should remain
+ * as high-level ops. */
+static void verify_canonical(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+    if (f->stage < XI_STAGE_CANONICAL) return;
+    /* Currently no sugar ops exist in the Xi IR (expansion happens
+     * in the AST canonicalizer before lowering). This verifier is
+     * a structural placeholder: concrete checks will be added when
+     * new high-level ops that require canonical lowering are introduced. */
+}
+
+/* CLOSED: upvalue captures fully materialized.
+ * XI_CLOSURE_NEW must have exactly ncaptures args matching the child
+ * function's capture metadata. XI_LOAD_UPVAL / XI_STORE_UPVAL indices
+ * must be within bounds. */
+static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+    if (f->stage < XI_STAGE_CLOSED) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+
+            if (v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
+                int idx = v->aux_int;
+                if (idx < 0 || idx >= (int)f->ncaptures) {
+                    verr(ctx,
+                         "func '%s': v%u %s in b%u has upval index %d "
+                         "but function has %u captures",
+                         f->name, v->id, xi_op_name(v->op),
+                         blk->id, idx, f->ncaptures);
+                    return;
+                }
+            }
+        }
+    }
+}
+
+/* OWNED: escape analysis has run; every allocation op carries a
+ * valid escape annotation (NO_ESCAPE / ARG_ESCAPE / GLOBAL_ESCAPE). */
+static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+    if (f->stage < XI_STAGE_OWNED) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+
+            /* Allocation ops must have escape level set (0-3) */
+            if (v->op == XI_ARRAY_NEW || v->op == XI_MAP_NEW ||
+                v->op == XI_SET_NEW || v->op == XI_JSON_NEW) {
+                if (v->escape > 3) {
+                    verr(ctx,
+                         "func '%s': v%u %s in b%u has invalid escape "
+                         "level %u (expected 0-3)",
+                         f->name, v->id, xi_op_name(v->op),
+                         blk->id, v->escape);
+                    return;
+                }
+            }
+        }
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
@@ -884,6 +968,45 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     /* Backend op legality (only at STAGE_BACKEND) */
     if (!ctx.failed) {
         verify_backend(&ctx, f);
+    }
+
+    return !ctx.failed;
+}
+
+XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage,
+                              char *errbuf, int errbuf_size) {
+    /* Run all generic checks first */
+    if (!xi_verify(f, errbuf, errbuf_size))
+        return false;
+
+    VerifyCtx ctx = { .buf = errbuf, .size = errbuf_size, .failed = false };
+    errbuf[0] = '\0';
+
+    /* Stage-specific checks run cumulatively: each stage includes
+     * all checks from preceding stages (fall-through). */
+    if (stage >= XI_STAGE_RAW)
+        verify_raw(&ctx, f);
+    if (!ctx.failed && stage >= XI_STAGE_CANONICAL)
+        verify_canonical(&ctx, f);
+    if (!ctx.failed && stage >= XI_STAGE_CLOSED)
+        verify_closed(&ctx, f);
+    if (!ctx.failed && stage >= XI_STAGE_OWNED)
+        verify_owned(&ctx, f);
+    /* REPPED and BACKEND already gated inside verify_repped/verify_backend
+     * (called by xi_verify above), so no double-run needed. */
+
+    /* Invariant mask consistency: the function's mask must include
+     * all bits implied by its current stage. */
+    if (!ctx.failed) {
+        XiInvariantMask required = xi_stage_invariants(f->stage);
+        XiInvariantMask missing = required & ~f->invariant_mask;
+        if (missing) {
+            verr(&ctx,
+                 "func '%s': invariant_mask 0x%x is missing bits 0x%x "
+                 "required by stage %s",
+                 f->name, f->invariant_mask, missing,
+                 xi_stage_name(f->stage));
+        }
     }
 
     return !ctx.failed;

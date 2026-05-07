@@ -142,4 +142,20 @@ XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats,
  * Convergence is typically reached in 2-3 rounds. */
 #define XI_OPT_MAX_ROUNDS 8
 
+/* ========== Pass Order Constraints ========== */
+
+/* Declarative constraint: pass 'before' must run before pass 'after'.
+ * The pipeline validates all constraints at startup and aborts if the
+ * pass table violates any ordering requirement. */
+typedef struct XiPassOrderConstraint {
+    const char *before;     /* name of the pass that must run first */
+    const char *after;      /* name of the pass that must run later */
+    const char *reason;     /* human-readable justification */
+} XiPassOrderConstraint;
+
+/* Validate that the pass table ordering satisfies all constraints.
+ * Returns true if valid.  On violation, writes a diagnostic to stderr
+ * and returns false. Called once at pipeline startup. */
+XR_FUNC bool xi_pass_order_check(void);
+
 #endif // XI_PASS_H

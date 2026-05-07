@@ -42,4 +42,12 @@
  * (up to errbuf_size bytes, NUL-terminated). */
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size);
 
+/* Stage-specific verifiers — run the base xi_verify() plus additional
+ * checks appropriate for the given stage. Each succeeding stage
+ * includes all checks from earlier stages.
+ *
+ * Return true if valid.  On failure, the diagnostic goes to errbuf. */
+XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage,
+                              char *errbuf, int errbuf_size);
+
 #endif  // XI_VERIFY_H
