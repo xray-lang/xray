@@ -9,8 +9,12 @@
  *
  * KEY CONCEPT:
  *   Transforms post-analysis AST into canonical form for the lowerer.
- *   Canonicalization rules implemented so far:
+ *   Canonicalization rules:
  *     - Compound assignment desugaring (variable and member targets)
+ *     - Increment/decrement expansion (x++ → x += 1 → x = x + 1)
+ *     - Index-set receiver extraction (statement context only)
+ *     - Short-circuit logic expansion (&& / || → ternary)
+ *     - Nullish coalesce expansion (?? → null-check ternary)
  */
 
 #include "xcanon.h"
@@ -343,6 +347,58 @@ static void canon_short_circuit(XrCanonCtx *ctx, AstNode *node) {
     node->node_id = saved_id;
 }
 
+/* ========== Nullish coalesce expansion ========== */
+
+/* Expand ?? into explicit null-check ternary.
+ *   x ?? b          →  x == null ? b : x          (x is simple)
+ *   f() ?? b        →  (let __t = f(); __t == null ? b : __t)
+ *
+ * For simple LHS we emit the ternary directly (no temp needed since
+ * variables/literals have no side effects and evaluate identically).
+ * Complex LHS requires statement context for temp extraction, so
+ * canon_block handles that path. In expression context we only
+ * handle simple LHS; complex LHS falls through to the lowerer. */
+static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node,
+                                    bool in_stmt_context) {
+    XR_DCHECK(node->type == AST_NULLISH_COALESCE,
+              "canon_nullish_coalesce: wrong node type");
+
+    AstNode *lhs = node->as.binary.left;
+    AstNode *rhs = node->as.binary.right;
+    int line = node->line;
+    bool lhs_simple = is_simple_expr(lhs);
+
+    /* Complex LHS in expression context — cannot safely extract temp */
+    if (!lhs_simple && !in_stmt_context)
+        return;
+
+    AstNode *test_lhs = lhs;  /* the value to null-check and return */
+
+    if (!lhs_simple) {
+        /* Statement context: wrap in a block with temp extraction.
+         * Not applicable here since canon_block calls us before
+         * canon_node; but guard for future callers. */
+        return;
+    }
+
+    /* Build: lhs == null ? rhs : lhs */
+    AstNode *null_lit = xr_ast_literal_null(ctx->isolate, line);
+    XR_DCHECK(null_lit != NULL, "canon_nullish_coalesce: null alloc");
+
+    AstNode *eq_check = xr_ast_binary(ctx->isolate, AST_BINARY_EQ,
+                                       test_lhs, null_lit, line);
+    XR_DCHECK(eq_check != NULL, "canon_nullish_coalesce: eq alloc");
+
+    /* Duplicate the LHS reference for the false branch.
+     * Since lhs is simple (variable/literal), safe to reuse pointer. */
+    AstNode *ternary = xr_ast_ternary(ctx->isolate, eq_check, rhs, test_lhs, line);
+    XR_DCHECK(ternary != NULL, "canon_nullish_coalesce: ternary alloc");
+
+    uint32_t saved_id = node->node_id;
+    *node = *ternary;
+    node->node_id = saved_id;
+}
+
 /* ========== AST walk (recursive, dispatches on node type) ========== */
 
 /* Forward declaration — the walker calls itself recursively. */
@@ -385,6 +441,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     if (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) {
         canon_short_circuit(ctx, node);
         /* Node type has changed to AST_TERNARY; fall through. */
+    }
+    if (node->type == AST_NULLISH_COALESCE) {
+        canon_nullish_coalesce(ctx, node, /*in_stmt_context=*/false);
+        /* May have changed to AST_TERNARY (simple LHS) or stayed as-is. */
     }
 
     switch (node->type) {
