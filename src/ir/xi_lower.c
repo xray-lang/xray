@@ -30,6 +30,9 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Forward declarations */
+static void finalize_capture_metadata(XiFunc *f);
+
 /* ========== Braun SSA: Variable Management ========== */
 
 /* Register a variable by its analyzer-assigned symbol_id.
@@ -518,7 +521,9 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
     XR_CHECK(func_node->type == AST_FUNCTION_DECL ||
              func_node->type == AST_FUNCTION_EXPR,
              "xi_lower_func: not a function node");
-    return xi_lower_func_impl(func_node, analyzer, isolate, NULL);
+    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL);
+    if (f) finalize_capture_metadata(f);
+    return f;
 }
 
 /*
@@ -649,6 +654,34 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
 }
 
 /*
+ * Recursively decorate capture metadata on the function tree.
+ * Sets capture_kind and is_mutable based on the already-computed needs_cell
+ * flag from the lowering-time closure analysis.  This finalizes the metadata
+ * so downstream passes (emit, JIT, AOT) can read XiCapture.capture_kind
+ * instead of interpreting needs_cell + source heuristically.
+ */
+static void finalize_capture_metadata(XiFunc *f) {
+    XR_DCHECK(f != NULL, "finalize_capture_metadata: NULL func");
+
+    for (uint16_t i = 0; i < f->ncaptures; i++) {
+        XiCapture *cap = &f->captures[i];
+        if (cap->needs_cell) {
+            cap->capture_kind = (uint8_t)XI_CAPTURE_BY_MUT_CELL;
+            cap->is_mutable = true;
+        } else {
+            cap->capture_kind = (uint8_t)XI_CAPTURE_BY_COPY;
+            cap->is_mutable = false;
+        }
+    }
+
+    /* Recurse into child functions */
+    for (uint16_t ci = 0; ci < f->nchildren; ci++) {
+        if (f->children[ci])
+            finalize_capture_metadata(f->children[ci]);
+    }
+}
+
+/*
  * Build XiModule metadata directly from lowerer tracking data.
  * Constructs the exports table from export_names + shared_slot_funcs/classes
  * without scanning IR instructions.  Also collects class data into
@@ -763,8 +796,10 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
     }
 
     /* Build module metadata from lowerer tracking data (no IR scan needed) */
-    if (!l.had_error)
+    if (!l.had_error) {
         build_module_metadata(&l);
+        finalize_capture_metadata(l.func);
+    }
 
     XiFunc *result = l.had_error ? NULL : l.func;
     if (result) result->stage = XI_STAGE_RAW;
