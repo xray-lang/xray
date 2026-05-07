@@ -8,6 +8,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_lower.h"
+#include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/frontend/parser/xast_nodes.h"
 #include "../../../src/frontend/parser/xast_types.h"
@@ -15,6 +16,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../include/xray_isolate.h"
+#include "../../../src/runtime/xisolate_api.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,7 +65,13 @@ static XiFunc *lower_source(const char *source) {
     }
     xa_analyzer_analyze(analyzer, "test.xr", program);
 
-    /* Lower */
+    /* Re-install parse arena for canonicalizer allocations */
+    if (program->type == AST_PROGRAM && program->as.program.arena)
+        xr_isolate_set_current_arena(g_iso, program->as.program.arena);
+
+    /* Canonicalize + Lower */
+    xr_canon_program(program, analyzer, g_iso);
+    xr_isolate_set_current_arena(g_iso, NULL);
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);
     if (!func) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
@@ -435,18 +443,19 @@ TEST(nullish_coalesce) {
         "print(y)\n"
     );
     assert(f != NULL);
-    /* Nullish coalesce produces: entry, eval_rhs, skip, merge blocks */
+    /* Canonicalized to: x == null ? 42 : x → ternary with EQ null check.
+     * Produces: entry, then_branch, else_branch, merge blocks. */
     assert(f->nblocks >= 3);
-    /* Verify ISNULL op exists */
-    int found_isnull = 0;
+    /* Verify EQ op exists (null-check from canonicalized ternary) */
+    int found_eq = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_ISNULL)
-                found_isnull = 1;
+            if (blk->values[i]->op == XI_EQ)
+                found_eq = 1;
         }
     }
-    assert(found_isnull && "should have ISNULL op");
+    assert(found_eq && "should have EQ op for null check");
     xi_func_free(f);
 }
 

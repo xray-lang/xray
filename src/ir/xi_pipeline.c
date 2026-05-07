@@ -218,8 +218,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(
     /* Restore previous arena */
     xr_isolate_set_current_arena(isolate, saved_arena);
 
-    XiFunc *ir = xi_lower_func_ex(func_node, analyzer, isolate,
-                                  XI_LOWER_CANONICALIZED);
+    XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
 
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
@@ -257,8 +256,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(
     /* Restore previous arena */
     xr_isolate_set_current_arena(isolate, saved_arena);
 
-    XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate,
-                                      XI_LOWER_CANONICALIZED);
+    XiFunc *ir = xi_lower_program(program_node, analyzer, isolate);
 
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
