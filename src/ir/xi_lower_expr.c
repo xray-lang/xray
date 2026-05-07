@@ -1399,13 +1399,17 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
         /* For program-level named functions, also store into shared array
          * so nested functions can access via XI_GET_SHARED (forward refs). */
         if (l->is_program && l->shared_map[var_id] >= 0) {
+            int slot = l->shared_map[var_id];
             XiValue *store = xi_value_new(l->func, l->cur_block,
                                            XI_SET_SHARED, l->type_void, 1);
             if (store) {
                 store->args[0] = v;
-                store->aux_int = l->shared_map[var_id];
+                store->aux_int = slot;
                 store->flags |= XI_FLAG_SIDE_EFFECT;
             }
+            /* Track function → shared slot for module export metadata */
+            if (slot >= 0 && slot < XI_LOWER_MAX_VARS)
+                l->shared_slot_funcs[slot] = child;
         }
     }
 

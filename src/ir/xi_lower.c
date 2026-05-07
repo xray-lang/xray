@@ -648,6 +648,79 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
     }
 }
 
+/*
+ * Build XiModule metadata directly from lowerer tracking data.
+ * Constructs the exports table from export_names + shared_slot_funcs/classes
+ * without scanning IR instructions.  Also collects class data into
+ * module->classes for AOT codegen.
+ */
+static void build_module_metadata(XiLower *l) {
+    XiFunc *f = l->func;
+    XR_DCHECK(f != NULL, "build_module_metadata: NULL func");
+
+    uint16_t nshared = f->nshared;
+    if (nshared == 0 && f->nchildren == 0) return;
+
+    /* Allocate module (caller must free via xi_module_free) */
+    XiModule *mod = xi_module_new(NULL, NULL, f);
+    if (!mod) return;
+
+    /* Build exports from export_names + tracked function/class pointers */
+    if (f->export_names && nshared > 0) {
+        uint16_t nexports = 0;
+        for (uint16_t s = 0; s < nshared; s++) {
+            if (f->export_names[s]) nexports++;
+        }
+        if (nexports > 0) {
+            XiModuleExport *exps = (XiModuleExport *)xr_calloc(
+                nexports, sizeof(XiModuleExport));
+            if (exps) {
+                uint16_t ei = 0;
+                for (uint16_t s = 0; s < nshared && ei < nexports; s++) {
+                    if (!f->export_names[s]) continue;
+                    exps[ei].name = f->export_names[s];
+                    exps[ei].shared_slot = s;
+                    exps[ei].function = l->shared_slot_funcs[s];
+                    exps[ei].class_data = l->shared_slot_classes[s];
+                    /* Type info from the var entry that maps to this slot */
+                    for (int vi = 0; vi < l->var_count; vi++) {
+                        if (l->shared_map[vi] == (int16_t)s) {
+                            exps[ei].value_type = l->vars[vi].type;
+                            break;
+                        }
+                    }
+                    exps[ei].is_live_binding = false;
+                    ei++;
+                }
+                mod->exports = exps;
+                mod->nexports = nexports;
+            }
+        }
+    }
+
+    /* Collect class data from tracked slots */
+    uint16_t class_count = 0;
+    for (uint16_t s = 0; s < nshared; s++) {
+        if (l->shared_slot_classes[s]) class_count++;
+    }
+    if (class_count > 0) {
+        XiClassData **cls = (XiClassData **)xr_calloc(
+            class_count, sizeof(XiClassData *));
+        if (cls) {
+            uint16_t ci = 0;
+            for (uint16_t s = 0; s < nshared && ci < class_count; s++) {
+                if (l->shared_slot_classes[s])
+                    cls[ci++] = l->shared_slot_classes[s];
+            }
+            mod->classes = cls;
+            mod->nclasses = class_count;
+        }
+    }
+
+    /* xi_module_new already copies init->children into mod->functions */
+    f->module = mod;
+}
+
 XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
                           struct XrayIsolate *isolate) {
     XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
@@ -688,6 +761,10 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
     if (l.cur_block) {
         xi_block_set_return(l.cur_block, NULL);
     }
+
+    /* Build module metadata from lowerer tracking data (no IR scan needed) */
+    if (!l.had_error)
+        build_module_metadata(&l);
 
     XiFunc *result = l.had_error ? NULL : l.func;
     if (result) result->stage = XI_STAGE_RAW;

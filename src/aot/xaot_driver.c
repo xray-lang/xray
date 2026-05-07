@@ -346,10 +346,19 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         XR_DCHECK(ir_funcs[m] != NULL, "xaot_build: pipeline OK but NULL IR");
         total_funcs += 1 + ir_funcs[m]->nchildren;
 
-        /* Build module metadata with explicit exports/classes */
-        modules[m] = xi_module_new(paths[m], mod_names[m], ir_funcs[m]);
-        if (modules[m])
-            xi_module_populate_exports(modules[m]);
+        /* Reuse module metadata built during lowering when available;
+         * fall back to post-hoc IR scan for legacy or standalone func paths. */
+        if (ir_funcs[m]->module) {
+            modules[m] = ir_funcs[m]->module;
+            modules[m]->path = paths[m];
+            modules[m]->name = mod_names[m];
+            /* Detach from func so xi_func_free won't double-free */
+            ir_funcs[m]->module = NULL;
+        } else {
+            modules[m] = xi_module_new(paths[m], mod_names[m], ir_funcs[m]);
+            if (modules[m])
+                xi_module_populate_exports(modules[m]);
+        }
     }
     xray_isolate_delete(X);
 
