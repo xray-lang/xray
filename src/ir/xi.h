@@ -329,11 +329,17 @@ typedef enum {
 
 /* ========== Value Flags ========== */
 
-#define XI_FLAG_SIDE_EFFECT (1 << 0) /* has side effects (cannot be eliminated) */
-#define XI_FLAG_MAY_THROW   (1 << 1) /* may raise exception */
-#define XI_FLAG_MAY_GC      (1 << 2) /* may trigger GC */
-#define XI_FLAG_SAFEPOINT   (1 << 3) /* GC safepoint */
-#define XI_FLAG_TAIL        (1 << 4) /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
+#define XI_FLAG_SIDE_EFFECT  (1 << 0) /* has side effects (cannot be eliminated) */
+#define XI_FLAG_MAY_THROW    (1 << 1) /* may raise exception */
+#define XI_FLAG_MAY_SUSPEND  (1 << 2) /* may yield / await / block on channel */
+#define XI_FLAG_READS_MEM    (1 << 3) /* reads heap memory (load_field, index_get, ...) */
+#define XI_FLAG_WRITES_MEM   (1 << 4) /* writes heap memory (store_field, index_set, ...) */
+#define XI_FLAG_TAIL         (1 << 5) /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
+
+/* Composite masks for query convenience */
+#define XI_FLAG_MEM_ANY      (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
+#define XI_FLAG_CALL_EFFECTS (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | \
+                              XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
 
 /* ========== Upvalue Capture Info ========== */
 
@@ -519,6 +525,12 @@ typedef struct XiFunc {
     uint8_t test_attr;          /* AttributeKind: @test / @before_each / etc. */
     int test_timeout;           /* @test(timeout: N) seconds, 0 = no timeout */
 
+    /* Effect summary: bitwise OR of XI_FLAG_* across all values.
+     * Computed by xi_func_compute_effects() after lowering completes.
+     * Callers use this to answer queries like "does this function
+     * may-suspend?" without rescanning the IR. */
+    uint8_t effect_summary;
+
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
 
@@ -543,6 +555,10 @@ XR_FUNC void xi_func_free(XiFunc *f);
 /* Arena helper: allocate aligned memory from the function's bump allocator.
  * Used by xi_lower.c for phi arg arrays during Braun SSA construction. */
 XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
+
+/* Compute effect_summary by OR-ing all value flags in the function.
+ * Recurses into children to propagate may-suspend etc. upward. */
+XR_FUNC void xi_func_compute_effects(XiFunc *f);
 
 /* ========== API: Block Management ========== */
 

@@ -522,7 +522,10 @@ XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
              func_node->type == AST_FUNCTION_EXPR,
              "xi_lower_func: not a function node");
     XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL);
-    if (f) finalize_capture_metadata(f);
+    if (f) {
+        finalize_capture_metadata(f);
+        xi_func_compute_effects(f);
+    }
     return f;
 }
 
@@ -799,6 +802,7 @@ XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
     if (!l.had_error) {
         build_module_metadata(&l);
         finalize_capture_metadata(l.func);
+        xi_func_compute_effects(l.func);
     }
 
     XiFunc *result = l.had_error ? NULL : l.func;
