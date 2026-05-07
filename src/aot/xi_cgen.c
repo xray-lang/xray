@@ -15,12 +15,11 @@
  *   - Each basic block emits a label (L0:, L1:, ...).
  *   - PHI nodes are eliminated by inserting assignments before
  *     jumps in predecessor blocks.
- *   - Value representation (I64/F64/TAGGED) determined by op+type,
- *     same logic as xi_opt_select_rep.
+ *   - Value representation (I64/F64/TAGGED) read from v->rep,
+ *     populated by xi_opt_select_rep in the pipeline.
  */
 
 #include "xi_cgen.h"
-#include "../ir/xi_rep.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -35,8 +34,11 @@
 
 /* ========== Representation Helpers ========== */
 
-/* Shared implementation — see xi_rep.h */
-#define cg_rep xi_value_def_rep
+/* Read the stored representation set by select_rep.
+ * select_rep always runs in the AOT pipeline before code generation. */
+static inline XrRep cg_rep(const XiValue *v) {
+    return v ? (XrRep)v->rep : XR_REP_TAGGED;
+}
 
 static const char *ctype_str(XrRep rep) {
     switch (rep) {
