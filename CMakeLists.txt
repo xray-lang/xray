@@ -334,6 +334,7 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/parser
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/codegen
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/analyzer
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/canonical
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/format
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm
     ${CMAKE_CURRENT_SOURCE_DIR}/src/jit
@@ -376,6 +377,7 @@ file(GLOB FRONTEND_LEXER_SRC "src/frontend/lexer/*.c")
 file(GLOB FRONTEND_PARSER_SRC "src/frontend/parser/*.c")
 file(GLOB FRONTEND_CODEGEN_SRC "src/frontend/codegen/*.c")
 file(GLOB FRONTEND_ANALYZER_SRC "src/frontend/analyzer/*.c")
+file(GLOB FRONTEND_CANONICAL_SRC "src/frontend/canonical/*.c")
 file(GLOB FRONTEND_FORMAT_SRC "src/frontend/format/*.c")
 file(GLOB VM_SRC "src/vm/*.c")
 # Dispatch case bodies live in *.inc.c files included from xvm.c inside
@@ -506,6 +508,7 @@ set(CORE_ALL_SOURCES
     ${FRONTEND_PARSER_SRC}
     ${FRONTEND_CODEGEN_SRC}
     ${FRONTEND_ANALYZER_SRC}
+    ${FRONTEND_CANONICAL_SRC}
     ${FRONTEND_FORMAT_SRC}
     ${VM_SRC}
     ${JIT_SRC}

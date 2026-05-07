@@ -7,7 +7,7 @@
  *
  * xi_pipeline.c - Unified Xi IR compilation pipeline
  *
- * Orchestrates: AST -> xi_lower -> xi_verify -> xi_opt -> xi_emit -> XrProto
+ * Orchestrates: AST -> canon -> xi_lower -> xi_verify -> xi_opt -> xi_emit -> XrProto
  */
 
 #include "xi_pipeline.h"
@@ -16,6 +16,7 @@
 #include "xi_opt.h"
 #include "xi_pass.h"
 #include "xi_emit.h"
+#include "../frontend/canonical/xcanon.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 
@@ -159,6 +160,9 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(
         cfg = &default_cfg;
     }
 
+    /* Canonicalize AST before lowering */
+    xr_canon_func(func_node, analyzer, isolate);
+
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
     return run_pipeline(ir, isolate, cfg);
 }
@@ -176,6 +180,9 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(
         default_cfg = xi_pipeline_default_config();
         cfg = &default_cfg;
     }
+
+    /* Canonicalize AST before lowering */
+    xr_canon_program(program_node, analyzer, isolate);
 
     XiFunc *ir = xi_lower_program(program_node, analyzer, isolate);
     return run_pipeline(ir, isolate, cfg);
