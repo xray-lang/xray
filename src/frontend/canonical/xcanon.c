@@ -234,16 +234,76 @@ static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
     canon_compound_assignment(ctx, node);
 }
 
+/* ========== Index-set receiver extraction ========== */
+
+/* Desugar index-set with complex array or index expressions.
+ *   f()[g()] = v  →  { let __t0 = f(); let __t1 = g(); __t0[__t1] = v }
+ * This ensures correct left-to-right single evaluation of sub-expressions. */
+static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
+    XR_DCHECK(node->type == AST_INDEX_SET,
+              "canon_index_set: wrong node type");
+
+    AstNode *arr = node->as.index_set.array;
+    AstNode *idx = node->as.index_set.index;
+    bool arr_complex = !is_simple_expr(arr);
+    bool idx_complex = !is_simple_expr(idx);
+
+    /* Both sides simple — no extraction needed */
+    if (!arr_complex && !idx_complex)
+        return;
+
+    int line = node->line;
+    AstNode *blk = xr_ast_block(ctx->isolate, line);
+    XR_DCHECK(blk != NULL, "canon_index_set: block alloc");
+
+    AstNode *new_arr = arr;
+    AstNode *new_idx = idx;
+
+    if (arr_complex) {
+        char *tmp_arr = canon_temp_name(ctx);
+        AstNode *decl_arr = xr_ast_var_decl(ctx->isolate, tmp_arr, arr, false, line);
+        XR_DCHECK(decl_arr != NULL, "canon_index_set: var_decl alloc");
+        xr_ast_block_add(ctx->isolate, blk, decl_arr);
+        new_arr = xr_ast_variable(ctx->isolate, tmp_arr, line);
+    }
+
+    if (idx_complex) {
+        char *tmp_idx = canon_temp_name(ctx);
+        AstNode *decl_idx = xr_ast_var_decl(ctx->isolate, tmp_idx, idx, false, line);
+        XR_DCHECK(decl_idx != NULL, "canon_index_set: var_decl alloc");
+        xr_ast_block_add(ctx->isolate, blk, decl_idx);
+        new_idx = xr_ast_variable(ctx->isolate, tmp_idx, line);
+    }
+
+    /* Build simplified index_set with simple operands */
+    AstNode *store = xr_ast_index_set(ctx->isolate, new_arr, new_idx,
+                                       node->as.index_set.value, line);
+    XR_DCHECK(store != NULL, "canon_index_set: index_set alloc");
+    xr_ast_block_add(ctx->isolate, blk, store);
+
+    /* Mutate in-place → AST_BLOCK */
+    uint32_t saved_id = node->node_id;
+    *node = *blk;
+    node->node_id = saved_id;
+}
+
 /* ========== AST walk (recursive, dispatches on node type) ========== */
 
 /* Forward declaration — the walker calls itself recursively. */
 static void canon_node(XrCanonCtx *ctx, AstNode *node);
 
-/* Canonicalize a block's statements in order. */
+/* Canonicalize a block's statements in order.
+ * Statements in block context can safely be replaced by AST_BLOCK
+ * (e.g. index_set with complex receivers). */
 static void canon_block(XrCanonCtx *ctx, AstNode **stmts, int count) {
     XR_DCHECK(ctx != NULL, "canon_block: NULL ctx");
     for (int i = 0; i < count; i++) {
-        if (stmts[i]) canon_node(ctx, stmts[i]);
+        if (!stmts[i]) continue;
+        /* Statement-context canonicalizations that expand to blocks */
+        if (stmts[i]->type == AST_INDEX_SET) {
+            canon_index_set(ctx, stmts[i]);
+        }
+        canon_node(ctx, stmts[i]);
     }
 }
 
@@ -263,6 +323,9 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_inc_dec(ctx, node);
         /* Node type has changed to AST_ASSIGNMENT; fall through. */
     }
+    /* AST_INDEX_SET canonicalization is applied in canon_block() (statement
+     * context only) — expanding to AST_BLOCK in expression position would
+     * break the lowerer. */
 
     switch (node->type) {
     /* ---- Statements with bodies ---- */
