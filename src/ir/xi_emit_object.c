@@ -285,17 +285,24 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
                                  0, 0, 0, cap->source, cap->type);
     }
 
-    /* Cell wrapping for mutable captures (emit once per value) */
+    /* Cell wrapping for mutable captures (emit once per value).
+     * Skip if cell was already created at the variable's first definition
+     * (cell_created[var_id] is set by the early CELL_NEW path in emit_value). */
     for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
         XiCapture *cap = &child_func->captures[ci];
         if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
             uint8_t reg = reg_of(ctx, cap->value);
             if (ctx->status != XI_EMIT_OK) return;
-            if (!ctx->cell_wrapped[cap->value->id]) {
+            bool already = ctx->cell_wrapped[cap->value->id];
+            if (!already && cap->value->var_id != 0xFF)
+                already = ctx->cell_created[cap->value->var_id];
+            if (!already) {
                 emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
                 ctx->cell_wrapped[cap->value->id] = true;
-                if (cap->value->var_id != 0xFF)
+                if (cap->value->var_id != 0xFF) {
                     ctx->cell_side_reg[cap->value->var_id] = reg;
+                    ctx->cell_created[cap->value->var_id] = true;
+                }
             }
         }
     }

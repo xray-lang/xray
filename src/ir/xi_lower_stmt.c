@@ -596,6 +596,106 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node,
     l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
 }
 
+/* ========== For-In Enum Loop (memberCount + getMember) ========== */
+
+static void lower_for_in_enum_loop(XiLower *l, AstNode *node,
+                                    XiValue *init_val, XiValue *limit,
+                                    XiValue *enum_cls) {
+    ForInStmtNode *s = &node->as.for_in_stmt;
+    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+
+    int sid = l->synthetic_id++;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "__ei_%d", sid);
+    char *idx_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(idx_name != NULL, "arena alloc failed");
+    memcpy(idx_name, buf, strlen(buf) + 1);
+
+    snprintf(buf, sizeof(buf), "__el_%d", sid);
+    char *lim_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(lim_name != NULL, "arena alloc failed");
+    memcpy(lim_name, buf, strlen(buf) + 1);
+
+    snprintf(buf, sizeof(buf), "__ec_%d", sid);
+    char *cls_name = (char *)xi_func_arena_alloc(l->func, (uint32_t)(strlen(buf) + 1));
+    XR_DCHECK(cls_name != NULL, "arena alloc failed");
+    memcpy(cls_name, buf, strlen(buf) + 1);
+
+    int idx_var = xi_lower_var_create(l, 0, idx_name, l->type_int);
+    int lim_var = xi_lower_var_create(l, 0, lim_name, l->type_int);
+    int cls_var = xi_lower_var_create(l, 0, cls_name, l->type_any);
+    xi_lower_braun_write(l, idx_var, l->cur_block, init_val);
+    xi_lower_braun_write(l, lim_var, l->cur_block, limit);
+    xi_lower_braun_write(l, cls_var, l->cur_block, enum_cls);
+
+    XiBlock *cond_blk = xi_block_new(l->func);
+    XiBlock *body_blk = xi_block_new(l->func);
+    XiBlock *incr_blk = xi_block_new(l->func);
+    XiBlock *exit_blk = xi_block_new(l->func);
+
+    xi_block_set_jump(l->cur_block, cond_blk);
+
+    l->cur_block = cond_blk;
+    XiValue *cur_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+    XiValue *cur_lim = xi_lower_braun_read(l, lim_var, l->cur_block);
+    XR_DCHECK(cur_idx != NULL, "braun_read idx must not be NULL");
+    XiValue *cond = xi_binary(l->func, l->cur_block, XI_LT,
+                              l->type_bool, cur_idx, cur_lim);
+    if (cond)
+        xi_block_set_if(l->cur_block, cond, body_blk, exit_blk);
+
+    xi_lower_braun_seal(l, body_blk);
+
+    XiBlock *prev_break = l->break_target;
+    XiBlock *prev_cont = l->continue_target;
+    l->break_target = exit_blk;
+    l->continue_target = incr_blk;
+
+    l->cur_block = body_blk;
+    XiValue *body_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+    XiValue *body_cls = xi_lower_braun_read(l, cls_var, l->cur_block);
+
+    /* Call enum_cls.getMember(idx) to get the enum member */
+    XiValue *item = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                  item_type, 2);
+    if (item) {
+        item->args[0] = body_cls;
+        item->args[1] = body_idx;
+        item->aux = (void *)"getMember";
+        item->aux_int = (int64_t)xi_lower_method_symbol(l, "getMember") << 1;
+        item->flags |= XI_FLAG_SIDE_EFFECT;
+        item->line = (uint32_t)node->line;
+    }
+
+    int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
+    if (item) xi_lower_braun_write(l, item_var, l->cur_block, item);
+
+    xi_lower_stmt(l, s->body);
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, incr_blk);
+
+    xi_lower_braun_seal(l, incr_blk);
+
+    l->cur_block = incr_blk;
+    if (incr_blk->npreds > 0) {
+        XiValue *inc_idx = xi_lower_braun_read(l, idx_var, l->cur_block);
+        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
+        XiValue *new_idx = xi_binary(l->func, l->cur_block, XI_ADD,
+                                     l->type_int, inc_idx, one);
+        if (new_idx) xi_lower_braun_write(l, idx_var, l->cur_block, new_idx);
+    }
+    if (l->cur_block && incr_blk->npreds > 0)
+        xi_block_set_jump(l->cur_block, cond_blk);
+
+    xi_lower_braun_seal(l, cond_blk);
+
+    l->break_target = prev_break;
+    l->continue_target = prev_cont;
+
+    xi_lower_braun_seal(l, exit_blk);
+    l->cur_block = (exit_blk->npreds > 0) ? exit_blk : NULL;
+}
+
 /* ========== For-In Dispatcher ========== */
 
 /* Check if collection type uses builtin length+index iteration (array,
@@ -627,6 +727,22 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
 
     XiValue *coll = xi_lower_expr(l, s->collection);
     if (!coll || !l->cur_block) return;
+
+    /* Enum types: iterate via memberCount + getMember(i) */
+    struct XrType *coll_type = xi_lower_node_type(l, s->collection);
+    if (coll_type && coll_type->kind == XR_KIND_ENUM) {
+        XiValue *len = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
+                                    l->type_int, 1);
+        if (!len) return;
+        len->args[0] = coll;
+        len->aux = (void *)"memberCount";
+        len->line = (uint32_t)node->line;
+
+        XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        /* Reuse index loop but with getMember call for item retrieval */
+        lower_for_in_enum_loop(l, node, zero, len, coll);
+        return;
+    }
 
     /* Class instances with iterator() use the custom protocol */
     if (!is_builtin_iterable_collection(l, s->collection)) {

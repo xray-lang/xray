@@ -500,21 +500,30 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
      * (closures handle cell-set internally), redirect the handler to write
      * into a temp register and then CELL_SET into the real cell register.
      * This prevents overwriting cell pointers when a variable is re-assigned
-     * after being cell-wrapped by a hoisted function's capture. */
+     * after being cell-wrapped by a hoisted function's capture.
+     *
+     * Special case: if the cell hasn't been created yet (first definition),
+     * emit the value normally then wrap with OP_CELL_NEW instead of CELL_SET. */
     uint8_t real_dst = dst;
     bool need_cell_set = false;
+    bool need_cell_new = false;
     if (v->op != XI_CLOSURE_NEW && v->var_id != 0xFF &&
         ctx->cell_side_reg[v->var_id] != NO_REG) {
-        if (ctx->next_reg >= MAX_REGS - 1) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
+        if (!ctx->cell_created[v->var_id]) {
+            /* First definition: emit value to dst, then wrap with CELL_NEW */
+            need_cell_new = true;
+        } else {
+            if (ctx->next_reg >= MAX_REGS - 1) {
+                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                return;
+            }
+            uint8_t tmp = ctx->next_reg++;
+            if (ctx->next_reg > ctx->max_reg)
+                ctx->max_reg = ctx->next_reg;
+            ctx->reg_map[v->id] = tmp;
+            dst = tmp;
+            need_cell_set = true;
         }
-        uint8_t tmp = ctx->next_reg++;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        ctx->reg_map[v->id] = tmp;
-        dst = tmp;
-        need_cell_set = true;
     }
 
     XR_DCHECK(v->op >= 0 && v->op < XI_OP_COUNT, "emit_value: op out of range");
@@ -523,6 +532,12 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         handler(ctx, v, dst);
     } else {
         emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+    }
+
+    if (need_cell_new && ctx->status == XI_EMIT_OK) {
+        emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, dst, 0, 0));
+        ctx->cell_wrapped[v->id] = true;
+        ctx->cell_created[v->var_id] = true;
     }
 
     if (need_cell_set && ctx->status == XI_EMIT_OK) {
@@ -668,6 +683,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
 
     /* Initialize side cell register map for hoisted function captures */
     memset(ctx.cell_side_reg, NO_REG, sizeof(ctx.cell_side_reg));
+    memset(ctx.cell_created, 0, sizeof(ctx.cell_created));
 
     /* Allocate per-value bytecode PC map for IC-guided JIT speculation */
     ctx.value_pc = (int *)xr_malloc(ctx.reg_map_size * sizeof(int));
@@ -685,6 +701,32 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
 
     alloc_registers(&ctx);
     if (ctx.status != XI_EMIT_OK) goto cleanup;
+
+    /* Pre-populate cell_side_reg for mutable captures so that blocks emitted
+     * before the closure (e.g. loop condition blocks) correctly cell-deref.
+     * Without this, a loop var captured by a closure in the body won't be
+     * cell-dereferenced in the condition block which is emitted first in RPO. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (v->op != XI_CLOSURE_NEW) continue;
+            XiFunc *child = (XiFunc *)v->aux;
+            if (!child) continue;
+            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                XiCapture *cap = &child->captures[ci];
+                if (!cap->needs_cell || cap->source != XI_CAPTURE_SRC_REG)
+                    continue;
+                if (!cap->value || cap->value->id >= ctx.reg_map_size)
+                    continue;
+                if (cap->value->var_id == 0xFF) continue;
+                uint8_t reg = ctx.reg_map[cap->value->id];
+                if (reg == NO_REG) continue;
+                ctx.cell_side_reg[cap->value->var_id] = reg;
+            }
+        }
+    }
 
     /* Emit blocks in RPO order */
     for (uint32_t r = 1; r <= rpo_count; r++) {
