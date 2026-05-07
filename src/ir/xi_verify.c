@@ -14,6 +14,7 @@
 #include "xi_verify.h"
 #include "xi_effect.h"
 #include "xi_backend.h"
+#include "xi_op_name.h"
 #include "xi_analysis.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
@@ -487,8 +488,8 @@ static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
             if (expect == 0xFF) continue;  /* variadic — skip */
             if (v->nargs != expect) {
                 verr(ctx,
-                     "func '%s': v%u (op %u) in b%u has %u args, expected %u",
-                     f->name, v->id, v->op, blk->id,
+                     "func '%s': v%u %s in b%u has %u args, expected %u",
+                     f->name, v->id, xi_op_name(v->op), blk->id,
                      (unsigned)v->nargs, (unsigned)expect);
                 return;
             }
@@ -585,9 +586,9 @@ static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
             uint8_t missing = required & ~v->flags;
             if (missing) {
                 verr(ctx,
-                     "func '%s': v%u (op %u) in b%u missing required "
+                     "func '%s': v%u %s in b%u missing required "
                      "effect flags: has=0x%02x need=0x%02x missing=0x%02x",
-                     f->name, v->id, v->op, blk->id,
+                     f->name, v->id, xi_op_name(v->op), blk->id,
                      v->flags, required, missing);
                 return;
             }
@@ -667,9 +668,9 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
             /* Only call ops may carry tail flag */
             if (v->op != XI_CALL && v->op != XI_CALL_METHOD) {
                 verr(ctx,
-                     "func '%s': v%u (op %u) in b%u has XI_FLAG_TAIL "
+                     "func '%s': v%u %s in b%u has XI_FLAG_TAIL "
                      "but is not a call op",
-                     f->name, v->id, v->op, blk->id);
+                     f->name, v->id, xi_op_name(v->op), blk->id);
                 return;
             }
 
@@ -717,8 +718,8 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
             /* Rep must be a known value */
             if (v->rep > XR_REP_STR) {
                 verr(ctx,
-                     "func '%s': v%u (op %u) in b%u has invalid rep %u",
-                     f->name, v->id, v->op, blk->id, v->rep);
+                     "func '%s': v%u %s in b%u has invalid rep %u",
+                     f->name, v->id, xi_op_name(v->op), blk->id, v->rep);
                 return;
             }
 
@@ -771,9 +772,9 @@ static void verify_backend(VerifyCtx *ctx, const XiFunc *f) {
 
             if (!xi_op_is_backend_legal(v->op)) {
                 verr(ctx,
-                     "func '%s': v%u has non-backend op %u in b%u "
+                     "func '%s': v%u has non-backend op %s(%u) in b%u "
                      "(must be lowered before STAGE_BACKEND)",
-                     f->name, v->id, v->op, blk->id);
+                     f->name, v->id, xi_op_name(v->op), v->op, blk->id);
                 return;
             }
         }
