@@ -2,8 +2,8 @@
 
 @test
 fn test_select(): void {
-    shared const ch1 = Channel(2)
-    shared const ch2 = Channel(2)
+    shared const ch1 = new Channel(2)
+    shared const ch2 = new Channel(2)
     
     // 向 ch1 发送数据
     ch1.trySend(100)

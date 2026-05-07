@@ -10,25 +10,6 @@ struct Temperature {
         fn(v: float) { this._celsius = (v - 32.0) / 1.8 }
     }
 }
-
-// === Getter ===
-let t = Temperature{_celsius: 100.0}
-assert(t.fahrenheit == 212.0)
-
-let t2 = Temperature{_celsius: 0.0}
-assert(t2.fahrenheit == 32.0)
-
-// === Setter ===
-t2.fahrenheit = 212.0
-assert(t2._celsius == 100.0)
-
-// === Value semantics: copy preserves computed property ===
-let t3 = t
-t3._celsius = 50.0
-assert(t.fahrenheit == 212.0)
-assert(t3.fahrenheit == 122.0)
-
-// === Struct with read-only computed property ===
 struct Circle {
     radius: float
 
@@ -41,16 +22,38 @@ struct Circle {
     }
 }
 
-let c = Circle{radius: 5.0}
-assert(c.area > 78.0)
-assert(c.area < 79.0)
-assert(c.circumference > 31.0)
-assert(c.circumference < 32.0)
+@test
+fn test_struct_getter_setter() {
 
-// === Copy preserves computed properties ===
-let c2 = c
-c2.radius = 10.0
-assert(c.area < 79.0)
-assert(c2.area > 314.0)
+    // === Getter ===
+    let t = Temperature{_celsius: 100.0}
+    assert(t.fahrenheit == 212.0)
 
-print("ok")
+    let t2 = Temperature{_celsius: 0.0}
+    assert(t2.fahrenheit == 32.0)
+
+    // === Setter ===
+    t2.fahrenheit = 212.0
+    assert(t2._celsius == 100.0)
+
+    // === Value semantics: copy preserves computed property ===
+    let t3 = t
+    t3._celsius = 50.0
+    assert(t.fahrenheit == 212.0)
+    assert(t3.fahrenheit == 122.0)
+
+    // === Struct with read-only computed property ===
+
+    let c = Circle{radius: 5.0}
+    assert(c.area > 78.0)
+    assert(c.area < 79.0)
+    assert(c.circumference > 31.0)
+    assert(c.circumference < 32.0)
+
+    // === Copy preserves computed properties ===
+    let c2 = c
+    c2.radius = 10.0
+    assert(c.area < 79.0)
+    assert(c2.area > 314.0)
+}
+

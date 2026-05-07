@@ -5,7 +5,7 @@
 print("========== 测试2：Channel const 零拷贝共享 ==========")
 
 fn test_const_string() {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     // const 字符串（天生不可变）
     const msg = "Hello, World!"
     ch.send(msg)
@@ -17,7 +17,7 @@ fn test_const_string() {
 }
 
 fn test_const_array() {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     // const 数组
     const data = [1, 2, 3, 4, 5]
     ch.send(data)
@@ -31,7 +31,7 @@ fn test_const_array() {
 }
 
 fn test_const_map() {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     // const Map
     const config = { "host" => "localhost", "port" => 8080 }
     ch.send(config)
@@ -44,7 +44,7 @@ fn test_const_map() {
 }
 
 fn test_primitive_types() {
-    let ch = Channel(5)
+    let ch = new Channel(5)
     // 基本类型（天生不可变）
     let num = 42
     let pi = 3.14159

@@ -59,7 +59,7 @@ fn test_move_go(): void {
 fn test_move_channel_send(): void {
     print("=== Test move channel send ===")
 
-    shared const ch = Channel(1)
+    shared const ch = new Channel(1)
     shared let payload = [10, 20, 30]
 
     // send with move: transfers ownership through channel
@@ -94,7 +94,7 @@ fn test_normal_copy(): void {
 fn test_move_pipeline(): void {
     print("=== Test move pipeline ===")
 
-    shared const ch = Channel(1)
+    shared const ch = new Channel(1)
     shared let msg = { step: 0 }
 
     // Stage 1: modify and move-send

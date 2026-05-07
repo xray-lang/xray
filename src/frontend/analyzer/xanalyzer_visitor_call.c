@@ -52,6 +52,34 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    /* Builtin heap types require 'new': Map(), Array(), Set(), Bytes(),
+     * Channel(), StringBuilder(), WeakMap(), WeakSet() without 'new' is
+     * an error — use 'new T()' instead. */
+    if (call->callee && call->callee->type == AST_VARIABLE) {
+        const char *cname = call->callee->as.variable.name;
+        if (cname) {
+            static const char *const heap_types[] = {
+                "Map", "Array", "Set", "Bytes", "Channel",
+                "StringBuilder", "WeakMap", "WeakSet", NULL
+            };
+            for (const char *const *p = heap_types; *p; p++) {
+                if (strcmp(cname, *p) == 0) {
+                    XrLocation loc = {.file = ctx->file_path,
+                                      .line = node->line,
+                                      .column = node->column};
+                    char msg[128];
+                    snprintf(msg, sizeof(msg),
+                             "Use 'new %s(...)' to construct %s",
+                             cname, cname);
+                    xa_analyzer_add_diagnostic(
+                        ctx->analyzer, XR_DIAG_SEV_ERROR,
+                        XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                    break;
+                }
+            }
+        }
+    }
+
     // Check generic type argument count and constraints
     if (call->type_arg_count > 0 && fn_links) {
         int expected_count = xa_symbol_links_get_type_param_count(fn_links);

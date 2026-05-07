@@ -2,7 +2,7 @@
 
 @test
 fn test_select_after(): void {
-    shared const ch = Channel(1)
+    shared const ch = new Channel(1)
     
     // 当 channel 为空时，after 分支执行
     select {

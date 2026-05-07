@@ -5,7 +5,8 @@ fn compute(x: int): int {
     return x * 2
 }
 
-fn main(): void {
+@test
+fn test_main() {
     // 创建协程
     let task = go compute(21)
     
@@ -26,4 +27,4 @@ fn main(): void {
     print("cancelled:", task2.result)
 }
 
-main()
+

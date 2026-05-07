@@ -5,28 +5,32 @@
 */
 
 // 会抛出错误的任务
+
 fn error_task(): int {
     let x: int = 1 / 0  // 除零错误
     return x
 }
-
-// 正常任务
 fn normal_task(): int {
     return 42
 }
 
-// 测试1：错误隔离
-print("test1: error isolation")
-let task1 = go error_task()
-let result1 = await task1
-print("  done:", task1.done)
-print("  result:", result1)
-print("  has error:", task1.error != null)
+@test
+fn test_error_isolation() {
 
-// 测试2：错误不影响其他协程
-print("test2: error does not affect other coroutines")
-let task2 = go normal_task()
-let result2 = await task2
-print("  result:", result2)
+    // 正常任务
 
-print("all tests passed")
+    // 测试1：错误隔离
+    print("test1: error isolation")
+    let task1 = go error_task()
+    let result1 = await task1
+    print("  done:", task1.done)
+    print("  result:", result1)
+    print("  has error:", task1.error != null)
+
+    // 测试2：错误不影响其他协程
+    print("test2: error does not affect other coroutines")
+    let task2 = go normal_task()
+    let result2 = await task2
+    print("  result:", result2)
+}
+

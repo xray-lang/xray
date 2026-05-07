@@ -172,7 +172,7 @@ fn test_url_safe_encode_decode_precise(): void {
 
 @test
 fn test_encode_bytes_basic(): void {
-    let bytes = Bytes(3)
+    let bytes = new Bytes(3)
     bytes[0] = 72   // 'H'
     bytes[1] = 101  // 'e'
     bytes[2] = 108  // 'l'
@@ -192,7 +192,7 @@ fn test_decode_to_bytes_basic(): void {
 
 @test
 fn test_bytes_roundtrip(): void {
-    let original = Bytes(5)
+    let original = new Bytes(5)
     original[0] = 0
     original[1] = 127
     original[2] = 255
@@ -217,7 +217,7 @@ fn test_decode_to_bytes_invalid(): void {
 
 @test
 fn test_encode_bytes_empty(): void {
-    let bytes = Bytes(0)
+    let bytes = new Bytes(0)
     let encoded = base64.encodeBytes(bytes)
     assert_eq(encoded, "")
 }

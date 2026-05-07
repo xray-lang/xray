@@ -1,14 +1,5 @@
 /*
- * 0836_field_default_init.xr - 测试类字段默认值初始化
- * 作者：xingleixu@gmail.com
- *
- * 验证类字段可以使用复杂表达式初始化：
- * - 简单字面量（null, bool, int, float, string）
- * - 复合类型（Array, Map）
- * - 复杂表达式
- */
 
-/* 测试1：简单字面量默认值 */
 class Simple {
     a = 0
     b = 3.14
@@ -19,15 +10,6 @@ class Simple {
         // 字段已自动初始化
     }
 }
-
-let s = new Simple()
-
-print("Simple.a = ${s.a}")       // expect: 0
-print("Simple.b = ${s.b}")       // expect: 3.14
-print("Simple.c = ${s.c}")       // expect: hello
-print("Simple.d = ${s.d}")       // expect: true
-
-/* 测试2：复合类型默认值 */
 class Complex {
     _map = #{}
     _arr: Array<int> = []
@@ -54,20 +36,6 @@ class Complex {
         return this._config["port"]
     }
 }
-
-let c = new Complex()
-
-
-print("初始 map size: ${c.getMapSize()}")  // expect: 0
-print("初始 arr size: ${c.getArrSize()}")  // expect: 0
-print("config port: ${c.getPort()}")       // expect: 8080
-
-c.addItem("a", 1)
-c.addItem("b", 2)
-print("添加后 map size: ${c.getMapSize()}")  // expect: 2
-print("添加后 arr size: ${c.getArrSize()}")  // expect: 2
-
-/* 测试3：构造函数参数覆盖默认值 */
 class Override {
     _name = "default"
     _count = 0
@@ -85,13 +53,6 @@ class Override {
         return this._count
     }
 }
-
-let o2 = new Override("custom", 42)
-
-print("Override 覆盖 name: ${o2.getName()}")   // expect: custom
-print("Override 覆盖 count: ${o2.getCount()}") // expect: 42
-
-/* 测试4：多实例独立性 */
 class Counter {
     _items: Array<string> = []
 
@@ -106,14 +67,57 @@ class Counter {
     }
 }
 
-let c1 = new Counter()
-let c2 = new Counter()
+@test
+fn test_field_default_init() {
+     * 0836_field_default_init.xr - 测试类字段默认值初始化
+     * 作者：xingleixu@gmail.com
+     *
+     * 验证类字段可以使用复杂表达式初始化：
+     * - 简单字面量（null, bool, int, float, string）
+     * - 复合类型（Array, Map）
+     * - 复杂表达式
+     */
 
-c1.add("a")
-c1.add("b")
-c2.add("x")
+    /* 测试1：简单字面量默认值 */
 
-print("c1 count: ${c1.count()}")  // expect: 2
-print("c2 count: ${c2.count()}")  // expect: 1
+    let s = new Simple()
 
-print("✅ 字段默认值初始化测试全部通过")
+    print("Simple.a = ${s.a}")       // expect: 0
+    print("Simple.b = ${s.b}")       // expect: 3.14
+    print("Simple.c = ${s.c}")       // expect: hello
+    print("Simple.d = ${s.d}")       // expect: true
+
+    /* 测试2：复合类型默认值 */
+
+    let c = new Complex()
+
+
+    print("初始 map size: ${c.getMapSize()}")  // expect: 0
+    print("初始 arr size: ${c.getArrSize()}")  // expect: 0
+    print("config port: ${c.getPort()}")       // expect: 8080
+
+    c.addItem("a", 1)
+    c.addItem("b", 2)
+    print("添加后 map size: ${c.getMapSize()}")  // expect: 2
+    print("添加后 arr size: ${c.getArrSize()}")  // expect: 2
+
+    /* 测试3：构造函数参数覆盖默认值 */
+
+    let o2 = new Override("custom", 42)
+
+    print("Override 覆盖 name: ${o2.getName()}")   // expect: custom
+    print("Override 覆盖 count: ${o2.getCount()}") // expect: 42
+
+    /* 测试4：多实例独立性 */
+
+    let c1 = new Counter()
+    let c2 = new Counter()
+
+    c1.add("a")
+    c1.add("b")
+    c2.add("x")
+
+    print("c1 count: ${c1.count()}")  // expect: 2
+    print("c2 count: ${c2.count()}")  // expect: 1
+}
+

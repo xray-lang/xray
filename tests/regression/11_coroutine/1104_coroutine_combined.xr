@@ -28,7 +28,7 @@ fn test_combined(): void {
     print("=== 协程综合测试 ===")
     
     // 1. 创建缓冲 Channel
-    shared const ch = Channel(5)
+    shared const ch = new Channel(5)
     
     // 2. defer 清理
     defer cleanup()

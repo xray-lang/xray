@@ -3,7 +3,7 @@
 @test
 fn test_channel(): void {
     // 创建缓冲 Channel（容量 3）
-    shared const ch = Channel(3)
+    shared const ch = new Channel(3)
     print(ch != null)  // true
     
     // 非阻塞发送到缓冲区

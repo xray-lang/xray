@@ -12,38 +12,44 @@
 // John Doe
 
 // Basic default parameter
+
 fn greet(name: string = "World"): void {
     print("Hello, " + name)
 }
-
-greet()
-greet("Alice")
-
-// Multiple parameters with defaults
 fn add(a: int, b: int = 10, c: int = 100): int {
     return a + b + c
 }
-
-print(add(1))           // 1 + 10 + 100 = 111
-print(add(1, 2))        // 1 + 2 + 100 = 103
-print(add(1, 2, 3))     // 1 + 2 + 3 = 6
-
-// Default with all optional params
 fn createPoint(x: int = 0, y: int = 0): Json {
     return { x: x, y: y }
 }
-
-let p1 = createPoint()
-let p2 = createPoint(5)
-let p3 = createPoint(5, 10)
-print(p1.x, p1.y)       // 0 0
-print(p2.x, p2.y)       // 5 0
-print(p3.x, p3.y)       // 5 10
-
-// Required param followed by optional
 fn formatName(first: string, last: string = "Unknown"): string {
     return first + " " + last
 }
 
-print(formatName("John"))           // John Unknown
-print(formatName("John", "Doe"))    // John Doe
+@test
+fn test_default_params() {
+
+    greet()
+    greet("Alice")
+
+    // Multiple parameters with defaults
+
+    print(add(1))           // 1 + 10 + 100 = 111
+    print(add(1, 2))        // 1 + 2 + 100 = 103
+    print(add(1, 2, 3))     // 1 + 2 + 3 = 6
+
+    // Default with all optional params
+
+    let p1 = createPoint()
+    let p2 = createPoint(5)
+    let p3 = createPoint(5, 10)
+    print(p1.x, p1.y)       // 0 0
+    print(p2.x, p2.y)       // 5 0
+    print(p3.x, p3.y)       // 5 10
+
+    // Required param followed by optional
+
+    print(formatName("John"))           // John Unknown
+    print(formatName("John", "Doe"))    // John Doe
+}
+

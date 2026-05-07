@@ -4,6 +4,7 @@
 // monomorphized correctly: cloned, type-substituted, injected, and new-exprs rewritten.
 
 // === Basic Box<T> class ===
+
 class Box<T> {
     value: T
     constructor(v: T) {
@@ -13,27 +14,6 @@ class Box<T> {
         return this.value
     }
 }
-
-// Box<int>
-let intBox = new Box<int>(42)
-assert_eq(intBox.value, 42)
-assert_eq(intBox.get(), 42)
-
-// Box<float>
-let floatBox = new Box<float>(3.14)
-assert_eq(floatBox.value, 3.14)
-assert_eq(floatBox.get(), 3.14)
-
-// Box<string>
-let strBox = new Box<string>("hello")
-assert_eq(strBox.value, "hello")
-assert_eq(strBox.get(), "hello")
-
-// Box<bool> — shares I64 rep with int (rep-dedup)
-let boolBox = new Box<bool>(true)
-assert_eq(boolBox.value, true)
-
-// === Multi-type-parameter class ===
 class Pair<K, V> {
     key: K
     val: V
@@ -43,29 +23,53 @@ class Pair<K, V> {
     }
 }
 
-let p1 = new Pair<string, int>("age", 30)
-assert_eq(p1.key, "age")
-assert_eq(p1.val, 30)
+@test
+fn test_mono_class_e2e() {
 
-let p2 = new Pair<int, float>(1, 2.5)
-assert_eq(p2.key, 1)
-assert_eq(p2.val, 2.5)
+    // Box<int>
+    let intBox = new Box<int>(42)
+    assert_eq(intBox.value, 42)
+    assert_eq(intBox.get(), 42)
 
-// === Multiple instances of same class ===
-let a = new Box<int>(1)
-let b = new Box<int>(2)
-let c = new Box<int>(3)
-assert_eq(a.get() + b.get() + c.get(), 6)
+    // Box<float>
+    let floatBox = new Box<float>(3.14)
+    assert_eq(floatBox.value, 3.14)
+    assert_eq(floatBox.get(), 3.14)
 
-// === Nested generic class usage ===
-let inner = new Box<int>(100)
-let outer = new Box<Box<int>>(inner)
-assert_eq(outer.get().get(), 100)
+    // Box<string>
+    let strBox = new Box<string>("hello")
+    assert_eq(strBox.value, "hello")
+    assert_eq(strBox.get(), "hello")
 
-// === Array of generic class instances ===
-let boxes = [new Box<int>(10), new Box<int>(20), new Box<int>(30)]
-assert_eq(boxes[0].get(), 10)
-assert_eq(boxes[1].get(), 20)
-assert_eq(boxes[2].get(), 30)
+    // Box<bool> — shares I64 rep with int (rep-dedup)
+    let boolBox = new Box<bool>(true)
+    assert_eq(boolBox.value, true)
 
-print("ok")
+    // === Multi-type-parameter class ===
+
+    let p1 = new Pair<string, int>("age", 30)
+    assert_eq(p1.key, "age")
+    assert_eq(p1.val, 30)
+
+    let p2 = new Pair<int, float>(1, 2.5)
+    assert_eq(p2.key, 1)
+    assert_eq(p2.val, 2.5)
+
+    // === Multiple instances of same class ===
+    let a = new Box<int>(1)
+    let b = new Box<int>(2)
+    let c = new Box<int>(3)
+    assert_eq(a.get() + b.get() + c.get(), 6)
+
+    // === Nested generic class usage ===
+    let inner = new Box<int>(100)
+    let outer = new Box<Box<int>>(inner)
+    assert_eq(outer.get().get(), 100)
+
+    // === Array of generic class instances ===
+    let boxes = [new Box<int>(10), new Box<int>(20), new Box<int>(30)]
+    assert_eq(boxes[0].get(), 10)
+    assert_eq(boxes[1].get(), 20)
+    assert_eq(boxes[2].get(), 30)
+}
+

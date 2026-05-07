@@ -10,7 +10,7 @@ print("========== 测试11：协程监控与调试 ==========")
 
 // 测试1：协程状态查询
 fn test_coro_status_query() {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     fn task() {
         ch.recv()
         // 等待信号
@@ -125,7 +125,7 @@ fn test_coro_error_capture() {
 
 // 测试6：协程优先级（如果支持）
 fn test_coro_priority() {
-    let results = Channel(10)
+    let results = new Channel(10)
     fn task(id, priority) {
         // 模拟工作
         let sum = 0
@@ -179,7 +179,7 @@ fn test_coro_chain() {
 
 // 测试8：并发调试模式 - 追踪执行顺序
 fn test_execution_trace() {
-    let trace = Channel(20)
+    let trace = new Channel(20)
     fn traced_task(id) {
         trace.send({ "event" => "start", "id" => id })
         // 模拟工作

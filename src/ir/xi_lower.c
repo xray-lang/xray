@@ -574,6 +574,10 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
                 name = s->as.class_decl.name;
                 sid = s->as.class_decl.symbol_id;
                 break;
+            case AST_STRUCT_DECL:
+                name = s->as.struct_decl.name;
+                sid = s->as.struct_decl.symbol_id;
+                break;
             case AST_VAR_DECL:
             case AST_CONST_DECL:
                 name = s->as.var_decl.name;

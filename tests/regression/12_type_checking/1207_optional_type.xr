@@ -2,14 +2,7 @@
 // Optional types can hold either the base type value or null
 // All types can be nullable (int?, string?, etc.)
 // Test 1: Variable with optional type
-let x: int? = null
-print(x)
-// expect: null
-let y: int? = 42
-print(y)
 
-// expect: 42
-// Test 2: Function return type
 fn findIndex(arr: Array<int>, val: int): int? {
     for (let i = 0; i < arr.length; i++) {
         if (arr[i] == val) {
@@ -18,26 +11,6 @@ fn findIndex(arr: Array<int>, val: int): int? {
     }
     return null
 }
-
-let idx1 = findIndex([10, 20, 30], 20)
-print(idx1)
-// expect: 1
-let idx2 = findIndex([10, 20, 30], 99)
-print(idx2)
-// expect: null
-// Test 3: Null coalescing with optional
-let result = findIndex([1, 2, 3], 5) ?? -1
-print(result)
-// expect: -1
-// Test 4: String optional type
-let name: string? = null
-print(name)
-// expect: null
-name = "Alice"
-print(name)
-
-// expect: Alice
-// Test 5: Optional with condition check
 fn greet(name: string?): string {
     if (name == null) {
         return "Hello, stranger!"
@@ -45,13 +18,46 @@ fn greet(name: string?): string {
     return "Hello, " + name + "!"
 }
 
-print(greet(null))
-// expect: Hello, stranger!
-print(greet("Bob"))
-// expect: Hello, Bob!
-// Test 6: Array optional type
-let arr: Array<int>? = null
-print(arr)
-// expect: null
-arr = [1, 2, 3]
-print(arr)
+@test
+fn test_optional_type() {
+    let x: int? = null
+    print(x)
+    // expect: null
+    let y: int? = 42
+    print(y)
+
+    // expect: 42
+    // Test 2: Function return type
+
+    let idx1 = findIndex([10, 20, 30], 20)
+    print(idx1)
+    // expect: 1
+    let idx2 = findIndex([10, 20, 30], 99)
+    print(idx2)
+    // expect: null
+    // Test 3: Null coalescing with optional
+    let result = findIndex([1, 2, 3], 5) ?? -1
+    print(result)
+    // expect: -1
+    // Test 4: String optional type
+    let name: string? = null
+    print(name)
+    // expect: null
+    name = "Alice"
+    print(name)
+
+    // expect: Alice
+    // Test 5: Optional with condition check
+
+    print(greet(null))
+    // expect: Hello, stranger!
+    print(greet("Bob"))
+    // expect: Hello, Bob!
+    // Test 6: Array optional type
+    let arr: Array<int>? = null
+    print(arr)
+    // expect: null
+    arr = [1, 2, 3]
+    print(arr)
+}
+

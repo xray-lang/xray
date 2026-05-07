@@ -5,7 +5,7 @@
 print("========== 测试6：生产者-消费者模式 ==========")
 
 fn test_single_producer_consumer() {
-    let ch = Channel(5)
+    let ch = new Channel(5)
     fn producer() {
         for (let i = 0; i < 20; i++) {
             ch.send(i)
@@ -30,8 +30,8 @@ fn test_single_producer_consumer() {
 }
 
 fn test_multi_producer() {
-    let ch = Channel(10)
-    let results = Channel(1)
+    let ch = new Channel(10)
+    let results = new Channel(1)
     fn producer(id, count) {
         for (let i = 0; i < count; i++) {
             ch.send(id * 100 + i)
@@ -61,8 +61,8 @@ fn test_multi_producer() {
 }
 
 fn test_multi_consumer() {
-    let ch = Channel(20)
-    let results = Channel(3)
+    let ch = new Channel(20)
+    let results = new Channel(3)
     fn producer(count) {
         for (let i = 0; i < count; i++) {
             ch.send(i)

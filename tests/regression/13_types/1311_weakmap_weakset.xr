@@ -6,78 +6,81 @@
 // ========== WeakMap tests ==========
 
 // Test 1: create and basic set/get
-let wm = new WeakMap()
-let key1 = { name: "alice" }
-let key2 = { name: "bob" }
-wm.set(key1, "value1")
-wm.set(key2, "value2")
-assert_eq(wm.get(key1), "value1")
-assert_eq(wm.get(key2), "value2")
-print("PASS: weakmap set/get")
 
-// Test 2: has
-assert_eq(wm.has(key1), true)
-let key3 = { name: "charlie" }
-assert_eq(wm.has(key3), false)
-print("PASS: weakmap has")
+@test
+fn test_weakmap_weakset() {
+    let wm = new WeakMap()
+    let key1 = { name: "alice" }
+    let key2 = { name: "bob" }
+    wm.set(key1, "value1")
+    wm.set(key2, "value2")
+    assert_eq(wm.get(key1), "value1")
+    assert_eq(wm.get(key2), "value2")
+    print("PASS: weakmap set/get")
 
-// Test 3: delete
-wm.delete(key1)
-assert_eq(wm.has(key1), false)
-assert_eq(wm.get(key1), null)
-assert_eq(wm.has(key2), true)
-print("PASS: weakmap delete")
+    // Test 2: has
+    assert_eq(wm.has(key1), true)
+    let key3 = { name: "charlie" }
+    assert_eq(wm.has(key3), false)
+    print("PASS: weakmap has")
 
-// Test 4: update value
-let key4 = { kind: "config" }
-wm.set(key4, "old")
-assert_eq(wm.get(key4), "old")
-wm.set(key4, "new")
-assert_eq(wm.get(key4), "new")
-print("PASS: weakmap update")
+    // Test 3: delete
+    wm.delete(key1)
+    assert_eq(wm.has(key1), false)
+    assert_eq(wm.get(key1), null)
+    assert_eq(wm.has(key2), true)
+    print("PASS: weakmap delete")
 
-// Test 5: array as value
-let key5 = { kind: "container" }
-wm.set(key5, [1, 2, 3])
-let arr = wm.get(key5)
-assert_eq(arr[0], 1)
-assert_eq(arr[1], 2)
-assert_eq(arr[2], 3)
-print("PASS: weakmap array value")
+    // Test 4: update value
+    let key4 = { kind: "config" }
+    wm.set(key4, "old")
+    assert_eq(wm.get(key4), "old")
+    wm.set(key4, "new")
+    assert_eq(wm.get(key4), "new")
+    print("PASS: weakmap update")
 
-// Test 6: nested object as value
-let key6 = { outer: true }
-wm.set(key6, { inner: { deep: "value" } })
-let val = wm.get(key6)
-assert_eq(val.inner.deep, "value")
-print("PASS: weakmap nested value")
+    // Test 5: array as value
+    let key5 = { kind: "container" }
+    wm.set(key5, [1, 2, 3])
+    let arr = wm.get(key5)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[1], 2)
+    assert_eq(arr[2], 3)
+    print("PASS: weakmap array value")
 
-// ========== WeakSet tests ==========
+    // Test 6: nested object as value
+    let key6 = { outer: true }
+    wm.set(key6, { inner: { deep: "value" } })
+    let val = wm.get(key6)
+    assert_eq(val.inner.deep, "value")
+    print("PASS: weakmap nested value")
 
-// Test 7: create and add/has
-let ws = new WeakSet()
-let obj1 = { id: 1 }
-let obj2 = { id: 2 }
-assert_eq(ws.has(obj1), false)
-ws.add(obj1)
-ws.add(obj2)
-assert_eq(ws.has(obj1), true)
-assert_eq(ws.has(obj2), true)
-print("PASS: weakset add/has")
+    // ========== WeakSet tests ==========
 
-// Test 8: delete
-ws.delete(obj1)
-assert_eq(ws.has(obj1), false)
-assert_eq(ws.has(obj2), true)
-print("PASS: weakset delete")
+    // Test 7: create and add/has
+    let ws = new WeakSet()
+    let obj1 = { id: 1 }
+    let obj2 = { id: 2 }
+    assert_eq(ws.has(obj1), false)
+    ws.add(obj1)
+    ws.add(obj2)
+    assert_eq(ws.has(obj1), true)
+    assert_eq(ws.has(obj2), true)
+    print("PASS: weakset add/has")
 
-// Test 9: no duplicates
-let ws2 = new WeakSet()
-let obj3 = { unique: true }
-ws2.add(obj3)
-ws2.add(obj3)
-ws2.add(obj3)
-assert_eq(ws2.has(obj3), true)
-print("PASS: weakset no duplicates")
+    // Test 8: delete
+    ws.delete(obj1)
+    assert_eq(ws.has(obj1), false)
+    assert_eq(ws.has(obj2), true)
+    print("PASS: weakset delete")
 
-print("weakmap_weakset: all tests passed")
+    // Test 9: no duplicates
+    let ws2 = new WeakSet()
+    let obj3 = { unique: true }
+    ws2.add(obj3)
+    ws2.add(obj3)
+    ws2.add(obj3)
+    assert_eq(ws2.has(obj3), true)
+    print("PASS: weakset no duplicates")
+}
+

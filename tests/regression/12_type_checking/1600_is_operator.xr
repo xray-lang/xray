@@ -1,31 +1,36 @@
 // Test 'is' operator for runtime type checking
 // Basic type checks
-let a = 42
-let b = 3.14
-let c = "hello"
-let d = true
-let e = null
-let arr = [1, 2, 3]
-let map = { "a" => 1 }
-// Test basic types
-print(a is int)
-// true
-print(b is float)
-// true
-print(c is string)
-// true
-print(d is bool)
-// true
-print(e is null)
-// true
-// Test negative cases
-print(a is string)
-// false
-print(c is int)
-// false
-// Test container types
-print(arr is Array<int>)
-// true
-print(map is Map<string, int>)
-// true
-print("is operator test completed")
+
+@test
+fn test_is_operator() {
+    let a = 42
+    let b = 3.14
+    let c = "hello"
+    let d = true
+    let e = null
+    let arr = [1, 2, 3]
+    let map = { "a" => 1 }
+    // Test basic types
+    print(a is int)
+    // true
+    print(b is float)
+    // true
+    print(c is string)
+    // true
+    print(d is bool)
+    // true
+    print(e is null)
+    // true
+    // Test negative cases
+    print(a is string)
+    // false
+    print(c is int)
+    // false
+    // Test container types
+    print(arr is Array<int>)
+    // true
+    print(map is Map<string, int>)
+    // true
+    print("is operator test completed")
+}
+

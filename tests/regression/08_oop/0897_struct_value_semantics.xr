@@ -5,60 +5,11 @@ struct Point {
     x: float
     y: float
 }
-
-// === let b = a creates independent copy ===
-let a = Point{x: 1.0, y: 2.0}
-let b = a
-b.x = 99.0
-assert(a.x == 1.0)
-assert(a.y == 2.0)
-assert(b.x == 99.0)
-assert(b.y == 2.0)
-
-// === Reassignment also copies ===
-let c = Point{x: 10.0, y: 20.0}
-let d = Point{x: 0.0, y: 0.0}
-d = c
-d.x = 999.0
-assert(c.x == 10.0)
-assert(d.x == 999.0)
-
-// === Struct literal assignment (fresh object, no extra copy) ===
-let e = Point{x: 5.0, y: 6.0}
-assert(e.x == 5.0)
-assert(e.y == 6.0)
-
-// === Multiple copies are independent ===
-let src = Point{x: 42.0, y: 0.0}
-let c1 = src
-let c2 = src
-let c3 = src
-c1.x = 1.0
-c2.x = 2.0
-c3.x = 3.0
-assert(src.x == 42.0)
-assert(c1.x == 1.0)
-assert(c2.x == 2.0)
-assert(c3.x == 3.0)
-
-// === Copy preserves all fields ===
 struct Color {
     r: int
     g: int
     b: int
 }
-
-let red = Color{r: 255, g: 0, b: 0}
-let copy = red
-copy.g = 128
-assert(red.r == 255)
-assert(red.g == 0)
-assert(red.b == 0)
-assert(copy.r == 255)
-assert(copy.g == 128)
-assert(copy.b == 0)
-
-// === Struct with method - copy preserves methods ===
 struct Vec2 {
     x: float
     y: float
@@ -68,16 +19,68 @@ struct Vec2 {
     }
 }
 
-let v1 = Vec2{x: 3.0, y: 4.0}
-let v2 = v1
-v2.x = 0.0
-assert(v1.mag_sq() == 25.0)
-assert(v2.mag_sq() == 16.0)
+@test
+fn test_struct_value_semantics() {
 
-// === Typename preserved after copy ===
-assert(typename(a) == "Point")
-assert(typename(b) == "Point")
-assert(typename(v1) == "Vec2")
-assert(typename(v2) == "Vec2")
+    // === let b = a creates independent copy ===
+    let a = Point{x: 1.0, y: 2.0}
+    let b = a
+    b.x = 99.0
+    assert(a.x == 1.0)
+    assert(a.y == 2.0)
+    assert(b.x == 99.0)
+    assert(b.y == 2.0)
 
-print("ok")
+    // === Reassignment also copies ===
+    let c = Point{x: 10.0, y: 20.0}
+    let d = Point{x: 0.0, y: 0.0}
+    d = c
+    d.x = 999.0
+    assert(c.x == 10.0)
+    assert(d.x == 999.0)
+
+    // === Struct literal assignment (fresh object, no extra copy) ===
+    let e = Point{x: 5.0, y: 6.0}
+    assert(e.x == 5.0)
+    assert(e.y == 6.0)
+
+    // === Multiple copies are independent ===
+    let src = Point{x: 42.0, y: 0.0}
+    let c1 = src
+    let c2 = src
+    let c3 = src
+    c1.x = 1.0
+    c2.x = 2.0
+    c3.x = 3.0
+    assert(src.x == 42.0)
+    assert(c1.x == 1.0)
+    assert(c2.x == 2.0)
+    assert(c3.x == 3.0)
+
+    // === Copy preserves all fields ===
+
+    let red = Color{r: 255, g: 0, b: 0}
+    let copy = red
+    copy.g = 128
+    assert(red.r == 255)
+    assert(red.g == 0)
+    assert(red.b == 0)
+    assert(copy.r == 255)
+    assert(copy.g == 128)
+    assert(copy.b == 0)
+
+    // === Struct with method - copy preserves methods ===
+
+    let v1 = Vec2{x: 3.0, y: 4.0}
+    let v2 = v1
+    v2.x = 0.0
+    assert(v1.mag_sq() == 25.0)
+    assert(v2.mag_sq() == 16.0)
+
+    // === Typename preserved after copy ===
+    assert(typename(a) == "Point")
+    assert(typename(b) == "Point")
+    assert(typename(v1) == "Vec2")
+    assert(typename(v2) == "Vec2")
+}
+

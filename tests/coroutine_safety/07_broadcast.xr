@@ -6,9 +6,9 @@ print("========== 测试7：广播模式 ==========")
 
 fn test_simple_broadcast() {
     // 广播同一消息给多个 worker
-    let ch1 = Channel(1)
-    let ch2 = Channel(1)
-    let ch3 = Channel(1)
+    let ch1 = new Channel(1)
+    let ch2 = new Channel(1)
+    let ch3 = new Channel(1)
     let channels = [ch1, ch2, ch3]
     let count = 3
     // const 消息（零拷贝）
@@ -47,7 +47,7 @@ fn test_simple_broadcast() {
 fn test_config_broadcast() {
     // 广播配置给所有 worker
     const config = { "server" => "localhost", "port" => 8080, "timeout" => 5000, "retries" => 3 }
-    let results = Channel(4)
+    let results = new Channel(4)
     fn worker(cfg) {
         let port = cfg.get("port")
         results.send(port)
@@ -76,7 +76,7 @@ fn test_large_data_broadcast() {
         data_arr.push(i)
     }
     const large_data = data_arr
-    let results = Channel(4)
+    let results = new Channel(4)
     fn worker(data) {
         let sum = 0
         for (item in data) {

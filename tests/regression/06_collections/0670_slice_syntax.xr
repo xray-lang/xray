@@ -1,35 +1,40 @@
 /*
- * 切片语法测试
- * 仅 Array 和 Bytes 支持切片语法
- */
 
-// 数组切片测试
-let arr = [1, 2, 3, 4, 5]
+@test
+fn test_slice_syntax() {
+     * 切片语法测试
+     * 仅 Array 和 Bytes 支持切片语法
+     */
 
-// 完整切片 [start:end]
-let slice1 = arr[1:4]
-print(slice1)  // [2, 3, 4]
+    // 数组切片测试
+    let arr = [1, 2, 3, 4, 5]
 
-// 省略 start [:end]
-let slice2 = arr[:3]
-print(slice2)  // [1, 2, 3]
+    // 完整切片 [start:end]
+    let slice1 = arr[1:4]
+    print(slice1)  // [2, 3, 4]
 
-// 省略 end [start:]
-let slice3 = arr[2:]
-print(slice3)  // [3, 4, 5]
+    // 省略 start [:end]
+    let slice2 = arr[:3]
+    print(slice2)  // [1, 2, 3]
 
-// 全切片 [:]
-let slice4 = arr[:]
-print(slice4)  // [1, 2, 3, 4, 5]
+    // 省略 end [start:]
+    let slice3 = arr[2:]
+    print(slice3)  // [3, 4, 5]
 
-print("All slice tests passed!")
+    // 全切片 [:]
+    let slice4 = arr[:]
+    print(slice4)  // [1, 2, 3, 4, 5]
 
-// expect: [2, 3, 4]
-// expect: [1, 2, 3]
-// expect: [3, 4, 5]
-// expect: [1, 2, 3, 4, 5]
-// expect: Hello
-// expect: Hello
-// expect: World!
-// expect: Hello, World!
-// expect: All slice tests passed!
+    print("All slice tests passed!")
+
+    // expect: [2, 3, 4]
+    // expect: [1, 2, 3]
+    // expect: [3, 4, 5]
+    // expect: [1, 2, 3, 4, 5]
+    // expect: Hello
+    // expect: Hello
+    // expect: World!
+    // expect: Hello, World!
+    // expect: All slice tests passed!
+}
+

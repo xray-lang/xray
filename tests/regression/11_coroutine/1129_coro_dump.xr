@@ -1,30 +1,33 @@
 // Coro.dump() 和 Coro.stalled() 测试
 // 作者：xingleixu@gmail.com
 
-print("test1: Coro.stats()")
-let stats = Coro.stats()
-print("stats keys:", stats.keys().length)
-
-print("test2: Coro.dump()")
-Coro.dump()
-
-print("test3: Coro.stalled()")
-let stalled = Coro.stalled()
-print("stalled:", stalled.length)
-
-print("test4: with coroutines")
-shared const ch = Channel(1)
-
 fn worker(c: Channel<int>): string {
     c.send(42)
     return "done"
 }
 
-let t = go(name: "test-worker") worker(ch)
-await t
-print("worker result:", t.result)
+@test
+fn test_coro_dump() {
+    print("test1: Coro.stats()")
+    let stats = Coro.stats()
+    print("stats keys:", stats.keys().length)
 
-print("test5: final dump")
-Coro.dump(10)
+    print("test2: Coro.dump()")
+    Coro.dump()
 
-print("all tests passed")
+    print("test3: Coro.stalled()")
+    let stalled = Coro.stalled()
+    print("stalled:", stalled.length)
+
+    print("test4: with coroutines")
+    shared const ch = new Channel(1)
+
+
+    let t = go(name: "test-worker") worker(ch)
+    await t
+    print("worker result:", t.result)
+
+    print("test5: final dump")
+    Coro.dump(10)
+}
+

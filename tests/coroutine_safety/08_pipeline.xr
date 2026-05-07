@@ -6,9 +6,9 @@ print("========== 测试8：流水线处理 ==========")
 
 fn test_simple_pipeline() {
     // stage1 -> stage2 -> stage3
-    let ch1 = Channel(5)
-    let ch2 = Channel(5)
-    let ch3 = Channel(5)
+    let ch1 = new Channel(5)
+    let ch2 = new Channel(5)
+    let ch3 = new Channel(5)
     fn stage1(input, output) {
         for (let i = 0; i < 10; i++) {
             output.send(i)
@@ -40,10 +40,10 @@ fn test_simple_pipeline() {
 }
 
 fn test_transform_pipeline() {
-    let input = Channel(10)
-    let filtered = Channel(10)
-    let transformed = Channel(10)
-    let result = Channel(1)
+    let input = new Channel(10)
+    let filtered = new Channel(10)
+    let transformed = new Channel(10)
+    let result = new Channel(1)
     // 过滤偶数
     fn filter_even(inp, out) {
         for (let i = 0; i < 20; i++) {
@@ -91,8 +91,8 @@ fn test_transform_pipeline() {
 
 fn test_parallel_pipeline() {
     // 并行处理阶段
-    let input = Channel(20)
-    let output = Channel(20)
+    let input = new Channel(20)
+    let output = new Channel(20)
     fn worker(inp, out, id) {
         for (let i = 0; i < 5; i++) {
             let val = inp.recv()

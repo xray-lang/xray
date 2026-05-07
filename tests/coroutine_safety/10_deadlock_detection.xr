@@ -10,7 +10,7 @@ print("========== 测试10：死锁场景与检测 ==========")
 
 // 测试1：使用超时接收避免永久阻塞
 fn test_channel_timeout_prevention() {
-    let ch = Channel()
+    let ch = new Channel()
     // 无缓冲 Channel
     // 测试超时接收（无发送者）
     let received = ch.recvTimeout(100)
@@ -23,7 +23,7 @@ fn test_channel_timeout_prevention() {
 
 // 测试2：使用 tryRecv/trySend 避免阻塞
 fn test_non_blocking_operations() {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     // 非阻塞发送
     let sent1 = ch.trySend(1)
     let sent2 = ch.trySend(2)
@@ -45,9 +45,9 @@ fn test_non_blocking_operations() {
 
 // 测试3：多生产者竞争有限缓冲区
 fn test_producer_competition() {
-    let ch = Channel(5)
+    let ch = new Channel(5)
     // 只有 5 个槽位
-    let results = Channel(10)
+    let results = new Channel(10)
     fn producer(id) {
         let sent_count = 0
         for (let i = 0; i < 10; i++) {
@@ -79,8 +79,8 @@ fn test_producer_competition() {
 
 // 测试4：消费者-生产者平衡
 fn test_balanced_producer_consumer() {
-    let ch = Channel(3)
-    let done = Channel(1)
+    let ch = new Channel(3)
+    let done = new Channel(1)
     fn producer() {
         for (let i = 0; i < 20; i++) {
             ch.send(i)
@@ -108,12 +108,12 @@ fn test_balanced_producer_consumer() {
 // 测试5：模拟资源锁（使用 Channel 作为信号量）
 fn test_semaphore_pattern() {
     // 用 Channel 实现信号量（最多 2 个并发）
-    let sem = Channel(2)
+    let sem = new Channel(2)
     sem.send(1)
     sem.send(1)
     // 初始化 2 个令牌
-    let results = Channel(10)
-    let active_count = Channel(1)
+    let results = new Channel(10)
+    let active_count = new Channel(1)
     active_count.send(0)
     // 当前活跃数
     fn worker(id) {
@@ -151,8 +151,8 @@ fn test_semaphore_pattern() {
 
 // 测试6：检测潜在死锁模式（通过超时）
 fn test_deadlock_pattern_detection() {
-    let ch1 = Channel()
-    let ch2 = Channel()
+    let ch1 = new Channel()
+    let ch2 = new Channel()
     // 可能导致死锁的模式：两个协程互相等待
     fn task_a() {
         // 先发 ch1，再收 ch2（但使用超时）
@@ -193,8 +193,8 @@ fn test_deadlock_pattern_detection() {
 
 // 测试7：正确的双向通信模式
 fn test_bidirectional_communication() {
-    let request = Channel(1)
-    let response = Channel(1)
+    let request = new Channel(1)
+    let response = new Channel(1)
     fn server() {
         let req = request.recv()
         let resp = req * 2

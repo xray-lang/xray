@@ -9,51 +9,54 @@
 */
 
 // 测试 1：主线程本地存储
-print("test1: main thread local storage")
-Coro.setLocal("name", "main")
-Coro.setLocal("count", 42)
-print("  name:", Coro.getLocal("name"))   // expect: main
-print("  count:", Coro.getLocal("count")) // expect: 42
 
-// 测试 2：协程内本地存储
-print("test2: coroutine local storage")
-let task1 = go(name: "worker-1") fn(): int {
-    Coro.setLocal("id", 1)
-    Coro.setLocal("name", "worker-one")
-    return Coro.getLocal("id")
-}()
+@test
+fn test_coro_local() {
+    print("test1: main thread local storage")
+    Coro.setLocal("name", "main")
+    Coro.setLocal("count", 42)
+    print("  name:", Coro.getLocal("name"))   // expect: main
+    print("  count:", Coro.getLocal("count")) // expect: 42
 
-let result1 = await task1
-print("  worker-1 id:", result1)  // expect: 1
+    // 测试 2：协程内本地存储
+    print("test2: coroutine local storage")
+    let task1 = go(name: "worker-1") fn(): int {
+        Coro.setLocal("id", 1)
+        Coro.setLocal("name", "worker-one")
+        return Coro.getLocal("id")
+    }()
 
-// 测试 3：协程之间数据隔离
-print("test3: isolation between coroutines")
+    let result1 = await task1
+    print("  worker-1 id:", result1)  // expect: 1
 
-let task2 = go(name: "worker-A") fn(): string {
-    Coro.setLocal("value", "A")
-    return Coro.getLocal("value")
-}()
+    // 测试 3：协程之间数据隔离
+    print("test3: isolation between coroutines")
 
-let task3 = go(name: "worker-B") fn(): string {
-    Coro.setLocal("value", "B")
-    return Coro.getLocal("value")
-}()
+    let task2 = go(name: "worker-A") fn(): string {
+        Coro.setLocal("value", "A")
+        return Coro.getLocal("value")
+    }()
 
-let resultA = await task2
-let resultB = await task3
-print("  worker-A value:", resultA)  // expect: A
-print("  worker-B value:", resultB)  // expect: B
+    let task3 = go(name: "worker-B") fn(): string {
+        Coro.setLocal("value", "B")
+        return Coro.getLocal("value")
+    }()
 
-// 测试 4：主线程数据不受协程影响
-print("test4: main thread unaffected")
-print("  main name:", Coro.getLocal("name"))   // expect: main
-print("  main count:", Coro.getLocal("count")) // expect: 42
+    let resultA = await task2
+    let resultB = await task3
+    print("  worker-A value:", resultA)  // expect: A
+    print("  worker-B value:", resultB)  // expect: B
 
-// 测试 5：获取不存在的 key
-print("test5: get non-existent key")
-let missing = Coro.getLocal("non_existent")
-if (missing == null) {
-    print("  missing key returns null")  // expect: null
+    // 测试 4：主线程数据不受协程影响
+    print("test4: main thread unaffected")
+    print("  main name:", Coro.getLocal("name"))   // expect: main
+    print("  main count:", Coro.getLocal("count")) // expect: 42
+
+    // 测试 5：获取不存在的 key
+    print("test5: get non-existent key")
+    let missing = Coro.getLocal("non_existent")
+    if (missing == null) {
+        print("  missing key returns null")  // expect: null
+    }
 }
 
-print("all tests passed")

@@ -3,13 +3,10 @@
 fn compute(): int {
     return 42
 }
-
 fn failing(): int {
     throw "monitor test error"
     return 0
 }
-
-// Test 1: monitor a successful task
 fn test_monitor_success() {
     let t = go compute()
     let ch = t.monitor()
@@ -19,8 +16,6 @@ fn test_monitor_success() {
     assert(val == 42, "monitor should receive task result")
     ch.close()
 }
-
-// Test 2: monitor a failing task
 fn test_monitor_fail() {
     let t = go failing()
     let ch = t.monitor()
@@ -30,8 +25,6 @@ fn test_monitor_fail() {
     assert(val == "monitor test error", "monitor should receive task error")
     ch.close()
 }
-
-// Test 3: monitor an already-completed task
 fn test_monitor_already_done() {
     let t = go compute()
     let r = await t
@@ -42,7 +35,18 @@ fn test_monitor_already_done() {
     ch.close()
 }
 
-test_monitor_success()
-test_monitor_fail()
-test_monitor_already_done()
-print("PASS")
+@test
+fn test_task_monitor() {
+
+
+    // Test 1: monitor a successful task
+
+    // Test 2: monitor a failing task
+
+    // Test 3: monitor an already-completed task
+
+    test_monitor_success()
+    test_monitor_fail()
+    test_monitor_already_done()
+}
+

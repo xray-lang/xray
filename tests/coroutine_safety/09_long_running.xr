@@ -9,7 +9,7 @@ print("========== 测试9：长时间运行与抢占调度 ==========")
 
 // 测试1：CPU 密集型协程不会饿死其他协程
 fn test_cpu_intensive_fairness() {
-    let results = Channel(10)
+    let results = new Channel(10)
     // CPU 密集型任务（计算）
     fn cpu_heavy(id) {
         let sum = 0
@@ -46,7 +46,7 @@ fn test_cpu_intensive_fairness() {
 
 // 测试2：协程取消机制
 fn test_cancel_running_coro() {
-    let started = Channel(1)
+    let started = new Channel(1)
     // 长时间运行的任务，检查取消状态
     fn long_task() {
         started.send(true)
@@ -77,7 +77,7 @@ fn test_cancel_running_coro() {
 
 // 测试3：多个长时间运行协程的公平调度
 fn test_multiple_long_running() {
-    let completions = Channel(10)
+    let completions = new Channel(10)
     fn work(id, iterations) {
         let sum = 0
         for (let i = 0; i < iterations; i++) {
@@ -108,7 +108,7 @@ fn test_multiple_long_running() {
 
 // 测试4：协程让出控制权
 fn test_yield_behavior() {
-    let log = Channel(20)
+    let log = new Channel(20)
     // 协作式让出的任务
     fn cooperative_task(id) {
         for (let i = 0; i < 5; i++) {

@@ -1883,7 +1883,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec){
-        .source = "const ch = Channel()\nprint(typeof(ch))",
+        .source = "const ch = new Channel()\nprint(typeof(ch))",
         .label = "Channel(): unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1893,7 +1893,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec){
-        .source = "const ch: Channel<int> = Channel(4)\nprint(typeof(ch))",
+        .source = "const ch: Channel<int> = new Channel(4)\nprint(typeof(ch))",
         .label = "Channel(N): buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1905,7 +1905,7 @@ TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
     run_compare((CompareSpec){
         .source =
-            "const ch: Channel<int> = Channel(2)\n"
+            "const ch: Channel<int> = new Channel(2)\n"
             "ch.send(10)\n"
             "ch.send(20)\n"
             "print(ch.recv())\n"
@@ -1938,7 +1938,7 @@ TEST(cmp_go_with_chan) {
     run_compare((CompareSpec){
         .source =
             "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-            "const ch: Channel<int> = Channel(1)\n"
+            "const ch: Channel<int> = new Channel(1)\n"
             "let task = go producer(ch)\n"
             "print(ch.recv())\n"
             "await task",
@@ -1980,7 +1980,7 @@ TEST(cmp_select_recv) {
         .source = "fn producer(ch: Channel<int>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
-                  "const ch: Channel<int> = Channel(1)\n"
+                  "const ch: Channel<int> = new Channel(1)\n"
                   "go producer(ch)\n"
                   "select {\n"
                   "  msg from ch => {\n"

@@ -6,42 +6,44 @@
 */
 
 // 基本测试：字符串 * 整数
-let line = "=" * 50
-assert_eq(line.length, 50)
 
-let stars = "*" * 10
-assert_eq(stars, "**********")
+@test
+fn test_string_repeat() {
+    let line = "=" * 50
+    assert_eq(line.length, 50)
 
-// 整数 * 字符串（交换顺序）
-let dashes = 5 * "-"
-assert_eq(dashes, "-----")
+    let stars = "*" * 10
+    assert_eq(stars, "**********")
 
-// 边界情况
-let empty = "x" * 0
-assert_eq(empty, "")
+    // 整数 * 字符串（交换顺序）
+    let dashes = 5 * "-"
+    assert_eq(dashes, "-----")
 
-let single = "abc" * 1
-assert_eq(single, "abc")
+    // 边界情况
+    let empty = "x" * 0
+    assert_eq(empty, "")
 
-// 多字符重复
-let pattern = "ab" * 3
-assert_eq(pattern, "ababab")
+    let single = "abc" * 1
+    assert_eq(single, "abc")
 
-// 中文字符重复
-let chinese = "好" * 3
-assert_eq(chinese, "好好好")
+    // 多字符重复
+    let pattern = "ab" * 3
+    assert_eq(pattern, "ababab")
 
-// 变量方式
-let s: string = "-"
-let n: int = 5
-let result = s * n
-assert_eq(result, "-----")
+    // 中文字符重复
+    let chinese = "好" * 3
+    assert_eq(chinese, "好好好")
 
-// 表达式中使用
-let header = "+" + "-" * 20 + "+"
-assert_eq(header.length, 22)
+    // 变量方式
+    let s: string = "-"
+    let n: int = 5
+    let result = s * n
+    assert_eq(result, "-----")
 
-// 打印分隔线
-print("=" * 40)
-print("测试通过!")
-print("=" * 40)
+    // 表达式中使用
+    let header = "+" + "-" * 20 + "+"
+    assert_eq(header.length, 22)
+
+    // 打印分隔线
+}
+
