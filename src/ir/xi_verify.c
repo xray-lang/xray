@@ -473,6 +473,9 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_GET_BUILTIN] = 0,
     [XI_IMPORT_REF]  = 0,
     [XI_REGEX_COMPILE] = 2,
+    [XI_RETAIN]      = 1,
+    [XI_RELEASE]     = 1,
+    [XI_MOVE]        = 1,
 };
 
 static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {

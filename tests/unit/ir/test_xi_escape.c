@@ -13,6 +13,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_escape.h"
+#include "../../../src/ir/xi_arc.h"
 #include "../../../src/runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
@@ -252,6 +253,91 @@ static void test_lattice_join(void) {
               "join(GLOBAL, HEAP) = GLOBAL");
 }
 
+/* ========== Test: ARC insertion — no retain for NO_ESCAPE ========== */
+
+/* Count occurrences of a given op in a function's IR. */
+static int count_ops(const XiFunc *f, uint16_t op) {
+    int count = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] && blk->values[i]->op == op)
+                count++;
+        }
+    }
+    return count;
+}
+
+static void test_arc_no_escape_skipped(void) {
+    /* Local array (NO_ESCAPE) should get zero RETAIN/RELEASE */
+    XiFunc *f = make_func("arc_local", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *idx = xi_const_int(f, b0, 0, &t_int);
+    XiValue *get = xi_value_new(f, b0, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = arr;
+    get->args[1] = idx;
+    xi_block_set_return(b0, get);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0,
+              "NO_ESCAPE array should have 0 retains");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0,
+              "NO_ESCAPE array should have 0 releases");
+    xi_func_free(f);
+}
+
+/* ========== Test: ARC insertion — retain for returned array ========== */
+
+static void test_arc_return_gets_retain(void) {
+    /* Returned array (ARG_ESCAPE) should get 1 RETAIN, 0 RELEASE */
+    XiFunc *f = make_func("arc_return", &t_array);
+    XiBlock *b0 = f->entry;
+
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    xi_block_set_return(b0, arr);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "ARG_ESCAPE array should have 1 retain");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0,
+              "ARG_ESCAPE array returned: 0 release (caller owns)");
+    xi_func_free(f);
+}
+
+/* ========== Test: ARC insertion — retain+release for heap escape ========== */
+
+static void test_arc_heap_gets_retain_release(void) {
+    /* Array stored to field (HEAP_ESCAPE): 1 retain + 1 release at exit */
+    XiFunc *f = make_func("arc_heap", &t_any);
+    XiBlock *b0 = f->entry;
+
+    XiValue *obj = xi_param(f, b0, 0, &t_any);
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *store = xi_value_new(f, b0, XI_STORE_FIELD, &t_any, 2);
+    store->args[0] = obj;
+    store->args[1] = arr;
+    store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *zero = xi_const_int(f, b0, 0, &t_int);
+    xi_block_set_return(b0, zero);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "HEAP_ESCAPE array should have 1 retain");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 1,
+              "HEAP_ESCAPE array should have 1 release at exit");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -263,6 +349,9 @@ int main(void) {
     test_chan_send_escape();
     test_set_shared_escape();
     test_call_arg_escape();
+    test_arc_no_escape_skipped();
+    test_arc_return_gets_retain();
+    test_arc_heap_gets_retain_release();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n",
            g_passed, g_failed);

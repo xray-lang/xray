@@ -112,6 +112,11 @@ static void dump_value(FILE *out, const XiValue *v) {
     if (v->rep == XR_REP_I64) fprintf(out, " :i64");
     else if (v->rep == XR_REP_F64) fprintf(out, " :f64");
 
+    /* Show escape level when set (after escape analysis) */
+    if (v->escape == 1) fprintf(out, " esc:arg");
+    else if (v->escape == 2) fprintf(out, " esc:heap");
+    else if (v->escape == 3) fprintf(out, " esc:global");
+
     if (v->line > 0)
         fprintf(out, " L%u", v->line);
 

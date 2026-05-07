@@ -56,6 +56,7 @@ static bool cg_is_void_like(const XiValue *v) {
     switch (v->op) {
     case XI_SET_SHARED: case XI_STORE_UPVAL:
     case XI_STORE_FIELD: case XI_INDEX_SET: case XI_THROW:
+    case XI_RETAIN: case XI_RELEASE:
         return true;
     case XI_CALL_BUILTIN:
         if (v->aux) {
@@ -1053,6 +1054,27 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, "xrt_throw_exc(");
             emit_vref(out, v->args[0]);
             fprintf(out, ")");
+            break;
+
+        /* ============ ARC / Ownership ============ */
+
+        case XI_RETAIN:
+            XR_DCHECK(v->nargs >= 1, "XI_RETAIN: need arg");
+            fprintf(out, "xrt_retain(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ")");
+            break;
+
+        case XI_RELEASE:
+            XR_DCHECK(v->nargs >= 1, "XI_RELEASE: need arg");
+            fprintf(out, "xrt_release(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ")");
+            break;
+
+        case XI_MOVE:
+            XR_DCHECK(v->nargs >= 1, "XI_MOVE: need arg");
+            emit_vref(out, v->args[0]);
             break;
 
         /* ============ Assertions ============ */

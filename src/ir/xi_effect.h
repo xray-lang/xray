@@ -145,6 +145,13 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
     case XI_DEFER:
         return XI_FLAG_SIDE_EFFECT;
 
+    /* --- ARC / Ownership --- */
+    case XI_RETAIN:
+    case XI_RELEASE:
+        return XI_FLAG_SIDE_EFFECT;
+    case XI_MOVE:
+        return 0;  /* pure annotation: ownership transfer, no runtime effect */
+
     case XI_OP_COUNT:
         break;
     }

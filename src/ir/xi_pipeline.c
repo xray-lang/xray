@@ -18,6 +18,7 @@
 #include "xi_emit.h"
 #include "xi_backend_lower.h"
 #include "xi_escape.h"
+#include "xi_arc.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
@@ -143,6 +144,12 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
                       "post-backend_lower verify failed");
         }
 #endif
+    }
+
+    /* ARC insertion: add retain/release based on escape analysis.
+     * Runs after backend lowering so ARC ops coexist with CALL_BUILTIN. */
+    if (cfg->run_escape && cfg->run_backend_lower) {
+        xi_arc_insert(ir);
     }
 
     /* Optional: dump IR after optimization */
