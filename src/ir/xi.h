@@ -600,6 +600,7 @@ typedef struct XiFunc {
 
 XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
 XR_FUNC void xi_func_free(XiFunc *f);
+XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage);
 
 /* Arena helper: allocate aligned memory from the function's bump allocator.
  * Used by xi_lower.c for phi arg arrays during Braun SSA construction. */

@@ -203,6 +203,37 @@ static void canon_compound_assignment(XrCanonCtx *ctx, AstNode *node) {
     }
 }
 
+/* ========== Increment / Decrement desugaring ========== */
+
+/* Desugar x++ / x-- into compound assignment: x += 1 / x -= 1.
+ * The compound assignment rule then further expands to x = x + 1.
+ * This ensures inc/dec follows the same code path as compound assign. */
+static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
+    XR_DCHECK(node->type == AST_INC || node->type == AST_DEC,
+              "canon_inc_dec: wrong node type");
+
+    const char *name = node->as.inc.name;
+    uint32_t    sid  = node->as.inc.symbol_id;
+    int         line = node->line;
+    bool is_inc = (node->type == AST_INC);
+
+    /* Build literal 1 */
+    AstNode *one = xr_ast_literal_int(ctx->isolate, 1, line);
+    XR_DCHECK(one != NULL, "canon_inc_dec: literal alloc");
+
+    /* Mutate in-place → AST_COMPOUND_ASSIGNMENT(name, +=/-=, 1) */
+    node->type = AST_COMPOUND_ASSIGNMENT;
+    memset(&node->as, 0, sizeof(node->as));
+    node->as.compound_assignment.name      = (char *)name;
+    node->as.compound_assignment.value     = one;
+    node->as.compound_assignment.symbol_id = sid;
+    node->as.compound_assignment.op        = is_inc ? TK_PLUS_ASSIGN : TK_MINUS_ASSIGN;
+    node->as.compound_assignment.object    = NULL;
+
+    /* Immediately desugar the synthesized compound assignment */
+    canon_compound_assignment(ctx, node);
+}
+
 /* ========== AST walk (recursive, dispatches on node type) ========== */
 
 /* Forward declaration — the walker calls itself recursively. */
@@ -227,6 +258,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     if (node->type == AST_COMPOUND_ASSIGNMENT) {
         canon_compound_assignment(ctx, node);
         /* Node type has changed; fall through to walk the result. */
+    }
+    if (node->type == AST_INC || node->type == AST_DEC) {
+        canon_inc_dec(ctx, node);
+        /* Node type has changed to AST_ASSIGNMENT; fall through. */
     }
 
     switch (node->type) {
