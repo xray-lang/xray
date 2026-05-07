@@ -195,10 +195,9 @@ static int collect_str_concat_leaves(XiLower *l, AstNode *node,
 }
 
 static XiValue *lower_binary(XiLower *l, AstNode *node) {
-    /* Short-circuit AND/OR need special control flow */
-    if (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) {
-        return lower_short_circuit(l, node);
-    }
+    /* &&/|| are canonicalized to ternary before lowering */
+    XR_DCHECK(node->type != AST_BINARY_AND && node->type != AST_BINARY_OR,
+              "lower_binary: &&/|| must be canonicalized to ternary");
 
     /* String concat optimization: flatten ADD chain → XI_STR_CONCAT
      * which emits STRBUF_NEW/APPEND/FINISH (no intermediate allocs). */
@@ -240,75 +239,6 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     return xi_binary(l->func, l->cur_block, op, result_type, lhs, rhs);
 }
 
-/* Short-circuit && and || use control flow (like if-expressions).
- * Always produces a bool result (xray semantics: && / || never leak
- * raw operand values — they return true/false).
- *
- * LEGACY FALLBACK: the canonicalizer expands && / || into ternary,
- * so the pipeline path should never reach this function. */
-static XiValue *lower_short_circuit(XiLower *l, AstNode *node) {
-    XR_DCHECK(!l->canonicalized,
-              "lower_short_circuit: &&/|| should be canonicalized to ternary");
-    bool is_and = (node->type == AST_BINARY_AND);
-
-    XiValue *lhs = xi_lower_expr(l, node->as.binary.left);
-    if (!lhs) return NULL;
-
-    XiBlock *eval_rhs = xi_block_new(l->func);
-    XiBlock *merge = xi_block_new(l->func);
-    XiBlock *skip = xi_block_new(l->func);
-
-    /* AND: if lhs then eval_rhs else skip (result = false)
-     * OR:  if lhs then skip (result = true) else eval_rhs */
-    if (is_and)
-        xi_block_set_if(l->cur_block, lhs, eval_rhs, skip);
-    else
-        xi_block_set_if(l->cur_block, lhs, skip, eval_rhs);
-
-    xi_lower_braun_seal(l, eval_rhs);
-    xi_lower_braun_seal(l, skip);
-
-    /* Evaluate RHS and coerce to bool if not already bool-typed */
-    l->cur_block = eval_rhs;
-    XiValue *rhs = xi_lower_expr(l, node->as.binary.right);
-    if (rhs && !(rhs->type && rhs->type->kind == XR_KIND_BOOL)) {
-        XiValue *not1 = xi_value_new(l->func, l->cur_block, XI_NOT,
-                                      l->type_bool, 1);
-        if (not1) {
-            not1->args[0] = rhs;
-            XiValue *not2 = xi_value_new(l->func, l->cur_block, XI_NOT,
-                                          l->type_bool, 1);
-            if (not2) {
-                not2->args[0] = not1;
-                rhs = not2;
-            }
-        }
-    }
-    XiBlock *rhs_exit = l->cur_block;
-    xi_block_set_jump(rhs_exit, merge);
-
-    /* Skip block: short-circuit result is a known boolean constant.
-     * AND skips when LHS is falsy → result = false.
-     * OR  skips when LHS is truthy → result = true. */
-    l->cur_block = skip;
-    XiValue *skip_val = xi_const_bool(l->func, skip, !is_and, l->type_bool);
-    xi_block_set_jump(skip, merge);
-
-    xi_lower_braun_seal(l, merge);
-
-    /* Merge with phi */
-    l->cur_block = merge;
-    XiPhi *phi = xi_phi_new(l->func, merge, l->type_bool, merge->npreds);
-    if (phi) {
-        for (uint16_t i = 0; i < merge->npreds; i++) {
-            if (merge->preds[i] == rhs_exit)
-                phi->value.args[i] = rhs ? rhs : skip_val;
-            else
-                phi->value.args[i] = skip_val;
-        }
-    }
-    return phi ? &phi->value : lhs;
-}
 
 static XiValue *lower_unary(XiLower *l, AstNode *node) {
     XiValue *operand = xi_lower_expr(l, node->as.unary.operand);
@@ -502,244 +432,6 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
             name ? name : "<null>", sid, (int)node->line);
     l->had_error = true;
     return NULL;
-}
-
-/* Map compound assignment operator token to Xi binary op */
-static uint16_t compound_op_to_xi(int tok) {
-    switch (tok) {
-        case TK_PLUS_ASSIGN:   return XI_ADD;
-        case TK_MINUS_ASSIGN:  return XI_SUB;
-        case TK_MUL_ASSIGN:    return XI_MUL;
-        case TK_DIV_ASSIGN:    return XI_DIV;
-        case TK_MOD_ASSIGN:    return XI_MOD;
-        case TK_AND_ASSIGN:    return XI_BAND;
-        case TK_OR_ASSIGN:     return XI_BOR;
-        case TK_XOR_ASSIGN:    return XI_BXOR;
-        case TK_LSHIFT_ASSIGN: return XI_SHL;
-        case TK_RSHIFT_ASSIGN: return XI_SHR;
-        default:               return XI_ADD;
-    }
-}
-
-static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
-    XR_DCHECK(!l->canonicalized,
-              "lower_compound_assignment: should be canonicalized to assignment");
-    const char *name = node->as.compound_assignment.name;
-    uint32_t sid = node->as.compound_assignment.symbol_id;
-    XiValue *rhs = xi_lower_expr(l, node->as.compound_assignment.value);
-    if (!rhs) return NULL;
-    uint16_t op = compound_op_to_xi(node->as.compound_assignment.op);
-    struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
-
-    /* Member compound assignment: obj.field op= rhs */
-    if (node->as.compound_assignment.object) {
-        XiValue *obj = xi_lower_expr(l, node->as.compound_assignment.object);
-        if (!obj) return NULL;
-
-        /* Load current field value */
-        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
-                                     result_type ? result_type : l->type_any, 1);
-        if (!cur) return NULL;
-        cur->args[0] = obj;
-        cur->aux = (void *)arena_strdup(l->func, name);
-        cur->line = (uint32_t)node->line;
-
-        if (!result_type)
-            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
-
-        /* Compute new value */
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
-        if (!result) return NULL;
-
-        /* Store back to field */
-        XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
-                                       result_type, 2);
-        if (!store) return NULL;
-        store->args[0] = obj;
-        store->args[1] = result;
-        store->aux = (void *)arena_strdup(l->func, name);
-        store->flags |= XI_FLAG_SIDE_EFFECT;
-        store->line = (uint32_t)node->line;
-        return result;
-    }
-
-    /* Local variable */
-    int var_id = xi_lower_var_find(l, sid, name);
-    if (var_id >= 0) {
-        XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
-        if (!cur) return NULL;
-        if (!result_type)
-            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
-        if (result) {
-            xi_lower_braun_write(l, var_id, l->cur_block, result);
-
-            /* Retroactive cell indirection for captured variables */
-            for (uint16_t ci_fn = 0; ci_fn < l->func->nchildren; ci_fn++) {
-                XiFunc *child = l->func->children[ci_fn];
-                if (!child) continue;
-                for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
-                    if (child->captures[ci].source == XI_CAPTURE_SRC_REG &&
-                        child->captures[ci].name && name &&
-                        strcmp(child->captures[ci].name, name) == 0) {
-                        child->captures[ci].needs_cell = true;
-                        if (var_id < l->var_count)
-                            l->vars[var_id].captured_by_child = true;
-                        result->flags |= XI_FLAG_SIDE_EFFECT;
-                    }
-                }
-            }
-
-            /* If program-level shared variable, also update shared array */
-            if (l->is_program && l->shared_map[var_id] >= 0) {
-                XiValue *store = xi_value_new(l->func, l->cur_block,
-                                               XI_SET_SHARED, l->type_void, 1);
-                if (store) {
-                    store->args[0] = result;
-                    store->aux_int = l->shared_map[var_id];
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
-        }
-        return result;
-    }
-
-    /* Shared variable from nested scope */
-    int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
-    if (shared_idx >= 0) {
-        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
-                                     l->type_any, 0);
-        if (!cur) return NULL;
-        cur->aux_int = shared_idx;
-
-        if (!result_type)
-            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
-        if (result) {
-            XiValue *store = xi_value_new(l->func, l->cur_block,
-                                           XI_SET_SHARED, l->type_void, 1);
-            if (store) {
-                store->args[0] = result;
-                store->aux_int = shared_idx;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        }
-        return result;
-    }
-
-    /* Upvalue: read via LOAD_UPVAL, compute, write via STORE_UPVAL */
-    struct XrType *upval_type = NULL;
-    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
-    if (upval_idx >= 0) {
-        if (!upval_type) upval_type = l->type_any;
-        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
-                                     upval_type, 0);
-        if (!cur) return NULL;
-        cur->aux_int = upval_idx;
-
-        if (!result_type)
-            result_type = infer_binary_type(l, node->type, cur->type, rhs->type);
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, rhs);
-        if (result) {
-            XR_DCHECK(upval_idx < (int)l->func->ncaptures,
-                      "upval_idx out of range for needs_cell");
-            propagate_needs_cell(l, upval_idx);
-
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
-                                           l->type_void, 1);
-            if (store) {
-                store->args[0] = result;
-                store->aux_int = upval_idx;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        }
-        return result;
-    }
-
-    return xi_const_null(l->func, l->cur_block, l->type_null);
-}
-
-static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
-    XR_DCHECK(!l->canonicalized,
-              "lower_inc_dec: ++/-- should be canonicalized to assignment");
-    const char *name = node->as.inc.name;
-    uint32_t sid = node->as.inc.symbol_id;
-    uint16_t op = (node->type == AST_INC) ? XI_ADD : XI_SUB;
-
-    /* Local variable */
-    int var_id = xi_lower_var_find(l, sid, name);
-    if (var_id >= 0) {
-        XiValue *cur = xi_lower_braun_read(l, var_id, l->cur_block);
-        if (!cur) return NULL;
-        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
-        struct XrType *result_type = cur->type ? cur->type : l->type_int;
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
-        if (result) {
-            xi_lower_braun_write(l, var_id, l->cur_block, result);
-            /* If program-level shared variable, also update shared array */
-            if (l->is_program && l->shared_map[var_id] >= 0) {
-                XiValue *store = xi_value_new(l->func, l->cur_block,
-                                               XI_SET_SHARED, l->type_void, 1);
-                if (store) {
-                    store->args[0] = result;
-                    store->aux_int = l->shared_map[var_id];
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
-        }
-        return result;
-    }
-
-    /* Shared variable from nested scope */
-    int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
-    if (shared_idx >= 0) {
-        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
-                                     l->type_any, 0);
-        if (!cur) return NULL;
-        cur->aux_int = shared_idx;
-        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
-        struct XrType *result_type = cur->type ? cur->type : l->type_int;
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
-        if (result) {
-            XiValue *store = xi_value_new(l->func, l->cur_block,
-                                           XI_SET_SHARED, l->type_void, 1);
-            if (store) {
-                store->args[0] = result;
-                store->aux_int = shared_idx;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        }
-        return result;
-    }
-
-    /* Upvalue: read via LOAD_UPVAL, compute, write via STORE_UPVAL */
-    struct XrType *upval_type = NULL;
-    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
-    if (upval_idx >= 0) {
-        if (!upval_type) upval_type = l->type_any;
-        XiValue *cur = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
-                                     upval_type, 0);
-        if (!cur) return NULL;
-        cur->aux_int = upval_idx;
-        XiValue *one = xi_const_int(l->func, l->cur_block, 1, l->type_int);
-        struct XrType *result_type = cur->type ? cur->type : l->type_int;
-        XiValue *result = xi_binary(l->func, l->cur_block, op, result_type, cur, one);
-        if (result) {
-            XR_DCHECK(upval_idx < (int)l->func->ncaptures,
-                      "upval_idx out of range for needs_cell");
-            propagate_needs_cell(l, upval_idx);
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL,
-                                           l->type_void, 1);
-            if (store) {
-                store->args[0] = result;
-                store->aux_int = upval_idx;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        }
-        return result;
-    }
-
-    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 static int json_field_index(struct XrType *type, const char *name) {
@@ -1370,7 +1062,7 @@ static void func_add_child(XiFunc *parent, XiFunc *child) {
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     /* Recursively lower the function body into a child XiFunc,
      * passing 'l' as parent so the child can resolve upvalue captures. */
-    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l, 0);
+    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l);
     if (!child) {
         l->had_error = true;
         return NULL;
@@ -2321,10 +2013,14 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         case AST_ASSIGNMENT:
             return lower_assignment(l, node);
         case AST_COMPOUND_ASSIGNMENT:
-            return lower_compound_assignment(l, node);
         case AST_INC:
         case AST_DEC:
-            return lower_inc_dec(l, node);
+            /* Canonicalized away: compound assignment → plain assignment,
+             * inc/dec → assignment with +1/-1. Must never reach here. */
+            XR_DCHECK(false, "AST_COMPOUND_ASSIGNMENT / INC / DEC "
+                      "must be canonicalized before lowering");
+            l->had_error = true;
+            return NULL;
 
         /* Calls */
         case AST_CALL_EXPR:

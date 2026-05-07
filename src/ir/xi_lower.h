@@ -151,21 +151,13 @@ typedef struct XiLower {
 
     /* Error tracking */
     bool had_error;
-
-    /* Set by the pipeline when AST was canonicalized before lowering.
-     * Enables debug assertions that verify dead lowerer paths are not
-     * reached (e.g. lower_short_circuit, lower_inc_dec). */
-    bool canonicalized;
 } XiLower;
 
 /* ========== API ========== */
 
-/* Lowering option flags (bitmask). */
-#define XI_LOWER_DEFAULT       0
-#define XI_LOWER_CANONICALIZED 1  /* AST was canonicalized; enable dead-path assertions */
-
 /*
  * Lower a function AST node into typed SSA IR.
+ * The AST must be canonicalized (xr_canon_func) before lowering.
  * The analyzer provides type information for each AST node.
  * Returns NULL on failure.
  */
@@ -173,24 +165,13 @@ XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node,
                                struct XaAnalyzer *analyzer,
                                struct XrayIsolate *isolate);
 
-/* Extended variant with option flags (e.g. XI_LOWER_CANONICALIZED). */
-XR_FUNC XiFunc *xi_lower_func_ex(struct AstNode *func_node,
-                                   struct XaAnalyzer *analyzer,
-                                   struct XrayIsolate *isolate,
-                                   uint32_t flags);
-
 /*
  * Lower a top-level program (sequence of statements) into a
  * synthetic "main" function. Used for script-mode execution.
+ * The AST must be canonicalized (xr_canon_program) before lowering.
  */
 XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node,
                                   struct XaAnalyzer *analyzer,
                                   struct XrayIsolate *isolate);
-
-/* Extended variant with option flags. */
-XR_FUNC XiFunc *xi_lower_program_ex(struct AstNode *program_node,
-                                      struct XaAnalyzer *analyzer,
-                                      struct XrayIsolate *isolate,
-                                      uint32_t flags);
 
 #endif  // XI_LOWER_H

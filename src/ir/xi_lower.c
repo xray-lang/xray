@@ -405,17 +405,13 @@ XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
  * from enclosing scopes via the upvalue capture mechanism.
  */
 XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyzer,
-                                     struct XrayIsolate *isolate, XiLower *parent_ctx,
-                                     uint32_t flags) {
+                                     struct XrayIsolate *isolate, XiLower *parent_ctx) {
     XR_DCHECK(func_node != NULL, "lower_func_impl: func_node is NULL");
     FunctionDeclNode *fdecl = &func_node->as.function_decl;
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
     l.parent = parent_ctx;
-    /* Inherit canonicalized flag from parent or from flags parameter */
-    l.canonicalized = (flags & XI_LOWER_CANONICALIZED) != 0;
-    if (parent_ctx) l.canonicalized = parent_ctx->canonicalized;
 
     /* Determine return type */
     struct XrType *ret_type = fdecl->return_type;
@@ -521,24 +517,19 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
 /* ========== Public API ========== */
 
-XR_FUNC XiFunc *xi_lower_func_ex(AstNode *func_node, struct XaAnalyzer *analyzer,
-                                   struct XrayIsolate *isolate, uint32_t flags) {
+XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
+                               struct XrayIsolate *isolate) {
     XR_CHECK(func_node != NULL, "xi_lower_func: func_node is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_func: analyzer is NULL");
     XR_CHECK(func_node->type == AST_FUNCTION_DECL ||
              func_node->type == AST_FUNCTION_EXPR,
              "xi_lower_func: not a function node");
-    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL, flags);
+    XiFunc *f = xi_lower_func_impl(func_node, analyzer, isolate, NULL);
     if (f) {
         finalize_capture_metadata(f);
         xi_func_compute_effects(f);
     }
     return f;
-}
-
-XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
-                                struct XrayIsolate *isolate) {
-    return xi_lower_func_ex(func_node, analyzer, isolate, XI_LOWER_DEFAULT);
 }
 
 /*
@@ -769,15 +760,14 @@ static void build_module_metadata(XiLower *l) {
     f->module = mod;
 }
 
-XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *analyzer,
-                                      struct XrayIsolate *isolate, uint32_t flags) {
+XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
+                                  struct XrayIsolate *isolate) {
     XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_program: analyzer is NULL");
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
     l.is_program = true;
-    l.canonicalized = (flags & XI_LOWER_CANONICALIZED) != 0;
 
     l.func = xi_func_new("<main>", l.type_void);
     if (!l.func) { xi_lower_cleanup(&l); return NULL; }
@@ -825,9 +815,4 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     }
     xi_lower_cleanup(&l);
     return result;
-}
-
-XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
-                          struct XrayIsolate *isolate) {
-    return xi_lower_program_ex(program_node, analyzer, isolate, XI_LOWER_DEFAULT);
 }

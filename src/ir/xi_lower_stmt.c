@@ -1634,10 +1634,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
 
         /* Expressions that appear as statements (assignment, call, etc.) */
         case AST_ASSIGNMENT:
-        case AST_COMPOUND_ASSIGNMENT:
         case AST_CALL_EXPR:
-        case AST_INC:
-        case AST_DEC:
         case AST_MEMBER_SET:
         case AST_INDEX_SET:
         case AST_GO_EXPR:
