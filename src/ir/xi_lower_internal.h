@@ -47,7 +47,8 @@ XR_FUNC void xi_lower_cleanup(XiLower *l);
 XR_FUNC XiFunc *xi_lower_func_impl(struct AstNode *func_node,
                                      struct XaAnalyzer *analyzer,
                                      struct XrayIsolate *isolate,
-                                     XiLower *parent_ctx);
+                                     XiLower *parent_ctx,
+                                     uint32_t flags);
 
 /* ========== AST Lowering Primitives ========== */
 

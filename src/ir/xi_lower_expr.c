@@ -242,8 +242,13 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
 
 /* Short-circuit && and || use control flow (like if-expressions).
  * Always produces a bool result (xray semantics: && / || never leak
- * raw operand values — they return true/false). */
+ * raw operand values — they return true/false).
+ *
+ * LEGACY FALLBACK: the canonicalizer expands && / || into ternary,
+ * so the pipeline path should never reach this function. */
 static XiValue *lower_short_circuit(XiLower *l, AstNode *node) {
+    XR_DCHECK(!l->canonicalized,
+              "lower_short_circuit: &&/|| should be canonicalized to ternary");
     bool is_and = (node->type == AST_BINARY_AND);
 
     XiValue *lhs = xi_lower_expr(l, node->as.binary.left);
@@ -517,6 +522,8 @@ static uint16_t compound_op_to_xi(int tok) {
 }
 
 static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
+    XR_DCHECK(!l->canonicalized,
+              "lower_compound_assignment: should be canonicalized to assignment");
     const char *name = node->as.compound_assignment.name;
     uint32_t sid = node->as.compound_assignment.symbol_id;
     XiValue *rhs = xi_lower_expr(l, node->as.compound_assignment.value);
@@ -653,6 +660,8 @@ static XiValue *lower_compound_assignment(XiLower *l, AstNode *node) {
 }
 
 static XiValue *lower_inc_dec(XiLower *l, AstNode *node) {
+    XR_DCHECK(!l->canonicalized,
+              "lower_inc_dec: ++/-- should be canonicalized to assignment");
     const char *name = node->as.inc.name;
     uint32_t sid = node->as.inc.symbol_id;
     uint16_t op = (node->type == AST_INC) ? XI_ADD : XI_SUB;
@@ -1262,6 +1271,8 @@ static XiValue *lower_ternary(XiLower *l, AstNode *node) {
  * Similar to short-circuit OR but checks null instead of falsy.
  */
 static XiValue *lower_nullish_coalesce(XiLower *l, AstNode *node) {
+    /* Partially dead after canonicalization: simple LHS is canonicalized
+     * to ternary, but complex LHS still falls through to here. */
     XiValue *lhs = xi_lower_expr(l, node->as.binary.left);
     if (!lhs) return NULL;
 
@@ -1359,7 +1370,7 @@ static void func_add_child(XiFunc *parent, XiFunc *child) {
 XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     /* Recursively lower the function body into a child XiFunc,
      * passing 'l' as parent so the child can resolve upvalue captures. */
-    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l);
+    XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l, 0);
     if (!child) {
         l->had_error = true;
         return NULL;
