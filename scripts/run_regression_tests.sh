@@ -129,12 +129,8 @@ run_one_test() {
         jit_flag="--no-jit"
     fi
 
-    # Choose command: files with @test function decorators use 'xray test',
-    # others use 'xray run'. Match '^@test' to skip @test in comments.
-    local xray_cmd="run"
-    if grep -qE '^[[:space:]]*@test' "${test_file}" 2>/dev/null; then
-        xray_cmd="test"
-    fi
+    # All regression tests use @test functions — run with 'xray test'
+    local xray_cmd="test"
 
     # Run with timeout
     local exit_code

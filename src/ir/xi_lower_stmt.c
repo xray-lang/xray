@@ -1618,6 +1618,8 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             xi_lower_class_decl(l, node);
             break;
         case AST_STRUCT_DECL:
+            xi_lower_class_decl(l, node);
+            break;
         case AST_INTERFACE_DECL:
         case AST_TYPE_ALIAS:
             break;

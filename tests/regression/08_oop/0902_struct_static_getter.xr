@@ -25,31 +25,34 @@ struct Color {
     }
 }
 
-// === Static factory methods ===
-let r = Color.red()
-let g = Color.green()
-let b = Color.blue()
+@test
+fn test_struct_static_getter() {
 
-assert(r.r == 255)
-assert(r.g == 0)
-assert(r.b == 0)
+    // === Static factory methods ===
+    let r = Color.red()
+    let g = Color.green()
+    let b = Color.blue()
 
-assert(g.r == 0)
-assert(g.g == 255)
-assert(g.b == 0)
+    assert(r.r == 255)
+    assert(r.g == 0)
+    assert(r.b == 0)
 
-assert(b.r == 0)
-assert(b.g == 0)
-assert(b.b == 255)
+    assert(g.r == 0)
+    assert(g.g == 255)
+    assert(g.b == 0)
 
-// === Computed property ===
-assert(r.hex() == "rgb(255,0,0)")
-assert(g.hex() == "rgb(0,255,0)")
+    assert(b.r == 0)
+    assert(b.g == 0)
+    assert(b.b == 255)
 
-// === Static result is independent copy ===
-let r2 = Color.red()
-r2.r = 128
-assert(r.r == 255)
-assert(r2.r == 128)
+    // === Computed property ===
+    assert(r.hex() == "rgb(255,0,0)")
+    assert(g.hex() == "rgb(0,255,0)")
 
-print("ok")
+    // === Static result is independent copy ===
+    let r2 = Color.red()
+    r2.r = 128
+    assert(r.r == 255)
+    assert(r2.r == 128)
+}
+

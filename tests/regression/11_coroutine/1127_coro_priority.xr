@@ -11,62 +11,66 @@
 */
 
 // 记录执行顺序（shared const 允许被协程捕获）
-shared const order: Array<string> = []
-
-// 测试 1：基本优先级设置
-print("test1: basic priority")
 
 fn lowTask(arr: Array<string>): string {
     arr.push("low")
     return "low"
 }
-
 fn highTask(arr: Array<string>): string {
     arr.push("high")
     return "high"
 }
-
 fn normalTask(arr: Array<string>): string {
     arr.push("normal")
     return "normal"
 }
-
-// 先创建低优先级任务
-let t1 = go lowTask(order)
-Coro.setPriority(t1, 0)  // LOW
-
-// 再创建高优先级任务
-let t2 = go highTask(order)
-Coro.setPriority(t2, 2)  // HIGH
-
-// 最后创建普通优先级任务
-let t3 = go normalTask(order)
-// 默认就是 normal，不需要设置
-
-// 等待所有完成
-await t1
-await t2
-await t3
-
-print("  execution order:", order.length)
-// 高优先级应该先执行
-
-// 测试 2：使用数字设置优先级
-print("test2: numeric priority")
-
 fn task0(): int { return 0 }
 fn task2(): int { return 2 }
 
-let t4 = go task0()
-Coro.setPriority(t4, 0)  // low
+@test
+fn test_coro_priority() {
+    shared const order: Array<string> = []
 
-let t5 = go task2()
-Coro.setPriority(t5, 2)  // high
+    // 测试 1：基本优先级设置
+    print("test1: basic priority")
 
-await t4
-await t5
 
-print("  t4 result:", t4.result)
-print("  t5 result:", t5.result)
 
-print("all tests passed")
+
+    // 先创建低优先级任务
+    let t1 = go lowTask(order)
+    Coro.setPriority(t1, 0)  // LOW
+
+    // 再创建高优先级任务
+    let t2 = go highTask(order)
+    Coro.setPriority(t2, 2)  // HIGH
+
+    // 最后创建普通优先级任务
+    let t3 = go normalTask(order)
+    // 默认就是 normal，不需要设置
+
+    // 等待所有完成
+    await t1
+    await t2
+    await t3
+
+    print("  execution order:", order.length)
+    // 高优先级应该先执行
+
+    // 测试 2：使用数字设置优先级
+    print("test2: numeric priority")
+
+
+    let t4 = go task0()
+    Coro.setPriority(t4, 0)  // low
+
+    let t5 = go task2()
+    Coro.setPriority(t5, 2)  // high
+
+    await t4
+    await t5
+
+    print("  t4 result:", t4.result)
+    print("  t5 result:", t5.result)
+}
+

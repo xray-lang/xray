@@ -20,7 +20,7 @@ fn test_closure_capture() {
 }
 
 fn test_closure_in_go() {
-    let result_ch = Channel(1)
+    let result_ch = new Channel(1)
     fn make_adder(base) {
         // 返回闭包，捕获 base
         return fn(x) {
@@ -42,7 +42,7 @@ fn test_closure_in_go() {
 }
 
 fn test_multiple_closures() {
-    let results = Channel(3)
+    let results = new Channel(3)
     fn make_multiplier(factor) {
         return fn(x) {
             return x * factor
@@ -76,7 +76,7 @@ fn test_multiple_closures() {
 }
 
 fn test_nested_closure() {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     fn outer(a) {
         fn middle(b) {
             fn inner(c) {

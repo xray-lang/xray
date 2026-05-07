@@ -32,7 +32,7 @@ fn benchmark_throughput(coro_count, work_size) {
 
 /* 基准2：协程切换延迟 */
 fn benchmark_switch_latency(iterations) {
-    let ch = Channel(1)
+    let ch = new Channel(1)
     /* ping-pong 协程 */
     let pong = go fn() {
         for (let i = 0; i < iterations; i++) {

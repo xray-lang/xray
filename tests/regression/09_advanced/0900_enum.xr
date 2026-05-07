@@ -7,86 +7,17 @@ enum Color {
     Green,
     Blue
 }
-
-// Test: enum identity comparison
-let c = Color.Red
-assert_eq(c == Color.Red, true)
-assert_eq(c == Color.Green, false)
-assert_eq(Color.Red == Color.Red, true)
-assert_eq(Color.Red != Color.Blue, true)
-
-// ===== Enum with explicit int values =====
-
 enum HttpStatus {
     OK = 200,
     NotFound = 404,
     ServerError = 500
 }
-
-assert_eq(HttpStatus.OK.value, 200)
-assert_eq(HttpStatus.NotFound.value, 404)
-assert_eq(HttpStatus.ServerError.value, 500)
-
-// ===== String enum =====
-
 enum Direction {
     North = "N",
     South = "S",
     East = "E",
     West = "W"
 }
-
-assert_eq(Direction.North.value, "N")
-assert_eq(Direction.East.value, "E")
-assert_eq(Direction.West.value, "W")
-
-// ===== Enum properties: name, value, ordinal =====
-
-assert_eq(Color.Red.name, "Red")
-assert_eq(Color.Green.name, "Green")
-assert_eq(Color.Blue.name, "Blue")
-
-assert_eq(Color.Red.value, 0)
-assert_eq(Color.Green.value, 1)
-assert_eq(Color.Blue.value, 2)
-
-assert_eq(Color.Red.ordinal, 0)
-assert_eq(Color.Green.ordinal, 1)
-assert_eq(Color.Blue.ordinal, 2)
-
-assert_eq(HttpStatus.OK.name, "OK")
-assert_eq(HttpStatus.OK.ordinal, 0)
-assert_eq(HttpStatus.NotFound.ordinal, 1)
-
-// ===== Enum toString =====
-
-assert_eq(Color.Red.toString(), "Color.Red")
-assert_eq(Color.Green.toString(), "Color.Green")
-assert_eq(Direction.North.toString(), "Direction.North")
-
-// ===== Enum memberCount and getMember =====
-
-assert_eq(Color.memberCount, 3)
-assert_eq(HttpStatus.memberCount, 3)
-assert_eq(Direction.memberCount, 4)
-
-let m0 = Color.getMember(0)
-let m1 = Color.getMember(1)
-let m2 = Color.getMember(2)
-assert_eq(m0 == Color.Red, true)
-assert_eq(m1 == Color.Green, true)
-assert_eq(m2 == Color.Blue, true)
-assert_eq(m0.name, "Red")
-assert_eq(m1.value, 1)
-
-// getMember loop
-for (let i = 0; i < Color.memberCount; i++) {
-    let member = Color.getMember(i)
-    assert_eq(member.ordinal, i)
-}
-
-// ===== Enum for-in iteration =====
-
 enum Day {
     Monday,
     Tuesday,
@@ -96,59 +27,6 @@ enum Day {
     Saturday,
     Sunday
 }
-
-let count = 0
-for (day in Day) {
-    count++
-}
-assert_eq(count, 7)
-
-// for-in with properties
-let names: Array<string> = []
-for (d in Color) {
-    names.push(d.name)
-}
-assert_eq(names.length, 3)
-assert_eq(names[0], "Red")
-assert_eq(names[1], "Green")
-assert_eq(names[2], "Blue")
-
-// for-in string enum
-let vals: Array<string> = []
-for (dir in Direction) {
-    vals.push(dir.value)
-}
-assert_eq(vals.length, 4)
-assert_eq(vals[0], "N")
-assert_eq(vals[3], "W")
-
-// for-in blank identifier
-let total = 0
-for (_ in Day) {
-    total++
-}
-assert_eq(total, 7)
-
-// ===== Enum in match =====
-
-let color = Color.Green
-let name = match color {
-    Color.Red => "red",
-    Color.Green => "green",
-    Color.Blue => "blue"
-}
-assert_eq(name, "green")
-
-let status = HttpStatus.NotFound
-let message = match status {
-    HttpStatus.OK => "Success",
-    HttpStatus.NotFound => "Not Found",
-    HttpStatus.ServerError => "Server Error"
-}
-assert_eq(message, "Not Found")
-
-// ===== Enum as function parameter =====
-
 fn getColorCode(c: Color): string {
     return match c {
         Color.Red => "#FF0000",
@@ -157,15 +35,140 @@ fn getColorCode(c: Color): string {
     }
 }
 
-assert_eq(getColorCode(Color.Red), "#FF0000")
-assert_eq(getColorCode(Color.Green), "#00FF00")
-assert_eq(getColorCode(Color.Blue), "#0000FF")
+@test
+fn test_enum() {
 
-// ===== Enum in array =====
+    // Test: enum identity comparison
+    let c = Color.Red
+    assert_eq(c == Color.Red, true)
+    assert_eq(c == Color.Green, false)
+    assert_eq(Color.Red == Color.Red, true)
+    assert_eq(Color.Red != Color.Blue, true)
 
-let colors = [Color.Red, Color.Green, Color.Blue]
-assert_eq(colors.length, 3)
-assert_eq(colors[0] == Color.Red, true)
-assert_eq(colors[2] == Color.Blue, true)
+    // ===== Enum with explicit int values =====
 
-print("PASS")
+
+    assert_eq(HttpStatus.OK.value, 200)
+    assert_eq(HttpStatus.NotFound.value, 404)
+    assert_eq(HttpStatus.ServerError.value, 500)
+
+    // ===== String enum =====
+
+
+    assert_eq(Direction.North.value, "N")
+    assert_eq(Direction.East.value, "E")
+    assert_eq(Direction.West.value, "W")
+
+    // ===== Enum properties: name, value, ordinal =====
+
+    assert_eq(Color.Red.name, "Red")
+    assert_eq(Color.Green.name, "Green")
+    assert_eq(Color.Blue.name, "Blue")
+
+    assert_eq(Color.Red.value, 0)
+    assert_eq(Color.Green.value, 1)
+    assert_eq(Color.Blue.value, 2)
+
+    assert_eq(Color.Red.ordinal, 0)
+    assert_eq(Color.Green.ordinal, 1)
+    assert_eq(Color.Blue.ordinal, 2)
+
+    assert_eq(HttpStatus.OK.name, "OK")
+    assert_eq(HttpStatus.OK.ordinal, 0)
+    assert_eq(HttpStatus.NotFound.ordinal, 1)
+
+    // ===== Enum toString =====
+
+    assert_eq(Color.Red.toString(), "Color.Red")
+    assert_eq(Color.Green.toString(), "Color.Green")
+    assert_eq(Direction.North.toString(), "Direction.North")
+
+    // ===== Enum memberCount and getMember =====
+
+    assert_eq(Color.memberCount, 3)
+    assert_eq(HttpStatus.memberCount, 3)
+    assert_eq(Direction.memberCount, 4)
+
+    let m0 = Color.getMember(0)
+    let m1 = Color.getMember(1)
+    let m2 = Color.getMember(2)
+    assert_eq(m0 == Color.Red, true)
+    assert_eq(m1 == Color.Green, true)
+    assert_eq(m2 == Color.Blue, true)
+    assert_eq(m0.name, "Red")
+    assert_eq(m1.value, 1)
+
+    // getMember loop
+    for (let i = 0; i < Color.memberCount; i++) {
+        let member = Color.getMember(i)
+        assert_eq(member.ordinal, i)
+    }
+
+    // ===== Enum for-in iteration =====
+
+
+    let count = 0
+    for (day in Day) {
+        count++
+    }
+    assert_eq(count, 7)
+
+    // for-in with properties
+    let names: Array<string> = []
+    for (d in Color) {
+        names.push(d.name)
+    }
+    assert_eq(names.length, 3)
+    assert_eq(names[0], "Red")
+    assert_eq(names[1], "Green")
+    assert_eq(names[2], "Blue")
+
+    // for-in string enum
+    let vals: Array<string> = []
+    for (dir in Direction) {
+        vals.push(dir.value)
+    }
+    assert_eq(vals.length, 4)
+    assert_eq(vals[0], "N")
+    assert_eq(vals[3], "W")
+
+    // for-in blank identifier
+    let total = 0
+    for (_ in Day) {
+        total++
+    }
+    assert_eq(total, 7)
+
+    // ===== Enum in match =====
+
+    let color = Color.Green
+    let name = match color {
+        Color.Red => "red",
+        Color.Green => "green",
+        Color.Blue => "blue"
+    }
+    assert_eq(name, "green")
+
+    let status = HttpStatus.NotFound
+    let message = match status {
+        HttpStatus.OK => "Success",
+        HttpStatus.NotFound => "Not Found",
+        HttpStatus.ServerError => "Server Error"
+    }
+    assert_eq(message, "Not Found")
+
+    // ===== Enum as function parameter =====
+
+
+    assert_eq(getColorCode(Color.Red), "#FF0000")
+    assert_eq(getColorCode(Color.Green), "#00FF00")
+    assert_eq(getColorCode(Color.Blue), "#0000FF")
+
+    // ===== Enum in array =====
+
+    let colors = [Color.Red, Color.Green, Color.Blue]
+    assert_eq(colors.length, 3)
+    assert_eq(colors[0] == Color.Red, true)
+    assert_eq(colors[2] == Color.Blue, true)
+}
+

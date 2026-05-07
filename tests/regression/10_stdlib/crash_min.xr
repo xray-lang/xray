@@ -1,4 +1,5 @@
 // Test: just define and use a class
+
 class Box {
     value: int
     constructor(v: int) {
@@ -6,7 +7,11 @@ class Box {
     }
 }
 
-for (let i = 0; i < 200; i++) {
-    let b = new Box(i)
+@test
+fn test_crash_min() {
+
+    for (let i = 0; i < 200; i++) {
+        let b = new Box(i)
+    }
 }
-print("OK 200")
+

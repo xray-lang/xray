@@ -3,8 +3,6 @@
 //         await any, Coro.monitor error notification
 
 import time
-
-// ========== Pattern 1: Basic task.error / task.result ==========
 fn test_basic_error(): void {
     let t1 = go {
         let x = 1 / 0
@@ -22,8 +20,6 @@ fn test_basic_error(): void {
     print("t2.result:", t2.result)
     print("await result:", r)
 }
-
-// ========== Pattern 2: try-catch CANNOT catch coroutine errors ==========
 fn test_try_catch_cannot_catch(): void {
     try {
         let t = go {
@@ -37,8 +33,6 @@ fn test_try_catch_cannot_catch(): void {
         print("UNEXPECTED: caught:", e)
     }
 }
-
-// ========== Pattern 3: try-catch CAN catch inside coroutine ==========
 fn test_try_catch_in_coro(): void {
     let t = go {
         try {
@@ -52,8 +46,6 @@ fn test_try_catch_in_coro(): void {
     print("result:", r)
     print("t.error:", t.error)
 }
-
-// ========== Pattern 4: Manual error check after await ==========
 fn test_manual_error_check(): void {
     fn risky_task(n: int): int {
         if (n == 0) {
@@ -71,8 +63,6 @@ fn test_manual_error_check(): void {
         print("Task succeeded:", t.result)
     }
 }
-
-// ========== Pattern 5: await all with errors ==========
 fn test_await_all_with_errors(): void {
     let tasks = [
         go { return "ok-1" },
@@ -90,8 +80,6 @@ fn test_await_all_with_errors(): void {
         }
     }
 }
-
-// ========== Pattern 6: await any - first success wins ==========
 fn test_await_any(): void {
     let tasks = [
         go { time.sleep(100); return "slow" },
@@ -100,8 +88,6 @@ fn test_await_any(): void {
     let r = await any(tasks)
     print("First result:", r)
 }
-
-// ========== Pattern 7: Coro.monitor error notification ==========
 fn test_monitor_error(): void {
     let t = go(name: "err-worker") {
         time.sleep(10)
@@ -114,19 +100,37 @@ fn test_monitor_error(): void {
     print("task.error:", t.error)
 }
 
-// ========== Run all ==========
-print("--- Pattern 1 ---")
-test_basic_error()
-print("--- Pattern 2 ---")
-test_try_catch_cannot_catch()
-print("--- Pattern 3 ---")
-test_try_catch_in_coro()
-print("--- Pattern 4 ---")
-test_manual_error_check()
-print("--- Pattern 5 ---")
-test_await_all_with_errors()
-print("--- Pattern 6 ---")
-test_await_any()
-print("--- Pattern 7 ---")
-test_monitor_error()
-print("DONE")
+@test
+fn test_coro_error_patterns() {
+
+    // ========== Pattern 1: Basic task.error / task.result ==========
+
+    // ========== Pattern 2: try-catch CANNOT catch coroutine errors ==========
+
+    // ========== Pattern 3: try-catch CAN catch inside coroutine ==========
+
+    // ========== Pattern 4: Manual error check after await ==========
+
+    // ========== Pattern 5: await all with errors ==========
+
+    // ========== Pattern 6: await any - first success wins ==========
+
+    // ========== Pattern 7: Coro.monitor error notification ==========
+
+    // ========== Run all ==========
+    print("--- Pattern 1 ---")
+    test_basic_error()
+    print("--- Pattern 2 ---")
+    test_try_catch_cannot_catch()
+    print("--- Pattern 3 ---")
+    test_try_catch_in_coro()
+    print("--- Pattern 4 ---")
+    test_manual_error_check()
+    print("--- Pattern 5 ---")
+    test_await_all_with_errors()
+    print("--- Pattern 6 ---")
+    test_await_any()
+    print("--- Pattern 7 ---")
+    test_monitor_error()
+}
+

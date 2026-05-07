@@ -1,11 +1,5 @@
 /*
- * 0835_this_in_closure.xr - 测试闭包中捕获 this
- * 作者：xingleixu@gmail.com
- * 
- * 验证闭包可以正确捕获外层方法的 this 变量
- */
 
-/* 测试1：基本的 this 捕获 */
 class Counter {
     _count: int
     
@@ -22,16 +16,6 @@ class Counter {
     getCount(): int {        return this._count
     }
 }
-
-let c = new Counter()
-let inc = c.getIncrementer()
-
-print("inc() = ${inc()}")  // expect: 1
-print("inc() = ${inc()}")  // expect: 2
-print("inc() = ${inc()}")  // expect: 3
-print("c.getCount() = ${c.getCount()}")  // expect: 3
-
-/* 测试2：多层嵌套闭包中的 this */
 class Nested {
     _value: int
     
@@ -46,13 +30,6 @@ class Nested {
         }
     }
 }
-
-let n = new Nested(10)
-let outer = n.getDoubleWrapper()
-let inner = outer()
-print("inner() = ${inner()}")  // expect: 20
-
-/* 测试3：闭包中同时捕获 this 和其他变量 */
 class Adder {
     _base: int
     
@@ -65,8 +42,35 @@ class Adder {
     }
 }
 
-let adder = new Adder(100)
-let add50 = adder.createAdder(50)
-print("add50(10) = ${add50(10)}")  // expect: 160
+@test
+fn test_this_in_closure() {
+     * 0835_this_in_closure.xr - 测试闭包中捕获 this
+     * 作者：xingleixu@gmail.com
+     * 
+     * 验证闭包可以正确捕获外层方法的 this 变量
+     */
 
-print("✅ 闭包捕获 this 测试全部通过")
+    /* 测试1：基本的 this 捕获 */
+
+    let c = new Counter()
+    let inc = c.getIncrementer()
+
+    print("inc() = ${inc()}")  // expect: 1
+    print("inc() = ${inc()}")  // expect: 2
+    print("inc() = ${inc()}")  // expect: 3
+    print("c.getCount() = ${c.getCount()}")  // expect: 3
+
+    /* 测试2：多层嵌套闭包中的 this */
+
+    let n = new Nested(10)
+    let outer = n.getDoubleWrapper()
+    let inner = outer()
+    print("inner() = ${inner()}")  // expect: 20
+
+    /* 测试3：闭包中同时捕获 this 和其他变量 */
+
+    let adder = new Adder(100)
+    let add50 = adder.createAdder(50)
+    print("add50(10) = ${add50(10)}")  // expect: 160
+}
+

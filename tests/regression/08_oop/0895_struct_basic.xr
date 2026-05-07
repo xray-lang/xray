@@ -2,18 +2,11 @@
 // Expected: struct declaration, instantiation, field access, methods
 
 // === Basic struct with fields ===
+
 struct Point {
     x: float
     y: float
 }
-
-let p = new Point()
-p.x = 3.0
-p.y = 4.0
-assert(p.x == 3.0)
-assert(p.y == 4.0)
-
-// === Struct with method ===
 struct Vec2 {
     x: float
     y: float
@@ -29,38 +22,12 @@ struct Vec2 {
         return result
     }
 }
-
-let a = new Vec2()
-a.x = 3.0
-a.y = 4.0
-assert(a.magnitude_sq() == 25.0)
-
-let b = new Vec2()
-b.x = 1.0
-b.y = 2.0
-
-let c = a.add(b)
-assert(c.x == 4.0)
-assert(c.y == 6.0)
-
-// === Struct with int fields ===
 struct Color {
     r: int
     g: int
     b: int
     a: int
 }
-
-let red = new Color()
-red.r = 255
-red.g = 0
-red.b = 0
-red.a = 255
-assert(red.r == 255)
-assert(red.g == 0)
-assert(red.a == 255)
-
-// === Struct with mixed field types ===
 struct Rect {
     x: float
     y: float
@@ -71,39 +38,76 @@ struct Rect {
         return this.width * this.height
     }
 }
-
-let r = new Rect()
-r.x = 10.0
-r.y = 20.0
-r.width = 100.0
-r.height = 50.0
-assert(r.area() == 5000.0)
-
-// === Struct with static method ===
 struct MathHelper {
     static pi(): float {
         return 3.14159
     }
 }
 
-assert(MathHelper.pi() > 3.14)
-assert(MathHelper.pi() < 3.15)
+@test
+fn test_struct_basic() {
 
-// === Struct typename ===
-let p2 = new Point()
-assert(typename(p2) == "Point")
+    let p = new Point()
+    p.x = 3.0
+    p.y = 4.0
+    assert(p.x == 3.0)
+    assert(p.y == 4.0)
 
-// === Multiple struct instances ===
-let points: Array<Point> = []
-for (let i = 0; i < 5; i++) {
-    let pt = new Point()
-    pt.x = float(i)
-    pt.y = float(i * 2)
-    points.push(pt)
+    // === Struct with method ===
+
+    let a = new Vec2()
+    a.x = 3.0
+    a.y = 4.0
+    assert(a.magnitude_sq() == 25.0)
+
+    let b = new Vec2()
+    b.x = 1.0
+    b.y = 2.0
+
+    let c = a.add(b)
+    assert(c.x == 4.0)
+    assert(c.y == 6.0)
+
+    // === Struct with int fields ===
+
+    let red = new Color()
+    red.r = 255
+    red.g = 0
+    red.b = 0
+    red.a = 255
+    assert(red.r == 255)
+    assert(red.g == 0)
+    assert(red.a == 255)
+
+    // === Struct with mixed field types ===
+
+    let r = new Rect()
+    r.x = 10.0
+    r.y = 20.0
+    r.width = 100.0
+    r.height = 50.0
+    assert(r.area() == 5000.0)
+
+    // === Struct with static method ===
+
+    assert(MathHelper.pi() > 3.14)
+    assert(MathHelper.pi() < 3.15)
+
+    // === Struct typename ===
+    let p2 = new Point()
+    assert(typename(p2) == "Point")
+
+    // === Multiple struct instances ===
+    let points: Array<Point> = []
+    for (let i = 0; i < 5; i++) {
+        let pt = new Point()
+        pt.x = float(i)
+        pt.y = float(i * 2)
+        points.push(pt)
+    }
+    assert(points.length == 5)
+    assert(points[0].x == 0.0)
+    assert(points[4].x == 4.0)
+    assert(points[4].y == 8.0)
 }
-assert(points.length == 5)
-assert(points[0].x == 0.0)
-assert(points[4].x == 4.0)
-assert(points[4].y == 8.0)
 
-print("ok")

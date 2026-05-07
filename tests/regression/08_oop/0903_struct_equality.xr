@@ -5,24 +5,6 @@ struct Point {
     x: float
     y: float
 }
-
-// === Deep equality (no operator== defined) ===
-let a = Point{x: 1.0, y: 2.0}
-let b = Point{x: 1.0, y: 2.0}
-let c = Point{x: 3.0, y: 4.0}
-
-assert(a == b)
-assert(!(a == c))
-
-// === Copy is equal ===
-let d = a
-assert(a == d)
-
-// === After modification, no longer equal ===
-d.x = 99.0
-assert(!(a == d))
-
-// === Struct with operator== ===
 struct Vec2 {
     x: float
     y: float
@@ -32,11 +14,32 @@ struct Vec2 {
     }
 }
 
-let v1 = Vec2{x: 1.0, y: 2.0}
-let v2 = Vec2{x: 1.0, y: 2.0}
-let v3 = Vec2{x: 5.0, y: 6.0}
+@test
+fn test_struct_equality() {
 
-assert(v1 == v2)
-assert(!(v1 == v3))
+    // === Deep equality (no operator== defined) ===
+    let a = Point{x: 1.0, y: 2.0}
+    let b = Point{x: 1.0, y: 2.0}
+    let c = Point{x: 3.0, y: 4.0}
 
-print("ok")
+    assert(a == b)
+    assert(!(a == c))
+
+    // === Copy is equal ===
+    let d = a
+    assert(a == d)
+
+    // === After modification, no longer equal ===
+    d.x = 99.0
+    assert(!(a == d))
+
+    // === Struct with operator== ===
+
+    let v1 = Vec2{x: 1.0, y: 2.0}
+    let v2 = Vec2{x: 1.0, y: 2.0}
+    let v3 = Vec2{x: 5.0, y: 6.0}
+
+    assert(v1 == v2)
+    assert(!(v1 == v3))
+}
+

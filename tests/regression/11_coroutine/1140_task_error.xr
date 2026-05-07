@@ -10,7 +10,8 @@ fn good(): int {
     return 42
 }
 
-fn main(): void {
+@test
+fn test_main() {
     // Error task
     let t1 = go bad()
     await t1
@@ -26,4 +27,4 @@ fn main(): void {
     print("t2.result:", t2.result)
 }
 
-main()
+

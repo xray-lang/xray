@@ -1,7 +1,8 @@
 // 测试生产者-消费者模型
 
-fn main(): void {
-    shared const ch = Channel(10)
+@test
+fn test_main() {
+    shared const ch = new Channel(10)
     
     // 生产者发送数据
     let i = 0
@@ -34,4 +35,4 @@ fn main(): void {
     print("done")
 }
 
-main()
+

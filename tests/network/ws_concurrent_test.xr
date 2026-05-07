@@ -103,7 +103,7 @@ fn runSequentialTest() {
 fn runConcurrentTest() {
     print("[并发测试] 运行 " + CONCURRENT_CONNECTIONS.toString() + " 个连接（并发执行）...")
     
-    let ch = Channel(CONCURRENT_CONNECTIONS)
+    let ch = new Channel(CONCURRENT_CONNECTIONS)
     let startTime = time.now()
     
     // 启动所有并发任务

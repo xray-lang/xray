@@ -9,7 +9,8 @@ fn worker(id: int, ch: Channel<int>): int {
     return result
 }
 
-fn main(): int {
+@test
+fn test_main() {
     // === 1. 基本 go/await ===
     print("=== 基本 go/await ===")
     let task1 = go { return 42 }
@@ -33,7 +34,7 @@ fn main(): int {
 
     // === 4. Channel 通信 ===
     print("=== Channel 通信 ===")
-    shared const ch = Channel(3)
+    shared const ch = new Channel(3)
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
@@ -67,4 +68,4 @@ fn main(): int {
     print("=== 完成 ===")
 }
 
-main()
+

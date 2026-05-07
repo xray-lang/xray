@@ -746,6 +746,51 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
 
     NewExprNode *ne = &node->as.new_expr;
 
+    /* Visit argument expressions so their types are resolved. */
+    for (int i = 0; i < ne->arg_count; i++) {
+        if (ne->arguments[i])
+            xa_visit_infer_expr(ctx, ne->arguments[i]);
+    }
+
+    /* Builtin heap types: return the correct container/channel type
+     * directly, bypassing class-symbol lookup. Supports explicit
+     * type arguments: new Map<string, int>(), new Channel<int>(). */
+    if (ne->class_name && !ne->module_name) {
+        XrayIsolate *X = ctx->analyzer->isolate;
+        const char *cn = ne->class_name;
+        XrType *bt = NULL;
+
+        /* Resolve explicit type arguments if present */
+        XrType *ta[8] = {0};
+        int tac = ne->type_arg_count > 8 ? 8 : ne->type_arg_count;
+        for (int i = 0; i < tac; i++)
+            ta[i] = ne->type_args[i]
+                ? xr_tref_resolve(X, ne->type_args[i])
+                : xr_type_new_unknown(NULL);
+
+        if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
+            XrType *kt = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
+            XrType *vt = tac >= 2 ? ta[1] : xr_type_new_unknown(X);
+            bt = xr_type_new_map(X, kt, vt);
+        } else if (strcmp(cn, "Array") == 0) {
+            XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
+            bt = xr_type_new_array(X, et);
+        } else if (strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) {
+            XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
+            bt = xr_type_new(X, XR_KIND_SET);
+            if (bt) bt->container.element_type = et;
+        } else if (strcmp(cn, "Bytes") == 0) {
+            bt = xr_type_new(X, XR_KIND_BYTES);
+        } else if (strcmp(cn, "Channel") == 0) {
+            XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
+            bt = xr_type_new(X, XR_KIND_CHANNEL);
+            if (bt) bt->container.element_type = et;
+        } else if (strcmp(cn, "StringBuilder") == 0) {
+            bt = xr_type_new_named_instance(X, "StringBuilder");
+        }
+        if (bt) return bt;
+    }
+
     // Look up class symbol to get XrClassInfo
     // Try current scope first, then global scope
     XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->current_scope, ne->class_name);

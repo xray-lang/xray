@@ -2,7 +2,7 @@
 
 @test
 fn test_select_send(): void {
-    shared const ch = Channel(2)
+    shared const ch = new Channel(2)
     
     // 发送分支：val to ch => ...
     select {

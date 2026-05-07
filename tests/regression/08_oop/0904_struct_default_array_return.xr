@@ -6,42 +6,45 @@ struct Config {
     height: int = 600
     title: string = "untitled"
 }
-
-// === Field default values ===
-let c = Config{}
-assert(c.width == 800)
-assert(c.height == 600)
-assert(c.title == "untitled")
-
-// === Partial override ===
-let c2 = Config{width: 1920, height: 1080}
-assert(c2.width == 1920)
-assert(c2.height == 1080)
-assert(c2.title == "untitled")
-
-// === Struct as return value ===
 struct Point {
     x: float
     y: float
 }
-
 fn make_point(x: float, y: float): Point {
     return Point{x: x, y: y}
 }
 
-let p = make_point(3.0, 4.0)
-assert(p.x == 3.0)
-assert(p.y == 4.0)
+@test
+fn test_struct_default_array_return() {
 
-// === Struct in Array ===
-let points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
-assert(points.length == 2)
-assert(points[0].x == 1.0)
-assert(points[1].y == 4.0)
+    // === Field default values ===
+    let c = Config{}
+    assert(c.width == 800)
+    assert(c.height == 600)
+    assert(c.title == "untitled")
 
-// === Array element copy independence ===
-let p2 = points[0]
-p2.x = 99.0
-assert(points[0].x == 1.0)
+    // === Partial override ===
+    let c2 = Config{width: 1920, height: 1080}
+    assert(c2.width == 1920)
+    assert(c2.height == 1080)
+    assert(c2.title == "untitled")
 
-print("ok")
+    // === Struct as return value ===
+
+
+    let p = make_point(3.0, 4.0)
+    assert(p.x == 3.0)
+    assert(p.y == 4.0)
+
+    // === Struct in Array ===
+    let points = [Point{x: 1.0, y: 2.0}, Point{x: 3.0, y: 4.0}]
+    assert(points.length == 2)
+    assert(points[0].x == 1.0)
+    assert(points[1].y == 4.0)
+
+    // === Array element copy independence ===
+    let p2 = points[0]
+    p2.x = 99.0
+    assert(points[0].x == 1.0)
+}
+

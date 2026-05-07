@@ -1,92 +1,96 @@
 // Test: All types support toString and string + auto-conversion
 
 // === 1. Basic types toString ===
-assert_eq(42.toString(), "42")
-assert_eq(3.14.toString(), "3.14")
-assert_eq(true.toString(), "true")
-assert_eq(false.toString(), "false")
-assert_eq(null.toString(), "null")
-assert_eq("hello".toString(), "hello")
 
-// === 2. string() conversion function ===
-assert_eq(string(42), "42")
-assert_eq(string(3.14), "3.14")
-assert_eq(string(true), "true")
-assert_eq(string(null), "null")
-assert_eq(string([1, 2, 3]), "[1, 2, 3]")
-
-// === 3. String + explicit conversion (B+ rule: no implicit conversion) ===
-assert_eq("count: " + string(42), "count: 42")
-assert_eq("pi: " + string(3.14), "pi: 3.14")
-assert_eq("flag: " + string(true), "flag: true")
-assert_eq("val: " + string(null), "val: null")
-assert_eq(string(42) + " items", "42 items")
-
-// === 4. Array toString ===
-let arr = [1, 2, 3]
-assert_eq(string(arr), "[1, 2, 3]")
-assert_eq("arr: " + string(arr), "arr: [1, 2, 3]")
-let nested = [[1, 2], [3, 4]]
-assert_eq(string(nested), "[[1, 2], [3, 4]]")
-
-// === 5. Map toString ===
-let m = {"a" => 1}
-let ms = string(m)
-assert(ms.indexOf("=>") >= 0)
-
-// === 6. Set toString ===
-let st = #[1, 2, 3]
-let ss = string(st)
-assert(ss.indexOf("#[") == 0)
-
-// === 7. Json toString ===
-let obj = { name: "Alice", age: 30 }
-let js = string(obj)
-assert(js.indexOf("name") >= 0)
-assert(js.indexOf("Alice") >= 0)
-
-// === 8. Bytes toString (Bytes is Array<uint8>) ===
-let buf = Bytes(3, 0)
-assert_eq(string(buf), "[0, 0, 0]")
-
-// === 9. Channel toString ===
-shared const ch = Channel(5)
-let cs = string(ch)
-assert(cs.indexOf("Channel") == 0)
-
-// === 10. Function toString ===
 fn myFunc(): int { return 1 }
-let fs = string(myFunc)
-assert(fs.indexOf("fn") == 0)
-
-// === 11. Class and Instance toString ===
 class Dog {
     name: string
     constructor(name) { this.name = name }
 }
-assert(string(Dog).indexOf("class") == 0)
-let dog = Dog("Rex")
-assert(string(dog).indexOf("Dog") >= 0)
-
-// === 12. Custom toString on Instance ===
 class Point {
     x: int = 0
     y: int = 0
     constructor(x, y) { this.x = x; this.y = y }
     toString(): string { return "(" + string(this.x) + ", " + string(this.y) + ")" }
 }
-let p = Point(3, 4)
-assert_eq(p.toString(), "(3, 4)")
-
-// === 13. Enum toString ===
 enum Color { Red, Green, Blue }
-assert_eq(Color.Red.toString(), "Color.Red")
-assert_eq("color: " + string(Color.Green), "color: Color.Green")
 
-// === 14. Template string auto conversion ===
-let x = 42
-let arr2 = [1, 2]
-assert_eq("x=${x}", "x=42")
-assert_eq("arr=${arr2}", "arr=[1, 2]")
+@test
+fn test_tostring() {
+    assert_eq(42.toString(), "42")
+    assert_eq(3.14.toString(), "3.14")
+    assert_eq(true.toString(), "true")
+    assert_eq(false.toString(), "false")
+    assert_eq(null.toString(), "null")
+    assert_eq("hello".toString(), "hello")
 
-print("PASS")
+    // === 2. string() conversion function ===
+    assert_eq(string(42), "42")
+    assert_eq(string(3.14), "3.14")
+    assert_eq(string(true), "true")
+    assert_eq(string(null), "null")
+    assert_eq(string([1, 2, 3]), "[1, 2, 3]")
+
+    // === 3. String + explicit conversion (B+ rule: no implicit conversion) ===
+    assert_eq("count: " + string(42), "count: 42")
+    assert_eq("pi: " + string(3.14), "pi: 3.14")
+    assert_eq("flag: " + string(true), "flag: true")
+    assert_eq("val: " + string(null), "val: null")
+    assert_eq(string(42) + " items", "42 items")
+
+    // === 4. Array toString ===
+    let arr = [1, 2, 3]
+    assert_eq(string(arr), "[1, 2, 3]")
+    assert_eq("arr: " + string(arr), "arr: [1, 2, 3]")
+    let nested = [[1, 2], [3, 4]]
+    assert_eq(string(nested), "[[1, 2], [3, 4]]")
+
+    // === 5. Map toString ===
+    let m = {"a" => 1}
+    let ms = string(m)
+    assert(ms.indexOf("=>") >= 0)
+
+    // === 6. Set toString ===
+    let st = #[1, 2, 3]
+    let ss = string(st)
+    assert(ss.indexOf("#[") == 0)
+
+    // === 7. Json toString ===
+    let obj = { name: "Alice", age: 30 }
+    let js = string(obj)
+    assert(js.indexOf("name") >= 0)
+    assert(js.indexOf("Alice") >= 0)
+
+    // === 8. Bytes toString (Bytes is Array<uint8>) ===
+    let buf = new Bytes(3, 0)
+    assert_eq(string(buf), "[0, 0, 0]")
+
+    // === 9. Channel toString ===
+    shared const ch = new Channel(5)
+    let cs = string(ch)
+    assert(cs.indexOf("Channel") == 0)
+
+    // === 10. Function toString ===
+    let fs = string(myFunc)
+    assert(fs.indexOf("fn") == 0)
+
+    // === 11. Class and Instance toString ===
+    assert(string(Dog).indexOf("class") == 0)
+    let dog = Dog("Rex")
+    assert(string(dog).indexOf("Dog") >= 0)
+
+    // === 12. Custom toString on Instance ===
+    let p = Point(3, 4)
+    assert_eq(p.toString(), "(3, 4)")
+
+    // === 13. Enum toString ===
+    assert_eq(Color.Red.toString(), "Color.Red")
+    assert_eq("color: " + string(Color.Green), "color: Color.Green")
+
+    // === 14. Template string auto conversion ===
+    let x = 42
+    let arr2 = [1, 2]
+    assert_eq("x=${x}", "x=42")
+    assert_eq("arr=${arr2}", "arr=[1, 2]")
+}
+

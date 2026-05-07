@@ -4,11 +4,7 @@
 // 测试 yield 让出执行权功能（类似 Go 的 runtime.Gosched）
 
 // 测试1：主线程中 yield（应该是 no-op）
-print("test1: main yield")
-yield
-print("test1: after yield")
 
-// 测试2：协程中 yield
 fn task_with_yield(): string {
     print("test2: step 1")
     yield
@@ -17,25 +13,12 @@ fn task_with_yield(): string {
     print("test2: step 3")
     return "done"
 }
-
-let t1 = go task_with_yield()
-await t1
-print("test2: result =", t1.result)
-
-// 测试3：多个协程交替 yield
 fn worker(id: int): int {
     print("test3: worker", id, "start")
     yield
     print("test3: worker", id, "end")
     return id
 }
-
-let w1 = go worker(1)
-let w2 = go worker(2)
-await all [w1, w2]
-print("test3: all done")
-
-// 测试4：yield 在循环中
 fn loop_yield(n: int): int {
     let sum = 0
     for (let i = 0; i < n; i++) {
@@ -46,12 +29,6 @@ fn loop_yield(n: int): int {
     }
     return sum
 }
-
-let t4 = go loop_yield(5)
-await t4
-print("test4: sum =", t4.result)
-
-// 测试5：多协程密集 yield
 fn intensive_yield(id: int, count: int): int {
     let sum = 0
     for (let i = 0; i < count; i++) {
@@ -61,10 +38,37 @@ fn intensive_yield(id: int, count: int): int {
     return sum
 }
 
-let t5a = go intensive_yield(1, 10)
-let t5b = go intensive_yield(2, 10)
-let t5c = go intensive_yield(3, 10)
-await all [t5a, t5b, t5c]
-print("test5: sums =", t5a.result, t5b.result, t5c.result)
+@test
+fn test_yield() {
+    print("test1: main yield")
+    yield
+    print("test1: after yield")
 
-print("all tests passed")
+    // 测试2：协程中 yield
+
+    let t1 = go task_with_yield()
+    await t1
+    print("test2: result =", t1.result)
+
+    // 测试3：多个协程交替 yield
+
+    let w1 = go worker(1)
+    let w2 = go worker(2)
+    await all [w1, w2]
+    print("test3: all done")
+
+    // 测试4：yield 在循环中
+
+    let t4 = go loop_yield(5)
+    await t4
+    print("test4: sum =", t4.result)
+
+    // 测试5：多协程密集 yield
+
+    let t5a = go intensive_yield(1, 10)
+    let t5b = go intensive_yield(2, 10)
+    let t5c = go intensive_yield(3, 10)
+    await all [t5a, t5b, t5c]
+    print("test5: sums =", t5a.result, t5b.result, t5c.result)
+}
+
