@@ -287,6 +287,62 @@ static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
     node->node_id = saved_id;
 }
 
+/* ========== Short-circuit logic expansion ========== */
+
+/* Build !!expr (double-not) to coerce any value to bool.
+ * If the expr is already a bool literal, returns it directly. */
+static AstNode *make_bool_coerce(XrCanonCtx *ctx, AstNode *expr) {
+    XR_DCHECK(expr != NULL, "make_bool_coerce: NULL expr");
+    /* Skip coercion for bool literals */
+    if (expr->type == AST_LITERAL_TRUE || expr->type == AST_LITERAL_FALSE)
+        return expr;
+    int line = expr->line;
+    AstNode *not1 = xr_ast_unary(ctx->isolate, AST_UNARY_NOT, expr, line);
+    XR_DCHECK(not1 != NULL, "make_bool_coerce: not1 alloc");
+    AstNode *not2 = xr_ast_unary(ctx->isolate, AST_UNARY_NOT, not1, line);
+    XR_DCHECK(not2 != NULL, "make_bool_coerce: not2 alloc");
+    return not2;
+}
+
+/* Expand short-circuit logic into explicit ternary (control flow).
+ *   a && b  →  a ? !!b : false
+ *   a || b  →  a ? true : !!b
+ *
+ * This makes control flow explicit at the AST level, so the lowerer
+ * handles it as a standard ternary (no special short-circuit path). */
+static void canon_short_circuit(XrCanonCtx *ctx, AstNode *node) {
+    XR_DCHECK(node->type == AST_BINARY_AND || node->type == AST_BINARY_OR,
+              "canon_short_circuit: wrong node type");
+
+    bool is_and = (node->type == AST_BINARY_AND);
+    AstNode *lhs = node->as.binary.left;
+    AstNode *rhs = node->as.binary.right;
+    int line = node->line;
+
+    AstNode *true_expr;
+    AstNode *false_expr;
+
+    if (is_and) {
+        /* a && b → a ? !!b : false */
+        true_expr = make_bool_coerce(ctx, rhs);
+        false_expr = xr_ast_literal_bool(ctx->isolate, 0, line);
+    } else {
+        /* a || b → a ? true : !!b */
+        true_expr = xr_ast_literal_bool(ctx->isolate, 1, line);
+        false_expr = make_bool_coerce(ctx, rhs);
+    }
+    XR_DCHECK(true_expr != NULL && false_expr != NULL,
+              "canon_short_circuit: branch alloc");
+
+    AstNode *ternary = xr_ast_ternary(ctx->isolate, lhs, true_expr, false_expr, line);
+    XR_DCHECK(ternary != NULL, "canon_short_circuit: ternary alloc");
+
+    /* Mutate in-place → AST_TERNARY */
+    uint32_t saved_id = node->node_id;
+    *node = *ternary;
+    node->node_id = saved_id;
+}
+
 /* ========== AST walk (recursive, dispatches on node type) ========== */
 
 /* Forward declaration — the walker calls itself recursively. */
@@ -326,6 +382,10 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     /* AST_INDEX_SET canonicalization is applied in canon_block() (statement
      * context only) — expanding to AST_BLOCK in expression position would
      * break the lowerer. */
+    if (node->type == AST_BINARY_AND || node->type == AST_BINARY_OR) {
+        canon_short_circuit(ctx, node);
+        /* Node type has changed to AST_TERNARY; fall through. */
+    }
 
     switch (node->type) {
     /* ---- Statements with bodies ---- */
