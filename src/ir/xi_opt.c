@@ -757,10 +757,27 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
     xr_free(box_of);
     xr_free(unbox_of);
 
+    /* Recurse into children first (bottom-up) */
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i])
             xi_opt_select_rep(f->children[i]);
     }
+
+    /* Populate v->rep for every value and phi in this function.
+     * After BOX/UNBOX insertion, xi_value_def_rep returns the
+     * correct concrete representation for each value. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (v) v->rep = (uint8_t)xi_value_def_rep(v);
+        }
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next)
+            phi->value.rep = XR_REP_TAGGED;
+    }
+
+    f->stage = XI_STAGE_REPPED;
     return xi_pass_change_all();
 }
 

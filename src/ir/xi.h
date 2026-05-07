@@ -381,6 +381,8 @@ typedef struct XiValue {
     uint16_t op;            /* XiOp */
     uint8_t flags;          /* XI_FLAG_* */
     uint8_t var_id;         /* source variable ID for register coalescing (0xFF = none) */
+    uint8_t rep;            /* XrRep: machine representation (set by select_rep,
+                             * default XR_REP_TAGGED until STAGE_REPPED) */
     struct XrType *type;    /* authoritative compile-time type (never NULL) */
     int64_t aux_int;        /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;              /* auxiliary pointer: proto, string literal, etc. */

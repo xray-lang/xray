@@ -696,6 +696,62 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
 /* Check 14 (channel try ops side-effect) is now covered by
  * verify_effect_flags which checks all opcode defaults. */
 
+/* ========== Check 15: Representation Consistency (STAGE_REPPED) ========== */
+
+/* After select_rep, every value must have a valid XrRep.
+ * BOX must produce TAGGED. UNBOX must produce I64 or F64.
+ * Phi nodes must be TAGGED (merge point). */
+static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+    if (f->stage < XI_STAGE_REPPED) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+
+            /* Rep must be a known value */
+            if (v->rep > XR_REP_STR) {
+                verr(ctx,
+                     "func '%s': v%u (op %u) in b%u has invalid rep %u",
+                     f->name, v->id, v->op, blk->id, v->rep);
+                return;
+            }
+
+            /* BOX must produce TAGGED */
+            if (v->op == XI_BOX && v->rep != XR_REP_TAGGED) {
+                verr(ctx,
+                     "func '%s': v%u BOX in b%u has rep %u, expected TAGGED",
+                     f->name, v->id, blk->id, v->rep);
+                return;
+            }
+
+            /* UNBOX must produce scalar (I64 or F64) */
+            if (v->op == XI_UNBOX &&
+                v->rep != XR_REP_I64 && v->rep != XR_REP_F64 &&
+                v->rep != XR_REP_TAGGED) {
+                verr(ctx,
+                     "func '%s': v%u UNBOX in b%u has invalid rep %u",
+                     f->name, v->id, blk->id, v->rep);
+                return;
+            }
+        }
+
+        /* Phi nodes must be TAGGED at merge points */
+        for (XiPhi *phi = blk->phis; phi && !ctx->failed; phi = phi->next) {
+            if (phi->value.rep != XR_REP_TAGGED) {
+                verr(ctx,
+                     "func '%s': phi v%u in b%u has rep %u, expected TAGGED",
+                     f->name, phi->value.id, blk->id, phi->value.rep);
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
@@ -786,6 +842,11 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     }
 
     /* Channel try ops check is now covered by verify_effect_flags */
+
+    /* Representation consistency (only at STAGE_REPPED and above) */
+    if (!ctx.failed) {
+        verify_repped(&ctx, f);
+    }
 
     return !ctx.failed;
 }

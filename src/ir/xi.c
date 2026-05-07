@@ -14,6 +14,7 @@
 
 #include "xi.h"
 #include "xi_effect.h"
+#include "../runtime/value/xtype.h"  /* XR_REP_TAGGED */
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
@@ -252,6 +253,7 @@ static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op,
     v->id = f->next_value_id++;
     v->op = op;
     v->flags = xi_op_default_effects(op);
+    v->rep = XR_REP_TAGGED;  /* default until select_rep assigns concrete rep */
     v->type = type;
     v->var_id = 0xFF;  /* no source variable */
     v->nargs = nargs;
