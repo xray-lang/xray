@@ -48,6 +48,37 @@ struct XrType;
 struct AstNode;
 struct XaAnalyzer;
 
+/* ========== IR Stage ========== */
+
+/*
+ * Each XiFunc progresses through a sequence of stages.  Stages are
+ * monotonically non-decreasing: once a function reaches a stage it
+ * never goes back.  Passes and backends declare which stage they
+ * require as input and which stage they produce as output, so the
+ * pipeline can statically reject illegal orderings.
+ *
+ * Stages are design-level milestones — not every stage needs to be
+ * implemented immediately.  Intermediate stages that are not yet
+ * active simply pass through (input == output == same stage).
+ */
+typedef enum {
+    XI_STAGE_RAW = 0,       /* direct AST lowering output; high-level ops present */
+    XI_STAGE_CANONICAL,     /* evaluation order fixed, syntax sugar expanded */
+    XI_STAGE_CLOSED,        /* closure/module/class metadata materialized */
+    XI_STAGE_OWNED,         /* ownership/effect/lifetime explicit */
+    XI_STAGE_REPPED,        /* value representations selected, BOX/UNBOX inserted */
+    XI_STAGE_BACKEND,       /* low-level ops only, ready for code generation */
+    XI_STAGE_COUNT,
+} XiStage;
+
+/* Human-readable stage name (for dumps and diagnostics). */
+static inline const char *xi_stage_name(XiStage s) {
+    static const char *names[] = {
+        "Raw", "Canonical", "Closed", "Owned", "Repped", "Backend",
+    };
+    return (unsigned)s < XI_STAGE_COUNT ? names[s] : "?";
+}
+
 /* ========== Operation Kinds ========== */
 
 /*
@@ -465,6 +496,11 @@ typedef struct XiFunc {
      * emitted as OP_IMPORT + OP_EXPORT/OP_EXPORT_ALL by emit_reexports. */
     XiReexportEntry *reexports;  /* arena-allocated array */
     uint16_t reexport_count;
+
+    /* IR stage — monotonically non-decreasing; set by lowerer and
+     * advanced by stage-transition passes.  Backends and passes check
+     * this to reject functions that have not reached the required stage. */
+    XiStage stage;
 
     /* VM entry metadata (propagated to XrProto during emission) */
     bool is_vararg;             /* has rest parameter (...args) */

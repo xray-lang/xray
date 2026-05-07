@@ -275,8 +275,9 @@ void xi_func_dump(const XiFunc *f, void *stream) {
     if (!f) return;
     FILE *out = stream ? (FILE *) stream : stdout;
 
-    /* Header */
-    fprintf(out, "func %s(", f->name ? f->name : "<anonymous>");
+    /* Header (includes stage for diagnostics) */
+    fprintf(out, "func %s [%s](", f->name ? f->name : "<anonymous>",
+            xi_stage_name(f->stage));
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (i > 0) fprintf(out, ", ");
         if (f->params[i])

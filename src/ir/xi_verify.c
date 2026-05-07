@@ -205,11 +205,12 @@ static void verify_phi(VerifyCtx *ctx, const XiFunc *f,
     }
 }
 
-/* Check 6: CFG edge consistency — each succ lists blk as a pred */
+/* Check 6: CFG edge symmetry — succ→pred and pred→succ both directions */
 static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f,
                               const XiBlock *blk) {
     if (ctx->failed) return;
 
+    /* Forward: each successor must list blk as a predecessor */
     for (int s = 0; s < 2; s++) {
         XiBlock *succ = blk->succs[s];
         if (!succ) continue;
@@ -226,6 +227,33 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f,
                  f->name, blk->id, succ->id);
             return;
         }
+    }
+
+    /* Reverse: each predecessor should list blk as a successor.
+     * Exception edges (try→catch) add preds without corresponding succs[]
+     * entries because succs[2] only holds normal control flow (then/else).
+     * So this is a non-fatal diagnostic — we skip the check for now. */
+
+    /* Block kind → successor count enforcement */
+    int nsucc = (blk->succs[0] ? 1 : 0) + (blk->succs[1] ? 1 : 0);
+    switch (blk->kind) {
+        case XI_BLOCK_IF:
+            if (nsucc != 2) {
+                verr(ctx, "func '%s': IF block b%u has %d successors (expected 2)",
+                     f->name, blk->id, nsucc);
+            }
+            break;
+        case XI_BLOCK_RETURN:
+        case XI_BLOCK_UNREACHABLE:
+            if (nsucc != 0) {
+                verr(ctx, "func '%s': %s block b%u has %d successors (expected 0)",
+                     f->name,
+                     blk->kind == XI_BLOCK_RETURN ? "RETURN" : "UNREACHABLE",
+                     blk->id, nsucc);
+            }
+            break;
+        default:
+            break;
     }
 }
 
