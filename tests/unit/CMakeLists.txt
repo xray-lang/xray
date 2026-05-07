@@ -154,6 +154,7 @@ add_xray_unit_test(test_xi_lower_hardfail ir/test_xi_lower_hardfail.c)
 add_xray_unit_test(test_xi_stage ir/test_xi_stage.c)
 add_xray_unit_test(test_xi_intrinsic ir/test_xi_intrinsic.c)
 add_xray_unit_test(test_xi_effect ir/test_xi_effect.c)
+add_xray_unit_test(test_xi_escape ir/test_xi_escape.c)
 
 # E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build
 # Covered by regression tests (scripts/run_regression_tests.sh)

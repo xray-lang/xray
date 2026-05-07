@@ -383,6 +383,8 @@ typedef struct XiValue {
     uint8_t var_id;         /* source variable ID for register coalescing (0xFF = none) */
     uint8_t rep;            /* XrRep: machine representation (set by select_rep,
                              * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t escape;         /* XiEscapeLevel (2-bit): escape analysis result
+                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     struct XrType *type;    /* authoritative compile-time type (never NULL) */
     int64_t aux_int;        /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;              /* auxiliary pointer: proto, string literal, etc. */
