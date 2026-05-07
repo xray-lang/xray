@@ -157,6 +157,15 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     return f;
 }
 
+XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage) {
+    if (!f) return;
+    f->stage = stage;
+    f->invariant_mask |= xi_stage_invariants(stage);
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        xi_func_set_stage_recursive(f->children[i], stage);
+    }
+}
+
 void xi_func_free(XiFunc *f) {
     if (!f) return;
 

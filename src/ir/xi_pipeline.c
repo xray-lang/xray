@@ -219,6 +219,13 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(
     xr_isolate_set_current_arena(isolate, saved_arena);
 
     XiFunc *ir = xi_lower_func(func_node, analyzer, isolate);
+
+    /* Canonicalization guarantees: advance stage and invariant mask
+     * for the root and all nested child functions. */
+    if (ir) {
+        xi_func_set_stage_recursive(ir, XI_STAGE_CANONICAL);
+    }
+
     return run_pipeline(ir, isolate, cfg);
 }
 
@@ -250,6 +257,13 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(
     xr_isolate_set_current_arena(isolate, saved_arena);
 
     XiFunc *ir = xi_lower_program(program_node, analyzer, isolate);
+
+    /* Canonicalization guarantees: advance stage and invariant mask
+     * for the root and all nested child functions. */
+    if (ir) {
+        xi_func_set_stage_recursive(ir, XI_STAGE_CANONICAL);
+    }
+
     return run_pipeline(ir, isolate, cfg);
 }
 
