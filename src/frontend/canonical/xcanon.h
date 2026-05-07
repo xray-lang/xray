@@ -9,13 +9,17 @@
  *
  * KEY CONCEPT:
  *   Transforms a typed AST (post-analyzer) into canonical form before
- *   Xi IR lowering.  Canonicalization responsibilities:
- *     - Fix evaluation order for complex sub-expressions
- *     - Introduce temporary variables for multi-use receivers/indices
- *     - Expand compound assignments (+=, etc.)
- *     - Expand short-circuit logic into explicit control flow
- *     - Normalize for-in, match, defer, try/finally
- *     - Normalize top-level declaration order
+ *   Xi IR lowering.  Implemented canonicalization rules:
+ *     - Compound assignment desugaring (variable and member targets)
+ *     - Increment/decrement expansion (x++ → x += 1 → x = x + 1)
+ *     - Index-set receiver extraction (statement context, temporaries)
+ *     - Short-circuit logic expansion (&& / || → ternary)
+ *     - Nullish coalesce expansion (?? → null-check ternary)
+ *
+ *   Constructs handled directly by the lowerer (not canonicalized):
+ *     - for-in (multiple iteration strategies selected at IR level)
+ *     - match (pattern matching + binding + phi merges)
+ *     - defer (maps to XI_DEFER IR opcode)
  *
  *   The canonicalizer operates on AST nodes in-place (mutating),
  *   allocating new nodes through the isolate's arena.  It reads type
