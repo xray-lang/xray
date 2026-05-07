@@ -20,6 +20,8 @@
  */
 
 #include "xi_cgen.h"
+#include "../ir/xi_backend_lower.h"
+#include "../ir/xi_opt.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -49,20 +51,17 @@ static const char *ctype_str(XrRep rep) {
 }
 
 /* Check whether an op is void-like (produces no named result).
- * Handles both pre-lowered ops (XI_PRINT etc.) and post-lowered
- * XI_CALL_BUILTIN with aux name. */
+ * At STAGE_BACKEND, XI_PRINT etc. are XI_CALL_BUILTIN with aux name. */
 static bool cg_is_void_like(const XiValue *v) {
     switch (v->op) {
-    case XI_PRINT: case XI_SET_SHARED: case XI_STORE_UPVAL:
+    case XI_SET_SHARED: case XI_STORE_UPVAL:
     case XI_STORE_FIELD: case XI_INDEX_SET: case XI_THROW:
-    case XI_JSON_INIT_F: case XI_JSON_SET_F:
         return true;
     case XI_CALL_BUILTIN:
         if (v->aux) {
             const char *n = (const char *)v->aux;
             if (strcmp(n, "print") == 0 || strcmp(n, "json_init_f") == 0 ||
-                strcmp(n, "json_set_f") == 0 || strcmp(n, "assert") == 0 ||
-                strcmp(n, "assert_eq") == 0 || strcmp(n, "assert_ne") == 0)
+                strcmp(n, "json_set_f") == 0)
                 return true;
         }
         return false;
@@ -657,21 +656,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             }
             break;
 
-        /* Print: aux_int encoding: bit0=add_space, bit1=newline */
-        case XI_PRINT: {
-            int flags = (int)v->aux_int;
-            bool add_space = (flags & 1) != 0;
-            bool newline   = (flags & 2) != 0;
-            if (add_space)
-                fprintf(out, "(putchar(' '), ");
-            fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-            if (add_space)
-                fprintf(out, ")");
-            break;
-        }
-
         /* Function call: args[0]=callee, args[1..n]=params */
         case XI_CALL: {
             XiValue *callee = v->args[0];
@@ -852,28 +836,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, ")");
             break;
 
-        /* String concatenation: use xrt_add which handles tagged string values */
-        case XI_STR_CONCAT: {
-            if (v->nargs == 2) {
-                fprintf(out, "xrt_add(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ", ");
-                emit_vref(out, v->args[1]);
-                fprintf(out, ")");
-            } else {
-                /* Multi-arg: chain pairwise xrt_add(xrt_add(a, b), c) */
-                for (uint16_t i = 0; i + 1 < v->nargs; i++)
-                    fprintf(out, "xrt_add(");
-                emit_vref(out, v->args[0]);
-                for (uint16_t i = 1; i < v->nargs; i++) {
-                    fprintf(out, ", ");
-                    emit_vref(out, v->args[i]);
-                    fprintf(out, ")");
-                }
-            }
-            break;
-        }
-
         /* Runtime type check: args[0]=value, aux=target XrType*.
          * AOT tag namespace extends VM tags: string uses XR_TAG_STR(14)
          * and XR_TAG_STR_ARC(19), not XR_TAG_PTR(5). */
@@ -927,29 +889,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
         }
 
         /* ============ Containers ============ */
-
-        /* Array creation: aux_int = initial capacity hint */
-        case XI_ARRAY_NEW: {
-            int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST)
-                          ? v->args[0]->aux_int : 4;
-            fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
-            break;
-        }
-
-        /* Map creation: aux_int = initial capacity hint */
-        case XI_MAP_NEW: {
-            int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST)
-                          ? v->args[0]->aux_int : 8;
-            fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
-            break;
-        }
-
-        /* Set creation (emitted as map with keys-only semantics for now) */
-        case XI_SET_NEW: {
-            int64_t cap = 8;
-            fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
-            break;
-        }
 
         /* Indexed read: args[0]=collection, args[1]=key */
         case XI_INDEX_GET:
@@ -1015,27 +954,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
             break;
         }
-        case XI_JSON_INIT_F:
-        case XI_JSON_SET_F: {
-            fprintf(out, "xrt_json_set_field(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", %d, ", (int)v->aux_int);
-            emit_vref(out, v->args[1]);
-            fprintf(out, ")");
-            break;
-        }
-        case XI_JSON_GET_F: {
-            fprintf(out, "xrt_json_get_field(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", %d)", (int)v->aux_int);
-            break;
-        }
-        case XI_JSON_DECODE: {
-            /* AOT: not yet supported — emit null placeholder */
-            fprintf(out, "((XrValue){.i = 0, .tag = XR_TAG_NULL})");
-            break;
-        }
-
         /* ============ Method Call ============ */
 
         /* Method dispatch: args[0]=recv, args[1..n]=params, aux=name string.
@@ -1129,26 +1047,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             break;
         }
 
-        /* ============ Type Operations ============ */
-
-        /* typeof(x): aux_int=0 → integer type ID, aux_int=1 → type name string */
-        case XI_TYPEOF: {
-            XR_DCHECK(v->nargs >= 1, "XI_TYPEOF: need arg");
-            if (v->aux_int == 1) {
-                /* typename(): return type name as boxed string */
-                fprintf(out, "xrt_typeof_str(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ")");
-            } else {
-                /* typeof(): return integer type ID matching VM semantics.
-                 * Result is always TAGGED (XrValue) so wrap in XR_FROM_INT. */
-                fprintf(out, "XR_FROM_INT(xrt_typeof_id(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, "))");
-            }
-            break;
-        }
-
         /* throw(value): abort with exception */
         case XI_THROW:
             XR_DCHECK(v->nargs >= 1, "XI_THROW: need arg");
@@ -1203,32 +1101,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
                     loc);
             break;
         }
-
-        /* ============ Iteration ============ */
-
-        /* iter_new(coll) → xrt_method_0(coll, SYMBOL_ITERATOR) */
-        case XI_ITER_NEW:
-            XR_DCHECK(v->nargs >= 1, "XI_ITER_NEW: need collection");
-            fprintf(out, "xrt_method_0(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", %d)", XRT_SYM_ITERATOR);
-            break;
-
-        /* iter_valid(iter) → xrt_method_0(iter, SYMBOL_HAS_NEXT) */
-        case XI_ITER_VALID:
-            XR_DCHECK(v->nargs >= 1, "XI_ITER_VALID: need iterator");
-            fprintf(out, "xr_truthy(xrt_method_0(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", %d))", XRT_SYM_HAS_NEXT);
-            break;
-
-        /* iter_next(iter) → xrt_method_0(iter, SYMBOL_NEXT) */
-        case XI_ITER_NEXT:
-            XR_DCHECK(v->nargs >= 1, "XI_ITER_NEXT: need iterator");
-            fprintf(out, "xrt_method_0(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", %d)", XRT_SYM_NEXT);
-            break;
 
         /* ============ Exception Handling ============ */
 
@@ -1405,16 +1277,6 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
         case XI_CLASS_CREATE:
             fprintf(out, "XR_NULL_VAL /* class descriptor */");
             break;
-
-        case XI_REGEX_COMPILE: {
-            XR_DCHECK(v->nargs >= 2, "XI_REGEX_COMPILE: need 2 args");
-            fprintf(out, "xr_regex_compile_literal(iso, ");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", ");
-            emit_vref(out, v->args[1]);
-            fprintf(out, ")");
-            break;
-        }
 
         default:
             fprintf(out, "XR_NULL_VAL /* TODO: op %d */", v->op);
@@ -1675,6 +1537,14 @@ static void emit_declarations(FILE *out, const XiFunc *f) {
 XR_FUNC void xi_cgen_func(FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
+    /* Auto-lower to STAGE_BACKEND if caller bypasses the pipeline
+     * (e.g. unit tests that construct IR manually). */
+    if (f->stage < XI_STAGE_REPPED) {
+        xi_opt_select_rep(f);
+        xi_opt_box_elim(f);
+    }
+    if (f->stage < XI_STAGE_BACKEND)
+        xi_backend_lower(f);
 
     /* Emit nested children first (forward declarations already emitted) */
     for (uint16_t i = 0; i < f->nchildren; i++) {
