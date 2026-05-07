@@ -39,7 +39,7 @@
 
 static bool licm_is_pure(const XiValue *v) {
     if (!v) return false;
-    if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_GC))
+    if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_WRITES_MEM))
         return false;
     switch (v->op) {
         case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:

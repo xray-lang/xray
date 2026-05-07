@@ -13,6 +13,7 @@
  */
 
 #include "xi.h"
+#include "xi_effect.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 
@@ -77,6 +78,32 @@ static void *arena_alloc(XiFunc *f, uint32_t size) {
 
 void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
+}
+
+XR_FUNC void xi_func_compute_effects(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_func_compute_effects: NULL func");
+    uint8_t summary = 0;
+
+    /* OR all value flags in this function */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v) summary |= v->flags;
+        }
+    }
+
+    /* Recurse into children; propagate MAY_SUSPEND upward since a
+     * parent that calls a may-suspend child is itself may-suspend. */
+    for (uint16_t ci = 0; ci < f->nchildren; ci++) {
+        if (!f->children[ci]) continue;
+        xi_func_compute_effects(f->children[ci]);
+        if (f->children[ci]->effect_summary & XI_FLAG_MAY_SUSPEND)
+            summary |= XI_FLAG_MAY_SUSPEND;
+    }
+
+    f->effect_summary = summary;
 }
 
 static void arena_free_all(XiFunc *f) {
@@ -224,6 +251,7 @@ static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op,
 
     v->id = f->next_value_id++;
     v->op = op;
+    v->flags = xi_op_default_effects(op);
     v->type = type;
     v->var_id = 0xFF;  /* no source variable */
     v->nargs = nargs;

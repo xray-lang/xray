@@ -12,6 +12,7 @@
  */
 
 #include "xi_verify.h"
+#include "xi_effect.h"
 #include "xi_analysis.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
@@ -566,36 +567,10 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 11: Side-Effect Flags ========== */
 
-static bool op_must_have_side_effect(uint16_t op) {
-    switch (op) {
-        case XI_STORE_FIELD:
-        case XI_INDEX_SET:
-        case XI_JSON_INIT_F:
-        case XI_JSON_SET_F:
-        case XI_STORE_UPVAL:
-        case XI_SET_SHARED:
-        case XI_PRINT:
-        case XI_THROW:
-        case XI_CHAN_SEND:
-        case XI_YIELD:
-        case XI_DEFER:
-        case XI_SCOPE_ENTER:
-        case XI_SCOPE_EXIT:
-        case XI_TRY:
-        case XI_CATCH:
-        case XI_FINALLY:
-        case XI_END_TRY:
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
-        case XI_ASSERT_THROWS:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static void verify_flags(VerifyCtx *ctx, const XiFunc *f) {
+/* Verify that every value's flags are a superset of the opcode's
+ * declared minimum effects from xi_op_default_effects().  This
+ * subsumes the old op_must_have_side_effect and chan_try checks. */
+static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed) return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
@@ -605,12 +580,14 @@ static void verify_flags(VerifyCtx *ctx, const XiFunc *f) {
             XiValue *v = blk->values[i];
             if (!v) continue;
 
-            if (op_must_have_side_effect(v->op)
-                && !(v->flags & XI_FLAG_SIDE_EFFECT)) {
+            uint8_t required = xi_op_default_effects(v->op);
+            uint8_t missing = required & ~v->flags;
+            if (missing) {
                 verr(ctx,
-                     "func '%s': v%u (op %u) in b%u must have "
-                     "XI_FLAG_SIDE_EFFECT but flags=0x%02x",
-                     f->name, v->id, v->op, blk->id, v->flags);
+                     "func '%s': v%u (op %u) in b%u missing required "
+                     "effect flags: has=0x%02x need=0x%02x missing=0x%02x",
+                     f->name, v->id, v->op, blk->id,
+                     v->flags, required, missing);
                 return;
             }
         }
@@ -716,32 +693,8 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
-/* ========== Check 14: Channel Try Ops Side-Effect ========== */
-
-/* XI_CHAN_TRY_RECV and XI_CHAN_TRY_SEND perform I/O-like operations.
- * They must carry XI_FLAG_SIDE_EFFECT so the optimizer cannot
- * eliminate them. */
-static void verify_chan_try_flags(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-
-    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
-        XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
-        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
-            XiValue *v = blk->values[i];
-            if (!v) continue;
-            if (v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_TRY_SEND) {
-                if (!(v->flags & XI_FLAG_SIDE_EFFECT)) {
-                    verr(ctx,
-                         "func '%s': v%u (op %u) in b%u is a channel "
-                         "try op but lacks XI_FLAG_SIDE_EFFECT",
-                         f->name, v->id, v->op, blk->id);
-                    return;
-                }
-            }
-        }
-    }
-}
+/* Check 14 (channel try ops side-effect) is now covered by
+ * verify_effect_flags which checks all opcode defaults. */
 
 /* ========== Public API ========== */
 
@@ -805,9 +758,9 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_op_arity(&ctx, f);
     }
 
-    /* Side-effect flags consistency */
+    /* Effect flags: value flags must be superset of opcode defaults */
     if (!ctx.failed) {
-        verify_flags(&ctx, f);
+        verify_effect_flags(&ctx, f);
     }
 
     /* Type contracts (bool-producing ops, XI_SELECT cond, XI_EXTRACT source) */
@@ -832,10 +785,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_tail_calls(&ctx, f);
     }
 
-    /* Channel try ops must have side-effect flag */
-    if (!ctx.failed) {
-        verify_chan_try_flags(&ctx, f);
-    }
+    /* Channel try ops check is now covered by verify_effect_flags */
 
     return !ctx.failed;
 }
