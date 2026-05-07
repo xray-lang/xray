@@ -16,6 +16,7 @@
 #include "xi_opt.h"
 #include "xi_pass.h"
 #include "xi_emit.h"
+#include "xi_backend_lower.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
@@ -50,6 +51,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_optimize = true;
     cfg.opt_level = XI_OPT_FULL;
     cfg.run_select_rep = true;
+    cfg.run_backend_lower = true;
     cfg.run_emit = false;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
@@ -115,6 +117,21 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
                 fprintf(stderr, "[xi_pipeline] post-select_rep verify: %s\n", rep_errbuf);
             XR_DCHECK(xi_verify(ir, rep_errbuf, sizeof(rep_errbuf)),
                       "post-select_rep verify failed");
+        }
+#endif
+    }
+
+    /* Backend lowering: rewrite high-level ops to XI_CALL_BUILTIN.
+     * Advances stage to STAGE_BACKEND. */
+    if (cfg->run_backend_lower) {
+        xi_backend_lower(ir);
+#ifndef NDEBUG
+        if (cfg->run_verify) {
+            char be_errbuf[512];
+            if (!xi_verify(ir, be_errbuf, sizeof(be_errbuf)))
+                fprintf(stderr, "[xi_pipeline] post-backend_lower verify: %s\n", be_errbuf);
+            XR_DCHECK(xi_verify(ir, be_errbuf, sizeof(be_errbuf)),
+                      "post-backend_lower verify failed");
         }
 #endif
     }
