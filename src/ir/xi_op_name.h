@@ -103,6 +103,9 @@ static inline const char *xi_op_name(uint16_t op) {
         case XI_GET_BUILTIN:   return "GET_BUILTIN";
         case XI_IMPORT_REF:    return "IMPORT_REF";
         case XI_REGEX_COMPILE: return "REGEX_COMPILE";
+        case XI_RETAIN:        return "RETAIN";
+        case XI_RELEASE:       return "RELEASE";
+        case XI_MOVE:          return "MOVE";
         default:               return "???";
     }
 }

@@ -272,6 +272,11 @@ typedef enum {
 
     XI_REGEX_COMPILE, /* args[0]=pattern(str), args[1]=flags(str); compiles regex literal */
 
+    /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
+    XI_RETAIN,      /* args[0]=value; increment refcount (no-op for scalars) */
+    XI_RELEASE,     /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
+    XI_MOVE,        /* args[0]=value; ownership transfer (consume source, no refcount change) */
+
     XI_OP_COUNT     /* sentinel */
 } XiOp;
 

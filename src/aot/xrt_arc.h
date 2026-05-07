@@ -54,9 +54,9 @@
  * ========================================================================= */
 
 typedef struct {
-    uint16_t flags;  // XRT_ARC_* flags
-    uint16_t type;   // object type tag for type-table dispatch
-    uint32_t _pad;   // alignment padding (8-byte aligned header)
+    uint16_t flags;    // XRT_ARC_* flags
+    uint16_t type;     // object type tag for type-table dispatch
+    int32_t refcount;  // ARC reference count (0 = unmanaged, >0 = live)
 } XrtArcHdr;
 
 #define XRT_ARC_HDR(p) ((XrtArcHdr *) ((char *) (p) - sizeof(XrtArcHdr)))
@@ -148,9 +148,33 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
     return (char *) hdr + sizeof(XrtArcHdr);
 }
 
-// ARC retain/release removed — bump allocator frees all objects in bulk
-// via xrt_bump_destroy() at program exit. Per-object reference counting
-// is not needed for short-lived AOT programs.
+/* ARC retain: increment refcount.
+ * Called by generated code for values with escape > NO_ESCAPE.
+ * No-op for: NULL pointers, scalar tags, bump-allocated objects. */
+static inline void xrt_retain(XrValue v) {
+    if (v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64 ||
+        v.tag == XR_TAG_BOOL || v.tag == XR_TAG_NULL)
+        return;  /* scalars have no header */
+    if (!v.ptr) return;
+    XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
+    if (hdr->flags & XRT_ARC_BUMP) return;  /* bump objects: freed in bulk */
+    hdr->refcount++;
+}
+
+/* ARC release: decrement refcount, free on zero.
+ * No-op for: NULL pointers, scalar tags, bump-allocated objects. */
+static inline void xrt_release(XrValue v) {
+    if (v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64 ||
+        v.tag == XR_TAG_BOOL || v.tag == XR_TAG_NULL)
+        return;
+    if (!v.ptr) return;
+    XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
+    if (hdr->flags & XRT_ARC_BUMP) return;
+    if (--hdr->refcount <= 0) {
+        /* TODO: call type-specific destructor if XRT_ARC_HAS_DEINIT */
+        XRT_FREE(hdr);
+    }
+}
 
 static inline void xrt_arc_init(void) {
     if (xrt_bump_enabled)
