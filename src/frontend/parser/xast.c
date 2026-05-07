@@ -75,6 +75,7 @@ static AstNode *alloc_node(XrayIsolate *X, AstNodeType type, int line) {
     memset(node, 0, sizeof(AstNode));
     node->type = type;
     node->line = line;
+    node->node_id = xr_isolate_next_ast_node_id(X);
     return node;
 }
 AstNode *xr_ast_literal_int(XrayIsolate *X, xr_Integer value, int line) {

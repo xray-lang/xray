@@ -123,6 +123,10 @@ struct XrayIsolate {
     // Current arena for AST allocation (set by parser, NULL = use malloc)
     struct XrArena *current_arena;
 
+    // Monotonic AST node ID counter; each alloc_node increments this.
+    // Reset when starting a new compilation unit (arena swap).
+    uint32_t next_ast_node_id;
+
     // Compile-time string pool for deduplication during parsing.
     // Lifetime matches current_arena — set/cleared together.
     struct XrCompileStringPool *compile_string_pool;
