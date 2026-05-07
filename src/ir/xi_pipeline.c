@@ -17,6 +17,7 @@
 #include "xi_pass.h"
 #include "xi_emit.h"
 #include "xi_backend_lower.h"
+#include "xi_escape.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
@@ -52,6 +53,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.opt_level = XI_OPT_FULL;
     cfg.run_select_rep = true;
     cfg.run_backend_lower = true;
+    cfg.run_escape = true;
     cfg.run_emit = false;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
@@ -103,6 +105,13 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         if (env && env[0] == '1') {
             xi_pipeline_stats_dump(&stats, ir->name);
         }
+    }
+
+    /* Escape analysis: compute escape levels for heap-allocating values.
+     * Run after optimization (dead code eliminated) but before select_rep
+     * so escape info is available when inserting BOX/UNBOX. */
+    if (cfg->run_escape) {
+        xi_escape_analyze(ir);
     }
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
