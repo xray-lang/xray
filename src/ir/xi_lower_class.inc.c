@@ -210,12 +210,16 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     /* Top-level classes: also store into shared array for cross-scope access */
     if (l->is_program && var_id < l->var_count
         && l->shared_map[var_id] >= 0) {
+        int slot = l->shared_map[var_id];
         XiValue *st = xi_value_new(l->func, l->cur_block,
                                     XI_SET_SHARED, l->type_void, 1);
         if (st) {
             st->args[0] = v;
-            st->aux_int = l->shared_map[var_id];
+            st->aux_int = slot;
             st->flags |= XI_FLAG_SIDE_EFFECT;
         }
+        /* Track class → shared slot for module export metadata */
+        if (slot >= 0 && slot < XI_LOWER_MAX_VARS)
+            l->shared_slot_classes[slot] = data;
     }
 }

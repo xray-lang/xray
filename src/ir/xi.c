@@ -138,6 +138,14 @@ void xi_func_free(XiFunc *f) {
     }
     xr_free(f->children);
 
+    /* Free attached module metadata (only set on program-level init funcs) */
+    if (f->module) {
+        /* Null out init to avoid xi_module_free trying to recurse into us */
+        f->module->init = NULL;
+        xi_module_free(f->module);
+        f->module = NULL;
+    }
+
     /* Arena owns all XiValues, XiPhis, XiBlocks, and arg arrays.
      * blocks[] (the index array) is heap-allocated separately because
      * it must be resizable across realloc without invalidating IR
@@ -447,6 +455,11 @@ XR_FUNC void xi_module_populate_exports(XiModule *mod) {
     XR_DCHECK(mod != NULL, "xi_module_populate_exports: NULL module");
     XR_DCHECK(mod->init != NULL, "xi_module_populate_exports: NULL init");
     XiFunc *f = mod->init;
+
+    /* If exports were already built during lowering, nothing to do.
+     * This function becomes a no-op for modules that went through the
+     * new lowering path (build_module_metadata). */
+    if (mod->exports && mod->nexports > 0) return;
 
     /* Temporary arrays sized to max shared slots */
     uint16_t max_slots = f->nshared;

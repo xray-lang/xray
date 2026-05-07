@@ -343,10 +343,20 @@ typedef enum {
 
 #define XI_MAX_CAPTURES 64
 
+/* Capture kind: how the closed-over variable is accessed by the child.
+ * Determined during closure analysis (xi_pass_close or lowerer). */
+typedef enum XiCaptureKind {
+    XI_CAPTURE_BY_COPY,       /* immutable value copied at closure creation */
+    XI_CAPTURE_BY_MUT_CELL,   /* mutable cell indirection (needs_cell) */
+    XI_CAPTURE_MODULE_LIVE,   /* module-level live binding via shared array */
+} XiCaptureKind;
+
 typedef struct XiCapture {
     uint8_t source;        /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
     uint8_t index;         /* SRC_UPVAL: parent upvalue index */
+    uint8_t capture_kind;  /* XiCaptureKind */
     bool needs_cell;       /* true if the captured variable is mutated in the child */
+    bool is_mutable;       /* true if the variable is ever reassigned after capture */
     const char *name;      /* variable name (debug; not owned) */
     struct XrType *type;   /* variable type */
     struct XiValue *value; /* SRC_REG: parent SSA value (register resolved at emit) */
@@ -512,6 +522,11 @@ typedef struct XiFunc {
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
 
+    /* Module back-pointer: set for program-level init functions so that
+     * the lowerer can populate XiModule.exports directly during lowering
+     * rather than relying on post-hoc IR scanning. */
+    struct XiModule *module;
+
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id;                /* unique name suffix for generated C functions */
 } XiFunc;
@@ -588,18 +603,29 @@ XR_FUNC void xi_func_dump(const XiFunc *f, void *stream);
 
 /* ========== Module Metadata ========== */
 
+/* Import binding classification. */
+typedef enum XiBindingKind {
+    XI_BIND_VALUE,      /* ordinary value (variable, constant) */
+    XI_BIND_FUNCTION,   /* function declaration */
+    XI_BIND_CLASS,      /* class declaration */
+    XI_BIND_NAMESPACE,  /* whole-module import (import mod) */
+} XiBindingKind;
+
 /* Explicit export entry: one per module-level exported binding. */
 typedef struct XiModuleExport {
     const char *name;           /* exported identifier (e.g. "square") */
     uint16_t shared_slot;       /* slot in module's shared array */
     XiFunc *function;           /* non-NULL if this export is a function */
     XiClassData *class_data;    /* non-NULL if this export is a class */
+    struct XrType *value_type;  /* inferred type of the exported value */
+    bool is_live_binding;       /* true for mutable export (re-assignable) */
 } XiModuleExport;
 
 /* Explicit import entry: one per imported member from another module. */
 typedef struct XiModuleImport {
     const char *module_path;    /* source path of exporting module (e.g. "./math_lib") */
     const char *member_name;    /* imported name (e.g. "square") */
+    uint8_t binding_kind;       /* XiBindingKind */
     XiModuleExport *resolved;   /* resolved after module graph linking (NULL until then) */
 } XiModuleImport;
 

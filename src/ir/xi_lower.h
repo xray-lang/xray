@@ -136,6 +136,11 @@ typedef struct XiLower {
      * lowering to support forward references and cross-closure access. */
     int16_t shared_map[XI_LOWER_MAX_VARS];
 
+    /* Shared slot → function/class tracking (built during lowering).
+     * Enables direct construction of XiModule.exports without IR scanning. */
+    struct XiFunc *shared_slot_funcs[XI_LOWER_MAX_VARS];
+    struct XiClassData *shared_slot_classes[XI_LOWER_MAX_VARS];
+
     /* Whether this lowering context is for a top-level program */
     bool is_program;
 

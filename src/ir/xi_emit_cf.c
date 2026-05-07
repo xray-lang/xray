@@ -82,11 +82,34 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
  * module system can record the exported values.  Uses a scratch register
  * (next_reg) to load each shared variable before exporting it.
  *
+ * Reads from XiModule.exports (authoritative metadata built during lowering)
+ * when available, falling back to XiFunc.export_names for compatibility.
+ *
  * Format:  OP_EXPORT A=const_idx(name), B=reg(value), C=0 */
 static void emit_module_exports(EmitCtx *ctx) {
     XiFunc *f = ctx->func;
-    if (!f->export_names || f->nshared == 0 || !ctx->isolate)
+    if (!ctx->isolate) return;
+
+    /* Prefer module metadata (no IR scanning needed to produce it) */
+    XiModule *mod = f->module;
+    if (mod && mod->exports && mod->nexports > 0) {
+        uint8_t tmp = ctx->next_reg;
+        if ((int)(tmp + 1) > ctx->max_reg)
+            ctx->max_reg = (uint8_t)(tmp + 1);
+
+        for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+            const XiModuleExport *exp = &mod->exports[ei];
+            XR_DCHECK(exp->name != NULL, "emit_module_exports: NULL export name");
+            int name_idx = add_const_string(ctx, exp->name);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int)exp->shared_slot));
+            emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t)name_idx, tmp, 0));
+        }
         return;
+    }
+
+    /* Fallback: read from export_names array */
+    if (!f->export_names || f->nshared == 0) return;
 
     uint8_t tmp = ctx->next_reg;
     if ((int)(tmp + 1) > ctx->max_reg)
@@ -97,9 +120,7 @@ static void emit_module_exports(EmitCtx *ctx) {
         if (!name) continue;
         int name_idx = add_const_string(ctx, name);
         if (ctx->status != XI_EMIT_OK) return;
-        /* OP_GETSHARED tmp, G[shared_offset + i] */
         emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int)i));
-        /* OP_EXPORT K[name_idx], tmp, 0 */
         emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t)name_idx, tmp, 0));
     }
 }
