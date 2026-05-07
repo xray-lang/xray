@@ -9,16 +9,19 @@
  *
  * KEY CONCEPT:
  *   Transforms post-analysis AST into canonical form for the lowerer.
- *   Currently a skeleton (identity pass) — individual canonicalization
- *   rules are added incrementally.
+ *   Canonicalization rules implemented so far:
+ *     - Compound assignment desugaring (variable and member targets)
  */
 
 #include "xcanon.h"
 #include "../../base/xchecks.h"
 #include "../../base/xdefs.h"
 #include "../parser/xast_nodes.h"
+#include "../parser/xast_api.h"
+#include "../parser/xparse_internal.h"
 #include "../analyzer/xanalyzer.h"
 
+#include <stdio.h>
 #include <string.h>
 
 /* ========== Canonicalizer context ========== */
@@ -26,8 +29,179 @@
 typedef struct XrCanonCtx {
     struct XaAnalyzer *analyzer;
     struct XrayIsolate *isolate;
+    uint32_t temp_counter;  /* monotonic counter for generating unique temp names */
     int error_count;
 } XrCanonCtx;
+
+/* ========== Temp variable helpers ========== */
+
+/* Maximum temp name length: "__canon_" (8) + digits (10) + NUL = 19 */
+#define CANON_TEMP_PREFIX "__canon_"
+#define CANON_TEMP_BUFSZ 24
+
+/* Generate a unique temp variable name, arena-allocated. */
+static char *canon_temp_name(XrCanonCtx *ctx) {
+    char buf[CANON_TEMP_BUFSZ];
+    int n = snprintf(buf, sizeof(buf), CANON_TEMP_PREFIX "%u", ctx->temp_counter++);
+    XR_DCHECK(n > 0 && n < (int)sizeof(buf), "canon_temp_name: snprintf overflow");
+    return ast_strdup(ctx->isolate, buf);
+}
+
+/* ========== Expression classification ========== */
+
+/* Returns true if expr is side-effect-free and cheap to evaluate twice.
+ * Used to decide whether a receiver needs extraction into a temp. */
+static bool is_simple_expr(const AstNode *node) {
+    if (!node) return true;
+    switch (node->type) {
+    case AST_VARIABLE:
+    case AST_THIS_EXPR:
+    case AST_LITERAL_INT:
+    case AST_LITERAL_FLOAT:
+    case AST_LITERAL_STRING:
+    case AST_LITERAL_TRUE:
+    case AST_LITERAL_FALSE:
+    case AST_LITERAL_NULL:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* ========== Operator mapping ========== */
+
+/* Map compound-assignment token to the corresponding binary AST type. */
+static AstNodeType compound_op_to_binary(XrTokenType op) {
+    switch (op) {
+    case TK_PLUS_ASSIGN:   return AST_BINARY_ADD;
+    case TK_MINUS_ASSIGN:  return AST_BINARY_SUB;
+    case TK_MUL_ASSIGN:    return AST_BINARY_MUL;
+    case TK_DIV_ASSIGN:    return AST_BINARY_DIV;
+    case TK_MOD_ASSIGN:    return AST_BINARY_MOD;
+    case TK_AND_ASSIGN:    return AST_BINARY_BAND;
+    case TK_OR_ASSIGN:     return AST_BINARY_BOR;
+    case TK_XOR_ASSIGN:    return AST_BINARY_BXOR;
+    case TK_LSHIFT_ASSIGN: return AST_BINARY_LSHIFT;
+    case TK_RSHIFT_ASSIGN: return AST_BINARY_RSHIFT;
+    default:               return AST_BINARY_ADD;
+    }
+}
+
+/* ========== Compound assignment desugaring ========== */
+
+/* Desugar simple variable compound assignment in-place.
+ *   x += e  →  x = x + e
+ *
+ * The node is mutated: type changes to AST_ASSIGNMENT, the
+ * union payload switches from CompoundAssignmentNode to
+ * AssignmentNode.  The symbol_id is preserved so the lowerer
+ * resolves the target identically. */
+static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
+    XR_DCHECK(node->type == AST_COMPOUND_ASSIGNMENT,
+              "canon_compound_var: wrong node type");
+    XR_DCHECK(node->as.compound_assignment.object == NULL,
+              "canon_compound_var: member target not expected");
+
+    const char *name   = node->as.compound_assignment.name;
+    uint32_t    sid    = node->as.compound_assignment.symbol_id;
+    XrTokenType op     = node->as.compound_assignment.op;
+    AstNode    *rhs    = node->as.compound_assignment.value;
+    int         line   = node->line;
+
+    /* Build: variable(name) */
+    AstNode *lhs_read = xr_ast_variable(ctx->isolate, name, line);
+    XR_DCHECK(lhs_read != NULL, "canon_compound_var: failed to create variable ref");
+    lhs_read->as.variable.symbol_id = sid;
+
+    /* Build: variable(name) op rhs */
+    AstNodeType bin_type = compound_op_to_binary(op);
+    AstNode *bin = xr_ast_binary(ctx->isolate, bin_type, lhs_read, rhs, line);
+    XR_DCHECK(bin != NULL, "canon_compound_var: failed to create binary");
+
+    /* Mutate in-place: AST_COMPOUND_ASSIGNMENT → AST_ASSIGNMENT */
+    node->type = AST_ASSIGNMENT;
+    memset(&node->as, 0, sizeof(node->as));
+    node->as.assignment.name      = (char *)name;
+    node->as.assignment.value     = bin;
+    node->as.assignment.symbol_id = sid;
+}
+
+/* Desugar member compound assignment.
+ *   obj.field += e  →  obj.field = obj.field + e    (simple receiver)
+ *   f().field += e  →  { let __t = f(); __t.field = __t.field + e }
+ *
+ * When the receiver is complex (call, binary, etc.) it is extracted
+ * into a temp variable to ensure single evaluation and correct
+ * left-to-right order.  The node is mutated in-place: for the simple
+ * case it becomes AST_MEMBER_SET; for the complex case it becomes
+ * AST_BLOCK wrapping a var_decl + member_set. */
+static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
+    XR_DCHECK(node->type == AST_COMPOUND_ASSIGNMENT,
+              "canon_compound_member: wrong node type");
+    XR_DCHECK(node->as.compound_assignment.object != NULL,
+              "canon_compound_member: no receiver object");
+
+    AstNode    *obj    = node->as.compound_assignment.object;
+    const char *field  = node->as.compound_assignment.name;
+    XrTokenType op     = node->as.compound_assignment.op;
+    AstNode    *rhs    = node->as.compound_assignment.value;
+    int         line   = node->line;
+    AstNodeType bin_type = compound_op_to_binary(op);
+
+    if (is_simple_expr(obj)) {
+        /* obj is cheap — safe to reference it twice.
+         * Build: obj.field = obj.field + rhs */
+        AstNode *load = xr_ast_member_access(ctx->isolate, obj, field, line);
+        XR_DCHECK(load != NULL, "canon_compound_member: member_access alloc");
+        AstNode *bin  = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
+        XR_DCHECK(bin != NULL, "canon_compound_member: binary alloc");
+
+        /* Mutate in-place → AST_MEMBER_SET */
+        node->type = AST_MEMBER_SET;
+        memset(&node->as, 0, sizeof(node->as));
+        node->as.member_set.object = obj;
+        node->as.member_set.member = (char *)field;
+        node->as.member_set.value  = bin;
+    } else {
+        /* Complex receiver — extract into a temp. */
+        char *tmp = canon_temp_name(ctx);
+        XR_DCHECK(tmp != NULL, "canon_compound_member: temp name alloc");
+
+        /* let __canon_N = obj */
+        AstNode *decl = xr_ast_var_decl(ctx->isolate, tmp, obj, false, line);
+        XR_DCHECK(decl != NULL, "canon_compound_member: var_decl alloc");
+
+        /* __canon_N.field = __canon_N.field + rhs */
+        AstNode *ref1 = xr_ast_variable(ctx->isolate, tmp, line);
+        AstNode *ref2 = xr_ast_variable(ctx->isolate, tmp, line);
+        AstNode *load = xr_ast_member_access(ctx->isolate, ref1, field, line);
+        AstNode *bin  = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
+        AstNode *store = xr_ast_member_set(ctx->isolate, ref2, field, bin, line);
+        XR_DCHECK(store != NULL, "canon_compound_member: member_set alloc");
+
+        /* Wrap in block: { decl; store } */
+        AstNode *blk = xr_ast_block(ctx->isolate, line);
+        XR_DCHECK(blk != NULL, "canon_compound_member: block alloc");
+        xr_ast_block_add(ctx->isolate, blk, decl);
+        xr_ast_block_add(ctx->isolate, blk, store);
+
+        /* Mutate the original node in-place → AST_BLOCK */
+        uint32_t saved_id = node->node_id;
+        *node = *blk;
+        node->node_id = saved_id;
+    }
+}
+
+/* Top-level dispatch for compound assignment desugaring. */
+static void canon_compound_assignment(XrCanonCtx *ctx, AstNode *node) {
+    if (!node || node->type != AST_COMPOUND_ASSIGNMENT) return;
+
+    if (node->as.compound_assignment.object) {
+        canon_compound_member(ctx, node);
+    } else {
+        canon_compound_var(ctx, node);
+    }
+}
 
 /* ========== AST walk (recursive, dispatches on node type) ========== */
 
@@ -43,10 +217,17 @@ static void canon_block(XrCanonCtx *ctx, AstNode **stmts, int count) {
 }
 
 /* Recursive canonicalization dispatcher.
- * Currently a no-op walk — each canonicalization rule will add its
- * handling to the appropriate case. */
+ * Applies canonicalization rules first, then walks child nodes.
+ * Rules may mutate the node type, so the switch runs on the
+ * post-canonicalization type. */
 static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     if (!node) return;
+
+    /* ---- Canonicalization rules (fire before recursive walk) ---- */
+    if (node->type == AST_COMPOUND_ASSIGNMENT) {
+        canon_compound_assignment(ctx, node);
+        /* Node type has changed; fall through to walk the result. */
+    }
 
     switch (node->type) {
     /* ---- Statements with bodies ---- */
@@ -138,6 +319,11 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_node(ctx, node->as.member_access.object);
         break;
 
+    case AST_MEMBER_SET:
+        canon_node(ctx, node->as.member_set.object);
+        canon_node(ctx, node->as.member_set.value);
+        break;
+
     case AST_INDEX_GET:
         canon_node(ctx, node->as.index_get.array);
         canon_node(ctx, node->as.index_get.index);
@@ -177,12 +363,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
 
     case AST_UNARY_NEG: case AST_UNARY_NOT: case AST_UNARY_BNOT:
         canon_node(ctx, node->as.unary.operand);
-        break;
-
-    /* ---- Compound assignment (future: expand to load-op-store) ---- */
-    case AST_COMPOUND_ASSIGNMENT:
-        canon_node(ctx, node->as.compound_assignment.object);
-        canon_node(ctx, node->as.compound_assignment.value);
         break;
 
     /* ---- Leaf nodes and cases handled by identity pass ---- */
