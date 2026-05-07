@@ -198,12 +198,19 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
         return;
     }
+    /* Hard fail for unrecognized name-based builtins */
+    if (bname) {
+        fprintf(stderr, "[xi_emit] unknown builtin name: '%s'\n", bname);
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
     /* Numeric builtin_id dispatch */
     int builtin_id = (int)v->aux_int;
-    if (builtin_id == 0 && !bname) {
+    if (builtin_id == 0) {
         /* cancelled() */
         emit_inst(ctx, CREATE_ABC(OP_CANCELLED, dst, 0, 0));
-    } else if (!bname) {
+    } else {
         /* Generic: INVOKE_BUILTIN A=base, B=builtin_idx, C=nargs */
         if (v->nargs > 0) {
             uint8_t base = reg_of(ctx, v->args[0]);

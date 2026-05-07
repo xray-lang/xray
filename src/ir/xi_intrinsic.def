@@ -1,0 +1,74 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xi_intrinsic.def - Single source of truth for runtime intrinsic helpers
+ *
+ * X-Macro format: XI_INTRINSIC(name, id, arity, c_helper)
+ *   name     — suffix after XR_INTRIN_  (e.g. GETPROP)
+ *   id       — numeric ID (stable, do NOT renumber)
+ *   arity    — expected argument count (-1 = variadic)
+ *   c_helper — runtime C function name (for JIT fn_ptr matching)
+ *
+ * Consumers:
+ *   - xm_intrinsic.h : XmIntrinsicId enum
+ *   - xm_intrinsic.c : name table, fn_ptr resolution table
+ *   - xi_cgen.c      : AOT C code emitter switch
+ *
+ * ADDING A NEW INTRINSIC:
+ *   1. Add one XI_INTRINSIC() line below with a unique id.
+ *   2. Implement the C helper in src/jit/ or src/aot/.
+ *   3. Add the lowering case in xi_cgen.c if AOT needs it.
+ *   IDs are grouped by category with gaps for future expansion.
+ */
+
+/* --- Object / property access --- */
+XI_INTRINSIC(GETPROP,         1,  2, xr_jit_getprop)
+XI_INTRINSIC(INDEX_GET,       2,  2, xr_jit_index_get)
+XI_INTRINSIC(INDEX_SET,       3,  3, xr_jit_index_set)
+XI_INTRINSIC(TARRAY_GET,      4,  2, xr_jit_tarray_get)
+XI_INTRINSIC(TARRAY_SET,      5,  3, xr_jit_tarray_set)
+
+/* --- Map ops --- */
+XI_INTRINSIC(MAP_GET,        10,  2, xr_jit_map_get)
+XI_INTRINSIC(MAP_SET,        11,  3, xr_jit_map_set)
+XI_INTRINSIC(MAP_INCREMENT,  12,  3, xr_jit_map_increment)
+
+/* --- StringBuilder (sentinels) --- */
+XI_INTRINSIC(STRBUF_NEW,     20,  0, xrt_strbuf_new_sentinel)
+XI_INTRINSIC(STRBUF_APPEND,  21,  2, xrt_strbuf_append_sentinel)
+XI_INTRINSIC(STRBUF_FINISH,  22,  1, xrt_strbuf_finish_sentinel)
+
+/* --- String ops --- */
+XI_INTRINSIC(SUBSTRING,      30,  3, xr_jit_substring)
+XI_INTRINSIC(STR_REPEAT,     31,  2, xr_jit_str_repeat)
+XI_INTRINSIC(CHR,            32,  1, xr_jit_chr)
+
+/* --- Method dispatch --- */
+XI_INTRINSIC(INVOKE_METHOD,  40, -1, xrt_invoke_method_sentinel)
+
+/* --- Shared variables --- */
+XI_INTRINSIC(GET_SHARED,     50,  2, xr_jit_get_shared)
+XI_INTRINSIC(SET_SHARED,     51,  3, xr_jit_set_shared)
+
+/* --- I/O --- */
+XI_INTRINSIC(PRINT,          60, -1, xr_jit_print)
+
+/* --- Tagged arithmetic fallback --- */
+XI_INTRINSIC(RT_ADD,         70,  2, xr_jit_rt_add)
+XI_INTRINSIC(RT_SUB,         71,  2, xr_jit_rt_sub)
+XI_INTRINSIC(RT_MUL,         72,  2, xr_jit_rt_mul)
+XI_INTRINSIC(RT_DIV,         73,  2, xr_jit_rt_div)
+XI_INTRINSIC(RT_MOD,         74,  2, xr_jit_rt_mod)
+
+/* --- Exception handling --- */
+XI_INTRINSIC(THROW,          80,  1, xr_jit_throw)
+
+/* --- Json struct promotion --- */
+XI_INTRINSIC(JSON_NEW_SHAPE, 90,  1, xr_json_new_with_shape)
+
+/* --- Type checking --- */
+XI_INTRINSIC(TYPEOF,        100,  1, xr_jit_typeof)

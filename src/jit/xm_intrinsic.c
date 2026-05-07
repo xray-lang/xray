@@ -18,10 +18,10 @@
  *   a const_i64 holding the intrinsic ID.  args[1] (extra_arg) is unchanged.
  *
  * ADDING A NEW INTRINSIC:
- *   1. Add an XR_INTRIN_* value in xm_intrinsic.h.
+ *   1. Add one XI_INTRINSIC() line in src/ir/xi_intrinsic.def.
  *   2. Add a {fn_ptr, id} entry to the intrinsic_map[] table below.
- *   3. Add the name string to xm_intrinsic_name() below.
- *   4. Add the lowering case in the AOT codegen (xi_cgen.c).
+ *   3. Add the lowering case in the AOT codegen (xi_cgen.c).
+ *   The enum, name table, and arity table are auto-generated from the .def.
  */
 
 #include "xm_intrinsic.h"
@@ -192,63 +192,26 @@ XR_FUNC void xm_resolve_intrinsics(XmFunc *func) {
     }
 }
 
-/* ========== Intrinsic Name ========== */
+/* ========== Intrinsic Name / Arity (generated from xi_intrinsic.def) ========== */
 
+/* Lowercase helper name for trace dumps.  Keep macro-generated names
+ * lowercase by stringifying the enum suffix (matches existing output). */
 XR_FUNC const char *xm_intrinsic_name(int id) {
     switch (id) {
-        case XR_INTRIN_GETPROP:
-            return "getprop";
-        case XR_INTRIN_INDEX_GET:
-            return "index_get";
-        case XR_INTRIN_INDEX_SET:
-            return "index_set";
-        case XR_INTRIN_TARRAY_GET:
-            return "tarray_get";
-        case XR_INTRIN_TARRAY_SET:
-            return "tarray_set";
-        case XR_INTRIN_MAP_GET:
-            return "map_get";
-        case XR_INTRIN_MAP_SET:
-            return "map_set";
-        case XR_INTRIN_MAP_INCREMENT:
-            return "map_increment";
-        case XR_INTRIN_STRBUF_NEW:
-            return "strbuf_new";
-        case XR_INTRIN_STRBUF_APPEND:
-            return "strbuf_append";
-        case XR_INTRIN_STRBUF_FINISH:
-            return "strbuf_finish";
-        case XR_INTRIN_SUBSTRING:
-            return "substring";
-        case XR_INTRIN_STR_REPEAT:
-            return "str_repeat";
-        case XR_INTRIN_CHR:
-            return "chr";
-        case XR_INTRIN_INVOKE_METHOD:
-            return "invoke_method";
-        case XR_INTRIN_GET_SHARED:
-            return "get_shared";
-        case XR_INTRIN_SET_SHARED:
-            return "set_shared";
-        case XR_INTRIN_PRINT:
-            return "print";
-        case XR_INTRIN_RT_ADD:
-            return "rt_add";
-        case XR_INTRIN_RT_SUB:
-            return "rt_sub";
-        case XR_INTRIN_RT_MUL:
-            return "rt_mul";
-        case XR_INTRIN_RT_DIV:
-            return "rt_div";
-        case XR_INTRIN_RT_MOD:
-            return "rt_mod";
-        case XR_INTRIN_THROW:
-            return "throw";
-        case XR_INTRIN_JSON_NEW_SHAPE:
-            return "json_new_shape";
-        case XR_INTRIN_TYPEOF:
-            return "typeof";
-        default:
-            return "intrin?";
+#define XI_INTRINSIC(name, id_val, ar, helper) \
+    case id_val: return #helper;
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
+        default: return "intrin?";
+    }
+}
+
+XR_FUNC int xm_intrinsic_arity(int id) {
+    switch (id) {
+#define XI_INTRINSIC(name, id_val, ar, helper) \
+    case id_val: return ar;
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
+        default: return -1;
     }
 }
