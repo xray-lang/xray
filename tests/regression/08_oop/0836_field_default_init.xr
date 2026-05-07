@@ -1,4 +1,6 @@
 /*
+ * 0836_field_default_init.xr - test class field default initialization
+ */
 
 class Simple {
     a = 0
@@ -69,14 +71,6 @@ class Counter {
 
 @test
 fn test_field_default_init() {
-     * 0836_field_default_init.xr - 测试类字段默认值初始化
-     * 作者：xingleixu@gmail.com
-     *
-     * 验证类字段可以使用复杂表达式初始化：
-     * - 简单字面量（null, bool, int, float, string）
-     * - 复合类型（Array, Map）
-     * - 复杂表达式
-     */
 
     /* 测试1：简单字面量默认值 */
 

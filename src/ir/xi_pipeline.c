@@ -75,6 +75,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         return res;
     }
 
+    /* Closure pass: build XiClosureMeta, assign env layout and cell indices.
+     * Advances stage to XI_STAGE_CLOSED. */
+    xi_pass_close(ir);
+
     /* Optional: dump IR before optimization */
     if (cfg->dump_ir_before) {
         fprintf(stderr, "=== Xi IR (before optimization) ===\n");
@@ -157,6 +161,9 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * Runs after backend lowering so ARC ops coexist with CALL_BUILTIN. */
     if (cfg->run_escape && cfg->run_backend_lower) {
         xi_arc_insert(ir);
+        /* Escape analysis + ARC insertion complete: advance to OWNED.
+         * Enables verify_owned checks (escape annotations on alloc ops). */
+        xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
 
     /* Optional: dump IR after optimization */

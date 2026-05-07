@@ -31,7 +31,6 @@
 #include "xm_codegen_internal.h"
 #include "xm_coalesce.h"
 #include "xm_peephole.h"
-#include "xm_blueprint.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 

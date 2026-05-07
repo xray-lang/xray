@@ -1,10 +1,10 @@
 /*
+ * 切片语法测试
+ * 仅 Array 和 Bytes 支持切片语法
+ */
 
 @test
 fn test_slice_syntax() {
-     * 切片语法测试
-     * 仅 Array 和 Bytes 支持切片语法
-     */
 
     // 数组切片测试
     let arr = [1, 2, 3, 4, 5]

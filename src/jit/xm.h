@@ -507,7 +507,7 @@ typedef struct {
     XrType *xrtype;       // precise static type (NULL = unknown)
     // Compiler hints for optimization
     struct XrProto *callee_proto;   // known callee proto (from OP_CLOSURE/GETSHARED)
-    struct XrShape *shape_hint;     // known Json shape (from OP_NEWJSON / Blueprint)
+    struct XrShape *shape_hint;     // known Json shape (from OP_NEWJSON / type feedback)
     struct XrStructLayout *layout;  // struct field layout (from OP_NEW_STRUCT / params)
     uint8_t array_etype;            // native array element type (0xFF = not a fixed array)
     uint16_t array_ecount;          // native array element count

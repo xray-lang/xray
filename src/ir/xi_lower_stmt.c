@@ -676,16 +676,18 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
     l->try_depth++;
     xi_lower_stmt(l, tc->try_body);
     l->try_depth--;
+    XiBlock *try_end_blk = l->cur_block;  /* last block in try body */
     if (l->cur_block) {
         xi_lower_stmt(l, tc->finally_body);
         if (l->cur_block)
             xi_block_set_jump(l->cur_block, merge);
     }
 
-    /* Exception path: catch → inline finally → re-throw */
-    XiBlock *pretry_blk = try_blk->preds[0];
-    XR_DCHECK(pretry_blk != NULL, "try block must have a predecessor");
-    xi_block_add_pred(exc_blk, pretry_blk);
+    /* Exception path: catch → inline finally → re-throw.
+     * Use try body's exit block so the finally sees the latest
+     * variable definitions (VM preserves register state on throw). */
+    XiBlock *exc_pred = try_end_blk ? try_end_blk : try_blk;
+    xi_block_add_pred(exc_blk, exc_pred);
     xi_lower_braun_seal(l, exc_blk);
     l->cur_block = exc_blk;
 
@@ -752,13 +754,17 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc,
     l->try_depth++;
     xi_lower_stmt(l, tc->try_body);
     l->try_depth--;
+    XiBlock *try_exit_blk = l->cur_block;  /* last block in try body */
     if (l->cur_block)
         xi_block_set_jump(l->cur_block, normal_target);
 
-    /* Catch block */
-    XiBlock *pretry_blk = try_blk->preds[0];
-    XR_DCHECK(pretry_blk != NULL, "try block must have a predecessor");
-    xi_block_add_pred(catch_blk, pretry_blk);
+    /* Catch block: receives control from anywhere in the try body.
+     * Use the try body's exit block as predecessor so Braun SSA sees
+     * variable mutations that occurred before the exception. The VM
+     * preserves register state across throws, so the catch handler
+     * reads the most recently written register values. */
+    XiBlock *catch_pred = try_exit_blk ? try_exit_blk : try_blk;
+    xi_block_add_pred(catch_blk, catch_pred);
     xi_lower_braun_seal(l, catch_blk);
     l->cur_block = catch_blk;
 

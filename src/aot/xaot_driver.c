@@ -346,24 +346,34 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         XR_DCHECK(ir_funcs[m] != NULL, "xaot_build: pipeline OK but NULL IR");
         total_funcs += 1 + ir_funcs[m]->nchildren;
 
-        /* Reuse module metadata built during lowering when available;
-         * fall back to post-hoc IR scan for legacy or standalone func paths. */
-        if (ir_funcs[m]->module) {
-            modules[m] = ir_funcs[m]->module;
-            modules[m]->path = paths[m];
-            modules[m]->name = mod_names[m];
-            /* Detach from func so xi_func_free won't double-free */
-            ir_funcs[m]->module = NULL;
-        } else {
-            modules[m] = xi_module_new(paths[m], mod_names[m], ir_funcs[m]);
-            if (modules[m])
-                xi_module_populate_exports(modules[m]);
-        }
+        /* Module metadata is always built during lowering. */
+        XR_DCHECK(ir_funcs[m]->module != NULL,
+                  "xaot_build: pipeline produced no module metadata");
+        modules[m] = ir_funcs[m]->module;
+        modules[m]->path = paths[m];
+        modules[m]->name = mod_names[m];
+        /* Detach from func so xi_func_free won't double-free */
+        ir_funcs[m]->module = NULL;
     }
     xray_isolate_delete(X);
 
-    /* --- Resolve cross-module imports from module graph --- */
-    xi_cgen_resolve_module_imports(modules, nmodules);
+    /* --- Create codegen context (no global state) --- */
+    XiCgenCtx *cg_ctx = xi_cgen_ctx_new();
+    if (!cg_ctx) {
+        fprintf(stderr, "Error: failed to create codegen context\n");
+        goto fail_free_ir;
+    }
+
+    /* --- SCC-based module linking: resolve imports and assign SCC IDs --- */
+    if (nmodules > 1) {
+        int unresolved = xi_module_link_resolve(modules, nmodules);
+        if (unresolved > 0) {
+            fprintf(stderr, "Warning: %d unresolved module import(s)\n", unresolved);
+        }
+    }
+
+    /* --- Resolve cross-module imports for C codegen --- */
+    xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
 
     /* --- Generate combined C source --- */
     char *buf = NULL;
@@ -371,21 +381,22 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     FILE *mem = open_memstream(&buf, &bufsz);
     if (!mem) {
         fprintf(stderr, "Error: open_memstream failed\n");
+        xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
     }
 
     if (nmodules == 1) {
-        /* Single-module fast path: use xi_cgen_program for backward compat */
-        xi_cgen_program(mem, ir_funcs[0], mod_names[0]);
+        /* Single-module fast path */
+        xi_cgen_program(cg_ctx, mem, modules[0]);
     } else {
         /* Multi-module: header + per-module sections + combined main */
         xi_cgen_header(mem);
         for (int m = 0; m < nmodules; m++)
-            xi_cgen_module(mem, ir_funcs[m], mod_names[m]);
-        xi_cgen_main(mem, (const char **)mod_names, ir_funcs,
-                     nmodules, entry_index);
+            xi_cgen_module(cg_ctx, mem, modules[m]);
+        xi_cgen_main(mem, modules, nmodules, entry_index);
     }
     fclose(mem);
+    xi_cgen_ctx_free(cg_ctx);
 
     /* Infer runtime features before freeing IR */
     XaotFeatureSet features;

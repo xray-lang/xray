@@ -6,6 +6,7 @@
 // 1. 基本 try-catch
 
 fn thr7(): void { throw "from_fn" }
+let f8 = false
 fn fn8(): void { try { throw "x" } finally { f8 = true } }
 fn d4(): void { throw "deep" }
 fn d3(): void { d4() }
@@ -89,7 +90,7 @@ fn test_exception() {
 
     // 8. 函数内 finally
     print("8. finally in function")
-    let f8 = false
+    f8 = false
     try { fn8() } catch (e) { }
     assert_eq(f8, true)
     print("   PASS")

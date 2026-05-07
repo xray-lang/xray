@@ -1,28 +1,30 @@
 /*
+ * 0835_this_in_closure.xr - test this capture in closures
+ */
 
 class Counter {
     _count: int
-    
+
     constructor() {
         this._count = 0
     }
-    
+
     getIncrementer(): fn(): int {        return fn() {
             this._count = this._count + 1
             return this._count
         }
     }
-    
+
     getCount(): int {        return this._count
     }
 }
 class Nested {
     _value: int
-    
+
     constructor(v: int) {
         this._value = v
     }
-    
+
     getDoubleWrapper(): fn(): fn(): int {        return fn() {
             return fn() {
                 return this._value * 2
@@ -32,11 +34,11 @@ class Nested {
 }
 class Adder {
     _base: int
-    
+
     constructor(base: int) {
         this._base = base
     }
-    
+
     createAdder(offset: int): fn(int): int {        return fn(x) {            return this._base + offset + x
         }
     }
@@ -44,11 +46,6 @@ class Adder {
 
 @test
 fn test_this_in_closure() {
-     * 0835_this_in_closure.xr - 测试闭包中捕获 this
-     * 作者：xingleixu@gmail.com
-     * 
-     * 验证闭包可以正确捕获外层方法的 this 变量
-     */
 
     /* 测试1：基本的 this 捕获 */
 

@@ -7,15 +7,17 @@
  *
  * xi_intrinsic.def - Single source of truth for runtime intrinsic helpers
  *
- * X-Macro format: XI_INTRINSIC(name, id, arity, c_helper)
+ * X-Macro format: XI_INTRINSIC(name, id, arity, c_helper, effects, ret_rep)
  *   name     — suffix after XR_INTRIN_  (e.g. GETPROP)
  *   id       — numeric ID (stable, do NOT renumber)
  *   arity    — expected argument count (-1 = variadic)
  *   c_helper — runtime C function name (for JIT fn_ptr matching)
+ *   effects  — bitfield of IEFF_* flags (from xi_intrinsic_flags.h)
+ *   ret_rep  — IREP_* return representation (IREP_VAL / IREP_VOID / IREP_I64)
  *
  * Consumers:
  *   - xm_intrinsic.h : XmIntrinsicId enum
- *   - xm_intrinsic.c : name table, fn_ptr resolution table
+ *   - xm_intrinsic.c : name table, fn_ptr table, effect/rep lookup
  *   - xi_cgen.c      : AOT C code emitter switch
  *
  * ADDING A NEW INTRINSIC:
@@ -25,50 +27,51 @@
  *   IDs are grouped by category with gaps for future expansion.
  */
 
+/*                    name          id  ar  c_helper                     eff            ret       */
 /* --- Object / property access --- */
-XI_INTRINSIC(GETPROP,         1,  2, xr_jit_getprop)
-XI_INTRINSIC(INDEX_GET,       2,  2, xr_jit_index_get)
-XI_INTRINSIC(INDEX_SET,       3,  3, xr_jit_index_set)
-XI_INTRINSIC(TARRAY_GET,      4,  2, xr_jit_tarray_get)
-XI_INTRINSIC(TARRAY_SET,      5,  3, xr_jit_tarray_set)
+XI_INTRINSIC(GETPROP,               1,  2, xr_jit_getprop,             IEFF_R|IEFF_T, IREP_VAL)
+XI_INTRINSIC(INDEX_GET,              2,  2, xr_jit_index_get,           IEFF_R|IEFF_T, IREP_VAL)
+XI_INTRINSIC(INDEX_SET,              3,  3, xr_jit_index_set,           IEFF_W|IEFF_T, IREP_VAL)
+XI_INTRINSIC(TARRAY_GET,             4,  2, xr_jit_tarray_get,          IEFF_R,        IREP_VAL)
+XI_INTRINSIC(TARRAY_SET,             5,  3, xr_jit_tarray_set,          IEFF_W,        IREP_VOID)
 
 /* --- Map ops --- */
-XI_INTRINSIC(MAP_GET,        10,  2, xr_jit_map_get)
-XI_INTRINSIC(MAP_SET,        11,  3, xr_jit_map_set)
-XI_INTRINSIC(MAP_INCREMENT,  12,  3, xr_jit_map_increment)
+XI_INTRINSIC(MAP_GET,               10,  2, xr_jit_map_get,             IEFF_R,        IREP_VAL)
+XI_INTRINSIC(MAP_SET,               11,  3, xr_jit_map_set,             IEFF_W,        IREP_VAL)
+XI_INTRINSIC(MAP_INCREMENT,         12,  3, xr_jit_map_increment,       IEFF_R|IEFF_W, IREP_VAL)
 
 /* --- StringBuilder (sentinels) --- */
-XI_INTRINSIC(STRBUF_NEW,     20,  0, xrt_strbuf_new_sentinel)
-XI_INTRINSIC(STRBUF_APPEND,  21,  2, xrt_strbuf_append_sentinel)
-XI_INTRINSIC(STRBUF_FINISH,  22,  1, xrt_strbuf_finish_sentinel)
+XI_INTRINSIC(STRBUF_NEW,            20,  0, xrt_strbuf_new_sentinel,    IEFF_A,        IREP_VAL)
+XI_INTRINSIC(STRBUF_APPEND,         21,  2, xrt_strbuf_append_sentinel, IEFF_W,        IREP_VOID)
+XI_INTRINSIC(STRBUF_FINISH,         22,  1, xrt_strbuf_finish_sentinel, IEFF_R|IEFF_A, IREP_VAL)
 
 /* --- String ops --- */
-XI_INTRINSIC(SUBSTRING,      30,  3, xr_jit_substring)
-XI_INTRINSIC(STR_REPEAT,     31,  2, xr_jit_str_repeat)
-XI_INTRINSIC(CHR,            32,  1, xr_jit_chr)
+XI_INTRINSIC(SUBSTRING,             30,  3, xr_jit_substring,           IEFF_R|IEFF_A, IREP_VAL)
+XI_INTRINSIC(STR_REPEAT,            31,  2, xr_jit_str_repeat,          IEFF_R|IEFF_A, IREP_VAL)
+XI_INTRINSIC(CHR,                   32,  1, xr_jit_chr,                 IEFF_A,        IREP_VAL)
 
 /* --- Method dispatch --- */
-XI_INTRINSIC(INVOKE_METHOD,  40, -1, xrt_invoke_method_sentinel)
+XI_INTRINSIC(INVOKE_METHOD,         40, -1, xrt_invoke_method_sentinel, IEFF_R|IEFF_W|IEFF_T, IREP_VAL)
 
 /* --- Shared variables --- */
-XI_INTRINSIC(GET_SHARED,     50,  2, xr_jit_get_shared)
-XI_INTRINSIC(SET_SHARED,     51,  3, xr_jit_set_shared)
+XI_INTRINSIC(GET_SHARED,            50,  2, xr_jit_get_shared,          IEFF_R,        IREP_VAL)
+XI_INTRINSIC(SET_SHARED,            51,  3, xr_jit_set_shared,          IEFF_W,        IREP_VOID)
 
 /* --- I/O --- */
-XI_INTRINSIC(PRINT,          60, -1, xr_jit_print)
+XI_INTRINSIC(PRINT,                 60, -1, xr_jit_print,               IEFF_IO,       IREP_VOID)
 
 /* --- Tagged arithmetic fallback --- */
-XI_INTRINSIC(RT_ADD,         70,  2, xr_jit_rt_add)
-XI_INTRINSIC(RT_SUB,         71,  2, xr_jit_rt_sub)
-XI_INTRINSIC(RT_MUL,         72,  2, xr_jit_rt_mul)
-XI_INTRINSIC(RT_DIV,         73,  2, xr_jit_rt_div)
-XI_INTRINSIC(RT_MOD,         74,  2, xr_jit_rt_mod)
+XI_INTRINSIC(RT_ADD,                70,  2, xr_jit_rt_add,              IEFF_T,        IREP_VAL)
+XI_INTRINSIC(RT_SUB,                71,  2, xr_jit_rt_sub,              IEFF_T,        IREP_VAL)
+XI_INTRINSIC(RT_MUL,                72,  2, xr_jit_rt_mul,              IEFF_T,        IREP_VAL)
+XI_INTRINSIC(RT_DIV,                73,  2, xr_jit_rt_div,              IEFF_T,        IREP_VAL)
+XI_INTRINSIC(RT_MOD,                74,  2, xr_jit_rt_mod,              IEFF_T,        IREP_VAL)
 
 /* --- Exception handling --- */
-XI_INTRINSIC(THROW,          80,  1, xr_jit_throw)
+XI_INTRINSIC(THROW,                 80,  1, xr_jit_throw,               IEFF_T,        IREP_VOID)
 
 /* --- Json struct promotion --- */
-XI_INTRINSIC(JSON_NEW_SHAPE, 90,  1, xr_json_new_with_shape)
+XI_INTRINSIC(JSON_NEW_SHAPE,        90,  1, xr_json_new_with_shape,     IEFF_A,        IREP_VAL)
 
 /* --- Type checking --- */
-XI_INTRINSIC(TYPEOF,        100,  1, xr_jit_typeof)
+XI_INTRINSIC(TYPEOF,               100,  1, xr_jit_typeof,              IEFF_PURE,     IREP_VAL)
