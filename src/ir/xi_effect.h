@@ -152,6 +152,10 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
     case XI_MOVE:
         return 0;  /* pure annotation: ownership transfer, no runtime effect */
 
+    /* --- Stack allocation --- */
+    case XI_STACK_ALLOC:
+        return XI_FLAG_SIDE_EFFECT;
+
     case XI_OP_COUNT:
         break;
     }

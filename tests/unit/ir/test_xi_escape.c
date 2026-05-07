@@ -338,6 +338,46 @@ static void test_arc_heap_gets_retain_release(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: stack alloc rewrite — NO_ESCAPE becomes STACK_ALLOC ========== */
+
+static void test_stack_alloc_local_array(void) {
+    /* Local array (NO_ESCAPE) should be rewritten to XI_STACK_ALLOC */
+    XiFunc *f = make_func("stack_local", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *idx = xi_const_int(f, b0, 0, &t_int);
+    XiValue *get = xi_value_new(f, b0, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = arr;
+    get->args[1] = idx;
+    xi_block_set_return(b0, get);
+
+    xi_escape_analyze(f);
+    xi_stack_alloc_rewrite(f);
+
+    ASSERT_EQ(arr->op, XI_STACK_ALLOC,
+              "NO_ESCAPE array should become STACK_ALLOC");
+    ASSERT_EQ(arr->aux_int, XI_ARRAY_NEW,
+              "STACK_ALLOC should preserve original op in aux_int");
+    xi_func_free(f);
+}
+
+static void test_stack_alloc_escaping_stays(void) {
+    /* Returned array (ARG_ESCAPE) should NOT be rewritten */
+    XiFunc *f = make_func("stack_esc", &t_array);
+    XiBlock *b0 = f->entry;
+
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    xi_block_set_return(b0, arr);
+
+    xi_escape_analyze(f);
+    xi_stack_alloc_rewrite(f);
+
+    ASSERT_EQ(arr->op, XI_ARRAY_NEW,
+              "ARG_ESCAPE array should stay as ARRAY_NEW");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -352,6 +392,8 @@ int main(void) {
     test_arc_no_escape_skipped();
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();
+    test_stack_alloc_local_array();
+    test_stack_alloc_escaping_stays();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n",
            g_passed, g_failed);

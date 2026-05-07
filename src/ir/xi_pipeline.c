@@ -146,6 +146,13 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
 #endif
     }
 
+    /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
+     * Must run after escape analysis and before ARC insertion (STACK_ALLOC
+     * values don't need retain/release since they have frame lifetime). */
+    if (cfg->run_escape && cfg->run_backend_lower) {
+        xi_stack_alloc_rewrite(ir);
+    }
+
     /* ARC insertion: add retain/release based on escape analysis.
      * Runs after backend lowering so ARC ops coexist with CALL_BUILTIN. */
     if (cfg->run_escape && cfg->run_backend_lower) {

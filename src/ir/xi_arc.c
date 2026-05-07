@@ -139,6 +139,41 @@ static void insert_exit_releases(XiFunc *f) {
     }
 }
 
+/* ========== Stack Alloc Rewrite ========== */
+
+/* Rewrite a single NO_ESCAPE heap-allocating value to XI_STACK_ALLOC.
+ * Preserves args, type, and stores original op in aux_int. */
+static void rewrite_to_stack(XiValue *v) {
+    XR_DCHECK(v != NULL, "rewrite_to_stack: NULL value");
+    XR_DCHECK(v->escape == XI_ESC_NONE, "rewrite_to_stack: not NO_ESCAPE");
+
+    v->aux_int = (int32_t)v->op;  /* save original op for codegen */
+    v->op = XI_STACK_ALLOC;
+}
+
+XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_stack_alloc_rewrite: NULL func");
+
+    /* Process children first (bottom-up) */
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            xi_stack_alloc_rewrite(f->children[i]);
+    }
+
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v) continue;
+            if (v->escape != XI_ESC_NONE) continue;
+            if (!type_needs_arc(v->type)) continue;  /* scalars: no alloc */
+            if (!xi_op_is_heap_alloc(v->op)) continue;
+            rewrite_to_stack(v);
+        }
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC void xi_arc_insert(XiFunc *f) {
