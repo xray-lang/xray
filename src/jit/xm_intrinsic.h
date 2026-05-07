@@ -13,11 +13,13 @@
  * reference to xr_jit_* addresses.
  *
  * ADDING A NEW INTRINSIC:
- *   1. Add an XR_INTRIN_* enum value below.
- *   2. Update the xm_intrinsic_name() switch in xm.c (for trace dumps).
+ *   1. Add one XI_INTRINSIC() line in src/ir/xi_intrinsic.def.
+ *   2. Implement the C helper in src/jit/ or src/aot/.
  *   3. Add the lowering case in the AOT codegen (xi_cgen.c).
+ *   The enum, name table, and arity table are auto-generated from the .def.
  *
  * RELATED MODULES:
+ *   - src/ir/xi_intrinsic.def : single source of truth for intrinsic IDs
  *   - src/jit/xm.h           : XM_CALL_INTRINSIC opcode
  *   - src/aot/xi_cgen.c       : AOT C code generation
  */
@@ -26,67 +28,32 @@
 #define XM_INTRINSIC_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "../base/xdefs.h" /* XR_FUNC */
 
 /* Forward-declare Xm types to avoid pulling in the full xm.h header. */
 typedef struct XmFunc XmFunc;
 
+/* Generated from xi_intrinsic.def — do not edit by hand */
 typedef enum {
     XR_INTRIN_NONE = 0,
-
-    /* --- Object/property access --- */
-    XR_INTRIN_GETPROP = 1,    /* xr_jit_getprop */
-    XR_INTRIN_INDEX_GET = 2,  /* xr_jit_index_get */
-    XR_INTRIN_INDEX_SET = 3,  /* xr_jit_index_set */
-    XR_INTRIN_TARRAY_GET = 4, /* xr_jit_tarray_get */
-    XR_INTRIN_TARRAY_SET = 5, /* xr_jit_tarray_set */
-
-    /* --- Map ops --- */
-    XR_INTRIN_MAP_GET = 10,       /* xr_jit_map_get */
-    XR_INTRIN_MAP_SET = 11,       /* xr_jit_map_set */
-    XR_INTRIN_MAP_INCREMENT = 12, /* xr_jit_map_increment */
-
-    /* --- StringBuilder (sentinels) --- */
-    XR_INTRIN_STRBUF_NEW = 20,    /* xrt_strbuf_new_sentinel */
-    XR_INTRIN_STRBUF_APPEND = 21, /* xrt_strbuf_append_sentinel */
-    XR_INTRIN_STRBUF_FINISH = 22, /* xrt_strbuf_finish_sentinel */
-
-    /* --- String ops --- */
-    XR_INTRIN_SUBSTRING = 30,  /* xr_jit_substring */
-    XR_INTRIN_STR_REPEAT = 31, /* xr_jit_str_repeat */
-    XR_INTRIN_CHR = 32,        /* xr_jit_chr */
-
-    /* --- Method dispatch --- */
-    XR_INTRIN_INVOKE_METHOD = 40, /* xrt_invoke_method_sentinel */
-
-    /* --- Shared variables --- */
-    XR_INTRIN_GET_SHARED = 50, /* xr_jit_get_shared */
-    XR_INTRIN_SET_SHARED = 51, /* xr_jit_set_shared */
-
-    /* --- I/O --- */
-    XR_INTRIN_PRINT = 60, /* xr_jit_print */
-
-    /* --- Tagged arithmetic fallback --- */
-    XR_INTRIN_RT_ADD = 70, /* xr_jit_rt_add */
-    XR_INTRIN_RT_SUB = 71, /* xr_jit_rt_sub */
-    XR_INTRIN_RT_MUL = 72, /* xr_jit_rt_mul */
-    XR_INTRIN_RT_DIV = 73, /* xr_jit_rt_div */
-    XR_INTRIN_RT_MOD = 74, /* xr_jit_rt_mod */
-
-    /* --- Exception handling --- */
-    XR_INTRIN_THROW = 80, /* xr_jit_throw */
-
-    /* --- Json struct promotion --- */
-    XR_INTRIN_JSON_NEW_SHAPE = 90, /* xr_json_new_with_shape */
-
-    /* --- Type checking --- */
-    XR_INTRIN_TYPEOF = 100, /* xr_jit_typeof */
-
-    XR_INTRIN_COUNT, /* sentinel; keep last */
+#define XI_INTRINSIC(name, id, arity, helper) XR_INTRIN_##name = id,
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
+    XR_INTRIN_COUNT /* sentinel; keep last */
 } XmIntrinsicId;
 
-/* Returns a human-readable name for this intrinsic, or "intrin?" if unknown. */
+/* Returns a human-readable name for this intrinsic, or "intrin?" if unknown.
+ * Generated from xi_intrinsic.def. */
 XR_FUNC const char *xm_intrinsic_name(int id);
+
+/* Returns the expected arity for this intrinsic, or -1 for variadic / unknown. */
+XR_FUNC int xm_intrinsic_arity(int id);
+
+/* Returns true if the given ID is a valid intrinsic. */
+static inline bool xm_intrinsic_valid(int id) {
+    return id > XR_INTRIN_NONE && id < XR_INTRIN_COUNT;
+}
 
 /*
  * Convert CALL_C/CALL_C_LEAF instructions whose fn_ptr matches a known
