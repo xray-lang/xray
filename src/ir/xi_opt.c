@@ -816,16 +816,17 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
 /* Pass table: ordered by recommended execution sequence.
  * The driver runs all passes whose min_level <= requested level. */
 static const XiPassDesc xi_pass_table[] = {
-    { "constfold",       xi_opt_const_fold,      XI_OPT_LIGHT, XI_PASS_NONE },
-    { "strength_reduce", xi_opt_strength_reduce,  XI_OPT_LIGHT, XI_PASS_NONE },
-    { "copy_prop",       xi_opt_copy_prop,        XI_OPT_LIGHT, XI_PASS_NONE },
-    { "phi_simplify",    xi_opt_phi_simplify,     XI_OPT_LIGHT, XI_PASS_NONE },
-    { "dce",             xi_opt_dce,              XI_OPT_LIGHT, XI_PASS_NONE },
-    { "sccp",            xi_opt_sccp,             XI_OPT_FULL,  XI_PASS_NONE },
-    { "gvn",             xi_opt_gvn,              XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
-    { "licm",            xi_opt_licm,             XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
-    { "inline",           xi_opt_inline,           XI_OPT_FULL,  XI_PASS_NONE },
-    { "ifconv",           xi_opt_ifconv,            XI_OPT_FULL,  XI_PASS_NEEDS_DOM },
+    /* name              fn                       min_level      flags               in_stage         out_stage */
+    { "constfold",       xi_opt_const_fold,      XI_OPT_LIGHT, XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "strength_reduce", xi_opt_strength_reduce,  XI_OPT_LIGHT, XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "copy_prop",       xi_opt_copy_prop,        XI_OPT_LIGHT, XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "phi_simplify",    xi_opt_phi_simplify,     XI_OPT_LIGHT, XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "dce",             xi_opt_dce,              XI_OPT_LIGHT, XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "sccp",            xi_opt_sccp,             XI_OPT_FULL,  XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "gvn",             xi_opt_gvn,              XI_OPT_FULL,  XI_PASS_NEEDS_DOM,  XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "licm",            xi_opt_licm,             XI_OPT_FULL,  XI_PASS_NEEDS_DOM,  XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "inline",           xi_opt_inline,           XI_OPT_FULL,  XI_PASS_NONE,       XI_STAGE_RAW,    XI_STAGE_RAW },
+    { "ifconv",           xi_opt_ifconv,            XI_OPT_FULL,  XI_PASS_NEEDS_DOM,  XI_STAGE_RAW,    XI_STAGE_RAW },
 };
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
@@ -854,6 +855,14 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
 
     if (stats) memset(stats, 0, sizeof(*stats));
 
+    /* XRAY_XI_CHECK=1 enables per-pass verification to pinpoint
+     * the exact pass that breaks an invariant. */
+    static int check_per_pass = -1;
+    if (check_per_pass < 0) {
+        const char *env = getenv("XRAY_XI_CHECK");
+        check_per_pass = (env && env[0] == '1') ? 1 : 0;
+    }
+
     uint64_t pipeline_start = xr_time_monotonic_ns();
     XiPassChange total = xi_pass_no_change();
 
@@ -874,8 +883,18 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
                     goto done;
             }
 
+            /* Stage contract: skip pass if function has not reached
+             * the required stage.  This is a soft check — the pass
+             * simply does not fire rather than aborting. */
+            if (desc->input_stage > f->stage)
+                continue;
+
             uint64_t t0 = xr_time_monotonic_ns();
             XiPassChange pc = desc->fn(f);
+
+            /* Advance stage if the pass declares a higher output stage */
+            if (desc->output_stage > f->stage)
+                f->stage = desc->output_stage;
             uint64_t dt = xr_time_monotonic_ns() - t0;
 
             /* Record per-pass stats */
@@ -888,6 +907,19 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
             }
 
             round_chg = xi_pass_merge(round_chg, pc);
+
+            /* XRAY_XI_CHECK=1: verify after every single pass.
+             * This catches the exact pass that breaks an invariant. */
+            if (check_per_pass) {
+                char check_errbuf[512];
+                if (!xi_verify(f, check_errbuf, sizeof(check_errbuf))) {
+                    fprintf(stderr, "[xi_check] verify failed after pass '%s' "
+                            "round %d for '%s': %s\n",
+                            desc->name, round,
+                            f->name ? f->name : "?", check_errbuf);
+                    XR_DCHECK(false, "XRAY_XI_CHECK: post-pass verify failed");
+                }
+            }
         }
 
         total = xi_pass_merge(total, round_chg);
@@ -901,11 +933,13 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
 
 #ifndef NDEBUG
         /* Re-verify after each round in debug builds */
-        char errbuf[512];
-        if (!xi_verify(f, errbuf, sizeof(errbuf))) {
-            fprintf(stderr, "[xi_pass] verify failed after round %d for '%s': %s\n",
-                    round, f->name ? f->name : "?", errbuf);
-            XR_DCHECK(false, "xi_pass: post-round verify failed");
+        if (!check_per_pass) {
+            char errbuf[512];
+            if (!xi_verify(f, errbuf, sizeof(errbuf))) {
+                fprintf(stderr, "[xi_pass] verify failed after round %d for '%s': %s\n",
+                        round, f->name ? f->name : "?", errbuf);
+                XR_DCHECK(false, "xi_pass: post-round verify failed");
+            }
         }
 #endif
     }

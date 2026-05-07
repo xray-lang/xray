@@ -82,12 +82,19 @@ typedef XiPassChange (*XiPassFn)(XiFunc *f);
 #define XI_PASS_NEEDS_DOM   (1u << 0)   /* requires dominator tree */
 #define XI_PASS_NEEDS_LOOP  (1u << 1)   /* requires loop detection */
 #define XI_PASS_NEEDS_DEFUSE (1u << 2)  /* requires def-use chains */
+#define XI_PASS_REQUIRED    (1u << 3)   /* cannot be disabled by env / config */
 
 typedef struct XiPassDesc {
     const char *name;       /* human-readable name for logging */
     XiPassFn fn;            /* pass entry point */
     XiOptLevel min_level;   /* minimum opt level to run this pass */
     uint32_t flags;         /* XI_PASS_* flags */
+
+    /* Stage contract: the pass requires func->stage >= input_stage.
+     * On completion, func->stage is advanced to output_stage (if greater).
+     * Most optimization passes are stage-preserving (input == output). */
+    XiStage input_stage;    /* minimum stage required (0 = any) */
+    XiStage output_stage;   /* stage after this pass (0 = unchanged) */
 } XiPassDesc;
 
 /* ========== Per-Pass Statistics ========== */
