@@ -17,6 +17,7 @@
 #include "xanalyzer_incremental.h"
 #include "xanalyzer_builtin_interfaces.h"
 #include "xa_node_table.h"
+#include "xa_selection.h"
 #include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
@@ -232,6 +233,9 @@ XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
     // AST -> inferred-type side table.
     analyzer->node_table = xa_node_table_new();
 
+    // AST -> selection facts table (member/method/index resolution).
+    analyzer->selection_table = xa_selection_table_new();
+
     return analyzer;
 }
 
@@ -258,6 +262,12 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     if (analyzer->node_table) {
         xa_node_table_free((XaNodeTable *) analyzer->node_table);
         analyzer->node_table = NULL;
+    }
+
+    // Free the selection facts table.
+    if (analyzer->selection_table) {
+        xa_selection_table_free((XaSelectionTable *) analyzer->selection_table);
+        analyzer->selection_table = NULL;
     }
 
 
@@ -979,6 +989,13 @@ struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstN
     if (!analyzer || !node)
         return NULL;
     return xa_node_table_get_type((XaNodeTable *) analyzer->node_table, node);
+}
+
+const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer,
+                                                    const struct AstNode *node) {
+    if (!analyzer || !node)
+        return NULL;
+    return xa_selection_table_get((XaSelectionTable *) analyzer->selection_table, node);
 }
 
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {

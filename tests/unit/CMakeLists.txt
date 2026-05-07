@@ -72,6 +72,7 @@ add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.
 add_xray_unit_test(test_ast_side_table frontend/test_ast_side_table.c)
 add_xray_unit_test(test_symbol_binding frontend/test_symbol_binding.c)
 add_xray_unit_test(test_scope_tree frontend/test_scope_tree.c)
+add_xray_unit_test(test_xa_selection frontend/test_xa_selection.c)
 
 # Phase 3: in-tree frontend architecture lint. Walks the project src/
 # tree at runtime, so it needs the absolute path baked in at build
