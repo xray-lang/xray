@@ -566,7 +566,8 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         }
     }
 
-    /* Xi IR → Xm lowering (sole compilation path) */
+    /* Xi IR → Xm lowering (sole compilation path).
+     * xi_to_xm_lower ensures select_rep is run if not already at REPPED. */
     if (proto->xi_func) {
         const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods)
                                        ? &ic_snap : NULL;
