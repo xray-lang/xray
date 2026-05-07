@@ -393,8 +393,13 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         }
     }
 
-    /* Undeclared variable — semantic error caught earlier */
-    return xi_const_null(l->func, l->cur_block, l->type_null);
+    /* Unresolved variable is a compiler bug: the analyzer must resolve
+     * all variable references before lowering.  Hard-fail so the bug
+     * surfaces immediately instead of hiding behind a runtime null. */
+    fprintf(stderr, "[LOWER] unresolved variable '%s' (symbol_id=%u) at line %d\n",
+            name ? name : "<null>", sid, (int)node->line);
+    l->had_error = true;
+    return NULL;
 }
 
 static XiValue *lower_assignment(XiLower *l, AstNode *node) {
@@ -486,10 +491,12 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         return val;
     }
 
-    /* Create implicitly (shouldn't happen after semantic analysis) */
-    var_id = xi_lower_var_create(l, sid, name, val->type);
-    xi_lower_braun_write(l, var_id, l->cur_block, val);
-    return val;
+    /* Unresolved assignment target is a compiler bug: the analyzer must
+     * bind all assignment targets before lowering. */
+    fprintf(stderr, "[LOWER] unresolved assignment target '%s' (symbol_id=%u) at line %d\n",
+            name ? name : "<null>", sid, (int)node->line);
+    l->had_error = true;
+    return NULL;
 }
 
 /* Map compound assignment operator token to Xi binary op */
@@ -1353,7 +1360,10 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
     /* Recursively lower the function body into a child XiFunc,
      * passing 'l' as parent so the child can resolve upvalue captures. */
     XiFunc *child = xi_lower_func_impl(node, l->analyzer, l->isolate, l);
-    if (!child) return xi_const_null(l->func, l->cur_block, l->type_null);
+    if (!child) {
+        l->had_error = true;
+        return NULL;
+    }
 
     /* Register as child of parent function */
     func_add_child(l->func, child);

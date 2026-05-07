@@ -70,6 +70,8 @@ add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 # Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.
 add_xray_unit_test(test_ast_side_table frontend/test_ast_side_table.c)
+add_xray_unit_test(test_symbol_binding frontend/test_symbol_binding.c)
+add_xray_unit_test(test_scope_tree frontend/test_scope_tree.c)
 
 # Phase 3: in-tree frontend architecture lint. Walks the project src/
 # tree at runtime, so it needs the absolute path baked in at build
@@ -148,6 +150,7 @@ add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
 add_xray_unit_test(test_xi_to_xm ir/test_xi_to_xm.c)
 add_xray_unit_test(test_xi_to_xm_e2e ir/test_xi_to_xm_e2e.c)
+add_xray_unit_test(test_xi_lower_hardfail ir/test_xi_lower_hardfail.c)
 
 # E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build
 # Covered by regression tests (scripts/run_regression_tests.sh)
@@ -403,3 +406,30 @@ target_include_directories(test_cli_spec PRIVATE
 )
 target_link_libraries(test_cli_spec PRIVATE xray_core)
 add_test(NAME test_cli_spec COMMAND test_cli_spec)
+
+# ============================================================================
+# test_harness/ — xray test runner self-tests
+# Verify that @test discover, execution, pass/fail/skip, and exit codes
+# all behave correctly.  These run the xray binary, not C unit tests.
+# ============================================================================
+
+set(_HARNESS_DIR ${CMAKE_SOURCE_DIR}/tests/test_harness)
+
+add_test(NAME harness_single_pass
+         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/single_pass.xr)
+add_test(NAME harness_multi_pass
+         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/multi_pass.xr)
+add_test(NAME harness_with_skip
+         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/with_skip.xr)
+
+add_test(NAME harness_single_fail
+         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/single_fail.xr)
+set_tests_properties(harness_single_fail PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME harness_no_tests
+         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/no_tests.xr)
+set_tests_properties(harness_no_tests PROPERTIES WILL_FAIL TRUE)
+
+add_test(NAME harness_mixed_pass_fail
+         COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/mixed_pass_fail.xr)
+set_tests_properties(harness_mixed_pass_fail PROPERTIES WILL_FAIL TRUE)
