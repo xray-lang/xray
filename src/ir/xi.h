@@ -277,6 +277,11 @@ typedef enum {
     XI_RELEASE,     /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
     XI_MOVE,        /* args[0]=value; ownership transfer (consume source, no refcount change) */
 
+    /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
+     * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.
+     * Inherits args from the original op. Freed automatically at return. */
+    XI_STACK_ALLOC,
+
     XI_OP_COUNT     /* sentinel */
 } XiOp;
 

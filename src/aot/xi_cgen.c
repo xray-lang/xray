@@ -1077,6 +1077,34 @@ static void emit_value_rhs(FILE *out, const XiFunc *f,
             emit_vref(out, v->args[0]);
             break;
 
+        /* ============ Stack Allocation ============ */
+
+        case XI_STACK_ALLOC: {
+            int32_t orig_op = v->aux_int;
+            if (orig_op == XI_ARRAY_NEW) {
+                int64_t cap = (v->nargs >= 1 && v->args[0] &&
+                               v->args[0]->op == XI_CONST)
+                              ? v->args[0]->aux_int : 4;
+                fprintf(out, "xrt_array_stack_new(%" PRId64 ")", cap);
+            } else if (orig_op == XI_MAP_NEW) {
+                /* map: fallback to heap (stack map not yet implemented) */
+                int64_t cap = (v->nargs >= 1 && v->args[0] &&
+                               v->args[0]->op == XI_CONST)
+                              ? v->args[0]->aux_int : 8;
+                fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+            } else if (orig_op == XI_SET_NEW) {
+                int64_t cap = (v->nargs >= 1 && v->args[0] &&
+                               v->args[0]->op == XI_CONST)
+                              ? v->args[0]->aux_int : 8;
+                fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+            } else {
+                /* Unknown original op: fallback to XR_NULL_VAL */
+                fprintf(out, "XR_NULL_VAL /* STACK_ALLOC: unknown orig_op %d */",
+                        orig_op);
+            }
+            break;
+        }
+
         /* ============ Assertions ============ */
 
         /* assert(cond): aux=location string, aux_int: 0=truthy, 1=falsy */

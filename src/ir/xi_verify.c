@@ -476,6 +476,7 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_RETAIN]      = 1,
     [XI_RELEASE]     = 1,
     [XI_MOVE]        = 1,
+    [XI_STACK_ALLOC] = 0xFF,  /* variadic: inherits args from original alloc op */
 };
 
 static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {

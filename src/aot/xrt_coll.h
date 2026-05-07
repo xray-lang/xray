@@ -131,6 +131,23 @@ static inline void xrt_array_set_f(XrValue arr, int64_t idx, double val) {
     a->data[idx] = xr_mkf64(val, XR_TAG_F64);
 }
 
+/* Stack-allocated array: header on stack, data buffer on stack via alloca.
+ * Used for NO_ESCAPE arrays (escape analysis optimization).
+ * The returned XrValue is valid only within the current function scope. */
+#ifndef xrt_array_stack_new
+#define xrt_array_stack_new(cap_expr) ({                                    \
+    int64_t _cap = (cap_expr);                                             \
+    if (_cap < 4) _cap = 4;                                                \
+    xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(                   \
+        sizeof(xrt_array_t) + (size_t)_cap * sizeof(XrValue));            \
+    _a->len = 0;                                                           \
+    _a->cap = _cap;                                                        \
+    _a->data = (XrValue *)((char *)_a + sizeof(xrt_array_t));             \
+    memset(_a->data, 0, (size_t)_cap * sizeof(XrValue));                  \
+    xr_mkptr(_a, XR_TAG_ARRAY);                                           \
+})
+#endif
+
 /* =========================================================================
  * StringBuilder runtime
  * ========================================================================= */

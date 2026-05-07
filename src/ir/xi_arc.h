@@ -29,6 +29,11 @@
 
 #include "xi.h"
 
+/* Rewrite NO_ESCAPE heap allocs to XI_STACK_ALLOC.
+ * Must be called after xi_escape_analyze() and before xi_arc_insert().
+ * Stores the original op in aux_int for codegen dispatch. */
+XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f);
+
 /* Insert ARC retain/release ops into f based on escape analysis.
  * Must be called after xi_escape_analyze() and xi_backend_lower().
  * Modifies the IR in place. */

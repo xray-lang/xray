@@ -112,6 +112,9 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
 
     /* ARC / Ownership (inserted after escape analysis) */
     case XI_RETAIN: case XI_RELEASE: case XI_MOVE:
+
+    /* Stack allocation (replaces heap alloc for NO_ESCAPE values) */
+    case XI_STACK_ALLOC:
         return true;
 
     /* --- Non-legal (must be lowered before BACKEND) --- */
