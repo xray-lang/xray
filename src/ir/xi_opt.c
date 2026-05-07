@@ -817,6 +817,7 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
     }
 
     f->stage = XI_STAGE_REPPED;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
     return xi_pass_change_all();
 }
 
@@ -923,6 +924,59 @@ static void validate_pass_table(void) {
         if (d->output_stage > max_output)
             max_output = d->output_stage;
     }
+
+    /* Check declarative pass ordering constraints */
+    xi_pass_order_check();
+}
+
+/* ========== Pass Order Constraints ========== */
+
+/* Declarative ordering rules. Each entry says "before must appear
+ * earlier than after in the pass table".  Checked once at startup. */
+static const XiPassOrderConstraint xi_pass_constraints[] = {
+    /* Within the same opt level, ordering matters for efficiency.
+     * Cross-level constraints (e.g. SCCP -> DCE) are not enforced
+     * here because the fixed-point loop handles convergence. */
+    { "constfold", "copy_prop",
+      "constant folding enables more copy propagation" },
+    { "copy_prop", "dce",
+      "copy propagation makes original values dead" },
+    { "gvn",       "licm",
+      "GVN eliminates redundancies before LICM hoists" },
+};
+
+#define XI_CONSTRAINT_COUNT \
+    (sizeof(xi_pass_constraints) / sizeof(xi_pass_constraints[0]))
+
+/* Return the index of a pass by name, or -1 if not found. */
+static int pass_index_by_name(const char *name) {
+    for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
+        if (strcmp(xi_pass_table[i].name, name) == 0)
+            return (int)i;
+    }
+    return -1;
+}
+
+XR_FUNC bool xi_pass_order_check(void) {
+    for (size_t c = 0; c < XI_CONSTRAINT_COUNT; c++) {
+        const XiPassOrderConstraint *pc = &xi_pass_constraints[c];
+        int bi = pass_index_by_name(pc->before);
+        int ai = pass_index_by_name(pc->after);
+
+        /* If either pass is not in the table (e.g. external pass),
+         * the constraint is trivially satisfied. */
+        if (bi < 0 || ai < 0)
+            continue;
+
+        if (bi >= ai) {
+            fprintf(stderr,
+                    "[xi_pass] order violation: '%s' (index %d) must "
+                    "precede '%s' (index %d) — %s\n",
+                    pc->before, bi, pc->after, ai, pc->reason);
+            return false;
+        }
+    }
+    return true;
 }
 
 /* Find or create a stats slot for the given pass name. */
@@ -1016,8 +1070,10 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
             XiPassChange pc = desc->fn(f);
 
             /* Advance stage if the pass declares a higher output stage */
-            if (desc->output_stage > f->stage)
+            if (desc->output_stage > f->stage) {
                 f->stage = desc->output_stage;
+                f->invariant_mask |= xi_stage_invariants(f->stage);
+            }
             uint64_t dt = xr_time_monotonic_ns() - t0;
 
             /* XRAY_XI_DUMP: targeted IR dump after matching pass */
@@ -1047,10 +1103,12 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
             round_chg = xi_pass_merge(round_chg, pc);
 
             /* XRAY_XI_CHECK=1: verify after every single pass.
-             * This catches the exact pass that breaks an invariant. */
+             * Uses stage-aware verification so stage-specific invariants
+             * are also checked as the function progresses. */
             if (check_per_pass) {
                 char check_errbuf[512];
-                if (!xi_verify(f, check_errbuf, sizeof(check_errbuf))) {
+                if (!xi_verify_stage(f, f->stage,
+                                     check_errbuf, sizeof(check_errbuf))) {
                     fprintf(stderr, "[xi_check] verify failed after pass '%s' "
                             "round %d for '%s': %s\n",
                             desc->name, round,

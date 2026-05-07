@@ -125,6 +125,7 @@ XR_FUNC void xi_backend_lower(XiFunc *f) {
     }
 
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_BACKEND);
 
     /* Recurse into children */
     for (uint16_t i = 0; i < f->nchildren; i++) {

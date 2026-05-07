@@ -79,6 +79,36 @@ static inline const char *xi_stage_name(XiStage s) {
     return (unsigned)s < XI_STAGE_COUNT ? names[s] : "?";
 }
 
+/*
+ * Invariant mask — each bit records an established property.
+ * Bits are cumulative: once set, they remain set. Passes and
+ * stage-specific verifiers check the mask to gate their work.
+ */
+typedef uint32_t XiInvariantMask;
+
+#define XI_INV_SSA_DOM       ((XiInvariantMask)(1u << 0))  /* SSA dominance holds */
+#define XI_INV_CFG_CLOSED    ((XiInvariantMask)(1u << 1))  /* CFG: no unreachable blocks, succ/pred symmetric */
+#define XI_INV_EVAL_ORDER    ((XiInvariantMask)(1u << 2))  /* evaluation order deterministic (no ambiguous side-effects) */
+#define XI_INV_UPVALS_RESOLVED ((XiInvariantMask)(1u << 3))  /* all upvalue refs have valid indices */
+#define XI_INV_ESCAPE_DONE   ((XiInvariantMask)(1u << 4))  /* escape analysis has run; every alloc annotated */
+#define XI_INV_REPS_SELECTED ((XiInvariantMask)(1u << 5))  /* representations chosen for all values */
+#define XI_INV_BACKEND_LEGAL ((XiInvariantMask)(1u << 6))  /* all ops in backend-legal set */
+#define XI_INV_ARC_INSERTED  ((XiInvariantMask)(1u << 7))  /* RETAIN/RELEASE ops inserted */
+#define XI_INV_EFFECTS_VALID ((XiInvariantMask)(1u << 8))  /* per-value effect flags match opcode table */
+
+/* Invariant mask implied by reaching a given stage. */
+static inline XiInvariantMask xi_stage_invariants(XiStage s) {
+    switch (s) {
+        case XI_STAGE_RAW:       return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED;
+        case XI_STAGE_CANONICAL: return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER;
+        case XI_STAGE_CLOSED:    return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED;
+        case XI_STAGE_OWNED:     return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED | XI_INV_ESCAPE_DONE;
+        case XI_STAGE_REPPED:    return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED | XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED;
+        case XI_STAGE_BACKEND:   return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED | XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED | XI_INV_BACKEND_LEGAL;
+        default:                 return 0;
+    }
+}
+
 /* ========== Operation Kinds ========== */
 
 /*
@@ -531,6 +561,11 @@ typedef struct XiFunc {
      * advanced by stage-transition passes.  Backends and passes check
      * this to reject functions that have not reached the required stage. */
     XiStage stage;
+
+    /* Cumulative invariant mask — bits are set as passes establish
+     * properties.  Stage-specific verifiers check required bits.
+     * Automatically updated when stage advances. */
+    XiInvariantMask invariant_mask;
 
     /* VM entry metadata (propagated to XrProto during emission) */
     bool is_vararg;             /* has rest parameter (...args) */
