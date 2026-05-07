@@ -306,12 +306,14 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
      * This enables static method calls like Json.size(obj). */
     if (name) {
         static const struct { const char *name; int index; } builtin_classes[] = {
-            {"Reflect", XR_GLOBAL_VAR_REFLECT},
-            {"Array",   XR_GLOBAL_VAR_ARRAY},
-            {"Set",     XR_GLOBAL_VAR_SET},
-            {"Map",     XR_GLOBAL_VAR_MAP},
-            {"String",  XR_GLOBAL_VAR_STRING},
-            {"Json",    XR_GLOBAL_VAR_JSON},
+            {"Reflect",  XR_GLOBAL_VAR_REFLECT},
+            {"Array",    XR_GLOBAL_VAR_ARRAY},
+            {"Set",      XR_GLOBAL_VAR_SET},
+            {"Map",      XR_GLOBAL_VAR_MAP},
+            {"String",   XR_GLOBAL_VAR_STRING},
+            {"Json",     XR_GLOBAL_VAR_JSON},
+            {"Bytes",    XR_GLOBAL_VAR_BYTES},
+            {"Process",  XR_GLOBAL_VAR_PROCESS},
         };
         for (int i = 0; i < (int)(sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
             if (strcmp(name, builtin_classes[i].name) == 0) {
@@ -1568,14 +1570,79 @@ static XiValue *lower_range_expr(XiLower *l, AstNode *node) {
 static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     StructLiteralNode *sl = &node->as.struct_literal;
     int count = sl->field_count;
-
-    XiValue *val_vals[32];
     int n = count > 32 ? 32 : count;
+
+    /* Evaluate field values first */
+    XiValue *val_vals[32];
     for (int i = 0; i < n; i++) {
         val_vals[i] = xi_lower_expr(l, sl->field_values[i]);
     }
 
-    /* Arena-copy field names so they survive AST destruction */
+    /* Resolve struct class from scope: local → shared → upvalue.
+     * Struct declarations are lowered as XI_CLASS_CREATE and bound to
+     * a variable with the struct name, so the lookup chain works the
+     * same way as for class constructors in lower_new_expr. */
+    const char *sname = sl->struct_name;
+    XiValue *cls = NULL;
+    if (sname) {
+        int var_id = xi_lower_var_find(l, 0, sname);
+        if (var_id >= 0) {
+            if (l->is_program && l->shared_map[var_id] >= 0) {
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                                   l->type_any, 0);
+                if (cls) cls->aux_int = l->shared_map[var_id];
+            } else {
+                cls = xi_lower_braun_read(l, var_id, l->cur_block);
+            }
+        }
+        if (!cls) {
+            struct XrType *stype = NULL;
+            int shared_idx = xi_lower_find_shared(l, 0, sname, &stype);
+            if (shared_idx >= 0) {
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED,
+                                   l->type_any, 0);
+                if (cls) cls->aux_int = shared_idx;
+            }
+        }
+        if (!cls) {
+            struct XrType *upval_type = NULL;
+            int upval_idx = xi_lower_resolve_upvalue(l, 0, sname, &upval_type);
+            if (upval_idx >= 0) {
+                cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL,
+                                   l->type_any, 0);
+                if (cls) cls->aux_int = upval_idx;
+            }
+        }
+    }
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+
+    /* If struct class resolved, create instance via constructor call */
+    if (cls) {
+        XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                                      result_type, 1);
+        if (!call) return NULL;
+        call->args[0] = cls;
+        call->aux = (void *)"constructor";
+        call->aux_int = (int64_t)xi_lower_method_symbol(l, "constructor") << 1;
+        call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        call->line = (uint32_t)node->line;
+
+        /* Set fields by name via XI_STORE_FIELD */
+        for (int i = 0; i < n; i++) {
+            if (!val_vals[i] || !sl->field_names[i]) continue;
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,
+                                         l->type_void, 2);
+            if (!set) break;
+            set->args[0] = call;
+            set->args[1] = val_vals[i];
+            set->aux = (void *)arena_strdup(l->func, sl->field_names[i]);
+            set->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+        return call;
+    }
+
+    /* Fallback: unresolved struct → create as Json object (legacy path) */
     const char **names_copy = (const char **)xi_func_arena_alloc(
         l->func, (uint32_t)(sizeof(const char *) * n));
     if (!names_copy) return NULL;
@@ -1583,7 +1650,6 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         names_copy[i] = sl->field_names[i];
     }
 
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *obj = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
     if (!obj) return NULL;
     obj->aux_int = n;

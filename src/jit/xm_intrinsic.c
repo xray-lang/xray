@@ -30,6 +30,7 @@
 #include "xm_jit_runtime.h"
 #include "xm_sentinels.h"
 #include "../runtime/object/xjson.h"
+#include "../ir/xi_intrinsic_flags.h"
 #include "../base/xchecks.h"
 #include <stddef.h>
 
@@ -40,93 +41,28 @@ typedef struct {
     int id;
 } IntrinsicMapEntry;
 
-/* Populated once at first call; relies on linker-resolved addresses. */
+/* Auto-generated from xi_intrinsic.def — IDs and fn_ptrs in one table. */
 static IntrinsicMapEntry intrinsic_map[] = {
-    /* Object / property access */
-    {NULL, XR_INTRIN_GETPROP},    /* xr_jit_getprop     */
-    {NULL, XR_INTRIN_INDEX_GET},  /* xr_jit_index_get   */
-    {NULL, XR_INTRIN_INDEX_SET},  /* xr_jit_index_set   */
-    {NULL, XR_INTRIN_TARRAY_GET}, /* xr_jit_tarray_get  */
-    {NULL, XR_INTRIN_TARRAY_SET}, /* xr_jit_tarray_set  */
-
-    /* Map ops */
-    {NULL, XR_INTRIN_MAP_GET},       /* xr_jit_map_get       */
-    {NULL, XR_INTRIN_MAP_SET},       /* xr_jit_map_set       */
-    {NULL, XR_INTRIN_MAP_INCREMENT}, /* xr_jit_map_increment */
-
-    /* StringBuilder (sentinels) */
-    {NULL, XR_INTRIN_STRBUF_NEW},    /* xrt_strbuf_new_sentinel    */
-    {NULL, XR_INTRIN_STRBUF_APPEND}, /* xrt_strbuf_append_sentinel */
-    {NULL, XR_INTRIN_STRBUF_FINISH}, /* xrt_strbuf_finish_sentinel */
-
-    /* String ops */
-    {NULL, XR_INTRIN_SUBSTRING},  /* xr_jit_substring  */
-    {NULL, XR_INTRIN_STR_REPEAT}, /* xr_jit_str_repeat */
-    {NULL, XR_INTRIN_CHR},        /* xr_jit_chr        */
-
-    /* Method dispatch */
-    {NULL, XR_INTRIN_INVOKE_METHOD}, /* xrt_invoke_method_sentinel */
-
-    /* Shared variables */
-    {NULL, XR_INTRIN_GET_SHARED}, /* xr_jit_get_shared */
-    {NULL, XR_INTRIN_SET_SHARED}, /* xr_jit_set_shared */
-
-    /* I/O */
-    {NULL, XR_INTRIN_PRINT}, /* xr_jit_print */
-
-    /* Tagged arithmetic fallback */
-    {NULL, XR_INTRIN_RT_ADD}, /* xr_jit_rt_add */
-    {NULL, XR_INTRIN_RT_SUB}, /* xr_jit_rt_sub */
-    {NULL, XR_INTRIN_RT_MUL}, /* xr_jit_rt_mul */
-    {NULL, XR_INTRIN_RT_DIV}, /* xr_jit_rt_div */
-    {NULL, XR_INTRIN_RT_MOD}, /* xr_jit_rt_mod */
-
-    /* Exception handling */
-    {NULL, XR_INTRIN_THROW}, /* xr_jit_throw */
-
-    /* Json struct promotion */
-    {NULL, XR_INTRIN_JSON_NEW_SHAPE}, /* xr_json_new_with_shape */
-
-    /* Type checking */
-    {NULL, XR_INTRIN_TYPEOF}, /* xr_jit_typeof */
+#define XI_INTRINSIC(name, id, arity, helper, eff, rep) \
+    {NULL, XR_INTRIN_##name},
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
 };
 
-#define INTRINSIC_MAP_COUNT (int) (sizeof(intrinsic_map) / sizeof(intrinsic_map[0]))
+#define INTRINSIC_MAP_COUNT (int)(sizeof(intrinsic_map) / sizeof(intrinsic_map[0]))
 
-/* One-time init: fill fn_ptr slots from linker symbols.  Thread-safety is
- * not required — AOT compilation is single-threaded. */
+/* One-time init: fill fn_ptr slots from linker symbols.
+ * Auto-generated from xi_intrinsic.def — adding a new intrinsic
+ * to the .def file automatically registers its fn_ptr here. */
 static bool map_initialized = false;
 
 static void init_intrinsic_map(void) {
-    if (map_initialized)
-        return;
+    if (map_initialized) return;
     int i = 0;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_getprop;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_index_get;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_index_set;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_tarray_get;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_tarray_set;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_map_get;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_map_set;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_map_increment;
-    intrinsic_map[i++].fn_ptr = (void *) xrt_strbuf_new_sentinel;
-    intrinsic_map[i++].fn_ptr = (void *) xrt_strbuf_append_sentinel;
-    intrinsic_map[i++].fn_ptr = (void *) xrt_strbuf_finish_sentinel;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_substring;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_str_repeat;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_chr;
-    intrinsic_map[i++].fn_ptr = (void *) xrt_invoke_method_sentinel;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_get_shared;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_set_shared;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_print;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_rt_add;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_rt_sub;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_rt_mul;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_rt_div;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_rt_mod;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_throw;
-    intrinsic_map[i++].fn_ptr = (void *) xr_json_new_with_shape;
-    intrinsic_map[i++].fn_ptr = (void *) xr_jit_typeof;
+#define XI_INTRINSIC(name, id, arity, helper, eff, rep) \
+    intrinsic_map[i++].fn_ptr = (void *)(helper);
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
     XR_DCHECK(i == INTRINSIC_MAP_COUNT, "intrinsic map init count mismatch");
     map_initialized = true;
 }
@@ -198,7 +134,7 @@ XR_FUNC void xm_resolve_intrinsics(XmFunc *func) {
  * lowercase by stringifying the enum suffix (matches existing output). */
 XR_FUNC const char *xm_intrinsic_name(int id) {
     switch (id) {
-#define XI_INTRINSIC(name, id_val, ar, helper) \
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
     case id_val: return #helper;
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
@@ -208,10 +144,30 @@ XR_FUNC const char *xm_intrinsic_name(int id) {
 
 XR_FUNC int xm_intrinsic_arity(int id) {
     switch (id) {
-#define XI_INTRINSIC(name, id_val, ar, helper) \
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
     case id_val: return ar;
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
         default: return -1;
+    }
+}
+
+XR_FUNC int xm_intrinsic_effects(int id) {
+    switch (id) {
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
+    case id_val: return (eff);
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
+        default: return 0;
+    }
+}
+
+XR_FUNC int xm_intrinsic_ret_rep(int id) {
+    switch (id) {
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
+    case id_val: return (rep);
+#include "../ir/xi_intrinsic.def"
+#undef XI_INTRINSIC
+        default: return IREP_VAL;
     }
 }

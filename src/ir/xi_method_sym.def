@@ -1,0 +1,101 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xi_method_sym.def - Single source of truth for method dispatch symbols
+ *
+ * X-Macro format: XI_METHOD_SYM(aot_name, id, rt_name, display_name)
+ *   aot_name     — suffix after XRT_SYM_  (e.g. LENGTH)
+ *   id           — numeric ID (stable, must match SYMBOL_* in xsymbol_table.h)
+ *   rt_name      — suffix after SYMBOL_   (e.g. LENGTH, TOLOWERCASE)
+ *   display_name — xray source-level method name (e.g. "length", "toLowerCase")
+ *
+ * Consumers:
+ *   - xrt_method_symbols.h : XRT_SYM_* enum generation
+ *   - xrt_symbol_check.c   : _Static_assert XRT_SYM_* == SYMBOL_* guards
+ *   - xi_cgen.c            : cg_method_sym() table generation
+ *   - test_xi_intrinsic.c  : consistency tests
+ *
+ * ADDING A NEW METHOD SYMBOL:
+ *   1. Add one XI_METHOD_SYM() line below with the correct SYMBOL_* id.
+ *   2. Add the matching SYMBOL_* entry in xsymbol_table.h (if not present).
+ *   3. Implement the method dispatch in xrt_method.h.
+ *   IDs must match the runtime SYMBOL_* enum. Do NOT renumber.
+ */
+
+/* --- Collection common (Array/Map/Set/String) --- */
+XI_METHOD_SYM(LENGTH,       1,  LENGTH,       "length")
+XI_METHOD_SYM(IS_EMPTY,     2,  IS_EMPTY,     "isEmpty")
+XI_METHOD_SYM(HAS,          3,  HAS,          "has")
+XI_METHOD_SYM(GET,          4,  GET,          "get")
+XI_METHOD_SYM(SET,          5,  SET,          "set")
+XI_METHOD_SYM(DELETE,       6,  DELETE,       "delete")
+XI_METHOD_SYM(CLEAR,        7,  CLEAR,        "clear")
+XI_METHOD_SYM(KEYS,         8,  KEYS,         "keys")
+XI_METHOD_SYM(VALUES,       9,  VALUES,       "values")
+
+/* --- Functional iteration --- */
+XI_METHOD_SYM(FOREACH,     12,  FOREACH,      "forEach")
+XI_METHOD_SYM(MAP,         13,  MAP,          "map")
+XI_METHOD_SYM(FILTER,      14,  FILTER,       "filter")
+XI_METHOD_SYM(REDUCE,      15,  REDUCE,       "reduce")
+
+/* --- String methods --- */
+XI_METHOD_SYM(SLICE,       16,  SLICE,        "slice")
+XI_METHOD_SYM(CHARAT,      17,  CHARAT,       "charAt")
+XI_METHOD_SYM(SUBSTRING,   18,  SUBSTRING,    "substring")
+XI_METHOD_SYM(INDEXOF,     19,  INDEXOF,      "indexOf")
+XI_METHOD_SYM(CONTAINS,    20,  CONTAINS,     "contains")
+XI_METHOD_SYM(STARTSWITH,  21,  STARTSWITH,   "startsWith")
+XI_METHOD_SYM(ENDSWITH,    22,  ENDSWITH,     "endsWith")
+XI_METHOD_SYM(TOLOWER,     23,  TOLOWERCASE,  "toLowerCase")
+XI_METHOD_SYM(TOUPPER,     24,  TOUPPERCASE,  "toUpperCase")
+XI_METHOD_SYM(TRIM,        25,  TRIM,         "trim")
+XI_METHOD_SYM(SPLIT,       26,  SPLIT,        "split")
+XI_METHOD_SYM(REPLACE,     27,  REPLACE,      "replace")
+XI_METHOD_SYM(REPLACEALL,  28,  REPLACEALL,   "replaceAll")
+XI_METHOD_SYM(REPEAT,      29,  REPEAT,       "repeat")
+XI_METHOD_SYM(CONCAT,      30,  CONCAT,       "concat")
+XI_METHOD_SYM(BYTE_AT,     31,  BYTE_AT,      "byteAt")
+XI_METHOD_SYM(TRIM_START,  35,  TRIM_START,   "trimStart")
+XI_METHOD_SYM(TRIM_END,    36,  TRIM_END,     "trimEnd")
+XI_METHOD_SYM(PAD_START,   37,  PAD_START,    "padStart")
+XI_METHOD_SYM(PAD_END,     38,  PAD_END,      "padEnd")
+XI_METHOD_SYM(LASTINDEXOF, 39,  LASTINDEXOF,  "lastIndexOf")
+
+/* --- Type conversion --- */
+XI_METHOD_SYM(TOINT,       40,  TOINT,        "toInt")
+XI_METHOD_SYM(TOFLOAT,     41,  TOFLOAT,      "toFloat")
+XI_METHOD_SYM(ORD,         46,  ORD,          "ord")
+
+/* --- Array methods --- */
+XI_METHOD_SYM(PUSH,        48,  PUSH,         "push")
+XI_METHOD_SYM(POP,         49,  POP,          "pop")
+XI_METHOD_SYM(SHIFT,       50,  SHIFT,        "shift")
+XI_METHOD_SYM(UNSHIFT,     51,  UNSHIFT,      "unshift")
+XI_METHOD_SYM(JOIN,        52,  JOIN,         "join")
+XI_METHOD_SYM(REVERSE,     53,  REVERSE,      "reverse")
+XI_METHOD_SYM(FILL,       168,  FILL,         "fill")
+XI_METHOD_SYM(SORT,       169,  SORT,         "sort")
+XI_METHOD_SYM(INCLUDES,   170,  INCLUDES,     "includes")
+
+/* --- Iterator protocol --- */
+XI_METHOD_SYM(ITERATOR,    54,  ITERATOR,     "iterator")
+XI_METHOD_SYM(HAS_NEXT,    56,  HASNEXT,      "hasNext")
+XI_METHOD_SYM(NEXT,        57,  NEXT,         "next")
+
+/* --- Numeric methods --- */
+XI_METHOD_SYM(FLOOR,       58,  FLOOR,        "floor")
+XI_METHOD_SYM(CEIL,        59,  CEIL,         "ceil")
+XI_METHOD_SYM(ROUND,       60,  ROUND,        "round")
+XI_METHOD_SYM(ABS,         61,  ABS,          "abs")
+XI_METHOD_SYM(SQRT,        62,  SQRT,         "sqrt")
+XI_METHOD_SYM(POW,         63,  POW,          "pow")
+XI_METHOD_SYM(TOFIXED,     64,  TOFIXED,      "toFixed")
+XI_METHOD_SYM(MAX,         66,  MAX,          "max")
+XI_METHOD_SYM(MIN,         67,  MIN,          "min")
+XI_METHOD_SYM(TOHEX,       68,  TOHEX,        "toHex")
+XI_METHOD_SYM(TOSTRING,    85,  TOSTRING,     "toString")

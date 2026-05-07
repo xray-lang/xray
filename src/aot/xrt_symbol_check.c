@@ -8,96 +8,24 @@
  * xrt_symbol_check.c -- compile-time guard tying AOT-side method
  * symbol IDs (XRT_SYM_*) to the runtime SYMBOL_* enum.
  *
- * KEY POINTS:
- *   - The AOT-generated C output is fully self-contained and cannot
- *     #include runtime headers, so xrt_method.h has to declare its
- *     own XRT_SYM_* constants. Without a guard those constants would
- *     drift the moment SYMBOL_* renumbers, and AOT-emitted dispatch
- *     would silently route methods to the wrong slot.
+ * Auto-generated from xi_method_sym.def.  Each XI_METHOD_SYM entry
+ * produces a _Static_assert pairing XRT_SYM_<aot_name> with
+ * SYMBOL_<rt_name>.  Name differences (TOLOWER vs TOLOWERCASE,
+ * HAS_NEXT vs HASNEXT) are handled by the rt_name column in the .def.
  *
- *   - This translation unit links into xray_core (NOT into the
- *     AOT-generated output). It only contains static_asserts that
- *     pair every XRT_SYM_X with the matching SYMBOL_X. Drift fails
- *     the runtime build immediately rather than producing miscompiled
- *     binaries.
- *
- *   - Aliases (XRT_SYM_TOLOWER == SYMBOL_TOLOWERCASE,
- *     XRT_SYM_TOUPPER == SYMBOL_TOUPPERCASE, XRT_SYM_SIZE ==
- *     SYMBOL_LENGTH) are documented inline because their names do
- *     not match.
+ * This TU links into xray_core.  Drift fails the build immediately.
  */
 
-/*
- * Use the lightweight constants-only header. Including the full
- * xrt_method.h here would drag in xrt_arc.h's static-inline allocator
- * helpers, which leave unresolved references to AOT-only globals
- * (xrt_bump_cursor / xrt_bump_blocks / xrt_bump_end / xrt_bump_enabled)
- * inside this xray_core translation unit on GNU ld.
- */
 #include "xrt_method_symbols.h"
 #include "../runtime/symbol/xsymbol_table.h"
 
-_Static_assert(XRT_SYM_LENGTH == SYMBOL_LENGTH,
-               "XRT_SYM_LENGTH drifted from runtime SYMBOL_LENGTH");
-/* SIZE is an analyzer-side alias; compiler always emits LENGTH. */
-_Static_assert(XRT_SYM_SIZE == SYMBOL_LENGTH, "XRT_SYM_SIZE alias drifted from SYMBOL_LENGTH");
-_Static_assert(XRT_SYM_IS_EMPTY == SYMBOL_IS_EMPTY, "XRT_SYM_IS_EMPTY drift");
-_Static_assert(XRT_SYM_HAS == SYMBOL_HAS, "XRT_SYM_HAS drift");
-_Static_assert(XRT_SYM_GET == SYMBOL_GET, "XRT_SYM_GET drift");
-_Static_assert(XRT_SYM_SET == SYMBOL_SET, "XRT_SYM_SET drift");
-_Static_assert(XRT_SYM_DELETE == SYMBOL_DELETE, "XRT_SYM_DELETE drift");
-_Static_assert(XRT_SYM_CLEAR == SYMBOL_CLEAR, "XRT_SYM_CLEAR drift");
-_Static_assert(XRT_SYM_KEYS == SYMBOL_KEYS, "XRT_SYM_KEYS drift");
-_Static_assert(XRT_SYM_VALUES == SYMBOL_VALUES, "XRT_SYM_VALUES drift");
-_Static_assert(XRT_SYM_SLICE == SYMBOL_SLICE, "XRT_SYM_SLICE drift");
-_Static_assert(XRT_SYM_INDEXOF == SYMBOL_INDEXOF, "XRT_SYM_INDEXOF drift");
-_Static_assert(XRT_SYM_CONTAINS == SYMBOL_CONTAINS, "XRT_SYM_CONTAINS drift");
-_Static_assert(XRT_SYM_STARTSWITH == SYMBOL_STARTSWITH, "XRT_SYM_STARTSWITH drift");
-_Static_assert(XRT_SYM_ENDSWITH == SYMBOL_ENDSWITH, "XRT_SYM_ENDSWITH drift");
-/* Naming differs: AOT uses TOLOWER/TOUPPER, runtime uses TOLOWERCASE/TOUPPERCASE. */
-_Static_assert(XRT_SYM_TOLOWER == SYMBOL_TOLOWERCASE, "XRT_SYM_TOLOWER drift");
-_Static_assert(XRT_SYM_TOUPPER == SYMBOL_TOUPPERCASE, "XRT_SYM_TOUPPER drift");
-_Static_assert(XRT_SYM_CHARAT == SYMBOL_CHARAT, "XRT_SYM_CHARAT drift");
-_Static_assert(XRT_SYM_SUBSTRING == SYMBOL_SUBSTRING, "XRT_SYM_SUBSTRING drift");
-_Static_assert(XRT_SYM_TRIM == SYMBOL_TRIM, "XRT_SYM_TRIM drift");
-_Static_assert(XRT_SYM_TRIM_START == SYMBOL_TRIM_START, "XRT_SYM_TRIM_START drift");
-_Static_assert(XRT_SYM_TRIM_END == SYMBOL_TRIM_END, "XRT_SYM_TRIM_END drift");
-_Static_assert(XRT_SYM_SPLIT == SYMBOL_SPLIT, "XRT_SYM_SPLIT drift");
-_Static_assert(XRT_SYM_REPLACE == SYMBOL_REPLACE, "XRT_SYM_REPLACE drift");
-_Static_assert(XRT_SYM_REPLACEALL == SYMBOL_REPLACEALL, "XRT_SYM_REPLACEALL drift");
-_Static_assert(XRT_SYM_REPEAT == SYMBOL_REPEAT, "XRT_SYM_REPEAT drift");
-_Static_assert(XRT_SYM_CONCAT == SYMBOL_CONCAT, "XRT_SYM_CONCAT drift");
-_Static_assert(XRT_SYM_BYTE_AT == SYMBOL_BYTE_AT, "XRT_SYM_BYTE_AT drift");
-_Static_assert(XRT_SYM_PAD_START == SYMBOL_PAD_START, "XRT_SYM_PAD_START drift");
-_Static_assert(XRT_SYM_PAD_END == SYMBOL_PAD_END, "XRT_SYM_PAD_END drift");
-_Static_assert(XRT_SYM_LASTINDEXOF == SYMBOL_LASTINDEXOF, "XRT_SYM_LASTINDEXOF drift");
-_Static_assert(XRT_SYM_TOINT == SYMBOL_TOINT, "XRT_SYM_TOINT drift");
-_Static_assert(XRT_SYM_TOFLOAT == SYMBOL_TOFLOAT, "XRT_SYM_TOFLOAT drift");
-_Static_assert(XRT_SYM_ORD == SYMBOL_ORD, "XRT_SYM_ORD drift");
-_Static_assert(XRT_SYM_PUSH == SYMBOL_PUSH, "XRT_SYM_PUSH drift");
-_Static_assert(XRT_SYM_POP == SYMBOL_POP, "XRT_SYM_POP drift");
-_Static_assert(XRT_SYM_SHIFT == SYMBOL_SHIFT, "XRT_SYM_SHIFT drift");
-_Static_assert(XRT_SYM_UNSHIFT == SYMBOL_UNSHIFT, "XRT_SYM_UNSHIFT drift");
-_Static_assert(XRT_SYM_JOIN == SYMBOL_JOIN, "XRT_SYM_JOIN drift");
-_Static_assert(XRT_SYM_REVERSE == SYMBOL_REVERSE, "XRT_SYM_REVERSE drift");
-_Static_assert(XRT_SYM_MAX == SYMBOL_MAX, "XRT_SYM_MAX drift");
-_Static_assert(XRT_SYM_MIN == SYMBOL_MIN, "XRT_SYM_MIN drift");
-_Static_assert(XRT_SYM_TOHEX == SYMBOL_TOHEX, "XRT_SYM_TOHEX drift");
-_Static_assert(XRT_SYM_FILL == SYMBOL_FILL, "XRT_SYM_FILL drift");
-_Static_assert(XRT_SYM_SORT == SYMBOL_SORT, "XRT_SYM_SORT drift");
-_Static_assert(XRT_SYM_INCLUDES == SYMBOL_INCLUDES, "XRT_SYM_INCLUDES drift");
-_Static_assert(XRT_SYM_FLOOR == SYMBOL_FLOOR, "XRT_SYM_FLOOR drift");
-_Static_assert(XRT_SYM_CEIL == SYMBOL_CEIL, "XRT_SYM_CEIL drift");
-_Static_assert(XRT_SYM_ROUND == SYMBOL_ROUND, "XRT_SYM_ROUND drift");
-_Static_assert(XRT_SYM_ABS == SYMBOL_ABS, "XRT_SYM_ABS drift");
-_Static_assert(XRT_SYM_SQRT == SYMBOL_SQRT, "XRT_SYM_SQRT drift");
-_Static_assert(XRT_SYM_POW == SYMBOL_POW, "XRT_SYM_POW drift");
-_Static_assert(XRT_SYM_TOFIXED == SYMBOL_TOFIXED, "XRT_SYM_TOFIXED drift");
-_Static_assert(XRT_SYM_TOSTRING == SYMBOL_TOSTRING, "XRT_SYM_TOSTRING drift");
-_Static_assert(XRT_SYM_FOREACH == SYMBOL_FOREACH, "XRT_SYM_FOREACH drift");
-_Static_assert(XRT_SYM_MAP == SYMBOL_MAP, "XRT_SYM_MAP drift");
-_Static_assert(XRT_SYM_FILTER == SYMBOL_FILTER, "XRT_SYM_FILTER drift");
-_Static_assert(XRT_SYM_REDUCE == SYMBOL_REDUCE, "XRT_SYM_REDUCE drift");
-_Static_assert(XRT_SYM_ITERATOR == SYMBOL_ITERATOR, "XRT_SYM_ITERATOR drift");
-_Static_assert(XRT_SYM_HAS_NEXT == SYMBOL_HASNEXT, "XRT_SYM_HAS_NEXT drift");
-_Static_assert(XRT_SYM_NEXT == SYMBOL_NEXT, "XRT_SYM_NEXT drift");
+/* Auto-generated from xi_method_sym.def — one assert per entry */
+#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) \
+    _Static_assert(XRT_SYM_##aot_name == SYMBOL_##rt_name, \
+                   "XRT_SYM_" #aot_name " drifted from SYMBOL_" #rt_name);
+#include "../ir/xi_method_sym.def"
+#undef XI_METHOD_SYM
+
+/* SIZE is an alias for LENGTH */
+_Static_assert(XRT_SYM_SIZE == SYMBOL_LENGTH,
+               "XRT_SYM_SIZE alias drifted from SYMBOL_LENGTH");

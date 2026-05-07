@@ -331,6 +331,129 @@ TEST(complex_nesting_parent_chain) {
     free_result(&r);
 }
 
+/* ========== Scope consistency checks ========== */
+
+/* Verify every scope has a unique identity (no aliasing). */
+static void collect_scope_ptrs(XaScope *scope, XaScope **arr, int *count, int max) {
+    if (!scope || *count >= max) return;
+    arr[(*count)++] = scope;
+    for (int i = 0; i < scope->child_count; i++)
+        collect_scope_ptrs(scope->children[i], arr, count, max);
+}
+
+static bool scopes_unique(XaScope *root) {
+    XaScope *ptrs[256];
+    int n = 0;
+    collect_scope_ptrs(root, ptrs, &n, 256);
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (ptrs[i] == ptrs[j]) return false;
+        }
+    }
+    return true;
+}
+
+/* Verify no scope has negative child_count and all children are non-NULL. */
+static bool scopes_well_formed(XaScope *scope) {
+    if (!scope) return true;
+    if (scope->child_count < 0) return false;
+    for (int i = 0; i < scope->child_count; i++) {
+        if (!scope->children[i]) return false;
+        if (!scopes_well_formed(scope->children[i])) return false;
+    }
+    return true;
+}
+
+TEST(scope_consistency_after_analysis) {
+    /* Complex program exercising all scope-creating constructs.
+     * After full analysis (Pass 1 + Pass 2), verify:
+     *   1. Parent chain is valid
+     *   2. All scopes are unique (no aliasing)
+     *   3. All scopes are well-formed
+     *   4. Symbol isolation holds */
+    AnalysisResult r = analyze_source(
+        "let g = 1\n"
+        "fn outer(x: int): int {\n"
+        "    let a = x\n"
+        "    fn inner(y: int): int {\n"
+        "        return a + y\n"
+        "    }\n"
+        "    if (x > 0) {\n"
+        "        let b = 2\n"
+        "    }\n"
+        "    for (i in [1, 2, 3]) {\n"
+        "        let c = i\n"
+        "    }\n"
+        "    return inner(a)\n"
+        "}\n"
+        "class Foo {\n"
+        "    val: int\n"
+        "    constructor(v: int) {\n"
+        "        this.val = v\n"
+        "    }\n"
+        "    get(): int {\n"
+        "        return this.val\n"
+        "    }\n"
+        "}\n"
+    );
+    XaScope *global = r.analyzer->global_scope;
+
+    /* 1. Parent chain */
+    assert(verify_parent_chain(global, NULL) &&
+           "parent chain must be valid after full analysis");
+
+    /* 2. No scope aliasing */
+    assert(scopes_unique(global) &&
+           "all scopes must be distinct objects");
+
+    /* 3. Well-formed */
+    assert(scopes_well_formed(global) &&
+           "all scopes must have valid child arrays");
+
+    /* 4. Sufficient depth — at least: global + outer + inner + class + methods */
+    int total = count_scopes(global);
+    assert(total >= 5 && "complex program must have at least 5 scopes");
+    printf("    total scopes = %d\n", total);
+
+    /* 5. Symbol isolation: function-local vars not in global */
+    assert(xa_scope_lookup_local(global, "a") == NULL);
+    assert(xa_scope_lookup_local(global, "b") == NULL);
+    assert(xa_scope_lookup_local(global, "c") == NULL);
+
+    /* 6. Global symbols present */
+    assert(xa_scope_lookup(global, "g") != NULL);
+    assert(xa_scope_lookup(global, "outer") != NULL);
+    assert(xa_scope_lookup(global, "Foo") != NULL);
+
+    free_result(&r);
+}
+
+TEST(reanalysis_scope_stability) {
+    /* Verify that analyzing the same code twice produces a consistent
+     * scope tree (same count, valid parent chains).  This guards
+     * against scope-creation side effects across analyses. */
+    const char *source =
+        "fn foo(x: int): int {\n"
+        "    let y = x + 1\n"
+        "    return y\n"
+        "}\n"
+        "let z = foo(1)\n";
+
+    AnalysisResult r1 = analyze_source(source);
+    int count1 = count_scopes(r1.analyzer->global_scope);
+    assert(verify_parent_chain(r1.analyzer->global_scope, NULL));
+    free_result(&r1);
+
+    AnalysisResult r2 = analyze_source(source);
+    int count2 = count_scopes(r2.analyzer->global_scope);
+    assert(verify_parent_chain(r2.analyzer->global_scope, NULL));
+
+    printf("    scope count: run1=%d run2=%d\n", count1, count2);
+    assert(count1 == count2 &&
+           "repeated analysis must produce identical scope count");
+    free_result(&r2);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -349,6 +472,8 @@ int main(void) {
     run_for_in_creates_scope();
     run_shadowing_correct_scope();
     run_complex_nesting_parent_chain();
+    run_scope_consistency_after_analysis();
+    run_reanalysis_scope_stability();
 
     teardown();
 

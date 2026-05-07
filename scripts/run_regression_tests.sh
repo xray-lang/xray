@@ -134,12 +134,14 @@ run_one_test() {
 
     # Run with timeout
     local exit_code
+    local output
     if [ -n "${TIMEOUT_CMD}" ]; then
-        "${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" > /dev/null 2>&1
+        output=$("${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" 2>&1)
         exit_code=$?
     else
-        # Shell-based timeout fallback
-        "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" > /dev/null 2>&1 &
+        # Shell-based timeout fallback — capture output to temp file
+        local tmp_out="${RESULTS_DIR}/${test_name}.out"
+        "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" > "${tmp_out}" 2>&1 &
         local pid=$!
         ( sleep "${TIMEOUT_SECS}"; kill "$pid" 2>/dev/null ) &
         local watcher=$!
@@ -150,14 +152,22 @@ run_one_test() {
         if [ $exit_code -eq 137 ] || [ $exit_code -eq 143 ]; then
             exit_code=124
         fi
+        output=$(cat "${tmp_out}" 2>/dev/null)
+        rm -f "${tmp_out}"
     fi
 
+    # Extract executed count from output (e.g., "7 passed")
+    local exec_count=0
+    local passed_count=$(echo "${output}" | sed 's/\x1b\[[0-9;]*m//g' | grep -o '[0-9]\+ passed' | head -1 | grep -o '[0-9]\+')
+    local failed_count=$(echo "${output}" | sed 's/\x1b\[[0-9;]*m//g' | grep -o '[0-9]\+ failed' | head -1 | grep -o '[0-9]\+')
+    exec_count=$(( ${passed_count:-0} + ${failed_count:-0} ))
+
     if [ ${exit_code} -eq 0 ]; then
-        echo "PASS" > "${result_file}"
+        echo "PASS:${exec_count}" > "${result_file}"
     elif [ ${exit_code} -eq 124 ]; then
-        echo "TIMEOUT" > "${result_file}"
+        echo "TIMEOUT:0" > "${result_file}"
     else
-        echo "FAIL" > "${result_file}"
+        echo "FAIL:${exec_count}" > "${result_file}"
     fi
 }
 export -f run_one_test is_in_list
@@ -167,8 +177,9 @@ export SKIP_TESTS NOJIT_TESTS
 # 开始时间
 start_time=$(date +%s)
 
-# Collect test files
-test_files=$(find "${TEST_DIR}" -name "*.xr" -type f ! -name '_*' | sort)
+# Collect test files (exclude helper/fixture dirs that aren't standalone tests)
+test_files=$(find "${TEST_DIR}" -name "*.xr" -type f ! -name '_*' \
+    ! -path '*/fixtures/*' ! -path '*/modules/*' ! -path '*/reexport_test/*' | sort)
 total_tests=$(echo "${test_files}" | wc -l | tr -d ' ')
 
 echo -e "${CYAN}运行 ${total_tests} 个测试 (${PARALLEL_JOBS} 并行)...${NC}"
@@ -181,11 +192,17 @@ echo "${test_files}" | xargs -P "${PARALLEL_JOBS}" -I {} bash -c 'run_one_test "
 passed_tests=0
 failed_tests=0
 skipped_tests=0
+total_executed=0
 declare -a failed_test_list
 
 for result_file in $(find "${RESULTS_DIR}" -name "*.result" | sort); do
     test_name=$(basename "${result_file}" .result)
-    result=$(cat "${result_file}")
+    raw=$(cat "${result_file}")
+    result=${raw%%:*}
+    exec_n=${raw#*:}
+    # If no colon, exec_n equals raw — treat as 0
+    if [ "${exec_n}" = "${raw}" ]; then exec_n=0; fi
+    total_executed=$((total_executed + exec_n))
     case "${result}" in
         PASS)
             passed_tests=$((passed_tests + 1))
@@ -212,7 +229,8 @@ elapsed_time=$((end_time - start_time))
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}测试摘要${NC}"
 echo -e "${BLUE}======================================${NC}"
-echo "总测试数: ${total_tests}"
+echo "总文件数: ${total_tests}"
+echo "执行测试: ${total_executed}"
 echo -e "${GREEN}通过: ${passed_tests}${NC}"
 if [ ${skipped_tests} -gt 0 ]; then
     echo -e "${CYAN}跳过: ${skipped_tests}${NC}"

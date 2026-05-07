@@ -23,6 +23,7 @@ static XrType stub_bool  = { .kind = XR_KIND_BOOL,   .id = 3, .frozen = true };
 static XrType stub_null  = { .kind = XR_KIND_NULL,   .id = 4, .frozen = true };
 static XrType stub_str   = { .kind = XR_KIND_STRING, .id = 5, .frozen = true };
 static XrType stub_void  = { .kind = XR_KIND_VOID,   .id = 6, .frozen = true };
+static XrType stub_func  = { .kind = XR_KIND_FUNCTION, .id = 7, .frozen = true };
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -909,7 +910,8 @@ TEST(select_rep_box_const_for_return) {
 }
 
 TEST(select_rep_unbox_param_for_arith) {
-    /* param(TAGGED) used by ADD(I64): needs UNBOX before ADD */
+    /* Typed int param gets I64 rep directly (no UNBOX needed for ADD).
+     * Return value still needs BOX (I64 → TAGGED for caller). */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -920,22 +922,21 @@ TEST(select_rep_unbox_param_for_arith) {
 
     xi_opt_select_rep(f);
 
-    /* ADD's first arg should now be an UNBOX of p0 */
-    assert(add->args[0] != p0 && "param should be unboxed for ADD");
-    assert(add->args[0]->op == XI_UNBOX && "should insert UNBOX");
-    assert(add->args[0]->args[0] == p0 && "UNBOX arg should be param");
+    /* Typed int param is already I64: ADD uses it directly */
+    assert(add->args[0] == p0 && "typed param used directly by ADD");
+    assert(p0->rep == XR_REP_I64 && "int param should have I64 rep");
     /* ADD result is I64, return needs TAGGED: should have BOX */
     assert(blk->control->op == XI_BOX && "return should BOX the ADD result");
     xi_func_free(f);
 }
 
 TEST(select_rep_no_change_for_call) {
-    /* CALL args and result are all TAGGED: no BOX/UNBOX needed */
-    XiFunc *f = make_func("test", &stub_int);
+    /* CALL with TAGGED-rep params: no BOX/UNBOX needed */
+    XiFunc *f = make_func("test", &stub_func);
     XiBlock *blk = f->entry;
 
-    XiValue *p0 = xi_param(f, blk, 0, &stub_int);
-    XiValue *call = xi_value_new(f, blk, XI_CALL, &stub_int, 2);
+    XiValue *p0 = xi_param(f, blk, 0, &stub_func);
+    XiValue *call = xi_value_new(f, blk, XI_CALL, &stub_func, 2);
     call->args[0] = p0;  /* callee */
     call->args[1] = p0;  /* arg */
     call->flags |= XI_FLAG_SIDE_EFFECT;

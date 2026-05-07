@@ -157,6 +157,10 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id,
         l->func->captures[idx].name = name;
         l->func->captures[idx].type = parent->vars[var_id].type;
         l->func->captures[idx].value = parent_val;
+        l->func->captures[idx].cell_index = -1;
+        l->func->captures[idx].env_offset = -1;
+        l->func->captures[idx].is_reassigned = false;
+        l->func->captures[idx].is_shared = false;
         /* Cell indirection is needed when the capture cannot see the final
          * value at closure creation time:
          *  - Hoisted function variables: initially null, replaced by the
@@ -182,6 +186,10 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id,
         l->func->captures[idx].index = (uint8_t)parent_upval;
         l->func->captures[idx].name = name;
         l->func->captures[idx].type = out_type ? *out_type : l->type_any;
+        l->func->captures[idx].cell_index = -1;
+        l->func->captures[idx].env_offset = -1;
+        l->func->captures[idx].is_reassigned = false;
+        l->func->captures[idx].is_shared = false;
         /* Inherit needs_cell from the parent capture so CELL_GET is emitted
          * at every level in the transitive capture chain. */
         if (parent_upval < (int)parent->func->ncaptures)
@@ -471,6 +479,34 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_braun_write(&l, var_id, entry, param_val);
     }
 
+    /* Emit default-value guards for optional parameters.
+     * The VM fills missing args with null; we emit:
+     *   def_val  = <lower default expression>
+     *   is_null  = (param == null)
+     *   resolved = SELECT(is_null, def_val, param)
+     * Single-block, no branching — avoids phi complexity in emitter. */
+    for (int i = 0; i < fdecl->param_count; i++) {
+        XrParamNode *p = fdecl->params[i];
+        if (!p->default_value) continue;
+
+        struct XrType *ptype = p->type ? p->type : l.type_any;
+        int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
+        XR_DCHECK(var_id >= 0, "default param var not found");
+        XiValue *cur = xi_lower_braun_read(&l, var_id, l.cur_block);
+        XiValue *def_val = xi_lower_expr(&l, p->default_value);
+        if (!def_val) continue;
+        XiValue *null_c = xi_const_null(l.func, l.cur_block, l.type_null);
+        XiValue *is_null = xi_binary(l.func, l.cur_block, XI_EQ,
+                                      l.type_bool, cur, null_c);
+        XiValue *resolved = xi_value_new(l.func, l.cur_block, XI_SELECT,
+                                          ptype, 3);
+        XR_DCHECK(resolved != NULL, "default param: SELECT alloc failed");
+        resolved->args[0] = is_null;
+        resolved->args[1] = cur;
+        resolved->args[2] = def_val;
+        xi_lower_braun_write(&l, var_id, l.cur_block, resolved);
+    }
+
     /* For named functions, register a self-reference so the body can
      * resolve recursive calls.  lower_call detects l.self_value and
      * emits a self-call (OP_CALLSELF) instead of a regular call. */
@@ -719,6 +755,7 @@ static void build_module_metadata(XiLower *l) {
                     if (!f->export_names[s]) continue;
                     exps[ei].name = f->export_names[s];
                     exps[ei].shared_slot = s;
+                    exps[ei].cell_index = -1;
                     exps[ei].function = l->shared_slot_funcs[s];
                     exps[ei].class_data = l->shared_slot_classes[s];
                     /* Type info from the var entry that maps to this slot */
@@ -753,6 +790,21 @@ static void build_module_metadata(XiLower *l) {
             }
             mod->classes = cls;
             mod->nclasses = class_count;
+        }
+    }
+
+    /* Shared-slot → function/class mappings for C codegen.
+     * These parallel arrays let cgen resolve GET_SHARED(slot) without
+     * scanning IR blocks for SET_SHARED patterns. */
+    if (nshared > 0) {
+        mod->nslots = nshared;
+        mod->slot_funcs = (XiFunc **)xr_calloc(nshared, sizeof(XiFunc *));
+        mod->slot_classes = (XiClassData **)xr_calloc(nshared, sizeof(XiClassData *));
+        if (mod->slot_funcs && mod->slot_classes) {
+            for (uint16_t s = 0; s < nshared; s++) {
+                mod->slot_funcs[s] = l->shared_slot_funcs[s];
+                mod->slot_classes[s] = l->shared_slot_classes[s];
+            }
         }
     }
 

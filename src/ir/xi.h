@@ -390,11 +390,13 @@ typedef enum {
 #define XI_MAX_CAPTURES 64
 
 /* Capture kind: how the closed-over variable is accessed by the child.
- * Determined during closure analysis (xi_pass_close or lowerer). */
+ * Determined during closure analysis (xi_pass_close). */
 typedef enum XiCaptureKind {
     XI_CAPTURE_BY_COPY,       /* immutable value copied at closure creation */
+    XI_CAPTURE_BY_IMM_REF,    /* immutable reference (large struct, no copy) */
     XI_CAPTURE_BY_MUT_CELL,   /* mutable cell indirection (needs_cell) */
     XI_CAPTURE_MODULE_LIVE,   /* module-level live binding via shared array */
+    XI_CAPTURE_CORO_SHARED,   /* coroutine-shared cell (escape analyzer) */
 } XiCaptureKind;
 
 typedef struct XiCapture {
@@ -403,10 +405,28 @@ typedef struct XiCapture {
     uint8_t capture_kind;  /* XiCaptureKind */
     bool needs_cell;       /* true if the captured variable is mutated in the child */
     bool is_mutable;       /* true if the variable is ever reassigned after capture */
+    bool is_reassigned;    /* true if variable is reassigned after capture point */
+    bool is_shared;        /* true if shared across coroutine boundaries */
+    int16_t cell_index;    /* cell table index (-1 = not assigned) */
+    int16_t env_offset;    /* offset in closure env object (-1 = not assigned) */
     const char *name;      /* variable name (debug; not owned) */
     struct XrType *type;   /* variable type */
     struct XiValue *value; /* SRC_REG: parent SSA value (register resolved at emit) */
 } XiCapture;
+
+/* Closure metadata: env layout and capture table for a single closure.
+ * Built by xi_pass_close from XiFunc.captures[]; replaces ad-hoc
+ * backend inspection of capture arrays.  All backends read this. */
+typedef struct XiClosureMeta {
+    struct XiFunc *function;     /* owning function */
+    struct XiFunc *parent_func;  /* lexical parent (back-pointer) */
+    XiCapture *captures;         /* pointer to func->captures (not owned) */
+    uint16_t ncaptures;          /* number of captures */
+    uint16_t env_size;           /* total slots in closure env object */
+    uint16_t ncells;             /* number of cell indirections */
+    bool has_mutable_capture;    /* any capture requires cell */
+    bool is_direct_callable;     /* can be called without closure alloc */
+} XiClosureMeta;
 
 /* ========== Core Structures ========== */
 
@@ -588,6 +608,11 @@ typedef struct XiFunc {
      * rather than relying on post-hoc IR scanning. */
     struct XiModule *module;
 
+    /* Closure metadata: populated by xi_pass_close.  NULL for non-closures
+     * and for program-level init functions.  Backends read this for
+     * env layout, cell indices, and capture decisions. */
+    XiClosureMeta *closure_meta;
+
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id;                /* unique name suffix for generated C functions */
 } XiFunc;
@@ -681,6 +706,7 @@ typedef enum XiBindingKind {
 typedef struct XiModuleExport {
     const char *name;           /* exported identifier (e.g. "square") */
     uint16_t shared_slot;       /* slot in module's shared array */
+    int16_t cell_index;         /* cross-module cell table index (-1 = N/A) */
     XiFunc *function;           /* non-NULL if this export is a function */
     XiClassData *class_data;    /* non-NULL if this export is a class */
     struct XrType *value_type;  /* inferred type of the exported value */
@@ -692,11 +718,20 @@ typedef struct XiModuleImport {
     const char *module_path;    /* source path of exporting module (e.g. "./math_lib") */
     const char *member_name;    /* imported name (e.g. "square") */
     uint8_t binding_kind;       /* XiBindingKind */
+    int16_t cell_index;         /* local cell table index for this import (-1 = N/A) */
     XiModuleExport *resolved;   /* resolved after module graph linking (NULL until then) */
 } XiModuleImport;
 
+/* Module link status for SCC-based initialization ordering. */
+typedef enum XiLinkStatus {
+    XI_LINK_UNVISITED = 0,  /* not yet visited by linker */
+    XI_LINK_IN_PROGRESS,    /* currently being linked (cycle detection) */
+    XI_LINK_LINKED,         /* fully linked, ready for evaluation */
+    XI_LINK_ERROR,          /* link failed (unresolved import, cycle error) */
+} XiLinkStatus;
+
 /* Per-module compilation unit: holds init function and explicit metadata.
- * Replaces the pattern of scanning IR blocks to infer exports/classes. */
+ * All metadata is produced during lowering; no post-hoc IR scanning. */
 typedef struct XiModule {
     const char *path;           /* source file path */
     const char *name;           /* C-safe identifier (e.g. "math_lib") */
@@ -709,6 +744,18 @@ typedef struct XiModule {
     uint16_t nexports;
     XiModuleImport *imports;    /* explicit import table */
     uint16_t nimports;
+    /* Shared-slot mappings: populated during lowering, consumed by C codegen.
+     * Indexed by shared slot number (0..nslots-1).  NULL entries mean the
+     * slot holds a plain value (not a function or class). */
+    XiFunc **slot_funcs;        /* [nslots] shared slot -> XiFunc* */
+    XiClassData **slot_classes; /* [nslots] shared slot -> XiClassData* */
+    uint16_t nslots;            /* = init->nshared */
+    /* SCC-based module linking */
+    int16_t scc_id;             /* strongly-connected component ID (-1 = unassigned) */
+    XiLinkStatus link_status;   /* linking progress state */
+    /* Closure metadata for all closures in this module */
+    XiClosureMeta **closure_metas; /* [nclosure_metas] */
+    uint16_t nclosure_metas;
 } XiModule;
 
 /* Allocate a new XiModule. Caller owns the returned pointer. */
@@ -717,10 +764,19 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
 /* Free a module and its metadata arrays (does NOT free init/functions). */
 XR_FUNC void xi_module_free(XiModule *mod);
 
-/* Populate exports[] and classes[] by scanning init's IR for
- * XI_SET_SHARED(slot, CLOSURE_NEW/CLASS_CREATE) patterns.
- * Must be called after lowering, before C codegen or import resolution. */
-XR_FUNC void xi_module_populate_exports(XiModule *mod);
+/* ========== Closure Pass ========== */
+
+/* Build XiClosureMeta for all closures in a function tree.
+ * Assigns env_offset and cell_index for each capture.
+ * Advances stage to XI_STAGE_CLOSED. */
+XR_FUNC void xi_pass_close(XiFunc *f);
+
+/* ========== Module Linker ========== */
+
+/* Resolve imports across a module graph using SCC-based linking.
+ * Sets XiModuleImport.resolved and module link_status/scc_id.
+ * Returns number of unresolved imports (0 = success). */
+XR_FUNC int xi_module_link_resolve(XiModule **modules, int nmodules);
 
 /* ========== Slot Map: Xi IR value → bytecode register mapping ========== */
 

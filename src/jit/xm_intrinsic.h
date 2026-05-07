@@ -30,6 +30,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../base/xdefs.h" /* XR_FUNC */
+#include "../ir/xi_intrinsic_flags.h"
 
 /* Forward-declare Xm types to avoid pulling in the full xm.h header. */
 typedef struct XmFunc XmFunc;
@@ -37,7 +38,7 @@ typedef struct XmFunc XmFunc;
 /* Generated from xi_intrinsic.def — do not edit by hand */
 typedef enum {
     XR_INTRIN_NONE = 0,
-#define XI_INTRINSIC(name, id, arity, helper) XR_INTRIN_##name = id,
+#define XI_INTRINSIC(name, id, arity, helper, eff, rep) XR_INTRIN_##name = id,
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
     XR_INTRIN_COUNT /* sentinel; keep last */
@@ -49,6 +50,12 @@ XR_FUNC const char *xm_intrinsic_name(int id);
 
 /* Returns the expected arity for this intrinsic, or -1 for variadic / unknown. */
 XR_FUNC int xm_intrinsic_arity(int id);
+
+/* Returns the effect-flag bitfield (IEFF_*) for this intrinsic, or 0. */
+XR_FUNC int xm_intrinsic_effects(int id);
+
+/* Returns the return-value representation (IREP_*) for this intrinsic. */
+XR_FUNC int xm_intrinsic_ret_rep(int id);
 
 /* Returns true if the given ID is a valid intrinsic. */
 static inline bool xm_intrinsic_valid(int id) {

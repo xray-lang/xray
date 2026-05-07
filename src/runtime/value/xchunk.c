@@ -24,7 +24,6 @@
 #include "xopcode_info.h"
 #include "../../base/xchecks.h"
 
-void xr_blueprint_free(struct XrBlueprint *bp);
 struct XiFunc;
 struct XiSlotMap;
 void xi_func_free(struct XiFunc *f);
@@ -162,12 +161,6 @@ void xr_vm_proto_free(XrProto *proto) {
         proto->inst_types = NULL;
     }
     // return_type_info points into analyzer_pool arena, do not free
-
-    // Free Blueprint (compiler-generated JIT metadata)
-    if (proto->blueprint != NULL) {
-        xr_blueprint_free((struct XrBlueprint *) proto->blueprint);
-        proto->blueprint = NULL;
-    }
 
     // Free Xi IR metadata (retained for JIT direct lowering)
     if (proto->xi_func != NULL) {

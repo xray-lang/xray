@@ -839,8 +839,20 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* Helper: check if an op is a heap-allocating instruction. */
+static bool verify_is_heap_alloc(uint16_t op) {
+    switch (op) {
+        case XI_ARRAY_NEW: case XI_MAP_NEW: case XI_SET_NEW:
+        case XI_JSON_NEW: case XI_CLOSURE_NEW: case XI_STR_CONCAT:
+        case XI_REGEX_COMPILE:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /* OWNED: escape analysis has run; every allocation op carries a
- * valid escape annotation (NO_ESCAPE / ARG_ESCAPE / GLOBAL_ESCAPE). */
+ * valid escape annotation; XI_MOVE ownership semantics are sound. */
 static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed) return;
     if (f->stage < XI_STAGE_OWNED) return;
@@ -853,9 +865,8 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
             XiValue *v = blk->values[i];
             if (!v) continue;
 
-            /* Allocation ops must have escape level set (0-3) */
-            if (v->op == XI_ARRAY_NEW || v->op == XI_MAP_NEW ||
-                v->op == XI_SET_NEW || v->op == XI_JSON_NEW) {
+            /* Allocation ops must have escape level in [0,3] */
+            if (verify_is_heap_alloc(v->op)) {
                 if (v->escape > 3) {
                     verr(ctx,
                          "func '%s': v%u %s in b%u has invalid escape "
@@ -863,6 +874,37 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                          f->name, v->id, xi_op_name(v->op),
                          blk->id, v->escape);
                     return;
+                }
+            }
+
+            /* XI_RETAIN / XI_RELEASE must reference a value */
+            if ((v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+                (v->nargs < 1 || !v->args[0])) {
+                verr(ctx,
+                     "func '%s': v%u %s in b%u has no argument",
+                     f->name, v->id, xi_op_name(v->op), blk->id);
+                return;
+            }
+
+            /* XI_MOVE: source must not be used after the move within
+             * the same block.  (Cross-block check would require dominance
+             * analysis — defer to a more advanced future pass.) */
+            if (v->op == XI_MOVE && v->nargs >= 1 && v->args[0]) {
+                XiValue *moved = v->args[0];
+                /* Scan remaining values in this block for use of moved */
+                for (uint32_t j = i + 1; j < blk->nvalues && !ctx->failed; j++) {
+                    XiValue *later = blk->values[j];
+                    if (!later) continue;
+                    for (uint16_t a = 0; a < later->nargs; a++) {
+                        if (later->args[a] == moved) {
+                            verr(ctx,
+                                 "func '%s': v%u uses moved value v%u "
+                                 "(moved at v%u) in b%u",
+                                 f->name, later->id, moved->id,
+                                 v->id, blk->id);
+                            return;
+                        }
+                    }
                 }
             }
         }

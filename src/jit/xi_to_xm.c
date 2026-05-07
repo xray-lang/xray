@@ -76,33 +76,6 @@ typedef struct {
 
 /* ========== Helpers ========== */
 
-/* Map Xi IR type to Xm machine representation.
- * Heap-allocated types (string, array, etc.) use PTR rep so codegen
- * correctly emits XR_TAG_PTR in call_arg_tags[]. */
-static uint8_t xi_type_to_rep(struct XrType *type) {
-    if (!type) return XR_REP_I64;
-    switch (type->kind) {
-        case XR_KIND_INT:       return XR_REP_I64;
-        case XR_KIND_FLOAT:     return XR_REP_F64;
-        case XR_KIND_BOOL:      return XR_REP_I64;
-        case XR_KIND_NULL:      return XR_REP_I64;
-        case XR_KIND_VOID:      return XR_REP_I64;
-        case XR_KIND_STRING:
-        case XR_KIND_ARRAY:
-        case XR_KIND_MAP:
-        case XR_KIND_SET:
-        case XR_KIND_BYTES:
-        case XR_KIND_CHANNEL:
-        case XR_KIND_JSON:
-        case XR_KIND_INSTANCE:
-        case XR_KIND_INTERFACE:
-        case XR_KIND_CLASS:
-        case XR_KIND_FUNCTION:
-        case XR_KIND_ENUM:      return XR_REP_PTR;
-        default:                return XR_REP_TAGGED;
-    }
-}
-
 /* Check if a type is floating-point */
 static bool is_float_type(struct XrType *type) {
     return type && type->kind == XR_KIND_FLOAT;
@@ -469,14 +442,16 @@ static XmRef lower_unbox(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     uint8_t arg_r = ref_rep(ctx, arg);
 
     /* If Xm source is already the target scalar rep, skip the unbox.
-     * This happens when xi_to_xm lowered the arg with a concrete rep
-     * (e.g. int PARAM → I64) while select_rep inserted an UNBOX
-     * because Xi IR treats PARAMs as TAGGED. */
+     * If source is a different scalar rep, convert instead of unboxing. */
     if (v->rep == XR_REP_F64) {
         if (arg_r == XR_REP_F64) return arg;
+        if (arg_r == XR_REP_I64)
+            return xm_emit_unary(ctx->xm_func, blk, XM_I2F, XR_REP_F64, arg);
         return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_F64, XR_REP_F64, arg);
     }
     if (arg_r == XR_REP_I64) return arg;
+    if (arg_r == XR_REP_F64)
+        return xm_emit_unary(ctx->xm_func, blk, XM_F2I, XR_REP_I64, arg);
     return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_I64, XR_REP_I64, arg);
 }
 
@@ -587,8 +562,32 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 generic_call:
     /* XI_CALL_BUILTIN (dump, copy, StringBuilder, Bytes, cancelled):
      * these are specialized VM ops that don't use xr_jit_invoke_method.
-     * Emit unconditional deopt so the interpreter handles them. */
+     * Validate the builtin name, then deopt to the VM interpreter. */
     if (v->op == XI_CALL_BUILTIN) {
+        const char *bn = (const char *)v->aux;
+        int bid = (int)v->aux_int;
+        /* Hard fail: reject unknown builtins at JIT lowering time.
+         * Known name-based builtins deopt to VM. Numeric-ID builtins
+         * (bid > 0) are INVOKE_BUILTIN opcodes and also deopt. */
+        if (bn != NULL) {
+            static const char *known[] = {
+                "dump", "copy", "chr", "print",
+                "StringBuilder", "Bytes", NULL
+            };
+            bool found = false;
+            for (int k = 0; known[k]; k++) {
+                if (strcmp(bn, known[k]) == 0) { found = true; break; }
+            }
+            if (!found) {
+                fprintf(stderr,
+                    "[xi_to_xm] ERROR: unknown builtin name '%s'\n", bn);
+                XR_DCHECK(false, "unregistered builtin in JIT lowering");
+            }
+        } else if (bid < 0) {
+            fprintf(stderr,
+                "[xi_to_xm] ERROR: invalid builtin id %d\n", bid);
+            XR_DCHECK(false, "invalid builtin id in JIT lowering");
+        }
         int bc_pc = slot_map_bc_pc(ctx, v->id);
         uint16_t did = record_deopt(ctx, (uint32_t)bc_pc);
         XmRef deopt_id = xm_const_i64(ctx->xm_func, (int64_t)did);
@@ -1005,9 +1004,21 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return xm_const_i64(ctx->xm_func, 0);
         }
 
-        /* Cross-module import ref — resolved at AOT cgen time, not JIT */
-        case XI_IMPORT_REF:
-            return xm_const_i64(ctx->xm_func, 0);
+        /* Cross-module import ref — resolve via shared array (same as
+         * GET_SHARED).  The VM's module loader populates the shared slot
+         * at import time; JIT reads it like any other shared variable. */
+        case XI_IMPORT_REF: {
+            int so = ctx->proto ? ctx->proto->shared_offset : 0;
+            int64_t abs_idx = v->aux_int + so;
+            XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func,
+                                           (void *)xr_jit_get_shared);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C,
+                                      XR_REP_I64, fn_ref, idx);
+            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            blk->ins[blk->nins - 1].ctype = (XmType){XM_TK_TAGGED, 0, 0};
+            return result;
+        }
 
         default:
             /* Truly unknown op — mark error, return dummy */
@@ -1022,7 +1033,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 static void lower_phis(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
     for (XiPhi *phi = xi_blk->phis; phi; phi = phi->next) {
         XiValue *pv = &phi->value;
-        uint8_t rep = xi_type_to_rep(pv->type);
+        uint8_t rep = pv->rep ? pv->rep : XR_REP_TAGGED;
         XmPhi *xm_phi = xm_add_phi(ctx->xm_func, xm_blk, rep);
         XR_DCHECK(xm_phi != NULL, "lower_phis: xm_add_phi returned NULL");
         set_ref(ctx, pv->id, xm_phi->dst);
@@ -1281,7 +1292,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
     func->num_params = xi_func->nparams;
     for (uint16_t i = 0; i < xi_func->nparams; i++) {
         XiValue *param = xi_func->params[i];
-        uint8_t rep = param ? xi_type_to_rep(param->type) : XR_REP_I64;
+        uint8_t rep = param ? (param->rep ? param->rep : XR_REP_TAGGED) : XR_REP_I64;
         XmRef vreg = xm_new_vreg(func, rep);
         if (param)
             set_ref(&ctx, param->id, vreg);

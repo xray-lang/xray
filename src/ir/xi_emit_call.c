@@ -210,17 +210,20 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (builtin_id == 0) {
         /* cancelled() */
         emit_inst(ctx, CREATE_ABC(OP_CANCELLED, dst, 0, 0));
-    } else {
+    } else if (builtin_id > 0 && builtin_id < 256 && v->nargs > 0) {
         /* Generic: INVOKE_BUILTIN A=base, B=builtin_idx, C=nargs */
-        if (v->nargs > 0) {
-            uint8_t base = reg_of(ctx, v->args[0]);
-            if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_INVOKE_BUILTIN,
-                                      base, (uint8_t)builtin_id,
-                                      (uint8_t)v->nargs));
-            if (dst != base)
-                emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
-        }
+        uint8_t base = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_INVOKE_BUILTIN,
+                                  base, (uint8_t)builtin_id,
+                                  (uint8_t)v->nargs));
+        if (dst != base)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+    } else {
+        /* Hard fail: unrecognized numeric builtin ID */
+        fprintf(stderr, "[xi_emit] unknown numeric builtin id: %d\n",
+                builtin_id);
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
     }
 }
 

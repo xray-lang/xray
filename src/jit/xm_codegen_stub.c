@@ -15,7 +15,6 @@
 #if defined(__aarch64__)
 
 #include "xm_codegen_internal.h"
-#include "xm_blueprint.h"
 #include "../coro/xcoroutine.h"
 
 /* ========== Write Barrier Stubs ========== */
@@ -268,7 +267,7 @@ static void osr_materialize_const(CodegenCtx *ctx, XmIns *def, int8_t phys, int8
 // OSR calling convention: x0=coro, x1=pointer to int64_t values array
 // The stub does a standard prologue, loads live regs from the array,
 // then jumps to the loop header block.
-// Requires Blueprint loop info; loops without Blueprint are skipped.
+// Uses register allocator liveness to determine which slots to load.
 XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         OsrSnapshot *snap = &ctx->osr_snaps[i];
@@ -321,67 +320,39 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG, A64_X1));
 
         // Load live values from interpreter's register array into physical regs.
-        // Uses Blueprint loop info for precise live slot information.
-        // Loops without Blueprint are skipped (no legacy bc_slot fallback).
+        // Directly queries the register allocator for vregs live at the OSR
+        // block that map back to a bytecode slot.
         XmBlock *osr_blk =
             (snap->block_id < ctx->func->nblk) ? ctx->func->blocks[snap->block_id] : NULL;
         uint16_t nslots = 0;
 
-        // Look up Blueprint loop info for this header.
-        // proto can be NULL when codegen is invoked outside a normal JIT
-        // pipeline (e.g. unit tests that build XmFunc directly).
-        XrBlueprint *bp = ctx->func->proto ? (XrBlueprint *) ctx->func->proto->blueprint : NULL;
-        XrBpLoopInfo *bp_loop = NULL;
-        if (bp && bp->loops) {
-            uint32_t bc_off = entry->bc_offset;
-            for (uint16_t li = 0; li < bp->nloops; li++) {
-                if (bp->loops[li].header_pc == bc_off) {
-                    bp_loop = &bp->loops[li];
-                    break;
-                }
-            }
-        }
+        // Walk all vregs: if live at the OSR block (has phys reg) and has a
+        // valid bc_slot, load it from the interpreter's values array.
+        for (uint32_t v = 0; v < ctx->func->nvreg && nslots < XM_MAX_OSR_SLOTS; v++) {
+            int16_t slot = ctx->func->vregs[v].bc_slot;
+            if (slot < 0)
+                continue;
+            int8_t ri = xra_vreg_reg_at(ctx->xra, snap->block_id, v);
+            if (ri < 0)
+                continue;
+            if (osr_should_skip_vreg(ctx, osr_blk, v, ri))
+                continue;
 
-        if (!bp_loop) {
-            // No Blueprint for this loop — skip OSR entry.
-            // All JIT-compiled functions have Blueprint, so this only
-            // happens for edge cases (e.g. very large functions).
-            continue;
-        }
-
-        // Load compiler-declared live slots from the values array.
-        for (uint8_t li = 0; li < bp_loop->nlive && nslots < XM_MAX_OSR_SLOTS; li++) {
-            uint8_t slot = bp_loop->live[li].slot;
-
-            // Find vreg(s) with this bc_slot that have a physical register
-            for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
-                if (ctx->func->vregs[v].bc_slot != (int16_t) slot)
-                    continue;
-                int8_t ri = xra_vreg_reg_at(ctx->xra, snap->block_id, v);
-                if (ri < 0)
-                    continue;
-                if (osr_should_skip_vreg(ctx, osr_blk, v, ri))
-                    continue;
-
-                bool is_fp = (ctx->func->vregs[v].rep == XR_REP_F64);
-                if (!is_fp) {
-                    A64Reg dst = alloc_regs[ri];
-                    a64_buf_emit(&ctx->buf, a64_ldr(dst, SCRATCH_REG, (int32_t) (slot * 8)));
-                    entry->slots[nslots].bc_slot = (int16_t) slot;
-                    entry->slots[nslots].phys_reg = (uint8_t) dst;
-                    entry->slots[nslots].type = XR_REP_I64;
-                    nslots++;
-                } else {
-                    A64Reg dst = alloc_fp_regs[ri];
-                    a64_buf_emit(&ctx->buf, a64_ldr_fp(dst, SCRATCH_REG, (int32_t) (slot * 8)));
-                    entry->slots[nslots].bc_slot = (int16_t) slot;
-                    entry->slots[nslots].phys_reg = (uint8_t) dst;
-                    entry->slots[nslots].type = XR_REP_F64;
-                    nslots++;
-                }
-                // Do NOT break: multiple vregs may share the same bc_slot
-                // but have different physical registers (e.g. v0 and its phi
-                // successor v11). All need to be loaded for correctness.
+            bool is_fp = (ctx->func->vregs[v].rep == XR_REP_F64);
+            if (!is_fp) {
+                A64Reg dst = alloc_regs[ri];
+                a64_buf_emit(&ctx->buf, a64_ldr(dst, SCRATCH_REG, (int32_t) (slot * 8)));
+                entry->slots[nslots].bc_slot = slot;
+                entry->slots[nslots].phys_reg = (uint8_t) dst;
+                entry->slots[nslots].type = XR_REP_I64;
+                nslots++;
+            } else {
+                A64Reg dst = alloc_fp_regs[ri];
+                a64_buf_emit(&ctx->buf, a64_ldr_fp(dst, SCRATCH_REG, (int32_t) (slot * 8)));
+                entry->slots[nslots].bc_slot = slot;
+                entry->slots[nslots].phys_reg = (uint8_t) dst;
+                entry->slots[nslots].type = XR_REP_F64;
+                nslots++;
             }
         }
 

@@ -748,6 +748,21 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_node(ctx, node->as.match_arm.body);
         break;
 
+    /* ---- Method declaration (class/struct method body + defaults) ---- */
+    case AST_METHOD_DECL: {
+        MethodDeclNode *m = &node->as.method_decl;
+        canon_node(ctx, m->body);
+        if (m->default_values) {
+            for (int i = 0; i < m->param_count; i++)
+                canon_node(ctx, m->default_values[i]);
+        }
+        if (m->base_args) {
+            for (int i = 0; i < m->base_arg_count; i++)
+                canon_node(ctx, m->base_args[i]);
+        }
+        break;
+    }
+
     /* ---- Field initializer ---- */
     case AST_FIELD_DECL:
         canon_node(ctx, node->as.field_decl.initializer);

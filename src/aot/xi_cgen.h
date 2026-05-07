@@ -18,42 +18,39 @@
 #include "../ir/xi.h"
 #include <stdio.h>
 
-/* Generate a C function definition for a Xi IR function and all its
- * nested children. Output is appended to `out`.
- * `name_prefix` is prepended to function names (e.g. module name). */
-XR_FUNC void xi_cgen_func(FILE *out, XiFunc *f, const char *name_prefix);
+/* Opaque codegen context — holds all mutable state for one C-generation
+ * session.  Created once by the AOT driver, shared across module calls,
+ * then freed.  No file-scope globals. */
+typedef struct XiCgenCtx XiCgenCtx;
 
-/* Generate a complete standalone C file:
- *   - #include "xrt.h"
- *   - Forward declarations
- *   - All function bodies (main_func and its children)
- *   - int main(void) { ... } entry point
- * Suitable for direct compilation with cc -o out file.c */
-XR_FUNC void xi_cgen_program(FILE *out, XiFunc *main_func,
-                              const char *module_name);
+/* Lifecycle */
+XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
+XR_FUNC void       xi_cgen_ctx_free(XiCgenCtx *ctx);
+
+/* Generate a complete standalone C file (single-module fast path):
+ *   #include "xrt.h" + forward decls + bodies + main()
+ * Suitable for: cc -o out file.c */
+XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out,
+                              struct XiModule *module);
 
 /* ========== Multi-module API ========== */
 
 /* Emit the common C header (includes, defines). Call once per file. */
 XR_FUNC void xi_cgen_header(FILE *out);
 
-/* Emit one module: module-scoped shared[], forward declarations, and
- * all function bodies.  Does NOT emit #includes or main().
- * `module_name` is the C-safe module prefix for function names. */
-XR_FUNC void xi_cgen_module(FILE *out, XiFunc *module_func,
-                             const char *module_name);
-
-/* Emit int main(void) that calls module init functions in order.
- * `module_names` and `module_funcs` are parallel arrays of size `n`.
- * `entry_index` is the index of the entry-point module. */
-XR_FUNC void xi_cgen_main(FILE *out, const char **module_names,
-                           XiFunc **module_funcs, int n, int entry_index);
-
-/* Resolve cross-module imports from a module graph.  Builds the internal
- * import table by matching each exporter's exports[] against all importers.
- * Must be called after xi_module_populate_exports() on each module and
- * before xi_cgen_module().  Requires nmodules > 1 to have any effect. */
-XR_FUNC void xi_cgen_resolve_module_imports(struct XiModule **modules,
+/* Resolve cross-module imports.  Populates ctx internal import table
+ * from the module graph.  Must be called before xi_cgen_module(). */
+XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx,
+                                             struct XiModule **modules,
                                              int nmodules);
+
+/* Emit one module: module-scoped shared[], forward decls, function
+ * bodies.  Does NOT emit #includes or main(). */
+XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out,
+                             struct XiModule *module);
+
+/* Emit int main(void) calling module inits in topo order. */
+XR_FUNC void xi_cgen_main(FILE *out, struct XiModule **modules,
+                           int n, int entry_index);
 
 #endif // XI_CGEN_H

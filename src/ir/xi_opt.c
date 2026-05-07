@@ -574,10 +574,16 @@ XR_FUNC XiPassChange xi_opt_strength_reduce(XiFunc *f) {
 
 /* Determine the machine representation a value naturally produces.
  * Constants and arithmetic with known numeric types produce I64/F64.
- * Calls, loads, parameters, and polymorphic ops produce TAGGED. */
+ * Calls, loads, and polymorphic ops produce TAGGED. */
 static XrRep sr_def_rep(const XiValue *v) {
     if (!v || !v->type) return XR_REP_TAGGED;
     switch (v->op) {
+        case XI_PARAM: {
+            /* Typed scalar params get concrete rep.  The JIT/AOT can
+             * use this directly instead of re-inferring from type->kind. */
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
         case XI_CONST: {
             if (v->type->kind == XR_KIND_NULL ||
                 v->type->kind == XR_KIND_STRING)
@@ -993,6 +999,163 @@ static XiPassStats *stats_slot(XiPipelineStats *st, const char *name) {
     return s;
 }
 
+/* Randomized topological sort of values within a block.
+ * Respects: (1) intra-block data dependencies (use after def),
+ *           (2) relative order among memory-touching / effectful values.
+ * Uses Kahn's algorithm with random selection from the ready set. */
+static void shuffle_block_values(XiBlock *blk) {
+    uint32_t n = blk->nvalues;
+    if (n <= 1) return;
+
+    /* Small stack buffer; fall back to heap for large blocks. */
+    uint32_t stack_indeg[128];
+    uint32_t stack_ready[128];
+    uint32_t *indeg = (n <= 128) ? stack_indeg :
+        (uint32_t *)xr_malloc(n * sizeof(uint32_t));
+    uint32_t *ready = (n <= 128) ? stack_ready :
+        (uint32_t *)xr_malloc(n * sizeof(uint32_t));
+    if (!indeg || !ready) return;
+
+    memset(indeg, 0, n * sizeof(uint32_t));
+
+    /* Build dependency graph.
+     * Edge types:
+     *   (a) Data: value[j] uses value[i] (same block) → edge i→j
+     *   (b) Effect chain: consecutive effectful values maintain order
+     *
+     * For (a), we only need arg->block == blk to confirm intra-block.
+     * Phi operands are never in the values[] array, so they won't match. */
+
+    int32_t prev_effect = -1;
+    for (uint32_t i = 0; i < n; i++) {
+        XiValue *v = blk->values[i];
+
+        /* (a) Data dependencies: count intra-block operands.
+         * Exclude phis (op == XI_PHI) — they live in blk->phis,
+         * not blk->values[], so they are never "placed" by the
+         * topo sort and would create false cycles. */
+        for (uint16_t a = 0; a < v->nargs; a++) {
+            XiValue *arg = v->args[a];
+            if (arg && arg->block == blk && arg->op != XI_PHI) {
+                indeg[i]++;
+            }
+        }
+
+        /* (b) Memory/effect chain: values touching memory or having
+         * side effects maintain relative order.  READS_MEM is included
+         * because a read must not move before a preceding write. */
+        if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM |
+                        XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
+                        XI_FLAG_MAY_SUSPEND)) {
+            if (prev_effect >= 0)
+                indeg[i]++;
+            prev_effect = (int32_t)i;
+        }
+    }
+
+    /* Collect initially ready values */
+    uint32_t ready_count = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        if (indeg[i] == 0)
+            ready[ready_count++] = i;
+    }
+
+    /* Kahn's algorithm with random pick */
+    XiValue **result = blk->values;
+    XiValue *stack_out[128];
+    XiValue **out = (n <= 128) ? stack_out :
+        (XiValue **)xr_malloc(n * sizeof(XiValue *));
+    if (!out) goto cleanup;
+
+    uint32_t placed = 0;
+
+    /* Precompute: for each effectful value, its immediate predecessor
+     * in the effect chain (original order). */
+    int32_t stack_epred[128];
+    int32_t *effect_pred = (n <= 128) ? stack_epred :
+        (int32_t *)xr_malloc(n * sizeof(int32_t));
+    if (!effect_pred) goto cleanup;
+    {
+        int32_t pe = -1;
+        for (uint32_t i = 0; i < n; i++) {
+            effect_pred[i] = -1;
+            if (result[i]->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM |
+                                    XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
+                                    XI_FLAG_MAY_SUSPEND)) {
+                effect_pred[i] = pe;
+                pe = (int32_t)i;
+            }
+        }
+    }
+
+    while (ready_count > 0) {
+        uint32_t pick = (uint32_t)(rand() % ready_count);
+        uint32_t idx = ready[pick];
+        ready[pick] = ready[--ready_count];
+
+        out[placed++] = result[idx];
+        XiValue *placed_v = result[idx];
+
+        /* Mark as placed using sentinel in-degree */
+        indeg[idx] = UINT32_MAX;
+
+        bool placed_is_effect = (placed_v->flags &
+            (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM |
+             XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
+             XI_FLAG_MAY_SUSPEND)) != 0;
+
+        /* Release dependents */
+        for (uint32_t j = 0; j < n; j++) {
+            if (indeg[j] == 0 || indeg[j] == UINT32_MAX) continue;
+
+            XiValue *vj = result[j];
+            uint32_t released = 0;
+
+            /* (a) Data dependency: vj uses placed_v (count all occurrences,
+             * since indeg was incremented per-arg during construction).
+             * Only count non-phi args (matches the build phase filter). */
+            for (uint16_t a = 0; a < vj->nargs; a++) {
+                if (vj->args[a] == placed_v && placed_v->op != XI_PHI)
+                    released++;
+            }
+
+            /* (b) Effect chain: vj's immediate effect predecessor is idx */
+            if (placed_is_effect && effect_pred[j] == (int32_t)idx) {
+                released++;
+            }
+
+            if (released > 0) {
+                XR_DCHECK(indeg[j] >= released,
+                          "shuffle_block_values: indeg underflow");
+                indeg[j] -= released;
+                if (indeg[j] == 0)
+                    ready[ready_count++] = j;
+            }
+        }
+    }
+
+    /* If topo sort is incomplete, a real cycle exists (should not happen
+     * in well-formed Xi IR). Skip the shuffle silently in release. */
+    if (placed == n) {
+        memcpy(result, out, n * sizeof(XiValue *));
+    }
+#ifndef NDEBUG
+    else {
+        fprintf(stderr, "[xi_shuffle] warning: block b%u has %u values but "
+                "only %u placed (possible dep cycle)\n",
+                blk->id, n, placed);
+    }
+#endif
+
+cleanup:
+    if (n > 128) {
+        if (indeg != stack_indeg) xr_free(indeg);
+        if (ready != stack_ready) xr_free(ready);
+        if (out != stack_out) xr_free(out);
+        if (effect_pred != stack_epred) xr_free(effect_pred);
+    }
+}
+
 XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
                                              XiPipelineStats *stats,
                                              uint64_t budget_ns) {
@@ -1040,10 +1203,11 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
         }
     }
 
-    /* XRAY_XI_SHUFFLE=1: randomize block iteration order before each
-     * pass invocation to detect implicit ordering dependencies.
-     * Only active in debug builds. Does not reorder values within a
-     * block (that would require dependency analysis). */
+    /* XRAY_XI_SHUFFLE=1: randomize block AND intra-block value iteration
+     * order before each pass to detect implicit ordering dependencies.
+     * Only active in debug builds. Values within a block are shuffled
+     * using randomized topological sort that respects data dependencies
+     * and side-effect ordering. */
     static int shuffle_blocks = -1;
     if (shuffle_blocks < 0) {
         const char *env = getenv("XRAY_XI_SHUFFLE");
@@ -1128,6 +1292,11 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
                     XiBlock *tmp = f->blocks[si];
                     f->blocks[si] = f->blocks[sj];
                     f->blocks[sj] = tmp;
+                }
+                /* Shuffle values within each block (randomized topo sort
+                 * respecting data deps and side-effect ordering). */
+                for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+                    shuffle_block_values(f->blocks[bi]);
                 }
             }
 

@@ -57,7 +57,8 @@ static void teardown(void) {
 }
 
 /* Compile source to Xi IR (without emitting bytecode).
- * Returns the XiFunc* (caller must free via xi_func_free). */
+ * Returns the XiFunc* (caller must free via xi_func_free).
+ * If mod_out is non-NULL, also returns the XiModule* (caller must free). */
 static XiFunc *compile_to_ir(const char *source) {
     assert(g_iso != NULL);
 
@@ -105,13 +106,33 @@ static char *generate_c(XiFunc *ir, const char *module_name) {
     /* Run select_rep to insert BOX/UNBOX */
     xi_opt_select_rep(ir);
 
+    /* Build module metadata if the pipeline didn't (e.g. standalone tests) */
+    XiModule *mod = ir->module;
+    bool own_mod = false;
+    if (!mod) {
+        mod = xi_module_new("test.xr", module_name, ir);
+        assert(mod != NULL);
+        own_mod = true;
+    } else {
+        if (!mod->name) mod->name = module_name;
+    }
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    assert(ctx != NULL);
+
     char *buf = NULL;
     size_t bufsz = 0;
     FILE *mem = open_memstream(&buf, &bufsz);
     assert(mem != NULL);
 
-    xi_cgen_program(mem, ir, module_name);
+    xi_cgen_program(ctx, mem, mod);
     fclose(mem);
+
+    xi_cgen_ctx_free(ctx);
+    if (own_mod) {
+        mod->init = NULL; /* don't double-free ir */
+        xi_module_free(mod);
+    }
 
     return buf;
 }

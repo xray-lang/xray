@@ -751,14 +751,16 @@ TEST(struct_literal) {
         "print(p)\n"
     );
     assert(f != NULL);
-    int found_alloc = 0;
+    int found_ctor = 0, found_store = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_JSON_NEW) found_alloc = 1;
+            if (blk->values[i]->op == XI_CALL_METHOD) found_ctor = 1;
+            if (blk->values[i]->op == XI_STORE_FIELD) found_store = 1;
         }
     }
-    assert(found_alloc && "should have JSON_NEW for struct literal");
+    assert(found_ctor && "struct literal should call constructor");
+    assert(found_store && "struct literal should set fields via STORE_FIELD");
     xi_func_free(f);
 }
 
