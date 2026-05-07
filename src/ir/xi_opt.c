@@ -831,6 +831,44 @@ static const XiPassDesc xi_pass_table[] = {
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
 
+/* Validate pass table invariants at startup.  Called once. */
+static void validate_pass_table(void) {
+    static bool validated = false;
+    if (validated) return;
+    validated = true;
+
+    for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
+        const XiPassDesc *d = &xi_pass_table[i];
+        XR_DCHECK(d->name != NULL, "pass table entry has NULL name");
+        XR_DCHECK(d->fn != NULL, "pass table entry has NULL fn");
+        /* output_stage must be >= input_stage (stages never go backwards) */
+        XR_DCHECK(d->output_stage >= d->input_stage,
+                  "pass has output_stage < input_stage");
+    }
+
+    /* Verify stage monotonicity across the table: no pass should require
+     * a higher input_stage than any earlier pass's output_stage can reach. */
+    XiStage max_output = XI_STAGE_RAW;
+    for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
+        const XiPassDesc *d = &xi_pass_table[i];
+        if (d->input_stage > max_output) {
+            /* This pass requires a stage that no earlier pass produces.
+             * This is allowed only if an external stage-transition pass
+             * (not in this table) runs between them.  Log a diagnostic
+             * in debug builds but don't abort — the pipeline driver
+             * will soft-skip it via the stage check. */
+#ifndef NDEBUG
+            fprintf(stderr, "[xi_pass] warning: pass '%s' requires stage %s "
+                    "but max reachable from earlier passes is %s\n",
+                    d->name, xi_stage_name(d->input_stage),
+                    xi_stage_name(max_output));
+#endif
+        }
+        if (d->output_stage > max_output)
+            max_output = d->output_stage;
+    }
+}
+
 /* Find or create a stats slot for the given pass name. */
 static XiPassStats *stats_slot(XiPipelineStats *st, const char *name) {
     if (!st) return NULL;
@@ -850,6 +888,8 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
                                              uint64_t budget_ns) {
     XR_DCHECK(f != NULL, "xi_opt_run_pipeline_ex: NULL func");
 
+    validate_pass_table();
+
     if (level == XI_OPT_NONE)
         return xi_pass_no_change();
 
@@ -861,6 +901,33 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
     if (check_per_pass < 0) {
         const char *env = getenv("XRAY_XI_CHECK");
         check_per_pass = (env && env[0] == '1') ? 1 : 0;
+    }
+
+    /* XRAY_XI_DUMP=func:pass — dump IR after a specific pass for a
+     * specific function.  Use "*" to match any func or pass name.
+     * Examples: "main:dce", "*:constfold", "foo:*" */
+    static const char *dump_func = NULL;
+    static const char *dump_pass = NULL;
+    static bool dump_parsed = false;
+    if (!dump_parsed) {
+        dump_parsed = true;
+        const char *dump_env = getenv("XRAY_XI_DUMP");
+        if (dump_env && dump_env[0]) {
+            /* Find the colon separator */
+            const char *colon = strchr(dump_env, ':');
+            if (colon) {
+                static char dump_func_buf[64];
+                static char dump_pass_buf[64];
+                size_t flen = (size_t)(colon - dump_env);
+                if (flen >= sizeof(dump_func_buf)) flen = sizeof(dump_func_buf) - 1;
+                memcpy(dump_func_buf, dump_env, flen);
+                dump_func_buf[flen] = '\0';
+                dump_func = dump_func_buf;
+                strncpy(dump_pass_buf, colon + 1, sizeof(dump_pass_buf) - 1);
+                dump_pass_buf[sizeof(dump_pass_buf) - 1] = '\0';
+                dump_pass = dump_pass_buf;
+            }
+        }
     }
 
     uint64_t pipeline_start = xr_time_monotonic_ns();
@@ -896,6 +963,21 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
             if (desc->output_stage > f->stage)
                 f->stage = desc->output_stage;
             uint64_t dt = xr_time_monotonic_ns() - t0;
+
+            /* XRAY_XI_DUMP: targeted IR dump after matching pass */
+            if (dump_func && dump_pass) {
+                const char *fn = f->name ? f->name : "<anonymous>";
+                bool func_match = (dump_func[0] == '*' && dump_func[1] == '\0')
+                                  || strcmp(dump_func, fn) == 0;
+                bool pass_match = (dump_pass[0] == '*' && dump_pass[1] == '\0')
+                                  || strcmp(dump_pass, desc->name) == 0;
+                if (func_match && pass_match) {
+                    fprintf(stderr, "=== Xi IR after '%s' (func '%s', round %d) ===\n",
+                            desc->name, fn, round);
+                    xi_func_dump(f, stderr);
+                    fprintf(stderr, "================================================\n");
+                }
+            }
 
             /* Record per-pass stats */
             XiPassStats *ps = stats_slot(stats, desc->name);
