@@ -24,6 +24,7 @@
 #include "xm_liveness2.h"
 #include "xm_offsets.h"
 #include "../ir/xi_rep.h"
+#include "../ir/xi_opt.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -333,8 +334,8 @@ static XmRef lower_binary_arith(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 2, "binary arith: expected 2 args");
     XmRef lhs = get_ref(ctx, v->args[0]);
     XmRef rhs = get_ref(ctx, v->args[1]);
-    bool is_float = is_float_type(v->type);
-    uint8_t rep = is_float ? XR_REP_F64 : XR_REP_I64;
+    bool is_float = (v->rep == XR_REP_F64);
+    uint8_t rep = v->rep;
 
     uint16_t xm_op;
     switch (v->op) {
@@ -366,8 +367,8 @@ static XmRef lower_binary_arith(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 1, "unary: expected 1 arg");
     XmRef arg = get_ref(ctx, v->args[0]);
-    bool is_float = is_float_type(v->type);
-    uint8_t rep = is_float ? XR_REP_F64 : XR_REP_I64;
+    bool is_float = (v->rep == XR_REP_F64);
+    uint8_t rep = v->rep;
 
     uint16_t xm_op;
     switch (v->op) {
@@ -450,21 +451,33 @@ static XmRef lower_convert(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 static XmRef lower_box(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 1, "box: expected 1 arg");
     XmRef arg = get_ref(ctx, v->args[0]);
-    struct XrType *src_type = v->args[0]->type;
+    uint8_t arg_r = ref_rep(ctx, arg);
 
-    if (is_float_type(src_type)) {
-        return xm_emit_unary(ctx->xm_func, blk, XM_BOX_F64, XR_REP_I64, arg);
+    /* If Xm source is already TAGGED/PTR, the box is redundant
+     * (xi_to_xm may have already tagged the value). */
+    if (arg_r == XR_REP_TAGGED || arg_r == XR_REP_PTR)
+        return arg;
+
+    if (v->args[0]->rep == XR_REP_F64) {
+        return xm_emit_unary(ctx->xm_func, blk, XM_BOX_F64, XR_REP_TAGGED, arg);
     }
-    return xm_emit_unary(ctx->xm_func, blk, XM_BOX_I64, XR_REP_I64, arg);
+    return xm_emit_unary(ctx->xm_func, blk, XM_BOX_I64, XR_REP_TAGGED, arg);
 }
 
 static XmRef lower_unbox(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 1, "unbox: expected 1 arg");
     XmRef arg = get_ref(ctx, v->args[0]);
+    uint8_t arg_r = ref_rep(ctx, arg);
 
-    if (is_float_type(v->type)) {
+    /* If Xm source is already the target scalar rep, skip the unbox.
+     * This happens when xi_to_xm lowered the arg with a concrete rep
+     * (e.g. int PARAM → I64) while select_rep inserted an UNBOX
+     * because Xi IR treats PARAMs as TAGGED. */
+    if (v->rep == XR_REP_F64) {
+        if (arg_r == XR_REP_F64) return arg;
         return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_F64, XR_REP_F64, arg);
     }
+    if (arg_r == XR_REP_I64) return arg;
     return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_I64, XR_REP_I64, arg);
 }
 
@@ -1210,6 +1223,12 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
                                           const XmICSnapshot *ic,
                                           struct XrayIsolate *isolate) {
     XR_DCHECK(xi_func != NULL, "xi_to_xm_lower: NULL xi_func");
+
+    /* Ensure representations are populated (idempotent if already done). */
+    if (xi_func->stage < XI_STAGE_REPPED) {
+        xi_opt_select_rep(xi_func);
+        xi_opt_box_elim(xi_func);
+    }
 
     XmFunc *func = xm_func_new(xi_func->name);
     if (!func) return NULL;
