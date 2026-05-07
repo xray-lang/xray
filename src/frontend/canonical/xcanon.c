@@ -500,9 +500,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         break;
     }
 
-    case AST_MATCH_ARM:
-        canon_node(ctx, node->as.match_arm.body);
-        break;
+    /* AST_MATCH_ARM handled below (walks guard + body) */
 
     /* ---- Expressions (walk children) ---- */
     case AST_EXPR_STMT:
@@ -567,6 +565,194 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_node(ctx, node->as.defer_stmt.expr);
         break;
 
+    /* ---- Print statement ---- */
+    case AST_PRINT_STMT: {
+        PrintNode *p = &node->as.print_stmt;
+        for (int i = 0; i < p->expr_count; i++)
+            canon_node(ctx, p->exprs[i]);
+        break;
+    }
+
+    /* ---- Throw ---- */
+    case AST_THROW_STMT:
+        canon_node(ctx, node->as.throw_stmt.expression);
+        break;
+
+    /* ---- Aggregate literals ---- */
+    case AST_ARRAY_LITERAL:
+        for (int i = 0; i < node->as.array_literal.count; i++)
+            canon_node(ctx, node->as.array_literal.elements[i]);
+        break;
+
+    case AST_MAP_LITERAL:
+        for (int i = 0; i < node->as.map_literal.count; i++) {
+            canon_node(ctx, node->as.map_literal.keys[i]);
+            canon_node(ctx, node->as.map_literal.values[i]);
+        }
+        break;
+
+    case AST_SET_LITERAL:
+        for (int i = 0; i < node->as.set_literal.count; i++)
+            canon_node(ctx, node->as.set_literal.elements[i]);
+        break;
+
+    case AST_OBJECT_LITERAL:
+        for (int i = 0; i < node->as.object_literal.count; i++) {
+            canon_node(ctx, node->as.object_literal.keys[i]);
+            canon_node(ctx, node->as.object_literal.values[i]);
+        }
+        break;
+
+    case AST_STRUCT_LITERAL:
+        for (int i = 0; i < node->as.struct_literal.field_count; i++)
+            canon_node(ctx, node->as.struct_literal.field_values[i]);
+        break;
+
+    case AST_TEMPLATE_STRING:
+        for (int i = 0; i < node->as.template_str.part_count; i++)
+            canon_node(ctx, node->as.template_str.parts[i]);
+        break;
+
+    /* ---- Slice ---- */
+    case AST_SLICE_EXPR:
+        canon_node(ctx, node->as.slice_expr.source);
+        canon_node(ctx, node->as.slice_expr.start);
+        canon_node(ctx, node->as.slice_expr.end);
+        break;
+
+    /* ---- Optional chain ---- */
+    case AST_OPTIONAL_CHAIN:
+        canon_node(ctx, node->as.optional_chain.object);
+        if (node->as.optional_chain.index)
+            canon_node(ctx, node->as.optional_chain.index);
+        break;
+
+    /* ---- Grouping / force unwrap (unary layout) ---- */
+    case AST_GROUPING:
+        canon_node(ctx, node->as.grouping);
+        break;
+
+    case AST_FORCE_UNWRAP:
+        canon_node(ctx, node->as.unary.operand);
+        break;
+
+    /* ---- Type-checking expressions (walk the operand) ---- */
+    case AST_IS_EXPR:
+        canon_node(ctx, node->as.is_expr.expr);
+        break;
+
+    case AST_AS_EXPR:
+        canon_node(ctx, node->as.as_expr.expr);
+        break;
+
+    /* ---- OOP: new / super ---- */
+    case AST_NEW_EXPR:
+        for (int i = 0; i < node->as.new_expr.arg_count; i++)
+            canon_node(ctx, node->as.new_expr.arguments[i]);
+        break;
+
+    case AST_SUPER_CALL:
+        for (int i = 0; i < node->as.super_call.arg_count; i++)
+            canon_node(ctx, node->as.super_call.arguments[i]);
+        break;
+
+    /* ---- Coroutine / concurrency ---- */
+    case AST_GO_EXPR:
+        canon_node(ctx, node->as.go_expr.expr);
+        if (node->as.go_expr.priority)
+            canon_node(ctx, node->as.go_expr.priority);
+        break;
+
+    case AST_AWAIT_EXPR:
+        canon_node(ctx, node->as.await_expr.expr);
+        if (node->as.await_expr.timeout)
+            canon_node(ctx, node->as.await_expr.timeout);
+        break;
+
+    case AST_CHANNEL_NEW:
+        canon_node(ctx, node->as.channel_new.buffer_size);
+        break;
+
+    case AST_MOVE_EXPR:
+        canon_node(ctx, node->as.move_expr.expr);
+        break;
+
+    case AST_SELECT_STMT: {
+        SelectStmtNode *sel = &node->as.select_stmt;
+        for (int i = 0; i < sel->case_count; i++) {
+            if (!sel->cases[i]) continue;
+            SelectCaseNode *sc = &sel->cases[i]->as.select_case;
+            canon_node(ctx, sc->channel);
+            canon_node(ctx, sc->value);
+            canon_node(ctx, sc->body);
+        }
+        break;
+    }
+
+    /* ---- Multi-value declarations / assignments ---- */
+    case AST_MULTI_VAR_DECL:
+        for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
+            canon_node(ctx, node->as.multi_var_decl.values[i]);
+        break;
+
+    case AST_MULTI_ASSIGN:
+        for (int i = 0; i < node->as.multi_assign.target_count; i++)
+            canon_node(ctx, node->as.multi_assign.targets[i]);
+        for (int i = 0; i < node->as.multi_assign.value_count; i++)
+            canon_node(ctx, node->as.multi_assign.values[i]);
+        break;
+
+    /* ---- Destructuring ---- */
+    case AST_DESTRUCTURE_DECL:
+        canon_node(ctx, node->as.destructure_decl.initializer);
+        break;
+
+    case AST_DESTRUCTURE_ASSIGN:
+        canon_node(ctx, node->as.destructure_assign.value);
+        break;
+
+    /* ---- Export (walk inner declaration) ---- */
+    case AST_EXPORT_STMT:
+        canon_node(ctx, node->as.export_stmt.declaration);
+        break;
+
+    /* ---- Class / struct (walk fields and methods) ---- */
+    case AST_CLASS_DECL:
+    case AST_STRUCT_DECL: {
+        ClassDeclNode *cls = &node->as.class_decl;
+        for (int i = 0; i < cls->field_count; i++)
+            canon_node(ctx, cls->fields[i]);
+        for (int i = 0; i < cls->method_count; i++)
+            canon_node(ctx, cls->methods[i]);
+        break;
+    }
+
+    /* ---- Enum (walk member values) ---- */
+    case AST_ENUM_DECL:
+        for (int i = 0; i < node->as.enum_decl.member_count; i++)
+            canon_node(ctx, node->as.enum_decl.members[i]);
+        break;
+
+    case AST_ENUM_CONVERT:
+        canon_node(ctx, node->as.enum_convert.value_expr);
+        break;
+
+    case AST_ENUM_INDEX:
+        canon_node(ctx, node->as.enum_index.collection);
+        canon_node(ctx, node->as.enum_index.index_expr);
+        break;
+
+    /* ---- Match arm (walk guard + body) ---- */
+    case AST_MATCH_ARM:
+        canon_node(ctx, node->as.match_arm.guard);
+        canon_node(ctx, node->as.match_arm.body);
+        break;
+
+    /* ---- Field initializer ---- */
+    case AST_FIELD_DECL:
+        canon_node(ctx, node->as.field_decl.initializer);
+        break;
+
     /* ---- Binary / unary expressions ---- */
     case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
     case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ:
@@ -574,6 +760,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     case AST_BINARY_GT:  case AST_BINARY_GE:  case AST_BINARY_AND:
     case AST_BINARY_OR:  case AST_BINARY_BAND: case AST_BINARY_BOR:
     case AST_BINARY_BXOR: case AST_BINARY_LSHIFT: case AST_BINARY_RSHIFT:
+    case AST_BINARY_EQ_STRICT: case AST_BINARY_NE_STRICT:
     case AST_NULLISH_COALESCE: case AST_RANGE:
         canon_node(ctx, node->as.binary.left);
         canon_node(ctx, node->as.binary.right);
@@ -583,9 +770,23 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         canon_node(ctx, node->as.unary.operand);
         break;
 
-    /* ---- Leaf nodes and cases handled by identity pass ---- */
+    /* ---- Leaf nodes (no expression children) ---- */
+    case AST_VARIABLE:
+    case AST_LITERAL_INT: case AST_LITERAL_FLOAT: case AST_LITERAL_STRING:
+    case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_NULL:
+    case AST_LITERAL_BIGINT: case AST_LITERAL_REGEX:
+    case AST_BREAK_STMT: case AST_CONTINUE_STMT:
+    case AST_THIS_EXPR: case AST_CANCELLED_EXPR:
+    case AST_ENUM_ACCESS: case AST_ENUM_MEMBER:
+    case AST_IMPORT_STMT: case AST_TYPE_ALIAS: case AST_INTERFACE_DECL:
+    case AST_YIELD_STMT:
+    case AST_PATTERN_LITERAL: case AST_PATTERN_RANGE:
+    case AST_PATTERN_WILDCARD: case AST_PATTERN_MULTI:
+        break;
+
     default:
-        /* Literals, variables, break, continue, etc. — nothing to walk. */
+        /* Unknown node type — should not reach here.
+         * If a new AST node is added, extend this switch. */
         break;
     }
 }
