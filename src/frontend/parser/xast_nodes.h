@@ -43,6 +43,7 @@
  */
 struct AstNode {
     AstNodeType type;
+    uint32_t node_id;  // stable monotonic ID, unique per compilation unit
     int line;
     int column;      // 1-indexed column number (for LSP)
     int end_line;    // 1-indexed end line, 0 = unset

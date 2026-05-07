@@ -9,20 +9,16 @@
  *
  * KEY CONCEPT:
  *   The analyzer infers a compile-time XrType for many AST expression
- *   nodes (literals, calls, member access, ...). Earlier each AstNode
- *   carried that type inline as `node->compile_type`, which forced the
- *   formatter (which never runs the analyzer) to allocate a field it
- *   never reads, and forced the analyzer / codegen to share a mutable
- *   field on a struct that is otherwise immutable parse output.
+ *   nodes (literals, calls, member access, ...). This module provides
+ *   a side table keyed by stable `AstNode.node_id` (uint32_t) so the
+ *   semantic metadata lives next to the analyzer that produced it.
  *
- *   This module provides a side table -- a hash map keyed by
- *   `AstNode *` -- so the type metadata lives next to the analyzer
- *   that produced it, not next to the AST that the parser owns.
+ *   Each entry carries: inferred XrType, enclosing XaScope, resolved
+ *   XaSymbol. Together these form the "typed node facts" that the
+ *   canonicalizer and lowerer consume.
  *
  *   Ownership: one XaNodeTable per XaAnalyzer; freed with the analyzer.
- *   Keys are bare AstNode pointers. Entries are valid only while the
- *   analyzer's owning AST is alive (the analyzer is destroyed before
- *   the AST in every release path that exists).
+ *   Entries are valid while the analyzer's owning AST is alive.
  *
  *   Lookup is O(1) amortised; sets in the same bucket as an existing
  *   entry overwrite. Returns NULL for unknown nodes -- treated by
@@ -33,9 +29,12 @@
 #define XA_NODE_TABLE_H
 
 #include "../../base/xdefs.h"
+#include <stdint.h>
 
 struct AstNode;
 struct XrType;
+struct XaScope;
+struct XaSymbol;
 
 typedef struct XaNodeTable XaNodeTable;
 
@@ -43,13 +42,21 @@ XR_FUNC XaNodeTable *xa_node_table_new(void);
 XR_FUNC void xa_node_table_free(XaNodeTable *t);
 
 // Insert / overwrite the inferred type for `node`. Passing NULL for
-// `type` clears any existing entry.
+// `type` clears any existing entry. Uses node->node_id as key.
 XR_FUNC void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType *type);
 
 // Returns the previously set type, or NULL if no entry exists for
-// `node`. Callers MUST treat NULL as "unknown" (the field used to
-// degrade to NULL in the same way as a missing entry).
+// `node`. Callers MUST treat NULL as "unknown".
 XR_FUNC struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode *node);
+
+// Set full binding facts for a node (type + scope + symbol).
+XR_FUNC void xa_node_table_set(XaNodeTable *t, struct AstNode *node,
+                               struct XrType *type, struct XaScope *scope,
+                               struct XaSymbol *symbol);
+
+// Retrieve scope / symbol binding for a node.
+XR_FUNC struct XaScope *xa_node_table_get_scope(const XaNodeTable *t, const struct AstNode *node);
+XR_FUNC struct XaSymbol *xa_node_table_get_symbol(const XaNodeTable *t, const struct AstNode *node);
 
 // Drop all entries, keep the bucket array allocated. Used between
 // analyses of the same file when the analyzer reuses its scratch state.

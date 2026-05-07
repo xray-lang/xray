@@ -76,6 +76,10 @@ XR_FUNC const char *xr_isolate_get_script_file(XrayIsolate *X);
 XR_FUNC struct XrArena *xr_isolate_get_current_arena(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_current_arena(XrayIsolate *X, struct XrArena *arena);
 
+// AST node ID counter (monotonic, unique per compilation unit)
+XR_FUNC uint32_t xr_isolate_next_ast_node_id(XrayIsolate *X);
+XR_FUNC void xr_isolate_reset_ast_node_ids(XrayIsolate *X);
+
 // Compile-time string pool (deduplication during parsing)
 XR_FUNC struct XrCompileStringPool *xr_isolate_get_string_pool_compile(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_string_pool_compile(XrayIsolate *X,

@@ -5,13 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xa_node_table.c - AST -> XrType side table implementation
+ * xa_node_table.c - AST -> semantic info side table implementation
  *
  * IMPLEMENTATION NOTE:
- *   The map uses pointer-keyed open chaining (linked list per bucket)
- *   with a 64-entry initial capacity and 0.75 load-factor growth. The
- *   pointer hash is a 64-bit avalanche mix on (uintptr_t)node so the
- *   typically aligned AST pointers do not cluster in low-order bits.
+ *   The map uses node_id-keyed open chaining (linked list per bucket)
+ *   with a 64-entry initial capacity and 0.75 load-factor growth.
+ *   Keys are uint32_t AstNode.node_id (stable monotonic IDs).
  *
  *   Allocation is via xr_malloc / xr_free per project rules. No arena
  *   here: the table outlives any single AST traversal.
@@ -21,13 +20,16 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
+#include "../../frontend/parser/xast_nodes.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef struct XaNodeEntry {
-    struct AstNode *node;
+    uint32_t node_id;       // key: AstNode.node_id
     struct XrType *type;
+    struct XaScope *scope;  // enclosing scope at this node
+    struct XaSymbol *symbol; // resolved symbol (NULL for non-binding nodes)
     struct XaNodeEntry *next;
 } XaNodeEntry;
 
@@ -42,16 +44,12 @@ struct XaNodeTable {
 #define XA_NODE_TABLE_LOAD_DEN 4
 #define XA_NODE_TABLE_GROWTH 2
 
-// Reuse the project's canonical splitmix64 integer hash (from
-// src/base/xhash.h). Casting AstNode * through uintptr_t to int64_t is
-// the standard pattern; xr_hash_int absorbs the high pointer bits via
-// its finalizer-style multiply-xor.
-static inline uint32_t hash_node_ptr(const void *p) {
-    return xr_hash_int((int64_t) (uintptr_t) p);
+static inline uint32_t hash_node_id(uint32_t id) {
+    return xr_hash_int((int64_t) id);
 }
 
-static inline int bucket_of(const XaNodeTable *t, const void *p) {
-    return (int) (hash_node_ptr(p) % (uint32_t) t->bucket_count);
+static inline int bucket_of(const XaNodeTable *t, uint32_t id) {
+    return (int) (hash_node_id(id) % (uint32_t) t->bucket_count);
 }
 
 XaNodeTable *xa_node_table_new(void) {
@@ -113,7 +111,7 @@ static void xa_node_table_grow(XaNodeTable *t) {
         XaNodeEntry *e = t->buckets[i];
         while (e) {
             XaNodeEntry *next = e->next;
-            int b = (int) (hash_node_ptr(e->node) % (uint32_t) new_count);
+            int b = (int) (hash_node_id(e->node_id) % (uint32_t) new_count);
             e->next = new_buckets[b];
             new_buckets[b] = e;
             e = next;
@@ -124,56 +122,95 @@ static void xa_node_table_grow(XaNodeTable *t) {
     t->bucket_count = new_count;
 }
 
-void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType *type) {
-    if (!t || !node)
-        return;
-
-    int b = bucket_of(t, node);
-    XaNodeEntry **pp = &t->buckets[b];
-    while (*pp) {
-        if ((*pp)->node == node) {
-            if (type == NULL) {
-                // Clear: drop the entry entirely so size and lookup
-                // stay symmetric with the "never set" case.
-                XaNodeEntry *to_free = *pp;
-                *pp = to_free->next;
-                xr_free(to_free);
-                t->size--;
-            } else {
-                (*pp)->type = type;
-            }
-            return;
-        }
-        pp = &(*pp)->next;
+/* Find or create an entry for the given node_id. Returns NULL only on
+ * allocation failure when creating a new entry. */
+static XaNodeEntry *find_or_create(XaNodeTable *t, uint32_t id) {
+    int b = bucket_of(t, id);
+    for (XaNodeEntry *e = t->buckets[b]; e; e = e->next) {
+        if (e->node_id == id)
+            return e;
     }
-
-    if (type == NULL)
-        return;  // Nothing to clear.
 
     XaNodeEntry *e = (XaNodeEntry *) xr_malloc(sizeof(XaNodeEntry));
     if (!e)
-        return;
-    e->node = node;
-    e->type = type;
+        return NULL;
+    memset(e, 0, sizeof(*e));
+    e->node_id = id;
     e->next = t->buckets[b];
     t->buckets[b] = e;
     t->size++;
 
-    // Grow on load-factor breach. Linear over t->bucket_count, so the
-    // chain length stays O(1) amortised.
     if ((int64_t) t->size * XA_NODE_TABLE_LOAD_DEN >
         (int64_t) t->bucket_count * XA_NODE_TABLE_LOAD_NUM) {
         xa_node_table_grow(t);
     }
+    return e;
+}
+
+static const XaNodeEntry *find_entry(const XaNodeTable *t, uint32_t id) {
+    int b = bucket_of(t, id);
+    for (const XaNodeEntry *e = t->buckets[b]; e; e = e->next) {
+        if (e->node_id == id)
+            return e;
+    }
+    return NULL;
+}
+
+void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType *type) {
+    if (!t || !node)
+        return;
+    uint32_t id = node->node_id;
+
+    if (type == NULL) {
+        /* Clear entry */
+        int b = bucket_of(t, id);
+        XaNodeEntry **pp = &t->buckets[b];
+        while (*pp) {
+            if ((*pp)->node_id == id) {
+                XaNodeEntry *to_free = *pp;
+                *pp = to_free->next;
+                xr_free(to_free);
+                t->size--;
+                return;
+            }
+            pp = &(*pp)->next;
+        }
+        return;
+    }
+
+    XaNodeEntry *e = find_or_create(t, id);
+    if (e) e->type = type;
 }
 
 struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode *node) {
     if (!t || !node)
         return NULL;
-    int b = (int) (hash_node_ptr(node) % (uint32_t) t->bucket_count);
-    for (XaNodeEntry *e = t->buckets[b]; e; e = e->next) {
-        if (e->node == node)
-            return e->type;
-    }
-    return NULL;
+    const XaNodeEntry *e = find_entry(t, node->node_id);
+    return e ? e->type : NULL;
+}
+
+void xa_node_table_set(XaNodeTable *t, struct AstNode *node,
+                       struct XrType *type, struct XaScope *scope,
+                       struct XaSymbol *symbol) {
+    if (!t || !node)
+        return;
+    XaNodeEntry *e = find_or_create(t, node->node_id);
+    if (!e) return;
+    e->type = type;
+    e->scope = scope;
+    e->symbol = symbol;
+}
+
+struct XaScope *xa_node_table_get_scope(const XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return NULL;
+    const XaNodeEntry *e = find_entry(t, node->node_id);
+    return e ? e->scope : NULL;
+}
+
+struct XaSymbol *xa_node_table_get_symbol(const XaNodeTable *t, const struct AstNode *node) {
+    if (!t || !node)
+        return NULL;
+    const XaNodeEntry *e = find_entry(t, node->node_id);
+    return e ? e->symbol : NULL;
 }
