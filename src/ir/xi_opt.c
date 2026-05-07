@@ -1040,6 +1040,56 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
         }
     }
 
+    /* XRAY_XI_SHUFFLE=1: randomize block iteration order before each
+     * pass invocation to detect implicit ordering dependencies.
+     * Only active in debug builds. Does not reorder values within a
+     * block (that would require dependency analysis). */
+    static int shuffle_blocks = -1;
+    if (shuffle_blocks < 0) {
+        const char *env = getenv("XRAY_XI_SHUFFLE");
+        shuffle_blocks = (env && env[0] == '1') ? 1 : 0;
+        if (shuffle_blocks)
+            srand((unsigned)xr_time_monotonic_ns());
+    }
+
+    /* XRAY_XI_PASS=pass:key=value[,pass:key=value,...]
+     * Per-pass control flags:
+     *   enable=0  — skip this pass entirely
+     *   dump=1    — dump IR after this pass (all funcs)
+     * Examples: "dce:enable=0", "gvn:dump=1,licm:enable=0" */
+    static bool pass_cfg_parsed = false;
+    static struct { bool disable; bool dump; } pass_cfg[XI_PASS_TABLE_SIZE];
+    if (!pass_cfg_parsed) {
+        pass_cfg_parsed = true;
+        memset(pass_cfg, 0, sizeof(pass_cfg));
+        const char *env = getenv("XRAY_XI_PASS");
+        if (env && env[0]) {
+            char buf[256];
+            strncpy(buf, env, sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            char *tok = strtok(buf, ",");
+            while (tok) {
+                char *colon = strchr(tok, ':');
+                if (colon) {
+                    *colon = '\0';
+                    const char *pname = tok;
+                    const char *kv = colon + 1;
+                    int idx = pass_index_by_name(pname);
+                    if (idx >= 0) {
+                        if (strncmp(kv, "enable=0", 8) == 0)
+                            pass_cfg[idx].disable = true;
+                        else if (strncmp(kv, "dump=1", 6) == 0)
+                            pass_cfg[idx].dump = true;
+                    } else {
+                        fprintf(stderr, "[xi_pass] warning: unknown pass '%s' "
+                                "in XRAY_XI_PASS\n", pname);
+                    }
+                }
+                tok = strtok(NULL, ",");
+            }
+        }
+    }
+
     uint64_t pipeline_start = xr_time_monotonic_ns();
     XiPassChange total = xi_pass_no_change();
 
@@ -1051,6 +1101,10 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
         for (size_t p = 0; p < XI_PASS_TABLE_SIZE; p++) {
             const XiPassDesc *desc = &xi_pass_table[p];
             if (desc->min_level > level)
+                continue;
+
+            /* XRAY_XI_PASS: skip disabled passes (unless required) */
+            if (pass_cfg[p].disable && !(desc->flags & XI_PASS_REQUIRED))
                 continue;
 
             /* Budget check before each pass */
@@ -1065,6 +1119,17 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
              * simply does not fire rather than aborting. */
             if (desc->input_stage > f->stage)
                 continue;
+
+            /* Shuffle blocks[1..n-1] (preserve entry at [0]) to catch
+             * passes that assume RPO or insertion order. */
+            if (shuffle_blocks && f->nblocks > 2) {
+                for (uint32_t si = f->nblocks - 1; si > 1; si--) {
+                    uint32_t sj = 1 + (uint32_t)(rand() % si);
+                    XiBlock *tmp = f->blocks[si];
+                    f->blocks[si] = f->blocks[sj];
+                    f->blocks[sj] = tmp;
+                }
+            }
 
             uint64_t t0 = xr_time_monotonic_ns();
             XiPassChange pc = desc->fn(f);
@@ -1089,6 +1154,15 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level,
                     xi_func_dump(f, stderr);
                     fprintf(stderr, "================================================\n");
                 }
+            }
+
+            /* XRAY_XI_PASS per-pass dump (unconditional on function name) */
+            if (pass_cfg[p].dump) {
+                const char *fn = f->name ? f->name : "<anonymous>";
+                fprintf(stderr, "=== [XI_PASS dump] after '%s' (func '%s', round %d) ===\n",
+                        desc->name, fn, round);
+                xi_func_dump(f, stderr);
+                fprintf(stderr, "=============================================\n");
             }
 
             /* Record per-pass stats */
