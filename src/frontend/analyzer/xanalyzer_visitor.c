@@ -602,6 +602,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (fi->item_name) {
                 XaSymbol *sym = xa_symbol_new(fi->item_name, XA_SYM_VARIABLE);
                 sym->location.line = node->line;
+                sym->is_const = true;  // for-in loop variable is immutable
                 xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
                 fi->item_symbol_id = sym->id;
                 XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -611,6 +612,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             if (fi->is_keyvalue && fi->value_name) {
                 XaSymbol *vsym = xa_symbol_new(fi->value_name, XA_SYM_VARIABLE);
                 vsym->location.line = node->line;
+                vsym->is_const = true;  // for-in loop variable is immutable
                 xa_scope_add_symbol(ctx->analyzer->current_scope, vsym);
                 fi->value_symbol_id = vsym->id;
                 XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, vsym);
