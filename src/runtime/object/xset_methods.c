@@ -36,28 +36,28 @@ static inline bool set_is_weak(const XrSet *s) {
     return (s->flags & XR_SET_FLAG_WEAK) != 0;
 }
 
-XrValue xr_set_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_set_has(set_self(self), args[0]));
 }
 
-XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
         return xr_bool(0);
     return xr_bool(xr_set_delete(set_self(self), args[0]));
 }
 
-XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_bool(xr_set_is_empty(set_self(self)));
 }
 
-XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
     /* WeakSet contract: value must be a heap object. */
     if (set_is_weak(s) && argc >= 1 && !XR_VALUE_NEEDS_GC(args[0])) {
@@ -72,7 +72,7 @@ XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return xr_bool(xr_set_add(s, args[0]));
 }
 
-XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -83,7 +83,7 @@ XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int a
     return xr_null();
 }
 
-XrValue xr_set_method_union(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_union(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
@@ -93,7 +93,7 @@ XrValue xr_set_method_union(XrayIsolate *iso, XrValue self, XrValue *args, int a
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
@@ -104,7 +104,7 @@ XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self, XrValue *args
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;
@@ -114,7 +114,7 @@ XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue *args, 
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrValue *args,
+static XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrValue *args,
                                            int argc) {
     XrSet *s = set_self(self);
     if (set_is_weak(s))
@@ -125,7 +125,7 @@ XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrVal
     return xr_value_from_set(result);
 }
 
-XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
@@ -135,7 +135,7 @@ XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self, XrValue *args, i
     return xr_bool(xr_set_is_subset(s, XR_TO_SET(args[0])));
 }
 
-XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     XrSet *s = set_self(self);
     if (set_is_weak(s))
@@ -145,7 +145,7 @@ XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValue *args,
     return xr_bool(xr_set_is_superset(s, XR_TO_SET(args[0])));
 }
 
-XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
@@ -155,7 +155,7 @@ XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, in
     return xr_value_from_array(arr);
 }
 
-XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrSet *s = set_self(self);
@@ -165,7 +165,7 @@ XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, in
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
-XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
