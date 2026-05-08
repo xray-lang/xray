@@ -13,18 +13,11 @@
 
 #include "xmap_builtins.h"
 #include "xchecks.h"
-#include "xmap_instance_methods.h"
-#include "xgc.h"
-#include "xarray.h"  // Must be before xmap.h for XrArray definition
+#include "xarray.h"
 #include "xmap.h"
 #include "xvalue.h"
-#include "xclass.h"
-#include "xclass_builder.h"
-#include "xmethod.h"
-#include "xsymbol_table.h"
 #include "xisolate_api.h"
-#include "xclass_system.h"
-#include <stdio.h>
+#include "xgc.h"
 
 // Map() - create empty map
 XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
@@ -82,26 +75,3 @@ XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue self, XrValue *args, i
     return xr_null();
 }
 
-// Create Map class with all methods using XrClassBuilder
-XrClass *xr_map_create_class(XrayIsolate *X, XrClass *objectClass) {
-    XR_DCHECK(X != NULL, "map_create_class: NULL isolate");
-    XrClassBuilder *builder = xr_class_builder_new(X, "Map", objectClass);
-    if (!builder) {
-        fprintf(stderr, "[Map] ERROR: Failed to create class builder\n");
-        return NULL;
-    }
-
-    // Static constructor
-    xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-                                       xr_builtin_map_construct, 0, 0);
-
-    // Instance methods
-    xr_class_builder_add_method(builder, "set", xr_map_method_set, 2, 0);
-    xr_class_builder_add_method(builder, "get", xr_map_method_get, 1, 0);
-    xr_class_builder_add_method(builder, "has", xr_map_method_has, 1, 0);
-    xr_class_builder_add_method(builder, "delete", xr_map_method_delete, 1, 0);
-    xr_class_builder_add_method(builder, "clear", xr_map_method_clear, 0, 0);
-    xr_class_builder_add_method(builder, "increment", xr_map_method_increment, 1, 0);
-
-    return xr_class_builder_finalize(builder);
-}

@@ -111,4 +111,4 @@ XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue self, XrValue *arg
     return xr_null();
 }
 
-// Note: Map instance methods are now registered via XrClassBuilder in xr_map_create_class()
+// Map instance methods are registered via xr_map_register_native_type() in xmap_methods.c

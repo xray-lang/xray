@@ -22,12 +22,21 @@
 #include "../../base/xhashmap.h"
 #include "xreflect_registry.h"
 #include "xmethod.h"
-#include "xmap_builtins.h"
-#include "../object/xarray_class_init.h"
-#include "../object/xset_class_init.h"
 #include "xstringbuilder_builtins.h"
 #include "xslice_builtins.h"
 #include "../value/xtype_names.h"
+
+/* Forward declarations: register functions live in *_methods.c files.
+ * We call them here to unify core->xxxClass with native_type_classes[]. */
+extern void xr_array_register_native_type(XrayIsolate *);
+extern void xr_map_register_native_type(XrayIsolate *);
+extern void xr_set_register_native_type(XrayIsolate *);
+extern void xr_string_register_native_type(XrayIsolate *);
+extern void xr_int_register_native_type(XrayIsolate *);
+extern void xr_float_register_native_type(XrayIsolate *);
+extern void xr_bool_register_native_type(XrayIsolate *);
+extern void xr_bigint_register_native_type(XrayIsolate *);
+extern void xr_json_register_native_type(XrayIsolate *);
 #include <stdio.h>
 #include <string.h>
 
@@ -43,17 +52,31 @@ void xr_core_init(XrayIsolate *X) {
     // Step 1: Create Object root class
     X->core->objectClass = xr_class_new(X, CLASS_NAME_OBJECT, NULL);
 
-    // Step 2: Create builtin type classes (all inherit from Object)
-    X->core->stringClass = xr_class_new(X, TYPE_NAME_STRING, X->core->objectClass);
-    X->core->arrayClass = xr_array_create_class(X, X->core->objectClass);
-    X->core->mapClass = xr_map_create_class(X, X->core->objectClass);
-    X->core->setClass = xr_set_create_class(X, X->core->objectClass);
+    // Step 2: Create builtin type classes.
+    // Collection and value types use xr_xxx_register_native_type() which
+    // builds a single XrClass with constructor + static methods + instance
+    // methods and stores it in native_type_classes[].  We then point
+    // core->xxxClass at the same object so callers that use either
+    // pathway see the same class.
+    xr_string_register_native_type(X);
+    X->core->stringClass = xr_isolate_get_native_type_class(X, XR_TSTRING);
+    xr_array_register_native_type(X);
+    X->core->arrayClass = xr_isolate_get_native_type_class(X, XR_TARRAY);
+    xr_map_register_native_type(X);
+    X->core->mapClass = xr_isolate_get_native_type_class(X, XR_TMAP);
+    xr_set_register_native_type(X);
+    X->core->setClass = xr_isolate_get_native_type_class(X, XR_TSET);
+    xr_json_register_native_type(X);
 
-    X->core->intClass = xr_class_new(X, TYPE_NAME_INT, X->core->objectClass);
-    X->core->floatClass = xr_class_new(X, TYPE_NAME_FLOAT, X->core->objectClass);
-    X->core->boolClass = xr_class_new(X, TYPE_NAME_BOOL, X->core->objectClass);
+    xr_int_register_native_type(X);
+    X->core->intClass = xr_isolate_get_native_type_class(X, XR_TINT);
+    xr_float_register_native_type(X);
+    X->core->floatClass = xr_isolate_get_native_type_class(X, XR_TFLOAT);
+    xr_bool_register_native_type(X);
+    X->core->boolClass = xr_isolate_get_native_type_class(X, XR_TBOOL);
     X->core->nullClass = xr_class_new(X, TYPE_NAME_NULL, X->core->objectClass);
-    X->core->bigintClass = xr_class_new(X, TYPE_NAME_BIGINT, X->core->objectClass);
+    xr_bigint_register_native_type(X);
+    X->core->bigintClass = xr_isolate_get_native_type_class(X, XR_TBIGINT);
 
     X->core->functionClass = xr_class_new(X, TYPE_NAME_FUNCTION, X->core->objectClass);
     X->core->closureClass = xr_class_new(X, TYPE_NAME_CLOSURE, X->core->functionClass);

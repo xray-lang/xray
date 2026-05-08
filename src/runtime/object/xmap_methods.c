@@ -158,6 +158,10 @@ static XrValue xr_map_method_to_string(XrayIsolate *iso, XrValue self, XrValue *
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
+#include "builtins/xmap_builtins.h"
+
+/* Defined in xmap_instance_methods.c */
+extern XrValue xr_map_method_increment(XrayIsolate *, XrValue, XrValue *, int);
 
 void xr_map_register_native_type(XrayIsolate *isolate) {
     static const XrNativeMethod map_methods[] = {
@@ -167,6 +171,7 @@ void xr_map_register_native_type(XrayIsolate *isolate) {
         {"set", xr_map_method_set, 0},
         {"delete", xr_map_method_delete, 1},
         {"clear", xr_map_method_clear, 0},
+        {"increment", xr_map_method_increment, 1},
         {"keys", xr_map_method_keys, 0},
         {"values", xr_map_method_values, 0},
         {"entries", xr_map_method_entries, 0},
@@ -176,12 +181,17 @@ void xr_map_register_native_type(XrayIsolate *isolate) {
         {"toString", xr_map_method_to_string, 0},
         {NULL, NULL, 0},
     };
+    static const XrNativeMethod map_statics[] = {
+        {"constructor", xr_builtin_map_construct, 0},
+        {"from", xr_builtin_map_from, 1},
+        {NULL, NULL, 0},
+    };
     static const XrNativeTypeInfo map_info = {
         .name = "Map",
         .gc_type = XR_TMAP,
         .methods = map_methods,
         .getters = NULL,
-        .static_methods = NULL,
+        .static_methods = map_statics,
     };
     xr_register_native_type(isolate, &map_info);
 }
