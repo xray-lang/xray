@@ -8,30 +8,29 @@
  * xic_builtin.h - Inline cache for OP_INVOKE_BUILTIN dispatch.
  *
  * KEY CONCEPT:
- *   OP_INVOKE_BUILTIN walks an if/else chain over receiver types
- *   (map / array / string / set / json / int / float / bool / bigint
- *   / ...) before reaching xr_method_table_lookup. Each call site
- *   is overwhelmingly monomorphic in real workloads (a particular
- *   .push site only ever pushes onto arrays). The IC caches the
- *   pair (XrTypeId, XrMethodSlot*) and short-circuits the chain
- *   on subsequent hits.
+ *   OP_INVOKE_BUILTIN resolves methods via XrClass lookup. Each
+ *   call site is overwhelmingly monomorphic in real workloads
+ *   (a particular .push site only ever pushes onto arrays). The IC
+ *   caches the pair (XrTypeId, XrPrimitiveMethodFn) and calls the
+ *   function pointer directly on subsequent hits, skipping the
+ *   XrClass lookup entirely.
  *
  *   The cache is keyed by PC (cache_index = pc - PROTO_CODE_BASE),
  *   so the bytecode operand `B` (method_symbol) is implicitly
  *   constant per cache slot — no need to store it.
  *
- *   Sticky first-write-wins: on a hit, slot->fn is called directly.
- *   On a type mismatch, the cache is left alone and the slow path
- *   runs; we count misses for tuning but do not thrash. JIT/AOT
- *   later consume the same feedback to specialize on the dominant
- *   type.
+ *   Sticky first-write-wins: on a hit, the cached fn is called
+ *   directly. On a type mismatch, the cache is left alone and the
+ *   slow path runs; we count misses for tuning but do not thrash.
+ *   JIT/AOT later consume the same feedback to specialize on the
+ *   dominant type.
  */
 
 #ifndef XRAY_XIC_BUILTIN_H
 #define XRAY_XIC_BUILTIN_H
 
-#include "../runtime/value/xmethod_table.h"
-#include "../runtime/value/xtype_names.h"
+#include "../runtime/value/xvalue.h"
+#include "../runtime/class/xmethod.h"
 #include "../base/xdefs.h"
 #include <stdint.h>
 
@@ -43,16 +42,16 @@ extern "C" {
 
 /*
  * Layout is 16 bytes on 64-bit:
- *   slot       - 8 bytes (NULL means empty)
+ *   fn         - 8 bytes (NULL means empty)
  *   cached_tid - 2 bytes (XrTypeId widened to int16_t; -1 unused
  *                so XR_TID_NULL = 0 is the legitimate "uninit"
- *                sentinel paired with slot == NULL)
+ *                sentinel paired with fn == NULL)
  *   hits       - 2 bytes (saturates; only used for stats)
  *   misses     - 2 bytes (saturates; only used for stats)
  *   _reserved  - 2 bytes (keep struct 16-byte aligned for fast load)
  */
 typedef struct XrICBuiltin {
-    const XrMethodSlot *slot;
+    XrPrimitiveMethodFn fn;
     int16_t cached_tid;
     uint16_t hits;
     uint16_t misses;

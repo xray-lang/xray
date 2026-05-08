@@ -124,7 +124,7 @@ TEST(ensure_builtin_lazy_alloc_is_idempotent) {
 
     /* All slots must start empty (slot==NULL is the sentinel). */
     for (int i = 0; i < t1->count; i++) {
-        ASSERT(t1->caches[i].slot == NULL);
+        ASSERT(t1->caches[i].fn == NULL);
         ASSERT_EQ_INT((int)t1->caches[i].hits, 0);
         ASSERT_EQ_INT((int)t1->caches[i].misses, 0);
     }
@@ -228,29 +228,29 @@ TEST(builtin_cache_is_sticky_first_write_wins) {
     XrICBuiltin ic = {0};
 
     /* First write: empty -> filled. */
-    XrMethodSlot fake_slot_a = {0};
-    ic.slot = &fake_slot_a;
+    XrPrimitiveMethodFn fake_fn_a = (XrPrimitiveMethodFn)(uintptr_t)0xDEAD;
+    ic.fn = fake_fn_a;
     ic.cached_tid = (int16_t)XR_TID_STRING;
 
     /* Subsequent miss against a different type must NOT overwrite. */
-    if (!ic.slot) { /* deliberately false; keep the same shape as the
-                      dispatcher to make the invariant obvious. */
-        ic.slot = NULL; /* unreachable */
+    if (!ic.fn) { /* deliberately false; keep the same shape as the
+                     dispatcher to make the invariant obvious. */
+        ic.fn = NULL; /* unreachable */
     }
     /* Mismatch path the dispatcher takes: increments misses, leaves
-     * slot untouched. */
-    if (ic.slot && ic.cached_tid != (int16_t)XR_TID_INT) {
+     * fn untouched. */
+    if (ic.fn && ic.cached_tid != (int16_t)XR_TID_INT) {
         ic.misses++;
     }
-    ASSERT(ic.slot == &fake_slot_a);
+    ASSERT(ic.fn == fake_fn_a);
     ASSERT_EQ_INT((int)ic.cached_tid, (int)XR_TID_STRING);
     ASSERT_EQ_INT((int)ic.misses, 1);
 
-    /* Hits on the cached type bump hits, never replace the slot. */
-    if (ic.slot && ic.cached_tid == (int16_t)XR_TID_STRING) {
+    /* Hits on the cached type bump hits, never replace the fn. */
+    if (ic.fn && ic.cached_tid == (int16_t)XR_TID_STRING) {
         ic.hits++;
     }
-    ASSERT(ic.slot == &fake_slot_a);
+    ASSERT(ic.fn == fake_fn_a);
     ASSERT_EQ_INT((int)ic.hits, 1);
 }
 
@@ -274,7 +274,7 @@ TEST(builtin_table_alloc_grows_capacity) {
 
     /* Each freshly allocated slot starts empty. */
     for (int i = 0; i < t->count; i++) {
-        ASSERT(t->caches[i].slot == NULL);
+        ASSERT(t->caches[i].fn == NULL);
     }
 
     xr_ic_builtin_table_free(t);
@@ -397,11 +397,11 @@ TEST(snapshot_builtin_is_deep_copy) {
     ASSERT_NOT_NULL(live);
 
     /* Seed two slots so we can detect both copies and isolation. */
-    XrMethodSlot fake_slot = { (XrMethodFn)(uintptr_t)0xCAFE, 1, 1, 0, 0 };
-    live->caches[0].slot       = &fake_slot;
+    XrPrimitiveMethodFn fake_fn = (XrPrimitiveMethodFn)(uintptr_t)0xCAFE;
+    live->caches[0].fn         = fake_fn;
     live->caches[0].cached_tid = 7;
     live->caches[0].hits       = 42;
-    live->caches[1].slot       = &fake_slot;
+    live->caches[1].fn         = fake_fn;
     live->caches[1].cached_tid = 9;
     live->caches[1].hits       = 1;
 

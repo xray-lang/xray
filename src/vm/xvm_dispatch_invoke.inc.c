@@ -838,22 +838,13 @@ vmcase(OP_INVOKE_BUILTIN) {
      *   B = method symbol
      *   C = nargs (argument count, excluding this)
      *
-     * Dispatch fast path (this opcode hits ~all .map/.push/.has
-     * call sites in real code, so it has to be tight):
-     *
-     *   1. Per-call-site monomorphic IC keyed on (XrTypeId,
-     *      slot*). On hit, jump straight to slot->fn — skipping
-     *      both the 10-branch type chain and the unified
-     *      table indirection.
-     *
-     *   2. On miss (uninitialized, type changed, etc.) fall
-     *      into the unified xr_method_table_lookup over the
-     *      ten migrated types. Cache (sticky first-write-wins)
-     *      after a successful dispatch.
-     *
-     *   3. If the type isn't migrated (StringBuilder, slice,
-     *      null, raw heap object), fall through to the
-     *      type-specific branches at the bottom.
+     * Dispatch:
+     *   1. Monomorphic IC keyed on (XrTypeId, fn). On hit, call fn
+     *      directly — skipping the XrClass lookup entirely.
+     *   2. On miss: resolve XrClass from native_type_classes or
+     *      xr_value_get_class, then xr_class_lookup_method. Cache
+     *      the resolved fn (sticky first-write-wins).
+     *   3. Fallback for null / toString / unregistered types.
      */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
@@ -863,18 +854,10 @@ vmcase(OP_INVOKE_BUILTIN) {
     XrValue receiver = R(a + 1);
     XrValue *args = &R(a + 2);
 
-    /* Persist the local pc into the frame before calling
-     * any builtin handler. If the handler throws (see e.g.
-     * the WeakMap.set / WeakSet.add receiver-type guards),
-     * xr_vm_add_stacktrace and xr_vm_throw_exception read
-     * frame->pc to record the throw site and to redirect
-     * to the catch handler. */
+    /* Persist local pc for throw-site recording. */
     savepc();
 
-    /* Lazy IC table allocation. cache_index = pc - 1 - base
-     * because pc has already advanced past this instruction.
-     * Pre-sized to PROTO_CODE_COUNT in xr_ic_builtin_table_new
-     * so the index is always valid. */
+    /* Lazy IC table allocation. */
     XrICBuiltinTable *_btab = xr_vm_ctx_ensure_ic_builtin(vm_ctx, cl->proto);
     if (unlikely(!_btab)) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_INVOKE_BUILTIN: failed to allocate IC table");
@@ -884,93 +867,69 @@ vmcase(OP_INVOKE_BUILTIN) {
 
     int _rcv_tid = (int) xr_value_typeid(receiver);
 
-    if (likely(_ic->slot != NULL && _ic->cached_tid == _rcv_tid)) {
-        /* IC hit: direct dispatch, no chain, no table lookup. */
+    if (likely(_ic->fn != NULL && _ic->cached_tid == _rcv_tid)) {
+        /* IC hit: direct dispatch. */
         if (likely(_ic->hits != UINT16_MAX))
             _ic->hits++;
-        R(a) = _ic->slot->fn(isolate, receiver, args, nargs);
+        R(a) = _ic->fn(isolate, receiver, args, nargs);
     } else {
-        if (_ic->slot) {
-            /* IC miss on already-filled cache (poly site).
-             * We don't replace the cached slot — sticky
-             * first-write-wins keeps the hot type fast. */
+        if (_ic->fn) {
+            /* IC miss on filled cache (poly site). */
             if (likely(_ic->misses != UINT16_MAX))
                 _ic->misses++;
         }
 
-        /* Unified slow path: single lookup covers all ten
-         * migrated types. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(_rcv_tid, method_symbol, SYMBOL_BUILTIN_COUNT);
-        if (_slot) {
-            R(a) = _slot->fn(isolate, receiver, args, nargs);
-            if (!_ic->slot) {
-                /* First-write-wins. cached_tid fits in
-                 * int16_t because XR_TID_COUNT < 256. */
-                _ic->slot = _slot;
+        /* Resolve XrClass for the receiver type. For value types
+         * (int/float/bool) use the gc_type enum directly; for
+         * heap objects read the GC header type. Then look up in
+         * native_type_classes. */
+        XrObjType _obj_type;
+        if (XR_IS_INT(receiver))
+            _obj_type = XR_TINT;
+        else if (XR_IS_FLOAT(receiver))
+            _obj_type = XR_TFLOAT;
+        else if (XR_IS_BOOL(receiver))
+            _obj_type = XR_TBOOL;
+        else if (XR_IS_PTR(receiver))
+            _obj_type = XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(receiver));
+        else
+            _obj_type = XR_TNULL;
+
+        /* Try native_type_classes first (covers all registered types). */
+        XrClass *_cls = ((int) _obj_type < XR_NATIVE_TYPE_MAX)
+                            ? isolate->native_type_classes[_obj_type]
+                            : NULL;
+        /* Fall back to xr_value_get_class for core-class types
+         * (StringBuilder, ArraySlice, etc.) */
+        if (!_cls)
+            _cls = xr_value_get_class(isolate, receiver);
+
+        XrPrimitiveMethodFn _resolved_fn = NULL;
+        if (_cls) {
+            XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+            if (_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)
+                _resolved_fn = _m->as.primitive;
+        }
+
+        if (_resolved_fn) {
+            R(a) = _resolved_fn(isolate, receiver, args, nargs);
+            if (!_ic->fn) {
+                /* First-write-wins IC fill. */
+                _ic->fn = _resolved_fn;
                 _ic->cached_tid = (int16_t) _rcv_tid;
             }
-        } else if (xr_is_stringbuilder(receiver)) {
-            // StringBuilder: dispatch through native_type_classes
-            XrClass *klass = isolate->native_type_classes[XR_TSTRINGBUILDER];
-            if (klass) {
-                XrMethod *method = xr_class_lookup_method(klass, method_symbol);
-                if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                    R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
-                    vmbreak;
-                }
-            }
-            if (method_symbol == SYMBOL_TOSTRING) {
-                R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
-                vmbreak;
-            }
-            XrSymbolTable *st = (XrSymbolTable *) isolate->symbol_table;
-            const char *mn = xr_symbol_get_name_in_table(st, method_symbol);
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "StringBuilder has no method '%s'",
-                             mn ? mn : "?");
-        } else if (XR_IS_PTR(receiver)) {
-            // Slice type method dispatch
-            XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
-            int heap_type = XR_GC_GET_TYPE(gc);
-
-            if (heap_type == XR_TARRAY_SLICE) {
-                // Get class for slice type, lookup method through class
-                XrClass *klass = xr_value_get_class(isolate, receiver);
-                if (klass) {
-                    XrMethod *method = xr_class_lookup_method(klass, method_symbol);
-                    if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                        R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
-                        vmbreak;
-                    }
-                }
-                if (method_symbol == SYMBOL_TOSTRING) {
-                    R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
-                    vmbreak;
-                }
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "slice type has no such method (symbol %d)",
-                                 method_symbol);
-            }
-            // Universal toString fallback for all other heap types
-            if (method_symbol == SYMBOL_TOSTRING) {
-                R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
-                vmbreak;
-            }
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,
-                             "this type does not support builtin method call");
         } else if (XR_IS_NULL(receiver)) {
             if (method_symbol == SYMBOL_TOSTRING) {
                 R(a) = xr_string_value(xr_string_intern(isolate, "null", 4, 0));
             } else {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "null has no method");
             }
+        } else if (method_symbol == SYMBOL_TOSTRING) {
+            /* Universal toString fallback for all types. */
+            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
         } else {
-            // Universal toString fallback
-            if (method_symbol == SYMBOL_TOSTRING) {
-                R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
-            } else {
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,
-                                 "this type does not support builtin method call");
-            }
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,
+                             "this type does not support builtin method call");
         }
     } /* close slow-path else (IC miss) */
     // If a builtin handler threw a catchable exception

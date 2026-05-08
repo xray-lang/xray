@@ -11,10 +11,11 @@
 #include "xbound_method.h"
 #include "../../base/xchecks.h"
 #include "../class/xenum.h"
+#include "../class/xclass.h"
 #include "../gc/xgc.h"
 #include "../object/xiterator.h"
+#include "../object/xnative_type.h"
 #include "../symbol/xsymbol_table.h"
-#include "../value/xmethod_table.h"
 #include "../value/xtype_names.h"
 #include "../xisolate_internal.h"
 
@@ -64,45 +65,53 @@ static XrValue bound_method_stub(XrayIsolate *isolate, XrValue receiver, XrValue
     return XR_NOTFOUND;
 }
 
-MethodHandler xr_map_get_handler(int symbol) {
-    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_MAP, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot)
-        return (MethodHandler) slot->fn;
+/* Resolve a primitive method handler from native_type_classes.
+ * Returns NULL if the type is not registered or the method is
+ * not found / not a primitive. */
+static MethodHandler resolve_native_handler(XrayIsolate *isolate, XrObjType gc_type, int symbol) {
+    XR_DCHECK(isolate != NULL, "resolve_native_handler: NULL isolate");
+    if ((int) gc_type >= XR_NATIVE_TYPE_MAX)
+        return NULL;
+    XrClass *cls = isolate->native_type_classes[gc_type];
+    if (!cls)
+        return NULL;
+    XrMethod *m = xr_class_lookup_method(cls, symbol);
+    if (m && m->type == XMETHOD_PRIMITIVE && m->as.primitive)
+        return (MethodHandler) m->as.primitive;
+    return NULL;
+}
+
+MethodHandler xr_map_get_handler(XrayIsolate *isolate, int symbol) {
+    MethodHandler h = resolve_native_handler(isolate, XR_TMAP, symbol);
+    if (h)
+        return h;
     if (symbol == SYMBOL_FOREACH)
         return bound_method_stub;
     return NULL;
 }
 
-MethodHandler xr_array_get_handler(int symbol) {
-    /* Pull from the unified xr_array_method_table — same XrMethodFn
-     * signature, no duplicate registry. Closure-taking methods
-     * (foreach / map / filter / reduce / find / ...) resolve through
-     * the bound-method stub when the user grabs them as values. */
-    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_ARRAY, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot)
-        return (MethodHandler) slot->fn;
+MethodHandler xr_array_get_handler(XrayIsolate *isolate, int symbol) {
+    MethodHandler h = resolve_native_handler(isolate, XR_TARRAY, symbol);
+    if (h)
+        return h;
     if (symbol == SYMBOL_ITERATOR)
         return bound_method_stub;
     return NULL;
 }
 
-MethodHandler xr_set_get_handler(int symbol) {
-    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_SET, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot)
-        return (MethodHandler) slot->fn;
-    if (symbol == SYMBOL_FOREACH || symbol == SYMBOL_MAP_METHOD || symbol == SYMBOL_FILTER) {
+MethodHandler xr_set_get_handler(XrayIsolate *isolate, int symbol) {
+    MethodHandler h = resolve_native_handler(isolate, XR_TSET, symbol);
+    if (h)
+        return h;
+    if (symbol == SYMBOL_FOREACH || symbol == SYMBOL_MAP_METHOD || symbol == SYMBOL_FILTER)
         return bound_method_stub;
-    }
     return NULL;
 }
 
-MethodHandler xr_string_get_handler(int symbol) {
-    /* SYMBOL_ITERATOR remains a bound-method stub: the lazy
-     * character iterator hasn't been lifted into a table entry
-     * yet. */
-    const XrMethodSlot *slot = xr_method_table_lookup(XR_TID_STRING, symbol, SYMBOL_BUILTIN_COUNT);
-    if (slot)
-        return (MethodHandler) slot->fn;
+MethodHandler xr_string_get_handler(XrayIsolate *isolate, int symbol) {
+    MethodHandler h = resolve_native_handler(isolate, XR_TSTRING, symbol);
+    if (h)
+        return h;
     if (symbol == SYMBOL_ITERATOR)
         return bound_method_stub;
     return NULL;
