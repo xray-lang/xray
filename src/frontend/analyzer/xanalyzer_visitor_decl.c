@@ -693,6 +693,18 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
     ClassDeclNode *cls = &node->as.class_decl;
 
+    // @native class is reserved for builtin type declarations embedded at
+    // compile time.  User code cannot bind C implementations, so reject early.
+    if (cls->is_native) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE,
+            "'@native class' cannot be used in user code — "
+            "it is reserved for builtin type declarations",
+            &loc);
+        return;
+    }
+
     // Create class symbol
     XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
     sym->location.line = node->line;
