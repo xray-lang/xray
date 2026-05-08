@@ -26,8 +26,7 @@
 #ifndef XMAP_METHODS_H
 #define XMAP_METHODS_H
 
-#include "../value/xmethod_table.h"
-#include "../symbol/xsymbol_table.h"
+#include "../../base/xdefs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,8 +40,6 @@ extern "C" {
  * which exports the same name family for the script-side Map class
  * dispatch.
  */
-
-extern const XrMethodSlot xr_map_method_table[SYMBOL_BUILTIN_COUNT];
 
 struct XrayIsolate;
 XR_FUNC void xr_map_register_native_type(struct XrayIsolate *isolate);

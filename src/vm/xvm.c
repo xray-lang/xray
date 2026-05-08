@@ -75,7 +75,7 @@
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"
-#include "../runtime/value/xmethod_table.h"
+
 #include "../runtime/xray_debug.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/value/xtype_feedback.h"

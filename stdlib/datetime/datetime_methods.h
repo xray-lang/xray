@@ -8,30 +8,18 @@
  * datetime_methods.h - DateTime instance method dispatch table.
  *
  * KEY POINTS:
- *   - Owning the DateTime method table inside stdlib/datetime/ is what
- *     finally lets src/vm/xvm.c stop reverse-#including
- *     stdlib/datetime/datetime.h. The VM dispatcher reaches each
- *     method through xr_method_table_lookup(XR_TID_DATETIME, ...),
- *     so it never sees DateTime's data structures directly.
- *   - The method bodies are `static` inside datetime_methods.c
- *     because nothing outside that translation unit needs to call
- *     them by name.
+ *   - Owning the DateTime methods inside stdlib/datetime/ keeps them
+ *     colocated with the implementation so src/vm never needs to
+ *     reverse-include stdlib/datetime/*.
+ *   - Dispatch is via native_type_classes[XR_TDATETIME], registered
+ *     during isolate init by xr_datetime_register_native_type().
+ *   - The method bodies are `static` inside datetime_methods.c.
  */
 
 #ifndef XRAY_DATETIME_METHODS_H
 #define XRAY_DATETIME_METHODS_H
 
-#include "../../src/runtime/value/xmethod_table.h"
-#include "../../src/runtime/symbol/xsymbol_table.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-extern const XrMethodSlot xr_datetime_method_table[SYMBOL_BUILTIN_COUNT];
-
-#ifdef __cplusplus
-}
-#endif
+/* DateTime method dispatch is handled via native_type_classes.
+ * Method bodies are static inside datetime_methods.c. */
 
 #endif /* XRAY_DATETIME_METHODS_H */

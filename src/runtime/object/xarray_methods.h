@@ -8,27 +8,19 @@
  * xarray_methods.h - Array instance method dispatch table.
  *
  * KEY POINTS:
- *   - Owns the per-type XrMethodSlot table for arrays/slices.
- *     OP_INVOKE_BUILTIN, OP_INVOKE invoke_array, the JIT array hint,
- *     and the cold-path go-statement helper all reach methods
- *     through xr_method_table_lookup(XR_TID_ARRAY, ...).
- *   - The bound-method bridge (xr_array_get_handler in
- *     runtime/closure/xbound_method.c) pulls from the same table —
- *     no duplicate handler registry.
+ *   - Dispatch is via native_type_classes[XR_TARRAY], registered
+ *     during isolate init by xr_array_register_native_type().
  *   - Method bodies are `static` inside xarray_methods.c.
  */
 
 #ifndef XARRAY_METHODS_H
 #define XARRAY_METHODS_H
 
-#include "../value/xmethod_table.h"
-#include "../symbol/xsymbol_table.h"
+#include "../../base/xdefs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern const XrMethodSlot xr_array_method_table[SYMBOL_BUILTIN_COUNT];
 
 /* Register Array methods on an XrClass via native_type_classes[XR_TARRAY].
  * Called once during isolate init. */

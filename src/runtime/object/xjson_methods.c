@@ -158,21 +158,6 @@ static XrValue xr_json_method_is_object(XrayIsolate *iso, XrValue self, XrValue 
     return xr_bool(xr_value_is_json(self));
 }
 
-const XrMethodSlot xr_json_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_ENTRIES_ITERATOR] = {xr_json_method_entries_iterator, 0, 0, 0},
-    [SYMBOL_TOSTRING] = {xr_json_method_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_KEYS] = {xr_json_method_keys, 0, 0, 0},
-    [SYMBOL_VALUES] = {xr_json_method_values, 0, 0, 0},
-    [SYMBOL_HAS] = {xr_json_method_has, 1, 1, 0},
-    [SYMBOL_IS_NULL] = {xr_json_method_is_null, 0, 0, 0},
-    [SYMBOL_IS_INT] = {xr_json_method_is_int, 0, 0, 0},
-    [SYMBOL_IS_FLOAT] = {xr_json_method_is_float, 0, 0, 0},
-    [SYMBOL_IS_STRING] = {xr_json_method_is_string, 0, 0, 0},
-    [SYMBOL_IS_BOOL] = {xr_json_method_is_bool, 0, 0, 0},
-    [SYMBOL_IS_ARRAY] = {xr_json_method_is_array, 0, 0, 0},
-    [SYMBOL_IS_OBJECT] = {xr_json_method_is_object, 0, 0, 0},
-};
-
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"

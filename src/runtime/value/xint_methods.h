@@ -21,7 +21,6 @@
 #ifndef XINT_METHODS_H
 #define XINT_METHODS_H
 
-#include "xmethod_table.h"
 #include "xvalue.h"
 #include "../object/xstring.h"
 #include "../object/xbigint.h"
@@ -180,8 +179,6 @@ static inline XrValue xr_int_pow_method(XrayIsolate *iso, XrValue self, XrValue 
     }
     return xr_float(pow(value, exponent));
 }
-
-extern const XrMethodSlot xr_int_method_table[SYMBOL_BUILTIN_COUNT];
 
 struct XrayIsolate;
 XR_FUNC void xr_int_register_native_type(struct XrayIsolate *isolate);

@@ -24,7 +24,6 @@
 #ifndef XBIGINT_METHODS_H
 #define XBIGINT_METHODS_H
 
-#include "../value/xmethod_table.h"
 #include "../value/xvalue.h"
 #include "../symbol/xsymbol_table.h"
 #include "xbigint.h"
@@ -129,8 +128,6 @@ static inline XrValue xr_bigint_to_float_method(XrayIsolate *iso, XrValue self, 
     (void) argc;
     return xr_float(xr_bigint_to_double(xr_bigint_method_self(self)));
 }
-
-extern const XrMethodSlot xr_bigint_method_table[SYMBOL_BUILTIN_COUNT];
 
 struct XrayIsolate;
 XR_FUNC void xr_bigint_register_native_type(struct XrayIsolate *isolate);

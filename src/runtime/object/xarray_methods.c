@@ -322,41 +322,6 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
-const XrMethodSlot xr_array_method_table[SYMBOL_BUILTIN_COUNT] = {
-    /* Mutation */
-    [SYMBOL_PUSH] = {m_push, 1, 1, 0},
-    [SYMBOL_POP] = {m_pop, 0, 0, 0},
-    [SYMBOL_SHIFT] = {m_shift, 0, 0, 0},
-    [SYMBOL_UNSHIFT] = {m_unshift, 1, 1, 0},
-    [SYMBOL_CLEAR] = {m_clear, 0, 0, 0},
-    [SYMBOL_REVERSE] = {m_reverse, 0, 0, 0},
-    [SYMBOL_FILL] = {m_fill, 1, 3, 0},
-    [SYMBOL_SORT] = {m_sort, 0, 1, XR_METHOD_FLAG_MAY_THROW},
-
-    /* Query (pure / no-GC) */
-    [SYMBOL_IS_EMPTY] = {m_is_empty, 0, 0, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-    [SYMBOL_HAS] = {m_has, 1, 1, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-    [SYMBOL_INCLUDES] = {m_includes, 1, 1, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-    [SYMBOL_INDEXOF] = {m_index_of, 1, 1, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-
-    /* Construction (allocates a new array — may throw on OOM) */
-    [SYMBOL_SLICE] = {m_slice, 0, 2, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_CONCAT] = {m_concat, 0, -1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_JOIN] = {m_join, 0, 1, XR_METHOD_FLAG_MAY_THROW},
-
-    /* Higher-order callbacks (closure invocation can throw) */
-    [SYMBOL_FOREACH] = {m_foreach, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_FILTER] = {m_filter, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_MAP_METHOD] = {m_map, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_REDUCE] = {m_reduce, 2, 2, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_FIND] = {m_find, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_FINDINDEX] = {m_find_index, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_EVERY] = {m_every, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_SOME] = {m_some, 1, 1, XR_METHOD_FLAG_MAY_THROW},
-
-    [SYMBOL_TOSTRING] = {m_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
-};
-
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"

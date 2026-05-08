@@ -14,19 +14,6 @@
  */
 
 #include "xbool_methods.h"
-
-const XrMethodSlot xr_bool_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_TOSTRING] =
-        {
-            .fn = xr_bool_to_string,
-            .min_args = 0,
-            .max_args = 0,
-            .flags = XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC,
-        },
-};
-
-/* ========== XrClass Registration ========== */
-
 #include "../object/xnative_type.h"
 
 void xr_bool_register_native_type(XrayIsolate *isolate) {

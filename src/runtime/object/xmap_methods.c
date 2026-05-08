@@ -155,22 +155,6 @@ static XrValue xr_map_method_to_string(XrayIsolate *iso, XrValue self, XrValue *
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
-const XrMethodSlot xr_map_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_IS_EMPTY] = {xr_map_method_is_empty, 0, 0, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-    [SYMBOL_HAS] = {xr_map_method_has, 1, 1, 0},
-    [SYMBOL_GET] = {xr_map_method_get, 1, 1, 0},
-    [SYMBOL_SET] = {xr_map_method_set, 0, 2, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_DELETE] = {xr_map_method_delete, 1, 1, 0},
-    [SYMBOL_CLEAR] = {xr_map_method_clear, 0, 0, 0},
-    [SYMBOL_KEYS] = {xr_map_method_keys, 0, 0, 0},
-    [SYMBOL_VALUES] = {xr_map_method_values, 0, 0, 0},
-    [SYMBOL_ENTRIES] = {xr_map_method_entries, 0, 0, 0},
-    [SYMBOL_HAS_VALUE_MAP] = {xr_map_method_has_value, 1, 1, 0},
-    [SYMBOL_ITERATOR] = {xr_map_method_iterator, 0, 0, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-    [SYMBOL_ENTRIES_ITERATOR] = {xr_map_method_entries_iterator, 0, 0, 0},
-    [SYMBOL_TOSTRING] = {xr_map_method_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
-};
-
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
