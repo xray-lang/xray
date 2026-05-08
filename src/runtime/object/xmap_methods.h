@@ -32,15 +32,6 @@
 extern "C" {
 #endif
 
-/*
- * The XrMethodFn implementations are `static` inside xmap_methods.c.
- * They're never called from outside that TU — the dispatcher reaches
- * them by going through the table below. Keeping them file-local
- * avoids a symbol clash with src/runtime/object/xmap_instance_methods.c
- * which exports the same name family for the script-side Map class
- * dispatch.
- */
-
 struct XrayIsolate;
 XR_FUNC void xr_map_register_native_type(struct XrayIsolate *isolate);
 

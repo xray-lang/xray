@@ -24,28 +24,13 @@
 #ifndef XSET_METHODS_H
 #define XSET_METHODS_H
 
-#include "../value/xvalue.h"
+#include "../../base/xdefs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-XR_FUNC XrValue xr_set_method_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_delete(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_add(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_clear(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_union(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_intersection(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrValue *args,
-                                                   int argc);
-XR_FUNC XrValue xr_set_method_is_subset(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-XR_FUNC XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-
+struct XrayIsolate;
 XR_FUNC void xr_set_register_native_type(struct XrayIsolate *isolate);
 
 #ifdef __cplusplus
