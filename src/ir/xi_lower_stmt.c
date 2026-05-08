@@ -789,24 +789,19 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
 
     /* Normal path: try body → inline finally → merge */
     l->cur_block = try_blk;
+    l->dead_after_throw = false;
     l->try_depth++;
     xi_lower_stmt(l, tc->try_body);
     l->try_depth--;
     XiBlock *try_end_blk = l->cur_block;  /* last block in try body */
+    bool try_body_threw = l->dead_after_throw;
 
-    /* When try_depth > 0, lower_throw keeps cur_block alive so its
-     * variable definitions remain SSA-visible.  But the code after
-     * the throw is dead at runtime.  Detect this: if the last value
-     * in the block is XI_THROW, skip normal-path finally inlining —
-     * the exception-path copy below will execute instead. */
-    bool dead_after_throw = false;
-    if (try_end_blk && try_end_blk->nvalues > 0) {
-        XiValue *last_v = try_end_blk->values[try_end_blk->nvalues - 1];
-        if (last_v && last_v->op == XI_THROW)
-            dead_after_throw = true;
-    }
+    /* Consistency check: flag must agree with block content. */
+    XR_DCHECK(!try_body_threw || (try_end_blk && try_end_blk->nvalues > 0
+              && try_end_blk->values[try_end_blk->nvalues - 1]->op == XI_THROW),
+              "dead_after_throw set but block has no XI_THROW");
 
-    if (l->cur_block && !dead_after_throw) {
+    if (l->cur_block && !try_body_threw) {
         xi_lower_stmt(l, tc->finally_body);
         if (l->cur_block)
             xi_block_set_jump(l->cur_block, merge);
@@ -819,6 +814,7 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
     xi_block_add_pred(exc_blk, exc_pred);
     xi_lower_braun_seal(l, exc_blk);
     l->cur_block = exc_blk;
+    l->dead_after_throw = false;
 
     XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH,
                                       l->type_any, 0);
@@ -832,9 +828,9 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
 
     xi_lower_stmt(l, tc->finally_body);
 
-    /* Variable writes in the exception-path finally modify shared registers
-     * (var_reg coalescing) that the outer catch reads after re-throw.
-     * Mark them side-effectful so DCE preserves them. */
+    /* Exception-path variable writes modify shared registers (var_reg
+     * coalescing) that the outer catch reads after re-throw.  Mark them
+     * side-effectful so DCE preserves them. */
     if (l->cur_block) {
         for (uint32_t i = pre_finally_nvals; i < l->cur_block->nvalues; i++) {
             XiValue *fv = l->cur_block->values[i];
@@ -858,6 +854,7 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
 
     xi_lower_braun_seal(l, merge);
     l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    l->dead_after_throw = false;
 
     if (l->cur_block) {
         XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY,
@@ -894,10 +891,16 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc,
     xi_lower_braun_seal(l, try_blk);
 
     l->cur_block = try_blk;
+    l->dead_after_throw = false;
     l->try_depth++;
     xi_lower_stmt(l, tc->try_body);
     l->try_depth--;
     XiBlock *try_exit_blk = l->cur_block;  /* last block in try body */
+
+    /* Wire the normal-path edge unconditionally.  When the try body
+     * ends with XI_THROW the JMP is dead at runtime, but it keeps the
+     * CFG connected so dominator computation does not see orphan blocks
+     * (e.g. a finally_blk that only the dead JMP reaches). */
     if (l->cur_block)
         xi_block_set_jump(l->cur_block, normal_target);
 
@@ -910,6 +913,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc,
     xi_block_add_pred(catch_blk, catch_pred);
     xi_lower_braun_seal(l, catch_blk);
     l->cur_block = catch_blk;
+    l->dead_after_throw = false;
 
     XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH,
                                       l->type_any, 0);
@@ -934,6 +938,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc,
     if (finally_blk) {
         xi_lower_braun_seal(l, finally_blk);
         l->cur_block = finally_blk;
+        l->dead_after_throw = false;
 
         XiValue *fin_op = xi_value_new(l->func, l->cur_block, XI_FINALLY,
                                         l->type_void, 0);
@@ -950,6 +955,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc,
 
     xi_lower_braun_seal(l, merge);
     l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    l->dead_after_throw = false;
 
     if (l->cur_block) {
         XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY,
@@ -1254,13 +1260,13 @@ static void lower_throw(XiLower *l, AstNode *node) {
     v->line = (uint32_t) node->line;
 
     if (l->try_depth > 0) {
-        /* Inside try-catch: keep the block alive so the enclosing scope
-         * can connect it to the merge.  OP_THROW transfers control at
-         * runtime, making any subsequent JMP dead code.  But the CFG edge
-         * is needed for SSA: variable definitions before the throw must
-         * appear in the merge block's phi. */
+        /* Inside try: keep block alive for SSA predecessor edges.
+         * OP_THROW transfers control at runtime, so subsequent code
+         * in this block is dead.  Set the flag so enclosing handlers
+         * skip normal-path inlining of finally bodies. */
+        l->dead_after_throw = true;
     } else {
-        /* Outside try-catch: no handler to catch this, terminate block. */
+        /* Outside try: no handler, terminate block. */
         l->cur_block->kind = XI_BLOCK_UNREACHABLE;
         l->cur_block->control = val;
         l->cur_block = NULL;

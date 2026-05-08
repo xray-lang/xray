@@ -254,7 +254,10 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 uint8_t b = reg_of(ctx, rhs);
                 if (ctx->status != XI_EMIT_OK) return;
 
-                /* Unwrap cells: fused cmp bypasses emit_value arg unwrap */
+                /* Unwrap cells: fused cmp bypasses emit_value arg unwrap.
+                 * Every cell-wrapped variable must be dereferenced here;
+                 * failure to do so means comparing the cell pointer instead
+                 * of the contained value. */
                 if (lhs->var_id != 0xFF &&
                     ctx->cell_side_reg[lhs->var_id] != NO_REG) {
                     uint8_t tmp = ctx->next_reg++;
@@ -271,6 +274,17 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, b, 0));
                     b = tmp;
                 }
+
+                /* Verify cell unwrap: after unwrapping, the comparison
+                 * registers must NOT be the raw cell registers. */
+                XR_DCHECK(lhs->var_id == 0xFF ||
+                          ctx->cell_side_reg[lhs->var_id] == NO_REG ||
+                          a != ctx->cell_side_reg[lhs->var_id],
+                          "fused cmp LHS still holds cell register");
+                XR_DCHECK(rhs->var_id == 0xFF ||
+                          ctx->cell_side_reg[rhs->var_id] == NO_REG ||
+                          b != ctx->cell_side_reg[rhs->var_id],
+                          "fused cmp RHS still holds cell register");
 
                 /* Determine branch-form opcode and sense.  GT/GE swap args. */
                 OpCode branch_op;

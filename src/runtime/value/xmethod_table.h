@@ -129,6 +129,14 @@ static inline const XrMethodSlot *xr_method_table_lookup(XrTypeId type_id, int s
     return slot->fn ? slot : NULL;
 }
 
+/*
+ * Boot-time verification: every type with a method table must implement
+ * required protocols (toString, iterator for collections, etc.).
+ * Only checks in debug builds; compiles to no-op in release.
+ * Call once during isolate initialization.
+ */
+XR_FUNC void xr_method_table_verify_protocols(void);
+
 #ifdef __cplusplus
 }
 #endif
