@@ -1296,6 +1296,12 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
         XmRef vreg = xm_new_vreg(func, rep);
         if (param)
             set_ref(&ctx, param->id, vreg);
+        /* Params occupy bytecode slots 0..n-1. Setting bc_slot enables:
+         * (1) prologue to init slot_runtime_tags[] from param_tags[],
+         * (2) emit_call_args_from_pool to dynamic-patch UNKNOWN arg tags. */
+        uint32_t vi = XM_REF_INDEX(vreg);
+        if (vi < func->nvreg)
+            func->vregs[vi].bc_slot = (int16_t) i;
     }
 
     /* Create all XmBlocks upfront (so forward jumps resolve) */
