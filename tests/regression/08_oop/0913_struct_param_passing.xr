@@ -4,6 +4,12 @@ struct Vec2 {
     x: float = 0.0
     y: float = 0.0
 }
+
+struct Rect {
+    origin: Vec2
+    size: Vec2
+}
+
 fn move_value(v: Vec2): Vec2 {
     v.x = v.x + 10.0
     v.y = v.y + 20.0
@@ -20,39 +26,125 @@ fn add_to(target: ref Vec2, src: in Vec2): void {
     target.x = target.x + src.x
     target.y = target.y + src.y
 }
+fn scale(v: ref Vec2, factor: float): void {
+    v.x = v.x * factor
+    v.y = v.y * factor
+}
+fn dot(a: in Vec2, b: in Vec2): float {
+    return a.x * b.x + a.y * b.y
+}
+fn normalize(v: ref Vec2): void {
+    let len = length_sq(v)
+    if (len > 0.0) {
+        let inv = 1.0 / len
+        v.x = v.x * inv
+        v.y = v.y * inv
+    }
+}
 
 @test
-fn test_struct_param_passing() {
+fn test_basic_modes() {
 
     // === Value passing (default): callee gets a copy ===
 
     let a = Vec2{x: 1.0, y: 2.0}
     let b = move_value(a)
-    assert(a.x == 1.0)   // original unchanged (value copy)
+    assert(a.x == 1.0)
     assert(a.y == 2.0)
-    assert(b.x == 11.0)  // returned modified copy
+    assert(b.x == 11.0)
     assert(b.y == 22.0)
 
     // === in passing: readonly reference, no copy ===
 
     let c = Vec2{x: 3.0, y: 4.0}
     assert(length_sq(c) == 25.0)
+    assert(c.x == 3.0)
+    assert(c.y == 4.0)
 
     // === ref passing: mutable reference, caller sees changes ===
 
     let d = Vec2{x: 1.0, y: 2.0}
     translate(d, 5.0, 10.0)
-    assert(d.x == 6.0)   // caller sees mutation
+    assert(d.x == 6.0)
     assert(d.y == 12.0)
 
-    // === Mixed: value + in + ref in same function ===
+    // === Mixed: ref + in in same function ===
 
     let e = Vec2{x: 10.0, y: 20.0}
     let f = Vec2{x: 3.0, y: 7.0}
     add_to(e, f)
     assert(e.x == 13.0)
     assert(e.y == 27.0)
-    assert(f.x == 3.0)   // in param unchanged
+    assert(f.x == 3.0)
     assert(f.y == 7.0)
 }
 
+@test
+fn test_multiple_ref_calls() {
+    // Same struct modified by ref multiple times
+    let v = Vec2{x: 0.0, y: 0.0}
+    translate(v, 1.0, 2.0)
+    assert(v.x == 1.0)
+    assert(v.y == 2.0)
+
+    translate(v, 3.0, 4.0)
+    assert(v.x == 4.0)
+    assert(v.y == 6.0)
+
+    scale(v, 2.0)
+    assert(v.x == 8.0)
+    assert(v.y == 12.0)
+}
+
+@test
+fn test_ref_then_in() {
+    // Modify via ref, then read via in
+    let v = Vec2{x: 3.0, y: 4.0}
+    scale(v, 3.0)
+    assert(v.x == 9.0)
+    assert(v.y == 12.0)
+    assert(length_sq(v) == 225.0)  // 9*9 + 12*12
+}
+
+@test
+fn test_two_in_params() {
+    // Both parameters are in (no copy, no mutation)
+    let a = Vec2{x: 2.0, y: 3.0}
+    let b = Vec2{x: 4.0, y: 5.0}
+    assert(dot(a, b) == 23.0)  // 2*4 + 3*5
+    assert(a.x == 2.0)
+    assert(b.x == 4.0)
+}
+
+@test
+fn test_ref_reads_in() {
+    // normalize reads via in (length_sq), modifies via ref
+    let v = Vec2{x: 4.0, y: 0.0}
+    normalize(v)
+    assert(v.x == 0.25)  // 4 * (1/16) = 0.25
+    assert(v.y == 0.0)
+}
+
+@test
+fn test_value_independence() {
+    // value copy is fully independent from original
+    let orig = Vec2{x: 5.0, y: 10.0}
+    let copy = move_value(orig)
+
+    // modify original via ref — copy must not change
+    translate(orig, 100.0, 200.0)
+    assert(orig.x == 105.0)
+    assert(copy.x == 15.0)  // 5 + 10 from move_value
+    assert(copy.y == 30.0)
+}
+
+@test
+fn test_ref_in_loop() {
+    // ref modification inside a loop
+    let v = Vec2{x: 0.0, y: 0.0}
+    for (let i = 0; i < 5; i++) {
+        translate(v, 1.0, 2.0)
+    }
+    assert(v.x == 5.0)
+    assert(v.y == 10.0)
+}
