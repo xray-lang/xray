@@ -12,16 +12,13 @@
  *     hot, branchless, and side-effect-free, so it lives here as
  *     `static inline` — AOT-generated C #includes this header and
  *     inlines the call directly at the call site.
- *   - The exported `xr_bool_method_table[]` takes the address of the
- *     inline definition, forcing the compiler to emit one out-of-line
- *     copy in xbool_methods.c for the VM interpreter dispatcher to
- *     reach via the unified XrMethodSlot indirection.
+ *   - The inline definition is also used by xr_bool_register_native_type()
+ *     to register the method on the XrClass dispatch table.
  */
 
 #ifndef XBOOL_METHODS_H
 #define XBOOL_METHODS_H
 
-#include "xmethod_table.h"
 #include "xvalue.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
@@ -44,17 +41,6 @@ static inline XrValue xr_bool_to_string(XrayIsolate *iso, XrValue self, XrValue 
     return XR_TO_BOOL(self) ? xr_string_value(xr_string_intern(iso, "true", 4, 0))
                             : xr_string_value(xr_string_intern(iso, "false", 5, 0));
 }
-
-/*
- * Per-type method table for XR_TID_BOOL.
- *
- * Indexed by symbol_id (SYMBOL_*). Slots not listed default to all
- * zeros (fn == NULL), which the dispatcher reports as "method not
- * found".
- *
- * Defined in xbool_methods.c.
- */
-extern const XrMethodSlot xr_bool_method_table[SYMBOL_BUILTIN_COUNT];
 
 struct XrayIsolate;
 XR_FUNC void xr_bool_register_native_type(struct XrayIsolate *isolate);

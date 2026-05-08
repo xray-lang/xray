@@ -21,7 +21,7 @@
 #define XVM_COLD_PATHS_H
 
 #include "xvm_internal.h"
-#include "../runtime/value/xmethod_table.h"
+
 #include "../coro/xchannel.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xworker.h"

@@ -11,10 +11,10 @@
  *   All built-in type member declarations are defined here using X-macros.
  *   The Analyzer (for LSP/type-checking) consumes this file to generate
  *   XaBuiltinMember arrays. VM implementation lives in the per-type
- *   method tables under runtime/value/x{bool,int,float}_methods.{c,h},
+ *   method bodies under runtime/value/x{bool,int,float}_methods.{c,h},
  *   runtime/object/x{array,string,map,set,bigint,json}_methods.{c,h},
- *   and stdlib/datetime/datetime_methods.{c,h}, all registered in
- *   runtime/value/xmethod_table.c.
+ *   and stdlib/datetime/datetime_methods.{c,h}, all registered via
+ *   xr_register_native_type() during isolate init.
  *
  * USAGE:
  *   #define M(name, sig, doc, is_method) {name, sig, doc, is_method, false},
@@ -29,7 +29,7 @@
  *   - Adding a method in a per-type table => MUST declare here
  *
  * RELATED MODULES:
- *   - src/runtime/value/xmethod_table.{c,h}: unified per-type method registry
+ *   - src/runtime/object/xnative_type.{c,h}: unified native type registration
  *   - src/analyzer/xanalyzer_builtins.c: consumes these definitions
  *   - src/object/xstringbuilder_builtins.c: StringBuilder VM implementation
  */

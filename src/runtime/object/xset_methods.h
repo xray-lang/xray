@@ -24,8 +24,7 @@
 #ifndef XSET_METHODS_H
 #define XSET_METHODS_H
 
-#include "../value/xmethod_table.h"
-#include "../symbol/xsymbol_table.h"
+#include "../value/xvalue.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,8 +45,6 @@ XR_FUNC XrValue xr_set_method_is_superset(XrayIsolate *iso, XrValue self, XrValu
 XR_FUNC XrValue xr_set_method_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 XR_FUNC XrValue xr_set_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 XR_FUNC XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
-
-extern const XrMethodSlot xr_set_method_table[SYMBOL_BUILTIN_COUNT];
 
 XR_FUNC void xr_set_register_native_type(struct XrayIsolate *isolate);
 

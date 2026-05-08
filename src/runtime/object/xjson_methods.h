@@ -19,14 +19,11 @@
 #ifndef XJSON_METHODS_H
 #define XJSON_METHODS_H
 
-#include "../value/xmethod_table.h"
-#include "../symbol/xsymbol_table.h"
+#include "../../base/xdefs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern const XrMethodSlot xr_json_method_table[SYMBOL_BUILTIN_COUNT];
 
 struct XrayIsolate;
 XR_FUNC void xr_json_register_native_type(struct XrayIsolate *isolate);

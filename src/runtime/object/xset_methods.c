@@ -7,10 +7,9 @@
  *
  * xset_methods.c - Set / WeakSet builtin method bodies + dispatch table.
  *
- * The dispatcher in OP_INVOKE_BUILTIN reaches each method through
- * xr_set_method_table[symbol].fn. Methods that are unsupported on a
- * weak set return XR_NOTFOUND so the dispatcher's shared
- * "method not found" path produces the standard diagnostic.
+ * Methods that are unsupported on a weak set return XR_NOTFOUND so
+ * the dispatcher's shared "method not found" path produces the
+ * standard diagnostic.
  */
 
 #include "xset_methods.h"
@@ -171,23 +170,6 @@ XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, i
     (void) argc;
     return xr_string_value(xr_value_to_string(iso, self));
 }
-
-const XrMethodSlot xr_set_method_table[SYMBOL_BUILTIN_COUNT] = {
-    [SYMBOL_HAS] = {xr_set_method_has, 1, 1, 0},
-    [SYMBOL_DELETE] = {xr_set_method_delete, 1, 1, 0},
-    [SYMBOL_IS_EMPTY] = {xr_set_method_is_empty, 0, 0, XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC},
-    [SYMBOL_ADD] = {xr_set_method_add, 0, 1, XR_METHOD_FLAG_MAY_THROW},
-    [SYMBOL_CLEAR] = {xr_set_method_clear, 0, 0, 0},
-    [SYMBOL_UNION] = {xr_set_method_union, 0, 1, 0},
-    [SYMBOL_INTERSECTION] = {xr_set_method_intersection, 0, 1, 0},
-    [SYMBOL_DIFFERENCE] = {xr_set_method_difference, 0, 1, 0},
-    [SYMBOL_SYMMETRIC_DIFFERENCE] = {xr_set_method_symmetric_difference, 0, 1, 0},
-    [SYMBOL_IS_SUBSET] = {xr_set_method_is_subset, 0, 1, 0},
-    [SYMBOL_IS_SUPERSET] = {xr_set_method_is_superset, 0, 1, 0},
-    [SYMBOL_TO_ARRAY] = {xr_set_method_to_array, 0, 0, 0},
-    [SYMBOL_ITERATOR] = {xr_set_method_iterator, 0, 0, 0},
-    [SYMBOL_TOSTRING] = {xr_set_method_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
-};
 
 /* ========== XrClass Registration ========== */
 

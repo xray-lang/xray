@@ -80,9 +80,8 @@ static XrRegexFlags parse_flags(const char *flags_str) {
  * Structure:
  *   { start: int, end: int, text: string, groups: Array<string> }
  *
- * Public symbol: stdlib/regex/regex_methods.c reuses this so the new
- * XrMethodSlot wrappers and the legacy native-type binding both yield
- * identically shaped match objects.
+ * Public symbol: stdlib/regex/regex_methods.c reuses this so the
+ * native-type binding yields identically shaped match objects.
  */
 XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match) {
     /* Temporarily disable GC: multiple allocations below (Json, String,

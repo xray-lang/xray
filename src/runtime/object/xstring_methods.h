@@ -8,31 +8,20 @@
  * xstring_methods.h - String instance method dispatch table.
  *
  * KEY POINTS:
- *   - Owns the per-type XrMethodSlot table for strings (XR_TID_STRING).
- *     OP_INVOKE_BUILTIN, OP_INVOKE invoke_string, the JIT string
- *     hint, and the cold-path go-statement helper all reach methods
- *     through xr_method_table_lookup(XR_TID_STRING, ...).
- *   - The bound-method bridge (xr_string_get_handler in
- *     runtime/closure/xbound_method.c) pulls from the same table.
- *   - SYMBOL_MATCH is wired through stdlib/regex/. The reverse
- *     include lives in xstring_methods.c (runtime/object -> stdlib).
- *     Same direction; the structural fix is to move XrRegex itself
- *     into src/runtime/object/ — out of scope for the method table
- *     migration.
+ *   - Dispatch is via native_type_classes[XR_TSTRING], registered
+ *     during isolate init by xr_string_register_native_type().
+ *   - SYMBOL_MATCH is wired through stdlib/regex/.
  *   - Method bodies are `static` inside xstring_methods.c.
  */
 
 #ifndef XSTRING_METHODS_H
 #define XSTRING_METHODS_H
 
-#include "../value/xmethod_table.h"
-#include "../symbol/xsymbol_table.h"
+#include "../../base/xdefs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-extern const XrMethodSlot xr_string_method_table[SYMBOL_BUILTIN_COUNT];
 
 struct XrayIsolate;
 XR_FUNC void xr_string_register_native_type(struct XrayIsolate *isolate);
