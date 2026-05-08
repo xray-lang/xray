@@ -174,6 +174,7 @@ XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, i
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
+#include "builtins/xset_builtins.h"
 
 void xr_set_register_native_type(XrayIsolate *isolate) {
     static const XrNativeMethod set_methods[] = {
@@ -193,12 +194,18 @@ void xr_set_register_native_type(XrayIsolate *isolate) {
         {"toString", xr_set_method_to_string, 0},
         {NULL, NULL, 0},
     };
+    static const XrNativeMethod set_statics[] = {
+        {"constructor", xr_builtin_set_construct, 0},
+        {"from", xr_builtin_set_from, 1},
+        {"range", xr_builtin_set_range, 2},
+        {NULL, NULL, 0},
+    };
     static const XrNativeTypeInfo set_info = {
         .name = "Set",
         .gc_type = XR_TSET,
         .methods = set_methods,
         .getters = NULL,
-        .static_methods = NULL,
+        .static_methods = set_statics,
     };
     xr_register_native_type(isolate, &set_info);
 }

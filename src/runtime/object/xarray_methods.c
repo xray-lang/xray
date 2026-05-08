@@ -325,6 +325,7 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
+#include "builtins/xarray_builtins.h"
 
 void xr_array_register_native_type(XrayIsolate *isolate) {
     static const XrNativeMethod array_methods[] = {
@@ -359,12 +360,19 @@ void xr_array_register_native_type(XrayIsolate *isolate) {
         {"toString", m_to_string, 0},
         {NULL, NULL, 0},
     };
+    static const XrNativeMethod array_statics[] = {
+        {"constructor", xr_builtin_array_construct, 0},
+        {"from", xr_builtin_array_from, 1},
+        {"range", xr_builtin_array_range, 2},
+        {"withCapacity", xr_builtin_array_with_capacity, 1},
+        {NULL, NULL, 0},
+    };
     static const XrNativeTypeInfo array_info = {
         .name = "Array",
         .gc_type = XR_TARRAY,
         .methods = array_methods,
         .getters = NULL,
-        .static_methods = NULL,
+        .static_methods = array_statics,
     };
     xr_register_native_type(isolate, &array_info);
 }

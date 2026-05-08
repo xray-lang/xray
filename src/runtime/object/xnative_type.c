@@ -13,6 +13,7 @@
 
 #include "xnative_type.h"
 #include "../class/xclass_builder.h"
+#include "../class/xclass_system.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
@@ -34,8 +35,13 @@ XrClass *xr_register_native_type(XrayIsolate *isolate, const XrNativeTypeInfo *i
         return existing;
     }
 
-    // Use ClassBuilder to create class
-    XrClassBuilder *builder = xr_class_builder_new(isolate, info->name, NULL);
+    // Use ClassBuilder to create class.  Inherit from Object when available
+    // so that native types participate in the full class hierarchy.
+    XrClass *super = NULL;
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    if (core)
+        super = core->objectClass;
+    XrClassBuilder *builder = xr_class_builder_new(isolate, info->name, super);
     if (!builder) {
         return NULL;
     }

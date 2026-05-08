@@ -22,6 +22,6 @@ XR_FUNC XrValue xr_map_method_delete(XrayIsolate *isolate, XrValue self, XrValue
 XR_FUNC XrValue xr_map_method_clear(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 XR_FUNC XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 
-// Note: Methods are registered via XrClassBuilder in xr_map_create_class()
+// Methods are registered via xr_map_register_native_type() in xmap_methods.c
 
 #endif  // XMAP_INSTANCE_METHODS_H
