@@ -53,7 +53,7 @@
 #include "../coro/xcoro_pool.h"
 #include "../vm/xvm.h"
 #include "../vm/xvm_internal.h"
-#include "../runtime/value/xmethod_table.h"
+#include "../runtime/object/xnative_type.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../module/xmodule.h"
 #include "xm_codegen.h"
@@ -315,60 +315,42 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
             recv_type = actual;
     }
 
-    // Unified dispatch — single switch covers all types
+    /* Map JIT type hint to XrObjType for native_type_classes lookup.
+     * -1 means "no direct mapping; fall through to special cases". */
+    static const int hint_to_obj_type[] = {
+        [JIT_TYPE_HINT_NONE]     = -1,
+        [JIT_TYPE_HINT_INT]      = XR_TINT,
+        [JIT_TYPE_HINT_FLOAT]    = XR_TFLOAT,
+        [JIT_TYPE_HINT_BOOL]     = XR_TBOOL,
+        [JIT_TYPE_HINT_STRING]   = XR_TSTRING,
+        [JIT_TYPE_HINT_ARRAY]    = XR_TARRAY,
+        [JIT_TYPE_HINT_MAP]      = XR_TMAP,
+        [JIT_TYPE_HINT_SET]      = XR_TSET,
+        [JIT_TYPE_HINT_JSON]     = XR_TJSON,
+        [JIT_TYPE_HINT_INSTANCE] = -1,
+        [JIT_TYPE_HINT_ITERATOR] = -1,
+        [JIT_TYPE_HINT_CLASS]    = -1,
+    };
+
     XrValue result = XR_NULL_VAL;
+
+    /* Fast path: XrClass-based dispatch for value/collection types. */
+    int _obj_type = (recv_type >= 0 && recv_type <= JIT_TYPE_HINT_CLASS)
+                        ? hint_to_obj_type[recv_type]
+                        : -1;
+    if (_obj_type >= 0 && _obj_type < XR_NATIVE_TYPE_MAX) {
+        XrClass *_cls = isolate->native_type_classes[_obj_type];
+        if (_cls) {
+            XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+            if (_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)
+                result = _m->as.primitive(isolate, receiver, args, nargs);
+            else
+                result = XR_NOTFOUND;
+        } else {
+            result = XR_NOTFOUND;
+        }
+    } else
     switch (recv_type) {
-        case JIT_TYPE_HINT_INT: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_INT, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_FLOAT: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_FLOAT, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_BOOL: {
-            /* Bool dispatches through the unified method table; missing
-             * symbols return XR_NOTFOUND and let the post-switch
-             * "method not found" path produce a uniform diagnostic. */
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_BOOL, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_STRING: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_STRING, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_ARRAY: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_MAP: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_MAP, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_SET: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_SET, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
-        case JIT_TYPE_HINT_JSON: {
-            const XrMethodSlot *slot =
-                xr_method_table_lookup(XR_TID_JSON, method_symbol, SYMBOL_BUILTIN_COUNT);
-            result = slot ? slot->fn(isolate, receiver, args, nargs) : XR_NOTFOUND;
-            break;
-        }
         case JIT_TYPE_HINT_ITERATOR: {
             XrIterator *iter = xr_value_to_iterator(receiver);
             if (iter) {
