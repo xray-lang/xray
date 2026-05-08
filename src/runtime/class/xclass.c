@@ -23,6 +23,7 @@
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
 #include "../xisolate_api.h"
+#include "../object/xnative_type.h"
 #include "xclass_system.h"
 #include "xreflect_registry.h"
 #include "xreflect_cache.h"
@@ -241,75 +242,53 @@ XrMethod *xr_class_lookup_method(XrClass *cls, int symbol) {
 // Get class for any value (unified object model)
 XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "value_get_class: NULL isolate");
-    if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
-        XrObjType type = XR_GC_GET_TYPE(gc);
 
-        if (type == XR_TINSTANCE) {
-            XrInstance *inst = (XrInstance *) gc;
-            return inst->klass;
-        }
-
-        if (type == XR_TENUM_VALUE) {
-            XrEnumValue *ev = (XrEnumValue *) gc;
-            if (ev->enum_name) {
-                XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
-                if (cls)
-                    return cls;
-            }
-            XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-            return core ? core->enumClass : NULL;
-        }
-
-        if (type == XR_TENUM_TYPE) {
-            XrEnumType *et = (XrEnumType *) gc;
-            return et->enum_class;
-        }
-
-        XrayCoreClasses *_core = xr_isolate_get_core_classes(X);
-        if (_core) {
-            switch (type) {
-                case XR_TARRAY_SLICE:
-                    return _core->arraySliceClass;
-                case XR_TSTRINGBUILDER:
-                    return _core->stringBuilderClass;
-                default:
-                    break;
-            }
-        }
-
+    /* Resolve the XrObjType. Value types (int/float/bool/null) map to
+     * the enum directly; heap objects read the GC header type tag. */
+    XrObjType type;
+    if (XR_IS_INT(value))
+        type = XR_TINT;
+    else if (XR_IS_FLOAT(value))
+        type = XR_TFLOAT;
+    else if (XR_IS_BOOL(value))
+        type = XR_TBOOL;
+    else if (XR_IS_NULL(value))
+        type = XR_TNULL;
+    else if (XR_IS_PTR(value))
+        type = XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(value));
+    else
         return NULL;
+
+    /* Instance: class pointer stored in the object header. */
+    if (type == XR_TINSTANCE) {
+        XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+        return inst->klass;
     }
 
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-    if (!core) {
-        return NULL;
-    }
-
-    if (XR_IS_INT(value)) {
-        return core->intClass;
-    }
-    if (XR_IS_FLOAT(value)) {
-        return core->floatClass;
-    }
-    if (XR_IS_BOOL(value)) {
-        return core->boolClass;
-    }
-    if (XR_IS_NULL(value)) {
-        return core->nullClass;
-    }
-
-    if (XR_IS_PTR(value)) {
-        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
-        XrObjType type = XR_GC_GET_TYPE(gc);
-
-        switch (type) {
-            case XR_TARRAY_SLICE:
-                return core->arraySliceClass;
-            default:
-                break;
+    /* Enum value: resolve by name, fall back to the abstract Enum class. */
+    if (type == XR_TENUM_VALUE) {
+        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(value);
+        if (ev->enum_name) {
+            XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
+            if (cls)
+                return cls;
         }
+        XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+        return core ? core->enumClass : NULL;
     }
+
+    /* Enum type: each enum type carries its own class. */
+    if (type == XR_TENUM_TYPE) {
+        XrEnumType *et = (XrEnumType *) XR_TO_PTR(value);
+        return et->enum_class;
+    }
+
+    /* All other types: single lookup in native_type_classes[].
+     * This covers primitives (int/float/bool/null), collections
+     * (Array/Map/Set/String/Json), stdlib types (DateTime/Regex/...),
+     * and internal types (Iterator/Range/StringBuilder/ArraySlice/BigInt). */
+    if ((int) type < XR_NATIVE_TYPE_MAX)
+        return xr_isolate_get_native_type_class(X, type);
 
     return NULL;
 }
