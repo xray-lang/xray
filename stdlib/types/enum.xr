@@ -1,0 +1,15 @@
+// Built-in enum value/type runtime info
+
+@native
+class EnumValue {
+    name: string
+    value: Json
+    ordinal: int
+    toString(): string
+}
+
+@native
+class EnumType {
+    memberCount: int
+    getMember(index: int): EnumValue
+}

@@ -1,0 +1,9 @@
+// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c
+
+@native
+class StringBuilder {
+    length: int
+    append(value: Json): StringBuilder
+    toString(): string
+    clear(): StringBuilder
+}

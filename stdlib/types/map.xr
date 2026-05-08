@@ -1,0 +1,15 @@
+// Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c
+
+@native
+class Map<K, V> {
+    length: int
+    get(key: K): V?
+    set(key: K, value: V): void
+    has(key: K): bool
+    delete(key: K): bool
+    clear(): void
+    keys(): Array<K>
+    values(): Array<V>
+    entries(): Array<[K, V]>
+    forEach(fn: fn(value: V, key: K): void): void
+}

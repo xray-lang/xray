@@ -172,6 +172,13 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     int method_count = 0;
     int method_capacity = 0;
 
+    // Save and restore native flag — the flag is set by the caller
+    // (xr_parse_attributed_declaration) after this function returns,
+    // but we also need it during body parsing. Use a pre-set approach:
+    // the caller will set is_native on the returned node, but we need
+    // to propagate it into method parsing. We use parser->parsing_native_class.
+    bool saved_native = parser->parsing_native_class;
+
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery: skip to next valid token
         if (parser->panic_mode) {
@@ -238,6 +245,8 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
             XR_PARSE_PUSH(parser, fields, field_count, field_capacity, member);
         }
     }
+
+    parser->parsing_native_class = saved_native;
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end class body");
     int end_line = parser->previous.line;
@@ -716,9 +725,9 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
     }
 
     AstNode *body = NULL;
-    if (is_abstract) {
-        // Abstract method has no body, semicolon optional (Xray syntax)
-        xr_parser_match(parser, TK_SEMICOLON);  // optional semicolon
+    if (is_abstract || parser->parsing_native_class) {
+        // Abstract or @native method has no body, semicolon optional
+        xr_parser_match(parser, TK_SEMICOLON);
     } else {
         // Normal method has body
         xr_parser_consume(parser, TK_LBRACE, "expected '{' to start method body");

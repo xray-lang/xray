@@ -1,0 +1,10 @@
+// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/
+
+@native
+class Task {
+    done: bool
+    cancelled: bool
+    result: Json
+    error: string?
+    cancel(): void
+}

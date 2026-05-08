@@ -86,6 +86,9 @@ struct Parser {
     // Set temporarily by 'is'/'as' parsers where runtime type checks don't need
     // element type info.
     bool allow_bare_container;
+
+    // True while parsing a @native class body: methods have no body.
+    bool parsing_native_class;
 };
 
 /* ========== Public Entry Points ========== */

@@ -1,0 +1,13 @@
+// Built-in BigInt type — implementation in src/runtime/object/xbigint_methods.c
+
+@native
+class BigInt {
+    abs(): BigInt
+    toString(): string
+    sign(): int
+    isZero(): bool
+    isNegative(): bool
+    isPositive(): bool
+    toInt(): int?
+    toFloat(): float
+}
