@@ -61,19 +61,10 @@ static const XrPreludeSymbols g_prelude_symbols = {
  * to drag in the full stdlib/{log,datetime,regex,net} headers.
  */
 struct XrayIsolate;
-/* Core builtin types (src/runtime) */
-extern void xr_bool_register_native_type(XrayIsolate *isolate);
-extern void xr_int_register_native_type(XrayIsolate *isolate);
-extern void xr_float_register_native_type(XrayIsolate *isolate);
-extern void xr_string_register_native_type(XrayIsolate *isolate);
-extern void xr_array_register_native_type(XrayIsolate *isolate);
-extern void xr_map_register_native_type(XrayIsolate *isolate);
-extern void xr_set_register_native_type(XrayIsolate *isolate);
-extern void xr_json_register_native_type(XrayIsolate *isolate);
-extern void xr_bigint_register_native_type(XrayIsolate *isolate);
+/* Types not registered by xr_core_init — they live in stdlib or
+ * depend on runtime infrastructure only available after core init. */
 extern void xr_iterator_register_native_type(XrayIsolate *isolate);
 extern void xr_range_register_native_type(XrayIsolate *isolate);
-/* Stdlib extension types */
 extern void xr_logger_register_native_type(XrayIsolate *isolate);
 extern void xr_datetime_register_native_type(XrayIsolate *isolate);
 extern void xr_regex_register_native_type(XrayIsolate *isolate);
@@ -83,18 +74,9 @@ extern void xr_netlistener_register_native_type(XrayIsolate *isolate);
 void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     if (!isolate)
         return;
-    /* Core value / collection types first, then stdlib extensions.
-     * xr_register_native_type is idempotent — repeated calls for the
-     * same gc_type return the existing XrClass. */
-    xr_bool_register_native_type(isolate);
-    xr_int_register_native_type(isolate);
-    xr_float_register_native_type(isolate);
-    xr_string_register_native_type(isolate);
-    xr_array_register_native_type(isolate);
-    xr_map_register_native_type(isolate);
-    xr_set_register_native_type(isolate);
-    xr_json_register_native_type(isolate);
-    xr_bigint_register_native_type(isolate);
+    /* Core types (int/float/bool/string/array/map/set/json/bigint/
+     * stringbuilder/arrayslice) are registered by xr_core_init().
+     * Prelude registers only the remaining native types. */
     xr_iterator_register_native_type(isolate);
     xr_range_register_native_type(isolate);
     xr_datetime_register_native_type(isolate);
