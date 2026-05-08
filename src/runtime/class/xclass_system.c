@@ -14,14 +14,12 @@
 #include "xclass_system.h"
 #include "../../base/xlog.h"
 #include "xclass.h"
-#include "xclass_builder.h"
+#include "xclass_builder.h"       /* Process class still uses builder */
 #include "../../base/xchecks.h"
 #include "../xisolate_internal.h"
+#include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../value/xvalue.h"
-#include "../../base/xhashmap.h"
-#include "xreflect_registry.h"
-#include "xmethod.h"
 #include "xstringbuilder_builtins.h"
 #include "xslice_builtins.h"
 #include "../value/xtype_names.h"
@@ -75,6 +73,7 @@ void xr_core_init(XrayIsolate *X) {
     xr_bool_register_native_type(X);
     X->core->boolClass = xr_isolate_get_native_type_class(X, XR_TBOOL);
     X->core->nullClass = xr_class_new(X, TYPE_NAME_NULL, X->core->objectClass);
+    xr_isolate_set_native_type_class(X, XR_TNULL, X->core->nullClass);
     xr_bigint_register_native_type(X);
     X->core->bigintClass = xr_isolate_get_native_type_class(X, XR_TBIGINT);
 
@@ -86,10 +85,10 @@ void xr_core_init(XrayIsolate *X) {
     X->core->enumClass = xr_class_new(X, CLASS_NAME_ENUM, X->core->objectClass);
     xr_class_mark_abstract(X->core->enumClass);
 
-    X->core->stringBuilderClass = xr_stringbuilder_create_class(X, X->core->objectClass);
-    xr_isolate_set_native_type_class(X, XR_TSTRINGBUILDER, X->core->stringBuilderClass);
-    X->core->arraySliceClass = xr_array_slice_create_class(X, X->core->objectClass);
-    xr_isolate_set_native_type_class(X, XR_TARRAY_SLICE, X->core->arraySliceClass);
+    xr_stringbuilder_register_native_type(X);
+    X->core->stringBuilderClass = xr_isolate_get_native_type_class(X, XR_TSTRINGBUILDER);
+    xr_array_slice_register_native_type(X);
+    X->core->arraySliceClass = xr_isolate_get_native_type_class(X, XR_TARRAY_SLICE);
 
     // Process class with fields
     {

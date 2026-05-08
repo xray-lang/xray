@@ -18,11 +18,8 @@
 #include "xstringbuilder.h"
 #include "xstring.h"
 #include "xvalue.h"
-#include "xclass.h"
-#include "xclass_builder.h"
 #include "xisolate_api.h"
-#include "xclass_system.h"
-#include <stdio.h>
+#include "xnative_type.h"
 #include <string.h>
 
 /* ========== Helpers ========== */
@@ -122,27 +119,27 @@ XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue self, XrVa
     return xr_int((int64_t) xr_stringbuilder_length(sb));
 }
 
-/* ========== Class Initialization ========== */
+/* ========== Native Type Registration ========== */
 
-// Initialize StringBuilder class
-// Create StringBuilder class with all methods using XrClassBuilder
-XrClass *xr_stringbuilder_create_class(XrayIsolate *X, XrClass *objectClass) {
-    XR_DCHECK(X != NULL, "stringbuilder_create_class: NULL isolate");
-    XrClassBuilder *builder = xr_class_builder_new(X, "StringBuilder", objectClass);
-    if (!builder) {
-        fprintf(stderr, "[StringBuilder] ERROR: Failed to create class builder\n");
-        return NULL;
-    }
-
-    // Static constructor
-    xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-                                       xr_builtin_stringbuilder_new, 0, 0);
-
-    // Instance methods
-    xr_class_builder_add_method(builder, "append", xr_builtin_stringbuilder_append, 1, 0);
-    xr_class_builder_add_method(builder, "toString", xr_builtin_stringbuilder_toString, 0, 0);
-    xr_class_builder_add_method(builder, "clear", xr_builtin_stringbuilder_clear, 0, 0);
-    xr_class_builder_add_method(builder, "length", xr_builtin_stringbuilder_length, 0, 0);
-
-    return xr_class_builder_finalize(builder);
+void xr_stringbuilder_register_native_type(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "stringbuilder_register_native_type: NULL isolate");
+    static const XrNativeMethod sb_methods[] = {
+        {"append", xr_builtin_stringbuilder_append, 1},
+        {"toString", xr_builtin_stringbuilder_toString, 0},
+        {"clear", xr_builtin_stringbuilder_clear, 0},
+        {"length", xr_builtin_stringbuilder_length, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeMethod sb_statics[] = {
+        {"constructor", xr_builtin_stringbuilder_new, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo sb_info = {
+        .name = "StringBuilder",
+        .gc_type = XR_TSTRINGBUILDER,
+        .methods = sb_methods,
+        .getters = NULL,
+        .static_methods = sb_statics,
+    };
+    xr_register_native_type(X, &sb_info);
 }

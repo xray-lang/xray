@@ -160,8 +160,19 @@ static XrValue xr_map_method_to_string(XrayIsolate *iso, XrValue self, XrValue *
 #include "xnative_type.h"
 #include "builtins/xmap_builtins.h"
 
-/* Defined in xmap_instance_methods.c */
-extern XrValue xr_map_method_increment(XrayIsolate *, XrValue, XrValue *, int);
+static XrValue xr_map_method_increment(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1)
+        return xr_null();
+    XrMap *m = map_self(self);
+    if (map_is_weak(m))
+        return XR_NOTFOUND;
+    XrValue key = args[0];
+    bool found = false;
+    XrValue old_val = xr_map_get(m, key, &found);
+    xr_map_set(m, key, (found && XR_IS_INT(old_val)) ? xr_int(XR_TO_INT(old_val) + 1) : xr_int(1));
+    return xr_null();
+}
 
 void xr_map_register_native_type(XrayIsolate *isolate) {
     static const XrNativeMethod map_methods[] = {
