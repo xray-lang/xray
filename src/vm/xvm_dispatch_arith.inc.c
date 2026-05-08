@@ -295,6 +295,13 @@ vmcase(OP_MULI) {
         R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, xr_int(sc), xr_bigint_mul);
         vmbreak;
     }
+    /* String repeat: "str" * N */
+    if (XR_IS_STRING(vb)) {
+        XrString *str = xr_value_to_string(isolate, vb);
+        XrString *result = xr_string_repeat(isolate, str, (xr_Integer)sc);
+        R(a) = result ? xr_string_value(result) : xr_null();
+        vmbreak;
+    }
     // Operator overload: convert immediate to XrValue
     {
         XrValue vc = xr_int(sc);
@@ -328,6 +335,19 @@ vmcase(OP_MULK) {
             XR_SET_FLOAT(R(a), nb * nc);
             vmbreak;
         }
+    }
+    /* String repeat: "str" * K or K * "str" */
+    if (XR_IS_STRING(vb) && XR_IS_INT(vc)) {
+        XrString *str = xr_value_to_string(isolate, vb);
+        XrString *result = xr_string_repeat(isolate, str, XR_TO_INT(vc));
+        R(a) = result ? xr_string_value(result) : xr_null();
+        vmbreak;
+    }
+    if (XR_IS_INT(vb) && XR_IS_STRING(vc)) {
+        XrString *str = xr_value_to_string(isolate, vc);
+        XrString *result = xr_string_repeat(isolate, str, XR_TO_INT(vb));
+        R(a) = result ? xr_string_value(result) : xr_null();
+        vmbreak;
     }
     // Operator overload
     VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_MUL_FLAG, SYMBOL_OP_MUL, "*");

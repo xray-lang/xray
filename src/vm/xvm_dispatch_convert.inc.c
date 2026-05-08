@@ -232,10 +232,9 @@ vmcase(OP_TOSTRING) {
     val = R(b);
     if (XR_IS_STRING(val)) {
         R(a) = val;
-    } else if (XR_IS_NULL(val)) {
-        // null propagation: string(null) → null
-        R(a) = xr_null();
     } else {
+        /* All types including null: explicit string() conversion always
+         * produces a string (null → "null", not null propagation). */
         R(a) = xr_string_value(xr_value_to_string(isolate, val));
     }
     vmbreak;
