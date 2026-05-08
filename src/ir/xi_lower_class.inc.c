@@ -12,10 +12,28 @@
  *      OP_CLASS_CREATE_FROM_DESCRIPTOR.
  */
 
+/* Returns true if the initializer is a simple literal that
+ * ast_field_default_to_value() can handle at compile time. */
+static bool is_simple_literal(AstNode *init) {
+    if (!init) return true;
+    switch (init->type) {
+    case AST_LITERAL_INT:
+    case AST_LITERAL_FLOAT:
+    case AST_LITERAL_TRUE:
+    case AST_LITERAL_FALSE:
+    case AST_LITERAL_STRING:
+        return true;
+    default:
+        return false;
+    }
+}
+
 /* Lower a class method body to a child XiFunc.
- * Instance methods get an implicit 'this' parameter at index 0. */
+ * Instance methods get an implicit 'this' parameter at index 0.
+ * For constructors, cd provides field declarations so complex
+ * default values can be lowered as IR before the user body. */
 static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
-                                     bool is_inst) {
+                                     bool is_inst, ClassDeclNode *cd) {
     XiLower ml;
     xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
@@ -63,14 +81,38 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m,
                     entry, p);
     }
 
+    /* For constructors: emit field default init for complex expressions.
+     * Simple literals (int/float/bool/string) are handled by the VM via
+     * field_default_values on the class descriptor; complex expressions
+     * (array, map, json, new-expr, etc.) must be lowered as IR. */
+    bool is_ctor = m->is_constructor
+                   || (m->name && strcmp(m->name, "constructor") == 0);
+    if (is_ctor && is_inst && cd) {
+        int this_var_init = xi_lower_var_create(&ml, 0, "this", ml.type_any);
+        XiValue *this_val = xi_lower_braun_read(&ml, this_var_init, ml.cur_block);
+        for (int fi = 0; fi < cd->field_count; fi++) {
+            if (cd->fields[fi]->type != AST_FIELD_DECL) continue;
+            FieldDeclNode *f = &cd->fields[fi]->as.field_decl;
+            if (f->is_static) continue;
+            if (!f->initializer || is_simple_literal(f->initializer)) continue;
+            XiValue *val = xi_lower_expr(&ml, f->initializer);
+            if (!val) continue;
+            XiValue *st = xi_value_new(ml.func, ml.cur_block,
+                                        XI_STORE_FIELD, ml.type_void, 2);
+            if (!st) continue;
+            st->args[0] = this_val;
+            st->args[1] = val;
+            st->aux = (void *)arena_strdup(ml.func, f->name);
+            st->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+    }
+
     if (m->body) xi_lower_stmt(&ml, m->body);
 
     /* Constructors auto-return 'this' (param 0) so the caller gets
      * the freshly-created instance, matching the legacy codegen
      * convention (xemit_return(emitter, 0, 1) at end of constructor). */
     if (ml.cur_block) {
-        bool is_ctor = m->is_constructor
-                       || (m->name && strcmp(m->name, "constructor") == 0);
         if (is_ctor && is_inst) {
             int this_var = xi_lower_var_create(&ml, 0, "this", ml.type_any);
             XiValue *this_ret = xi_lower_braun_read(&ml, this_var, ml.cur_block);
@@ -111,7 +153,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (m->is_static_constructor) continue;
 
-        XiFunc *mf = lower_method_as_func(l, m, !m->is_static);
+        XiFunc *mf = lower_method_as_func(l, m, !m->is_static, cd);
         if (!mf) continue;
         func_add_child(l->func, mf);
         if (cidx) cidx[ci] = (uint16_t)(l->func->nchildren - 1);
@@ -157,7 +199,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         if (cd->methods[i]->type != AST_METHOD_DECL) continue;
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
         if (!m->is_static_constructor) continue;
-        XiFunc *cf = lower_method_as_func(l, m, false);
+        XiFunc *cf = lower_method_as_func(l, m, false, cd);
         if (cf) {
             func_add_child(l->func, cf);
             clinit_idx = (int)(l->func->nchildren - 1);
