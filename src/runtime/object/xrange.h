@@ -93,4 +93,8 @@ static inline XrRange *xr_value_to_range(XrValue v) {
 // Materialize range into an Array (caller must handle large ranges)
 XR_FUNC XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r);
 
+/* Register Range as a native type for unified dispatch. */
+struct XrayIsolate;
+XR_FUNC void xr_range_register_native_type(struct XrayIsolate *isolate);
+
 #endif  // XRANGE_H

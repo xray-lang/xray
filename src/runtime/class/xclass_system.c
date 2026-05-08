@@ -66,6 +66,7 @@ void xr_core_init(XrayIsolate *X) {
     X->core->stringBuilderClass = xr_stringbuilder_create_class(X, X->core->objectClass);
     xr_isolate_set_native_type_class(X, XR_TSTRINGBUILDER, X->core->stringBuilderClass);
     X->core->arraySliceClass = xr_array_slice_create_class(X, X->core->objectClass);
+    xr_isolate_set_native_type_class(X, XR_TARRAY_SLICE, X->core->arraySliceClass);
 
     // Process class with fields
     {

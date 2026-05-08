@@ -257,3 +257,50 @@ XrIterator *xr_value_to_iterator(XrValue value) {
 
     return (XrIterator *) XR_TO_PTR(value);
 }
+
+/* ========== Native Type Registration ========== */
+
+#include "xnative_type.h"
+#include "xstring.h"
+#include "../value/xvalue_format.h"
+
+static XrValue m_iter_has_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    XrIterator *iter = xr_value_to_iterator(self);
+    XR_DCHECK(iter != NULL, "Iterator.hasNext: invalid iterator");
+    return xr_bool(xr_iterator_has_next(iter));
+}
+
+static XrValue m_iter_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    XrIterator *iter = xr_value_to_iterator(self);
+    XR_DCHECK(iter != NULL, "Iterator.next: invalid iterator");
+    return xr_iterator_next(iter);
+}
+
+static XrValue m_iter_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xr_string_value(xr_value_to_string(iso, self));
+}
+
+void xr_iterator_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod iter_methods[] = {
+        {"hasNext", m_iter_has_next, 0},
+        {"next", m_iter_next, 0},
+        {"toString", m_iter_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo iter_info = {
+        .name = "Iterator",
+        .gc_type = XR_TITERATOR,
+        .methods = iter_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &iter_info);
+}
