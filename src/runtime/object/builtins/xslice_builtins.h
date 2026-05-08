@@ -37,8 +37,7 @@ XR_FUNC XrValue xr_builtin_array_slice_find(XrayIsolate *iso, XrValue self, XrVa
 XR_FUNC XrValue xr_builtin_array_slice_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 XR_FUNC XrValue xr_builtin_array_slice_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 
-// Create slice classes (using XrClassBuilder)
-typedef struct XrClass XrClass;
-XR_FUNC XrClass *xr_array_slice_create_class(XrayIsolate *X, XrClass *objectClass);
+// Register ArraySlice as native type
+XR_FUNC void xr_array_slice_register_native_type(XrayIsolate *X);
 
 #endif  // XSLICE_BUILTINS_H

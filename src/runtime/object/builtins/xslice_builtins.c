@@ -465,37 +465,38 @@ XrValue xr_builtin_array_slice_some(XrayIsolate *isolate, XrValue self, XrValue 
     return xr_bool(0);
 }
 
-/* ========== Class Initialization ========== */
+/* ========== Native Type Registration ========== */
 
-#include "xclass_builder.h"
+#include "xnative_type.h"
 
-// Create ArraySlice class with all methods using XrClassBuilder
-XrClass *xr_array_slice_create_class(XrayIsolate *X, XrClass *objectClass) {
-    XR_DCHECK(X != NULL, "array_slice_create_class: NULL isolate");
-    XrClassBuilder *builder = xr_class_builder_new(X, "ArraySlice", objectClass);
-    if (!builder) {
-        fprintf(stderr, "[ArraySlice] ERROR: Failed to create class builder\n");
-        return NULL;
-    }
-
-    // Basic methods
-    xr_class_builder_add_method(builder, "length", xr_builtin_array_slice_length, 0, 0);
-    xr_class_builder_add_method(builder, "get", xr_builtin_array_slice_get, 1, 0);
-    xr_class_builder_add_method(builder, "set", xr_builtin_array_slice_set, 2, 0);
-    xr_class_builder_add_method(builder, "toArray", xr_builtin_array_slice_to_array, 0, 0);
-    xr_class_builder_add_method(builder, "indexOf", xr_builtin_array_slice_index_of, 1, 0);
-    xr_class_builder_add_method(builder, "contains", xr_builtin_array_slice_contains, 1, 0);
-    xr_class_builder_add_method(builder, "first", xr_builtin_array_slice_first, 0, 0);
-    xr_class_builder_add_method(builder, "last", xr_builtin_array_slice_last, 0, 0);
-
-    // Higher-order function methods
-    xr_class_builder_add_method(builder, "forEach", xr_builtin_array_slice_for_each, 1, 0);
-    xr_class_builder_add_method(builder, "map", xr_builtin_array_slice_map, 1, 0);
-    xr_class_builder_add_method(builder, "filter", xr_builtin_array_slice_filter, 1, 0);
-    xr_class_builder_add_method(builder, "reduce", xr_builtin_array_slice_reduce, 2, 0);
-    xr_class_builder_add_method(builder, "find", xr_builtin_array_slice_find, 1, 0);
-    xr_class_builder_add_method(builder, "every", xr_builtin_array_slice_every, 1, 0);
-    xr_class_builder_add_method(builder, "some", xr_builtin_array_slice_some, 1, 0);
-
-    return xr_class_builder_finalize(builder);
+void xr_array_slice_register_native_type(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "array_slice_register_native_type: NULL isolate");
+    static const XrNativeMethod slice_methods[] = {
+        /* Basic */
+        {"length", xr_builtin_array_slice_length, 0},
+        {"get", xr_builtin_array_slice_get, 1},
+        {"set", xr_builtin_array_slice_set, 2},
+        {"toArray", xr_builtin_array_slice_to_array, 0},
+        {"indexOf", xr_builtin_array_slice_index_of, 1},
+        {"contains", xr_builtin_array_slice_contains, 1},
+        {"first", xr_builtin_array_slice_first, 0},
+        {"last", xr_builtin_array_slice_last, 0},
+        /* Higher-order */
+        {"forEach", xr_builtin_array_slice_for_each, 1},
+        {"map", xr_builtin_array_slice_map, 1},
+        {"filter", xr_builtin_array_slice_filter, 1},
+        {"reduce", xr_builtin_array_slice_reduce, 2},
+        {"find", xr_builtin_array_slice_find, 1},
+        {"every", xr_builtin_array_slice_every, 1},
+        {"some", xr_builtin_array_slice_some, 1},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo slice_info = {
+        .name = "ArraySlice",
+        .gc_type = XR_TARRAY_SLICE,
+        .methods = slice_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(X, &slice_info);
 }
