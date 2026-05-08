@@ -1,0 +1,10 @@
+// Built-in Regex type — implementation in stdlib/regex/regex_methods.c
+
+@native
+class Regex {
+    test(text: string): bool
+    find(text: string): string?
+    findAll(text: string): Array<string>
+    replace(text: string, replacement: string): string
+    split(text: string): Array<string>
+}

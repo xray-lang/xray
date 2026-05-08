@@ -349,6 +349,7 @@ AstNode *xr_parse_template_string(Parser *parser) {
             xr_scanner_init(&expr_scanner, expr_code);
 
             Parser expr_parser;
+            memset(&expr_parser, 0, sizeof(expr_parser));
             expr_parser.scanner = expr_scanner;
             expr_parser.X = parser->X;
             expr_parser.had_error = 0;

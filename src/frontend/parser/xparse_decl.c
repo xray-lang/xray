@@ -83,6 +83,18 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
         attr->kind = ATTR_BEFORE_ALL;
     } else if (name_token.length == 9 && memcmp(name_token.start, "after_all", 9) == 0) {
         attr->kind = ATTR_AFTER_ALL;
+    } else if (name_token.length == 6 && memcmp(name_token.start, "native", 6) == 0) {
+        attr->kind = ATTR_NATIVE;
+    } else if (name_token.length == 10 && memcmp(name_token.start, "deprecated", 10) == 0) {
+        attr->kind = ATTR_DEPRECATED;
+        // Optional message: @deprecated("use X instead")
+        if (xr_parser_match(parser, TK_LPAREN)) {
+            // Consume and ignore the message string for now
+            if (xr_parser_check(parser, TK_LITERAL_STRING)) {
+                xr_parser_advance(parser);
+            }
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' to close @deprecated");
+        }
     } else {
         xr_parser_error(parser, "unknown attribute name");
         return NULL;
@@ -91,41 +103,76 @@ static XrAttribute *xr_parse_single_attribute(Parser *parser) {
     return attr;
 }
 
-// Parse attributed function: @test fn test_add() { ... }
-static AstNode *xr_parse_attributed_function(Parser *parser) {
+// Check if any attribute in the list has the given kind.
+static bool attrs_has(XrAttribute **attrs, int count, AttributeKind kind) {
+    for (int i = 0; i < count; i++) {
+        if (attrs[i] && attrs[i]->kind == kind)
+            return true;
+    }
+    return false;
+}
+
+// Parse attributed declaration: @test fn ..., @native class ..., etc.
+static AstNode *xr_parse_attributed_declaration(Parser *parser) {
     XrAttribute **attributes = NULL;
     int attr_count = 0;
     int attr_capacity = 0;
 
     while (xr_parser_check(parser, TK_AT)) {
         XrAttribute *attr = xr_parse_single_attribute(parser);
-        if (!attr) {
-            for (int i = 0; i < attr_count; i++) {
-            }
+        if (!attr)
             return NULL;
-        }
-
         XR_PARSE_PUSH(parser, attributes, attr_count, attr_capacity, attr);
     }
 
-    if (!xr_parser_match(parser, TK_FN)) {
-        xr_parser_error_at_current(parser, "expected 'fn' after attribute");
-        for (int i = 0; i < attr_count; i++) {
+    bool is_native = attrs_has(attributes, attr_count, ATTR_NATIVE);
+
+    // @native class / @native final class
+    if (xr_parser_check(parser, TK_CLASS) || xr_parser_check(parser, TK_FINAL)) {
+        bool is_final = xr_parser_match(parser, TK_FINAL);
+        if (is_final) {
+            if (!xr_parser_match(parser, TK_CLASS)) {
+                xr_parser_error_at_current(parser, "expected 'class' after 'final'");
+                return NULL;
+            }
+        } else {
+            xr_parser_advance(parser);  // consume TK_CLASS
         }
-        return NULL;
+        // Set flag so method body parsing is skipped for @native classes
+        parser->parsing_native_class = is_native;
+        AstNode *cls = xr_parse_class_declaration(parser);
+        parser->parsing_native_class = false;
+        if (!cls)
+            return NULL;
+        cls->as.class_decl.is_final = is_final;
+        cls->as.class_decl.is_native = is_native;
+        return cls;
     }
 
-    AstNode *func = xr_parse_function_declaration(parser);
-    if (!func) {
-        for (int i = 0; i < attr_count; i++) {
-        }
-        return NULL;
+    // @native struct
+    if (xr_parser_match(parser, TK_STRUCT)) {
+        parser->parsing_native_class = is_native;
+        AstNode *st = xr_parse_struct_declaration(parser);
+        parser->parsing_native_class = false;
+        if (!st)
+            return NULL;
+        st->as.class_decl.is_native = is_native;
+        return st;
     }
 
-    func->as.function_decl.attributes = attributes;
-    func->as.function_decl.attr_count = attr_count;
+    // @test fn ..., @native fn ...
+    if (xr_parser_match(parser, TK_FN)) {
+        AstNode *func = xr_parse_function_declaration(parser);
+        if (!func)
+            return NULL;
+        func->as.function_decl.attributes = attributes;
+        func->as.function_decl.attr_count = attr_count;
+        return func;
+    }
 
-    return func;
+    xr_parser_error_at_current(parser,
+        "expected 'fn', 'class', or 'struct' after attribute");
+    return NULL;
 }
 
 // Parse function declaration: fn add(a, b) { return a + b }
@@ -1023,9 +1070,9 @@ AstNode *xr_parse_declaration(Parser *parser) {
         return xr_ast_yield_stmt(parser->X, line);
     }
 
-    // Attribute marker + function declaration: @test fn test_xxx() { ... }
+    // Attributed declaration: @test fn ..., @native class ..., etc.
     if (xr_parser_check(parser, TK_AT)) {
-        return xr_parse_attributed_function(parser);
+        return xr_parse_attributed_declaration(parser);
     }
 
     // Function declaration: only fn keyword supported

@@ -1,0 +1,14 @@
+// Built-in float type — implementation in src/runtime/value/xfloat_methods.c
+
+@native
+class float {
+    abs(): float
+    toString(): string
+    toFixed(decimals?: int): string
+    toInt(): int
+    floor(): int
+    ceil(): int
+    round(): int
+    sqrt(): float
+    pow(exp: float): float
+}

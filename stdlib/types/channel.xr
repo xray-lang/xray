@@ -1,0 +1,11 @@
+// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c
+
+@native
+class Channel<T> {
+    send(value: T): void
+    recv(): T
+    trySend(value: T): bool
+    tryRecv(): (T, bool)
+    close(): void
+    closed: bool
+}

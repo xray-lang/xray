@@ -9,75 +9,20 @@
  */
 
 #include "xanalyzer_builtins.h"
+#include "xanalyzer_native_types.h"
 #include "../../base/xchecks.h"
-#include "../../module/xbuiltin_method_defs.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../base/xmalloc.h"
 #include "../../../stdlib/prelude/prelude.h"
 #include <string.h>
 
-// Generate XaBuiltinMember arrays from unified X-macro definitions
-#define XMEMBER(name, sig, doc, is_method) {name, sig, doc, is_method, false},
-
-static const XaBuiltinMember array_members[] = {XR_ARRAY_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember string_members[] = {XR_STRING_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember map_members[] = {XR_MAP_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember set_members[] = {XR_SET_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember channel_members[] = {XR_CHANNEL_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember enum_value_members[] = {XR_ENUM_VALUE_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember enum_type_members[] = {XR_ENUM_TYPE_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember int_members[] = {XR_INT_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember float_members[] = {XR_FLOAT_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember bool_members[] = {XR_BOOL_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember bigint_members[] = {XR_BIGINT_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember json_members[] = {XR_JSON_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember stringbuilder_members[] = {XR_STRINGBUILDER_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember regex_members[] = {XR_REGEX_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember exception_members[] = {XR_EXCEPTION_MEMBERS(XMEMBER)};
-
-static const XaBuiltinMember coroutine_members[] = {XR_COROUTINE_MEMBERS(XMEMBER)};
-
-#undef XMEMBER
-
-#define COUNTOF(arr) (int) (sizeof(arr) / sizeof(arr[0]))
-
-// Indexed by XrTypeId for O(1) lookup.
-// Entries without methods have NULL members.
-static const XaBuiltinType builtin_types[XR_TID_COUNT] = {
-    [XR_TID_NULL] = {TYPE_NAME_UNKNOWN, NULL, 0},
-    [XR_TID_INT] = {TYPE_NAME_INT, int_members, COUNTOF(int_members)},
-    [XR_TID_FLOAT] = {TYPE_NAME_FLOAT, float_members, COUNTOF(float_members)},
-    [XR_TID_STRING] = {TYPE_NAME_STRING, string_members, COUNTOF(string_members)},
-    [XR_TID_BOOL] = {TYPE_NAME_BOOL, bool_members, COUNTOF(bool_members)},
-    [XR_TID_ARRAY] = {TYPE_NAME_ARRAY, array_members, COUNTOF(array_members)},
-    [XR_TID_MAP] = {TYPE_NAME_MAP, map_members, COUNTOF(map_members)},
-    [XR_TID_SET] = {TYPE_NAME_SET, set_members, COUNTOF(set_members)},
-    [XR_TID_JSON] = {TYPE_NAME_JSON, json_members, COUNTOF(json_members)},
-    [XR_TID_BIGINT] = {TYPE_NAME_BIGINT, bigint_members, COUNTOF(bigint_members)},
-    [XR_TID_STRINGBUILDER] = {TYPE_NAME_STRINGBUILDER, stringbuilder_members,
-                              COUNTOF(stringbuilder_members)},
-    [XR_TID_CHANNEL] = {TYPE_NAME_CHANNEL, channel_members, COUNTOF(channel_members)},
-    [XR_TID_ENUM_VALUE] = {TYPE_NAME_ENUM_VALUE, enum_value_members, COUNTOF(enum_value_members)},
-    [XR_TID_ENUM_TYPE] = {TYPE_NAME_ENUM_TYPE, enum_type_members, COUNTOF(enum_type_members)},
-    [XR_TID_REGEX] = {TYPE_NAME_REGEX, regex_members, COUNTOF(regex_members)},
-    [XR_TID_EXCEPTION] = {TYPE_NAME_EXCEPTION, exception_members, COUNTOF(exception_members)},
-    [XR_TID_COROUTINE] = {TYPE_NAME_COROUTINE, coroutine_members, COUNTOF(coroutine_members)},
-};
+// Builtin type table populated at startup from .xr declarations.
+static inline const XaBuiltinType *get_builtin_types(void) {
+    if (!xa_native_types_ready())
+        xa_native_types_init();
+    return xa_native_get_builtin_types();
+}
 
 // XrType → XrTypeId
 XrTypeId xr_type_to_builtin_id(XrType *type) {
@@ -123,7 +68,7 @@ const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
     XrTypeId id = xr_type_to_builtin_id(type);
     if (id == XR_TID_NULL)
         return NULL;
-    const XaBuiltinType *bt = &builtin_types[id];
+    const XaBuiltinType *bt = &get_builtin_types()[id];
     return bt->members ? bt : NULL;
 }
 
@@ -131,9 +76,10 @@ const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
 const XaBuiltinType *xa_builtin_get_by_name(const char *name) {
     if (!name)
         return NULL;
+    const XaBuiltinType *table = get_builtin_types();
     for (int i = 0; i < XR_TID_COUNT; i++) {
-        if (builtin_types[i].name && strcmp(builtin_types[i].name, name) == 0) {
-            return &builtin_types[i];
+        if (table[i].name && strcmp(table[i].name, name) == 0) {
+            return &table[i];
         }
     }
     return NULL;
@@ -702,7 +648,7 @@ const char *xa_builtin_get_type_name(XrType *type) {
         return NULL;
     if (id == XR_TID_ARRAY)
         return TYPE_NAME_ARRAY;
-    return builtin_types[id].name;
+    return get_builtin_types()[id].name;
 }
 
 // Parse a type string (e.g., "int", "string?", "Array<int>") to XrType

@@ -1,0 +1,8 @@
+// Built-in Exception type — implementation in src/runtime/object/xexception.c
+
+@native
+class Exception {
+    message: string
+    stack: string
+    toString(): string
+}

@@ -217,7 +217,7 @@ typedef enum {
     LITERAL_KIND_NULL
 } LiteralKind;
 
-// Attribute types (test framework)
+// Attribute types
 typedef enum {
     ATTR_NONE = 0,
     ATTR_TEST,          // @test
@@ -226,7 +226,9 @@ typedef enum {
     ATTR_BEFORE_EACH,   // @before_each
     ATTR_AFTER_EACH,    // @after_each
     ATTR_BEFORE_ALL,    // @before_all
-    ATTR_AFTER_ALL      // @after_all
+    ATTR_AFTER_ALL,     // @after_all
+    ATTR_NATIVE,        // @native — implementation provided by C runtime
+    ATTR_DEPRECATED,    // @deprecated or @deprecated("message")
 } AttributeKind;
 
 // Destructuring pattern types (flat only, no nesting)

@@ -42,6 +42,7 @@
 #include "../base/xmalloc.h"
 #include "../../stdlib/stdlib_cache.h"
 #include "../base/xglobal_indices.h"
+#include "../frontend/analyzer/xanalyzer_native_types.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -149,6 +150,11 @@ static int isolate_init_full(XrayIsolate *isolate) {
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }
+
+#if XR_DEBUG
+    // Verify C-registered methods match .xr declarations
+    xa_native_verify_protocol(isolate);
+#endif
 
     return 0;
 }

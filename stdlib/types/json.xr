@@ -1,0 +1,14 @@
+// Built-in Json type — implementation in src/runtime/object/xjson_methods.c
+
+@native
+class Json {
+    keys(): Array<string>
+    values(): Array<Json>
+    entries(): Array<[string, Json]>
+    has(key: string): bool
+    get(key: string): Json
+    isEmpty(): bool
+    delete(key: string): void
+    clear(): void
+    toString(): string
+}

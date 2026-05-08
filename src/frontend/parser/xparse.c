@@ -775,6 +775,9 @@ static void xr_parser_init_internal(Parser *parser, XrayIsolate *X, const char *
     parser->error_callback_data = NULL;
     parser->error_count = 0;
     parser->max_errors = 0;
+
+    parser->allow_bare_container = false;
+    parser->parsing_native_class = false;
 }
 
 // Allocate and install a new arena on the Isolate. Returns the previous arena
