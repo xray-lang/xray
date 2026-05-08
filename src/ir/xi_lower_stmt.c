@@ -793,7 +793,20 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
     xi_lower_stmt(l, tc->try_body);
     l->try_depth--;
     XiBlock *try_end_blk = l->cur_block;  /* last block in try body */
-    if (l->cur_block) {
+
+    /* When try_depth > 0, lower_throw keeps cur_block alive so its
+     * variable definitions remain SSA-visible.  But the code after
+     * the throw is dead at runtime.  Detect this: if the last value
+     * in the block is XI_THROW, skip normal-path finally inlining —
+     * the exception-path copy below will execute instead. */
+    bool dead_after_throw = false;
+    if (try_end_blk && try_end_blk->nvalues > 0) {
+        XiValue *last_v = try_end_blk->values[try_end_blk->nvalues - 1];
+        if (last_v && last_v->op == XI_THROW)
+            dead_after_throw = true;
+    }
+
+    if (l->cur_block && !dead_after_throw) {
         xi_lower_stmt(l, tc->finally_body);
         if (l->cur_block)
             xi_block_set_jump(l->cur_block, merge);
@@ -814,7 +827,21 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
         catch_op->line = (uint32_t)node->line;
     }
 
+    /* Track value count before finally so we can mark new writes. */
+    uint32_t pre_finally_nvals = l->cur_block ? l->cur_block->nvalues : 0;
+
     xi_lower_stmt(l, tc->finally_body);
+
+    /* Variable writes in the exception-path finally modify shared registers
+     * (var_reg coalescing) that the outer catch reads after re-throw.
+     * Mark them side-effectful so DCE preserves them. */
+    if (l->cur_block) {
+        for (uint32_t i = pre_finally_nvals; i < l->cur_block->nvalues; i++) {
+            XiValue *fv = l->cur_block->values[i];
+            if (fv && fv->var_id != 0xFF)
+                fv->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+    }
 
     if (l->cur_block && catch_op) {
         XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW,
