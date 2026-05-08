@@ -431,6 +431,23 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
             }
         }
     }
+
+    /* Init slot_runtime_tags for TAGGED params from param_tags[].
+     * Without this, CALL_C dynamic arg tag patches read stale/zero
+     * tags for param-derived values.  Mirrors ARM64 xm_codegen.c. */
+    for (uint32_t i = 0; i < nparams && i < 8; i++) {
+        if (i >= ctx->func->nvreg)
+            continue;
+        if (ctx->func->vregs[i].rep != XR_REP_TAGGED)
+            continue;
+        int16_t bc_slot = ctx->func->vregs[i].bc_slot;
+        if (bc_slot < 0 || bc_slot >= 256)
+            continue;
+        int32_t pt_off = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + i * 8);
+        int32_t rt_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, pt_off);
+        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, rt_off, X64_SCRATCH_REG);
+    }
 }
 
 /* Fast prologue: frame setup + coro/jit_ctx load, NO args-pointer param loading.

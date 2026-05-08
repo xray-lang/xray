@@ -96,8 +96,15 @@ static void emit_call_args_from_pool(CodegenCtx *ctx, XmIns *ins) {
         if (ai >= ctx->func->nvreg)
             continue;
         int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
-        if (bc_slot < 0 || bc_slot >= 256)
+        if (bc_slot < 0 || bc_slot >= 256) {
+            /* UNKNOWN ctype + no bc_slot = tag is lost at runtime.
+             * This caused the regex JIT bug (commit 90ef326). Flag it
+             * so future occurrences are caught during development. */
+            XR_DCHECK(false,
+                      "emit_call_args_from_pool: UNKNOWN ctype vreg has "
+                      "bc_slot=-1, runtime tag will be 0xFF");
             continue;
+        }
         int32_t src_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
         int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
         a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));

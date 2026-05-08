@@ -927,8 +927,14 @@ void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XmIns *ins) {
         if (ai >= ctx->func->nvreg)
             continue;
         int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
-        if (bc_slot < 0 || bc_slot >= 256)
+        if (bc_slot < 0 || bc_slot >= 256) {
+            /* UNKNOWN ctype + no bc_slot = tag is lost at runtime.
+             * See ARM64 counterpart and commit 90ef326 for context. */
+            XR_DCHECK(false,
+                      "x64_emit_call_args: UNKNOWN ctype vreg has "
+                      "bc_slot=-1, runtime tag will be 0xFF");
             continue;
+        }
         int32_t src_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
         int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
         x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
