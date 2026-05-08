@@ -327,8 +327,13 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
     uint8_t src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK) return;
-    if (dst != src)
+    /* Value types (structs) need deep copy to maintain copy-on-assign semantics */
+    XrType *src_type = v->args[0]->type;
+    if (src_type && src_type->is_value_type) {
+        emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
+    } else if (dst != src) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+    }
 }
 
 /* Conditional select: dst = cond ? true_val : false_val.

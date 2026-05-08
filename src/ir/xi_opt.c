@@ -277,8 +277,13 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 static XiValue *resolve_copy(XiValue *v) {
     while (v && v->op == XI_COPY && v->nargs >= 1) {
         XiValue *src = v->args[0];
+        /* Stop at variable-domain boundaries (prevents register corruption) */
         if (v->var_id != 0xFF && src &&
             src->var_id != 0xFF && v->var_id != src->var_id)
+            break;
+        /* Stop at value-type copies — these become OP_COPY (deep copy) at
+         * emit time and must not be propagated away */
+        if (v->type && v->type->is_value_type)
             break;
         v = src;
     }
