@@ -29,7 +29,7 @@ XrClass *xr_array_create_class(XrayIsolate *X, XrClass *objectClass) {
 
     // Static constructor
     xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-                                       (XrCFunctionPtr) xr_builtin_array_construct, 0, 0);
+                                       xr_builtin_array_construct, 0, 0);
 
     return xr_class_builder_finalize(builder);
 }

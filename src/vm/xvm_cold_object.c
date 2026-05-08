@@ -779,8 +779,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 (getter_symbol >= 0) ? xr_class_lookup_method(scls, getter_symbol) : NULL;
             if (getter) {
                 if (getter->type == XMETHOD_PRIMITIVE) {
-                    XrValue args[1] = {obj};
-                    base[a] = getter->as.primitive(isolate, args, 1);
+                    base[a] = getter->as.primitive(isolate, obj, NULL, 0);
                     return VM_COLD_BREAK;
                 }
                 if (getter->as.closure) {
@@ -870,10 +869,7 @@ XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm
 
     // PRIMITIVE type getter
     if (getter->type == XMETHOD_PRIMITIVE) {
-        XrCFunctionPtr cfunc = getter->as.primitive;
-        XrValue getter_args[1];
-        getter_args[0] = obj;
-        base[a] = cfunc(isolate, getter_args, 1);
+        base[a] = getter->as.primitive(isolate, obj, NULL, 0);
         return VM_COLD_BREAK;
     }
 

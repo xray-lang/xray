@@ -23,90 +23,83 @@
 #include <stdio.h>
 
 // Map.prototype.set(key, value) - returns this for chaining
-XrValue xr_map_method_set(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_map_method_set(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
-    if (nargs < 3)
+    if (argc < 2)
         return xr_null();
 
-    XrValue this_val = args[0];
-    if (!XR_IS_MAP(this_val))
+    if (!XR_IS_MAP(self))
         return xr_null();
 
-    XrMap *map = XR_TO_MAP(this_val);
-    xr_map_set(map, args[1], args[2]);
-    return this_val;
+    XrMap *map = XR_TO_MAP(self);
+    xr_map_set(map, args[0], args[1]);
+    return self;
 }
 
 // Map.prototype.get(key) - returns null if not found
-XrValue xr_map_method_get(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_map_method_get(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
-    if (nargs < 2)
+    if (argc < 1)
         return xr_null();
 
-    XrValue this_val = args[0];
-    if (!XR_IS_MAP(this_val))
+    if (!XR_IS_MAP(self))
         return xr_null();
 
-    XrMap *map = XR_TO_MAP(this_val);
+    XrMap *map = XR_TO_MAP(self);
     bool found = false;
-    XrValue result = xr_map_get(map, args[1], &found);
+    XrValue result = xr_map_get(map, args[0], &found);
     return found ? result : xr_null();
 }
 
 // Map.prototype.has(key)
-XrValue xr_map_method_has(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_map_method_has(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
-    if (nargs < 2)
+    if (argc < 1)
         return xr_bool(false);
 
-    XrValue this_val = args[0];
-    if (!XR_IS_MAP(this_val))
+    if (!XR_IS_MAP(self))
         return xr_bool(false);
 
-    XrMap *map = XR_TO_MAP(this_val);
-    return xr_bool(xr_map_has(map, args[1]));
+    XrMap *map = XR_TO_MAP(self);
+    return xr_bool(xr_map_has(map, args[0]));
 }
 
 // Map.prototype.delete(key) - returns true if deleted
-XrValue xr_map_method_delete(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_map_method_delete(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
-    if (nargs < 2)
+    if (argc < 1)
         return xr_bool(false);
 
-    XrValue this_val = args[0];
-    if (!XR_IS_MAP(this_val))
+    if (!XR_IS_MAP(self))
         return xr_bool(false);
 
-    XrMap *map = XR_TO_MAP(this_val);
-    return xr_bool(xr_map_delete(map, args[1]));
+    XrMap *map = XR_TO_MAP(self);
+    return xr_bool(xr_map_delete(map, args[0]));
 }
 
 // Map.prototype.clear()
-XrValue xr_map_method_clear(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_map_method_clear(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
-    if (nargs < 1)
+    (void) args;
+    (void) argc;
+    if (!XR_IS_MAP(self))
         return xr_null();
 
-    XrValue this_val = args[0];
-    if (!XR_IS_MAP(this_val))
-        return xr_null();
-
-    xr_map_clear(XR_TO_MAP(this_val));
+    xr_map_clear(XR_TO_MAP(self));
     return xr_null();
 }
 
 // Map.increment(key) - optimized counter: set to 1 if not exists, else add 1
-XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     (void) isolate;
-    if (nargs < 2)
+    if (argc < 1)
         return xr_null();
 
-    XrValue this_val = args[0];
-    if (!XR_IS_MAP(this_val))
+    if (!XR_IS_MAP(self))
         return xr_null();
 
-    XrMap *map = XR_TO_MAP(this_val);
-    XrValue key = args[1];
+    XrMap *map = XR_TO_MAP(self);
+    XrValue key = args[0];
     bool found = false;
     XrValue old_val = xr_map_get(map, key, &found);
 

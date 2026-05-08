@@ -967,41 +967,39 @@ static XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Common implementation for child logger methods
-static XrValue logger_log_at(XrayIsolate *isolate, XrValue *args, int nargs, XrLogLevel level) {
-    if (nargs < 1)
-        return xr_null();
-    XrLogger *logger = unwrap_logger(isolate, args[0]);
+static XrValue logger_log_at(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs, XrLogLevel level) {
+    XrLogger *logger = unwrap_logger(isolate, self);
     if (!logger)
         return xr_null();
 
     const char *msg = "";
-    if (nargs > 1 && XR_IS_STRING(args[1])) {
-        msg = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    if (nargs > 0 && XR_IS_STRING(args[0])) {
+        msg = XR_STRING_CHARS(XR_TO_STRING(args[0]));
     }
 
-    XrValue *attrs = (nargs > 2) ? &args[2] : NULL;
-    int nattrs = (nargs > 2) ? (nargs - 2) / 2 : 0;
+    XrValue *attrs = (nargs > 1) ? &args[1] : NULL;
+    int nattrs = (nargs > 1) ? (nargs - 1) / 2 : 0;
 
     XrLogState *ls = log_state_get(isolate);
     xr_log_write(ls, logger, level, msg, attrs, nattrs);
     return xr_null();
 }
 
-static XrValue xr_logger_debug(XrayIsolate *X, XrValue *args, int n) {
-    return logger_log_at(X, args, n, XR_LOG_DEBUG);
+static XrValue xr_logger_debug(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+    return logger_log_at(X, self, args, n, XR_LOG_DEBUG);
 }
-static XrValue xr_logger_info(XrayIsolate *X, XrValue *args, int n) {
-    return logger_log_at(X, args, n, XR_LOG_INFO);
+static XrValue xr_logger_info(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+    return logger_log_at(X, self, args, n, XR_LOG_INFO);
 }
-static XrValue xr_logger_warn(XrayIsolate *X, XrValue *args, int n) {
-    return logger_log_at(X, args, n, XR_LOG_WARN);
+static XrValue xr_logger_warn(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+    return logger_log_at(X, self, args, n, XR_LOG_WARN);
 }
-static XrValue xr_logger_error(XrayIsolate *X, XrValue *args, int n) {
-    return logger_log_at(X, args, n, XR_LOG_ERROR);
+static XrValue xr_logger_error(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+    return logger_log_at(X, self, args, n, XR_LOG_ERROR);
 }
 
-static XrValue xr_logger_fatal(XrayIsolate *X, XrValue *args, int n) {
-    logger_log_at(X, args, n, XR_LOG_FATAL);
+static XrValue xr_logger_fatal(XrayIsolate *X, XrValue self, XrValue *args, int n) {
+    logger_log_at(X, self, args, n, XR_LOG_FATAL);
     // Flush async queue before exit
     XrLogState *ls = log_state_get(X);
     if (ls->async_initialized)
@@ -1010,15 +1008,13 @@ static XrValue xr_logger_fatal(XrayIsolate *X, XrValue *args, int n) {
     return xr_null();
 }
 
-static XrValue xr_logger_child(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-    XrLogger *parent = unwrap_logger(isolate, args[0]);
+static XrValue xr_logger_child(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    XrLogger *parent = unwrap_logger(isolate, self);
     if (!parent)
         return xr_null();
 
-    XrValue *attrs = (nargs > 1) ? &args[1] : NULL;
-    int nattrs = (nargs > 1) ? (nargs - 1) / 2 : 0;
+    XrValue *attrs = (nargs > 0) ? args : NULL;
+    int nattrs = (nargs > 0) ? nargs / 2 : 0;
 
     XrLogger *child = create_child_logger(parent, attrs, nattrs);
     if (!child)

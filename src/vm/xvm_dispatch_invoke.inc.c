@@ -236,7 +236,7 @@ invoke_dispatch:;
                              _mn ? _mn : "?");
         }
         if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
-            R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+            R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
             vmbreak;
         }
         if (method->type == XMETHOD_CLOSURE && method->as.closure != NULL) {
@@ -344,17 +344,16 @@ invoke_iterator:
         vmbreak;
     }
 
-/* === Map builtin methods === */
+/* === Map builtin methods (XrClass dispatch) === */
 invoke_map:
     if (XR_IS_MAP(receiver)) {
-        /* See xmap_methods.h — unified method table dispatch.
-         * WeakMap-blocked methods return XR_NOTFOUND from the
-         * method body itself. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_MAP, method_symbol, SYMBOL_BUILTIN_COUNT);
-        R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs) : XR_NOTFOUND;
-        VM_BUILTIN_INVOKE_CHECK_EXC();
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        XrClass *_cls = isolate->native_type_classes[XR_TMAP];
+        XR_DCHECK(_cls != NULL, "Map XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_BUILTIN_INVOKE_CHECK_EXC();
+        } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
             const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "Map has no method '%s'", _mn ? _mn : "?");
@@ -362,15 +361,16 @@ invoke_map:
         vmbreak;
     }
 
-/* === Json builtin methods === */
+/* === Json builtin methods (XrClass dispatch) === */
 invoke_json:
     if (xr_value_is_json(receiver)) {
-        /* See xjson_methods.h — unified method table dispatch. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_JSON, method_symbol, SYMBOL_BUILTIN_COUNT);
-        R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs) : XR_NOTFOUND;
-        VM_BUILTIN_INVOKE_CHECK_EXC();
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        XrClass *_cls = isolate->native_type_classes[XR_TJSON];
+        XR_DCHECK(_cls != NULL, "Json XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_BUILTIN_INVOKE_CHECK_EXC();
+        } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
             const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "Json has no method '%s'", _mn ? _mn : "?");
@@ -378,17 +378,16 @@ invoke_json:
         vmbreak;
     }
 
-/* === String builtin methods === */
+/* === String builtin methods (XrClass dispatch) === */
 invoke_string:
     if (XR_IS_STRING(receiver)) {
-        /* See xstring_methods.h — unified method table dispatch.
-         * Receiver stays in heap form to skip the SSO→promote
-         * round-trip the legacy dispatcher used to do. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_STRING, method_symbol, SYMBOL_BUILTIN_COUNT);
-        R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs) : XR_NOTFOUND;
-        VM_BUILTIN_INVOKE_CHECK_EXC();
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        XrClass *_cls = isolate->native_type_classes[XR_TSTRING];
+        XR_DCHECK(_cls != NULL, "String XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_BUILTIN_INVOKE_CHECK_EXC();
+        } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
             const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "String has no method '%s'", _mn ? _mn : "?");
@@ -396,15 +395,16 @@ invoke_string:
         vmbreak;
     }
 
-/* === Array builtin methods === */
+/* === Array builtin methods (XrClass dispatch) === */
 invoke_array:
     if (XR_IS_ARRAY(receiver)) {
-        /* See xarray_methods.h — unified method table dispatch. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_ARRAY, method_symbol, SYMBOL_BUILTIN_COUNT);
-        R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs) : XR_NOTFOUND;
-        VM_BUILTIN_INVOKE_CHECK_EXC();
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        XrClass *_cls = isolate->native_type_classes[XR_TARRAY];
+        XR_DCHECK(_cls != NULL, "Array XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_BUILTIN_INVOKE_CHECK_EXC();
+        } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
             const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "Array has no method '%s'", _mn ? _mn : "?");
@@ -412,18 +412,16 @@ invoke_array:
         vmbreak;
     }
 
-/* === Set builtin methods === */
+/* === Set builtin methods (XrClass dispatch) === */
 invoke_set:
     if (XR_IS_SET(receiver)) {
-        /* See xset_methods.h — unified method table dispatch.
-         * WeakSet-blocked methods return XR_NOTFOUND from the
-         * method body itself, so the same
-         * "method not found" diagnostic surfaces. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_SET, method_symbol, SYMBOL_BUILTIN_COUNT);
-        R(a) = _slot ? _slot->fn(isolate, receiver, &R(a + 2), nargs) : XR_NOTFOUND;
-        VM_BUILTIN_INVOKE_CHECK_EXC();
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        XrClass *_cls = isolate->native_type_classes[XR_TSET];
+        XR_DCHECK(_cls != NULL, "Set XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_BUILTIN_INVOKE_CHECK_EXC();
+        } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
             const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "Set has no method '%s'", _mn ? _mn : "?");
@@ -431,14 +429,14 @@ invoke_set:
         vmbreak;
     }
 
-/* === Int builtin methods === */
+/* === Int builtin methods (XrClass dispatch) === */
 invoke_int:
     if (XR_IS_INT(receiver)) {
-        /* See xint_methods.h — unified method table dispatch. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_INT, method_symbol, SYMBOL_BUILTIN_COUNT);
-        if (likely(_slot != NULL)) {
-            R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+        XrClass *_cls = isolate->native_type_classes[XR_TINT];
+        XR_DCHECK(_cls != NULL, "Int XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
             VM_BUILTIN_INVOKE_CHECK_EXC();
         } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
@@ -448,14 +446,14 @@ invoke_int:
         vmbreak;
     }
 
-/* === Float builtin methods === */
+/* === Float builtin methods (XrClass dispatch) === */
 invoke_float:
     if (XR_IS_FLOAT(receiver)) {
-        /* See xfloat_methods.h — unified method table dispatch. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_FLOAT, method_symbol, SYMBOL_BUILTIN_COUNT);
-        if (likely(_slot != NULL)) {
-            R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+        XrClass *_cls = isolate->native_type_classes[XR_TFLOAT];
+        XR_DCHECK(_cls != NULL, "Float XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
             VM_BUILTIN_INVOKE_CHECK_EXC();
         } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
@@ -465,18 +463,14 @@ invoke_float:
         vmbreak;
     }
 
-/* === Bool builtin methods === */
+/* === Bool builtin methods (XrClass dispatch) === */
 invoke_bool:
     if (XR_IS_BOOL(receiver)) {
-        /* Bool dispatches through the unified method table.
-         * Hot small methods (e.g. toString) are static-inline
-         * in xbool_methods.h, so AOT inlines them at the call
-         * site; the VM reaches the same body via this table
-         * indirection. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_BOOL, method_symbol, SYMBOL_BUILTIN_COUNT);
-        if (likely(_slot != NULL)) {
-            R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+        XrClass *_cls = isolate->native_type_classes[XR_TBOOL];
+        XR_DCHECK(_cls != NULL, "Bool XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
             VM_BUILTIN_INVOKE_CHECK_EXC();
         } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
@@ -486,19 +480,14 @@ invoke_bool:
         vmbreak;
     }
 
-/* === BigInt builtin methods === */
+/* === BigInt builtin methods (XrClass dispatch) === */
 invoke_bigint:
     if (XR_IS_BIGINT(receiver)) {
-        /* BigInt dispatches through the unified method table.
-         * See xbigint_methods.h — every method is a static
-         * inline wrapper around an extern xr_bigint_*
-         * primitive, so AOT inlines the wrapper at the call
-         * site and the VM reaches a single out-of-line copy
-         * via this indirection. */
-        const XrMethodSlot *_slot =
-            xr_method_table_lookup(XR_TID_BIGINT, method_symbol, SYMBOL_BUILTIN_COUNT);
-        if (likely(_slot != NULL)) {
-            R(a) = _slot->fn(isolate, receiver, &R(a + 2), nargs);
+        XrClass *_cls = isolate->native_type_classes[XR_TBIGINT];
+        XR_DCHECK(_cls != NULL, "BigInt XrClass not registered");
+        XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
+        if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
+            R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
             VM_BUILTIN_INVOKE_CHECK_EXC();
         } else {
             XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
@@ -522,7 +511,7 @@ invoke_native_type:
                 XrMethod *method = xr_class_lookup_method(native_klass, method_symbol);
                 if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
                     // Native method: call C function directly
-                    R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+                    R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
                     vmbreak;
                 }
             }
@@ -604,7 +593,7 @@ invoke_stringbuilder:
             XrMethod *method = xr_class_lookup_method(klass, method_symbol);
             if (method != NULL && method->type == XMETHOD_PRIMITIVE &&
                 method->as.primitive != NULL) {
-                R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+                R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
                 vmbreak;
             }
         }
@@ -620,10 +609,7 @@ invoke_stringbuilder:
 
             if (method != NULL && method->type == XMETHOD_PRIMITIVE &&
                 method->as.primitive != NULL) {
-                XrCFunctionPtr cfunc = method->as.primitive;
-                XrValue result = cfunc(isolate, &R(a + 1), nargs + 1);
-
-                R(a) = result;
+                R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
                 vmbreak;
             } else {
                 // Universal toString fallback for basic types
@@ -653,7 +639,7 @@ invoke_slice:
             if (klass) {
                 XrMethod *method = xr_class_lookup_method(klass, method_symbol);
                 if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                    R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+                    R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
                     vmbreak;
                 }
             }
@@ -714,7 +700,7 @@ invoke_slice:
         // Support PRIMITIVE type instance methods (reflection API)
         // Args from R[a+1] (this at a+1)
         if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
-            R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+            R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
             vmbreak;
         }
 
@@ -930,7 +916,7 @@ vmcase(OP_INVOKE_BUILTIN) {
             if (klass) {
                 XrMethod *method = xr_class_lookup_method(klass, method_symbol);
                 if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                    R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+                    R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
                     vmbreak;
                 }
             }
@@ -953,7 +939,7 @@ vmcase(OP_INVOKE_BUILTIN) {
                 if (klass) {
                     XrMethod *method = xr_class_lookup_method(klass, method_symbol);
                     if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                        R(a) = method->as.primitive(isolate, &R(a + 1), nargs + 1);
+                        R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
                         vmbreak;
                     }
                 }

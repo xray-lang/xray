@@ -30,12 +30,12 @@ static inline XrMethodMetadata *get_method_metadata_internal(XrValue val) {
 
 /* ========== Method Property Getters ========== */
 
-XrValue xr_method_getName(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getName: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_null();
 
@@ -48,12 +48,12 @@ XrValue xr_method_getName(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(xr_string_intern(isolate, name, strlen(name), 0));
 }
 
-XrValue xr_method_getDeclaringType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getDeclaringType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getDeclaringType: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_null();
 
@@ -64,12 +64,12 @@ XrValue xr_method_getDeclaringType(XrayIsolate *isolate, XrValue *args, int narg
 /**
  * Method.isOverride: bool
  */
-XrValue xr_method_getIsOverride(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getIsOverride(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_bool(false);
 
@@ -87,12 +87,12 @@ XrValue xr_method_getIsOverride(XrayIsolate *isolate, XrValue *args, int nargs) 
     return xr_bool(false);
 }
 
-XrValue xr_method_getIsGetter(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getIsGetter(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_bool(false);
 
@@ -100,12 +100,12 @@ XrValue xr_method_getIsGetter(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_bool(m->type == XMETHOD_GETTER);
 }
 
-XrValue xr_method_getIsSetter(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getIsSetter(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_bool(false);
 
@@ -113,12 +113,12 @@ XrValue xr_method_getIsSetter(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_bool(m->type == XMETHOD_SETTER);
 }
 
-XrValue xr_method_getIsOperator(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getIsOperator(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_bool(false);
 
@@ -126,12 +126,12 @@ XrValue xr_method_getIsOperator(XrayIsolate *isolate, XrValue *args, int nargs) 
     return xr_bool(m->type == XMETHOD_OPERATOR);
 }
 
-XrValue xr_method_getReturnType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getReturnType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getReturnType: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_null();
 
@@ -168,12 +168,12 @@ XrValue xr_method_getReturnType(XrayIsolate *isolate, XrValue *args, int nargs) 
     return xr_null();
 }
 
-XrValue xr_method_getParameterCount(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getParameterCount(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_int(0);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_int(0);
 
@@ -220,12 +220,12 @@ static const char *type_kind_to_name(XrTypeKind kind) {
     }
 }
 
-XrValue xr_method_getParameters(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_getParameters(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_getParameters: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner)
         return xr_null();
 
@@ -258,15 +258,15 @@ XrValue xr_method_getParameters(XrayIsolate *isolate, XrValue *args, int nargs) 
 
 /* ========== Method.invoke ========== */
 
-XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_invoke(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_invoke: NULL isolate");
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Method.invoke: requires at least 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Method.invoke: requires at least 1 argument");
         return xr_null();
     }
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
-    XrValue instance = args[1];
+    XrMethodMetadata *method = get_method_metadata_internal(self);
+    XrValue instance = args[0];
 
     if (!method || !method->owner) {
         xr_log_warning("reflect", "Method.invoke: invalid method");
@@ -278,8 +278,8 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrArray *arg_array = NULL;
     int arg_count = 0;
 
-    if (nargs >= 3 && XR_IS_ARRAY(args[2])) {
-        arg_array = XR_TO_ARRAY(args[2]);
+    if (nargs >= 2 && XR_IS_ARRAY(args[1])) {
+        arg_array = XR_TO_ARRAY(args[1]);
         arg_count = arg_array->length;
     }
 
@@ -291,8 +291,6 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrValue call_args[256];
     int total_args = 0;
 
-    call_args[total_args++] = instance;
-
     if (arg_array && arg_count > 0) {
         XrValue *adata = (XrValue *) arg_array->data;
         for (int i = 0; i < arg_count; i++) {
@@ -302,8 +300,7 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     switch (xr_method->type) {
         case XMETHOD_PRIMITIVE: {
-            XrCFunctionPtr func = xr_method->as.primitive;
-            return func(isolate, call_args, total_args);
+            return xr_method->as.primitive(isolate, instance, call_args, total_args);
         }
 
         case XMETHOD_CLOSURE: {
@@ -313,7 +310,12 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
                 return xr_null();
             }
 
-            return xr_vm_call_closure(isolate, closure, call_args, total_args);
+            // Closure calling convention: args[0]=self
+            XrValue cl_args[256];
+            cl_args[0] = instance;
+            for (int i = 0; i < total_args && i < 255; i++)
+                cl_args[i + 1] = call_args[i];
+            return xr_vm_call_closure(isolate, closure, cl_args, total_args + 1);
         }
 
         default: {
@@ -323,14 +325,10 @@ XrValue xr_method_invoke(XrayIsolate *isolate, XrValue *args, int nargs) {
     }
 }
 
-XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "method_invokeStatic: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Method.invokeStatic: requires at least 1 argument");
-        return xr_null();
-    }
 
-    XrMethodMetadata *method = get_method_metadata_internal(args[0]);
+    XrMethodMetadata *method = get_method_metadata_internal(self);
     if (!method || !method->owner) {
         xr_log_warning("reflect", "Method.invokeStatic: invalid method");
         return xr_null();
@@ -346,8 +344,8 @@ XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     XrArray *arg_array = NULL;
     int arg_count = 0;
 
-    if (nargs >= 2 && XR_IS_ARRAY(args[1])) {
-        arg_array = XR_TO_ARRAY(args[1]);
+    if (nargs >= 1 && XR_IS_ARRAY(args[0])) {
+        arg_array = XR_TO_ARRAY(args[0]);
         arg_count = arg_array->length;
     }
 
@@ -369,8 +367,7 @@ XrValue xr_method_invokeStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     switch (xr_method->type) {
         case XMETHOD_PRIMITIVE: {
-            XrCFunctionPtr func = xr_method->as.primitive;
-            return func(isolate, call_args, total_args);
+            return xr_method->as.primitive(isolate, xr_null(), call_args, total_args);
         }
 
         case XMETHOD_CLOSURE: {

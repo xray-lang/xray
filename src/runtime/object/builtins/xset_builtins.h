@@ -14,11 +14,12 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-// Global Set constructor
-XR_FUNC XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue *args, int nargs);
+// Global Set constructor (self = class value, ignored)
+XR_FUNC XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                          int argc);
 
-// Static methods
-XR_FUNC XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_set_range(XrayIsolate *isolate, XrValue *args, int nargs);
+// Static methods (self = class value, ignored)
+XR_FUNC XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_set_range(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 
 #endif  // XSET_BUILTINS_H

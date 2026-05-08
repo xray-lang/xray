@@ -14,13 +14,13 @@
 #include "../value/xvalue.h"
 #include "../../base/xdefs.h"
 
-// Map instance methods
-XR_FUNC XrValue xr_map_method_set(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_map_method_get(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_map_method_has(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_map_method_delete(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_map_method_clear(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue *args, int nargs);
+// Map instance methods (self = receiver Map)
+XR_FUNC XrValue xr_map_method_set(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_map_method_get(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_map_method_has(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_map_method_delete(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_map_method_clear(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_map_method_increment(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 
 // Note: Methods are registered via XrClassBuilder in xr_map_create_class()
 

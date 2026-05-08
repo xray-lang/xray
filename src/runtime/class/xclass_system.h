@@ -66,20 +66,4 @@ typedef struct XrayCoreClasses {
 XR_FUNC void xr_core_init(XrayIsolate *X);
 XR_FUNC void xr_core_free(XrayIsolate *X);
 
-/* ========== Method Binding ========== */
-
-#ifndef XR_CFUNCTION_PTR_DEFINED
-typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs);
-#define XR_CFUNCTION_PTR_DEFINED
-#endif
-
-XR_FUNC void xr_bind_static_method(XrayIsolate *X, XrClass *klass, const char *name,
-                                   XrCFunctionPtr func);
-XR_FUNC void xr_bind_instance_method(XrayIsolate *X, XrClass *klass, const char *name,
-                                     XrCFunctionPtr func);
-
-// Call after VM and core classes are initialized
-XR_FUNC void xr_bind_builtin_static_methods(XrayIsolate *X);
-XR_FUNC void xr_bind_primitive_type_methods(XrayIsolate *X);
-
 #endif  // XCLASS_SYSTEM_H

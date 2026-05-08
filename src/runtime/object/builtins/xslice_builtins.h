@@ -17,25 +17,25 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-/* ========== ArraySlice Methods ========== */
+/* ========== ArraySlice Methods (self = receiver ArraySlice) ========== */
 
-XR_FUNC XrValue xr_builtin_array_slice_length(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_get(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_set(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_to_array(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_index_of(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_contains(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_first(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_last(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_builtin_array_slice_length(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_get(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_set(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_index_of(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_contains(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_first(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_last(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 
 // Higher-order function methods
-XR_FUNC XrValue xr_builtin_array_slice_for_each(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_map(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_filter(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_reduce(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_find(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_every(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_slice_some(XrayIsolate *isolate, XrValue *args, int nargs);
+XR_FUNC XrValue xr_builtin_array_slice_for_each(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_map(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_filter(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_reduce(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_slice_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc);
 
 // Create slice classes (using XrClassBuilder)
 typedef struct XrClass XrClass;

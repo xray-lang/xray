@@ -183,6 +183,9 @@ static inline XrValue xr_int_pow_method(XrayIsolate *iso, XrValue self, XrValue 
 
 extern const XrMethodSlot xr_int_method_table[SYMBOL_BUILTIN_COUNT];
 
+struct XrayIsolate;
+XR_FUNC void xr_int_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

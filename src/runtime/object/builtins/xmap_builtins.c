@@ -27,18 +27,20 @@
 #include <stdio.h>
 
 // Map() - create empty map
-XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
     XR_DCHECK(isolate != NULL, "map_construct: NULL isolate");
+    (void) self;
     (void) args;
-    if (nargs != 0)
+    if (argc != 0)
         return xr_null();
     XrMap *map = xr_map_new(xr_current_coro(isolate));
     return xr_value_from_map(map);
 }
 
 // Map.from(entries) or Map.from(keys, values)
-XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs == 1) {
+XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    if (argc == 1) {
         // Map.from(entries) - array of [key, value] pairs
         if (!XR_IS_ARRAY(args[0]))
             return xr_null();
@@ -60,7 +62,7 @@ XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue *args, int nargs) {
         }
 
         return xr_value_from_map(map);
-    } else if (nargs == 2) {
+    } else if (argc == 2) {
         // Map.from(keys, values)
         if (!XR_IS_ARRAY(args[0]) || !XR_IS_ARRAY(args[1]))
             return xr_null();
@@ -91,16 +93,15 @@ XrClass *xr_map_create_class(XrayIsolate *X, XrClass *objectClass) {
 
     // Static constructor
     xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-                                       (XrCFunctionPtr) xr_builtin_map_construct, 0, 0);
+                                       xr_builtin_map_construct, 0, 0);
 
     // Instance methods
-    xr_class_builder_add_method(builder, "set", (XrCFunctionPtr) xr_map_method_set, 2, 0);
-    xr_class_builder_add_method(builder, "get", (XrCFunctionPtr) xr_map_method_get, 1, 0);
-    xr_class_builder_add_method(builder, "has", (XrCFunctionPtr) xr_map_method_has, 1, 0);
-    xr_class_builder_add_method(builder, "delete", (XrCFunctionPtr) xr_map_method_delete, 1, 0);
-    xr_class_builder_add_method(builder, "clear", (XrCFunctionPtr) xr_map_method_clear, 0, 0);
-    xr_class_builder_add_method(builder, "increment", (XrCFunctionPtr) xr_map_method_increment, 1,
-                                0);
+    xr_class_builder_add_method(builder, "set", xr_map_method_set, 2, 0);
+    xr_class_builder_add_method(builder, "get", xr_map_method_get, 1, 0);
+    xr_class_builder_add_method(builder, "has", xr_map_method_has, 1, 0);
+    xr_class_builder_add_method(builder, "delete", xr_map_method_delete, 1, 0);
+    xr_class_builder_add_method(builder, "clear", xr_map_method_clear, 0, 0);
+    xr_class_builder_add_method(builder, "increment", xr_map_method_increment, 1, 0);
 
     return xr_class_builder_finalize(builder);
 }

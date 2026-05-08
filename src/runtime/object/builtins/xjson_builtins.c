@@ -41,7 +41,8 @@
 /* ========== Static Method Implementations ========== */
 
 // Json.keys(obj) -> Array<string>
-static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
@@ -65,7 +66,8 @@ static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue *args, int narg
 }
 
 // Json.values(obj) -> Array
-static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
@@ -84,7 +86,8 @@ static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue *args, int na
 }
 
 // Json.entries(obj) -> Array<Array<string, any>>
-static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
@@ -111,7 +114,8 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue *args, int n
 }
 
 // Json.has(obj, key) -> bool
-static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 2 || !xr_value_is_json(args[0]))
         return xr_bool(false);
 
@@ -131,7 +135,8 @@ static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue *args, int nargs
 }
 
 // Json.get(obj, key, default?) -> any
-static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 2)
         return xr_null();
     if (!xr_value_is_json(args[0]))
@@ -155,7 +160,8 @@ static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue *args, int nargs
 }
 
 // Json.size(obj) -> int
-static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_int(0);
 
@@ -167,7 +173,8 @@ static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue *args, int narg
 }
 
 // Json.isEmpty(obj) -> bool
-static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_bool(true);
 
@@ -180,7 +187,8 @@ static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue *args, int n
 
 // Json.stringify(value, indent?) — thin wrapper that calls the core
 // stringify engine and throws a TypeError on non-serializable types.
-static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue *args, int argc) {
+static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
     if (argc < 1)
         return xr_null();
 
@@ -208,25 +216,19 @@ static XrClass *create_json_utility_class(XrayIsolate *X) {
     if (!builder)
         return NULL;
 
-    xr_class_builder_add_static_method(builder, "keys", (XrCFunctionPtr) xr_json_static_keys, 1, 0);
-    xr_class_builder_add_static_method(builder, "values", (XrCFunctionPtr) xr_json_static_values, 1,
-                                       0);
-    xr_class_builder_add_static_method(builder, "entries", (XrCFunctionPtr) xr_json_static_entries,
-                                       1, 0);
-    xr_class_builder_add_static_method(builder, "has", (XrCFunctionPtr) xr_json_static_has, 2, 0);
-    xr_class_builder_add_static_method(builder, "get", (XrCFunctionPtr) xr_json_static_get, 2, 0);
-    xr_class_builder_add_static_method(builder, "size", (XrCFunctionPtr) xr_json_static_size, 1, 0);
-    xr_class_builder_add_static_method(builder, "isEmpty", (XrCFunctionPtr) xr_json_static_isEmpty,
-                                       1, 0);
+    xr_class_builder_add_static_method(builder, "keys", xr_json_static_keys, 1, 0);
+    xr_class_builder_add_static_method(builder, "values", xr_json_static_values, 1, 0);
+    xr_class_builder_add_static_method(builder, "entries", xr_json_static_entries, 1, 0);
+    xr_class_builder_add_static_method(builder, "has", xr_json_static_has, 2, 0);
+    xr_class_builder_add_static_method(builder, "get", xr_json_static_get, 2, 0);
+    xr_class_builder_add_static_method(builder, "size", xr_json_static_size, 1, 0);
+    xr_class_builder_add_static_method(builder, "isEmpty", xr_json_static_isEmpty, 1, 0);
 
     // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
-    xr_class_builder_add_static_method(builder, "parse", (XrCFunctionPtr) xr_json_fn_parse, 1, 0);
-    xr_class_builder_add_static_method(builder, "stringify",
-                                       (XrCFunctionPtr) xr_json_builtin_stringify, 2, 0);
-    xr_class_builder_add_static_method(builder, "isValid", (XrCFunctionPtr) xr_json_fn_is_valid, 1,
-                                       0);
-    xr_class_builder_add_static_method(builder, "tryParse", (XrCFunctionPtr) xr_json_fn_try_parse, 1,
-                                       0);
+    xr_class_builder_add_static_method(builder, "parse", xr_json_fn_parse, 1, 0);
+    xr_class_builder_add_static_method(builder, "stringify", xr_json_builtin_stringify, 2, 0);
+    xr_class_builder_add_static_method(builder, "isValid", xr_json_fn_is_valid, 1, 0);
+    xr_class_builder_add_static_method(builder, "tryParse", xr_json_fn_try_parse, 1, 0);
 
     return xr_class_builder_finalize(builder);
 }

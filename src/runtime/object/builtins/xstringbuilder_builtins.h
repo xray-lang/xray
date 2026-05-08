@@ -14,14 +14,19 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-// Constructor
-XR_FUNC XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue *args, int nargs);
+// Constructor (self = class value, ignored)
+XR_FUNC XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                              int argc);
 
-// Instance methods
-XR_FUNC XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_stringbuilder_toString(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_stringbuilder_clear(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue *args, int nargs);
+// Instance methods (self = receiver StringBuilder)
+XR_FUNC XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                                 int argc);
+XR_FUNC XrValue xr_builtin_stringbuilder_toString(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                                   int argc);
+XR_FUNC XrValue xr_builtin_stringbuilder_clear(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                                int argc);
+XR_FUNC XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                                 int argc);
 
 // Create StringBuilder class (using XrClassBuilder)
 typedef struct XrClass XrClass;

@@ -132,6 +132,9 @@ static inline XrValue xr_bigint_to_float_method(XrayIsolate *iso, XrValue self, 
 
 extern const XrMethodSlot xr_bigint_method_table[SYMBOL_BUILTIN_COUNT];
 
+struct XrayIsolate;
+XR_FUNC void xr_bigint_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

@@ -25,6 +25,23 @@ typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs
 #define XR_CFUNCTION_PTR_DEFINED
 #endif
 
+/*
+ * Calling convention for class primitive methods.
+ *
+ *   iso   - owning isolate (always non-NULL).
+ *   self  - receiver value (instance for instance methods, class for statics).
+ *   args  - pointer to first user argument (excludes self).
+ *   argc  - user argument count (excludes self).
+ *
+ * Matches VM register layout: fn(iso, R(a+1), &R(a+2), nargs).
+ * Static methods receive the class as self and may ignore it.
+ */
+#ifndef XR_PRIMITIVE_METHOD_FN_DEFINED
+typedef XrValue (*XrPrimitiveMethodFn)(XrayIsolate *isolate, XrValue self,
+                                       XrValue *args, int argc);
+#define XR_PRIMITIVE_METHOD_FN_DEFINED
+#endif
+
 typedef enum {
     XMETHOD_NONE,
     XMETHOD_CLOSURE,
@@ -51,8 +68,8 @@ typedef struct XrMethod {
     XrMethodType type;
 
     union {
-        struct XrClosure *closure;  // CLOSURE/GETTER/SETTER/OPERATOR
-        XrCFunctionPtr primitive;   // PRIMITIVE
+        struct XrClosure *closure;       // CLOSURE/GETTER/SETTER/OPERATOR
+        XrPrimitiveMethodFn primitive;   // PRIMITIVE
     } as;
 
     uint8_t flags;

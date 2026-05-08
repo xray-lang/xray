@@ -61,6 +61,17 @@ static const XrPreludeSymbols g_prelude_symbols = {
  * to drag in the full stdlib/{log,datetime,regex,net} headers.
  */
 struct XrayIsolate;
+/* Core builtin types (src/runtime) */
+extern void xr_bool_register_native_type(XrayIsolate *isolate);
+extern void xr_int_register_native_type(XrayIsolate *isolate);
+extern void xr_float_register_native_type(XrayIsolate *isolate);
+extern void xr_string_register_native_type(XrayIsolate *isolate);
+extern void xr_array_register_native_type(XrayIsolate *isolate);
+extern void xr_map_register_native_type(XrayIsolate *isolate);
+extern void xr_set_register_native_type(XrayIsolate *isolate);
+extern void xr_json_register_native_type(XrayIsolate *isolate);
+extern void xr_bigint_register_native_type(XrayIsolate *isolate);
+/* Stdlib extension types */
 extern void xr_logger_register_native_type(XrayIsolate *isolate);
 extern void xr_datetime_register_native_type(XrayIsolate *isolate);
 extern void xr_regex_register_native_type(XrayIsolate *isolate);
@@ -70,10 +81,18 @@ extern void xr_netlistener_register_native_type(XrayIsolate *isolate);
 void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     if (!isolate)
         return;
-    /* xr_register_native_type itself is idempotent — repeated calls for
-     * the same gc_type return the existing XrClass — so the order here
-     * is mainly cosmetic. We list types in the same order they appear in
-     * prelude_types.def to make the correspondence obvious. */
+    /* Core value / collection types first, then stdlib extensions.
+     * xr_register_native_type is idempotent — repeated calls for the
+     * same gc_type return the existing XrClass. */
+    xr_bool_register_native_type(isolate);
+    xr_int_register_native_type(isolate);
+    xr_float_register_native_type(isolate);
+    xr_string_register_native_type(isolate);
+    xr_array_register_native_type(isolate);
+    xr_map_register_native_type(isolate);
+    xr_set_register_native_type(isolate);
+    xr_json_register_native_type(isolate);
+    xr_bigint_register_native_type(isolate);
     xr_datetime_register_native_type(isolate);
     xr_logger_register_native_type(isolate);
     xr_regex_register_native_type(isolate);

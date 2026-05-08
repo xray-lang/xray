@@ -188,3 +188,35 @@ const XrMethodSlot xr_set_method_table[SYMBOL_BUILTIN_COUNT] = {
     [SYMBOL_ITERATOR] = {xr_set_method_iterator, 0, 0, 0},
     [SYMBOL_TOSTRING] = {xr_set_method_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
 };
+
+/* ========== XrClass Registration ========== */
+
+#include "xnative_type.h"
+
+void xr_set_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod set_methods[] = {
+        {"has", xr_set_method_has, 1},
+        {"delete", xr_set_method_delete, 1},
+        {"isEmpty", xr_set_method_is_empty, 0},
+        {"add", xr_set_method_add, 0},
+        {"clear", xr_set_method_clear, 0},
+        {"union", xr_set_method_union, 0},
+        {"intersection", xr_set_method_intersection, 0},
+        {"difference", xr_set_method_difference, 0},
+        {"symmetricDifference", xr_set_method_symmetric_difference, 0},
+        {"isSubset", xr_set_method_is_subset, 0},
+        {"isSuperset", xr_set_method_is_superset, 0},
+        {"toArray", xr_set_method_to_array, 0},
+        {"iterator", xr_set_method_iterator, 0},
+        {"toString", xr_set_method_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo set_info = {
+        .name = "Set",
+        .gc_type = XR_TSET,
+        .methods = set_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &set_info);
+}

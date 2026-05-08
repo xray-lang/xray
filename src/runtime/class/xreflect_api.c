@@ -137,7 +137,8 @@ XrParameterMetadata *xr_get_parameter_metadata(XrValue param_obj) {
 
 /* ========== Reflect Class Methods ========== */
 
-XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_getType: NULL isolate");
     if (nargs < 1) {
         xr_log_warning("reflect", "Reflect.getType: requires 1 argument");
@@ -170,7 +171,8 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_create_type_object(X, meta);
 }
 
-XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_getTypeByName: NULL isolate");
     if (nargs < 1) {
         xr_log_warning("reflect", "Reflect.getTypeByName: requires 1 argument");
@@ -193,7 +195,8 @@ XrValue xr_reflect_getTypeByName(XrayIsolate *isolate, XrValue *args, int nargs)
     return xr_create_type_object(X, meta);
 }
 
-XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_getAllTypes: NULL isolate");
     (void) args;
     (void) nargs;
@@ -218,7 +221,8 @@ XrValue xr_reflect_getAllTypes(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_value_from_array(array);
 }
 
-XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_isInstance: NULL isolate");
     if (nargs < 2) {
         xr_log_warning("reflect", "Reflect.isInstance: requires 2 arguments");
@@ -239,7 +243,8 @@ XrValue xr_reflect_isInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_bool(xr_class_instanceof(obj_class, type_meta->klass));
 }
 
-XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_isInstanceOf: NULL isolate");
     if (nargs < 2) {
         xr_log_warning("reflect", "Reflect.isInstanceOf: requires 2 arguments");
@@ -261,12 +266,13 @@ XrValue xr_reflect_isInstanceOf(XrayIsolate *isolate, XrValue *args, int nargs) 
 
     XrValue type_obj = xr_create_type_object(X, type_meta);
     XrValue new_args[2] = {obj, type_obj};
-    return xr_reflect_isInstance(isolate, new_args, 2);
+    return xr_reflect_isInstance(isolate, xr_null(), new_args, 2);
 }
 
 // Reflect.fieldCount(obj: Json): int
 // Supports Json, struct (stack-allocated), and class instances
-XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     if (nargs < 1)
         return xr_int(0);
     XrValue obj = args[0];
@@ -305,7 +311,8 @@ static XrValue tid_to_string_value(XrayIsolate *isolate, uint8_t tid) {
 }
 
 // Reflect.elementType(obj: Array|Set|Channel): string
-XrValue xr_reflect_elementType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_elementType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_elementType: NULL isolate");
     if (nargs < 1)
         return tid_to_string_value(isolate, 0);
@@ -323,7 +330,8 @@ XrValue xr_reflect_elementType(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Reflect.keyType(obj: Map): string
-XrValue xr_reflect_keyType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_keyType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_keyType: NULL isolate");
     if (nargs < 1)
         return tid_to_string_value(isolate, 0);
@@ -336,7 +344,8 @@ XrValue xr_reflect_keyType(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Reflect.valueType(obj: Map): string
-XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_valueType: NULL isolate");
     if (nargs < 1)
         return tid_to_string_value(isolate, 0);
@@ -350,7 +359,8 @@ XrValue xr_reflect_valueType(XrayIsolate *isolate, XrValue *args, int nargs) {
 
 // Reflect.typeOf(obj: Json): string
 // Returns full generic type string, e.g. "Array<int>", "Map<string, int>"
-XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "reflect_typeOf: NULL isolate");
     if (nargs < 1)
         return tid_to_string_value(isolate, 0);

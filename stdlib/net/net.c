@@ -1436,63 +1436,71 @@ XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: NetConn, maxlen
  * a yieldable variant, the matching wrappers can move here.
  */
 
-static XrValue conn_method_fd(XrayIsolate *X, XrValue *args, int n) {
+static XrValue conn_method_fd(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetConn *c = unwrap_conn(args[0]);
+    XrNetConn *c = unwrap_conn(self);
     return xr_int(c ? c->fd : -1);
 }
 
-static XrValue conn_method_close(XrayIsolate *X, XrValue *args, int n) {
+static XrValue conn_method_close(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetConn *c = unwrap_conn(args[0]);
+    XrNetConn *c = unwrap_conn(self);
     if (c)
         xr_net_conn_close(c);
     return XR_NULL_VAL;
 }
 
-static XrValue conn_method_is_closed(XrayIsolate *X, XrValue *args, int n) {
+static XrValue conn_method_is_closed(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetConn *c = unwrap_conn(args[0]);
+    XrNetConn *c = unwrap_conn(self);
     return xr_bool(!c || c->closed);
 }
 
-static XrValue conn_method_is_tls(XrayIsolate *X, XrValue *args, int n) {
+static XrValue conn_method_is_tls(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetConn *c = unwrap_conn(args[0]);
+    XrNetConn *c = unwrap_conn(self);
     return xr_bool(c && c->kind == XR_NETCONN_TLS);
 }
 
-static XrValue listener_method_fd(XrayIsolate *X, XrValue *args, int n) {
+static XrValue listener_method_fd(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetListener *l = unwrap_listener(args[0]);
+    XrNetListener *l = unwrap_listener(self);
     return xr_int(l ? l->fd : -1);
 }
 
-static XrValue listener_method_port(XrayIsolate *X, XrValue *args, int n) {
+static XrValue listener_method_port(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetListener *l = unwrap_listener(args[0]);
+    XrNetListener *l = unwrap_listener(self);
     return xr_int(l ? l->port : -1);
 }
 
-static XrValue listener_method_close(XrayIsolate *X, XrValue *args, int n) {
+static XrValue listener_method_close(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetListener *l = unwrap_listener(args[0]);
+    XrNetListener *l = unwrap_listener(self);
     if (l)
         xr_net_listener_close(l);
     return XR_NULL_VAL;
 }
 
-static XrValue listener_method_is_closed(XrayIsolate *X, XrValue *args, int n) {
+static XrValue listener_method_is_closed(XrayIsolate *X, XrValue self, XrValue *args, int n) {
     (void) X;
+    (void) args;
     (void) n;
-    XrNetListener *l = unwrap_listener(args[0]);
+    XrNetListener *l = unwrap_listener(self);
     return xr_bool(!l || l->closed);
 }
 

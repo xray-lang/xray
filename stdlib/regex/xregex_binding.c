@@ -523,15 +523,12 @@ static XrValue regex_is_valid(XrayIsolate *isolate, XrValue *args, int argc) {
 
 #include "../../src/runtime/object/xnative_type.h"
 
-// Module functions and method functions share the same arg layout:
-// args[0]=re, args[1]=text, args[2]=extra. Reuse module functions directly.
+// re.pattern getter
+static XrValue re_method_pattern(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) args;
+    (void) nargs;
 
-// re.pattern() - Get pattern string
-static XrValue re_method_pattern(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    XrRegex *re = unwrap_regex(isolate, args[0]);
+    XrRegex *re = unwrap_regex(isolate, self);
     if (!re)
         return xr_null();
 
@@ -542,19 +539,46 @@ static XrValue re_method_pattern(XrayIsolate *isolate, XrValue *args, int nargs)
     return xr_string_value(xr_string_intern(isolate, pattern, strlen(pattern), 0));
 }
 
-// Regex method table (reuse module functions — same arg layout)
+// Thin wrappers: prepend self into a temporary args array so the module
+// functions (which expect args[0]=regex) can be reused unchanged.
+
+static XrValue re_m_test(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    XrValue tmp[3] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
+    return regex_test(X, tmp, n + 1);
+}
+static XrValue re_m_find(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
+    return regex_find(X, tmp, n + 1);
+}
+static XrValue re_m_find_all(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
+    return regex_find_all(X, tmp, n + 1);
+}
+static XrValue re_m_replace(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
+    return regex_replace(X, tmp, n + 1);
+}
+static XrValue re_m_replace_all(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
+    return regex_replace_all(X, tmp, n + 1);
+}
+static XrValue re_m_split(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    XrValue tmp[4] = {self, n > 0 ? a[0] : xr_null(), n > 1 ? a[1] : xr_null()};
+    return regex_split(X, tmp, n + 1);
+}
+
 static XrNativeMethod regex_methods[] = {
-    {"test", (XrCFunctionPtr) regex_test, 2},               // this + text
-    {"find", (XrCFunctionPtr) regex_find, 3},               // this + text + offset?
-    {"findAll", (XrCFunctionPtr) regex_find_all, 3},        // this + text + limit?
-    {"replace", (XrCFunctionPtr) regex_replace, 3},         // this + text + repl
-    {"replaceAll", (XrCFunctionPtr) regex_replace_all, 3},  // this + text + repl
-    {"split", (XrCFunctionPtr) regex_split, 3},             // this + text + limit?
+    {"test", re_m_test, 1},
+    {"find", re_m_find, 2},
+    {"findAll", re_m_find_all, 2},
+    {"replace", re_m_replace, 2},
+    {"replaceAll", re_m_replace_all, 2},
+    {"split", re_m_split, 2},
     {NULL, NULL, 0}};
 
 // Regex property getters
 static XrNativeMethod regex_getters[] = {
-    {"pattern", (XrCFunctionPtr) re_method_pattern, 1},  // this only
+    {"pattern", re_method_pattern, 1},
     {NULL, NULL, 0}};
 
 /* ========================================================================

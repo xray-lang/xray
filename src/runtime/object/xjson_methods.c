@@ -172,3 +172,33 @@ const XrMethodSlot xr_json_method_table[SYMBOL_BUILTIN_COUNT] = {
     [SYMBOL_IS_ARRAY] = {xr_json_method_is_array, 0, 0, 0},
     [SYMBOL_IS_OBJECT] = {xr_json_method_is_object, 0, 0, 0},
 };
+
+/* ========== XrClass Registration ========== */
+
+#include "xnative_type.h"
+
+void xr_json_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod json_methods[] = {
+        {"entriesIterator", xr_json_method_entries_iterator, 0},
+        {"toString", xr_json_method_to_string, 0},
+        {"keys", xr_json_method_keys, 0},
+        {"values", xr_json_method_values, 0},
+        {"has", xr_json_method_has, 1},
+        {"isNull", xr_json_method_is_null, 0},
+        {"isInt", xr_json_method_is_int, 0},
+        {"isFloat", xr_json_method_is_float, 0},
+        {"isString", xr_json_method_is_string, 0},
+        {"isBool", xr_json_method_is_bool, 0},
+        {"isArray", xr_json_method_is_array, 0},
+        {"isObject", xr_json_method_is_object, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo json_info = {
+        .name = "Json",
+        .gc_type = XR_TJSON,
+        .methods = json_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &json_info);
+}

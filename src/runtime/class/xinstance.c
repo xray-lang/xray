@@ -224,29 +224,28 @@ XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *na
 
     XrValue this_value = xr_value_from_instance(inst);
 
-    // Stack buffer for small arg counts, heap fallback for large
-    XrValue stack_buf[9];
-    XrValue *full_args =
-        (argc + 1 <= 9) ? stack_buf : (XrValue *) xr_malloc(sizeof(XrValue) * (argc + 1));
-    if (!full_args) {
-        xr_log_warning("instance", "failed to allocate argument array");
-        return xr_null();
-    }
-    full_args[0] = this_value;
-    for (int i = 0; i < argc; i++) {
-        full_args[i + 1] = args[i];
-    }
-
     // Call method based on type
     XrValue result = xr_null();
     if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-        result = method->as.primitive(X, full_args, argc + 1);
+        result = method->as.primitive(X, this_value, args, argc);
     } else if (method->as.closure) {
+        // Closure calling convention still uses args[0]=self
+        XrValue stack_buf[9];
+        XrValue *full_args =
+            (argc + 1 <= 9) ? stack_buf : (XrValue *) xr_malloc(sizeof(XrValue) * (argc + 1));
+        if (!full_args) {
+            xr_log_warning("instance", "failed to allocate argument array");
+            return xr_null();
+        }
+        full_args[0] = this_value;
+        for (int i = 0; i < argc; i++) {
+            full_args[i + 1] = args[i];
+        }
         result = xr_vm_call_closure(X, method->as.closure, full_args, argc + 1);
+        if (full_args != stack_buf)
+            xr_free(full_args);
     }
 
-    if (full_args != stack_buf)
-        xr_free(full_args);
     return result;
 }
 

@@ -24,3 +24,22 @@ const XrMethodSlot xr_bool_method_table[SYMBOL_BUILTIN_COUNT] = {
             .flags = XR_METHOD_FLAG_PURE | XR_METHOD_FLAG_NO_GC,
         },
 };
+
+/* ========== XrClass Registration ========== */
+
+#include "../object/xnative_type.h"
+
+void xr_bool_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod bool_methods[] = {
+        {"toString", xr_bool_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo bool_info = {
+        .name = "Bool",
+        .gc_type = XR_TBOOL,
+        .methods = bool_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &bool_info);
+}

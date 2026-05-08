@@ -17,12 +17,14 @@
 #include "xvalue.h"
 #include "xdefs.h"
 
-// Global Array constructor
-XR_FUNC XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue *args, int nargs);
+// Global Array constructor (self = class value, ignored)
+XR_FUNC XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                            int argc);
 
-// Array static methods
-XR_FUNC XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue *args, int nargs);
-XR_FUNC XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue *args, int nargs);
+// Array static methods (self = class value, ignored)
+XR_FUNC XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
+XR_FUNC XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                                int argc);
 
 #endif  // XARRAY_BUILTINS_H

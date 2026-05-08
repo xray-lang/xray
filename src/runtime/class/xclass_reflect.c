@@ -27,25 +27,25 @@ static XrClass *create_reflect_class(XrayIsolate *X) {
     if (!builder)
         return NULL;
 
-    xr_class_builder_add_static_method(builder, "getType", (XrCFunctionPtr) xr_reflect_getType, 1,
+    xr_class_builder_add_static_method(builder, "getType", xr_reflect_getType, 1,
                                        0);
     xr_class_builder_add_static_method(builder, "getTypeByName",
-                                       (XrCFunctionPtr) xr_reflect_getTypeByName, 1, 0);
+                                       xr_reflect_getTypeByName, 1, 0);
     xr_class_builder_add_static_method(builder, "getAllTypes",
-                                       (XrCFunctionPtr) xr_reflect_getAllTypes, 0, 0);
+                                       xr_reflect_getAllTypes, 0, 0);
     xr_class_builder_add_static_method(builder, "isInstance",
-                                       (XrCFunctionPtr) xr_reflect_isInstance, 2, 0);
+                                       xr_reflect_isInstance, 2, 0);
     xr_class_builder_add_static_method(builder, "isInstanceOf",
-                                       (XrCFunctionPtr) xr_reflect_isInstanceOf, 2, 0);
+                                       xr_reflect_isInstanceOf, 2, 0);
     xr_class_builder_add_static_method(builder, "elementType",
-                                       (XrCFunctionPtr) xr_reflect_elementType, 1, 0);
-    xr_class_builder_add_static_method(builder, "keyType", (XrCFunctionPtr) xr_reflect_keyType, 1,
+                                       xr_reflect_elementType, 1, 0);
+    xr_class_builder_add_static_method(builder, "keyType", xr_reflect_keyType, 1,
                                        0);
-    xr_class_builder_add_static_method(builder, "valueType", (XrCFunctionPtr) xr_reflect_valueType,
+    xr_class_builder_add_static_method(builder, "valueType", xr_reflect_valueType,
                                        1, 0);
-    xr_class_builder_add_static_method(builder, "typeOf", (XrCFunctionPtr) xr_reflect_typeOf, 1, 0);
+    xr_class_builder_add_static_method(builder, "typeOf", xr_reflect_typeOf, 1, 0);
     xr_class_builder_add_static_method(builder, "fieldCount",
-                                       (XrCFunctionPtr) xr_reflect_fieldCount, 1, 0);
+                                       xr_reflect_fieldCount, 1, 0);
 
     return xr_class_builder_finalize(builder);
 }
@@ -59,31 +59,31 @@ static XrClass *create_type_class(XrayIsolate *X) {
         return NULL;
 
     // Instance methods
-    xr_class_builder_add_method(builder, "getFields", (XrCFunctionPtr) xr_type_getFields, 0, 0);
+    xr_class_builder_add_method(builder, "getFields", xr_type_getFields, 0, 0);
     xr_class_builder_add_method(builder, "getDeclaredFields",
-                                (XrCFunctionPtr) xr_type_getDeclaredFields, 0, 0);
-    xr_class_builder_add_method(builder, "getField", (XrCFunctionPtr) xr_type_getField, 1, 0);
-    xr_class_builder_add_method(builder, "getMethods", (XrCFunctionPtr) xr_type_getMethods, 0, 0);
+                                xr_type_getDeclaredFields, 0, 0);
+    xr_class_builder_add_method(builder, "getField", xr_type_getField, 1, 0);
+    xr_class_builder_add_method(builder, "getMethods", xr_type_getMethods, 0, 0);
     xr_class_builder_add_method(builder, "getDeclaredMethods",
-                                (XrCFunctionPtr) xr_type_getDeclaredMethods, 0, 0);
-    xr_class_builder_add_method(builder, "getMethod", (XrCFunctionPtr) xr_type_getMethod, 1, 0);
-    xr_class_builder_add_method(builder, "getConstructor", (XrCFunctionPtr) xr_type_getConstructor,
+                                xr_type_getDeclaredMethods, 0, 0);
+    xr_class_builder_add_method(builder, "getMethod", xr_type_getMethod, 1, 0);
+    xr_class_builder_add_method(builder, "getConstructor", xr_type_getConstructor,
                                 0, 0);
-    xr_class_builder_add_method(builder, "newInstance", (XrCFunctionPtr) xr_type_newInstance, 0, 0);
+    xr_class_builder_add_method(builder, "newInstance", xr_type_newInstance, 0, 0);
     xr_class_builder_add_method(builder, "newInstanceWith",
-                                (XrCFunctionPtr) xr_type_newInstanceWith, 1, 0);
-    xr_class_builder_add_method(builder, "isSubtypeOf", (XrCFunctionPtr) xr_type_isSubtypeOf, 1, 0);
+                                xr_type_newInstanceWith, 1, 0);
+    xr_class_builder_add_method(builder, "isSubtypeOf", xr_type_isSubtypeOf, 1, 0);
     xr_class_builder_add_method(builder, "isAssignableFrom",
-                                (XrCFunctionPtr) xr_type_isAssignableFrom, 1, 0);
-    xr_class_builder_add_method(builder, "implements", (XrCFunctionPtr) xr_type_implements, 1, 0);
+                                xr_type_isAssignableFrom, 1, 0);
+    xr_class_builder_add_method(builder, "implements", xr_type_implements, 1, 0);
 
     // Getters (as methods with get: prefix)
-    xr_class_builder_add_method(builder, "get:name", (XrCFunctionPtr) xr_type_getName, 0, 0);
-    xr_class_builder_add_method(builder, "get:kind", (XrCFunctionPtr) xr_type_getKind, 0, 0);
-    xr_class_builder_add_method(builder, "get:isAbstract", (XrCFunctionPtr) xr_type_getIsAbstract,
+    xr_class_builder_add_method(builder, "get:name", xr_type_getName, 0, 0);
+    xr_class_builder_add_method(builder, "get:kind", xr_type_getKind, 0, 0);
+    xr_class_builder_add_method(builder, "get:isAbstract", xr_type_getIsAbstract,
                                 0, 0);
-    xr_class_builder_add_method(builder, "get:isFinal", (XrCFunctionPtr) xr_type_getIsFinal, 0, 0);
-    xr_class_builder_add_method(builder, "get:superType", (XrCFunctionPtr) xr_type_getSuperType, 0,
+    xr_class_builder_add_method(builder, "get:isFinal", xr_type_getIsFinal, 0, 0);
+    xr_class_builder_add_method(builder, "get:superType", xr_type_getSuperType, 0,
                                 0);
 
     return xr_class_builder_finalize(builder);
@@ -97,21 +97,21 @@ static XrClass *create_field_class(XrayIsolate *X) {
     if (!builder)
         return NULL;
 
-    xr_class_builder_add_method(builder, "get", (XrCFunctionPtr) xr_field_get, 1, 0);
-    xr_class_builder_add_method(builder, "set", (XrCFunctionPtr) xr_field_set, 2, 0);
-    xr_class_builder_add_method(builder, "getStatic", (XrCFunctionPtr) xr_field_getStatic, 0, 0);
-    xr_class_builder_add_method(builder, "setStatic", (XrCFunctionPtr) xr_field_setStatic, 1, 0);
+    xr_class_builder_add_method(builder, "get", xr_field_get, 1, 0);
+    xr_class_builder_add_method(builder, "set", xr_field_set, 2, 0);
+    xr_class_builder_add_method(builder, "getStatic", xr_field_getStatic, 0, 0);
+    xr_class_builder_add_method(builder, "setStatic", xr_field_setStatic, 1, 0);
 
-    xr_class_builder_add_method(builder, "get:name", (XrCFunctionPtr) xr_field_getName, 0, 0);
-    xr_class_builder_add_method(builder, "get:type", (XrCFunctionPtr) xr_field_getType, 0, 0);
-    xr_class_builder_add_method(builder, "get:isStatic", (XrCFunctionPtr) xr_field_getIsStatic, 0,
+    xr_class_builder_add_method(builder, "get:name", xr_field_getName, 0, 0);
+    xr_class_builder_add_method(builder, "get:type", xr_field_getType, 0, 0);
+    xr_class_builder_add_method(builder, "get:isStatic", xr_field_getIsStatic, 0,
                                 0);
-    xr_class_builder_add_method(builder, "get:isPrivate", (XrCFunctionPtr) xr_field_getIsPrivate, 0,
+    xr_class_builder_add_method(builder, "get:isPrivate", xr_field_getIsPrivate, 0,
                                 0);
-    xr_class_builder_add_method(builder, "get:isReadonly", (XrCFunctionPtr) xr_field_getIsReadonly,
+    xr_class_builder_add_method(builder, "get:isReadonly", xr_field_getIsReadonly,
                                 0, 0);
     xr_class_builder_add_method(builder, "get:declaringType",
-                                (XrCFunctionPtr) xr_field_getDeclaringType, 0, 0);
+                                xr_field_getDeclaringType, 0, 0);
 
     return xr_class_builder_finalize(builder);
 }
@@ -124,32 +124,32 @@ static XrClass *create_method_class(XrayIsolate *X) {
     if (!builder)
         return NULL;
 
-    xr_class_builder_add_method(builder, "invoke", (XrCFunctionPtr) xr_method_invoke, 2, 0);
-    xr_class_builder_add_method(builder, "invokeStatic", (XrCFunctionPtr) xr_method_invokeStatic, 1,
+    xr_class_builder_add_method(builder, "invoke", xr_method_invoke, 2, 0);
+    xr_class_builder_add_method(builder, "invokeStatic", xr_method_invokeStatic, 1,
                                 0);
 
-    xr_class_builder_add_method(builder, "get:name", (XrCFunctionPtr) xr_method_getName, 0, 0);
-    xr_class_builder_add_method(builder, "get:returnType", (XrCFunctionPtr) xr_method_getReturnType,
+    xr_class_builder_add_method(builder, "get:name", xr_method_getName, 0, 0);
+    xr_class_builder_add_method(builder, "get:returnType", xr_method_getReturnType,
                                 0, 0);
-    xr_class_builder_add_method(builder, "get:isStatic", (XrCFunctionPtr) xr_method_getIsStatic, 0,
+    xr_class_builder_add_method(builder, "get:isStatic", xr_method_getIsStatic, 0,
                                 0);
-    xr_class_builder_add_method(builder, "get:isPrivate", (XrCFunctionPtr) xr_method_getIsPrivate,
+    xr_class_builder_add_method(builder, "get:isPrivate", xr_method_getIsPrivate,
                                 0, 0);
-    xr_class_builder_add_method(builder, "get:isAbstract", (XrCFunctionPtr) xr_method_getIsAbstract,
+    xr_class_builder_add_method(builder, "get:isAbstract", xr_method_getIsAbstract,
                                 0, 0);
-    xr_class_builder_add_method(builder, "get:isOverride", (XrCFunctionPtr) xr_method_getIsOverride,
+    xr_class_builder_add_method(builder, "get:isOverride", xr_method_getIsOverride,
                                 0, 0);
-    xr_class_builder_add_method(builder, "get:isGetter", (XrCFunctionPtr) xr_method_getIsGetter, 0,
+    xr_class_builder_add_method(builder, "get:isGetter", xr_method_getIsGetter, 0,
                                 0);
-    xr_class_builder_add_method(builder, "get:isSetter", (XrCFunctionPtr) xr_method_getIsSetter, 0,
+    xr_class_builder_add_method(builder, "get:isSetter", xr_method_getIsSetter, 0,
                                 0);
-    xr_class_builder_add_method(builder, "get:isOperator", (XrCFunctionPtr) xr_method_getIsOperator,
+    xr_class_builder_add_method(builder, "get:isOperator", xr_method_getIsOperator,
                                 0, 0);
     xr_class_builder_add_method(builder, "get:declaringType",
-                                (XrCFunctionPtr) xr_method_getDeclaringType, 0, 0);
+                                xr_method_getDeclaringType, 0, 0);
     xr_class_builder_add_method(builder, "get:parameterCount",
-                                (XrCFunctionPtr) xr_method_getParameterCount, 0, 0);
-    xr_class_builder_add_method(builder, "get:parameters", (XrCFunctionPtr) xr_method_getParameters,
+                                xr_method_getParameterCount, 0, 0);
+    xr_class_builder_add_method(builder, "get:parameters", xr_method_getParameters,
                                 0, 0);
 
     return xr_class_builder_finalize(builder);
@@ -163,7 +163,7 @@ static XrClass *create_constructor_class(XrayIsolate *X) {
     if (!builder)
         return NULL;
 
-    xr_class_builder_add_method(builder, "newInstance", (XrCFunctionPtr) xr_constructor_newInstance,
+    xr_class_builder_add_method(builder, "newInstance", xr_constructor_newInstance,
                                 1, 0);
 
     return xr_class_builder_finalize(builder);

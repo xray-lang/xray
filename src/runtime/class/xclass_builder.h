@@ -42,7 +42,7 @@ XR_FUNC int xr_class_builder_add_field(XrClassBuilder *builder, const char *name
 
 // Returns 0 on success, -1 on failure (e.g., duplicate method)
 XR_FUNC int xr_class_builder_add_method(XrClassBuilder *builder, const char *name,
-                                        XrCFunctionPtr impl, int param_count, uint32_t flags);
+                                        XrPrimitiveMethodFn impl, int param_count, uint32_t flags);
 
 // Add method with closure (for descriptor path)
 XR_FUNC int xr_class_builder_add_method_closure(XrClassBuilder *builder, const char *name,
@@ -53,7 +53,7 @@ XR_FUNC int xr_class_builder_add_static_field(XrClassBuilder *builder, const cha
                                               XrValue value, uint32_t flags);
 
 XR_FUNC int xr_class_builder_add_static_method(XrClassBuilder *builder, const char *name,
-                                               XrCFunctionPtr impl, int param_count,
+                                               XrPrimitiveMethodFn impl, int param_count,
                                                uint32_t flags);
 
 // Add static method with closure (for descriptor path)

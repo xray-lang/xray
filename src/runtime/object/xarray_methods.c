@@ -356,3 +356,50 @@ const XrMethodSlot xr_array_method_table[SYMBOL_BUILTIN_COUNT] = {
 
     [SYMBOL_TOSTRING] = {m_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
 };
+
+/* ========== XrClass Registration ========== */
+
+#include "xnative_type.h"
+
+void xr_array_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod array_methods[] = {
+        /* Mutation */
+        {"push", m_push, 1},
+        {"pop", m_pop, 0},
+        {"shift", m_shift, 0},
+        {"unshift", m_unshift, 1},
+        {"clear", m_clear, 0},
+        {"reverse", m_reverse, 0},
+        {"fill", m_fill, 1},
+        {"sort", m_sort, 0},
+        /* Query */
+        {"isEmpty", m_is_empty, 0},
+        {"has", m_has, 1},
+        {"includes", m_includes, 1},
+        {"indexOf", m_index_of, 1},
+        /* Construction */
+        {"slice", m_slice, 0},
+        {"concat", m_concat, 0},
+        {"join", m_join, 0},
+        /* Higher-order */
+        {"forEach", m_foreach, 1},
+        {"filter", m_filter, 1},
+        {"map", m_map, 1},
+        {"reduce", m_reduce, 2},
+        {"find", m_find, 1},
+        {"findIndex", m_find_index, 1},
+        {"every", m_every, 1},
+        {"some", m_some, 1},
+        /* Conversion */
+        {"toString", m_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo array_info = {
+        .name = "Array",
+        .gc_type = XR_TARRAY,
+        .methods = array_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &array_info);
+}
