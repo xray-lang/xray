@@ -353,7 +353,12 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * and the shared SSA value causes two variables to coalesce to
          * the same physical register — corrupting loop-carried values
          * when the source variable is subsequently modified. */
-        if (val->var_id != 0xFF && val->var_id != (uint8_t)var_id) {
+        bool need_copy = (val->var_id != 0xFF &&
+                          val->var_id != (uint8_t)var_id);
+        /* Value types (structs) always need deep copy on assignment */
+        if (!need_copy && val->type && val->type->is_value_type)
+            need_copy = true;
+        if (need_copy) {
             XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY,
                                           val->type, 1);
             if (copy) {
@@ -900,6 +905,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     int n = call->arg_count > 32 ? 32 : call->arg_count;
     for (int i = 0; i < n; i++) {
         arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
+        /* Value types (structs) passed as arguments need deep copy to
+         * ensure callee modifications don't affect the caller's binding */
+        XiValue *a = arg_vals[i];
+        if (a && a->type && a->type->is_value_type) {
+            XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY,
+                                         a->type, 1);
+            if (cpy) { cpy->args[0] = a; arg_vals[i] = cpy; }
+        }
     }
 
     /* Detect self-call: callee resolves to the self-reference variable.
@@ -914,9 +927,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     if (!v) return NULL;
 
     v->args[0] = callee_val;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++)
         v->args[i + 1] = arg_vals[i];
-    }
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     v->line = (uint32_t) node->line;
     if (is_self_call) v->aux_int = 1;
