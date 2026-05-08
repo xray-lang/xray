@@ -149,6 +149,12 @@ typedef struct XiLower {
      * modifications made before the throw. */
     int try_depth;
 
+    /* True when cur_block's last instruction is XI_THROW but the block
+     * is kept alive for SSA predecessor edges (try_depth > 0).
+     * Consumers must NOT append semantically live code to this block.
+     * Reset when cur_block changes to a genuinely new block. */
+    bool dead_after_throw;
+
     /* Error tracking */
     bool had_error;
 } XiLower;

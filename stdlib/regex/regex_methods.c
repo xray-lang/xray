@@ -175,6 +175,28 @@ static XrValue m_pattern(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return xr_string_value(xr_string_intern(iso, pat, strlen(pat), 0));
 }
 
+// regex.toString() -> string (e.g. "/pattern/")
+static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    const char *pat = xr_regex_pattern(re_self(self));
+    if (!pat)
+        return xr_string_value(xr_string_intern(iso, "Regex()", 7, 0));
+    size_t plen = strlen(pat);
+    /* Build "/pattern/" representation. */
+    size_t total = plen + 2;  /* '/' + pattern + '/' */
+    char *buf = (char *) xr_malloc(total + 1);
+    if (!buf)
+        return xr_string_value(xr_string_intern(iso, pat, plen, 0));
+    buf[0] = '/';
+    memcpy(buf + 1, pat, plen);
+    buf[plen + 1] = '/';
+    buf[total] = '\0';
+    XrString *result = xr_string_intern(iso, buf, total, 0);
+    xr_free(buf);
+    return xr_string_value(result);
+}
+
 /* ========== Slot table ========== */
 
 #define MAY_THROW XR_METHOD_FLAG_MAY_THROW
@@ -187,6 +209,7 @@ const XrMethodSlot xr_regex_method_table[SYMBOL_BUILTIN_COUNT] = {
     [SYMBOL_REPLACEALL] = {m_replace_all, 2, 2, MAY_THROW},
     [SYMBOL_SPLIT] = {m_split, 1, 2, MAY_THROW},
     [SYMBOL_PATTERN] = {m_pattern, 0, 0, XR_METHOD_FLAG_PURE},
+    [SYMBOL_TOSTRING] = {m_to_string, 0, 0, MAY_THROW},
 };
 
 #undef MAY_THROW

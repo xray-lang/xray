@@ -38,6 +38,7 @@
 #include "../runtime/class/xreflect_api.h"
 #include "../runtime/object/builtins/xjson_builtins.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../runtime/value/xmethod_table.h"
 #include "../base/xmalloc.h"
 #include "../../stdlib/stdlib_cache.h"
 #include "../base/xglobal_indices.h"
@@ -71,6 +72,10 @@ static int isolate_init_full(XrayIsolate *isolate) {
     if (!isolate->symbol_table)
         return -1;
     xr_symbol_table_init_builtins((XrSymbolTable *) isolate->symbol_table);
+
+    /* Verify builtin method tables implement required protocols.
+     * Debug-only: catches missing methods at boot, not at first call. */
+    xr_method_table_verify_protocols();
 
     // Type registry (must be before core_init, which registers classes)
     xr_registry_init(isolate);

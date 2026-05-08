@@ -64,3 +64,68 @@ const XrMethodSlot *const xr_builtin_method_tables[XR_TID_COUNT] = {
  *     entry corresponds to NULL.
  */
 XR_STATIC_ASSERT(XR_TID_NULL == 0, "XR_TID_NULL must be 0 so default-init slots map to it");
+
+/* ========== Protocol Completeness Verification ========== */
+
+#include "../../base/xchecks.h"
+#include "../symbol/xsymbol_table.h"
+
+/*
+ * Verify that every type with a registered method table implements the
+ * required protocols.  Catches missing method registrations at boot
+ * rather than at first call.
+ *
+ *   - toString:  every type with a table must provide it (print,
+ *                string interpolation, and explicit conversion all
+ *                dispatch through the method table).
+ *   - iterator:  collection types that use XrIterator (Map, Set, Json)
+ *                must provide it for for-in loops.
+ *   - keys:      key-enumerable types (Map, Json) must provide it.
+ */
+
+/* Helper: check that table[sym] has a non-NULL fn. */
+static bool has_method(XrTypeId tid, int sym) {
+    return xr_method_table_lookup(tid, sym, SYMBOL_BUILTIN_COUNT) != NULL;
+}
+
+XR_FUNC void xr_method_table_verify_protocols(void) {
+#if XR_DEBUG
+    /* Every type with a registered method table must support toString. */
+    for (int tid = 0; tid < XR_TID_COUNT; tid++) {
+        if (xr_builtin_method_tables[tid] != NULL) {
+            XR_CHECK_FMT(has_method((XrTypeId)tid, SYMBOL_TOSTRING),
+                         "builtin type %d has method table but missing toString", tid);
+        }
+    }
+
+    /* Collections whose plain for-in (for v in coll) dispatches through
+     * the method table's iterator() slot.  Array/String use index-based
+     * loops and don't need this. */
+    static const XrTypeId iterator_types[] = {
+        XR_TID_MAP, XR_TID_SET
+    };
+    for (int i = 0; i < (int)(sizeof(iterator_types) / sizeof(iterator_types[0])); i++) {
+        XR_CHECK_FMT(has_method(iterator_types[i], SYMBOL_ITERATOR),
+                     "type %d missing iterator method", iterator_types[i]);
+    }
+
+    /* Types that support key-value for-in (for k, v in coll) must
+     * provide entriesIterator(). */
+    static const XrTypeId kv_iterable_types[] = {
+        XR_TID_MAP, XR_TID_JSON
+    };
+    for (int i = 0; i < (int)(sizeof(kv_iterable_types) / sizeof(kv_iterable_types[0])); i++) {
+        XR_CHECK_FMT(has_method(kv_iterable_types[i], SYMBOL_ENTRIES_ITERATOR),
+                     "type %d missing entriesIterator method", kv_iterable_types[i]);
+    }
+
+    /* Key-enumerable types must provide keys(). */
+    static const XrTypeId keyable_types[] = {
+        XR_TID_MAP, XR_TID_JSON
+    };
+    for (int i = 0; i < (int)(sizeof(keyable_types) / sizeof(keyable_types[0])); i++) {
+        XR_CHECK_FMT(has_method(keyable_types[i], SYMBOL_KEYS),
+                     "type %d missing keys method", keyable_types[i]);
+    }
+#endif  /* XR_DEBUG */
+}
