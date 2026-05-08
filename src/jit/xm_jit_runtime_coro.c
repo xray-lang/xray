@@ -426,7 +426,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
             XrValue args[16];
             for (int i = 0; i < nargs && i < 15; i++)
                 args[i] = jit_value_from_tag(coro->jit_ctx->call_args[1 + i], XR_TAG_I64);
-            ctor->as.primitive(isolate, args, nargs);
+            ctor->as.primitive(isolate, xr_value_from_instance(instance), args, nargs);
         }
 
         // Return instance pointer regardless of constructor outcome

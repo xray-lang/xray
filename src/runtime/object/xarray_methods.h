@@ -30,6 +30,11 @@ extern "C" {
 
 extern const XrMethodSlot xr_array_method_table[SYMBOL_BUILTIN_COUNT];
 
+/* Register Array methods on an XrClass via native_type_classes[XR_TARRAY].
+ * Called once during isolate init. */
+struct XrayIsolate;
+XR_FUNC void xr_array_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

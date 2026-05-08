@@ -480,3 +480,66 @@ const XrMethodSlot xr_string_method_table[SYMBOL_BUILTIN_COUNT] = {
 
 #undef PURE_NO_GC
 #undef MAY_THROW
+
+/* ========== XrClass Registration ========== */
+
+#include "xnative_type.h"
+
+void xr_string_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod string_methods[] = {
+        /* Indexing / extraction */
+        {"charAt", m_char_at, 1},
+        {"codePointAt", m_codepoint_at, 1},
+        {"substring", m_substring, 0},
+        {"slice", m_slice, 0},
+        {"byteAt", m_byte_at, 1},
+        /* Search */
+        {"indexOf", m_index_of, 1},
+        {"lastIndexOf", m_last_index_of, 1},
+        {"contains", m_contains, 1},
+        {"has", m_has, 1},
+        {"startsWith", m_starts_with, 1},
+        {"endsWith", m_ends_with, 1},
+        /* Case / whitespace */
+        {"toLowerCase", m_to_lower, 0},
+        {"toUpperCase", m_to_upper, 0},
+        {"trim", m_trim, 0},
+        {"trimStart", m_trim_start, 0},
+        {"trimEnd", m_trim_end, 0},
+        {"padStart", m_pad_start, 1},
+        {"padEnd", m_pad_end, 1},
+        /* Replacement / construction */
+        {"split", m_split, 0},
+        {"replace", m_replace, 2},
+        {"replaceAll", m_replace_all, 2},
+        {"repeat", m_repeat, 1},
+        {"concat", m_concat, 0},
+        /* Reverse / translate */
+        {"reverse", m_reverse, 0},
+        {"reverseBytes", m_reverse_bytes, 0},
+        {"translateBytes", m_translate_bytes, 1},
+        {"translate", m_translate, 1},
+        /* Predicates */
+        {"isEmpty", m_is_empty, 0},
+        {"isLetter", m_is_letter, 0},
+        {"isNumber", m_is_number, 0},
+        {"isAlphanumeric", m_is_alnum, 0},
+        {"isWhitespace", m_is_whitespace, 0},
+        /* Conversion / Unicode */
+        {"toInt", m_to_int, 0},
+        {"toFloat", m_to_float, 0},
+        {"ord", m_ord, 0},
+        /* Regex */
+        {"match", m_match, 1},
+        {"toString", m_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo string_info = {
+        .name = "String",
+        .gc_type = XR_TSTRING,
+        .methods = string_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &string_info);
+}

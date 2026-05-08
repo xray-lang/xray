@@ -58,12 +58,12 @@ static inline XrFieldMetadata *get_field_meta(XrValue val) {
 
 /* ========== Field Property Getters ========== */
 
-XrValue xr_field_getName(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "field_getName: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *meta = get_field_meta(args[0]);
+    XrFieldMetadata *meta = get_field_meta(self);
     if (!meta || !meta->owner)
         return xr_null();
 
@@ -74,12 +74,12 @@ XrValue xr_field_getName(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(xr_string_intern(isolate, desc->name, strlen(desc->name), 0));
 }
 
-XrValue xr_field_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_getType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "field_getType: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
+    XrFieldMetadata *field = get_field_meta(self);
     if (!field || !field->owner)
         return xr_null();
 
@@ -96,12 +96,12 @@ XrValue xr_field_getType(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-XrValue xr_field_getIsStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_getIsStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
+    XrFieldMetadata *field = get_field_meta(self);
     if (!field || !field->owner)
         return xr_bool(false);
 
@@ -109,12 +109,12 @@ XrValue xr_field_getIsStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_bool((desc->flags & XR_FIELD_STATIC) != 0);
 }
 
-XrValue xr_field_getIsReadonly(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_getIsReadonly(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
+    XrFieldMetadata *field = get_field_meta(self);
     if (!field || !field->owner)
         return xr_bool(false);
 
@@ -122,23 +122,23 @@ XrValue xr_field_getIsReadonly(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_bool(desc->flags & XR_FIELD_FINAL);
 }
 
-XrValue xr_field_getIsPrivate(XrayIsolate *X, XrValue *args, int nargs) {
+XrValue xr_field_getIsPrivate(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *meta = get_field_meta(args[0]);
+    XrFieldMetadata *meta = get_field_meta(self);
     if (!meta || !meta->owner)
         return xr_bool(false);
 
     return xr_bool(xr_class_is_field_private(meta->owner, meta->field_index));
 }
 
-XrValue xr_field_getDeclaringType(XrayIsolate *X, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
+XrValue xr_field_getDeclaringType(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *meta = get_field_meta(args[0]);
+    XrFieldMetadata *meta = get_field_meta(self);
     if (!meta || !meta->owner)
         return xr_null();
 
@@ -148,15 +148,15 @@ XrValue xr_field_getDeclaringType(XrayIsolate *X, XrValue *args, int nargs) {
 
 /* ========== Field Methods ========== */
 
-XrValue xr_field_get(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_get(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Field.get: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Field.get: requires 1 argument");
         return xr_null();
     }
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
-    XrValue instance = args[1];
+    XrFieldMetadata *field = get_field_meta(self);
+    XrValue instance = args[0];
 
     if (!field || !field->owner)
         return xr_null();
@@ -168,16 +168,16 @@ XrValue xr_field_get(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_instance_get_field_by_index(XR_TO_INSTANCE(instance), field->field_index);
 }
 
-XrValue xr_field_set(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_set(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 3) {
-        xr_log_warning("reflect", "Field.set: requires 3 arguments");
+    if (nargs < 2) {
+        xr_log_warning("reflect", "Field.set: requires 2 arguments");
         return xr_null();
     }
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
-    XrValue instance = args[1];
-    XrValue value = args[2];
+    XrFieldMetadata *field = get_field_meta(self);
+    XrValue instance = args[0];
+    XrValue value = args[1];
 
     if (!field || !field->owner)
         return xr_null();
@@ -190,14 +190,12 @@ XrValue xr_field_set(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Field.getStatic: requires 1 argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
+    XrFieldMetadata *field = get_field_meta(self);
     if (!field || !field->owner)
         return xr_null();
 
@@ -218,15 +216,15 @@ XrValue xr_field_getStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_null();
 }
 
-XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Field.setStatic: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Field.setStatic: requires 1 argument");
         return xr_null();
     }
 
-    XrFieldMetadata *field = get_field_meta(args[0]);
-    XrValue value = args[1];
+    XrFieldMetadata *field = get_field_meta(self);
+    XrValue value = args[0];
 
     if (!field || !field->owner)
         return xr_null();
@@ -252,12 +250,12 @@ XrValue xr_field_setStatic(XrayIsolate *isolate, XrValue *args, int nargs) {
 /* === Method property getters (was xreflect_method_stubs)=== */
 /* ========================================================== */
 
-XrValue xr_method_getIsStatic(XrayIsolate *X, XrValue *args, int nargs) {
+XrValue xr_method_getIsStatic(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *meta = get_method_meta(args[0]);
+    XrMethodMetadata *meta = get_method_meta(self);
     if (!meta || !meta->owner)
         return xr_bool(false);
 
@@ -265,12 +263,12 @@ XrValue xr_method_getIsStatic(XrayIsolate *X, XrValue *args, int nargs) {
     return xr_bool((method->flags & XMETHOD_FLAG_STATIC) != 0);
 }
 
-XrValue xr_method_getIsPrivate(XrayIsolate *X, XrValue *args, int nargs) {
+XrValue xr_method_getIsPrivate(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *meta = get_method_meta(args[0]);
+    XrMethodMetadata *meta = get_method_meta(self);
     if (!meta || !meta->owner)
         return xr_bool(false);
 
@@ -278,12 +276,12 @@ XrValue xr_method_getIsPrivate(XrayIsolate *X, XrValue *args, int nargs) {
     return xr_bool((method->flags & XMETHOD_FLAG_PRIVATE) != 0);
 }
 
-XrValue xr_method_getIsAbstract(XrayIsolate *X, XrValue *args, int nargs) {
+XrValue xr_method_getIsAbstract(XrayIsolate *X, XrValue self, XrValue *args, int nargs) {
     (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrMethodMetadata *meta = get_method_meta(args[0]);
+    XrMethodMetadata *meta = get_method_meta(self);
     if (!meta || !meta->owner)
         return xr_bool(false);
 
@@ -295,14 +293,10 @@ XrValue xr_method_getIsAbstract(XrayIsolate *X, XrValue *args, int nargs) {
 /* === Constructor section (was xreflect_constructor.c)   === */
 /* ========================================================== */
 
-XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "constructor_newInstance: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Constructor.newInstance: requires at least 1 argument");
-        return xr_null();
-    }
 
-    XrMethodMetadata *ctor = xr_get_method_metadata(args[0]);
+    XrMethodMetadata *ctor = xr_get_method_metadata(self);
 
     if (!ctor || !ctor->owner) {
         xr_log_warning("reflect", "Constructor.newInstance: invalid constructor");
@@ -318,8 +312,8 @@ XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int narg
     XrArray *arg_array = NULL;
     int arg_count = 0;
 
-    if (nargs >= 2 && XR_IS_ARRAY(args[1])) {
-        arg_array = XR_TO_ARRAY(args[1]);
+    if (nargs >= 1 && XR_IS_ARRAY(args[0])) {
+        arg_array = XR_TO_ARRAY(args[0]);
         arg_count = arg_array->length;
     }
 
@@ -331,7 +325,6 @@ XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int narg
 
     XrValue call_args[256];
     int total_args = 0;
-    call_args[total_args++] = instance_val;
 
     if (arg_array && arg_count > 0) {
         for (int i = 0; i < arg_count; i++) {
@@ -342,12 +335,15 @@ XrValue xr_constructor_newInstance(XrayIsolate *isolate, XrValue *args, int narg
     XrMethod *method = &ctor->owner->methods[ctor->method_index];
 
     if (method->type == XMETHOD_PRIMITIVE) {
-        XrCFunctionPtr func = method->as.primitive;
-        func(isolate, call_args, total_args);
+        method->as.primitive(isolate, instance_val, call_args, total_args);
     } else if (method->type == XMETHOD_CLOSURE) {
         XrClosure *closure = method->as.closure;
         if (closure) {
-            xr_vm_call_closure(isolate, closure, call_args, total_args);
+            XrValue cl_args[256];
+            cl_args[0] = instance_val;
+            for (int i = 0; i < total_args && i < 255; i++)
+                cl_args[i + 1] = call_args[i];
+            xr_vm_call_closure(isolate, closure, cl_args, total_args + 1);
         }
     }
 

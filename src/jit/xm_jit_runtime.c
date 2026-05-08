@@ -394,9 +394,7 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
             }
             XrMethod *method = xr_class_lookup_method(inst->klass, method_symbol);
             if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                XrValue call_args[9];
-                jit_build_this_args(call_args, receiver, args, nargs);
-                result = method->as.primitive(isolate, call_args, nargs + 1);
+                result = method->as.primitive(isolate, receiver, args, nargs);
             } else if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
                 XrValue call_args[9];
                 jit_build_this_args(call_args, receiver, args, nargs);
@@ -437,7 +435,7 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                         return XR_JIT_NULL();
                     }
                 } else if (ctor && ctor->type == XMETHOD_PRIMITIVE && ctor->as.primitive) {
-                    result = ctor->as.primitive(isolate, args, nargs);
+                    result = ctor->as.primitive(isolate, inst_val, args, nargs);
                     break;
                 }
                 // Return instance (constructor modifies it in-place)
@@ -526,9 +524,7 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                 if (klass) {
                     XrMethod *method = xr_class_lookup_method(klass, method_symbol);
                     if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                        XrValue call_args[9];
-                        jit_build_this_args(call_args, receiver, args, nargs);
-                        result = method->as.primitive(isolate, call_args, nargs + 1);
+                        result = method->as.primitive(isolate, receiver, args, nargs);
                     }
                 }
             }

@@ -25,7 +25,8 @@
 // Array() - empty array
 // Array(n) - length n, filled with null
 // Array(n, value) - length n, filled with value
-XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "array_construct: NULL isolate");
     if (nargs == 0) {
         // Array() - empty array
@@ -82,7 +83,8 @@ XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue *args, int narg
 }
 
 // Array.from(iterable) - create array from iterable or string
-XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "array_from: NULL isolate");
     if (nargs != 1) {
         xr_runtime_error(isolate, "Array.from() expects 1 argument\n");
@@ -151,7 +153,8 @@ XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Array.range(start, end) - create array [start, start+1, ..., end]
-XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "array_range: NULL isolate");
     if (nargs != 2) {
         xr_runtime_error(isolate, "Array.range() expects 2 arguments\n");
@@ -183,7 +186,8 @@ XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Array.withCapacity(n) - capacity n, length 0 (performance optimization)
-XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "array_with_capacity: NULL isolate");
     if (nargs != 1) {
         xr_runtime_error(isolate, "Array.withCapacity() expects 1 argument\n");

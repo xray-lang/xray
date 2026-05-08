@@ -44,6 +44,9 @@ extern "C" {
 
 extern const XrMethodSlot xr_map_method_table[SYMBOL_BUILTIN_COUNT];
 
+struct XrayIsolate;
+XR_FUNC void xr_map_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

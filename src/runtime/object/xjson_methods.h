@@ -28,6 +28,9 @@ extern "C" {
 
 extern const XrMethodSlot xr_json_method_table[SYMBOL_BUILTIN_COUNT];
 
+struct XrayIsolate;
+XR_FUNC void xr_json_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

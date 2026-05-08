@@ -49,13 +49,14 @@ static void append_value(XrStringBuilder *sb, XrayIsolate *iso, XrValue value) {
 /* ========== Constructor ========== */
 
 // StringBuilder() or StringBuilder(initValue)
-XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+    (void) self;
     XR_DCHECK(isolate != NULL, "stringbuilder_new: NULL isolate");
     XrStringBuilder *sb = xr_stringbuilder_new(xr_current_coro(isolate));
     if (!sb)
         return xr_null();
 
-    if (nargs > 0) {
+    if (argc > 0) {
         append_value(sb, isolate, args[0]);
     }
 
@@ -65,28 +66,24 @@ XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue *args, int na
 /* ========== Instance Methods ========== */
 
 // sb.append(value) - supports chaining
-XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    XrValue receiver = args[0];
-    XrStringBuilder *sb = xr_to_stringbuilder(receiver);
+XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+    XrStringBuilder *sb = xr_to_stringbuilder(self);
     if (!sb)
         return xr_null();
 
-    for (int i = 1; i < nargs; i++) {
+    for (int i = 0; i < argc; i++) {
         append_value(sb, isolate, args[i]);
     }
 
-    return receiver;
+    return self;
 }
 
 // sb.toString()
-XrValue xr_builtin_stringbuilder_toString(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1)
-        return xr_null();
-
-    XrStringBuilder *sb = xr_to_stringbuilder(args[0]);
+XrValue xr_builtin_stringbuilder_toString(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                          int argc) {
+    (void) args;
+    (void) argc;
+    XrStringBuilder *sb = xr_to_stringbuilder(self);
     if (!sb)
         return xr_null();
 
@@ -99,26 +96,26 @@ XrValue xr_builtin_stringbuilder_toString(XrayIsolate *isolate, XrValue *args, i
 }
 
 // sb.clear()
-XrValue xr_builtin_stringbuilder_clear(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_stringbuilder_clear(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                       int argc) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_null();
-
-    XrStringBuilder *sb = xr_to_stringbuilder(args[0]);
+    (void) args;
+    (void) argc;
+    XrStringBuilder *sb = xr_to_stringbuilder(self);
     if (!sb)
         return xr_null();
 
     xr_stringbuilder_clear(sb);
-    return args[0];
+    return self;
 }
 
 // sb.length
-XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                        int argc) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_int(0);
-
-    XrStringBuilder *sb = xr_to_stringbuilder(args[0]);
+    (void) args;
+    (void) argc;
+    XrStringBuilder *sb = xr_to_stringbuilder(self);
     if (!sb)
         return xr_int(0);
 
@@ -139,17 +136,13 @@ XrClass *xr_stringbuilder_create_class(XrayIsolate *X, XrClass *objectClass) {
 
     // Static constructor
     xr_class_builder_add_static_method(builder, XR_KEYWORD_CONSTRUCTOR,
-                                       (XrCFunctionPtr) xr_builtin_stringbuilder_new, 0, 0);
+                                       xr_builtin_stringbuilder_new, 0, 0);
 
     // Instance methods
-    xr_class_builder_add_method(builder, "append", (XrCFunctionPtr) xr_builtin_stringbuilder_append,
-                                1, 0);
-    xr_class_builder_add_method(builder, "toString",
-                                (XrCFunctionPtr) xr_builtin_stringbuilder_toString, 0, 0);
-    xr_class_builder_add_method(builder, "clear", (XrCFunctionPtr) xr_builtin_stringbuilder_clear,
-                                0, 0);
-    xr_class_builder_add_method(builder, "length", (XrCFunctionPtr) xr_builtin_stringbuilder_length,
-                                0, 0);
+    xr_class_builder_add_method(builder, "append", xr_builtin_stringbuilder_append, 1, 0);
+    xr_class_builder_add_method(builder, "toString", xr_builtin_stringbuilder_toString, 0, 0);
+    xr_class_builder_add_method(builder, "clear", xr_builtin_stringbuilder_clear, 0, 0);
+    xr_class_builder_add_method(builder, "length", xr_builtin_stringbuilder_length, 0, 0);
 
     return xr_class_builder_finalize(builder);
 }

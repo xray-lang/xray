@@ -30,17 +30,17 @@ typedef struct {
 /* ========== Script-callable Functions ========== */
 
 // parse(str) → XrValue
-XR_FUNC XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_json_fn_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc);
 
 // Core stringify: returns result + error info without throwing.
 // Callers that need exception semantics should inspect has_error and throw.
 XR_FUNC XrJsonStringifyResult xr_json_stringify_core(XrayIsolate *X, XrValue val, int indent);
 
 // isValid(str, strict?) → bool (zero-allocation validator)
-XR_FUNC XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue self, XrValue *args, int argc);
 
 // tryParse(str) → Json {value, error}
-XR_FUNC XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue *args, int argc);
+XR_FUNC XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc);
 
 /* ========== C API ========== */
 

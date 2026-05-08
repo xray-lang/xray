@@ -56,6 +56,9 @@ static inline XrValue xr_bool_to_string(XrayIsolate *iso, XrValue self, XrValue 
  */
 extern const XrMethodSlot xr_bool_method_table[SYMBOL_BUILTIN_COUNT];
 
+struct XrayIsolate;
+XR_FUNC void xr_bool_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

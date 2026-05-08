@@ -23,15 +23,13 @@
 // NULL cache; every caller below keeps its pre-existing defensive
 // branch to create wrapper objects on the fly in that case.
 
-XrValue xr_type_getFields(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getFields(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getFields: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Type.getFields: requires this argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta)
         return xr_null();
 
@@ -51,15 +49,13 @@ XrValue xr_type_getFields(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_value_from_array(array);
 }
 
-XrValue xr_type_getDeclaredFields(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getDeclaredFields(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getDeclaredFields: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Type.getDeclaredFields: requires this argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_null();
 
@@ -85,21 +81,21 @@ XrValue xr_type_getDeclaredFields(XrayIsolate *isolate, XrValue *args, int nargs
     return xr_value_from_array(array);
 }
 
-XrValue xr_type_getField(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getField(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getField: NULL isolate");
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Type.getField: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Type.getField: requires 1 argument");
         return xr_null();
     }
 
-    if (!XR_IS_STRING(args[1])) {
+    if (!XR_IS_STRING(args[0])) {
         xr_log_warning("reflect", "Type.getField: argument must be string");
         return xr_null();
     }
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
-    XrString *name_str = XR_TO_STRING(args[1]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
+    XrString *name_str = XR_TO_STRING(args[0]);
 
     if (!meta || !meta->klass)
         return xr_null();
@@ -134,15 +130,13 @@ XrValue xr_type_getField(XrayIsolate *isolate, XrValue *args, int nargs) {
  * Type.getMethods(): Array<Method>
  */
 
-XrValue xr_type_getMethods(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getMethods(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getMethods: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Type.getMethods: requires this argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_null();
 
@@ -172,15 +166,13 @@ XrValue xr_type_getMethods(XrayIsolate *isolate, XrValue *args, int nargs) {
  * Returns only methods declared in this class (not inherited)
  */
 
-XrValue xr_type_getDeclaredMethods(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getDeclaredMethods(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getDeclaredMethods: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Type.getDeclaredMethods: requires this argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_null();
 
@@ -215,21 +207,21 @@ XrValue xr_type_getDeclaredMethods(XrayIsolate *isolate, XrValue *args, int narg
  * Type.getMethod(name: string): Method?
  */
 
-XrValue xr_type_getMethod(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getMethod(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getMethod: NULL isolate");
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Type.getMethod: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Type.getMethod: requires 1 argument");
         return xr_null();
     }
 
-    if (!XR_IS_STRING(args[1])) {
+    if (!XR_IS_STRING(args[0])) {
         xr_log_warning("reflect", "Type.getMethod: argument must be string");
         return xr_null();
     }
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
-    XrString *name_str = XR_TO_STRING(args[1]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
+    XrString *name_str = XR_TO_STRING(args[0]);
 
     if (!meta || !meta->klass)
         return xr_null();
@@ -262,15 +254,13 @@ XrValue xr_type_getMethod(XrayIsolate *isolate, XrValue *args, int nargs) {
  * Type.getConstructor(): Constructor?
  */
 
-XrValue xr_type_getConstructor(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getConstructor(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getConstructor: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Type.getConstructor: requires this argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta)
         return xr_null();
 
@@ -292,15 +282,13 @@ XrValue xr_type_getConstructor(XrayIsolate *isolate, XrValue *args, int nargs) {
  * Type.newInstance(): Json
  */
 
-XrValue xr_type_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_newInstance(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_newInstance: NULL isolate");
-    if (nargs < 1) {
-        xr_log_warning("reflect", "Type.newInstance: requires this argument");
-        return xr_null();
-    }
+    (void) args;
+    (void) nargs;
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_null();
 
@@ -308,15 +296,15 @@ XrValue xr_type_newInstance(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_value_from_instance(instance);
 }
 
-XrValue xr_type_newInstanceWith(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_newInstanceWith(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_newInstanceWith: NULL isolate");
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Type.newInstanceWith: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Type.newInstanceWith: requires 1 argument");
         return xr_null();
     }
 
     XrayIsolate *X = isolate;
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_null();
 
@@ -333,28 +321,29 @@ XrValue xr_type_newInstanceWith(XrayIsolate *isolate, XrValue *args, int nargs) 
                 XrArray *arg_array = NULL;
                 int arg_count = 0;
 
-                if (XR_IS_ARRAY(args[1])) {
-                    arg_array = XR_TO_ARRAY(args[1]);
+                if (XR_IS_ARRAY(args[0])) {
+                    arg_array = XR_TO_ARRAY(args[0]);
                     arg_count = arg_array->length;
                 }
 
                 XrValue call_args[256];
                 int total_args = 0;
 
-                call_args[total_args++] = instance_val;
-
                 if (arg_array && arg_count > 0) {
                     XrValue *adata = (XrValue *) arg_array->data;
-                    for (int j = 0; j < arg_count && total_args < 256; j++) {
+                    for (int j = 0; j < arg_count && total_args < 255; j++) {
                         call_args[total_args++] = adata[j];
                     }
                 }
 
                 if (method->type == XMETHOD_PRIMITIVE) {
-                    XrCFunctionPtr func = method->as.primitive;
-                    func(X, call_args, total_args);
+                    method->as.primitive(X, instance_val, call_args, total_args);
                 } else if (method->type == XMETHOD_CLOSURE && method->as.closure) {
-                    xr_vm_call_closure(X, method->as.closure, call_args, total_args);
+                    XrValue cl_args[256];
+                    cl_args[0] = instance_val;
+                    for (int k = 0; k < total_args && k < 255; k++)
+                        cl_args[k + 1] = call_args[k];
+                    xr_vm_call_closure(X, method->as.closure, cl_args, total_args + 1);
                 }
 
                 break;
@@ -365,15 +354,15 @@ XrValue xr_type_newInstanceWith(XrayIsolate *isolate, XrValue *args, int nargs) 
     return instance_val;
 }
 
-XrValue xr_type_isSubtypeOf(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_isSubtypeOf(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Type.isSubtypeOf: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Type.isSubtypeOf: requires 1 argument");
         return xr_bool(false);
     }
 
-    XrTypeMetadata *this_meta = xr_get_type_metadata(args[0]);
-    XrTypeMetadata *other_meta = xr_get_type_metadata(args[1]);
+    XrTypeMetadata *this_meta = xr_get_type_metadata(self);
+    XrTypeMetadata *other_meta = xr_get_type_metadata(args[0]);
 
     if (!this_meta || !other_meta)
         return xr_bool(false);
@@ -384,15 +373,15 @@ XrValue xr_type_isSubtypeOf(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_bool(result);
 }
 
-XrValue xr_type_isAssignableFrom(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_isAssignableFrom(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Type.isAssignableFrom: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Type.isAssignableFrom: requires 1 argument");
         return xr_bool(false);
     }
 
-    XrTypeMetadata *this_meta = xr_get_type_metadata(args[0]);
-    XrTypeMetadata *other_meta = xr_get_type_metadata(args[1]);
+    XrTypeMetadata *this_meta = xr_get_type_metadata(self);
+    XrTypeMetadata *other_meta = xr_get_type_metadata(args[0]);
 
     if (!this_meta || !other_meta)
         return xr_bool(false);
@@ -403,20 +392,20 @@ XrValue xr_type_isAssignableFrom(XrayIsolate *isolate, XrValue *args, int nargs)
     return xr_bool(result);
 }
 
-XrValue xr_type_implements(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_implements(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2) {
-        xr_log_warning("reflect", "Type.implements: requires 2 arguments");
+    if (nargs < 1) {
+        xr_log_warning("reflect", "Type.implements: requires 1 argument");
         return xr_bool(false);
     }
 
     // Get the type being checked
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_bool(false);
 
     // Get the interface to check against
-    XrTypeMetadata *iface_meta = xr_get_type_metadata(args[1]);
+    XrTypeMetadata *iface_meta = xr_get_type_metadata(args[0]);
     if (!iface_meta || !iface_meta->klass)
         return xr_bool(false);
 
@@ -430,12 +419,12 @@ XrValue xr_type_implements(XrayIsolate *isolate, XrValue *args, int nargs) {
 
 /* ========== Type Property Getters ========== */
 
-XrValue xr_type_getName(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getName: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta)
         return xr_null();
 
@@ -447,12 +436,12 @@ XrValue xr_type_getName(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(name_str);
 }
 
-XrValue xr_type_getKind(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getKind(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getKind: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta)
         return xr_null();
 
@@ -469,38 +458,38 @@ XrValue xr_type_getKind(XrayIsolate *isolate, XrValue *args, int nargs) {
     return xr_string_value(kind);
 }
 
-XrValue xr_type_getIsAbstract(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getIsAbstract(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_bool(false);
 
     return xr_bool((meta->klass->flags & XR_CLASS_ABSTRACT) != 0);
 }
 
-XrValue xr_type_getIsFinal(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getIsFinal(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1)
-        return xr_bool(false);
+    (void) args;
+    (void) nargs;
 
-    XrTypeMetadata *meta = xr_get_type_metadata(args[0]);
+    XrTypeMetadata *meta = xr_get_type_metadata(self);
     if (!meta || !meta->klass)
         return xr_bool(false);
 
     return xr_bool((meta->klass->flags & XR_CLASS_FINAL) != 0);
 }
 
-XrValue xr_type_getSuperType(XrayIsolate *isolate, XrValue *args, int nargs) {
+XrValue xr_type_getSuperType(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     XR_DCHECK(isolate != NULL, "type_getSuperType: NULL isolate");
-    if (nargs < 1)
-        return xr_null();
+    (void) args;
+    (void) nargs;
 
-    if (!XR_IS_INSTANCE(args[0]))
+    if (!XR_IS_INSTANCE(self))
         return xr_null();
-    TypeWrapper *wrapper = (TypeWrapper *) XR_TO_INSTANCE(args[0]);
+    TypeWrapper *wrapper = (TypeWrapper *) XR_TO_INSTANCE(self);
     XrTypeMetadata *meta = &wrapper->metadata;
 
     if (!meta->klass)

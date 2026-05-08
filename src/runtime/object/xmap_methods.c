@@ -170,3 +170,34 @@ const XrMethodSlot xr_map_method_table[SYMBOL_BUILTIN_COUNT] = {
     [SYMBOL_ENTRIES_ITERATOR] = {xr_map_method_entries_iterator, 0, 0, 0},
     [SYMBOL_TOSTRING] = {xr_map_method_to_string, 0, 0, XR_METHOD_FLAG_MAY_THROW},
 };
+
+/* ========== XrClass Registration ========== */
+
+#include "xnative_type.h"
+
+void xr_map_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod map_methods[] = {
+        {"isEmpty", xr_map_method_is_empty, 0},
+        {"has", xr_map_method_has, 1},
+        {"get", xr_map_method_get, 1},
+        {"set", xr_map_method_set, 0},
+        {"delete", xr_map_method_delete, 1},
+        {"clear", xr_map_method_clear, 0},
+        {"keys", xr_map_method_keys, 0},
+        {"values", xr_map_method_values, 0},
+        {"entries", xr_map_method_entries, 0},
+        {"hasValue", xr_map_method_has_value, 1},
+        {"iterator", xr_map_method_iterator, 0},
+        {"entriesIterator", xr_map_method_entries_iterator, 0},
+        {"toString", xr_map_method_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo map_info = {
+        .name = "Map",
+        .gc_type = XR_TMAP,
+        .methods = map_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &map_info);
+}

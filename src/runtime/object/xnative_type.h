@@ -27,9 +27,9 @@
 
 // Native method descriptor (array ends with {NULL, NULL, 0})
 typedef struct XrNativeMethod {
-    const char *name;     // Method name
-    XrCFunctionPtr func;  // C function pointer
-    int arity;            // Parameter count (including this, -1 for variadic)
+    const char *name;          // Method name
+    XrPrimitiveMethodFn func;  // C function pointer (iso, self, args, argc)
+    int arity;                 // Parameter count (excluding self, -1 for variadic)
 } XrNativeMethod;
 
 /* ========== Native Type Registration Info ========== */

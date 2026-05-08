@@ -478,7 +478,7 @@ XR_NOINLINE int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVal
 
         // Primitive constructor (Map, Array, etc.)
         if (ctor != NULL && ctor->type == XMETHOD_PRIMITIVE && ctor->as.primitive != NULL) {
-            XrValue result = ctor->as.primitive(isolate, &base[a + 2], nargs);
+            XrValue result = ctor->as.primitive(isolate, inst_val, &base[a + 2], nargs);
             base[a] = result;
             return VM_COLD_BREAK;
         }
@@ -526,7 +526,7 @@ XR_NOINLINE int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVal
         }
 
         if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
-            XrValue result = method->as.primitive(isolate, &base[a + 2], nargs);
+            XrValue result = method->as.primitive(isolate, base[a + 1], &base[a + 2], nargs);
             base[a] = result;
             /* Check if the builtin raised an exception (e.g. Json.stringify
              * on non-serializable types calls xr_vm_unwind_with_trace). */

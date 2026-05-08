@@ -203,7 +203,7 @@ bool xr_class_builder_has_method(const XrClassBuilder *builder, const char *name
     return false;
 }
 
-int xr_class_builder_add_method(XrClassBuilder *builder, const char *name, XrCFunctionPtr impl,
+int xr_class_builder_add_method(XrClassBuilder *builder, const char *name, XrPrimitiveMethodFn impl,
                                 int param_count, uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
@@ -300,7 +300,7 @@ int xr_class_builder_add_static_field(XrClassBuilder *builder, const char *name,
 /* ========== Static Method Operations ========== */
 
 int xr_class_builder_add_static_method(XrClassBuilder *builder, const char *name,
-                                       XrCFunctionPtr impl, int param_count, uint32_t flags) {
+                                       XrPrimitiveMethodFn impl, int param_count, uint32_t flags) {
     XR_DCHECK(builder != NULL, "add_static_method: NULL builder");
     ENSURE_NOT_FINALIZED(builder);
 

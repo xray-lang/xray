@@ -94,9 +94,9 @@ op_call_entry:;
 
             if (constructor && constructor->type == XMETHOD_PRIMITIVE) {
                 // Native class constructor (GC safe zone)
-                XrCFunctionPtr func = constructor->as.primitive;
+                XrPrimitiveMethodFn func = constructor->as.primitive;
                 GC_SAFE_ENTER(isolate);
-                XrValue result = func(isolate, &R(a + 1), nargs);
+                XrValue result = func(isolate, R(a), &R(a + 1), nargs);
                 GC_SAFE_LEAVE(isolate);
                 R(a) = result;
                 vmbreak;

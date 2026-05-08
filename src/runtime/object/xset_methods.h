@@ -49,6 +49,8 @@ XR_FUNC XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue 
 
 extern const XrMethodSlot xr_set_method_table[SYMBOL_BUILTIN_COUNT];
 
+XR_FUNC void xr_set_register_native_type(struct XrayIsolate *isolate);
+
 #ifdef __cplusplus
 }
 #endif

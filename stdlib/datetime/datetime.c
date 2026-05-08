@@ -603,9 +603,8 @@ XrDateTime *xr_datetime_to_local(XrayIsolate *isolate, XrDateTime *dt) {
 
 /* ========== Module Binding Functions ========== */
 
-// All binding functions are static, used by both module export AND native type method tables.
-// For methods: args[0] = self (DateTime), args[1..] = method args
-// For module functions: args[0..] = function args
+// Module-level functions use XrCFunctionPtr (iso, args, argc) for XRS_EXPORT.
+// Instance methods use XrPrimitiveMethodFn (iso, self, args, argc) for native type table.
 
 static XrValue dt_now(XrayIsolate *isolate, XrValue *args, int nargs) {
     (void) args;
@@ -686,15 +685,15 @@ static XrValue dt_offset(XrayIsolate *isolate, XrValue *args, int nargs) {
     return XR_INT(xr_datetime_local_offset());
 }
 
-// Method binding: args[0] = self (DateTime)
+// Method binding: self = DateTime instance
 
-static XrValue dt_format(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+static XrValue dt_format(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    if (!XR_IS_DATETIME(self))
         return XR_NULL_VAL;
-    XrDateTime *dt = XR_TO_DATETIME(args[0]);
+    XrDateTime *dt = XR_TO_DATETIME(self);
     const char *pattern = "YYYY-MM-DD HH:mm:ss";
-    if (nargs > 1 && XR_IS_STRING(args[1])) {
-        pattern = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    if (nargs > 0 && XR_IS_STRING(args[0])) {
+        pattern = XR_STRING_CHARS(XR_TO_STRING(args[0]));
     }
 
     // Build into a dynamic buffer so long custom patterns (e.g. embedding
@@ -734,183 +733,213 @@ static XrValue dt_format(XrayIsolate *isolate, XrValue *args, int nargs) {
     return v;
 }
 
-static XrValue dt_to_iso(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+static XrValue dt_to_iso(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_NULL_VAL;
     char buf[64];
-    int len = xr_datetime_to_iso_string(XR_TO_DATETIME(args[0]), buf, sizeof(buf));
+    int len = xr_datetime_to_iso_string(XR_TO_DATETIME(self), buf, sizeof(buf));
     return xr_string_value(xr_string_new(isolate, buf, len));
 }
 
-static XrValue dt_year(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_year(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_year(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_year(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_month(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_month(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_month(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_month(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_day(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_day(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_day(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_day(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_hour(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_hour(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_hour(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_hour(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_minute(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_minute(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_minute(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_minute(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_second(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_second(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_second(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_second(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_millisecond(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_millisecond(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_millisecond(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_millisecond(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_weekday(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_weekday(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_weekday(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_weekday(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_yearday(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_yearday(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_yearday(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_yearday(XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_timestamp(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_timestamp(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(XR_TO_DATETIME(args[0])->timestamp);
+    return XR_INT(XR_TO_DATETIME(self)->timestamp);
 }
 
-static XrValue dt_add(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 3 || !XR_IS_DATETIME(args[0]) || !XR_IS_STRING(args[2]))
+static XrValue dt_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    if (!XR_IS_DATETIME(self) || nargs < 2 || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
-    XrDateTime *dt = XR_TO_DATETIME(args[0]);
-    int64_t amount = XR_IS_INT(args[1]) ? XR_TO_INT(args[1]) : 0;
-    const char *unit = XR_STRING_CHARS(XR_TO_STRING(args[2]));
+    XrDateTime *dt = XR_TO_DATETIME(self);
+    int64_t amount = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0;
+    const char *unit = XR_STRING_CHARS(XR_TO_STRING(args[1]));
     return xr_datetime_value(xr_datetime_add(isolate, dt, amount, unit));
 }
 
-static XrValue dt_diff(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_diff(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2 || !XR_IS_DATETIME(args[0]) || !XR_IS_DATETIME(args[1]))
+    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
         return XR_INT(0);
-    XrDateTime *dt1 = XR_TO_DATETIME(args[0]);
-    XrDateTime *dt2 = XR_TO_DATETIME(args[1]);
+    XrDateTime *dt1 = XR_TO_DATETIME(self);
+    XrDateTime *dt2 = XR_TO_DATETIME(args[0]);
     const char *unit = "seconds";
-    if (nargs > 2 && XR_IS_STRING(args[2])) {
-        unit = XR_STRING_CHARS(XR_TO_STRING(args[2]));
+    if (nargs > 1 && XR_IS_STRING(args[1])) {
+        unit = XR_STRING_CHARS(XR_TO_STRING(args[1]));
     }
     return XR_INT(xr_datetime_diff(dt1, dt2, unit));
 }
 
-static XrValue dt_to_utc(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+static XrValue dt_to_utc(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_NULL_VAL;
-    return xr_datetime_value(xr_datetime_to_utc(isolate, XR_TO_DATETIME(args[0])));
+    return xr_datetime_value(xr_datetime_to_utc(isolate, XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_to_local(XrayIsolate *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+static XrValue dt_to_local(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_NULL_VAL;
-    return xr_datetime_value(xr_datetime_to_local(isolate, XR_TO_DATETIME(args[0])));
+    return xr_datetime_value(xr_datetime_to_local(isolate, XR_TO_DATETIME(self)));
 }
 
-static XrValue dt_is_before(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_is_before(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 2 || !XR_IS_DATETIME(args[0]) || !XR_IS_DATETIME(args[1]))
+    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
         return XR_FALSE_VAL;
-    return xr_datetime_is_before(XR_TO_DATETIME(args[0]), XR_TO_DATETIME(args[1])) ? XR_TRUE_VAL
-                                                                                   : XR_FALSE_VAL;
-}
-
-static XrValue dt_is_after(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    if (nargs < 2 || !XR_IS_DATETIME(args[0]) || !XR_IS_DATETIME(args[1]))
-        return XR_FALSE_VAL;
-    return xr_datetime_is_after(XR_TO_DATETIME(args[0]), XR_TO_DATETIME(args[1])) ? XR_TRUE_VAL
-                                                                                  : XR_FALSE_VAL;
-}
-
-static XrValue dt_equals(XrayIsolate *isolate, XrValue *args, int nargs) {
-    (void) isolate;
-    if (nargs < 2 || !XR_IS_DATETIME(args[0]) || !XR_IS_DATETIME(args[1]))
-        return XR_FALSE_VAL;
-    return xr_datetime_equals(XR_TO_DATETIME(args[0]), XR_TO_DATETIME(args[1])) ? XR_TRUE_VAL
+    return xr_datetime_is_before(XR_TO_DATETIME(self), XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL
                                                                                 : XR_FALSE_VAL;
 }
 
-static XrValue dt_is_leap_year(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_is_after(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
         return XR_FALSE_VAL;
-    return xr_datetime_is_leap_year(XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL : XR_FALSE_VAL;
+    return xr_datetime_is_after(XR_TO_DATETIME(self), XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL
+                                                                               : XR_FALSE_VAL;
 }
 
-static XrValue dt_days_in_month(XrayIsolate *isolate, XrValue *args, int nargs) {
+static XrValue dt_equals(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (nargs < 1 || !XR_IS_DATETIME(args[0]))
+    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
+        return XR_FALSE_VAL;
+    return xr_datetime_equals(XR_TO_DATETIME(self), XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL
+                                                                             : XR_FALSE_VAL;
+}
+
+static XrValue dt_is_leap_year(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) isolate;
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
+        return XR_FALSE_VAL;
+    return xr_datetime_is_leap_year(XR_TO_DATETIME(self)) ? XR_TRUE_VAL : XR_FALSE_VAL;
+}
+
+static XrValue dt_days_in_month(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) isolate;
+    (void) args;
+    (void) nargs;
+    if (!XR_IS_DATETIME(self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_days_in_month(XR_TO_DATETIME(args[0])));
+    return XR_INT(xr_datetime_days_in_month(XR_TO_DATETIME(self)));
 }
 
 #include "../../src/runtime/object/xnative_type.h"
 
 /* ========== DateTime Native Type Method Table ========== */
 
-static XrNativeMethod datetime_methods[] = {{"format", (XrCFunctionPtr) dt_format, 2},
-                                            {"toISOString", (XrCFunctionPtr) dt_to_iso, 1},
-                                            {"add", (XrCFunctionPtr) dt_add, 3},
-                                            {"diff", (XrCFunctionPtr) dt_diff, 3},
-                                            {"toUTC", (XrCFunctionPtr) dt_to_utc, 1},
-                                            {"toLocal", (XrCFunctionPtr) dt_to_local, 1},
-                                            {"isBefore", (XrCFunctionPtr) dt_is_before, 2},
-                                            {"isAfter", (XrCFunctionPtr) dt_is_after, 2},
-                                            {"equals", (XrCFunctionPtr) dt_equals, 2},
-                                            {"isLeapYear", (XrCFunctionPtr) dt_is_leap_year, 1},
-                                            {"daysInMonth", (XrCFunctionPtr) dt_days_in_month, 1},
+static XrNativeMethod datetime_methods[] = {{"format", dt_format, 2},
+                                            {"toISOString", dt_to_iso, 1},
+                                            {"add", dt_add, 3},
+                                            {"diff", dt_diff, 3},
+                                            {"toUTC", dt_to_utc, 1},
+                                            {"toLocal", dt_to_local, 1},
+                                            {"isBefore", dt_is_before, 2},
+                                            {"isAfter", dt_is_after, 2},
+                                            {"equals", dt_equals, 2},
+                                            {"isLeapYear", dt_is_leap_year, 1},
+                                            {"daysInMonth", dt_days_in_month, 1},
                                             {NULL, NULL, 0}};
 
-static XrNativeMethod datetime_getters[] = {{"year", (XrCFunctionPtr) dt_year, 1},
-                                            {"month", (XrCFunctionPtr) dt_month, 1},
-                                            {"day", (XrCFunctionPtr) dt_day, 1},
-                                            {"hour", (XrCFunctionPtr) dt_hour, 1},
-                                            {"minute", (XrCFunctionPtr) dt_minute, 1},
-                                            {"second", (XrCFunctionPtr) dt_second, 1},
-                                            {"millisecond", (XrCFunctionPtr) dt_millisecond, 1},
-                                            {"weekday", (XrCFunctionPtr) dt_weekday, 1},
-                                            {"yearday", (XrCFunctionPtr) dt_yearday, 1},
-                                            {"timestamp", (XrCFunctionPtr) dt_timestamp, 1},
+static XrNativeMethod datetime_getters[] = {{"year", dt_year, 1},
+                                            {"month", dt_month, 1},
+                                            {"day", dt_day, 1},
+                                            {"hour", dt_hour, 1},
+                                            {"minute", dt_minute, 1},
+                                            {"second", dt_second, 1},
+                                            {"millisecond", dt_millisecond, 1},
+                                            {"weekday", dt_weekday, 1},
+                                            {"yearday", dt_yearday, 1},
+                                            {"timestamp", dt_timestamp, 1},
                                             {NULL, NULL, 0}};
 
 // ========== Type Declarations (parsed by gen_stdlib_types.py) ==========

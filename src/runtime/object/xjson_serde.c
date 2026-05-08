@@ -481,7 +481,8 @@ static void stringify_value(JsonWriter *w, XrValue val) {
 /* ========== Public Functions ========== */
 
 // parse(str) - Parse JSON string
-XrValue xr_json_fn_parse(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_null();
     }
@@ -771,8 +772,9 @@ static void validate_value(JsonValidator *v) {
 // isValid(str, strict?) - Check if string is valid JSON (zero allocation).
 // strict (bool, default false): when true, additionally reject
 // unescaped control bytes (< 0x20) inside strings, matching RFC 8259 §7.
-XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
     (void) X;
+    (void) self;
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         return xr_bool(false);
     }
@@ -804,7 +806,8 @@ XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue *args, int argc) {
 
 // tryParse(str) - Try to parse JSON
 // Returns Json: {value: parsed result, error: error message or null}
-XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue *args, int argc) {
+XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
     XrJson *result = xr_json_new(xr_current_coro(X), 4);
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
