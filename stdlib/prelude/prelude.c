@@ -71,6 +71,8 @@ extern void xr_map_register_native_type(XrayIsolate *isolate);
 extern void xr_set_register_native_type(XrayIsolate *isolate);
 extern void xr_json_register_native_type(XrayIsolate *isolate);
 extern void xr_bigint_register_native_type(XrayIsolate *isolate);
+extern void xr_iterator_register_native_type(XrayIsolate *isolate);
+extern void xr_range_register_native_type(XrayIsolate *isolate);
 /* Stdlib extension types */
 extern void xr_logger_register_native_type(XrayIsolate *isolate);
 extern void xr_datetime_register_native_type(XrayIsolate *isolate);
@@ -93,6 +95,8 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     xr_set_register_native_type(isolate);
     xr_json_register_native_type(isolate);
     xr_bigint_register_native_type(isolate);
+    xr_iterator_register_native_type(isolate);
+    xr_range_register_native_type(isolate);
     xr_datetime_register_native_type(isolate);
     xr_logger_register_native_type(isolate);
     xr_regex_register_native_type(isolate);

@@ -87,4 +87,8 @@ static inline bool xr_is_iterator(XrValue value) {
     return XR_IS_ITERATOR(value);
 }
 
+/* Register Iterator as a native type for unified dispatch. */
+struct XrayIsolate;
+XR_FUNC void xr_iterator_register_native_type(struct XrayIsolate *isolate);
+
 #endif  // XITERATOR_H

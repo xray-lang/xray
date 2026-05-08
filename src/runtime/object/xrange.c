@@ -69,3 +69,51 @@ XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r) {
 
     return xr_value_from_array(arr);
 }
+
+/* ========== Native Type Registration ========== */
+
+#include "xnative_type.h"
+#include "xstring.h"
+#include "../value/xvalue_format.h"
+#include "../xisolate_api.h"
+
+static XrValue m_range_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xr_string_value(xr_value_to_string(iso, self));
+}
+
+static XrValue m_range_to_array(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrRange *rng = xr_value_to_range(self);
+    XR_DCHECK(rng != NULL, "Range.toArray: invalid range");
+    return xr_range_to_array(xr_current_coro(iso), rng);
+}
+
+static XrValue m_range_contains(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    XrRange *rng = xr_value_to_range(self);
+    XR_DCHECK(rng != NULL, "Range.contains: invalid range");
+    if (argc >= 1 && XR_IS_INT(args[0])) {
+        return xr_bool(xr_range_contains(rng, XR_TO_INT(args[0])));
+    }
+    return xr_bool(false);
+}
+
+void xr_range_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod range_methods[] = {
+        {"toString", m_range_to_string, 0},
+        {"toArray", m_range_to_array, 0},
+        {"contains", m_range_contains, 1},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo range_info = {
+        .name = "Range",
+        .gc_type = XR_TRANGE,
+        .methods = range_methods,
+        .getters = NULL,
+        .static_methods = NULL,
+    };
+    xr_register_native_type(isolate, &range_info);
+}
