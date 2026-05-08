@@ -226,6 +226,23 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     // Set min_params for default parameter support
     if (fn_type) {
         fn_type->function.min_params = fn->required_count;
+
+        // Propagate in/ref passing modes to the function type
+        bool has_modes = false;
+        for (int i = 0; i < fn->param_count && !has_modes; i++) {
+            if (fn->params[i] && fn->params[i]->passing_mode != XR_PARAM_VALUE)
+                has_modes = true;
+        }
+        if (has_modes) {
+            uint8_t *modes = xr_calloc(fn->param_count, sizeof(uint8_t));
+            if (modes) {
+                for (int i = 0; i < fn->param_count; i++) {
+                    if (fn->params[i])
+                        modes[i] = fn->params[i]->passing_mode;
+                }
+                fn_type->function.param_passing_modes = modes;
+            }
+        }
     }
 
     // Add to scope
@@ -1062,6 +1079,23 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
 
             XrType *method_type = xr_type_new_function(ctx->analyzer->isolate, param_types,
                                                        md->param_count, ret_type, false);
+
+            // Propagate in/ref passing modes to the method type
+            if (method_type && md->param_passing_modes) {
+                bool has_modes = false;
+                for (int j = 0; j < md->param_count && !has_modes; j++) {
+                    if (md->param_passing_modes[j] != XR_PARAM_VALUE)
+                        has_modes = true;
+                }
+                if (has_modes) {
+                    uint8_t *modes = xr_calloc(md->param_count, sizeof(uint8_t));
+                    if (modes) {
+                        for (int j = 0; j < md->param_count; j++)
+                            modes[j] = md->param_passing_modes[j];
+                        method_type->function.param_passing_modes = modes;
+                    }
+                }
+            }
 
             XaSymbolLinks *method_links = xa_analyzer_get_links(ctx->analyzer, method_sym);
             method_links->type = method_type;

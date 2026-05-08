@@ -901,14 +901,27 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
     /* Evaluate callee and all arguments before creating CALL */
     XiValue *callee_val = xi_lower_expr(l, call->callee);
+
+    /* Resolve callee function type to get parameter passing modes.
+     * in/ref parameters skip deep copy at the call site. */
+    struct XrType *callee_type = xi_lower_node_type(l, call->callee);
+    const uint8_t *pmodes = NULL;
+    int pcount = 0;
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION) {
+        pmodes = callee_type->function.param_passing_modes;
+        pcount = callee_type->function.param_count;
+    }
+
     XiValue *arg_vals[32];
     int n = call->arg_count > 32 ? 32 : call->arg_count;
     for (int i = 0; i < n; i++) {
         arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
         /* Value types (structs) passed as arguments need deep copy to
-         * ensure callee modifications don't affect the caller's binding */
+         * ensure callee modifications don't affect the caller's binding.
+         * Skip copy for in/ref parameters (they pass by reference). */
+        uint8_t mode = (pmodes && i < pcount) ? pmodes[i] : XR_PARAM_VALUE;
         XiValue *a = arg_vals[i];
-        if (a && a->type && a->type->is_value_type) {
+        if (a && a->type && a->type->is_value_type && mode == XR_PARAM_VALUE) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY,
                                          a->type, 1);
             if (cpy) { cpy->args[0] = a; arg_vals[i] = cpy; }
