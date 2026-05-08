@@ -274,7 +274,14 @@ invoke_dispatch:;
         _obj_type = XR_TBOOL;
     else if (XR_IS_PTR(receiver))
         _obj_type = XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(receiver));
-    else
+    else if (XR_IS_NULL(receiver)) {
+        /* null only supports toString(); anything else is a type error */
+        if (method_symbol == SYMBOL_TOSTRING) {
+            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
+            vmbreak;
+        }
+        goto invoke_type_error;
+    } else
         goto invoke_type_error;
 
     /* Route types that need special VM control flow (can push frames,

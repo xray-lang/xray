@@ -524,14 +524,19 @@ XR_FUNC XiPassChange xi_opt_strength_reduce(XiFunc *f) {
                     else if (same) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
                     break;
 
-                case XI_MUL:
-                    /* x * 0 = 0 */
-                    if (r_zero || l_zero) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
+                case XI_MUL: {
+                    /* x * 0 = 0 (only valid for numeric types; string * 0
+                     * must go through the runtime to produce "") */
+                    bool both_numeric = lhs->type && rhs->type &&
+                        lhs->type->kind != XR_KIND_STRING &&
+                        rhs->type->kind != XR_KIND_STRING;
+                    if ((r_zero || l_zero) && both_numeric) { v->op = XI_CONST; v->aux_int = 0; v->nargs = 0; chg.values_changed = true; }
                     /* x * 1 = x */
                     else if (r_one) { v->op = XI_COPY; v->args[0] = lhs; v->nargs = 1; chg.values_changed = true; }
                     /* 1 * x = x */
                     else if (l_one) { v->op = XI_COPY; v->args[0] = rhs; v->nargs = 1; chg.values_changed = true; }
                     break;
+                }
 
                 case XI_DIV:
                     /* x / 1 = x */
