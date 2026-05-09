@@ -24,7 +24,9 @@
 #include "xm_codegen.h"
 #endif
 
+#ifndef _WIN32
 #include <signal.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -206,7 +208,9 @@ void jit_guard_page_init_trampoline(void) {
 
 #endif /* __aarch64__ guard page safepoint */
 
-/* ========== Crash Handler ========== */
+/* ========== Crash Handler (POSIX only — Windows uses SEH) ========== */
+
+#ifndef _WIN32
 
 static struct sigaction g_old_sigsegv;
 static struct sigaction g_old_sigbus;
@@ -494,3 +498,12 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
 
     fprintf(stderr, "[JIT-debug] crash handler installed (with alt stack)\n");
 }
+
+#else /* _WIN32 */
+
+XR_FUNC void jit_debug_install_crash_handler(void) {
+    /* Windows: signal-based crash handler not available.
+     * TODO: implement via AddVectoredExceptionHandler. */
+}
+
+#endif /* _WIN32 */

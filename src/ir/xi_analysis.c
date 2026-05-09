@@ -325,6 +325,13 @@ XR_FUNC XiLiveness *xi_compute_liveness(XiFunc *f) {
      *
      * Iterate in reverse RPO (= approx post-order) until convergence.
      */
+    uint64_t *new_in = (uint64_t *) xr_malloc(set_words * sizeof(uint64_t));
+    if (!new_in) {
+        xr_free(rpo_order);
+        xi_liveness_free(l);
+        return NULL;
+    }
+
     bool changed = true;
     while (changed) {
         changed = false;
@@ -347,7 +354,6 @@ XR_FUNC XiLiveness *xi_compute_liveness(XiFunc *f) {
             }
 
             /* Compute new live_in: start from live_out */
-            uint64_t new_in[set_words];
             memcpy(new_in, out, set_words * sizeof(uint64_t));
 
             /* Walk instructions backward: remove defs, add uses */
@@ -400,6 +406,7 @@ XR_FUNC XiLiveness *xi_compute_liveness(XiFunc *f) {
         }
     }
 
+    xr_free(new_in);
     xr_free(rpo_order);
     return l;
 }

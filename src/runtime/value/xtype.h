@@ -247,13 +247,11 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         return XR_REP_TAGGED;
     switch (t->kind) {
         case XR_KIND_INT:
+        case XR_KIND_BOOL:
+        case XR_KIND_NULL:
             return XR_REP_I64;
         case XR_KIND_FLOAT:
             return XR_REP_F64;
-        case XR_KIND_BOOL:
-            return XR_REP_I64;
-        case XR_KIND_NULL:
-            return XR_REP_I64;
         case XR_KIND_VOID:
             return XR_REP_VOID;
         case XR_KIND_STRING:
