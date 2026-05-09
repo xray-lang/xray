@@ -213,6 +213,22 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->ast = node;
     data->class_name = arena_strdup(l->func, cd->name);
     data->super_name = arena_strdup(l->func, cd->super_name);
+    data->generic_origin_name = arena_strdup(l->func, cd->generic_origin_name);
+    data->display_name = arena_strdup(l->func, cd->display_name);
+    data->is_monomorphized = cd->is_monomorphized;
+    /* Copy concrete type arg display names (arena-duplicated) */
+    data->mono_type_arg_names = NULL;
+    data->mono_type_arg_count = 0;
+    if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+        const char **names = (const char **)xi_func_arena_alloc(
+            l->func, cd->mono_type_arg_count * sizeof(const char *));
+        if (names) {
+            for (int ti = 0; ti < cd->mono_type_arg_count; ti++)
+                names[ti] = arena_strdup(l->func, cd->mono_type_arg_names[ti]);
+            data->mono_type_arg_names = names;
+            data->mono_type_arg_count = cd->mono_type_arg_count;
+        }
+    }
     data->child_idx = cidx;
     data->ninst = inst_n;
     data->nstat = stat_n;

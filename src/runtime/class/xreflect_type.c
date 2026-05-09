@@ -428,7 +428,7 @@ XrValue xr_type_getName(XrayIsolate *isolate, XrValue self, XrValue *args, int n
     if (!meta)
         return xr_null();
 
-    const char *type_name = meta->klass ? meta->klass->name : meta->name;
+    const char *type_name = meta->klass ? xr_class_display_name(meta->klass) : meta->name;
     if (!type_name)
         return xr_null();
 

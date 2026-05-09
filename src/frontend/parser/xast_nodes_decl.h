@@ -78,6 +78,13 @@ typedef struct ClassDeclNode {
     XrGenericParam **type_params;  // Generic type parameters
     int type_param_count;
     uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved
+    /* Monomorphization metadata (set by xa_mono_pass) */
+    bool is_monomorphized;       // true for cloned generic instances (e.g. Box$i64)
+    bool is_generic_skeleton;    // true for original generic decl kept as skeleton
+    char *generic_origin_name;   // Original generic class name (e.g. "Box"), NULL if not mono
+    char *display_name;          // User-visible name without mangling suffix
+    const char **mono_type_arg_names;  // Concrete type display names (e.g. ["int","string"]), NULL if not mono
+    int mono_type_arg_count;           // Element count of mono_type_arg_names
 } ClassDeclNode;
 
 typedef struct InterfaceMethodNode {

@@ -17,7 +17,6 @@
  * Owns:
  *   - OP_TARRAY_GET / GETC / SET / PUSH  — typed compact array R/W
  *   - OP_TFIELD_GET / SET                — typed json field R/W with barrier
- *   - OP_INST_TYPE_ARGS                  — reified type args on instance
  *   - OP_NEW_STRUCT / STRUCT_GET / SET / COPY  — stack struct lifecycle
  *
  * Placeholder OP_NOP is kept inline in xvm.c next to the
@@ -253,25 +252,6 @@ vmcase(OP_TFIELD_SET) {
     XrValue _tfv = R(GETARG_C(i));
     json->fields[GETARG_B(i)] = _tfv;
     VM_BARRIER_VAL(json, _tfv);
-    vmbreak;
-}
-
-vmcase(OP_INST_TYPE_ARGS) {
-    /* OP_INST_TYPE_ARGS: set reified type args on instance
-    ** A = instance register
-    ** Bx = packed: [tid1:5 << 7] | [tid0:5 << 2] | [argc:2]
-    */
-    TRACE_EXECUTION();
-    int a = GETARG_A(i);
-    int bx = GETARG_Bx(i);
-    int argc = bx & 0x03;
-    int tid0 = (bx >> 2) & 0x1F;
-    int tid1 = (bx >> 7) & 0x1F;
-    XrValue val = R(a);
-    if (XR_IS_PTR(val) && XR_HEAP_TYPE(val) == XR_TINSTANCE) {
-        XrGCHeader *gc = &((XrInstance *) XR_VALUE_GCPTR(val))->gc;
-        XR_INST_SET_TYPE_ARGS(gc, argc, tid0, tid1);
-    }
     vmbreak;
 }
 

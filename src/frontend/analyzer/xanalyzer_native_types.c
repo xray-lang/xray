@@ -270,6 +270,8 @@ static const NativeTypeMapping type_mappings[] = {
     {"Regex",          XR_TID_REGEX,          TYPE_NAME_REGEX},
     {"Exception",      XR_TID_EXCEPTION,      TYPE_NAME_EXCEPTION},
     {"Task",           XR_TID_COROUTINE,      TYPE_NAME_COROUTINE},
+    {"WeakMap",        XR_TID_WEAKMAP,        TYPE_NAME_WEAKMAP},
+    {"WeakSet",        XR_TID_WEAKSET,        TYPE_NAME_WEAKSET},
 };
 
 #define NUM_TYPE_MAPPINGS (int)(sizeof(type_mappings) / sizeof(type_mappings[0]))
@@ -403,6 +405,8 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_REGEX,          XR_TREGEX},
     {XR_TID_EXCEPTION,      XR_TEXCEPTION},
     {XR_TID_COROUTINE,      XR_TTASK},
+    {XR_TID_WEAKMAP,        XR_TMAP},
+    {XR_TID_WEAKSET,        XR_TSET},
 };
 
 #define NUM_TID_OBJ_MAPPINGS (int)(sizeof(tid_obj_map) / sizeof(tid_obj_map[0]))

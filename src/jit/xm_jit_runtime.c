@@ -184,10 +184,10 @@ static int32_t jit_prepush_yield_frame(XrCoroutine *coro, uint32_t deopt_id) {
             default:
                 continue;
         }
-        // Resolve xr_tag: prefer compile-time tag, fallback to runtime tag
+        // Resolve xr_tag: prefer compile-time tag, fallback to vreg runtime tag
         uint8_t tag = s->xr_tag;
-        if (tag == XR_RTAG_UNKNOWN && bc >= 0 && bc < 256) {
-            uint8_t rt = jctx->slot_runtime_tags[bc];
+        if (tag == XR_RTAG_UNKNOWN && s->vreg_idx < XR_JIT_MAX_VREG_TAGS) {
+            uint8_t rt = jctx->vreg_runtime_tags[s->vreg_idx];
             if (rt != 0 && rt != XR_RTAG_UNKNOWN)
                 tag = rt;
         }
@@ -287,7 +287,7 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     // Reconstruct receiver and args from call_args[] payloads and
     // call_arg_tags[] type bytes. The codegen stores per-byte tags in
     // call_arg_tags[] (compile-time known or dynamically patched from
-    // slot_runtime_tags[] at each call site).
+    // vreg_runtime_tags[] at each call site).
     uint8_t recv_tag = coro->jit_ctx->call_arg_tags[0];
     // Invoke receivers are always heap objects (module, instance, class, etc.).
     // When the compile-time tag is unknown, reconstruct as PTR to avoid
@@ -716,7 +716,7 @@ XrJitResult xr_jit_index_get(XrCoroutine *coro, int64_t extra_arg) {
 // Called from JIT via CALL_C for OP_INDEX_SET.
 // jit_call_args[0] = obj raw, jit_call_args[1] = key raw, jit_call_args[2] = val raw
 // extra_arg = (val_bc_slot<<24) | (obj_st<<16) | (key_st<<8) | val_st
-//   val_bc_slot: bc register slot for val — used to resolve CALLEE_SETS via slot_runtime_tags
+//   val_bc_slot: bc register slot for val (legacy field, kept for compat)
 XrJitResult xr_jit_index_set(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
     XrValue obj_val =
@@ -1583,9 +1583,9 @@ XrJitResult xr_jit_assert_eq(XrCoroutine *coro, int64_t extra_arg) {
                 (unsigned long long) coro->jit_ctx->call_args[1]);
         fprintf(stderr, "  actual: tag=%d i=%lld  expect: tag=%d i=%lld\n", actual.tag,
                 (long long) actual.i, expect.tag, (long long) expect.i);
-        if (a_bc != 0xFF)
-            fprintf(stderr, "  slot_runtime_tags[%d]=%d\n", a_bc,
-                    coro->jit_ctx->slot_runtime_tags[a_bc]);
+        if (a_bc != 0xFF && a_bc < XR_JIT_MAX_VREG_TAGS)
+            fprintf(stderr, "  vreg_runtime_tags[%d]=%d\n", a_bc,
+                    coro->jit_ctx->vreg_runtime_tags[a_bc]);
         return (XrJitResult){XM_DEOPT_MARKER, 0};
     }
     return XR_JIT_OK();

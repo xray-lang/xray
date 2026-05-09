@@ -163,7 +163,7 @@ XrValue xr_reflect_getType(XrayIsolate *isolate, XrValue self, XrValue *args, in
         meta = xr_registry_register_class(X, klass);
         if (!meta) {
             xr_log_warning("reflect", "Reflect.getType: failed to register class '%s'",
-                           klass->name);
+                           xr_class_display_name(klass));
             return xr_null();
         }
     }
@@ -304,7 +304,7 @@ XrValue xr_reflect_fieldCount(XrayIsolate *isolate, XrValue self, XrValue *args,
 
 // Helper: convert tid to interned string value
 static XrValue tid_to_string_value(XrayIsolate *isolate, uint8_t tid) {
-    const char *name = (tid == 0) ? "unknown" : xr_typeid_name((XrTypeId) tid);
+    const char *name = (tid == 0) ? "any" : xr_typeid_name((XrTypeId) tid);
     size_t len = strlen(name);
     uint32_t hash = xr_string_hash(name, len);
     return XR_FROM_PTR(xr_string_intern(isolate, name, len, hash));
@@ -428,18 +428,23 @@ XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue self, XrValue *args, int
         }
         case XR_TINSTANCE: {
             XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(obj);
-            const char *cls_name = inst->klass ? inst->klass->name : "instance";
-            int argc = XR_INST_TYPE_ARGC(&inst->gc);
-            if (argc >= 2) {
-                int tid0 = XR_INST_TYPE_ARG0(&inst->gc);
-                int tid1 = XR_INST_TYPE_ARG1(&inst->gc);
-                n = snprintf(buf, sizeof(buf), "%s<%s, %s>", cls_name,
-                             xr_typeid_name((XrTypeId) tid0), xr_typeid_name((XrTypeId) tid1));
-            } else if (argc == 1) {
-                int tid0 = XR_INST_TYPE_ARG0(&inst->gc);
-                n = snprintf(buf, sizeof(buf), "%s<%s>", cls_name, xr_typeid_name((XrTypeId) tid0));
+            const char *dname = xr_class_display_name(inst->klass);
+            uint8_t argc = inst->klass ? inst->klass->mono_type_argc : 0;
+            const char **tnames = inst->klass ? inst->klass->mono_type_arg_names : NULL;
+            if (argc > 0 && tnames) {
+                char *ptr = buf;
+                size_t rem = sizeof(buf);
+                int w = snprintf(ptr, rem, "%s<", dname);
+                ptr += w; rem -= (size_t)w;
+                for (int i = 0; i < argc && rem > 2; i++) {
+                    if (i > 0) { w = snprintf(ptr, rem, ", "); ptr += w; rem -= (size_t)w; }
+                    w = snprintf(ptr, rem, "%s", tnames[i] ? tnames[i] : "unknown");
+                    ptr += w; rem -= (size_t)w;
+                }
+                snprintf(ptr, rem, ">");
+                n = (int)(ptr - buf) + 1;
             } else {
-                n = snprintf(buf, sizeof(buf), "%s", cls_name);
+                n = snprintf(buf, sizeof(buf), "%s", dname);
             }
             break;
         }

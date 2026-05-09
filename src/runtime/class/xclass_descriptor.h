@@ -60,8 +60,13 @@ typedef struct XrClassDescriptor {
     /* ========== Basic Info ========== */
     const char *class_name;
     const char *super_name;
+    const char *generic_origin_name;  /* Original generic class name, NULL if not mono */
+    const char *display_name;         /* User-visible name, NULL = same as class_name */
+    const char **mono_type_arg_names; /* Concrete type display names, NULL if not mono */
+    int mono_type_arg_count;          /* Element count of mono_type_arg_names */
     int32_t super_global_index;
     uint32_t flags;
+    bool is_monomorphized;            /* true for mono-generated classes */
 
     /* ========== Fields ========== */
     XrFieldDescriptorEntry *instance_fields;

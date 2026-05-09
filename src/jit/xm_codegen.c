@@ -1006,22 +1006,17 @@ static void emit_prologue(CodegenCtx *ctx) {
                 a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, A64_SP, SPILL_BASE + slot * 8));
             }
         }
-        // Init slot_runtime_tags for TAGGED (unknown/Json) params from param_tags[].
-        // emit_call_args_from_pool dynamic-patches UNKNOWN tags by reading
-        // slot_runtime_tags[bc_slot]. Without this init, dynamic ops on
-        // tagged fallback params (OP_ADD, etc.) see stale/zero tags → wrong results.
+        // Init vreg_runtime_tags for TAGGED params from param_tags[].
+        // Params are vregs 0..n-1 by construction, so vreg index == param index.
         // param_tags[] is set by xm_jit_call (interp→JIT) or
         // xr_jit_call_func / CALL_KNOWN codegen (JIT→JIT).
         for (uint32_t i = 0; i < nparams && i < 8; i++) {
-            if (i >= ctx->func->nvreg)
+            if (i >= ctx->func->nvreg || i >= XR_JIT_MAX_VREG_TAGS)
                 continue;
             if (ctx->func->vregs[i].rep != XR_REP_TAGGED)
                 continue;
-            int16_t bc_slot = ctx->func->vregs[i].bc_slot;
-            if (bc_slot < 0 || bc_slot >= 256)
-                continue;
             int32_t pt_off = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + i * 8);
-            int32_t rt_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+            int32_t rt_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) i;
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, pt_off));
             a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG, JIT_CTX_REG, rt_off));
         }

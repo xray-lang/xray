@@ -39,9 +39,9 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
     if (XR_TYPE_IS_ARRAY(type))
         return XR_TID_ARRAY;
     if (XR_TYPE_IS_MAP(type))
-        return XR_TID_MAP;
+        return type->is_weak ? XR_TID_WEAKMAP : XR_TID_MAP;
     if (type->kind == XR_KIND_SET)
-        return XR_TID_SET;
+        return type->is_weak ? XR_TID_WEAKSET : XR_TID_SET;
     if (type->kind == XR_KIND_BYTES)
         return XR_TID_ARRAY;
     if (XR_TYPE_IS_JSON(type))

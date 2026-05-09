@@ -78,8 +78,15 @@ vmcase(OP_NEWARRAY) {
 
     if (array) {
         array->elem_tid = elem_tid;
-        for (int j = 0; j < b; j++) {
-            xr_array_push(array, R(a + 1 + j));
+        if (elem_type != XR_ELEM_ANY) {
+            /* Typed arrays: set length directly (data is uninitialized).
+             * Caller populates via OP_INDEX_SET / OP_ARRAY_INIT afterward.
+             * Pushing from registers would crash on non-numeric garbage. */
+            array->length = b;
+        } else {
+            for (int j = 0; j < b; j++) {
+                xr_array_push(array, R(a + 1 + j));
+            }
         }
     }
     R(a) = xr_value_from_array(array);
@@ -968,8 +975,8 @@ vmcase(OP_INDEX_GET) {
         R(a) = ch ? xr_string_value(ch) : xr_null();
         vmbreak;
     }
-    // Fast path: Array
-    if (XR_IS_ARRAY(obj_val)) {
+    // Fast path: Array (includes slices — XR_TARRAY_SLICE shares XrArray layout)
+    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(key_val);
         if ((unsigned) idx < (unsigned) arr->length) {
@@ -1110,8 +1117,8 @@ vmcase(OP_INDEX_SET) {
         }
         vmbreak;
     }
-    // Fast path: Array
-    if (XR_IS_ARRAY(obj_val)) {
+    // Fast path: Array (includes slices — XR_TARRAY_SLICE shares XrArray layout)
+    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(key_val);
         if ((unsigned) idx < (unsigned) arr->length) {
@@ -1187,8 +1194,8 @@ vmcase(OP_SLICE) {
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 
-    // Array slice: zero-copy, shared data
-    if (XR_IS_ARRAY(source)) {
+    // Array/slice: zero-copy, shared data
+    if (XR_IS_ARRAY_OR_SLICE(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
 
         // Use slice function

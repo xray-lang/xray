@@ -456,15 +456,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             if (fn_type) {
                 if ((XR_TYPE_IS_ARRAY(obj_type) || obj_type->kind == XR_KIND_SET ||
                      obj_type->kind == XR_KIND_CHANNEL) &&
-                    obj_type->container.element_type &&
-                    !XR_TYPE_IS_UNKNOWN(obj_type->container.element_type)) {
+                    obj_type->container.element_type) {
                     const char *names[] = {"T"};
                     XrType *types[] = {obj_type->container.element_type};
                     fn_type = xr_type_substitute(ctx->analyzer->isolate, fn_type, names, types, 1);
                 } else if (XR_TYPE_IS_MAP(obj_type)) {
                     XrType *kt = obj_type->map.key_type;
                     XrType *vt = obj_type->map.value_type;
-                    if (kt && !XR_TYPE_IS_UNKNOWN(kt) && vt && !XR_TYPE_IS_UNKNOWN(vt)) {
+                    if (kt && vt) {
                         const char *names[] = {"K", "V"};
                         XrType *types[] = {kt, vt};
                         fn_type =
@@ -811,13 +810,19 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
             XrType *kt = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             XrType *vt = tac >= 2 ? ta[1] : xr_type_new_unknown(X);
             bt = xr_type_new_map(X, kt, vt);
+            if (strcmp(cn, "WeakMap") == 0)
+                bt->is_weak = true;
         } else if (strcmp(cn, "Array") == 0) {
             XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new_array(X, et);
         } else if (strcmp(cn, "Set") == 0 || strcmp(cn, "WeakSet") == 0) {
             XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new(X, XR_KIND_SET);
-            if (bt) bt->container.element_type = et;
+            if (bt) {
+                bt->container.element_type = et;
+                if (strcmp(cn, "WeakSet") == 0)
+                    bt->is_weak = true;
+            }
         } else if (strcmp(cn, "Bytes") == 0) {
             bt = xr_type_new(X, XR_KIND_BYTES);
         } else if (strcmp(cn, "Channel") == 0) {

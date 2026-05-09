@@ -408,7 +408,8 @@ void xr_registry_print(XrayIsolate *X) {
 
     for (int i = 0; i < registry->type_count; i++) {
         XrTypeMetadata *meta = registry->types[i];
-        printf("  [%2d] %s - %d fields, %d methods\n", i, meta->klass->name,
+        printf("  [%2d] %s - %d fields, %d methods\n", i,
+               xr_class_display_name(meta->klass),
                meta->klass->field_count, meta->klass->method_count);
     }
 }

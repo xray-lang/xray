@@ -169,17 +169,18 @@ typedef struct XrJitScratch {
     uint32_t jit_frame_depth;
     void *jit_frame_stack[XR_JIT_MAX_FRAME_DEPTH];
 
-    /* Per-slot runtime tags: written by CALL_C codegen after each CALL_C.
-     * Indexed by bytecode register number (bc_slot).
-     * Consumers that need a dynamic tag (INDEX_SET, PRINT, TYPEOF, ISNULL, etc.)
-     * read slot_runtime_tags[bc_slot] instead of the old global return_tag. */
-    uint8_t slot_runtime_tags[256];
+    /* Per-vreg runtime tags: written by CALL_C codegen after each CALL_C.
+     * Indexed by vreg index (directly from XmRef, no bc_slot indirection).
+     * Consumers that need a dynamic tag (method invoke, SETPROP, etc.)
+     * read vreg_runtime_tags[vreg_idx]. */
+#define XR_JIT_MAX_VREG_TAGS 512
+    uint8_t vreg_runtime_tags[XR_JIT_MAX_VREG_TAGS];
 
     /* Tag returned by the last call_c_stub invocation.
      * call_c_stub stores the C helper's x1 here instead of returning it in
      * x1, so that x1 (alloc_regs[0]) is not clobbered by the stub return
      * sequence.  XM_CALL_C codegen reads this field to populate
-     * slot_runtime_tags[bc_slot]. */
+     * vreg_runtime_tags[dst_vreg_idx]. */
     int64_t call_result_tag;
 
     /* JIT yield: pre-push frame for yieldable suspend.

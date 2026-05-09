@@ -198,6 +198,7 @@ struct XrType {
     bool is_const;       // Deep immutability (for coroutine safety)
     bool is_value_type;  // Struct value type (copy-on-assign)
     bool is_literal;     // Literal type: kind + literal union holds value
+    bool is_weak;        // Weak variant: WeakMap (kind==MAP) / WeakSet (kind==SET)
 
     // Native width for int/float types (XrSlotType value)
     // 0 = default (int=int64, float=float64), nonzero = specific width

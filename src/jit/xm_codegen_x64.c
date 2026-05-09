@@ -432,19 +432,15 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
         }
     }
 
-    /* Init slot_runtime_tags for TAGGED params from param_tags[].
-     * Without this, CALL_C dynamic arg tag patches read stale/zero
-     * tags for param-derived values.  Mirrors ARM64 xm_codegen.c. */
+    /* Init vreg_runtime_tags for TAGGED params from param_tags[].
+     * Params are vregs 0..n-1 by construction, so vreg index == param index. */
     for (uint32_t i = 0; i < nparams && i < 8; i++) {
-        if (i >= ctx->func->nvreg)
+        if (i >= ctx->func->nvreg || i >= XR_JIT_MAX_VREG_TAGS)
             continue;
         if (ctx->func->vregs[i].rep != XR_REP_TAGGED)
             continue;
-        int16_t bc_slot = ctx->func->vregs[i].bc_slot;
-        if (bc_slot < 0 || bc_slot >= 256)
-            continue;
         int32_t pt_off = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + i * 8);
-        int32_t rt_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+        int32_t rt_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) i;
         x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, pt_off);
         x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, rt_off, X64_SCRATCH_REG);
     }

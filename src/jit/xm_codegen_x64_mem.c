@@ -513,17 +513,14 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET,
                        X64_SCRATCH_REG);
 
-            /* Dynamic tag patch: if tag1 unknown, read from slot_runtime_tags */
+            /* Dynamic tag patch: if tag1 unknown, read from vreg_runtime_tags */
             if (tag1 == XR_RTAG_UNKNOWN && xm_ref_is_vreg(ins->args[1])) {
                 uint32_t ai = XM_REF_INDEX(ins->args[1]);
-                if (ai < ctx->func->nvreg) {
-                    int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
-                    if (bc_slot >= 0 && bc_slot < 256) {
-                        int32_t src_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
-                        int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + 1;
-                        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
-                        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst_off, X64_SCRATCH_REG);
-                    }
+                if (ai < ctx->func->nvreg && ai < XR_JIT_MAX_VREG_TAGS) {
+                    int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
+                    int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + 1;
+                    x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
+                    x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst_off, X64_SCRATCH_REG);
                 }
             }
 

@@ -1202,14 +1202,11 @@ static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     if (t1 == XR_RTAG_UNKNOWN && xm_ref_is_vreg(ins->args[1])) {
         uint32_t ai = XM_REF_INDEX(ins->args[1]);
-        if (ai < ctx->func->nvreg) {
-            int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
-            if (bc_slot >= 0 && bc_slot < 256) {
-                int32_t soff = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
-                int32_t doff = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + 1;
-                x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, soff);
-                x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, doff, X64_SCRATCH_REG);
-            }
+        if (ai < ctx->func->nvreg && ai < XR_JIT_MAX_VREG_TAGS) {
+            int32_t soff = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
+            int32_t doff = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + 1;
+            x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, soff);
+            x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, doff, X64_SCRATCH_REG);
         }
     }
 
@@ -1365,20 +1362,24 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     /* Load result_tag -> runtime_tags[bc_slot] */
     {
+        int32_t res_vreg_off = -1;
         int16_t res_bc_slot = -1;
         if (xm_ref_is_vreg(ins->dst)) {
             uint32_t vi = XM_REF_INDEX(ins->dst);
+            if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS)
+                res_vreg_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
             if (vi < ctx->func->nvreg)
                 res_bc_slot = ctx->func->vregs[vi].bc_slot;
         }
-        if (res_bc_slot >= 0 && res_bc_slot < 256) {
+        if (res_vreg_off >= 0) {
             x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG,
                           (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
-            int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + res_bc_slot;
-            x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_RCX);
+            x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, res_vreg_off, X64_RCX);
         }
-        if (suspend_id < 16)
+        if (suspend_id < 16) {
             ctx->suspend_result_bc_slots[suspend_id] = res_bc_slot;
+            ctx->suspend_result_tag_offs[suspend_id] = res_vreg_off;
+        }
     }
 
     /* Record continuation point for resume entry jump table */

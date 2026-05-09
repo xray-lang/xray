@@ -132,7 +132,7 @@ op_call_entry:;
 
             if (!instance) {
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to create instance: '%s'",
-                                 klass->name);
+                                 xr_class_display_name(klass));
             }
             XrValue inst_val = XR_FROM_PTR(instance);
 

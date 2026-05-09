@@ -350,12 +350,17 @@ typedef struct XiClassData {
     struct AstNode *ast;     /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
     const char *class_name;  /* arena copy of class name */
     const char *super_name;  /* arena copy of parent class name (NULL if none) */
+    const char *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
+    const char *display_name;        /* User-visible name (e.g. "Box"), NULL = same as class_name */
     XiClassMethod *methods;  /* arena array [nmethod] of method descriptors */
     uint16_t nmethod;        /* total method count (instance + static) */
     uint16_t *child_idx;     /* maps method order → XiFunc::children index */
     uint16_t ninst;          /* instance method count */
     uint16_t nstat;          /* static method count */
     int clinit_child_idx;    /* children index for static constructor (-1 if none) */
+    bool is_monomorphized;   /* true for mono-generated classes */
+    const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
+    int mono_type_arg_count;          /* element count */
 } XiClassData;
 
 /* ========== Block Kinds ========== */

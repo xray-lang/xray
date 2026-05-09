@@ -373,12 +373,11 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
             x64_mov_rm(&ctx->buf, result_rd, X64_SCRATCH_REG, (int32_t) XM_SUSPEND_RESULT_OFF);
         }
 
-        /* Load result_tag → runtime_tags[bc_slot] */
-        int16_t bc_slot = ctx->suspend_result_bc_slots[i];
-        if (bc_slot >= 0 && bc_slot < 256) {
+        /* Load result_tag → vreg_runtime_tags[vi] */
+        int32_t tag_off = ctx->suspend_result_tag_offs[i];
+        if (tag_off >= 0) {
             x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG,
                           (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
-            int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
             x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_RCX);
         }
 

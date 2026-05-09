@@ -1019,7 +1019,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 a64_buf_emit(&ctx->buf, a64_str(val_reg, JIT_CTX_REG, 8));
             // Determine val value_tag for reconstruction.
             // If vreg has a known concrete vtag, convert to value_tag.
-            // Otherwise 0xFF = UNKNOWN, patched at runtime from slot_runtime_tags.
+            // Otherwise 0xFF = UNKNOWN, patched at runtime from vreg_runtime_tags.
             uint8_t val_tag = 0xFF;  // unknown
             if (xm_ref_is_vreg(ins->args[1])) {
                 XmType vct = xm_ref_ctype(ctx->func, ins->args[1]);
@@ -1033,18 +1033,12 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Write val_tag to call_arg_tags[1] (helper reads it via call_arg_tags)
             int32_t tag1_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + 1;
             if (val_tag == 0xFF && xm_ref_is_vreg(ins->args[1])) {
-                // Dynamic patch: load from slot_runtime_tags[bc_slot]
+                // Dynamic patch: load from vreg_runtime_tags[vi]
                 uint32_t vi = XM_REF_INDEX(ins->args[1]);
-                if (vi < ctx->func->nvreg) {
-                    int16_t bc_slot = ctx->func->vregs[vi].bc_slot;
-                    if (bc_slot >= 0 && bc_slot < 256) {
-                        int32_t src_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
-                        a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));
-                        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
-                    } else {
-                        a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, val_tag, 0));
-                        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
-                    }
+                if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS) {
+                    int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));
+                    a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
                 } else {
                     a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, val_tag, 0));
                     a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
@@ -1262,27 +1256,31 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 a64_buf_emit(&ctx->buf, a64_ldr(rd, SCRATCH_REG, XM_SUSPEND_RESULT_OFF));
             }
 
-            // Load result_tag from suspend_state and write to runtime_tags[bc_slot].
+            // Load result_tag from suspend_state and write to vreg_runtime_tags[vi].
             // This ensures downstream CALL_C helpers (e.g. xr_jit_rt_add) get the
             // correct type tag for the await/channel result after resume.
             {
+                int32_t res_vreg_off = -1;
                 int16_t res_bc_slot = -1;
                 if (xm_ref_is_vreg(ins->dst)) {
                     uint32_t vi = XM_REF_INDEX(ins->dst);
+                    if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS)
+                        res_vreg_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
                     if (vi < ctx->func->nvreg)
                         res_bc_slot = ctx->func->vregs[vi].bc_slot;
                 }
-                if (res_bc_slot >= 0 && res_bc_slot < 256) {
+                if (res_vreg_off >= 0) {
                     // LDRB w17, [x16, #result_tag_off]
                     a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, SCRATCH_REG,
                                                      (int32_t) XM_SUSPEND_RESULT_TAG_OFF));
-                    // STRB w17, [x28, #runtime_tags + bc_slot]
-                    int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + res_bc_slot;
-                    a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
+                    // STRB w17, [x28, #vreg_runtime_tags + vi]
+                    a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, res_vreg_off));
                 }
-                // Record bc_slot for resume entry trampoline
-                if (suspend_id < 16)
+                // Record for resume entry trampoline
+                if (suspend_id < 16) {
                     ctx->suspend_result_bc_slots[suspend_id] = res_bc_slot;
+                    ctx->suspend_result_tag_offs[suspend_id] = res_vreg_off;
+                }
             }
 
             // Record continuation point for resume entry jump table

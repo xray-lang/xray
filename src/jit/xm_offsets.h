@@ -66,8 +66,9 @@
 // JIT frame stack for GC caller-frame scanning
 #define XM_JIT_FRAME_DEPTH_OFFSET offsetof(XrJitScratch, jit_frame_depth)
 #define XM_JIT_FRAME_STACK_OFFSET offsetof(XrJitScratch, jit_frame_stack)
-// Per-slot runtime tags (written by CALL_C codegen from XrJitResult.tag)
-#define XM_JIT_SLOT_RUNTIME_TAGS_OFFSET offsetof(XrJitScratch, slot_runtime_tags)
+// Per-vreg runtime tags (written by CALL_C codegen from XrJitResult.tag).
+// Indexed by vreg index (no bc_slot indirection).
+#define XM_JIT_VREG_RUNTIME_TAGS_OFFSET offsetof(XrJitScratch, vreg_runtime_tags)
 // Tag from last call_c_stub: stored here instead of x1 to avoid clobbering alloc_regs[0]
 #define XM_JIT_CALL_RESULT_TAG_OFFSET offsetof(XrJitScratch, call_result_tag)
 // Scratch slot reusing call_args[15] for temporary tag save/restore
@@ -178,8 +179,8 @@ _Static_assert(XM_JIT_RET_VALS_OFFSET % 8 == 0, "ret_vals must be 8-byte aligned
 _Static_assert(XM_JIT_RET_TAGS_OFFSET % 8 == 0, "ret_tags must be 8-byte aligned for ARM64");
 _Static_assert(sizeof(((XrJitScratch *) 0)->ret_tags[0]) == 8,
                "ret_tags elements must be 8 bytes for ARM64 alignment");
-_Static_assert(sizeof(((XrJitScratch *) 0)->slot_runtime_tags) == 256,
-               "slot_runtime_tags must be 256 bytes");
+_Static_assert(sizeof(((XrJitScratch *) 0)->vreg_runtime_tags) == XR_JIT_MAX_VREG_TAGS,
+               "vreg_runtime_tags size must match XR_JIT_MAX_VREG_TAGS");
 
 #include "../runtime/value/xchunk.h"
 _Static_assert(offsetof(XrProto, jit_entry) == XM_PROTO_JIT_ENTRY_OFFSET,

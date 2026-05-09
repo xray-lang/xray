@@ -234,8 +234,18 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
     // builder->name is a symbol-table-interned pointer; sharing it with
     // cls carries no ownership transfer.
     cls->name = b->name;
+    cls->display_name = b->display_name;
     cls->super = b->super;
+    cls->generic_origin = b->generic_origin;
     cls->flags = b->flags;
+
+    /* Transfer mono_type_arg_names ownership: builder allocated the copy,
+     * class takes it; builder's pointer is NULLed to prevent double-free
+     * in xr_class_builder_destroy. */
+    cls->mono_type_argc = b->mono_type_argc;
+    cls->mono_type_arg_names = b->mono_type_arg_names;
+    ((XrClassBuilder *)b)->mono_type_arg_names = NULL;
+    ((XrClassBuilder *)b)->mono_type_argc = 0;
 
     if (cls->super == NULL) {
         cls->depth = 0;

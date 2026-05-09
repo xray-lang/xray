@@ -54,9 +54,13 @@ typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
 typedef struct {
     uint16_t type_id;
-    uint16_t parent_id;   // 0 = no parent
-    const char *name;     // class name (e.g. "Point")
-    XrtMethodFn *vtable;  // virtual method table (NULL if no virtuals)
+    uint16_t parent_id;        // 0 = no parent
+    const char *name;          // internal name (e.g. "Box$i64")
+    const char *display_name;  // user-visible name (e.g. "Box"); NULL = same as name
+    uint16_t generic_origin;   // type_id of skeleton class; 0 = not monomorphized
+    const char **mono_type_arg_names;  // static array of display name strings, NULL if not generic
+    uint8_t mono_type_argc;            // element count of mono_type_arg_names
+    XrtMethodFn *vtable;       // virtual method table (NULL if no virtuals)
     int vtable_size;
     XrtDestructor destructor;  // NULL for classes without custom dtor
     uint32_t instance_size;    // byte size of instance fields
@@ -91,11 +95,28 @@ static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id, X
     ti->type_id = id;
     ti->parent_id = parent_id;
     ti->name = name;
+    ti->display_name = NULL;
+    ti->generic_origin = 0;
+    ti->mono_type_arg_names = NULL;
+    ti->mono_type_argc = 0;
     ti->vtable = vtable;
     ti->vtable_size = vtable_size;
     ti->destructor = dtor;
     ti->instance_size = inst_size;
     return id;
+}
+
+/* Set generic origin and display name for a monomorphized type.
+ * type_arg_names is a static array of string literals (no ownership transfer). */
+static inline void xrt_type_set_generic(uint16_t type_id, uint16_t origin_id,
+                                        const char *display,
+                                        const char **type_arg_names, uint8_t argc) {
+    if (type_id == 0 || type_id >= xrt_type_count) return;
+    XrtTypeInfo *ti = &xrt_type_table[type_id];
+    ti->generic_origin = origin_id;
+    ti->display_name = display;
+    ti->mono_type_arg_names = type_arg_names;
+    ti->mono_type_argc = argc;
 }
 
 /* =========================================================================
@@ -124,6 +145,32 @@ static inline XrValue xrt_box_obj(void *obj) {
 /* Unbox XrValue to object pointer (no type check) */
 static inline void *xrt_unbox_obj(XrValue v) {
     return v.ptr;
+}
+
+/* =========================================================================
+ * instanceof checks — class type identity
+ * ========================================================================= */
+
+/* Get display name for a type_id (falls back to internal name) */
+static inline const char *xrt_type_display_name(uint16_t type_id) {
+    if (type_id == 0 || type_id >= xrt_type_count) return "<unknown>";
+    const XrtTypeInfo *ti = &xrt_type_table[type_id];
+    return ti->display_name ? ti->display_name : ti->name;
+}
+
+/* Walk inheritance chain: true if value is an instance of target_tid
+ * or any subclass whose parent chain reaches target_tid. Also checks
+ * generic_origin at each level for monomorphized classes. */
+static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
+    if (val.tag != XR_TAG_PTR || !val.ptr) return 0;
+    XrtArcHdr *h = XRT_ARC_HDR(val.ptr);
+    uint16_t cur = h->type;
+    while (cur != 0 && cur < xrt_type_count) {
+        if (cur == target_tid) return 1;
+        if (xrt_type_table[cur].generic_origin == target_tid) return 1;
+        cur = xrt_type_table[cur].parent_id;
+    }
+    return 0;
 }
 
 #endif  // XRT_CLASS_H

@@ -90,7 +90,13 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
         cap = (uint8_t)v->args[0]->aux_int;
     }
-    emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, cap, 0));
+    /* C = (elem_tid << 2) | storage_mode.
+     * elem_tid is only set when the lowerer explicitly encodes it in
+     * aux_int (e.g. new Array<T>()).  Array literals like [1,2,3] always
+     * create XR_ELEM_ANY arrays because OP_NEWARRAY pushes B elements
+     * from registers and typed storage crashes on uninitialized slots. */
+    uint8_t c_field = (uint8_t)(v->aux_int & 0xFF);
+    emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, cap, c_field));
 }
 
 /* Map creation */
@@ -99,12 +105,14 @@ XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
         cap = (uint8_t)v->args[0]->aux_int;
     }
+    /* C field pre-encoded by lowerer: (key_kind<<7)|(value_tid<<2)|flags */
     uint8_t c_field = (uint8_t)(v->aux_int & 0xFF);
     emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, cap, c_field));
 }
 
 /* Set creation */
 XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    /* B field pre-encoded by lowerer: (elem_tid<<2)|flags */
     uint8_t b_field = (uint8_t)(v->aux_int & 0xFF);
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
@@ -539,11 +547,30 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v,
     desc->class_name = strdup(cd->name);
     desc->super_name = (cd->super_name && !cd->super_module)
                        ? strdup(cd->super_name) : NULL;
+    desc->generic_origin_name = cdata->generic_origin_name
+                                ? strdup(cdata->generic_origin_name) : NULL;
+    desc->display_name = cdata->display_name
+                         ? strdup(cdata->display_name) : NULL;
+    desc->is_monomorphized = cdata->is_monomorphized;
+    desc->mono_type_arg_names = NULL;
+    desc->mono_type_arg_count = 0;
+    if (cdata->mono_type_arg_count > 0 && cdata->mono_type_arg_names) {
+        const char **names = (const char **)xr_calloc(
+            cdata->mono_type_arg_count, sizeof(const char *));
+        if (names) {
+            for (int i = 0; i < cdata->mono_type_arg_count; i++)
+                names[i] = cdata->mono_type_arg_names[i]
+                            ? strdup(cdata->mono_type_arg_names[i]) : NULL;
+            desc->mono_type_arg_names = names;
+            desc->mono_type_arg_count = cdata->mono_type_arg_count;
+        }
+    }
     desc->super_global_index = -1;
     desc->descriptor_version = XR_CLASS_DESCRIPTOR_VERSION;
     desc->clinit_proto_index = -1;
     if (cd->is_abstract) desc->flags |= XR_CLASS_ABSTRACT;
     if (cd->is_final)    desc->flags |= XR_CLASS_FINAL;
+    if (cdata->is_monomorphized) desc->flags |= XR_CLASS_MONOMORPHIZED;
 
     if (!emit_class_collect_fields_impl(ctx, cd, desc)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);

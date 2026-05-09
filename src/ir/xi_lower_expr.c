@@ -16,6 +16,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xtype_names.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -1160,7 +1161,20 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
                                        result_type, 1);
             if (!v) return NULL;
             v->args[0] = cap;
-            v->aux_int = 0;
+            /* Encode key_kind and value_tid: C = (key_kind<<7)|(vtid<<2)|flags */
+            if (XR_TYPE_IS_MAP(result_type)) {
+                uint8_t vtid = 0, key_kind = 0;
+                if (result_type->map.value_type)
+                    vtid = xr_type_to_tid(result_type->map.value_type);
+                if (result_type->map.key_type) {
+                    uint8_t ktid = xr_type_to_tid(result_type->map.key_type);
+                    if (ktid == XR_TID_STRING) key_kind = 1;
+                    else if (ktid == XR_TID_INT) key_kind = 2;
+                }
+                v->aux_int = (int64_t)((key_kind << 7) | ((vtid & 0x1F) << 2));
+            } else {
+                v->aux_int = 0;
+            }
             v->line = (uint32_t)node->line;
             return v;
         }
@@ -1180,6 +1194,11 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
                                        result_type, 1);
             if (!v) return NULL;
             v->args[0] = cap;
+            /* Encode elem_tid from explicit type param: C = (tid<<2)|mode */
+            if (XR_TYPE_IS_ARRAY(result_type) && result_type->container.element_type) {
+                uint8_t tid = xr_type_to_tid(result_type->container.element_type);
+                v->aux_int = (int64_t)(tid << 2);
+            }
             v->line = (uint32_t)node->line;
             return v;
         }
@@ -1189,7 +1208,13 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
                                        result_type, 1);
             if (!v) return NULL;
             v->args[0] = cap;
-            v->aux_int = 0;
+            /* Encode elem_tid from explicit type param: B = (tid<<2)|flags */
+            if (result_type->kind == XR_KIND_SET && result_type->container.element_type) {
+                uint8_t tid = xr_type_to_tid(result_type->container.element_type);
+                v->aux_int = (int64_t)((tid & 0x1F) << 2);
+            } else {
+                v->aux_int = 0;
+            }
             v->line = (uint32_t)node->line;
             return v;
         }
@@ -1283,7 +1308,6 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     if (!cls) {
         cls = xi_const_null(l->func, l->cur_block, l->type_null);
     }
-
     uint16_t nargs = (uint16_t)(n + 1);
     XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
                                   result_type, nargs);
