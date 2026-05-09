@@ -706,6 +706,48 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_UNBOX:
             return lower_unbox(ctx, blk, v);
 
+        /* Explicit width narrowing/widening — ensures correct value range
+         * in the JIT register. Unsigned: AND mask. Signed: SHL+SAR. */
+        case XI_NARROW_U8: case XI_WIDEN_U8: {
+            XmRef a = get_ref(ctx, v->args[0]);
+            XmRef m = xm_const_i64(ctx->xm_func, 0xFF);
+            return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
+        }
+        case XI_NARROW_U16: case XI_WIDEN_U16: {
+            XmRef a = get_ref(ctx, v->args[0]);
+            XmRef m = xm_const_i64(ctx->xm_func, 0xFFFF);
+            return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
+        }
+        case XI_NARROW_U32: case XI_WIDEN_U32: {
+            XmRef a = get_ref(ctx, v->args[0]);
+            XmRef m = xm_const_i64(ctx->xm_func, 0xFFFFFFFF);
+            return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
+        }
+        case XI_NARROW_I8: case XI_WIDEN_I8: {
+            XmRef a = get_ref(ctx, v->args[0]);
+            XmRef sh = xm_const_i64(ctx->xm_func, 56);
+            XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
+            return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
+        }
+        case XI_NARROW_I16: case XI_WIDEN_I16: {
+            XmRef a = get_ref(ctx, v->args[0]);
+            XmRef sh = xm_const_i64(ctx->xm_func, 48);
+            XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
+            return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
+        }
+        case XI_NARROW_I32: case XI_WIDEN_I32: {
+            XmRef a = get_ref(ctx, v->args[0]);
+            XmRef sh = xm_const_i64(ctx->xm_func, 32);
+            XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
+            return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
+        }
+        case XI_NARROW_F32: case XI_WIDEN_F32: {
+            /* float precision roundtrip — typed array runtime already handles
+             * the actual float32 truncation, so this is a semantic no-op in JIT.
+             * If we had FCVTS/FCVTD, we'd emit them here. */
+            return get_ref(ctx, v->args[0]);
+        }
+
         /* Null check */
         case XI_ISNULL: {
             XR_DCHECK(v->nargs == 1, "isnull: expected 1 arg");

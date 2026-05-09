@@ -415,6 +415,14 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_NOT]         = 1,
     [XI_CONVERT]     = 1,
     [XI_BOX]         = 1,  [XI_UNBOX]  = 1,
+    [XI_NARROW_I8]   = 1,  [XI_NARROW_U8]  = 1,
+    [XI_NARROW_I16]  = 1,  [XI_NARROW_U16] = 1,
+    [XI_NARROW_I32]  = 1,  [XI_NARROW_U32] = 1,
+    [XI_NARROW_F32]  = 1,
+    [XI_WIDEN_I8]    = 1,  [XI_WIDEN_U8]   = 1,
+    [XI_WIDEN_I16]   = 1,  [XI_WIDEN_U16]  = 1,
+    [XI_WIDEN_I32]   = 1,  [XI_WIDEN_U32]  = 1,
+    [XI_WIDEN_F32]   = 1,
     [XI_LOAD_FIELD]  = 1,  [XI_STORE_FIELD] = 2,
     [XI_INDEX_GET]   = 2,  [XI_INDEX_SET]   = 3,
     [XI_JSON_NEW]    = 0,     /* no args; aux carries field count + names */
@@ -911,6 +919,56 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+/* ========== Check 17: NARROW Required Before Typed-Array Store ========== */
+
+/* Return true if the op is a narrowing truncation instruction. */
+static bool is_narrow_op(uint16_t op) {
+    return op == XI_NARROW_I8  || op == XI_NARROW_U8  ||
+           op == XI_NARROW_I16 || op == XI_NARROW_U16 ||
+           op == XI_NARROW_I32 || op == XI_NARROW_U32 ||
+           op == XI_NARROW_F32;
+}
+
+/* XI_INDEX_SET on a sub-width typed array (Array<int8>, Array<uint16>, etc.)
+ * must have a NARROW_* op feeding its value argument (args[2]).
+ * Without narrowing, a full-width int64/f64 is stored into a narrow slot,
+ * silently losing high bits at the VM/JIT level but not at AOT. */
+static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed) return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk) continue;
+
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_INDEX_SET) continue;
+            if (v->nargs < 3 || !v->args[0] || !v->args[2]) continue;
+
+            /* Check if the collection is a typed array */
+            struct XrType *coll_type = v->args[0]->type;
+            if (!coll_type || coll_type->kind != XR_KIND_ARRAY) continue;
+
+            struct XrType *elem = coll_type->container.element_type;
+            if (!elem || elem->native_width == 0) continue;
+
+            /* Sub-width element — args[2] must be a NARROW_* op */
+            XiValue *val = v->args[2];
+            XR_DCHECK(val != NULL, "verify: INDEX_SET val arg is NULL");
+            if (!is_narrow_op(val->op)) {
+                verr(ctx,
+                     "func '%s': XI_INDEX_SET v%u in b%u stores to "
+                     "sub-width typed array (native_width=%u) but "
+                     "value v%u (op %s) is not a NARROW_* op",
+                     f->name, v->id, blk->id,
+                     elem->native_width,
+                     val->id, xi_op_name(val->op));
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Public API ========== */
 
 XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
@@ -1010,6 +1068,11 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     /* Backend op legality (only at STAGE_BACKEND) */
     if (!ctx.failed) {
         verify_backend(&ctx, f);
+    }
+
+    /* NARROW before typed-array store (all stages) */
+    if (!ctx.failed) {
+        verify_narrow_before_typed_store(&ctx, f);
     }
 
     return !ctx.failed;

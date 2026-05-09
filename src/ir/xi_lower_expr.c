@@ -27,6 +27,7 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../base/xglobal_indices.h"
+#include "../runtime/value/xstruct_layout.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -481,8 +482,8 @@ static int type_member_to_tid(const char *name) {
         {"Channel",  21},  /* XR_TID_CHANNEL */
         {"Regex",    22},  /* XR_TID_REGEX */
         {"DateTime", 23},  /* XR_TID_DATETIME */
-        {"Bytes",    33},  /* XR_TID_BYTES */
-        {"TypedArray",34}, /* XR_TID_TYPED_ARRAY */
+        {"Bytes",    14},  /* XR_TID_ARRAY (Bytes is Array<uint8>) */
+        {"TypedArray",14}, /* XR_TID_ARRAY (TypedArray is Array with elem_type) */
     };
     for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
         if (strcmp(name, table[i].n) == 0)
@@ -562,6 +563,55 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     return v;
 }
 
+/* Map typed-array element type to XI_NARROW_* op (for stores).
+ * Returns 0 if no narrowing needed (i64/f64/bool/any). */
+static uint16_t xi_narrow_op_for_elem(struct XrType *elem_type) {
+    if (!elem_type) return 0;
+    uint8_t nw = elem_type->native_width;
+    if (nw == 0) {
+        /* Default width: int->i64, float->f64 — no narrowing */
+        return 0;
+    }
+    switch (nw) {
+        case XR_NATIVE_I8:  return XI_NARROW_I8;
+        case XR_NATIVE_U8:  return XI_NARROW_U8;
+        case XR_NATIVE_I16: return XI_NARROW_I16;
+        case XR_NATIVE_U16: return XI_NARROW_U16;
+        case XR_NATIVE_I32: return XI_NARROW_I32;
+        case XR_NATIVE_U32: return XI_NARROW_U32;
+        case XR_NATIVE_F32: return XI_NARROW_F32;
+        default: return 0;  /* i64/u64/f64/bool: no narrowing */
+    }
+}
+
+/* Map typed-array element type to XI_WIDEN_* op (for loads).
+ * Returns 0 if no widening needed. */
+static uint16_t xi_widen_op_for_elem(struct XrType *elem_type) {
+    if (!elem_type) return 0;
+    uint8_t nw = elem_type->native_width;
+    if (nw == 0) return 0;
+    switch (nw) {
+        case XR_NATIVE_I8:  return XI_WIDEN_I8;
+        case XR_NATIVE_U8:  return XI_WIDEN_U8;
+        case XR_NATIVE_I16: return XI_WIDEN_I16;
+        case XR_NATIVE_U16: return XI_WIDEN_U16;
+        case XR_NATIVE_I32: return XI_WIDEN_I32;
+        case XR_NATIVE_U32: return XI_WIDEN_U32;
+        case XR_NATIVE_F32: return XI_WIDEN_F32;
+        default: return 0;
+    }
+}
+
+/* Get element type from a container type (Array<T> or [N]T). */
+static struct XrType *xi_get_container_elem_type(struct XrType *container_type) {
+    if (!container_type) return NULL;
+    if (container_type->kind == XR_KIND_ARRAY)
+        return container_type->container.element_type;
+    if (container_type->kind == XR_KIND_FIXED_ARRAY)
+        return container_type->fixed_array.element_type;
+    return NULL;
+}
+
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
     XiValue *obj = xi_lower_expr(l, ig->array);
@@ -574,6 +624,17 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->args[0] = obj;
     v->args[1] = idx;
     v->line = (uint32_t) node->line;
+
+    /* Insert XI_WIDEN after reading from a sub-width typed array */
+    struct XrType *elem_type = xi_get_container_elem_type(obj->type);
+    uint16_t widen_op = xi_widen_op_for_elem(elem_type);
+    if (widen_op) {
+        XiValue *w = xi_value_new(l->func, l->cur_block, widen_op, result_type, 1);
+        if (!w) return v;
+        w->args[0] = v;
+        w->line = (uint32_t) node->line;
+        return w;
+    }
     return v;
 }
 
@@ -583,6 +644,18 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     XiValue *idx = xi_lower_expr(l, is_node->index);
     XiValue *val = xi_lower_expr(l, is_node->value);
     if (!obj || !idx || !val) return NULL;
+
+    /* Insert XI_NARROW before writing to a sub-width typed array */
+    struct XrType *elem_type = xi_get_container_elem_type(obj->type);
+    uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
+    if (narrow_op) {
+        XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, val->type, 1);
+        if (n) {
+            n->args[0] = val;
+            n->line = (uint32_t) node->line;
+            val = n;
+        }
+    }
 
     struct XrType *result_type = val->type;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, result_type, 3);

@@ -46,6 +46,14 @@ static bool ifconv_is_pure(const XiValue *v) {
         case XI_NOT: case XI_ISNULL:
         case XI_CONVERT: case XI_COPY:
         case XI_BOX: case XI_UNBOX:
+        case XI_NARROW_I8: case XI_NARROW_U8:
+        case XI_NARROW_I16: case XI_NARROW_U16:
+        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_NARROW_F32:
+        case XI_WIDEN_I8: case XI_WIDEN_U8:
+        case XI_WIDEN_I16: case XI_WIDEN_U16:
+        case XI_WIDEN_I32: case XI_WIDEN_U32:
+        case XI_WIDEN_F32:
         case XI_CONST: case XI_SELECT:
             return true;
         default:

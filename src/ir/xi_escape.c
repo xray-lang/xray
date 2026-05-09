@@ -108,6 +108,14 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         case XI_EQ_STRICT: case XI_NE_STRICT:
         case XI_NOT: case XI_ISNULL: case XI_IS: case XI_AS:
         case XI_CONVERT: case XI_TYPEOF:
+        case XI_NARROW_I8: case XI_NARROW_U8:
+        case XI_NARROW_I16: case XI_NARROW_U16:
+        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_NARROW_F32:
+        case XI_WIDEN_I8: case XI_WIDEN_U8:
+        case XI_WIDEN_I16: case XI_WIDEN_U16:
+        case XI_WIDEN_I32: case XI_WIDEN_U32:
+        case XI_WIDEN_F32:
             return XI_ESC_NONE;
 
         /* ---- BOX / UNBOX: transparent ---- */

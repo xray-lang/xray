@@ -626,6 +626,18 @@ static XrRep sr_def_rep(const XiValue *v) {
             XrRep r = xr_type_base_rep(v->type);
             return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
         }
+        /* NARROW/WIDEN: value stays in machine register, only range changes.
+         * Integer variants keep I64, float variants keep F64. */
+        case XI_NARROW_I8: case XI_NARROW_U8:
+        case XI_NARROW_I16: case XI_NARROW_U16:
+        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_WIDEN_I8: case XI_WIDEN_U8:
+        case XI_WIDEN_I16: case XI_WIDEN_U16:
+        case XI_WIDEN_I32: case XI_WIDEN_U32:
+            return XR_REP_I64;
+        case XI_NARROW_F32:
+        case XI_WIDEN_F32:
+            return XR_REP_F64;
         default:
             return XR_REP_TAGGED;
     }
@@ -662,6 +674,17 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
             return XR_REP_TAGGED;
         case XI_UNBOX:
             return XR_REP_TAGGED;
+        /* NARROW/WIDEN: input must be unboxed */
+        case XI_NARROW_I8: case XI_NARROW_U8:
+        case XI_NARROW_I16: case XI_NARROW_U16:
+        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_WIDEN_I8: case XI_WIDEN_U8:
+        case XI_WIDEN_I16: case XI_WIDEN_U16:
+        case XI_WIDEN_I32: case XI_WIDEN_U32:
+            return XR_REP_I64;
+        case XI_NARROW_F32:
+        case XI_WIDEN_F32:
+            return XR_REP_F64;
         default:
             return XR_REP_TAGGED;
     }

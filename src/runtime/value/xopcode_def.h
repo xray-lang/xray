@@ -224,6 +224,20 @@
     _(BOX_F64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as f64)")                                    \
     _(UNBOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = unbox(R[B]) as i64")                                \
     _(UNBOX_F64, FMT_AB, KOP_AB_UNARY, "R[A] = unbox(R[B]) as f64")                                \
+    _(NARROW_I8, FMT_AB, KOP_AB_UNARY, "R[A] = (int8_t)R[B]")                                      \
+    _(NARROW_U8, FMT_AB, KOP_AB_UNARY, "R[A] = (uint8_t)R[B]")                                     \
+    _(NARROW_I16, FMT_AB, KOP_AB_UNARY, "R[A] = (int16_t)R[B]")                                    \
+    _(NARROW_U16, FMT_AB, KOP_AB_UNARY, "R[A] = (uint16_t)R[B]")                                   \
+    _(NARROW_I32, FMT_AB, KOP_AB_UNARY, "R[A] = (int32_t)R[B]")                                    \
+    _(NARROW_U32, FMT_AB, KOP_AB_UNARY, "R[A] = (uint32_t)R[B]")                                   \
+    _(NARROW_F32, FMT_AB, KOP_AB_UNARY, "R[A] = (float)R[B]")                                      \
+    _(WIDEN_I8, FMT_AB, KOP_AB_UNARY, "R[A] = sign_ext_i8(R[B])")                                  \
+    _(WIDEN_U8, FMT_AB, KOP_AB_UNARY, "R[A] = zero_ext_u8(R[B])")                                  \
+    _(WIDEN_I16, FMT_AB, KOP_AB_UNARY, "R[A] = sign_ext_i16(R[B])")                                \
+    _(WIDEN_U16, FMT_AB, KOP_AB_UNARY, "R[A] = zero_ext_u16(R[B])")                                \
+    _(WIDEN_I32, FMT_AB, KOP_AB_UNARY, "R[A] = sign_ext_i32(R[B])")                                \
+    _(WIDEN_U32, FMT_AB, KOP_AB_UNARY, "R[A] = zero_ext_u32(R[B])")                                \
+    _(WIDEN_F32, FMT_AB, KOP_AB_UNARY, "R[A] = (double)(float)R[B]")                               \
     _(ARRAY_GET_NOCHECK, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:Array[R[C]] (no check)")               \
     _(MAP_INCREMENT, FMT_AB, KOP_AB_INPLACE, "R[A]:Map[R[B]]++")                                   \
     _(SUBSTRING, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].substring(R[C], R[C+1])")                      \

@@ -187,6 +187,28 @@ typedef enum {
     XI_BOX,         /* unboxed -> tagged XrValue */
     XI_UNBOX,       /* tagged -> unboxed (type guard) */
 
+    /* Explicit narrowing: truncate int64/double to sub-width, re-extend.
+     * Result rep stays I64 (or F64 for F32 variant) — only value range changes.
+     * Inserted by xi_lower at typed-storage write points. */
+    XI_NARROW_I8,   /* int64 → (int8_t)  → int64  (sign-extend back) */
+    XI_NARROW_U8,   /* int64 → (uint8_t) → int64  (zero-extend back) */
+    XI_NARROW_I16,  /* int64 → (int16_t) → int64 */
+    XI_NARROW_U16,  /* int64 → (uint16_t)→ int64 */
+    XI_NARROW_I32,  /* int64 → (int32_t) → int64 */
+    XI_NARROW_U32,  /* int64 → (uint32_t)→ int64 */
+    XI_NARROW_F32,  /* double → (float)  → double (precision roundtrip) */
+
+    /* Explicit widening: sign/zero extend sub-width to int64.
+     * Inserted by xi_lower at typed-storage read points.
+     * Makes sign-extension vs zero-extension unambiguous. */
+    XI_WIDEN_I8,    /* sign-extend int8 value in int64 */
+    XI_WIDEN_U8,    /* zero-extend uint8 value in int64 (mask 0xFF) */
+    XI_WIDEN_I16,   /* sign-extend int16 */
+    XI_WIDEN_U16,   /* zero-extend uint16 */
+    XI_WIDEN_I32,   /* sign-extend int32 */
+    XI_WIDEN_U32,   /* zero-extend uint32 */
+    XI_WIDEN_F32,   /* (double)(float) roundtrip — explicit precision gate */
+
     /* Memory / field access */
     XI_LOAD_FIELD,  /* obj.field: args[0]=obj, aux_int=field_index */
     XI_STORE_FIELD, /* obj.field=val: args[0]=obj, args[1]=val, aux_int=field_index */

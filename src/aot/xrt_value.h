@@ -127,9 +127,28 @@ static inline const char *xr_unbox_str(XrValue v) {
  * ========================================================================= */
 
 #define XR_IS_NULL(v)  ((v).tag == XR_TAG_NULL)
+#define XR_IS_BOOL(v)  ((v).tag == XR_TAG_BOOL)
 #define XR_IS_INT(v)   ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
+#define XR_IS_FALSE(v) ((v).tag == XR_TAG_BOOL && (v).i == 0)
 #define XR_IS_NUM(v)   (XR_IS_INT(v) || XR_IS_FLOAT(v))
+
+/* Coerce any numeric/bool value to int64 (for typed array storage).
+ * Non-numeric values return 0 in AOT context. */
+static inline int64_t xr_value_to_int64_coerce(XrValue v) {
+    if (XR_IS_INT(v)) return v.i;
+    if (XR_IS_FLOAT(v)) return (int64_t)v.f;
+    if (XR_IS_BOOL(v)) return v.i;
+    return 0;
+}
+
+/* Coerce any numeric/bool value to double (for typed array storage). */
+static inline double xr_value_to_f64_coerce(XrValue v) {
+    if (XR_IS_FLOAT(v)) return v.f;
+    if (XR_IS_INT(v)) return (double)v.i;
+    if (XR_IS_BOOL(v)) return (double)v.i;
+    return 0.0;
+}
 
 /* =========================================================================
  * String helpers
