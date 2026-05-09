@@ -28,10 +28,6 @@ typedef struct {
     uint8_t  elem_size;   /* cached bytes per element */
 } xrt_array_t;
 
-/* Direct XrValue* access for ELEM_ANY arrays (used by method dispatch).
- * Safe because AOT-generated code only creates ELEM_ANY arrays. */
-#define XRT_ARRAY_ELEMS(a) ((XrValue *)(a)->data)
-
 static inline XrValue xrt_array_new(int64_t cap) {
     if (cap < 4)
         cap = 4;
@@ -63,7 +59,7 @@ static inline XrValue xrt_array_new_typed(int64_t cap, uint8_t etype) {
     a->len = 0;
     a->cap = cap;
     a->elem_type = etype;
-    a->elem_size = xr_elem_sizes[etype];
+    a->elem_size = XR_ELEM_SIZES[etype];
     a->data = XRT_CALLOC((size_t) cap, (size_t) a->elem_size);
     if (!a->data) {
         fprintf(stderr, "xrt_array_new_typed: out of memory\n");

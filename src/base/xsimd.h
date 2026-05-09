@@ -119,7 +119,7 @@ XR_FUNC const char *xr_simd_skip_range_neon(const char *s, size_t len, const cha
     xr_simd_find_range_neon(s, len, ranges, range_len)
 #define xr_simd_skip_range(s, len, ranges, range_len)                                              \
     xr_simd_skip_range_neon(s, len, ranges, range_len)
-#endif  // ========== TypedArray SIMD Memset ==========
+#endif  // ========== Typed Array SIMD Memset ==========
 
 // Fill memory with repeated 8-bit value (SIMD accelerated)
 XR_FUNC void xr_simd_memset8(void *dst, uint8_t value, size_t count);

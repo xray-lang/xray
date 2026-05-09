@@ -22,7 +22,7 @@
  *   OP_STRBUF_NEW / APPEND / FINISH   — StringBuilder hot path
  */
 
-// Box/Unbox: typed storage (TypedArray/TypedField) ↔ tagged boundary
+// Box/Unbox: typed storage (typed array / compact field) to tagged boundary
 // BOX creates tagged value from raw payload
 // UNBOX extracts raw payload with type check
 vmcase(OP_BOX_I64) {

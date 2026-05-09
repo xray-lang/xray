@@ -43,8 +43,6 @@ add_xray_unit_test(test_immix_gc gc/test_immix_gc.c)
 
 add_xray_unit_test(test_utf8 object/test_utf8.c)
 
-# TODO: fix memory management for test_typed_array
-# add_xray_unit_test(test_typed_array object/test_typed_array.c)
 add_xray_unit_test(test_xarray object/test_xarray.c)
 add_xray_unit_test(test_xstring object/test_xstring.c)
 add_xray_unit_test(test_xmap object/test_xmap.c)

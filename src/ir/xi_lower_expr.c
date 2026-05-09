@@ -483,7 +483,6 @@ static int type_member_to_tid(const char *name) {
         {"Regex",    22},  /* XR_TID_REGEX */
         {"DateTime", 23},  /* XR_TID_DATETIME */
         {"Bytes",    14},  /* XR_TID_ARRAY (Bytes is Array<uint8>) */
-        {"TypedArray",14}, /* XR_TID_ARRAY (TypedArray is Array with elem_type) */
     };
     for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
         if (strcmp(name, table[i].n) == 0)

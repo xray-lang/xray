@@ -1157,7 +1157,7 @@ scalar:
 
 #endif  // __SSE4_2__
 
-/* ========== TypedArray SIMD Memset ========== */
+/* ========== Typed Array SIMD Memset ========== */
 
 // Scalar fallback for memset16
 static void memset16_scalar(void *dst, uint16_t value, size_t count) {
