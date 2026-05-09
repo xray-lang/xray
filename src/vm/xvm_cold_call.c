@@ -62,11 +62,21 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
         return VM_COLD_BREAK;
     }
 
-    // ch.tryRecv()
+    // ch.tryRecv() → (value, ok) multi-return into base[a], base[a+1]
     if (nargs == 0 && method_symbol == SYMBOL_TRYRECV) {
         bool ok;
         XrValue value = xr_channel_try_recv(ch, &ok);
+        /* Unbuffered rendezvous: if buffer was empty, try to wake a
+         * blocked sender and take its value directly. */
+        if (!ok) {
+            XrCoroutine *sender = xr_runtime_wake_channel(isolate, ch, true);
+            if (sender) {
+                value = sender->send_value;
+                ok = true;
+            }
+        }
         base[a] = ok ? vm_chan_copy_recv(isolate, value, vm_ctx) : xr_null();
+        base[a + 1] = xr_bool(ok);
         if (ok) {
             xr_runtime_wake_channel(isolate, ch, true);
         }
