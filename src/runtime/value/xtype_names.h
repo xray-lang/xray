@@ -52,10 +52,6 @@
 #define TYPE_NAME_WEAKSET "WeakSet"
 #define TYPE_NAME_BYTES "Bytes"
 
-/* ========== Slice/View Types ========== */
-
-#define TYPE_NAME_ARRAY_SLICE "ArraySlice"
-
 /* ========== Runtime Types ========== */
 
 #define TYPE_NAME_OBJECT "object"
@@ -63,7 +59,6 @@
 #define TYPE_NAME_CFUNCTION "cfunction"
 #define TYPE_NAME_CLASS "class"
 #define TYPE_NAME_CLASS_LITE "class_lite"
-#define TYPE_NAME_CLASS_BUILDER "class_builder"
 #define TYPE_NAME_INSTANCE "instance"
 #define TYPE_NAME_BOUND_METHOD "bound_method"
 #define TYPE_NAME_ENUM_TYPE "enum_type"
@@ -163,14 +158,9 @@ typedef enum {
     XR_TID_COROUTINE,      // 30
     XR_TID_RANGE,          // 31
     XR_TID_TASK,           // 32
-    // Internal/GC types (not user-visible, used by RuntimeTypeInfo)
-    XR_TID_BYTES,        // 33
-    XR_TID_TYPED_ARRAY,  // 34
-    XR_TID_UPVALUE,      // 35
-    XR_TID_ERROR,        // 36
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,      // 37
-    XR_TID_WEAKSET,      // 38
+    XR_TID_WEAKMAP,      // 33
+    XR_TID_WEAKSET,      // 34
     XR_TID_COUNT
 } XrTypeId;
 

@@ -61,7 +61,7 @@
 #include "../os/os_time.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
-#include "../runtime/object/xslice.h"
+
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xjson_serde.h"
 #include "../runtime/symbol/xsymbol_table.h"

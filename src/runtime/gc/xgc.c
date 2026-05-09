@@ -54,8 +54,6 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     // Containers — full lifecycle: destroy + traverse + deep_copy + to_shared.
     [XR_TARRAY] = {xr_gc_destroy_array, xr_gc_traverse_array, xr_deep_copy_array_with_ctx,
                    xr_to_shared_array},
-    [XR_TARRAY_SLICE] = {NULL, xr_gc_traverse_array, xr_deep_copy_array_with_ctx,
-                         xr_to_shared_array},
     [XR_TMAP] = {xr_gc_destroy_map, xr_gc_traverse_map, xr_deep_copy_map_with_ctx,
                  xr_to_shared_map},
     [XR_TSET] = {xr_gc_destroy_set, xr_gc_traverse_set, xr_deep_copy_set_with_ctx,

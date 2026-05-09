@@ -310,8 +310,8 @@ XrType *xr_type_new_datetime(XrayIsolate *X) {
 }
 
 XrType *xr_type_new_bytes(XrayIsolate *X) {
-    XrType *type = type_alloc(X, XR_KIND_BYTES);
-    return type;
+    /* Bytes is a type alias for Array<int> (runtime storage: XR_ELEM_U8). */
+    return xr_type_new_array(X, xr_type_new(X, XR_KIND_INT));
 }
 
 XrType *xr_type_new_regex(XrayIsolate *X) {
@@ -1035,14 +1035,6 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
         return true;
     }
-
-    // Bytes ↔ Array: Bytes is an alias for Array<uint8>
-    if (target->kind == XR_KIND_BYTES && XR_TYPE_IS_ARRAY(source))
-        return true;
-    if (XR_TYPE_IS_ARRAY(target) && source->kind == XR_KIND_BYTES)
-        return true;
-    if (target->kind == XR_KIND_BYTES && source->kind == XR_KIND_BYTES)
-        return true;
 
     // Array type compatibility (invariant, with unknown element fallback)
     if (XR_TYPE_IS_ARRAY(target) && XR_TYPE_IS_ARRAY(source)) {

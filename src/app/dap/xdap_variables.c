@@ -114,8 +114,6 @@ bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value) {
         XrGCHeader *hdr = XR_TO_PTR(value);
         if (hdr->type == XR_TINSTANCE)
             return true;
-        if (hdr->type == XR_TARRAY_SLICE)
-            return true;
     }
     return false;
 }
@@ -131,8 +129,6 @@ XdapVarRefType xr_debug_get_ref_type(XrValue value) {
         XrGCHeader *hdr = XR_TO_PTR(value);
         if (hdr->type == XR_TINSTANCE)
             return XDAP_REF_INSTANCE;
-        if (hdr->type == XR_TARRAY_SLICE)
-            return XDAP_REF_ARRAY;
     }
     return XDAP_REF_INVALID;
 }
@@ -337,13 +333,6 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **ou
         case XDAP_REF_ARRAY:
             if (XR_IS_ARRAY(ref->value)) {
                 return get_array_children(isolate, XR_TO_ARRAY(ref->value), out_vars);
-            }
-            // Handle ArraySlice (same structure as Array)
-            if (XR_IS_PTR(ref->value)) {
-                XrGCHeader *hdr = XR_TO_PTR(ref->value);
-                if (hdr->type == XR_TARRAY_SLICE) {
-                    return get_array_children(isolate, (XrArray *) hdr, out_vars);
-                }
             }
             break;
 

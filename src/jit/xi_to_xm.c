@@ -1002,6 +1002,9 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_TYPEOF:
         case XI_GET_BUILTIN:
         case XI_CLASS_CREATE:
+        case XI_STRUCT_NEW:
+        case XI_STRUCT_GET:
+        case XI_STRUCT_SET:
             return lower_call(ctx, blk, v);
 
         /* Structured concurrency scope — runtime calls */

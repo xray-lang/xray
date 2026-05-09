@@ -453,10 +453,6 @@ static bool is_set_type(XrType *type) {
     return type && (type->kind == XR_KIND_SET);
 }
 
-static bool is_bytes_type(XrType *type) {
-    return type && (type->kind == XR_KIND_BYTES);
-}
-
 static bool is_bigint_type(XrType *type) {
     return type && (xr_type_is_named_class(type, "BigInt"));
 }
@@ -529,9 +525,9 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 
     switch (iface) {
         case XA_IFACE_ITERABLE:
-            // Iterable: Array, Map, Set, string (Bytes = Array<uint8>)
+            // Iterable: Array, Map, Set, string
             return is_array_type(type) || is_map_type(type) || is_set_type(type) ||
-                   is_string_type(type) || is_bytes_type(type);
+                   is_string_type(type);
 
         case XA_IFACE_ITERATOR:
             // Iterator: internal use only, no built-in types directly implement
@@ -552,18 +548,18 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
             return true;
 
         case XA_IFACE_INDEXABLE:
-            // Indexable: Array, string, Map, Json (Bytes = Array<uint8>)
+            // Indexable: Array, string, Map, Json
             return is_array_type(type) || is_string_type(type) || is_map_type(type) ||
-                   is_bytes_type(type) || is_json_type(type);
+                   is_json_type(type);
 
         case XA_IFACE_EQUATABLE:
             // Equatable: all types support == and !=
             return true;
 
         case XA_IFACE_LENGTHABLE:
-            // Lengthable: Array, string, Map, Set, Json (Bytes = Array<uint8>)
+            // Lengthable: Array, string, Map, Set, Json
             return is_array_type(type) || is_string_type(type) || is_map_type(type) ||
-                   is_set_type(type) || is_bytes_type(type) || is_json_type(type);
+                   is_set_type(type) || is_json_type(type);
 
         case XA_IFACE_CALLABLE:
             // Callable: Function, Class

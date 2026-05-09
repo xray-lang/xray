@@ -203,8 +203,6 @@ static const char *type_kind_to_name(XrTypeKind kind) {
             return "Map";
         case XR_KIND_SET:
             return "Set";
-        case XR_KIND_BYTES:
-            return "Bytes";
         case XR_KIND_CHANNEL:
             return "Channel";
         case XR_KIND_JSON:

@@ -397,6 +397,9 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_WIDEN_F32]    = xi_emit_widen,
     [XI_LOAD_FIELD]   = xi_emit_load_field,
     [XI_STORE_FIELD]  = xi_emit_store_field,
+    [XI_STRUCT_NEW]   = xi_emit_struct_new,
+    [XI_STRUCT_GET]   = xi_emit_struct_get,
+    [XI_STRUCT_SET]   = xi_emit_struct_set,
     [XI_INDEX_GET]    = xi_emit_index_get,
     [XI_INDEX_SET]    = xi_emit_index_set,
     [XI_JSON_NEW]     = xi_emit_json_new,
@@ -781,6 +784,8 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
     ctx.proto->is_vararg = f->is_vararg;
     ctx.proto->entry_type = f->entry_type;
     ctx.proto->min_params = f->min_params;
+    /* Set struct_area_size for VM per-frame struct allocation */
+    ctx.proto->struct_area_size = (uint16_t)(ctx.struct_area_offset * 16);
     ctx.proto->test_attr = f->test_attr;
     ctx.proto->test_timeout = f->test_timeout;
     /* Compile-time escape analysis is the authority on coroutine safety.

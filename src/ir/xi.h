@@ -215,6 +215,13 @@ typedef enum {
     XI_INDEX_GET,   /* obj[key]: args[0]=obj, args[1]=key */
     XI_INDEX_SET,   /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
 
+    /* Struct native storage: typed field access with compile-time layout.
+     * args[0]=class_val for NEW; args[0]=struct for GET/SET.
+     * aux=XrStructLayout*; aux_int=field_index for GET/SET. */
+    XI_STRUCT_NEW,  /* allocate struct: args[0]=class, aux=XrStructLayout* */
+    XI_STRUCT_GET,  /* read field: args[0]=struct, aux_int=field_idx, aux=XrStructLayout* */
+    XI_STRUCT_SET,  /* write field: args[0]=struct, args[1]=val, aux_int=field_idx, aux=XrStructLayout* */
+
     /* Json / Allocation */
     XI_JSON_NEW,    /* Create Json object: aux=field_count, aux_ptr=field_names[] */
     XI_JSON_INIT_F, /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
@@ -383,6 +390,7 @@ typedef struct XiClassData {
     bool is_monomorphized;   /* true for mono-generated classes */
     const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
     int mono_type_arg_count;          /* element count */
+    struct XrStructLayout *struct_layout; /* non-NULL for VALUE_TYPE (struct) classes */
 } XiClassData;
 
 /* ========== Block Kinds ========== */

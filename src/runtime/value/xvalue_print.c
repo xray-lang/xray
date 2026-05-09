@@ -108,8 +108,7 @@ static void dump_newline(DumpContext *ctx) {
 // Dump Array
 static void dump_array(XrArray *arr, DumpContext *ctx) {
     XR_DCHECK(arr != NULL, "dump_array: NULL array");
-    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY || XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY_SLICE,
-              "dump_array: object is not an array");
+    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY, "dump_array: object is not an array");
     printf("[");
     int32_t count = arr->length;
     if (count == 0) {
@@ -293,7 +292,6 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
         XrObjType type = XR_GC_GET_TYPE(gc);
         switch (type) {
             case XR_TARRAY:
-            case XR_TARRAY_SLICE:
                 dump_array((XrArray *) gc, ctx);
                 return;
             case XR_TMAP:

@@ -306,7 +306,7 @@ invoke_dispatch:;
      * dispatched here: value types (int, float, bool), collections
      * (Array, Map, Set, String, Json), stdlib extensions (DateTime,
      * Regex, Logger, Net), and internal types (Iterator, Range,
-     * StringBuilder, ArraySlice, BigInt). One code path replaces
+     * StringBuilder, BigInt). One code path replaces
      * the former per-type invoke_* blocks. */
     {
         XrClass *_cls = ((int) _obj_type < XR_NATIVE_TYPE_MAX)
@@ -633,7 +633,7 @@ vmcase(OP_INVOKE_BUILTIN) {
                             ? isolate->native_type_classes[_obj_type]
                             : NULL;
         /* Fall back to xr_value_get_class for core-class types
-         * (StringBuilder, ArraySlice, etc.) */
+         * (StringBuilder, etc.) */
         if (!_cls)
             _cls = xr_value_get_class(isolate, receiver);
 

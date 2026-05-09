@@ -30,7 +30,7 @@
 #include "../runtime/xray_debug_hooks.h"
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
-#include "../runtime/object/xslice.h"
+
 #include "../runtime/object/xjson.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
@@ -742,16 +742,6 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         XrJson *json = xr_value_to_json(obj);
         base[a] = xr_json_get(isolate, json, prop_symbol);
         return VM_COLD_BREAK;
-    }
-
-    // ArraySlice .length property
-    if (XR_IS_PTR(obj)) {
-        XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(obj);
-        if (XR_GC_GET_TYPE(gc) == XR_TARRAY_SLICE && prop_symbol == SYMBOL_LENGTH) {
-            XrArraySlice *slice = (XrArraySlice *) gc;
-            base[a] = xr_int(xr_array_slice_length(slice));
-            return VM_COLD_BREAK;
-        }
     }
 
     // Channel property access error

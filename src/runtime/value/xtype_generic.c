@@ -253,8 +253,7 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
             }
             if (strcmp(iface_name, "Indexable") == 0) {
                 XrTypeKind k = type->kind;
-                return k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP ||
-                       k == XR_KIND_BYTES;
+                return k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP;
             }
             if (strcmp(iface_name, "Equatable") == 0) {
                 return true;  // All types support == and !=
@@ -262,7 +261,7 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
             if (strcmp(iface_name, "Lengthable") == 0) {
                 XrTypeKind k = type->kind;
                 return k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP ||
-                       k == XR_KIND_SET || k == XR_KIND_BYTES;
+                       k == XR_KIND_SET;
             }
             if (strcmp(iface_name, "Callable") == 0) {
                 return type->kind == XR_KIND_FUNCTION || type->kind == XR_KIND_CLASS;

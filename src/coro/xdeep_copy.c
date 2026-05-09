@@ -40,7 +40,6 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
         case XR_TSTRING:
             return XR_COPY_SHARED;
         case XR_TARRAY:
-        case XR_TARRAY_SLICE:
         case XR_TMAP:
         case XR_TFUNCTION:
             return XR_COPY_DEEP;

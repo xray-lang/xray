@@ -272,8 +272,10 @@ void xa_class_info_free(XrClassInfo *info) {
         xr_free(info->constructor_params);
     if (info->vtable)
         xr_free(info->vtable);
-    if (info->struct_layout)
+    if (info->struct_layout) {
+        xr_free(info->struct_layout->field_names);
         xr_free(info->struct_layout);
+    }
     if (info->members_map)
         xr_hashmap_free(info->members_map);
     xr_free(info);

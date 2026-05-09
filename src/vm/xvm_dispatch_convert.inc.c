@@ -138,6 +138,12 @@ vmcase(OP_TYPENAME) {
         if (cls && cls->name)
             type_name = cls->name;
     }
+    // For struct refs, extract class pointer from struct area header
+    if (type_name == NULL && val.tag == XR_TAG_STRUCT_REF && val.ptr) {
+        XrClass *cls = *(XrClass **)val.ptr;
+        if (cls && cls->name)
+            type_name = cls->name;
+    }
     // For enum values, return enum name
     if (type_name == NULL && XR_IS_ENUM_VALUE(val)) {
         XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(val);

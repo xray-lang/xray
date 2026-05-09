@@ -31,8 +31,7 @@
 #include <string.h>
 
 static inline XrArray *array_self(XrValue self) {
-    /* Slices share XrArray layout — both shapes are valid receivers. */
-    XR_DCHECK(XR_IS_ARRAY_OR_SLICE(self), "array method: receiver is not an array or slice");
+    XR_DCHECK(XR_IS_ARRAY(self), "array method: receiver is not an array");
     return XR_TO_ARRAY(self);
 }
 

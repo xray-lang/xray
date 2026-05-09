@@ -848,7 +848,14 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         (node->type == AST_STRUCT_DECL) ? node->as.struct_decl.type_param_count : 0;
     if (node->type == AST_STRUCT_DECL && info->field_count > 0 && struct_type_param_count == 0) {
         XrStructLayout *layout = xr_calloc(1, sizeof(XrStructLayout));
+        if (!layout) goto skip_layout;
         layout->field_count = (uint16_t) info->field_count;
+        /* Populate field_names parallel to fields[] for codegen/diagnostics */
+        layout->field_names = xr_calloc((size_t)info->field_count, sizeof(const char *));
+        if (layout->field_names) {
+            for (int i = 0; i < info->field_count; i++)
+                layout->field_names[i] = info->fields[i] ? info->fields[i]->name : NULL;
+        }
         bool layout_valid = true;
 
         for (int i = 0; i < info->field_count && i < XR_MAX_STRUCT_FIELDS; i++) {
@@ -967,14 +974,17 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                          cls->name ? cls->name : "?", (unsigned) layout->total_size);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                xr_free(layout->field_names);
                 xr_free(layout);
             } else {
                 info->struct_layout = layout;
             }
         } else {
+            xr_free(layout->field_names);
             xr_free(layout);
         }
     }
+    skip_layout:
 
     // Collect methods
     for (int i = 0; i < cls->method_count; i++) {

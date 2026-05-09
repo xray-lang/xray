@@ -150,8 +150,6 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_FUNCTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TFUNCTION)
 #define XR_IS_CFUNCTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCFUNCTION)
 #define XR_IS_ARRAY(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TARRAY)
-#define XR_IS_ARRAY_OR_SLICE(v)                                                                    \
-    (XR_IS_PTR(v) && (XR_HEAP_TYPE(v) == XR_TARRAY || XR_HEAP_TYPE(v) == XR_TARRAY_SLICE))
 #define XR_IS_SET(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TSET)
 #define XR_IS_MAP(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMAP)
 #define XR_IS_CLASS(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCLASS)

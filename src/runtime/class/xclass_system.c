@@ -21,7 +21,6 @@
 #include "../../base/xmalloc.h"
 #include "../value/xvalue.h"
 #include "xstringbuilder_builtins.h"
-#include "xslice_builtins.h"
 #include "../value/xtype_names.h"
 
 /* Forward declarations: register functions live in *_methods.c files.
@@ -87,8 +86,6 @@ void xr_core_init(XrayIsolate *X) {
 
     xr_stringbuilder_register_native_type(X);
     X->core->stringBuilderClass = xr_isolate_get_native_type_class(X, XR_TSTRINGBUILDER);
-    xr_array_slice_register_native_type(X);
-    X->core->arraySliceClass = xr_isolate_get_native_type_class(X, XR_TARRAY_SLICE);
 
     // Process class with fields
     {

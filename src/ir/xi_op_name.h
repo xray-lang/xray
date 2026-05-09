@@ -62,6 +62,9 @@ static inline const char *xi_op_name(uint16_t op) {
         case XI_STORE_FIELD:   return "STORE_FIELD";
         case XI_INDEX_GET:     return "INDEX_GET";
         case XI_INDEX_SET:     return "INDEX_SET";
+        case XI_STRUCT_NEW:    return "STRUCT_NEW";
+        case XI_STRUCT_GET:    return "STRUCT_GET";
+        case XI_STRUCT_SET:    return "STRUCT_SET";
         case XI_JSON_NEW:      return "JSON_NEW";
         case XI_JSON_INIT_F:   return "JSON_INIT_F";
         case XI_JSON_GET_F:    return "JSON_GET_F";

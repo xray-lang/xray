@@ -11,6 +11,7 @@
 
 #include "xi_emit_internal.h"
 #include "../runtime/value/xtype.h"
+#include "../runtime/value/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xshape.h"
 #include "../runtime/class/xclass_descriptor.h"
@@ -61,6 +62,197 @@ XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
     } else {
         emit_inst(ctx, CREATE_ABC(OP_SETFIELD, obj, (uint8_t)v->aux_int, val));
+    }
+}
+
+/* Scan all uses of XI_STRUCT_NEW value v in the function.
+ * Returns true if the struct never escapes local field access —
+ * safe for stack allocation via OP_NEW_STRUCT.
+ *
+ * Safe consumers: XI_STRUCT_GET (args[0]),
+ *                 XI_STRUCT_SET (args[0] only — the container),
+ *                 XI_PRINT.
+ * Unsafe: XI_STRUCT_SET args[1] (stored value escapes into field),
+ *         COPY (value semantics require independent copies),
+ *         returned, passed as call arg, stored to shared/upval/field,
+ *         pushed into container, used in PHI (may cross loop iteration). */
+static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
+    XiFunc *f = ctx->func;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk) continue;
+
+        /* Block control (RETURN / IF condition) */
+        if (blk->control == target)
+            return false;
+
+        /* Phi nodes — struct in PHI can cross loop iterations */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t k = 0; k < phi->value.nargs; k++) {
+                if (phi->value.args[k] == target)
+                    return false;
+            }
+        }
+
+        /* Value args: only direct field access on this struct is safe.
+         * Everything else (COPY, CALL, STORE, RETURN...) escapes.
+         *
+         * XI_STRUCT_GET: target must be args[0] (the struct being read).
+         * XI_STRUCT_SET: target as args[0] is safe (container being written).
+         *                target as args[1] is UNSAFE — storing a stack struct_ref
+         *                into another struct creates a dangling pointer when the
+         *                container is heap-allocated. */
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v) continue;
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != target) continue;
+                switch ((XiOp)v->op) {
+                case XI_STRUCT_GET:
+                    break;
+                case XI_STRUCT_SET:
+                    /* Safe only as args[0] (the container receiving the write).
+                     * As args[1] (the stored value), this struct escapes into
+                     * another struct's field — must be heap-allocated. */
+                    if (a != 0)
+                        return false;
+                    break;
+                case XI_PRINT:
+                    break;
+                default:
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+/* Mark a XI_STRUCT_NEW value as stack-promoted by setting a flag bit.
+ * Emit handlers for XI_STRUCT_GET/SET check this to decide the opcode. */
+#define STRUCT_PROMOTED_BIT  ((int64_t)1 << 32)
+#define STRUCT_IS_PROMOTED(v) (((v)->aux_int & STRUCT_PROMOTED_BIT) != 0)
+
+/* Trace through COPY chain to find the defining XI_STRUCT_NEW. */
+static XiValue *trace_struct_origin(XiValue *v) {
+    while (v && v->op == XI_COPY && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+/* Struct new: decide stack vs heap at emit time.
+ * Stack path: OP_NEW_STRUCT (frame struct_area, zero heap allocation).
+ * Heap path:  OP_INVOKE(constructor) (normal object allocation). */
+XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+
+    XrStructLayout *layout = (XrStructLayout *)v->aux;
+    XR_DCHECK(layout != NULL, "XI_STRUCT_NEW: missing struct layout");
+
+    if (struct_can_stack_alloc(ctx, v)) {
+        /* Stack path: OP_NEW_STRUCT */
+        uint8_t cls_reg = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+
+        uint16_t slot = ctx->struct_area_offset;
+        uint16_t bytes_needed = (uint16_t)(8 + layout->total_size);
+        uint16_t slots_needed = (bytes_needed + 15) / 16;
+        ctx->struct_area_offset = (uint16_t)(slot + slots_needed);
+
+        XR_DCHECK(slot <= 255, "XI_STRUCT_NEW: struct_area slot overflow");
+        emit_inst(ctx, CREATE_ABC(OP_NEW_STRUCT, dst, cls_reg, (uint8_t)slot));
+        v->aux_int |= STRUCT_PROMOTED_BIT;
+    } else {
+        /* Heap path: emit OP_INVOKE(constructor, 0 args).
+         * OP_INVOKE needs R[dst+1] for receiver. Allocate a fresh
+         * scratch register beyond all live values to avoid clobbering. */
+        uint8_t recv = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+
+        /* Use a high scratch register for the call window to avoid
+         * interfering with live values in low registers. */
+        uint8_t base = ctx->max_reg;
+        uint8_t call_top = (uint8_t)(base + 2);
+        if (call_top > ctx->max_reg) ctx->max_reg = call_top;
+
+        /* R[base+1] = receiver (class), invoke stores result in R[base] */
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 1, recv, 0));
+
+        int sym = add_symbol(ctx, "constructor");
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t)sym, 0));
+
+        /* Move result from scratch to actual destination */
+        if (base != dst)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+    }
+}
+
+/* Struct get: read field.
+ * Stack-promoted → OP_STRUCT_GET (direct native field read).
+ * Heap fallback  → OP_GETPROP   (property lookup by name). */
+XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+
+    XiValue *origin = trace_struct_origin(v->args[0]);
+    bool promoted = (origin && origin->op == XI_STRUCT_NEW
+                     && STRUCT_IS_PROMOTED(origin));
+
+    uint8_t obj = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK) return;
+
+    if (promoted) {
+        XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_STRUCT_FIELDS,
+                  "XI_STRUCT_GET: field_idx out of range");
+        emit_inst(ctx, CREATE_ABC(OP_STRUCT_GET, dst, obj,
+                                  (uint8_t)v->aux_int));
+    } else {
+        /* Heap path: OP_GETPROP with field name from layout */
+        XrStructLayout *sl = (XrStructLayout *)v->aux;
+        const char *fname = (sl && sl->field_names
+                             && v->aux_int < sl->field_count)
+                            ? sl->field_names[v->aux_int] : NULL;
+        XR_DCHECK(fname != NULL, "XI_STRUCT_GET: missing field name");
+        int sym = add_symbol(ctx, fname);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, (uint8_t)sym));
+        if (v->id < ctx->reg_map_size)
+            ctx->value_pc[v->id] = current_pc(ctx) - 1;
+    }
+}
+
+/* Struct set: write field.
+ * Stack-promoted → OP_STRUCT_SET (direct native field write).
+ * Heap fallback  → OP_SETPROP   (property store by name). */
+XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void)dst;
+    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+
+    XiValue *origin = trace_struct_origin(v->args[0]);
+    bool promoted = (origin && origin->op == XI_STRUCT_NEW
+                     && STRUCT_IS_PROMOTED(origin));
+
+    uint8_t obj = reg_of(ctx, v->args[0]);
+    uint8_t val = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK) return;
+
+    if (promoted) {
+        XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_STRUCT_FIELDS,
+                  "XI_STRUCT_SET: field_idx out of range");
+        emit_inst(ctx, CREATE_ABC(OP_STRUCT_SET, obj,
+                                  (uint8_t)v->aux_int, val));
+    } else {
+        /* Heap path: OP_SETPROP with field name */
+        XrStructLayout *sl = (XrStructLayout *)v->aux;
+        const char *fname = (sl && sl->field_names
+                             && v->aux_int < sl->field_count)
+                            ? sl->field_names[v->aux_int] : NULL;
+        XR_DCHECK(fname != NULL, "XI_STRUCT_SET: missing field name");
+        int sym = add_symbol(ctx, fname);
+        if (ctx->status != XI_EMIT_OK) return;
+        emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, (uint8_t)sym, val));
+        if (v->id < ctx->reg_map_size)
+            ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
 }
 
@@ -575,6 +767,12 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v,
     if (!emit_class_collect_fields_impl(ctx, cd, desc)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
+    }
+
+    /* Propagate native struct layout and VALUE_TYPE flag for struct classes */
+    if (cdata->struct_layout) {
+        desc->struct_layout = cdata->struct_layout;
+        desc->flags |= XR_CLASS_VALUE_TYPE;
     }
 
     /* Instance methods */

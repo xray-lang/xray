@@ -154,8 +154,7 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                     return 0;
                 }
 
-                case XR_TARRAY:
-                case XR_TARRAY_SLICE: {
+                case XR_TARRAY: {
                     XrArray *arr = XR_TO_ARRAY(value);
                     int32_t count = arr->length;
 

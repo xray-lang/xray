@@ -23,6 +23,7 @@
 #include "../ir/xi_backend_lower.h"
 #include "../ir/xi_opt.h"
 #include "../base/xdefs.h"
+#include "../runtime/value/xstruct_layout.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -55,7 +56,7 @@ static const char *ctype_str(XrRep rep) {
 static bool cg_is_void_like(const XiValue *v) {
     switch (v->op) {
     case XI_SET_SHARED: case XI_STORE_UPVAL:
-    case XI_STORE_FIELD: case XI_INDEX_SET: case XI_THROW:
+    case XI_STORE_FIELD: case XI_STRUCT_SET: case XI_INDEX_SET: case XI_THROW:
     case XI_RETAIN: case XI_RELEASE:
         return true;
     case XI_CALL_BUILTIN:
@@ -960,6 +961,54 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             fprintf(out, "), ");
             emit_vref(out, v->args[1]);
             fprintf(out, ")");
+            break;
+        }
+
+        /* Struct native ops — delegate to runtime class constructor + field access.
+         * Full native C struct codegen is a future optimization. */
+        case XI_STRUCT_NEW: {
+            XR_DCHECK(v->nargs >= 1, "XI_STRUCT_NEW: need class arg");
+            /* Call the class constructor: xrt_call_method(class, "constructor", 0) */
+            fprintf(out, "xrt_call_method(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", %d, 0)", cg_method_sym("constructor"));
+            break;
+        }
+        case XI_STRUCT_GET: {
+            XR_DCHECK(v->nargs >= 1, "XI_STRUCT_GET: need struct arg");
+            XrStructLayout *sl = (XrStructLayout *)v->aux;
+            const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
+                                ? sl->field_names[v->aux_int] : NULL;
+            if (fname) {
+                int sym = cg_method_sym(fname);
+                if (sym >= 0) {
+                    fprintf(out, "xrt_getprop(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", %d)", sym);
+                } else {
+                    fprintf(out, "xrt_map_get((xrt_map_t*)");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ".ptr, xr_box_str(\"%s\"))", fname);
+                }
+            } else {
+                fprintf(out, "XR_NULL");
+            }
+            break;
+        }
+        case XI_STRUCT_SET: {
+            XR_DCHECK(v->nargs >= 2, "XI_STRUCT_SET: need struct + val");
+            XrStructLayout *sl = (XrStructLayout *)v->aux;
+            const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
+                                ? sl->field_names[v->aux_int] : NULL;
+            if (fname) {
+                fprintf(out, "(xrt_map_set((xrt_map_t*)");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ".ptr, xr_box_str(\"%s\"), ", fname);
+                emit_vref(out, v->args[1]);
+                fprintf(out, "), ");
+                emit_vref(out, v->args[1]);
+                fprintf(out, ")");
+            }
             break;
         }
 

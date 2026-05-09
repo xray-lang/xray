@@ -53,6 +53,11 @@ typedef struct {
     /* Line number tracking for debug info */
     int current_line;        /* line of the value being emitted */
 
+    /* Struct-area slot allocator: tracks byte offset for OP_NEW_STRUCT.
+     * Each struct occupies ceil16(8 + layout->total_size) bytes.
+     * Proto->struct_area_size is set to this at end of emit. */
+    uint16_t struct_area_offset;  /* running byte offset (in 16-byte units) */
+
     /* Block linearization */
     XiBlock **rpo_order;     /* blocks in RPO order */
     uint32_t rpo_count;
@@ -184,6 +189,9 @@ XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, uint8_t dst);
 /* ========== Handler Declarations (xi_emit_object.c) ========== */
 XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst);

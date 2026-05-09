@@ -42,8 +42,6 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return type->is_weak ? XR_TID_WEAKMAP : XR_TID_MAP;
     if (type->kind == XR_KIND_SET)
         return type->is_weak ? XR_TID_WEAKSET : XR_TID_SET;
-    if (type->kind == XR_KIND_BYTES)
-        return XR_TID_ARRAY;
     if (XR_TYPE_IS_JSON(type))
         return XR_TID_JSON;
     if (xr_type_is_named_class(type, "BigInt"))
@@ -757,7 +755,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";
     } else if (base_len == 5 && strncmp(s, "Bytes", 5) == 0) {
-        type = xr_type_new(X, XR_KIND_BYTES);
+        type = xr_type_new_bytes(X);
     } else if (base_len == 5 && strncmp(s, TYPE_NAME_NEVER, 5) == 0) {
         type = xr_type_new_never(NULL);
         // Native-width integer types

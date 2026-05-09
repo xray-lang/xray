@@ -286,7 +286,7 @@ XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
     /* All other types: single lookup in native_type_classes[].
      * This covers primitives (int/float/bool/null), collections
      * (Array/Map/Set/String/Json), stdlib types (DateTime/Regex/...),
-     * and internal types (Iterator/Range/StringBuilder/ArraySlice/BigInt). */
+     * and internal types (Iterator/Range/StringBuilder/BigInt). */
     if ((int) type < XR_NATIVE_TYPE_MAX)
         return xr_isolate_get_native_type_class(X, type);
 
