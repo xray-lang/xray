@@ -124,6 +124,7 @@ static inline const char *xi_op_name(uint16_t op) {
         case XI_RELEASE:       return "RELEASE";
         case XI_MOVE:          return "MOVE";
         case XI_STACK_ALLOC:   return "STACK_ALLOC";
+        case XI_CORO_OP:       return "CORO_OP";
         default:               return "???";
     }
 }

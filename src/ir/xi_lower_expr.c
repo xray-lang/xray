@@ -947,6 +947,58 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node,
     return NULL;  /* not a builtin — fall through to generic CALL */
 }
 
+/* Map Coro.method() names to XI_CORO_OP sub-type constants.
+ * Returns -1 for unknown methods. */
+static int coro_method_sub_type(const char *method) {
+    XR_DCHECK(method != NULL, "coro_method_sub_type: NULL method");
+    /* Dedicated opcodes */
+    if (strcmp(method, "setLocal") == 0)     return XI_CORO_SUB_SET_LOCAL;
+    if (strcmp(method, "getLocal") == 0)     return XI_CORO_SUB_GET_LOCAL;
+    if (strcmp(method, "setPriority") == 0)  return XI_CORO_SUB_SET_PRIORITY;
+    if (strcmp(method, "lockThread") == 0)   return XI_CORO_SUB_LOCK_THREAD;
+    if (strcmp(method, "unlockThread") == 0) return XI_CORO_SUB_UNLOCK_THREAD;
+    /* OP_CORO_CTRL sub-opcodes (CORO_CTRL_* values from xchunk.h) */
+    if (strcmp(method, "stats") == 0)        return XI_CORO_SUB_CTRL_BASE + 0;
+    if (strcmp(method, "list") == 0)         return XI_CORO_SUB_CTRL_BASE + 1;
+    if (strcmp(method, "dump") == 0)         return XI_CORO_SUB_CTRL_BASE + 3;
+    if (strcmp(method, "stalled") == 0)      return XI_CORO_SUB_CTRL_BASE + 4;
+    if (strcmp(method, "deadlocks") == 0)    return XI_CORO_SUB_CTRL_BASE + 5;
+    if (strcmp(method, "top") == 0)          return XI_CORO_SUB_CTRL_BASE + 6;
+    if (strcmp(method, "groupBy") == 0)      return XI_CORO_SUB_CTRL_BASE + 7;
+    if (strcmp(method, "whereis") == 0)      return XI_CORO_SUB_CTRL_BASE + 8;
+    if (strcmp(method, "monitor") == 0)      return XI_CORO_SUB_CTRL_BASE + 9;
+    if (strcmp(method, "demonitor") == 0)    return XI_CORO_SUB_CTRL_BASE + 10;
+    if (strcmp(method, "self") == 0)         return XI_CORO_SUB_CTRL_BASE + 11;
+    if (strcmp(method, "kill") == 0)         return XI_CORO_SUB_CTRL_BASE + 12;
+    return -1;
+}
+
+/* Lower Coro.method(args...) → XI_CORO_OP.
+ * Returns NULL for unrecognized methods. */
+static XiValue *lower_coro_method(XiLower *l, AstNode *node,
+                                  const char *method, CallExprNode *call) {
+    int sub = coro_method_sub_type(method);
+    if (sub < 0) return NULL;
+
+    int n = call->arg_count > 16 ? 16 : call->arg_count;
+    XiValue *arg_vals[16];
+    for (int i = 0; i < n; i++) {
+        arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
+        if (!arg_vals[i]) return NULL;
+    }
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CORO_OP,
+                               result_type, (uint16_t)n);
+    if (!v) return NULL;
+    for (int i = 0; i < n; i++)
+        v->args[i] = arg_vals[i];
+    v->aux_int = sub;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = (uint32_t)node->line;
+    return v;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -990,6 +1042,18 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 v->line = (uint32_t)node->line;
                 return v;
             }
+        }
+
+        /* Coro.method() → XI_CORO_OP with sub-type encoding.
+         * Coro is a built-in module with dedicated VM opcodes; it has
+         * no runtime object, so the generic XI_CALL_METHOD path would
+         * fail because lower_variable("Coro") cannot resolve. */
+        if (ma->object && ma->object->type == AST_VARIABLE &&
+            ma->name && strcmp(ma->object->as.variable.name, "Coro") == 0) {
+            XiValue *coro_op = lower_coro_method(l, node, ma->name, call);
+            if (coro_op) return coro_op;
+            /* Unknown Coro method — fall through to generic path which
+             * will report "unresolved variable" for Coro. */
         }
 
         XiValue *recv = xi_lower_expr(l, ma->object);
