@@ -16,7 +16,7 @@
 
 // Global Map constructor (self = class value, ignored)
 XR_FUNC XrValue xr_builtin_map_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
-                                          int argc);
+                                         int argc);
 
 // Static methods (self = class value, ignored)
 XR_FUNC XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);

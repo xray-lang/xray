@@ -865,8 +865,7 @@ void *worker_loop(void *arg) {
                 // worker's inbox and continue looking for local work.
                 // This catches coros that arrived via work-stealing or
                 // migration and must not execute on this worker.
-                if (xr_coro_is_thread_locked(coro) &&
-                    coro->ext->locked_worker != worker->p.id) {
+                if (xr_coro_is_thread_locked(coro) && coro->ext->locked_worker != worker->p.id) {
                     int lw = coro->ext->locked_worker;
                     if (lw >= 0 && lw < runtime->worker_count) {
                         xr_worker_inbox_enqueue(runtime, lw, coro);

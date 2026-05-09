@@ -42,28 +42,28 @@ struct XrCoroGC;
 /* ========== Connection kind ========== */
 
 typedef enum {
-    XR_NETCONN_TCP = 0,  /* plain TCP stream            */
-    XR_NETCONN_UDP = 1,  /* UDP datagram socket         */
-    XR_NETCONN_TLS = 2,  /* TLS over TCP (tls_state set) */
+    XR_NETCONN_TCP = 0, /* plain TCP stream            */
+    XR_NETCONN_UDP = 1, /* UDP datagram socket         */
+    XR_NETCONN_TLS = 2, /* TLS over TCP (tls_state set) */
 } XrNetConnKind;
 
 /* ========== Connection handle ========== */
 
 typedef struct XrNetConn {
     XrGCHeader gc_header;
-    int fd;             /* -1 once closed                                 */
-    uint8_t kind;       /* XrNetConnKind                                  */
-    bool closed;        /* idempotency guard for close                     */
-    void *tls_state;    /* XrTlsConn* when kind == TLS, NULL otherwise     */
-    struct XrayIsolate *isolate;  /* owning isolate (for netpoll cleanup) */
+    int fd;                      /* -1 once closed                                 */
+    uint8_t kind;                /* XrNetConnKind                                  */
+    bool closed;                 /* idempotency guard for close                     */
+    void *tls_state;             /* XrTlsConn* when kind == TLS, NULL otherwise     */
+    struct XrayIsolate *isolate; /* owning isolate (for netpoll cleanup) */
 } XrNetConn;
 
 /* ========== Listener handle ========== */
 
 typedef struct XrNetListener {
     XrGCHeader gc_header;
-    int fd;             /* -1 once closed                                 */
-    int port;           /* listening port                                  */
+    int fd;   /* -1 once closed                                 */
+    int port; /* listening port                                  */
     bool closed;
     struct XrayIsolate *isolate;
 } XrNetListener;

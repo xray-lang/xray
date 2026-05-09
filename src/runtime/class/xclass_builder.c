@@ -426,18 +426,20 @@ void xr_class_builder_set_generic_origin(XrClassBuilder *builder, XrClass *origi
     }
 }
 
-void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder,
-                                               const char **type_arg_names, uint8_t argc) {
+void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder, const char **type_arg_names,
+                                              uint8_t argc) {
     XR_DCHECK(builder != NULL, "set_mono_type_arg_names: NULL builder");
-    if (builder == NULL || argc == 0 || type_arg_names == NULL) return;
-    const char **copy = (const char **)xr_malloc(argc * sizeof(const char *));
-    if (copy == NULL) return;
+    if (builder == NULL || argc == 0 || type_arg_names == NULL)
+        return;
+    const char **copy = (const char **) xr_malloc(argc * sizeof(const char *));
+    if (copy == NULL)
+        return;
     for (uint8_t i = 0; i < argc; i++)
         copy[i] = type_arg_names[i] ? xr_strdup(type_arg_names[i]) : NULL;
     /* Free previous names if any */
     if (builder->mono_type_arg_names) {
         for (uint8_t i = 0; i < builder->mono_type_argc; i++)
-            xr_free((void *)builder->mono_type_arg_names[i]);
+            xr_free((void *) builder->mono_type_arg_names[i]);
         xr_free(builder->mono_type_arg_names);
     }
     builder->mono_type_arg_names = copy;
@@ -469,7 +471,7 @@ void xr_class_builder_destroy(XrClassBuilder *builder) {
     xr_free(builder->abstract_methods);
     if (builder->mono_type_arg_names) {
         for (uint8_t i = 0; i < builder->mono_type_argc; i++)
-            xr_free((void *)builder->mono_type_arg_names[i]);
+            xr_free((void *) builder->mono_type_arg_names[i]);
         xr_free(builder->mono_type_arg_names);
     }
     xr_free(builder);

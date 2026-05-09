@@ -32,9 +32,9 @@
 #define XM_CODE_CACHE_MAX (256 * 1024 * 1024)     // 256MB hard ceiling
 
 typedef struct XmCodePage {
-    uint8_t *base;             // page base address (mmap'd)
-    size_t size;               // total page size
-    size_t used;               // bytes used (bump pointer offset)
+    uint8_t *base;            // page base address (mmap'd)
+    size_t size;              // total page size
+    size_t used;              // bytes used (bump pointer offset)
     struct XmCodePage *next;  // linked list
 } XmCodePage;
 
@@ -52,11 +52,11 @@ typedef struct XmCodeGarbage {
 typedef struct XmCodeAlloc {
     XmCodePage *pages;       // linked list of allocated pages
     XmCodePage *current;     // current page for bump allocation
-    size_t total_allocated;   // total bytes mmap'd
-    size_t total_used;        // total bytes of JIT code
-    size_t budget;            // max bytes allowed (0 = unlimited)
-    uint32_t n_pages;         // page count
-    uint64_t epoch;           // monotonically increasing epoch (bumped at safepoints)
+    size_t total_allocated;  // total bytes mmap'd
+    size_t total_used;       // total bytes of JIT code
+    size_t budget;           // max bytes allowed (0 = unlimited)
+    uint32_t n_pages;        // page count
+    uint64_t epoch;          // monotonically increasing epoch (bumped at safepoints)
     XmCodeGarbage *garbage;  // retired code awaiting safe reclaim
 } XmCodeAlloc;
 

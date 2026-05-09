@@ -41,23 +41,23 @@ struct AstNode;
 
 /* What kind of member/access is this selection? */
 typedef enum XaSelectionKind {
-    XA_SEL_FIELD,          /* instance field access: obj.field */
-    XA_SEL_METHOD,         /* method access: obj.method (before call) */
-    XA_SEL_INDEX,          /* subscript/index access: arr[i] / map[k] */
-    XA_SEL_STATIC_MEMBER,  /* static member: Class.staticField */
-    XA_SEL_MODULE_EXPORT,  /* module namespace access: mod.exportedName */
-    XA_SEL_ENUM_MEMBER,    /* enum member: Color.Red */
+    XA_SEL_FIELD,         /* instance field access: obj.field */
+    XA_SEL_METHOD,        /* method access: obj.method (before call) */
+    XA_SEL_INDEX,         /* subscript/index access: arr[i] / map[k] */
+    XA_SEL_STATIC_MEMBER, /* static member: Class.staticField */
+    XA_SEL_MODULE_EXPORT, /* module namespace access: mod.exportedName */
+    XA_SEL_ENUM_MEMBER,   /* enum member: Color.Red */
 } XaSelectionKind;
 
 /* A resolved selection fact for one AST node. */
 typedef struct XaSelection {
     XaSelectionKind kind;
-    struct XrType *receiver_type;    /* type of the object being accessed */
-    struct XaSymbol *target_symbol;  /* resolved member symbol (NULL if unresolved) */
-    int32_t field_index;             /* direct slot index (-1 = needs name lookup) */
-    struct XrType *result_type;      /* type of the selection result */
-    bool is_indirect;                /* true if access goes through a pointer/cell */
-    bool is_optional;                /* true if optional chain (obj?.field) */
+    struct XrType *receiver_type;   /* type of the object being accessed */
+    struct XaSymbol *target_symbol; /* resolved member symbol (NULL if unresolved) */
+    int32_t field_index;            /* direct slot index (-1 = needs name lookup) */
+    struct XrType *result_type;     /* type of the selection result */
+    bool is_indirect;               /* true if access goes through a pointer/cell */
+    bool is_optional;               /* true if optional chain (obj?.field) */
 } XaSelection;
 
 /* Opaque selection table (node_id -> XaSelection). */
@@ -70,11 +70,11 @@ XR_FUNC void xa_selection_table_free(XaSelectionTable *t);
 /* Record a selection fact for the given AST node. Overwrites any
  * existing entry for the same node_id. */
 XR_FUNC void xa_selection_table_set(XaSelectionTable *t, struct AstNode *node,
-                                     const XaSelection *sel);
+                                    const XaSelection *sel);
 
 /* Retrieve the selection fact for a node, or NULL if none recorded. */
 XR_FUNC const XaSelection *xa_selection_table_get(const XaSelectionTable *t,
-                                                   const struct AstNode *node);
+                                                  const struct AstNode *node);
 
 /* Drop all entries (keeps bucket array allocated). */
 XR_FUNC void xa_selection_table_clear(XaSelectionTable *t);

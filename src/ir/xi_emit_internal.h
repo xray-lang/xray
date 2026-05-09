@@ -26,44 +26,44 @@
 /* ========== Constants ========== */
 
 #define MAX_REGS 256
-#define NO_REG   255
+#define NO_REG 255
 
 /* ========== Emit Context ========== */
 
 typedef struct {
     XiFunc *func;
     XrProto *proto;
-    struct XrayIsolate *isolate;      /* for string interning; may be NULL */
+    struct XrayIsolate *isolate; /* for string interning; may be NULL */
     XiEmitStatus status;
 
     /* Register allocation: value_id -> register number */
-    uint8_t *reg_map;        /* [next_value_id] */
+    uint8_t *reg_map; /* [next_value_id] */
     uint32_t reg_map_size;
-    uint8_t next_reg;        /* next free register */
-    uint8_t max_reg;         /* high-water mark */
+    uint8_t next_reg; /* next free register */
+    uint8_t max_reg;  /* high-water mark */
 
     /* Free register stack for register recycling */
     uint8_t free_regs[MAX_REGS];
-    uint16_t nfree;          /* count of free registers on the stack */
+    uint16_t nfree; /* count of free registers on the stack */
 
     /* Liveness: per-value last-use tracking (value_id -> last-use ordinal) */
-    uint32_t *last_use;      /* [next_value_id], 0 = unused/dead */
-    uint32_t current_ordinal;/* monotonic instruction counter */
+    uint32_t *last_use;       /* [next_value_id], 0 = unused/dead */
+    uint32_t current_ordinal; /* monotonic instruction counter */
 
     /* Line number tracking for debug info */
-    int current_line;        /* line of the value being emitted */
+    int current_line; /* line of the value being emitted */
 
     /* Struct-area slot allocator: tracks byte offset for OP_NEW_STRUCT.
      * Each struct occupies ceil16(8 + layout->total_size) bytes.
      * Proto->struct_area_size is set to this at end of emit. */
-    uint16_t struct_area_offset;  /* running byte offset (in 16-byte units) */
+    uint16_t struct_area_offset; /* running byte offset (in 16-byte units) */
 
     /* Block linearization */
-    XiBlock **rpo_order;     /* blocks in RPO order */
+    XiBlock **rpo_order; /* blocks in RPO order */
     uint32_t rpo_count;
 
     /* Jump patching: block_id -> start PC */
-    int *block_pc;           /* [next_block_id], -1 = not yet emitted */
+    int *block_pc; /* [next_block_id], -1 = not yet emitted */
     uint32_t block_pc_size;
 
     /* Pending jump patches: instructions that need target PCs */
@@ -76,9 +76,9 @@ typedef struct {
 
     /* OP_TRY patches: absolute target PC patching (catch + finally) */
     struct {
-        int pc;              /* OP_TRY instruction PC */
-        uint32_t target_bid; /* catch block ID */
-        uint32_t finally_bid;/* finally block ID (0 if none) */
+        int pc;               /* OP_TRY instruction PC */
+        uint32_t target_bid;  /* catch block ID */
+        uint32_t finally_bid; /* finally block ID (0 if none) */
     } *try_patches;
     uint32_t ntry_patch;
     uint32_t try_patch_cap;
@@ -86,12 +86,12 @@ typedef struct {
     /* Track which value IDs have been wrapped in a cell (OP_CELL_NEW).
      * Prevents double-wrapping when multiple closures capture the same
      * mutable variable. */
-    bool *cell_wrapped;      /* [next_value_id] */
+    bool *cell_wrapped; /* [next_value_id] */
 
     /* Per-value bytecode PC: records the instruction offset for IC-relevant
      * ops (GETPROP/SETPROP/INVOKE).  Indexed by value_id; -1 = no mapping.
      * Consumed by build_slot_map() for JIT IC-guided speculation. */
-    int *value_pc;           /* [next_value_id] */
+    int *value_pc; /* [next_value_id] */
 
     /* Comparison-branch fusion: if the block control is a comparison with
      * no other consumers, skip emitting OP_CMP_* and instead emit the
@@ -102,19 +102,19 @@ typedef struct {
      * function captures.  The cell is allocated in a separate register
      * so the original register remains usable for direct parent calls.
      * NO_REG (0xFF) means no cell allocated for this variable. */
-    uint8_t cell_side_reg[MAX_REGS];  /* var_id → cell register */
+    uint8_t cell_side_reg[MAX_REGS]; /* var_id → cell register */
 
     /* Tracks whether OP_CELL_NEW has been emitted for a given var_id.
      * First write to a cell_side_reg variable emits CELL_NEW; subsequent
      * writes emit CELL_SET. */
-    bool cell_created[MAX_REGS];      /* var_id → true if CELL_NEW emitted */
+    bool cell_created[MAX_REGS]; /* var_id → true if CELL_NEW emitted */
 
     /* Variable-based register coalescing: all SSA definitions of the same
      * source variable share one VM register.  This is required for correct
      * exception semantics — the VM's OP_THROW bypasses SSA phi resolution,
      * so catch-block modifications must write to the same register that
      * post-try-catch code reads from. */
-    uint8_t var_reg[MAX_REGS];  /* var_id -> pinned register (NO_REG = unassigned) */
+    uint8_t var_reg[MAX_REGS]; /* var_id -> pinned register (NO_REG = unassigned) */
 } EmitCtx;
 
 /* ========== Shared Utility Functions ========== */
@@ -132,8 +132,7 @@ XR_FUNC int add_const_float(EmitCtx *ctx, double val);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
 XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid);
-XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid,
-                            uint32_t finally_bid);
+XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid, uint32_t finally_bid);
 
 /* ========== Functions from xi_emit_reg.c ========== */
 XR_FUNC void compute_last_use(EmitCtx *ctx);

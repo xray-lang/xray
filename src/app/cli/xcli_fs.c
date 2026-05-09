@@ -126,7 +126,7 @@ void xr_cli_filelist_sort(XrCliFileList *fl) {
 /* ========== Directory Traversal ========== */
 
 XrCliWalkOpts xr_cli_walk_defaults(void) {
-    return (XrCliWalkOpts){
+    return (XrCliWalkOpts) {
         .xr_only = true,
         .skip_hidden = true,
         .skip_underscore = false,

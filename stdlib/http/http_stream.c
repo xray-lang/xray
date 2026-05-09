@@ -278,8 +278,8 @@ cleanup:
 }
 
 XrStreamResult xr_http_resume_download(struct XrayIsolate *X, const char *url,
-                                       const char *output_path,
-                                       XrHttpProgressCallback on_progress, void *user_data) {
+                                       const char *output_path, XrHttpProgressCallback on_progress,
+                                       void *user_data) {
     XrStreamConfig config;
     xr_stream_config_init(&config);
     config.url = url;

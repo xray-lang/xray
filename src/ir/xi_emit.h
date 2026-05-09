@@ -38,9 +38,9 @@ struct XrayIsolate;
 typedef enum {
     XI_EMIT_OK = 0,
     XI_EMIT_ERR_TOO_MANY_REGS,   /* function needs > 255 registers */
-    XI_EMIT_ERR_TOO_MANY_CONSTS,  /* constant pool overflow */
-    XI_EMIT_ERR_UNSUPPORTED_OP,   /* unhandled XiOp */
-    XI_EMIT_ERR_INTERNAL,         /* unexpected internal error */
+    XI_EMIT_ERR_TOO_MANY_CONSTS, /* constant pool overflow */
+    XI_EMIT_ERR_UNSUPPORTED_OP,  /* unhandled XiOp */
+    XI_EMIT_ERR_INTERNAL,        /* unexpected internal error */
 } XiEmitStatus;
 
 /* Emit Xi IR function to a new XrProto.
@@ -48,8 +48,7 @@ typedef enum {
  * and the status indicates the error kind.
  * Caller owns the returned XrProto (free with xr_vm_proto_free). */
 /* isolate is needed for string constant interning (may be NULL for no-string funcs) */
-XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate,
-                              struct XrProto **out_proto);
+XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrProto **out_proto);
 
 /* Human-readable error string for emit status. */
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);

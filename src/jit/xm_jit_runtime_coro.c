@@ -147,11 +147,11 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
     if (xr_channel_is_closed(ch)) {
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
 
     XrValue send_v =
@@ -173,7 +173,7 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
         return XR_JIT_NULL();
     }
     // Need blocking → XM_SUSPEND will save regs then call block helper
-    return (XrJitResult){XM_DEOPT_MARKER, 0};
+    return (XrJitResult) {XM_DEOPT_MARKER, 0};
 }
 
 // Block helper for channel send (called from XM_SUSPEND after regs saved).
@@ -186,7 +186,7 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     if (!xr_value_is_channel(ch_val)) {
         coro->jit_suspend->result = xr_null().i;
         coro->jit_suspend->result_tag = XR_TAG_NULL;
-        return (XrJitResult){1, 0};  // not blocked, handle error inline
+        return (XrJitResult) {1, 0};  // not blocked, handle error inline
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
     uint8_t val_tag = (uint8_t) (coro->jit_ctx->call_args[2] & 0xFF);
@@ -197,13 +197,13 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     if (cr == XR_CHAN_OK) {
         coro->jit_suspend->result = xr_null().i;
         coro->jit_suspend->result_tag = XR_TAG_NULL;
-        return (XrJitResult){1, 0};  // succeeded during retry
+        return (XrJitResult) {1, 0};  // succeeded during retry
     }
     if (cr == XR_CHAN_BLOCK) {
         // BLOCKED already set by xr_channel_send under lock (gopark pattern).
         // Do NOT touch flags after this point — coro may already be woken
         // by another worker. VM bytecode path also doesn't set wait_reason.
-        return (XrJitResult){0, 0};  // blocked
+        return (XrJitResult) {0, 0};  // blocked
     }
     // Closed or error: store null result, continue inline
     coro->jit_suspend->result = xr_null().i;
@@ -241,7 +241,7 @@ XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
     }
 
     // Need blocking → XM_SUSPEND will save regs then call block helper
-    return (XrJitResult){XM_DEOPT_MARKER, 0};
+    return (XrJitResult) {XM_DEOPT_MARKER, 0};
 }
 
 // Block helper for channel recv (called from XM_SUSPEND after regs saved).
@@ -271,12 +271,12 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
         }
         coro->jit_suspend->result = out.i;
         coro->jit_suspend->result_tag = out.tag;
-        return (XrJitResult){1, 0};  // succeeded during retry
+        return (XrJitResult) {1, 0};  // succeeded during retry
     }
     if (cr == XR_CHAN_CLOSED) {
         coro->jit_suspend->result = xr_null().i;
         coro->jit_suspend->result_tag = XR_TAG_NULL;
-        return (XrJitResult){1, 0};
+        return (XrJitResult) {1, 0};
     }
     if (cr == XR_CHAN_BLOCK) {
         // BLOCKED already set by xr_channel_recv under lock (gopark pattern).
@@ -284,7 +284,7 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
         // Worker resume path copies stack[0] → jit_suspend.result before
         // calling xm_jit_resume.
         // Do NOT touch flags — coro may already be woken by another worker.
-        return (XrJitResult){0, 0};  // blocked
+        return (XrJitResult) {0, 0};  // blocked
     }
     coro->jit_suspend->result = xr_null().i;
     coro->jit_suspend->result_tag = XR_TAG_NULL;
@@ -305,18 +305,18 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
 
     XrValue recv_val = jit_value_from_tag(coro->jit_ctx->call_args[0], recv_tag);
     if (!XR_IS_PTR(recv_val) || !recv_val.ptr)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     XrInstance *inst = xr_value_to_instance(recv_val);
     if (!inst)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     XrClass *cls = xr_instance_get_class(inst);
     if (!cls || method_idx >= cls->method_count)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     XrClosure *closure = cls->methods[method_idx].as.closure;
     if (!closure || !closure->proto)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     XrProto *proto = closure->proto;
 
@@ -335,7 +335,7 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
 
     XrayIsolate *isolate = coro->isolate;
     if (!isolate)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     bool saved_suppress = xr_isolate_get_suppress_exception_print(isolate);
     xr_isolate_set_suppress_exception_print(isolate, true);
@@ -354,7 +354,7 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
         if (XR_SLOT_IS_FLOAT(rst)) {
             int64_t raw;
             memcpy(&raw, &result.f, sizeof(int64_t));
-            return (XrJitResult){raw, XR_TAG_F64};
+            return (XrJitResult) {raw, XR_TAG_F64};
         }
     }
     return XR_JIT_RESULT(result);
@@ -371,7 +371,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     int64_t raw_closure = coro->jit_ctx->call_args[0];
     // Detect poison values from uninitialized JIT registers (OSR edge case)
     if (raw_closure == 0 || ((uint64_t) raw_closure >> 48) != 0)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     // Class call: allocate instance + call constructor inline
     XrGCHeader *callee_gc = (XrGCHeader *) raw_closure;
@@ -379,12 +379,12 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         XrClass *klass = (XrClass *) raw_closure;
         XrayIsolate *isolate = coro->isolate;
         if (!isolate)
-            return (XrJitResult){XM_DEOPT_MARKER, 0};
+            return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
         // Allocate instance on coroutine heap (normal storage mode)
         XrInstance *instance = xr_instance_new(isolate, klass);
         if (!instance)
-            return (XrJitResult){XM_DEOPT_MARKER, 0};
+            return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
         // Look up constructor method (cached symbol for speed)
         static int ctor_sym = -1;
@@ -412,12 +412,12 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         }
 
         // Return instance pointer regardless of constructor outcome
-        return (XrJitResult){(int64_t) (uintptr_t) instance, XR_TAG_PTR};
+        return (XrJitResult) {(int64_t) (uintptr_t) instance, XR_TAG_PTR};
     }
 
     XrClosure *closure = (XrClosure *) raw_closure;
     if (!closure->proto)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     XrProto *proto = closure->proto;
 
@@ -493,7 +493,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     // VM fallback: BOX args and call via interpreter
     XrayIsolate *isolate = coro->isolate;
     if (!isolate)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     XrValue args[16];
     for (int i = 0; i < nargs && i < 15; i++) {
@@ -524,7 +524,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         if (XR_SLOT_IS_FLOAT(rst)) {
             int64_t raw;
             memcpy(&raw, &result.f, sizeof(int64_t));
-            return (XrJitResult){raw, XR_TAG_F64};
+            return (XrJitResult) {raw, XR_TAG_F64};
         }
     }
     return XR_JIT_RESULT(result);
@@ -534,7 +534,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
 
 // OSR calling convention: same as normal — x0=coro, x1=pointer to int64_t values[]
 bool xm_jit_osr_enter(void *osr_entry, XrCoroutine *coro, int64_t *values, uint8_t return_type,
-                       XrValue *result) {
+                      XrValue *result) {
     if (!osr_entry || !result)
         return false;
 
@@ -603,7 +603,7 @@ void xm_jit_install_bg_result(XrProto *proto) {
 /* ========== OSR Trigger (called from VM at loop back-edges) ========== */
 
 int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint32_t bc_pc,
-                        XrValue *base, int maxstack, uint8_t return_type, XrValue *result) {
+                       XrValue *base, int maxstack, uint8_t return_type, XrValue *result) {
     if (!jit || !jit->enabled || !proto || !result)
         return XM_JIT_DEOPT;
 
@@ -770,7 +770,7 @@ XrJitResult xr_jit_rt_add(XrCoroutine *coro, int64_t extra_arg) {
             r.f = nb + nc;
             int64_t raw;
             memcpy(&raw, &r.f, sizeof(double));
-            return (XrJitResult){raw, XR_TAG_F64};
+            return (XrJitResult) {raw, XR_TAG_F64};
         }
     }
     // String concatenation
@@ -805,7 +805,7 @@ XrJitResult xr_jit_rt_sub(XrCoroutine *coro, int64_t extra_arg) {
         r.f = nb - nc;
         int64_t raw;
         memcpy(&raw, &r.f, sizeof(double));
-        return (XrJitResult){raw, XR_TAG_F64};
+        return (XrJitResult) {raw, XR_TAG_F64};
     }
     return XR_JIT_NULL();
 }
@@ -829,7 +829,7 @@ XrJitResult xr_jit_rt_mul(XrCoroutine *coro, int64_t extra_arg) {
         r.f = nb * nc;
         int64_t raw;
         memcpy(&raw, &r.f, sizeof(double));
-        return (XrJitResult){raw, XR_TAG_F64};
+        return (XrJitResult) {raw, XR_TAG_F64};
     }
     return XR_JIT_NULL();
 }
@@ -852,7 +852,7 @@ XrJitResult xr_jit_rt_div(XrCoroutine *coro, int64_t extra_arg) {
         r.f = nb / nc;
         int64_t raw;
         memcpy(&raw, &r.f, sizeof(double));
-        return (XrJitResult){raw, XR_TAG_F64};
+        return (XrJitResult) {raw, XR_TAG_F64};
     }
     XrValue exc = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
     coro->jit_ctx->exception = (void *) exc.ptr;
@@ -889,7 +889,7 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
         r.f = fmod(nb, nc);
         int64_t raw;
         memcpy(&raw, &r.f, sizeof(double));
-        return (XrJitResult){raw, XR_TAG_F64};
+        return (XrJitResult) {raw, XR_TAG_F64};
     }
     XrValue exc2 = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
     coro->jit_ctx->exception = (void *) exc2.ptr;
@@ -976,7 +976,7 @@ XrJitResult xr_jit_scope_exit(XrCoroutine *coro, int64_t extra_arg) {
 
     if (atomic_load(&coro->wait_count) > 0) {
         // Children still running — deopt to interpreter for blocking wait
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
 
     // All children done — safe to unlink and free scope
@@ -999,15 +999,15 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
 
     XrValue fn_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_closure(fn_val))
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     struct XrClosure *closure = xr_value_to_closure(fn_val);
     XrProto *proto = closure->proto;
 
     if (!proto->is_coro_safe)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     if (nargs != proto->numparams)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     // Build args from call_args[1..nargs].
     // Primary tag source: call_arg_tags[] (precise compile-time tags from codegen).
@@ -1024,16 +1024,16 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
 
     XrayIsolate *isolate = coro->isolate;
     if (!isolate)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     XrCoroutine *child = xr_coro_create(isolate, closure, args, nargs, NULL, NULL, 0);
     if (!child)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     // Create Task handle (mirrors vm_spawn)
     XrTask *task = xr_task_create(coro, child);
     if (!task)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     if (fire_and_forget)
         child->gc_flags |= XR_CORO_GC_RECYCLABLE;
@@ -1051,7 +1051,7 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     // Schedule the coroutine (no continuation stealing in JIT path)
     XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
     if (!runtime)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     xr_runtime_spawn(runtime, child);
 
     XrValue result = xr_value_from_task(task);
@@ -1085,7 +1085,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
     }
 
     // Not done or not a Task → deopt to interpreter for blocking wait
-    return (XrJitResult){XM_DEOPT_MARKER, 0};
+    return (XrJitResult) {XM_DEOPT_MARKER, 0};
 }
 
 /*
@@ -1112,7 +1112,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
     int64_t raw0 = coro->jit_ctx->call_args[0];
     XrValue val = jit_value_from_tag(raw0, XR_TAG_PTR);
     if (!xr_value_is_task(val))
-        return (XrJitResult){0, 0};  // safety fallback
+        return (XrJitResult) {0, 0};  // safety fallback
     XrTask *task = xr_value_to_task(val);
 
     // Re-check: task may have completed between fast-path and here
@@ -1125,7 +1125,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         }
         coro->jit_suspend->result = res.i;
         coro->jit_suspend->result_tag = res.tag;
-        return (XrJitResult){1, 0};  // not blocked — JIT continues
+        return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }
 
     // CAS: NONE → WAITING (mirror vm_await logic in xvm_cold_paths.c:2439)
@@ -1142,7 +1142,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         uint32_t new_flags =
             xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
         atomic_store_explicit(&coro->flags, new_flags, memory_order_release);
-        return (XrJitResult){0, 0};  // blocked — JIT saves resume info and returns SUSPEND_MARKER
+        return (XrJitResult) {0, 0};  // blocked — JIT saves resume info and returns SUSPEND_MARKER
     }
 
     if (expected == XR_AWAIT_RESOLVED) {
@@ -1156,7 +1156,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         coro->jit_suspend->result = res.i;
         coro->jit_suspend->result_tag = res.tag;
         atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
-        return (XrJitResult){1, 0};  // not blocked — JIT continues
+        return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }
 
     // XR_AWAIT_WAITING: concurrent await on same task (overwrite waiter)
@@ -1165,5 +1165,5 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
     uint32_t new_flags2 =
         xr_coro_set_wait_reason_flags(old_flags2, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
     atomic_store_explicit(&coro->flags, new_flags2, memory_order_release);
-    return (XrJitResult){0, 0};  // blocked
+    return (XrJitResult) {0, 0};  // blocked
 }

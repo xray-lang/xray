@@ -108,10 +108,11 @@ struct XrClassBuilder {
     bool finalized;
 
     // Monomorphized generics support
-    const char *display_name;           /* User-visible name (NULL = same as builder->name) */
-    XrClass *generic_origin;            /* Skeleton generic class for mono classes */
-    uint8_t mono_type_argc;             /* Number of concrete type arg names */
-    const char **mono_type_arg_names;   /* Concrete type display names (caller-owned until finalize copies) */
+    const char *display_name; /* User-visible name (NULL = same as builder->name) */
+    XrClass *generic_origin;  /* Skeleton generic class for mono classes */
+    uint8_t mono_type_argc;   /* Number of concrete type arg names */
+    const char *
+        *mono_type_arg_names; /* Concrete type display names (caller-owned until finalize copies) */
 };
 
 #endif  // XCLASS_BUILDER_INTERNAL_H

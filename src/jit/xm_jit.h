@@ -47,7 +47,7 @@ typedef struct XmJitState {
     void
         *dominant_shape;  // XrShape* — most common NEWJSON shape in module (NULL if none/ambiguous)
     bool verbose;         // diagnostic logging (auto-enabled by --jit-force)
-    bool stats_enabled;         // --jit-stats: print compilation statistics on exit
+    bool stats_enabled;   // --jit-stats: print compilation statistics on exit
     XmCompileQueue *bg_queue;  // background compilation queue (NULL if sync mode)
 
     // Code cache eviction: track compiled protos for LRU reclaim
@@ -104,7 +104,7 @@ XR_FUNC bool xm_jit_try_compile(XmJitState *jit, XrProto *proto);
 #define XM_JIT_DEOPT 1
 #define XM_JIT_SUSPEND 2
 XR_FUNC int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
-                         struct XrType *return_type_info, XrValue *result);
+                        struct XrType *return_type_info, XrValue *result);
 
 // Multi-return value reconstruction: fill results[1..n] from jit_ctx->ret_vals[].
 // Called after xm_jit_call() succeeds when the caller expects multiple results.
@@ -133,7 +133,7 @@ XR_FUNC int xm_jit_resume(XrCoroutine *coro, XrValue *result);
 // result: output XrValue
 // Returns true on success, false on deopt.
 XR_FUNC bool xm_jit_osr_enter(void *osr_entry, XrCoroutine *coro, int64_t *values,
-                               uint8_t return_type, XrValue *result);
+                              uint8_t return_type, XrValue *result);
 
 /* Unified JIT result installation data.
  * Both sync and background paths fill this struct, then call
@@ -172,6 +172,6 @@ XR_FUNC void xm_jit_install_bg_result(XrProto *proto);
 // Returns: XM_JIT_OK on success, XM_JIT_DEOPT on deopt/no-match,
 // XM_JIT_SUSPEND on channel/await block.
 XR_FUNC int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint32_t bc_pc,
-                                XrValue *base, int maxstack, uint8_t return_type, XrValue *result);
+                               XrValue *base, int maxstack, uint8_t return_type, XrValue *result);
 
 #endif  // XM_JIT_H

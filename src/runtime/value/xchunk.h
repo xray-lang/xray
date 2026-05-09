@@ -320,8 +320,8 @@ typedef struct XrProto {
     void *jit_resume_entry;           // Resume entry for JIT suspend/resume (NULL = none)
     void *_Atomic jit_entry_pending;  // Background JIT: compiled entry awaiting installation
     struct XmTypeFeedback *type_feedback;  // runtime type profile (lazily allocated)
-    _Atomic uint32_t call_count;            // runtime call count (hot function detection)
-    _Atomic uint32_t exec_count;            // runtime execution count (Tier 2 trigger)
+    _Atomic uint32_t call_count;           // runtime call count (hot function detection)
+    _Atomic uint32_t exec_count;           // runtime execution count (Tier 2 trigger)
     _Atomic uint32_t
         deopt_count;   // deopt counter (<5 normal, >=5 conservative recompile, >=20 JIT disabled)
     bool osr_pending;  // post-deopt: re-attempt OSR at next matching loop back-edge
@@ -361,8 +361,8 @@ typedef struct XrProto {
     // xi_slot_map: value_id → bytecode slot mapping (XiSlotMap*); enables
     //   JIT deopt snapshot generation from Xi IR values.
     // Both freed in xr_proto_free(). NULL if Xi pipeline was not used.
-    void *xi_func;       // opaque XiFunc* (owned, freed via xi_func_free)
-    void *xi_slot_map;   // opaque XiSlotMap* (owned, freed via xi_slot_map_free)
+    void *xi_func;      // opaque XiFunc* (owned, freed via xi_func_free)
+    void *xi_slot_map;  // opaque XiSlotMap* (owned, freed via xi_slot_map_free)
 } XrProto;
 
 // Convenience macros

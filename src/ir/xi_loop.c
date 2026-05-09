@@ -26,16 +26,16 @@
 
 /* Collect all blocks in the natural loop body rooted at hdr_bi,
  * given latch latch_bi.  Merges into caller-supplied bitmap. */
-static void collect_loop_body(XiFunc *f, uint32_t hdr_bi,
-                               uint32_t latch_bi, uint8_t *in_loop) {
+static void collect_loop_body(XiFunc *f, uint32_t hdr_bi, uint32_t latch_bi, uint8_t *in_loop) {
     XR_DCHECK(f != NULL, "collect_loop_body: NULL func");
     XR_DCHECK(hdr_bi < f->nblocks, "collect_loop_body: header OOB");
     XR_DCHECK(latch_bi < f->nblocks, "collect_loop_body: latch OOB");
 
     in_loop[hdr_bi] = 1;
 
-    uint32_t *stack = (uint32_t *)xr_malloc(f->nblocks * sizeof(uint32_t));
-    if (!stack) return;
+    uint32_t *stack = (uint32_t *) xr_malloc(f->nblocks * sizeof(uint32_t));
+    if (!stack)
+        return;
     uint32_t sp = 0;
 
     if (!in_loop[latch_bi]) {
@@ -48,8 +48,10 @@ static void collect_loop_body(XiFunc *f, uint32_t hdr_bi,
         XiBlock *blk = f->blocks[b];
         for (uint16_t p = 0; p < blk->npreds; p++) {
             XiBlock *pred = blk->preds[p];
-            if (!pred || pred->id >= f->nblocks) continue;
-            if (in_loop[pred->id]) continue;
+            if (!pred || pred->id >= f->nblocks)
+                continue;
+            if (in_loop[pred->id])
+                continue;
             in_loop[pred->id] = 1;
             stack[sp++] = pred->id;
         }
@@ -63,33 +65,40 @@ static XiBlock *find_preheader(XiBlock *hdr, const uint8_t *in_loop) {
     XiBlock *found = NULL;
     for (uint16_t p = 0; p < hdr->npreds; p++) {
         XiBlock *cand = hdr->preds[p];
-        if (!cand) continue;
-        if (in_loop[cand->id]) continue;
-        if (found) return NULL;  /* more than one out-of-loop pred */
+        if (!cand)
+            continue;
+        if (in_loop[cand->id])
+            continue;
+        if (found)
+            return NULL; /* more than one out-of-loop pred */
         found = cand;
     }
     return found;
 }
 
 /* Allocate and populate an XiLoop from header + body bitmap. */
-static XiLoop *alloc_loop(XiFunc *f, uint32_t hdr_bi,
-                            uint32_t latch_bi, const uint8_t *in_loop) {
+static XiLoop *alloc_loop(XiFunc *f, uint32_t hdr_bi, uint32_t latch_bi, const uint8_t *in_loop) {
     XR_DCHECK(f != NULL, "alloc_loop: NULL func");
 
     uint32_t body_count = 0;
     for (uint32_t b = 0; b < f->nblocks; b++)
-        if (in_loop[b]) body_count++;
+        if (in_loop[b])
+            body_count++;
 
-    XiLoop *loop = (XiLoop *)xr_calloc(1, sizeof(XiLoop));
-    if (!loop) return NULL;
+    XiLoop *loop = (XiLoop *) xr_calloc(1, sizeof(XiLoop));
+    if (!loop)
+        return NULL;
 
     loop->header = f->blocks[hdr_bi];
     loop->latch = f->blocks[latch_bi];
     loop->preheader = find_preheader(loop->header, in_loop);
 
     if (body_count > 0) {
-        loop->body = (XiBlock **)xr_malloc(body_count * sizeof(XiBlock *));
-        if (!loop->body) { xr_free(loop); return NULL; }
+        loop->body = (XiBlock **) xr_malloc(body_count * sizeof(XiBlock *));
+        if (!loop->body) {
+            xr_free(loop);
+            return NULL;
+        }
         uint32_t w = 0;
         for (uint32_t b = 0; b < f->nblocks; b++)
             if (in_loop[b])
@@ -100,7 +109,8 @@ static XiLoop *alloc_loop(XiFunc *f, uint32_t hdr_bi,
 }
 
 static void free_loop(XiLoop *loop) {
-    if (!loop) return;
+    if (!loop)
+        return;
     xr_free(loop->body);
     xr_free(loop);
 }
@@ -109,27 +119,33 @@ static void free_loop(XiLoop *loop) {
 
 XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_compute_loops: NULL func");
-    if (f->nblocks == 0) return NULL;
+    if (f->nblocks == 0)
+        return NULL;
 
     uint32_t n = f->nblocks;
 
     /* Back-edge detection: (src -> hdr) where hdr dominates src */
-    uint8_t *headers = (uint8_t *)xr_calloc(n, sizeof(uint8_t));
-    uint32_t *first_latch = (uint32_t *)xr_malloc(n * sizeof(uint32_t));
-    uint8_t *latch_seen = (uint8_t *)xr_calloc(n, sizeof(uint8_t));
+    uint8_t *headers = (uint8_t *) xr_calloc(n, sizeof(uint8_t));
+    uint32_t *first_latch = (uint32_t *) xr_malloc(n * sizeof(uint32_t));
+    uint8_t *latch_seen = (uint8_t *) xr_calloc(n, sizeof(uint8_t));
     if (!headers || !first_latch || !latch_seen) {
-        xr_free(headers); xr_free(first_latch); xr_free(latch_seen);
+        xr_free(headers);
+        xr_free(first_latch);
+        xr_free(latch_seen);
         return NULL;
     }
 
     for (uint32_t s = 0; s < n; s++) {
         XiBlock *src = f->blocks[s];
-        if (!src) continue;
+        if (!src)
+            continue;
         for (int k = 0; k < 2; k++) {
             XiBlock *tgt = src->succs[k];
-            if (!tgt) continue;
+            if (!tgt)
+                continue;
             XR_DCHECK(tgt->id < n, "successor block ID out of range");
-            if (!xi_dominates(tgt, src)) continue;
+            if (!xi_dominates(tgt, src))
+                continue;
             /* tgt dominates src: back-edge found */
             headers[tgt->id] = 1;
             if (!latch_seen[tgt->id]) {
@@ -141,50 +157,63 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
 
     uint32_t nloop = 0;
     for (uint32_t b = 0; b < n; b++)
-        if (headers[b]) nloop++;
+        if (headers[b])
+            nloop++;
 
     if (nloop == 0) {
-        xr_free(headers); xr_free(first_latch); xr_free(latch_seen);
+        xr_free(headers);
+        xr_free(first_latch);
+        xr_free(latch_seen);
         return NULL;
     }
 
     /* Allocate XiLoopInfo */
-    XiLoopInfo *info = (XiLoopInfo *)xr_calloc(1, sizeof(XiLoopInfo));
+    XiLoopInfo *info = (XiLoopInfo *) xr_calloc(1, sizeof(XiLoopInfo));
     if (!info) {
-        xr_free(headers); xr_free(first_latch); xr_free(latch_seen);
+        xr_free(headers);
+        xr_free(first_latch);
+        xr_free(latch_seen);
         return NULL;
     }
     info->nblocks = n;
-    info->block_to_loop = (XiLoop **)xr_calloc(n, sizeof(XiLoop *));
-    info->all_loops = (XiLoop **)xr_calloc(nloop, sizeof(XiLoop *));
+    info->block_to_loop = (XiLoop **) xr_calloc(n, sizeof(XiLoop *));
+    info->all_loops = (XiLoop **) xr_calloc(nloop, sizeof(XiLoop *));
     if (!info->block_to_loop || !info->all_loops) {
         xi_loopinfo_free(info);
-        xr_free(headers); xr_free(first_latch); xr_free(latch_seen);
+        xr_free(headers);
+        xr_free(first_latch);
+        xr_free(latch_seen);
         return NULL;
     }
 
     /* Per-loop body bitmaps for parent/child wiring */
-    uint8_t *body_bitmaps = (uint8_t *)xr_calloc((size_t)nloop * n, sizeof(uint8_t));
+    uint8_t *body_bitmaps = (uint8_t *) xr_calloc((size_t) nloop * n, sizeof(uint8_t));
     if (!body_bitmaps) {
         xi_loopinfo_free(info);
-        xr_free(headers); xr_free(first_latch); xr_free(latch_seen);
+        xr_free(headers);
+        xr_free(first_latch);
+        xr_free(latch_seen);
         return NULL;
     }
 
     /* Build each loop's body by merging all back-edges to the same header */
     uint32_t idx = 0;
     for (uint32_t hbi = 0; hbi < n; hbi++) {
-        if (!headers[hbi]) continue;
-        uint8_t *bitmap = body_bitmaps + (size_t)idx * n;
+        if (!headers[hbi])
+            continue;
+        uint8_t *bitmap = body_bitmaps + (size_t) idx * n;
 
         /* Collect body from all back-edges to this header */
         for (uint32_t s = 0; s < n; s++) {
             XiBlock *src = f->blocks[s];
-            if (!src) continue;
+            if (!src)
+                continue;
             for (int k = 0; k < 2; k++) {
                 XiBlock *tgt = src->succs[k];
-                if (!tgt || tgt->id != hbi) continue;
-                if (!xi_dominates(tgt, src)) continue;
+                if (!tgt || tgt->id != hbi)
+                    continue;
+                if (!xi_dominates(tgt, src))
+                    continue;
                 collect_loop_body(f, hbi, s, bitmap);
             }
         }
@@ -192,7 +221,9 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
         XiLoop *L = alloc_loop(f, hbi, first_latch[hbi], bitmap);
         if (!L) {
             xr_free(body_bitmaps);
-            xr_free(headers); xr_free(first_latch); xr_free(latch_seen);
+            xr_free(headers);
+            xr_free(first_latch);
+            xr_free(latch_seen);
             xi_loopinfo_free(info);
             return NULL;
         }
@@ -212,11 +243,14 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
         uint32_t best_size = UINT32_MAX;
 
         for (uint32_t mi = 0; mi < nloop; mi++) {
-            if (mi == li) continue;
+            if (mi == li)
+                continue;
             XiLoop *M = info->all_loops[mi];
-            if (!xi_dominates(M->header, L->header)) continue;
-            uint8_t *mbm = body_bitmaps + (size_t)mi * n;
-            if (!mbm[hL]) continue;
+            if (!xi_dominates(M->header, L->header))
+                continue;
+            uint8_t *mbm = body_bitmaps + (size_t) mi * n;
+            if (!mbm[hL])
+                continue;
             if (M->nbody < best_size) {
                 best_size = M->nbody;
                 best = M;
@@ -239,7 +273,8 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
     for (uint32_t li = 0; li < nloop; li++) {
         XiLoop *L = info->all_loops[li];
         uint32_t d = 1;
-        for (XiLoop *p = L->parent; p; p = p->parent) d++;
+        for (XiLoop *p = L->parent; p; p = p->parent)
+            d++;
         L->depth = d;
     }
 
@@ -248,7 +283,7 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
         XiLoop *best = NULL;
         uint32_t best_depth = 0;
         for (uint32_t li = 0; li < nloop; li++) {
-            if (body_bitmaps[(size_t)li * n + b]) {
+            if (body_bitmaps[(size_t) li * n + b]) {
                 XiLoop *L = info->all_loops[li];
                 if (L->depth > best_depth) {
                     best_depth = L->depth;
@@ -281,7 +316,8 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
 }
 
 XR_FUNC void xi_loopinfo_free(XiLoopInfo *info) {
-    if (!info) return;
+    if (!info)
+        return;
     if (info->all_loops) {
         for (uint32_t i = 0; i < info->nloop; i++)
             free_loop(info->all_loops[i]);
@@ -292,13 +328,15 @@ XR_FUNC void xi_loopinfo_free(XiLoopInfo *info) {
 }
 
 XR_FUNC uint32_t xi_block_loop_depth(const XiLoopInfo *info, uint32_t blk_id) {
-    if (!info || blk_id >= info->nblocks) return 0;
+    if (!info || blk_id >= info->nblocks)
+        return 0;
     XiLoop *L = info->block_to_loop[blk_id];
     return L ? L->depth : 0;
 }
 
 XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk) {
-    if (!loop || !blk) return false;
+    if (!loop || !blk)
+        return false;
     for (uint32_t i = 0; i < loop->nbody; i++)
         if (loop->body[i] == blk)
             return true;

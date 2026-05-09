@@ -38,26 +38,26 @@
 /* ========== Use Site ========== */
 
 typedef enum {
-    XI_USE_VALUE_ARG = 0,   /* instruction args[arg_idx] */
-    XI_USE_PHI_ARG   = 1,   /* phi node value.args[arg_idx] */
-    XI_USE_CONTROL   = 2,   /* block control value */
+    XI_USE_VALUE_ARG = 0, /* instruction args[arg_idx] */
+    XI_USE_PHI_ARG = 1,   /* phi node value.args[arg_idx] */
+    XI_USE_CONTROL = 2,   /* block control value */
 } XiUseKind;
 
 typedef struct {
-    uint32_t block_id;      /* block containing the use */
-    uint32_t value_id;      /* value/phi that uses this def (UINT32_MAX for control) */
-    uint8_t kind;           /* XiUseKind */
-    uint8_t arg_idx;        /* argument index within the user */
+    uint32_t block_id; /* block containing the use */
+    uint32_t value_id; /* value/phi that uses this def (UINT32_MAX for control) */
+    uint8_t kind;      /* XiUseKind */
+    uint8_t arg_idx;   /* argument index within the user */
 } XiUseSite;
 
 /* ========== Def-Use Chains ========== */
 
 typedef struct XiDefUse {
-    XiUseSite *sites;       /* flat array of all use records */
-    uint32_t *offset;       /* offset[v] = start index in sites[] for value v */
-    uint32_t *count;        /* count[v]  = number of uses for value v */
-    uint32_t max_id;        /* size of offset[] and count[] arrays */
-    uint32_t total_sites;   /* total entries in sites[] */
+    XiUseSite *sites;     /* flat array of all use records */
+    uint32_t *offset;     /* offset[v] = start index in sites[] for value v */
+    uint32_t *count;      /* count[v]  = number of uses for value v */
+    uint32_t max_id;      /* size of offset[] and count[] arrays */
+    uint32_t total_sites; /* total entries in sites[] */
 } XiDefUse;
 
 /* ========== API ========== */
@@ -73,13 +73,15 @@ XR_FUNC void xi_defuse_free(XiDefUse *du);
 
 /* Number of uses for value with given ID. */
 static inline uint32_t xi_defuse_nuses(const XiDefUse *du, uint32_t vid) {
-    if (!du || vid >= du->max_id) return 0;
+    if (!du || vid >= du->max_id)
+        return 0;
     return du->count[vid];
 }
 
 /* Pointer to first use site for value vid (iterate count[vid] entries). */
 static inline const XiUseSite *xi_defuse_uses(const XiDefUse *du, uint32_t vid) {
-    if (!du || vid >= du->max_id || du->count[vid] == 0) return NULL;
+    if (!du || vid >= du->max_id || du->count[vid] == 0)
+        return NULL;
     return &du->sites[du->offset[vid]];
 }
 
@@ -93,4 +95,4 @@ static inline bool xi_defuse_single_use(const XiDefUse *du, uint32_t vid) {
     return xi_defuse_nuses(du, vid) == 1;
 }
 
-#endif // XI_DEFUSE_H
+#endif  // XI_DEFUSE_H

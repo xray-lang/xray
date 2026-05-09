@@ -219,7 +219,7 @@ typedef struct {
     int16_t spill_slot;  // valid when is_reload = true
 } XraEdgeCopy;
 
-XR_FUNC uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target,
-                                 XmBlock *from, XraEdgeCopy *out, uint32_t max_copies);
+XR_FUNC uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target, XmBlock *from,
+                                 XraEdgeCopy *out, uint32_t max_copies);
 
 #endif  // XM_REGALLOC_H

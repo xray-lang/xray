@@ -63,7 +63,8 @@ XrValue xr_builtin_stringbuilder_new(XrayIsolate *isolate, XrValue self, XrValue
 /* ========== Instance Methods ========== */
 
 // sb.append(value) - supports chaining
-XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue self, XrValue *args, int argc) {
+XrValue xr_builtin_stringbuilder_append(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                        int argc) {
     XrStringBuilder *sb = xr_to_stringbuilder(self);
     if (!sb)
         return xr_null();

@@ -42,7 +42,7 @@ typedef struct XmPassChange {
 
 /* Sentinel: "nothing changed" — shorthand for passes that early-exit. */
 static inline XmPassChange xm_pass_no_change(void) {
-    return (XmPassChange){false, false, false, 0, 0, 0};
+    return (XmPassChange) {false, false, false, 0, 0, 0};
 }
 
 /* Sentinel: "everything changed" — matches the conservative reset the
@@ -50,7 +50,7 @@ static inline XmPassChange xm_pass_no_change(void) {
  * passes that touch mutation but have not yet grown fine-grained
  * bookkeeping. */
 static inline XmPassChange xm_pass_change_all(void) {
-    return (XmPassChange){true, true, true, 0, 0, 0};
+    return (XmPassChange) {true, true, true, 0, 0, 0};
 }
 
 // Forward declaration
@@ -72,12 +72,11 @@ XR_FUNC void xm_run_pipeline(XmFunc *func, XmOptLevel opt);
 // Extended pipeline with caller proto (enables auto-inlining at -O2).
 // budget_ms: wall-clock cap in milliseconds (0 = unlimited).
 // Returns true if the budget was exceeded (caller should bail out).
-XR_FUNC bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
-                                  uint32_t budget_ms);
+XR_FUNC bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto, uint32_t budget_ms);
 
 // Budget constants (milliseconds)
-#define XM_BUDGET_SYNC_MS  10   // Tier 1 JIT on main thread
-#define XM_BUDGET_BG_MS    50   // background worker compilation
+#define XM_BUDGET_SYNC_MS 10  // Tier 1 JIT on main thread
+#define XM_BUDGET_BG_MS 50    // background worker compilation
 
 /* ========== Declarative Pipeline Driver ==========
  *
@@ -139,9 +138,9 @@ typedef struct XmCompileBudget {
  * of every round and bails out early if exceeded.  The partially
  * optimised IR is still valid — only remaining passes are skipped.
  */
-XR_FUNC XmPipelineStats xm_run_fixedpoint(XmFunc *func, XrProto *proto,
-                                            const XmPassDesc *passes, uint32_t npass,
-                                            uint32_t max_rounds, XmCompileBudget *budget);
+XR_FUNC XmPipelineStats xm_run_fixedpoint(XmFunc *func, XrProto *proto, const XmPassDesc *passes,
+                                          uint32_t npass, uint32_t max_rounds,
+                                          XmCompileBudget *budget);
 
 /* ========== Individual Pass API ========== */
 
@@ -297,6 +296,6 @@ XR_FUNC XmPassChange xm_pass_range_analysis(XmFunc *func);
 // nargs: number of arguments
 // Returns the XmRef of the inlined return value (or XM_NONE on failure).
 XR_FUNC XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_idx,
-                                   XmFunc *callee, XmRef *call_args, uint32_t nargs);
+                                 XmFunc *callee, XmRef *call_args, uint32_t nargs);
 
 #endif  // XM_PASS_H

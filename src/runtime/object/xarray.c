@@ -972,7 +972,8 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
     if (start > end)
         start = end;
 
-    // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by capacity==0 && source!=NULL
+    // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by capacity==0 &&
+    // source!=NULL
     XrArray *slice = (XrArray *) xr_alloc(coro, sizeof(XrArray), XR_TARRAY);
     if (!slice)
         return NULL;

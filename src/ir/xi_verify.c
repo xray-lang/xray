@@ -33,11 +33,12 @@ typedef struct {
 } VerifyCtx;
 
 static void verr(VerifyCtx *ctx, const char *fmt, ...) {
-    if (ctx->failed) return;  /* report first error only */
+    if (ctx->failed)
+        return; /* report first error only */
     ctx->failed = true;
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(ctx->buf, (size_t)ctx->size, fmt, ap);
+    vsnprintf(ctx->buf, (size_t) ctx->size, fmt, ap);
     va_end(ap);
 }
 
@@ -65,22 +66,23 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
 
 /* Check 2: entry block must have 0 predecessors */
 static void verify_entry(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
     if (f->entry->npreds != 0) {
-        verr(ctx, "func '%s': entry block b%u has %u predecessors (expected 0)",
-             f->name, f->entry->id, f->entry->npreds);
+        verr(ctx, "func '%s': entry block b%u has %u predecessors (expected 0)", f->name,
+             f->entry->id, f->entry->npreds);
     }
 }
 
 /* Check 3: block-level invariants */
 static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
     XR_DCHECK(blk != NULL, "verify_block: NULL block");
 
     /* Block must belong to this function */
     if (blk->func != f) {
-        verr(ctx, "func '%s': block b%u has wrong func pointer",
-             f->name, blk->id);
+        verr(ctx, "func '%s': block b%u has wrong func pointer", f->name, blk->id);
         return;
     }
 
@@ -94,13 +96,11 @@ static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
             break;
         case XI_BLOCK_IF:
             if (!blk->control) {
-                verr(ctx, "func '%s': IF block b%u has NULL control",
-                     f->name, blk->id);
+                verr(ctx, "func '%s': IF block b%u has NULL control", f->name, blk->id);
                 return;
             }
             if (!blk->succs[0] || !blk->succs[1]) {
-                verr(ctx, "func '%s': IF block b%u missing successor(s)",
-                     f->name, blk->id);
+                verr(ctx, "func '%s': IF block b%u missing successor(s)", f->name, blk->id);
                 return;
             }
             break;
@@ -110,44 +110,40 @@ static void verify_block(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
         case XI_BLOCK_UNREACHABLE:
             break;
         default:
-            verr(ctx, "func '%s': block b%u has invalid kind %u",
-                 f->name, blk->id, blk->kind);
+            verr(ctx, "func '%s': block b%u has invalid kind %u", f->name, blk->id, blk->kind);
             return;
     }
 }
 
 /* Check 4: value-level invariants */
-static void verify_value(VerifyCtx *ctx, const XiFunc *f,
-                          const XiBlock *blk, const XiValue *v) {
-    if (ctx->failed) return;
+static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiValue *v) {
+    if (ctx->failed)
+        return;
     XR_DCHECK(v != NULL, "verify_value: NULL value");
 
     /* Type must be non-NULL */
     if (!v->type) {
-        verr(ctx, "func '%s': value v%u in b%u has NULL type",
-             f->name, v->id, blk->id);
+        verr(ctx, "func '%s': value v%u in b%u has NULL type", f->name, v->id, blk->id);
         return;
     }
 
     /* Op must be in valid range */
     if (v->op >= XI_OP_COUNT) {
-        verr(ctx, "func '%s': value v%u in b%u has invalid op %u",
-             f->name, v->id, blk->id, v->op);
+        verr(ctx, "func '%s': value v%u in b%u has invalid op %u", f->name, v->id, blk->id, v->op);
         return;
     }
 
     /* Block back-pointer must match */
     if (v->block != blk) {
-        verr(ctx, "func '%s': value v%u claims block b%u but is in b%u",
-             f->name, v->id,
+        verr(ctx, "func '%s': value v%u claims block b%u but is in b%u", f->name, v->id,
              v->block ? v->block->id : 9999, blk->id);
         return;
     }
 
     /* Args array consistency */
     if (v->nargs > 0 && !v->args) {
-        verr(ctx, "func '%s': value v%u in b%u has %u args but NULL args ptr",
-             f->name, v->id, blk->id, v->nargs);
+        verr(ctx, "func '%s': value v%u in b%u has %u args but NULL args ptr", f->name, v->id,
+             blk->id, v->nargs);
         return;
     }
 
@@ -157,66 +153,64 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f,
     for (uint16_t a = 0; a < v->nargs; a++) {
         if (!v->args[a]) {
             if (v->op == XI_CLOSURE_NEW)
-                continue;  /* NULL capture arg is valid */
-            verr(ctx, "func '%s': value v%u in b%u arg[%u] is NULL",
-                 f->name, v->id, blk->id, a);
+                continue; /* NULL capture arg is valid */
+            verr(ctx, "func '%s': value v%u in b%u arg[%u] is NULL", f->name, v->id, blk->id, a);
             return;
         }
         if (!v->args[a]->type) {
-            verr(ctx, "func '%s': value v%u in b%u arg[%u] (v%u) has NULL type",
-                 f->name, v->id, blk->id, a, v->args[a]->id);
+            verr(ctx, "func '%s': value v%u in b%u arg[%u] (v%u) has NULL type", f->name, v->id,
+                 blk->id, a, v->args[a]->id);
             return;
         }
     }
 }
 
 /* Check 5: phi node invariants */
-static void verify_phi(VerifyCtx *ctx, const XiFunc *f,
-                        const XiBlock *blk, const XiPhi *phi) {
-    if (ctx->failed) return;
+static void verify_phi(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, const XiPhi *phi) {
+    if (ctx->failed)
+        return;
     XR_DCHECK(phi != NULL, "verify_phi: NULL phi");
 
     /* Phi must have op == XI_PHI */
     if (phi->value.op != XI_PHI) {
-        verr(ctx, "func '%s': phi in b%u has op %u (expected XI_PHI=%u)",
-             f->name, blk->id, phi->value.op, XI_PHI);
+        verr(ctx, "func '%s': phi in b%u has op %u (expected XI_PHI=%u)", f->name, blk->id,
+             phi->value.op, XI_PHI);
         return;
     }
 
     /* Phi type must be non-NULL */
     if (!phi->value.type) {
-        verr(ctx, "func '%s': phi v%u in b%u has NULL type",
-             f->name, phi->value.id, blk->id);
+        verr(ctx, "func '%s': phi v%u in b%u has NULL type", f->name, phi->value.id, blk->id);
         return;
     }
 
     /* Phi arg count must match predecessor count */
     if (phi->value.nargs != blk->npreds) {
-        verr(ctx, "func '%s': phi v%u in b%u has %u args but block has %u preds",
-             f->name, phi->value.id, blk->id,
-             phi->value.nargs, blk->npreds);
+        verr(ctx, "func '%s': phi v%u in b%u has %u args but block has %u preds", f->name,
+             phi->value.id, blk->id, phi->value.nargs, blk->npreds);
         return;
     }
 
     /* Each phi arg must be non-NULL with valid type */
     for (uint16_t a = 0; a < phi->value.nargs; a++) {
         if (!phi->value.args[a]) {
-            verr(ctx, "func '%s': phi v%u in b%u arg[%u] is NULL",
-                 f->name, phi->value.id, blk->id, a);
+            verr(ctx, "func '%s': phi v%u in b%u arg[%u] is NULL", f->name, phi->value.id, blk->id,
+                 a);
             return;
         }
     }
 }
 
 /* Check 6: CFG edge symmetry — succ→pred and pred→succ both directions */
-static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f,
-                              const XiBlock *blk) {
-    if (ctx->failed) return;
+static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk) {
+    if (ctx->failed)
+        return;
 
     /* Forward: each successor must list blk as a predecessor */
     for (int s = 0; s < 2; s++) {
         XiBlock *succ = blk->succs[s];
-        if (!succ) continue;
+        if (!succ)
+            continue;
 
         bool found = false;
         for (uint16_t p = 0; p < succ->npreds; p++) {
@@ -226,8 +220,8 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f,
             }
         }
         if (!found) {
-            verr(ctx, "func '%s': b%u has successor b%u but is not in its pred list",
-                 f->name, blk->id, succ->id);
+            verr(ctx, "func '%s': b%u has successor b%u but is not in its pred list", f->name,
+                 blk->id, succ->id);
             return;
         }
     }
@@ -242,17 +236,15 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f,
     switch (blk->kind) {
         case XI_BLOCK_IF:
             if (nsucc != 2) {
-                verr(ctx, "func '%s': IF block b%u has %d successors (expected 2)",
-                     f->name, blk->id, nsucc);
+                verr(ctx, "func '%s': IF block b%u has %d successors (expected 2)", f->name,
+                     blk->id, nsucc);
             }
             break;
         case XI_BLOCK_RETURN:
         case XI_BLOCK_UNREACHABLE:
             if (nsucc != 0) {
-                verr(ctx, "func '%s': %s block b%u has %d successors (expected 0)",
-                     f->name,
-                     blk->kind == XI_BLOCK_RETURN ? "RETURN" : "UNREACHABLE",
-                     blk->id, nsucc);
+                verr(ctx, "func '%s': %s block b%u has %d successors (expected 0)", f->name,
+                     blk->kind == XI_BLOCK_RETURN ? "RETURN" : "UNREACHABLE", blk->id, nsucc);
             }
             break;
         default:
@@ -262,13 +254,15 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f,
 
 /* Check 7: unique value IDs within function */
 static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     /* Use a simple O(n) scan; for typical function sizes this is fine. */
     uint32_t max_id = f->next_value_id;
 
     /* Track seen IDs with a bitmap if small enough, else skip. */
-    if (max_id > 10000) return;  /* skip for very large functions */
+    if (max_id > 10000)
+        return; /* skip for very large functions */
 
     /* Stack-allocate a bitset. Max ~1.2 KB for 10000 IDs. */
     uint8_t seen[1250];
@@ -280,16 +274,14 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             uint32_t vid = blk->values[i]->id;
             if (vid >= max_id) {
-                verr(ctx, "func '%s': value v%u >= next_value_id %u",
-                     f->name, vid, max_id);
+                verr(ctx, "func '%s': value v%u >= next_value_id %u", f->name, vid, max_id);
                 return;
             }
             uint32_t byte = vid / 8;
-            uint8_t bit = (uint8_t)(1 << (vid & 7));
+            uint8_t bit = (uint8_t) (1 << (vid & 7));
             if (byte < sizeof(seen)) {
                 if (seen[byte] & bit) {
-                    verr(ctx, "func '%s': duplicate value ID v%u",
-                         f->name, vid);
+                    verr(ctx, "func '%s': duplicate value ID v%u", f->name, vid);
                     return;
                 }
                 seen[byte] |= bit;
@@ -300,16 +292,14 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             uint32_t vid = phi->value.id;
             if (vid >= max_id) {
-                verr(ctx, "func '%s': phi v%u >= next_value_id %u",
-                     f->name, vid, max_id);
+                verr(ctx, "func '%s': phi v%u >= next_value_id %u", f->name, vid, max_id);
                 return;
             }
             uint32_t byte = vid / 8;
-            uint8_t bit = (uint8_t)(1 << (vid & 7));
+            uint8_t bit = (uint8_t) (1 << (vid & 7));
             if (byte < sizeof(seen)) {
                 if (seen[byte] & bit) {
-                    verr(ctx, "func '%s': duplicate phi ID v%u",
-                         f->name, vid);
+                    verr(ctx, "func '%s': duplicate phi ID v%u", f->name, vid);
                     return;
                 }
                 seen[byte] |= bit;
@@ -322,13 +312,16 @@ static void verify_unique_ids(VerifyCtx *ctx, const XiFunc *f) {
 
 /* Return true if 'def_blk' dominates 'use_blk' (or they are the same block). */
 static bool block_dominates(const XiBlock *def_blk, const XiBlock *use_blk) {
-    if (!def_blk || !use_blk) return false;
+    if (!def_blk || !use_blk)
+        return false;
     /* Walk the dominator tree from use_blk to entry.
      * dom_depth == 0 for entry; idom == self for entry. */
     const XiBlock *b = use_blk;
     while (b && b->dom_depth >= def_blk->dom_depth) {
-        if (b == def_blk) return true;
-        if (b->idom == b) break;  /* entry block */
+        if (b == def_blk)
+            return true;
+        if (b->idom == b)
+            break; /* entry block */
         b = b->idom;
     }
     return false;
@@ -338,7 +331,8 @@ static bool block_dominates(const XiBlock *def_blk, const XiBlock *use_blk) {
  * dominates the use site.  Phi args are special: arg[i] must be
  * dominated by preds[i] (since the phi chooses along the edge). */
 static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     /* Compute RPO and dominators (overwrites scratch fields on blocks). */
     xi_compute_rpo(f);
@@ -346,21 +340,23 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         /* Check regular values */
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
             for (uint16_t a = 0; a < v->nargs; a++) {
                 XiValue *arg = v->args[a];
-                if (!arg || !arg->block) continue;
+                if (!arg || !arg->block)
+                    continue;
                 if (!block_dominates(arg->block, blk)) {
                     verr(ctx,
                          "func '%s': v%u in b%u uses v%u defined in b%u "
                          "which does not dominate b%u",
-                         f->name, v->id, blk->id,
-                         arg->id, arg->block->id, blk->id);
+                         f->name, v->id, blk->id, arg->id, arg->block->id, blk->id);
                     return;
                 }
             }
@@ -370,16 +366,18 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
         for (XiPhi *phi = blk->phis; phi && !ctx->failed; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 XiValue *arg = phi->value.args[a];
-                if (!arg || !arg->block) continue;
-                if (a >= blk->npreds) break;
+                if (!arg || !arg->block)
+                    continue;
+                if (a >= blk->npreds)
+                    break;
                 XiBlock *pred = blk->preds[a];
-                if (!pred) continue;
+                if (!pred)
+                    continue;
                 if (!block_dominates(arg->block, pred)) {
                     verr(ctx,
                          "func '%s': phi v%u in b%u arg[%u] (v%u from b%u) "
                          "not dominated by predecessor b%u",
-                         f->name, phi->value.id, blk->id, a,
-                         arg->id, arg->block->id, pred->id);
+                         f->name, phi->value.id, blk->id, a, arg->id, arg->block->id, pred->id);
                     return;
                 }
             }
@@ -391,8 +389,7 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
                 verr(ctx,
                      "func '%s': b%u control v%u defined in b%u "
                      "which does not dominate b%u",
-                     f->name, blk->id, blk->control->id,
-                     blk->control->block->id, blk->id);
+                     f->name, blk->id, blk->control->id, blk->control->block->id, blk->id);
                 return;
             }
         }
@@ -403,110 +400,134 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
 
 /* Expected argument count per XiOp.  0xFF = variadic (skip check). */
 static const uint8_t expected_narg[XI_OP_COUNT] = {
-    [XI_CONST]       = 0,
-    [XI_PARAM]       = 0,
-    [XI_ADD]         = 2,  [XI_SUB]    = 2,  [XI_MUL]   = 2,
-    [XI_DIV]         = 2,  [XI_MOD]    = 2,  [XI_NEG]   = 1,
-    [XI_BAND]        = 2,  [XI_BOR]    = 2,  [XI_BXOR]  = 2,
-    [XI_BNOT]        = 1,  [XI_SHL]    = 2,  [XI_SHR]   = 2,
-    [XI_EQ]          = 2,  [XI_NE]     = 2,  [XI_LT]    = 2,
-    [XI_LE]          = 2,  [XI_GT]     = 2,  [XI_GE]    = 2,
-    [XI_EQ_STRICT]   = 2,  [XI_NE_STRICT] = 2,
-    [XI_NOT]         = 1,
-    [XI_CONVERT]     = 1,
-    [XI_BOX]         = 1,  [XI_UNBOX]  = 1,
-    [XI_NARROW_I8]   = 1,  [XI_NARROW_U8]  = 1,
-    [XI_NARROW_I16]  = 1,  [XI_NARROW_U16] = 1,
-    [XI_NARROW_I32]  = 1,  [XI_NARROW_U32] = 1,
-    [XI_NARROW_F32]  = 1,
-    [XI_WIDEN_I8]    = 1,  [XI_WIDEN_U8]   = 1,
-    [XI_WIDEN_I16]   = 1,  [XI_WIDEN_U16]  = 1,
-    [XI_WIDEN_I32]   = 1,  [XI_WIDEN_U32]  = 1,
-    [XI_WIDEN_F32]   = 1,
-    [XI_LOAD_FIELD]  = 1,  [XI_STORE_FIELD] = 2,
-    [XI_INDEX_GET]   = 2,  [XI_INDEX_SET]   = 3,
-    [XI_STRUCT_NEW]  = 1,     /* args[0]=class */
-    [XI_STRUCT_GET]  = 1,     /* args[0]=struct */
-    [XI_STRUCT_SET]  = 2,     /* args[0]=struct, args[1]=val */
-    [XI_JSON_NEW]    = 0,     /* no args; aux carries field count + names */
-    [XI_JSON_INIT_F] = 2,     /* args[0]=json, args[1]=val */
-    [XI_JSON_GET_F]  = 1,     /* args[0]=json */
-    [XI_JSON_SET_F]  = 2,     /* args[0]=json, args[1]=val */
-    [XI_JSON_DECODE] = 1,     /* args[0]=string_data */
-    [XI_ARRAY_NEW]   = 0xFF,
-    [XI_MAP_NEW]     = 0xFF,
-    [XI_CALL]        = 0xFF,  /* callee + params: variadic */
+    [XI_CONST] = 0,
+    [XI_PARAM] = 0,
+    [XI_ADD] = 2,
+    [XI_SUB] = 2,
+    [XI_MUL] = 2,
+    [XI_DIV] = 2,
+    [XI_MOD] = 2,
+    [XI_NEG] = 1,
+    [XI_BAND] = 2,
+    [XI_BOR] = 2,
+    [XI_BXOR] = 2,
+    [XI_BNOT] = 1,
+    [XI_SHL] = 2,
+    [XI_SHR] = 2,
+    [XI_EQ] = 2,
+    [XI_NE] = 2,
+    [XI_LT] = 2,
+    [XI_LE] = 2,
+    [XI_GT] = 2,
+    [XI_GE] = 2,
+    [XI_EQ_STRICT] = 2,
+    [XI_NE_STRICT] = 2,
+    [XI_NOT] = 1,
+    [XI_CONVERT] = 1,
+    [XI_BOX] = 1,
+    [XI_UNBOX] = 1,
+    [XI_NARROW_I8] = 1,
+    [XI_NARROW_U8] = 1,
+    [XI_NARROW_I16] = 1,
+    [XI_NARROW_U16] = 1,
+    [XI_NARROW_I32] = 1,
+    [XI_NARROW_U32] = 1,
+    [XI_NARROW_F32] = 1,
+    [XI_WIDEN_I8] = 1,
+    [XI_WIDEN_U8] = 1,
+    [XI_WIDEN_I16] = 1,
+    [XI_WIDEN_U16] = 1,
+    [XI_WIDEN_I32] = 1,
+    [XI_WIDEN_U32] = 1,
+    [XI_WIDEN_F32] = 1,
+    [XI_LOAD_FIELD] = 1,
+    [XI_STORE_FIELD] = 2,
+    [XI_INDEX_GET] = 2,
+    [XI_INDEX_SET] = 3,
+    [XI_STRUCT_NEW] = 1,  /* args[0]=class */
+    [XI_STRUCT_GET] = 1,  /* args[0]=struct */
+    [XI_STRUCT_SET] = 2,  /* args[0]=struct, args[1]=val */
+    [XI_JSON_NEW] = 0,    /* no args; aux carries field count + names */
+    [XI_JSON_INIT_F] = 2, /* args[0]=json, args[1]=val */
+    [XI_JSON_GET_F] = 1,  /* args[0]=json */
+    [XI_JSON_SET_F] = 2,  /* args[0]=json, args[1]=val */
+    [XI_JSON_DECODE] = 1, /* args[0]=string_data */
+    [XI_ARRAY_NEW] = 0xFF,
+    [XI_MAP_NEW] = 0xFF,
+    [XI_CALL] = 0xFF, /* callee + params: variadic */
     [XI_CALL_METHOD] = 0xFF,
-    [XI_CALL_BUILTIN]= 0xFF,
-    [XI_EXTRACT]     = 1,
-    [XI_CLOSURE_NEW] = 0xFF,  /* captures: variadic */
-    [XI_LOAD_UPVAL]  = 0,
+    [XI_CALL_BUILTIN] = 0xFF,
+    [XI_EXTRACT] = 1,
+    [XI_CLOSURE_NEW] = 0xFF, /* captures: variadic */
+    [XI_LOAD_UPVAL] = 0,
     [XI_STORE_UPVAL] = 1,
-    [XI_GET_SHARED]  = 0,
-    [XI_SET_SHARED]  = 1,
-    [XI_PRINT]       = 0xFF,  /* one arg per print, but lowerer can vary */
-    [XI_GO]          = 0xFF,
-    [XI_AWAIT]       = 0xFF,  /* 1 or 2 (optional timeout arg) */
-    [XI_CHAN_SEND]       = 2,
-    [XI_CHAN_RECV]       = 1,
-    [XI_CHAN_TRY_SEND]   = 2,
-    [XI_CHAN_TRY_RECV]   = 1,
-    [XI_YIELD]       = 0,
-    [XI_THROW]       = 1,
-    [XI_ITER_NEW]    = 1,
-    [XI_ITER_NEXT]   = 1,
-    [XI_ITER_VALID]  = 1,
-    [XI_DEFER]       = 0xFF,  /* variadic: callee + optional arguments */
-    [XI_CHAN_NEW]    = 0xFF,  /* 0 or 1 (buffer size optional) */
-    [XI_SET_NEW]    = 0xFF,
-    [XI_STR_CONCAT] = 0xFF,  /* variadic */
-    [XI_IS]          = 2,
-    [XI_AS]          = 1,
-    [XI_SLICE]       = 3,
-    [XI_RANGE]       = 2,
-    [XI_MULTI_RET]   = 0xFF,  /* variadic */
-    [XI_ISNULL]      = 1,
-    [XI_PHI]         = 0xFF,  /* matches preds: variadic */
-    [XI_SELECT]      = 3,
-    [XI_COPY]        = 1,
-    [XI_CLASS_CREATE]= 0xFF,  /* child function refs: variadic */
+    [XI_GET_SHARED] = 0,
+    [XI_SET_SHARED] = 1,
+    [XI_PRINT] = 0xFF, /* one arg per print, but lowerer can vary */
+    [XI_GO] = 0xFF,
+    [XI_AWAIT] = 0xFF, /* 1 or 2 (optional timeout arg) */
+    [XI_CHAN_SEND] = 2,
+    [XI_CHAN_RECV] = 1,
+    [XI_CHAN_TRY_SEND] = 2,
+    [XI_CHAN_TRY_RECV] = 1,
+    [XI_YIELD] = 0,
+    [XI_THROW] = 1,
+    [XI_ITER_NEW] = 1,
+    [XI_ITER_NEXT] = 1,
+    [XI_ITER_VALID] = 1,
+    [XI_DEFER] = 0xFF,    /* variadic: callee + optional arguments */
+    [XI_CHAN_NEW] = 0xFF, /* 0 or 1 (buffer size optional) */
+    [XI_SET_NEW] = 0xFF,
+    [XI_STR_CONCAT] = 0xFF, /* variadic */
+    [XI_IS] = 2,
+    [XI_AS] = 1,
+    [XI_SLICE] = 3,
+    [XI_RANGE] = 2,
+    [XI_MULTI_RET] = 0xFF, /* variadic */
+    [XI_ISNULL] = 1,
+    [XI_PHI] = 0xFF, /* matches preds: variadic */
+    [XI_SELECT] = 3,
+    [XI_COPY] = 1,
+    [XI_CLASS_CREATE] = 0xFF, /* child function refs: variadic */
     [XI_SCOPE_ENTER] = 0,
-    [XI_SCOPE_EXIT]  = 0,
-    [XI_TRY]         = 0,
-    [XI_CATCH]       = 0,
-    [XI_FINALLY]     = 0,
-    [XI_END_TRY]     = 0,
-    [XI_ASSERT]      = 1,
-    [XI_ASSERT_EQ]   = 2,
-    [XI_ASSERT_NE]   = 2,
+    [XI_SCOPE_EXIT] = 0,
+    [XI_TRY] = 0,
+    [XI_CATCH] = 0,
+    [XI_FINALLY] = 0,
+    [XI_END_TRY] = 0,
+    [XI_ASSERT] = 1,
+    [XI_ASSERT_EQ] = 2,
+    [XI_ASSERT_NE] = 2,
     [XI_ASSERT_THROWS] = 1,
-    [XI_TYPEOF]      = 1,
+    [XI_TYPEOF] = 1,
     [XI_GET_BUILTIN] = 0,
-    [XI_IMPORT_REF]  = 0,
+    [XI_IMPORT_REF] = 0,
     [XI_REGEX_COMPILE] = 2,
-    [XI_RETAIN]      = 1,
-    [XI_RELEASE]     = 1,
-    [XI_MOVE]        = 1,
-    [XI_STACK_ALLOC] = 0xFF,  /* variadic: inherits args from original alloc op */
-    [XI_CORO_OP]     = 0xFF,  /* variadic: 0..2 args depending on Coro method */
+    [XI_RETAIN] = 1,
+    [XI_RELEASE] = 1,
+    [XI_MOVE] = 1,
+    [XI_STACK_ALLOC] = 0xFF, /* variadic: inherits args from original alloc op */
+    [XI_CORO_OP] = 0xFF,     /* variadic: 0..2 args depending on Coro method */
 };
 
 static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || v->op >= XI_OP_COUNT) continue;
+            if (!v || v->op >= XI_OP_COUNT)
+                continue;
             uint8_t expect = expected_narg[v->op];
-            if (expect == 0xFF) continue;  /* variadic — skip */
+            if (expect == 0xFF)
+                continue; /* variadic — skip */
             if (v->nargs != expect) {
-                verr(ctx,
-                     "func '%s': v%u %s in b%u has %u args, expected %u",
-                     f->name, v->id, xi_op_name(v->op), blk->id,
-                     (unsigned)v->nargs, (unsigned)expect);
+                verr(ctx, "func '%s': v%u %s in b%u has %u args, expected %u", f->name, v->id,
+                     xi_op_name(v->op), blk->id, (unsigned) v->nargs, (unsigned) expect);
                 return;
             }
         }
@@ -516,24 +537,26 @@ static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
 /* ========== Check 10: Type Contracts ========== */
 
 static bool is_comparison_op(uint16_t op) {
-    return (op >= XI_EQ && op <= XI_GE)
-        || op == XI_EQ_STRICT || op == XI_NE_STRICT;
+    return (op >= XI_EQ && op <= XI_GE) || op == XI_EQ_STRICT || op == XI_NE_STRICT;
 }
 
 static bool is_bool_producing_op(uint16_t op) {
-    return is_comparison_op(op) || op == XI_NOT || op == XI_IS
-        || op == XI_ISNULL || op == XI_ITER_VALID;
+    return is_comparison_op(op) || op == XI_NOT || op == XI_IS || op == XI_ISNULL ||
+           op == XI_ITER_VALID;
 }
 
 static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || !v->type) continue;
+            if (!v || !v->type)
+                continue;
             uint16_t op = v->op;
 
             /* Comparisons and boolean ops must produce bool type */
@@ -559,8 +582,7 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
                         verr(ctx,
                              "func '%s': XI_SELECT v%u in b%u condition v%u "
                              "is not bool (kind=%u)",
-                             f->name, v->id, blk->id,
-                             v->args[0]->id, ck);
+                             f->name, v->id, blk->id, v->args[0]->id, ck);
                         return;
                     }
                 }
@@ -569,13 +591,12 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             /* XI_EXTRACT: arg[0] must be a call or multi-ret */
             if (op == XI_EXTRACT && v->nargs == 1 && v->args[0]) {
                 uint16_t src_op = v->args[0]->op;
-                if (src_op != XI_CALL && src_op != XI_CALL_METHOD
-                    && src_op != XI_CALL_BUILTIN && src_op != XI_MULTI_RET) {
+                if (src_op != XI_CALL && src_op != XI_CALL_METHOD && src_op != XI_CALL_BUILTIN &&
+                    src_op != XI_MULTI_RET) {
                     verr(ctx,
                          "func '%s': XI_EXTRACT v%u in b%u extracts from "
                          "v%u (op %u) which is not a call/multi_ret",
-                         f->name, v->id, blk->id,
-                         v->args[0]->id, src_op);
+                         f->name, v->id, blk->id, v->args[0]->id, src_op);
                     return;
                 }
             }
@@ -589,14 +610,17 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
  * declared minimum effects from xi_op_default_effects().  This
  * subsumes the old op_must_have_side_effect and chan_try checks. */
 static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
 
             uint8_t required = xi_op_default_effects(v->op);
             uint8_t missing = required & ~v->flags;
@@ -604,8 +628,7 @@ static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
                 verr(ctx,
                      "func '%s': v%u %s in b%u missing required "
                      "effect flags: has=0x%02x need=0x%02x missing=0x%02x",
-                     f->name, v->id, xi_op_name(v->op), blk->id,
-                     v->flags, required, missing);
+                     f->name, v->id, xi_op_name(v->op), blk->id, v->flags, required, missing);
                 return;
             }
         }
@@ -619,14 +642,17 @@ static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
  * at lowering time (only valid when isolate is NULL during AOT).
  * The is_super bit must be 0 or 1.  aux (method name) must be non-NULL. */
 static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || v->op != XI_CALL_METHOD) continue;
+            if (!v || v->op != XI_CALL_METHOD)
+                continue;
 
             /* aux must carry the method name string */
             if (!v->aux) {
@@ -639,17 +665,16 @@ static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
 
             /* aux_int low bit is is_super (0 or 1) */
             int64_t ai = v->aux_int;
-            int is_super = (int)(ai & 1);
+            int is_super = (int) (ai & 1);
             int64_t sym_id = ai >> 1;
-            (void)is_super;  /* always valid: 0 or 1 */
+            (void) is_super; /* always valid: 0 or 1 */
 
             /* symbol_id must be non-negative */
             if (sym_id < 0) {
                 verr(ctx,
                      "func '%s': XI_CALL_METHOD v%u in b%u has negative "
                      "symbol_id=%lld (aux_int=%lld)",
-                     f->name, v->id, blk->id,
-                     (long long)sym_id, (long long)ai);
+                     f->name, v->id, blk->id, (long long) sym_id, (long long) ai);
                 return;
             }
 
@@ -672,14 +697,17 @@ static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
  * or the callee must be typed as a function.  Class constructors etc.
  * are not safe tail-call targets because OP_TAILCALL only handles closures. */
 static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || !(v->flags & XI_FLAG_TAIL)) continue;
+            if (!v || !(v->flags & XI_FLAG_TAIL))
+                continue;
 
             /* Only call ops may carry tail flag */
             if (v->op != XI_CALL && v->op != XI_CALL_METHOD) {
@@ -693,8 +721,7 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
             /* XI_CALL: must be self-call or callee typed as function */
             if (v->op == XI_CALL) {
                 bool is_self = (v->aux_int & 0xFF) == 1;
-                bool callee_is_func = v->nargs >= 1 && v->args[0] &&
-                                      v->args[0]->type &&
+                bool callee_is_func = v->nargs >= 1 && v->args[0] && v->args[0]->type &&
                                       v->args[0]->type->kind == XR_KIND_FUNCTION;
                 if (!is_self && !callee_is_func) {
                     verr(ctx,
@@ -702,8 +729,7 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
                          "but callee is not a function (kind=%u) and "
                          "not a self-call",
                          f->name, v->id, blk->id,
-                         v->args[0] && v->args[0]->type
-                             ? v->args[0]->type->kind : 0);
+                         v->args[0] && v->args[0]->type ? v->args[0]->type->kind : 0);
                     return;
                 }
             }
@@ -720,40 +746,40 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
  * BOX must produce TAGGED. UNBOX must produce I64 or F64.
  * Phi nodes must be TAGGED (merge point). */
 static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-    if (f->stage < XI_STAGE_REPPED) return;
+    if (ctx->failed)
+        return;
+    if (f->stage < XI_STAGE_REPPED)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
 
             /* Rep must be a known value */
             if (v->rep > XR_REP_STR) {
-                verr(ctx,
-                     "func '%s': v%u %s in b%u has invalid rep %u",
-                     f->name, v->id, xi_op_name(v->op), blk->id, v->rep);
+                verr(ctx, "func '%s': v%u %s in b%u has invalid rep %u", f->name, v->id,
+                     xi_op_name(v->op), blk->id, v->rep);
                 return;
             }
 
             /* BOX must produce TAGGED */
             if (v->op == XI_BOX && v->rep != XR_REP_TAGGED) {
-                verr(ctx,
-                     "func '%s': v%u BOX in b%u has rep %u, expected TAGGED",
-                     f->name, v->id, blk->id, v->rep);
+                verr(ctx, "func '%s': v%u BOX in b%u has rep %u, expected TAGGED", f->name, v->id,
+                     blk->id, v->rep);
                 return;
             }
 
             /* UNBOX must produce scalar (I64 or F64) */
-            if (v->op == XI_UNBOX &&
-                v->rep != XR_REP_I64 && v->rep != XR_REP_F64 &&
+            if (v->op == XI_UNBOX && v->rep != XR_REP_I64 && v->rep != XR_REP_F64 &&
                 v->rep != XR_REP_TAGGED) {
-                verr(ctx,
-                     "func '%s': v%u UNBOX in b%u has invalid rep %u",
-                     f->name, v->id, blk->id, v->rep);
+                verr(ctx, "func '%s': v%u UNBOX in b%u has invalid rep %u", f->name, v->id, blk->id,
+                     v->rep);
                 return;
             }
         }
@@ -761,9 +787,8 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
         /* Phi nodes must be TAGGED at merge points */
         for (XiPhi *phi = blk->phis; phi && !ctx->failed; phi = phi->next) {
             if (phi->value.rep != XR_REP_TAGGED) {
-                verr(ctx,
-                     "func '%s': phi v%u in b%u has rep %u, expected TAGGED",
-                     f->name, phi->value.id, blk->id, phi->value.rep);
+                verr(ctx, "func '%s': phi v%u in b%u has rep %u, expected TAGGED", f->name,
+                     phi->value.id, blk->id, phi->value.rep);
                 return;
             }
         }
@@ -775,16 +800,20 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
 /* At STAGE_BACKEND, all ops must be in the backend-legal whitelist.
  * Non-legal ops should have been lowered by xi_backend_lower(). */
 static void verify_backend(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-    if (f->stage < XI_STAGE_BACKEND) return;
+    if (ctx->failed)
+        return;
+    if (f->stage < XI_STAGE_BACKEND)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
 
             if (!xi_op_is_backend_legal(v->op)) {
                 verr(ctx,
@@ -802,8 +831,9 @@ static void verify_backend(VerifyCtx *ctx, const XiFunc *f) {
 /* RAW: basic SSA structure after lowering. All generic checks in
  * xi_verify() are sufficient; no additional stage-specific checks. */
 static void verify_raw(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-    (void)f;
+    if (ctx->failed)
+        return;
+    (void) f;
     /* RAW is the baseline stage. All structural checks are already
      * covered by the generic verify_*() helpers above. */
 }
@@ -812,8 +842,10 @@ static void verify_raw(VerifyCtx *ctx, const XiFunc *f) {
  * No compound-assignment or increment/decrement ops should remain
  * as high-level ops. */
 static void verify_canonical(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-    if (f->stage < XI_STAGE_CANONICAL) return;
+    if (ctx->failed)
+        return;
+    if (f->stage < XI_STAGE_CANONICAL)
+        return;
     /* Currently no sugar ops exist in the Xi IR (expansion happens
      * in the AST canonicalizer before lowering). This verifier is
      * a structural placeholder: concrete checks will be added when
@@ -825,25 +857,28 @@ static void verify_canonical(VerifyCtx *ctx, const XiFunc *f) {
  * function's capture metadata. XI_LOAD_UPVAL / XI_STORE_UPVAL indices
  * must be within bounds. */
 static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-    if (f->stage < XI_STAGE_CLOSED) return;
+    if (ctx->failed)
+        return;
+    if (f->stage < XI_STAGE_CLOSED)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
 
             if (v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL) {
                 int idx = v->aux_int;
-                if (idx < 0 || idx >= (int)f->ncaptures) {
+                if (idx < 0 || idx >= (int) f->ncaptures) {
                     verr(ctx,
                          "func '%s': v%u %s in b%u has upval index %d "
                          "but function has %u captures",
-                         f->name, v->id, xi_op_name(v->op),
-                         blk->id, idx, f->ncaptures);
+                         f->name, v->id, xi_op_name(v->op), blk->id, idx, f->ncaptures);
                     return;
                 }
             }
@@ -854,8 +889,12 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
 /* Helper: check if an op is a heap-allocating instruction. */
 static bool verify_is_heap_alloc(uint16_t op) {
     switch (op) {
-        case XI_ARRAY_NEW: case XI_MAP_NEW: case XI_SET_NEW:
-        case XI_JSON_NEW: case XI_CLOSURE_NEW: case XI_STR_CONCAT:
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+        case XI_JSON_NEW:
+        case XI_CLOSURE_NEW:
+        case XI_STR_CONCAT:
         case XI_REGEX_COMPILE:
             return true;
         default:
@@ -866,16 +905,20 @@ static bool verify_is_heap_alloc(uint16_t op) {
 /* OWNED: escape analysis has run; every allocation op carries a
  * valid escape annotation; XI_MOVE ownership semantics are sound. */
 static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
-    if (f->stage < XI_STAGE_OWNED) return;
+    if (ctx->failed)
+        return;
+    if (f->stage < XI_STAGE_OWNED)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
 
             /* Allocation ops must have escape level in [0,3] */
             if (verify_is_heap_alloc(v->op)) {
@@ -883,18 +926,15 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                     verr(ctx,
                          "func '%s': v%u %s in b%u has invalid escape "
                          "level %u (expected 0-3)",
-                         f->name, v->id, xi_op_name(v->op),
-                         blk->id, v->escape);
+                         f->name, v->id, xi_op_name(v->op), blk->id, v->escape);
                     return;
                 }
             }
 
             /* XI_RETAIN / XI_RELEASE must reference a value */
-            if ((v->op == XI_RETAIN || v->op == XI_RELEASE) &&
-                (v->nargs < 1 || !v->args[0])) {
-                verr(ctx,
-                     "func '%s': v%u %s in b%u has no argument",
-                     f->name, v->id, xi_op_name(v->op), blk->id);
+            if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && (v->nargs < 1 || !v->args[0])) {
+                verr(ctx, "func '%s': v%u %s in b%u has no argument", f->name, v->id,
+                     xi_op_name(v->op), blk->id);
                 return;
             }
 
@@ -906,14 +946,14 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 /* Scan remaining values in this block for use of moved */
                 for (uint32_t j = i + 1; j < blk->nvalues && !ctx->failed; j++) {
                     XiValue *later = blk->values[j];
-                    if (!later) continue;
+                    if (!later)
+                        continue;
                     for (uint16_t a = 0; a < later->nargs; a++) {
                         if (later->args[a] == moved) {
                             verr(ctx,
                                  "func '%s': v%u uses moved value v%u "
                                  "(moved at v%u) in b%u",
-                                 f->name, later->id, moved->id,
-                                 v->id, blk->id);
+                                 f->name, later->id, moved->id, v->id, blk->id);
                             return;
                         }
                     }
@@ -927,10 +967,8 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
 
 /* Return true if the op is a narrowing truncation instruction. */
 static bool is_narrow_op(uint16_t op) {
-    return op == XI_NARROW_I8  || op == XI_NARROW_U8  ||
-           op == XI_NARROW_I16 || op == XI_NARROW_U16 ||
-           op == XI_NARROW_I32 || op == XI_NARROW_U32 ||
-           op == XI_NARROW_F32;
+    return op == XI_NARROW_I8 || op == XI_NARROW_U8 || op == XI_NARROW_I16 || op == XI_NARROW_U16 ||
+           op == XI_NARROW_I32 || op == XI_NARROW_U32 || op == XI_NARROW_F32;
 }
 
 /* XI_INDEX_SET on a sub-width typed array (Array<int8>, Array<uint16>, etc.)
@@ -938,23 +976,29 @@ static bool is_narrow_op(uint16_t op) {
  * Without narrowing, a full-width int64/f64 is stored into a narrow slot,
  * silently losing high bits at the VM/JIT level but not at AOT. */
 static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed) return;
+    if (ctx->failed)
+        return;
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
-            if (!v || v->op != XI_INDEX_SET) continue;
-            if (v->nargs < 3 || !v->args[0] || !v->args[2]) continue;
+            if (!v || v->op != XI_INDEX_SET)
+                continue;
+            if (v->nargs < 3 || !v->args[0] || !v->args[2])
+                continue;
 
             /* Check if the collection is a typed array */
             struct XrType *coll_type = v->args[0]->type;
-            if (!coll_type || coll_type->kind != XR_KIND_ARRAY) continue;
+            if (!coll_type || coll_type->kind != XR_KIND_ARRAY)
+                continue;
 
             struct XrType *elem = coll_type->container.element_type;
-            if (!elem || elem->native_width == 0) continue;
+            if (!elem || elem->native_width == 0)
+                continue;
 
             /* Sub-width element — args[2] must be a NARROW_* op */
             XiValue *val = v->args[2];
@@ -964,9 +1008,7 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
                      "func '%s': XI_INDEX_SET v%u in b%u stores to "
                      "sub-width typed array (native_width=%u) but "
                      "value v%u (op %s) is not a NARROW_* op",
-                     f->name, v->id, blk->id,
-                     elem->native_width,
-                     val->id, xi_op_name(val->op));
+                     f->name, v->id, blk->id, elem->native_width, val->id, xi_op_name(val->op));
                 return;
             }
         }
@@ -980,20 +1022,22 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     XR_DCHECK(errbuf_size > 0, "xi_verify: errbuf_size <= 0");
 
     if (!f) {
-        snprintf(errbuf, (size_t)errbuf_size, "NULL function pointer");
+        snprintf(errbuf, (size_t) errbuf_size, "NULL function pointer");
         return false;
     }
 
-    VerifyCtx ctx = { .buf = errbuf, .size = errbuf_size, .failed = false };
+    VerifyCtx ctx = {.buf = errbuf, .size = errbuf_size, .failed = false};
     errbuf[0] = '\0';
 
     /* Function-level */
     verify_func(&ctx, f);
-    if (ctx.failed) return false;
+    if (ctx.failed)
+        return false;
 
     /* Entry block */
     verify_entry(&ctx, f);
-    if (ctx.failed) return false;
+    if (ctx.failed)
+        return false;
 
     /* Per-block checks */
     for (uint32_t b = 0; b < f->nblocks && !ctx.failed; b++) {
@@ -1004,13 +1048,13 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         }
 
         verify_block(&ctx, f, blk);
-        if (ctx.failed) break;
+        if (ctx.failed)
+            break;
 
         /* Values in this block */
         for (uint32_t i = 0; i < blk->nvalues && !ctx.failed; i++) {
             if (!blk->values[i]) {
-                verr(&ctx, "func '%s': b%u values[%u] is NULL",
-                     f->name, blk->id, i);
+                verr(&ctx, "func '%s': b%u values[%u] is NULL", f->name, blk->id, i);
                 break;
             }
             verify_value(&ctx, f, blk, blk->values[i]);
@@ -1049,7 +1093,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
      * Cast away const: xi_compute_rpo/dominators write scratch fields
      * (rpo, idom, dom_depth) but do not modify the IR semantics. */
     if (!ctx.failed) {
-        verify_dominance(&ctx, (XiFunc *)f);
+        verify_dominance(&ctx, (XiFunc *) f);
     }
 
     /* XI_CALL_METHOD aux_int encoding contract */
@@ -1082,13 +1126,12 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     return !ctx.failed;
 }
 
-XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage,
-                              char *errbuf, int errbuf_size) {
+XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage, char *errbuf, int errbuf_size) {
     /* Run all generic checks first */
     if (!xi_verify(f, errbuf, errbuf_size))
         return false;
 
-    VerifyCtx ctx = { .buf = errbuf, .size = errbuf_size, .failed = false };
+    VerifyCtx ctx = {.buf = errbuf, .size = errbuf_size, .failed = false};
     errbuf[0] = '\0';
 
     /* Stage-specific checks run cumulatively: each stage includes
@@ -1113,8 +1156,7 @@ XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage,
             verr(&ctx,
                  "func '%s': invariant_mask 0x%x is missing bits 0x%x "
                  "required by stage %s",
-                 f->name, f->invariant_mask, missing,
-                 xi_stage_name(f->stage));
+                 f->name, f->invariant_mask, missing, xi_stage_name(f->stage));
         }
     }
 

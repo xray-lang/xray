@@ -309,9 +309,8 @@ invoke_dispatch:;
      * StringBuilder, BigInt). One code path replaces
      * the former per-type invoke_* blocks. */
     {
-        XrClass *_cls = ((int) _obj_type < XR_NATIVE_TYPE_MAX)
-                            ? isolate->native_type_classes[_obj_type]
-                            : NULL;
+        XrClass *_cls =
+            ((int) _obj_type < XR_NATIVE_TYPE_MAX) ? isolate->native_type_classes[_obj_type] : NULL;
         if (_cls) {
             XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
             if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
@@ -629,9 +628,8 @@ vmcase(OP_INVOKE_BUILTIN) {
             _obj_type = XR_TNULL;
 
         /* Try native_type_classes first (covers all registered types). */
-        XrClass *_cls = ((int) _obj_type < XR_NATIVE_TYPE_MAX)
-                            ? isolate->native_type_classes[_obj_type]
-                            : NULL;
+        XrClass *_cls =
+            ((int) _obj_type < XR_NATIVE_TYPE_MAX) ? isolate->native_type_classes[_obj_type] : NULL;
         /* Fall back to xr_value_get_class for core-class types
          * (StringBuilder, etc.) */
         if (!_cls)

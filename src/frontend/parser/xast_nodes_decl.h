@@ -21,7 +21,7 @@
 
 // Generic type parameter (for <T: Constraint> syntax)
 typedef struct XrGenericParam {
-    char *name;          // Type parameter name: T, U, K, V
+    char *name;             // Type parameter name: T, U, K, V
     XrTypeRef *constraint;  // Constraint type (can be NULL)
 } XrGenericParam;
 
@@ -36,7 +36,7 @@ typedef struct XrParamNode {
     int line;                       // Line number (1-indexed)
     int column;                     // Column number (1-indexed, for LSP)
     uint8_t passing_mode;           // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF
-    XrTypeRef *type;                   // Type annotation (can be NULL)
+    XrTypeRef *type;                // Type annotation (can be NULL)
     AstNode *default_value;         // Default value expression (can be NULL)
     XrDestructurePattern *pattern;  // Destructure pattern (can be NULL)
     bool is_rest;                   // Is this a rest parameter (...args)?
@@ -74,16 +74,17 @@ typedef struct ClassDeclNode {
     int method_count;
     bool is_abstract;
     bool is_final;
-    bool is_native;  // @native: C runtime provides implementation
+    bool is_native;                // @native: C runtime provides implementation
     XrGenericParam **type_params;  // Generic type parameters
     int type_param_count;
     uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved
     /* Monomorphization metadata (set by xa_mono_pass) */
-    bool is_monomorphized;       // true for cloned generic instances (e.g. Box$i64)
-    bool is_generic_skeleton;    // true for original generic decl kept as skeleton
-    char *generic_origin_name;   // Original generic class name (e.g. "Box"), NULL if not mono
-    char *display_name;          // User-visible name without mangling suffix
-    const char **mono_type_arg_names;  // Concrete type display names (e.g. ["int","string"]), NULL if not mono
+    bool is_monomorphized;             // true for cloned generic instances (e.g. Box$i64)
+    bool is_generic_skeleton;          // true for original generic decl kept as skeleton
+    char *generic_origin_name;         // Original generic class name (e.g. "Box"), NULL if not mono
+    char *display_name;                // User-visible name without mangling suffix
+    const char **mono_type_arg_names;  // Concrete type display names (e.g. ["int","string"]), NULL
+                                       // if not mono
     int mono_type_arg_count;           // Element count of mono_type_arg_names
 } ClassDeclNode;
 
@@ -189,7 +190,7 @@ typedef struct EnumDeclNode {
     char *type_hint;
     AstNode **members;
     int member_count;
-    uint32_t symbol_id;  /* Analyzer-assigned unique ID */
+    uint32_t symbol_id; /* Analyzer-assigned unique ID */
 } EnumDeclNode;
 
 typedef struct EnumAccessNode {
@@ -212,8 +213,8 @@ typedef struct EnumIndexNode {
 
 // Import member (selective imports)
 typedef struct ImportMember {
-    char *name;   // Original name
-    char *alias;  // Alias (optional, import { foo as bar })
+    char *name;          // Original name
+    char *alias;         // Alias (optional, import { foo as bar })
     uint32_t symbol_id;  // Analyzer-assigned unique ID (for upvalue capture)
 } ImportMember;
 

@@ -186,7 +186,8 @@ XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue self, XrValue *args
 }
 
 // Array.withCapacity(n) - capacity n, length 0 (performance optimization)
-XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                       int nargs) {
     (void) self;
     XR_DCHECK(isolate != NULL, "array_with_capacity: NULL isolate");
     if (nargs != 1) {

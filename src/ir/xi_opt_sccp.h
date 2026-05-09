@@ -25,4 +25,4 @@
  * branches with known conditions, and removes unreachable blocks. */
 XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f);
 
-#endif // XI_OPT_SCCP_H
+#endif  // XI_OPT_SCCP_H

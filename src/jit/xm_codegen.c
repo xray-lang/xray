@@ -486,12 +486,12 @@ static void emit_edge_copies(CodegenCtx *ctx, XmBlock *target, XmBlock *from) {
                 /* Spill-to-reg reload: add to copies[] for ordering, not emitted immediately.
                  * A reload that writes dst must come AFTER any pending reg-to-reg copy
                  * that uses dst as its source, to avoid clobbering the source value. */
-                copies[n++] = (Copy){d, A64_XZR, false, ec[i].is_fp, true, ec[i].spill_slot};
+                copies[n++] = (Copy) {d, A64_XZR, false, ec[i].is_fp, true, ec[i].spill_slot};
                 continue;
             }
             A64Reg s = ec[i].is_fp ? alloc_fp_regs[ec[i].src_idx] : alloc_regs[ec[i].src_idx];
             if (d != s)
-                copies[n++] = (Copy){d, s, false, ec[i].is_fp, false, 0};
+                copies[n++] = (Copy) {d, s, false, ec[i].is_fp, false, 0};
         }
     }
 

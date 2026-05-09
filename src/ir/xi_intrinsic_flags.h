@@ -19,17 +19,17 @@
 
 /* ========== Intrinsic effect flags (bitfield) ========== */
 
-#define IEFF_PURE  0x00  /* no observable side effects           */
-#define IEFF_R     0x01  /* reads heap / shared state            */
-#define IEFF_W     0x02  /* writes heap / shared state           */
-#define IEFF_T     0x04  /* can throw or trap                    */
-#define IEFF_IO    0x08  /* performs I/O (print, file, network)  */
-#define IEFF_A     0x10  /* allocates on the managed heap        */
+#define IEFF_PURE 0x00 /* no observable side effects           */
+#define IEFF_R 0x01    /* reads heap / shared state            */
+#define IEFF_W 0x02    /* writes heap / shared state           */
+#define IEFF_T 0x04    /* can throw or trap                    */
+#define IEFF_IO 0x08   /* performs I/O (print, file, network)  */
+#define IEFF_A 0x10    /* allocates on the managed heap        */
 
 /* ========== Intrinsic return-value representation ========== */
 
-#define IREP_VAL   0  /* returns a tagged XrValue               */
-#define IREP_VOID  1  /* no meaningful return (side-effect only) */
-#define IREP_I64   2  /* returns a raw int64                     */
+#define IREP_VAL 0  /* returns a tagged XrValue               */
+#define IREP_VOID 1 /* no meaningful return (side-effect only) */
+#define IREP_I64 2  /* returns a raw int64                     */
 
-#endif // XI_INTRINSIC_FLAGS_H
+#endif  // XI_INTRINSIC_FLAGS_H

@@ -42,7 +42,7 @@
 
 typedef struct XrtExcFrame {
     jmp_buf buf;               // setjmp/longjmp target
-    XrValue exception;        // exception value (set before longjmp)
+    XrValue exception;         // exception value (set before longjmp)
     struct XrtExcFrame *prev;  // previous frame in stack
 } XrtExcFrame;
 

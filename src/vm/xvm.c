@@ -151,7 +151,7 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
         if (_cr == VM_COLD_FATAL)                                                                  \
             return XR_VM_RUNTIME_ERROR;                                                            \
         if (_cr == VM_COLD_GO_CHILD)                                                               \
-            return XR_VM_GO_CHILD;                                                               \
+            return XR_VM_GO_CHILD;                                                                 \
         if (_cr == VM_COLD_ERROR) {                                                                \
             if (vm_ctx->handler_count == 0)                                                        \
                 return XR_VM_RUNTIME_ERROR;                                                        \

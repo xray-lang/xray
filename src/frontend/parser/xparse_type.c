@@ -95,7 +95,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         Token saved_current = parser->current;
         xr_parser_advance(parser);
         if (parser->current.type == TK_LITERAL_INT) {
-            int length = (int)strtol(parser->current.start, NULL, 10);
+            int length = (int) strtol(parser->current.start, NULL, 10);
             xr_parser_advance(parser);
             if (xr_parser_match(parser, TK_RBRACKET)) {
                 XrTypeRef *elem = parse_type_annotation_base(parser);
@@ -107,34 +107,50 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     }
 
     /* Primitive type keywords */
-    if (xr_parser_match(parser, TK_INT))    return xr_tref_int(parser->X);
-    if (xr_parser_match(parser, TK_FLOAT))  return xr_tref_float(parser->X);
-    if (xr_parser_match(parser, TK_STRING)) return xr_tref_string(parser->X);
-    if (xr_parser_match(parser, TK_BOOL))   return xr_tref_bool(parser->X);
-    if (xr_parser_match(parser, TK_VOID))   return xr_tref_void(parser->X);
-    if (xr_parser_match(parser, TK_NULL))   return xr_tref_null(parser->X);
+    if (xr_parser_match(parser, TK_INT))
+        return xr_tref_int(parser->X);
+    if (xr_parser_match(parser, TK_FLOAT))
+        return xr_tref_float(parser->X);
+    if (xr_parser_match(parser, TK_STRING))
+        return xr_tref_string(parser->X);
+    if (xr_parser_match(parser, TK_BOOL))
+        return xr_tref_bool(parser->X);
+    if (xr_parser_match(parser, TK_VOID))
+        return xr_tref_void(parser->X);
+    if (xr_parser_match(parser, TK_NULL))
+        return xr_tref_null(parser->X);
 
     /* Native-width integer types */
-    if (xr_parser_match(parser, TK_INT8))   return xr_tref_int_width(parser->X, XR_TREF_NW_I8);
-    if (xr_parser_match(parser, TK_INT16))  return xr_tref_int_width(parser->X, XR_TREF_NW_I16);
-    if (xr_parser_match(parser, TK_INT32))  return xr_tref_int_width(parser->X, XR_TREF_NW_I32);
-    if (xr_parser_match(parser, TK_INT64))  return xr_tref_int_width(parser->X, XR_TREF_NW_I64);
-    if (xr_parser_match(parser, TK_UINT8))  return xr_tref_int_width(parser->X, XR_TREF_NW_U8);
-    if (xr_parser_match(parser, TK_UINT16)) return xr_tref_int_width(parser->X, XR_TREF_NW_U16);
-    if (xr_parser_match(parser, TK_UINT32)) return xr_tref_int_width(parser->X, XR_TREF_NW_U32);
-    if (xr_parser_match(parser, TK_UINT64)) return xr_tref_int_width(parser->X, XR_TREF_NW_U64);
+    if (xr_parser_match(parser, TK_INT8))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_I8);
+    if (xr_parser_match(parser, TK_INT16))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_I16);
+    if (xr_parser_match(parser, TK_INT32))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_I32);
+    if (xr_parser_match(parser, TK_INT64))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_I64);
+    if (xr_parser_match(parser, TK_UINT8))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_U8);
+    if (xr_parser_match(parser, TK_UINT16))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_U16);
+    if (xr_parser_match(parser, TK_UINT32))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_U32);
+    if (xr_parser_match(parser, TK_UINT64))
+        return xr_tref_int_width(parser->X, XR_TREF_NW_U64);
 
     /* Native-width float types */
-    if (xr_parser_match(parser, TK_FLOAT32)) return xr_tref_float_width(parser->X, XR_TREF_NW_F32);
-    if (xr_parser_match(parser, TK_FLOAT64)) return xr_tref_float_width(parser->X, XR_TREF_NW_F64);
+    if (xr_parser_match(parser, TK_FLOAT32))
+        return xr_tref_float_width(parser->X, XR_TREF_NW_F32);
+    if (xr_parser_match(parser, TK_FLOAT64))
+        return xr_tref_float_width(parser->X, XR_TREF_NW_F64);
 
     /* Struct type literal: { x: float, y: float } or { x: float, ... } */
     if (xr_parser_match(parser, TK_LBRACE)) {
         int capacity = 16;
         int field_count = 0;
         bool allow_extension = false;
-        const char **fnames = xr_malloc((size_t)capacity * sizeof(const char *));
-        XrTypeRef **ftypes = xr_malloc((size_t)capacity * sizeof(XrTypeRef *));
+        const char **fnames = xr_malloc((size_t) capacity * sizeof(const char *));
+        XrTypeRef **ftypes = xr_malloc((size_t) capacity * sizeof(XrTypeRef *));
 
         XR_CHECK(fnames != NULL && ftypes != NULL,
                  "parse_type: alloc failed for struct literal fields");
@@ -147,16 +163,15 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             }
             if (field_count >= capacity) {
                 int new_cap = capacity * 2;
-                XR_REALLOC_OR_ABORT(fnames, (size_t)new_cap * sizeof(const char *),
+                XR_REALLOC_OR_ABORT(fnames, (size_t) new_cap * sizeof(const char *),
                                     "parse_type field_names grow");
-                XR_REALLOC_OR_ABORT(ftypes, (size_t)new_cap * sizeof(XrTypeRef *),
+                XR_REALLOC_OR_ABORT(ftypes, (size_t) new_cap * sizeof(XrTypeRef *),
                                     "parse_type field_types grow");
                 capacity = new_cap;
             }
             xr_parser_match(parser, TK_CONST);
             xr_parser_consume(parser, TK_NAME, "expected field name");
-            fnames[field_count] = strndup(parser->previous.start,
-                                          parser->previous.length);
+            fnames[field_count] = strndup(parser->previous.start, parser->previous.length);
 
             bool is_optional = xr_parser_match(parser, TK_QUESTION);
             xr_parser_consume(parser, TK_COLON, "expected ':'");
@@ -169,10 +184,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
-        XrTypeRef *result = xr_tref_object(parser->X, fnames, ftypes,
-                                            field_count, allow_extension);
+        XrTypeRef *result = xr_tref_object(parser->X, fnames, ftypes, field_count, allow_extension);
         for (int i = 0; i < field_count; i++)
-            xr_free((void *)fnames[i]);
+            xr_free((void *) fnames[i]);
         xr_free(fnames);
         xr_free(ftypes);
         return result;
@@ -187,9 +201,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_advance(parser);
             XrTypeRef *params[16];
             int count = 0;
-            while (!xr_parser_check(parser, TK_RPAREN) &&
-                   !xr_parser_check(parser, TK_EOF)) {
-                if (count > 0) xr_parser_match(parser, TK_COMMA);
+            while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+                if (count > 0)
+                    xr_parser_match(parser, TK_COMMA);
                 if (count < 16)
                     params[count++] = xr_parse_type_annotation(parser);
             }
@@ -207,9 +221,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_LPAREN)) {
         XrTypeRef *elems[16];
         int count = 0;
-        while (!xr_parser_check(parser, TK_RPAREN) &&
-               !xr_parser_check(parser, TK_EOF)) {
-            if (count > 0) xr_parser_match(parser, TK_COMMA);
+        while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+            if (count > 0)
+                xr_parser_match(parser, TK_COMMA);
             if (count < 16)
                 elems[count++] = xr_parse_type_annotation(parser);
         }
@@ -222,19 +236,17 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         Token name_token = parser->previous;
         char temp_name[256];
         int name_len = name_token.length < 255 ? name_token.length : 255;
-        strncpy(temp_name, name_token.start, (size_t)name_len);
+        strncpy(temp_name, name_token.start, (size_t) name_len);
         temp_name[name_len] = '\0';
 
         /* Misspelling detection (purely syntactic, kept in parser) */
         if (strcmp(temp_name, "JsonValue") == 0) {
-            xr_parser_error(parser,
-                            "Type 'JsonValue' has been removed. Use 'Json' instead.");
+            xr_parser_error(parser, "Type 'JsonValue' has been removed. Use 'Json' instead.");
             return xr_tref_named(parser->X, "Json");
         }
         if (strcmp(temp_name, "any") == 0) {
-            xr_parser_error(parser,
-                            "'any' type is not supported. "
-                            "Use a concrete type or 'Json' for dynamic values.");
+            xr_parser_error(parser, "'any' type is not supported. "
+                                    "Use a concrete type or 'Json' for dynamic values.");
             return xr_tref_unknown(parser->X);
         }
         if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
@@ -243,25 +255,21 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
         if (strcmp(temp_name, "Int") == 0 || strcmp(temp_name, "Integer") == 0 ||
             strcmp(temp_name, "integer") == 0) {
-            xr_parser_error(parser,
-                            "use 'int' (lowercase) for integer type in Xray");
+            xr_parser_error(parser, "use 'int' (lowercase) for integer type in Xray");
             return xr_tref_int(parser->X);
         }
         if (strcmp(temp_name, "Float") == 0 || strcmp(temp_name, "Double") == 0 ||
             strcmp(temp_name, "double") == 0) {
-            xr_parser_error(parser,
-                            "use 'float' (lowercase) for floating-point type in Xray");
+            xr_parser_error(parser, "use 'float' (lowercase) for floating-point type in Xray");
             return xr_tref_float(parser->X);
         }
         if (strcmp(temp_name, "Bool") == 0 || strcmp(temp_name, "Boolean") == 0 ||
             strcmp(temp_name, "boolean") == 0) {
-            xr_parser_error(parser,
-                            "use 'bool' (lowercase) for boolean type in Xray");
+            xr_parser_error(parser, "use 'bool' (lowercase) for boolean type in Xray");
             return xr_tref_bool(parser->X);
         }
         if (strcmp(temp_name, "char") == 0 || strcmp(temp_name, "Char") == 0) {
-            xr_parser_error(parser,
-                            "there is no 'char' type in Xray. Use 'string' for characters");
+            xr_parser_error(parser, "there is no 'char' type in Xray. Use 'string' for characters");
             return xr_tref_string(parser->X);
         }
         if (strcmp(temp_name, "void") == 0) {

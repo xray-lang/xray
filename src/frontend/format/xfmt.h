@@ -42,15 +42,15 @@ extern XrFmtConfig xfmt_default_config;
 
 // Format context
 typedef struct XrFmtContext {
-    char *output;         // Output buffer
-    size_t capacity;      // Buffer capacity
-    size_t length;        // Current length
-    int indent_level;     // Current indent level
-    int line_start;       // At line start flag
-    int column;           // Current column (for line length tracking)
-    int in_template_expr; // Inside ${...} interpolation — use single quotes
-    XrFmtConfig *config;  // Configuration
-    XrayIsolate *X;       // Isolate for type printing
+    char *output;          // Output buffer
+    size_t capacity;       // Buffer capacity
+    size_t length;         // Current length
+    int indent_level;      // Current indent level
+    int line_start;        // At line start flag
+    int column;            // Current column (for line length tracking)
+    int in_template_expr;  // Inside ${...} interpolation — use single quotes
+    XrFmtConfig *config;   // Configuration
+    XrayIsolate *X;        // Isolate for type printing
 } XrFmtContext;
 
 // Initialize formatter context

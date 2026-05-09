@@ -41,13 +41,11 @@
  *
  * Parameters are identical to xm_emit().
  */
-XR_FUNC XmRef xm_fold_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a,
-                             XmRef b);
+XR_FUNC XmRef xm_fold_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, XmRef b);
 
 /*
  * Optimizing unary emit: wrapper for single-operand instructions.
  */
-XR_FUNC XmRef xm_fold_emit_unary(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type,
-                                   XmRef a);
+XR_FUNC XmRef xm_fold_emit_unary(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a);
 
 #endif  // XM_FOLD_H

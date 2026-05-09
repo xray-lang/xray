@@ -366,7 +366,7 @@ void xm_emit_void(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, XmRef b) {
 }
 
 void xm_emit_raw(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef dst, XmRef arg0,
-                  XmRef arg1) {
+                 XmRef arg1) {
     XR_DCHECK(func != NULL, "xm_emit_raw: NULL func");
     XR_DCHECK(blk != NULL, "xm_emit_raw: NULL blk");
     XmIns *ins = block_grow_ins(func, blk);
@@ -557,13 +557,13 @@ XmPhi *xm_add_phi(XmFunc *func, XmBlock *blk, uint8_t type) {
     phi->rep = type;
     switch (type) {
         case XR_REP_I64:
-            phi->ctype = (XmType){XM_TK_INT, 0, 0};
+            phi->ctype = (XmType) {XM_TK_INT, 0, 0};
             break;
         case XR_REP_F64:
-            phi->ctype = (XmType){XM_TK_FLOAT, 0, 0};
+            phi->ctype = (XmType) {XM_TK_FLOAT, 0, 0};
             break;
         case XR_REP_PTR:
-            phi->ctype = (XmType){XM_TK_PTR, 0, 0};
+            phi->ctype = (XmType) {XM_TK_PTR, 0, 0};
             break;
         default:
             phi->ctype = XM_TYPE_UNKNOWN;

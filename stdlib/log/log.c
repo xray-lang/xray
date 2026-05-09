@@ -967,7 +967,8 @@ static XrValue xr_log_child(XrayIsolate *isolate, XrValue *args, int nargs) {
 }
 
 // Common implementation for child logger methods
-static XrValue logger_log_at(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs, XrLogLevel level) {
+static XrValue logger_log_at(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
+                             XrLogLevel level) {
     XrLogger *logger = unwrap_logger(isolate, self);
     if (!logger)
         return xr_null();

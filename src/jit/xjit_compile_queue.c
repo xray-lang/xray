@@ -83,16 +83,14 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
      * NULL isolate: class-registry dynarrays are not safe for bg.
      * IC snapshots captured on main thread are read-only here. */
     XmICSnapshot ic_snap = {
-        .ic_fields  = task->ic_fields_snapshot,
+        .ic_fields = task->ic_fields_snapshot,
         .ic_methods = task->ic_methods_snapshot,
     };
-    const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods)
-                                   ? &ic_snap : NULL;
+    const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods) ? &ic_snap : NULL;
     XmFunc *func = NULL;
     if (proto->xi_func) {
-        func = xi_to_xm_lower((XiFunc *)proto->xi_func, proto,
-                               (XiSlotMap *)proto->xi_slot_map,
-                               ic_ptr, NULL);
+        func = xi_to_xm_lower((XiFunc *) proto->xi_func, proto, (XiSlotMap *) proto->xi_slot_map,
+                              ic_ptr, NULL);
     }
     /* IC snapshots are owned by the task; release them unconditionally. */
     if (task->ic_fields_snapshot)

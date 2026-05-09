@@ -60,17 +60,17 @@
  *
  * Grouped by category. Keep alphabetical within each group.
  */
-#define XM_HELPER_DEF(_)                                                                          \
+#define XM_HELPER_DEF(_)                                                                           \
     /* ---- Call / Invoke ---- */                                                                  \
-    _(call_self, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                       \
-    _(call_func, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                       \
-    _(invoke_method, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                   \
-    _(invoke_direct, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                   \
-    _(closure_new, 0, XR_REP_PTR, XM_HF_GC)                                                       \
+    _(call_self, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
+    _(call_func, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
+    _(invoke_method, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                     \
+    _(invoke_direct, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                     \
+    _(closure_new, 0, XR_REP_PTR, XM_HF_GC)                                                        \
     _(closure_set_upval, 0, XR_REP_VOID, 0)                                                        \
     _(upval_get, 0, XR_REP_TAGGED, 0)                                                              \
     /* ---- Arithmetic (mixed-type fallback) ---- */                                               \
-    _(rt_add, 2, XR_REP_TAGGED, XM_HF_GC)                                                         \
+    _(rt_add, 2, XR_REP_TAGGED, XM_HF_GC)                                                          \
     _(rt_sub, 2, XR_REP_TAGGED, 0)                                                                 \
     _(rt_mul, 2, XR_REP_TAGGED, 0)                                                                 \
     _(rt_div, 2, XR_REP_TAGGED, 0)                                                                 \
@@ -78,52 +78,52 @@
     _(rt_eq, 2, XR_REP_I64, 0)    /* returns bool */                                               \
     _(eq_value, 2, XR_REP_I64, 0) /* returns bool */                                               \
     /* ---- Property Access ---- */                                                                \
-    _(getprop, 1, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
-    _(setprop, 2, XR_REP_VOID, XM_HF_GC)                                                          \
+    _(getprop, 1, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                           \
+    _(setprop, 2, XR_REP_VOID, XM_HF_GC)                                                           \
     _(getfield_ic, 0, XR_REP_TAGGED, 0)                                                            \
     _(getbuiltin, 0, XR_REP_TAGGED, 0)                                                             \
     /* ---- Index / Container Access ---- */                                                       \
-    _(index_get, 2, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                       \
-    _(index_set, 3, XR_REP_VOID, XM_HF_GC)                                                        \
+    _(index_get, 2, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
+    _(index_set, 3, XR_REP_VOID, XM_HF_GC)                                                         \
     _(tarray_get, 2, XR_REP_TAGGED, 0)                                                             \
     _(tarray_set, 3, XR_REP_VOID, 0)                                                               \
-    _(map_get, 2, XR_REP_TAGGED, XM_HF_GC)                                                        \
-    _(map_set, 3, XR_REP_VOID, XM_HF_GC)                                                          \
-    _(map_increment, 2, XR_REP_VOID, XM_HF_GC)                                                    \
+    _(map_get, 2, XR_REP_TAGGED, XM_HF_GC)                                                         \
+    _(map_set, 3, XR_REP_VOID, XM_HF_GC)                                                           \
+    _(map_increment, 2, XR_REP_VOID, XM_HF_GC)                                                     \
     /* ---- Shared Variables ---- */                                                               \
-    _(get_shared, 0, XR_REP_TAGGED, XM_HF_GC)                                                     \
-    _(set_shared, 1, XR_REP_VOID, XM_HF_GC)                                                       \
+    _(get_shared, 0, XR_REP_TAGGED, XM_HF_GC)                                                      \
+    _(set_shared, 1, XR_REP_VOID, XM_HF_GC)                                                        \
     /* ---- Exception ---- */                                                                      \
-    _(throw, 1, XR_REP_VOID, XM_HF_THROW)                                                         \
+    _(throw, 1, XR_REP_VOID, XM_HF_THROW)                                                          \
     /* ---- Type Operations ---- */                                                                \
     _(is_type, 1, XR_REP_I64, 0)   /* returns bool */                                              \
     _(checktype, 1, XR_REP_I64, 0) /* returns bool */                                              \
     _(typename, 1, XR_REP_PTR, 0)                                                                  \
     _(typeof, 1, XR_REP_I64, 0)                                                                    \
-    _(deep_copy, 1, XR_REP_PTR, XM_HF_GC)                                                         \
+    _(deep_copy, 1, XR_REP_PTR, XM_HF_GC)                                                          \
     /* ---- String Operations ---- */                                                              \
-    _(chr, 0, XR_REP_PTR, XM_HF_GC)                                                               \
-    _(substring, 0, XR_REP_PTR, XM_HF_GC)                                                         \
-    _(str_repeat, 0, XR_REP_PTR, XM_HF_GC)                                                        \
-    _(tostring, 1, XR_REP_PTR, XM_HF_GC)                                                          \
-    _(strbuf_new, 0, XR_REP_PTR, XM_HF_GC)                                                        \
-    _(strbuf_append, 0, XR_REP_VOID, XM_HF_GC)                                                    \
-    _(strbuf_finish, 0, XR_REP_PTR, XM_HF_GC)                                                     \
+    _(chr, 0, XR_REP_PTR, XM_HF_GC)                                                                \
+    _(substring, 0, XR_REP_PTR, XM_HF_GC)                                                          \
+    _(str_repeat, 0, XR_REP_PTR, XM_HF_GC)                                                         \
+    _(tostring, 1, XR_REP_PTR, XM_HF_GC)                                                           \
+    _(strbuf_new, 0, XR_REP_PTR, XM_HF_GC)                                                         \
+    _(strbuf_append, 0, XR_REP_VOID, XM_HF_GC)                                                     \
+    _(strbuf_finish, 0, XR_REP_PTR, XM_HF_GC)                                                      \
     /* ---- Struct ---- */                                                                         \
-    _(new_struct, 0, XR_REP_PTR, XM_HF_GC)                                                        \
+    _(new_struct, 0, XR_REP_PTR, XM_HF_GC)                                                         \
     _(struct_get, 0, XR_REP_TAGGED, 0)                                                             \
     _(struct_set, 0, XR_REP_VOID, 0)                                                               \
-    _(struct_copy, 0, XR_REP_PTR, XM_HF_GC)                                                       \
+    _(struct_copy, 0, XR_REP_PTR, XM_HF_GC)                                                        \
     /* ---- Container Construction ---- */                                                         \
-    _(rt_array_new, 0, XR_REP_PTR, XM_HF_GC)                                                      \
-    _(rt_array_push, 0, XR_REP_VOID, XM_HF_GC)                                                    \
+    _(rt_array_new, 0, XR_REP_PTR, XM_HF_GC)                                                       \
+    _(rt_array_push, 0, XR_REP_VOID, XM_HF_GC)                                                     \
     _(rt_array_len, 0, XR_REP_I64, 0)                                                              \
-    _(rt_map_new, 0, XR_REP_PTR, XM_HF_GC)                                                        \
-    _(newrange, 0, XR_REP_PTR, XM_HF_GC)                                                          \
+    _(rt_map_new, 0, XR_REP_PTR, XM_HF_GC)                                                         \
+    _(newrange, 0, XR_REP_PTR, XM_HF_GC)                                                           \
     _(range_unpack, 0, XR_REP_VOID, 0)                                                             \
-    _(newset, 0, XR_REP_PTR, XM_HF_GC)                                                            \
-    _(slice, 0, XR_REP_PTR, XM_HF_GC)                                                             \
-    _(bytes_new, 0, XR_REP_PTR, XM_HF_GC)                                                         \
+    _(newset, 0, XR_REP_PTR, XM_HF_GC)                                                             \
+    _(slice, 0, XR_REP_PTR, XM_HF_GC)                                                              \
+    _(bytes_new, 0, XR_REP_PTR, XM_HF_GC)                                                          \
     /* ---- Enum ---- */                                                                           \
     _(enum_access, 0, XR_REP_TAGGED, 0)                                                            \
     _(enum_name, 0, XR_REP_PTR, 0)                                                                 \
@@ -131,24 +131,24 @@
     /* ---- IO / Debug ---- */                                                                     \
     _(print, 0, XR_REP_VOID, 0)                                                                    \
     _(dump, 0, XR_REP_VOID, 0)                                                                     \
-    _(assert, 1, XR_REP_VOID, XM_HF_THROW)                                                        \
-    _(assert_eq, 2, XR_REP_VOID, XM_HF_THROW)                                                     \
-    _(assert_ne, 2, XR_REP_VOID, XM_HF_THROW)                                                     \
+    _(assert, 1, XR_REP_VOID, XM_HF_THROW)                                                         \
+    _(assert_eq, 2, XR_REP_VOID, XM_HF_THROW)                                                      \
+    _(assert_ne, 2, XR_REP_VOID, XM_HF_THROW)                                                      \
     /* ---- Channel / Concurrency ---- */                                                          \
-    _(chan_new, 0, XR_REP_PTR, XM_HF_GC)                                                          \
+    _(chan_new, 0, XR_REP_PTR, XM_HF_GC)                                                           \
     _(chan_close, 0, XR_REP_VOID, 0)                                                               \
     _(chan_is_closed, 0, XR_REP_I64, 0) /* returns bool */                                         \
     _(chan_try_send, 0, XR_REP_I64, 0)  /* returns bool */                                         \
     _(chan_try_recv, 0, XR_REP_TAGGED, 0)                                                          \
-    _(chan_send, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                     \
-    _(chan_send_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                             \
-    _(chan_recv, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                     \
-    _(chan_recv_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                             \
+    _(chan_send, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                       \
+    _(chan_send_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                              \
+    _(chan_recv, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                       \
+    _(chan_recv_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                              \
     _(scope_enter, 0, XR_REP_VOID, 0)                                                              \
     _(scope_exit, 0, XR_REP_VOID, 0)                                                               \
-    _(go, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                    \
-    _(await, 0, XR_REP_TAGGED, XM_HF_SUSPEND)                                                     \
-    _(await_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                                 \
+    _(go, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                              \
+    _(await, 0, XR_REP_TAGGED, XM_HF_SUSPEND)                                                      \
+    _(await_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                                  \
     // ---- end ----
 
 /* ========== Generated Enum ========== */

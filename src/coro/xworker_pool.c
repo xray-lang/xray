@@ -125,7 +125,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
             if (cached_block && worker->p.arena_cache_start < worker->p.arena_cache_end) {
                 uint32_t idx = worker->p.arena_cache_start++;
                 XrCoroutine *coro = &cached_block->coros[idx];
-                coro->gc = (XrGCHeader){.type = XR_TCOROUTINE};
+                coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
                 xr_coro_init_from_slab(coro, cached_block, idx);
                 return coro;
             }
@@ -145,7 +145,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                     worker->p.arena_cache_end = local_end;
 
                     XrCoroutine *coro = &block->coros[local_base];
-                    coro->gc = (XrGCHeader){.type = XR_TCOROUTINE};
+                    coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
                     xr_coro_init_from_slab(coro, block, local_base);
                     return coro;
                 }

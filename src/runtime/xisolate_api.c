@@ -163,12 +163,14 @@ void xr_isolate_set_current_arena(XrayIsolate *X, struct XrArena *arena) {
 /* ========== AST Node ID ========== */
 
 uint32_t xr_isolate_next_ast_node_id(XrayIsolate *X) {
-    if (!X) return 0;
+    if (!X)
+        return 0;
     return ++X->next_ast_node_id;
 }
 
 void xr_isolate_reset_ast_node_ids(XrayIsolate *X) {
-    if (X) X->next_ast_node_id = 0;
+    if (X)
+        X->next_ast_node_id = 0;
 }
 
 /* ========== Compile-time String Pool ========== */
@@ -177,8 +179,7 @@ struct XrCompileStringPool *xr_isolate_get_string_pool_compile(XrayIsolate *X) {
     return X ? X->compile_string_pool : NULL;
 }
 
-void xr_isolate_set_string_pool_compile(XrayIsolate *X,
-                                         struct XrCompileStringPool *pool) {
+void xr_isolate_set_string_pool_compile(XrayIsolate *X, struct XrCompileStringPool *pool) {
     if (X) {
         X->compile_string_pool = pool;
     }

@@ -172,8 +172,7 @@ XmPassChange xm_pass_copy_prop(XmFunc *func) {
             uint32_t ri = XM_REF_INDEX(root);
             if (ri >= nv || ri == i)
                 continue;
-            uint8_t src_vtag =
-                type_kind_to_vtag(xm_ref_ctype(func, XM_REF(XM_REF_VREG, i)).kind);
+            uint8_t src_vtag = type_kind_to_vtag(xm_ref_ctype(func, XM_REF(XM_REF_VREG, i)).kind);
             uint8_t dst_vtag = type_kind_to_vtag(xm_ref_ctype(func, root).kind);
             if (dst_vtag == VTAG_TAGGED && src_vtag != VTAG_TAGGED) {
                 // Check rep compatibility before upgrading
@@ -295,7 +294,7 @@ XmPassChange xm_pass_copy_prop(XmFunc *func) {
     }
 
     xr_free(copy_of);
-    return iters > 1 ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return iters > 1 ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Phi Simplification ========== */
@@ -474,7 +473,7 @@ XmPassChange xm_pass_phi_simp(XmFunc *func) {
                 func->vregs[dvi].xrtype = common_xrt;
         }
     }
-    return iters > 1 ? (XmPassChange){false, true, true, 0, 0, 0} : xm_pass_no_change();
+    return iters > 1 ? (XmPassChange) {false, true, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== CFG Rebuild (QBE fillpreds model) ========== */
@@ -735,9 +734,9 @@ void xm_verify_types(XmFunc *func) {
 
 // Helper: resolve XmRef to its XmType
 #define REF_TYPE(r)                                                                                \
-    (xm_ref_is_vreg(r)    ? func->vregs[XM_REF_INDEX(r)].rep                                     \
-     : xm_ref_is_const(r) ? func->consts[XM_REF_INDEX(r)].rep                                    \
-                           : XR_REP_VOID)
+    (xm_ref_is_vreg(r)    ? func->vregs[XM_REF_INDEX(r)].rep                                       \
+     : xm_ref_is_const(r) ? func->consts[XM_REF_INDEX(r)].rep                                      \
+                          : XR_REP_VOID)
 
     for (uint32_t i = 0; i < func->nblk; i++) {
         XmBlock *blk = func->blocks[i];
@@ -936,7 +935,7 @@ XmPassChange xm_pass_split_critical_edges(XmFunc *func) {
         XmBlock *succs[2] = {blk->s1, blk->s2};
         for (int s = 0; s < 2; s++) {
             if (succs[s] && succs[s]->npred > 1 && nedges < 128) {
-                edges[nedges++] = (CritEdge){bi, s};
+                edges[nedges++] = (CritEdge) {bi, s};
             }
         }
     }
@@ -978,7 +977,7 @@ XmPassChange xm_pass_split_critical_edges(XmFunc *func) {
         /* No phi arg values change — only the predecessor identity changes,
          * which is already handled by updating preds[p] above. */
     }
-    return nedges > 0 ? (XmPassChange){true, false, false, 0, 0, 0} : xm_pass_no_change();
+    return nedges > 0 ? (XmPassChange) {true, false, false, 0, 0, 0} : xm_pass_no_change();
 }
 
 /*
@@ -1071,7 +1070,7 @@ XmPassChange xm_pass_merge_blocks(XmFunc *func) {
             }
         }
     }
-    return iters > 1 ? (XmPassChange){true, false, false, 0, 0, 0} : xm_pass_no_change();
+    return iters > 1 ? (XmPassChange) {true, false, false, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== SelectRepresentations ========== */
@@ -1155,7 +1154,7 @@ XmPassChange xm_pass_select_rep(XmFunc *func) {
     }
 
     xr_free(def_ins);
-    return iters > 1 ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return iters > 1 ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Block Reordering (Profile-Guided) ========== */
@@ -1323,5 +1322,5 @@ XmPassChange xm_pass_reorder_blocks(XmFunc *func) {
     xr_free(id_to_idx);
     xr_free(placed);
     xr_free(order);
-    return (XmPassChange){true, false, false, 0, 0, 0};
+    return (XmPassChange) {true, false, false, 0, 0, 0};
 }

@@ -1051,7 +1051,9 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
      *      success from an async connect failure (ECONNREFUSED,
      *      EHOSTUNREACH, etc.).
      */
-    { (void) xr_socket_set_nonblocking(ws->fd); }
+    {
+        (void) xr_socket_set_nonblocking(ws->fd);
+    }
 
     // Connect
     struct sockaddr *sa;

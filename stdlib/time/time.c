@@ -11,7 +11,7 @@
 #include "time.h"
 #include "../common.h"
 #include "../../src/coro/xyieldable.h"
-#include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
+#include "../../src/vm/xvm.h"  // xr_vm_yieldable_cfunction_new
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
 

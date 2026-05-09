@@ -723,8 +723,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // STR xzr, [rd, #0]  — gc_next = NULL
             a64_buf_emit(&ctx->buf, a64_str(A64_XZR, rd, 0));
             // LDRB w17, [x16, #101]  — currentwhite
-            a64_buf_emit(&ctx->buf,
-                         a64_ldrb(SCRATCH_REG2, SCRATCH_REG, XM_GC_CURRENTWHITE_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, SCRATCH_REG, XM_GC_CURRENTWHITE_OFFSET));
             // STRB w17, [rd, #9]  — marked = currentwhite
             a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, rd, XM_GC_HDR_MARKED_OFFSET));
             // MOV w17, #gc_type
@@ -1178,8 +1177,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) suspend_id, 0));
             a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_ID_OFFSET));
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) smap_id, 0));
-            a64_buf_emit(&ctx->buf,
-                         a64_str_w(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_SMAP_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_SMAP_OFFSET));
             // Update frame + jit_ctx smap for GC during blocked state
             a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, A64_FP, FRAME_SMAP_ID_OFFSET));
             a64_buf_emit(&ctx->buf,

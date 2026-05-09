@@ -105,7 +105,7 @@ void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
         return;
     /* Use the buffer variant — no arena required at format time. */
     char buf[256];
-    int n = xr_tref_to_string_buf(tref, buf, (int)sizeof(buf));
+    int n = xr_tref_to_string_buf(tref, buf, (int) sizeof(buf));
     if (n > 0) {
         xfmt_write_str(ctx, buf);
     } else {

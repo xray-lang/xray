@@ -105,8 +105,8 @@
 /* Frame-embedded GC stack map metadata (negative offsets from RBP).
  * These mirror ARM64's FRAME_SMAP_PTR_OFFSET / FRAME_SMAP_ID_OFFSET.
  * Usage: x64_mov_rm(buf, reg, RBP, -(int32_t)X64_FRAME_SMAP_PTR_OFFSET) */
-#define X64_FRAME_SMAP_PTR_OFFSET  8   /* [rbp - 8]:  XrStackMapTable* for this JIT function */
-#define X64_FRAME_SMAP_ID_OFFSET  16   /* [rbp - 16]: safepoint_id (uint32_t) at current point */
+#define X64_FRAME_SMAP_PTR_OFFSET 8 /* [rbp - 8]:  XrStackMapTable* for this JIT function */
+#define X64_FRAME_SMAP_ID_OFFSET 16 /* [rbp - 16]: safepoint_id (uint32_t) at current point */
 
 #ifdef _WIN32
 #define X64_SPILL_BASE (16 + X64_CALLEE_XMM_BYTES) /* 16 + 72 = 88 */
@@ -293,13 +293,11 @@ static inline bool x64_is_fp_vreg(X64CodegenCtx *ctx, XmRef ref) {
 XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins);
 
 /* Inline alloc fast path (xm_codegen_x64_mem.c) */
-XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd,
-                                 uint8_t gc_type, uint16_t gc_extra,
-                                 uint32_t alloc_size);
+XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8_t gc_type,
+                                uint16_t gc_extra, uint32_t alloc_size);
 
 /* Edge copies + branch patching (xm_codegen_x64_patch.c) */
-XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target,
-                                    XmBlock *from);
+XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *from);
 XR_FUNC void x64_patch_branches(X64CodegenCtx *ctx);
 
 /* Call ops: CALL_C, CALL_C_LEAF, CALL_SELF_DIRECT, CALL_KNOWN, etc. */

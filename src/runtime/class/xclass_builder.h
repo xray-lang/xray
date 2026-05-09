@@ -72,7 +72,7 @@ XR_FUNC void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags)
 XR_FUNC void xr_class_builder_set_display_name(XrClassBuilder *builder, const char *display_name);
 XR_FUNC void xr_class_builder_set_generic_origin(XrClassBuilder *builder, XrClass *origin);
 XR_FUNC void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder,
-                                                       const char **type_arg_names, uint8_t argc);
+                                                      const char **type_arg_names, uint8_t argc);
 
 // Finalize: compute offsets, generate vtable, freeze class, destroy builder
 XR_FUNC XrClass *xr_class_builder_finalize(XrClassBuilder *builder);

@@ -62,12 +62,12 @@ struct XaAnalyzer;
  * active simply pass through (input == output == same stage).
  */
 typedef enum {
-    XI_STAGE_RAW = 0,       /* direct AST lowering output; high-level ops present */
-    XI_STAGE_CANONICAL,     /* evaluation order fixed, syntax sugar expanded */
-    XI_STAGE_CLOSED,        /* closure/module/class metadata materialized */
-    XI_STAGE_OWNED,         /* ownership/effect/lifetime explicit */
-    XI_STAGE_REPPED,        /* value representations selected, BOX/UNBOX inserted */
-    XI_STAGE_BACKEND,       /* low-level ops only, ready for code generation */
+    XI_STAGE_RAW = 0,   /* direct AST lowering output; high-level ops present */
+    XI_STAGE_CANONICAL, /* evaluation order fixed, syntax sugar expanded */
+    XI_STAGE_CLOSED,    /* closure/module/class metadata materialized */
+    XI_STAGE_OWNED,     /* ownership/effect/lifetime explicit */
+    XI_STAGE_REPPED,    /* value representations selected, BOX/UNBOX inserted */
+    XI_STAGE_BACKEND,   /* low-level ops only, ready for code generation */
     XI_STAGE_COUNT,
 } XiStage;
 
@@ -76,7 +76,7 @@ static inline const char *xi_stage_name(XiStage s) {
     static const char *names[] = {
         "Raw", "Canonical", "Closed", "Owned", "Repped", "Backend",
     };
-    return (unsigned)s < XI_STAGE_COUNT ? names[s] : "?";
+    return (unsigned) s < XI_STAGE_COUNT ? names[s] : "?";
 }
 
 /*
@@ -86,26 +86,42 @@ static inline const char *xi_stage_name(XiStage s) {
  */
 typedef uint32_t XiInvariantMask;
 
-#define XI_INV_SSA_DOM       ((XiInvariantMask)(1u << 0))  /* SSA dominance holds */
-#define XI_INV_CFG_CLOSED    ((XiInvariantMask)(1u << 1))  /* CFG: no unreachable blocks, succ/pred symmetric */
-#define XI_INV_EVAL_ORDER    ((XiInvariantMask)(1u << 2))  /* evaluation order deterministic (no ambiguous side-effects) */
-#define XI_INV_UPVALS_RESOLVED ((XiInvariantMask)(1u << 3))  /* all upvalue refs have valid indices */
-#define XI_INV_ESCAPE_DONE   ((XiInvariantMask)(1u << 4))  /* escape analysis has run; every alloc annotated */
-#define XI_INV_REPS_SELECTED ((XiInvariantMask)(1u << 5))  /* representations chosen for all values */
-#define XI_INV_BACKEND_LEGAL ((XiInvariantMask)(1u << 6))  /* all ops in backend-legal set */
-#define XI_INV_ARC_INSERTED  ((XiInvariantMask)(1u << 7))  /* RETAIN/RELEASE ops inserted */
-#define XI_INV_EFFECTS_VALID ((XiInvariantMask)(1u << 8))  /* per-value effect flags match opcode table */
+#define XI_INV_SSA_DOM ((XiInvariantMask) (1u << 0)) /* SSA dominance holds */
+#define XI_INV_CFG_CLOSED                                                                          \
+    ((XiInvariantMask) (1u << 1)) /* CFG: no unreachable blocks, succ/pred symmetric */
+#define XI_INV_EVAL_ORDER                                                                          \
+    ((XiInvariantMask) (1u << 2)) /* evaluation order deterministic (no ambiguous side-effects) */
+#define XI_INV_UPVALS_RESOLVED                                                                     \
+    ((XiInvariantMask) (1u << 3)) /* all upvalue refs have valid indices */
+#define XI_INV_ESCAPE_DONE                                                                         \
+    ((XiInvariantMask) (1u << 4)) /* escape analysis has run; every alloc annotated */
+#define XI_INV_REPS_SELECTED                                                                       \
+    ((XiInvariantMask) (1u << 5)) /* representations chosen for all values */
+#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 6)) /* all ops in backend-legal set */
+#define XI_INV_ARC_INSERTED ((XiInvariantMask) (1u << 7))  /* RETAIN/RELEASE ops inserted */
+#define XI_INV_EFFECTS_VALID                                                                       \
+    ((XiInvariantMask) (1u << 8)) /* per-value effect flags match opcode table */
 
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
     switch (s) {
-        case XI_STAGE_RAW:       return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED;
-        case XI_STAGE_CANONICAL: return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER;
-        case XI_STAGE_CLOSED:    return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED;
-        case XI_STAGE_OWNED:     return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED | XI_INV_ESCAPE_DONE;
-        case XI_STAGE_REPPED:    return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED | XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED;
-        case XI_STAGE_BACKEND:   return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED | XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED | XI_INV_BACKEND_LEGAL;
-        default:                 return 0;
+        case XI_STAGE_RAW:
+            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED;
+        case XI_STAGE_CANONICAL:
+            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER;
+        case XI_STAGE_CLOSED:
+            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED;
+        case XI_STAGE_OWNED:
+            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
+                   XI_INV_ESCAPE_DONE;
+        case XI_STAGE_REPPED:
+            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
+                   XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED;
+        case XI_STAGE_BACKEND:
+            return XI_INV_SSA_DOM | XI_INV_CFG_CLOSED | XI_INV_EVAL_ORDER | XI_INV_UPVALS_RESOLVED |
+                   XI_INV_ESCAPE_DONE | XI_INV_REPS_SELECTED | XI_INV_BACKEND_LEGAL;
+        default:
+            return 0;
     }
 }
 
@@ -150,8 +166,8 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
 
 typedef enum {
     /* Constants */
-    XI_CONST = 0,   /* constant value (int/float/bool/null/string in aux) */
-    XI_PARAM,       /* function parameter (aux_int = param index) */
+    XI_CONST = 0, /* constant value (int/float/bool/null/string in aux) */
+    XI_PARAM,     /* function parameter (aux_int = param index) */
 
     /* Arithmetic (polymorphic: type determines int vs float) */
     XI_ADD,
@@ -159,15 +175,15 @@ typedef enum {
     XI_MUL,
     XI_DIV,
     XI_MOD,
-    XI_NEG,         /* unary negate */
+    XI_NEG, /* unary negate */
 
     /* Bitwise */
-    XI_BAND,        /* & */
-    XI_BOR,         /* | */
-    XI_BXOR,        /* ^ */
-    XI_BNOT,        /* ~ */
-    XI_SHL,         /* << */
-    XI_SHR,         /* >> */
+    XI_BAND, /* & */
+    XI_BOR,  /* | */
+    XI_BXOR, /* ^ */
+    XI_BNOT, /* ~ */
+    XI_SHL,  /* << */
+    XI_SHR,  /* >> */
 
     /* Comparison (result is always bool) */
     XI_EQ,
@@ -176,38 +192,38 @@ typedef enum {
     XI_LE,
     XI_GT,
     XI_GE,
-    XI_EQ_STRICT,   /* === identity/reference equality */
-    XI_NE_STRICT,   /* !== identity/reference inequality */
+    XI_EQ_STRICT, /* === identity/reference equality */
+    XI_NE_STRICT, /* !== identity/reference inequality */
 
     /* Logical */
-    XI_NOT,         /* ! (unary) */
+    XI_NOT, /* ! (unary) */
 
     /* Type conversion */
-    XI_CONVERT,     /* explicit type cast: aux stores target type */
-    XI_BOX,         /* unboxed -> tagged XrValue */
-    XI_UNBOX,       /* tagged -> unboxed (type guard) */
+    XI_CONVERT, /* explicit type cast: aux stores target type */
+    XI_BOX,     /* unboxed -> tagged XrValue */
+    XI_UNBOX,   /* tagged -> unboxed (type guard) */
 
     /* Explicit narrowing: truncate int64/double to sub-width, re-extend.
      * Result rep stays I64 (or F64 for F32 variant) — only value range changes.
      * Inserted by xi_lower at typed-storage write points. */
-    XI_NARROW_I8,   /* int64 → (int8_t)  → int64  (sign-extend back) */
-    XI_NARROW_U8,   /* int64 → (uint8_t) → int64  (zero-extend back) */
-    XI_NARROW_I16,  /* int64 → (int16_t) → int64 */
-    XI_NARROW_U16,  /* int64 → (uint16_t)→ int64 */
-    XI_NARROW_I32,  /* int64 → (int32_t) → int64 */
-    XI_NARROW_U32,  /* int64 → (uint32_t)→ int64 */
-    XI_NARROW_F32,  /* double → (float)  → double (precision roundtrip) */
+    XI_NARROW_I8,  /* int64 → (int8_t)  → int64  (sign-extend back) */
+    XI_NARROW_U8,  /* int64 → (uint8_t) → int64  (zero-extend back) */
+    XI_NARROW_I16, /* int64 → (int16_t) → int64 */
+    XI_NARROW_U16, /* int64 → (uint16_t)→ int64 */
+    XI_NARROW_I32, /* int64 → (int32_t) → int64 */
+    XI_NARROW_U32, /* int64 → (uint32_t)→ int64 */
+    XI_NARROW_F32, /* double → (float)  → double (precision roundtrip) */
 
     /* Explicit widening: sign/zero extend sub-width to int64.
      * Inserted by xi_lower at typed-storage read points.
      * Makes sign-extension vs zero-extension unambiguous. */
-    XI_WIDEN_I8,    /* sign-extend int8 value in int64 */
-    XI_WIDEN_U8,    /* zero-extend uint8 value in int64 (mask 0xFF) */
-    XI_WIDEN_I16,   /* sign-extend int16 */
-    XI_WIDEN_U16,   /* zero-extend uint16 */
-    XI_WIDEN_I32,   /* sign-extend int32 */
-    XI_WIDEN_U32,   /* zero-extend uint32 */
-    XI_WIDEN_F32,   /* (double)(float) roundtrip — explicit precision gate */
+    XI_WIDEN_I8,  /* sign-extend int8 value in int64 */
+    XI_WIDEN_U8,  /* zero-extend uint8 value in int64 (mask 0xFF) */
+    XI_WIDEN_I16, /* sign-extend int16 */
+    XI_WIDEN_U16, /* zero-extend uint16 */
+    XI_WIDEN_I32, /* sign-extend int32 */
+    XI_WIDEN_U32, /* zero-extend uint32 */
+    XI_WIDEN_F32, /* (double)(float) roundtrip — explicit precision gate */
 
     /* Memory / field access */
     XI_LOAD_FIELD,  /* obj.field: args[0]=obj, aux_int=field_index */
@@ -218,9 +234,10 @@ typedef enum {
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.
      * aux=XrStructLayout*; aux_int=field_index for GET/SET. */
-    XI_STRUCT_NEW,  /* allocate struct: args[0]=class, aux=XrStructLayout* */
-    XI_STRUCT_GET,  /* read field: args[0]=struct, aux_int=field_idx, aux=XrStructLayout* */
-    XI_STRUCT_SET,  /* write field: args[0]=struct, args[1]=val, aux_int=field_idx, aux=XrStructLayout* */
+    XI_STRUCT_NEW, /* allocate struct: args[0]=class, aux=XrStructLayout* */
+    XI_STRUCT_GET, /* read field: args[0]=struct, aux_int=field_idx, aux=XrStructLayout* */
+    XI_STRUCT_SET, /* write field: args[0]=struct, args[1]=val, aux_int=field_idx,
+                      aux=XrStructLayout* */
 
     /* Json / Allocation */
     XI_JSON_NEW,    /* Create Json object: aux=field_count, aux_ptr=field_names[] */
@@ -233,13 +250,13 @@ typedef enum {
     XI_MAP_NEW,     /* new map: args[0]=capacity */
 
     /* Function calls */
-    XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
-                     * aux_int bits 0-7: flags (1=self_call)
-                     * aux_int bits 8-15: nresults (0 means 1) */
-    XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
-    XI_CALL_BUILTIN,/* builtin call: aux_int=builtin_id, args[0..n]=params */
-    XI_EXTRACT,     /* extract i-th result from multi-return call:
-                     * args[0]=call_value, aux_int=result_index (1-based offset) */
+    XI_CALL,         /* function call: args[0]=callee, args[1..n]=params
+                      * aux_int bits 0-7: flags (1=self_call)
+                      * aux_int bits 8-15: nresults (0 means 1) */
+    XI_CALL_METHOD,  /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
+    XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
+    XI_EXTRACT,      /* extract i-th result from multi-return call:
+                      * args[0]=call_value, aux_int=result_index (1-based offset) */
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
@@ -247,61 +264,61 @@ typedef enum {
     XI_STORE_UPVAL, /* store upvalue: aux_int=upval_index, args[0]=val */
 
     /* Shared (module-level) variables */
-    XI_GET_SHARED,  /* load from shared array: aux_int=shared_index */
-    XI_SET_SHARED,  /* store to shared array: aux_int=shared_index, args[0]=val */
+    XI_GET_SHARED, /* load from shared array: aux_int=shared_index */
+    XI_SET_SHARED, /* store to shared array: aux_int=shared_index, args[0]=val */
 
     /* Print (builtin, kept as dedicated op for convenience) */
-    XI_PRINT,       /* print: args[0..n]=values, aux_int=flags */
+    XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
 
     /* Coroutine */
-    XI_GO,          /* go expr: args[0]=callee, args[1..n]=params */
-    XI_AWAIT,       /* await task: args[0]=task */
-    XI_CHAN_SEND,       /* ch.send(v): args[0]=chan, args[1]=val */
-    XI_CHAN_RECV,       /* ch.recv(): args[0]=chan */
-    XI_CHAN_TRY_SEND,   /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
-    XI_CHAN_TRY_RECV,   /* ch.tryRecv(): args[0]=chan — non-blocking, null on empty */
-    XI_YIELD,       /* yield execution */
+    XI_GO,            /* go expr: args[0]=callee, args[1..n]=params */
+    XI_AWAIT,         /* await task: args[0]=task */
+    XI_CHAN_SEND,     /* ch.send(v): args[0]=chan, args[1]=val */
+    XI_CHAN_RECV,     /* ch.recv(): args[0]=chan */
+    XI_CHAN_TRY_SEND, /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
+    XI_CHAN_TRY_RECV, /* ch.tryRecv(): args[0]=chan — non-blocking, null on empty */
+    XI_YIELD,         /* yield execution */
 
     /* Exception handling */
-    XI_THROW,       /* throw exception: args[0]=value */
+    XI_THROW, /* throw exception: args[0]=value */
 
     /* Iteration (for-in protocol) */
-    XI_ITER_NEW,    /* create iterator: args[0]=collection */
-    XI_ITER_NEXT,   /* advance + get value: args[0]=iterator, returns next value */
-    XI_ITER_VALID,  /* test not-done: args[0]=iterator, returns bool */
+    XI_ITER_NEW,   /* create iterator: args[0]=collection */
+    XI_ITER_NEXT,  /* advance + get value: args[0]=iterator, returns next value */
+    XI_ITER_VALID, /* test not-done: args[0]=iterator, returns bool */
 
     /* Defer */
-    XI_DEFER,       /* defer expr: args[0]=callee (executed at scope exit) */
+    XI_DEFER, /* defer expr: args[0]=callee (executed at scope exit) */
 
     /* Channel creation */
-    XI_CHAN_NEW,     /* create channel: args[0]=buffer_size (optional) */
+    XI_CHAN_NEW, /* create channel: args[0]=buffer_size (optional) */
 
     /* Set creation */
-    XI_SET_NEW,     /* create set: args[0]=capacity */
+    XI_SET_NEW, /* create set: args[0]=capacity */
 
     /* String concatenation (for template strings) */
-    XI_STR_CONCAT,  /* concat: args[0..n]=parts, produces string */
+    XI_STR_CONCAT, /* concat: args[0..n]=parts, produces string */
 
     /* Type operations */
-    XI_IS,          /* runtime type check: args[0]=value, args[1]=type (tid int or class), returns bool */
-    XI_AS,          /* type cast: args[0]=value, aux=target type */
-    XI_SLICE,       /* slice: args[0]=source, args[1]=start, args[2]=end */
-    XI_RANGE,       /* range: args[0]=start, args[1]=end */
+    XI_IS,    /* runtime type check: args[0]=value, args[1]=type (tid int or class), returns bool */
+    XI_AS,    /* type cast: args[0]=value, aux=target type */
+    XI_SLICE, /* slice: args[0]=source, args[1]=start, args[2]=end */
+    XI_RANGE, /* range: args[0]=start, args[1]=end */
 
     /* Multi-value return packaging */
-    XI_MULTI_RET,   /* args[0..n]=return values, placed in consecutive regs */
+    XI_MULTI_RET, /* args[0..n]=return values, placed in consecutive regs */
 
     /* Null check */
-    XI_ISNULL,      /* args[0]=value, returns bool (true if null) */
+    XI_ISNULL, /* args[0]=value, returns bool (true if null) */
 
     /* Phi node (not in value list — separate on XiBlock) */
-    XI_PHI,         /* SSA phi: args[i] corresponds to block->preds[i] */
+    XI_PHI, /* SSA phi: args[i] corresponds to block->preds[i] */
 
     /* Conditional select (from if-conversion) */
-    XI_SELECT,      /* dst = args[0] ? args[1] : args[2] (cond, true_val, false_val) */
+    XI_SELECT, /* dst = args[0] ? args[1] : args[2] (cond, true_val, false_val) */
 
     /* Identity / type narrowing */
-    XI_COPY,        /* identity: dst = args[0], may carry narrowed type */
+    XI_COPY, /* identity: dst = args[0], may carry narrowed type */
 
     /* OOP: class creation */
     XI_CLASS_CREATE, /* create class from descriptor: aux=XiClassData* */
@@ -311,18 +328,18 @@ typedef enum {
     XI_SCOPE_EXIT,  /* exit scope: aux_int=scope_mode, dst=result (supervisor) */
 
     /* Exception handling */
-    XI_TRY,         /* begin try: marks start of protected region */
-    XI_CATCH,       /* catch: receive exception into dst register */
-    XI_FINALLY,     /* begin finally block */
-    XI_END_TRY,     /* end try-catch-finally region */
+    XI_TRY,     /* begin try: marks start of protected region */
+    XI_CATCH,   /* catch: receive exception into dst register */
+    XI_FINALLY, /* begin finally block */
+    XI_END_TRY, /* end try-catch-finally region */
 
     /* Builtin calls: compile-time recognized functions */
-    XI_ASSERT,      /* args[0]=cond; aux=loc_string; aux_int: 0=true,1=false */
-    XI_ASSERT_EQ,   /* args[0]=actual, args[1]=expected; aux=loc_string */
-    XI_ASSERT_NE,   /* args[0]=actual, args[1]=unexpected; aux=loc_string */
+    XI_ASSERT,        /* args[0]=cond; aux=loc_string; aux_int: 0=true,1=false */
+    XI_ASSERT_EQ,     /* args[0]=actual, args[1]=expected; aux=loc_string */
+    XI_ASSERT_NE,     /* args[0]=actual, args[1]=unexpected; aux=loc_string */
     XI_ASSERT_THROWS, /* args[0]=fn; aux=loc_string; emits try-catch sequence */
-    XI_TYPEOF,      /* args[0]=value; result=string typename */
-    XI_GET_BUILTIN, /* aux=name_string; aux_int=global_index; loads runtime global */
+    XI_TYPEOF,        /* args[0]=value; result=string typename */
+    XI_GET_BUILTIN,   /* aux=name_string; aux_int=global_index; loads runtime global */
 
     /* Cross-module import reference (resolved at cgen time).
      * aux = XiImportRef* (module_path + member_name).
@@ -332,9 +349,9 @@ typedef enum {
     XI_REGEX_COMPILE, /* args[0]=pattern(str), args[1]=flags(str); compiles regex literal */
 
     /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
-    XI_RETAIN,      /* args[0]=value; increment refcount (no-op for scalars) */
-    XI_RELEASE,     /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
-    XI_MOVE,        /* args[0]=value; ownership transfer (consume source, no refcount change) */
+    XI_RETAIN,  /* args[0]=value; increment refcount (no-op for scalars) */
+    XI_RELEASE, /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
+    XI_MOVE,    /* args[0]=value; ownership transfer (consume source, no refcount change) */
 
     /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
      * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.
@@ -347,66 +364,67 @@ typedef enum {
      * OP_LOCK_THREAD, OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
     XI_CORO_OP,
 
-    XI_OP_COUNT     /* sentinel */
+    XI_OP_COUNT /* sentinel */
 } XiOp;
 
 /* XI_CORO_OP sub-type constants (stored in aux_int) */
-#define XI_CORO_SUB_SET_LOCAL       0
-#define XI_CORO_SUB_GET_LOCAL       1
-#define XI_CORO_SUB_SET_PRIORITY    2
-#define XI_CORO_SUB_LOCK_THREAD     3
-#define XI_CORO_SUB_UNLOCK_THREAD   4
+#define XI_CORO_SUB_SET_LOCAL 0
+#define XI_CORO_SUB_GET_LOCAL 1
+#define XI_CORO_SUB_SET_PRIORITY 2
+#define XI_CORO_SUB_LOCK_THREAD 3
+#define XI_CORO_SUB_UNLOCK_THREAD 4
 /* Values >= XI_CORO_SUB_CTRL_BASE map to OP_CORO_CTRL with
  * sub-opcode = (aux_int - XI_CORO_SUB_CTRL_BASE), which corresponds
  * to the CORO_CTRL_* constants in xchunk.h. */
-#define XI_CORO_SUB_CTRL_BASE      100
+#define XI_CORO_SUB_CTRL_BASE 100
 
 /* Import reference metadata for XI_IMPORT_REF.
  * Stored in XiValue.aux, resolved by the AOT driver after all modules
  * are lowered.  The resolved_mod_index + resolved_shared_slot fields
  * are filled in by the driver's cross-module resolution pass. */
 typedef struct XiImportRef {
-    const char *module_path;       /* import source (e.g. "./math_lib") */
-    const char *member_name;       /* exported name (e.g. "square") */
-    int resolved_mod_index;        /* index into the driver's module array, -1 = unresolved */
-    int resolved_shared_slot;      /* shared slot in the target module, -1 = unresolved */
+    const char *module_path;  /* import source (e.g. "./math_lib") */
+    const char *member_name;  /* exported name (e.g. "square") */
+    int resolved_mod_index;   /* index into the driver's module array, -1 = unresolved */
+    int resolved_shared_slot; /* shared slot in the target module, -1 = unresolved */
 } XiImportRef;
 
 /* Re-export entry for "export { a } from './file'" and "export * from './file'".
  * Stored on XiFunc during lowering, emitted as OP_IMPORT + OP_EXPORT / OP_EXPORT_ALL. */
 typedef struct XiReexportEntry {
-    const char *from_path;   /* source module path (arena copy) */
-    const char *name;        /* original export name (NULL = star re-export) */
-    const char *alias;       /* export alias (NULL = same as name) */
+    const char *from_path; /* source module path (arena copy) */
+    const char *name;      /* original export name (NULL = star re-export) */
+    const char *alias;     /* export alias (NULL = same as name) */
 } XiReexportEntry;
 
 /* Arena-safe method descriptor for XI_CLASS_CREATE.
  * One entry per instance/static method, ordered as the class declares them.
  * All strings are arena-allocated (survive AST destruction). */
 typedef struct XiClassMethod {
-    const char *name;          /* method name (arena copy) */
-    bool is_constructor;       /* true for constructor or "constructor" */
-    bool is_static;            /* true for static methods */
+    const char *name;           /* method name (arena copy) */
+    bool is_constructor;        /* true for constructor or "constructor" */
+    bool is_static;             /* true for static methods */
     bool is_static_constructor; /* true for static constructor */
 } XiClassMethod;
 
 /* Lowerer → emitter bridge for XI_CLASS_CREATE.
  * All data is arena-allocated; does NOT depend on AST after lowering. */
 typedef struct XiClassData {
-    struct AstNode *ast;     /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
-    const char *class_name;  /* arena copy of class name */
-    const char *super_name;  /* arena copy of parent class name (NULL if none) */
-    const char *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
-    const char *display_name;        /* User-visible name (e.g. "Box"), NULL = same as class_name */
-    XiClassMethod *methods;  /* arena array [nmethod] of method descriptors */
-    uint16_t nmethod;        /* total method count (instance + static) */
-    uint16_t *child_idx;     /* maps method order → XiFunc::children index */
-    uint16_t ninst;          /* instance method count */
-    uint16_t nstat;          /* static method count */
-    int clinit_child_idx;    /* children index for static constructor (-1 if none) */
-    bool is_monomorphized;   /* true for mono-generated classes */
-    const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
-    int mono_type_arg_count;          /* element count */
+    struct AstNode *ast;    /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
+    const char *class_name; /* arena copy of class name */
+    const char *super_name; /* arena copy of parent class name (NULL if none) */
+    const char
+        *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
+    const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */
+    XiClassMethod *methods;   /* arena array [nmethod] of method descriptors */
+    uint16_t nmethod;         /* total method count (instance + static) */
+    uint16_t *child_idx;      /* maps method order → XiFunc::children index */
+    uint16_t ninst;           /* instance method count */
+    uint16_t nstat;           /* static method count */
+    int clinit_child_idx;     /* children index for static constructor (-1 if none) */
+    bool is_monomorphized;    /* true for mono-generated classes */
+    const char **mono_type_arg_names;     /* concrete type display names (e.g. ["int","string"]) */
+    int mono_type_arg_count;              /* element count */
     struct XrStructLayout *struct_layout; /* non-NULL for VALUE_TYPE (struct) classes */
 } XiClassData;
 
@@ -421,34 +439,34 @@ typedef enum {
 
 /* ========== Value Flags ========== */
 
-#define XI_FLAG_SIDE_EFFECT  (1 << 0) /* has side effects (cannot be eliminated) */
-#define XI_FLAG_MAY_THROW    (1 << 1) /* may raise exception */
-#define XI_FLAG_MAY_SUSPEND  (1 << 2) /* may yield / await / block on channel */
-#define XI_FLAG_READS_MEM    (1 << 3) /* reads heap memory (load_field, index_get, ...) */
-#define XI_FLAG_WRITES_MEM   (1 << 4) /* writes heap memory (store_field, index_set, ...) */
-#define XI_FLAG_TAIL         (1 << 5) /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
+#define XI_FLAG_SIDE_EFFECT (1 << 0) /* has side effects (cannot be eliminated) */
+#define XI_FLAG_MAY_THROW (1 << 1)   /* may raise exception */
+#define XI_FLAG_MAY_SUSPEND (1 << 2) /* may yield / await / block on channel */
+#define XI_FLAG_READS_MEM (1 << 3)   /* reads heap memory (load_field, index_get, ...) */
+#define XI_FLAG_WRITES_MEM (1 << 4)  /* writes heap memory (store_field, index_set, ...) */
+#define XI_FLAG_TAIL (1 << 5)        /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
 
 /* Composite masks for query convenience */
-#define XI_FLAG_MEM_ANY      (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
-#define XI_FLAG_CALL_EFFECTS (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | \
-                              XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
+#define XI_FLAG_MEM_ANY (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
+#define XI_FLAG_CALL_EFFECTS                                                                       \
+    (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
 
 /* ========== Upvalue Capture Info ========== */
 
 /* Source kinds matching the VM's UpvalInfo.source constants */
-#define XI_CAPTURE_SRC_REG   2  /* from enclosing frame's register */
-#define XI_CAPTURE_SRC_UPVAL 1  /* from enclosing closure's upvals[] */
+#define XI_CAPTURE_SRC_REG 2   /* from enclosing frame's register */
+#define XI_CAPTURE_SRC_UPVAL 1 /* from enclosing closure's upvals[] */
 
 #define XI_MAX_CAPTURES 64
 
 /* Capture kind: how the closed-over variable is accessed by the child.
  * Determined during closure analysis (xi_pass_close). */
 typedef enum XiCaptureKind {
-    XI_CAPTURE_BY_COPY,       /* immutable value copied at closure creation */
-    XI_CAPTURE_BY_IMM_REF,    /* immutable reference (large struct, no copy) */
-    XI_CAPTURE_BY_MUT_CELL,   /* mutable cell indirection (needs_cell) */
-    XI_CAPTURE_MODULE_LIVE,   /* module-level live binding via shared array */
-    XI_CAPTURE_CORO_SHARED,   /* coroutine-shared cell (escape analyzer) */
+    XI_CAPTURE_BY_COPY,     /* immutable value copied at closure creation */
+    XI_CAPTURE_BY_IMM_REF,  /* immutable reference (large struct, no copy) */
+    XI_CAPTURE_BY_MUT_CELL, /* mutable cell indirection (needs_cell) */
+    XI_CAPTURE_MODULE_LIVE, /* module-level live binding via shared array */
+    XI_CAPTURE_CORO_SHARED, /* coroutine-shared cell (escape analyzer) */
 } XiCaptureKind;
 
 typedef struct XiCapture {
@@ -470,14 +488,14 @@ typedef struct XiCapture {
  * Built by xi_pass_close from XiFunc.captures[]; replaces ad-hoc
  * backend inspection of capture arrays.  All backends read this. */
 typedef struct XiClosureMeta {
-    struct XiFunc *function;     /* owning function */
-    struct XiFunc *parent_func;  /* lexical parent (back-pointer) */
-    XiCapture *captures;         /* pointer to func->captures (not owned) */
-    uint16_t ncaptures;          /* number of captures */
-    uint16_t env_size;           /* total slots in closure env object */
-    uint16_t ncells;             /* number of cell indirections */
-    bool has_mutable_capture;    /* any capture requires cell */
-    bool is_direct_callable;     /* can be called without closure alloc */
+    struct XiFunc *function;    /* owning function */
+    struct XiFunc *parent_func; /* lexical parent (back-pointer) */
+    XiCapture *captures;        /* pointer to func->captures (not owned) */
+    uint16_t ncaptures;         /* number of captures */
+    uint16_t env_size;          /* total slots in closure env object */
+    uint16_t ncells;            /* number of cell indirections */
+    bool has_mutable_capture;   /* any capture requires cell */
+    bool is_direct_callable;    /* can be called without closure alloc */
 } XiClosureMeta;
 
 /* ========== Core Structures ========== */
@@ -489,22 +507,22 @@ typedef struct XiClosureMeta {
  * Size: ~72 bytes. Values are arena-allocated within XiFunc.
  */
 typedef struct XiValue {
-    uint32_t id;            /* dense SSA value ID (unique within function) */
-    uint16_t op;            /* XiOp */
-    uint8_t flags;          /* XI_FLAG_* */
-    uint8_t var_id;         /* source variable ID for register coalescing (0xFF = none) */
-    uint8_t rep;            /* XrRep: machine representation (set by select_rep,
-                             * default XR_REP_TAGGED until STAGE_REPPED) */
-    uint8_t escape;         /* XiEscapeLevel (2-bit): escape analysis result
-                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
-    struct XrType *type;    /* authoritative compile-time type (never NULL) */
-    int64_t aux_int;        /* auxiliary integer: const value, symbol ID, etc. */
-    void *aux;              /* auxiliary pointer: proto, string literal, etc. */
-    struct XiValue **args;  /* operand values (SSA uses) */
-    uint16_t nargs;         /* number of args */
-    int16_t uses;           /* use count (for DCE; -1 = not computed) */
-    uint32_t line;          /* source line number (0 = unknown) */
-    struct XiBlock *block;  /* containing block */
+    uint32_t id;           /* dense SSA value ID (unique within function) */
+    uint16_t op;           /* XiOp */
+    uint8_t flags;         /* XI_FLAG_* */
+    uint8_t var_id;        /* source variable ID for register coalescing (0xFF = none) */
+    uint8_t rep;           /* XrRep: machine representation (set by select_rep,
+                            * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
+                            * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    struct XrType *type;   /* authoritative compile-time type (never NULL) */
+    int64_t aux_int;       /* auxiliary integer: const value, symbol ID, etc. */
+    void *aux;             /* auxiliary pointer: proto, string literal, etc. */
+    struct XiValue **args; /* operand values (SSA uses) */
+    uint16_t nargs;        /* number of args */
+    int16_t uses;          /* use count (for DCE; -1 = not computed) */
+    uint32_t line;         /* source line number (0 = unknown) */
+    struct XiBlock *block; /* containing block */
 } XiValue;
 
 /*
@@ -513,8 +531,8 @@ typedef struct XiValue {
  * args[i] corresponds to block->preds[i].
  */
 typedef struct XiPhi {
-    XiValue value;          /* embedded value (op == XI_PHI) */
-    struct XiPhi *next;     /* linked list within block */
+    XiValue value;      /* embedded value (op == XI_PHI) */
+    struct XiPhi *next; /* linked list within block */
 } XiPhi;
 
 /*
@@ -524,9 +542,9 @@ typedef struct XiPhi {
  * instruction. This matches Go SSA's design and simplifies iteration.
  */
 typedef struct XiBlock {
-    uint32_t id;            /* dense block ID (unique within function) */
-    uint16_t kind;          /* XiBlockKind */
-    bool visited;           /* traversal scratch */
+    uint32_t id;   /* dense block ID (unique within function) */
+    uint16_t kind; /* XiBlockKind */
+    bool visited;  /* traversal scratch */
     uint8_t _pad;
 
     /* Phi nodes at entry (linked list; NULL if no merge point) */
@@ -547,9 +565,9 @@ typedef struct XiBlock {
     uint16_t preds_cap;
 
     /* Ordering & dominance */
-    uint32_t rpo;             /* reverse post-order index (0 = not computed) */
-    struct XiBlock *idom;     /* immediate dominator (NULL for entry) */
-    uint16_t dom_depth;       /* depth in dominator tree (entry = 0) */
+    uint32_t rpo;         /* reverse post-order index (0 = not computed) */
+    struct XiBlock *idom; /* immediate dominator (NULL for entry) */
+    uint16_t dom_depth;   /* depth in dominator tree (entry = 0) */
 
     /* Braun SSA: block sealing.
      * A block is sealed when all its predecessors are known.
@@ -590,7 +608,7 @@ typedef struct XiFunc {
     XiBlock **blocks;
     uint32_t nblocks;
     uint32_t blocks_cap;
-    XiBlock *entry;             /* blocks[0] is always the entry block */
+    XiBlock *entry; /* blocks[0] is always the entry block */
 
     /* ID allocation */
     uint32_t next_value_id;
@@ -621,12 +639,12 @@ typedef struct XiFunc {
     /* Export table: maps shared slot → exported name.  Populated during
      * lowering for top-level declarations so the AOT driver can build
      * cross-module import resolution tables.  NULL entries = not exported. */
-    const char **export_names;   /* array of nshared entries (arena-alloc'd) */
+    const char **export_names; /* array of nshared entries (arena-alloc'd) */
 
     /* Re-export table: entries from "export { a } from './file'" and
      * "export * from './file'" statements. Populated during lowering,
      * emitted as OP_IMPORT + OP_EXPORT/OP_EXPORT_ALL by emit_reexports. */
-    XiReexportEntry *reexports;  /* arena-allocated array */
+    XiReexportEntry *reexports; /* arena-allocated array */
     uint16_t reexport_count;
 
     /* IR stage — monotonically non-decreasing; set by lowerer and
@@ -640,11 +658,11 @@ typedef struct XiFunc {
     XiInvariantMask invariant_mask;
 
     /* VM entry metadata (propagated to XrProto during emission) */
-    bool is_vararg;             /* has rest parameter (...args) */
-    uint8_t entry_type;         /* 0=normal, 1=has_defaults, 2=generator */
-    uint16_t min_params;        /* required parameter count (no defaults) */
-    uint8_t test_attr;          /* AttributeKind: @test / @before_each / etc. */
-    int test_timeout;           /* @test(timeout: N) seconds, 0 = no timeout */
+    bool is_vararg;      /* has rest parameter (...args) */
+    uint8_t entry_type;  /* 0=normal, 1=has_defaults, 2=generator */
+    uint16_t min_params; /* required parameter count (no defaults) */
+    uint8_t test_attr;   /* AttributeKind: @test / @before_each / etc. */
+    int test_timeout;    /* @test(timeout: N) seconds, 0 = no timeout */
 
     /* Effect summary: bitwise OR of XI_FLAG_* across all values.
      * Computed by xi_func_compute_effects() after lowering completes.
@@ -666,7 +684,7 @@ typedef struct XiFunc {
     XiClosureMeta *closure_meta;
 
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
-    int cgen_id;                /* unique name suffix for generated C functions */
+    int cgen_id; /* unique name suffix for generated C functions */
 } XiFunc;
 
 /* ========== Arena Constants ========== */
@@ -695,49 +713,39 @@ XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);
 /* ========== API: Value Construction ========== */
 
 /* Create a new value and append to the given block. */
-XR_FUNC XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op,
-                               struct XrType *type, uint16_t nargs);
+XR_FUNC XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
+                              uint16_t nargs);
 
 /* Convenience: constant constructors.
  * Caller provides XrType* (obtained from XaAnalyzer/XrTypePool).
  * The IR module does not depend on XrayIsolate. */
-XR_FUNC XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val,
-                               struct XrType *int_type);
-XR_FUNC XiValue *xi_const_float(XiFunc *f, XiBlock *blk, double val,
-                                 struct XrType *float_type);
-XR_FUNC XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val,
-                                struct XrType *bool_type);
-XR_FUNC XiValue *xi_const_null(XiFunc *f, XiBlock *blk,
-                                struct XrType *null_type);
-XR_FUNC XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str,
-                               struct XrType *str_type);
-XR_FUNC XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk,
-                                  const char *digits,
-                                  struct XrType *bigint_type);
+XR_FUNC XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val, struct XrType *int_type);
+XR_FUNC XiValue *xi_const_float(XiFunc *f, XiBlock *blk, double val, struct XrType *float_type);
+XR_FUNC XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val, struct XrType *bool_type);
+XR_FUNC XiValue *xi_const_null(XiFunc *f, XiBlock *blk, struct XrType *null_type);
+XR_FUNC XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str, struct XrType *str_type);
+XR_FUNC XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk, const char *digits,
+                                 struct XrType *bigint_type);
 
 /* Convenience: binary op */
-XR_FUNC XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op,
-                            struct XrType *type, XiValue *lhs, XiValue *rhs);
+XR_FUNC XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, XiValue *lhs,
+                           XiValue *rhs);
 
 /* Convenience: unary op */
-XR_FUNC XiValue *xi_unary(XiFunc *f, XiBlock *blk, uint16_t op,
-                           struct XrType *type, XiValue *arg);
+XR_FUNC XiValue *xi_unary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, XiValue *arg);
 
 /* Convenience: function parameter */
-XR_FUNC XiValue *xi_param(XiFunc *f, XiBlock *blk, uint16_t index,
-                           struct XrType *type);
+XR_FUNC XiValue *xi_param(XiFunc *f, XiBlock *blk, uint16_t index, struct XrType *type);
 
 /* ========== API: Phi Nodes ========== */
 
-XR_FUNC XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type,
-                           uint16_t npreds);
+XR_FUNC XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type, uint16_t npreds);
 
 /* ========== API: Block Termination ========== */
 
 XR_FUNC void xi_block_set_return(XiBlock *blk, XiValue *val);
 XR_FUNC void xi_block_set_jump(XiBlock *blk, XiBlock *target);
-XR_FUNC void xi_block_set_if(XiBlock *blk, XiValue *cond,
-                              XiBlock *then_blk, XiBlock *else_blk);
+XR_FUNC void xi_block_set_if(XiBlock *blk, XiValue *cond, XiBlock *then_blk, XiBlock *else_blk);
 
 /* ========== API: Dump ========== */
 
@@ -748,53 +756,53 @@ XR_FUNC void xi_func_dump(const XiFunc *f, void *stream);
 
 /* Import binding classification. */
 typedef enum XiBindingKind {
-    XI_BIND_VALUE,      /* ordinary value (variable, constant) */
-    XI_BIND_FUNCTION,   /* function declaration */
-    XI_BIND_CLASS,      /* class declaration */
-    XI_BIND_NAMESPACE,  /* whole-module import (import mod) */
+    XI_BIND_VALUE,     /* ordinary value (variable, constant) */
+    XI_BIND_FUNCTION,  /* function declaration */
+    XI_BIND_CLASS,     /* class declaration */
+    XI_BIND_NAMESPACE, /* whole-module import (import mod) */
 } XiBindingKind;
 
 /* Explicit export entry: one per module-level exported binding. */
 typedef struct XiModuleExport {
-    const char *name;           /* exported identifier (e.g. "square") */
-    uint16_t shared_slot;       /* slot in module's shared array */
-    int16_t cell_index;         /* cross-module cell table index (-1 = N/A) */
-    XiFunc *function;           /* non-NULL if this export is a function */
-    XiClassData *class_data;    /* non-NULL if this export is a class */
-    struct XrType *value_type;  /* inferred type of the exported value */
-    bool is_live_binding;       /* true for mutable export (re-assignable) */
+    const char *name;          /* exported identifier (e.g. "square") */
+    uint16_t shared_slot;      /* slot in module's shared array */
+    int16_t cell_index;        /* cross-module cell table index (-1 = N/A) */
+    XiFunc *function;          /* non-NULL if this export is a function */
+    XiClassData *class_data;   /* non-NULL if this export is a class */
+    struct XrType *value_type; /* inferred type of the exported value */
+    bool is_live_binding;      /* true for mutable export (re-assignable) */
 } XiModuleExport;
 
 /* Explicit import entry: one per imported member from another module. */
 typedef struct XiModuleImport {
-    const char *module_path;    /* source path of exporting module (e.g. "./math_lib") */
-    const char *member_name;    /* imported name (e.g. "square") */
-    uint8_t binding_kind;       /* XiBindingKind */
-    int16_t cell_index;         /* local cell table index for this import (-1 = N/A) */
-    XiModuleExport *resolved;   /* resolved after module graph linking (NULL until then) */
+    const char *module_path;  /* source path of exporting module (e.g. "./math_lib") */
+    const char *member_name;  /* imported name (e.g. "square") */
+    uint8_t binding_kind;     /* XiBindingKind */
+    int16_t cell_index;       /* local cell table index for this import (-1 = N/A) */
+    XiModuleExport *resolved; /* resolved after module graph linking (NULL until then) */
 } XiModuleImport;
 
 /* Module link status for SCC-based initialization ordering. */
 typedef enum XiLinkStatus {
-    XI_LINK_UNVISITED = 0,  /* not yet visited by linker */
-    XI_LINK_IN_PROGRESS,    /* currently being linked (cycle detection) */
-    XI_LINK_LINKED,         /* fully linked, ready for evaluation */
-    XI_LINK_ERROR,          /* link failed (unresolved import, cycle error) */
+    XI_LINK_UNVISITED = 0, /* not yet visited by linker */
+    XI_LINK_IN_PROGRESS,   /* currently being linked (cycle detection) */
+    XI_LINK_LINKED,        /* fully linked, ready for evaluation */
+    XI_LINK_ERROR,         /* link failed (unresolved import, cycle error) */
 } XiLinkStatus;
 
 /* Per-module compilation unit: holds init function and explicit metadata.
  * All metadata is produced during lowering; no post-hoc IR scanning. */
 typedef struct XiModule {
-    const char *path;           /* source file path */
-    const char *name;           /* C-safe identifier (e.g. "math_lib") */
-    XiFunc *init;               /* module init function (top-level) */
-    XiFunc **functions;         /* all top-level functions (init's children) */
+    const char *path;   /* source file path */
+    const char *name;   /* C-safe identifier (e.g. "math_lib") */
+    XiFunc *init;       /* module init function (top-level) */
+    XiFunc **functions; /* all top-level functions (init's children) */
     uint16_t nfuncs;
-    XiClassData **classes;      /* all class descriptors lowered in this module */
+    XiClassData **classes; /* all class descriptors lowered in this module */
     uint16_t nclasses;
-    XiModuleExport *exports;    /* explicit export table */
+    XiModuleExport *exports; /* explicit export table */
     uint16_t nexports;
-    XiModuleImport *imports;    /* explicit import table */
+    XiModuleImport *imports; /* explicit import table */
     uint16_t nimports;
     /* Shared-slot mappings: populated during lowering, consumed by C codegen.
      * Indexed by shared slot number (0..nslots-1).  NULL entries mean the
@@ -803,8 +811,8 @@ typedef struct XiModule {
     XiClassData **slot_classes; /* [nslots] shared slot -> XiClassData* */
     uint16_t nslots;            /* = init->nshared */
     /* SCC-based module linking */
-    int16_t scc_id;             /* strongly-connected component ID (-1 = unassigned) */
-    XiLinkStatus link_status;   /* linking progress state */
+    int16_t scc_id;           /* strongly-connected component ID (-1 = unassigned) */
+    XiLinkStatus link_status; /* linking progress state */
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */
     uint16_t nclosure_metas;
@@ -836,10 +844,10 @@ XR_FUNC int xi_module_link_resolve(XiModule **modules, int nmodules);
  * Generated by xi_emit during bytecode emission; consumed by JIT for
  * deopt snapshot generation from Xi IR values. */
 typedef struct {
-    uint32_t value_id;   /* Xi IR value ID (XiValue.id) */
-    uint32_t bc_pc;      /* bytecode PC where this assignment takes effect */
-    uint8_t  bc_slot;    /* bytecode register R[0..255] */
-    uint8_t  xr_tag;     /* XR_TAG_* (NULL=0, BOOL=1, I64=3, F64=4, PTR=5) */
+    uint32_t value_id; /* Xi IR value ID (XiValue.id) */
+    uint32_t bc_pc;    /* bytecode PC where this assignment takes effect */
+    uint8_t bc_slot;   /* bytecode register R[0..255] */
+    uint8_t xr_tag;    /* XR_TAG_* (NULL=0, BOOL=1, I64=3, F64=4, PTR=5) */
 } XiSlotMapEntry;
 
 /* Mapping table from Xi IR SSA values to bytecode slots.

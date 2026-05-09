@@ -274,10 +274,10 @@ typedef struct XrCoroExt {
  *   +200  spill[XM_SUSPEND_SPILL_MAX] spill slots bridging old→new stack frame
  */
 typedef struct XrJitSuspendState {
-    int64_t caller_saved[15];  // x1-x15
-    int64_t callee_saved[8];   // x20-x27
-    int64_t result;            // await/channel result (written by block helper or waker)
-    int64_t result_tag;        // XR_TAG_* for result (resume writes to runtime_tags)
+    int64_t caller_saved[15];             // x1-x15
+    int64_t callee_saved[8];              // x20-x27
+    int64_t result;                       // await/channel result (written by block helper or waker)
+    int64_t result_tag;                   // XR_TAG_* for result (resume writes to runtime_tags)
     int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
 } XrJitSuspendState;
 

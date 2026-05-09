@@ -429,6 +429,18 @@ if(XR_STDLIB_FULL)
         list(FILTER STDLIB_ALL_SRC EXCLUDE REGEX ".*/stdlib/test_yield/.*\\.c$")
     endif()
     set(STDLIB_SRC ${STDLIB_ALL_SRC})
+    # Full mode: define XR_HAS_* for modules actually included,
+    # so xmodule.c guards work the same as modular mode.
+    add_compile_definitions(XR_HAS_FILESYSTEM=1)
+    add_compile_definitions(XR_HAS_NETWORK=1)
+    add_compile_definitions(XR_HAS_CRYPTO=1)
+    add_compile_definitions(XR_HAS_DATA_FORMATS=1)
+    if(XR_STDLIB_COMPRESS)
+        add_compile_definitions(XR_HAS_COMPRESS=1)
+    endif()
+    if(XR_STDLIB_CLUSTER)
+        add_compile_definitions(XR_HAS_CLUSTER=1)
+    endif()
     message(STATUS "Stdlib: full")
 else()
     # Modular compilation - define XR_STDLIB_MODULAR to indicate modular build

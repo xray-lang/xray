@@ -169,7 +169,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         r[slen] = 0;
         return sv;
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
@@ -185,33 +185,33 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_BOOL(a->len == 0);
         if (sym == XRT_SYM_POP && a->len > 0) {
             a->len--;
-            return xr_typed_get(a->data, (int32_t)a->len, a->elem_type);
+            return xr_typed_get(a->data, (int32_t) a->len, a->elem_type);
         }
         if (sym == XRT_SYM_SHIFT && a->len > 0) {
             XrValue first = xr_typed_get(a->data, 0, a->elem_type);
             for (int64_t i = 0; i < a->len - 1; i++) {
-                XrValue next = xr_typed_get(a->data, (int32_t)(i + 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t)i, next, a->elem_type);
+                XrValue next = xr_typed_get(a->data, (int32_t) (i + 1), a->elem_type);
+                xr_typed_set(a->data, (int32_t) i, next, a->elem_type);
             }
             a->len--;
             return first;
         }
         if (sym == XRT_SYM_REVERSE) {
             for (int64_t i = 0, j = a->len - 1; i < j; i++, j--) {
-                XrValue vi = xr_typed_get(a->data, (int32_t)i, a->elem_type);
-                XrValue vj = xr_typed_get(a->data, (int32_t)j, a->elem_type);
-                xr_typed_set(a->data, (int32_t)i, vj, a->elem_type);
-                xr_typed_set(a->data, (int32_t)j, vi, a->elem_type);
+                XrValue vi = xr_typed_get(a->data, (int32_t) i, a->elem_type);
+                XrValue vj = xr_typed_get(a->data, (int32_t) j, a->elem_type);
+                xr_typed_set(a->data, (int32_t) i, vj, a->elem_type);
+                xr_typed_set(a->data, (int32_t) j, vi, a->elem_type);
             }
             return recv;
         }
         if (sym == XRT_SYM_SORT && a->len > 1) {
             for (int64_t gap = a->len / 2; gap > 0; gap /= 2) {
                 for (int64_t i = gap; i < a->len; i++) {
-                    XrValue key = xr_typed_get(a->data, (int32_t)i, a->elem_type);
+                    XrValue key = xr_typed_get(a->data, (int32_t) i, a->elem_type);
                     int64_t j = i;
                     while (j >= gap) {
-                        XrValue bv = xr_typed_get(a->data, (int32_t)(j - gap), a->elem_type);
+                        XrValue bv = xr_typed_get(a->data, (int32_t) (j - gap), a->elem_type);
                         int cmp = 0;
                         if (bv.tag == XR_TAG_I64 && key.tag == XR_TAG_I64)
                             cmp = (bv.i > key.i) - (bv.i < key.i);
@@ -223,10 +223,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
                             cmp = (int) bv.tag - (int) key.tag;
                         if (cmp <= 0)
                             break;
-                        xr_typed_set(a->data, (int32_t)j, bv, a->elem_type);
+                        xr_typed_set(a->data, (int32_t) j, bv, a->elem_type);
                         j -= gap;
                     }
-                    xr_typed_set(a->data, (int32_t)j, key, a->elem_type);
+                    xr_typed_set(a->data, (int32_t) j, key, a->elem_type);
                 }
             }
             return recv;
@@ -277,12 +277,12 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_SQRT)
             return XR_FROM_FLOAT(sqrt(v));
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 /* String 1-arg method dispatch (extracted to keep xrt_method_1 under 150 lines) */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
-                                        XrValue arg0) {
+                                       XrValue arg0) {
     if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0))
         return XR_FROM_BOOL(strstr(s, (const char *) arg0.ptr) ? 1 : 0);
     if (sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0)) {
@@ -410,7 +410,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         ((char *) sv.ptr)[1] = 0;
         return sv;
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
@@ -422,26 +422,26 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         if (sym == XRT_SYM_PUSH) {
             xrt_array_push(recv, arg0);
-            return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+            return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
         }
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_push(recv, XR_NULL_VAL);
             a = (xrt_array_t *) recv.ptr;
             for (int64_t i = a->len - 1; i > 0; i--) {
-                XrValue prev = xr_typed_get(a->data, (int32_t)(i - 1), a->elem_type);
-                xr_typed_set(a->data, (int32_t)i, prev, a->elem_type);
+                XrValue prev = xr_typed_get(a->data, (int32_t) (i - 1), a->elem_type);
+                xr_typed_set(a->data, (int32_t) i, prev, a->elem_type);
             }
             xr_typed_set(a->data, 0, arg0, a->elem_type);
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
             for (int64_t i = 0; i < a->len; i++)
-                xr_typed_set(a->data, (int32_t)i, arg0, a->elem_type);
+                xr_typed_set(a->data, (int32_t) i, arg0, a->elem_type);
             return recv;
         }
         if (sym == XRT_SYM_INDEXOF) {
             for (int64_t i = 0; i < a->len; i++) {
-                XrValue elem = xr_typed_get(a->data, (int32_t)i, a->elem_type);
+                XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
                 if (elem.tag == arg0.tag && elem.i == arg0.i)
                     return XR_FROM_INT(i);
             }
@@ -449,7 +449,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         }
         if (sym == XRT_SYM_INCLUDES) {
             for (int64_t i = 0; i < a->len; i++) {
-                XrValue elem = xr_typed_get(a->data, (int32_t)i, a->elem_type);
+                XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
                 if (elem.tag == arg0.tag && elem.i == arg0.i)
                     return XR_FROM_BOOL(1);
             }
@@ -460,7 +460,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             size_t seplen = strlen(sep);
             size_t total = 0;
             for (int64_t i = 0; i < a->len; i++) {
-                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t)i, a->elem_type), 0);
+                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
                 total += strlen((const char *) sv.ptr);
                 if (i < a->len - 1)
                     total += seplen;
@@ -469,7 +469,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             char *r = (char *) result.ptr;
             size_t pos = 0;
             for (int64_t i = 0; i < a->len; i++) {
-                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t)i, a->elem_type), 0);
+                XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
                 const char *p = (const char *) sv.ptr;
                 size_t plen = strlen(p);
                 memcpy(r + pos, p, plen);
@@ -493,7 +493,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             int64_t rlen = a->len - start;
             XrValue arr = xrt_array_new(rlen);
             for (int64_t i = 0; i < rlen; i++)
-                xrt_array_push(arr, xr_typed_get(a->data, (int32_t)(start + i), a->elem_type));
+                xrt_array_push(arr, xr_typed_get(a->data, (int32_t) (start + i), a->elem_type));
             return arr;
         }
         /* Higher-order methods: callback is an AOT closure (XR_TAG_CLOSURE).
@@ -507,13 +507,13 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             if (sym == XRT_SYM_MAP) {
                 XrValue arr = xrt_array_new(a->len);
                 for (int64_t i = 0; i < a->len; i++)
-                    xrt_array_push(arr, fn(cl, xr_typed_get(a->data, (int32_t)i, a->elem_type)));
+                    xrt_array_push(arr, fn(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type)));
                 return arr;
             }
             if (sym == XRT_SYM_FILTER) {
                 XrValue arr = xrt_array_new(a->len);
                 for (int64_t i = 0; i < a->len; i++) {
-                    XrValue elem = xr_typed_get(a->data, (int32_t)i, a->elem_type);
+                    XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
                     XrValue r = fn(cl, elem);
                     if (xr_truthy(r))
                         xrt_array_push(arr, elem);
@@ -522,7 +522,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
             if (sym == XRT_SYM_FOREACH) {
                 for (int64_t i = 0; i < a->len; i++)
-                    fn(cl, xr_typed_get(a->data, (int32_t)i, a->elem_type));
+                    fn(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type));
                 return XR_NULL_VAL;
             }
         }
@@ -572,7 +572,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         double b = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(a < b ? a : b);
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
@@ -693,14 +693,14 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         int64_t rlen = end - start;
         XrValue arr = xrt_array_new(rlen);
         for (int64_t i = 0; i < rlen; i++)
-            xrt_array_push(arr, xr_typed_get(a->data, (int32_t)(start + i), a->elem_type));
+            xrt_array_push(arr, xr_typed_get(a->data, (int32_t) (start + i), a->elem_type));
         return arr;
     }
     if (recv.tag == XR_TAG_MAP && sym == XRT_SYM_SET) {
         xrt_map_set((xrt_map_t *) recv.ptr, arg0, arg1);
-        return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+        return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 /* =========================================================================
@@ -732,7 +732,7 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_INT(s[0] == '\0');
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 #endif  // XRT_METHOD_H

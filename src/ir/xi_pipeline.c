@@ -100,7 +100,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     /* Optimization passes (pipeline driver handles per-round verify) */
     if (cfg->run_optimize) {
         XiOptLevel level = cfg->opt_level;
-        if (level == XI_OPT_NONE) level = XI_OPT_LIGHT;
+        if (level == XI_OPT_NONE)
+            level = XI_OPT_LIGHT;
 
         XiPipelineStats stats;
         xi_opt_run_pipeline_ex(ir, level, &stats, cfg->budget_ns);
@@ -195,12 +196,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
 
 /* ========== Public API ========== */
 
-XR_FUNC XiPipelineResult xi_pipeline_compile_func(
-    struct AstNode *func_node,
-    struct XaAnalyzer *analyzer,
-    struct XrayIsolate *isolate,
-    const XiPipelineConfig *cfg)
-{
+XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
+                                                  struct XaAnalyzer *analyzer,
+                                                  struct XrayIsolate *isolate,
+                                                  const XiPipelineConfig *cfg) {
     XR_DCHECK(func_node != NULL, "xi_pipeline_compile_func: NULL func_node");
 
     XiPipelineConfig default_cfg;
@@ -211,8 +210,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(
 
     /* Re-install the parse arena so canonicalizer can allocate new AST nodes. */
     struct XrArena *saved_arena = xr_isolate_get_current_arena(isolate);
-    if (func_node->as.function_decl.body &&
-        func_node->as.function_decl.body->type == AST_BLOCK) {
+    if (func_node->as.function_decl.body && func_node->as.function_decl.body->type == AST_BLOCK) {
         /* Function bodies don't own arenas directly; the arena lives on
          * the enclosing program node.  The caller (xvm_compile.c) already
          * re-installs the program arena before entering the pipeline, so
@@ -236,12 +234,10 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(
     return run_pipeline(ir, isolate, cfg);
 }
 
-XR_FUNC XiPipelineResult xi_pipeline_compile_program(
-    struct AstNode *program_node,
-    struct XaAnalyzer *analyzer,
-    struct XrayIsolate *isolate,
-    const XiPipelineConfig *cfg)
-{
+XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_node,
+                                                     struct XaAnalyzer *analyzer,
+                                                     struct XrayIsolate *isolate,
+                                                     const XiPipelineConfig *cfg) {
     XR_DCHECK(program_node != NULL, "xi_pipeline_compile_program: NULL program_node");
 
     XiPipelineConfig default_cfg;
@@ -275,7 +271,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(
 }
 
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res) {
-    if (!res) return;
+    if (!res)
+        return;
     if (res->ir) {
         xi_func_free(res->ir);
         res->ir = NULL;
@@ -289,11 +286,16 @@ XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res) {
 
 XR_FUNC const char *xi_pipe_status_str(XiPipeStatus s) {
     switch (s) {
-        case XI_PIPE_OK:          return "OK";
-        case XI_PIPE_ERR_LOWER:   return "AST lowering failed";
-        case XI_PIPE_ERR_VERIFY:  return "IR verification failed";
-        case XI_PIPE_ERR_EMIT:    return "bytecode emission failed";
-        case XI_PIPE_ERR_INTERNAL:return "internal pipeline error";
+        case XI_PIPE_OK:
+            return "OK";
+        case XI_PIPE_ERR_LOWER:
+            return "AST lowering failed";
+        case XI_PIPE_ERR_VERIFY:
+            return "IR verification failed";
+        case XI_PIPE_ERR_EMIT:
+            return "bytecode emission failed";
+        case XI_PIPE_ERR_INTERNAL:
+            return "internal pipeline error";
     }
     return "unknown";
 }

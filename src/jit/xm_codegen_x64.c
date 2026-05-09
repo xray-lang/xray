@@ -305,7 +305,6 @@ static void x64_emit_gap_moves_before(X64CodegenCtx *ctx, uint32_t ins_idx) {
     ctx->gap_move_cursor = cursor;
 }
 
-
 /* ========== Prologue / Epilogue ========== */
 
 static void x64_emit_prologue(X64CodegenCtx *ctx) {
@@ -353,8 +352,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
 
     /* Save stack_map_ptr from jit_ctx into frame for GC and smap restoration
      * after JIT→JIT calls. Mirrors ARM64's FRAME_SMAP_PTR_OFFSET store. */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
-               (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
     x64_mov_mr(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET, X64_SCRATCH_REG);
     /* Initialize safepoint_id = UINT32_MAX (no active safepoint) */
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, 0xFFFFFFFF);
@@ -488,8 +486,7 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
     x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET);
 
     /* Save stack_map_ptr from jit_ctx into frame */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
-               (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
     x64_mov_mr(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET, X64_SCRATCH_REG);
     /* Initialize safepoint_id = UINT32_MAX */
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, 0xFFFFFFFF);
@@ -555,7 +552,6 @@ void x64_emit_epilogue(X64CodegenCtx *ctx) {
     x64_pop_r(&ctx->buf, X64_RBP);
     x64_ret(&ctx->buf);
 }
-
 
 /* ========== Block Emission ========== */
 
@@ -747,7 +743,6 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
             break;
     }
 }
-
 
 /* ========== Main Codegen Entry ========== */
 

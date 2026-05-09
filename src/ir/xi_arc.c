@@ -28,7 +28,8 @@
 /* Check whether a type needs refcounting (heap-allocated objects).
  * Scalars (int, float, bool, null) never need ARC. */
 static bool type_needs_arc(const struct XrType *type) {
-    if (!type) return true;  /* unknown type: conservative */
+    if (!type)
+        return true; /* unknown type: conservative */
     switch (type->kind) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
@@ -38,17 +39,20 @@ static bool type_needs_arc(const struct XrType *type) {
         case XR_KIND_NEVER:
             return false;
         default:
-            return true;  /* string, array, map, object, closure, etc. */
+            return true; /* string, array, map, object, closure, etc. */
     }
 }
 
 /* Check if a value is a heap-allocating op that may need ARC. */
 static bool needs_retain(const XiValue *v) {
-    if (!v) return false;
+    if (!v)
+        return false;
     /* Only heap-allocating ops with non-trivial escape need retain */
-    if (v->escape == XI_ESC_NONE) return false;
+    if (v->escape == XI_ESC_NONE)
+        return false;
     /* Also skip scalars even if escape > NONE (they're value types) */
-    if (!type_needs_arc(v->type)) return false;
+    if (!type_needs_arc(v->type))
+        return false;
     return xi_op_is_heap_alloc(v->op);
 }
 
@@ -56,10 +60,14 @@ static bool needs_retain(const XiValue *v) {
  * Values that escape via return (ARG_ESCAPE) should NOT be released
  * because ownership transfers to the caller. */
 static bool needs_exit_release(const XiValue *v) {
-    if (!v) return false;
-    if (v->escape == XI_ESC_NONE) return false;
-    if (v->escape == XI_ESC_ARG) return false;  /* caller owns it */
-    if (!type_needs_arc(v->type)) return false;
+    if (!v)
+        return false;
+    if (v->escape == XI_ESC_NONE)
+        return false;
+    if (v->escape == XI_ESC_ARG)
+        return false; /* caller owns it */
+    if (!type_needs_arc(v->type))
+        return false;
     return xi_op_is_heap_alloc(v->op);
 }
 
@@ -70,15 +78,18 @@ static bool needs_exit_release(const XiValue *v) {
 static void insert_retains(XiFunc *f) {
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         /* Walk values in reverse to avoid index invalidation.
          * New retain values are appended, so we scan the original range. */
         uint32_t orig_count = blk->nvalues;
         for (uint32_t i = 0; i < orig_count; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
-            if (!needs_retain(v)) continue;
+            if (!v)
+                continue;
+            if (!needs_retain(v))
+                continue;
 
             /* Insert XI_RETAIN v after v */
             XiValue *retain = xi_value_new(f, blk, XI_RETAIN, v->type, 1);
@@ -105,23 +116,28 @@ static void insert_exit_releases(XiFunc *f) {
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
             if (needs_exit_release(v) && nrelease < 256) {
                 to_release[nrelease++] = v;
             }
         }
     }
 
-    if (nrelease == 0) return;
+    if (nrelease == 0)
+        return;
 
     /* Insert RELEASE ops in each return block, before the terminator */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
-        if (blk->kind != XI_BLOCK_RETURN) continue;
+        if (!blk)
+            continue;
+        if (blk->kind != XI_BLOCK_RETURN)
+            continue;
 
         for (int r = 0; r < nrelease; r++) {
             XiValue *v = to_release[r];
@@ -129,7 +145,8 @@ static void insert_exit_releases(XiFunc *f) {
 
             /* Skip release if this value is the return value
              * (ownership transfers to caller). */
-            if (blk->control == v) continue;
+            if (blk->control == v)
+                continue;
 
             XiValue *release = xi_value_new(f, blk, XI_RELEASE, v->type, 1);
             XR_DCHECK(release != NULL, "xi_arc: failed to create RELEASE");
@@ -147,7 +164,7 @@ static void rewrite_to_stack(XiValue *v) {
     XR_DCHECK(v != NULL, "rewrite_to_stack: NULL value");
     XR_DCHECK(v->escape == XI_ESC_NONE, "rewrite_to_stack: not NO_ESCAPE");
 
-    v->aux_int = (int32_t)v->op;  /* save original op for codegen */
+    v->aux_int = (int32_t) v->op; /* save original op for codegen */
     v->op = XI_STACK_ALLOC;
 }
 
@@ -162,13 +179,18 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
 
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
-            if (v->escape != XI_ESC_NONE) continue;
-            if (!type_needs_arc(v->type)) continue;  /* scalars: no alloc */
-            if (!xi_op_is_heap_alloc(v->op)) continue;
+            if (!v)
+                continue;
+            if (v->escape != XI_ESC_NONE)
+                continue;
+            if (!type_needs_arc(v->type))
+                continue; /* scalars: no alloc */
+            if (!xi_op_is_heap_alloc(v->op))
+                continue;
             rewrite_to_stack(v);
         }
     }

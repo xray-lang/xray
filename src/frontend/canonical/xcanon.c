@@ -33,7 +33,7 @@
 typedef struct XrCanonCtx {
     struct XaAnalyzer *analyzer;
     struct XrayIsolate *isolate;
-    uint32_t temp_counter;  /* monotonic counter for generating unique temp names */
+    uint32_t temp_counter; /* monotonic counter for generating unique temp names */
     int error_count;
 } XrCanonCtx;
 
@@ -47,7 +47,7 @@ typedef struct XrCanonCtx {
 static char *canon_temp_name(XrCanonCtx *ctx) {
     char buf[CANON_TEMP_BUFSZ];
     int n = snprintf(buf, sizeof(buf), CANON_TEMP_PREFIX "%u", ctx->temp_counter++);
-    XR_DCHECK(n > 0 && n < (int)sizeof(buf), "canon_temp_name: snprintf overflow");
+    XR_DCHECK(n > 0 && n < (int) sizeof(buf), "canon_temp_name: snprintf overflow");
     return ast_strdup(ctx->isolate, buf);
 }
 
@@ -56,19 +56,20 @@ static char *canon_temp_name(XrCanonCtx *ctx) {
 /* Returns true if expr is side-effect-free and cheap to evaluate twice.
  * Used to decide whether a receiver needs extraction into a temp. */
 static bool is_simple_expr(const AstNode *node) {
-    if (!node) return true;
-    switch (node->type) {
-    case AST_VARIABLE:
-    case AST_THIS_EXPR:
-    case AST_LITERAL_INT:
-    case AST_LITERAL_FLOAT:
-    case AST_LITERAL_STRING:
-    case AST_LITERAL_TRUE:
-    case AST_LITERAL_FALSE:
-    case AST_LITERAL_NULL:
+    if (!node)
         return true;
-    default:
-        return false;
+    switch (node->type) {
+        case AST_VARIABLE:
+        case AST_THIS_EXPR:
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_NULL:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -77,17 +78,28 @@ static bool is_simple_expr(const AstNode *node) {
 /* Map compound-assignment token to the corresponding binary AST type. */
 static AstNodeType compound_op_to_binary(XrTokenType op) {
     switch (op) {
-    case TK_PLUS_ASSIGN:   return AST_BINARY_ADD;
-    case TK_MINUS_ASSIGN:  return AST_BINARY_SUB;
-    case TK_MUL_ASSIGN:    return AST_BINARY_MUL;
-    case TK_DIV_ASSIGN:    return AST_BINARY_DIV;
-    case TK_MOD_ASSIGN:    return AST_BINARY_MOD;
-    case TK_AND_ASSIGN:    return AST_BINARY_BAND;
-    case TK_OR_ASSIGN:     return AST_BINARY_BOR;
-    case TK_XOR_ASSIGN:    return AST_BINARY_BXOR;
-    case TK_LSHIFT_ASSIGN: return AST_BINARY_LSHIFT;
-    case TK_RSHIFT_ASSIGN: return AST_BINARY_RSHIFT;
-    default:               return AST_BINARY_ADD;
+        case TK_PLUS_ASSIGN:
+            return AST_BINARY_ADD;
+        case TK_MINUS_ASSIGN:
+            return AST_BINARY_SUB;
+        case TK_MUL_ASSIGN:
+            return AST_BINARY_MUL;
+        case TK_DIV_ASSIGN:
+            return AST_BINARY_DIV;
+        case TK_MOD_ASSIGN:
+            return AST_BINARY_MOD;
+        case TK_AND_ASSIGN:
+            return AST_BINARY_BAND;
+        case TK_OR_ASSIGN:
+            return AST_BINARY_BOR;
+        case TK_XOR_ASSIGN:
+            return AST_BINARY_BXOR;
+        case TK_LSHIFT_ASSIGN:
+            return AST_BINARY_LSHIFT;
+        case TK_RSHIFT_ASSIGN:
+            return AST_BINARY_RSHIFT;
+        default:
+            return AST_BINARY_ADD;
     }
 }
 
@@ -101,16 +113,15 @@ static AstNodeType compound_op_to_binary(XrTokenType op) {
  * AssignmentNode.  The symbol_id is preserved so the lowerer
  * resolves the target identically. */
 static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
-    XR_DCHECK(node->type == AST_COMPOUND_ASSIGNMENT,
-              "canon_compound_var: wrong node type");
+    XR_DCHECK(node->type == AST_COMPOUND_ASSIGNMENT, "canon_compound_var: wrong node type");
     XR_DCHECK(node->as.compound_assignment.object == NULL,
               "canon_compound_var: member target not expected");
 
-    const char *name   = node->as.compound_assignment.name;
-    uint32_t    sid    = node->as.compound_assignment.symbol_id;
-    XrTokenType op     = node->as.compound_assignment.op;
-    AstNode    *rhs    = node->as.compound_assignment.value;
-    int         line   = node->line;
+    const char *name = node->as.compound_assignment.name;
+    uint32_t sid = node->as.compound_assignment.symbol_id;
+    XrTokenType op = node->as.compound_assignment.op;
+    AstNode *rhs = node->as.compound_assignment.value;
+    int line = node->line;
 
     /* Build: variable(name) */
     AstNode *lhs_read = xr_ast_variable(ctx->isolate, name, line);
@@ -125,8 +136,8 @@ static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
     /* Mutate in-place: AST_COMPOUND_ASSIGNMENT → AST_ASSIGNMENT */
     node->type = AST_ASSIGNMENT;
     memset(&node->as, 0, sizeof(node->as));
-    node->as.assignment.name      = (char *)name;
-    node->as.assignment.value     = bin;
+    node->as.assignment.name = (char *) name;
+    node->as.assignment.value = bin;
     node->as.assignment.symbol_id = sid;
 }
 
@@ -140,16 +151,15 @@ static void canon_compound_var(XrCanonCtx *ctx, AstNode *node) {
  * case it becomes AST_MEMBER_SET; for the complex case it becomes
  * AST_BLOCK wrapping a var_decl + member_set. */
 static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
-    XR_DCHECK(node->type == AST_COMPOUND_ASSIGNMENT,
-              "canon_compound_member: wrong node type");
+    XR_DCHECK(node->type == AST_COMPOUND_ASSIGNMENT, "canon_compound_member: wrong node type");
     XR_DCHECK(node->as.compound_assignment.object != NULL,
               "canon_compound_member: no receiver object");
 
-    AstNode    *obj    = node->as.compound_assignment.object;
-    const char *field  = node->as.compound_assignment.name;
-    XrTokenType op     = node->as.compound_assignment.op;
-    AstNode    *rhs    = node->as.compound_assignment.value;
-    int         line   = node->line;
+    AstNode *obj = node->as.compound_assignment.object;
+    const char *field = node->as.compound_assignment.name;
+    XrTokenType op = node->as.compound_assignment.op;
+    AstNode *rhs = node->as.compound_assignment.value;
+    int line = node->line;
     AstNodeType bin_type = compound_op_to_binary(op);
 
     if (is_simple_expr(obj)) {
@@ -157,15 +167,15 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
          * Build: obj.field = obj.field + rhs */
         AstNode *load = xr_ast_member_access(ctx->isolate, obj, field, line);
         XR_DCHECK(load != NULL, "canon_compound_member: member_access alloc");
-        AstNode *bin  = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
+        AstNode *bin = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
         XR_DCHECK(bin != NULL, "canon_compound_member: binary alloc");
 
         /* Mutate in-place → AST_MEMBER_SET */
         node->type = AST_MEMBER_SET;
         memset(&node->as, 0, sizeof(node->as));
         node->as.member_set.object = obj;
-        node->as.member_set.member = (char *)field;
-        node->as.member_set.value  = bin;
+        node->as.member_set.member = (char *) field;
+        node->as.member_set.value = bin;
     } else {
         /* Complex receiver — extract into a temp. */
         char *tmp = canon_temp_name(ctx);
@@ -179,7 +189,7 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
         AstNode *ref1 = xr_ast_variable(ctx->isolate, tmp, line);
         AstNode *ref2 = xr_ast_variable(ctx->isolate, tmp, line);
         AstNode *load = xr_ast_member_access(ctx->isolate, ref1, field, line);
-        AstNode *bin  = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
+        AstNode *bin = xr_ast_binary(ctx->isolate, bin_type, load, rhs, line);
         AstNode *store = xr_ast_member_set(ctx->isolate, ref2, field, bin, line);
         XR_DCHECK(store != NULL, "canon_compound_member: member_set alloc");
 
@@ -198,7 +208,8 @@ static void canon_compound_member(XrCanonCtx *ctx, AstNode *node) {
 
 /* Top-level dispatch for compound assignment desugaring. */
 static void canon_compound_assignment(XrCanonCtx *ctx, AstNode *node) {
-    if (!node || node->type != AST_COMPOUND_ASSIGNMENT) return;
+    if (!node || node->type != AST_COMPOUND_ASSIGNMENT)
+        return;
 
     if (node->as.compound_assignment.object) {
         canon_compound_member(ctx, node);
@@ -213,12 +224,11 @@ static void canon_compound_assignment(XrCanonCtx *ctx, AstNode *node) {
  * The compound assignment rule then further expands to x = x + 1.
  * This ensures inc/dec follows the same code path as compound assign. */
 static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
-    XR_DCHECK(node->type == AST_INC || node->type == AST_DEC,
-              "canon_inc_dec: wrong node type");
+    XR_DCHECK(node->type == AST_INC || node->type == AST_DEC, "canon_inc_dec: wrong node type");
 
     const char *name = node->as.inc.name;
-    uint32_t    sid  = node->as.inc.symbol_id;
-    int         line = node->line;
+    uint32_t sid = node->as.inc.symbol_id;
+    int line = node->line;
     bool is_inc = (node->type == AST_INC);
 
     /* Build literal 1 */
@@ -228,11 +238,11 @@ static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
     /* Mutate in-place → AST_COMPOUND_ASSIGNMENT(name, +=/-=, 1) */
     node->type = AST_COMPOUND_ASSIGNMENT;
     memset(&node->as, 0, sizeof(node->as));
-    node->as.compound_assignment.name      = (char *)name;
-    node->as.compound_assignment.value     = one;
+    node->as.compound_assignment.name = (char *) name;
+    node->as.compound_assignment.value = one;
     node->as.compound_assignment.symbol_id = sid;
-    node->as.compound_assignment.op        = is_inc ? TK_PLUS_ASSIGN : TK_MINUS_ASSIGN;
-    node->as.compound_assignment.object    = NULL;
+    node->as.compound_assignment.op = is_inc ? TK_PLUS_ASSIGN : TK_MINUS_ASSIGN;
+    node->as.compound_assignment.object = NULL;
 
     /* Immediately desugar the synthesized compound assignment */
     canon_compound_assignment(ctx, node);
@@ -244,8 +254,7 @@ static void canon_inc_dec(XrCanonCtx *ctx, AstNode *node) {
  *   f()[g()] = v  →  { let __t0 = f(); let __t1 = g(); __t0[__t1] = v }
  * This ensures correct left-to-right single evaluation of sub-expressions. */
 static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
-    XR_DCHECK(node->type == AST_INDEX_SET,
-              "canon_index_set: wrong node type");
+    XR_DCHECK(node->type == AST_INDEX_SET, "canon_index_set: wrong node type");
 
     AstNode *arr = node->as.index_set.array;
     AstNode *idx = node->as.index_set.index;
@@ -280,8 +289,8 @@ static void canon_index_set(XrCanonCtx *ctx, AstNode *node) {
     }
 
     /* Build simplified index_set with simple operands */
-    AstNode *store = xr_ast_index_set(ctx->isolate, new_arr, new_idx,
-                                       node->as.index_set.value, line);
+    AstNode *store =
+        xr_ast_index_set(ctx->isolate, new_arr, new_idx, node->as.index_set.value, line);
     XR_DCHECK(store != NULL, "canon_index_set: index_set alloc");
     xr_ast_block_add(ctx->isolate, blk, store);
 
@@ -335,8 +344,7 @@ static void canon_short_circuit(XrCanonCtx *ctx, AstNode *node) {
         true_expr = xr_ast_literal_bool(ctx->isolate, 1, line);
         false_expr = make_bool_coerce(ctx, rhs);
     }
-    XR_DCHECK(true_expr != NULL && false_expr != NULL,
-              "canon_short_circuit: branch alloc");
+    XR_DCHECK(true_expr != NULL && false_expr != NULL, "canon_short_circuit: branch alloc");
 
     AstNode *ternary = xr_ast_ternary(ctx->isolate, lhs, true_expr, false_expr, line);
     XR_DCHECK(ternary != NULL, "canon_short_circuit: ternary alloc");
@@ -358,10 +366,8 @@ static void canon_short_circuit(XrCanonCtx *ctx, AstNode *node) {
  * Complex LHS requires statement context for temp extraction, so
  * canon_block handles that path. In expression context we only
  * handle simple LHS; complex LHS falls through to the lowerer. */
-static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node,
-                                    bool in_stmt_context) {
-    XR_DCHECK(node->type == AST_NULLISH_COALESCE,
-              "canon_nullish_coalesce: wrong node type");
+static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node, bool in_stmt_context) {
+    XR_DCHECK(node->type == AST_NULLISH_COALESCE, "canon_nullish_coalesce: wrong node type");
 
     AstNode *lhs = node->as.binary.left;
     AstNode *rhs = node->as.binary.right;
@@ -372,7 +378,7 @@ static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node,
     if (!lhs_simple && !in_stmt_context)
         return;
 
-    AstNode *test_lhs = lhs;  /* the value to null-check and return */
+    AstNode *test_lhs = lhs; /* the value to null-check and return */
 
     if (!lhs_simple) {
         /* Statement context: wrap in a block with temp extraction.
@@ -385,8 +391,7 @@ static void canon_nullish_coalesce(XrCanonCtx *ctx, AstNode *node,
     AstNode *null_lit = xr_ast_literal_null(ctx->isolate, line);
     XR_DCHECK(null_lit != NULL, "canon_nullish_coalesce: null alloc");
 
-    AstNode *eq_check = xr_ast_binary(ctx->isolate, AST_BINARY_EQ,
-                                       test_lhs, null_lit, line);
+    AstNode *eq_check = xr_ast_binary(ctx->isolate, AST_BINARY_EQ, test_lhs, null_lit, line);
     XR_DCHECK(eq_check != NULL, "canon_nullish_coalesce: eq alloc");
 
     /* Duplicate the LHS reference for the false branch.
@@ -410,7 +415,8 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node);
 static void canon_block(XrCanonCtx *ctx, AstNode **stmts, int count) {
     XR_DCHECK(ctx != NULL, "canon_block: NULL ctx");
     for (int i = 0; i < count; i++) {
-        if (!stmts[i]) continue;
+        if (!stmts[i])
+            continue;
         /* Statement-context canonicalizations that expand to blocks */
         if (stmts[i]->type == AST_INDEX_SET) {
             canon_index_set(ctx, stmts[i]);
@@ -424,7 +430,8 @@ static void canon_block(XrCanonCtx *ctx, AstNode **stmts, int count) {
  * Rules may mutate the node type, so the switch runs on the
  * post-canonicalization type. */
 static void canon_node(XrCanonCtx *ctx, AstNode *node) {
-    if (!node) return;
+    if (!node)
+        return;
 
     /* ---- Canonicalization rules (fire before recursive walk) ---- */
     if (node->type == AST_COMPOUND_ASSIGNMENT) {
@@ -448,369 +455,399 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
     }
 
     switch (node->type) {
-    /* ---- Statements with bodies ---- */
-    case AST_BLOCK:
-        canon_block(ctx, node->as.block.statements, node->as.block.count);
-        break;
+        /* ---- Statements with bodies ---- */
+        case AST_BLOCK:
+            canon_block(ctx, node->as.block.statements, node->as.block.count);
+            break;
 
-    case AST_PROGRAM:
-        canon_block(ctx, node->as.program.statements, node->as.program.count);
-        break;
+        case AST_PROGRAM:
+            canon_block(ctx, node->as.program.statements, node->as.program.count);
+            break;
 
-    case AST_IF_STMT:
-        canon_node(ctx, node->as.if_stmt.condition);
-        canon_node(ctx, node->as.if_stmt.then_branch);
-        canon_node(ctx, node->as.if_stmt.else_branch);
-        break;
+        case AST_IF_STMT:
+            canon_node(ctx, node->as.if_stmt.condition);
+            canon_node(ctx, node->as.if_stmt.then_branch);
+            canon_node(ctx, node->as.if_stmt.else_branch);
+            break;
 
-    case AST_WHILE_STMT:
-        canon_node(ctx, node->as.while_stmt.condition);
-        canon_node(ctx, node->as.while_stmt.body);
-        break;
+        case AST_WHILE_STMT:
+            canon_node(ctx, node->as.while_stmt.condition);
+            canon_node(ctx, node->as.while_stmt.body);
+            break;
 
-    case AST_FOR_STMT:
-        canon_node(ctx, node->as.for_stmt.initializer);
-        canon_node(ctx, node->as.for_stmt.condition);
-        canon_node(ctx, node->as.for_stmt.increment);
-        canon_node(ctx, node->as.for_stmt.body);
-        break;
+        case AST_FOR_STMT:
+            canon_node(ctx, node->as.for_stmt.initializer);
+            canon_node(ctx, node->as.for_stmt.condition);
+            canon_node(ctx, node->as.for_stmt.increment);
+            canon_node(ctx, node->as.for_stmt.body);
+            break;
 
-    case AST_FOR_IN_STMT:
-        canon_node(ctx, node->as.for_in_stmt.collection);
-        canon_node(ctx, node->as.for_in_stmt.body);
-        break;
+        case AST_FOR_IN_STMT:
+            canon_node(ctx, node->as.for_in_stmt.collection);
+            canon_node(ctx, node->as.for_in_stmt.body);
+            break;
 
-    case AST_FUNCTION_DECL:
-    case AST_FUNCTION_EXPR:
-        canon_node(ctx, node->as.function_decl.body);
-        break;
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            canon_node(ctx, node->as.function_decl.body);
+            break;
 
-    case AST_TRY_CATCH:
-        canon_node(ctx, node->as.try_catch.try_body);
-        canon_node(ctx, node->as.try_catch.catch_body);
-        canon_node(ctx, node->as.try_catch.finally_body);
-        break;
+        case AST_TRY_CATCH:
+            canon_node(ctx, node->as.try_catch.try_body);
+            canon_node(ctx, node->as.try_catch.catch_body);
+            canon_node(ctx, node->as.try_catch.finally_body);
+            break;
 
-    case AST_MATCH_EXPR: {
-        MatchExprNode *m = &node->as.match_expr;
-        canon_node(ctx, m->expr);
-        for (int i = 0; i < m->arm_count; i++) {
-            if (m->arms[i]) canon_node(ctx, m->arms[i]);
+        case AST_MATCH_EXPR: {
+            MatchExprNode *m = &node->as.match_expr;
+            canon_node(ctx, m->expr);
+            for (int i = 0; i < m->arm_count; i++) {
+                if (m->arms[i])
+                    canon_node(ctx, m->arms[i]);
+            }
+            break;
         }
-        break;
-    }
 
-    /* AST_MATCH_ARM handled below (walks guard + body) */
+        /* AST_MATCH_ARM handled below (walks guard + body) */
 
-    /* ---- Expressions (walk children) ---- */
-    case AST_EXPR_STMT:
-        canon_node(ctx, node->as.expr_stmt);
-        break;
+        /* ---- Expressions (walk children) ---- */
+        case AST_EXPR_STMT:
+            canon_node(ctx, node->as.expr_stmt);
+            break;
 
-    case AST_VAR_DECL:
-    case AST_CONST_DECL:
-        canon_node(ctx, node->as.var_decl.initializer);
-        break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            canon_node(ctx, node->as.var_decl.initializer);
+            break;
 
-    case AST_ASSIGNMENT:
-        canon_node(ctx, node->as.assignment.value);
-        break;
+        case AST_ASSIGNMENT:
+            canon_node(ctx, node->as.assignment.value);
+            break;
 
-    case AST_RETURN_STMT:
-        for (int i = 0; i < node->as.return_stmt.value_count; i++) {
-            canon_node(ctx, node->as.return_stmt.values[i]);
+        case AST_RETURN_STMT:
+            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
+                canon_node(ctx, node->as.return_stmt.values[i]);
+            }
+            break;
+
+        case AST_CALL_EXPR: {
+            CallExprNode *call = &node->as.call_expr;
+            canon_node(ctx, call->callee);
+            for (int i = 0; i < call->arg_count; i++) {
+                if (call->arguments[i])
+                    canon_node(ctx, call->arguments[i]);
+            }
+            break;
         }
-        break;
 
-    case AST_CALL_EXPR: {
-        CallExprNode *call = &node->as.call_expr;
-        canon_node(ctx, call->callee);
-        for (int i = 0; i < call->arg_count; i++) {
-            if (call->arguments[i]) canon_node(ctx, call->arguments[i]);
+        case AST_MEMBER_ACCESS:
+            canon_node(ctx, node->as.member_access.object);
+            break;
+
+        case AST_MEMBER_SET:
+            canon_node(ctx, node->as.member_set.object);
+            canon_node(ctx, node->as.member_set.value);
+            break;
+
+        case AST_INDEX_GET:
+            canon_node(ctx, node->as.index_get.array);
+            canon_node(ctx, node->as.index_get.index);
+            break;
+
+        case AST_INDEX_SET:
+            canon_node(ctx, node->as.index_set.array);
+            canon_node(ctx, node->as.index_set.index);
+            canon_node(ctx, node->as.index_set.value);
+            break;
+
+        case AST_TERNARY:
+            canon_node(ctx, node->as.ternary.condition);
+            canon_node(ctx, node->as.ternary.true_expr);
+            canon_node(ctx, node->as.ternary.false_expr);
+            break;
+
+        case AST_SCOPE_BLOCK:
+            canon_node(ctx, node->as.scope_block.body);
+            break;
+
+        case AST_DEFER_STMT:
+            canon_node(ctx, node->as.defer_stmt.expr);
+            break;
+
+        /* ---- Print statement ---- */
+        case AST_PRINT_STMT: {
+            PrintNode *p = &node->as.print_stmt;
+            for (int i = 0; i < p->expr_count; i++)
+                canon_node(ctx, p->exprs[i]);
+            break;
         }
-        break;
-    }
 
-    case AST_MEMBER_ACCESS:
-        canon_node(ctx, node->as.member_access.object);
-        break;
+        /* ---- Throw ---- */
+        case AST_THROW_STMT:
+            canon_node(ctx, node->as.throw_stmt.expression);
+            break;
 
-    case AST_MEMBER_SET:
-        canon_node(ctx, node->as.member_set.object);
-        canon_node(ctx, node->as.member_set.value);
-        break;
+        /* ---- Aggregate literals ---- */
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++)
+                canon_node(ctx, node->as.array_literal.elements[i]);
+            break;
 
-    case AST_INDEX_GET:
-        canon_node(ctx, node->as.index_get.array);
-        canon_node(ctx, node->as.index_get.index);
-        break;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                canon_node(ctx, node->as.map_literal.keys[i]);
+                canon_node(ctx, node->as.map_literal.values[i]);
+            }
+            break;
 
-    case AST_INDEX_SET:
-        canon_node(ctx, node->as.index_set.array);
-        canon_node(ctx, node->as.index_set.index);
-        canon_node(ctx, node->as.index_set.value);
-        break;
+        case AST_SET_LITERAL:
+            for (int i = 0; i < node->as.set_literal.count; i++)
+                canon_node(ctx, node->as.set_literal.elements[i]);
+            break;
 
-    case AST_TERNARY:
-        canon_node(ctx, node->as.ternary.condition);
-        canon_node(ctx, node->as.ternary.true_expr);
-        canon_node(ctx, node->as.ternary.false_expr);
-        break;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++) {
+                canon_node(ctx, node->as.object_literal.keys[i]);
+                canon_node(ctx, node->as.object_literal.values[i]);
+            }
+            break;
 
-    case AST_SCOPE_BLOCK:
-        canon_node(ctx, node->as.scope_block.body);
-        break;
+        case AST_STRUCT_LITERAL:
+            for (int i = 0; i < node->as.struct_literal.field_count; i++)
+                canon_node(ctx, node->as.struct_literal.field_values[i]);
+            break;
 
-    case AST_DEFER_STMT:
-        canon_node(ctx, node->as.defer_stmt.expr);
-        break;
+        case AST_TEMPLATE_STRING:
+            for (int i = 0; i < node->as.template_str.part_count; i++)
+                canon_node(ctx, node->as.template_str.parts[i]);
+            break;
 
-    /* ---- Print statement ---- */
-    case AST_PRINT_STMT: {
-        PrintNode *p = &node->as.print_stmt;
-        for (int i = 0; i < p->expr_count; i++)
-            canon_node(ctx, p->exprs[i]);
-        break;
-    }
+        /* ---- Slice ---- */
+        case AST_SLICE_EXPR:
+            canon_node(ctx, node->as.slice_expr.source);
+            canon_node(ctx, node->as.slice_expr.start);
+            canon_node(ctx, node->as.slice_expr.end);
+            break;
 
-    /* ---- Throw ---- */
-    case AST_THROW_STMT:
-        canon_node(ctx, node->as.throw_stmt.expression);
-        break;
+        /* ---- Optional chain ---- */
+        case AST_OPTIONAL_CHAIN:
+            canon_node(ctx, node->as.optional_chain.object);
+            if (node->as.optional_chain.index)
+                canon_node(ctx, node->as.optional_chain.index);
+            break;
 
-    /* ---- Aggregate literals ---- */
-    case AST_ARRAY_LITERAL:
-        for (int i = 0; i < node->as.array_literal.count; i++)
-            canon_node(ctx, node->as.array_literal.elements[i]);
-        break;
+        /* ---- Grouping / force unwrap (unary layout) ---- */
+        case AST_GROUPING:
+            canon_node(ctx, node->as.grouping);
+            break;
 
-    case AST_MAP_LITERAL:
-        for (int i = 0; i < node->as.map_literal.count; i++) {
-            canon_node(ctx, node->as.map_literal.keys[i]);
-            canon_node(ctx, node->as.map_literal.values[i]);
+        case AST_FORCE_UNWRAP:
+            canon_node(ctx, node->as.unary.operand);
+            break;
+
+        /* ---- Type-checking expressions (walk the operand) ---- */
+        case AST_IS_EXPR:
+            canon_node(ctx, node->as.is_expr.expr);
+            break;
+
+        case AST_AS_EXPR:
+            canon_node(ctx, node->as.as_expr.expr);
+            break;
+
+        /* ---- OOP: new / super ---- */
+        case AST_NEW_EXPR:
+            for (int i = 0; i < node->as.new_expr.arg_count; i++)
+                canon_node(ctx, node->as.new_expr.arguments[i]);
+            break;
+
+        case AST_SUPER_CALL:
+            for (int i = 0; i < node->as.super_call.arg_count; i++)
+                canon_node(ctx, node->as.super_call.arguments[i]);
+            break;
+
+        /* ---- Coroutine / concurrency ---- */
+        case AST_GO_EXPR:
+            canon_node(ctx, node->as.go_expr.expr);
+            if (node->as.go_expr.priority)
+                canon_node(ctx, node->as.go_expr.priority);
+            break;
+
+        case AST_AWAIT_EXPR:
+            canon_node(ctx, node->as.await_expr.expr);
+            if (node->as.await_expr.timeout)
+                canon_node(ctx, node->as.await_expr.timeout);
+            break;
+
+        case AST_CHANNEL_NEW:
+            canon_node(ctx, node->as.channel_new.buffer_size);
+            break;
+
+        case AST_MOVE_EXPR:
+            canon_node(ctx, node->as.move_expr.expr);
+            break;
+
+        case AST_SELECT_STMT: {
+            SelectStmtNode *sel = &node->as.select_stmt;
+            for (int i = 0; i < sel->case_count; i++) {
+                if (!sel->cases[i])
+                    continue;
+                SelectCaseNode *sc = &sel->cases[i]->as.select_case;
+                canon_node(ctx, sc->channel);
+                canon_node(ctx, sc->value);
+                canon_node(ctx, sc->body);
+            }
+            break;
         }
-        break;
 
-    case AST_SET_LITERAL:
-        for (int i = 0; i < node->as.set_literal.count; i++)
-            canon_node(ctx, node->as.set_literal.elements[i]);
-        break;
+        /* ---- Multi-value declarations / assignments ---- */
+        case AST_MULTI_VAR_DECL:
+            for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
+                canon_node(ctx, node->as.multi_var_decl.values[i]);
+            break;
 
-    case AST_OBJECT_LITERAL:
-        for (int i = 0; i < node->as.object_literal.count; i++) {
-            canon_node(ctx, node->as.object_literal.keys[i]);
-            canon_node(ctx, node->as.object_literal.values[i]);
+        case AST_MULTI_ASSIGN:
+            for (int i = 0; i < node->as.multi_assign.target_count; i++)
+                canon_node(ctx, node->as.multi_assign.targets[i]);
+            for (int i = 0; i < node->as.multi_assign.value_count; i++)
+                canon_node(ctx, node->as.multi_assign.values[i]);
+            break;
+
+        /* ---- Destructuring ---- */
+        case AST_DESTRUCTURE_DECL:
+            canon_node(ctx, node->as.destructure_decl.initializer);
+            break;
+
+        case AST_DESTRUCTURE_ASSIGN:
+            canon_node(ctx, node->as.destructure_assign.value);
+            break;
+
+        /* ---- Export (walk inner declaration) ---- */
+        case AST_EXPORT_STMT:
+            canon_node(ctx, node->as.export_stmt.declaration);
+            break;
+
+        /* ---- Class / struct (walk fields and methods) ---- */
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL: {
+            ClassDeclNode *cls = &node->as.class_decl;
+            for (int i = 0; i < cls->field_count; i++)
+                canon_node(ctx, cls->fields[i]);
+            for (int i = 0; i < cls->method_count; i++)
+                canon_node(ctx, cls->methods[i]);
+            break;
         }
-        break;
 
-    case AST_STRUCT_LITERAL:
-        for (int i = 0; i < node->as.struct_literal.field_count; i++)
-            canon_node(ctx, node->as.struct_literal.field_values[i]);
-        break;
+        /* ---- Enum (walk member values) ---- */
+        case AST_ENUM_DECL:
+            for (int i = 0; i < node->as.enum_decl.member_count; i++)
+                canon_node(ctx, node->as.enum_decl.members[i]);
+            break;
 
-    case AST_TEMPLATE_STRING:
-        for (int i = 0; i < node->as.template_str.part_count; i++)
-            canon_node(ctx, node->as.template_str.parts[i]);
-        break;
+        case AST_ENUM_CONVERT:
+            canon_node(ctx, node->as.enum_convert.value_expr);
+            break;
 
-    /* ---- Slice ---- */
-    case AST_SLICE_EXPR:
-        canon_node(ctx, node->as.slice_expr.source);
-        canon_node(ctx, node->as.slice_expr.start);
-        canon_node(ctx, node->as.slice_expr.end);
-        break;
+        case AST_ENUM_INDEX:
+            canon_node(ctx, node->as.enum_index.collection);
+            canon_node(ctx, node->as.enum_index.index_expr);
+            break;
 
-    /* ---- Optional chain ---- */
-    case AST_OPTIONAL_CHAIN:
-        canon_node(ctx, node->as.optional_chain.object);
-        if (node->as.optional_chain.index)
-            canon_node(ctx, node->as.optional_chain.index);
-        break;
+        /* ---- Match arm (walk guard + body) ---- */
+        case AST_MATCH_ARM:
+            canon_node(ctx, node->as.match_arm.guard);
+            canon_node(ctx, node->as.match_arm.body);
+            break;
 
-    /* ---- Grouping / force unwrap (unary layout) ---- */
-    case AST_GROUPING:
-        canon_node(ctx, node->as.grouping);
-        break;
-
-    case AST_FORCE_UNWRAP:
-        canon_node(ctx, node->as.unary.operand);
-        break;
-
-    /* ---- Type-checking expressions (walk the operand) ---- */
-    case AST_IS_EXPR:
-        canon_node(ctx, node->as.is_expr.expr);
-        break;
-
-    case AST_AS_EXPR:
-        canon_node(ctx, node->as.as_expr.expr);
-        break;
-
-    /* ---- OOP: new / super ---- */
-    case AST_NEW_EXPR:
-        for (int i = 0; i < node->as.new_expr.arg_count; i++)
-            canon_node(ctx, node->as.new_expr.arguments[i]);
-        break;
-
-    case AST_SUPER_CALL:
-        for (int i = 0; i < node->as.super_call.arg_count; i++)
-            canon_node(ctx, node->as.super_call.arguments[i]);
-        break;
-
-    /* ---- Coroutine / concurrency ---- */
-    case AST_GO_EXPR:
-        canon_node(ctx, node->as.go_expr.expr);
-        if (node->as.go_expr.priority)
-            canon_node(ctx, node->as.go_expr.priority);
-        break;
-
-    case AST_AWAIT_EXPR:
-        canon_node(ctx, node->as.await_expr.expr);
-        if (node->as.await_expr.timeout)
-            canon_node(ctx, node->as.await_expr.timeout);
-        break;
-
-    case AST_CHANNEL_NEW:
-        canon_node(ctx, node->as.channel_new.buffer_size);
-        break;
-
-    case AST_MOVE_EXPR:
-        canon_node(ctx, node->as.move_expr.expr);
-        break;
-
-    case AST_SELECT_STMT: {
-        SelectStmtNode *sel = &node->as.select_stmt;
-        for (int i = 0; i < sel->case_count; i++) {
-            if (!sel->cases[i]) continue;
-            SelectCaseNode *sc = &sel->cases[i]->as.select_case;
-            canon_node(ctx, sc->channel);
-            canon_node(ctx, sc->value);
-            canon_node(ctx, sc->body);
+        /* ---- Method declaration (class/struct method body + defaults) ---- */
+        case AST_METHOD_DECL: {
+            MethodDeclNode *m = &node->as.method_decl;
+            canon_node(ctx, m->body);
+            if (m->default_values) {
+                for (int i = 0; i < m->param_count; i++)
+                    canon_node(ctx, m->default_values[i]);
+            }
+            if (m->base_args) {
+                for (int i = 0; i < m->base_arg_count; i++)
+                    canon_node(ctx, m->base_args[i]);
+            }
+            break;
         }
-        break;
-    }
 
-    /* ---- Multi-value declarations / assignments ---- */
-    case AST_MULTI_VAR_DECL:
-        for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
-            canon_node(ctx, node->as.multi_var_decl.values[i]);
-        break;
+        /* ---- Field initializer ---- */
+        case AST_FIELD_DECL:
+            canon_node(ctx, node->as.field_decl.initializer);
+            break;
 
-    case AST_MULTI_ASSIGN:
-        for (int i = 0; i < node->as.multi_assign.target_count; i++)
-            canon_node(ctx, node->as.multi_assign.targets[i]);
-        for (int i = 0; i < node->as.multi_assign.value_count; i++)
-            canon_node(ctx, node->as.multi_assign.values[i]);
-        break;
+        /* ---- Binary / unary expressions ---- */
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_NULLISH_COALESCE:
+        case AST_RANGE:
+            canon_node(ctx, node->as.binary.left);
+            canon_node(ctx, node->as.binary.right);
+            break;
 
-    /* ---- Destructuring ---- */
-    case AST_DESTRUCTURE_DECL:
-        canon_node(ctx, node->as.destructure_decl.initializer);
-        break;
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            canon_node(ctx, node->as.unary.operand);
+            break;
 
-    case AST_DESTRUCTURE_ASSIGN:
-        canon_node(ctx, node->as.destructure_assign.value);
-        break;
+        /* ---- Leaf nodes (no expression children) ---- */
+        case AST_VARIABLE:
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_REGEX:
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT:
+        case AST_THIS_EXPR:
+        case AST_CANCELLED_EXPR:
+        case AST_ENUM_ACCESS:
+        case AST_ENUM_MEMBER:
+        case AST_IMPORT_STMT:
+        case AST_TYPE_ALIAS:
+        case AST_INTERFACE_DECL:
+        case AST_YIELD_STMT:
+        case AST_PATTERN_LITERAL:
+        case AST_PATTERN_RANGE:
+        case AST_PATTERN_WILDCARD:
+        case AST_PATTERN_MULTI:
+            break;
 
-    /* ---- Export (walk inner declaration) ---- */
-    case AST_EXPORT_STMT:
-        canon_node(ctx, node->as.export_stmt.declaration);
-        break;
-
-    /* ---- Class / struct (walk fields and methods) ---- */
-    case AST_CLASS_DECL:
-    case AST_STRUCT_DECL: {
-        ClassDeclNode *cls = &node->as.class_decl;
-        for (int i = 0; i < cls->field_count; i++)
-            canon_node(ctx, cls->fields[i]);
-        for (int i = 0; i < cls->method_count; i++)
-            canon_node(ctx, cls->methods[i]);
-        break;
-    }
-
-    /* ---- Enum (walk member values) ---- */
-    case AST_ENUM_DECL:
-        for (int i = 0; i < node->as.enum_decl.member_count; i++)
-            canon_node(ctx, node->as.enum_decl.members[i]);
-        break;
-
-    case AST_ENUM_CONVERT:
-        canon_node(ctx, node->as.enum_convert.value_expr);
-        break;
-
-    case AST_ENUM_INDEX:
-        canon_node(ctx, node->as.enum_index.collection);
-        canon_node(ctx, node->as.enum_index.index_expr);
-        break;
-
-    /* ---- Match arm (walk guard + body) ---- */
-    case AST_MATCH_ARM:
-        canon_node(ctx, node->as.match_arm.guard);
-        canon_node(ctx, node->as.match_arm.body);
-        break;
-
-    /* ---- Method declaration (class/struct method body + defaults) ---- */
-    case AST_METHOD_DECL: {
-        MethodDeclNode *m = &node->as.method_decl;
-        canon_node(ctx, m->body);
-        if (m->default_values) {
-            for (int i = 0; i < m->param_count; i++)
-                canon_node(ctx, m->default_values[i]);
-        }
-        if (m->base_args) {
-            for (int i = 0; i < m->base_arg_count; i++)
-                canon_node(ctx, m->base_args[i]);
-        }
-        break;
-    }
-
-    /* ---- Field initializer ---- */
-    case AST_FIELD_DECL:
-        canon_node(ctx, node->as.field_decl.initializer);
-        break;
-
-    /* ---- Binary / unary expressions ---- */
-    case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
-    case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ:
-    case AST_BINARY_NE:  case AST_BINARY_LT:  case AST_BINARY_LE:
-    case AST_BINARY_GT:  case AST_BINARY_GE:  case AST_BINARY_AND:
-    case AST_BINARY_OR:  case AST_BINARY_BAND: case AST_BINARY_BOR:
-    case AST_BINARY_BXOR: case AST_BINARY_LSHIFT: case AST_BINARY_RSHIFT:
-    case AST_BINARY_EQ_STRICT: case AST_BINARY_NE_STRICT:
-    case AST_NULLISH_COALESCE: case AST_RANGE:
-        canon_node(ctx, node->as.binary.left);
-        canon_node(ctx, node->as.binary.right);
-        break;
-
-    case AST_UNARY_NEG: case AST_UNARY_NOT: case AST_UNARY_BNOT:
-        canon_node(ctx, node->as.unary.operand);
-        break;
-
-    /* ---- Leaf nodes (no expression children) ---- */
-    case AST_VARIABLE:
-    case AST_LITERAL_INT: case AST_LITERAL_FLOAT: case AST_LITERAL_STRING:
-    case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_NULL:
-    case AST_LITERAL_BIGINT: case AST_LITERAL_REGEX:
-    case AST_BREAK_STMT: case AST_CONTINUE_STMT:
-    case AST_THIS_EXPR: case AST_CANCELLED_EXPR:
-    case AST_ENUM_ACCESS: case AST_ENUM_MEMBER:
-    case AST_IMPORT_STMT: case AST_TYPE_ALIAS: case AST_INTERFACE_DECL:
-    case AST_YIELD_STMT:
-    case AST_PATTERN_LITERAL: case AST_PATTERN_RANGE:
-    case AST_PATTERN_WILDCARD: case AST_PATTERN_MULTI:
-        break;
-
-    default:
-        /* Unknown node type — should not reach here.
-         * If a new AST node is added, extend this switch. */
-        break;
+        default:
+            /* Unknown node type — should not reach here.
+             * If a new AST node is added, extend this switch. */
+            break;
     }
 }
 
 /* ========== Public API ========== */
 
-XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program,
-                                        struct XaAnalyzer *analyzer,
-                                        struct XrayIsolate *isolate) {
+XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyzer *analyzer,
+                                       struct XrayIsolate *isolate) {
     if (!program || !analyzer || !isolate)
         return XR_CANON_ERR_NULL_INPUT;
 
@@ -827,14 +864,12 @@ XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program,
     return ctx.error_count > 0 ? XR_CANON_ERR_INTERNAL : XR_CANON_OK;
 }
 
-XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node,
-                                     struct XaAnalyzer *analyzer,
-                                     struct XrayIsolate *isolate) {
+XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
+                                    struct XrayIsolate *isolate) {
     if (!func_node || !analyzer || !isolate)
         return XR_CANON_ERR_NULL_INPUT;
 
-    XR_DCHECK(func_node->type == AST_FUNCTION_DECL ||
-              func_node->type == AST_FUNCTION_EXPR,
+    XR_DCHECK(func_node->type == AST_FUNCTION_DECL || func_node->type == AST_FUNCTION_EXPR,
               "xr_canon_func: expected function node");
 
     XrCanonCtx ctx;

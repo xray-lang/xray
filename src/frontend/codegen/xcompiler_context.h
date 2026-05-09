@@ -86,7 +86,6 @@ struct XrCompilerContext {
     ConstEntry *const_entries;
     int const_entry_count;
     int const_entry_capacity;
-
 };
 
 XR_FUNC XrCompilerContext *xr_compiler_context_new(XrayIsolate *X);

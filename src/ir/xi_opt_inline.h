@@ -32,4 +32,4 @@
 /* Run inlining on the function.  May inline multiple call sites. */
 XR_FUNC XiPassChange xi_opt_inline(XiFunc *f);
 
-#endif // XI_OPT_INLINE_H
+#endif  // XI_OPT_INLINE_H

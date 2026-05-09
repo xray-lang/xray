@@ -432,9 +432,8 @@ static void type_prop_scan_once(XmFunc *func) {
                     if (xm_ref_is_vreg(ins->args[0])) {
                         uint32_t ai = XM_REF_INDEX(ins->args[0]);
                         if (ai < func->nvreg && func->vregs[ai].xrtype)
-                            set_vreg_type(
-                                func, dvi, func->vregs[ai].xrtype,
-                                type_kind_to_vtag(xm_ref_ctype(func, ins->args[0]).kind));
+                            set_vreg_type(func, dvi, func->vregs[ai].xrtype,
+                                          type_kind_to_vtag(xm_ref_ctype(func, ins->args[0]).kind));
                     }
                     break;
                 }
@@ -448,8 +447,7 @@ static void type_prop_scan_once(XmFunc *func) {
                     if (dvi >= func->nvreg)
                         break;
                     refine_vreg_vtag(func, dvi, VTAG_PTR);
-                    set_vreg_heap_type(func, dvi,
-                                       ins->op == XM_RT_ARRAY_NEW ? XR_TARRAY : XR_TMAP);
+                    set_vreg_heap_type(func, dvi, ins->op == XM_RT_ARRAY_NEW ? XR_TARRAY : XR_TMAP);
                     break;
                 }
 
@@ -553,9 +551,8 @@ static void type_prop_scan_once(XmFunc *func) {
                     if (xm_ref_is_vreg(ins->args[0])) {
                         uint32_t ai = XM_REF_INDEX(ins->args[0]);
                         if (ai < func->nvreg && func->vregs[ai].xrtype)
-                            set_vreg_type(
-                                func, dvi, func->vregs[ai].xrtype,
-                                type_kind_to_vtag(xm_ref_ctype(func, ins->args[0]).kind));
+                            set_vreg_type(func, dvi, func->vregs[ai].xrtype,
+                                          type_kind_to_vtag(xm_ref_ctype(func, ins->args[0]).kind));
                     }
                     break;
                 }
@@ -803,7 +800,7 @@ XmPassChange xm_pass_type_prop(XmFunc *func) {
         if (type_prop_checksum(func) == before)
             break;
     }
-    return type_prop_checksum(func) != initial ? (XmPassChange){false, false, true, 0, 0, 0}
+    return type_prop_checksum(func) != initial ? (XmPassChange) {false, false, true, 0, 0, 0}
                                                : xm_pass_no_change();
 }
 
@@ -922,7 +919,7 @@ XmPassChange xm_pass_specialize(XmFunc *func) {
                 n_spec++;
         }
     }
-    return n_spec ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return n_spec ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Write Barrier Elimination ========== */
@@ -1029,7 +1026,7 @@ XmPassChange xm_pass_elim_write_barriers(XmFunc *func) {
     }
 
 #undef WBE_MAX_SAFE
-    return n_elim ? (XmPassChange){false, true, false, n_elim, 0, 0} : xm_pass_no_change();
+    return n_elim ? (XmPassChange) {false, true, false, n_elim, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Range Analysis ========== */
@@ -1053,11 +1050,11 @@ XmPassChange xm_pass_elim_write_barriers(XmFunc *func) {
 #define RA_MAX_ROUNDS XM_RA_MAX_ROUNDS
 
 typedef struct {
-    int64_t lo;        // inclusive lower bound
-    int64_t hi;        // inclusive upper bound (constant)
+    int64_t lo;       // inclusive lower bound
+    int64_t hi;       // inclusive upper bound (constant)
     XmRef sym_bound;  // symbolic strict upper bound: value < sym_bound
-                       // XM_NONE if no symbolic bound
-    bool known;        // true if range is valid
+                      // XM_NONE if no symbolic bound
+    bool known;       // true if range is valid
 } XmRange;
 
 // Try to get constant value from a vreg
@@ -1082,8 +1079,7 @@ static bool ra_get_const(XmFunc *func, XmRef ref, int64_t *out) {
 /* Detect simple induction variable pattern:
  *   phi(init, update) where update = phi + stride
  * Returns true if detected, sets *init_val and *stride_val */
-static bool ra_detect_induction(XmFunc *func, XmPhi *phi, int64_t *init_val,
-                                int64_t *stride_val) {
+static bool ra_detect_induction(XmFunc *func, XmPhi *phi, int64_t *init_val, int64_t *stride_val) {
     if (!phi || phi->narg != 2)
         return false;
     if (!xm_ref_is_vreg(phi->dst))
@@ -1461,7 +1457,7 @@ XmPassChange xm_pass_range_analysis(XmFunc *func) {
     }
 
     xr_free(ranges);
-    return (XmPassChange){false, false, true, 0, 0, 0};
+    return (XmPassChange) {false, false, true, 0, 0, 0};
 }
 
 #undef RA_MAX_ROUNDS
@@ -1624,5 +1620,5 @@ XmPassChange xm_pass_insert_redefines(XmFunc *func) {
             }
         }
     }
-    return any_inserted ? (XmPassChange){false, true, true, 0, 0, 0} : xm_pass_no_change();
+    return any_inserted ? (XmPassChange) {false, true, true, 0, 0, 0} : xm_pass_no_change();
 }

@@ -1313,7 +1313,7 @@ static const StdlibEntry stdlib_core[] = {
     {"encoding", xr_load_module_encoding},
 };
 
-#if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_FILESYSTEM)
 static const StdlibEntry stdlib_filesystem[] = {
     {"io", xr_load_module_io},
     {"os", xr_load_module_os},
@@ -1326,7 +1326,7 @@ static const StdlibEntry stdlib_test_modules[] = {
 };
 #endif
 
-#if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_NETWORK)
 static const StdlibEntry stdlib_network[] = {
     {"net", xr_load_module_net},
     {"http", xr_load_module_http},
@@ -1334,25 +1334,25 @@ static const StdlibEntry stdlib_network[] = {
 };
 #endif
 
-#if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_CRYPTO)
 static const StdlibEntry stdlib_crypto[] = {
     {"crypto", xr_load_module_crypto},
 };
 #endif
 
-#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_COMPRESS)
 static const StdlibEntry stdlib_compress[] = {
     {"compress", xr_load_module_compress},
 };
 #endif
 
-#if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_CLUSTER)
 static const StdlibEntry stdlib_cluster[] = {
     {"cluster", xr_load_module_cluster},
 };
 #endif
 
-#if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_DATA_FORMATS)
 static const StdlibEntry stdlib_data_formats[] = {
     {"csv", xr_load_module_csv},
     {"toml", xr_load_module_toml},
@@ -1375,25 +1375,25 @@ void xr_module_register_stdlib(XrayIsolate *isolate) {
 
     REGISTER_TABLE(stdlib_core);
 
-#if defined(XR_HAS_FILESYSTEM) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_FILESYSTEM)
     REGISTER_TABLE(stdlib_filesystem);
 #endif
 #if defined(XR_HAS_TEST_MODULES)
     REGISTER_TABLE(stdlib_test_modules);
 #endif
-#if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_NETWORK)
     REGISTER_TABLE(stdlib_network);
 #endif
-#if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_CRYPTO)
     REGISTER_TABLE(stdlib_crypto);
 #endif
-#if defined(XR_HAS_COMPRESS) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_COMPRESS)
     REGISTER_TABLE(stdlib_compress);
 #endif
-#if defined(XR_HAS_CLUSTER) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_CLUSTER)
     REGISTER_TABLE(stdlib_cluster);
 #endif
-#if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
+#if defined(XR_HAS_DATA_FORMATS)
     REGISTER_TABLE(stdlib_data_formats);
 #endif
 }

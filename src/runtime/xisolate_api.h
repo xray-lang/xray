@@ -82,8 +82,7 @@ XR_FUNC void xr_isolate_reset_ast_node_ids(XrayIsolate *X);
 
 // Compile-time string pool (deduplication during parsing)
 XR_FUNC struct XrCompileStringPool *xr_isolate_get_string_pool_compile(XrayIsolate *X);
-XR_FUNC void xr_isolate_set_string_pool_compile(XrayIsolate *X,
-                                                  struct XrCompileStringPool *pool);
+XR_FUNC void xr_isolate_set_string_pool_compile(XrayIsolate *X, struct XrCompileStringPool *pool);
 
 // Type system (compiler)
 XR_FUNC XrTypeInferContext *xr_isolate_get_type_infer_context(XrayIsolate *X);

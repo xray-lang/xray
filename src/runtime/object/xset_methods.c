@@ -115,7 +115,7 @@ static XrValue xr_set_method_difference(XrayIsolate *iso, XrValue self, XrValue 
 }
 
 static XrValue xr_set_method_symmetric_difference(XrayIsolate *iso, XrValue self, XrValue *args,
-                                           int argc) {
+                                                  int argc) {
     XrSet *s = set_self(self);
     if (set_is_weak(s))
         return XR_NOTFOUND;

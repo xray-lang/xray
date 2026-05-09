@@ -41,17 +41,17 @@
 typedef struct XrValue {
     union {
         struct {
-            uint8_t tag;         /* [0]   XR_TAG_* */
-            uint8_t flags;       /* [1]   reserved = 0 */
-            uint16_t heap_type;  /* [2-3] object subtype (PTR only) */
-            uint32_t ext;        /* [4-7] reserved = 0 */
+            uint8_t tag;        /* [0]   XR_TAG_* */
+            uint8_t flags;      /* [1]   reserved = 0 */
+            uint16_t heap_type; /* [2-3] object subtype (PTR only) */
+            uint32_t ext;       /* [4-7] reserved = 0 */
         };
-        uint64_t descriptor;     /* [0-7] bulk load/compare */
+        uint64_t descriptor; /* [0-7] bulk load/compare */
     };
     union {
-        int64_t i;   /* [8-15] integer payload (I64) */
-        double f;    /* [8-15] float payload (F64) */
-        void *ptr;   /* [8-15] heap pointer */
+        int64_t i; /* [8-15] integer payload (I64) */
+        double f;  /* [8-15] float payload (F64) */
+        void *ptr; /* [8-15] heap pointer */
     };
 } XrValue;
 
@@ -60,21 +60,21 @@ typedef struct XrValue {
  * Extended tags (>= 8) are AOT-specific: encode object type without GC header.
  * ========================================================================= */
 
-#define XR_TAG_NULL       0   /* null singleton */
-#define XR_TAG_BOOL       1   /* bool: payload 0=false, 1=true */
-#define XR_TAG_I64        3   /* integer (stored in .i as int64) */
-#define XR_TAG_F64        4   /* float (stored in .f as double) */
-#define XR_TAG_PTR        5   /* generic heap object pointer */
-#define XR_TAG_STRUCT_REF 6   /* stack-allocated struct ref */
-#define XR_TAG_NOTFOUND   7   /* sentinel: map lookup miss */
+#define XR_TAG_NULL 0       /* null singleton */
+#define XR_TAG_BOOL 1       /* bool: payload 0=false, 1=true */
+#define XR_TAG_I64 3        /* integer (stored in .i as int64) */
+#define XR_TAG_F64 4        /* float (stored in .f as double) */
+#define XR_TAG_PTR 5        /* generic heap object pointer */
+#define XR_TAG_STRUCT_REF 6 /* stack-allocated struct ref */
+#define XR_TAG_NOTFOUND 7   /* sentinel: map lookup miss */
 
 /* AOT extensions — object type encoded in tag (no GC header available) */
-#define XR_TAG_STR       14   /* static / literal string (const char*) */
-#define XR_TAG_ARRAY     15   /* AOT array */
-#define XR_TAG_MAP       16   /* AOT map */
-#define XR_TAG_STRBUF    17   /* AOT string builder */
-#define XR_TAG_CLOSURE   18   /* AOT closure */
-#define XR_TAG_STR_ARC   19   /* bump-allocated string */
+#define XR_TAG_STR 14     /* static / literal string (const char*) */
+#define XR_TAG_ARRAY 15   /* AOT array */
+#define XR_TAG_MAP 16     /* AOT map */
+#define XR_TAG_STRBUF 17  /* AOT string builder */
+#define XR_TAG_CLOSURE 18 /* AOT closure */
+#define XR_TAG_STR_ARC 19 /* bump-allocated string */
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
@@ -101,12 +101,12 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
  * Boxing / unboxing — XR_FROM_* / XR_TO_* (same API as VM's xvalue.h)
  * ========================================================================= */
 
-#define XR_FROM_INT(x)   ((XrValue){.tag = XR_TAG_I64, .i = (int64_t)(x)})
-#define XR_FROM_FLOAT(x) ((XrValue){.tag = XR_TAG_F64, .f = (double)(x)})
-#define XR_FROM_BOOL(x)  ((XrValue){.tag = XR_TAG_BOOL, .i = (x) ? 1 : 0})
-#define XR_NULL_VAL      ((XrValue){.tag = XR_TAG_NULL})
-#define XR_TRUE_VAL      ((XrValue){.tag = XR_TAG_BOOL, .i = 1})
-#define XR_FALSE_VAL     ((XrValue){.tag = XR_TAG_BOOL, .i = 0})
+#define XR_FROM_INT(x) ((XrValue) {.tag = XR_TAG_I64, .i = (int64_t) (x)})
+#define XR_FROM_FLOAT(x) ((XrValue) {.tag = XR_TAG_F64, .f = (double) (x)})
+#define XR_FROM_BOOL(x) ((XrValue) {.tag = XR_TAG_BOOL, .i = (x) ? 1 : 0})
+#define XR_NULL_VAL ((XrValue) {.tag = XR_TAG_NULL})
+#define XR_TRUE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 1})
+#define XR_FALSE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 0})
 
 static inline XrValue xr_box_str(const char *s) {
     XrValue r = {0};
@@ -115,7 +115,7 @@ static inline XrValue xr_box_str(const char *s) {
     return r;
 }
 
-#define XR_TO_INT(v)   ((v).i)
+#define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
 
 static inline const char *xr_unbox_str(XrValue v) {
@@ -126,27 +126,33 @@ static inline const char *xr_unbox_str(XrValue v) {
  * Type checks
  * ========================================================================= */
 
-#define XR_IS_NULL(v)  ((v).tag == XR_TAG_NULL)
-#define XR_IS_BOOL(v)  ((v).tag == XR_TAG_BOOL)
-#define XR_IS_INT(v)   ((v).tag == XR_TAG_I64)
+#define XR_IS_NULL(v) ((v).tag == XR_TAG_NULL)
+#define XR_IS_BOOL(v) ((v).tag == XR_TAG_BOOL)
+#define XR_IS_INT(v) ((v).tag == XR_TAG_I64)
 #define XR_IS_FLOAT(v) ((v).tag == XR_TAG_F64)
 #define XR_IS_FALSE(v) ((v).tag == XR_TAG_BOOL && (v).i == 0)
-#define XR_IS_NUM(v)   (XR_IS_INT(v) || XR_IS_FLOAT(v))
+#define XR_IS_NUM(v) (XR_IS_INT(v) || XR_IS_FLOAT(v))
 
 /* Coerce any numeric/bool value to int64 (for typed array storage).
  * Non-numeric values return 0 in AOT context. */
 static inline int64_t xr_value_to_int64_coerce(XrValue v) {
-    if (XR_IS_INT(v)) return v.i;
-    if (XR_IS_FLOAT(v)) return (int64_t)v.f;
-    if (XR_IS_BOOL(v)) return v.i;
+    if (XR_IS_INT(v))
+        return v.i;
+    if (XR_IS_FLOAT(v))
+        return (int64_t) v.f;
+    if (XR_IS_BOOL(v))
+        return v.i;
     return 0;
 }
 
 /* Coerce any numeric/bool value to double (for typed array storage). */
 static inline double xr_value_to_f64_coerce(XrValue v) {
-    if (XR_IS_FLOAT(v)) return v.f;
-    if (XR_IS_INT(v)) return (double)v.i;
-    if (XR_IS_BOOL(v)) return (double)v.i;
+    if (XR_IS_FLOAT(v))
+        return v.f;
+    if (XR_IS_INT(v))
+        return (double) v.i;
+    if (XR_IS_BOOL(v))
+        return (double) v.i;
     return 0.0;
 }
 

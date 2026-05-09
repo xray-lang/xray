@@ -133,7 +133,7 @@
     _(CMP_NE_STRICT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] !== R[C])")                               \
     _(CMP_LT, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] < R[C])")                                        \
     _(CMP_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] <= R[C])")                                       \
-    _(IS, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] is R[C])")                                    \
+    _(IS, FMT_ABC, KOP_ABC_BIN, "R[A] = (R[B] is R[C])")                                           \
     _(CHECKTYPE, FMT_AB, KOP_AB_K, "assert R[A] is Type[K(B)]")                                    \
     _(ISNULL, FMT_AB_IMM, KOP_AB_FLAG, "if (R[A]==null) != k then PC++")                           \
     _(ISNULL_SET, FMT_AB, KOP_AB_UNARY, "R[A] = (R[B] == null)")                                   \
@@ -250,7 +250,7 @@
     _(ASSERT_NE, FMT_ABC, KOP_SPECIAL, "if R[A] == R[B] throw AssertError(K[C])")                  \
     _(REGEX_COMPILE, FMT_ABC, KOP_ABC_BIN_K, "R[A] = regex.compile(K[B], K[C])")                   \
     _(GO, FMT_ABC, KOP_ABC_BIN_LIT,                                                                \
-      "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                         \
+      "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                          \
     _(AWAIT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = await R[B], C=discard")                             \
     _(AWAIT_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = await(timeout: R[C]) R[B]")                     \
     _(AWAIT_ALL, FMT_AB, KOP_AB_UNARY, "R[A] = await R[B]:Array")                                  \
@@ -286,10 +286,10 @@
       "select block wait: A=ch_base, B=ch_count, C=case_count")                                    \
     _(GETSHARED, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = shared[Bx]")                                  \
     _(SETSHARED, FMT_GLOBAL, KOP_GLOBAL_SET, "shared[Bx] = R[A]")                                  \
-    _(TARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:typed_array[R[C]]")                          \
-    _(TARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:typed_array[C]")                        \
-    _(TARRAY_SET, FMT_ABC, KOP_ABC_INPLACE, "R[A]:typed_array[R[B]] = R[C]")                      \
-    _(TARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:typed_array.push(R[B])")                         \
+    _(TARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:typed_array[R[C]]")                           \
+    _(TARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:typed_array[C]")                         \
+    _(TARRAY_SET, FMT_ABC, KOP_ABC_INPLACE, "R[A]:typed_array[R[B]] = R[C]")                       \
+    _(TARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:typed_array.push(R[B])")                          \
     _(TFIELD_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A].i = R[B]:compact_fields[C]")                     \
     _(TFIELD_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:compact_fields[B] = R[C].i")                 \
     _(LOOP_BACK, FMT_ABC, KOP_SPECIAL, "tail recursion: R[0..B-1]=R[A+1..A+B]; PC=entry")          \

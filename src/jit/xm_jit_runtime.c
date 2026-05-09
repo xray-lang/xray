@@ -66,12 +66,12 @@ XrJitResult xr_jit_call_self(XrCoroutine *coro, int64_t unused) {
     (void) unused;
     XrProto *proto = (XrProto *) coro->jit_ctx->call_proto;
     if (!proto || !proto->jit_entry)
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
-        // Recursive JIT call: same calling convention (coro, args_ptr)
+    // Recursive JIT call: same calling convention (coro, args_ptr)
 #ifdef _WIN32
     int64_t payload = ((XmJitFn) proto->jit_entry)((intptr_t) coro, coro->jit_ctx->call_args);
-    return (XrJitResult){payload, (uint64_t) coro->jit_ctx->call_result_tag};
+    return (XrJitResult) {payload, (uint64_t) coro->jit_ctx->call_result_tag};
 #else
     return ((XmJitFn) proto->jit_entry)((intptr_t) coro, coro->jit_ctx->call_args);
 #endif
@@ -280,9 +280,8 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     int deopt_id = (int) ((encoded >> 16) & 0xFFFF);
     int type_hint = (int) ((encoded >> 8) & 0xFF);
     int nargs = (int) (encoded & 0xFF);
-    XR_DCHECK(method_symbol > 0,
-              "xr_jit_invoke_method: method_symbol=0 — "
-              "xi_to_xm failed to resolve method name from bytecode");
+    XR_DCHECK(method_symbol > 0, "xr_jit_invoke_method: method_symbol=0 — "
+                                 "xi_to_xm failed to resolve method name from bytecode");
 
     // Reconstruct receiver and args from call_args[] payloads and
     // call_arg_tags[] type bytes. The codegen stores per-byte tags in
@@ -318,26 +317,19 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     /* Map JIT type hint to XrObjType for native_type_classes lookup.
      * -1 means "no direct mapping; fall through to special cases". */
     static const int hint_to_obj_type[] = {
-        [JIT_TYPE_HINT_NONE]     = -1,
-        [JIT_TYPE_HINT_INT]      = XR_TINT,
-        [JIT_TYPE_HINT_FLOAT]    = XR_TFLOAT,
-        [JIT_TYPE_HINT_BOOL]     = XR_TBOOL,
-        [JIT_TYPE_HINT_STRING]   = XR_TSTRING,
-        [JIT_TYPE_HINT_ARRAY]    = XR_TARRAY,
-        [JIT_TYPE_HINT_MAP]      = XR_TMAP,
-        [JIT_TYPE_HINT_SET]      = XR_TSET,
-        [JIT_TYPE_HINT_JSON]     = XR_TJSON,
-        [JIT_TYPE_HINT_INSTANCE] = -1,
-        [JIT_TYPE_HINT_ITERATOR] = -1,
-        [JIT_TYPE_HINT_CLASS]    = -1,
+        [JIT_TYPE_HINT_NONE] = -1,           [JIT_TYPE_HINT_INT] = XR_TINT,
+        [JIT_TYPE_HINT_FLOAT] = XR_TFLOAT,   [JIT_TYPE_HINT_BOOL] = XR_TBOOL,
+        [JIT_TYPE_HINT_STRING] = XR_TSTRING, [JIT_TYPE_HINT_ARRAY] = XR_TARRAY,
+        [JIT_TYPE_HINT_MAP] = XR_TMAP,       [JIT_TYPE_HINT_SET] = XR_TSET,
+        [JIT_TYPE_HINT_JSON] = XR_TJSON,     [JIT_TYPE_HINT_INSTANCE] = -1,
+        [JIT_TYPE_HINT_ITERATOR] = -1,       [JIT_TYPE_HINT_CLASS] = -1,
     };
 
     XrValue result = XR_NULL_VAL;
 
     /* Fast path: XrClass-based dispatch for value/collection types. */
-    int _obj_type = (recv_type >= 0 && recv_type <= JIT_TYPE_HINT_CLASS)
-                        ? hint_to_obj_type[recv_type]
-                        : -1;
+    int _obj_type =
+        (recv_type >= 0 && recv_type <= JIT_TYPE_HINT_CLASS) ? hint_to_obj_type[recv_type] : -1;
     if (_obj_type >= 0 && _obj_type < XR_NATIVE_TYPE_MAX) {
         XrClass *_cls = isolate->native_type_classes[_obj_type];
         if (_cls) {
@@ -350,169 +342,169 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
             result = XR_NOTFOUND;
         }
     } else
-    switch (recv_type) {
-        case JIT_TYPE_HINT_ITERATOR: {
-            XrIterator *iter = xr_value_to_iterator(receiver);
-            if (iter) {
-                if (method_symbol == SYMBOL_HASNEXT) {
-                    result = xr_bool(xr_iterator_has_next(iter));
-                } else if (method_symbol == SYMBOL_NEXT) {
-                    result = xr_iterator_next(iter);
+        switch (recv_type) {
+            case JIT_TYPE_HINT_ITERATOR: {
+                XrIterator *iter = xr_value_to_iterator(receiver);
+                if (iter) {
+                    if (method_symbol == SYMBOL_HASNEXT) {
+                        result = xr_bool(xr_iterator_has_next(iter));
+                    } else if (method_symbol == SYMBOL_NEXT) {
+                        result = xr_iterator_next(iter);
+                    }
                 }
+                break;
             }
-            break;
-        }
-        case JIT_TYPE_HINT_INSTANCE: {
-            XrInstance *inst = xr_value_to_instance(receiver);
-            if (!inst) {
-                // Fallback: try direct cast if receiver is a valid pointer
-                if (XR_IS_PTR(receiver) && receiver.ptr) {
-                    XrGCHeader *hdr = (XrGCHeader *) receiver.ptr;
-                    if (hdr->type == XR_TINSTANCE)
-                        inst = (XrInstance *) receiver.ptr;
+            case JIT_TYPE_HINT_INSTANCE: {
+                XrInstance *inst = xr_value_to_instance(receiver);
+                if (!inst) {
+                    // Fallback: try direct cast if receiver is a valid pointer
+                    if (XR_IS_PTR(receiver) && receiver.ptr) {
+                        XrGCHeader *hdr = (XrGCHeader *) receiver.ptr;
+                        if (hdr->type == XR_TINSTANCE)
+                            inst = (XrInstance *) receiver.ptr;
+                    }
+                    if (!inst)
+                        break;
                 }
-                if (!inst)
-                    break;
-            }
-            XrMethod *method = xr_class_lookup_method(inst->klass, method_symbol);
-            if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                result = method->as.primitive(isolate, receiver, args, nargs);
-            } else if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
-                XrValue call_args[9];
-                jit_build_this_args(call_args, receiver, args, nargs);
-                bool saved = xr_isolate_get_suppress_exception_print(isolate);
-                xr_isolate_set_suppress_exception_print(isolate, true);
-                result = xr_vm_call_closure(isolate, method->as.closure, call_args, nargs + 1);
-                xr_isolate_set_suppress_exception_print(isolate, saved);
-                if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-                    coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
-                    coro->vm_ctx.current_exception = XR_NULL_VAL;
-                    return XR_JIT_NULL();
-                }
-            }
-            break;
-        }
-        case JIT_TYPE_HINT_CLASS: {
-            // Constructor call: new ClassName(args...)
-            XrClass *cls = xr_value_to_class(receiver);
-            if (cls) {
-                XrInstance *inst = xr_instance_new(isolate, cls);
-                if (!inst)
-                    break;
-                XrValue inst_val = xr_value_from_instance(inst);
-                XrMethod *ctor = xr_class_lookup_method(cls, method_symbol);
-                if (ctor && ctor->type == XMETHOD_CLOSURE && ctor->as.closure) {
-                    // Call constructor with instance as this
+                XrMethod *method = xr_class_lookup_method(inst->klass, method_symbol);
+                if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+                    result = method->as.primitive(isolate, receiver, args, nargs);
+                } else if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
                     XrValue call_args[9];
-                    call_args[0] = inst_val;
-                    for (int i = 0; i < nargs && i < 8; i++)
-                        call_args[1 + i] = args[i];
+                    jit_build_this_args(call_args, receiver, args, nargs);
                     bool saved = xr_isolate_get_suppress_exception_print(isolate);
                     xr_isolate_set_suppress_exception_print(isolate, true);
-                    xr_vm_call_closure(isolate, ctor->as.closure, call_args, nargs + 1);
+                    result = xr_vm_call_closure(isolate, method->as.closure, call_args, nargs + 1);
                     xr_isolate_set_suppress_exception_print(isolate, saved);
                     if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
                         coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
                         coro->vm_ctx.current_exception = XR_NULL_VAL;
                         return XR_JIT_NULL();
                     }
-                } else if (ctor && ctor->type == XMETHOD_PRIMITIVE && ctor->as.primitive) {
-                    result = ctor->as.primitive(isolate, inst_val, args, nargs);
-                    break;
                 }
-                // Return instance (constructor modifies it in-place)
-                result = inst_val;
+                break;
             }
-            break;
-        }
-        default: {
-            // Generic PTR fallback: try native type class lookup
-            if (XR_IS_PTR(receiver) && receiver.ptr) {
-                XrGCHeader *hdr = (XrGCHeader *) receiver.ptr;
-                // Module receiver: look up exported function and call it
-                if (hdr->type == XR_TMODULE) {
-                    XrModule *mod = (XrModule *) receiver.ptr;
-                    XrValue export_val = xr_module_get_sym(mod, method_symbol);
-                    // Use already-reconstructed args[] (bitmap-tagged, precise)
-                    if (XR_IS_PTR(export_val) && export_val.ptr) {
-                        XrGCHeader *fn_hdr = (XrGCHeader *) export_val.ptr;
-                        if (fn_hdr->type == XR_TCFUNCTION) {
-                            XrCFunction *cfunc = (XrCFunction *) export_val.ptr;
-                            if (cfunc->is_yieldable) {
-                                /* Try-mode fast path: if IO is ready, completes
-                                 * inline (zero deopt). */
-                                coro->jit_try_mode = true;
-                                XrValue try_result;
-                                XrCFuncResult status =
-                                    cfunc->as.yieldable(isolate, args, nargs + 1, &try_result);
-                                coro->jit_try_mode = false;
+            case JIT_TYPE_HINT_CLASS: {
+                // Constructor call: new ClassName(args...)
+                XrClass *cls = xr_value_to_class(receiver);
+                if (cls) {
+                    XrInstance *inst = xr_instance_new(isolate, cls);
+                    if (!inst)
+                        break;
+                    XrValue inst_val = xr_value_from_instance(inst);
+                    XrMethod *ctor = xr_class_lookup_method(cls, method_symbol);
+                    if (ctor && ctor->type == XMETHOD_CLOSURE && ctor->as.closure) {
+                        // Call constructor with instance as this
+                        XrValue call_args[9];
+                        call_args[0] = inst_val;
+                        for (int i = 0; i < nargs && i < 8; i++)
+                            call_args[1 + i] = args[i];
+                        bool saved = xr_isolate_get_suppress_exception_print(isolate);
+                        xr_isolate_set_suppress_exception_print(isolate, true);
+                        xr_vm_call_closure(isolate, ctor->as.closure, call_args, nargs + 1);
+                        xr_isolate_set_suppress_exception_print(isolate, saved);
+                        if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
+                            coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
+                            coro->vm_ctx.current_exception = XR_NULL_VAL;
+                            return XR_JIT_NULL();
+                        }
+                    } else if (ctor && ctor->type == XMETHOD_PRIMITIVE && ctor->as.primitive) {
+                        result = ctor->as.primitive(isolate, inst_val, args, nargs);
+                        break;
+                    }
+                    // Return instance (constructor modifies it in-place)
+                    result = inst_val;
+                }
+                break;
+            }
+            default: {
+                // Generic PTR fallback: try native type class lookup
+                if (XR_IS_PTR(receiver) && receiver.ptr) {
+                    XrGCHeader *hdr = (XrGCHeader *) receiver.ptr;
+                    // Module receiver: look up exported function and call it
+                    if (hdr->type == XR_TMODULE) {
+                        XrModule *mod = (XrModule *) receiver.ptr;
+                        XrValue export_val = xr_module_get_sym(mod, method_symbol);
+                        // Use already-reconstructed args[] (bitmap-tagged, precise)
+                        if (XR_IS_PTR(export_val) && export_val.ptr) {
+                            XrGCHeader *fn_hdr = (XrGCHeader *) export_val.ptr;
+                            if (fn_hdr->type == XR_TCFUNCTION) {
+                                XrCFunction *cfunc = (XrCFunction *) export_val.ptr;
+                                if (cfunc->is_yieldable) {
+                                    /* Try-mode fast path: if IO is ready, completes
+                                     * inline (zero deopt). */
+                                    coro->jit_try_mode = true;
+                                    XrValue try_result;
+                                    XrCFuncResult status =
+                                        cfunc->as.yieldable(isolate, args, nargs + 1, &try_result);
+                                    coro->jit_try_mode = false;
 
-                                if (status == XR_CFUNC_DONE) {
-                                    return (XrJitResult){try_result.i, 0};
-                                }
-
-                                /* WOULD_BLOCK: pre-push interpreter frame and
-                                 * call yieldable in normal mode. Avoids deopt +
-                                 * interpreter re-execution of OP_INVOKE. If
-                                 * pre-push fails, fall back to the deopt path
-                                 * below. */
-                                if (jit_prepush_yield_frame(coro, (uint32_t) deopt_id) >= 0) {
-                                    XrValue normal_result;
-                                    XrCFuncResult st2 = cfunc->as.yieldable(
-                                        isolate, args, nargs + 1, &normal_result);
-
-                                    if (st2 == XR_CFUNC_DONE) {
-                                        /* IO became ready between try-mode and
-                                         * normal call. Pop the pre-pushed frame
-                                         * and return result to JIT. */
-                                        isolate->vm_ctx.frame_count--;
-                                        return (XrJitResult){normal_result.i, 0};
+                                    if (status == XR_CFUNC_DONE) {
+                                        return (XrJitResult) {try_result.i, 0};
                                     }
-                                    /* BLOCKED/YIELD: yield_setup_frame has set up
-                                     * continuation on the pre-pushed frame. Signal
-                                     * VM to skip deopt recovery and return the
-                                     * appropriate result directly. */
-                                    coro->jit_ctx->yield_frame_pushed = true;
-                                    coro->jit_ctx->yield_vm_result = (uint8_t) st2;
-                                }
 
-                                /* Trigger deopt exit (deopt stub tears down JIT
-                                 * frame). VM checks yield_frame_pushed to decide
-                                 * whether to do normal deopt recovery or return
-                                 * BLOCKED/YIELD immediately. */
-                                coro->jit_ctx->invoke_deopt_id = (uint32_t) deopt_id;
-                                coro->jit_ctx->deopt_id = UINT32_MAX;
-                                return (XrJitResult){XM_DEOPT_MARKER, 0};
-                            }
-                            result = cfunc->as.func(isolate, args, nargs);
-                        } else if (fn_hdr->type == XR_TFUNCTION) {
-                            // Script closure: call via VM
-                            XrClosure *fn = (XrClosure *) export_val.ptr;
-                            bool saved = xr_isolate_get_suppress_exception_print(isolate);
-                            xr_isolate_set_suppress_exception_print(isolate, true);
-                            result = xr_vm_call_closure(isolate, fn, args, nargs);
-                            xr_isolate_set_suppress_exception_print(isolate, saved);
-                            if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-                                coro->jit_ctx->exception =
-                                    (void *) coro->vm_ctx.current_exception.ptr;
-                                coro->vm_ctx.current_exception = XR_NULL_VAL;
-                                return XR_JIT_NULL();
+                                    /* WOULD_BLOCK: pre-push interpreter frame and
+                                     * call yieldable in normal mode. Avoids deopt +
+                                     * interpreter re-execution of OP_INVOKE. If
+                                     * pre-push fails, fall back to the deopt path
+                                     * below. */
+                                    if (jit_prepush_yield_frame(coro, (uint32_t) deopt_id) >= 0) {
+                                        XrValue normal_result;
+                                        XrCFuncResult st2 = cfunc->as.yieldable(
+                                            isolate, args, nargs + 1, &normal_result);
+
+                                        if (st2 == XR_CFUNC_DONE) {
+                                            /* IO became ready between try-mode and
+                                             * normal call. Pop the pre-pushed frame
+                                             * and return result to JIT. */
+                                            isolate->vm_ctx.frame_count--;
+                                            return (XrJitResult) {normal_result.i, 0};
+                                        }
+                                        /* BLOCKED/YIELD: yield_setup_frame has set up
+                                         * continuation on the pre-pushed frame. Signal
+                                         * VM to skip deopt recovery and return the
+                                         * appropriate result directly. */
+                                        coro->jit_ctx->yield_frame_pushed = true;
+                                        coro->jit_ctx->yield_vm_result = (uint8_t) st2;
+                                    }
+
+                                    /* Trigger deopt exit (deopt stub tears down JIT
+                                     * frame). VM checks yield_frame_pushed to decide
+                                     * whether to do normal deopt recovery or return
+                                     * BLOCKED/YIELD immediately. */
+                                    coro->jit_ctx->invoke_deopt_id = (uint32_t) deopt_id;
+                                    coro->jit_ctx->deopt_id = UINT32_MAX;
+                                    return (XrJitResult) {XM_DEOPT_MARKER, 0};
+                                }
+                                result = cfunc->as.func(isolate, args, nargs);
+                            } else if (fn_hdr->type == XR_TFUNCTION) {
+                                // Script closure: call via VM
+                                XrClosure *fn = (XrClosure *) export_val.ptr;
+                                bool saved = xr_isolate_get_suppress_exception_print(isolate);
+                                xr_isolate_set_suppress_exception_print(isolate, true);
+                                result = xr_vm_call_closure(isolate, fn, args, nargs);
+                                xr_isolate_set_suppress_exception_print(isolate, saved);
+                                if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
+                                    coro->jit_ctx->exception =
+                                        (void *) coro->vm_ctx.current_exception.ptr;
+                                    coro->vm_ctx.current_exception = XR_NULL_VAL;
+                                    return XR_JIT_NULL();
+                                }
                             }
                         }
+                        break;
                     }
-                    break;
-                }
-                XrClass *klass = xr_value_get_class(isolate, receiver);
-                if (klass) {
-                    XrMethod *method = xr_class_lookup_method(klass, method_symbol);
-                    if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-                        result = method->as.primitive(isolate, receiver, args, nargs);
+                    XrClass *klass = xr_value_get_class(isolate, receiver);
+                    if (klass) {
+                        XrMethod *method = xr_class_lookup_method(klass, method_symbol);
+                        if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+                            result = method->as.primitive(isolate, receiver, args, nargs);
+                        }
                     }
                 }
+                break;
             }
-            break;
         }
-    }
 
     return XR_JIT_RESULT(result);
 }
@@ -590,38 +582,38 @@ XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
     if (heap_type == XR_TSTRING) {
         XrString *str = (XrString *) obj.ptr;
         if (sym == SYMBOL_LENGTH)
-            return (XrJitResult){(int64_t) xr_string_char_length(str), XR_TAG_I64};
+            return (XrJitResult) {(int64_t) xr_string_char_length(str), XR_TAG_I64};
         if (sym == SYMBOL_BYTE_LENGTH)
-            return (XrJitResult){(int64_t) str->length, XR_TAG_I64};
+            return (XrJitResult) {(int64_t) str->length, XR_TAG_I64};
         if (sym == SYMBOL_IS_EMPTY)
-            return (XrJitResult){str->length == 0 ? 1 : 0, XR_TAG_I64};
+            return (XrJitResult) {str->length == 0 ? 1 : 0, XR_TAG_I64};
     }
 
     // Array properties (slices share XR_TARRAY with capacity==0)
     if (heap_type == XR_TARRAY) {
         XrArray *arr = (XrArray *) obj.ptr;
         if (sym == SYMBOL_LENGTH)
-            return (XrJitResult){(int64_t) arr->length, XR_TAG_I64};
+            return (XrJitResult) {(int64_t) arr->length, XR_TAG_I64};
         if (sym == SYMBOL_IS_EMPTY)
-            return (XrJitResult){arr->length == 0 ? 1 : 0, XR_TAG_I64};
+            return (XrJitResult) {arr->length == 0 ? 1 : 0, XR_TAG_I64};
     }
 
     // Map properties
     if (heap_type == XR_TMAP) {
         XrMap *map = (XrMap *) obj.ptr;
         if (sym == SYMBOL_LENGTH)
-            return (XrJitResult){(int64_t) xr_map_size(map), XR_TAG_I64};
+            return (XrJitResult) {(int64_t) xr_map_size(map), XR_TAG_I64};
         if (sym == SYMBOL_IS_EMPTY)
-            return (XrJitResult){xr_map_is_empty(map) ? 1 : 0, XR_TAG_I64};
+            return (XrJitResult) {xr_map_is_empty(map) ? 1 : 0, XR_TAG_I64};
     }
 
     // Set properties
     if (heap_type == XR_TSET) {
         XrSet *set = (XrSet *) obj.ptr;
         if (sym == SYMBOL_LENGTH)
-            return (XrJitResult){(int64_t) xr_set_size(set), XR_TAG_I64};
+            return (XrJitResult) {(int64_t) xr_set_size(set), XR_TAG_I64};
         if (sym == SYMBOL_IS_EMPTY)
-            return (XrJitResult){xr_set_is_empty(set) ? 1 : 0, XR_TAG_I64};
+            return (XrJitResult) {xr_set_is_empty(set) ? 1 : 0, XR_TAG_I64};
     }
 
     // Enum value properties
@@ -635,7 +627,7 @@ XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
             return XR_JIT_RESULT(_n);
         }
         if (sym == SYMBOL_ORDINAL)
-            return (XrJitResult){(int64_t) ev->member_index, XR_TAG_I64};
+            return (XrJitResult) {(int64_t) ev->member_index, XR_TAG_I64};
     }
 
     // Json object field access
@@ -664,7 +656,7 @@ XrJitResult xr_jit_setprop(XrCoroutine *coro, int64_t extra_arg) {
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
         if (!xr_json_set(coro->isolate, json, sym, value)) {
-            return (XrJitResult){XM_DEOPT_MARKER, 0};
+            return (XrJitResult) {XM_DEOPT_MARKER, 0};
         }
     }
 
@@ -759,7 +751,7 @@ XrJitResult xr_jit_tarray_get(XrCoroutine *coro, int64_t unused) {
     if (!arr || idx < 0 || idx >= arr->length)
         return XR_JIT_NULL();
 
-    XrValue v = xr_typed_get(arr->data, (int32_t)idx, arr->elem_type);
+    XrValue v = xr_typed_get(arr->data, (int32_t) idx, arr->elem_type);
     return XR_JIT_VAL(v);
 }
 
@@ -775,9 +767,8 @@ XrJitResult xr_jit_tarray_set(XrCoroutine *coro, int64_t extra_arg) {
     if (!arr || idx < 0 || idx >= arr->length)
         return XR_JIT_OK();
 
-    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[2],
-                                      coro->jit_ctx->call_arg_tags[2]);
-    if (xr_typed_set(arr->data, (int32_t)idx, val, arr->elem_type)) {
+    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[2], coro->jit_ctx->call_arg_tags[2]);
+    if (xr_typed_set(arr->data, (int32_t) idx, val, arr->elem_type)) {
         XR_ARRAY_MARK_GC_PTRS(arr, val);
     }
     return XR_JIT_OK();
@@ -830,7 +821,7 @@ XrJitResult xr_jit_map_set(XrCoroutine *coro, int64_t extra_arg) {
         XrJson *json = (XrJson *) obj;
         XrString *key_str = (XrString *) key.ptr;
         if (!xr_json_set_by_key(coro->isolate, json, key_str->data, val)) {
-            return (XrJitResult){XM_DEOPT_MARKER, 0};
+            return (XrJitResult) {XM_DEOPT_MARKER, 0};
         }
     }
     return XR_JIT_OK();
@@ -1339,22 +1330,22 @@ XrJitResult xr_jit_struct_get(XrCoroutine *coro, int64_t extra_arg) {
             result.tag = XR_TAG_BOOL;
             break;
         case XR_NATIVE_I32:
-            result = XR_FROM_INT((int64_t) * (int32_t *) fp);
+            result = XR_FROM_INT((int64_t) *(int32_t *) fp);
             break;
         case XR_NATIVE_U32:
-            result = XR_FROM_INT((int64_t) * (uint32_t *) fp);
+            result = XR_FROM_INT((int64_t) *(uint32_t *) fp);
             break;
         case XR_NATIVE_I16:
-            result = XR_FROM_INT((int64_t) * (int16_t *) fp);
+            result = XR_FROM_INT((int64_t) *(int16_t *) fp);
             break;
         case XR_NATIVE_U16:
-            result = XR_FROM_INT((int64_t) * (uint16_t *) fp);
+            result = XR_FROM_INT((int64_t) *(uint16_t *) fp);
             break;
         case XR_NATIVE_I8:
-            result = XR_FROM_INT((int64_t) * (int8_t *) fp);
+            result = XR_FROM_INT((int64_t) *(int8_t *) fp);
             break;
         case XR_NATIVE_U8:
-            result = XR_FROM_INT((int64_t) * (uint8_t *) fp);
+            result = XR_FROM_INT((int64_t) *(uint8_t *) fp);
             break;
         case XR_NATIVE_F32:
             result = XR_FROM_FLOAT((double) *(float *) fp);
@@ -1546,7 +1537,7 @@ XrJitResult xr_jit_assert(XrCoroutine *coro, int64_t extra_arg) {
         // Set a generic assertion exception
         const char *fn_name = negate ? "assert_false" : "assert";
         fprintf(stderr, "\nASSERTION FAILED: %s()\n\n", fn_name);
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
     return XR_JIT_OK();
 }
@@ -1573,7 +1564,7 @@ XrJitResult xr_jit_assert_eq(XrCoroutine *coro, int64_t extra_arg) {
         if (a_bc != 0xFF && a_bc < XR_JIT_MAX_VREG_TAGS)
             fprintf(stderr, "  vreg_runtime_tags[%d]=%d\n", a_bc,
                     coro->jit_ctx->vreg_runtime_tags[a_bc]);
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
     return XR_JIT_OK();
 }
@@ -1590,8 +1581,7 @@ XrJitResult xr_jit_assert_ne(XrCoroutine *coro, int64_t extra_arg) {
     XrValue expect = jit_value_from_tag(coro->jit_ctx->call_args[1], b_tag);
     if (xr_value_deep_eq(actual, expect)) {
         fprintf(stderr, "\nASSERTION FAILED: assert_ne()\n\n");
-        return (XrJitResult){XM_DEOPT_MARKER, 0};
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
     return XR_JIT_OK();
 }
-

@@ -23,8 +23,7 @@
 
 /* Generated enum from xi_method_sym.def */
 enum {
-#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) \
-    XRT_SYM_##aot_name = id,
+#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) XRT_SYM_##aot_name = id,
 #include "../ir/xi_method_sym.def"
 #undef XI_METHOD_SYM
     XRT_SYM_COUNT_

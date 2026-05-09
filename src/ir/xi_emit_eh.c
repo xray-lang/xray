@@ -16,10 +16,14 @@
 
 /* Throw */
 XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t src = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     emit_inst(ctx, CREATE_ABC(OP_THROW, src, 0, 0));
 }
 
@@ -27,59 +31,67 @@ XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * aux = catch block (NULL for try-finally without catch).
  * aux_int = finally block ID (>=0) or -1 if no finally. */
 XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    XiBlock *catch_blk = (XiBlock *)v->aux;  /* NULL when no catch clause */
+    (void) dst;
+    XiBlock *catch_blk = (XiBlock *) v->aux; /* NULL when no catch clause */
     int try_pc = current_pc(ctx);
-    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0));     /* patched later */
-    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0));      /* finally placeholder */
+    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0)); /* patched later */
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0)); /* finally placeholder */
 
     /* aux_int = finally block ID (>=0) or -1 if no finally */
-    uint32_t fin_bid = (v->aux_int >= 0) ? (uint32_t)v->aux_int : 0;
+    uint32_t fin_bid = (v->aux_int >= 0) ? (uint32_t) v->aux_int : 0;
     uint32_t catch_bid = catch_blk ? catch_blk->id : 0;
     add_try_patch(ctx, try_pc, catch_bid, fin_bid);
 }
 
 /* Catch */
 XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)v;
+    (void) v;
     emit_inst(ctx, CREATE_ABC(OP_CATCH, dst, 0, 0));
 }
 
 /* Finally */
 XR_FUNC void xi_emit_finally(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)v; (void)dst;
+    (void) v;
+    (void) dst;
     emit_inst(ctx, CREATE_ABC(OP_FINALLY, 0, 0, 0));
 }
 
 /* End try */
 XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)v; (void)dst;
+    (void) v;
+    (void) dst;
     emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
 }
 
 /* Defer: args[0]=callee, args[1..n]=call arguments.
  * OP_DEFER A B — closure at R[A], arguments at R[A+1]..R[A+B]. */
 XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
-    uint8_t nargs = (uint8_t)(v->nargs - 1);
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t nargs = (uint8_t) (v->nargs - 1);
 
     /* Reserve consecutive register window: dst, dst+1, ..., dst+nargs */
     {
-        uint8_t top = (uint8_t)(dst + nargs + 1);
-        if (top > ctx->max_reg) ctx->max_reg = top;
+        uint8_t top = (uint8_t) (dst + nargs + 1);
+        if (top > ctx->max_reg)
+            ctx->max_reg = top;
     }
 
     /* Move callee into dst */
     uint8_t callee = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     if (callee != dst)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
 
     /* Move arguments into consecutive slots after callee */
     for (uint16_t a = 1; a < v->nargs; a++) {
         uint8_t arg_reg = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK) return;
-        uint8_t target = (uint8_t)(dst + a);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (dst + a);
         if (arg_reg != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
@@ -93,23 +105,29 @@ XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * Uses OP_GO which creates an XrTask and supports
  * scope tracking, link mode, and continuation stealing. */
 XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
-    uint8_t nargs = (uint8_t)(v->nargs - 1);
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t nargs = (uint8_t) (v->nargs - 1);
 
     {
-        uint8_t call_top = (uint8_t)(dst + nargs + 1);
-        if (call_top > ctx->max_reg) ctx->max_reg = call_top;
+        uint8_t call_top = (uint8_t) (dst + nargs + 1);
+        if (call_top > ctx->max_reg)
+            ctx->max_reg = call_top;
     }
 
     uint8_t callee = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     if (callee != dst)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
 
     for (uint16_t a = 1; a < v->nargs; a++) {
         uint8_t arg_reg = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK) return;
-        uint8_t target = (uint8_t)(dst + a);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (dst + a);
         if (arg_reg != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
@@ -118,7 +136,7 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, nargs));
 
     /* NOP A=3: link_mode annotation (read by vm_go) */
-    int link_mode = (int)v->aux_int;
+    int link_mode = (int) v->aux_int;
     if (link_mode != 0) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 3, link_mode));
     }
@@ -126,12 +144,16 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
 /* Await */
 XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t task = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
-    int flags = (int)v->aux_int;
-    bool is_any  = (flags & 1) != 0;
-    bool is_all  = (flags & 2) != 0;
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    int flags = (int) v->aux_int;
+    bool is_any = (flags & 1) != 0;
+    bool is_all = (flags & 2) != 0;
     bool is_any_success = (flags & 4) != 0;
     if (is_any_success) {
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 1));
@@ -141,7 +163,8 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABx(OP_AWAIT_ALL, dst, task));
     } else if (v->nargs >= 2) {
         uint8_t timeout = reg_of(ctx, v->args[1]);
-        if (ctx->status != XI_EMIT_OK) return;
+        if (ctx->status != XI_EMIT_OK)
+            return;
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_TIMEOUT, dst, task, timeout));
     } else {
         emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, 0));
@@ -150,7 +173,8 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
 /* Yield */
 XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)v; (void)dst;
+    (void) v;
+    (void) dst;
     emit_inst(ctx, CREATE_ABC(OP_YIELD, 0, 0, 0));
 }
 
@@ -158,35 +182,47 @@ XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t buf = 0;
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
-        buf = (uint8_t)v->args[0]->aux_int;
+        buf = (uint8_t) v->args[0]->aux_int;
     }
     emit_inst(ctx, CREATE_ABx(OP_CHAN_NEW, dst, buf));
 }
 
 /* Channel send */
 XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t ch = reg_of(ctx, v->args[0]);
     uint8_t val = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     emit_inst(ctx, CREATE_ABC(OP_CHAN_SEND, 0, ch, val));
 }
 
 /* Channel recv */
 XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t ch = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     emit_inst(ctx, CREATE_ABC(OP_CHAN_RECV, dst, ch, 0));
 }
 
 /* Non-blocking channel try-send: returns bool (success/failure) */
 XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t ch = reg_of(ctx, v->args[0]);
     uint8_t val = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_SEND, dst, ch, val));
 }
 
@@ -194,12 +230,18 @@ XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * OP_CHAN_TRY_RECV writes R[dst] (value) and R[dst+1] (ok bool).
  * Reserve dst+1 so subsequent allocations do not reuse it. */
 XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t ch = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_RECV, dst, ch, 0));
-    if (dst + 2 > ctx->next_reg) ctx->next_reg = dst + 2;
-    if (ctx->next_reg > ctx->max_reg) ctx->max_reg = ctx->next_reg;
+    if (dst + 2 > ctx->next_reg)
+        ctx->next_reg = dst + 2;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
 }
 
 /* ========== Coro Built-in Module ========== */
@@ -208,7 +250,7 @@ XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * aux_int encodes the sub-type: 0..4 = dedicated opcodes,
  * >= XI_CORO_SUB_CTRL_BASE = OP_CORO_CTRL sub-opcode. */
 XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    int sub = (int)v->aux_int;
+    int sub = (int) v->aux_int;
 
     switch (sub) {
         case XI_CORO_SUB_SET_LOCAL: {
@@ -216,7 +258,8 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             XR_DCHECK(v->nargs >= 2, "emit coro_op: setLocal needs 2 args");
             uint8_t key = reg_of(ctx, v->args[0]);
             uint8_t val = reg_of(ctx, v->args[1]);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
             emit_inst(ctx, CREATE_ABC(OP_SET_LOCAL, key, val, 0));
             return;
         }
@@ -224,7 +267,8 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             /* Coro.getLocal(key) → OP_GET_LOCAL A=dst B=key */
             XR_DCHECK(v->nargs >= 1, "emit coro_op: getLocal needs 1 arg");
             uint8_t key = reg_of(ctx, v->args[0]);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
             emit_inst(ctx, CREATE_ABC(OP_GET_LOCAL, dst, key, 0));
             return;
         }
@@ -233,7 +277,8 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             XR_DCHECK(v->nargs >= 2, "emit coro_op: setPriority needs 2 args");
             uint8_t task = reg_of(ctx, v->args[0]);
             uint8_t prio = reg_of(ctx, v->args[1]);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
             emit_inst(ctx, CREATE_ABC(OP_SET_PRIORITY, task, prio, 0));
             return;
         }
@@ -257,59 +302,72 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t b_reg = 0;
     if (v->nargs >= 1) {
         b_reg = reg_of(ctx, v->args[0]);
-        if (ctx->status != XI_EMIT_OK) return;
+        if (ctx->status != XI_EMIT_OK)
+            return;
     }
-    emit_inst(ctx, CREATE_ABC(OP_CORO_CTRL, dst, b_reg, (uint8_t)ctrl_sub));
+    emit_inst(ctx, CREATE_ABC(OP_CORO_CTRL, dst, b_reg, (uint8_t) ctrl_sub));
 }
 
 /* ========== Scope ========== */
 
 /* Scope enter */
 XR_FUNC void xi_emit_scope_enter(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    emit_inst(ctx, CREATE_ABC(OP_SCOPE_ENTER, (uint8_t)v->aux_int, 0, 0));
+    (void) dst;
+    emit_inst(ctx, CREATE_ABC(OP_SCOPE_ENTER, (uint8_t) v->aux_int, 0, 0));
 }
 
 /* Scope exit */
 XR_FUNC void xi_emit_scope_exit(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    emit_inst(ctx, CREATE_ABC(OP_SCOPE_EXIT, (uint8_t)v->aux_int, dst, 0));
+    emit_inst(ctx, CREATE_ABC(OP_SCOPE_EXIT, (uint8_t) v->aux_int, dst, 0));
 }
 
 /* ========== Assert ========== */
 
 XR_FUNC void xi_emit_assert(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t cond = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
-    int loc_k = add_const_string(ctx, (const char *)v->aux);
-    if (ctx->status != XI_EMIT_OK) return;
-    emit_inst(ctx, CREATE_ABC(OP_ASSERT, cond, (uint8_t)loc_k,
-                               (uint8_t)v->aux_int));
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    int loc_k = add_const_string(ctx, (const char *) v->aux);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ASSERT, cond, (uint8_t) loc_k, (uint8_t) v->aux_int));
 }
 
 XR_FUNC void xi_emit_assert_eq(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t actual = reg_of(ctx, v->args[0]);
     uint8_t expected = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK) return;
-    int loc_k = add_const_string(ctx, (const char *)v->aux);
-    if (ctx->status != XI_EMIT_OK) return;
-    emit_inst(ctx, CREATE_ABC(OP_ASSERT_EQ, actual, expected,
-                               (uint8_t)loc_k));
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    int loc_k = add_const_string(ctx, (const char *) v->aux);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ASSERT_EQ, actual, expected, (uint8_t) loc_k));
 }
 
 XR_FUNC void xi_emit_assert_ne(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    (void) dst;
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t actual = reg_of(ctx, v->args[0]);
     uint8_t unexpected = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK) return;
-    int loc_k = add_const_string(ctx, (const char *)v->aux);
-    if (ctx->status != XI_EMIT_OK) return;
-    emit_inst(ctx, CREATE_ABC(OP_ASSERT_NE, actual, unexpected,
-                               (uint8_t)loc_k));
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    int loc_k = add_const_string(ctx, (const char *) v->aux);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ASSERT_NE, actual, unexpected, (uint8_t) loc_k));
 }
 
 /* assert_throws(fn): emit inline try-catch sequence.
@@ -321,25 +379,32 @@ XR_FUNC void xi_emit_assert_ne(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  *   CATCH tmp                 ; exception thrown → pass
  *   END_TRY */
 XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void)dst;
-    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     uint8_t fn_reg = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
 
     /* Build assertion failure message */
-    const char *loc = v->aux ? (const char *)v->aux : "unknown";
+    const char *loc = v->aux ? (const char *) v->aux : "unknown";
     char msg[128];
     snprintf(msg, sizeof(msg), "assertion failed at %s: expected throw", loc);
     int msg_k = add_const_string(ctx, msg);
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
 
     /* Allocate temp registers for the call window and error value */
     if (ctx->next_reg + 2 >= MAX_REGS) {
-        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS); return;
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
     }
     uint8_t call_reg = ctx->next_reg++;
-    uint8_t err_reg  = ctx->next_reg++;
-    if (ctx->next_reg > ctx->max_reg) ctx->max_reg = ctx->next_reg;
+    uint8_t err_reg = ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
 
     /* OP_TRY Bx = absolute catch PC.
      * Layout: TRY(+0), NOP(+1), MOVE(+2), CALL(+3), LOADK(+4), THROW(+5),
@@ -348,7 +413,7 @@ XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     int try_pc = current_pc(ctx);
     int catch_pc = try_pc + 6;
     emit_inst(ctx, CREATE_ABx(OP_TRY, 0, catch_pc));
-    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0));    /* finally = 0 (none) */
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0)); /* finally = 0 (none) */
 
     /* Call fn() */
     emit_inst(ctx, CREATE_ABC(OP_MOVE, call_reg, fn_reg, 0));
@@ -370,7 +435,10 @@ XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 /* ========== Regex Literal ========== */
 
 XR_FUNC void xi_emit_regex_compile(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    if (v->nargs < 2) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    if (v->nargs < 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
 
     /* args[0] = pattern string constant, args[1] = flags string constant */
     XiValue *pat = v->args[0];
@@ -378,13 +446,15 @@ XR_FUNC void xi_emit_regex_compile(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XR_DCHECK(pat->op == XI_CONST, "regex pattern must be XI_CONST");
     XR_DCHECK(flg->op == XI_CONST, "regex flags must be XI_CONST");
 
-    const char *pattern = (const char *)pat->aux;
-    const char *flags   = (const char *)flg->aux;
+    const char *pattern = (const char *) pat->aux;
+    const char *flags = (const char *) flg->aux;
 
     int ki_pat = add_const_string(ctx, pattern ? pattern : "");
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
     int ki_flg = add_const_string(ctx, flags ? flags : "");
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
 
-    emit_inst(ctx, CREATE_ABC(OP_REGEX_COMPILE, dst, (uint8_t)ki_pat, (uint8_t)ki_flg));
+    emit_inst(ctx, CREATE_ABC(OP_REGEX_COMPILE, dst, (uint8_t) ki_pat, (uint8_t) ki_flg));
 }

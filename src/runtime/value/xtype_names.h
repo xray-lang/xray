@@ -159,8 +159,8 @@ typedef enum {
     XR_TID_RANGE,          // 31
     XR_TID_TASK,           // 32
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,      // 33
-    XR_TID_WEAKSET,      // 34
+    XR_TID_WEAKMAP,  // 33
+    XR_TID_WEAKSET,  // 34
     XR_TID_COUNT
 } XrTypeId;
 

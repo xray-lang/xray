@@ -331,8 +331,7 @@ vmcase(OP_JSON_SETK) {
     XrJson *json = xr_value_to_json(R(a));
     XrValue val = R(c);
     if (!xr_json_set(isolate, json, (SymbolId) PROTO_SYMBOL(cl->proto, b), val)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
-                         "cannot add property to sealed Json object");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
     }
     VM_BARRIER_VAL(json, val);
     vmbreak;
@@ -387,7 +386,7 @@ vmcase(OP_JSON_DECODE) {
 
     XrValue data = R(b);
     XrValue shape_val = k[c];
-    XrShape *shape = (XrShape *)(intptr_t)XR_TO_INT(shape_val);
+    XrShape *shape = (XrShape *) (intptr_t) XR_TO_INT(shape_val);
     XR_DCHECK(shape != NULL, "OP_JSON_DECODE: null shape");
 
     /* Accept string (parse first) or Json object (validate directly) */
@@ -414,12 +413,15 @@ vmcase(OP_JSON_DECODE) {
         vmbreak;
     }
 
-    XrSymbolTable *symtab = (XrSymbolTable *)xr_isolate_get_symbol_table(isolate);
+    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     bool valid = true;
     for (uint16_t fi = 0; fi < field_count; fi++) {
         SymbolId sym = shape->field_symbols[fi];
         const char *fname = xr_symbol_get_name_in_table(symtab, sym);
-        if (!fname) { valid = false; break; }
+        if (!fname) {
+            valid = false;
+            break;
+        }
 
         XrValue field_val = xr_json_get_by_key(isolate, src, fname);
         if (XR_IS_NULL(field_val) && !xr_json_has_field(isolate, src, sym)) {
@@ -476,7 +478,7 @@ vmcase(OP_GETPROP) {
                     R(a).tag = XR_TAG_BOOL;
                     break;
                 case XR_NATIVE_I32:
-                    R(a) = XR_FROM_INT((int64_t) * (int32_t *) fp);
+                    R(a) = XR_FROM_INT((int64_t) *(int32_t *) fp);
                     break;
                 case XR_NATIVE_F32:
                     R(a) = XR_FROM_FLOAT((double) *(float *) fp);
@@ -698,8 +700,7 @@ vmcase(OP_SETPROP) {
 
         // Slow path: overflow field, new field addition
         if (!xr_json_set(isolate, json, prop_symbol, value)) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
-                             "cannot add property to sealed Json object");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
         }
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
         vmbreak;

@@ -63,7 +63,7 @@ XR_FUNC void jit_guard_page_arm(void *page);
 XR_FUNC void jit_guard_page_disarm(void *page);
 XR_FUNC void jit_guard_page_init_trampoline(void);
 
-#else  /* !__aarch64__ — guard page safepoint not available */
+#else /* !__aarch64__ — guard page safepoint not available */
 
 static inline void *jit_guard_page_alloc(void) {
     return NULL;
@@ -80,6 +80,6 @@ static inline void jit_guard_page_disarm(void *p) {
 static inline void jit_guard_page_init_trampoline(void) {
 }
 
-#endif  /* __aarch64__ */
+#endif /* __aarch64__ */
 
 #endif  // XM_JIT_DEBUG_H

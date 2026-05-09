@@ -104,7 +104,7 @@ XR_FUNC void jit_debug_dump(const char *name, const void *code, uint32_t size,
 
 #ifdef __aarch64__
 
-static void *g_safepoint_trampoline = NULL;  /* global trampoline code (mmap'd executable) */
+static void *g_safepoint_trampoline = NULL; /* global trampoline code (mmap'd executable) */
 static uint32_t g_trampoline_size = 0;
 
 void *jit_guard_page_alloc(void) {
@@ -204,7 +204,7 @@ void jit_guard_page_init_trampoline(void) {
     xr_os_codemem_flush_icache(g_safepoint_trampoline, g_trampoline_size);
 }
 
-#endif  /* __aarch64__ guard page safepoint */
+#endif /* __aarch64__ guard page safepoint */
 
 /* ========== Crash Handler ========== */
 
@@ -344,8 +344,8 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                 for (uint32_t i = dstart; i < dend; i++) {
                     uint32_t off = i * 4;
                     a64_disasm_one(line, sizeof(line), code[i], off);
-                    fprintf(stderr, "  %s %04x: %08x  %s\n",
-                            (i == crash_inst) ? ">>>" : "   ", off, code[i], line);
+                    fprintf(stderr, "  %s %04x: %08x  %s\n", (i == crash_inst) ? ">>>" : "   ", off,
+                            code[i], line);
                 }
             }
 #elif defined(__x86_64__)
@@ -355,8 +355,9 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                 uint32_t dend = (offset + 32 < r->code_size) ? offset + 32 : r->code_size;
                 const uint8_t *bytes = (const uint8_t *) r->code;
                 for (uint32_t off = dstart; off < dend; off += 16) {
-                    fprintf(stderr, "  %s %04x:",
-                            (off <= offset && offset < off + 16) ? ">>>" : "   ", off);
+                    fprintf(stderr,
+                            "  %s %04x:", (off <= offset && offset < off + 16) ? ">>>" : "   ",
+                            off);
                     for (uint32_t j = 0; j < 16 && off + j < dend; j++)
                         fprintf(stderr, " %02x", bytes[off + j]);
                     fprintf(stderr, "\n");
@@ -419,27 +420,21 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
 #elif defined(__x86_64__) && defined(XR_OS_MACOS)
         fprintf(stderr, "[JIT-CRASH] Registers:\n");
         fprintf(stderr, "  rax = 0x%016llx  rbx = 0x%016llx  rcx = 0x%016llx\n",
-                uc2->uc_mcontext->__ss.__rax,
-                uc2->uc_mcontext->__ss.__rbx,
+                uc2->uc_mcontext->__ss.__rax, uc2->uc_mcontext->__ss.__rbx,
                 uc2->uc_mcontext->__ss.__rcx);
         fprintf(stderr, "  rdx = 0x%016llx  rsi = 0x%016llx  rdi = 0x%016llx\n",
-                uc2->uc_mcontext->__ss.__rdx,
-                uc2->uc_mcontext->__ss.__rsi,
+                uc2->uc_mcontext->__ss.__rdx, uc2->uc_mcontext->__ss.__rsi,
                 uc2->uc_mcontext->__ss.__rdi);
         fprintf(stderr, "  rbp = 0x%016llx  rsp = 0x%016llx  rip = 0x%016llx\n",
-                uc2->uc_mcontext->__ss.__rbp,
-                uc2->uc_mcontext->__ss.__rsp,
+                uc2->uc_mcontext->__ss.__rbp, uc2->uc_mcontext->__ss.__rsp,
                 uc2->uc_mcontext->__ss.__rip);
         fprintf(stderr, "  r8  = 0x%016llx  r9  = 0x%016llx  r10 = 0x%016llx\n",
-                uc2->uc_mcontext->__ss.__r8,
-                uc2->uc_mcontext->__ss.__r9,
+                uc2->uc_mcontext->__ss.__r8, uc2->uc_mcontext->__ss.__r9,
                 uc2->uc_mcontext->__ss.__r10);
         fprintf(stderr, "  r11 = 0x%016llx  r12 = 0x%016llx  r13 = 0x%016llx\n",
-                uc2->uc_mcontext->__ss.__r11,
-                uc2->uc_mcontext->__ss.__r12,
+                uc2->uc_mcontext->__ss.__r11, uc2->uc_mcontext->__ss.__r12,
                 uc2->uc_mcontext->__ss.__r13);
-        fprintf(stderr, "  r14 = 0x%016llx  r15 = 0x%016llx\n",
-                uc2->uc_mcontext->__ss.__r14,
+        fprintf(stderr, "  r14 = 0x%016llx  r15 = 0x%016llx\n", uc2->uc_mcontext->__ss.__r14,
                 uc2->uc_mcontext->__ss.__r15);
 #elif defined(__x86_64__) && defined(XR_OS_LINUX)
         fprintf(stderr, "[JIT-CRASH] Registers:\n");
@@ -499,4 +494,3 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
 
     fprintf(stderr, "[JIT-debug] crash handler installed (with alt stack)\n");
 }
-

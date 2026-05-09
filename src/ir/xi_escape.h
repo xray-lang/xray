@@ -34,10 +34,10 @@
 
 /* Escape levels — stored in XiValue.escape (2 bits). */
 typedef enum {
-    XI_ESC_NONE   = 0,  /* does not escape — stack-allocatable */
-    XI_ESC_ARG    = 1,  /* escapes via return / out-param */
-    XI_ESC_HEAP   = 2,  /* stored to heap object or captured by closure */
-    XI_ESC_GLOBAL = 3,  /* stored to global / sent cross-goroutine */
+    XI_ESC_NONE = 0,   /* does not escape — stack-allocatable */
+    XI_ESC_ARG = 1,    /* escapes via return / out-param */
+    XI_ESC_HEAP = 2,   /* stored to heap object or captured by closure */
+    XI_ESC_GLOBAL = 3, /* stored to global / sent cross-goroutine */
 } XiEscapeLevel;
 
 /* Check whether an op is a heap-allocating instruction.

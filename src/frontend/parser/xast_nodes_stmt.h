@@ -38,7 +38,7 @@ typedef struct VarDeclNode {
     bool is_const;
     uint8_t storage_mode;  // 0 = normal, 1 = shared
     XrTypeRef *type_annotation;
-    uint32_t symbol_id;    /* unique ID from analyzer; 0 = unresolved */
+    uint32_t symbol_id; /* unique ID from analyzer; 0 = unresolved */
 } VarDeclNode;
 
 // Storage mode constants
@@ -79,8 +79,8 @@ typedef struct ForInStmtNode {
     XrTypeRef *item_type;
     AstNode *collection;
     AstNode *body;
-    uint32_t item_symbol_id;   /* symbol ID for iteration key/item variable */
-    uint32_t value_symbol_id;  /* symbol ID for iteration value variable (key-value loops) */
+    uint32_t item_symbol_id;  /* symbol ID for iteration key/item variable */
+    uint32_t value_symbol_id; /* symbol ID for iteration value variable (key-value loops) */
 } ForInStmtNode;
 
 typedef struct BreakStmtNode {
@@ -99,7 +99,7 @@ typedef struct TryCatchNode {
     int catch_var_column;  // Column of catch variable (1-indexed)
     AstNode *catch_body;
     AstNode *finally_body;
-    uint32_t catch_symbol_id;  /* symbol ID for catch variable; 0 = unresolved */
+    uint32_t catch_symbol_id; /* symbol ID for catch variable; 0 = unresolved */
 } TryCatchNode;
 
 typedef struct ThrowStmtNode {
@@ -181,7 +181,7 @@ typedef struct SelectCaseNode {
     bool is_send;
     bool is_default;
     bool is_timeout;
-    uint32_t var_symbol_id;  /* symbol ID for recv variable; 0 = unresolved */
+    uint32_t var_symbol_id; /* symbol ID for recv variable; 0 = unresolved */
 } SelectCaseNode;
 
 typedef struct SelectStmtNode {

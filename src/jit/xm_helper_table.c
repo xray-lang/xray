@@ -15,8 +15,8 @@
  * Each entry maps: helper enum ID → { function pointer, ret_rep, nargs, flags }
  */
 const XmHelperInfo xm_helper_info[XM_HELPER__COUNT] = {
-#define XM_HELPER_ENTRY_(name, nargs_, ret_rep_, flags_)                                          \
-    [XM_HELPER_##name] = {                                                                        \
+#define XM_HELPER_ENTRY_(name, nargs_, ret_rep_, flags_)                                           \
+    [XM_HELPER_##name] = {                                                                         \
         .func = (void *) xr_jit_##name,                                                            \
         .ret_rep = (ret_rep_),                                                                     \
         .nargs = (nargs_),                                                                         \

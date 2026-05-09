@@ -91,8 +91,8 @@ static inline bool xr_kind_is_object_like(XrTypeKind k) {
 // Function parameter passing modes (used by XrType.function.param_passing_modes)
 #ifndef XR_PARAM_VALUE
 #define XR_PARAM_VALUE 0  // Default: deep copy at function entry
-#define XR_PARAM_IN    1  // Readonly reference: no copy, no mutation allowed
-#define XR_PARAM_REF   2  // Mutable reference: no copy, mutation visible to caller
+#define XR_PARAM_IN 1     // Readonly reference: no copy, no mutation allowed
+#define XR_PARAM_REF 2    // Mutable reference: no copy, mutation visible to caller
 #endif
 
 // Forward declarations
@@ -475,7 +475,6 @@ xr_type_new_named_instance(XrayIsolate *X,
                            const char *name);  // generic named class (Exception/Range/etc)
 XR_FUNC XrType *xr_type_new_enum(XrayIsolate *X, const char *enum_name);
 
-
 // API: Optional type (T?)
 XR_FUNC XrType *xr_type_new_optional(XrayIsolate *X, XrType *base_type);
 XR_FUNC XrType *xr_type_get_base(XrType *optional_type);
@@ -622,8 +621,7 @@ static inline bool xr_type_is_json_field_compatible(XrType *type) {
             return true;
         case XR_KIND_INSTANCE:
             // DateTime is serializable (ISO 8601 string)
-            if (type->instance.class_name &&
-                strcmp(type->instance.class_name, "DateTime") == 0)
+            if (type->instance.class_name && strcmp(type->instance.class_name, "DateTime") == 0)
                 return true;
             return false;
         case XR_KIND_UNION:

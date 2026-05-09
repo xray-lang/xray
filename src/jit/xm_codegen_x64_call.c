@@ -298,8 +298,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             }
 
             /* Restore caller's active stack map in jit_ctx after JIT→JIT return */
-            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
-                       -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
+            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET,
                        X64_SCRATCH_REG);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);
@@ -436,8 +435,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
             /* Restore caller's smap + frame_sp after JIT→JIT return.
              * Use R11 (scratch) to avoid clobbering RCX which holds callee tag. */
-            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
-                       -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
+            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET,
                        X64_SCRATCH_REG);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);
@@ -620,8 +618,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
             /* Restore caller's smap + frame_sp after JIT→JIT return.
              * Use R11 (scratch) to avoid clobbering RCX which holds callee tag. */
-            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP,
-                       -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
+            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET,
                        X64_SCRATCH_REG);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);

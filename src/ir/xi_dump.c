@@ -17,7 +17,7 @@
 
 #include "xi.h"
 #include "xi_op_name.h"
-#include "../runtime/value/xtype.h"  /* XrTypeKind, XR_KIND_* */
+#include "../runtime/value/xtype.h" /* XrTypeKind, XR_KIND_* */
 #include "../runtime/value/xstruct_layout.h"
 
 #include <stdio.h>
@@ -27,26 +27,45 @@
 /* ========== Type Name Helper ========== */
 
 static const char *xi_type_name(const struct XrType *type) {
-    if (!type) return "?";
+    if (!type)
+        return "?";
     switch (type->kind) {
-        case XR_KIND_INT:      return "int";
-        case XR_KIND_FLOAT:    return "float";
-        case XR_KIND_BOOL:     return "bool";
-        case XR_KIND_STRING:   return "string";
-        case XR_KIND_NULL:     return "null";
-        case XR_KIND_UNKNOWN:  return "any";
-        case XR_KIND_VOID:     return "void";
-        case XR_KIND_ARRAY:    return "array";
-        case XR_KIND_MAP:      return "map";
-        case XR_KIND_FUNCTION: return "fn";
-        case XR_KIND_INSTANCE: return "instance";
-        case XR_KIND_CLASS:    return "class";
-        case XR_KIND_ENUM:     return "enum";
-        case XR_KIND_JSON:     return "json";
-        case XR_KIND_UNION:    return "union";
-        case XR_KIND_TUPLE:    return "tuple";
-        case XR_KIND_NEVER:    return "never";
-        default:               return "?";
+        case XR_KIND_INT:
+            return "int";
+        case XR_KIND_FLOAT:
+            return "float";
+        case XR_KIND_BOOL:
+            return "bool";
+        case XR_KIND_STRING:
+            return "string";
+        case XR_KIND_NULL:
+            return "null";
+        case XR_KIND_UNKNOWN:
+            return "any";
+        case XR_KIND_VOID:
+            return "void";
+        case XR_KIND_ARRAY:
+            return "array";
+        case XR_KIND_MAP:
+            return "map";
+        case XR_KIND_FUNCTION:
+            return "fn";
+        case XR_KIND_INSTANCE:
+            return "instance";
+        case XR_KIND_CLASS:
+            return "class";
+        case XR_KIND_ENUM:
+            return "enum";
+        case XR_KIND_JSON:
+            return "json";
+        case XR_KIND_UNION:
+            return "union";
+        case XR_KIND_TUPLE:
+            return "tuple";
+        case XR_KIND_NEVER:
+            return "never";
+        default:
+            return "?";
     }
 }
 
@@ -54,18 +73,24 @@ static const char *xi_type_name(const struct XrType *type) {
 
 static const char *xi_block_kind_name(uint16_t kind) {
     switch (kind) {
-        case XI_BLOCK_PLAIN:       return "plain";
-        case XI_BLOCK_IF:          return "if";
-        case XI_BLOCK_RETURN:      return "return";
-        case XI_BLOCK_UNREACHABLE: return "unreachable";
-        default:                   return "?";
+        case XI_BLOCK_PLAIN:
+            return "plain";
+        case XI_BLOCK_IF:
+            return "if";
+        case XI_BLOCK_RETURN:
+            return "return";
+        case XI_BLOCK_UNREACHABLE:
+            return "unreachable";
+        default:
+            return "?";
     }
 }
 
 /* ========== Dump a Single Value ========== */
 
 static void dump_value(FILE *out, const XiValue *v) {
-    if (!v) return;
+    if (!v)
+        return;
 
     /* v42 = ADD v3 v5 */
     fprintf(out, "    v%u = %s", v->id, xi_op_name(v->op));
@@ -101,16 +126,16 @@ static void dump_value(FILE *out, const XiValue *v) {
     if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
         fprintf(out, " .%s", (const char *) v->aux);
     } else if (v->op == XI_STRUCT_GET || v->op == XI_STRUCT_SET) {
-        XrStructLayout *sl = (XrStructLayout *)v->aux;
+        XrStructLayout *sl = (XrStructLayout *) v->aux;
         const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
-                            ? sl->field_names[v->aux_int] : "?";
+                                ? sl->field_names[v->aux_int]
+                                : "?";
         fprintf(out, " .%s [field=%" PRId64 "]", fname, v->aux_int);
     } else if (v->op == XI_STRUCT_NEW && v->aux) {
-        XrStructLayout *sl = (XrStructLayout *)v->aux;
+        XrStructLayout *sl = (XrStructLayout *) v->aux;
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
-    } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN ||
-               v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
-               v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {
+    } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL ||
+               v->op == XI_STORE_UPVAL || v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
     }
 
@@ -118,13 +143,18 @@ static void dump_value(FILE *out, const XiValue *v) {
     fprintf(out, "  ; %s", xi_type_name(v->type));
 
     /* Show explicit rep when it differs from TAGGED (i.e. after select_rep) */
-    if (v->rep == XR_REP_I64) fprintf(out, " :i64");
-    else if (v->rep == XR_REP_F64) fprintf(out, " :f64");
+    if (v->rep == XR_REP_I64)
+        fprintf(out, " :i64");
+    else if (v->rep == XR_REP_F64)
+        fprintf(out, " :f64");
 
     /* Show escape level when set (after escape analysis) */
-    if (v->escape == 1) fprintf(out, " esc:arg");
-    else if (v->escape == 2) fprintf(out, " esc:heap");
-    else if (v->escape == 3) fprintf(out, " esc:global");
+    if (v->escape == 1)
+        fprintf(out, " esc:arg");
+    else if (v->escape == 2)
+        fprintf(out, " esc:heap");
+    else if (v->escape == 3)
+        fprintf(out, " esc:global");
 
     if (v->line > 0)
         fprintf(out, " L%u", v->line);
@@ -135,15 +165,15 @@ static void dump_value(FILE *out, const XiValue *v) {
 /* ========== Dump a Phi Node ========== */
 
 static void dump_phi(FILE *out, const XiPhi *phi) {
-    if (!phi) return;
+    if (!phi)
+        return;
     const XiValue *v = &phi->value;
     fprintf(out, "    v%u = PHI", v->id);
     for (uint16_t i = 0; i < v->nargs; i++) {
         if (v->args[i])
             fprintf(out, " [b%u:v%u]", v->block->preds[i]->id, v->args[i]->id);
         else
-            fprintf(out, " [b%u:<nil>]",
-                    (i < v->block->npreds) ? v->block->preds[i]->id : 0);
+            fprintf(out, " [b%u:<nil>]", (i < v->block->npreds) ? v->block->preds[i]->id : 0);
     }
     fprintf(out, "  ; %s\n", xi_type_name(v->type));
 }
@@ -151,7 +181,8 @@ static void dump_phi(FILE *out, const XiPhi *phi) {
 /* ========== Dump a Block ========== */
 
 static void dump_block(FILE *out, const XiBlock *blk) {
-    if (!blk) return;
+    if (!blk)
+        return;
 
     fprintf(out, "  b%u:", blk->id);
 
@@ -178,10 +209,8 @@ static void dump_block(FILE *out, const XiBlock *blk) {
                 fprintf(out, "    JMP b%u\n", blk->succs[0]->id);
             break;
         case XI_BLOCK_IF:
-            fprintf(out, "    IF v%u -> b%u b%u\n",
-                    blk->control ? blk->control->id : 0,
-                    blk->succs[0] ? blk->succs[0]->id : 0,
-                    blk->succs[1] ? blk->succs[1]->id : 0);
+            fprintf(out, "    IF v%u -> b%u b%u\n", blk->control ? blk->control->id : 0,
+                    blk->succs[0] ? blk->succs[0]->id : 0, blk->succs[1] ? blk->succs[1]->id : 0);
             break;
         case XI_BLOCK_RETURN:
             if (blk->control)
@@ -198,17 +227,18 @@ static void dump_block(FILE *out, const XiBlock *blk) {
 /* ========== Dump a Function ========== */
 
 void xi_func_dump(const XiFunc *f, void *stream) {
-    if (!f) return;
+    if (!f)
+        return;
     FILE *out = stream ? (FILE *) stream : stdout;
 
     /* Header (includes stage and invariant mask for diagnostics) */
     fprintf(out, "func %s [%s inv=0x%x](", f->name ? f->name : "<anonymous>",
             xi_stage_name(f->stage), f->invariant_mask);
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (i > 0) fprintf(out, ", ");
+        if (i > 0)
+            fprintf(out, ", ");
         if (f->params[i])
-            fprintf(out, "v%u: %s", f->params[i]->id,
-                    xi_type_name(f->params[i]->type));
+            fprintf(out, "v%u: %s", f->params[i]->id, xi_type_name(f->params[i]->type));
         else
             fprintf(out, "?: ?");
     }

@@ -270,7 +270,6 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
         analyzer->selection_table = NULL;
     }
 
-
     // Free type pool
     if (analyzer->type_pool) {
         xr_type_pool_free(analyzer->type_pool);

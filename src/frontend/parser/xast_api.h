@@ -173,8 +173,8 @@ XR_FUNC AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **
 
 // Create interface method signature node
 XR_FUNC AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name, char **parameters,
-                                         XrTypeRef **param_types, int param_count, XrTypeRef *return_type,
-                                         int line);
+                                         XrTypeRef **param_types, int param_count,
+                                         XrTypeRef *return_type, int line);
 
 // Create field declaration node
 XR_FUNC AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrTypeRef *field_type,
@@ -182,9 +182,10 @@ XR_FUNC AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrTypeRef *
 
 // Create method declaration node
 XR_FUNC AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name, char **parameters,
-                                    XrTypeRef **param_types, int param_count, XrTypeRef *return_type,
-                                    AstNode *body, bool is_constructor, bool is_static,
-                                    bool is_private, bool is_getter, bool is_setter, int line);
+                                    XrTypeRef **param_types, int param_count,
+                                    XrTypeRef *return_type, AstNode *body, bool is_constructor,
+                                    bool is_static, bool is_private, bool is_getter, bool is_setter,
+                                    int line);
 
 // Create new expression node (supports new module.Class() and new Box<int>() syntax)
 XR_FUNC AstNode *xr_ast_new_expr(XrayIsolate *X, const char *module_name, const char *class_name,
@@ -270,7 +271,8 @@ XR_FUNC XrDestructurePattern *xr_pattern_array(XrayIsolate *X, XrDestructurePatt
 XR_FUNC XrDestructurePattern *xr_pattern_object(XrayIsolate *X, char **fields,
                                                 XrDestructurePattern **patterns, int count,
                                                 bool use_shorthand);
-XR_FUNC XrDestructurePattern *xr_pattern_identifier(XrayIsolate *X, const char *name, XrTypeRef *type);
+XR_FUNC XrDestructurePattern *xr_pattern_identifier(XrayIsolate *X, const char *name,
+                                                    XrTypeRef *type);
 XR_FUNC XrDestructurePattern *xr_pattern_skip(XrayIsolate *iso);
 
 // Create destructure nodes

@@ -45,29 +45,41 @@
  * Returns canonical names: "int", "float", "string", "bool", etc.
  * For named/generic types, returns the type's own name (e.g. "Array"). */
 static const char *mono_type_display_name(XrTypeRef *t) {
-    if (!t) return "unknown";
-    switch ((XrTypeRefKind)t->kind) {
+    if (!t)
+        return "unknown";
+    switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_INT:
-        case XR_TREF_INT_WIDTH:    return "int";
+        case XR_TREF_INT_WIDTH:
+            return "int";
         case XR_TREF_FLOAT:
-        case XR_TREF_FLOAT_WIDTH:  return "float";
-        case XR_TREF_BOOL:         return "bool";
-        case XR_TREF_STRING:       return "string";
-        case XR_TREF_NULL:         return "null";
-        case XR_TREF_VOID:         return "void";
+        case XR_TREF_FLOAT_WIDTH:
+            return "float";
+        case XR_TREF_BOOL:
+            return "bool";
+        case XR_TREF_STRING:
+            return "string";
+        case XR_TREF_NULL:
+            return "null";
+        case XR_TREF_VOID:
+            return "void";
         case XR_TREF_NAMED:
-        case XR_TREF_GENERIC:      return t->name ? t->name : "object";
-        case XR_TREF_FUNCTION:     return "function";
-        case XR_TREF_OPTIONAL:     return "optional";
-        case XR_TREF_TYPE_PARAM:   return t->name ? t->name : "T";
-        default:                   return "unknown";
+        case XR_TREF_GENERIC:
+            return t->name ? t->name : "object";
+        case XR_TREF_FUNCTION:
+            return "function";
+        case XR_TREF_OPTIONAL:
+            return "optional";
+        case XR_TREF_TYPE_PARAM:
+            return t->name ? t->name : "T";
+        default:
+            return "unknown";
     }
 }
 
 const char *xr_mono_type_tag(XrTypeRef *t) {
     if (!t)
         return "unknown";
-    switch ((XrTypeRefKind)t->kind) {
+    switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_INT:
         case XR_TREF_INT_WIDTH:
             return "i64";
@@ -148,9 +160,9 @@ XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_
     /* Recurse into children (OPTIONAL, UNION, GENERIC, FUNCTION, etc.) */
     if (type->nchildren > 0 && type->children) {
         bool changed = false;
-        XrTypeRef **new_children =
-            (XrTypeRef **)xr_calloc(type->nchildren, sizeof(XrTypeRef *));
-        if (!new_children) return type;
+        XrTypeRef **new_children = (XrTypeRef **) xr_calloc(type->nchildren, sizeof(XrTypeRef *));
+        if (!new_children)
+            return type;
         for (int i = 0; i < type->nchildren; i++) {
             new_children[i] = xr_mono_type_substitute(type->children[i], map, map_count);
             if (new_children[i] != type->children[i])
@@ -160,8 +172,11 @@ XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_
             xr_free(new_children);
             return type;
         }
-        XrTypeRef *result = (XrTypeRef *)xr_calloc(1, sizeof(XrTypeRef));
-        if (!result) { xr_free(new_children); return type; }
+        XrTypeRef *result = (XrTypeRef *) xr_calloc(1, sizeof(XrTypeRef));
+        if (!result) {
+            xr_free(new_children);
+            return type;
+        }
         *result = *type;
         result->children = new_children;
         return result;
@@ -193,10 +208,10 @@ static XrTypeRef *sub_tref(XrTypeRef *t, XrMonoTypeMap *map, int mc) {
     return (map && mc > 0) ? xr_mono_type_substitute(t, map, mc) : t;
 }
 
-static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count,
-                                     XrMonoTypeMap *map, int mc) {
-    if (!arr || count <= 0) return NULL;
-    XrTypeRef **result = (XrTypeRef **)xr_calloc((size_t)count, sizeof(XrTypeRef *));
+static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count, XrMonoTypeMap *map, int mc) {
+    if (!arr || count <= 0)
+        return NULL;
+    XrTypeRef **result = (XrTypeRef **) xr_calloc((size_t) count, sizeof(XrTypeRef *));
     for (int i = 0; i < count; i++)
         result[i] = sub_tref(arr[i], map, mc);
     return result;
@@ -746,19 +761,26 @@ void xa_mono_collector_free(XaMonoCollector *c) {
 /* Derive a slot-type category from XrTypeRef for rep-sharing dedup.
  * Returns a 4-bit value: distinguishes int/float/bool/string/ptr(ref). */
 static uint8_t tref_slot_category(XrTypeRef *t) {
-    if (!t) return XR_SLOT_ANY;
-    switch ((XrTypeRefKind)t->kind) {
+    if (!t)
+        return XR_SLOT_ANY;
+    switch ((XrTypeRefKind) t->kind) {
         case XR_TREF_INT:
-        case XR_TREF_INT_WIDTH:   return XR_SLOT_I64;
+        case XR_TREF_INT_WIDTH:
+            return XR_SLOT_I64;
         case XR_TREF_FLOAT:
-        case XR_TREF_FLOAT_WIDTH: return XR_SLOT_F64;
-        case XR_TREF_BOOL:        return XR_SLOT_BOOL;
-        case XR_TREF_STRING:      return XR_SLOT_PTR;
+        case XR_TREF_FLOAT_WIDTH:
+            return XR_SLOT_F64;
+        case XR_TREF_BOOL:
+            return XR_SLOT_BOOL;
+        case XR_TREF_STRING:
+            return XR_SLOT_PTR;
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
         case XR_TREF_OPTIONAL:
-        case XR_TREF_FUNCTION:    return XR_SLOT_PTR;
-        default:                  return XR_SLOT_ANY;
+        case XR_TREF_FUNCTION:
+            return XR_SLOT_PTR;
+        default:
+            return XR_SLOT_ANY;
     }
 }
 
@@ -773,8 +795,9 @@ static uint32_t compute_rep_signature(XrTypeRef **type_args, int count) {
     return sig;
 }
 
-const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, XrTypeRef **type_args,
-                                  int type_arg_count, bool is_class_generic) {
+const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name,
+                                  XrTypeRef **type_args, int type_arg_count,
+                                  bool is_class_generic) {
     if (!c || !generic_name)
         return NULL;
 
@@ -837,8 +860,9 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, 
     inst->generic_name = xr_strdup(generic_name);
     inst->type_args = type_args;
     inst->type_arg_count = type_arg_count;
-    inst->mangled_name = candidate_mangled ? candidate_mangled
-                                           : xr_mono_mangle(generic_name, type_args, type_arg_count);
+    inst->mangled_name = candidate_mangled
+                             ? candidate_mangled
+                             : xr_mono_mangle(generic_name, type_args, type_arg_count);
     inst->rep_signature = rep_sig;
     inst->is_class_generic = is_class_generic;
     return inst->mangled_name;
@@ -985,10 +1009,10 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             const char *fn_name = call->callee->as.variable.name;
             XaGenericDecl *decl = registry_find(registry, fn_name);
             if (decl && decl->type_param_count == call->type_arg_count) {
-                bool is_cls = (decl->node->type == AST_CLASS_DECL ||
-                               decl->node->type == AST_STRUCT_DECL);
-                xa_mono_collector_add(collector, fn_name, call->type_args,
-                                      call->type_arg_count, is_cls);
+                bool is_cls =
+                    (decl->node->type == AST_CLASS_DECL || decl->node->type == AST_STRUCT_DECL);
+                xa_mono_collector_add(collector, fn_name, call->type_args, call->type_arg_count,
+                                      is_cls);
             }
         }
         // Recurse into callee and arguments
@@ -1002,8 +1026,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     if (node->type == AST_NEW_EXPR) {
         NewExprNode *ne = &node->as.new_expr;
         if (ne->type_arg_count > 0) {
-            xa_mono_collector_add(collector, ne->class_name, ne->type_args,
-                                  ne->type_arg_count, true);
+            xa_mono_collector_add(collector, ne->class_name, ne->type_args, ne->type_arg_count,
+                                  true);
         }
         for (int i = 0; i < ne->arg_count; i++)
             collect_instantiation_sites(ne->arguments[i], registry, collector);
@@ -1016,8 +1040,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         if (sl->type_arg_count > 0 && sl->struct_name) {
             XaGenericDecl *decl = registry_find(registry, sl->struct_name);
             if (decl && decl->type_param_count == sl->type_arg_count) {
-                xa_mono_collector_add(collector, sl->struct_name, sl->type_args,
-                                      sl->type_arg_count, true);
+                xa_mono_collector_add(collector, sl->struct_name, sl->type_args, sl->type_arg_count,
+                                      true);
             }
         }
         for (int i = 0; i < sl->field_count; i++)
@@ -1435,8 +1459,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.class_decl.display_name = xr_strdup(inst->generic_name);
             /* Store concrete type arg display names for Reflect.typeOf */
             if (inst->type_arg_count > 0 && inst->type_args) {
-                const char **names = (const char **)xr_calloc(
-                    inst->type_arg_count, sizeof(const char *));
+                const char **names =
+                    (const char **) xr_calloc(inst->type_arg_count, sizeof(const char *));
                 if (names) {
                     for (int ti = 0; ti < inst->type_arg_count; ti++)
                         names[ti] = mono_type_display_name(inst->type_args[ti]);
@@ -1456,8 +1480,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.struct_decl.generic_origin_name = xr_strdup(inst->generic_name);
             cloned->as.struct_decl.display_name = xr_strdup(inst->generic_name);
             if (inst->type_arg_count > 0 && inst->type_args) {
-                const char **names = (const char **)xr_calloc(
-                    inst->type_arg_count, sizeof(const char *));
+                const char **names =
+                    (const char **) xr_calloc(inst->type_arg_count, sizeof(const char *));
                 if (names) {
                     for (int ti = 0; ti < inst->type_arg_count; ti++)
                         names[ti] = mono_type_display_name(inst->type_args[ti]);
@@ -1476,7 +1500,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         int insert_pos = prog->count;  // fallback: append
         for (int j = 0; j < prog->count; j++) {
             AstNode *sj = prog->statements[j];
-            if (!sj) continue;
+            if (!sj)
+                continue;
             // Unwrap export wrapper
             if (sj->type == AST_EXPORT_STMT && sj->as.export_stmt.declaration)
                 sj = sj->as.export_stmt.declaration;
@@ -1505,9 +1530,8 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         }
         // Shift statements after insert_pos to make room
         if (insert_pos < prog->count) {
-            memmove(&prog->statements[insert_pos + 1],
-                    &prog->statements[insert_pos],
-                    (size_t)(prog->count - insert_pos) * sizeof(AstNode *));
+            memmove(&prog->statements[insert_pos + 1], &prog->statements[insert_pos],
+                    (size_t) (prog->count - insert_pos) * sizeof(AstNode *));
         }
         prog->statements[insert_pos] = cloned;
         prog->count++;

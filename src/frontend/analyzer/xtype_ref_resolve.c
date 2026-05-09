@@ -31,10 +31,9 @@ static XrType *resolve_named(XrayIsolate *X, const char *name) {
     /* Prelude lookup (Array, Map, Set, Channel, Json, Bytes, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
     if (symbols) {
-        const XrPreludeTypeEntry *entry =
-            xr_prelude_lookup_type(symbols, name, strlen(name));
+        const XrPreludeTypeEntry *entry = xr_prelude_lookup_type(symbols, name, strlen(name));
         if (entry) {
-            switch ((XrPreludeKind)entry->kind) {
+            switch ((XrPreludeKind) entry->kind) {
                 case XR_PRELUDE_KIND_SIMPLE:
                     return xr_type_new_named_instance(X, entry->name);
                 case XR_PRELUDE_KIND_SINGLETON:
@@ -96,7 +95,7 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
     /* Generic class instance */
     XrType **args_copy = NULL;
     if (nargs > 0) {
-        args_copy = (XrType **)xr_malloc(sizeof(XrType *) * (size_t)nargs);
+        args_copy = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) nargs);
         if (args_copy) {
             for (int i = 0; i < nargs; i++)
                 args_copy[i] = args[i];
@@ -106,22 +105,34 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
 }
 
 static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
-    if (!t) return xr_type_new_unknown(NULL);
+    if (!t)
+        return xr_type_new_unknown(NULL);
 
-    switch ((XrTypeRefKind)t->kind) {
-        case XR_TREF_INT:         return xr_type_new_int(NULL);
-        case XR_TREF_FLOAT:       return xr_type_new_float(NULL);
-        case XR_TREF_STRING:      return xr_type_new_string(NULL);
-        case XR_TREF_BOOL:        return xr_type_new_bool(NULL);
-        case XR_TREF_VOID:        return xr_type_new_void(NULL);
-        case XR_TREF_NULL:        return xr_type_new_null(NULL);
-        case XR_TREF_UNKNOWN:     return xr_type_new_unknown(NULL);
+    switch ((XrTypeRefKind) t->kind) {
+        case XR_TREF_INT:
+            return xr_type_new_int(NULL);
+        case XR_TREF_FLOAT:
+            return xr_type_new_float(NULL);
+        case XR_TREF_STRING:
+            return xr_type_new_string(NULL);
+        case XR_TREF_BOOL:
+            return xr_type_new_bool(NULL);
+        case XR_TREF_VOID:
+            return xr_type_new_void(NULL);
+        case XR_TREF_NULL:
+            return xr_type_new_null(NULL);
+        case XR_TREF_UNKNOWN:
+            return xr_type_new_unknown(NULL);
 
-        case XR_TREF_INT_WIDTH:   return xr_type_new_int_width(X, t->native_width);
-        case XR_TREF_FLOAT_WIDTH: return xr_type_new_float_width(X, t->native_width);
+        case XR_TREF_INT_WIDTH:
+            return xr_type_new_int_width(X, t->native_width);
+        case XR_TREF_FLOAT_WIDTH:
+            return xr_type_new_float_width(X, t->native_width);
 
-        case XR_TREF_NAMED:       return resolve_named(X, t->name);
-        case XR_TREF_GENERIC:     return resolve_generic(X, t);
+        case XR_TREF_NAMED:
+            return resolve_named(X, t->name);
+        case XR_TREF_GENERIC:
+            return resolve_generic(X, t);
 
         case XR_TREF_OPTIONAL: {
             XrType *inner = resolve_impl(X, t->children[0]);
@@ -130,8 +141,7 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
 
         case XR_TREF_UNION: {
             XrType *members[XR_UNION_MAX_MEMBERS];
-            int count = t->nchildren < XR_UNION_MAX_MEMBERS
-                            ? t->nchildren : XR_UNION_MAX_MEMBERS;
+            int count = t->nchildren < XR_UNION_MAX_MEMBERS ? t->nchildren : XR_UNION_MAX_MEMBERS;
             for (int i = 0; i < count; i++)
                 members[i] = resolve_impl(X, t->children[i]);
             return xr_type_new_union(X, members, count);
@@ -142,9 +152,8 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
             XrType *params[16];
             for (int i = 0; i < nparam && i < 16; i++)
                 params[i] = resolve_impl(X, t->children[i]);
-            XrType *ret = t->nchildren > 0
-                              ? resolve_impl(X, t->children[t->nchildren - 1])
-                              : xr_type_new_void(NULL);
+            XrType *ret = t->nchildren > 0 ? resolve_impl(X, t->children[t->nchildren - 1])
+                                           : xr_type_new_void(NULL);
             return xr_type_new_function(X, params, nparam, ret, false);
         }
 
@@ -157,10 +166,11 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
         }
 
         case XR_TREF_OBJECT: {
-            const char **names = (const char **)t->field_names;
+            const char **names = (const char **) t->field_names;
             int count = t->nchildren;
             XrType *types[64];
-            if (count > 64) count = 64;
+            if (count > 64)
+                count = 64;
             for (int i = 0; i < count; i++)
                 types[i] = resolve_impl(X, t->children[i]);
             XrType **type_ptrs = types;
@@ -169,10 +179,9 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
         }
 
         case XR_TREF_FIXED_ARRAY: {
-            XrType *elem = t->nchildren > 0
-                               ? resolve_impl(X, t->children[0])
-                               : xr_type_new_unknown(NULL);
-            return xr_type_new_fixed_array(X, elem, (int)t->fixed_length);
+            XrType *elem =
+                t->nchildren > 0 ? resolve_impl(X, t->children[0]) : xr_type_new_unknown(NULL);
+            return xr_type_new_fixed_array(X, elem, (int) t->fixed_length);
         }
 
         case XR_TREF_TYPE_PARAM:

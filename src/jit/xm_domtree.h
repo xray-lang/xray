@@ -81,7 +81,7 @@ static inline uint32_t xm_dom_idom(const XmDomTree *dt, uint32_t blk_id) {
  * not free the returned pointer — it is owned by the tree.
  */
 static inline const uint32_t *xm_dom_children(const XmDomTree *dt, uint32_t blk_id,
-                                               uint32_t *out_n) {
+                                              uint32_t *out_n) {
     if (!dt || blk_id >= dt->nblk) {
         if (out_n)
             *out_n = 0;

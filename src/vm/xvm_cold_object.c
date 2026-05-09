@@ -456,14 +456,16 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             XrArray *entries = xr_map_entries(COLD_CORO(vm_ctx), map);
             base[a] = entries ? xr_value_from_array(entries) : xr_null();
         } else if (prop_symbol == SYMBOL_HAS) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_HAS));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_HAS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_DELETE) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_DELETE));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_CLEAR) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_CLEAR));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_map_get_handler(isolate, SYMBOL_CLEAR));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_FOREACH) {
             XrBoundMethod *bm =
@@ -488,20 +490,24 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else if (prop_symbol == SYMBOL_IS_EMPTY) {
             base[a] = xr_bool(xr_set_is_empty(set));
         } else if (prop_symbol == SYMBOL_ADD) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_ADD));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_ADD));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_HAS) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_HAS));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_HAS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_DELETE) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_DELETE));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_CLEAR) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_CLEAR));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_CLEAR));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_UNION) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_UNION));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_UNION));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_INTERSECTION) {
             XrBoundMethod *bm =
@@ -571,20 +577,20 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_CONTAINS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_STARTSWITH) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_STARTSWITH));
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_string_get_handler(isolate, SYMBOL_STARTSWITH));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_ENDSWITH) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_ENDSWITH));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_TOLOWERCASE) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_TOLOWERCASE));
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_string_get_handler(isolate, SYMBOL_TOLOWERCASE));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_TOUPPERCASE) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_TOUPPERCASE));
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_string_get_handler(isolate, SYMBOL_TOUPPERCASE));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_TRIM) {
             XrBoundMethod *bm =
@@ -599,8 +605,8 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_REPLACE));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_REPLACEALL) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_REPLACEALL));
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_string_get_handler(isolate, SYMBOL_REPLACEALL));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_REPEAT) {
             XrBoundMethod *bm =
@@ -615,8 +621,8 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_ITERATOR));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_CODEPOINT_AT || prop_symbol == SYMBOL_CHARCODEAT) {
-            XrBoundMethod *bm =
-                xr_bound_method_new(isolate, obj, xr_string_get_handler(isolate, SYMBOL_CODEPOINT_AT));
+            XrBoundMethod *bm = xr_bound_method_new(
+                isolate, obj, xr_string_get_handler(isolate, SYMBOL_CODEPOINT_AT));
             base[a] = xr_value_from_bound_method(bm);
         } else {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
@@ -660,7 +666,8 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_PUSH));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_POP) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_POP));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_POP));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_SHIFT) {
             XrBoundMethod *bm =
@@ -675,7 +682,8 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_INDEXOF));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_HAS) {
-            XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_HAS));
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_HAS));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_JOIN) {
             XrBoundMethod *bm =

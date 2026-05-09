@@ -25,13 +25,12 @@ typedef struct XiCgenCtx XiCgenCtx;
 
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
-XR_FUNC void       xi_cgen_ctx_free(XiCgenCtx *ctx);
+XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()
  * Suitable for: cc -o out file.c */
-XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out,
-                              struct XiModule *module);
+XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, struct XiModule *module);
 
 /* ========== Multi-module API ========== */
 
@@ -40,17 +39,14 @@ XR_FUNC void xi_cgen_header(FILE *out);
 
 /* Resolve cross-module imports.  Populates ctx internal import table
  * from the module graph.  Must be called before xi_cgen_module(). */
-XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx,
-                                             struct XiModule **modules,
-                                             int nmodules);
+XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, struct XiModule **modules,
+                                            int nmodules);
 
 /* Emit one module: module-scoped shared[], forward decls, function
  * bodies.  Does NOT emit #includes or main(). */
-XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out,
-                             struct XiModule *module);
+XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out, struct XiModule *module);
 
 /* Emit int main(void) calling module inits in topo order. */
-XR_FUNC void xi_cgen_main(FILE *out, struct XiModule **modules,
-                           int n, int entry_index);
+XR_FUNC void xi_cgen_main(FILE *out, struct XiModule **modules, int n, int entry_index);
 
-#endif // XI_CGEN_H
+#endif  // XI_CGEN_H

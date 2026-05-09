@@ -25,4 +25,4 @@
 /* Run if-conversion on the function.  Requires dominators computed. */
 XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f);
 
-#endif // XI_OPT_IFCONV_H
+#endif  // XI_OPT_IFCONV_H

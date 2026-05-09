@@ -57,12 +57,12 @@ typedef enum {
 
 // Per-slot entry in runtime deopt table
 typedef struct {
-    int16_t bc_slot;     // bytecode register index R[bc_slot]
-    uint8_t type;        // XrRep (I64/F64/PTR/TAGGED)
-    uint8_t loc_kind;    // XmDeoptLocKind
-    uint8_t xr_tag;      // XrValue tag (0-15), or 0xFF=unknown
+    int16_t bc_slot;   // bytecode register index R[bc_slot]
+    uint8_t type;      // XrRep (I64/F64/PTR/TAGGED)
+    uint8_t loc_kind;  // XmDeoptLocKind
+    uint8_t xr_tag;    // XrValue tag (0-15), or 0xFF=unknown
     uint8_t _pad;
-    uint16_t vreg_idx;   // source vreg index (for vreg_runtime_tags[] lookup)
+    uint16_t vreg_idx;  // source vreg index (for vreg_runtime_tags[] lookup)
     union {
         uint8_t phys_reg;      // for LOC_REG / LOC_FP_REG
         int16_t spill_offset;  // for LOC_SPILL (byte offset from frame base)

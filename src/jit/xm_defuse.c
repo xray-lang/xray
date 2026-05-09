@@ -29,8 +29,8 @@ static inline void count_ref(uint32_t *cnt, uint32_t nv, XmRef ref) {
 }
 
 // Pass 2 helper: record a use and advance the write cursor
-static inline void record_use(XmDefUse *du, uint32_t vreg, uint32_t blk, uint32_t ins,
-                              uint8_t kind, uint8_t arg_idx) {
+static inline void record_use(XmDefUse *du, uint32_t vreg, uint32_t blk, uint32_t ins, uint8_t kind,
+                              uint8_t arg_idx) {
     uint32_t pos = du->offset[vreg] + du->count[vreg];
     du->uses[pos].blk = blk;
     du->uses[pos].ins = ins;

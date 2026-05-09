@@ -47,7 +47,7 @@ typedef enum {
 
 // Def-use chains for an entire function
 typedef struct XmDefUse {
-    XmUse *uses;         // flat array of all use records
+    XmUse *uses;          // flat array of all use records
     uint32_t *offset;     // offset[v] = start index in uses[] for vreg v
     uint32_t *count;      // count[v]  = number of uses for vreg v
     uint32_t nvreg;       // number of vregs

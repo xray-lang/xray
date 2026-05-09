@@ -52,10 +52,10 @@ XR_FUNC bool xi_dominates(const XiBlock *a, const XiBlock *b);
 /* Per-block liveness sets.
  * Bitsets indexed by value ID. Allocated as a single contiguous block. */
 typedef struct XiLiveness {
-    uint32_t nblocks;       /* number of blocks */
-    uint32_t set_words;     /* uint64_t words per bitset */
-    uint64_t *live_in;      /* [nblocks * set_words] — values live at block entry */
-    uint64_t *live_out;     /* [nblocks * set_words] — values live at block exit */
+    uint32_t nblocks;   /* number of blocks */
+    uint32_t set_words; /* uint64_t words per bitset */
+    uint64_t *live_in;  /* [nblocks * set_words] — values live at block entry */
+    uint64_t *live_out; /* [nblocks * set_words] — values live at block exit */
 } XiLiveness;
 
 /* Compute liveness for all values in the function.
@@ -65,12 +65,10 @@ typedef struct XiLiveness {
 XR_FUNC XiLiveness *xi_compute_liveness(XiFunc *f);
 
 /* Query: is value 'v' live at the entry of block 'blk'? */
-XR_FUNC bool xi_is_live_in(const XiLiveness *l, const XiBlock *blk,
-                             const XiValue *v);
+XR_FUNC bool xi_is_live_in(const XiLiveness *l, const XiBlock *blk, const XiValue *v);
 
 /* Query: is value 'v' live at the exit of block 'blk'? */
-XR_FUNC bool xi_is_live_out(const XiLiveness *l, const XiBlock *blk,
-                              const XiValue *v);
+XR_FUNC bool xi_is_live_out(const XiLiveness *l, const XiBlock *blk, const XiValue *v);
 
 /* Free liveness data. */
 XR_FUNC void xi_liveness_free(XiLiveness *l);

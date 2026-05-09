@@ -244,8 +244,8 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
      * in xr_class_builder_destroy. */
     cls->mono_type_argc = b->mono_type_argc;
     cls->mono_type_arg_names = b->mono_type_arg_names;
-    ((XrClassBuilder *)b)->mono_type_arg_names = NULL;
-    ((XrClassBuilder *)b)->mono_type_argc = 0;
+    ((XrClassBuilder *) b)->mono_type_arg_names = NULL;
+    ((XrClassBuilder *) b)->mono_type_argc = 0;
 
     if (cls->super == NULL) {
         cls->depth = 0;

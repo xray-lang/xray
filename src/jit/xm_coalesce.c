@@ -355,7 +355,7 @@ uint32_t xm_coalesce(XmFunc *func) {
                 mov_cap *= 2;
                 XR_REALLOC_OR_ABORT(movs, mov_cap * sizeof(CoalesceMove), "coalesce movs grow");
             }
-            movs[nmov++] = (CoalesceMove){
+            movs[nmov++] = (CoalesceMove) {
                 .dst_vreg = dv, .src_vreg = sv, .blk_idx = bi, .ins_idx = ii, .freq = w};
         }
     }

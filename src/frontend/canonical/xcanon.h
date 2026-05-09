@@ -49,14 +49,12 @@ typedef enum {
  *
  * Returns XR_CANON_OK on success.  The AST is modified in-place;
  * newly synthesized nodes get fresh node_id values from the isolate. */
-XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program,
-                                        struct XaAnalyzer *analyzer,
-                                        struct XrayIsolate *isolate);
+XR_FUNC XrCanonStatus xr_canon_program(struct AstNode *program, struct XaAnalyzer *analyzer,
+                                       struct XrayIsolate *isolate);
 
 /* Canonicalize a single function body. Used by the pipeline when
  * compiling individual functions rather than full programs. */
-XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node,
-                                     struct XaAnalyzer *analyzer,
-                                     struct XrayIsolate *isolate);
+XR_FUNC XrCanonStatus xr_canon_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
+                                    struct XrayIsolate *isolate);
 
 #endif  // XCANON_H

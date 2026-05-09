@@ -32,46 +32,68 @@
 /* ========== Lattice Cell ========== */
 
 typedef enum {
-    SCCP_TOP = 0,       /* unseen (default after calloc) */
+    SCCP_TOP = 0, /* unseen (default after calloc) */
     SCCP_CONST_INT,
     SCCP_CONST_FLOAT,
     SCCP_CONST_BOOL,
-    SCCP_BOT,           /* overdefined */
+    SCCP_BOT, /* overdefined */
 } SccpKind;
 
 typedef struct {
     SccpKind kind;
-    int64_t ival;       /* payload for INT / BOOL */
-    double fval;        /* payload for FLOAT */
+    int64_t ival; /* payload for INT / BOOL */
+    double fval;  /* payload for FLOAT */
 } SccpCell;
 
-static SccpCell sccp_top(void)       { return (SccpCell){SCCP_TOP, 0, 0.0}; }
-static SccpCell sccp_bot(void)       { return (SccpCell){SCCP_BOT, 0, 0.0}; }
-static SccpCell sccp_int(int64_t v)  { return (SccpCell){SCCP_CONST_INT, v, 0.0}; }
-static SccpCell sccp_float(double v) { return (SccpCell){SCCP_CONST_FLOAT, 0, v}; }
-static SccpCell sccp_bool(bool v)    { return (SccpCell){SCCP_CONST_BOOL, v ? 1 : 0, 0.0}; }
+static SccpCell sccp_top(void) {
+    return (SccpCell) {SCCP_TOP, 0, 0.0};
+}
+static SccpCell sccp_bot(void) {
+    return (SccpCell) {SCCP_BOT, 0, 0.0};
+}
+static SccpCell sccp_int(int64_t v) {
+    return (SccpCell) {SCCP_CONST_INT, v, 0.0};
+}
+static SccpCell sccp_float(double v) {
+    return (SccpCell) {SCCP_CONST_FLOAT, 0, v};
+}
+static SccpCell sccp_bool(bool v) {
+    return (SccpCell) {SCCP_CONST_BOOL, v ? 1 : 0, 0.0};
+}
 
 static bool sccp_eq(SccpCell a, SccpCell b) {
-    if (a.kind != b.kind) return false;
+    if (a.kind != b.kind)
+        return false;
     switch (a.kind) {
-        case SCCP_CONST_INT:   return a.ival == b.ival;
-        case SCCP_CONST_FLOAT: return a.fval == b.fval;
-        case SCCP_CONST_BOOL:  return a.ival == b.ival;
-        default:               return true;
+        case SCCP_CONST_INT:
+            return a.ival == b.ival;
+        case SCCP_CONST_FLOAT:
+            return a.fval == b.fval;
+        case SCCP_CONST_BOOL:
+            return a.ival == b.ival;
+        default:
+            return true;
     }
 }
 
 static SccpCell sccp_meet(SccpCell a, SccpCell b) {
-    if (a.kind == SCCP_TOP) return b;
-    if (b.kind == SCCP_TOP) return a;
-    if (a.kind == SCCP_BOT || b.kind == SCCP_BOT) return sccp_bot();
-    if (sccp_eq(a, b)) return a;
+    if (a.kind == SCCP_TOP)
+        return b;
+    if (b.kind == SCCP_TOP)
+        return a;
+    if (a.kind == SCCP_BOT || b.kind == SCCP_BOT)
+        return sccp_bot();
+    if (sccp_eq(a, b))
+        return a;
     return sccp_bot();
 }
 
 /* ========== Worklists ========== */
 
-typedef struct { uint32_t from; uint32_t to; } CfgEdge;
+typedef struct {
+    uint32_t from;
+    uint32_t to;
+} CfgEdge;
 
 typedef struct {
     CfgEdge *buf;
@@ -88,11 +110,12 @@ static void cfg_push(CfgWl *w, uint32_t from, uint32_t to) {
         w->cap = w->cap ? w->cap * 2 : 64;
         XR_REALLOC_OR_ABORT(w->buf, w->cap * sizeof(CfgEdge), "sccp cfg wl");
     }
-    w->buf[w->len++] = (CfgEdge){from, to};
+    w->buf[w->len++] = (CfgEdge) {from, to};
 }
 
 static bool cfg_pop(CfgWl *w, CfgEdge *out) {
-    if (!w->len) return false;
+    if (!w->len)
+        return false;
     *out = w->buf[--w->len];
     return true;
 }
@@ -106,7 +129,8 @@ static void ssa_push(SsaWl *w, uint32_t v) {
 }
 
 static bool ssa_pop(SsaWl *w, uint32_t *out) {
-    if (!w->len) return false;
+    if (!w->len)
+        return false;
     *out = w->buf[--w->len];
     return true;
 }
@@ -114,13 +138,13 @@ static bool ssa_pop(SsaWl *w, uint32_t *out) {
 /* ========== SCCP Context ========== */
 
 typedef struct {
-    XiFunc  *func;
-    SccpCell *cells;        /* [next_value_id] */
-    bool     *reachable;    /* [nblocks] */
-    bool     *exec_edge;    /* [nblocks * 2]: [bi*2] = succs[0] edge, [bi*2+1] = succs[1] */
-    uint32_t  max_id;       /* = func->next_value_id */
-    CfgWl     cfg;
-    SsaWl     ssa;
+    XiFunc *func;
+    SccpCell *cells; /* [next_value_id] */
+    bool *reachable; /* [nblocks] */
+    bool *exec_edge; /* [nblocks * 2]: [bi*2] = succs[0] edge, [bi*2+1] = succs[1] */
+    uint32_t max_id; /* = func->next_value_id */
+    CfgWl cfg;
+    SsaWl ssa;
 } SccpCtx;
 
 /* ========== Value → Cell ========== */
@@ -128,9 +152,11 @@ typedef struct {
 /* Get the cell for an XiValue. Constants evaluate immediately;
  * other values use the cells[] array. */
 static SccpCell value_cell(SccpCtx *ctx, const XiValue *v) {
-    if (!v) return sccp_bot();
+    if (!v)
+        return sccp_bot();
     if (v->op == XI_CONST) {
-        if (!v->type) return sccp_bot();
+        if (!v->type)
+            return sccp_bot();
         if (v->type->kind == XR_KIND_INT)
             return sccp_int(v->aux_int);
         if (v->type->kind == XR_KIND_FLOAT) {
@@ -158,7 +184,8 @@ static bool both_float(SccpCell a, SccpCell b) {
 
 /* Evaluate a single XiValue under current cell state. */
 static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
-    if (!v) return sccp_bot();
+    if (!v)
+        return sccp_bot();
 
     /* Side-effecting ops always produce BOT */
     if (v->flags & XI_FLAG_SIDE_EFFECT)
@@ -179,18 +206,23 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
     /* Unary ops */
     if (v->nargs == 1) {
         SccpCell a = value_cell(ctx, v->args[0]);
-        if (a.kind == SCCP_TOP) return sccp_top();
+        if (a.kind == SCCP_TOP)
+            return sccp_top();
 
         switch (v->op) {
             case XI_NEG:
-                if (a.kind == SCCP_CONST_INT)   return sccp_int(-a.ival);
-                if (a.kind == SCCP_CONST_FLOAT) return sccp_float(-a.fval);
+                if (a.kind == SCCP_CONST_INT)
+                    return sccp_int(-a.ival);
+                if (a.kind == SCCP_CONST_FLOAT)
+                    return sccp_float(-a.fval);
                 return sccp_bot();
             case XI_BNOT:
-                if (a.kind == SCCP_CONST_INT) return sccp_int(~a.ival);
+                if (a.kind == SCCP_CONST_INT)
+                    return sccp_int(~a.ival);
                 return sccp_bot();
             case XI_NOT:
-                if (a.kind == SCCP_CONST_BOOL) return sccp_bool(a.ival == 0);
+                if (a.kind == SCCP_CONST_BOOL)
+                    return sccp_bool(a.ival == 0);
                 return sccp_bot();
             case XI_ISNULL:
                 /* A non-null constant is never null */
@@ -216,19 +248,19 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
             /* Integer arithmetic */
             case XI_ADD:
                 if (both_int(a, b))
-                    return sccp_int((int64_t)((uint64_t)a.ival + (uint64_t)b.ival));
+                    return sccp_int((int64_t) ((uint64_t) a.ival + (uint64_t) b.ival));
                 if (both_float(a, b))
                     return sccp_float(a.fval + b.fval);
                 return sccp_bot();
             case XI_SUB:
                 if (both_int(a, b))
-                    return sccp_int((int64_t)((uint64_t)a.ival - (uint64_t)b.ival));
+                    return sccp_int((int64_t) ((uint64_t) a.ival - (uint64_t) b.ival));
                 if (both_float(a, b))
                     return sccp_float(a.fval - b.fval);
                 return sccp_bot();
             case XI_MUL:
                 if (both_int(a, b))
-                    return sccp_int((int64_t)((uint64_t)a.ival * (uint64_t)b.ival));
+                    return sccp_int((int64_t) ((uint64_t) a.ival * (uint64_t) b.ival));
                 if (both_float(a, b))
                     return sccp_float(a.fval * b.fval);
                 return sccp_bot();
@@ -245,49 +277,64 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
 
             /* Bitwise */
             case XI_BAND:
-                if (both_int(a, b)) return sccp_int(a.ival & b.ival);
+                if (both_int(a, b))
+                    return sccp_int(a.ival & b.ival);
                 return sccp_bot();
             case XI_BOR:
-                if (both_int(a, b)) return sccp_int(a.ival | b.ival);
+                if (both_int(a, b))
+                    return sccp_int(a.ival | b.ival);
                 return sccp_bot();
             case XI_BXOR:
-                if (both_int(a, b)) return sccp_int(a.ival ^ b.ival);
+                if (both_int(a, b))
+                    return sccp_int(a.ival ^ b.ival);
                 return sccp_bot();
             case XI_SHL:
                 if (both_int(a, b) && b.ival >= 0 && b.ival < 64)
-                    return sccp_int((int64_t)((uint64_t)a.ival << b.ival));
+                    return sccp_int((int64_t) ((uint64_t) a.ival << b.ival));
                 return sccp_bot();
             case XI_SHR:
                 if (both_int(a, b) && b.ival >= 0 && b.ival < 64)
-                    return sccp_int((int64_t)((uint64_t)a.ival >> b.ival));
+                    return sccp_int((int64_t) ((uint64_t) a.ival >> b.ival));
                 return sccp_bot();
 
             /* Comparisons (result is bool) */
             case XI_LT:
-                if (both_int(a, b))   return sccp_bool(a.ival < b.ival);
-                if (both_float(a, b)) return sccp_bool(a.fval < b.fval);
+                if (both_int(a, b))
+                    return sccp_bool(a.ival < b.ival);
+                if (both_float(a, b))
+                    return sccp_bool(a.fval < b.fval);
                 return sccp_bot();
             case XI_LE:
-                if (both_int(a, b))   return sccp_bool(a.ival <= b.ival);
-                if (both_float(a, b)) return sccp_bool(a.fval <= b.fval);
+                if (both_int(a, b))
+                    return sccp_bool(a.ival <= b.ival);
+                if (both_float(a, b))
+                    return sccp_bool(a.fval <= b.fval);
                 return sccp_bot();
             case XI_GT:
-                if (both_int(a, b))   return sccp_bool(a.ival > b.ival);
-                if (both_float(a, b)) return sccp_bool(a.fval > b.fval);
+                if (both_int(a, b))
+                    return sccp_bool(a.ival > b.ival);
+                if (both_float(a, b))
+                    return sccp_bool(a.fval > b.fval);
                 return sccp_bot();
             case XI_GE:
-                if (both_int(a, b))   return sccp_bool(a.ival >= b.ival);
-                if (both_float(a, b)) return sccp_bool(a.fval >= b.fval);
+                if (both_int(a, b))
+                    return sccp_bool(a.ival >= b.ival);
+                if (both_float(a, b))
+                    return sccp_bool(a.fval >= b.fval);
                 return sccp_bot();
             case XI_EQ:
-                if (both_int(a, b))   return sccp_bool(a.ival == b.ival);
-                if (both_float(a, b)) return sccp_bool(a.fval == b.fval);
+                if (both_int(a, b))
+                    return sccp_bool(a.ival == b.ival);
+                if (both_float(a, b))
+                    return sccp_bool(a.fval == b.fval);
                 if (a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
                     return sccp_bool(a.ival == b.ival);
                 return sccp_bot();
             case XI_NE:
-                if (both_int(a, b))   return sccp_bool(a.ival != b.ival);
-                if (both_float(a, b)) return sccp_bool(a.fval != b.fval);
+                if (both_int(a, b))
+                    return sccp_bool(a.ival != b.ival);
+                if (both_float(a, b))
+                    return sccp_bool(a.fval != b.fval);
                 if (a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
                     return sccp_bool(a.ival != b.ival);
                 return sccp_bot();
@@ -305,9 +352,11 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
 static SccpCell eval_phi(SccpCtx *ctx, const XiBlock *blk, const XiPhi *phi) {
     SccpCell acc = sccp_top();
     for (uint16_t i = 0; i < phi->value.nargs; i++) {
-        if (i >= blk->npreds) break;
+        if (i >= blk->npreds)
+            break;
         XiBlock *pred = blk->preds[i];
-        if (!pred) continue;
+        if (!pred)
+            continue;
         XR_DCHECK(pred->id < ctx->func->nblocks, "phi pred ID out of range");
 
         /* Check if the edge from pred to blk is executable */
@@ -316,10 +365,12 @@ static SccpCell eval_phi(SccpCtx *ctx, const XiBlock *blk, const XiPhi *phi) {
             edge_exec = true;
         if (pred->succs[1] == blk && ctx->exec_edge[pred->id * 2 + 1])
             edge_exec = true;
-        if (!edge_exec) continue;
+        if (!edge_exec)
+            continue;
 
         acc = sccp_meet(acc, value_cell(ctx, phi->value.args[i]));
-        if (acc.kind == SCCP_BOT) break;
+        if (acc.kind == SCCP_BOT)
+            break;
     }
     return acc;
 }
@@ -328,7 +379,8 @@ static SccpCell eval_phi(SccpCtx *ctx, const XiBlock *blk, const XiPhi *phi) {
 
 static void mark_edge(SccpCtx *ctx, uint32_t from_bi, uint32_t to_bi, int slot) {
     uint32_t eidx = from_bi * 2 + slot;
-    if (ctx->exec_edge[eidx]) return;
+    if (ctx->exec_edge[eidx])
+        return;
     ctx->exec_edge[eidx] = true;
     if (!ctx->reachable[to_bi])
         ctx->reachable[to_bi] = true;
@@ -341,12 +393,14 @@ static void mark_edge(SccpCtx *ctx, uint32_t from_bi, uint32_t to_bi, int slot) 
 static void enqueue_uses(SccpCtx *ctx, uint32_t vid) {
     XiFunc *f = ctx->func;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        if (!ctx->reachable[bi]) continue;
+        if (!ctx->reachable[bi])
+            continue;
         XiBlock *blk = f->blocks[bi];
 
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
-            if (!v) continue;
+            if (!v)
+                continue;
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] && v->args[a]->id == vid) {
                     ssa_push(&ctx->ssa, v->id);
@@ -398,7 +452,11 @@ static void visit_terminator(SccpCtx *ctx, XiBlock *blk) {
 /* ========== Find Value by ID ========== */
 
 /* Find the XiValue* and its block given a value ID.  Used for rewriting. */
-typedef struct { XiValue *v; XiBlock *blk; bool is_phi; } ValLoc;
+typedef struct {
+    XiValue *v;
+    XiBlock *blk;
+    bool is_phi;
+} ValLoc;
 
 static ValLoc find_value(XiFunc *f, uint32_t vid) {
     ValLoc loc = {NULL, NULL, false};
@@ -406,11 +464,11 @@ static ValLoc find_value(XiFunc *f, uint32_t vid) {
         XiBlock *blk = f->blocks[bi];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             if (blk->values[vi] && blk->values[vi]->id == vid)
-                return (ValLoc){blk->values[vi], blk, false};
+                return (ValLoc) {blk->values[vi], blk, false};
         }
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             if (phi->value.id == vid)
-                return (ValLoc){&phi->value, blk, true};
+                return (ValLoc) {&phi->value, blk, true};
         }
     }
     return loc;
@@ -419,17 +477,20 @@ static ValLoc find_value(XiFunc *f, uint32_t vid) {
 /* ========== Revisit a Value ========== */
 
 static void revisit_value(SccpCtx *ctx, uint32_t vid) {
-    if (vid >= ctx->max_id) return;
+    if (vid >= ctx->max_id)
+        return;
 
     ValLoc loc = find_value(ctx->func, vid);
-    if (!loc.v) return;
-    if (!ctx->reachable[loc.blk->id]) return;
+    if (!loc.v)
+        return;
+    if (!ctx->reachable[loc.blk->id])
+        return;
 
     SccpCell old = ctx->cells[vid];
     SccpCell neu;
 
     if (loc.is_phi) {
-        XiPhi *phi = (XiPhi *)((char *)loc.v - offsetof(XiPhi, value));
+        XiPhi *phi = (XiPhi *) ((char *) loc.v - offsetof(XiPhi, value));
         neu = eval_phi(ctx, loc.blk, phi);
     } else {
         neu = eval_value(ctx, loc.v);
@@ -449,13 +510,16 @@ static bool rewrite_function(SccpCtx *ctx) {
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
-        if (!ctx->reachable[bi]) continue;
+        if (!ctx->reachable[bi])
+            continue;
 
         /* Rewrite values with constant cells to XI_CONST */
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
-            if (!v || v->op == XI_CONST || v->op == XI_PARAM) continue;
-            if (v->flags & XI_FLAG_SIDE_EFFECT) continue;
+            if (!v || v->op == XI_CONST || v->op == XI_PARAM)
+                continue;
+            if (v->flags & XI_FLAG_SIDE_EFFECT)
+                continue;
 
             SccpCell cell = ctx->cells[v->id];
             switch (cell.kind) {
@@ -504,7 +568,8 @@ static bool rewrite_function(SccpCtx *ctx) {
 
 XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_sccp: NULL func");
-    if (f->nblocks == 0) return xi_pass_no_change();
+    if (f->nblocks == 0)
+        return xi_pass_no_change();
 
     uint32_t n = f->nblocks;
     uint32_t max_id = f->next_value_id;
@@ -513,11 +578,13 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     memset(&ctx, 0, sizeof(ctx));
     ctx.func = f;
     ctx.max_id = max_id;
-    ctx.cells = (SccpCell *)xr_calloc(max_id > 0 ? max_id : 1, sizeof(SccpCell));
-    ctx.reachable = (bool *)xr_calloc(n, sizeof(bool));
-    ctx.exec_edge = (bool *)xr_calloc((size_t)n * 2, sizeof(bool));
+    ctx.cells = (SccpCell *) xr_calloc(max_id > 0 ? max_id : 1, sizeof(SccpCell));
+    ctx.reachable = (bool *) xr_calloc(n, sizeof(bool));
+    ctx.exec_edge = (bool *) xr_calloc((size_t) n * 2, sizeof(bool));
     if (!ctx.cells || !ctx.reachable || !ctx.exec_edge) {
-        xr_free(ctx.cells); xr_free(ctx.reachable); xr_free(ctx.exec_edge);
+        xr_free(ctx.cells);
+        xr_free(ctx.reachable);
+        xr_free(ctx.exec_edge);
         return xi_pass_no_change();
     }
 
@@ -530,12 +597,14 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
         CfgEdge ce;
         if (cfg_pop(&ctx.cfg, &ce)) {
             XiBlock *blk = f->blocks[ce.to];
-            if (!blk) continue;
+            if (!blk)
+                continue;
 
             /* Evaluate all phis in this block */
             for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
                 uint32_t dv = phi->value.id;
-                if (dv >= max_id) continue;
+                if (dv >= max_id)
+                    continue;
                 SccpCell neu = eval_phi(&ctx, blk, phi);
                 if (!sccp_eq(ctx.cells[dv], neu)) {
                     ctx.cells[dv] = neu;
@@ -546,9 +615,11 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
             /* Evaluate all values in this block */
             for (uint32_t i = 0; i < blk->nvalues; i++) {
                 XiValue *v = blk->values[i];
-                if (!v) continue;
+                if (!v)
+                    continue;
                 uint32_t dv = v->id;
-                if (dv >= max_id) continue;
+                if (dv >= max_id)
+                    continue;
                 SccpCell neu = eval_value(&ctx, v);
                 if (!sccp_eq(ctx.cells[dv], neu)) {
                     ctx.cells[dv] = neu;
@@ -566,10 +637,10 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
 
             /* Re-visit terminators that read this value */
             for (uint32_t bi = 0; bi < n; bi++) {
-                if (!ctx.reachable[bi]) continue;
+                if (!ctx.reachable[bi])
+                    continue;
                 XiBlock *blk = f->blocks[bi];
-                if (blk->kind == XI_BLOCK_IF && blk->control &&
-                    blk->control->id == vid) {
+                if (blk->kind == XI_BLOCK_IF && blk->control && blk->control->id == vid) {
                     visit_terminator(&ctx, blk);
                 }
             }
