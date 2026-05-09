@@ -591,8 +591,8 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 // cold-object / cold-chan TUs can call it without an owning .c
 // file having to re-export it.
 
-XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                      XrValue *base, XrBcCallFrame *frame) {
+XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr, XrValue *base,
+                      XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c_raw = GETARG_C(instr);

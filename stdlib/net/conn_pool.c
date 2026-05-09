@@ -403,8 +403,8 @@ XrPooledConn *xr_conn_pool_get(struct XrayIsolate *X, XrConnPool *pool, const ch
     return result;
 }
 
-void xr_conn_pool_put(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn,
-                      const char *host, uint16_t port, bool is_https, bool keep_alive) {
+void xr_conn_pool_put(struct XrayIsolate *X, XrConnPool *pool, XrPooledConn *conn, const char *host,
+                      uint16_t port, bool is_https, bool keep_alive) {
     if (!pool || !pool->initialized || !conn)
         return;
 

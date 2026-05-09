@@ -45,22 +45,22 @@ struct XrayIsolate;
  * small (< 1000 each) for typical functions.
  */
 
-#define XI_LOWER_MAX_VARS   256
+#define XI_LOWER_MAX_VARS 256
 #define XI_LOWER_MAX_BLOCKS 256
 #define XI_LOWER_MAX_INCOMPLETE 256
 
 typedef struct XiVarEntry {
-    uint32_t symbol_id; /* unique ID from analyzer (0 = unresolved / synthetic) */
-    const char *name;   /* variable name (debug only, not owned, points into AST) */
-    struct XrType *type;/* declared type */
-    bool hoisted;       /* true if pre-registered by function hoisting; captures
-                         * of this variable need cell indirection because the
-                         * actual closure is assigned after sibling captures. */
+    uint32_t symbol_id;     /* unique ID from analyzer (0 = unresolved / synthetic) */
+    const char *name;       /* variable name (debug only, not owned, points into AST) */
+    struct XrType *type;    /* declared type */
+    bool hoisted;           /* true if pre-registered by function hoisting; captures
+                             * of this variable need cell indirection because the
+                             * actual closure is assigned after sibling captures. */
     bool captured_by_child; /* true if a hoisted child function captures this
-                            * variable — definitions must survive DCE because
-                            * hoisting reorders the closure before the actual
-                            * initializer, and the upvalue/cell must see the
-                            * real value rather than the braun-read null. */
+                             * variable — definitions must survive DCE because
+                             * hoisting reorders the closure before the actual
+                             * initializer, and the upvalue/cell must see the
+                             * real value rather than the braun-read null. */
 } XiVarEntry;
 
 /*
@@ -119,7 +119,7 @@ typedef struct XiLower {
      * can resolve its own name; lower_call detects this and emits
      * a self-call (OP_CALLSELF) instead of a regular call. */
     XiValue *self_value;
-    int self_var_id;  /* Braun var_id of the self-reference (-1 = none) */
+    int self_var_id; /* Braun var_id of the self-reference (-1 = none) */
 
     /* Parent lowering context for upvalue capture resolution.
      * NULL for top-level program or standalone functions.
@@ -167,17 +167,15 @@ typedef struct XiLower {
  * The analyzer provides type information for each AST node.
  * Returns NULL on failure.
  */
-XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node,
-                               struct XaAnalyzer *analyzer,
-                               struct XrayIsolate *isolate);
+XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node, struct XaAnalyzer *analyzer,
+                              struct XrayIsolate *isolate);
 
 /*
  * Lower a top-level program (sequence of statements) into a
  * synthetic "main" function. Used for script-mode execution.
  * The AST must be canonicalized (xr_canon_program) before lowering.
  */
-XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node,
-                                  struct XaAnalyzer *analyzer,
-                                  struct XrayIsolate *isolate);
+XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node, struct XaAnalyzer *analyzer,
+                                 struct XrayIsolate *isolate);
 
 #endif  // XI_LOWER_H

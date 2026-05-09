@@ -29,21 +29,40 @@
 
 static bool xi_op_is_pure(uint16_t op) {
     switch (op) {
-        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+        case XI_DIV:
+        case XI_MOD:
         case XI_NEG:
-        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
-        case XI_SHL: case XI_SHR:
-        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+        case XI_BNOT:
+        case XI_SHL:
+        case XI_SHR:
+        case XI_EQ:
+        case XI_NE:
+        case XI_LT:
+        case XI_LE:
+        case XI_GT:
+        case XI_GE:
         case XI_NOT:
         case XI_ISNULL:
         case XI_CONVERT:
-        case XI_NARROW_I8: case XI_NARROW_U8:
-        case XI_NARROW_I16: case XI_NARROW_U16:
-        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_NARROW_I8:
+        case XI_NARROW_U8:
+        case XI_NARROW_I16:
+        case XI_NARROW_U16:
+        case XI_NARROW_I32:
+        case XI_NARROW_U32:
         case XI_NARROW_F32:
-        case XI_WIDEN_I8: case XI_WIDEN_U8:
-        case XI_WIDEN_I16: case XI_WIDEN_U16:
-        case XI_WIDEN_I32: case XI_WIDEN_U32:
+        case XI_WIDEN_I8:
+        case XI_WIDEN_U8:
+        case XI_WIDEN_I16:
+        case XI_WIDEN_U16:
+        case XI_WIDEN_I32:
+        case XI_WIDEN_U32:
         case XI_WIDEN_F32:
             return true;
         default:
@@ -53,9 +72,13 @@ static bool xi_op_is_pure(uint16_t op) {
 
 static bool xi_op_is_commutative(uint16_t op) {
     switch (op) {
-        case XI_ADD: case XI_MUL:
-        case XI_BAND: case XI_BOR: case XI_BXOR:
-        case XI_EQ: case XI_NE:
+        case XI_ADD:
+        case XI_MUL:
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+        case XI_EQ:
+        case XI_NE:
             return true;
         default:
             return false;
@@ -67,17 +90,17 @@ static bool xi_op_is_commutative(uint16_t op) {
 #define GVN_MIN_TABLE 64
 
 typedef struct {
-    uint32_t key;           /* hash; 0 = empty slot */
+    uint32_t key; /* hash; 0 = empty slot */
     uint16_t op;
     XiValue *arg0, *arg1;
-    XiValue *result;        /* first occurrence */
-    uint32_t def_blk_id;   /* block id of first occurrence */
+    XiValue *result;     /* first occurrence */
+    uint32_t def_blk_id; /* block id of first occurrence */
 } GvnEntry;
 
 static uint32_t gvn_hash(uint16_t op, const XiValue *a0, const XiValue *a1) {
-    uint32_t h = (uint32_t)op * 2654435761u;
-    h ^= (uint32_t)(uintptr_t)a0 * 2246822519u;
-    h ^= (uint32_t)(uintptr_t)a1 * 3266489917u;
+    uint32_t h = (uint32_t) op * 2654435761u;
+    h ^= (uint32_t) (uintptr_t) a0 * 2246822519u;
+    h ^= (uint32_t) (uintptr_t) a1 * 3266489917u;
     /* Ensure non-zero so 0 remains the empty-slot sentinel */
     return h ? h : 1;
 }
@@ -85,7 +108,7 @@ static uint32_t gvn_hash(uint16_t op, const XiValue *a0, const XiValue *a1) {
 /* Normalize commutative ops: ensure arg0 <= arg1 by pointer value */
 static void gvn_normalize(XiValue *v) {
     if (v->nargs == 2 && xi_op_is_commutative(v->op)) {
-        if ((uintptr_t)v->args[0] > (uintptr_t)v->args[1]) {
+        if ((uintptr_t) v->args[0] > (uintptr_t) v->args[1]) {
             XiValue *tmp = v->args[0];
             v->args[0] = v->args[1];
             v->args[1] = tmp;
@@ -97,7 +120,8 @@ static void gvn_normalize(XiValue *v) {
 
 XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_gvn: NULL func");
-    if (f->nblocks < 2) return xi_pass_no_change();
+    if (f->nblocks < 2)
+        return xi_pass_no_change();
 
     /* Ensure dominator tree is available */
     xi_compute_rpo(f);
@@ -113,8 +137,9 @@ XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
         tsize <<= 1;
     uint32_t tmask = tsize - 1;
 
-    GvnEntry *table = (GvnEntry *)xr_calloc(tsize, sizeof(GvnEntry));
-    if (!table) return xi_pass_no_change();
+    GvnEntry *table = (GvnEntry *) xr_calloc(tsize, sizeof(GvnEntry));
+    if (!table)
+        return xi_pass_no_change();
 
     uint32_t n_replaced = 0;
 
@@ -123,13 +148,18 @@ XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
 
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
-            if (!v) continue;
+            if (!v)
+                continue;
 
             /* Only pure binary ops are eligible */
-            if (v->nargs != 2) continue;
-            if (!xi_op_is_pure(v->op)) continue;
-            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW)) continue;
-            if (!v->args[0] || !v->args[1]) continue;
+            if (v->nargs != 2)
+                continue;
+            if (!xi_op_is_pure(v->op))
+                continue;
+            if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))
+                continue;
+            if (!v->args[0] || !v->args[1])
+                continue;
 
             gvn_normalize(v);
 
@@ -151,8 +181,8 @@ XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
                     break;
                 }
 
-                if (e->key == h && e->op == v->op &&
-                    e->arg0 == v->args[0] && e->arg1 == v->args[1]) {
+                if (e->key == h && e->op == v->op && e->arg0 == v->args[0] &&
+                    e->arg1 == v->args[1]) {
                     /* Match: replace if earlier def dominates current block */
                     XiBlock *def_blk = f->blocks[e->def_blk_id];
                     XR_DCHECK(def_blk != NULL, "GVN: def block is NULL");
@@ -170,7 +200,8 @@ XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
 
     xr_free(table);
 
-    if (n_replaced == 0) return xi_pass_no_change();
+    if (n_replaced == 0)
+        return xi_pass_no_change();
 
     XiPassChange chg = xi_pass_no_change();
     chg.values_changed = true;

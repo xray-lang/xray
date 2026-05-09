@@ -32,8 +32,8 @@
  *   4. Replace callee RET terminators with JMP to post_call
  *   5. Wire pre_call → callee entry, post_call receives return value via Phi
  */
-XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_idx,
-                           XmFunc *callee, XmRef *call_args, uint32_t nargs) {
+XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_idx, XmFunc *callee,
+                         XmRef *call_args, uint32_t nargs) {
     if (!caller || !callee || !call_block)
         return XM_NONE;
     if (callee->nblk == 0)
@@ -89,12 +89,12 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
 // Helper: remap a single XmRef from callee space to caller space
 #define REMAP_REF(r)                                                                               \
     do {                                                                                           \
-        if (xm_ref_is_vreg(r)) {                                                                  \
-            uint32_t _idx = XM_REF_INDEX(r);                                                      \
+        if (xm_ref_is_vreg(r)) {                                                                   \
+            uint32_t _idx = XM_REF_INDEX(r);                                                       \
             if (_idx < callee_nvreg)                                                               \
                 (r) = vreg_map[_idx];                                                              \
-        } else if (xm_ref_is_const(r)) {                                                          \
-            uint32_t _idx = XM_REF_INDEX(r);                                                      \
+        } else if (xm_ref_is_const(r)) {                                                           \
+            uint32_t _idx = XM_REF_INDEX(r);                                                       \
             if (_idx < nconst)                                                                     \
                 (r) = const_map[_idx];                                                             \
         }                                                                                          \
@@ -340,7 +340,7 @@ XmPassChange xm_insert_write_barriers(XmFunc *func) {
         blk->nins = new_nins;
         total_barriers += barrier_count;
     }
-    return total_barriers ? (XmPassChange){false, true, false, 0, 0, 0} : xm_pass_no_change();
+    return total_barriers ? (XmPassChange) {false, true, false, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== InsertArcReleases (AOT only) ========== */
@@ -758,8 +758,7 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
             continue;
 
         // Skip if ref is RET value of target block
-        if (tblk->jmp.type == XM_JMP_RET && !xm_ref_is_none(tblk->jmp.arg) &&
-            tblk->jmp.arg == ref)
+        if (tblk->jmp.type == XM_JMP_RET && !xm_ref_is_none(tblk->jmp.arg) && tblk->jmp.arg == ref)
             continue;
 
         // Skip if ownership transferred via STORE_FIELD in any block
@@ -815,7 +814,7 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
         any_inserted = true;
     }
 #undef ARC_MAX_GLOBAL
-    return any_inserted ? (XmPassChange){false, true, false, 0, 0, 0} : xm_pass_no_change();
+    return any_inserted ? (XmPassChange) {false, true, false, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Escape Analysis + Scalar Replacement ========== */
@@ -849,7 +848,7 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
 #define EA_MAX_SCALAR_FIELDS 64
 
 typedef struct {
-    XmRef ref;           // ALLOC result vreg
+    XmRef ref;            // ALLOC result vreg
     uint32_t blk;         // containing block index
     uint32_t ins_idx;     // instruction index in that block
     int32_t alloc_size;   // allocation size
@@ -939,8 +938,8 @@ static void ea_mark_escapes(XmFunc *func, EaAlloc *allocs, uint32_t nalloc) {
 
 #define ESC_IF_ALLOC(ref)                                                                          \
     do {                                                                                           \
-        if (xm_ref_is_vreg(ref)) {                                                                \
-            uint32_t _v = XM_REF_INDEX(ref);                                                      \
+        if (xm_ref_is_vreg(ref)) {                                                                 \
+            uint32_t _v = XM_REF_INDEX(ref);                                                       \
             if (_v < func->nvreg) {                                                                \
                 uint32_t _j = ref_to_alloc[_v];                                                    \
                 if (_j != UINT32_MAX)                                                              \
@@ -1136,7 +1135,7 @@ XmPassChange xm_pass_escape_analysis(XmFunc *func) {
     }
 
     xr_free(allocs);
-    return n_replaced ? (XmPassChange){false, true, true, n_replaced, 0, 0} : xm_pass_no_change();
+    return n_replaced ? (XmPassChange) {false, true, true, n_replaced, 0, 0} : xm_pass_no_change();
 }
 
 /*
@@ -1267,7 +1266,7 @@ XmPassChange xm_pass_alloc_sink(XmFunc *func) {
             }
         }
     }
-    return n_sunk ? (XmPassChange){false, true, false, n_sunk, 0, 0} : xm_pass_no_change();
+    return n_sunk ? (XmPassChange) {false, true, false, n_sunk, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Automatic Function Inlining ========== */
@@ -1488,9 +1487,8 @@ XmPassChange xm_pass_auto_inline(XmFunc *func, XrProto *caller_proto) {
                 // --- Build callee Xm via xi_to_xm ---
                 XmFunc *callee_func = NULL;
                 if (callee->xi_func)
-                    callee_func = xi_to_xm_lower(
-                        (XiFunc *)callee->xi_func, callee,
-                        (XiSlotMap *)callee->xi_slot_map, NULL, NULL);
+                    callee_func = xi_to_xm_lower((XiFunc *) callee->xi_func, callee,
+                                                 (XiSlotMap *) callee->xi_slot_map, NULL, NULL);
                 if (!callee_func)
                     continue;
                 int max_blk = is_tiny ? 8 : 32;
@@ -1572,7 +1570,7 @@ XmPassChange xm_pass_auto_inline(XmFunc *func, XrProto *caller_proto) {
     }
 
 #undef MAX_INLINE_CALLEES
-    return inlined_count > 0 ? (XmPassChange){true, true, true, 0, 0, 0} : xm_pass_no_change();
+    return inlined_count > 0 ? (XmPassChange) {true, true, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 // (INLINE_JIT_CALL_ARGS_BASE removed: args now come from call_arg_pool)
@@ -1713,7 +1711,7 @@ XmPassChange xm_pass_elim_guards(XmFunc *func) {
     }
 #undef GUARD_TABLE_SIZE
 #undef GUARD_TABLE_MASK
-    return n_elim ? (XmPassChange){false, true, false, n_elim, 0, 0} : xm_pass_no_change();
+    return n_elim ? (XmPassChange) {false, true, false, n_elim, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Branch Value Propagation (propjnz) ========== */
@@ -1850,7 +1848,7 @@ XmPassChange xm_pass_propjnz(XmFunc *func) {
             }
         }
     }
-    return any_prop ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return any_prop ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Global Code Motion (GCM) ========== */
@@ -2196,7 +2194,7 @@ XmPassChange xm_pass_gcm(XmFunc *func) {
     xr_free(early);
     xr_free(best);
     xr_free(def_blk);
-    return (XmPassChange){false, true, false, 0, 0, 0};
+    return (XmPassChange) {false, true, false, 0, 0, 0};
 }
 
 /* ========== Type Propagation Pass ========== */

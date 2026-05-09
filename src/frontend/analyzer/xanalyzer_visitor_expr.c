@@ -19,12 +19,12 @@
 #include "../../base/xchecks.h"
 
 /* Record a selection fact for a member/index access node. */
-static void record_selection(XaInferContext *ctx, AstNode *node,
-                             XaSelectionKind kind, XrType *receiver,
-                             XaSymbol *target, int32_t field_idx,
-                             XrType *result, bool is_optional) {
-    XaSelectionTable *st = (XaSelectionTable *)ctx->analyzer->selection_table;
-    if (!st) return;
+static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
+                             XrType *receiver, XaSymbol *target, int32_t field_idx, XrType *result,
+                             bool is_optional) {
+    XaSelectionTable *st = (XaSelectionTable *) ctx->analyzer->selection_table;
+    if (!st)
+        return;
     XaSelection sel = {
         .kind = kind,
         .receiver_type = receiver,
@@ -329,8 +329,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         mod_result = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
                     }
                     if (mod_result) {
-                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT,
-                                         obj_type, sym, -1, mod_result, false);
+                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                                         mod_result, false);
                     }
                     return mod_result;
                 }
@@ -345,18 +345,18 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     // typo like Color.Yellow is flagged here rather than handed to the
     // EnumValue builtin probe below (which would also miss).
     if (obj_type->kind == XR_KIND_ENUM && obj_type->enum_type.enum_name) {
-        XaSymbol *enum_sym = xa_scope_lookup(ctx->analyzer->current_scope,
-                                             obj_type->enum_type.enum_name);
+        XaSymbol *enum_sym =
+            xa_scope_lookup(ctx->analyzer->current_scope, obj_type->enum_type.enum_name);
         if (enum_sym && enum_sym->kind == XA_SYM_ENUM) {
             XaSymbolLinks *el = xa_analyzer_get_links(ctx->analyzer, enum_sym);
             if (el) {
                 for (int i = 0; i < el->enum_member_count; i++) {
                     if (el->enum_member_names[i] &&
                         strcmp(el->enum_member_names[i], ma->name) == 0) {
-                        XrType *enum_type = xr_type_new_enum(ctx->analyzer->isolate,
-                                                              obj_type->enum_type.enum_name);
-                        record_selection(ctx, node, XA_SEL_ENUM_MEMBER,
-                                         obj_type, enum_sym, i, enum_type, false);
+                        XrType *enum_type =
+                            xr_type_new_enum(ctx->analyzer->isolate, obj_type->enum_type.enum_name);
+                        record_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
+                                         enum_type, false);
                         return enum_type;
                     }
                 }
@@ -382,8 +382,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 if (member) {
                     XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                     if (ml && ml->type) {
-                        record_selection(ctx, node, XA_SEL_STATIC_MEMBER,
-                                         obj_type, member, -1, ml->type, false);
+                        record_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member, -1,
+                                         ml->type, false);
                         return ml->type;
                     }
                 }
@@ -404,19 +404,21 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrType *joined = NULL;
         for (int i = 0; i < obj_type->union_type.member_count; i++) {
             XrType *m = obj_type->union_type.members[i];
-            if (!m) continue;
+            if (!m)
+                continue;
             XrType *member_ty = NULL;
             // Class instance: look up method/field by name in class info.
             if (XR_TYPE_IS_INSTANCE(m) && m->instance.class_name) {
-                XaSymbol *cs = xa_scope_lookup(ctx->analyzer->current_scope,
-                                               m->instance.class_name);
+                XaSymbol *cs =
+                    xa_scope_lookup(ctx->analyzer->current_scope, m->instance.class_name);
                 if (cs) {
                     XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, cs);
                     if (cl && cl->class_info) {
                         XaSymbol *mem = xa_class_info_lookup_member(cl->class_info, ma->name);
                         if (mem) {
                             XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, mem);
-                            if (ml && ml->type) member_ty = ml->type;
+                            if (ml && ml->type)
+                                member_ty = ml->type;
                         }
                     }
                 }
@@ -425,8 +427,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 joined = NULL;
                 break;
             }
-            joined = joined ? xr_type_union(ctx->analyzer->isolate, joined, member_ty)
-                            : member_ty;
+            joined = joined ? xr_type_union(ctx->analyzer->isolate, joined, member_ty) : member_ty;
         }
         if (joined)
             return joined;
@@ -523,10 +524,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                 obj_type->instance.type_args, obj_type->instance.type_arg_count);
                             xr_free(param_names);
                         }
-                        XaSelectionKind sk = (member->kind == XA_SYM_METHOD)
-                                                 ? XA_SEL_METHOD : XA_SEL_FIELD;
-                        record_selection(ctx, node, sk, obj_type, member,
-                                         -1, member_type, false);
+                        XaSelectionKind sk =
+                            (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
+                        record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
                         return member_type;
                     }
                 }
@@ -544,15 +544,15 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             // Check handle fields first
             for (int i = 0; i < handle->field_count; i++) {
                 if (strcmp(handle->fields[i].name, ma->name) == 0) {
-                    return xa_builtin_parse_type_string(
-                        ctx->analyzer->isolate, handle->fields[i].type_str);
+                    return xa_builtin_parse_type_string(ctx->analyzer->isolate,
+                                                        handle->fields[i].type_str);
                 }
             }
             // Check handle methods
             for (int i = 0; i < handle->method_count; i++) {
                 if (strcmp(handle->methods[i].name, ma->name) == 0) {
-                    return xa_builtin_parse_full_signature(
-                        ctx->analyzer->isolate, handle->methods[i].signature);
+                    return xa_builtin_parse_full_signature(ctx->analyzer->isolate,
+                                                           handle->methods[i].signature);
                 }
             }
         }
@@ -565,8 +565,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         // return Json since any field access is valid at runtime.
         return xr_type_new_json(ctx->analyzer->isolate);
     }
-    if (XR_TYPE_IS_JSON(obj_type) &&
-        obj_type->object.field_count > 0) {
+    if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
         if (obj_type->object.field_names && obj_type->object.field_types) {
             for (int i = 0; i < obj_type->object.field_count; i++) {
                 if (obj_type->object.field_names[i] &&
@@ -577,9 +576,9 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     // JSON fields are always nullable (runtime dynamic);
                     // OBJECT fields return exact type (compile-time fixed)
                     XrType *result_ft = XR_TYPE_IS_JSON(obj_type)
-                        ? xr_type_make_nullable(ctx->analyzer->isolate, ft) : ft;
-                    record_selection(ctx, node, XA_SEL_FIELD, obj_type,
-                                     NULL, i, result_ft, false);
+                                            ? xr_type_make_nullable(ctx->analyzer->isolate, ft)
+                                            : ft;
+                    record_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, i, result_ft, false);
                     return result_ft;
                 }
             }
@@ -770,8 +769,8 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    XrType *type =
-        xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, obj->count, false);
+    XrType *type = xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types,
+                                                obj->count, false);
     xr_free(field_names);
     xr_free(field_types);
 
@@ -802,9 +801,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         XrType *ta[8] = {0};
         int tac = ne->type_arg_count > 8 ? 8 : ne->type_arg_count;
         for (int i = 0; i < tac; i++)
-            ta[i] = ne->type_args[i]
-                ? xr_tref_resolve(X, ne->type_args[i])
-                : xr_type_new_unknown(NULL);
+            ta[i] =
+                ne->type_args[i] ? xr_tref_resolve(X, ne->type_args[i]) : xr_type_new_unknown(NULL);
 
         if (strcmp(cn, "Map") == 0 || strcmp(cn, "WeakMap") == 0) {
             XrType *kt = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
@@ -828,11 +826,13 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         } else if (strcmp(cn, "Channel") == 0) {
             XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new(X, XR_KIND_CHANNEL);
-            if (bt) bt->container.element_type = et;
+            if (bt)
+                bt->container.element_type = et;
         } else if (strcmp(cn, "StringBuilder") == 0) {
             bt = xr_type_new_named_instance(X, "StringBuilder");
         }
-        if (bt) return bt;
+        if (bt)
+            return bt;
     }
 
     // Look up class symbol to get XrClassInfo
@@ -869,12 +869,12 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
         // Resolve XrTypeRef** to XrType** for runtime use
         XrType *resolved_targs_buf[8];
         XrType **resolved_targs = (ne->type_arg_count <= 8)
-            ? resolved_targs_buf
-            : xr_malloc(sizeof(XrType *) * (size_t)ne->type_arg_count);
+                                      ? resolved_targs_buf
+                                      : xr_malloc(sizeof(XrType *) * (size_t) ne->type_arg_count);
         for (int i = 0; i < ne->type_arg_count; i++)
             resolved_targs[i] = ne->type_args[i]
-                ? xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[i])
-                : xr_type_new_unknown(NULL);
+                                    ? xr_tref_resolve(ctx->analyzer->isolate, ne->type_args[i])
+                                    : xr_type_new_unknown(NULL);
 
         // Check constructor argument types against substituted parameter types
         if (class_info && class_links && ne->arg_count > 0) {
@@ -930,8 +930,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
-        XrType *gi = xr_type_new_generic_instance(ctx->analyzer->isolate, ne->class_name, class_info,
-                                            resolved_targs, ne->type_arg_count);
+        XrType *gi = xr_type_new_generic_instance(ctx->analyzer->isolate, ne->class_name,
+                                                  class_info, resolved_targs, ne->type_arg_count);
         if (resolved_targs != resolved_targs_buf)
             xr_free(resolved_targs);
         return gi;
@@ -1201,8 +1201,8 @@ XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node) {
     // Visit operand to ensure it's analyzed (side effects, narrowing)
     xa_visit_infer_expr(ctx, node->as.as_expr.expr);
     XrType *target = node->as.as_expr.type
-        ? xr_tref_resolve(ctx->analyzer->isolate, node->as.as_expr.type)
-        : NULL;
+                         ? xr_tref_resolve(ctx->analyzer->isolate, node->as.as_expr.type)
+                         : NULL;
     if (!target)
         return xr_type_new_unknown(NULL);
     return target;
@@ -1294,7 +1294,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     // Use expected return type if not explicitly declared
-    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type) : xr_type_new_unknown(NULL);
+    XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type)
+                                          : xr_type_new_unknown(NULL);
     if (XR_TYPE_IS_UNKNOWN(return_type) && expected_fn && expected_fn->function.return_type) {
         return_type = expected_fn->function.return_type;
     }
@@ -1388,11 +1389,13 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
 
         // Discard diagnostics from symbol-resolution-only body visit
         if (!need_return_infer && ctx->analyzer->diagnostic_count > saved_diag_count) {
-            XaDiagnostic *first_new = saved_diag_tail ? saved_diag_tail->next : ctx->analyzer->diagnostics;
+            XaDiagnostic *first_new =
+                saved_diag_tail ? saved_diag_tail->next : ctx->analyzer->diagnostics;
             XaDiagnostic *d = first_new;
             while (d) {
                 XaDiagnostic *next = d->next;
-                if (d->message) xr_free((void *)d->message);
+                if (d->message)
+                    xr_free((void *) d->message);
                 xr_free(d);
                 d = next;
             }

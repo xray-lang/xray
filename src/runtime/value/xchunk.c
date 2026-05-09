@@ -164,11 +164,11 @@ void xr_vm_proto_free(XrProto *proto) {
 
     // Free Xi IR metadata (retained for JIT direct lowering)
     if (proto->xi_func != NULL) {
-        xi_func_free((struct XiFunc *)proto->xi_func);
+        xi_func_free((struct XiFunc *) proto->xi_func);
         proto->xi_func = NULL;
     }
     if (proto->xi_slot_map != NULL) {
-        xi_slot_map_free((struct XiSlotMap *)proto->xi_slot_map);
+        xi_slot_map_free((struct XiSlotMap *) proto->xi_slot_map);
         proto->xi_slot_map = NULL;
     }
 

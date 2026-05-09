@@ -307,13 +307,12 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, 0xFFFF, 0));
         a64_buf_emit(&ctx->buf, a64_movk(SCRATCH_REG2, 0xFFFF, 16));
         a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, A64_FP, FRAME_SMAP_ID_OFFSET));
-        a64_buf_emit(&ctx->buf,
-                     a64_str_w(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_ID_OFFSET));
+        a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_ID_OFFSET));
         // Save JIT frame SP for GC access
         a64_buf_emit(&ctx->buf, a64_str(A64_FP, JIT_CTX_REG, XM_JIT_FRAME_SP_OFFSET));
         // Load guard page pointer into x20 from jit_ctx->safepoint_page for OSR entry
-        a64_buf_emit(&ctx->buf, a64_ldr(SAFEPT_PAGE_REG, JIT_CTX_REG,
-                                        (int32_t) XM_JIT_SAFEPOINT_PAGE_OFFSET));
+        a64_buf_emit(&ctx->buf,
+                     a64_ldr(SAFEPT_PAGE_REG, JIT_CTX_REG, (int32_t) XM_JIT_SAFEPOINT_PAGE_OFFSET));
 
         // Save values pointer to SCRATCH_REG (x16) before loading,
         // because x1 (alloc_regs[0]) may be overwritten by vreg loads
@@ -514,7 +513,8 @@ XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *res
             rs->type = slot->rep;
             rs->xr_tag = slot->xr_tag;
             rs->_pad = 0;
-            rs->vreg_idx = xm_ref_is_vreg(slot->value) ? (uint16_t) XM_REF_INDEX(slot->value) : 0xFFFF;
+            rs->vreg_idx =
+                xm_ref_is_vreg(slot->value) ? (uint16_t) XM_REF_INDEX(slot->value) : 0xFFFF;
 
             XmRef ref = slot->value;
             if (xm_ref_is_none(ref))
@@ -781,5 +781,4 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     result->resume_entry_offset = ctx->resume_entry_offset * 4;
 }
 
-
-#endif  /* __aarch64__ */
+#endif /* __aarch64__ */

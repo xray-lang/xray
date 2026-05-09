@@ -274,7 +274,8 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         return VM_COLD_BREAK;
     }
 
-    if (!current) current = vm_cold_get_coro(vm_ctx);
+    if (!current)
+        current = vm_cold_get_coro(vm_ctx);
     if (current) {
         int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 

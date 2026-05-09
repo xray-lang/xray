@@ -224,8 +224,8 @@ XrType *xr_type_new_json(XrayIsolate *X) {
     return &g_type_json;  // Process-level singleton (plain Json without fields)
 }
 
-XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types,
-                                     int count, bool is_sealed) {
+XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types, int count,
+                                     bool is_sealed) {
     X = resolve_isolate(X);
     XrType *type = type_alloc(X, XR_KIND_JSON);
     if (!type)

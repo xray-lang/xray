@@ -690,7 +690,7 @@ void xr_class_free(XrClass *cls) {
     // Free monomorphized type arg names array
     if (cls->mono_type_arg_names) {
         for (uint8_t i = 0; i < cls->mono_type_argc; i++)
-            xr_free((void *)cls->mono_type_arg_names[i]);
+            xr_free((void *) cls->mono_type_arg_names[i]);
         xr_free(cls->mono_type_arg_names);
         cls->mono_type_arg_names = NULL;
         cls->mono_type_argc = 0;

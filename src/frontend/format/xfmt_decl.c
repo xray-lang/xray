@@ -172,8 +172,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         if (m->is_getter || m->is_setter) {
             // Extract base property name (strip "get:" or "set:" prefix)
             const char *prop_name = m->name;
-            if (prop_name && (strncmp(prop_name, "get:", 4) == 0 ||
-                              strncmp(prop_name, "set:", 4) == 0)) {
+            if (prop_name &&
+                (strncmp(prop_name, "get:", 4) == 0 || strncmp(prop_name, "set:", 4) == 0)) {
                 prop_name = prop_name + 4;
             }
 
@@ -190,8 +190,10 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                     if (strncmp(oname, "get:", 4) == 0 || strncmp(oname, "set:", 4) == 0)
                         oname = oname + 4;
                     if (strcmp(oname, prop_name) == 0) {
-                        if (other->is_getter) getter = other;
-                        if (other->is_setter) setter = other;
+                        if (other->is_getter)
+                            getter = other;
+                        if (other->is_setter)
+                            setter = other;
                         pair_idx = j;
                         break;
                     }
@@ -205,7 +207,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                     MethodDeclNode *prev = &cls->methods[j]->as.method_decl;
                     if (prev->is_getter && prev->name) {
                         const char *pname = prev->name;
-                        if (strncmp(pname, "get:", 4) == 0) pname = pname + 4;
+                        if (strncmp(pname, "get:", 4) == 0)
+                            pname = pname + 4;
                         if (strcmp(pname, prop_name) == 0) {
                             already_emitted = 1;
                             break;
@@ -252,7 +255,8 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_indent(ctx);
                 xfmt_write_str(ctx, "fn(");
                 for (int j = 0; j < setter->param_count; j++) {
-                    if (j > 0) xfmt_write_str(ctx, ", ");
+                    if (j > 0)
+                        xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, setter->parameters[j]);
                     if (setter->param_types && setter->param_types[j]) {
                         xfmt_write_str(ctx, ": ");

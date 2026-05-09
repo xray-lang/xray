@@ -22,14 +22,14 @@
 // Variable reference node
 typedef struct VariableNode {
     char *name;
-    uint32_t symbol_id;  /* unique ID from analyzer scope resolution; 0 = unresolved */
+    uint32_t symbol_id; /* unique ID from analyzer scope resolution; 0 = unresolved */
 } VariableNode;
 
 // Assignment node
 typedef struct AssignmentNode {
     char *name;
     AstNode *value;
-    uint32_t symbol_id;  /* resolved target variable ID; 0 = unresolved */
+    uint32_t symbol_id; /* resolved target variable ID; 0 = unresolved */
 } AssignmentNode;
 
 // Compound assignment node
@@ -38,13 +38,13 @@ typedef struct CompoundAssignmentNode {
     XrTokenType op;
     AstNode *value;
     AstNode *object;
-    uint32_t symbol_id;  /* resolved target variable ID; 0 = unresolved */
+    uint32_t symbol_id; /* resolved target variable ID; 0 = unresolved */
 } CompoundAssignmentNode;
 
 // Increment/decrement node
 typedef struct IncDecNode {
     char *name;
-    uint32_t symbol_id;  /* resolved target variable ID; 0 = unresolved */
+    uint32_t symbol_id; /* resolved target variable ID; 0 = unresolved */
 } IncDecNode;
 
 // Destructure assignment node

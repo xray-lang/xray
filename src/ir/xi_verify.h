@@ -47,7 +47,6 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size);
  * includes all checks from earlier stages.
  *
  * Return true if valid.  On failure, the diagnostic goes to errbuf. */
-XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage,
-                              char *errbuf, int errbuf_size);
+XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage, char *errbuf, int errbuf_size);
 
 #endif  // XI_VERIFY_H

@@ -169,7 +169,7 @@ XmPassChange xm_pass_dce(XmFunc *func) {
     xr_free(use_count);
     xr_free(removable);
     xr_free(worklist);
-    return n_removed ? (XmPassChange){false, true, false, n_removed, 0, n_removed}
+    return n_removed ? (XmPassChange) {false, true, false, n_removed, 0, n_removed}
                      : xm_pass_no_change();
 }
 
@@ -308,7 +308,7 @@ XmPassChange xm_pass_cse(XmFunc *func) {
     }
 
     xr_free(table);
-    return n_replaced ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return n_replaced ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Global Value Numbering (GVN) ========== */
@@ -547,7 +547,7 @@ XmPassChange xm_pass_gvn(XmFunc *func) {
     }
 
     xr_free(table);
-    return n_replaced ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return n_replaced ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Store-to-Load Forwarding ========== */
@@ -569,9 +569,9 @@ XmPassChange xm_pass_gvn(XmFunc *func) {
  */
 
 typedef struct {
-    XmRef obj;      // object pointer vreg
+    XmRef obj;       // object pointer vreg
     int64_t offset;  // field byte offset
-    XmRef value;    // last stored/loaded value vreg
+    XmRef value;     // last stored/loaded value vreg
     bool valid;
     bool is_store;       // true if value came from a store (for DSE)
     uint32_t store_blk;  // block index of the store (for DSE)
@@ -777,7 +777,7 @@ XmPassChange xm_pass_store_to_load(XmFunc *func) {
     }
 
     xr_free(t.entries);
-    return n_fwd ? (XmPassChange){false, true, true, n_fwd, 0, 0} : xm_pass_no_change();
+    return n_fwd ? (XmPassChange) {false, true, true, n_fwd, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== If-Conversion ========== */
@@ -901,12 +901,12 @@ XmPassChange xm_pass_ifconvert(XmFunc *func) {
             // Move then-block instructions to ifblk
             for (uint32_t i = 0; i < thenblk->nins; i++)
                 xm_emit_raw(func, ifblk, thenblk->ins[i].op, thenblk->ins[i].rep,
-                             thenblk->ins[i].dst, thenblk->ins[i].args[0], thenblk->ins[i].args[1]);
+                            thenblk->ins[i].dst, thenblk->ins[i].args[0], thenblk->ins[i].args[1]);
 
             // Move else-block instructions to ifblk
             for (uint32_t i = 0; i < elseblk->nins; i++)
                 xm_emit_raw(func, ifblk, elseblk->ins[i].op, elseblk->ins[i].rep,
-                             elseblk->ins[i].dst, elseblk->ins[i].args[0], elseblk->ins[i].args[1]);
+                            elseblk->ins[i].dst, elseblk->ins[i].args[0], elseblk->ins[i].args[1]);
 
             // Emit SELECT_COND + SELECT for each PHI
             xm_emit_raw(func, ifblk, XM_SELECT_COND, XR_REP_VOID, XM_NONE, cond, XM_NONE);
@@ -953,7 +953,7 @@ XmPassChange xm_pass_ifconvert(XmFunc *func) {
         if (!converted_any)
             break;
     }
-    return ever_converted ? (XmPassChange){true, true, false, 0, 0, 0} : xm_pass_no_change();
+    return ever_converted ? (XmPassChange) {true, true, false, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Loop Invariant Code Motion (LICM) ========== */
@@ -1132,7 +1132,7 @@ XmPassChange xm_pass_licm(XmFunc *func) {
                     store_cap = store_cap ? store_cap * 2 : 8;
                     XR_REALLOC_OR_ABORT(stores, store_cap * sizeof(LicmStoreInfo), "licm stores");
                 }
-                stores[nstores++] = (LicmStoreInfo){obj, off, has_off};
+                stores[nstores++] = (LicmStoreInfo) {obj, off, has_off};
             }
         }
 
@@ -1211,7 +1211,7 @@ XmPassChange xm_pass_licm(XmFunc *func) {
 
                     if (can_hoist) {
                         xm_emit_raw(func, preheader, ins->op, ins->rep, ins->dst, ins->args[0],
-                                     ins->args[1]);
+                                    ins->args[1]);
                         preheader->ins[preheader->nins - 1].flags = ins->flags;
                         if (xm_ref_is_vreg(ins->dst)) {
                             uint32_t di = XM_REF_INDEX(ins->dst);
@@ -1238,7 +1238,7 @@ XmPassChange xm_pass_licm(XmFunc *func) {
 
     xr_free(def_block);
     xr_free(in_loop);
-    return any_hoisted ? (XmPassChange){false, true, false, 0, 0, 0} : xm_pass_no_change();
+    return any_hoisted ? (XmPassChange) {false, true, false, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Canonicalize ========== */
@@ -1421,9 +1421,8 @@ XmPassChange xm_pass_canonicalize(XmFunc *func) {
                     }
                     // Self-comparison folding
                     if (ins->args[0] == ins->args[1]) {
-                        bool is_true =
-                            (ins->op == XM_EQ || ins->op == XM_LE || ins->op == XM_GE ||
-                             ins->op == XM_FEQ || ins->op == XM_FLE);
+                        bool is_true = (ins->op == XM_EQ || ins->op == XM_LE || ins->op == XM_GE ||
+                                        ins->op == XM_FEQ || ins->op == XM_FLE);
                         XmRef cval = xm_const_i64(func, is_true ? 1 : 0);
                         ins->op = XM_CONST_I64;
                         ins->rep = XR_REP_I64;
@@ -1493,7 +1492,7 @@ XmPassChange xm_pass_canonicalize(XmFunc *func) {
                 changed = true;
         }
     }
-    return changed ? (XmPassChange){false, false, true, 0, 0, 0} : xm_pass_no_change();
+    return changed ? (XmPassChange) {false, false, true, 0, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Dead Store Elimination ========== */
@@ -1514,7 +1513,7 @@ XmPassChange xm_pass_canonicalize(XmFunc *func) {
 
 typedef struct {
     XmRef obj;
-    XmRef offset;     // const ref for byte offset
+    XmRef offset;      // const ref for byte offset
     uint32_t ins_idx;  // instruction index in block
 } DseEntry;
 
@@ -1552,10 +1551,10 @@ XmPassChange xm_pass_dse(XmFunc *func) {
 
             /* GC trigger or call invalidates all tracked stores
              * (may observe stored values through aliases) */
-            if (ins->op == XM_CALL_C || ins->op == XM_CALL_KNOWN ||
-                ins->op == XM_CALL_KNOWN_REG || ins->op == XM_CALL_DIRECT ||
-                ins->op == XM_CALL_SELF_DIRECT || ins->op == XM_CALL_INTRINSIC ||
-                ins->op == XM_ALLOC || ins->op == XM_SAFEPOINT || ins->op == XM_CALL_C_LEAF) {
+            if (ins->op == XM_CALL_C || ins->op == XM_CALL_KNOWN || ins->op == XM_CALL_KNOWN_REG ||
+                ins->op == XM_CALL_DIRECT || ins->op == XM_CALL_SELF_DIRECT ||
+                ins->op == XM_CALL_INTRINSIC || ins->op == XM_ALLOC || ins->op == XM_SAFEPOINT ||
+                ins->op == XM_CALL_C_LEAF) {
                 ntracked = 0;
                 continue;
             }
@@ -1609,7 +1608,7 @@ XmPassChange xm_pass_dse(XmFunc *func) {
     }
 
     xr_free(tracked);
-    return n_killed ? (XmPassChange){false, true, false, n_killed, 0, 0} : xm_pass_no_change();
+    return n_killed ? (XmPassChange) {false, true, false, n_killed, 0, 0} : xm_pass_no_change();
 }
 
 /* ========== Pipeline Runner ========== */
@@ -1618,12 +1617,12 @@ XmPassChange xm_pass_dse(XmFunc *func) {
  * dominator / loop / def-use analyses so the next consumer sees a
  * coherent snapshot. Blanket invalidation is correct; a fine-grained
  * change tracker could be added if profiling shows it matters. */
-#define XM_RESET_ANALYSIS(fn)                                                                     \
+#define XM_RESET_ANALYSIS(fn)                                                                      \
     do {                                                                                           \
-        xm_rebuild_vreg_defs(fn);                                                                 \
-        xm_func_invalidate_loops(fn); /* transitively dom */                                      \
-        xm_func_invalidate_defuse(fn);                                                            \
-        xm_func_invalidate_alias(fn);                                                             \
+        xm_rebuild_vreg_defs(fn);                                                                  \
+        xm_func_invalidate_loops(fn); /* transitively dom */                                       \
+        xm_func_invalidate_defuse(fn);                                                             \
+        xm_func_invalidate_alias(fn);                                                              \
     } while (0)
 
 /* ========== FixedPoint pipeline driver ========== */
@@ -1677,7 +1676,7 @@ static XmPassChange fixedpoint_invoke(XmFunc *func, XrProto *proto, const XmPass
 }
 
 XmPipelineStats xm_run_fixedpoint(XmFunc *func, XrProto *proto, const XmPassDesc *passes,
-                                    uint32_t npass, uint32_t max_rounds, XmCompileBudget *budget) {
+                                  uint32_t npass, uint32_t max_rounds, XmCompileBudget *budget) {
     XmPipelineStats st = {0, 0, 0, 0};
     if (!func || !passes || npass == 0 || max_rounds == 0)
         return st;
@@ -1776,7 +1775,7 @@ static const XmPassDesc PG_RANGE[] = {
     {"split_critical_edges", {.v = xm_pass_split_critical_edges}, 0},
 };
 
-#define XM_PIPELINE_SIZE(arr) (uint32_t)(sizeof(arr) / sizeof((arr)[0]))
+#define XM_PIPELINE_SIZE(arr) (uint32_t) (sizeof(arr) / sizeof((arr)[0]))
 
 /* Cached pipeline-verbose toggle (XRAY_JIT_PIPELINE_VERBOSE).  Read
  * once on first use; suitable for debugging / tuning runs where
@@ -1807,8 +1806,7 @@ static void run_group(const char *group_name, XmFunc *func, XrProto *proto,
     }
 }
 
-bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
-                         uint32_t budget_ms) {
+bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto, uint32_t budget_ms) {
     if (!func)
         return false;
 
@@ -1816,9 +1814,8 @@ bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
      * budget_ms == 0 means unlimited (deadline set to UINT64_MAX). */
     XmCompileBudget budget;
     budget.start_ns = xr_time_monotonic_ns();
-    budget.deadline_ns = budget_ms > 0
-        ? budget.start_ns + (uint64_t)budget_ms * 1000000ULL
-        : UINT64_MAX;
+    budget.deadline_ns =
+        budget_ms > 0 ? budget.start_ns + (uint64_t) budget_ms * 1000000ULL : UINT64_MAX;
     budget.timed_out = false;
 
     /* Canon group: initial type/rep analysis + DCE. Runs even at -O0
@@ -1839,8 +1836,7 @@ bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
             XM_RESET_ANALYSIS(func);
             /* Re-canon once post-inline so the loop group below sees
              * the callee's constants / types. */
-            run_group("post-inline", func, proto, PG_CANON, XM_PIPELINE_SIZE(PG_CANON), 2,
-                      &budget);
+            run_group("post-inline", func, proto, PG_CANON, XM_PIPELINE_SIZE(PG_CANON), 2, &budget);
         }
 
         run_group("loop", func, proto, PG_LOOP, XM_PIPELINE_SIZE(PG_LOOP), 3, &budget);
@@ -1853,8 +1849,7 @@ bool xm_run_pipeline_ex(XmFunc *func, XmOptLevel opt, XrProto *proto,
             xm_verify_cfg(func);
             xm_verify_types(func);
 
-            run_group("cleanup", func, proto, PG_CLEANUP, XM_PIPELINE_SIZE(PG_CLEANUP), 2,
-                      &budget);
+            run_group("cleanup", func, proto, PG_CLEANUP, XM_PIPELINE_SIZE(PG_CLEANUP), 2, &budget);
             run_group("range", func, proto, PG_RANGE, XM_PIPELINE_SIZE(PG_RANGE), 2, &budget);
         }
     }

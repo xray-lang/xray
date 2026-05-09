@@ -49,7 +49,8 @@ XR_FUNC void xr_type_scope_free(XrTypeScope *scope);
 // `name` is already defined locally (caller should report duplicate). The
 // returned pointer is stable until the scope is freed; callers may mutate
 // `entry->type` to patch forward-declared placeholders.
-XR_FUNC XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name, XrTypeRef *type_ref);
+XR_FUNC XrTypeAlias *xr_type_scope_define(XrTypeScope *scope, const char *name,
+                                          XrTypeRef *type_ref);
 
 // Walk the scope chain to find an alias. Returns NULL if not found.
 XR_FUNC XrTypeAlias *xr_type_scope_lookup(XrTypeScope *scope, const char *name);

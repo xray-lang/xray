@@ -249,8 +249,7 @@ _Static_assert(offsetof(XrCell, value) == XM_CELL_VALUE_OFFSET, "Cell.value offs
 // XrArray checks
 #include "../runtime/object/xarray.h"
 _Static_assert(offsetof(XrArray, data) == XM_ARRAY_DATA_OFFSET, "Array.data offset mismatch");
-_Static_assert(offsetof(XrArray, length) == XM_ARRAY_LENGTH_OFFSET,
-               "Array.length offset mismatch");
+_Static_assert(offsetof(XrArray, length) == XM_ARRAY_LENGTH_OFFSET, "Array.length offset mismatch");
 _Static_assert(offsetof(XrArray, elem_type) == XM_ARRAY_ELEM_TYPE_OFFSET,
                "Array.elem_type offset mismatch");
 _Static_assert(offsetof(XrArray, elem_size) == XM_ARRAY_ELEM_SIZE_OFFSET,

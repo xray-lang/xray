@@ -214,7 +214,6 @@ static void x64_emit_noncommutative_fp(X64CodegenCtx *ctx, X64Xmm fd, XmRef arg0
     emit_op(&ctx->buf, fd, fm);
 }
 
-
 /* ========== Handler type ========== */
 typedef void (*X64InsHandler)(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd);
 
@@ -229,7 +228,7 @@ static void x64_h_const(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 }
 
 static void x64_h_const_f64(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     if (xm_ref_is_const(ins->args[0])) {
         uint32_t ci = XM_REF_INDEX(ins->args[0]);
@@ -341,13 +340,27 @@ static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_cmp_rr(&ctx->buf, rn, rm);
     X64Cond cc;
     switch (ins->op) {
-        case XM_EQ:  cc = X64_CC_E;  break;
-        case XM_NE:  cc = X64_CC_NE; break;
-        case XM_LT:  cc = X64_CC_L;  break;
-        case XM_LE:  cc = X64_CC_LE; break;
-        case XM_GT:  cc = X64_CC_G;  break;
-        case XM_GE:  cc = X64_CC_GE; break;
-        default:     cc = X64_CC_E;  break;
+        case XM_EQ:
+            cc = X64_CC_E;
+            break;
+        case XM_NE:
+            cc = X64_CC_NE;
+            break;
+        case XM_LT:
+            cc = X64_CC_L;
+            break;
+        case XM_LE:
+            cc = X64_CC_LE;
+            break;
+        case XM_GT:
+            cc = X64_CC_G;
+            break;
+        case XM_GE:
+            cc = X64_CC_GE;
+            break;
+        default:
+            cc = X64_CC_E;
+            break;
     }
     /* Zero without clobbering CMP flags (MOV doesn't affect flags) */
     x64_mov_ri32(&ctx->buf, rd, 0);
@@ -357,33 +370,33 @@ static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Float Arithmetic ========== */
 
 static void x64_h_fadd(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Xmm fm = x64_prepare_commutative_fp(ctx, fd, ins->args[0], ins->args[1], X64_SCRATCH_XMM);
     x64_addsd(&ctx->buf, fd, fm);
 }
 
 static void x64_h_fsub(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1], x64_subsd);
 }
 
 static void x64_h_fmul(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Xmm fm = x64_prepare_commutative_fp(ctx, fd, ins->args[0], ins->args[1], X64_SCRATCH_XMM);
     x64_mulsd(&ctx->buf, fd, fm);
 }
 
 static void x64_h_fdiv(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1], x64_divsd);
 }
 
 static void x64_h_fneg(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
     if (fn != fd)
@@ -396,7 +409,7 @@ static void x64_h_fneg(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Float Conversion ========== */
 
 static void x64_h_i2f(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     x64_cvtsi2sd(&ctx->buf, fd, rn);
@@ -454,7 +467,7 @@ static void x64_h_mov(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Select ========== */
 
 static void x64_h_select_cond(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     x64_test_rr(&ctx->buf, rn, rn);
 }
@@ -480,7 +493,7 @@ static void x64_h_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 }
 
 static void x64_h_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     bool store_fp = false;
     if (xm_ref_is_vreg(ins->args[1])) {
@@ -578,7 +591,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Float sub-word memory ========== */
 
 static void x64_h_load_f32(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     /* MOVSS xmm_scratch, [addr]:  F3 0F 10 /r */
@@ -591,22 +604,20 @@ static void x64_h_load_f32(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     /* CVTSS2SD fd, xmm_scratch:  F3 0F 5A /r */
     x64_emit8(&ctx->buf, 0xF3);
     if ((int) fd > 7 || X64_SCRATCH_XMM > 7)
-        x64_emit8(&ctx->buf,
-                  0x40 | (((int) fd > 7) ? 4 : 0) | ((X64_SCRATCH_XMM > 7) ? 1 : 0));
+        x64_emit8(&ctx->buf, 0x40 | (((int) fd > 7) ? 4 : 0) | ((X64_SCRATCH_XMM > 7) ? 1 : 0));
     x64_emit8(&ctx->buf, 0x0F);
     x64_emit8(&ctx->buf, 0x5A);
     x64_emit8(&ctx->buf, 0xC0 | (((int) fd & 7) << 3) | (X64_SCRATCH_XMM & 7));
 }
 
 static void x64_h_store_f32(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
     /* CVTSD2SS xmm_scratch, fm:  F2 0F 5A /r */
     x64_emit8(&ctx->buf, 0xF2);
     if (X64_SCRATCH_XMM > 7 || (int) fm > 7)
-        x64_emit8(&ctx->buf,
-                  0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) | (((int) fm > 7) ? 1 : 0));
+        x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) | (((int) fm > 7) ? 1 : 0));
     x64_emit8(&ctx->buf, 0x0F);
     x64_emit8(&ctx->buf, 0x5A);
     x64_emit8(&ctx->buf, 0xC0 | ((X64_SCRATCH_XMM & 7) << 3) | ((int) fm & 7));
@@ -689,8 +700,7 @@ static void x64_h_field_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     /* Save runtime tag to jit_ctx scratch if type is unknown */
     if (xm_ref_is_vreg(ins->dst)) {
         uint32_t vi = XM_REF_INDEX(ins->dst);
-        if (vi < ctx->func->nvreg && ins->ctype.kind == XM_TK_UNKNOWN &&
-            ins->rep == XR_REP_I64) {
+        if (vi < ctx->func->nvreg && ins->ctype.kind == XM_TK_UNKNOWN && ins->rep == XR_REP_I64) {
             x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, obj, offset + XM_XRVALUE_TAG_OFFSET);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_TAG_SCRATCH_OFFSET,
                        X64_SCRATCH_REG);
@@ -707,7 +717,7 @@ static void x64_h_field_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Object field store ========== */
 
 static void x64_h_field_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     int32_t offset = 0;
     if (!xm_ref_is_none(ins->dst) && xm_ref_is_const(ins->dst)) {
@@ -750,8 +760,7 @@ static void x64_h_field_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 is_ptr_val = xm_type_is_ptr(vct.kind);
             } else {
                 uint32_t vi = XM_REF_INDEX(ins->args[1]);
-                uint8_t vt =
-                    (vi < ctx->func->nvreg) ? ctx->func->vregs[vi].rep : XR_REP_TAGGED;
+                uint8_t vt = (vi < ctx->func->nvreg) ? ctx->func->vregs[vi].rep : XR_REP_TAGGED;
                 if (vt == XR_REP_F64)
                     tag_val = XR_TAG_F64;
                 else if (vt == XR_REP_I64)
@@ -835,7 +844,7 @@ static void x64_h_unbox_f64(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Guard ops ========== */
 
 static void x64_h_guard(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     switch (ins->op) {
         case XM_GUARD_TAG: {
             X64Reg val_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
@@ -940,7 +949,7 @@ static void x64_h_guard(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Deopt ========== */
 
 static void x64_h_deopt(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     x64_emit_deopt_id(ctx, ins);
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *p = &ctx->patches[ctx->npatch];
@@ -957,20 +966,20 @@ static void x64_h_deopt(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Safepoint ========== */
 
 static void x64_h_safepoint(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd; (void)ins;
+    (void) rd;
+    (void) ins;
     uint32_t smap_id_sp = x64_record_safepoint(ctx);
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) smap_id_sp);
     x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET,
                  X64_SCRATCH_REG);
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
-               (int32_t) XM_JIT_SAFEPOINT_PAGE_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_SAFEPOINT_PAGE_OFFSET);
     x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG, 0);
 }
 
 /* ========== Runtime arithmetic (mixed-type) ========== */
 
 static void x64_h_rt_arith(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
     if (xm_ref_is_vreg(ins->args[0])) {
         uint32_t ai = XM_REF_INDEX(ins->args[0]);
@@ -1004,10 +1013,18 @@ static void x64_h_rt_arith(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         if (fd != fa)
             x64_movsd_rr(&ctx->buf, fd, fa);
         switch (ins->op) {
-            case XM_RT_ADD: x64_addsd(&ctx->buf, fd, fb); break;
-            case XM_RT_SUB: x64_subsd(&ctx->buf, fd, fb); break;
-            case XM_RT_MUL: x64_mulsd(&ctx->buf, fd, fb); break;
-            case XM_RT_DIV: x64_divsd(&ctx->buf, fd, fb); break;
+            case XM_RT_ADD:
+                x64_addsd(&ctx->buf, fd, fb);
+                break;
+            case XM_RT_SUB:
+                x64_subsd(&ctx->buf, fd, fb);
+                break;
+            case XM_RT_MUL:
+                x64_mulsd(&ctx->buf, fd, fb);
+                break;
+            case XM_RT_DIV:
+                x64_divsd(&ctx->buf, fd, fb);
+                break;
             case XM_RT_MOD: {
                 x64_movsd_rr(&ctx->buf, X64_XMM14, fd);
                 x64_divsd(&ctx->buf, X64_XMM14, fb);
@@ -1017,7 +1034,8 @@ static void x64_h_rt_arith(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 x64_subsd(&ctx->buf, fd, X64_XMM14);
                 break;
             }
-            default: break;
+            default:
+                break;
         }
     } else {
         x64_emit_deopt_id(ctx, ins);
@@ -1037,7 +1055,7 @@ static void x64_h_rt_arith(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Runtime unary minus ========== */
 
 static void x64_h_rt_unm(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     uint8_t ta = XR_REP_I64;
     if (xm_ref_is_vreg(ins->args[0])) {
         uint32_t ai = XM_REF_INDEX(ins->args[0]);
@@ -1091,9 +1109,12 @@ static void x64_h_rt_cmp(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         }
         x64_ucomisd(&ctx->buf, fa, fb);
         X64Cond cc;
-        if (ins->op == XM_RT_LT)       cc = X64_CC_B;
-        else if (ins->op == XM_RT_LE)  cc = X64_CC_BE;
-        else                            cc = X64_CC_E;
+        if (ins->op == XM_RT_LT)
+            cc = X64_CC_B;
+        else if (ins->op == XM_RT_LE)
+            cc = X64_CC_BE;
+        else
+            cc = X64_CC_E;
         x64_xor_rr(&ctx->buf, rd, rd);
         x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40);
         x64_emit8(&ctx->buf, 0x0F);
@@ -1136,11 +1157,10 @@ static void x64_h_rt_collection(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
 
     x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET,
-                 X64_SCRATCH_REG);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
 
     void *fn = (ins->op == XM_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
-                                             : (void *) (uintptr_t) xr_jit_rt_map_new;
+                                            : (void *) (uintptr_t) xr_jit_rt_map_new;
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
@@ -1161,7 +1181,7 @@ static void x64_h_rt_collection(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Runtime array push ========== */
 
 static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     x64_emit_ptr_spill_writeback(ctx);
 
     uint32_t smap_id_ap = x64_record_safepoint(ctx);
@@ -1197,8 +1217,7 @@ static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     }
     uint64_t tpk = (uint64_t) t0 | ((uint64_t) t1 << 8);
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tpk);
-    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET,
-               X64_SCRATCH_REG);
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
 
     if (t1 == XR_RTAG_UNKNOWN && xm_ref_is_vreg(ins->args[1])) {
         uint32_t ai = XM_REF_INDEX(ins->args[1]);
@@ -1212,8 +1231,7 @@ static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
     x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
-    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET,
-                 X64_SCRATCH_REG);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
 
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
 
@@ -1249,7 +1267,9 @@ static void x64_h_rt_simple(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== No-op handlers ========== */
 
 static void x64_h_nop(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)ctx; (void)ins; (void)rd;
+    (void) ctx;
+    (void) ins;
+    (void) rd;
 }
 
 /* ========== Suspend (coroutine await/channel) ========== */
@@ -1271,8 +1291,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     uint32_t smap_id = x64_record_safepoint(ctx);
 
     /* Load suspend_state pointer: R11 = coro->jit_suspend */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG,
-               (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
     CODEGEN_CHECK(ctx, suspend_id < 16, "suspend_id out of range");
 
     /* Save caller-saved GP regs */
@@ -1281,8 +1300,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     /* Save callee-saved GP regs */
     for (int i = 0; i < X64_NGPR_CALLEE_SAVE_ALLOC; i++)
-        x64_mov_mr(&ctx->buf, X64_SCRATCH_REG,
-                   (int32_t) XM_SUSPEND_CALLEE_SAVED_OFF + i * 8,
+        x64_mov_mr(&ctx->buf, X64_SCRATCH_REG, (int32_t) XM_SUSPEND_CALLEE_SAVED_OFF + i * 8,
                    x64_alloc_regs[X64_NGPR_CALLER_SAVE + i]);
 
     /* Save spill slots */
@@ -1303,8 +1321,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_mov_mr32(&ctx->buf, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_ID_OFFSET, X64_RCX);
     x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) smap_id);
     x64_mov_mr32(&ctx->buf, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_SMAP_OFFSET, X64_RCX);
-    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET,
-                 X64_RCX);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET, X64_RCX);
 
     /* Pre-store resume info (gopark pattern) */
     x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET);
@@ -1348,8 +1365,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_patch_rel32(&ctx->buf, jne_not_blocked, ctx->buf.pos);
 
     /* Reload suspend pointer (R11 clobbered by CALL) */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG,
-               (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
 
     /* Reload caller-saved GP regs */
     for (int i = 0; i < X64_NGPR_CALLER_SAVE && i < X64_MAX_PHYS_REGS; i++)
@@ -1372,8 +1388,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 res_bc_slot = ctx->func->vregs[vi].bc_slot;
         }
         if (res_vreg_off >= 0) {
-            x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG,
-                          (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
+            x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
             x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, res_vreg_off, X64_RCX);
         }
         if (suspend_id < 16) {
@@ -1396,7 +1411,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Write barriers ========== */
 
 static void x64_h_barrier_fwd(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg parent_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     X64Reg child_reg = x64_get_operand(ctx, ins->args[1], X64_RCX);
     if (parent_reg != X64_SCRATCH_REG)
@@ -1416,7 +1431,7 @@ static void x64_h_barrier_fwd(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 }
 
 static void x64_h_barrier_back(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg container_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     if (container_reg != X64_SCRATCH_REG)
         x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, container_reg);
@@ -1457,11 +1472,10 @@ static void x64_h_alloc(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Catch ========== */
 
 static void x64_h_catch(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)ins;
+    (void) ins;
     x64_mov_rm(&ctx->buf, rd, X64_JIT_CTX_REG, (int32_t) XM_JIT_EXCEPTION_OFFSET);
     x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_EXCEPTION_OFFSET,
-               X64_SCRATCH_REG);
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_EXCEPTION_OFFSET, X64_SCRATCH_REG);
 }
 
 /* ========== Call ops — delegated to xm_codegen_x64_call.c ========== */
@@ -1474,7 +1488,7 @@ static void x64_h_call(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Return ========== */
 
 static void x64_h_ret(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    (void)rd;
+    (void) rd;
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     if (rn != X64_RAX)
         x64_mov_rr(&ctx->buf, X64_RAX, rn);
@@ -1483,110 +1497,110 @@ static void x64_h_ret(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 /* ========== Dispatch Table ========== */
 
 static const X64InsHandler x64_ins_handlers[XM_OP_COUNT] = {
-    [XM_CONST_I64]    = x64_h_const,
-    [XM_CONST_PTR]    = x64_h_const,
-    [XM_CONST_F64]    = x64_h_const_f64,
-    [XM_ADD]          = x64_h_add,
-    [XM_SUB]          = x64_h_sub,
-    [XM_MUL]          = x64_h_mul,
-    [XM_DIV]          = x64_h_div_mod,
-    [XM_MOD]          = x64_h_div_mod,
-    [XM_NEG]          = x64_h_neg,
-    [XM_AND]          = x64_h_and,
-    [XM_OR]           = x64_h_or,
-    [XM_XOR]          = x64_h_xor,
-    [XM_NOT]          = x64_h_not,
-    [XM_SHL]          = x64_h_shl,
-    [XM_SHR]          = x64_h_shr,
-    [XM_EQ]           = x64_h_cmp_int,
-    [XM_NE]           = x64_h_cmp_int,
-    [XM_LT]           = x64_h_cmp_int,
-    [XM_LE]           = x64_h_cmp_int,
-    [XM_GT]           = x64_h_cmp_int,
-    [XM_GE]           = x64_h_cmp_int,
-    [XM_FADD]         = x64_h_fadd,
-    [XM_FSUB]         = x64_h_fsub,
-    [XM_FMUL]         = x64_h_fmul,
-    [XM_FDIV]         = x64_h_fdiv,
-    [XM_FNEG]         = x64_h_fneg,
-    [XM_I2F]          = x64_h_i2f,
-    [XM_F2I]          = x64_h_f2i,
-    [XM_FEQ]          = x64_h_cmp_float,
-    [XM_FNE]          = x64_h_cmp_float,
-    [XM_FLT]          = x64_h_cmp_float,
-    [XM_FLE]          = x64_h_cmp_float,
-    [XM_MOV]          = x64_h_mov,
-    [XM_REDEFINE]     = x64_h_mov,
-    [XM_SELECT_COND]  = x64_h_select_cond,
-    [XM_SELECT]       = x64_h_select,
-    [XM_LOAD]         = x64_h_load,
-    [XM_STORE]        = x64_h_store,
-    [XM_LOAD8Z]       = x64_h_subword,
-    [XM_LOAD8S]       = x64_h_subword,
-    [XM_STORE8]       = x64_h_subword,
-    [XM_LOAD16Z]      = x64_h_subword,
-    [XM_LOAD16S]      = x64_h_subword,
-    [XM_STORE16]      = x64_h_subword,
-    [XM_LOAD32Z]      = x64_h_subword,
-    [XM_LOAD32S]      = x64_h_subword,
-    [XM_STORE32]      = x64_h_subword,
-    [XM_LOAD_F32]     = x64_h_load_f32,
-    [XM_STORE_F32]    = x64_h_store_f32,
-    [XM_LOAD_CORO]      = x64_h_coro,
+    [XM_CONST_I64] = x64_h_const,
+    [XM_CONST_PTR] = x64_h_const,
+    [XM_CONST_F64] = x64_h_const_f64,
+    [XM_ADD] = x64_h_add,
+    [XM_SUB] = x64_h_sub,
+    [XM_MUL] = x64_h_mul,
+    [XM_DIV] = x64_h_div_mod,
+    [XM_MOD] = x64_h_div_mod,
+    [XM_NEG] = x64_h_neg,
+    [XM_AND] = x64_h_and,
+    [XM_OR] = x64_h_or,
+    [XM_XOR] = x64_h_xor,
+    [XM_NOT] = x64_h_not,
+    [XM_SHL] = x64_h_shl,
+    [XM_SHR] = x64_h_shr,
+    [XM_EQ] = x64_h_cmp_int,
+    [XM_NE] = x64_h_cmp_int,
+    [XM_LT] = x64_h_cmp_int,
+    [XM_LE] = x64_h_cmp_int,
+    [XM_GT] = x64_h_cmp_int,
+    [XM_GE] = x64_h_cmp_int,
+    [XM_FADD] = x64_h_fadd,
+    [XM_FSUB] = x64_h_fsub,
+    [XM_FMUL] = x64_h_fmul,
+    [XM_FDIV] = x64_h_fdiv,
+    [XM_FNEG] = x64_h_fneg,
+    [XM_I2F] = x64_h_i2f,
+    [XM_F2I] = x64_h_f2i,
+    [XM_FEQ] = x64_h_cmp_float,
+    [XM_FNE] = x64_h_cmp_float,
+    [XM_FLT] = x64_h_cmp_float,
+    [XM_FLE] = x64_h_cmp_float,
+    [XM_MOV] = x64_h_mov,
+    [XM_REDEFINE] = x64_h_mov,
+    [XM_SELECT_COND] = x64_h_select_cond,
+    [XM_SELECT] = x64_h_select,
+    [XM_LOAD] = x64_h_load,
+    [XM_STORE] = x64_h_store,
+    [XM_LOAD8Z] = x64_h_subword,
+    [XM_LOAD8S] = x64_h_subword,
+    [XM_STORE8] = x64_h_subword,
+    [XM_LOAD16Z] = x64_h_subword,
+    [XM_LOAD16S] = x64_h_subword,
+    [XM_STORE16] = x64_h_subword,
+    [XM_LOAD32Z] = x64_h_subword,
+    [XM_LOAD32S] = x64_h_subword,
+    [XM_STORE32] = x64_h_subword,
+    [XM_LOAD_F32] = x64_h_load_f32,
+    [XM_STORE_F32] = x64_h_store_f32,
+    [XM_LOAD_CORO] = x64_h_coro,
     [XM_LOAD_CORO_BYTE] = x64_h_coro,
-    [XM_STORE_CORO]      = x64_h_coro,
+    [XM_STORE_CORO] = x64_h_coro,
     [XM_STORE_CORO_BYTE] = x64_h_coro,
-    [XM_LOAD_FIELD]   = x64_h_field_load,
-    [XM_STORE_FIELD]  = x64_h_field_store,
-    [XM_TAG_LOAD]     = x64_h_tag_load,
-    [XM_BOX_I64]      = x64_h_box,
-    [XM_BOX_F64]      = x64_h_box,
-    [XM_UNBOX_I64]    = x64_h_unbox_i64,
-    [XM_UNBOX_F64]    = x64_h_unbox_f64,
-    [XM_GUARD_TAG]    = x64_h_guard,
+    [XM_LOAD_FIELD] = x64_h_field_load,
+    [XM_STORE_FIELD] = x64_h_field_store,
+    [XM_TAG_LOAD] = x64_h_tag_load,
+    [XM_BOX_I64] = x64_h_box,
+    [XM_BOX_F64] = x64_h_box,
+    [XM_UNBOX_I64] = x64_h_unbox_i64,
+    [XM_UNBOX_F64] = x64_h_unbox_f64,
+    [XM_GUARD_TAG] = x64_h_guard,
     [XM_GUARD_BOUNDS] = x64_h_guard,
-    [XM_GUARD_NONNULL]= x64_h_guard,
-    [XM_GUARD_CLASS]  = x64_h_guard,
-    [XM_GUARD_KLASS]  = x64_h_guard,
-    [XM_GUARD_SHAPE]  = x64_h_guard,
-    [XM_TAG_CHECK]    = x64_h_guard,
-    [XM_DEOPT]        = x64_h_deopt,
-    [XM_SAFEPOINT]    = x64_h_safepoint,
-    [XM_RT_ADD]       = x64_h_rt_arith,
-    [XM_RT_SUB]       = x64_h_rt_arith,
-    [XM_RT_MUL]       = x64_h_rt_arith,
-    [XM_RT_DIV]       = x64_h_rt_arith,
-    [XM_RT_MOD]       = x64_h_rt_arith,
-    [XM_RT_UNM]       = x64_h_rt_unm,
-    [XM_RT_LT]        = x64_h_rt_cmp,
-    [XM_RT_LE]        = x64_h_rt_cmp,
-    [XM_RT_EQ]        = x64_h_rt_cmp,
+    [XM_GUARD_NONNULL] = x64_h_guard,
+    [XM_GUARD_CLASS] = x64_h_guard,
+    [XM_GUARD_KLASS] = x64_h_guard,
+    [XM_GUARD_SHAPE] = x64_h_guard,
+    [XM_TAG_CHECK] = x64_h_guard,
+    [XM_DEOPT] = x64_h_deopt,
+    [XM_SAFEPOINT] = x64_h_safepoint,
+    [XM_RT_ADD] = x64_h_rt_arith,
+    [XM_RT_SUB] = x64_h_rt_arith,
+    [XM_RT_MUL] = x64_h_rt_arith,
+    [XM_RT_DIV] = x64_h_rt_arith,
+    [XM_RT_MOD] = x64_h_rt_arith,
+    [XM_RT_UNM] = x64_h_rt_unm,
+    [XM_RT_LT] = x64_h_rt_cmp,
+    [XM_RT_LE] = x64_h_rt_cmp,
+    [XM_RT_EQ] = x64_h_rt_cmp,
     [XM_RT_ARRAY_NEW] = x64_h_rt_collection,
-    [XM_RT_MAP_NEW]   = x64_h_rt_collection,
-    [XM_RT_ARRAY_PUSH]= x64_h_rt_array_push,
-    [XM_RT_PRINT]     = x64_h_rt_simple,
+    [XM_RT_MAP_NEW] = x64_h_rt_collection,
+    [XM_RT_ARRAY_PUSH] = x64_h_rt_array_push,
+    [XM_RT_PRINT] = x64_h_rt_simple,
     [XM_RT_ARRAY_LEN] = x64_h_rt_simple,
     [XM_RT_INDEX_GET] = x64_h_rt_simple,
     [XM_RT_INDEX_SET] = x64_h_rt_simple,
-    [XM_RT_ISNULL]    = x64_h_rt_simple,
-    [XM_TRY_BEGIN]    = x64_h_nop,
-    [XM_TRY_END]      = x64_h_nop,
-    [XM_THROW]        = x64_h_nop,
-    [XM_NOP]          = x64_h_nop,
-    [XM_PHI]          = x64_h_nop,
-    [XM_SUSPEND]      = x64_h_suspend,
-    [XM_BARRIER_FWD]  = x64_h_barrier_fwd,
+    [XM_RT_ISNULL] = x64_h_rt_simple,
+    [XM_TRY_BEGIN] = x64_h_nop,
+    [XM_TRY_END] = x64_h_nop,
+    [XM_THROW] = x64_h_nop,
+    [XM_NOP] = x64_h_nop,
+    [XM_PHI] = x64_h_nop,
+    [XM_SUSPEND] = x64_h_suspend,
+    [XM_BARRIER_FWD] = x64_h_barrier_fwd,
     [XM_BARRIER_BACK] = x64_h_barrier_back,
-    [XM_ALLOC]        = x64_h_alloc,
-    [XM_CATCH]        = x64_h_catch,
-    [XM_CALL_C]       = x64_h_call,
-    [XM_CALL_C_LEAF]  = x64_h_call,
+    [XM_ALLOC] = x64_h_alloc,
+    [XM_CATCH] = x64_h_catch,
+    [XM_CALL_C] = x64_h_call,
+    [XM_CALL_C_LEAF] = x64_h_call,
     [XM_CALL_SELF_DIRECT] = x64_h_call,
-    [XM_CALL_KNOWN]   = x64_h_call,
+    [XM_CALL_KNOWN] = x64_h_call,
     [XM_CALL_KNOWN_REG] = x64_h_call,
-    [XM_CALL_DIRECT]  = x64_h_call,
-    [XM_CALL]         = x64_h_call,
-    [XM_RET]          = x64_h_ret,
+    [XM_CALL_DIRECT] = x64_h_call,
+    [XM_CALL] = x64_h_call,
+    [XM_RET] = x64_h_ret,
 };
 
 /* ========== Instruction Dispatch ========== */
@@ -1606,4 +1620,4 @@ XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins) {
     }
 }
 
-#endif  /* __x86_64__ || _M_X64 */
+#endif /* __x86_64__ || _M_X64 */

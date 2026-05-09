@@ -168,8 +168,8 @@ typedef struct XrVMState {
 #ifdef XRAY_HAS_JIT
     // JIT compiler state (v3: self-hosted Xm pipeline)
     struct XmJitState *jit;  // JIT compiler state (compile queue, code cache)
-    int jit_threshold;        // call count threshold for Tier 1 compilation
-    int jit_opt_threshold;    // exec count threshold for Tier 2 optimization
+    int jit_threshold;       // call count threshold for Tier 1 compilation
+    int jit_opt_threshold;   // exec count threshold for Tier 2 optimization
 #endif
 
     // Coroutine support

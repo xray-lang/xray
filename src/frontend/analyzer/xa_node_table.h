@@ -50,9 +50,8 @@ XR_FUNC void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct
 XR_FUNC struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode *node);
 
 // Set full binding facts for a node (type + scope + symbol).
-XR_FUNC void xa_node_table_set(XaNodeTable *t, struct AstNode *node,
-                               struct XrType *type, struct XaScope *scope,
-                               struct XaSymbol *symbol);
+XR_FUNC void xa_node_table_set(XaNodeTable *t, struct AstNode *node, struct XrType *type,
+                               struct XaScope *scope, struct XaSymbol *symbol);
 
 // Retrieve scope / symbol binding for a node.
 XR_FUNC struct XaScope *xa_node_table_get_scope(const XaNodeTable *t, const struct AstNode *node);

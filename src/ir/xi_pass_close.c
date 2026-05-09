@@ -67,7 +67,7 @@ static uint16_t assign_env_layout(XiFunc *f) {
         }
     }
 
-    return (uint16_t)next_offset;
+    return (uint16_t) next_offset;
 }
 
 /* ========== Build XiClosureMeta ========== */
@@ -76,10 +76,12 @@ static uint16_t assign_env_layout(XiFunc *f) {
 static XiClosureMeta *build_closure_meta(XiFunc *f) {
     XR_DCHECK(f != NULL, "build_closure_meta: NULL func");
 
-    if (f->ncaptures == 0) return NULL;
+    if (f->ncaptures == 0)
+        return NULL;
 
-    XiClosureMeta *meta = (XiClosureMeta *)xr_calloc(1, sizeof(XiClosureMeta));
-    if (!meta) return NULL;
+    XiClosureMeta *meta = (XiClosureMeta *) xr_calloc(1, sizeof(XiClosureMeta));
+    if (!meta)
+        return NULL;
 
     meta->function = f;
     meta->parent_func = NULL; /* set by caller who knows parent */
@@ -118,7 +120,8 @@ static void close_func_recursive(XiFunc *f, XiFunc *parent) {
     XR_DCHECK(f != NULL, "close_func_recursive: NULL func");
 
     /* Skip if already closed */
-    if (f->stage >= XI_STAGE_CLOSED) return;
+    if (f->stage >= XI_STAGE_CLOSED)
+        return;
 
     /* Process children first (bottom-up: leaf closures before parents) */
     for (uint16_t i = 0; i < f->nchildren; i++) {
@@ -148,7 +151,8 @@ static void close_func_recursive(XiFunc *f, XiFunc *parent) {
  * importers see updated values.  For now, assign cell indices
  * sequentially for any export marked as is_live_binding. */
 static void assign_export_cell_indices(XiModule *mod) {
-    if (!mod || !mod->exports) return;
+    if (!mod || !mod->exports)
+        return;
 
     int16_t next_cell = 0;
     for (uint16_t i = 0; i < mod->nexports; i++) {
@@ -168,12 +172,10 @@ static void collect_closure_metas(XiModule *mod, XiFunc *f) {
     if (f->closure_meta) {
         /* Grow array */
         uint16_t new_count = mod->nclosure_metas + 1;
-        XiClosureMeta **new_arr = (XiClosureMeta **)xr_calloc(
-            new_count, sizeof(XiClosureMeta *));
+        XiClosureMeta **new_arr = (XiClosureMeta **) xr_calloc(new_count, sizeof(XiClosureMeta *));
         if (new_arr) {
             if (mod->closure_metas) {
-                memcpy(new_arr, mod->closure_metas,
-                       mod->nclosure_metas * sizeof(XiClosureMeta *));
+                memcpy(new_arr, mod->closure_metas, mod->nclosure_metas * sizeof(XiClosureMeta *));
                 xr_free(mod->closure_metas);
             }
             new_arr[mod->nclosure_metas] = f->closure_meta;

@@ -417,10 +417,14 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 if (s && s->ast_node) {
                     AstNode *fn_node = (AstNode *) s->ast_node;
                     XrType *decl_ret = NULL;
-                    if (fn_node->type == AST_FUNCTION_DECL && fn_node->as.function_decl.return_type) {
-                        decl_ret = xr_tref_resolve(ctx->analyzer->isolate, fn_node->as.function_decl.return_type);
-                    } else if (fn_node->type == AST_METHOD_DECL && fn_node->as.method_decl.return_type) {
-                        decl_ret = xr_tref_resolve(ctx->analyzer->isolate, fn_node->as.method_decl.return_type);
+                    if (fn_node->type == AST_FUNCTION_DECL &&
+                        fn_node->as.function_decl.return_type) {
+                        decl_ret = xr_tref_resolve(ctx->analyzer->isolate,
+                                                   fn_node->as.function_decl.return_type);
+                    } else if (fn_node->type == AST_METHOD_DECL &&
+                               fn_node->as.method_decl.return_type) {
+                        decl_ret = xr_tref_resolve(ctx->analyzer->isolate,
+                                                   fn_node->as.method_decl.return_type);
                     }
                     if (decl_ret && !XR_TYPE_IS_UNKNOWN(decl_ret)) {
                         ctx->expected_type = decl_ret;
@@ -460,13 +464,11 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Return type mismatch: expected '%s', got '%s'",
+                snprintf(msg, sizeof(msg), "Return type mismatch: expected '%s', got '%s'",
                          xr_type_to_string(ctx->expected_return_type),
                          xr_type_to_string(return_type));
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
-                                           &loc);
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
             }
         }
     }

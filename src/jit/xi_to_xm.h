@@ -26,7 +26,7 @@ struct XrICMethodTable;
 /* IC snapshot bundle for speculative optimization during lowering.
  * All pointers are read-only snapshots; NULL = no IC data available. */
 typedef struct {
-    struct XrICFieldTable  *ic_fields;
+    struct XrICFieldTable *ic_fields;
     struct XrICMethodTable *ic_methods;
 } XmICSnapshot;
 
@@ -38,10 +38,7 @@ typedef struct {
  * slot_map: value_id → bytecode slot mapping (for deopt generation)
  * ic: IC snapshots for speculative guard insertion (may be NULL)
  * isolate: runtime context (may be NULL for unit tests) */
-XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
-                                         struct XrProto *proto,
-                                         XiSlotMap *slot_map,
-                                         const XmICSnapshot *ic,
-                                         struct XrayIsolate *isolate);
+XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, XiSlotMap *slot_map,
+                                      const XmICSnapshot *ic, struct XrayIsolate *isolate);
 
 #endif  // XI_TO_XM_H

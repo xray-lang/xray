@@ -36,18 +36,18 @@ struct XrProto;
 
 typedef enum {
     XI_PIPE_OK = 0,
-    XI_PIPE_ERR_LOWER,      /* AST lowering failed */
-    XI_PIPE_ERR_VERIFY,     /* IR verification found errors */
-    XI_PIPE_ERR_EMIT,       /* bytecode emission failed */
-    XI_PIPE_ERR_INTERNAL,   /* unexpected internal error */
+    XI_PIPE_ERR_LOWER,    /* AST lowering failed */
+    XI_PIPE_ERR_VERIFY,   /* IR verification found errors */
+    XI_PIPE_ERR_EMIT,     /* bytecode emission failed */
+    XI_PIPE_ERR_INTERNAL, /* unexpected internal error */
 } XiPipeStatus;
 
 /* ========== Pipeline Mode ========== */
 
 typedef enum {
-    XI_PIPE_VM,     /* lower → verify → opt → bytecode emit */
-    XI_PIPE_AOT,    /* lower → verify → opt → select_rep → box_elim (no emit) */
-    XI_PIPE_CHECK,  /* lower → verify only (no opt, no emit) */
+    XI_PIPE_VM,    /* lower → verify → opt → bytecode emit */
+    XI_PIPE_AOT,   /* lower → verify → opt → select_rep → box_elim (no emit) */
+    XI_PIPE_CHECK, /* lower → verify only (no opt, no emit) */
 } XiPipelineMode;
 
 /* ========== Pipeline Configuration ========== */
@@ -79,10 +79,10 @@ typedef struct XiPipelineConfig {
 
 typedef struct XiPipelineResult {
     XiPipeStatus status;
-    struct XrProto *proto;  /* output bytecode (owned by caller; NULL in AOT/CHECK mode) */
-    XiFunc *ir;             /* intermediate IR (freed on result_free) */
-    XiModule *module;       /* module metadata (populated in AOT mode; freed on result_free) */
-    const char *error_msg;  /* human-readable error description */
+    struct XrProto *proto; /* output bytecode (owned by caller; NULL in AOT/CHECK mode) */
+    XiFunc *ir;            /* intermediate IR (freed on result_free) */
+    XiModule *module;      /* module metadata (populated in AOT mode; freed on result_free) */
+    const char *error_msg; /* human-readable error description */
 } XiPipelineResult;
 
 /* ========== API ========== */
@@ -95,18 +95,16 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void);
 
 /* Compile a function AST node through the full pipeline.
  * Returns pipeline result; caller must call xi_pipeline_result_free. */
-XR_FUNC XiPipelineResult xi_pipeline_compile_func(
-    struct AstNode *func_node,
-    struct XaAnalyzer *analyzer,
-    struct XrayIsolate *isolate,
-    const XiPipelineConfig *cfg);
+XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
+                                                  struct XaAnalyzer *analyzer,
+                                                  struct XrayIsolate *isolate,
+                                                  const XiPipelineConfig *cfg);
 
 /* Compile a top-level program AST through the full pipeline. */
-XR_FUNC XiPipelineResult xi_pipeline_compile_program(
-    struct AstNode *program_node,
-    struct XaAnalyzer *analyzer,
-    struct XrayIsolate *isolate,
-    const XiPipelineConfig *cfg);
+XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_node,
+                                                     struct XaAnalyzer *analyzer,
+                                                     struct XrayIsolate *isolate,
+                                                     const XiPipelineConfig *cfg);
 
 /* Free pipeline result (frees IR, does NOT free proto). */
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res);

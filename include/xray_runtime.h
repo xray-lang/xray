@@ -32,34 +32,34 @@
 typedef struct XrValue {
     union {
         struct {
-            uint8_t tag;         /* [0]   XR_TAG_* */
-            uint8_t flags;       /* [1]   reserved = 0 */
-            uint16_t heap_type;  /* [2-3] object subtype (PTR only) */
-            uint32_t ext;        /* [4-7] reserved = 0 */
+            uint8_t tag;        /* [0]   XR_TAG_* */
+            uint8_t flags;      /* [1]   reserved = 0 */
+            uint16_t heap_type; /* [2-3] object subtype (PTR only) */
+            uint32_t ext;       /* [4-7] reserved = 0 */
         };
-        uint64_t descriptor;     /* [0-7] bulk load/compare */
+        uint64_t descriptor; /* [0-7] bulk load/compare */
     };
     union {
-        int64_t i;   /* [8-15] integer payload */
-        double f;    /* [8-15] float payload */
-        void *ptr;   /* [8-15] heap pointer */
+        int64_t i; /* [8-15] integer payload */
+        double f;  /* [8-15] float payload */
+        void *ptr; /* [8-15] heap pointer */
     };
 } XrValue;
 
 /* ========== Value Tags ========== */
 
-#define XR_TAG_NULL       0   /* null singleton */
-#define XR_TAG_BOOL       1   /* bool: payload 0=false, 1=true */
-#define XR_TAG_I64        3   /* integer (stored in .i as int64) */
-#define XR_TAG_F64        4   /* float (stored in .f as double) */
-#define XR_TAG_PTR        5   /* generic heap object pointer */
-#define XR_TAG_STR       14   /* NUL-terminated C string (const char*) */
+#define XR_TAG_NULL 0 /* null singleton */
+#define XR_TAG_BOOL 1 /* bool: payload 0=false, 1=true */
+#define XR_TAG_I64 3  /* integer (stored in .i as int64) */
+#define XR_TAG_F64 4  /* float (stored in .f as double) */
+#define XR_TAG_PTR 5  /* generic heap object pointer */
+#define XR_TAG_STR 14 /* NUL-terminated C string (const char*) */
 
 /* ========== Singleton Values ========== */
 
-#define XR_NULL_VAL  ((XrValue){.tag = XR_TAG_NULL})
-#define XR_TRUE_VAL  ((XrValue){.tag = XR_TAG_BOOL, .i = 1})
-#define XR_FALSE_VAL ((XrValue){.tag = XR_TAG_BOOL, .i = 0})
+#define XR_NULL_VAL ((XrValue) {.tag = XR_TAG_NULL})
+#define XR_TRUE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 1})
+#define XR_FALSE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 0})
 
 /* ========== Box / Unbox (inline, zero overhead) ========== */
 

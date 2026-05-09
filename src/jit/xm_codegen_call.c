@@ -684,8 +684,7 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Set call_closure from call_args[0] so callee can access upvalues.
             // Without this, xr_jit_upval_get reads stale call_closure.
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
-            a64_buf_emit(&ctx->buf,
-                         a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_CLOSURE_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_CLOSURE_OFFSET));
 
             // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
             // pass-through. Callee prologue reads param_tags to init
@@ -852,8 +851,7 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Set call_closure from call_args[0] so callee can access upvalues.
             // Without this, xr_jit_upval_get reads stale call_closure → SIGBUS.
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
-            a64_buf_emit(&ctx->buf,
-                         a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_CLOSURE_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_CLOSURE_OFFSET));
 
             // --- Fast path: register passing, BLR to fast_entry ---
             if (nargs_reg == 1) {

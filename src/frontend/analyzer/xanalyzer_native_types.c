@@ -79,8 +79,8 @@ static char *dup_range(const char *start, int len) {
 /* Trim trailing whitespace/newline from a string in-place. */
 static void trim_trailing(char *s) {
     int len = (int) strlen(s);
-    while (len > 0 && (s[len - 1] == ' ' || s[len - 1] == '\t' ||
-                        s[len - 1] == '\n' || s[len - 1] == '\r')) {
+    while (len > 0 &&
+           (s[len - 1] == ' ' || s[len - 1] == '\t' || s[len - 1] == '\n' || s[len - 1] == '\r')) {
         s[--len] = '\0';
     }
 }
@@ -90,9 +90,8 @@ static void trim_trailing(char *s) {
 /* Parse all members from an @native class source string.
  * Returns heap-allocated array of XaBuiltinMember (caller owns).
  * Sets *out_count. Sets *out_class_name to the class name (heap). */
-static XaBuiltinMember *parse_native_class(const char *source,
-                                            char **out_class_name,
-                                            int *out_count) {
+static XaBuiltinMember *parse_native_class(const char *source, char **out_class_name,
+                                           int *out_count) {
     XR_DCHECK(source != NULL, "parse_native_class: NULL source");
     XR_DCHECK(out_class_name != NULL, "parse_native_class: NULL out_class_name");
     XR_DCHECK(out_count != NULL, "parse_native_class: NULL out_count");
@@ -163,8 +162,7 @@ static XaBuiltinMember *parse_native_class(const char *source,
             continue;
         }
 
-        XR_CHECK_BOUNDS(count, MAX_MEMBERS_PER_TYPE,
-                        "too many members in @native class");
+        XR_CHECK_BOUNDS(count, MAX_MEMBERS_PER_TYPE, "too many members in @native class");
 
         bool is_static = false;
         if (strncmp(line, "static ", 7) == 0) {
@@ -254,27 +252,27 @@ typedef struct {
 
 /* Maps .xr class names to XrTypeId and display name. */
 static const NativeTypeMapping type_mappings[] = {
-    {"int",            XR_TID_INT,            TYPE_NAME_INT},
-    {"float",          XR_TID_FLOAT,          TYPE_NAME_FLOAT},
-    {"bool",           XR_TID_BOOL,           TYPE_NAME_BOOL},
-    {"string",         XR_TID_STRING,         TYPE_NAME_STRING},
-    {"Array",          XR_TID_ARRAY,          TYPE_NAME_ARRAY},
-    {"Map",            XR_TID_MAP,            TYPE_NAME_MAP},
-    {"Set",            XR_TID_SET,            TYPE_NAME_SET},
-    {"Json",           XR_TID_JSON,           TYPE_NAME_JSON},
-    {"BigInt",         XR_TID_BIGINT,         TYPE_NAME_BIGINT},
-    {"StringBuilder",  XR_TID_STRINGBUILDER,  TYPE_NAME_STRINGBUILDER},
-    {"Channel",        XR_TID_CHANNEL,        TYPE_NAME_CHANNEL},
-    {"EnumValue",      XR_TID_ENUM_VALUE,     TYPE_NAME_ENUM_VALUE},
-    {"EnumType",       XR_TID_ENUM_TYPE,      TYPE_NAME_ENUM_TYPE},
-    {"Regex",          XR_TID_REGEX,          TYPE_NAME_REGEX},
-    {"Exception",      XR_TID_EXCEPTION,      TYPE_NAME_EXCEPTION},
-    {"Task",           XR_TID_COROUTINE,      TYPE_NAME_COROUTINE},
-    {"WeakMap",        XR_TID_WEAKMAP,        TYPE_NAME_WEAKMAP},
-    {"WeakSet",        XR_TID_WEAKSET,        TYPE_NAME_WEAKSET},
+    {"int", XR_TID_INT, TYPE_NAME_INT},
+    {"float", XR_TID_FLOAT, TYPE_NAME_FLOAT},
+    {"bool", XR_TID_BOOL, TYPE_NAME_BOOL},
+    {"string", XR_TID_STRING, TYPE_NAME_STRING},
+    {"Array", XR_TID_ARRAY, TYPE_NAME_ARRAY},
+    {"Map", XR_TID_MAP, TYPE_NAME_MAP},
+    {"Set", XR_TID_SET, TYPE_NAME_SET},
+    {"Json", XR_TID_JSON, TYPE_NAME_JSON},
+    {"BigInt", XR_TID_BIGINT, TYPE_NAME_BIGINT},
+    {"StringBuilder", XR_TID_STRINGBUILDER, TYPE_NAME_STRINGBUILDER},
+    {"Channel", XR_TID_CHANNEL, TYPE_NAME_CHANNEL},
+    {"EnumValue", XR_TID_ENUM_VALUE, TYPE_NAME_ENUM_VALUE},
+    {"EnumType", XR_TID_ENUM_TYPE, TYPE_NAME_ENUM_TYPE},
+    {"Regex", XR_TID_REGEX, TYPE_NAME_REGEX},
+    {"Exception", XR_TID_EXCEPTION, TYPE_NAME_EXCEPTION},
+    {"Task", XR_TID_COROUTINE, TYPE_NAME_COROUTINE},
+    {"WeakMap", XR_TID_WEAKMAP, TYPE_NAME_WEAKMAP},
+    {"WeakSet", XR_TID_WEAKSET, TYPE_NAME_WEAKSET},
 };
 
-#define NUM_TYPE_MAPPINGS (int)(sizeof(type_mappings) / sizeof(type_mappings[0]))
+#define NUM_TYPE_MAPPINGS (int) (sizeof(type_mappings) / sizeof(type_mappings[0]))
 
 static XrTypeId class_name_to_tid(const char *name, const char **out_display) {
     XR_DCHECK(name != NULL, "class_name_to_tid: NULL name");
@@ -318,8 +316,7 @@ static void load_one_source(const char *source) {
                 native_builtin_types[tid].members = members;
                 native_builtin_types[tid].member_count = member_count;
             } else {
-                fprintf(stderr,
-                        "xray: warning: @native class '%s' has no XrTypeId mapping\n",
+                fprintf(stderr, "xray: warning: @native class '%s' has no XrTypeId mapping\n",
                         class_name);
                 /* Free unused members */
                 if (members) {
@@ -394,22 +391,22 @@ typedef struct {
 } TidObjMapping;
 
 static const TidObjMapping tid_obj_map[] = {
-    {XR_TID_STRING,         XR_TSTRING},
-    {XR_TID_ARRAY,          XR_TARRAY},
-    {XR_TID_MAP,            XR_TMAP},
-    {XR_TID_SET,            XR_TSET},
-    {XR_TID_JSON,           XR_TJSON},
-    {XR_TID_BIGINT,         XR_TBIGINT},
-    {XR_TID_STRINGBUILDER,  XR_TSTRINGBUILDER},
-    {XR_TID_CHANNEL,        XR_TCHANNEL},
-    {XR_TID_REGEX,          XR_TREGEX},
-    {XR_TID_EXCEPTION,      XR_TEXCEPTION},
-    {XR_TID_COROUTINE,      XR_TTASK},
-    {XR_TID_WEAKMAP,        XR_TMAP},
-    {XR_TID_WEAKSET,        XR_TSET},
+    {XR_TID_STRING, XR_TSTRING},
+    {XR_TID_ARRAY, XR_TARRAY},
+    {XR_TID_MAP, XR_TMAP},
+    {XR_TID_SET, XR_TSET},
+    {XR_TID_JSON, XR_TJSON},
+    {XR_TID_BIGINT, XR_TBIGINT},
+    {XR_TID_STRINGBUILDER, XR_TSTRINGBUILDER},
+    {XR_TID_CHANNEL, XR_TCHANNEL},
+    {XR_TID_REGEX, XR_TREGEX},
+    {XR_TID_EXCEPTION, XR_TEXCEPTION},
+    {XR_TID_COROUTINE, XR_TTASK},
+    {XR_TID_WEAKMAP, XR_TMAP},
+    {XR_TID_WEAKSET, XR_TSET},
 };
 
-#define NUM_TID_OBJ_MAPPINGS (int)(sizeof(tid_obj_map) / sizeof(tid_obj_map[0]))
+#define NUM_TID_OBJ_MAPPINGS (int) (sizeof(tid_obj_map) / sizeof(tid_obj_map[0]))
 
 XR_FUNC int xa_native_verify_protocol(XrayIsolate *X) {
     if (!X)
@@ -430,8 +427,7 @@ XR_FUNC int xa_native_verify_protocol(XrayIsolate *X) {
         XrClass *cls = xr_isolate_get_native_type_class(X, obj_type);
         if (!cls) {
             /* Type declared in .xr but not registered at runtime */
-            fprintf(stderr,
-                    "xray: protocol: @native class '%s' declared but not registered\n",
+            fprintf(stderr, "xray: protocol: @native class '%s' declared but not registered\n",
                     bt->name ? bt->name : "?");
             mismatches++;
             continue;
@@ -441,27 +437,24 @@ XR_FUNC int xa_native_verify_protocol(XrayIsolate *X) {
         for (int i = 0; i < bt->member_count; i++) {
             const XaBuiltinMember *mem = &bt->members[i];
             if (!mem->is_method)
-                continue;  /* Skip properties — they may be computed */
+                continue; /* Skip properties — they may be computed */
 
             SymbolId sym = xr_builtin_symbol_from_name(mem->name);
             if (sym == SYMBOL_INVALID) {
                 /* Method name not in builtin symbol table — look up via
                  * isolate symbol table instead */
-                sym = xr_symbol_lookup_in_table(
-                    xr_isolate_get_symbol_table(X), mem->name);
+                sym = xr_symbol_lookup_in_table(xr_isolate_get_symbol_table(X), mem->name);
             }
             if (sym == SYMBOL_INVALID) {
-                fprintf(stderr,
-                        "xray: protocol: '%s.%s' — symbol not interned\n",
-                        bt->name, mem->name);
+                fprintf(stderr, "xray: protocol: '%s.%s' — symbol not interned\n", bt->name,
+                        mem->name);
                 mismatches++;
                 continue;
             }
 
             XrMethod *method = xr_class_lookup_method(cls, sym);
             if (!method) {
-                fprintf(stderr,
-                        "xray: protocol: '%s.%s' declared in .xr but missing in C\n",
+                fprintf(stderr, "xray: protocol: '%s.%s' declared in .xr but missing in C\n",
                         bt->name, mem->name);
                 mismatches++;
             }

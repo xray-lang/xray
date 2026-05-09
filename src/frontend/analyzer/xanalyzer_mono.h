@@ -45,8 +45,8 @@ XR_FUNC const char *xr_mono_type_tag(XrTypeRef *t);
 // type_map: if non-NULL, maps type param names to concrete types during clone.
 // type_map_count: number of entries in type_map.
 typedef struct {
-    const char *param_name;  // Type parameter name (e.g., "T")
-    XrTypeRef *concrete_type; // Concrete type ref to substitute
+    const char *param_name;    // Type parameter name (e.g., "T")
+    XrTypeRef *concrete_type;  // Concrete type ref to substitute
 } XrMonoTypeMap;
 
 XR_FUNC AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *type_map, int type_map_count);
@@ -56,7 +56,8 @@ XR_FUNC AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *type_map, int type_m
 // Substitute type parameters in a type ref tree.
 // Returns the type ref with all TYPE_PARAM kinds replaced by concrete types.
 // If no substitution needed, may return the original type ref.
-XR_FUNC XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *type_map, int type_map_count);
+XR_FUNC XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *type_map,
+                                           int type_map_count);
 
 /* ========== Mono Instance Tracking ========== */
 

@@ -58,22 +58,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *cname = call->callee->as.variable.name;
         if (cname) {
-            static const char *const heap_types[] = {
-                "Map", "Array", "Set", "Bytes", "Channel",
-                "StringBuilder", "WeakMap", "WeakSet", NULL
-            };
+            static const char *const heap_types[] = {"Map",     "Array",   "Set",
+                                                     "Bytes",   "Channel", "StringBuilder",
+                                                     "WeakMap", "WeakSet", NULL};
             for (const char *const *p = heap_types; *p; p++) {
                 if (strcmp(cname, *p) == 0) {
-                    XrLocation loc = {.file = ctx->file_path,
-                                      .line = node->line,
-                                      .column = node->column};
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
                     char msg[128];
-                    snprintf(msg, sizeof(msg),
-                             "Use 'new %s(...)' to construct %s",
-                             cname, cname);
-                    xa_analyzer_add_diagnostic(
-                        ctx->analyzer, XR_DIAG_SEV_ERROR,
-                        XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
+                    snprintf(msg, sizeof(msg), "Use 'new %s(...)' to construct %s", cname, cname);
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_NOT_CALLABLE, msg, &loc);
                     break;
                 }
             }
@@ -101,8 +96,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Check constraints
         for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
             XrType *type_arg = call->type_args[i]
-                ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
-                : NULL;
+                                   ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
+                                   : NULL;
             XrType *constraint = xa_symbol_links_get_type_param_constraint(fn_links, i);
 
             if (constraint && type_arg && !xr_type_satisfies_constraint(type_arg, constraint)) {
@@ -126,11 +121,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
             ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0) {
             XrType *target_type = call->type_args[0]
-                ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0])
-                : NULL;
+                                      ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[0])
+                                      : NULL;
 
             // Resolve type alias to its underlying object type
-            if (target_type && target_type->kind == XR_KIND_CLASS && target_type->instance.class_name) {
+            if (target_type && target_type->kind == XR_KIND_CLASS &&
+                target_type->instance.class_name) {
                 XaSymbol *alias_sym =
                     xa_scope_lookup(ctx->analyzer->current_scope, target_type->instance.class_name);
                 if (alias_sym && alias_sym->kind == XA_SYM_TYPE_ALIAS && alias_sym->alias_type) {
@@ -139,8 +135,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
 
             // Validate: target must be sealed Json type with known fields
-            if (!target_type || !XR_TYPE_IS_JSON(target_type) ||
-                !target_type->object.is_sealed || target_type->object.field_count == 0) {
+            if (!target_type || !XR_TYPE_IS_JSON(target_type) || !target_type->object.is_sealed ||
+                target_type->object.field_count == 0) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
@@ -203,8 +199,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
      * the callee's parameter signature (set in the detailed loop below).
      * Visiting them eagerly without context triggers spurious E0365. */
     for (int i = 0; i < call->arg_count; i++) {
-        if (call->arguments[i] &&
-            call->arguments[i]->type != AST_FUNCTION_EXPR)
+        if (call->arguments[i] && call->arguments[i]->type != AST_FUNCTION_EXPR)
             xa_visit_infer_expr(ctx, call->arguments[i]);
     }
 
@@ -230,10 +225,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             XrType *saved_arr = ctx->callback_array_type;
             ctx->callback_element_type = container_elem_type;
             ctx->callback_index_type = xr_type_new_int(NULL);
-            if (strcmp(method_name, "reduce") == 0 && call->arg_count >= 2 &&
-                call->arguments[1]) {
-                ctx->callback_accumulator_type =
-                    xa_visit_infer_expr(ctx, call->arguments[1]);
+            if (strcmp(method_name, "reduce") == 0 && call->arg_count >= 2 && call->arguments[1]) {
+                ctx->callback_accumulator_type = xa_visit_infer_expr(ctx, call->arguments[1]);
                 ctx->callback_array_type = callee_obj_type;
             }
             for (int i = 0; i < call->arg_count; i++) {

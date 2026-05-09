@@ -25,4 +25,4 @@
  * (xi_compute_rpo + xi_compute_dominators). */
 XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f);
 
-#endif // XI_OPT_GVN_H
+#endif  // XI_OPT_GVN_H

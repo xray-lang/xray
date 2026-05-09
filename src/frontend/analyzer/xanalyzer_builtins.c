@@ -528,7 +528,8 @@ static const XaBuiltinMember g_rt_cluster_functions[] = {
     {"nodes", "(): Array<string>", "List cluster nodes", true, true},
     {"channel", "(name: string): Channel", "Get distributed channel", true, true},
     {"serve", "(name: string, handler: fn): void", "Register service handler", true, true},
-    {"call", "(node: string, service: string, data: Json): Json", "Call remote service", true, true},
+    {"call", "(node: string, service: string, data: Json): Json", "Call remote service", true,
+     true},
     {"reply", "(req: Json, result: Json): void", "Reply to service request", true, true},
     {"monitor", "(node: string): Channel", "Monitor node health", true, true},
     {"stop", "(): void", "Stop cluster node", true, true},
@@ -834,8 +835,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         if (X) {
             const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
             if (symbols) {
-                const XrPreludeTypeEntry *entry =
-                    xr_prelude_lookup_type(symbols, s, base_len);
+                const XrPreludeTypeEntry *entry = xr_prelude_lookup_type(symbols, s, base_len);
                 if (entry && entry->kind == (int) XR_PRELUDE_KIND_SIMPLE) {
                     type = xr_type_new_instance(X, NULL);
                     if (type)

@@ -43,13 +43,12 @@ typedef struct {
 
 /* Auto-generated from xi_intrinsic.def — IDs and fn_ptrs in one table. */
 static IntrinsicMapEntry intrinsic_map[] = {
-#define XI_INTRINSIC(name, id, arity, helper, eff, rep) \
-    {NULL, XR_INTRIN_##name},
+#define XI_INTRINSIC(name, id, arity, helper, eff, rep) {NULL, XR_INTRIN_##name},
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
 };
 
-#define INTRINSIC_MAP_COUNT (int)(sizeof(intrinsic_map) / sizeof(intrinsic_map[0]))
+#define INTRINSIC_MAP_COUNT (int) (sizeof(intrinsic_map) / sizeof(intrinsic_map[0]))
 
 /* One-time init: fill fn_ptr slots from linker symbols.
  * Auto-generated from xi_intrinsic.def — adding a new intrinsic
@@ -57,10 +56,11 @@ static IntrinsicMapEntry intrinsic_map[] = {
 static bool map_initialized = false;
 
 static void init_intrinsic_map(void) {
-    if (map_initialized) return;
+    if (map_initialized)
+        return;
     int i = 0;
-#define XI_INTRINSIC(name, id, arity, helper, eff, rep) \
-    intrinsic_map[i++].fn_ptr = (void *)(helper);
+#define XI_INTRINSIC(name, id, arity, helper, eff, rep)                                            \
+    intrinsic_map[i++].fn_ptr = (void *) (helper);
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
     XR_DCHECK(i == INTRINSIC_MAP_COUNT, "intrinsic map init count mismatch");
@@ -134,40 +134,48 @@ XR_FUNC void xm_resolve_intrinsics(XmFunc *func) {
  * lowercase by stringifying the enum suffix (matches existing output). */
 XR_FUNC const char *xm_intrinsic_name(int id) {
     switch (id) {
-#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
-    case id_val: return #helper;
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep)                                           \
+    case id_val:                                                                                   \
+        return #helper;
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
-        default: return "intrin?";
+        default:
+            return "intrin?";
     }
 }
 
 XR_FUNC int xm_intrinsic_arity(int id) {
     switch (id) {
-#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
-    case id_val: return ar;
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep)                                           \
+    case id_val:                                                                                   \
+        return ar;
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
-        default: return -1;
+        default:
+            return -1;
     }
 }
 
 XR_FUNC int xm_intrinsic_effects(int id) {
     switch (id) {
-#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
-    case id_val: return (eff);
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep)                                           \
+    case id_val:                                                                                   \
+        return (eff);
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
-        default: return 0;
+        default:
+            return 0;
     }
 }
 
 XR_FUNC int xm_intrinsic_ret_rep(int id) {
     switch (id) {
-#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep) \
-    case id_val: return (rep);
+#define XI_INTRINSIC(name, id_val, ar, helper, eff, rep)                                           \
+    case id_val:                                                                                   \
+        return (rep);
 #include "../ir/xi_intrinsic.def"
 #undef XI_INTRINSIC
-        default: return IREP_VAL;
+        default:
+            return IREP_VAL;
     }
 }

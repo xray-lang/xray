@@ -74,4 +74,3 @@ XrValue xr_builtin_map_from(XrayIsolate *isolate, XrValue self, XrValue *args, i
     }
     return xr_null();
 }
-

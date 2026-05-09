@@ -569,11 +569,9 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     /* Xi IR → Xm lowering (sole compilation path).
      * xi_to_xm_lower ensures select_rep is run if not already at REPPED. */
     if (proto->xi_func) {
-        const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods)
-                                       ? &ic_snap : NULL;
-        func = xi_to_xm_lower((XiFunc *)proto->xi_func, proto,
-                               (XiSlotMap *)proto->xi_slot_map, ic_ptr,
-                               jit->isolate);
+        const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods) ? &ic_snap : NULL;
+        func = xi_to_xm_lower((XiFunc *) proto->xi_func, proto, (XiSlotMap *) proto->xi_slot_map,
+                              ic_ptr, jit->isolate);
     }
     /* Release IC snapshots (they were copied into deopt tables) */
     if (ic_snap.ic_fields)
@@ -851,7 +849,7 @@ static inline bool jit_tag_matches_slot(uint32_t tag, uint8_t slot_type) {
 }
 
 int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
-                 struct XrType *return_type_info, XrValue *result) {
+                struct XrType *return_type_info, XrValue *result) {
     if (!jit_entry || !result)
         return XM_JIT_DEOPT;
 

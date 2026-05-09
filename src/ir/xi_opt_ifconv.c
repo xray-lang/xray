@@ -26,35 +26,59 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 
-#define IFCONV_MAX_ROUNDS    3
-#define IFCONV_MAX_INS       2
-#define IFCONV_MAX_PHIS      2
+#define IFCONV_MAX_ROUNDS 3
+#define IFCONV_MAX_INS 2
+#define IFCONV_MAX_PHIS 2
 
 /* ========== Helpers ========== */
 
 /* Check if a value is pure (safe to speculate past a branch). */
 static bool ifconv_is_pure(const XiValue *v) {
-    if (!v) return false;
+    if (!v)
+        return false;
     if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_WRITES_MEM))
         return false;
     switch (v->op) {
-        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+        case XI_DIV:
+        case XI_MOD:
         case XI_NEG:
-        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
-        case XI_SHL: case XI_SHR:
-        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
-        case XI_NOT: case XI_ISNULL:
-        case XI_CONVERT: case XI_COPY:
-        case XI_BOX: case XI_UNBOX:
-        case XI_NARROW_I8: case XI_NARROW_U8:
-        case XI_NARROW_I16: case XI_NARROW_U16:
-        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+        case XI_BNOT:
+        case XI_SHL:
+        case XI_SHR:
+        case XI_EQ:
+        case XI_NE:
+        case XI_LT:
+        case XI_LE:
+        case XI_GT:
+        case XI_GE:
+        case XI_NOT:
+        case XI_ISNULL:
+        case XI_CONVERT:
+        case XI_COPY:
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_NARROW_I8:
+        case XI_NARROW_U8:
+        case XI_NARROW_I16:
+        case XI_NARROW_U16:
+        case XI_NARROW_I32:
+        case XI_NARROW_U32:
         case XI_NARROW_F32:
-        case XI_WIDEN_I8: case XI_WIDEN_U8:
-        case XI_WIDEN_I16: case XI_WIDEN_U16:
-        case XI_WIDEN_I32: case XI_WIDEN_U32:
+        case XI_WIDEN_I8:
+        case XI_WIDEN_U8:
+        case XI_WIDEN_I16:
+        case XI_WIDEN_U16:
+        case XI_WIDEN_I32:
+        case XI_WIDEN_U32:
         case XI_WIDEN_F32:
-        case XI_CONST: case XI_SELECT:
+        case XI_CONST:
+        case XI_SELECT:
             return true;
         default:
             return false;
@@ -64,14 +88,19 @@ static bool ifconv_is_pure(const XiValue *v) {
 /* Check if a branch arm block is eligible: PLAIN, ≤N pure values,
  * single successor. */
 static bool ifconv_ok_arm(const XiBlock *blk) {
-    if (!blk) return false;
-    if (blk->kind != XI_BLOCK_PLAIN) return false;
+    if (!blk)
+        return false;
+    if (blk->kind != XI_BLOCK_PLAIN)
+        return false;
     uint32_t n = 0;
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         const XiValue *v = blk->values[i];
-        if (!v) continue;
-        if (v->op == XI_COPY) continue;  /* copies are free */
-        if (!ifconv_is_pure(v)) return false;
+        if (!v)
+            continue;
+        if (v->op == XI_COPY)
+            continue; /* copies are free */
+        if (!ifconv_is_pure(v))
+            return false;
         n++;
     }
     return n <= IFCONV_MAX_INS;
@@ -79,18 +108,19 @@ static bool ifconv_ok_arm(const XiBlock *blk) {
 
 /* Check if join block has 1-2 phis and exactly 2 predecessors. */
 static bool ifconv_ok_join(const XiBlock *blk) {
-    if (!blk || blk->npreds != 2) return false;
+    if (!blk || blk->npreds != 2)
+        return false;
     uint32_t n = 0;
     for (const XiPhi *p = blk->phis; p; p = p->next) {
         n++;
-        if (n > IFCONV_MAX_PHIS) return false;
+        if (n > IFCONV_MAX_PHIS)
+            return false;
     }
     return n >= 1;
 }
 
 /* Find the phi arg for a given predecessor block. */
-static XiValue *phi_arg_for_pred(const XiPhi *phi, const XiBlock *join,
-                                  const XiBlock *pred) {
+static XiValue *phi_arg_for_pred(const XiPhi *phi, const XiBlock *join, const XiBlock *pred) {
     for (uint16_t i = 0; i < join->npreds && i < phi->value.nargs; i++) {
         if (join->preds[i] == pred)
             return phi->value.args[i];
@@ -104,7 +134,8 @@ static void ifconv_replace_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] == old_val)
                     v->args[a] = new_val;
@@ -125,8 +156,9 @@ static void ifconv_replace_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
 static bool ifconv_append_value(XiBlock *blk, XiValue *v) {
     if (blk->nvalues >= blk->values_cap) {
         uint32_t new_cap = blk->values_cap ? blk->values_cap * 2 : 8;
-        XiValue **tmp = (XiValue **)xr_malloc(new_cap * sizeof(XiValue *));
-        if (!tmp) return false;
+        XiValue **tmp = (XiValue **) xr_malloc(new_cap * sizeof(XiValue *));
+        if (!tmp)
+            return false;
         if (blk->values) {
             for (uint32_t i = 0; i < blk->nvalues; i++)
                 tmp[i] = blk->values[i];
@@ -142,7 +174,8 @@ static bool ifconv_append_value(XiBlock *blk, XiValue *v) {
 
 XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_ifconv: NULL func");
-    if (f->nblocks < 3) return xi_pass_no_change();
+    if (f->nblocks < 3)
+        return xi_pass_no_change();
 
     bool ever_converted = false;
 
@@ -151,26 +184,37 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
 
         for (uint32_t bi = 0; bi < f->nblocks; bi++) {
             XiBlock *ifblk = f->blocks[bi];
-            if (ifblk->kind != XI_BLOCK_IF) continue;
-            if (!ifblk->control) continue;
-            if (!ifblk->succs[0] || !ifblk->succs[1]) continue;
-            if (ifblk->succs[0] == ifblk->succs[1]) continue;
+            if (ifblk->kind != XI_BLOCK_IF)
+                continue;
+            if (!ifblk->control)
+                continue;
+            if (!ifblk->succs[0] || !ifblk->succs[1])
+                continue;
+            if (ifblk->succs[0] == ifblk->succs[1])
+                continue;
 
             XiBlock *then_blk = ifblk->succs[0];
             XiBlock *else_blk = ifblk->succs[1];
 
             /* Both arms must be PLAIN and jump to the same join block. */
-            if (then_blk->kind != XI_BLOCK_PLAIN) continue;
-            if (else_blk->kind != XI_BLOCK_PLAIN) continue;
-            if (!then_blk->succs[0] || !else_blk->succs[0]) continue;
-            if (then_blk->succs[0] != else_blk->succs[0]) continue;
+            if (then_blk->kind != XI_BLOCK_PLAIN)
+                continue;
+            if (else_blk->kind != XI_BLOCK_PLAIN)
+                continue;
+            if (!then_blk->succs[0] || !else_blk->succs[0])
+                continue;
+            if (then_blk->succs[0] != else_blk->succs[0])
+                continue;
 
             XiBlock *join_blk = then_blk->succs[0];
 
             /* Validate arm blocks and join block. */
-            if (!ifconv_ok_arm(then_blk)) continue;
-            if (!ifconv_ok_arm(else_blk)) continue;
-            if (!ifconv_ok_join(join_blk)) continue;
+            if (!ifconv_ok_arm(then_blk))
+                continue;
+            if (!ifconv_ok_arm(else_blk))
+                continue;
+            if (!ifconv_ok_join(join_blk))
+                continue;
 
             /* === Conversion === */
             XiValue *cond = ifblk->control;
@@ -178,24 +222,27 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
             /* Move then-block values to ifblk. */
             for (uint32_t i = 0; i < then_blk->nvalues; i++) {
                 XiValue *v = then_blk->values[i];
-                if (v) ifconv_append_value(ifblk, v);
+                if (v)
+                    ifconv_append_value(ifblk, v);
             }
 
             /* Move else-block values to ifblk. */
             for (uint32_t i = 0; i < else_blk->nvalues; i++) {
                 XiValue *v = else_blk->values[i];
-                if (v) ifconv_append_value(ifblk, v);
+                if (v)
+                    ifconv_append_value(ifblk, v);
             }
 
             /* Create XI_SELECT for each phi in join_blk. */
             for (XiPhi *phi = join_blk->phis; phi; phi = phi->next) {
                 XiValue *true_val = phi_arg_for_pred(phi, join_blk, then_blk);
                 XiValue *false_val = phi_arg_for_pred(phi, join_blk, else_blk);
-                if (!true_val || !false_val) continue;
+                if (!true_val || !false_val)
+                    continue;
 
-                XiValue *sel = xi_value_new(f, ifblk, XI_SELECT,
-                                             phi->value.type, 3);
-                if (!sel) continue;
+                XiValue *sel = xi_value_new(f, ifblk, XI_SELECT, phi->value.type, 3);
+                if (!sel)
+                    continue;
                 sel->args[0] = cond;
                 sel->args[1] = true_val;
                 sel->args[2] = false_val;
@@ -221,16 +268,18 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
             /* Update join_blk predecessors: only ifblk now. */
             join_blk->preds[0] = ifblk;
             join_blk->npreds = 1;
-            join_blk->phis = NULL;  /* phis replaced by selects */
+            join_blk->phis = NULL; /* phis replaced by selects */
 
             converted_any = true;
             ever_converted = true;
         }
 
-        if (!converted_any) break;
+        if (!converted_any)
+            break;
     }
 
-    if (!ever_converted) return xi_pass_no_change();
+    if (!ever_converted)
+        return xi_pass_no_change();
 
     XiPassChange chg = xi_pass_no_change();
     chg.cfg_changed = true;

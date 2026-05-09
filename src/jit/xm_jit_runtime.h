@@ -42,19 +42,19 @@ typedef struct {
 
 /* ========== Convenience macros for constructing XrJitResult ========== */
 
-#define XR_JIT_OK() ((XrJitResult){0, 0})
-#define XR_JIT_NULL() ((XrJitResult){0, (uint64_t) XR_TAG_NULL})
-#define XR_JIT_INT(v) ((XrJitResult){(int64_t) (v), (uint64_t) XR_TAG_I64})
-#define XR_JIT_BOOL(v) ((XrJitResult){(int64_t) (v), (uint64_t) XR_TAG_BOOL})
-#define XR_JIT_PTR(p) ((XrJitResult){(int64_t) (uintptr_t) (p), (uint64_t) XR_TAG_PTR})
-#define XR_JIT_VAL(v) ((XrJitResult){(v).i, (uint64_t) (v).tag})
+#define XR_JIT_OK() ((XrJitResult) {0, 0})
+#define XR_JIT_NULL() ((XrJitResult) {0, (uint64_t) XR_TAG_NULL})
+#define XR_JIT_INT(v) ((XrJitResult) {(int64_t) (v), (uint64_t) XR_TAG_I64})
+#define XR_JIT_BOOL(v) ((XrJitResult) {(int64_t) (v), (uint64_t) XR_TAG_BOOL})
+#define XR_JIT_PTR(p) ((XrJitResult) {(int64_t) (uintptr_t) (p), (uint64_t) XR_TAG_PTR})
+#define XR_JIT_VAL(v) ((XrJitResult) {(v).i, (uint64_t) (v).tag})
 
 static inline XrJitResult xr_jit_float_result(double v) {
     union {
         double f;
         int64_t i;
     } u = {.f = v};
-    return (XrJitResult){u.i, (uint64_t) XR_TAG_F64};
+    return (XrJitResult) {u.i, (uint64_t) XR_TAG_F64};
 }
 #define XR_JIT_FLOAT(v) xr_jit_float_result(v)
 

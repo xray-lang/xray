@@ -132,14 +132,13 @@ static int net_dns_lookup_to_addrs(XrayIsolate *X, const char *hostname, XrNetAd
         return 0;
 
     XrSockAddr resolved[8];
-    int count = xr_dns_resolve_all(X, hostname, resolved, max_addrs > 8 ? 8 : max_addrs,
-                                   XR_AF_UNSPEC);
+    int count =
+        xr_dns_resolve_all(X, hostname, resolved, max_addrs > 8 ? 8 : max_addrs, XR_AF_UNSPEC);
 
     for (int i = 0; i < count; i++) {
         if (resolved[i].family == AF_INET) {
             addrs[i].family = XR_NET_IPV4;
-            inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, addrs[i].host,
-                      sizeof(addrs[i].host));
+            inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, addrs[i].host, sizeof(addrs[i].host));
         } else {
             addrs[i].family = XR_NET_IPV6;
             inet_ntop(AF_INET6, &resolved[i].addr.v6.sin6_addr, addrs[i].host,
@@ -765,11 +764,11 @@ static XrValue net_listen_handle(XrayIsolate *X, XrValue *args, int nargs) {
     if (port_num == 0) {
         struct sockaddr_storage ss;
         socklen_t sslen = sizeof(ss);
-        if (getsockname(fd, (struct sockaddr *)&ss, &sslen) == 0) {
+        if (getsockname(fd, (struct sockaddr *) &ss, &sslen) == 0) {
             if (ss.ss_family == AF_INET6)
-                port_num = ntohs(((struct sockaddr_in6 *)&ss)->sin6_port);
+                port_num = ntohs(((struct sockaddr_in6 *) &ss)->sin6_port);
             else
-                port_num = ntohs(((struct sockaddr_in *)&ss)->sin_port);
+                port_num = ntohs(((struct sockaddr_in *) &ss)->sin_port);
         }
     }
 
@@ -1412,8 +1411,7 @@ XR_DEFINE_BUILTIN(net_write_handle_yieldable, "write", "(conn: NetConn, data: st
                   "Write data to connection")
 XR_DEFINE_BUILTIN(net_close_handle, "close", "(handle: NetConn | NetListener): void",
                   "Close a connection or listener")
-XR_DEFINE_BUILTIN(net_fd_handle, "fd", "(handle: NetConn | NetListener): int",
-                  "Get fd from handle")
+XR_DEFINE_BUILTIN(net_fd_handle, "fd", "(handle: NetConn | NetListener): int", "Get fd from handle")
 XR_DEFINE_BUILTIN(net_dns_lookup, "lookup", "(hostname: string): string?", "DNS lookup")
 XR_DEFINE_BUILTIN(net_has_tls, "hasTLS", "(): bool", "Check if TLS support is available")
 XR_DEFINE_BUILTIN(net_dial_tls_yieldable, "dialTLS",

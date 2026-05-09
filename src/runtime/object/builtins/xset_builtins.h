@@ -16,7 +16,7 @@
 
 // Global Set constructor (self = class value, ignored)
 XR_FUNC XrValue xr_builtin_set_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
-                                          int argc);
+                                         int argc);
 
 // Static methods (self = class value, ignored)
 XR_FUNC XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);

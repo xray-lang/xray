@@ -477,8 +477,8 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 /* ========== Shared Object Refcount Tracking ========== */
 
 static int ptr_compare(const void *a, const void *b) {
-    uintptr_t pa = (uintptr_t) * (XrGCHeader **) a;
-    uintptr_t pb = (uintptr_t) * (XrGCHeader **) b;
+    uintptr_t pa = (uintptr_t) *(XrGCHeader **) a;
+    uintptr_t pb = (uintptr_t) *(XrGCHeader **) b;
     return (pa > pb) - (pa < pb);
 }
 

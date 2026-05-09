@@ -307,8 +307,8 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             }
             case XR_TCLASS: {
                 XrClass *klass = (XrClass *) hdr;
-                snprintf(buf, sizeof(buf), "class %s @%p",
-                         xr_class_display_name(klass), (void *) hdr);
+                snprintf(buf, sizeof(buf), "class %s @%p", xr_class_display_name(klass),
+                         (void *) hdr);
                 break;
             }
             case XR_TCOROUTINE:

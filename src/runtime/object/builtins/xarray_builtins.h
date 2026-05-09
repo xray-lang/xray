@@ -19,12 +19,12 @@
 
 // Global Array constructor (self = class value, ignored)
 XR_FUNC XrValue xr_builtin_array_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
-                                            int argc);
+                                           int argc);
 
 // Array static methods (self = class value, ignored)
 XR_FUNC XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 XR_FUNC XrValue xr_builtin_array_range(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 XR_FUNC XrValue xr_builtin_array_with_capacity(XrayIsolate *isolate, XrValue self, XrValue *args,
-                                                int argc);
+                                               int argc);
 
 #endif  // XARRAY_BUILTINS_H

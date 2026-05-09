@@ -38,27 +38,48 @@
 /* ========== Pure-Op Classification ========== */
 
 static bool licm_is_pure(const XiValue *v) {
-    if (!v) return false;
+    if (!v)
+        return false;
     if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_WRITES_MEM))
         return false;
     switch (v->op) {
-        case XI_ADD: case XI_SUB: case XI_MUL: case XI_DIV: case XI_MOD:
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+        case XI_DIV:
+        case XI_MOD:
         case XI_NEG:
-        case XI_BAND: case XI_BOR: case XI_BXOR: case XI_BNOT:
-        case XI_SHL: case XI_SHR:
-        case XI_EQ: case XI_NE: case XI_LT: case XI_LE: case XI_GT: case XI_GE:
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+        case XI_BNOT:
+        case XI_SHL:
+        case XI_SHR:
+        case XI_EQ:
+        case XI_NE:
+        case XI_LT:
+        case XI_LE:
+        case XI_GT:
+        case XI_GE:
         case XI_NOT:
         case XI_ISNULL:
         case XI_CONVERT:
         case XI_COPY:
-        case XI_BOX: case XI_UNBOX:
-        case XI_NARROW_I8: case XI_NARROW_U8:
-        case XI_NARROW_I16: case XI_NARROW_U16:
-        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_NARROW_I8:
+        case XI_NARROW_U8:
+        case XI_NARROW_I16:
+        case XI_NARROW_U16:
+        case XI_NARROW_I32:
+        case XI_NARROW_U32:
         case XI_NARROW_F32:
-        case XI_WIDEN_I8: case XI_WIDEN_U8:
-        case XI_WIDEN_I16: case XI_WIDEN_U16:
-        case XI_WIDEN_I32: case XI_WIDEN_U32:
+        case XI_WIDEN_I8:
+        case XI_WIDEN_U8:
+        case XI_WIDEN_I16:
+        case XI_WIDEN_U16:
+        case XI_WIDEN_I32:
+        case XI_WIDEN_U32:
         case XI_WIDEN_F32:
             return true;
         default:
@@ -70,7 +91,7 @@ static bool licm_is_pure(const XiValue *v) {
 
 /* Build value_id → block_index mapping for all values in the function. */
 static void build_def_block(const XiFunc *f, uint32_t *def_blk, uint32_t max_id) {
-    memset(def_blk, 0xFF, max_id * sizeof(uint32_t));  /* UINT32_MAX = unknown */
+    memset(def_blk, 0xFF, max_id * sizeof(uint32_t)); /* UINT32_MAX = unknown */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
@@ -92,14 +113,17 @@ static void build_def_block(const XiFunc *f, uint32_t *def_blk, uint32_t max_id)
 }
 
 /* Check if a value's definition is outside the loop body. */
-static bool def_outside_loop(const XiValue *v, const uint32_t *def_blk,
-                              uint32_t max_id, const bool *in_loop,
-                              uint32_t nblocks) {
-    if (!v) return true;  /* NULL arg (e.g. CLOSURE_NEW) treated as outside */
-    if (v->op == XI_CONST) return true;  /* Constants are loop-invariant */
-    if (v->id >= max_id) return false;
+static bool def_outside_loop(const XiValue *v, const uint32_t *def_blk, uint32_t max_id,
+                             const bool *in_loop, uint32_t nblocks) {
+    if (!v)
+        return true; /* NULL arg (e.g. CLOSURE_NEW) treated as outside */
+    if (v->op == XI_CONST)
+        return true; /* Constants are loop-invariant */
+    if (v->id >= max_id)
+        return false;
     uint32_t bi = def_blk[v->id];
-    if (bi >= nblocks) return false;
+    if (bi >= nblocks)
+        return false;
     return !in_loop[bi];
 }
 
@@ -111,13 +135,15 @@ static bool block_append_value(XiBlock *blk, XiValue *v) {
         uint32_t new_cap = blk->values_cap ? blk->values_cap * 2 : 8;
         XiValue **tmp = NULL;
         if (blk->values) {
-            tmp = (XiValue **)xr_malloc(new_cap * sizeof(XiValue *));
-            if (!tmp) return false;
+            tmp = (XiValue **) xr_malloc(new_cap * sizeof(XiValue *));
+            if (!tmp)
+                return false;
             memcpy(tmp, blk->values, blk->nvalues * sizeof(XiValue *));
             /* old array is arena-allocated, no free needed */
         } else {
-            tmp = (XiValue **)xr_calloc(new_cap, sizeof(XiValue *));
-            if (!tmp) return false;
+            tmp = (XiValue **) xr_calloc(new_cap, sizeof(XiValue *));
+            if (!tmp)
+                return false;
         }
         blk->values = tmp;
         blk->values_cap = new_cap;
@@ -130,24 +156,27 @@ static bool block_append_value(XiBlock *blk, XiValue *v) {
 
 XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_licm: NULL func");
-    if (f->nblocks < 2) return xi_pass_no_change();
+    if (f->nblocks < 2)
+        return xi_pass_no_change();
 
     /* Compute analysis prerequisites */
     xi_compute_rpo(f);
     xi_compute_dominators(f);
     XiLoopInfo *loops = xi_compute_loops(f);
     if (!loops || loops->nloop == 0) {
-        if (loops) xi_loopinfo_free(loops);
+        if (loops)
+            xi_loopinfo_free(loops);
         return xi_pass_no_change();
     }
 
     uint32_t max_id = f->next_value_id;
     uint32_t nblk = f->nblocks;
 
-    uint32_t *def_blk = (uint32_t *)xr_malloc(max_id * sizeof(uint32_t));
-    bool *in_loop = (bool *)xr_calloc(nblk, sizeof(bool));
+    uint32_t *def_blk = (uint32_t *) xr_malloc(max_id * sizeof(uint32_t));
+    bool *in_loop = (bool *) xr_calloc(nblk, sizeof(bool));
     if (!def_blk || !in_loop) {
-        xr_free(def_blk); xr_free(in_loop);
+        xr_free(def_blk);
+        xr_free(in_loop);
         xi_loopinfo_free(loops);
         return xi_pass_no_change();
     }
@@ -159,7 +188,8 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
     /* Process innermost-first (all_loops[] sorted by XiLoopInfo) */
     for (uint32_t li = 0; li < loops->nloop; li++) {
         XiLoop *L = loops->all_loops[li];
-        if (!L->preheader) continue;  /* no preheader → skip */
+        if (!L->preheader)
+            continue; /* no preheader → skip */
 
         /* Build loop body bitmap */
         memset(in_loop, 0, nblk * sizeof(bool));
@@ -178,7 +208,8 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
 
             for (uint32_t bi_idx = 0; bi_idx < L->nbody; bi_idx++) {
                 XiBlock *blk = L->body[bi_idx];
-                if (blk == preheader) continue;
+                if (blk == preheader)
+                    continue;
 
                 uint32_t write = 0;
                 for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
@@ -188,8 +219,7 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
                     if (v && licm_is_pure(v)) {
                         can_hoist = true;
                         for (uint16_t a = 0; a < v->nargs; a++) {
-                            if (!def_outside_loop(v->args[a], def_blk,
-                                                   max_id, in_loop, nblk)) {
+                            if (!def_outside_loop(v->args[a], def_blk, max_id, in_loop, nblk)) {
                                 can_hoist = false;
                                 break;
                             }
@@ -215,7 +245,8 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
                 blk->nvalues = write;
             }
 
-            if (!hoisted_this_iter) break;
+            if (!hoisted_this_iter)
+                break;
         }
     }
 
@@ -223,7 +254,8 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
     xr_free(in_loop);
     xi_loopinfo_free(loops);
 
-    if (!any_hoisted) return xi_pass_no_change();
+    if (!any_hoisted)
+        return xi_pass_no_change();
 
     XiPassChange chg = xi_pass_no_change();
     chg.values_changed = true;

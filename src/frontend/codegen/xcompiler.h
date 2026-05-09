@@ -42,21 +42,21 @@ typedef struct XrGlobalVar {
 
 /* Ownership state for shared let variables (Move semantics) */
 typedef enum {
-    SHARED_STATE_OWNED,  /* Can be used */
-    SHARED_STATE_MOVED,  /* Cannot be used after Channel.send() */
+    SHARED_STATE_OWNED, /* Can be used */
+    SHARED_STATE_MOVED, /* Cannot be used after Channel.send() */
 } XrSharedState;
 
 /* Shared variable info (for coroutine variable storage) */
 typedef struct XrSharedVar {
     XrString *name;
-    int index;           /* Index in shared_array */
-    int scope_depth;     /* Scope depth at declaration */
-    int function_depth;  /* Function nesting depth */
+    int index;          /* Index in shared_array */
+    int scope_depth;    /* Scope depth at declaration */
+    int function_depth; /* Function nesting depth */
     bool is_const;
-    XrSharedState state;          /* Ownership (shared let only) */
-    int moved_line;               /* Line where variable was moved */
-    int moved_column;             /* Column where variable was moved */
-    struct XrType *compile_type;  /* Inferred type */
+    XrSharedState state;         /* Ownership (shared let only) */
+    int moved_line;              /* Line where variable was moved */
+    int moved_column;            /* Column where variable was moved */
+    struct XrType *compile_type; /* Inferred type */
 } XrSharedVar;
 
 /* ========== Compile API ========== */

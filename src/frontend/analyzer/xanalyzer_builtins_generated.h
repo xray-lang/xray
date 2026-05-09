@@ -50,19 +50,26 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
     {"uuid", "(): string", "Generate UUID v4", true, false},
     {"encrypt", "(key: string, plaintext: string): string", "AES-256-CBC encrypt", true, false},
     {"decrypt", "(key: string, ciphertext: string): string?", "AES-256-CBC decrypt", true, false},
-    {"timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", true, false},
+    {"timingSafeEqual", "(a: string, b: string): bool", "Constant-time string comparison", true,
+     false},
 };
 #define GEN_CRYPTO_FUNCTION_COUNT 10
 
 // csv module functions
 static const XaBuiltinMember g_gen_csv_functions[] = {
-    {"parse", "(data: string, options?: Json): Array<Array<string>>", "Parse CSV string", true, false},
-    {"parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers", true, false},
+    {"parse", "(data: string, options?: Json): Array<Array<string>>", "Parse CSV string", true,
+     false},
+    {"parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers", true,
+     false},
     {"parseTsv", "(data: string): Array<Array<string>>", "Parse TSV string", true, false},
-    {"parseAuto", "(data: string): Array<Array<string>>", "Auto-detect delimiter and parse", true, false},
-    {"stringify", "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string", true, false},
-    {"parseFile", "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file", true, false},
-    {"writeFile", "(path: string, data: Array<Array<string>>, options?: Json): bool", "Write CSV file", true, false},
+    {"parseAuto", "(data: string): Array<Array<string>>", "Auto-detect delimiter and parse", true,
+     false},
+    {"stringify", "(data: Array<Array<string>>, options?: Json): string", "Convert to CSV string",
+     true, false},
+    {"parseFile", "(path: string, options?: Json): Array<Array<string>>", "Parse CSV file", true,
+     false},
+    {"writeFile", "(path: string, data: Array<Array<string>>, options?: Json): bool",
+     "Write CSV file", true, false},
 };
 #define GEN_CSV_FUNCTION_COUNT 7
 
@@ -70,10 +77,16 @@ static const XaBuiltinMember g_gen_csv_functions[] = {
 static const XaBuiltinMember g_gen_datetime_functions[] = {
     {"now", "(): DateTime", "Get current local datetime", true, false},
     {"utc", "(): DateTime", "Get current UTC datetime", true, false},
-    {"create", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create local datetime", true, false},
-    {"createUTC", "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime", "Create UTC datetime", true, false},
-    {"fromTimestamp", "(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", true, false},
-    {"fromTimestampMs", "(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)", true, false},
+    {"create",
+     "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
+     "Create local datetime", true, false},
+    {"createUTC",
+     "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
+     "Create UTC datetime", true, false},
+    {"fromTimestamp", "(ts: int): DateTime", "Create datetime from Unix timestamp (seconds)", true,
+     false},
+    {"fromTimestampMs", "(ts: int): DateTime", "Create datetime from Unix timestamp (milliseconds)",
+     true, false},
     {"parse", "(s: string, format?: string): DateTime?", "Parse datetime string", true, false},
     {"offset", "(): int", "Get UTC offset in minutes", true, false},
     {"format", "(pattern?: string): string", "Format datetime to string", true, false},
@@ -109,8 +122,10 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
     {"utf8Valid", "(data: string): bool", "Check if valid UTF-8", true, false},
     {"utf8Count", "(data: string): int", "Count UTF-8 characters", true, false},
     {"utf8ByteLength", "(data: string): int", "Get UTF-8 byte length", true, false},
-    {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true, false},
-    {"utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?", "UTF-16 decode to string (auto-detects BOM)", true, false},
+    {"utf16Encode", "(data: string, endian?: int): Array<uint8>", "UTF-16 encode to bytes", true,
+     false},
+    {"utf16Decode", "(data: string | Array<uint8>, endian?: int, stripBom?: bool): string?",
+     "UTF-16 decode to string (auto-detects BOM)", true, false},
     // Module constants (is_method=false)
     {"LE", ": int", "", false, false},
     {"BE", ": int", "", false, false},
@@ -120,7 +135,8 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
 // gc module functions
 static const XaBuiltinMember g_gen_gc_functions[] = {
     {"collect", "(): int", "Force full GC, return cycle count", true, false},
-    {"step", "(): bool", "Run one incremental GC step, return true if cycle completed", true, false},
+    {"step", "(): bool", "Run one incremental GC step, return true if cycle completed", true,
+     false},
     {"disable", "(): void", "Disable automatic GC", true, false},
     {"enable", "(): void", "Enable automatic GC", true, false},
     {"isrunning", "(): bool", "Check if GC is enabled", true, false},
@@ -140,30 +156,20 @@ static const XaBuiltinMember g_gen_gc_functions[] = {
 
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
-    {"status", "int", true},
-    {"statusText", "string", true},
-    {"headers", "Json", true},
-    {"body", "string", false},
-    {"error", "string", true},
-    {"ok", "bool", true},
+    {"status", "int", true},   {"statusText", "string", true}, {"headers", "Json", true},
+    {"body", "string", false}, {"error", "string", true},      {"ok", "bool", true},
 };
 
 // http.HttpRequest handle fields
 static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
-    {"method", "string", true},
-    {"path", "string", true},
-    {"query", "Json", true},
-    {"contentLength", "int", true},
-    {"bodyOffset", "int", true},
+    {"method", "string", true},     {"path", "string", true},    {"query", "Json", true},
+    {"contentLength", "int", true}, {"bodyOffset", "int", true},
 };
 
 // http.DownloadResult handle fields
 static const XaBuiltinHandleField g_gen_http_downloadresult_fields[] = {
-    {"status", "int", true},
-    {"downloaded", "int", true},
-    {"total", "int", true},
-    {"completed", "bool", false},
-    {"error", "string", true},
+    {"status", "int", true},      {"downloaded", "int", true}, {"total", "int", true},
+    {"completed", "bool", false}, {"error", "string", true},
 };
 
 static const XaBuiltinHandle g_gen_http_handles[] = {
@@ -176,42 +182,48 @@ static const XaBuiltinHandle g_gen_http_handles[] = {
 // http module functions
 static const XaBuiltinMember g_gen_http_functions[] = {
     {"get", "(url: string, options?: Json): HttpResponse", "HTTP GET request", true, false},
-    {"post", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP POST request", true, false},
-    {"put", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP PUT request", true, false},
+    {"post", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP POST request",
+     true, false},
+    {"put", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP PUT request", true,
+     false},
     {"delete", "(url: string, options?: Json): HttpResponse", "HTTP DELETE request", true, false},
-    {"request", "(method: string, url: string, options?: Json): HttpResponse", "Generic HTTP request", true, false},
+    {"request", "(method: string, url: string, options?: Json): HttpResponse",
+     "Generic HTTP request", true, false},
     {"urlEncode", "(s: string): string", "URL-encode a string", true, false},
     {"urlDecode", "(s: string): string", "URL-decode a string", true, false},
-    {"route", "(method: string, path: string, handler: fn): void", "Register a route handler", true, false},
-    {"static", "(prefix: string, dir: string): void", "Serve static files from directory", true, false},
+    {"route", "(method: string, path: string, handler: fn): void", "Register a route handler", true,
+     false},
+    {"static", "(prefix: string, dir: string): void", "Serve static files from directory", true,
+     false},
     {"stopServer", "(): void", "Stop the HTTP server", true, false},
     {"parseRequest", "(data: string): HttpRequest?", "Parse raw HTTP request data", true, false},
-    {"sendResponse", "(fd: int, status: int, headers: Json, body: string): int", "Send HTTP response on fd", true, false},
-    {"download", "(url: string, path: string, options?: Json): DownloadResult", "Download file from URL", true, false},
+    {"sendResponse", "(fd: int, status: int, headers: Json, body: string): int",
+     "Send HTTP response on fd", true, false},
+    {"download", "(url: string, path: string, options?: Json): DownloadResult",
+     "Download file from URL", true, false},
     {"getContentLength", "(url: string): int", "Get content length of URL", true, false},
     {"formDataNew", "(): Json", "Create new multipart form data", true, false},
-    {"formDataAppend", "(form: Json, name: string, value: string): void", "Append field to form data", true, false},
-    {"formDataAppendFile", "(form: Json, name: string, path: string, filename?: string): void", "Append file to form data", true, false},
-    {"formDataPost", "(url: string, form: Json, options?: Json): HttpResponse", "POST multipart form data", true, false},
+    {"formDataAppend", "(form: Json, name: string, value: string): void",
+     "Append field to form data", true, false},
+    {"formDataAppendFile", "(form: Json, name: string, path: string, filename?: string): void",
+     "Append file to form data", true, false},
+    {"formDataPost", "(url: string, form: Json, options?: Json): HttpResponse",
+     "POST multipart form data", true, false},
     {"setProxy", "(url: string): void", "Set HTTP proxy", true, false},
     {"clearProxy", "(): void", "Clear HTTP proxy", true, false},
     {"h2Get", "(url: string, options?: Json): HttpResponse", "HTTP/2 GET request", true, false},
-    {"h2Post", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP/2 POST request", true, false},
-    {"h2Request", "(method: string, url: string, options?: Json): HttpResponse", "Generic HTTP/2 request", true, false},
+    {"h2Post", "(url: string, body?: string, options?: Json): HttpResponse", "HTTP/2 POST request",
+     true, false},
+    {"h2Request", "(method: string, url: string, options?: Json): HttpResponse",
+     "Generic HTTP/2 request", true, false},
 };
 #define GEN_HTTP_FUNCTION_COUNT 23
 
 // io.FileStat handle fields
 static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
-    {"size", "int", true},
-    {"mode", "int", true},
-    {"mtime", "int", true},
-    {"atime", "int", true},
-    {"ctime", "int", false},
-    {"uid", "int", true},
-    {"gid", "int", true},
-    {"isFile", "bool", true},
-    {"isDir", "bool", true},
+    {"size", "int", true},        {"mode", "int", true},    {"mtime", "int", true},
+    {"atime", "int", true},       {"ctime", "int", false},  {"uid", "int", true},
+    {"gid", "int", true},         {"isFile", "bool", true}, {"isDir", "bool", true},
     {"isSymlink", "bool", false},
 };
 
@@ -223,9 +235,11 @@ static const XaBuiltinHandle g_gen_io_handles[] = {
 // io module functions
 static const XaBuiltinMember g_gen_io_functions[] = {
     {"readFile", "(path: string): string?", "Read entire file as string", true, false},
-    {"readFileBytes", "(path: string): Array<uint8>?", "Read entire file as byte array", true, false},
+    {"readFileBytes", "(path: string): Array<uint8>?", "Read entire file as byte array", true,
+     false},
     {"writeFile", "(path: string, data: string): bool", "Write string to file", true, false},
-    {"writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", true, false},
+    {"writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", true,
+     false},
     {"appendFile", "(path: string, data: string): bool", "Append string to file", true, false},
     {"exists", "(path: string): bool", "Check if path exists", true, false},
     {"isFile", "(path: string): bool", "Check if path is a file", true, false},
@@ -250,7 +264,8 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"realpath", "(path: string): string?", "Resolve to absolute path", true, false},
     {"tempFile", "(): string?", "Create temporary file", true, false},
     {"tempDir", "(): string?", "Create temporary directory", true, false},
-    {"readDirRecursive", "(path: string): Array<string>", "List directory entries recursively", true, false},
+    {"readDirRecursive", "(path: string): Array<string>", "List directory entries recursively",
+     true, false},
 };
 #define GEN_IO_FUNCTION_COUNT 29
 
@@ -337,19 +352,25 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
-    {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false},
-    {"listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true, false},
+    {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true,
+     false},
+    {"listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true,
+     false},
     {"accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false},
     {"read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false},
     {"write", "(conn: NetConn, data: string): int", "Write data to connection", true, false},
-    {"close", "(handle: NetConn | NetListener): void", "Close a connection or listener", true, false},
+    {"close", "(handle: NetConn | NetListener): void", "Close a connection or listener", true,
+     false},
     {"fd", "(handle: NetConn | NetListener): int", "Get fd from handle", true, false},
     {"lookup", "(hostname: string): string?", "DNS lookup", true, false},
     {"hasTLS", "(): bool", "Check if TLS support is available", true, false},
-    {"dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", true, false},
-    {"upgradeTLS", "(conn: NetConn, hostname: string): NetConn?", "Upgrade connection to TLS", true, false},
+    {"dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", true,
+     false},
+    {"upgradeTLS", "(conn: NetConn, hostname: string): NetConn?", "Upgrade connection to TLS", true,
+     false},
     {"udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false},
-    {"sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false},
+    {"sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram",
+     true, false},
     {"recvFrom", "(handle: NetConn, maxlen?: int): Json", "Receive UDP datagram", true, false},
 };
 #define GEN_NET_FUNCTION_COUNT 14
@@ -414,8 +435,10 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
     {"fullFind", "(pattern: Regex, s: string): Json", "Full match with captures", true, false},
     {"count", "(pattern: Regex, s: string): int", "Count matches", true, false},
     {"findAll", "(pattern: Regex, s: string): Array<string>", "Find all matches", true, false},
-    {"replace", "(pattern: Regex, s: string, replacement: string): string", "Replace first match", true, false},
-    {"replaceAll", "(pattern: Regex, s: string, replacement: string): string", "Replace all matches", true, false},
+    {"replace", "(pattern: Regex, s: string, replacement: string): string", "Replace first match",
+     true, false},
+    {"replaceAll", "(pattern: Regex, s: string, replacement: string): string",
+     "Replace all matches", true, false},
     {"split", "(pattern: Regex, s: string): Array<string>", "Split by pattern", true, false},
     {"escape", "(s: string): string", "Escape regex special chars", true, false},
     {"isValid", "(pattern: string): bool", "Check if pattern is valid", true, false},
@@ -479,15 +502,21 @@ static const XaBuiltinHandle g_gen_ws_handles[] = {
 
 // ws module functions
 static const XaBuiltinMember g_gen_ws_functions[] = {
-    {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true, false},
-    {"send", "(conn: WsConn, data: string, binary?: bool): bool", "Send data over WebSocket connection", true, false},
-    {"recv", "(conn: WsConn, timeout?: int): WsMessage?", "Receive data from WebSocket connection", true, false},
-    {"close", "(conn: WsConn, code?: int, reason?: string?): bool", "Close a WebSocket connection", true, false},
+    {"connect", "(url: string, options?: Json): WsConn?", "Connect to a WebSocket server", true,
+     false},
+    {"send", "(conn: WsConn, data: string, binary?: bool): bool",
+     "Send data over WebSocket connection", true, false},
+    {"recv", "(conn: WsConn, timeout?: int): WsMessage?", "Receive data from WebSocket connection",
+     true, false},
+    {"close", "(conn: WsConn, code?: int, reason?: string?): bool", "Close a WebSocket connection",
+     true, false},
     {"ping", "(conn: WsConn): bool", "Send a ping frame", true, false},
     {"state", "(conn: WsConn): string", "Get connection state", true, false},
     {"isOpen", "(conn: WsConn): bool", "Check if connection is open", true, false},
-    {"recvData", "(conn: WsConn, timeout?: int): string?", "High-performance recv returning data string directly (no Json wrapper)", true, false},
-    {"echoServe", "(port: int): bool", "Pure C echo server with zero VM/GC overhead per message", true, false},
+    {"recvData", "(conn: WsConn, timeout?: int): string?",
+     "High-performance recv returning data string directly (no Json wrapper)", true, false},
+    {"echoServe", "(port: int): bool", "Pure C echo server with zero VM/GC overhead per message",
+     true, false},
 };
 #define GEN_WS_FUNCTION_COUNT 9
 
@@ -526,7 +555,8 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"datetime", g_gen_datetime_functions, GEN_DATETIME_FUNCTION_COUNT, NULL, 0},
     {"encoding", g_gen_encoding_functions, GEN_ENCODING_FUNCTION_COUNT, NULL, 0},
     {"gc", g_gen_gc_functions, GEN_GC_FUNCTION_COUNT, NULL, 0},
-    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles, GEN_HTTP_HANDLE_COUNT},
+    {"http", g_gen_http_functions, GEN_HTTP_FUNCTION_COUNT, g_gen_http_handles,
+     GEN_HTTP_HANDLE_COUNT},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
@@ -543,4 +573,4 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
 };
 #define GEN_BUILTIN_MODULE_COUNT 21
 
-#endif // XANALYZER_BUILTINS_GENERATED_H
+#endif  // XANALYZER_BUILTINS_GENERATED_H

@@ -147,7 +147,8 @@ static inline void xr_mem_track_free(void) {
 static inline int64_t xr_mem_check_balance(void) {
     return 0;
 }
-static inline void xr_mem_dump_stats(void) {}
+static inline void xr_mem_dump_stats(void) {
+}
 
 #define xr_malloc(size) xr_malloc_raw(size)
 #define xr_calloc(count, size) xr_calloc_raw(count, size)

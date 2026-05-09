@@ -88,7 +88,7 @@ static void a64_h_div(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
     /* Division by zero: ARM64 SDIV returns 0 silently — deopt instead */
     add_patch(ctx, PATCH_DEOPT_CBZ, 0, rm);
-    a64_buf_emit(&ctx->buf, a64_nop());  /* patched to CBZ rm, deopt */
+    a64_buf_emit(&ctx->buf, a64_nop()); /* patched to CBZ rm, deopt */
     ctx->has_deopt = true;
     a64_buf_emit(&ctx->buf, a64_sdiv(rd, rn, rm));
 }
@@ -201,11 +201,21 @@ static void a64_h_cmp_float(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         return;
     A64Cond cc;
     switch (ins->op) {
-        case XM_FEQ: cc = A64_CC_EQ; break;
-        case XM_FNE: cc = A64_CC_NE; break;
-        case XM_FLT: cc = A64_CC_MI; break;
-        case XM_FLE: cc = A64_CC_LS; break;
-        default:     cc = A64_CC_AL; break;
+        case XM_FEQ:
+            cc = A64_CC_EQ;
+            break;
+        case XM_FNE:
+            cc = A64_CC_NE;
+            break;
+        case XM_FLT:
+            cc = A64_CC_MI;
+            break;
+        case XM_FLE:
+            cc = A64_CC_LS;
+            break;
+        default:
+            cc = A64_CC_AL;
+            break;
     }
     a64_buf_emit(&ctx->buf, a64_cset(rd, cc));
 }
@@ -222,13 +232,27 @@ static void a64_h_cmp_int(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         return;
     A64Cond cc;
     switch (ins->op) {
-        case XM_LT: cc = A64_CC_LT; break;
-        case XM_LE: cc = A64_CC_LE; break;
-        case XM_GT: cc = A64_CC_GT; break;
-        case XM_GE: cc = A64_CC_GE; break;
-        case XM_EQ: cc = A64_CC_EQ; break;
-        case XM_NE: cc = A64_CC_NE; break;
-        default:    cc = A64_CC_AL; break;
+        case XM_LT:
+            cc = A64_CC_LT;
+            break;
+        case XM_LE:
+            cc = A64_CC_LE;
+            break;
+        case XM_GT:
+            cc = A64_CC_GT;
+            break;
+        case XM_GE:
+            cc = A64_CC_GE;
+            break;
+        case XM_EQ:
+            cc = A64_CC_EQ;
+            break;
+        case XM_NE:
+            cc = A64_CC_NE;
+            break;
+        default:
+            cc = A64_CC_AL;
+            break;
     }
     a64_buf_emit(&ctx->buf, a64_cset(rd, cc));
 }
@@ -257,7 +281,7 @@ static void a64_h_const_f64(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 /* ========== Select (conditional move) ========== */
 
 static void a64_h_select_cond(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
-    (void)rd;
+    (void) rd;
     A64Reg cond_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
     a64_buf_emit(&ctx->buf, a64_cmp_imm(cond_reg, 0));
 }
@@ -331,46 +355,46 @@ static void a64_h_unbox_f64(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 /* ========== Dispatch Table ========== */
 
 static const A64InsHandler a64_ins_handlers[XM_OP_COUNT] = {
-    [XM_ADD]          = a64_h_add,
-    [XM_SUB]          = a64_h_sub,
-    [XM_MUL]          = a64_h_mul,
-    [XM_DIV]          = a64_h_div,
-    [XM_MOD]          = a64_h_mod,
-    [XM_NEG]          = a64_h_neg,
-    [XM_AND]          = a64_h_and,
-    [XM_OR]           = a64_h_or,
-    [XM_XOR]          = a64_h_xor,
-    [XM_NOT]          = a64_h_not,
-    [XM_SHL]          = a64_h_shl,
-    [XM_SHR]          = a64_h_shr,
-    [XM_FADD]         = a64_h_fadd,
-    [XM_FSUB]         = a64_h_fsub,
-    [XM_FMUL]         = a64_h_fmul,
-    [XM_FDIV]         = a64_h_fdiv,
-    [XM_FNEG]         = a64_h_fneg,
-    [XM_I2F]          = a64_h_i2f,
-    [XM_F2I]          = a64_h_f2i,
-    [XM_FEQ]          = a64_h_cmp_float,
-    [XM_FNE]          = a64_h_cmp_float,
-    [XM_FLT]          = a64_h_cmp_float,
-    [XM_FLE]          = a64_h_cmp_float,
-    [XM_LT]           = a64_h_cmp_int,
-    [XM_LE]           = a64_h_cmp_int,
-    [XM_GT]           = a64_h_cmp_int,
-    [XM_GE]           = a64_h_cmp_int,
-    [XM_EQ]           = a64_h_cmp_int,
-    [XM_NE]           = a64_h_cmp_int,
-    [XM_CONST_I64]    = a64_h_const,
-    [XM_CONST_PTR]    = a64_h_const,
-    [XM_CONST_F64]    = a64_h_const_f64,
-    [XM_SELECT_COND]  = a64_h_select_cond,
-    [XM_SELECT]       = a64_h_select,
-    [XM_MOV]          = a64_h_mov,
-    [XM_REDEFINE]     = a64_h_mov,
-    [XM_BOX_I64]      = a64_h_box,
-    [XM_BOX_F64]      = a64_h_box,
-    [XM_UNBOX_I64]    = a64_h_unbox_i64,
-    [XM_UNBOX_F64]    = a64_h_unbox_f64,
+    [XM_ADD] = a64_h_add,
+    [XM_SUB] = a64_h_sub,
+    [XM_MUL] = a64_h_mul,
+    [XM_DIV] = a64_h_div,
+    [XM_MOD] = a64_h_mod,
+    [XM_NEG] = a64_h_neg,
+    [XM_AND] = a64_h_and,
+    [XM_OR] = a64_h_or,
+    [XM_XOR] = a64_h_xor,
+    [XM_NOT] = a64_h_not,
+    [XM_SHL] = a64_h_shl,
+    [XM_SHR] = a64_h_shr,
+    [XM_FADD] = a64_h_fadd,
+    [XM_FSUB] = a64_h_fsub,
+    [XM_FMUL] = a64_h_fmul,
+    [XM_FDIV] = a64_h_fdiv,
+    [XM_FNEG] = a64_h_fneg,
+    [XM_I2F] = a64_h_i2f,
+    [XM_F2I] = a64_h_f2i,
+    [XM_FEQ] = a64_h_cmp_float,
+    [XM_FNE] = a64_h_cmp_float,
+    [XM_FLT] = a64_h_cmp_float,
+    [XM_FLE] = a64_h_cmp_float,
+    [XM_LT] = a64_h_cmp_int,
+    [XM_LE] = a64_h_cmp_int,
+    [XM_GT] = a64_h_cmp_int,
+    [XM_GE] = a64_h_cmp_int,
+    [XM_EQ] = a64_h_cmp_int,
+    [XM_NE] = a64_h_cmp_int,
+    [XM_CONST_I64] = a64_h_const,
+    [XM_CONST_PTR] = a64_h_const,
+    [XM_CONST_F64] = a64_h_const_f64,
+    [XM_SELECT_COND] = a64_h_select_cond,
+    [XM_SELECT] = a64_h_select,
+    [XM_MOV] = a64_h_mov,
+    [XM_REDEFINE] = a64_h_mov,
+    [XM_BOX_I64] = a64_h_box,
+    [XM_BOX_F64] = a64_h_box,
+    [XM_UNBOX_I64] = a64_h_unbox_i64,
+    [XM_UNBOX_F64] = a64_h_unbox_f64,
     /* All other opcodes (mem, call, etc.) handled by fallback chain */
 };
 
@@ -398,4 +422,4 @@ XR_FUNC void a64_emit_xm_ins(CodegenCtx *ctx, XmIns *ins) {
     a64_buf_emit(&ctx->buf, a64_nop());
 }
 
-#endif  /* __aarch64__ */
+#endif /* __aarch64__ */

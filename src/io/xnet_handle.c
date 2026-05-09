@@ -58,8 +58,7 @@ XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind) {
 }
 
 XrNetListener *xr_net_listener_new(struct XrayIsolate *X, int fd, int port) {
-    XrNetListener *l =
-        (XrNetListener *) alloc_handle(X, sizeof(XrNetListener), XR_TNETLISTENER);
+    XrNetListener *l = (XrNetListener *) alloc_handle(X, sizeof(XrNetListener), XR_TNETLISTENER);
     if (!l)
         return NULL;
     l->fd = fd;

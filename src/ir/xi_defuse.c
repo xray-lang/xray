@@ -31,12 +31,14 @@ static inline void count_ref(uint32_t *cnt, uint32_t max_id, const XiValue *v) {
 static void count_all_uses(uint32_t *cnt, uint32_t max_id, const XiFunc *f) {
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         /* Value args */
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!v) continue;
+            if (!v)
+                continue;
             for (uint16_t a = 0; a < v->nargs; a++)
                 count_ref(cnt, max_id, v->args[a]);
         }
@@ -54,9 +56,8 @@ static void count_all_uses(uint32_t *cnt, uint32_t max_id, const XiFunc *f) {
 
 /* ========== Pass 2: Record Use Sites ========== */
 
-static inline void record_site(XiDefUse *du, uint32_t vid,
-                                uint32_t block_id, uint32_t value_id,
-                                uint8_t kind, uint8_t arg_idx) {
+static inline void record_site(XiDefUse *du, uint32_t vid, uint32_t block_id, uint32_t value_id,
+                               uint8_t kind, uint8_t arg_idx) {
     XR_DCHECK(vid < du->max_id, "record_site: vid out of range");
     uint32_t pos = du->offset[vid] + du->count[vid];
     XR_DCHECK(pos < du->total_sites, "record_site: pos out of range");
@@ -70,16 +71,17 @@ static inline void record_site(XiDefUse *du, uint32_t vid,
 static void fill_all_uses(XiDefUse *du, const XiFunc *f) {
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
-        if (!blk) continue;
+        if (!blk)
+            continue;
 
         /* Value args */
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!v) continue;
+            if (!v)
+                continue;
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] && v->args[a]->id < du->max_id) {
-                    record_site(du, v->args[a]->id, blk->id, v->id,
-                                XI_USE_VALUE_ARG, a);
+                    record_site(du, v->args[a]->id, blk->id, v->id, XI_USE_VALUE_ARG, a);
                 }
             }
         }
@@ -88,16 +90,15 @@ static void fill_all_uses(XiDefUse *du, const XiFunc *f) {
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 if (phi->value.args[a] && phi->value.args[a]->id < du->max_id) {
-                    record_site(du, phi->value.args[a]->id, blk->id,
-                                phi->value.id, XI_USE_PHI_ARG, a);
+                    record_site(du, phi->value.args[a]->id, blk->id, phi->value.id, XI_USE_PHI_ARG,
+                                a);
                 }
             }
         }
 
         /* Block control */
         if (blk->control && blk->control->id < du->max_id) {
-            record_site(du, blk->control->id, blk->id, UINT32_MAX,
-                        XI_USE_CONTROL, 0);
+            record_site(du, blk->control->id, blk->id, UINT32_MAX, XI_USE_CONTROL, 0);
         }
     }
 }
@@ -110,13 +111,15 @@ XR_FUNC void xi_defuse_build(XiDefUse *du, XiFunc *f) {
     memset(du, 0, sizeof(*du));
 
     uint32_t max_id = f->next_value_id;
-    if (max_id == 0) return;
+    if (max_id == 0)
+        return;
 
     du->max_id = max_id;
-    du->count = (uint32_t *)xr_calloc(max_id, sizeof(uint32_t));
-    du->offset = (uint32_t *)xr_calloc(max_id, sizeof(uint32_t));
+    du->count = (uint32_t *) xr_calloc(max_id, sizeof(uint32_t));
+    du->offset = (uint32_t *) xr_calloc(max_id, sizeof(uint32_t));
     if (!du->count || !du->offset) {
-        xr_free(du->count); xr_free(du->offset);
+        xr_free(du->count);
+        xr_free(du->offset);
         memset(du, 0, sizeof(*du));
         return;
     }
@@ -132,11 +135,13 @@ XR_FUNC void xi_defuse_build(XiDefUse *du, XiFunc *f) {
     }
     du->total_sites = total;
 
-    if (total == 0) return;
+    if (total == 0)
+        return;
 
-    du->sites = (XiUseSite *)xr_calloc(total, sizeof(XiUseSite));
+    du->sites = (XiUseSite *) xr_calloc(total, sizeof(XiUseSite));
     if (!du->sites) {
-        xr_free(du->count); xr_free(du->offset);
+        xr_free(du->count);
+        xr_free(du->offset);
         memset(du, 0, sizeof(*du));
         return;
     }
@@ -149,7 +154,8 @@ XR_FUNC void xi_defuse_build(XiDefUse *du, XiFunc *f) {
 }
 
 XR_FUNC void xi_defuse_free(XiDefUse *du) {
-    if (!du) return;
+    if (!du)
+        return;
     xr_free(du->sites);
     xr_free(du->offset);
     xr_free(du->count);

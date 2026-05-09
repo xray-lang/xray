@@ -20,12 +20,11 @@
 #include "../runtime/symbol/xsymbol_table.h"
 
 /* Auto-generated from xi_method_sym.def — one assert per entry */
-#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) \
-    _Static_assert(XRT_SYM_##aot_name == SYMBOL_##rt_name, \
+#define XI_METHOD_SYM(aot_name, id, rt_name, display_name)                                         \
+    _Static_assert(XRT_SYM_##aot_name == SYMBOL_##rt_name,                                         \
                    "XRT_SYM_" #aot_name " drifted from SYMBOL_" #rt_name);
 #include "../ir/xi_method_sym.def"
 #undef XI_METHOD_SYM
 
 /* SIZE is an alias for LENGTH */
-_Static_assert(XRT_SYM_SIZE == SYMBOL_LENGTH,
-               "XRT_SYM_SIZE alias drifted from SYMBOL_LENGTH");
+_Static_assert(XRT_SYM_SIZE == SYMBOL_LENGTH, "XRT_SYM_SIZE alias drifted from SYMBOL_LENGTH");

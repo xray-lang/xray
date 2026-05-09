@@ -74,7 +74,7 @@ static XrValue path_join(XrayIsolate *X, XrValue *args, int argc) {
         if (!part || part[0] == '\0')
             continue;
 
-            // Check absolute path FIRST, before adding separator
+        // Check absolute path FIRST, before adding separator
 #ifdef XR_OS_WINDOWS
         bool is_abs = IS_SEP(part[0]) ||
                       (((part[0] >= 'A' && part[0] <= 'Z') || (part[0] >= 'a' && part[0] <= 'z')) &&

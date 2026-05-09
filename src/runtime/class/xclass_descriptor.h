@@ -66,7 +66,7 @@ typedef struct XrClassDescriptor {
     int mono_type_arg_count;          /* Element count of mono_type_arg_names */
     int32_t super_global_index;
     uint32_t flags;
-    bool is_monomorphized;            /* true for mono-generated classes */
+    bool is_monomorphized; /* true for mono-generated classes */
 
     /* ========== Fields ========== */
     XrFieldDescriptorEntry *instance_fields;

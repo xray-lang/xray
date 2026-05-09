@@ -122,9 +122,8 @@ typedef enum {
 #define XM_REF_INDEX_BITS 29
 #define XM_REF_INDEX_MASK ((1u << XM_REF_INDEX_BITS) - 1)
 
-#define XM_REF(kind, index)                                                                       \
-    ((XmRef) (((uint32_t) (kind) << XM_REF_INDEX_BITS) |                                         \
-               ((uint32_t) (index) & XM_REF_INDEX_MASK)))
+#define XM_REF(kind, index)                                                                        \
+    ((XmRef) (((uint32_t) (kind) << XM_REF_INDEX_BITS) | ((uint32_t) (index) & XM_REF_INDEX_MASK)))
 #define XM_REF_KIND(r) ((XmRefKind) ((r) >> XM_REF_INDEX_BITS))
 #define XM_REF_INDEX(r) ((uint32_t) ((r) & XM_REF_INDEX_MASK))
 
@@ -245,25 +244,25 @@ static inline bool xm_type_is_ptr(uint8_t kind) {
 static inline XmType xm_type_from_rep(uint8_t rep) {
     switch (rep) {
         case XR_REP_I64:
-            return (XmType){XM_TK_INT, 0, 0};
+            return (XmType) {XM_TK_INT, 0, 0};
         case XR_REP_F64:
-            return (XmType){XM_TK_FLOAT, 0, 0};
+            return (XmType) {XM_TK_FLOAT, 0, 0};
         case XR_REP_PTR:
-            return (XmType){XM_TK_PTR, 0, 0};
+            return (XmType) {XM_TK_PTR, 0, 0};
         default:
-            return (XmType){XM_TK_UNKNOWN, 0, 0};
+            return (XmType) {XM_TK_UNKNOWN, 0, 0};
     }
 }
 
 // Unknown type constant
-#define XM_TYPE_UNKNOWN ((XmType){XM_TK_UNKNOWN, 0, 0})
+#define XM_TYPE_UNKNOWN ((XmType) {XM_TK_UNKNOWN, 0, 0})
 
 /* ========== Xm Instruction (20 bytes) ========== */
 
 typedef struct XmIns {
-    uint16_t op;     // XmOp (or machine opcode after isel)
-    uint8_t rep;     // result XrRep (machine representation, codegen decision)
-    uint8_t flags;   // XM_FLAG_*
+    uint16_t op;    // XmOp (or machine opcode after isel)
+    uint8_t rep;    // result XrRep (machine representation, codegen decision)
+    uint8_t flags;  // XM_FLAG_*
     XmType ctype;   // compile-time type of result value
     XmRef dst;      // result vreg (XM_NONE if void)
     XmRef args[2];  // up to 2 inline operands
@@ -280,7 +279,7 @@ typedef struct XmInsExtra {
 /* ========== Phi Node ========== */
 
 typedef struct XmPhi {
-    XmRef dst;     // result vreg
+    XmRef dst;      // result vreg
     uint8_t rep;    // XrRep (machine representation)
     uint16_t narg;  // number of incoming values (== block->npred)
     uint8_t _pad;
@@ -316,7 +315,7 @@ typedef struct XmBlock {
     // Terminator
     struct {
         uint16_t type;  // XmJmpType
-        XmRef arg;     // condition (for BR) or return value (for RET)
+        XmRef arg;      // condition (for BR) or return value (for RET)
     } jmp;
 
     // CFG edges
@@ -350,14 +349,14 @@ typedef struct {
     int16_t bc_slot;  // bytecode register index (R[bc_slot])
     uint8_t rep;      // XrRep of the value (I64/F64/PTR/TAGGED)
     uint8_t xr_tag;   // XrValue tag (0-15), or XRVREG_TAG_UNKNOWN (0xFF)
-    XmRef value;     // Xm ref (vreg or const) holding the slot value
+    XmRef value;      // Xm ref (vreg or const) holding the slot value
 } XmDeoptSlot;
 
 // Deoptimization snapshot attached to a guard/deopt point
 typedef struct {
-    uint32_t bc_pc;       // bytecode PC to resume at
-    uint16_t nslots;      // number of live slots in this snapshot
-    uint16_t deopt_id;    // index into XmFunc.deopt_infos / XrProto.deopt_table
+    uint32_t bc_pc;      // bytecode PC to resume at
+    uint16_t nslots;     // number of live slots in this snapshot
+    uint16_t deopt_id;   // index into XmFunc.deopt_infos / XrProto.deopt_table
     XmDeoptSlot *slots;  // array of slot mappings (arena-allocated)
 } XmDeoptInfo;
 
@@ -496,7 +495,7 @@ static inline XmType xm_type_from_vtag(uint8_t vtag, uint16_t heap_type) {
 }
 
 typedef struct {
-    XmIns *def;          // defining instruction
+    XmIns *def;           // defining instruction
     uint8_t rep;          // XrRep (machine rep: I64/F64/PTR/TAGGED)
     uint16_t heap_type;   // GC heap type (XR_T*), valid when ctype.kind is PTR; 0=unknown
     int8_t reg;           // physical register (-1 = unallocated)
@@ -580,7 +579,7 @@ typedef struct XmFunc {
     struct XmDomTree *domtree;    // see xm_domtree.h
     struct XmLoopInfo *loopinfo;  // see xm_looptree.h
     struct XmDefUse *defuse;      // see xm_defuse.h
-    void *alias;                   // opaque AliasTable *, see xm_alias.c
+    void *alias;                  // opaque AliasTable *, see xm_alias.c
 
     // Call argument pool: flat array of XmRef for all CALL instructions.
     // Each CALL dst vreg has (call_arg_start, call_nargs) pointing into this pool.
@@ -594,7 +593,7 @@ typedef struct XmFunc {
     // Codegen emits LIFO cleanup at every return point.
     struct {
         XmRef closure;  // closure vreg (XrValue)
-        int arg_count;   // number of call arguments (0 for defer { ... })
+        int arg_count;  // number of call arguments (0 for defer { ... })
         XmRef args[8];  // call arg vregs (if arg_count > 0)
     } defer_entries[16];
     int defer_count;  // number of defer entries
@@ -656,14 +655,13 @@ XR_FUNC void xm_block_set_br(XmBlock *blk, XmRef cond, XmBlock *if_true, XmBlock
 XR_FUNC void xm_block_set_ret(XmBlock *blk, XmRef val);
 
 // Instructions
-XR_FUNC XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a,
-                        XmRef b);
+XR_FUNC XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, XmRef b);
 XR_FUNC XmRef xm_emit_unary(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a);
 XR_FUNC void xm_emit_void(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, XmRef b);
 
 // Low-level emit with explicit dst (for Phi lowering and regalloc MOV insertion)
 XR_FUNC void xm_emit_raw(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef dst,
-                          XmRef arg0, XmRef arg1);
+                         XmRef arg0, XmRef arg1);
 
 // Constants
 XR_FUNC XmRef xm_const_i64(XmFunc *func, int64_t val);

@@ -89,7 +89,8 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
      * A GC step triggered by any intermediate alloc could collect them. */
     XrCoroutine *coro = xr_current_coro(isolate);
     XrCoroGC *gc = coro ? coro->coro_gc : NULL;
-    if (gc) gc->gc_disabled++;
+    if (gc)
+        gc->gc_disabled++;
 
     XrJson *result = xr_json_new(coro, 4);
 
@@ -123,7 +124,8 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
     }
     xr_json_set_by_key(isolate, result, "groups", xr_value_from_array(groups));
 
-    if (gc) gc->gc_disabled--;
+    if (gc)
+        gc->gc_disabled--;
     return xr_json_value(result);
 }
 
@@ -566,19 +568,16 @@ static XrValue re_m_split(XrayIsolate *X, XrValue self, XrValue *a, int n) {
     return regex_split(X, tmp, n + 1);
 }
 
-static XrNativeMethod regex_methods[] = {
-    {"test", re_m_test, 1},
-    {"find", re_m_find, 2},
-    {"findAll", re_m_find_all, 2},
-    {"replace", re_m_replace, 2},
-    {"replaceAll", re_m_replace_all, 2},
-    {"split", re_m_split, 2},
-    {NULL, NULL, 0}};
+static XrNativeMethod regex_methods[] = {{"test", re_m_test, 1},
+                                         {"find", re_m_find, 2},
+                                         {"findAll", re_m_find_all, 2},
+                                         {"replace", re_m_replace, 2},
+                                         {"replaceAll", re_m_replace_all, 2},
+                                         {"split", re_m_split, 2},
+                                         {NULL, NULL, 0}};
 
 // Regex property getters
-static XrNativeMethod regex_getters[] = {
-    {"pattern", re_method_pattern, 1},
-    {NULL, NULL, 0}};
+static XrNativeMethod regex_getters[] = {{"pattern", re_method_pattern, 1}, {NULL, NULL, 0}};
 
 /* ========================================================================
  * Native Type Registration
@@ -628,11 +627,9 @@ XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Cou
 XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: Regex, s: string): Array<string>",
                   "Find all matches")
 XR_DEFINE_BUILTIN(regex_replace, "replace",
-                  "(pattern: Regex, s: string, replacement: string): string",
-                  "Replace first match")
+                  "(pattern: Regex, s: string, replacement: string): string", "Replace first match")
 XR_DEFINE_BUILTIN(regex_replace_all, "replaceAll",
-                  "(pattern: Regex, s: string, replacement: string): string",
-                  "Replace all matches")
+                  "(pattern: Regex, s: string, replacement: string): string", "Replace all matches")
 XR_DEFINE_BUILTIN(regex_split, "split", "(pattern: Regex, s: string): Array<string>",
                   "Split by pattern")
 XR_DEFINE_BUILTIN(regex_escape, "escape", "(s: string): string", "Escape regex special chars")

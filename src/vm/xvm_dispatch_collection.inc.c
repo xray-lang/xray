@@ -301,22 +301,22 @@ vmcase(OP_ARRAY_GET) {
                     R(a) = *(uint8_t *) ep ? XR_TRUE_VAL : XR_FALSE_VAL;
                     break;
                 case XR_NATIVE_I32:
-                    R(a) = XR_FROM_INT((int64_t) * (int32_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int32_t *) ep);
                     break;
                 case XR_NATIVE_U32:
-                    R(a) = XR_FROM_INT((int64_t) * (uint32_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint32_t *) ep);
                     break;
                 case XR_NATIVE_I16:
-                    R(a) = XR_FROM_INT((int64_t) * (int16_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int16_t *) ep);
                     break;
                 case XR_NATIVE_U16:
-                    R(a) = XR_FROM_INT((int64_t) * (uint16_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint16_t *) ep);
                     break;
                 case XR_NATIVE_I8:
-                    R(a) = XR_FROM_INT((int64_t) * (int8_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int8_t *) ep);
                     break;
                 case XR_NATIVE_U8:
-                    R(a) = XR_FROM_INT((int64_t) * (uint8_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint8_t *) ep);
                     break;
                 case XR_NATIVE_F32:
                     R(a) = XR_FROM_FLOAT((double) *(float *) ep);
@@ -392,22 +392,22 @@ vmcase(OP_ARRAY_GETC) {
                     R(a) = *(uint8_t *) ep ? XR_TRUE_VAL : XR_FALSE_VAL;
                     break;
                 case XR_NATIVE_I32:
-                    R(a) = XR_FROM_INT((int64_t) * (int32_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int32_t *) ep);
                     break;
                 case XR_NATIVE_U32:
-                    R(a) = XR_FROM_INT((int64_t) * (uint32_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint32_t *) ep);
                     break;
                 case XR_NATIVE_I16:
-                    R(a) = XR_FROM_INT((int64_t) * (int16_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int16_t *) ep);
                     break;
                 case XR_NATIVE_U16:
-                    R(a) = XR_FROM_INT((int64_t) * (uint16_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint16_t *) ep);
                     break;
                 case XR_NATIVE_I8:
-                    R(a) = XR_FROM_INT((int64_t) * (int8_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int8_t *) ep);
                     break;
                 case XR_NATIVE_U8:
-                    R(a) = XR_FROM_INT((int64_t) * (uint8_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint8_t *) ep);
                     break;
                 case XR_NATIVE_F32:
                     R(a) = XR_FROM_FLOAT((double) *(float *) ep);
@@ -818,8 +818,7 @@ vmcase(OP_MAP_SETK) {
         XrValue key_val = k[b];
         XrString *key_str = XR_TO_STRING(key_val);
         if (!xr_json_set_by_key(isolate, json, key_str->data, R(c))) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
-                             "cannot add property to sealed Json object");
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
         }
         VM_BARRIER_BACK(json);
         vmbreak;
@@ -936,22 +935,22 @@ vmcase(OP_INDEX_GET) {
                     R(a) = *(uint8_t *) ep ? XR_TRUE_VAL : XR_FALSE_VAL;
                     break;
                 case XR_NATIVE_I32:
-                    R(a) = XR_FROM_INT((int64_t) * (int32_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int32_t *) ep);
                     break;
                 case XR_NATIVE_U32:
-                    R(a) = XR_FROM_INT((int64_t) * (uint32_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint32_t *) ep);
                     break;
                 case XR_NATIVE_I16:
-                    R(a) = XR_FROM_INT((int64_t) * (int16_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int16_t *) ep);
                     break;
                 case XR_NATIVE_U16:
-                    R(a) = XR_FROM_INT((int64_t) * (uint16_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint16_t *) ep);
                     break;
                 case XR_NATIVE_I8:
-                    R(a) = XR_FROM_INT((int64_t) * (int8_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(int8_t *) ep);
                     break;
                 case XR_NATIVE_U8:
-                    R(a) = XR_FROM_INT((int64_t) * (uint8_t *) ep);
+                    R(a) = XR_FROM_INT((int64_t) *(uint8_t *) ep);
                     break;
                 case XR_NATIVE_F32:
                     R(a) = XR_FROM_FLOAT((double) *(float *) ep);
@@ -1026,7 +1025,7 @@ vmcase(OP_INDEX_GET) {
         int idx = (int) XR_TO_INT(key_val);
         if (vals && (unsigned) idx < (unsigned) vals->length) {
             R(a) = (vals->elem_type == XR_ELEM_ANY) ? ((XrValue *) vals->data)[idx]
-                                                     : xr_array_get_element(vals, idx);
+                                                    : xr_array_get_element(vals, idx);
         } else {
             R(a) = xr_null();
         }

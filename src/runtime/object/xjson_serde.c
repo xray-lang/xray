@@ -471,8 +471,7 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             w->has_error = true;
             XrTypeId tid = xr_value_typeid(val);
             snprintf(w->error_msg, sizeof(w->error_msg),
-                     "cannot serialize value of type '%s' to JSON",
-                     xr_typeid_name(tid));
+                     "cannot serialize value of type '%s' to JSON", xr_typeid_name(tid));
         }
         writer_str(w, "null");
     }

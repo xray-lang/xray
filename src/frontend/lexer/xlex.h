@@ -147,21 +147,21 @@ typedef enum {
     TK_SCOPE,   // scope - structured concurrency
 
     // Type keywords
-    TK_VOID,           // void
-    TK_INT,            // int (= int64)
-    TK_FLOAT,          // float (= float64)
-    TK_STRING,         // string
-    TK_BOOL,           // bool
-    TK_INT8,           // int8
-    TK_INT16,          // int16
-    TK_INT32,          // int32
-    TK_INT64,          // int64
-    TK_UINT8,          // uint8
-    TK_UINT16,         // uint16
-    TK_UINT32,         // uint32
-    TK_UINT64,         // uint64
-    TK_FLOAT32,        // float32
-    TK_FLOAT64,        // float64
+    TK_VOID,     // void
+    TK_INT,      // int (= int64)
+    TK_FLOAT,    // float (= float64)
+    TK_STRING,   // string
+    TK_BOOL,     // bool
+    TK_INT8,     // int8
+    TK_INT16,    // int16
+    TK_INT32,    // int32
+    TK_INT64,    // int64
+    TK_UINT8,    // uint8
+    TK_UINT16,   // uint16
+    TK_UINT32,   // uint32
+    TK_UINT64,   // uint64
+    TK_FLOAT32,  // float32
+    TK_FLOAT64,  // float64
     // None of the uppercase native type names are lexer keywords any
     // more. Array / BigInt / Bytes / Channel / DateTime / Json / Map /
     // Range / Regex / Set / StringBuilder all reach the parser as plain
@@ -169,7 +169,7 @@ typedef enum {
     // stdlib/prelude/prelude.h. Channel additionally gets a contextual
     // intercept in xr_parse_variable so that `Channel(...)` still
     // produces a dedicated AST_CHANNEL_NEW node.
-    TK_UNKNOWN,        // unknown
+    TK_UNKNOWN,  // unknown
     TK_LAST_KEYWORD = TK_UNKNOWN,
 
     // Contextual keywords (NOT in keyword range — can be used as identifiers)

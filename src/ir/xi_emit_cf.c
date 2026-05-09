@@ -23,18 +23,25 @@ XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
     /* Find which predecessor index 'pred' is in succ->preds */
     int pred_idx = -1;
     for (uint16_t p = 0; p < succ->npreds; p++) {
-        if (succ->preds[p] == pred) { pred_idx = (int)p; break; }
+        if (succ->preds[p] == pred) {
+            pred_idx = (int) p;
+            break;
+        }
     }
-    if (pred_idx < 0) return;
+    if (pred_idx < 0)
+        return;
 
     for (XiPhi *phi = succ->phis; phi; phi = phi->next) {
-        if ((uint16_t)pred_idx >= phi->value.nargs) continue;
+        if ((uint16_t) pred_idx >= phi->value.nargs)
+            continue;
         XiValue *src = phi->value.args[pred_idx];
-        if (!src) continue;
+        if (!src)
+            continue;
 
         uint8_t dst_reg = reg_of(ctx, &phi->value);
         uint8_t src_reg = reg_of(ctx, src);
-        if (ctx->status != XI_EMIT_OK) return;
+        if (ctx->status != XI_EMIT_OK)
+            return;
 
         if (dst_reg != src_reg) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst_reg, src_reg, 0));
@@ -51,13 +58,16 @@ XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
 static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
     XR_DCHECK(ctrl != NULL, "ctrl must not be NULL");
     uint16_t op = ctrl->op;
-    if (op < XI_EQ || op > XI_GE || ctrl->nargs < 2) return false;
+    if (op < XI_EQ || op > XI_GE || ctrl->nargs < 2)
+        return false;
     /* Ensure no other value in this block uses the comparison result */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *v = blk->values[i];
-        if (v == ctrl) continue;
+        if (v == ctrl)
+            continue;
         for (uint16_t a = 0; a < v->nargs; a++) {
-            if (v->args[a] == ctrl) return false;
+            if (v->args[a] == ctrl)
+                return false;
         }
     }
     /* Ensure no phi anywhere in the function references this comparison.
@@ -70,7 +80,8 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
         XiBlock *b = f->blocks[bi];
         for (XiPhi *phi = b->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
-                if (phi->value.args[a] == ctrl) return false;
+                if (phi->value.args[a] == ctrl)
+                    return false;
             }
         }
     }
@@ -88,22 +99,25 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
  * Format:  OP_EXPORT A=const_idx(name), B=reg(value), C=0 */
 static void emit_module_exports(EmitCtx *ctx) {
     XiFunc *f = ctx->func;
-    if (!ctx->isolate) return;
+    if (!ctx->isolate)
+        return;
 
     XiModule *mod = f->module;
-    if (!mod || !mod->exports || mod->nexports == 0) return;
+    if (!mod || !mod->exports || mod->nexports == 0)
+        return;
 
     uint8_t tmp = ctx->next_reg;
-    if ((int)(tmp + 1) > ctx->max_reg)
-        ctx->max_reg = (uint8_t)(tmp + 1);
+    if ((int) (tmp + 1) > ctx->max_reg)
+        ctx->max_reg = (uint8_t) (tmp + 1);
 
     for (uint16_t ei = 0; ei < mod->nexports; ei++) {
         const XiModuleExport *exp = &mod->exports[ei];
         XR_DCHECK(exp->name != NULL, "emit_module_exports: NULL export name");
         int name_idx = add_const_string(ctx, exp->name);
-        if (ctx->status != XI_EMIT_OK) return;
-        emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int)exp->shared_slot));
-        emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t)name_idx, tmp, 0));
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int) exp->shared_slot));
+        emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t) name_idx, tmp, 0));
     }
 }
 
@@ -116,18 +130,21 @@ static void emit_reexports(EmitCtx *ctx) {
         return;
 
     uint8_t mod_reg = ctx->next_reg;
-    uint8_t val_reg = (uint8_t)(mod_reg + 1);
-    if ((int)(val_reg + 1) > ctx->max_reg)
-        ctx->max_reg = (uint8_t)(val_reg + 1);
+    uint8_t val_reg = (uint8_t) (mod_reg + 1);
+    if ((int) (val_reg + 1) > ctx->max_reg)
+        ctx->max_reg = (uint8_t) (val_reg + 1);
 
     for (uint16_t i = 0; i < f->reexport_count; i++) {
         XiReexportEntry *re = &f->reexports[i];
-        if (!re->from_path) continue;
-        if (ctx->status != XI_EMIT_OK) return;
+        if (!re->from_path)
+            continue;
+        if (ctx->status != XI_EMIT_OK)
+            return;
 
         /* OP_IMPORT mod_reg, K[path_idx] */
         int path_idx = add_const_string(ctx, re->from_path);
-        if (ctx->status != XI_EMIT_OK) return;
+        if (ctx->status != XI_EMIT_OK)
+            return;
         emit_inst(ctx, CREATE_ABx(OP_IMPORT, mod_reg, path_idx));
 
         if (!re->name) {
@@ -136,21 +153,22 @@ static void emit_reexports(EmitCtx *ctx) {
         } else {
             /* Selective re-export: get member, then export with alias */
             int sym_idx = add_symbol(ctx, re->name);
-            if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_GETPROP, val_reg, mod_reg,
-                                      (uint8_t)sym_idx));
+            if (ctx->status != XI_EMIT_OK)
+                return;
+            emit_inst(ctx, CREATE_ABC(OP_GETPROP, val_reg, mod_reg, (uint8_t) sym_idx));
 
             const char *export_name = re->alias ? re->alias : re->name;
             int name_idx = add_const_string(ctx, export_name);
-            if (ctx->status != XI_EMIT_OK) return;
-            emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t)name_idx,
-                                      val_reg, 0));
+            if (ctx->status != XI_EMIT_OK)
+                return;
+            emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t) name_idx, val_reg, 0));
         }
     }
 }
 
 XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
-    if (ctx->status != XI_EMIT_OK) return;
+    if (ctx->status != XI_EMIT_OK)
+        return;
 
     /* Record block start PC */
     XR_DCHECK(blk->id < ctx->block_pc_size, "block_id out of range");
@@ -166,9 +184,10 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *v = blk->values[i];
         ctx->current_ordinal++;
-        ctx->current_line = (int)v->line;
+        ctx->current_line = (int) v->line;
         emit_value(ctx, v);
-        if (ctx->status != XI_EMIT_OK) return;
+        if (ctx->status != XI_EMIT_OK)
+            return;
         /* Recycle registers of args whose last use was this instruction.
          * Skip recycling for the fused comparison's args — they are still
          * needed by the branch-form opcode in the terminator. */
@@ -178,8 +197,8 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
          * still need a destination register for bytecode emission, but that
          * register can be freed immediately for reuse.
          * Coalesced registers (var_id != 0xFF) are never freed. */
-        if (ctx->last_use && v->id < ctx->reg_map_size
-            && ctx->last_use[v->id] == 0 && v->var_id == 0xFF) {
+        if (ctx->last_use && v->id < ctx->reg_map_size && ctx->last_use[v->id] == 0 &&
+            v->var_id == 0xFF) {
             uint8_t r = ctx->reg_map[v->id];
             if (r != NO_REG) {
                 ctx->reg_map[v->id] = NO_REG;
@@ -188,30 +207,33 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
         }
     }
 
-    ctx->current_ordinal++;  /* ordinal for terminator */
+    ctx->current_ordinal++; /* ordinal for terminator */
     /* Emit terminator */
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
             /* Emit OP_EXPORT instructions for module-level exports
              * before returning, so the VM's module system picks them up. */
             emit_module_exports(ctx);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
             emit_reexports(ctx);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
 
             if (blk->control && blk->control->op == XI_MULTI_RET) {
                 /* Multi-value return: values in consecutive regs */
                 uint8_t base = reg_of(ctx, blk->control);
-                if (ctx->status != XI_EMIT_OK) return;
-                uint8_t nret = (uint8_t)blk->control->nargs;
+                if (ctx->status != XI_EMIT_OK)
+                    return;
+                uint8_t nret = (uint8_t) blk->control->nargs;
                 emit_inst(ctx, CREATE_ABC(OP_RETURN, base, nret, 0));
             } else if (blk->control) {
                 uint8_t r = reg_of(ctx, blk->control);
-                if (ctx->status != XI_EMIT_OK) return;
+                if (ctx->status != XI_EMIT_OK)
+                    return;
                 /* If the return value was cell-wrapped for closure capture,
                  * dereference the cell to return the actual value. */
-                if ((blk->control->id < ctx->reg_map_size &&
-                     ctx->cell_wrapped[blk->control->id]) ||
+                if ((blk->control->id < ctx->reg_map_size && ctx->cell_wrapped[blk->control->id]) ||
                     (blk->control->var_id != 0xFF &&
                      ctx->cell_side_reg[blk->control->var_id] != NO_REG)) {
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, r, r, 0));
@@ -224,21 +246,26 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
 
         case XI_BLOCK_PLAIN: {
             XiBlock *succ = blk->succs[0];
-            if (!succ) break;
+            if (!succ)
+                break;
             /* Emit phi moves for successor */
             emit_phi_moves(ctx, blk, succ);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
             /* Jump to successor (skip if it's the next block in RPO) */
             if (succ != next_blk) {
                 int jmp_pc = current_pc(ctx);
-                emit_inst(ctx, CREATE_sJ(OP_JMP, 0));  /* placeholder */
+                emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder */
                 xi_emit_add_patch(ctx, jmp_pc, succ->id);
             }
             break;
         }
 
         case XI_BLOCK_IF: {
-            if (!blk->control) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+            if (!blk->control) {
+                emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+                return;
+            }
 
             XiBlock *then_b = blk->succs[0];
             XiBlock *else_b = blk->succs[1];
@@ -252,22 +279,21 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 XiValue *rhs = cmp->args[1];
                 uint8_t a = reg_of(ctx, lhs);
                 uint8_t b = reg_of(ctx, rhs);
-                if (ctx->status != XI_EMIT_OK) return;
+                if (ctx->status != XI_EMIT_OK)
+                    return;
 
                 /* Unwrap cells: fused cmp bypasses emit_value arg unwrap.
                  * Every cell-wrapped variable must be dereferenced here;
                  * failure to do so means comparing the cell pointer instead
                  * of the contained value. */
-                if (lhs->var_id != 0xFF &&
-                    ctx->cell_side_reg[lhs->var_id] != NO_REG) {
+                if (lhs->var_id != 0xFF && ctx->cell_side_reg[lhs->var_id] != NO_REG) {
                     uint8_t tmp = ctx->next_reg++;
                     if (ctx->next_reg > ctx->max_reg)
                         ctx->max_reg = ctx->next_reg;
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, a, 0));
                     a = tmp;
                 }
-                if (rhs->var_id != 0xFF &&
-                    ctx->cell_side_reg[rhs->var_id] != NO_REG) {
+                if (rhs->var_id != 0xFF && ctx->cell_side_reg[rhs->var_id] != NO_REG) {
                     uint8_t tmp = ctx->next_reg++;
                     if (ctx->next_reg > ctx->max_reg)
                         ctx->max_reg = ctx->next_reg;
@@ -277,13 +303,11 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
 
                 /* Verify cell unwrap: after unwrapping, the comparison
                  * registers must NOT be the raw cell registers. */
-                XR_DCHECK(lhs->var_id == 0xFF ||
-                          ctx->cell_side_reg[lhs->var_id] == NO_REG ||
-                          a != ctx->cell_side_reg[lhs->var_id],
+                XR_DCHECK(lhs->var_id == 0xFF || ctx->cell_side_reg[lhs->var_id] == NO_REG ||
+                              a != ctx->cell_side_reg[lhs->var_id],
                           "fused cmp LHS still holds cell register");
-                XR_DCHECK(rhs->var_id == 0xFF ||
-                          ctx->cell_side_reg[rhs->var_id] == NO_REG ||
-                          b != ctx->cell_side_reg[rhs->var_id],
+                XR_DCHECK(rhs->var_id == 0xFF || ctx->cell_side_reg[rhs->var_id] == NO_REG ||
+                              b != ctx->cell_side_reg[rhs->var_id],
                           "fused cmp RHS still holds cell register");
 
                 /* Determine branch-form opcode and sense.  GT/GE swap args. */
@@ -291,50 +315,74 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 int k = 0;
                 bool swap = false;
                 switch (cmp->op) {
-                    case XI_LT: branch_op = OP_LT; break;
-                    case XI_LE: branch_op = OP_LE; break;
-                    case XI_GT: branch_op = OP_LT; swap = true; break;
-                    case XI_GE: branch_op = OP_LE; swap = true; break;
-                    case XI_EQ: branch_op = OP_EQ; break;
-                    case XI_NE: branch_op = OP_EQ; k = 1; break;
-                    default:    branch_op = OP_EQ; break;
+                    case XI_LT:
+                        branch_op = OP_LT;
+                        break;
+                    case XI_LE:
+                        branch_op = OP_LE;
+                        break;
+                    case XI_GT:
+                        branch_op = OP_LT;
+                        swap = true;
+                        break;
+                    case XI_GE:
+                        branch_op = OP_LE;
+                        swap = true;
+                        break;
+                    case XI_EQ:
+                        branch_op = OP_EQ;
+                        break;
+                    case XI_NE:
+                        branch_op = OP_EQ;
+                        k = 1;
+                        break;
+                    default:
+                        branch_op = OP_EQ;
+                        break;
                 }
-                if (swap) { uint8_t t = a; a = b; b = t; }
+                if (swap) {
+                    uint8_t t = a;
+                    a = b;
+                    b = t;
+                }
 
                 /* Try immediate form (OP_LTI/LEI/EQI) when RHS is small int */
                 bool is_imm = false;
-                XiValue *imm_arg = swap ? lhs : rhs;   /* the "B" operand */
+                XiValue *imm_arg = swap ? lhs : rhs; /* the "B" operand */
                 if (imm_arg->op == XI_CONST && imm_arg->type &&
-                    imm_arg->type->kind == XR_KIND_INT &&
-                    imm_arg->aux_int >= -128 && imm_arg->aux_int <= 127 &&
+                    imm_arg->type->kind == XR_KIND_INT && imm_arg->aux_int >= -128 &&
+                    imm_arg->aux_int <= 127 &&
                     (branch_op == OP_LT || branch_op == OP_LE || branch_op == OP_EQ)) {
-                    OpCode imm_op = branch_op == OP_LT ? OP_LTI :
-                                   branch_op == OP_LE ? OP_LEI : OP_EQI;
+                    OpCode imm_op = branch_op == OP_LT   ? OP_LTI
+                                    : branch_op == OP_LE ? OP_LEI
+                                                         : OP_EQI;
                     /* Use already cell-unwrapped 'a' register (post-swap). */
                     uint8_t ra = a;
-                    int8_t imm = (int8_t)imm_arg->aux_int;
-                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint8_t)imm, (uint8_t)k));
+                    int8_t imm = (int8_t) imm_arg->aux_int;
+                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint8_t) imm, (uint8_t) k));
                     is_imm = true;
                 }
 
                 if (!is_imm) {
-                    emit_inst(ctx, CREATE_ABC(branch_op, a, b, (uint8_t)k));
+                    emit_inst(ctx, CREATE_ABC(branch_op, a, b, (uint8_t) k));
                 }
             } else {
                 /* Non-fused path: TEST cond, skip next if cond is false */
                 uint8_t cond = reg_of(ctx, blk->control);
-                if (ctx->status != XI_EMIT_OK) return;
+                if (ctx->status != XI_EMIT_OK)
+                    return;
                 emit_inst(ctx, CREATE_ABC(OP_TEST, cond, 0, 0));
             }
 
             /* JMP -> else block */
             int else_jmp_pc = current_pc(ctx);
-            emit_inst(ctx, CREATE_sJ(OP_JMP, 0));  /* placeholder */
+            emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder */
             xi_emit_add_patch(ctx, else_jmp_pc, else_b->id);
 
             /* Phi moves for then path */
             emit_phi_moves(ctx, blk, then_b);
-            if (ctx->status != XI_EMIT_OK) return;
+            if (ctx->status != XI_EMIT_OK)
+                return;
 
             /* Jump to then if not fallthrough */
             if (then_b != next_blk) {
@@ -390,7 +438,8 @@ XR_FUNC void patch_jumps(EmitCtx *ctx) {
         if (bid > 0) {
             XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad catch block id");
             target_pc = ctx->block_pc[bid];
-            if (target_pc < 0) target_pc = pc + 1;
+            if (target_pc < 0)
+                target_pc = pc + 1;
         }
         XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
         *inst = CREATE_ABx(OP_TRY, 0, target_pc);

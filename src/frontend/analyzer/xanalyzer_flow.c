@@ -155,8 +155,7 @@ static XrType *apply_condition_narrowing(XrAstNode *expr, const char *var_name, 
             strcmp(is_expr->expr->as.variable.name, var_name) == 0 && is_expr->type) {
             XrTypeRef *tref = is_expr->type;
             // Extract class name from NAMED / GENERIC type refs
-            if ((tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) &&
-                tref->name) {
+            if ((tref->kind == XR_TREF_NAMED || tref->kind == XR_TREF_GENERIC) && tref->name) {
                 return xa_narrow_by_instanceof(base_type, tref->name, assume_true);
             }
             // For primitive type checks (x is int, x is string, etc.)

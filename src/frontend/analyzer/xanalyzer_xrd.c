@@ -30,7 +30,7 @@ typedef struct XrdModule {
     XaBuiltinHandle *handles;  // owned
     int handle_cap;
     int *handle_method_caps;  // per-handle method capacity array
-    char *name_buf;  // owned string storage
+    char *name_buf;           // owned string storage
     struct XrdModule *next;
 } XrdModule;
 
@@ -190,11 +190,9 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                 int idx = xrd->module.handle_count;
                 if (idx >= xrd->handle_cap) {
                     int new_cap = xrd->handle_cap * 2;
-                    XR_REALLOC_OR_ABORT(xrd->handles,
-                                        (size_t) new_cap * sizeof(XaBuiltinHandle),
+                    XR_REALLOC_OR_ABORT(xrd->handles, (size_t) new_cap * sizeof(XaBuiltinHandle),
                                         "xrd handles grow");
-                    XR_REALLOC_OR_ABORT(xrd->handle_method_caps,
-                                        (size_t) new_cap * sizeof(int),
+                    XR_REALLOC_OR_ABORT(xrd->handle_method_caps, (size_t) new_cap * sizeof(int),
                                         "xrd handle_method_caps grow");
                     // Zero-init new slots
                     for (int k = xrd->handle_cap; k < new_cap; k++) {
@@ -253,9 +251,8 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
                         int new_cap = xrd->handle_method_caps[handle_idx] * 2;
                         if (new_cap < 8)
                             new_cap = 8;
-                        XaBuiltinMember *new_methods =
-                            xr_realloc((void *) h->methods,
-                                       (size_t) new_cap * sizeof(XaBuiltinMember));
+                        XaBuiltinMember *new_methods = xr_realloc(
+                            (void *) h->methods, (size_t) new_cap * sizeof(XaBuiltinMember));
                         if (new_methods) {
                             h->methods = new_methods;
                             xrd->handle_method_caps[handle_idx] = new_cap;

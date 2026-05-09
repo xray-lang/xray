@@ -24,4 +24,4 @@
  * and loop info (xi_compute_loops). */
 XR_FUNC XiPassChange xi_opt_licm(XiFunc *f);
 
-#endif // XI_OPT_LICM_H
+#endif  // XI_OPT_LICM_H

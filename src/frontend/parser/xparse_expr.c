@@ -834,7 +834,7 @@ AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     }
     // Check for safe cast: as Type? (XrTypeRef uses XR_TREF_OPTIONAL kind)
     bool is_safe = xr_tref_is_nullable(target_type);
-    return xr_ast_as_expr(parser->X, left, (XrType *)target_type, is_safe, line);
+    return xr_ast_as_expr(parser->X, left, (XrType *) target_type, is_safe, line);
 }
 
 // Parse optional chain: obj?.prop, obj?.[index], obj?.method()

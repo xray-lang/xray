@@ -37,27 +37,27 @@
 /* ========== Loop Structures ========== */
 
 typedef struct XiLoop {
-    struct XiLoop *parent;    /* outer loop (NULL at forest root) */
-    struct XiLoop *child;     /* first nested loop */
-    struct XiLoop *sibling;   /* next loop sharing the same parent */
+    struct XiLoop *parent;  /* outer loop (NULL at forest root) */
+    struct XiLoop *child;   /* first nested loop */
+    struct XiLoop *sibling; /* next loop sharing the same parent */
 
-    XiBlock *header;          /* loop header block */
-    XiBlock *preheader;       /* unique out-of-loop predecessor, or NULL */
-    XiBlock *latch;           /* back-edge source (first if multiple) */
+    XiBlock *header;    /* loop header block */
+    XiBlock *preheader; /* unique out-of-loop predecessor, or NULL */
+    XiBlock *latch;     /* back-edge source (first if multiple) */
 
-    XiBlock **body;           /* heap-allocated body block array */
-    uint32_t nbody;           /* number of blocks in body */
+    XiBlock **body; /* heap-allocated body block array */
+    uint32_t nbody; /* number of blocks in body */
 
-    uint32_t depth;           /* 1-based nesting depth */
-    uint32_t id;              /* index in XiLoopInfo::all_loops[] */
+    uint32_t depth; /* 1-based nesting depth */
+    uint32_t id;    /* index in XiLoopInfo::all_loops[] */
 } XiLoop;
 
 typedef struct XiLoopInfo {
-    XiLoop  *root_list;       /* top-level loops linked via sibling */
-    XiLoop **all_loops;       /* heap array, innermost-first */
-    XiLoop **block_to_loop;   /* [nblocks] innermost loop per block */
-    uint32_t nloop;           /* total number of loops */
-    uint32_t nblocks;         /* size of block_to_loop[] */
+    XiLoop *root_list;      /* top-level loops linked via sibling */
+    XiLoop **all_loops;     /* heap array, innermost-first */
+    XiLoop **block_to_loop; /* [nblocks] innermost loop per block */
+    uint32_t nloop;         /* total number of loops */
+    uint32_t nblocks;       /* size of block_to_loop[] */
 } XiLoopInfo;
 
 /* ========== API ========== */
@@ -78,4 +78,4 @@ XR_FUNC uint32_t xi_block_loop_depth(const XiLoopInfo *info, uint32_t blk_id);
 /* Query: does the given block belong to the given loop? */
 XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk);
 
-#endif // XI_LOOP_H
+#endif  // XI_LOOP_H

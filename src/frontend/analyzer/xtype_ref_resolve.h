@@ -23,7 +23,6 @@ struct XrType;
 
 /* Resolve a single XrTypeRef to its runtime XrType*.
  * Returns xr_type_new_unknown() on NULL input or unresolvable refs. */
-XR_FUNC struct XrType *xr_tref_resolve(struct XrayIsolate *X,
-                                        const struct XrTypeRef *tref);
+XR_FUNC struct XrType *xr_tref_resolve(struct XrayIsolate *X, const struct XrTypeRef *tref);
 
 #endif  // XTYPE_REF_RESOLVE_H

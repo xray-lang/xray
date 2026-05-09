@@ -21,11 +21,11 @@
  * ========================================================================= */
 
 typedef struct {
-    int64_t  len;
-    int64_t  cap;
-    void    *data;        /* uint8_t[] / int64_t[] / XrValue[] — depends on elem_type */
-    uint8_t  elem_type;   /* XR_ELEM_ANY / XR_ELEM_U8 / ... */
-    uint8_t  elem_size;   /* cached bytes per element */
+    int64_t len;
+    int64_t cap;
+    void *data;        /* uint8_t[] / int64_t[] / XrValue[] — depends on elem_type */
+    uint8_t elem_type; /* XR_ELEM_ANY / XR_ELEM_U8 / ... */
+    uint8_t elem_size; /* cached bytes per element */
 } xrt_array_t;
 
 static inline XrValue xrt_array_new(int64_t cap) {
@@ -39,7 +39,7 @@ static inline XrValue xrt_array_new(int64_t cap) {
     a->len = 0;
     a->cap = cap;
     a->elem_type = XR_ELEM_ANY;
-    a->elem_size = (uint8_t)sizeof(XrValue);
+    a->elem_size = (uint8_t) sizeof(XrValue);
     a->data = XRT_CALLOC((size_t) cap, sizeof(XrValue));
     if (!a->data) {
         fprintf(stderr, "xrt_array_new: out of memory\n");
@@ -79,7 +79,7 @@ static inline void xrt_array_push(XrValue arr, XrValue val) {
         }
         a->data = tmp;
     }
-    xr_typed_set(a->data, (int32_t)a->len, val, a->elem_type);
+    xr_typed_set(a->data, (int32_t) a->len, val, a->elem_type);
     a->len++;
 }
 
@@ -87,24 +87,25 @@ static inline int64_t xrt_array_len(XrValue arr) {
     return ((xrt_array_t *) arr.ptr)->len;
 }
 
-
 /* Stack-allocated array: header on stack, data buffer on stack via alloca.
  * Used for NO_ESCAPE arrays (escape analysis optimization).
  * The returned XrValue is valid only within the current function scope. */
 #ifndef xrt_array_stack_new
-#define xrt_array_stack_new(cap_expr) ({                                    \
-    int64_t _cap = (cap_expr);                                             \
-    if (_cap < 4) _cap = 4;                                                \
-    xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(                   \
-        sizeof(xrt_array_t) + (size_t)_cap * sizeof(XrValue));            \
-    _a->len = 0;                                                           \
-    _a->cap = _cap;                                                        \
-    _a->elem_type = XR_ELEM_ANY;                                          \
-    _a->elem_size = (uint8_t)sizeof(XrValue);                             \
-    _a->data = (void *)((char *)_a + sizeof(xrt_array_t));               \
-    memset(_a->data, 0, (size_t)_cap * sizeof(XrValue));                  \
-    xr_mkptr(_a, XR_TAG_ARRAY);                                           \
-})
+#define xrt_array_stack_new(cap_expr)                                                              \
+    ({                                                                                             \
+        int64_t _cap = (cap_expr);                                                                 \
+        if (_cap < 4)                                                                              \
+            _cap = 4;                                                                              \
+        xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(sizeof(xrt_array_t) +                   \
+                                                           (size_t) _cap * sizeof(XrValue));       \
+        _a->len = 0;                                                                               \
+        _a->cap = _cap;                                                                            \
+        _a->elem_type = XR_ELEM_ANY;                                                               \
+        _a->elem_size = (uint8_t) sizeof(XrValue);                                                 \
+        _a->data = (void *) ((char *) _a + sizeof(xrt_array_t));                                   \
+        memset(_a->data, 0, (size_t) _cap * sizeof(XrValue));                                      \
+        xr_mkptr(_a, XR_TAG_ARRAY);                                                                \
+    })
 #endif
 
 /* =========================================================================
@@ -236,7 +237,7 @@ static inline XrValue xrt_map_get(xrt_map_t *m, XrValue key) {
     for (int64_t i = 0; i < m->len; i++)
         if (xrt_key_eq(m->entries[i].key, key))
             return m->entries[i].val;
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
@@ -267,19 +268,19 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
 
 typedef struct {
     int64_t field_count;
-    XrValue fields[];       /* flexible array of field values */
+    XrValue fields[]; /* flexible array of field values */
 } xrt_json_t;
 
 static inline XrValue xrt_json_new(int64_t field_count) {
-    xrt_json_t *j = (xrt_json_t *) XRT_MALLOC(
-        sizeof(xrt_json_t) + (size_t)field_count * sizeof(XrValue));
+    xrt_json_t *j =
+        (xrt_json_t *) XRT_MALLOC(sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue));
     if (!j) {
         fprintf(stderr, "xrt_json_new: out of memory\n");
         abort();
     }
     j->field_count = field_count;
     for (int64_t i = 0; i < field_count; i++)
-        j->fields[i] = (XrValue){.i = 0, .tag = XR_TAG_NULL};
+        j->fields[i] = (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     return xr_mkptr(j, XR_TAG_PTR);
 }
 
@@ -287,7 +288,7 @@ static inline XrValue xrt_json_get_field(XrValue obj, int field_idx) {
     xrt_json_t *j = (xrt_json_t *) obj.ptr;
     if (field_idx >= 0 && field_idx < j->field_count)
         return j->fields[field_idx];
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
@@ -307,11 +308,11 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         if (idx < 0)
             idx += a->len;
         if (idx >= 0 && idx < a->len)
-            return xr_typed_get(a->data, (int32_t)idx, a->elem_type);
+            return xr_typed_get(a->data, (int32_t) idx, a->elem_type);
     } else if (obj.tag == XR_TAG_MAP) {
         return xrt_map_get((xrt_map_t *) obj.ptr, key);
     }
-    return (XrValue){.i = 0, .tag = XR_TAG_NULL};
+    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
@@ -321,7 +322,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         if (idx < 0)
             idx += a->len;
         if (idx >= 0 && idx < a->len) {
-            xr_typed_set(a->data, (int32_t)idx, val, a->elem_type);
+            xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
         } else if (idx >= 0) {
             while (a->len < idx)
                 xrt_array_push(obj, XR_NULL_VAL);
@@ -337,8 +338,8 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
  * ========================================================================= */
 
 typedef struct xrt_closure {
-    void *fn;           // C function pointer
-    int nupvals;        // number of captured upvalues
+    void *fn;          // C function pointer
+    int nupvals;       // number of captured upvalues
     XrValue upvals[];  // captured values (flexible array)
 } xrt_closure_t;
 
@@ -352,7 +353,7 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     c->fn = fn;
     c->nupvals = nupvals;
     for (int i = 0; i < nupvals; i++)
-        c->upvals[i] = (XrValue){.i = 0, .tag = XR_TAG_NULL};
+        c->upvals[i] = (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     return xr_mkptr(c, XR_TAG_CLOSURE);
 }
 

@@ -36,8 +36,7 @@ struct XrayIsolate;
  * Copies into the isolate's shared GC so the value outlives the
  * sending coroutine. Returns the original value unchanged for
  * scalars and immutables. */
-static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate,
-                                            XrValue value) {
+static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
     if (!xr_value_needs_copy(value))
@@ -50,9 +49,8 @@ static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate,
 /* Deep copy a mutable value received from a channel into the
  * receiver's coroutine-local GC.  Returns the original value
  * unchanged for scalars and immutables. */
-static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate,
-                                         XrValue value,
-                                         struct XrCoroutine *recv_coro) {
+static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue value,
+                                        struct XrCoroutine *recv_coro) {
     if (!XR_IS_PTR(value))
         return value;
     if (!xr_value_needs_copy(value))
@@ -70,10 +68,8 @@ static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate,
  *            isolate-level GC fallback inside xr_deep_copy_to_coro)
  *
  * Returns true if a value was received, false otherwise. */
-static inline bool xr_chan_try_recv(struct XrayIsolate *isolate,
-                                     XrChannel *ch,
-                                     XrValue *out_value,
-                                     struct XrCoroutine *recv_coro) {
+static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, XrValue *out_value,
+                                    struct XrCoroutine *recv_coro) {
     XR_DCHECK(ch != NULL, "xr_chan_try_recv: NULL channel");
     XR_DCHECK(out_value != NULL, "xr_chan_try_recv: NULL out_value");
 
@@ -105,9 +101,7 @@ static inline bool xr_chan_try_recv(struct XrayIsolate *isolate,
 
 /* Unified trySend: deep-copy value, try buffer push, wake receivers
  * on success.  Returns true if the value was enqueued. */
-static inline bool xr_chan_try_send(struct XrayIsolate *isolate,
-                                     XrChannel *ch,
-                                     XrValue value) {
+static inline bool xr_chan_try_send(struct XrayIsolate *isolate, XrChannel *ch, XrValue value) {
     XR_DCHECK(ch != NULL, "xr_chan_try_send: NULL channel");
 
     value = xr_chan_prepare_send(isolate, value);

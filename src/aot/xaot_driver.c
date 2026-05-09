@@ -89,14 +89,13 @@ static char *derive_module_name(const char *path) {
     return name;
 }
 
-
 /* ========== Xi IR Pipeline (Source -> AST -> Xi IR -> C) ========== */
 
 /* Compile one source file through the Xi IR pipeline.
  * Returns the pipeline result (caller frees).  On failure, returns
  * pres.status != XI_PIPE_OK and prints an error message. */
 static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
-    XiPipelineResult fail = { .status = XI_PIPE_ERR_INTERNAL };
+    XiPipelineResult fail = {.status = XI_PIPE_ERR_INTERNAL};
 
     char *source = read_source_file(path);
     if (!source) {
@@ -123,15 +122,14 @@ static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
 
     XiPipelineConfig cfg = xi_pipeline_aot_config();
 
-    XiPipelineResult pres = xi_pipeline_compile_program(
-        program, analyzer, X, &cfg);
+    XiPipelineResult pres = xi_pipeline_compile_program(program, analyzer, X, &cfg);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
 
     if (pres.status != XI_PIPE_OK) {
-        fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n",
-                path, xi_pipe_status_str(pres.status));
+        fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n", path,
+                xi_pipe_status_str(pres.status));
         if (pres.error_msg)
             fprintf(stderr, "  %s\n", pres.error_msg);
     }
@@ -145,27 +143,23 @@ static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
  * relative paths (starting with "./") are user modules, not stdlib.
  * Json is a builtin type and not an import module. */
 static XaotStdlibSet stdlib_flag_for_import(const char *name) {
-    if (!name || name[0] == '.') return 0;
+    if (!name || name[0] == '.')
+        return 0;
 
-    struct { const char *name; XaotStdlibSet flag; } table[] = {
-        {"regex",    XAOT_STDLIB_REGEX},
-        {"math",     XAOT_STDLIB_MATH},
-        {"time",     XAOT_STDLIB_TIME},
-        {"datetime", XAOT_STDLIB_TIME},
-        {"path",     XAOT_STDLIB_PATH},
-        {"io",       XAOT_STDLIB_IO},
-        {"os",       XAOT_STDLIB_OS},
-        {"net",      XAOT_STDLIB_NET},
-        {"http",     XAOT_STDLIB_HTTP},
-        {"crypto",   XAOT_STDLIB_CRYPTO},
-        {"base64",   XAOT_STDLIB_BASE64},
-        {"csv",      XAOT_STDLIB_CSV},
-        {"toml",     XAOT_STDLIB_TOML},
-        {"yaml",     XAOT_STDLIB_YAML},
-        {"xml",      XAOT_STDLIB_XML},
-        {"compress", XAOT_STDLIB_COMPRESS},
+    struct {
+        const char *name;
+        XaotStdlibSet flag;
+    } table[] = {
+        {"regex", XAOT_STDLIB_REGEX},   {"math", XAOT_STDLIB_MATH},
+        {"time", XAOT_STDLIB_TIME},     {"datetime", XAOT_STDLIB_TIME},
+        {"path", XAOT_STDLIB_PATH},     {"io", XAOT_STDLIB_IO},
+        {"os", XAOT_STDLIB_OS},         {"net", XAOT_STDLIB_NET},
+        {"http", XAOT_STDLIB_HTTP},     {"crypto", XAOT_STDLIB_CRYPTO},
+        {"base64", XAOT_STDLIB_BASE64}, {"csv", XAOT_STDLIB_CSV},
+        {"toml", XAOT_STDLIB_TOML},     {"yaml", XAOT_STDLIB_YAML},
+        {"xml", XAOT_STDLIB_XML},       {"compress", XAOT_STDLIB_COMPRESS},
     };
-    for (int i = 0; i < (int)(sizeof(table) / sizeof(table[0])); i++) {
+    for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++) {
         if (strcmp(name, table[i].name) == 0)
             return table[i].flag;
     }
@@ -177,10 +171,12 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
     XR_DCHECK(f != NULL, "scan_func_features: NULL func");
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (!v) continue;
+            if (!v)
+                continue;
             switch (v->op) {
                 case XI_YIELD:
                     fs->need_coro = true;
@@ -213,10 +209,11 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                     fs->need_instanceof = true;
                     break;
                 case XI_IMPORT_REF: {
-                    XiImportRef *ref = (XiImportRef *)v->aux;
+                    XiImportRef *ref = (XiImportRef *) v->aux;
                     if (ref && ref->module_path) {
                         XaotStdlibSet flag = stdlib_flag_for_import(ref->module_path);
-                        if (flag) fs->stdlib |= flag;
+                        if (flag)
+                            fs->stdlib |= flag;
                         /* net/http imply netpoll runtime */
                         if (flag & (XAOT_STDLIB_NET | XAOT_STDLIB_HTTP))
                             fs->need_netpoll = true;
@@ -235,7 +232,8 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
 
 /* Recursively infer features from an Xi IR function tree */
 static void infer_features_recursive(XiFunc *f, XaotFeatureSet *fs) {
-    if (!f) return;
+    if (!f)
+        return;
     scan_func_features(f, fs);
     for (uint16_t c = 0; c < f->nchildren; c++)
         infer_features_recursive(f->children[c], fs);
@@ -273,8 +271,8 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
             return 1;
         }
         nmodules = bundle->count;
-        paths = (char **)xr_calloc(nmodules, sizeof(char *));
-        mod_names = (char **)xr_calloc(nmodules, sizeof(char *));
+        paths = (char **) xr_calloc(nmodules, sizeof(char *));
+        mod_names = (char **) xr_calloc(nmodules, sizeof(char *));
         if (!paths || !mod_names) {
             xr_bundle_free(bundle);
             xray_isolate_delete(Xb);
@@ -285,8 +283,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         for (int i = 0; i < nmodules; i++) {
             paths[i] = xr_strdup(bundle->entries[i].path);
             mod_names[i] = derive_module_name(bundle->entries[i].path);
-            if (bundle->entry_path &&
-                strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
+            if (bundle->entry_path && strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
                 entry_index = i;
         }
         xr_bundle_free(bundle);
@@ -297,8 +294,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     if (nmodules > 1) {
         printf("[xi-native] %d modules (topo order):\n", nmodules);
         for (int i = 0; i < nmodules; i++)
-            printf("  [%d] %s%s\n", i, paths[i],
-                   i == entry_index ? " (entry)" : "");
+            printf("  [%d] %s%s\n", i, paths[i], i == entry_index ? " (entry)" : "");
     }
 
     /* --- Compile all modules through Xi IR pipeline --- */
@@ -308,9 +304,8 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         goto fail_free_names;
     }
 
-    XiPipelineResult *pres_arr =
-        (XiPipelineResult *)xr_calloc(nmodules, sizeof(XiPipelineResult));
-    XiFunc **ir_funcs = (XiFunc **)xr_calloc(nmodules, sizeof(XiFunc *));
+    XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));
+    XiFunc **ir_funcs = (XiFunc **) xr_calloc(nmodules, sizeof(XiFunc *));
     if (!pres_arr || !ir_funcs) {
         xr_free(pres_arr);
         xr_free(ir_funcs);
@@ -319,7 +314,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     }
 
     /* Module metadata array (parallel to ir_funcs) */
-    XiModule **modules = (XiModule **)xr_calloc(nmodules, sizeof(XiModule *));
+    XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));
     if (!modules) {
         xr_free(pres_arr);
         xr_free(ir_funcs);
@@ -347,8 +342,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         total_funcs += 1 + ir_funcs[m]->nchildren;
 
         /* Module metadata is always built during lowering. */
-        XR_DCHECK(ir_funcs[m]->module != NULL,
-                  "xaot_build: pipeline produced no module metadata");
+        XR_DCHECK(ir_funcs[m]->module != NULL, "xaot_build: pipeline produced no module metadata");
         modules[m] = ir_funcs[m]->module;
         modules[m]->path = paths[m];
         modules[m]->name = mod_names[m];
@@ -411,11 +405,11 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     xr_free(pres_arr);
     xr_free(ir_funcs);
 
-    printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules)\n",
-           bufsz, total_funcs, nmodules);
+    printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules)\n", bufsz, total_funcs,
+           nmodules);
 
     /* Copy from system-malloc'd open_memstream buffer to xr_malloc */
-    char *owned = (char *)xr_malloc(bufsz + 1);
+    char *owned = (char *) xr_malloc(bufsz + 1);
     if (!owned) {
         free(buf);
         goto fail_free_names;

@@ -103,7 +103,7 @@ static void cfg_push(CfgWl *w, uint32_t from, uint32_t to) {
         w->cap = w->cap ? w->cap * 2 : 64;
         XR_REALLOC_OR_ABORT(w->edges, w->cap * sizeof(CfgEdge), "sccp cfg wl");
     }
-    w->edges[w->len++] = (CfgEdge){from, to};
+    w->edges[w->len++] = (CfgEdge) {from, to};
 }
 
 static bool cfg_pop(CfgWl *w, CfgEdge *out) {
@@ -747,6 +747,6 @@ XmPassChange xm_pass_sccp(XmFunc *func) {
     xr_free(ctx.exec_edge);
     xr_free(ctx.cfg.edges);
     xr_free(ctx.ssa.vregs);
-    return (any_rewrite || blocks_removed) ? (XmPassChange){blocks_removed, true, true, 0, 0, 0}
+    return (any_rewrite || blocks_removed) ? (XmPassChange) {blocks_removed, true, true, 0, 0, 0}
                                            : xm_pass_no_change();
 }

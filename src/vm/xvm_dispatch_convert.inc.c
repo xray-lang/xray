@@ -140,7 +140,7 @@ vmcase(OP_TYPENAME) {
     }
     // For struct refs, extract class pointer from struct area header
     if (type_name == NULL && val.tag == XR_TAG_STRUCT_REF && val.ptr) {
-        XrClass *cls = *(XrClass **)val.ptr;
+        XrClass *cls = *(XrClass **) val.ptr;
         if (cls && cls->name)
             type_name = cls->name;
     }

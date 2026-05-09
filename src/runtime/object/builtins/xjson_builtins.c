@@ -86,7 +86,8 @@ static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue self, XrValue
 }
 
 // Json.entries(obj) -> Array<Array<string, any>>
-static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                      int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
@@ -173,7 +174,8 @@ static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue self, XrValue *
 }
 
 // Json.isEmpty(obj) -> bool
-static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                      int nargs) {
     (void) self;
     if (nargs < 1 || !xr_value_is_json(args[0]))
         return xr_bool(true);
@@ -199,8 +201,7 @@ static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue self, XrValue *
 
     XrJsonStringifyResult r = xr_json_stringify_core(X, args[0], indent);
     if (r.has_error) {
-        XrValue exc = xr_exception_newf(X, XR_ERR_TYPE,
-                                        "Json.stringify: %s", r.error_msg);
+        XrValue exc = xr_exception_newf(X, XR_ERR_TYPE, "Json.stringify: %s", r.error_msg);
         xr_vm_unwind_with_trace(X, exc);
         return xr_null();
     }

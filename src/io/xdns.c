@@ -41,8 +41,8 @@ typedef struct XrDnsCacheEntry {
     char *hostname;
     XrSockAddr addrs[XR_DNS_MAX_ADDRS];
     int addr_count;
-    int current_idx;        // round-robin window into addrs[]
-    uint64_t expire_time;   // monotonic ms; entry is stale once now >= expire_time
+    int current_idx;       // round-robin window into addrs[]
+    uint64_t expire_time;  // monotonic ms; entry is stale once now >= expire_time
     struct XrDnsCacheEntry *hash_next;
     struct XrDnsCacheEntry *lru_next;  // toward tail (older)
     struct XrDnsCacheEntry *lru_prev;  // toward head (newer)
@@ -130,8 +130,8 @@ static void cache_move_to_front_locked(struct XrIoDnsCache *cache, XrDnsCacheEnt
         cache->tail = entry;
 }
 
-static void cache_insert_locked(struct XrIoDnsCache *cache, const char *hostname,
-                                XrSockAddr *addrs, int addr_count) {
+static void cache_insert_locked(struct XrIoDnsCache *cache, const char *hostname, XrSockAddr *addrs,
+                                int addr_count) {
     unsigned int idx = hash_hostname(hostname);
 
     XrDnsCacheEntry *entry = cache_find_locked(cache, hostname);

@@ -434,14 +434,20 @@ XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue self, XrValue *args, int
                 char *ptr = buf;
                 size_t rem = sizeof(buf);
                 int w = snprintf(ptr, rem, "%s<", dname);
-                ptr += w; rem -= (size_t)w;
+                ptr += w;
+                rem -= (size_t) w;
                 for (int i = 0; i < argc && rem > 2; i++) {
-                    if (i > 0) { w = snprintf(ptr, rem, ", "); ptr += w; rem -= (size_t)w; }
+                    if (i > 0) {
+                        w = snprintf(ptr, rem, ", ");
+                        ptr += w;
+                        rem -= (size_t) w;
+                    }
                     w = snprintf(ptr, rem, "%s", tnames[i] ? tnames[i] : "unknown");
-                    ptr += w; rem -= (size_t)w;
+                    ptr += w;
+                    rem -= (size_t) w;
                 }
                 snprintf(ptr, rem, ">");
-                n = (int)(ptr - buf) + 1;
+                n = (int) (ptr - buf) + 1;
             } else {
                 n = snprintf(buf, sizeof(buf), "%s", dname);
             }

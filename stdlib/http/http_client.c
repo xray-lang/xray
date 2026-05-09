@@ -420,7 +420,9 @@ static char *build_request(XrayIsolate *isolate, const XrHttpRequestConfig *conf
     }
 
     // Accept-Encoding (supports gzip decompression)
-    { p += sprintf(p, "Accept-Encoding: gzip, deflate\r\n"); }
+    {
+        p += sprintf(p, "Accept-Encoding: gzip, deflate\r\n");
+    }
 
     // Content-Length
     if (config->body_len > 0 && !has_content_length) {

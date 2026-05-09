@@ -422,7 +422,7 @@ op_call_closure:
                 _jit_coro->jit_ctx->call_closure = closure;
                 _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
                 int _jrc1 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
-                                         proto->return_type_info, &jit_result);
+                                        proto->return_type_info, &jit_result);
                 if (_jrc1 == XM_JIT_OK) {
                     R(a) = jit_result;
                     // Multi-return: fill R[a+1..] from jit_ctx->ret_vals[]
@@ -486,7 +486,7 @@ op_call_closure:
                     _jit_coro->jit_ctx->call_closure = closure;
                     _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
                     int _jrc2 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
-                                             proto->return_type_info, &jit_result);
+                                            proto->return_type_info, &jit_result);
                     if (_jrc2 == XM_JIT_OK) {
                         R(a) = jit_result;
                         if (_jit_coro->jit_ctx->ret_count > 1)
@@ -707,7 +707,7 @@ vmcase(OP_CALLSELF) {
             _jit_coro->jit_ctx->call_closure = closure;
             _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
             int _jrc3 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
-                                     proto->return_type_info, &jit_result);
+                                    proto->return_type_info, &jit_result);
             if (_jrc3 == XM_JIT_OK) {
                 R(a) = jit_result;
                 if (_jit_coro->jit_ctx->ret_count > 1)
@@ -767,7 +767,7 @@ vmcase(OP_CALLSELF) {
                 _jit_coro->jit_ctx->call_closure = closure;
                 _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
                 int _jrc4 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
-                                         proto->return_type_info, &jit_result);
+                                        proto->return_type_info, &jit_result);
                 if (_jrc4 == XM_JIT_OK) {
                     R(a) = jit_result;
                     if (_jit_coro->jit_ctx->ret_count > 1)

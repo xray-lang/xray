@@ -37,8 +37,7 @@ typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs
  * Static methods receive the class as self and may ignore it.
  */
 #ifndef XR_PRIMITIVE_METHOD_FN_DEFINED
-typedef XrValue (*XrPrimitiveMethodFn)(XrayIsolate *isolate, XrValue self,
-                                       XrValue *args, int argc);
+typedef XrValue (*XrPrimitiveMethodFn)(XrayIsolate *isolate, XrValue self, XrValue *args, int argc);
 #define XR_PRIMITIVE_METHOD_FN_DEFINED
 #endif
 
@@ -68,8 +67,8 @@ typedef struct XrMethod {
     XrMethodType type;
 
     union {
-        struct XrClosure *closure;       // CLOSURE/GETTER/SETTER/OPERATOR
-        XrPrimitiveMethodFn primitive;   // PRIMITIVE
+        struct XrClosure *closure;      // CLOSURE/GETTER/SETTER/OPERATOR
+        XrPrimitiveMethodFn primitive;  // PRIMITIVE
     } as;
 
     uint8_t flags;

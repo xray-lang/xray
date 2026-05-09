@@ -628,8 +628,7 @@ static XrValue xml_cdata_fn(XrayIsolate *X, XrValue *args, int argc) {
 
 // @module xml
 
-XR_DEFINE_BUILTIN(xml_parse_fn, "parse", "(data: string, options?: Json): Json",
-                  "Parse XML string")
+XR_DEFINE_BUILTIN(xml_parse_fn, "parse", "(data: string, options?: Json): Json", "Parse XML string")
 XR_DEFINE_BUILTIN(xml_parse_detailed, "parseDetailed", "(data: string): Json",
                   "Parse XML with details")
 XR_DEFINE_BUILTIN(xml_parse_file, "parseFile", "(path: string): Json", "Parse XML file")

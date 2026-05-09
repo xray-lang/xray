@@ -79,8 +79,8 @@ XR_FUNC void xr_stream_config_init(XrStreamConfig *config);
  * Returns: download result
  */
 XR_FUNC XrStreamResult xr_http_download(struct XrayIsolate *X, const char *url,
-                                        const char *output_path,
-                                        XrHttpProgressCallback on_progress, void *user_data);
+                                        const char *output_path, XrHttpProgressCallback on_progress,
+                                        void *user_data);
 
 /*
  * Stream download (using config)
@@ -94,8 +94,7 @@ XR_FUNC XrStreamResult xr_http_stream(struct XrayIsolate *X, const XrStreamConfi
  */
 XR_FUNC XrStreamResult xr_http_resume_download(struct XrayIsolate *X, const char *url,
                                                const char *output_path,
-                                               XrHttpProgressCallback on_progress,
-                                               void *user_data);
+                                               XrHttpProgressCallback on_progress, void *user_data);
 
 /*
  * Get remote file size (HEAD request)

@@ -679,10 +679,11 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 }
                 parameters = _new_parameters;
 
-                XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(parser->X, sizeof(XrTypeRef *),
-                                                                        (size_t) param_capacity);
+                XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(
+                    parser->X, sizeof(XrTypeRef *), (size_t) param_capacity);
                 if (old_capacity > 0 && param_types) {
-                    memcpy(_new_param_types, param_types, sizeof(XrTypeRef *) * (size_t) old_capacity);
+                    memcpy(_new_param_types, param_types,
+                           sizeof(XrTypeRef *) * (size_t) old_capacity);
                 }
                 param_types = _new_param_types;
 
@@ -1142,8 +1143,8 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
     } else {
         // Allocate parameter arrays in the parse arena
         parameters = (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) expected_params);
-        param_types =
-            (XrTypeRef **) ast_alloc_array(parser->X, sizeof(XrTypeRef *), (size_t) expected_params);
+        param_types = (XrTypeRef **) ast_alloc_array(parser->X, sizeof(XrTypeRef *),
+                                                     (size_t) expected_params);
 
         // Parse first parameter
         xr_parser_consume(parser, TK_NAME, "expected parameter name");
@@ -1489,10 +1490,11 @@ AstNode *xr_parse_interface_method(Parser *parser) {
                 }
                 parameters = _new_parameters;
 
-                XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(parser->X, sizeof(XrTypeRef *),
-                                                                        (size_t) param_capacity);
+                XrTypeRef **_new_param_types = (XrTypeRef **) ast_alloc_array(
+                    parser->X, sizeof(XrTypeRef *), (size_t) param_capacity);
                 if (old_capacity > 0 && param_types) {
-                    memcpy(_new_param_types, param_types, sizeof(XrTypeRef *) * (size_t) old_capacity);
+                    memcpy(_new_param_types, param_types,
+                           sizeof(XrTypeRef *) * (size_t) old_capacity);
                 }
                 param_types = _new_param_types;
             }

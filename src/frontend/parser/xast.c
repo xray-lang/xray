@@ -58,7 +58,7 @@ XR_FUNC char *ast_strdup(XrayIsolate *X, const char *s) {
     /* Deduplicate via compile-time pool when available. */
     XrCompileStringPool *pool = xr_isolate_get_string_pool_compile(X);
     if (pool) {
-        return (char *)xr_string_pool_intern(pool, s);
+        return (char *) xr_string_pool_intern(pool, s);
     }
     XrArena *arena = get_arena(X);
     XR_CHECK(arena != NULL, "ast_strdup: parser requires an arena");
@@ -570,7 +570,8 @@ AstNode *xr_ast_call_expr(XrayIsolate *X, AstNode *callee, AstNode **arguments, 
 // Create function call node with generic type arguments
 // e.g.: foo<int, string>(arg1, arg2)
 AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee, AstNode **arguments,
-                                  int arg_count, XrTypeRef **type_args, int type_arg_count, int line) {
+                                  int arg_count, XrTypeRef **type_args, int type_arg_count,
+                                  int line) {
     AstNode *node = alloc_node(X, AST_CALL_EXPR, line);
     node->as.call_expr.callee = callee;
     node->as.call_expr.arg_count = arg_count;
@@ -962,8 +963,8 @@ AstNode *xr_ast_method_decl(XrayIsolate *X, const char *name, char **parameters,
 //   new module.ClassName()    - module_name = "module"
 // Also supports generic type arguments: new Box<int>(42)
 AstNode *xr_ast_new_expr(XrayIsolate *X, const char *module_name, const char *class_name,
-                         AstNode **arguments, int arg_count, XrTypeRef **type_args, int type_arg_count,
-                         int line) {
+                         AstNode **arguments, int arg_count, XrTypeRef **type_args,
+                         int type_arg_count, int line) {
     AstNode *node = alloc_node(X, AST_NEW_EXPR, line);
     node->as.new_expr.module_name = ast_strdup(X, module_name);
     node->as.new_expr.class_name = (char *) class_name;
@@ -1839,7 +1840,8 @@ AstNode *xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count
 // Create type alias node
 // type User = { name: string, age: int, email?: string }
 AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
-                           XrTypeRef **field_types, bool *field_optional, int field_count, int line) {
+                           XrTypeRef **field_types, bool *field_optional, int field_count,
+                           int line) {
     AstNode *node = alloc_node(X, AST_TYPE_ALIAS, line);
 
     // Copy type name

@@ -46,8 +46,8 @@ static uint32_t block_index(XmFunc *func, const XmBlock *blk) {
  * can re-use the bitmap to merge the bodies of multiple latches that
  * share a header.
  */
-static void collect_loop_body(XmFunc *func, const XmDomTree *dt, uint32_t hdr_bi,
-                              uint32_t latch_bi, uint8_t *in_loop) {
+static void collect_loop_body(XmFunc *func, const XmDomTree *dt, uint32_t hdr_bi, uint32_t latch_bi,
+                              uint8_t *in_loop) {
     (void) dt;
     in_loop[hdr_bi] = 1;
 
@@ -104,7 +104,7 @@ static XmBlock *find_unique_preheader(XmBlock *hdr, const uint8_t *in_loop, XmFu
  * (freed by xm_loopinfo_free).
  */
 static XmLoop *alloc_loop(XmFunc *func, uint32_t hdr_bi, uint32_t latch_bi,
-                           const uint8_t *in_loop) {
+                          const uint8_t *in_loop) {
     XmBlock *hdr = func->blocks[hdr_bi];
 
     uint32_t body_count = 0;

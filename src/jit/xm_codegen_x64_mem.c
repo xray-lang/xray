@@ -448,7 +448,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
             /* Load runtime helper pointer */
             void *fn = (ins->op == XM_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
-                                                     : (void *) (uintptr_t) xr_jit_rt_map_new;
+                                                    : (void *) (uintptr_t) xr_jit_rt_map_new;
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
             /* CALL call_c_stub */

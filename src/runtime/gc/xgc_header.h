@@ -92,9 +92,9 @@ typedef enum {
     XR_TREGEX,
     XR_TLOGGER,
     XR_TRANGE,
-    XR_TBLOB,     // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCELL,     // Single-slot mutable capture cell (32B)
-    XR_TTASK,     // Lightweight GC-managed coroutine handle (Task/Executor separation)
+    XR_TBLOB,         // Raw byte buffer on Immix heap (no traverse/destroy)
+    XR_TCELL,         // Single-slot mutable capture cell (32B)
+    XR_TTASK,         // Lightweight GC-managed coroutine handle (Task/Executor separation)
     XR_TNETCONN,      // Typed TCP / UDP / TLS connection handle (src/io/xnet_handle.h)
     XR_TNETLISTENER,  // Typed TCP listener handle (src/io/xnet_handle.h)
 } XrObjType;

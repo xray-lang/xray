@@ -141,32 +141,50 @@ static inline void xrt_println(XrValue v) {
  * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_MAP=16. */
 static inline int64_t xrt_typeof_id(XrValue v) {
     switch (v.tag) {
-        case XR_TAG_I64:       return 8;   /* XR_TID_INT */
-        case XR_TAG_F64:       return 11;  /* XR_TID_FLOAT */
-        case XR_TAG_BOOL:      return 1;   /* XR_TID_BOOL */
-        case XR_TAG_NULL:      return 0;   /* XR_TID_NULL */
+        case XR_TAG_I64:
+            return 8; /* XR_TID_INT */
+        case XR_TAG_F64:
+            return 11; /* XR_TID_FLOAT */
+        case XR_TAG_BOOL:
+            return 1; /* XR_TID_BOOL */
+        case XR_TAG_NULL:
+            return 0; /* XR_TID_NULL */
         case XR_TAG_STR:
-        case XR_TAG_STR_ARC:   return 12;  /* XR_TID_STRING */
-        case XR_TAG_ARRAY:     return 14;  /* XR_TID_ARRAY */
-        case XR_TAG_MAP:       return 16;  /* XR_TID_MAP */
-        case XR_TAG_CLOSURE:   return 13;  /* XR_TID_FUNCTION */
-        default:               return 17;  /* XR_TID_INSTANCE */
+        case XR_TAG_STR_ARC:
+            return 12; /* XR_TID_STRING */
+        case XR_TAG_ARRAY:
+            return 14; /* XR_TID_ARRAY */
+        case XR_TAG_MAP:
+            return 16; /* XR_TID_MAP */
+        case XR_TAG_CLOSURE:
+            return 13; /* XR_TID_FUNCTION */
+        default:
+            return 17; /* XR_TID_INSTANCE */
     }
 }
 
 /* typename(x) — return type name as a boxed string value */
 static inline XrValue xrt_typeof_str(XrValue v) {
     switch (v.tag) {
-        case XR_TAG_I64:       return xr_box_str("int");
-        case XR_TAG_F64:       return xr_box_str("float");
-        case XR_TAG_BOOL:      return xr_box_str("bool");
-        case XR_TAG_NULL:      return xr_box_str("null");
+        case XR_TAG_I64:
+            return xr_box_str("int");
+        case XR_TAG_F64:
+            return xr_box_str("float");
+        case XR_TAG_BOOL:
+            return xr_box_str("bool");
+        case XR_TAG_NULL:
+            return xr_box_str("null");
         case XR_TAG_STR:
-        case XR_TAG_STR_ARC:   return xr_box_str("string");
-        case XR_TAG_ARRAY:     return xr_box_str("array");
-        case XR_TAG_MAP:       return xr_box_str("map");
-        case XR_TAG_CLOSURE:   return xr_box_str("function");
-        default:               return xr_box_str("object");
+        case XR_TAG_STR_ARC:
+            return xr_box_str("string");
+        case XR_TAG_ARRAY:
+            return xr_box_str("array");
+        case XR_TAG_MAP:
+            return xr_box_str("map");
+        case XR_TAG_CLOSURE:
+            return xr_box_str("function");
+        default:
+            return xr_box_str("object");
     }
 }
 

@@ -234,9 +234,8 @@ static bool covers(const LsRange *r, int32_t pos) {
 
 // Is this a CALL-family opcode that clobbers caller-saved registers?
 static bool is_call_op(uint16_t op) {
-    return op == XM_CALL || op == XM_CALL_C || op == XM_CALL_C_LEAF ||
-           op == XM_CALL_SELF_DIRECT || op == XM_CALL_DIRECT || op == XM_CALL_KNOWN ||
-           op == XM_CALL_KNOWN_REG;
+    return op == XM_CALL || op == XM_CALL_C || op == XM_CALL_C_LEAF || op == XM_CALL_SELF_DIRECT ||
+           op == XM_CALL_DIRECT || op == XM_CALL_KNOWN || op == XM_CALL_KNOWN_REG;
 }
 
 /*
@@ -1960,7 +1959,7 @@ uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target, XmBl
 #endif
             if (d >= 0 && s >= 0 && d != s && n < mx) {
                 bool fp = (p->rep == XR_REP_F64);
-                out[n++] = (XraEdgeCopy){(uint8_t) d, (uint8_t) s, fp, false, 0};
+                out[n++] = (XraEdgeCopy) {(uint8_t) d, (uint8_t) s, fp, false, 0};
             }
         }
     }
@@ -1988,11 +1987,11 @@ uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target, XmBl
         bool fp = (v < func->nvreg && func->vregs[v].rep == XR_REP_F64);
 
         if (from_reg >= 0 && to_reg >= 0) {
-            out[n++] = (XraEdgeCopy){(uint8_t) to_reg, (uint8_t) from_reg, fp, false, 0};
+            out[n++] = (XraEdgeCopy) {(uint8_t) to_reg, (uint8_t) from_reg, fp, false, 0};
         } else if (from_reg < 0 && to_reg >= 0) {
             int16_t slot = xra_vreg_spill(r, v);
             if (slot >= 0)
-                out[n++] = (XraEdgeCopy){(uint8_t) to_reg, 0, fp, true, slot};
+                out[n++] = (XraEdgeCopy) {(uint8_t) to_reg, 0, fp, true, slot};
         }
     }
 

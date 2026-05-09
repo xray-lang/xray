@@ -298,7 +298,7 @@ vmcase(OP_MULI) {
     /* String repeat: "str" * N */
     if (XR_IS_STRING(vb)) {
         XrString *str = xr_value_to_string(isolate, vb);
-        XrString *result = xr_string_repeat(isolate, str, (xr_Integer)sc);
+        XrString *result = xr_string_repeat(isolate, str, (xr_Integer) sc);
         R(a) = result ? xr_string_value(result) : xr_null();
         vmbreak;
     }

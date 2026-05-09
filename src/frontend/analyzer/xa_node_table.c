@@ -26,10 +26,10 @@
 #include <string.h>
 
 typedef struct XaNodeEntry {
-    uint32_t node_id;       // key: AstNode.node_id
+    uint32_t node_id;  // key: AstNode.node_id
     struct XrType *type;
-    struct XaScope *scope;  // enclosing scope at this node
-    struct XaSymbol *symbol; // resolved symbol (NULL for non-binding nodes)
+    struct XaScope *scope;    // enclosing scope at this node
+    struct XaSymbol *symbol;  // resolved symbol (NULL for non-binding nodes)
     struct XaNodeEntry *next;
 } XaNodeEntry;
 
@@ -179,7 +179,8 @@ void xa_node_table_set_type(XaNodeTable *t, struct AstNode *node, struct XrType 
     }
 
     XaNodeEntry *e = find_or_create(t, id);
-    if (e) e->type = type;
+    if (e)
+        e->type = type;
 }
 
 struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode *node) {
@@ -189,13 +190,13 @@ struct XrType *xa_node_table_get_type(const XaNodeTable *t, const struct AstNode
     return e ? e->type : NULL;
 }
 
-void xa_node_table_set(XaNodeTable *t, struct AstNode *node,
-                       struct XrType *type, struct XaScope *scope,
-                       struct XaSymbol *symbol) {
+void xa_node_table_set(XaNodeTable *t, struct AstNode *node, struct XrType *type,
+                       struct XaScope *scope, struct XaSymbol *symbol) {
     if (!t || !node)
         return;
     XaNodeEntry *e = find_or_create(t, node->node_id);
-    if (!e) return;
+    if (!e)
+        return;
     e->type = type;
     e->scope = scope;
     e->symbol = symbol;

@@ -14,7 +14,7 @@
 #include "xclass_system.h"
 #include "../../base/xlog.h"
 #include "xclass.h"
-#include "xclass_builder.h"       /* Process class still uses builder */
+#include "xclass_builder.h" /* Process class still uses builder */
 #include "../../base/xchecks.h"
 #include "../xisolate_internal.h"
 #include "../xisolate_api.h"

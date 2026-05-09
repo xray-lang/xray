@@ -126,8 +126,8 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     /* Xi IR pipeline: single compilation path (no legacy fallback) */
     {
         XiPipelineConfig pipe_cfg = xi_pipeline_default_config();
-        XiPipelineResult pipe_res = xi_pipeline_compile_program(
-            ast, ctx->analyzer, ctx->X, &pipe_cfg);
+        XiPipelineResult pipe_res =
+            xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);
         if (pipe_res.status == XI_PIPE_OK && pipe_res.proto != NULL) {
             XrProto *proto = pipe_res.proto;
             xi_pipeline_result_free(&pipe_res);

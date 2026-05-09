@@ -141,8 +141,7 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
         x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET);
 
         /* Save stack_map_ptr from jit_ctx into frame (RCX as temp) */
-        x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG,
-                   (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
+        x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
         x64_mov_mr(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET, X64_RCX);
         /* Initialize safepoint_id = UINT32_MAX */
         x64_load_imm64(&ctx->buf, X64_RCX, 0xFFFFFFFF);
@@ -297,8 +296,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     /* Save JIT frame SP for GC */
     x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET, X64_RBP);
     /* Save stack_map_ptr from jit_ctx into frame */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
-               (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
     x64_mov_mr(&ctx->buf, X64_RBP, -(int32_t) X64_FRAME_SMAP_PTR_OFFSET, X64_SCRATCH_REG);
     /* Initialize smap_id to UINT32_MAX (invalid) */
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, 0xFFFFFFFF);
@@ -376,8 +374,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
         /* Load result_tag → vreg_runtime_tags[vi] */
         int32_t tag_off = ctx->suspend_result_tag_offs[i];
         if (tag_off >= 0) {
-            x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG,
-                          (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
+            x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
             x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_RCX);
         }
 

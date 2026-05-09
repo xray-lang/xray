@@ -124,9 +124,8 @@ XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor 
         xr_class_builder_set_flags(builder, XR_CLASS_MONOMORPHIZED);
 
         if (desc->mono_type_arg_count > 0 && desc->mono_type_arg_names) {
-            xr_class_builder_set_mono_type_arg_names(
-                builder, desc->mono_type_arg_names,
-                (uint8_t)desc->mono_type_arg_count);
+            xr_class_builder_set_mono_type_arg_names(builder, desc->mono_type_arg_names,
+                                                     (uint8_t) desc->mono_type_arg_count);
         }
     }
 
