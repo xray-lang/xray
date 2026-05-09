@@ -89,6 +89,7 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
     case XI_CHAN_SEND: case XI_CHAN_RECV:
     case XI_CHAN_TRY_SEND: case XI_CHAN_TRY_RECV:
     case XI_CHAN_NEW:
+    case XI_CORO_OP:
 
     /* Exception handling */
     case XI_THROW:

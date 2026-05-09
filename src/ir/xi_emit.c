@@ -432,6 +432,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_ITER_VALID]   = xi_emit_iter,
     [XI_DEFER]        = xi_emit_defer,
     [XI_CHAN_NEW]      = xi_emit_chan_new,
+    [XI_CORO_OP]      = xi_emit_coro_op,
     [XI_SET_NEW]      = xi_emit_set_new,
     [XI_STR_CONCAT]   = xi_emit_str_concat,
     [XI_IS]           = xi_emit_is,

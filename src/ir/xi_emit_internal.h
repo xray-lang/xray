@@ -229,6 +229,7 @@ XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_chan_try_send(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_scope_enter(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_scope_exit(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_assert(EmitCtx *ctx, XiValue *v, uint8_t dst);

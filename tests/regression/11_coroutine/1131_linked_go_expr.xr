@@ -3,7 +3,7 @@
 fn ok(): int {
     return 42
 }
-fn test_linked_go_expr() {
+fn test_linked_go_basic() {
     let t = go ok()
     let r = await t
     assert(r == 42, "linked go should return result via await")
@@ -33,7 +33,7 @@ fn test_linked_go_expr() {
 
     // Test 3: linked go inside linked scope
 
-    test_linked_go_expr()
+    test_linked_go_basic()
     test_go_with_monitor()
     test_linked_go_in_scope()
 }

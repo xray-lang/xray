@@ -202,6 +202,66 @@ XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->next_reg > ctx->max_reg) ctx->max_reg = ctx->next_reg;
 }
 
+/* ========== Coro Built-in Module ========== */
+
+/* Coro.method() → dedicated opcodes or OP_CORO_CTRL.
+ * aux_int encodes the sub-type: 0..4 = dedicated opcodes,
+ * >= XI_CORO_SUB_CTRL_BASE = OP_CORO_CTRL sub-opcode. */
+XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    int sub = (int)v->aux_int;
+
+    switch (sub) {
+        case XI_CORO_SUB_SET_LOCAL: {
+            /* Coro.setLocal(key, val) → OP_SET_LOCAL A=key B=val */
+            XR_DCHECK(v->nargs >= 2, "emit coro_op: setLocal needs 2 args");
+            uint8_t key = reg_of(ctx, v->args[0]);
+            uint8_t val = reg_of(ctx, v->args[1]);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_SET_LOCAL, key, val, 0));
+            return;
+        }
+        case XI_CORO_SUB_GET_LOCAL: {
+            /* Coro.getLocal(key) → OP_GET_LOCAL A=dst B=key */
+            XR_DCHECK(v->nargs >= 1, "emit coro_op: getLocal needs 1 arg");
+            uint8_t key = reg_of(ctx, v->args[0]);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_GET_LOCAL, dst, key, 0));
+            return;
+        }
+        case XI_CORO_SUB_SET_PRIORITY: {
+            /* Coro.setPriority(task, prio) → OP_SET_PRIORITY A=task B=prio */
+            XR_DCHECK(v->nargs >= 2, "emit coro_op: setPriority needs 2 args");
+            uint8_t task = reg_of(ctx, v->args[0]);
+            uint8_t prio = reg_of(ctx, v->args[1]);
+            if (ctx->status != XI_EMIT_OK) return;
+            emit_inst(ctx, CREATE_ABC(OP_SET_PRIORITY, task, prio, 0));
+            return;
+        }
+        case XI_CORO_SUB_LOCK_THREAD: {
+            /* Coro.lockThread() → OP_LOCK_THREAD */
+            emit_inst(ctx, CREATE_ABC(OP_LOCK_THREAD, 0, 0, 0));
+            return;
+        }
+        case XI_CORO_SUB_UNLOCK_THREAD: {
+            /* Coro.unlockThread() → OP_UNLOCK_THREAD */
+            emit_inst(ctx, CREATE_ABC(OP_UNLOCK_THREAD, 0, 0, 0));
+            return;
+        }
+        default:
+            break;
+    }
+
+    /* OP_CORO_CTRL sub-opcodes: A=dst, B=first_arg_reg, C=sub_opcode */
+    XR_DCHECK(sub >= XI_CORO_SUB_CTRL_BASE, "emit coro_op: unexpected sub-type");
+    int ctrl_sub = sub - XI_CORO_SUB_CTRL_BASE;
+    uint8_t b_reg = 0;
+    if (v->nargs >= 1) {
+        b_reg = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK) return;
+    }
+    emit_inst(ctx, CREATE_ABC(OP_CORO_CTRL, dst, b_reg, (uint8_t)ctrl_sub));
+}
+
 /* ========== Scope ========== */
 
 /* Scope enter */
