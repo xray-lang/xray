@@ -182,7 +182,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
 
     switch (type) {
         case XR_TARRAY:
-        case XR_TARRAY_SLICE:
             format_array(isolate, sb, (XrArray *) gc, depth);
             break;
         case XR_TMAP:

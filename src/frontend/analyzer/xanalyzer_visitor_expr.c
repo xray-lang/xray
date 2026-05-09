@@ -824,7 +824,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                     bt->is_weak = true;
             }
         } else if (strcmp(cn, "Bytes") == 0) {
-            bt = xr_type_new(X, XR_KIND_BYTES);
+            bt = xr_type_new_bytes(X);
         } else if (strcmp(cn, "Channel") == 0) {
             XrType *et = tac >= 1 ? ta[0] : xr_type_new_unknown(X);
             bt = xr_type_new(X, XR_KIND_CHANNEL);

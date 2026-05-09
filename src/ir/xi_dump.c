@@ -18,6 +18,7 @@
 #include "xi.h"
 #include "xi_op_name.h"
 #include "../runtime/value/xtype.h"  /* XrTypeKind, XR_KIND_* */
+#include "../runtime/value/xstruct_layout.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -99,6 +100,14 @@ static void dump_value(FILE *out, const XiValue *v) {
     /* Auxiliary info for specific ops */
     if ((v->op == XI_LOAD_FIELD || v->op == XI_STORE_FIELD) && v->aux) {
         fprintf(out, " .%s", (const char *) v->aux);
+    } else if (v->op == XI_STRUCT_GET || v->op == XI_STRUCT_SET) {
+        XrStructLayout *sl = (XrStructLayout *)v->aux;
+        const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
+                            ? sl->field_names[v->aux_int] : "?";
+        fprintf(out, " .%s [field=%" PRId64 "]", fname, v->aux_int);
+    } else if (v->op == XI_STRUCT_NEW && v->aux) {
+        XrStructLayout *sl = (XrStructLayout *)v->aux;
+        fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
     } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN ||
                v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
                v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {

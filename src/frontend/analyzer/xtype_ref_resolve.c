@@ -37,8 +37,6 @@ static XrType *resolve_named(XrayIsolate *X, const char *name) {
             switch ((XrPreludeKind)entry->kind) {
                 case XR_PRELUDE_KIND_SIMPLE:
                     return xr_type_new_named_instance(X, entry->name);
-                case XR_PRELUDE_KIND_BYTES:
-                    return xr_type_new_bytes(X);
                 case XR_PRELUDE_KIND_SINGLETON:
                     if (strcmp(entry->name, "Json") == 0)
                         return xr_type_new_json(X);
@@ -46,6 +44,8 @@ static XrType *resolve_named(XrayIsolate *X, const char *name) {
                 case XR_PRELUDE_KIND_GENERIC_1:
                 case XR_PRELUDE_KIND_GENERIC_2:
                     /* Bare name without type args — use unknown placeholders */
+                    if (strcmp(entry->name, "Bytes") == 0)
+                        return xr_type_new_bytes(X);
                     if (strcmp(entry->name, "Array") == 0)
                         return xr_type_new_array(X, xr_type_new_unknown(NULL));
                     if (strcmp(entry->name, "Set") == 0)

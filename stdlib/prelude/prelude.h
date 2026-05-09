@@ -14,7 +14,7 @@
  *   as a plain identifier; the parser's type-context branch consults the
  *   per-isolate prelude symbol table (populated by xr_load_module_prelude
  *   during isolate init) to decide whether a name maps to a generic
- *   container, a singleton type, a special kind (Bytes), or a simple
+ *   container, a singleton type, or a simple
  *   named-instance type.
  *
  * WHY THIS DESIGN:
@@ -40,7 +40,6 @@ typedef enum {
     XR_PRELUDE_KIND_SIMPLE,     // XR_KIND_INSTANCE with class_name == name
     XR_PRELUDE_KIND_GENERIC_1,  // requires <T>, e.g. Array<int>, Set<T>, Channel<T>
     XR_PRELUDE_KIND_GENERIC_2,  // requires <K, V>, e.g. Map<string, int>
-    XR_PRELUDE_KIND_BYTES,      // XR_KIND_BYTES special kind
     XR_PRELUDE_KIND_SINGLETON,  // process-wide singleton XrType (e.g. Json)
 } XrPreludeKind;
 

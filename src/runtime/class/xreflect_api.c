@@ -320,7 +320,7 @@ XrValue xr_reflect_elementType(XrayIsolate *isolate, XrValue self, XrValue *args
     if (!XR_IS_PTR(obj))
         return tid_to_string_value(isolate, 0);
     uint8_t type = XR_HEAP_TYPE(obj);
-    if (type == XR_TARRAY || type == XR_TARRAY_SLICE)
+    if (type == XR_TARRAY)
         return tid_to_string_value(isolate, XR_TO_ARRAY(obj)->elem_tid);
     if (type == XR_TSET)
         return tid_to_string_value(isolate, ((XrSet *) XR_VALUE_GCPTR(obj))->elem_tid);
@@ -384,8 +384,7 @@ XrValue xr_reflect_typeOf(XrayIsolate *isolate, XrValue self, XrValue *args, int
     int n = 0;
 
     switch (heap_type) {
-        case XR_TARRAY:
-        case XR_TARRAY_SLICE: {
+        case XR_TARRAY: {
             XrArray *arr = XR_TO_ARRAY(obj);
             if (arr->elem_tid != 0) {
                 n = snprintf(buf, sizeof(buf), "Array<%s>",

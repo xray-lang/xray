@@ -73,7 +73,6 @@ typedef enum {
     XR_TSET,
     XR_TMAP,
     XR_TCLASS,
-    XR_TCLASS_BUILDER_UNUSED,  // Reserved slot, keep enum values stable
     XR_TINSTANCE,
     XR_TBOUND_METHOD,
     XR_TENUM_TYPE,
@@ -82,7 +81,6 @@ typedef enum {
     XR_TEXCEPTION,
     XR_TMODULE,
     XR_TITERATOR,
-    XR_TRESERVED,
     XR_TSTRINGBUILDER,
     XR_TJSON,
     XR_TSHAPE,
@@ -90,13 +88,11 @@ typedef enum {
     XR_TCHANNEL,
     XR_TBIGINT,
     XR_TCOROPOOL,
-    XR_TARRAY_SLICE,
     XR_TDATETIME,
     XR_TREGEX,
     XR_TLOGGER,
     XR_TRANGE,
     XR_TBLOB,     // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCONTEXT,  // DEPRECATED: kept for enum stability, no longer allocated
     XR_TCELL,     // Single-slot mutable capture cell (32B)
     XR_TTASK,     // Lightweight GC-managed coroutine handle (Task/Executor separation)
     XR_TNETCONN,      // Typed TCP / UDP / TLS connection handle (src/io/xnet_handle.h)
@@ -164,7 +160,6 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_SET,
                                   TYPE_NAME_MAP,
                                   TYPE_NAME_CLASS,
-                                  TYPE_NAME_CLASS_BUILDER,
                                   TYPE_NAME_INSTANCE,
                                   TYPE_NAME_BOUND_METHOD,
                                   TYPE_NAME_ENUM_TYPE,
@@ -173,7 +168,6 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_EXCEPTION,
                                   TYPE_NAME_MODULE,
                                   TYPE_NAME_ITERATOR,
-                                  "reserved",
                                   TYPE_NAME_STRINGBUILDER,
                                   TYPE_NAME_JSON,
                                   TYPE_NAME_SHAPE,
@@ -181,13 +175,11 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_CHANNEL,
                                   TYPE_NAME_BIGINT,
                                   TYPE_NAME_COROPOOL,
-                                  TYPE_NAME_ARRAY_SLICE,
                                   TYPE_NAME_DATETIME,
                                   TYPE_NAME_REGEX,
                                   TYPE_NAME_LOGGER,
                                   TYPE_NAME_RANGE,
                                   "blob",
-                                  "context",
                                   "cell",
                                   TYPE_NAME_TASK,
                                   "NetConn",

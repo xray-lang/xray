@@ -425,6 +425,9 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_WIDEN_F32]   = 1,
     [XI_LOAD_FIELD]  = 1,  [XI_STORE_FIELD] = 2,
     [XI_INDEX_GET]   = 2,  [XI_INDEX_SET]   = 3,
+    [XI_STRUCT_NEW]  = 1,     /* args[0]=class */
+    [XI_STRUCT_GET]  = 1,     /* args[0]=struct */
+    [XI_STRUCT_SET]  = 2,     /* args[0]=struct, args[1]=val */
     [XI_JSON_NEW]    = 0,     /* no args; aux carries field count + names */
     [XI_JSON_INIT_F] = 2,     /* args[0]=json, args[1]=val */
     [XI_JSON_GET_F]  = 1,     /* args[0]=json */

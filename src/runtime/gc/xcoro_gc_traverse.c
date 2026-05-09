@@ -33,8 +33,7 @@ void xr_gc_traverse_array(XrCoroGC *gc, XrGCHeader *obj) {
     if (!gc || !obj)
         return;
     struct XrArray *arr = (struct XrArray *) obj;
-    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY || XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY_SLICE,
-              "gc_traverse_array: object is not an array");
+    XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY, "gc_traverse_array: object is not an array");
 
     // Mark source array (for slices)
     if (arr->source) {

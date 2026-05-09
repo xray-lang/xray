@@ -31,6 +31,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../xglobals_table.h"
 #include "xclass_lookup.h"
+#include "../value/xstruct_layout.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -246,9 +247,25 @@ XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor 
         }
     }
 
-    // Set struct_layout for native struct storage
+    // Set struct_layout and VALUE_TYPE / FLAT_COPYABLE flags
     if (desc->struct_layout) {
         cls->struct_layout = desc->struct_layout;
+        cls->flags |= XR_CLASS_VALUE_TYPE;
+
+        /* A struct is flat-copyable (memcpy-safe) if none of its fields
+         * are nested struct instances that would need recursive deep copy.
+         * Primitives (int, float, bool) and strings (immutable, shared)
+         * are safe; nested structs are stored as heap pointers that
+         * would alias after a shallow memcpy. */
+        bool flat = true;
+        for (uint16_t fi = 0; fi < desc->struct_layout->field_count; fi++) {
+            if (desc->struct_layout->fields[fi].native_type == XR_NATIVE_STRUCT) {
+                flat = false;
+                break;
+            }
+        }
+        if (flat)
+            cls->flags |= XR_CLASS_FLAT_COPYABLE;
     }
 
     // Not yet initialized by static constructor

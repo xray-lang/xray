@@ -60,6 +60,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
 
     /* --- Reads heap memory --- */
     case XI_LOAD_FIELD:
+    case XI_STRUCT_GET:
     case XI_INDEX_GET:
     case XI_JSON_GET_F:
     case XI_GET_SHARED:
@@ -71,6 +72,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
 
     /* --- Writes heap memory (implies side effect) --- */
     case XI_STORE_FIELD:
+    case XI_STRUCT_SET:
     case XI_INDEX_SET:
     case XI_JSON_INIT_F:
     case XI_JSON_SET_F:
@@ -79,6 +81,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
 
     /* --- Allocation (read+write, side effect) --- */
+    case XI_STRUCT_NEW:
     case XI_JSON_NEW:
     case XI_JSON_DECODE:
     case XI_ARRAY_NEW:

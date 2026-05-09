@@ -317,11 +317,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TCHANNEL:
                 snprintf(buf, sizeof(buf), "<channel> @%p", (void *) hdr);
                 break;
-            case XR_TARRAY_SLICE: {
-                XrArray *slice = (XrArray *) hdr;
-                snprintf(buf, sizeof(buf), "Slice[%d] @%p", slice->length, (void *) hdr);
-                break;
-            }
             case XR_TREGEX:
                 snprintf(buf, sizeof(buf), "<regex> @%p", (void *) hdr);
                 break;

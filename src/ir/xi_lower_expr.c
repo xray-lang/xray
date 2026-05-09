@@ -24,6 +24,7 @@
 #include "../frontend/lexer/xlex.h"
 
 #include "../runtime/class/xenum.h"
+#include "../runtime/class/xclass_info.h"
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../base/xglobal_indices.h"
@@ -40,6 +41,24 @@ static const char *arena_strdup(XiFunc *f, const char *s) {
     if (!copy) return NULL;
     memcpy(copy, s, len + 1);
     return copy;
+}
+
+/* Return the XrStructLayout for a struct instance type, or NULL. */
+static XrStructLayout *struct_layout_of(struct XrType *t) {
+    if (!t || !t->is_value_type) return NULL;
+    if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS) return NULL;
+    if (!t->instance.class_ref) return NULL;
+    return t->instance.class_ref->struct_layout;
+}
+
+/* Find field index by name in a struct layout.  Returns -1 if not found. */
+static int struct_field_index(const XrStructLayout *layout, const char *name) {
+    if (!layout || !layout->field_names || !name) return -1;
+    for (int i = 0; i < layout->field_count; i++) {
+        if (layout->field_names[i] && strcmp(layout->field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
 }
 
 /* ========== Forward Declarations ========== */
@@ -512,6 +531,23 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 
+    /* Struct with compile-time layout → XI_STRUCT_GET (emitter decides
+     * whether to stack-allocate or fall back to OP_GETPROP) */
+    XrStructLayout *slayout = struct_layout_of(obj->type);
+    if (slayout) {
+        int sidx = struct_field_index(slayout, ma->name);
+        if (sidx >= 0) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_STRUCT_GET,
+                                       result_type, 1);
+            if (!v) return NULL;
+            v->args[0] = obj;
+            v->aux = (void *)slayout;
+            v->aux_int = sidx;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
+
     /* Sealed Json with known field → direct indexed access */
     int fidx = json_field_index(obj->type, ma->name);
     if (fidx >= 0) {
@@ -538,6 +574,24 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     if (!obj || !val) return NULL;
 
     struct XrType *result_type = val->type;
+
+    /* Struct with compile-time layout → XI_STRUCT_SET */
+    XrStructLayout *slayout = struct_layout_of(obj->type);
+    if (slayout) {
+        int sidx = struct_field_index(slayout, ms->member);
+        if (sidx >= 0) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET,
+                                       result_type, 2);
+            if (!v) return NULL;
+            v->args[0] = obj;
+            v->args[1] = val;
+            v->aux = (void *)slayout;
+            v->aux_int = sidx;
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
 
     /* Sealed Json with known field → direct indexed store */
     int fidx = json_field_index(obj->type, ms->member);
@@ -1346,8 +1400,6 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
         arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
     }
 
-    /* Resolve class name using the same chain as lower_variable:
-     * local variable → program-level shared → upvalue capture. */
     XiValue *cls = NULL;
     int var_id = xi_lower_var_find(l, 0, cname);
     if (var_id >= 0) {
@@ -1738,8 +1790,45 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 
-    /* If struct class resolved, create instance via constructor call */
+    /* Struct with layout: emit XI_STRUCT_NEW + XI_STRUCT_SET.
+     * Emitter decides stack vs heap based on local use-scan. */
     if (cls) {
+        XrStructLayout *slayout = NULL;
+        if (sname && l->analyzer) {
+            XaSymbol *sym = xa_analyzer_lookup(l->analyzer, sname);
+            if (sym) {
+                XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+                if (links && links->class_info)
+                    slayout = links->class_info->struct_layout;
+            }
+        }
+
+        if (slayout) {
+            XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW,
+                                          result_type, 1);
+            if (!inst) return NULL;
+            inst->args[0] = cls;
+            inst->aux = (void *)slayout;
+            inst->flags |= XI_FLAG_SIDE_EFFECT;
+            inst->line = (uint32_t)node->line;
+
+            for (int i = 0; i < n; i++) {
+                if (!val_vals[i] || !sl->field_names[i]) continue;
+                int fidx = struct_field_index(slayout, sl->field_names[i]);
+                if (fidx < 0) continue;
+                XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET,
+                                             l->type_void, 2);
+                if (!set) break;
+                set->args[0] = inst;
+                set->args[1] = val_vals[i];
+                set->aux = (void *)slayout;
+                set->aux_int = fidx;
+                set->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+            return inst;
+        }
+
+        /* No layout (generic struct) → constructor call fallback */
         XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
                                       result_type, 1);
         if (!call) return NULL;
@@ -1749,7 +1838,6 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         call->line = (uint32_t)node->line;
 
-        /* Set fields by name via XI_STORE_FIELD */
         for (int i = 0; i < n; i++) {
             if (!val_vals[i] || !sl->field_names[i]) continue;
             XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD,

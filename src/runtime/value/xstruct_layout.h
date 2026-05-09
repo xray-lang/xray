@@ -78,6 +78,7 @@ typedef struct XrStructLayout {
     uint16_t alignment;    // alignment requirement
     uint16_t field_count;  // number of fields
     uint16_t layout_id;    // global layout registry index
+    const char **field_names;  // [field_count] parallel to fields[], NULL-able
     XrStructFieldLayout fields[XR_MAX_STRUCT_FIELDS];
 } XrStructLayout;
 

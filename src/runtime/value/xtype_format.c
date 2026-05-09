@@ -168,8 +168,6 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_TYPE_PARAM) {
         return type->type_param.name ? type->type_param.name : "T";
     }
-    if (type->kind == XR_KIND_BYTES)
-        return "Array<uint8>";
     if (xr_type_is_named_class(type, "Regex"))
         return "Regex";
     if (xr_type_is_named_class(type, "BigInt"))

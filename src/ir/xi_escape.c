@@ -69,6 +69,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
 
         /* ---- HEAP_ESCAPE: stored into a heap object ---- */
         case XI_STORE_FIELD:    /* obj.field = value */
+        case XI_STRUCT_SET:     /* struct.field = value */
         case XI_INDEX_SET:      /* obj[key] = value */
         case XI_JSON_INIT_F:    /* json field init */
         case XI_JSON_SET_F:     /* json field set */
@@ -128,6 +129,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         /* ---- Container reads: no escape of the key/index arg ---- */
         case XI_INDEX_GET:
         case XI_LOAD_FIELD:
+        case XI_STRUCT_GET:
         case XI_JSON_GET_F:
             return XI_ESC_NONE;
 
@@ -191,6 +193,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         case XI_STR_CONCAT:
             return XI_ESC_NONE;  /* inputs consumed, new string produced */
 
+        case XI_STRUCT_NEW:     /* args[0] = class ref, not stored */
         case XI_CLASS_CREATE:
         case XI_REGEX_COMPILE:
             return XI_ESC_NONE;

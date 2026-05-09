@@ -57,7 +57,6 @@ typedef struct XrayCoreClasses {
 
     // Utility
     XrClass *stringBuilderClass;
-    XrClass *arraySliceClass;
     XrClass *processClass;
 } XrayCoreClasses;
 

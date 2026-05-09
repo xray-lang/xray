@@ -68,6 +68,9 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
     case XI_LOAD_FIELD: case XI_STORE_FIELD:
     case XI_INDEX_GET: case XI_INDEX_SET:
 
+    /* Struct native storage (direct bytecode: OP_NEW_STRUCT/STRUCT_GET/SET) */
+    case XI_STRUCT_NEW: case XI_STRUCT_GET: case XI_STRUCT_SET:
+
     /* Call family (the universal lowering target) */
     case XI_CALL:
     case XI_CALL_METHOD:

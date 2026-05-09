@@ -54,7 +54,6 @@ typedef enum XrTypeKind {
     XR_KIND_ARRAY,
     XR_KIND_MAP,
     XR_KIND_SET,
-    XR_KIND_BYTES,
     XR_KIND_CHANNEL,
     XR_KIND_JSON,
     XR_KIND_CLASS,
@@ -80,11 +79,10 @@ static inline bool xr_kind_is_primitive(XrTypeKind k) {
     return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING || k == XR_KIND_BOOL;
 }
 static inline bool xr_kind_is_container(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_BYTES;
+    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET;
 }
 static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
-    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_STRING ||
-           k == XR_KIND_BYTES;
+    return k == XR_KIND_ARRAY || k == XR_KIND_MAP || k == XR_KIND_SET || k == XR_KIND_STRING;
 }
 static inline bool xr_kind_is_object_like(XrTypeKind k) {
     return k == XR_KIND_JSON || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
@@ -265,7 +263,6 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         case XR_KIND_JSON:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
-        case XR_KIND_BYTES:
         case XR_KIND_INTERFACE:
         case XR_KIND_CLASS:
         case XR_KIND_FUNCTION:
@@ -351,7 +348,6 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
         case XR_KIND_JSON:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
-        case XR_KIND_BYTES:
         case XR_KIND_INTERFACE:
         case XR_KIND_CLASS:
             return XR_SLOT_PTR;
@@ -401,7 +397,6 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_JSON:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
-        case XR_KIND_BYTES:
         case XR_KIND_INTERFACE:
         case XR_KIND_CLASS:
         case XR_KIND_FUNCTION:
@@ -556,7 +551,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
 
     // Direction 2: any structured value flows into a Json sink. The
     // sink is a dynamic object, so accepting an instance / array / map
-    // / set / bytes / channel / unknown / null here does not lose
+    // / set / channel / unknown / null here does not lose
     // information. Json self-contains null, so `null` and the
     // analyzer's `unknown` placeholder are deliberately accepted —
     // forcing a manual `Json?` annotation would be redundant noise.
@@ -566,7 +561,6 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
             case XR_KIND_ARRAY:
             case XR_KIND_MAP:
             case XR_KIND_SET:
-            case XR_KIND_BYTES:
             case XR_KIND_CHANNEL:
             case XR_KIND_JSON:
             case XR_KIND_UNKNOWN:
