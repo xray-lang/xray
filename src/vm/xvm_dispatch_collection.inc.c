@@ -430,8 +430,8 @@ vmcase(OP_ARRAY_GETC) {
         R(a) = ch ? xr_string_value(ch) : xr_null();
         vmbreak;
     }
-    // Array / ArraySlice indexing
-    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
+    // Array indexing (includes slices — capacity==0 && source!=NULL)
+    if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         if (c < arr->length) {
             R(a) = (arr->elem_type == XR_ELEM_ANY) ? ((XrValue *) arr->data)[c]
@@ -534,7 +534,7 @@ vmcase(OP_ARRAY_SET) {
         }
         vmbreak;
     }
-    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
+    if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(R(b));
         XrValue _av = R(c);
@@ -631,7 +631,7 @@ vmcase(OP_ARRAY_SETC) {
         }
         vmbreak;
     }
-    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
+    if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         XrValue _acv = R(c);
         if (b < arr->length) {
@@ -669,7 +669,7 @@ vmcase(OP_ARRAY_SETC) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Bytes, TypedArray support constant index assignment");
+                     "only Array, Bytes, typed array support constant index assignment");
 }
 
 vmcase(OP_ARRAY_PUSH) {
@@ -975,8 +975,8 @@ vmcase(OP_INDEX_GET) {
         R(a) = ch ? xr_string_value(ch) : xr_null();
         vmbreak;
     }
-    // Fast path: Array (includes slices — XR_TARRAY_SLICE shares XrArray layout)
-    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
+    // Fast path: Array (includes slices — capacity==0 && source!=NULL)
+    if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(key_val);
         if ((unsigned) idx < (unsigned) arr->length) {
@@ -1055,7 +1055,7 @@ vmcase(OP_INDEX_GET) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Map, Json, String, Bytes, TypedArray support indexing");
+                     "only Array, Map, Json, String, Bytes, typed array support indexing");
 }
 
 vmcase(OP_INDEX_SET) {
@@ -1117,8 +1117,8 @@ vmcase(OP_INDEX_SET) {
         }
         vmbreak;
     }
-    // Fast path: Array (includes slices — XR_TARRAY_SLICE shares XrArray layout)
-    if (XR_IS_ARRAY_OR_SLICE(obj_val)) {
+    // Fast path: Array (includes slices — capacity==0 && source!=NULL)
+    if (XR_IS_ARRAY(obj_val)) {
         XrArray *arr = XR_TO_ARRAY(obj_val);
         int idx = (int) XR_TO_INT(key_val);
         if ((unsigned) idx < (unsigned) arr->length) {
@@ -1177,7 +1177,7 @@ vmcase(OP_INDEX_SET) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Map, Json, Bytes, TypedArray support index assignment");
+                     "only Array, Map, Json, Bytes, typed array support index assignment");
 }
 
 vmcase(OP_SLICE) {
@@ -1195,7 +1195,7 @@ vmcase(OP_SLICE) {
     int64_t end = XR_TO_INT(R(c + 1));
 
     // Array/slice: zero-copy, shared data
-    if (XR_IS_ARRAY_OR_SLICE(source)) {
+    if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
 
         // Use slice function

@@ -286,10 +286,10 @@
       "select block wait: A=ch_base, B=ch_count, C=case_count")                                    \
     _(GETSHARED, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = shared[Bx]")                                  \
     _(SETSHARED, FMT_GLOBAL, KOP_GLOBAL_SET, "shared[Bx] = R[A]")                                  \
-    _(TARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A].i = R[B]:TypedArray[R[C]]")                          \
-    _(TARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A].i = R[B]:TypedArray[C]")                        \
-    _(TARRAY_SET, FMT_ABC, KOP_ABC_INPLACE, "R[A]:TypedArray[R[B]] = R[C].i")                      \
-    _(TARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:TypedArray.push(R[B].i)")                         \
+    _(TARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:typed_array[R[C]]")                          \
+    _(TARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:typed_array[C]")                        \
+    _(TARRAY_SET, FMT_ABC, KOP_ABC_INPLACE, "R[A]:typed_array[R[B]] = R[C]")                      \
+    _(TARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:typed_array.push(R[B])")                         \
     _(TFIELD_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A].i = R[B]:compact_fields[C]")                     \
     _(TFIELD_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:compact_fields[B] = R[C].i")                 \
     _(LOOP_BACK, FMT_ABC, KOP_SPECIAL, "tail recursion: R[0..B-1]=R[A+1..A+B]; PC=entry")          \
