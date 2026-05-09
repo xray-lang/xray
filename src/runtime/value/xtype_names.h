@@ -168,6 +168,9 @@ typedef enum {
     XR_TID_TYPED_ARRAY,  // 34
     XR_TID_UPVALUE,      // 35
     XR_TID_ERROR,        // 36
+    // Analyzer-only type IDs (not returned by typeof at runtime)
+    XR_TID_WEAKMAP,      // 37
+    XR_TID_WEAKSET,      // 38
     XR_TID_COUNT
 } XrTypeId;
 

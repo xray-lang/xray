@@ -131,24 +131,11 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
 #define XR_GC_SET_STORAGE(gc, m) ((gc)->extra = ((gc)->extra & ~0x01) | ((m) & 0x01))
 #define XR_GC_IS_SHARED(gc) (XR_GC_GET_STORAGE(gc) == XR_GC_STORAGE_SHARED)
 
-/* ========== Instance Reified Type Args (uses extra bits 1-12) ========== */
-/*
- * Layout: [15:13 spare][12:8 tid1][7:3 tid0][2:1 argc][0 storage]
- *   argc: 0-3 type arguments
- *   tid0/tid1: XrTypeId (5 bits each, 0-31)
- */
-#define XR_INST_TYPE_ARGC(gc) (((gc)->extra >> 1) & 0x03)
-#define XR_INST_TYPE_ARG0(gc) (((gc)->extra >> 3) & 0x1F)
-#define XR_INST_TYPE_ARG1(gc) (((gc)->extra >> 8) & 0x1F)
-#define XR_INST_SET_TYPE_ARGS(gc, argc, tid0, tid1)                                                \
-    ((gc)->extra = ((gc)->extra & 0x01) | (((argc) & 0x03) << 1) | (((tid0) & 0x1F) << 3) |        \
-                   (((tid1) & 0x1F) << 8))
-
 /* ========== MMAP Flag (extra field bit 13) ========== */
 /*
  * Marks objects allocated via mmap (vs xr_malloc).
  * Used by both system heap (shared objects) and per-coro GC (large objects).
- * Bit 13 of extra is spare (bits 0-12 used by storage + type args).
+ * Bits 1-12 of extra are now spare (type args moved to XrClass.mono_type_arg_names).
  */
 #define XR_GC_FLAG_MMAP 0x2000
 #define XR_GC_IS_MMAP(gc) (((gc)->extra & XR_GC_FLAG_MMAP) != 0)

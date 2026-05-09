@@ -480,7 +480,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         // Set param_tags for callee's dynamic op tag lookups.
         // Derive tags from callee's param_types (the STORE_CORO builder path
         // does NOT populate call_arg_tags, so we use declared types).
-        // Callee prologue copies param_tags[i] → slot_runtime_tags[bc_slot].
+        // Callee prologue copies param_tags[i] → vreg_runtime_tags[i].
         for (int i = 0; i < nargs && i < 8; i++) {
             uint8_t tag = XR_TAG_I64;
             if (proto->param_types && i < proto->param_types_count && proto->param_types[i])

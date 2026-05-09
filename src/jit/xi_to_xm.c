@@ -618,15 +618,14 @@ generic_call:
         /* Method returns are polymorphic (int, bool, string, null, ptr).
          * Use I64 rep (raw payload in GP register) + TAGGED ctype so
          * the type pass does not narrow, allowing the dynamic tag patch
-         * to read the correct runtime tag from slot_runtime_tags[]. */
+         * to read the correct runtime tag from vreg_runtime_tags[]. */
         XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C,
                                   XR_REP_I64, fn_ref, encoded_ref);
         blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
         blk->ins[blk->nins - 1].ctype = (XmType){XM_TK_TAGGED, 0, 0};
         xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
-        /* Propagate bc_slot from Xi slot_map so the codegen can store
-         * the dynamic return tag into slot_runtime_tags[]. Without this,
-         * Xi IR vregs default to bc_slot=-1 and the tag is lost. */
+        /* Propagate bc_slot from Xi slot_map so deopt snapshots can
+         * reconstruct the correct bytecode register. */
         if (xm_ref_is_vreg(result) && ctx->slot_idx &&
             v->id < ctx->slot_idx_size) {
             int32_t si = ctx->slot_idx[v->id];
@@ -744,7 +743,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             /* Shared vars are dynamically typed: set XM_TK_TAGGED to
              * prevent the type pass from narrowing to I64, which would
-             * skip the slot_runtime_tags[] dynamic tag patch. */
+             * skip the vreg_runtime_tags[] dynamic tag patch. */
             blk->ins[blk->nins - 1].ctype = (XmType){XM_TK_TAGGED, 0, 0};
             /* Propagate bc_slot for runtime tag resolution */
             if (xm_ref_is_vreg(result) && ctx->slot_idx &&
@@ -1296,9 +1295,8 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func,
         XmRef vreg = xm_new_vreg(func, rep);
         if (param)
             set_ref(&ctx, param->id, vreg);
-        /* Params occupy bytecode slots 0..n-1. Setting bc_slot enables:
-         * (1) prologue to init slot_runtime_tags[] from param_tags[],
-         * (2) emit_call_args_from_pool to dynamic-patch UNKNOWN arg tags. */
+        /* Params occupy bytecode slots 0..n-1. Setting bc_slot enables
+         * deopt snapshots to reconstruct the correct bytecode registers. */
         uint32_t vi = XM_REF_INDEX(vreg);
         if (vi < func->nvreg)
             func->vregs[vi].bc_slot = (int16_t) i;

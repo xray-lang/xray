@@ -301,15 +301,14 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                 break;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) hdr;
-                const char *class_name =
-                    inst->klass && inst->klass->name ? inst->klass->name : "Instance";
+                const char *class_name = xr_class_display_name(inst->klass);
                 snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
                 break;
             }
             case XR_TCLASS: {
                 XrClass *klass = (XrClass *) hdr;
                 snprintf(buf, sizeof(buf), "class %s @%p",
-                         klass->name ? klass->name : "<anonymous>", (void *) hdr);
+                         xr_class_display_name(klass), (void *) hdr);
                 break;
             }
             case XR_TCOROUTINE:

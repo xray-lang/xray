@@ -163,6 +163,27 @@ static void cg_register_class_methods(XiCgenCtx *ctx, const XiFunc *parent,
     }
 }
 
+/* Find the shared slot index that holds a class by name.
+ * Returns -1 if not found. The slot holds the type_id (as xr_int).
+ * For `is` checks against a skeleton name (e.g. "Box"), prefer the
+ * skeleton class itself; xrt_instanceof walks generic_origin on each
+ * mono instance to match. */
+static int cg_find_class_slot(const XiCgenCtx *ctx, const char *class_name) {
+    if (!class_name) return -1;
+    int display_match = -1;
+    for (int s = 0; s < ctx->nshared && s < CG_MAX_SHARED; s++) {
+        const XiClassData *cd = ctx->shared_class[s];
+        if (!cd || !cd->class_name) continue;
+        /* Exact internal name match (skeleton or mono) */
+        if (strcmp(cd->class_name, class_name) == 0) return s;
+        /* display_name match: remember first, but keep scanning for exact */
+        if (display_match < 0 && cd->display_name
+            && strcmp(cd->display_name, class_name) == 0)
+            display_match = s;
+    }
+    return display_match;
+}
+
 /* Lookup constructor XiFunc for a class by name.
  * Scans module slot_classes instead of raw IR blocks. */
 static const XiFunc *cg_lookup_class_ctor(XiCgenCtx *ctx,
@@ -817,6 +838,25 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                     emit_vref(out, v->args[0]);
                     fprintf(out, ")");
                     break;
+                case XR_KIND_INSTANCE:
+                case XR_KIND_CLASS: {
+                    /* Class instanceof: resolve class name to shared slot holding
+                     * the type_id, then emit xrt_instanceof(val, tid). */
+                    const char *cname = target->instance.class_name;
+                    int slot = cg_find_class_slot(ctx, cname);
+                    if (slot >= 0) {
+                        fprintf(out, "xrt_instanceof(");
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, ", (uint16_t)%s[%d].i)", ctx->shared_name, slot);
+                    } else {
+                        /* Class not found in this module — fall back to tag check */
+                        fprintf(out, "(");
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, ".tag == %u) /* is %s: class not resolved */",
+                                (unsigned)XR_TAG_PTR, cname ? cname : "?");
+                    }
+                    break;
+                }
                 default: {
                     uint8_t tag = xr_type_to_xr_tag(target);
                     if (tag != 0xFF) {
@@ -1257,13 +1297,53 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             break;
         }
 
-        /* Class creation: the value itself is not used at runtime in AOT.
-         * Constructor calls go through the XI_CALL class_slot path which
-         * allocates instances and calls the constructor directly.
-         * Emit NULL_VAL so the SSA value has a valid C definition. */
-        case XI_CLASS_CREATE:
-            fprintf(out, "XR_NULL_VAL /* class descriptor */");
+        /* Class creation: register the type in xrt_type_table.
+         * For monomorphized classes, also link to skeleton via generic_origin
+         * and set concrete type arg display names for Reflect.typeOf. */
+        case XI_CLASS_CREATE: {
+            const XiClassData *cd = (const XiClassData *)v->aux;
+            if (!cd) {
+                fprintf(out, "XR_NULL_VAL /* class descriptor: no data */");
+                break;
+            }
+            const char *name = cd->class_name ? cd->class_name : "?";
+            if (cd->is_monomorphized && cd->display_name) {
+                /* Emit static type arg names array + register + set_generic.
+                 * The skeleton's type_id is resolved by scanning xrt_type_table
+                 * at runtime (skeleton is always registered first). */
+                fprintf(out, "({ ");
+                /* Emit static const char* array for type arg names */
+                if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+                    fprintf(out, "static const char *_ta_%s[] = {", name);
+                    for (int ti = 0; ti < cd->mono_type_arg_count; ti++) {
+                        fprintf(out, "%s\"%s\"",
+                                ti > 0 ? ", " : "",
+                                cd->mono_type_arg_names[ti] ? cd->mono_type_arg_names[ti] : "unknown");
+                    }
+                    fprintf(out, "}; ");
+                }
+                fprintf(out, "uint16_t _tid = xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0); ",
+                        name);
+                /* Find skeleton type_id by scanning the table for display_name match */
+                fprintf(out, "uint16_t _orig = 0; "
+                        "for (uint16_t _i = 1; _i < xrt_type_count; _i++) "
+                        "{ if (xrt_type_table[_i].name && strcmp(xrt_type_table[_i].name, \"%s\") == 0) "
+                        "{ _orig = _i; break; } } ",
+                        cd->display_name);
+                fprintf(out, "xrt_type_set_generic(_tid, _orig, \"%s\", ",
+                        cd->display_name);
+                if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+                    fprintf(out, "_ta_%s, %d", name, cd->mono_type_arg_count);
+                } else {
+                    fprintf(out, "NULL, 0");
+                }
+                fprintf(out, "); xr_int(_tid); })");
+            } else {
+                fprintf(out, "xr_int(xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0))",
+                        name);
+            }
             break;
+        }
 
         default:
             fprintf(out, "XR_NULL_VAL /* TODO: op %d */", v->op);

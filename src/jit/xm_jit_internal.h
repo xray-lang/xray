@@ -105,7 +105,7 @@ static inline XrValue jit_value_from_tag(int64_t raw, uint8_t xr_tag) {
 
 // Reconstruct XrValue from deopt slot: raw payload + Xm rep + xr_tag hint.
 // When xr_tag is known (0-15), reconstruction is exact — no address heuristic.
-// Callers should resolve xr_tag from slot_runtime_tags before calling this.
+// Callers should resolve xr_tag from vreg_runtime_tags before calling this.
 static inline XrValue deopt_reconstruct(int64_t raw, uint8_t xm_type, uint8_t xr_tag) {
     XrValue v;
     v.descriptor = 0;

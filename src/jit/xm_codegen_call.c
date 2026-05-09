@@ -81,9 +81,8 @@ static void emit_call_args_from_pool(CodegenCtx *ctx, XmIns *ins) {
     }
 
     // Dynamic patch: for args with UNKNOWN compile-time tag, load the
-    // precise runtime tag from slot_runtime_tags[bc_slot] and overwrite
-    // the 0xFF byte in call_arg_tags[i]. This eliminates heuristic
-    // type guessing in all CALL_C helpers.
+    // precise runtime tag from vreg_runtime_tags[vreg_idx] and overwrite
+    // the 0xFF byte in call_arg_tags[i]. Indexed by vreg, no bc_slot.
     for (uint16_t i = 0; i < vreg->call_nargs; i++) {
         uint8_t ct = (i < 8) ? (uint8_t) ((tag_pack[0] >> (i * 8)) & 0xFF)
                              : (uint8_t) ((tag_pack[1] >> ((i - 8) * 8)) & 0xFF);
@@ -93,19 +92,9 @@ static void emit_call_args_from_pool(CodegenCtx *ctx, XmIns *ins) {
         if (!xm_ref_is_vreg(arg))
             continue;
         uint32_t ai = XM_REF_INDEX(arg);
-        if (ai >= ctx->func->nvreg)
+        if (ai >= ctx->func->nvreg || ai >= XR_JIT_MAX_VREG_TAGS)
             continue;
-        int16_t bc_slot = ctx->func->vregs[ai].bc_slot;
-        if (bc_slot < 0 || bc_slot >= 256) {
-            /* UNKNOWN ctype + no bc_slot = tag is lost at runtime.
-             * This caused the regex JIT bug (commit 90ef326). Flag it
-             * so future occurrences are caught during development. */
-            XR_DCHECK(false,
-                      "emit_call_args_from_pool: UNKNOWN ctype vreg has "
-                      "bc_slot=-1, runtime tag will be 0xFF");
-            continue;
-        }
-        int32_t src_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
+        int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
         int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
         a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));
         a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, dst_off));
@@ -184,17 +173,14 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     a64_buf_emit(&ctx->buf, a64_mov(rd, A64_X0));
                 }
             }
-            // Store tag (from jit_ctx->call_result_tag) to slot_runtime_tags[bc_slot]
+            // Store tag (from jit_ctx->call_result_tag) to vreg_runtime_tags[vi]
             if (xm_ref_is_vreg(ins->dst)) {
                 uint32_t vi = XM_REF_INDEX(ins->dst);
-                if (vi < ctx->func->nvreg) {
-                    int16_t bc_slot = ctx->func->vregs[vi].bc_slot;
-                    if (bc_slot >= 0 && bc_slot < 256) {
-                        int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
-                        a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG,
-                                                         XM_JIT_CALL_RESULT_TAG_OFFSET));
-                        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
-                    }
+                if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS) {
+                    int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG,
+                                                     XM_JIT_CALL_RESULT_TAG_OFFSET));
+                    a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
                 }
             }
             break;
@@ -404,17 +390,16 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Save return value (x0) to x16
             a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG, A64_X0));
 
-            // Store tag (x1 = callee's tag from RET epilogue) to slot_runtime_tags
+            // Store tag (x1 = callee's tag from RET epilogue) to vreg_runtime_tags
             // before deopt check clobbers x17 (SCRATCH_REG2) with DEOPT_MARKER.
-            int16_t self_bc_slot = -1;
+            int32_t self_vreg_off = -1;
             if (xm_ref_is_vreg(ins->dst)) {
                 uint32_t vi = XM_REF_INDEX(ins->dst);
-                if (vi < ctx->func->nvreg)
-                    self_bc_slot = ctx->func->vregs[vi].bc_slot;
+                if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS)
+                    self_vreg_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
             }
-            if (self_bc_slot >= 0 && self_bc_slot < 256) {
-                int32_t stag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + self_bc_slot;
-                a64_buf_emit(&ctx->buf, a64_strb(A64_X1, JIT_CTX_REG, stag_off));
+            if (self_vreg_off >= 0) {
+                a64_buf_emit(&ctx->buf, a64_strb(A64_X1, JIT_CTX_REG, self_vreg_off));
             }
 
             // Deopt propagation check
@@ -456,12 +441,11 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             if (rd != A64_XZR) {
                 a64_buf_emit(&ctx->buf, a64_mov(rd, SCRATCH_REG));
             }
-            // Reload tag from slot_runtime_tags to x1: live-reg restore above
+            // Reload tag from vreg_runtime_tags to x1: live-reg restore above
             // clobbered x1. x1 must hold callee's tag for the CALLEE_SETS chain
             // (caller's RET epilogue skips overwriting x1 when CALLEE_SETS).
-            if (self_bc_slot >= 0 && self_bc_slot < 256) {
-                int32_t stag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + self_bc_slot;
-                a64_buf_emit(&ctx->buf, a64_ldrb(A64_X1, JIT_CTX_REG, stag_off));
+            if (self_vreg_off >= 0) {
+                a64_buf_emit(&ctx->buf, a64_ldrb(A64_X1, JIT_CTX_REG, self_vreg_off));
             }
             break;
         }
@@ -617,14 +601,11 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // on both the fast and slow paths through PATCH_CALL_C).
             if (xm_ref_is_vreg(ins->dst)) {
                 uint32_t vi = XM_REF_INDEX(ins->dst);
-                if (vi < ctx->func->nvreg) {
-                    int16_t bc_slot = ctx->func->vregs[vi].bc_slot;
-                    if (bc_slot >= 0 && bc_slot < 256) {
-                        int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
-                        a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG,
-                                                         XM_JIT_CALL_RESULT_TAG_OFFSET));
-                        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
-                    }
+                if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS) {
+                    int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG,
+                                                     XM_JIT_CALL_RESULT_TAG_OFFSET));
+                    a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
                 }
             }
             if (rd != A64_XZR) {
@@ -708,7 +689,7 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
             // pass-through. Callee prologue reads param_tags to init
-            // slot_runtime_tags for TAGGED params. Uses x17 (SCRATCH_REG2).
+            // vreg_runtime_tags for TAGGED params. Uses x17 (SCRATCH_REG2).
             for (uint64_t pi = 0; pi < nargs_val && pi < 8; pi++) {
                 int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + (pi + 1));
                 int32_t dst = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + pi * 8);
@@ -766,19 +747,16 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG, A64_X0));
 
-            // Save tag from call_result_tag to slot_runtime_tags[bc_slot].
+            // Save tag from call_result_tag to vreg_runtime_tags[vi].
             // Both fast path (BLR, callee stores x1→call_result_tag above) and
             // slow path (call_c_stub) leave the tag in call_result_tag.
             if (xm_ref_is_vreg(ins->dst)) {
                 uint32_t vi = XM_REF_INDEX(ins->dst);
-                if (vi < ctx->func->nvreg) {
-                    int16_t bc_slot_k = ctx->func->vregs[vi].bc_slot;
-                    if (bc_slot_k >= 0 && bc_slot_k < 256) {
-                        int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot_k;
-                        a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG,
-                                                         XM_JIT_CALL_RESULT_TAG_OFFSET));
-                        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
-                    }
+                if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS) {
+                    int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG,
+                                                     XM_JIT_CALL_RESULT_TAG_OFFSET));
+                    a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
                 }
             }
 

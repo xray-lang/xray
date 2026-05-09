@@ -111,6 +111,24 @@ XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor 
         return NULL;
     }
 
+    /* Monomorphized generics: set origin, display name, and concrete type names */
+    if (desc->is_monomorphized) {
+        xr_class_builder_set_display_name(builder, desc->display_name);
+        if (desc->generic_origin_name) {
+            XrClass *origin = xr_class_lookup_by_name(isolate, desc->generic_origin_name);
+            if (origin) {
+                xr_class_builder_set_generic_origin(builder, origin);
+            }
+        }
+        xr_class_builder_set_flags(builder, XR_CLASS_MONOMORPHIZED);
+
+        if (desc->mono_type_arg_count > 0 && desc->mono_type_arg_names) {
+            xr_class_builder_set_mono_type_arg_names(
+                builder, desc->mono_type_arg_names,
+                (uint8_t)desc->mono_type_arg_count);
+        }
+    }
+
     // Add instance fields
     for (uint32_t i = 0; i < desc->instance_field_count; i++) {
         XrFieldDescriptorEntry *field = &desc->instance_fields[i];

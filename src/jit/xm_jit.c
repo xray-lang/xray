@@ -1225,10 +1225,10 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
                 continue;
         }
 
-        // Resolve xr_tag: prefer compile-time tag, fallback to runtime tag
+        // Resolve xr_tag: prefer compile-time tag, fallback to vreg runtime tag
         uint8_t tag = s->xr_tag;
-        if (tag == XR_RTAG_UNKNOWN && bc >= 0 && bc < 256) {
-            uint8_t rt = coro->jit_ctx->slot_runtime_tags[bc];
+        if (tag == XR_RTAG_UNKNOWN && s->vreg_idx < XR_JIT_MAX_VREG_TAGS) {
+            uint8_t rt = coro->jit_ctx->vreg_runtime_tags[s->vreg_idx];
             if (rt != 0 && rt != XR_RTAG_UNKNOWN)
                 tag = rt;
         }

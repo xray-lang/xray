@@ -205,6 +205,7 @@ typedef struct {
     uint32_t suspend_smap_ids[16];        // smap id at each suspend point
     uint8_t suspend_result_regs[16];      // physical register for result per suspend_id
     int16_t suspend_result_bc_slots[16];  // bc_slot of result vreg per suspend_id
+    int32_t suspend_result_tag_offs[16];  // vreg_runtime_tags offset per suspend_id (-1=none)
     uint32_t nsuspend;                    // number of suspend points emitted
     uint32_t resume_entry_offset;         // byte offset of resume entry (0 = none)
 } X64CodegenCtx;

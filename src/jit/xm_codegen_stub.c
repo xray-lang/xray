@@ -513,7 +513,8 @@ XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *res
             rs->bc_slot = slot->bc_slot;
             rs->type = slot->rep;
             rs->xr_tag = slot->xr_tag;
-            memset(rs->_pad, 0, sizeof(rs->_pad));
+            rs->_pad = 0;
+            rs->vreg_idx = xm_ref_is_vreg(slot->value) ? (uint16_t) XM_REF_INDEX(slot->value) : 0xFFFF;
 
             XmRef ref = slot->value;
             if (xm_ref_is_none(ref))
@@ -762,12 +763,11 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
             a64_buf_emit(&ctx->buf, a64_ldr(rd, SCRATCH_REG2, XM_SUSPEND_RESULT_OFF));
         }
 
-        // Load result_tag and write to runtime_tags[bc_slot]
-        int16_t bc_slot = ctx->suspend_result_bc_slots[i];
-        if (bc_slot >= 0 && bc_slot < 256) {
+        // Load result_tag and write to vreg_runtime_tags[vi]
+        int32_t tag_off = ctx->suspend_result_tag_offs[i];
+        if (tag_off >= 0) {
             a64_buf_emit(&ctx->buf,
                          a64_ldrb(SCRATCH_REG, SCRATCH_REG2, (int32_t) XM_SUSPEND_RESULT_TAG_OFF));
-            int32_t tag_off = (int32_t) XM_JIT_SLOT_RUNTIME_TAGS_OFFSET + bc_slot;
             a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG, JIT_CTX_REG, tag_off));
         }
 

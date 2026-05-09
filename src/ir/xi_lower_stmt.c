@@ -13,9 +13,10 @@
 
 #include "xi_lower_internal.h"
 #include "xi.h"
+#include "../runtime/value/xtype.h"
+#include "../runtime/value/xtype_names.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../runtime/value/xtype.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 
@@ -1192,6 +1193,32 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         if (!init_val) return;
     } else {
         init_val = xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+
+    /* Propagate reified generic elem_tid when there is an explicit type
+     * annotation on a container literal (e.g. let a: Array<int> = [1,2]).
+     * Only the annotation distinguishes typed from untyped containers. */
+    if (node->as.var_decl.type_annotation && type) {
+        if (init_val->op == XI_ARRAY_NEW && XR_TYPE_IS_ARRAY(type) &&
+            type->container.element_type) {
+            uint8_t tid = xr_type_to_tid(type->container.element_type);
+            init_val->aux_int = (int64_t)((tid << 2) | ((uint8_t)init_val->aux_int & 0x03));
+        } else if (init_val->op == XI_SET_NEW && type->kind == XR_KIND_SET &&
+                   type->container.element_type) {
+            uint8_t tid = xr_type_to_tid(type->container.element_type);
+            init_val->aux_int = (int64_t)(((tid & 0x1F) << 2) | ((uint8_t)init_val->aux_int & 0x03));
+        } else if (init_val->op == XI_MAP_NEW && XR_TYPE_IS_MAP(type)) {
+            uint8_t flags = (uint8_t)(init_val->aux_int & 0x03);
+            uint8_t value_tid = 0, key_kind = 0;
+            if (type->map.value_type)
+                value_tid = xr_type_to_tid(type->map.value_type);
+            if (type->map.key_type) {
+                uint8_t ktid = xr_type_to_tid(type->map.key_type);
+                if (ktid == XR_TID_STRING) key_kind = 1;
+                else if (ktid == XR_TID_INT) key_kind = 2;
+            }
+            init_val->aux_int = (int64_t)((key_kind << 7) | ((value_tid & 0x1F) << 2) | flags);
+        }
     }
     /* When the initializer comes from a different variable, insert an
      * explicit copy so the new variable gets its own SSA value.  Without

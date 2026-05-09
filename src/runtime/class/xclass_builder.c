@@ -410,6 +410,40 @@ void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags) {
     }
 }
 
+/* ========== Monomorphized Generics ========== */
+
+void xr_class_builder_set_display_name(XrClassBuilder *builder, const char *display_name) {
+    XR_DCHECK(builder != NULL, "set_display_name: NULL builder");
+    if (builder != NULL) {
+        builder->display_name = display_name;
+    }
+}
+
+void xr_class_builder_set_generic_origin(XrClassBuilder *builder, XrClass *origin) {
+    XR_DCHECK(builder != NULL, "set_generic_origin: NULL builder");
+    if (builder != NULL) {
+        builder->generic_origin = origin;
+    }
+}
+
+void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder,
+                                               const char **type_arg_names, uint8_t argc) {
+    XR_DCHECK(builder != NULL, "set_mono_type_arg_names: NULL builder");
+    if (builder == NULL || argc == 0 || type_arg_names == NULL) return;
+    const char **copy = (const char **)xr_malloc(argc * sizeof(const char *));
+    if (copy == NULL) return;
+    for (uint8_t i = 0; i < argc; i++)
+        copy[i] = type_arg_names[i] ? xr_strdup(type_arg_names[i]) : NULL;
+    /* Free previous names if any */
+    if (builder->mono_type_arg_names) {
+        for (uint8_t i = 0; i < builder->mono_type_argc; i++)
+            xr_free((void *)builder->mono_type_arg_names[i]);
+        xr_free(builder->mono_type_arg_names);
+    }
+    builder->mono_type_arg_names = copy;
+    builder->mono_type_argc = argc;
+}
+
 // calculate_instance_size was a dead public API -- the actual instance
 // size computation lives inside finalize_fields in
 // xclass_builder_finalize.c, and no external consumer ever asked for a
@@ -433,5 +467,10 @@ void xr_class_builder_destroy(XrClassBuilder *builder) {
     xr_free(builder->static_methods);
     xr_free(builder->interfaces);
     xr_free(builder->abstract_methods);
+    if (builder->mono_type_arg_names) {
+        for (uint8_t i = 0; i < builder->mono_type_argc; i++)
+            xr_free((void *)builder->mono_type_arg_names[i]);
+        xr_free(builder->mono_type_arg_names);
+    }
     xr_free(builder);
 }

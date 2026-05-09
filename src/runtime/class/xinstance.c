@@ -135,7 +135,7 @@ XrValue xr_instance_get_field(XrayIsolate *X, XrInstance *inst, const char *name
     int index = xr_class_lookup_field_by_name(X, klass, name);
     if (index < 0) {
         xr_log_warning("instance", "field '%s' not found in class '%s'", name,
-                       klass->name ? klass->name : "<unnamed>");
+                       xr_class_display_name(klass));
         return xr_null();
     }
 
@@ -160,7 +160,7 @@ void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, X
     int index = xr_class_lookup_field_by_name(X, klass, name);
     if (index < 0) {
         xr_log_warning("instance", "field '%s' not found in class '%s'", name,
-                       klass->name ? klass->name : "<unnamed>");
+                       xr_class_display_name(klass));
         return;
     }
 
@@ -211,14 +211,14 @@ XrValue xr_instance_call_method(XrayIsolate *X, XrInstance *inst, const char *na
     SymbolId method_symbol = xr_symbol_lookup_in_table(sym_table, name);
     if (method_symbol == SYMBOL_INVALID) {
         xr_log_warning("instance", "method '%s' not found in class '%s'", name,
-                       klass->name ? klass->name : "<unnamed>");
+                       xr_class_display_name(klass));
         return xr_null();
     }
 
     XrMethod *method = xr_class_lookup_method(klass, method_symbol);
     if (!method) {
         xr_log_warning("instance", "method '%s' not found in class '%s'", name,
-                       klass->name ? klass->name : "<unnamed>");
+                       xr_class_display_name(klass));
         return xr_null();
     }
 
@@ -263,7 +263,7 @@ void xr_instance_print(XrInstance *inst) {
         return;
     }
 
-    const char *class_name = klass->name ? klass->name : "<unnamed>";
+    const char *class_name = xr_class_display_name(klass);
     printf("%s instance {\n", class_name);
 
     // Use instance field count (exclude static fields)

@@ -41,44 +41,62 @@
 
 /* ========== Name Mangling ========== */
 
-const char *xr_mono_type_tag(XrType *t) {
-    if (!t)
-        return "unknown";
-    switch (t->kind) {
-        case XR_KIND_INT:
-            return "i64";
-        case XR_KIND_FLOAT:
-            return "f64";
-        case XR_KIND_BOOL:
-            return "bool";
-        case XR_KIND_STRING:
-            return "str";
-        case XR_KIND_NULL:
-            return "null";
-        case XR_KIND_ARRAY:
-            return "arr";
-        case XR_KIND_MAP:
-            return "map";
-        case XR_KIND_SET:
-            return "set";
-        case XR_KIND_BYTES:
-            return "bytes";
-        case XR_KIND_JSON:
-            return "json";
-        case XR_KIND_CHANNEL:
-            return "chan";
-        case XR_KIND_INSTANCE:
-            return t->instance.class_name ? t->instance.class_name : "obj";
-        case XR_KIND_FUNCTION:
-            return "fn";
-        case XR_KIND_ENUM:
-            return t->enum_type.enum_name ? t->enum_type.enum_name : "enum";
-        default:
-            return "unknown";  // Fallback for types without a dedicated mono tag
+/* User-facing display name for a concrete type argument.
+ * Returns canonical names: "int", "float", "string", "bool", etc.
+ * For named/generic types, returns the type's own name (e.g. "Array"). */
+static const char *mono_type_display_name(XrTypeRef *t) {
+    if (!t) return "unknown";
+    switch ((XrTypeRefKind)t->kind) {
+        case XR_TREF_INT:
+        case XR_TREF_INT_WIDTH:    return "int";
+        case XR_TREF_FLOAT:
+        case XR_TREF_FLOAT_WIDTH:  return "float";
+        case XR_TREF_BOOL:         return "bool";
+        case XR_TREF_STRING:       return "string";
+        case XR_TREF_NULL:         return "null";
+        case XR_TREF_VOID:         return "void";
+        case XR_TREF_NAMED:
+        case XR_TREF_GENERIC:      return t->name ? t->name : "object";
+        case XR_TREF_FUNCTION:     return "function";
+        case XR_TREF_OPTIONAL:     return "optional";
+        case XR_TREF_TYPE_PARAM:   return t->name ? t->name : "T";
+        default:                   return "unknown";
     }
 }
 
-char *xr_mono_mangle(const char *name, XrType **type_args, int count) {
+const char *xr_mono_type_tag(XrTypeRef *t) {
+    if (!t)
+        return "unknown";
+    switch ((XrTypeRefKind)t->kind) {
+        case XR_TREF_INT:
+        case XR_TREF_INT_WIDTH:
+            return "i64";
+        case XR_TREF_FLOAT:
+        case XR_TREF_FLOAT_WIDTH:
+            return "f64";
+        case XR_TREF_BOOL:
+            return "bool";
+        case XR_TREF_STRING:
+            return "str";
+        case XR_TREF_NULL:
+            return "null";
+        case XR_TREF_VOID:
+            return "void";
+        case XR_TREF_NAMED:
+        case XR_TREF_GENERIC:
+            return t->name ? t->name : "obj";
+        case XR_TREF_FUNCTION:
+            return "fn";
+        case XR_TREF_OPTIONAL:
+            return "opt";
+        case XR_TREF_TYPE_PARAM:
+            return t->name ? t->name : "T";
+        default:
+            return "unknown";
+    }
+}
+
+char *xr_mono_mangle(const char *name, XrTypeRef **type_args, int count) {
     if (!name || count <= 0 || !type_args)
         return xr_strdup(name ? name : "");
 
@@ -115,144 +133,41 @@ char *xr_mono_mangle(const char *name, XrType **type_args, int count) {
 
 /* ========== Type Substitution ========== */
 
-static XrType *find_substitution(const char *name, XrMonoTypeMap *map, int count) {
-    if (!name || !map)
-        return NULL;
-    for (int i = 0; i < count; i++) {
-        if (map[i].param_name && strcmp(map[i].param_name, name) == 0)
-            return map[i].concrete_type;
-    }
-    return NULL;
-}
-
-XrType *xr_mono_type_substitute(XrType *type, XrMonoTypeMap *map, int map_count) {
+XrTypeRef *xr_mono_type_substitute(XrTypeRef *type, XrMonoTypeMap *map, int map_count) {
     if (!type || !map || map_count <= 0)
         return type;
 
-    // Direct substitution for type parameters
-    if (type->kind == XR_KIND_TYPE_PARAM) {
-        XrType *sub = find_substitution(type->type_param.name, map, map_count);
-        return sub ? sub : type;
+    /* Direct substitution for type parameters and named refs matching a param */
+    if ((type->kind == XR_TREF_TYPE_PARAM || type->kind == XR_TREF_NAMED) && type->name) {
+        for (int i = 0; i < map_count; i++) {
+            if (map[i].param_name && strcmp(type->name, map[i].param_name) == 0)
+                return map[i].concrete_type ? map[i].concrete_type : type;
+        }
     }
 
-    // Recurse into composite types
-    switch (type->kind) {
-        case XR_KIND_ARRAY:
-        case XR_KIND_SET:
-        case XR_KIND_CHANNEL: {
-            XrType *elem = xr_mono_type_substitute(type->container.element_type, map, map_count);
-            if (elem == type->container.element_type)
-                return type;
-            XrType *result = (XrType *) xr_calloc(1, sizeof(XrType));
-            *result = *type;
-            result->container.element_type = elem;
-            result->frozen = false;
-            return result;
-        }
-        case XR_KIND_MAP: {
-            XrType *k = xr_mono_type_substitute(type->map.key_type, map, map_count);
-            XrType *v = xr_mono_type_substitute(type->map.value_type, map, map_count);
-            if (k == type->map.key_type && v == type->map.value_type)
-                return type;
-            XrType *result = (XrType *) xr_calloc(1, sizeof(XrType));
-            *result = *type;
-            result->map.key_type = k;
-            result->map.value_type = v;
-            result->frozen = false;
-            return result;
-        }
-        case XR_KIND_FUNCTION: {
-            bool changed = false;
-            XrType *ret = xr_mono_type_substitute(type->function.return_type, map, map_count);
-            if (ret != type->function.return_type)
+    /* Recurse into children (OPTIONAL, UNION, GENERIC, FUNCTION, etc.) */
+    if (type->nchildren > 0 && type->children) {
+        bool changed = false;
+        XrTypeRef **new_children =
+            (XrTypeRef **)xr_calloc(type->nchildren, sizeof(XrTypeRef *));
+        if (!new_children) return type;
+        for (int i = 0; i < type->nchildren; i++) {
+            new_children[i] = xr_mono_type_substitute(type->children[i], map, map_count);
+            if (new_children[i] != type->children[i])
                 changed = true;
-
-            XrType **params = NULL;
-            if (type->function.param_count > 0) {
-                params = (XrType **) xr_calloc(type->function.param_count, sizeof(XrType *));
-                for (int i = 0; i < type->function.param_count; i++) {
-                    params[i] =
-                        xr_mono_type_substitute(type->function.param_types[i], map, map_count);
-                    if (params[i] != type->function.param_types[i])
-                        changed = true;
-                }
-            }
-            if (!changed) {
-                xr_free(params);
-                return type;
-            }
-            XrType *result = (XrType *) xr_calloc(1, sizeof(XrType));
-            *result = *type;
-            result->function.return_type = ret;
-            if (params)
-                result->function.param_types = params;
-            result->frozen = false;
-            return result;
         }
-        case XR_KIND_INSTANCE: {
-            if (type->instance.type_arg_count <= 0)
-                return type;
-            bool changed = false;
-            XrType **args = (XrType **) xr_calloc(type->instance.type_arg_count, sizeof(XrType *));
-            for (int i = 0; i < type->instance.type_arg_count; i++) {
-                args[i] = xr_mono_type_substitute(type->instance.type_args[i], map, map_count);
-                if (args[i] != type->instance.type_args[i])
-                    changed = true;
-            }
-            if (!changed) {
-                xr_free(args);
-                return type;
-            }
-            XrType *result = (XrType *) xr_calloc(1, sizeof(XrType));
-            *result = *type;
-            result->instance.type_args = args;
-            result->frozen = false;
-            return result;
-        }
-        case XR_KIND_TUPLE: {
-            if (type->tuple.element_count <= 0)
-                return type;
-            bool changed = false;
-            XrType **elems = (XrType **) xr_calloc(type->tuple.element_count, sizeof(XrType *));
-            for (int i = 0; i < type->tuple.element_count; i++) {
-                elems[i] = xr_mono_type_substitute(type->tuple.element_types[i], map, map_count);
-                if (elems[i] != type->tuple.element_types[i])
-                    changed = true;
-            }
-            if (!changed) {
-                xr_free(elems);
-                return type;
-            }
-            XrType *result = (XrType *) xr_calloc(1, sizeof(XrType));
-            *result = *type;
-            result->tuple.element_types = elems;
-            result->frozen = false;
-            return result;
-        }
-        case XR_KIND_UNION: {
-            if (type->union_type.member_count <= 0)
-                return type;
-            bool changed = false;
-            XrType **members =
-                (XrType **) xr_calloc(type->union_type.member_count, sizeof(XrType *));
-            for (int i = 0; i < type->union_type.member_count; i++) {
-                members[i] = xr_mono_type_substitute(type->union_type.members[i], map, map_count);
-                if (members[i] != type->union_type.members[i])
-                    changed = true;
-            }
-            if (!changed) {
-                xr_free(members);
-                return type;
-            }
-            XrType *result = (XrType *) xr_calloc(1, sizeof(XrType));
-            *result = *type;
-            result->union_type.members = members;
-            result->frozen = false;
-            return result;
-        }
-        default:
+        if (!changed) {
+            xr_free(new_children);
             return type;
+        }
+        XrTypeRef *result = (XrTypeRef *)xr_calloc(1, sizeof(XrTypeRef));
+        if (!result) { xr_free(new_children); return type; }
+        *result = *type;
+        result->children = new_children;
+        return result;
     }
+
+    return type;
 }
 
 /* ========== AST Clone ========== */
@@ -271,51 +186,11 @@ static AstNode **clone_node_array(AstNode **arr, int count, XrMonoTypeMap *map, 
     return result;
 }
 
-static XrType *sub_type(XrType *t, XrMonoTypeMap *map, int mc) {
-    return (map && mc > 0) ? xr_mono_type_substitute(t, map, mc) : t;
-}
-
-/* Convert a concrete XrType* to a heap-allocated XrTypeRef for mono clones.
- * Covers the common cases needed by monomorphization substitution. */
-static XrTypeRef *tref_from_xrtype(XrType *t) {
-    if (!t) return NULL;
-    XrTypeRef *r = (XrTypeRef *)xr_calloc(1, sizeof(XrTypeRef));
-    if (!r) return NULL;
-    switch (t->kind) {
-        case XR_KIND_INT:    r->kind = XR_TREF_INT; break;
-        case XR_KIND_FLOAT:  r->kind = XR_TREF_FLOAT; break;
-        case XR_KIND_STRING: r->kind = XR_TREF_STRING; break;
-        case XR_KIND_BOOL:   r->kind = XR_TREF_BOOL; break;
-        case XR_KIND_VOID:   r->kind = XR_TREF_VOID; break;
-        case XR_KIND_NULL:   r->kind = XR_TREF_NULL; break;
-        default:
-            /* For named/class types, use NAMED with the best name available */
-            r->kind = XR_TREF_NAMED;
-            if (t->kind == XR_KIND_CLASS && t->instance.class_name)
-                r->name = xr_strdup(t->instance.class_name);
-            else if (t->kind == XR_KIND_INSTANCE && t->instance.class_name)
-                r->name = xr_strdup(t->instance.class_name);
-            else
-                r->kind = XR_TREF_UNKNOWN;
-            break;
-    }
-    return r;
-}
-
 /* Substitute type parameters in an XrTypeRef tree.
- * Returns a new XrTypeRef (heap-allocated) if substitution occurred,
+ * Returns a new XrTypeRef if substitution occurred,
  * or the original pointer unchanged. */
 static XrTypeRef *sub_tref(XrTypeRef *t, XrMonoTypeMap *map, int mc) {
-    if (!t || !map || mc <= 0) return t;
-    /* NAMED or TYPE_PARAM refs can match type params */
-    if ((t->kind == XR_TREF_NAMED || t->kind == XR_TREF_TYPE_PARAM) && t->name) {
-        for (int i = 0; i < mc; i++) {
-            if (map[i].param_name && strcmp(t->name, map[i].param_name) == 0) {
-                return tref_from_xrtype(map[i].concrete_type);
-            }
-        }
-    }
-    return t;
+    return (map && mc > 0) ? xr_mono_type_substitute(t, map, mc) : t;
 }
 
 static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count,
@@ -349,16 +224,6 @@ static char **clone_str_array(char **arr, int count) {
     char **result = (char **) xr_calloc(count, sizeof(char *));
     for (int i = 0; i < count; i++) {
         result[i] = clone_str(arr[i]);
-    }
-    return result;
-}
-
-static XrType **clone_type_array(XrType **arr, int count, XrMonoTypeMap *map, int mc) {
-    if (!arr || count <= 0)
-        return NULL;
-    XrType **result = (XrType **) xr_calloc(count, sizeof(XrType *));
-    for (int i = 0; i < count; i++) {
-        result[i] = sub_type(arr[i], map, mc);
     }
     return result;
 }
@@ -878,32 +743,65 @@ void xa_mono_collector_free(XaMonoCollector *c) {
     c->capacity = 0;
 }
 
-// Compute slot-type signature for deduplication: combine slot types of all type args.
-// Uses xr_type_to_slot_type (not xr_type_rep) to distinguish bool from int —
-// both share XR_REP_I64 but have different slot types (BOOL=11 vs I64=7).
-static uint32_t compute_rep_signature(XrType **type_args, int count) {
+/* Derive a slot-type category from XrTypeRef for rep-sharing dedup.
+ * Returns a 4-bit value: distinguishes int/float/bool/string/ptr(ref). */
+static uint8_t tref_slot_category(XrTypeRef *t) {
+    if (!t) return XR_SLOT_ANY;
+    switch ((XrTypeRefKind)t->kind) {
+        case XR_TREF_INT:
+        case XR_TREF_INT_WIDTH:   return XR_SLOT_I64;
+        case XR_TREF_FLOAT:
+        case XR_TREF_FLOAT_WIDTH: return XR_SLOT_F64;
+        case XR_TREF_BOOL:        return XR_SLOT_BOOL;
+        case XR_TREF_STRING:      return XR_SLOT_PTR;
+        case XR_TREF_NAMED:
+        case XR_TREF_GENERIC:
+        case XR_TREF_OPTIONAL:
+        case XR_TREF_FUNCTION:    return XR_SLOT_PTR;
+        default:                  return XR_SLOT_ANY;
+    }
+}
+
+// Compute slot-type signature for deduplication: combine slot categories.
+// Distinguishes bool from int (BOOL=11 vs I64=7) for function generics.
+static uint32_t compute_rep_signature(XrTypeRef **type_args, int count) {
     uint32_t sig = 0;
     for (int i = 0; i < count && i < 8; i++) {
-        uint8_t st = type_args[i] ? xr_type_to_slot_type(type_args[i]) : XR_SLOT_ANY;
+        uint8_t st = tref_slot_category(type_args[i]);
         sig = (sig << 4) | (st & 0xF);
     }
     return sig;
 }
 
-const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, XrType **type_args,
-                                  int type_arg_count) {
+const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, XrTypeRef **type_args,
+                                  int type_arg_count, bool is_class_generic) {
     if (!c || !generic_name)
         return NULL;
 
     uint32_t rep_sig = compute_rep_signature(type_args, type_arg_count);
 
-    // Check for duplicate (same generic + same rep signature)
-    // Also count per-generic instances for limit check
+    /* Pre-compute mangled name for class/struct generics so we can
+     * do exact-name dedup instead of rep-signature dedup. This avoids
+     * conflating Box<string> and Box<MyClass> which share XR_SLOT_PTR. */
+    char *candidate_mangled = NULL;
+    if (is_class_generic) {
+        candidate_mangled = xr_mono_mangle(generic_name, type_args, type_arg_count);
+    }
+
+    // Check for duplicate; class generics compare by mangled name,
+    // function generics compare by rep-signature (allows rep-sharing).
     int per_generic = 0;
     for (int i = 0; i < c->count; i++) {
         if (strcmp(c->instances[i].generic_name, generic_name) == 0) {
-            if (c->instances[i].rep_signature == rep_sig &&
-                c->instances[i].type_arg_count == type_arg_count) {
+            bool is_dup = false;
+            if (is_class_generic && candidate_mangled) {
+                is_dup = (strcmp(c->instances[i].mangled_name, candidate_mangled) == 0);
+            } else {
+                is_dup = (c->instances[i].rep_signature == rep_sig &&
+                          c->instances[i].type_arg_count == type_arg_count);
+            }
+            if (is_dup) {
+                xr_free(candidate_mangled);
                 return c->instances[i].mangled_name;  // Already registered
             }
             per_generic++;
@@ -916,6 +814,7 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, 
                        "monomorphization limit reached (%d instances), "
                        "skipping %s",
                        XR_MONO_MAX_INSTANCES, generic_name);
+        xr_free(candidate_mangled);
         return NULL;
     }
 
@@ -923,6 +822,7 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, 
     if (per_generic >= XR_MONO_MAX_PER_GENERIC) {
         xr_log_warning("mono", "too many instantiations of '%s' (%d), skipping", generic_name,
                        XR_MONO_MAX_PER_GENERIC);
+        xr_free(candidate_mangled);
         return NULL;
     }
 
@@ -937,25 +837,40 @@ const char *xa_mono_collector_add(XaMonoCollector *c, const char *generic_name, 
     inst->generic_name = xr_strdup(generic_name);
     inst->type_args = type_args;
     inst->type_arg_count = type_arg_count;
-    inst->mangled_name = xr_mono_mangle(generic_name, type_args, type_arg_count);
+    inst->mangled_name = candidate_mangled ? candidate_mangled
+                                           : xr_mono_mangle(generic_name, type_args, type_arg_count);
     inst->rep_signature = rep_sig;
+    inst->is_class_generic = is_class_generic;
     return inst->mangled_name;
 }
 
-// Lookup mangled name by rep-signature matching (same dedup logic as add)
+// Lookup mangled name (same dedup logic as add: class generics by name,
+// function generics by rep-signature).
 static const char *xa_mono_collector_lookup(XaMonoCollector *c, const char *generic_name,
-                                            XrType **type_args, int type_arg_count) {
+                                            XrTypeRef **type_args, int type_arg_count) {
     if (!c || !generic_name)
         return NULL;
     uint32_t rep_sig = compute_rep_signature(type_args, type_arg_count);
+    char *candidate_mangled = xr_mono_mangle(generic_name, type_args, type_arg_count);
+    const char *result = NULL;
     for (int i = 0; i < c->count; i++) {
-        if (c->instances[i].rep_signature == rep_sig &&
-            strcmp(c->instances[i].generic_name, generic_name) == 0 &&
-            c->instances[i].type_arg_count == type_arg_count) {
-            return c->instances[i].mangled_name;
+        if (strcmp(c->instances[i].generic_name, generic_name) != 0)
+            continue;
+        if (c->instances[i].is_class_generic) {
+            if (candidate_mangled && strcmp(c->instances[i].mangled_name, candidate_mangled) == 0) {
+                result = c->instances[i].mangled_name;
+                break;
+            }
+        } else {
+            if (c->instances[i].rep_signature == rep_sig &&
+                c->instances[i].type_arg_count == type_arg_count) {
+                result = c->instances[i].mangled_name;
+                break;
+            }
         }
     }
-    return NULL;
+    xr_free(candidate_mangled);
+    return result;
 }
 
 /* ========== Mono Pass Collect + Instantiate + Rewrite ========== */
@@ -1070,7 +985,10 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             const char *fn_name = call->callee->as.variable.name;
             XaGenericDecl *decl = registry_find(registry, fn_name);
             if (decl && decl->type_param_count == call->type_arg_count) {
-                xa_mono_collector_add(collector, fn_name, call->type_args, call->type_arg_count);
+                bool is_cls = (decl->node->type == AST_CLASS_DECL ||
+                               decl->node->type == AST_STRUCT_DECL);
+                xa_mono_collector_add(collector, fn_name, call->type_args,
+                                      call->type_arg_count, is_cls);
             }
         }
         // Recurse into callee and arguments
@@ -1084,7 +1002,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
     if (node->type == AST_NEW_EXPR) {
         NewExprNode *ne = &node->as.new_expr;
         if (ne->type_arg_count > 0) {
-            xa_mono_collector_add(collector, ne->class_name, ne->type_args, ne->type_arg_count);
+            xa_mono_collector_add(collector, ne->class_name, ne->type_args,
+                                  ne->type_arg_count, true);
         }
         for (int i = 0; i < ne->arg_count; i++)
             collect_instantiation_sites(ne->arguments[i], registry, collector);
@@ -1098,7 +1017,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             XaGenericDecl *decl = registry_find(registry, sl->struct_name);
             if (decl && decl->type_param_count == sl->type_arg_count) {
                 xa_mono_collector_add(collector, sl->struct_name, sl->type_args,
-                                      sl->type_arg_count);
+                                      sl->type_arg_count, true);
             }
         }
         for (int i = 0; i < sl->field_count; i++)
@@ -1310,8 +1229,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 if (mangled) {
                     // Old class_name is arena-allocated, do not free.
                     ne->class_name = xr_strdup(mangled);
-                    ne->type_args = NULL;
-                    ne->type_arg_count = 0;
+                    // Keep type_args/type_arg_count for display and diagnostics.
                 }
             }
         }
@@ -1512,17 +1430,66 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             cloned->as.class_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.class_decl.type_param_count = 0;
             cloned->as.class_decl.type_params = NULL;
+            cloned->as.class_decl.is_monomorphized = true;
+            cloned->as.class_decl.generic_origin_name = xr_strdup(inst->generic_name);
+            cloned->as.class_decl.display_name = xr_strdup(inst->generic_name);
+            /* Store concrete type arg display names for Reflect.typeOf */
+            if (inst->type_arg_count > 0 && inst->type_args) {
+                const char **names = (const char **)xr_calloc(
+                    inst->type_arg_count, sizeof(const char *));
+                if (names) {
+                    for (int ti = 0; ti < inst->type_arg_count; ti++)
+                        names[ti] = mono_type_display_name(inst->type_args[ti]);
+                    cloned->as.class_decl.mono_type_arg_names = names;
+                    cloned->as.class_decl.mono_type_arg_count = inst->type_arg_count;
+                }
+            }
+            if (decl->node && decl->node->type == AST_CLASS_DECL) {
+                decl->node->as.class_decl.is_generic_skeleton = true;
+            }
         } else if (cloned->type == AST_STRUCT_DECL) {
             xr_free(cloned->as.struct_decl.name);
             cloned->as.struct_decl.name = xr_strdup(inst->mangled_name);
             cloned->as.struct_decl.type_param_count = 0;
             cloned->as.struct_decl.type_params = NULL;
+            cloned->as.struct_decl.is_monomorphized = true;
+            cloned->as.struct_decl.generic_origin_name = xr_strdup(inst->generic_name);
+            cloned->as.struct_decl.display_name = xr_strdup(inst->generic_name);
+            if (inst->type_arg_count > 0 && inst->type_args) {
+                const char **names = (const char **)xr_calloc(
+                    inst->type_arg_count, sizeof(const char *));
+                if (names) {
+                    for (int ti = 0; ti < inst->type_arg_count; ti++)
+                        names[ti] = mono_type_display_name(inst->type_args[ti]);
+                    cloned->as.struct_decl.mono_type_arg_names = names;
+                    cloned->as.struct_decl.mono_type_arg_count = inst->type_arg_count;
+                }
+            }
+            if (decl->node && decl->node->type == AST_STRUCT_DECL) {
+                decl->node->as.struct_decl.is_generic_skeleton = true;
+            }
         }
 
-        // Inject into program (grow array if needed).
-        // The initial prog->statements is arena-allocated by the parser; we
-        // must not xr_free/xr_realloc it. On the first overflow, allocate a
-        // heap buffer and memcpy. After that, normal xr_realloc is safe.
+        // Find the position of the original generic declaration so we insert
+        // the monomorphized clone right after it. This ensures the specialized
+        // class/function is defined before any call site that uses it.
+        int insert_pos = prog->count;  // fallback: append
+        for (int j = 0; j < prog->count; j++) {
+            AstNode *sj = prog->statements[j];
+            if (!sj) continue;
+            // Unwrap export wrapper
+            if (sj->type == AST_EXPORT_STMT && sj->as.export_stmt.declaration)
+                sj = sj->as.export_stmt.declaration;
+            if (sj == decl->node) {
+                insert_pos = j + 1;
+                break;
+            }
+        }
+
+        // Grow array if needed. The initial prog->statements is arena-
+        // allocated by the parser; we must not xr_free/xr_realloc it.
+        // On the first overflow, allocate a heap buffer and memcpy.
+        // After that, normal xr_realloc is safe.
         if (prog->count >= prog->capacity) {
             int new_cap = prog->capacity ? prog->capacity * 2 : (prog->count + 16);
             AstNode **new_buf = (AstNode **) xr_malloc((size_t) new_cap * sizeof(AstNode *));
@@ -1536,7 +1503,14 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
             prog->capacity = new_cap;
             heap_owned = true;
         }
-        prog->statements[prog->count++] = cloned;
+        // Shift statements after insert_pos to make room
+        if (insert_pos < prog->count) {
+            memmove(&prog->statements[insert_pos + 1],
+                    &prog->statements[insert_pos],
+                    (size_t)(prog->count - insert_pos) * sizeof(AstNode *));
+        }
+        prog->statements[insert_pos] = cloned;
+        prog->count++;
     }
 }
 

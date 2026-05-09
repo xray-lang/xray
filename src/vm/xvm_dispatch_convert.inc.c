@@ -287,7 +287,6 @@ vmcase(OP_COPY) {
             if (_new) {
                 memcpy(_new->fields, _inst->fields, sizeof(XrValue) * _fc);
                 _new->klass = _cls;
-                _new->gc.extra = (_new->gc.extra & 0x01) | (_inst->gc.extra & ~0x01);
                 R(a) = XR_FROM_PTR(_new);
                 vmbreak;
             }

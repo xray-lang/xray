@@ -351,8 +351,6 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     if (!new_inst)
         return XR_NULL_VAL;
     xr_instance_init_inplace(new_inst, cls);
-    // Propagate reified type args from gc.extra
-    new_inst->gc.extra = (new_inst->gc.extra & 0x01) | (inst->gc.extra & ~0x01);
 
     XrValue result = XR_FROM_PTR(new_inst);
     xr_copy_context_record(ctx, inst, result);
@@ -679,8 +677,6 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
         return XR_NULL_VAL;
     xr_instance_init_inplace(new_inst, cls);
     XR_GC_SET_STORAGE(&new_inst->gc, XR_GC_STORAGE_SHARED);
-    // Propagate reified type args from gc.extra
-    new_inst->gc.extra = (new_inst->gc.extra & 0x01) | (inst->gc.extra & ~0x01);
     xr_shared_set_refc(&new_inst->gc, 1);
     uint32_t field_count = xr_class_instance_field_count(cls);
     for (uint32_t i = 0; i < field_count; i++)

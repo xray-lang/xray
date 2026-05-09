@@ -30,6 +30,10 @@ static const char xr_native_def_string[] = "// Built-in string type — implemen
 
 static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    length: int\n    append(value: Json): StringBuilder\n    toString(): string\n    clear(): StringBuilder\n}\n";
 
+static const char xr_native_def_weakmap[] = "// Built-in WeakMap type — weak-reference map, keys must be heap objects\n\n@native\nclass WeakMap {\n    get(key: Json): Json?\n    set(key: Json, value: Json): void\n    has(key: Json): bool\n    delete(key: Json): bool\n}\n";
+
+static const char xr_native_def_weakset[] = "// Built-in WeakSet type — weak-reference set, elements must be heap objects\n\n@native\nclass WeakSet {\n    add(value: Json): void\n    has(value: Json): bool\n    delete(value: Json): bool\n}\n";
+
 #define XR_NATIVE_TYPE_DEFS(X) \
     X("array", xr_native_def_array) \
     X("bigint", xr_native_def_bigint) \
@@ -45,5 +49,7 @@ static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder typ
     X("regex", xr_native_def_regex) \
     X("set", xr_native_def_set) \
     X("string", xr_native_def_string) \
-    X("stringbuilder", xr_native_def_stringbuilder)
+    X("stringbuilder", xr_native_def_stringbuilder) \
+    X("weakmap", xr_native_def_weakmap) \
+    X("weakset", xr_native_def_weakset)
 

@@ -1010,7 +1010,7 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
 
         if (!instance) {
             VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_CALL, "failed to create instance: '%s'",
-                          klass->name);
+                          xr_class_display_name(klass));
         }
         XrValue inst_val = XR_FROM_PTR(instance);
 

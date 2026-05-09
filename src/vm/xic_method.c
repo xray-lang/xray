@@ -114,7 +114,7 @@ void xr_ic_method_dump_feedback(const XrICMethod *cache, int pc_offset, const ch
     for (int i = 0; i < cache->count; i++) {
         const XrICEntry *e = &cache->entries[i];
         double pct = cache->total_count > 0 ? 100.0 * e->hit_count / cache->total_count : 0.0;
-        fprintf(stderr, "  %s:%.1f%%", e->klass ? e->klass->name : "?", pct);
+        fprintf(stderr, "  %s:%.1f%%", e->klass ? xr_class_display_name(e->klass) : "?", pct);
     }
     fprintf(stderr, "\n");
 }
@@ -161,7 +161,7 @@ void xr_ic_method_print_stats(const XrICMethod *cache, const char *name) {
 
     for (int i = 0; i < cache->count; i++) {
         if (cache->entries[i].klass) {
-            printf("  [%d] class=%s\n", i, cache->entries[i].klass->name);
+            printf("  [%d] class=%s\n", i, xr_class_display_name(cache->entries[i].klass));
         }
     }
 }

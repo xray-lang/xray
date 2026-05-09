@@ -278,8 +278,6 @@
     _(TARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:TypedArray.push(R[B].i)")                         \
     _(TFIELD_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A].i = R[B]:compact_fields[C]")                     \
     _(TFIELD_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:compact_fields[B] = R[C].i")                 \
-    _(INST_TYPE_ARGS, FMT_ABx, KOP_ABx_LAYOUT,                                                     \
-      "R[A]:Instance.gc.extra = packed type args from Bx")                                         \
     _(LOOP_BACK, FMT_ABC, KOP_SPECIAL, "tail recursion: R[0..B-1]=R[A+1..A+B]; PC=entry")          \
     _(NEW_STRUCT, FMT_ABC, KOP_ABC_BIN_LIT,                                                        \
       "R[A] = alloc struct in struct_area (B=class reg, C=slot offset)")                           \
