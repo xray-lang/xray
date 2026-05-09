@@ -1432,6 +1432,27 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     if (!cls) {
         cls = xi_const_null(l->func, l->cur_block, l->type_null);
     }
+
+    /* Zero-arg struct with compile-time layout → XI_STRUCT_NEW.
+     * The emitter decides stack vs heap via struct_can_stack_alloc. */
+    if (ne->arg_count == 0 && ne->module_name == NULL && l->analyzer) {
+        XaSymbol *sym = xa_analyzer_lookup(l->analyzer, cname);
+        if (sym) {
+            XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+            if (links && links->class_info && links->class_info->struct_layout) {
+                XrStructLayout *slayout = links->class_info->struct_layout;
+                XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW,
+                                              result_type, 1);
+                if (!inst) return NULL;
+                inst->args[0] = cls;
+                inst->aux = (void *)slayout;
+                inst->flags |= XI_FLAG_SIDE_EFFECT;
+                inst->line = (uint32_t)node->line;
+                return inst;
+            }
+        }
+    }
+
     uint16_t nargs = (uint16_t)(n + 1);
     XiValue *call = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
                                   result_type, nargs);
