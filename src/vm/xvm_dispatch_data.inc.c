@@ -67,6 +67,83 @@ vmcase(OP_UNBOX_F64) {
     vmbreak;
 }
 
+// Narrow: truncate tagged int/float to sub-width, re-extend back.
+// The value stays tagged — only the numeric range changes.
+vmcase(OP_NARROW_I8) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(int8_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_NARROW_U8) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(uint8_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_NARROW_I16) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(int16_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_NARROW_U16) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(uint16_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_NARROW_I32) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(int32_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_NARROW_U32) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(uint32_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_NARROW_F32) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_FLOAT((double)(float)XR_TO_FLOAT(R(b)));
+    vmbreak;
+}
+
+// Widen: sign/zero extend sub-width value back to full width.
+// Semantically identical to NARROW for these bit widths, but placed
+// at load points to make the extension direction explicit.
+vmcase(OP_WIDEN_I8) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(int8_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_WIDEN_U8) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(uint8_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_WIDEN_I16) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(int16_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_WIDEN_U16) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(uint16_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_WIDEN_I32) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(int32_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_WIDEN_U32) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_INT((int64_t)(uint32_t)XR_TO_INT(R(b)));
+    vmbreak;
+}
+vmcase(OP_WIDEN_F32) {
+    int a = GETARG_A(i), b = GETARG_B(i);
+    R(a) = XR_FROM_FLOAT((double)(float)XR_TO_FLOAT(R(b)));
+    vmbreak;
+}
+
 vmcase(OP_ARRAY_GET_NOCHECK) {
     // Array access without bounds check (compiler proved index is valid)
     int a = GETARG_A(i);

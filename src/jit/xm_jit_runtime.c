@@ -597,8 +597,8 @@ XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
             return (XrJitResult){str->length == 0 ? 1 : 0, XR_TAG_I64};
     }
 
-    // Array / ArraySlice properties
-    if (heap_type == XR_TARRAY || heap_type == XR_TARRAY_SLICE) {
+    // Array properties (slices share XR_TARRAY with capacity==0)
+    if (heap_type == XR_TARRAY) {
         XrArray *arr = (XrArray *) obj.ptr;
         if (sym == SYMBOL_LENGTH)
             return (XrJitResult){(int64_t) arr->length, XR_TAG_I64};
@@ -750,7 +750,7 @@ XrJitResult xr_jit_index_set(XrCoroutine *coro, int64_t extra_arg) {
 
 // Called from JIT via CALL_C for OP_TARRAY_GET.
 // jit_call_args[0] = array ptr (raw), jit_call_args[1] = index (raw i64)
-// Returns raw i64 value from typed array (no tag).
+// Returns tagged XrJitResult via shared xr_typed_get (handles all elem types).
 XrJitResult xr_jit_tarray_get(XrCoroutine *coro, int64_t unused) {
     (void) unused;
     XrArray *arr = (XrArray *) coro->jit_ctx->call_args[0];
@@ -759,16 +759,8 @@ XrJitResult xr_jit_tarray_get(XrCoroutine *coro, int64_t unused) {
     if (!arr || idx < 0 || idx >= arr->length)
         return XR_JIT_NULL();
 
-    // Typed array stores raw i64 values
-    if (arr->elem_type == XR_ELEM_I64) {
-        return XR_JIT_INT(((int64_t *) arr->data)[idx]);
-    }
-    // Regular array stores tagged XrValue - extract i64 payload
-    if (arr->elem_type == XR_ELEM_ANY) {
-        XrValue *elems = (XrValue *) arr->data;
-        return XR_JIT_VAL(elems[idx]);
-    }
-    return XR_JIT_NULL();
+    XrValue v = xr_typed_get(arr->data, (int32_t)idx, arr->elem_type);
+    return XR_JIT_VAL(v);
 }
 
 // Called from JIT via CALL_C for OP_TARRAY_SET.
@@ -779,19 +771,14 @@ XrJitResult xr_jit_tarray_set(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
     XrArray *arr = (XrArray *) coro->jit_ctx->call_args[0];
     int64_t idx = coro->jit_ctx->call_args[1];
-    int64_t raw_val = coro->jit_ctx->call_args[2];
 
     if (!arr || idx < 0 || idx >= arr->length)
         return XR_JIT_OK();
 
-    // Typed array stores raw i64 values
-    if (arr->elem_type == XR_ELEM_I64) {
-        ((int64_t *) arr->data)[idx] = raw_val;
-    }
-    // Regular array stores tagged XrValue — reconstruct with correct tag
-    else if (arr->elem_type == XR_ELEM_ANY) {
-        XrValue *elems = (XrValue *) arr->data;
-        elems[idx] = jit_value_from_tag(raw_val, coro->jit_ctx->call_arg_tags[2]);
+    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[2],
+                                      coro->jit_ctx->call_arg_tags[2]);
+    if (xr_typed_set(arr->data, (int32_t)idx, val, arr->elem_type)) {
+        XR_ARRAY_MARK_GC_PTRS(arr, val);
     }
     return XR_JIT_OK();
 }

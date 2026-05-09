@@ -165,6 +165,8 @@ XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_box(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_unbox(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_narrow(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_widen(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_isnull(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_is(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, uint8_t dst);

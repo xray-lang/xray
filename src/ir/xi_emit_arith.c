@@ -203,6 +203,46 @@ XR_FUNC void xi_emit_unbox(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_UNBOX_I64, dst, src, 0));
 }
 
+/* Narrow: truncate int64/double to sub-width, sign/zero-extend back.
+ * Each XI_NARROW_* maps 1:1 to the corresponding OP_NARROW_*. */
+XR_FUNC void xi_emit_narrow(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK) return;
+    uint16_t op;
+    switch (v->op) {
+        case XI_NARROW_I8:  op = OP_NARROW_I8;  break;
+        case XI_NARROW_U8:  op = OP_NARROW_U8;  break;
+        case XI_NARROW_I16: op = OP_NARROW_I16; break;
+        case XI_NARROW_U16: op = OP_NARROW_U16; break;
+        case XI_NARROW_I32: op = OP_NARROW_I32; break;
+        case XI_NARROW_U32: op = OP_NARROW_U32; break;
+        case XI_NARROW_F32: op = OP_NARROW_F32; break;
+        default: emit_error(ctx, XI_EMIT_ERR_INTERNAL); return;
+    }
+    emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
+}
+
+/* Widen: sign/zero extend sub-width value in int64 register.
+ * Each XI_WIDEN_* maps 1:1 to the corresponding OP_WIDEN_*. */
+XR_FUNC void xi_emit_widen(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK) return;
+    uint16_t op;
+    switch (v->op) {
+        case XI_WIDEN_I8:  op = OP_WIDEN_I8;  break;
+        case XI_WIDEN_U8:  op = OP_WIDEN_U8;  break;
+        case XI_WIDEN_I16: op = OP_WIDEN_I16; break;
+        case XI_WIDEN_U16: op = OP_WIDEN_U16; break;
+        case XI_WIDEN_I32: op = OP_WIDEN_I32; break;
+        case XI_WIDEN_U32: op = OP_WIDEN_U32; break;
+        case XI_WIDEN_F32: op = OP_WIDEN_F32; break;
+        default: emit_error(ctx, XI_EMIT_ERR_INTERNAL); return;
+    }
+    emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
+}
+
 /* Null check */
 XR_FUNC void xi_emit_isnull(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) { emit_error(ctx, XI_EMIT_ERR_INTERNAL); return; }

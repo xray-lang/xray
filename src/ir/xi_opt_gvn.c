@@ -37,6 +37,14 @@ static bool xi_op_is_pure(uint16_t op) {
         case XI_NOT:
         case XI_ISNULL:
         case XI_CONVERT:
+        case XI_NARROW_I8: case XI_NARROW_U8:
+        case XI_NARROW_I16: case XI_NARROW_U16:
+        case XI_NARROW_I32: case XI_NARROW_U32:
+        case XI_NARROW_F32:
+        case XI_WIDEN_I8: case XI_WIDEN_U8:
+        case XI_WIDEN_I16: case XI_WIDEN_U16:
+        case XI_WIDEN_I32: case XI_WIDEN_U32:
+        case XI_WIDEN_F32:
             return true;
         default:
             return false;

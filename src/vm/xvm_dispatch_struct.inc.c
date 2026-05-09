@@ -34,44 +34,7 @@ vmcase(OP_TARRAY_GET) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          idx, arr->length);
     }
-    switch (arr->elem_type) {
-        case XR_ELEM_I64:
-            XR_SET_INT(R(a), ((int64_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_F64:
-            XR_SET_FLOAT(R(a), ((double *) arr->data)[idx]);
-            break;
-        case XR_ELEM_I32:
-            XR_SET_INT(R(a), (int64_t) ((int32_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_U8:
-            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_I8:
-            XR_SET_INT(R(a), (int64_t) ((int8_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_U16:
-            XR_SET_INT(R(a), (int64_t) ((uint16_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_I16:
-            XR_SET_INT(R(a), (int64_t) ((int16_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_U32:
-            XR_SET_INT(R(a), (int64_t) ((uint32_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_U64:
-            XR_SET_INT(R(a), (int64_t) ((uint64_t *) arr->data)[idx]);
-            break;
-        case XR_ELEM_F32:
-            XR_SET_FLOAT(R(a), (double) ((float *) arr->data)[idx]);
-            break;
-        case XR_ELEM_BOOL:
-            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[idx]);
-            break;
-        default:
-            R(a) = ((XrValue *) arr->data)[idx];
-            break;
-    }
+    R(a) = xr_typed_get(arr->data, idx, arr->elem_type);
     vmbreak;
 }
 
@@ -85,44 +48,7 @@ vmcase(OP_TARRAY_GETC) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          c, arr->length);
     }
-    switch (arr->elem_type) {
-        case XR_ELEM_I64:
-            XR_SET_INT(R(a), ((int64_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_F64:
-            XR_SET_FLOAT(R(a), ((double *) arr->data)[c]);
-            break;
-        case XR_ELEM_I32:
-            XR_SET_INT(R(a), (int64_t) ((int32_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_U8:
-            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_I8:
-            XR_SET_INT(R(a), (int64_t) ((int8_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_U16:
-            XR_SET_INT(R(a), (int64_t) ((uint16_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_I16:
-            XR_SET_INT(R(a), (int64_t) ((int16_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_U32:
-            XR_SET_INT(R(a), (int64_t) ((uint32_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_U64:
-            XR_SET_INT(R(a), (int64_t) ((uint64_t *) arr->data)[c]);
-            break;
-        case XR_ELEM_F32:
-            XR_SET_FLOAT(R(a), (double) ((float *) arr->data)[c]);
-            break;
-        case XR_ELEM_BOOL:
-            XR_SET_INT(R(a), (int64_t) ((uint8_t *) arr->data)[c]);
-            break;
-        default:
-            R(a) = ((XrValue *) arr->data)[c];
-            break;
-    }
+    R(a) = xr_typed_get(arr->data, (int32_t)c, arr->elem_type);
     vmbreak;
 }
 
@@ -137,47 +63,9 @@ vmcase(OP_TARRAY_SET) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          idx, arr->length);
     }
-    switch (arr->elem_type) {
-        case XR_ELEM_I64:
-            ((int64_t *) arr->data)[idx] = R(c).i;
-            break;
-        case XR_ELEM_F64:
-            ((double *) arr->data)[idx] = R(c).f;
-            break;
-        case XR_ELEM_I32:
-            ((int32_t *) arr->data)[idx] = (int32_t) R(c).i;
-            break;
-        case XR_ELEM_U8:
-            ((uint8_t *) arr->data)[idx] = (uint8_t) R(c).i;
-            break;
-        case XR_ELEM_I8:
-            ((int8_t *) arr->data)[idx] = (int8_t) R(c).i;
-            break;
-        case XR_ELEM_U16:
-            ((uint16_t *) arr->data)[idx] = (uint16_t) R(c).i;
-            break;
-        case XR_ELEM_I16:
-            ((int16_t *) arr->data)[idx] = (int16_t) R(c).i;
-            break;
-        case XR_ELEM_U32:
-            ((uint32_t *) arr->data)[idx] = (uint32_t) R(c).i;
-            break;
-        case XR_ELEM_U64:
-            ((uint64_t *) arr->data)[idx] = (uint64_t) R(c).i;
-            break;
-        case XR_ELEM_F32:
-            ((float *) arr->data)[idx] = (float) R(c).f;
-            break;
-        case XR_ELEM_BOOL:
-            ((uint8_t *) arr->data)[idx] = (uint8_t) R(c).i;
-            break;
-        default:
-            // XR_ELEM_ANY: store full tagged XrValue (preserves tag for GC)
-            ((XrValue *) arr->data)[idx] = R(c);
-            XR_ARRAY_MARK_GC_PTRS(arr, R(c));
-            if (XR_ARRAY_IS_GC_TRACED(arr))
-                XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
-            break;
+    if (xr_typed_set(arr->data, idx, R(c), arr->elem_type)) {
+        XR_ARRAY_MARK_GC_PTRS(arr, R(c));
+        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
     }
     vmbreak;
 }
@@ -194,47 +82,9 @@ vmcase(OP_TARRAY_PUSH) {
         xr_array_grow(arr);
     }
     int32_t idx = arr->length++;
-    switch (arr->elem_type) {
-        case XR_ELEM_I64:
-            ((int64_t *) arr->data)[idx] = R(b).i;
-            break;
-        case XR_ELEM_F64:
-            ((double *) arr->data)[idx] = R(b).f;
-            break;
-        case XR_ELEM_I32:
-            ((int32_t *) arr->data)[idx] = (int32_t) R(b).i;
-            break;
-        case XR_ELEM_U8:
-            ((uint8_t *) arr->data)[idx] = (uint8_t) R(b).i;
-            break;
-        case XR_ELEM_I8:
-            ((int8_t *) arr->data)[idx] = (int8_t) R(b).i;
-            break;
-        case XR_ELEM_U16:
-            ((uint16_t *) arr->data)[idx] = (uint16_t) R(b).i;
-            break;
-        case XR_ELEM_I16:
-            ((int16_t *) arr->data)[idx] = (int16_t) R(b).i;
-            break;
-        case XR_ELEM_U32:
-            ((uint32_t *) arr->data)[idx] = (uint32_t) R(b).i;
-            break;
-        case XR_ELEM_U64:
-            ((uint64_t *) arr->data)[idx] = (uint64_t) R(b).i;
-            break;
-        case XR_ELEM_F32:
-            ((float *) arr->data)[idx] = (float) R(b).f;
-            break;
-        case XR_ELEM_BOOL:
-            ((uint8_t *) arr->data)[idx] = (uint8_t) R(b).i;
-            break;
-        default:
-            // XR_ELEM_ANY: store full tagged XrValue (preserves tag for GC)
-            ((XrValue *) arr->data)[idx] = R(b);
-            XR_ARRAY_MARK_GC_PTRS(arr, R(b));
-            if (XR_ARRAY_IS_GC_TRACED(arr))
-                XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
-            break;
+    if (xr_typed_set(arr->data, idx, R(b), arr->elem_type)) {
+        XR_ARRAY_MARK_GC_PTRS(arr, R(b));
+        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
     }
     vmbreak;
 }

@@ -41,6 +41,14 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
     case XI_EQ_STRICT: case XI_NE_STRICT:
     case XI_NOT:
     case XI_CONVERT: case XI_BOX: case XI_UNBOX:
+    case XI_NARROW_I8: case XI_NARROW_U8:
+    case XI_NARROW_I16: case XI_NARROW_U16:
+    case XI_NARROW_I32: case XI_NARROW_U32:
+    case XI_NARROW_F32:
+    case XI_WIDEN_I8: case XI_WIDEN_U8:
+    case XI_WIDEN_I16: case XI_WIDEN_U16:
+    case XI_WIDEN_I32: case XI_WIDEN_U32:
+    case XI_WIDEN_F32:
     case XI_ISNULL:
     case XI_IS: case XI_AS:
     case XI_PHI: case XI_SELECT: case XI_COPY:
