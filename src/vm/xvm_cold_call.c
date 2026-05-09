@@ -51,35 +51,19 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
     XR_DCHECK(isolate != NULL, "vm_invoke_channel: NULL isolate");
     XR_DCHECK(ch != NULL, "vm_invoke_channel: NULL channel");
     XR_DCHECK(base != NULL, "vm_invoke_channel: NULL base");
-    // ch.trySend(value)
+    // ch.trySend(value) — unified helper
     if (nargs == 1 && method_symbol == SYMBOL_TRYSEND) {
-        XrValue send_v = vm_chan_copy_send(isolate, base[a + 2]);
-        bool success = xr_channel_try_send(ch, send_v);
-        base[a] = xr_bool(success);
-        if (success) {
-            xr_runtime_wake_channel(isolate, ch, false);
-        }
+        base[a] = xr_bool(xr_chan_try_send(isolate, ch, base[a + 2]));
         return VM_COLD_BREAK;
     }
 
-    // ch.tryRecv() → (value, ok) multi-return into base[a], base[a+1]
+    // ch.tryRecv() → (value, ok) multi-return — unified helper
     if (nargs == 0 && method_symbol == SYMBOL_TRYRECV) {
-        bool ok;
-        XrValue value = xr_channel_try_recv(ch, &ok);
-        /* Unbuffered rendezvous: if buffer was empty, try to wake a
-         * blocked sender and take its value directly. */
-        if (!ok) {
-            XrCoroutine *sender = xr_runtime_wake_channel(isolate, ch, true);
-            if (sender) {
-                value = sender->send_value;
-                ok = true;
-            }
-        }
-        base[a] = ok ? vm_chan_copy_recv(isolate, value, vm_ctx) : xr_null();
-        base[a + 1] = xr_bool(ok);
-        if (ok) {
-            xr_runtime_wake_channel(isolate, ch, true);
-        }
+        XrCoroutine *recv_coro = vm_ctx ? (XrCoroutine *) vm_ctx->current_coro : NULL;
+        XrValue recv_val;
+        bool recv_ok = xr_chan_try_recv(isolate, ch, &recv_val, recv_coro);
+        base[a] = recv_val;
+        base[a + 1] = xr_bool(recv_ok);
         return VM_COLD_BREAK;
     }
 
