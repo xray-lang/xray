@@ -64,7 +64,7 @@ static void parse_unquoted_module(Parser *parser, char **out_name, ImportType *o
     if (xr_parser_match(parser, TK_SLASH)) {
         xr_parser_consume(parser, TK_NAME, "expected package name");
         int name_len = parser->previous.length;
-        int total_len = strlen(first_part) + 1 + name_len;
+        int total_len = (int) strlen(first_part) + 1 + name_len;
         *out_name = (char *) ast_alloc(parser->X, (size_t) total_len + 1);
         snprintf(*out_name, total_len + 1, "%s/%.*s", first_part, name_len, parser->previous.start);
         *out_type = IMPORT_PACKAGE;

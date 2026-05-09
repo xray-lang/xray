@@ -180,7 +180,7 @@ static const XrUnicodeRange ranges_Latin[] = {
 
 // Greek
 static const XrUnicodeRange ranges_Greek[] = {
-    {0x0370, 0x03FF},
+    {0x0370, 0x03FF},  // Greek and Coptic
     {0x1F00, 0x1FFF},  // Extended
 };
 #define RANGES_Greek_COUNT (sizeof(ranges_Greek) / sizeof(ranges_Greek[0]))
@@ -205,7 +205,7 @@ static const XrUnicodeRange ranges_Arabic[] = {
 
 // Hebrew
 static const XrUnicodeRange ranges_Hebrew[] = {
-    {0x0590, 0x05FF},
+    {0x0590, 0x05FF},  // Hebrew
     {0xFB1D, 0xFB4F},  // Presentation Forms
 };
 #define RANGES_Hebrew_COUNT (sizeof(ranges_Hebrew) / sizeof(ranges_Hebrew[0]))

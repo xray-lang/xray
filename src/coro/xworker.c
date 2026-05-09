@@ -249,12 +249,17 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     }
 
     // Allocate Workers (P + M* pointer)
-    runtime->workers = (XrWorker *) xr_calloc(num_workers, sizeof(XrWorker));
+    // XrProc contains _Alignas(XR_CACHE_LINE) members, so the array
+    // must be cache-line aligned to satisfy UBSan / hardware.
+    size_t workers_size = (size_t) num_workers * sizeof(XrWorker);
+    runtime->workers = (XrWorker *) xr_malloc_aligned(workers_size, XR_CACHE_LINE);
     if (!runtime->workers) {
         xr_free(runtime->machines);
         xr_free(runtime);
         return NULL;
     }
+
+    memset(runtime->workers, 0, workers_size);
 
     // Initialize Workers (binds each Worker to its pre-allocated M)
     for (int i = 0; i < num_workers; i++) {
@@ -338,7 +343,7 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count; i++) {
         xr_worker_destroy(&runtime->workers[i]);
     }
-    xr_free(runtime->workers);
+    xr_free_aligned(runtime->workers, XR_CACHE_LINE);
     xr_free(runtime->machines);
 
     // blocked queue cleaned up when Worker destroyed
