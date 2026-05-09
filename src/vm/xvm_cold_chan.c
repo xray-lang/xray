@@ -255,13 +255,12 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     else if (XR_IS_FLOAT(timeout_val))
         timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
 
-    // Try immediate receive
-    bool ok;
-    XrValue value = xr_channel_try_recv(ch, &ok);
-    if (ok) {
-        base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
+    // Try immediate receive via unified helper
+    XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+    XrValue recv_val;
+    if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
+        base[a] = recv_val;
         base[a + 1] = xr_bool(true);
-        xr_runtime_wake_channel(isolate, ch, true);
         return VM_COLD_BREAK;
     }
     if (xr_channel_is_closed(ch)) {
@@ -275,7 +274,7 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         return VM_COLD_BREAK;
     }
 
-    XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+    if (!current) current = vm_cold_get_coro(vm_ctx);
     if (current) {
         int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 
@@ -288,12 +287,10 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
             base[a + 1] = xr_bool(false);
             return VM_COLD_BREAK;
         }
-        value = xr_channel_try_recv(ch, &ok);
-        if (ok) {
+        if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
             current->channel_deadline = 0;
-            base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
+            base[a] = recv_val;
             base[a + 1] = xr_bool(true);
-            xr_runtime_wake_channel(isolate, ch, true);
             return VM_COLD_BREAK;
         }
         if (xr_channel_is_closed(ch)) {
@@ -316,11 +313,9 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
             base[a + 1] = xr_bool(false);
             break;
         }
-        value = xr_channel_try_recv(ch, &ok);
-        if (ok) {
-            base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
+        if (xr_chan_try_recv(isolate, ch, &recv_val, NULL)) {
+            base[a] = recv_val;
             base[a + 1] = xr_bool(true);
-            xr_runtime_wake_channel(isolate, ch, true);
             break;
         }
         if (xr_channel_is_closed(ch)) {

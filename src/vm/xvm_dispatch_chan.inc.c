@@ -207,45 +207,28 @@ vmcase(OP_CHAN_RECV) {
 }
 
 vmcase(OP_CHAN_TRY_SEND) {
-    /* R[A] = R[B].trySend(R[C]) - non-blocking send
-     * A = result (bool)
-     * B = Channel
-     * C = value to send
-     */
+    /* R[A] = R[B].trySend(R[C]) — non-blocking send.
+     * Canonical logic in xr_chan_try_send (xchannel_ops.h). */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
-    // Get Channel directly
     XrValue ch_val = R(b);
     if (!xr_value_is_channel(ch_val)) {
         R(a) = xr_bool(false);
         vmbreak;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
-
-    // Non-blocking send (deep copy mutable values for buffer safety)
-    XrValue _send_v = vm_chan_copy_send(isolate, R(c));
-    bool success = xr_channel_try_send(ch, _send_v);
-    R(a) = xr_bool(success);
-
-    // Send succeeded, wake waiting receivers
-    if (success) {
-        xr_runtime_wake_channel(isolate, ch, false);  // Wake receivers
-    }
+    R(a) = xr_bool(xr_chan_try_send(isolate, ch, R(c)));
     vmbreak;
 }
 
 vmcase(OP_CHAN_TRY_RECV) {
-    /* R[A], R[A+1] = R[B].tryRecv() - non-blocking receive, returns multi-value
-     * R[A] = received value (null on failure)
-     * R[A+1] = success (bool)
-     * B = Channel
-     */
+    /* R[A], R[A+1] = R[B].tryRecv() — non-blocking receive (multi-return).
+     * Canonical logic in xr_chan_try_recv (xchannel_ops.h). */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
 
-    // Get Channel directly
     XrValue ch_val = R(b);
     if (!xr_value_is_channel(ch_val)) {
         R(a) = xr_null();
@@ -253,31 +236,12 @@ vmcase(OP_CHAN_TRY_RECV) {
         vmbreak;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
+    XrCoroutine *_recv_coro = (XrCoroutine *) vm_ctx->current_coro;
 
-    // Timer channel no longer needs polling here.
-    // Timer wheel callback writes data to buffer; try_recv finds it.
-
-    // Non-blocking receive
-    bool ok;
-    XrValue value = xr_channel_try_recv(ch, &ok);
-
-    // Unbuffered Channel rendezvous: try to wake sender from Runtime queue
-    if (!ok) {
-        XrCoroutine *sender = xr_runtime_wake_channel(isolate, ch, true);
-        if (sender) {
-            value = sender->send_value;
-            ok = true;
-        }
-    }
-
-    // Return multi-value: value and ok
-    R(a) = ok ? vm_chan_copy_recv(isolate, value, vm_ctx) : xr_null();
-    R(a + 1) = xr_bool(ok);
-
-    // Receive succeeded, wake waiting senders
-    if (ok) {
-        xr_runtime_wake_channel(isolate, ch, true);  // Wake senders
-    }
+    XrValue _recv_val;
+    bool _recv_ok = xr_chan_try_recv(isolate, ch, &_recv_val, _recv_coro);
+    R(a) = _recv_val;
+    R(a + 1) = xr_bool(_recv_ok);
     vmbreak;
 }
 

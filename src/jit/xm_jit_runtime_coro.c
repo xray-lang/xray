@@ -43,6 +43,7 @@
 #include "../coro/xcoroutine.h"
 #include "../coro/xchannel.h"
 #include "../coro/xdeep_copy.h"
+#include "../coro/xchannel_ops.h"
 #include "../coro/xtask.h"
 #include "../coro/xworker.h"
 #include "../coro/xcoro_pool.h"
@@ -99,6 +100,7 @@ XrJitResult xr_jit_chan_is_closed(XrCoroutine *coro, int64_t extra_arg) {
 // jit_call_args[0] = channel raw, jit_call_args[1] = value raw
 // extra_arg = slot_type of value
 // Returns 1 on success, 0 on failure.
+// Canonical logic in xr_chan_try_send (xchannel_ops.h).
 XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
@@ -109,22 +111,14 @@ XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
     XrValue send_v =
         jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
 
-    // Deep copy mutable values for buffer safety
-    if (XR_IS_PTR(send_v) && xr_value_needs_copy(send_v)) {
-        XrayIsolate *isolate = coro->isolate;
-        send_v = xr_deep_copy(isolate, send_v, xr_isolate_get_gc(isolate));
-    }
-
-    bool success = xr_channel_try_send(ch, send_v);
-    if (success) {
-        xr_runtime_wake_channel(coro->isolate, ch, false);
-    }
+    bool success = xr_chan_try_send(coro->isolate, ch, send_v);
     return XR_JIT_BOOL(success ? 1 : 0);
 }
 
 // Called from JIT via CALL_C for OP_CHAN_TRY_RECV.
 // jit_call_args[0] = channel raw
 // Returns received value raw (or 0 for null). Stores ok flag in jit_call_args[1].
+// Canonical logic in xr_chan_try_recv (xchannel_ops.h).
 XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
@@ -134,22 +128,10 @@ XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    bool ok;
-    XrValue value = xr_channel_try_recv(ch, &ok);
-
-    // Unbuffered rendezvous: try to wake sender
-    if (!ok) {
-        XrCoroutine *sender = xr_runtime_wake_channel(coro->isolate, ch, true);
-        if (sender) {
-            value = sender->send_value;
-            ok = true;
-        }
-    }
-
-    if (ok) {
-        xr_runtime_wake_channel(coro->isolate, ch, true);
+    XrValue recv_val;
+    if (xr_chan_try_recv(coro->isolate, ch, &recv_val, coro)) {
         coro->jit_ctx->call_args[1] = 1;  // ok = true
-        return XR_JIT_VAL(value);
+        return XR_JIT_VAL(recv_val);
     }
     coro->jit_ctx->call_args[1] = 0;  // ok = false
     return XR_JIT_NULL();

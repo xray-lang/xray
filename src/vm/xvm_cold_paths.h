@@ -89,24 +89,18 @@ static inline XrCoroutine *vm_cold_get_coro(XrVMContext *vm_ctx) {
 }
 
 /* ========== Channel Deep Copy Helpers ========== */
+/* Thin wrappers: canonical logic lives in xchannel_ops.h.
+ * These adapt the VM-specific (isolate, vm_ctx) calling convention
+ * to the shared (isolate, coro) interface. */
+#include "../coro/xchannel_ops.h"
 
-// Deep copy mutable value to fixed GC before entering channel buffer
 static inline XrValue vm_chan_copy_send(XrayIsolate *isolate, XrValue value) {
-    if (!XR_IS_PTR(value))
-        return value;
-    if (!xr_value_needs_copy(value))
-        return value;
-    return xr_deep_copy(isolate, value, &isolate->gc);
+    return xr_chan_prepare_send(isolate, value);
 }
 
-// Deep copy value received from channel to current coroutine's heap
 static inline XrValue vm_chan_copy_recv(XrayIsolate *isolate, XrValue value, XrVMContext *vm_ctx) {
-    if (!XR_IS_PTR(value))
-        return value;
-    if (!xr_value_needs_copy(value))
-        return value;
     XrCoroutine *coro = vm_ctx ? (XrCoroutine *) vm_ctx->current_coro : NULL;
-    return xr_deep_copy_to_coro(isolate, value, coro);
+    return xr_chan_copy_recv(isolate, value, coro);
 }
 
 /* ========== Shared Types ========== */
