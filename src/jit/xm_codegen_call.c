@@ -485,6 +485,17 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // --- Inline JIT fast path ---
             // x16 = jit_ctx->call_args[0] (closure ptr)
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
+            // NULL / poison guard: an unconditional dereference of a null
+            // or poisoned callee (XR_TAG_NULL or a deopt marker like
+            // 0xdead0001dead0001 surviving in call_args[0]) would SIGSEGV
+            // at the GC type load below.  xr_jit_call_func performs the
+            // same check on its slow path; mirror it here so we route to
+            // the slow path and let the VM raise the proper error.
+            uint32_t cbz_null_idx = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());  // patched to CBZ x16, slow
+            a64_buf_emit(&ctx->buf, a64_lsr_imm64(SCRATCH_REG2, SCRATCH_REG, 48));
+            uint32_t cbnz_poison_idx = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());  // patched to CBNZ x17, slow
             // GC type guard: only XR_TFUNCTION (closures) use fast path.
             // Classes (XR_TCLASS) have different layout and must go to slow path
             // where xr_jit_call_func handles instance allocation + constructor.
@@ -570,6 +581,14 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             // --- done label ---
             uint32_t done_label = ctx->buf.count;
+
+            // Patch CBZ null-callee → slow_path
+            int32_t off_null = (int32_t) slow_path - (int32_t) cbz_null_idx;
+            ctx->buf.code[cbz_null_idx] = a64_cbz(SCRATCH_REG, off_null);
+
+            // Patch CBNZ poison-bits → slow_path
+            int32_t off_poison = (int32_t) slow_path - (int32_t) cbnz_poison_idx;
+            ctx->buf.code[cbnz_poison_idx] = a64_cbnz(SCRATCH_REG2, off_poison);
 
             // Patch B.NE type_guard → slow_path
             int32_t off_type = (int32_t) slow_path - (int32_t) bne_type_idx;
