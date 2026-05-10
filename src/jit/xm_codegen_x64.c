@@ -708,16 +708,23 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                 }
 
                 /* Compute return type tag.  proto->return_type_info is the
-                 * authoritative source: handles void (-> NULL) and const
-                 * ret values where xm_ref_ctype gives no information. */
+                 * authoritative source: handles void (-> NULL), FUNCTION
+                 * returns, and const ret values where xm_ref_ctype gives no
+                 * information.  Only fall back to vreg ctype / const rep
+                 * when the proto says nothing — CALL_C result vregs default
+                 * to rep=I64 and would otherwise downgrade FUNCTION/PTR
+                 * returns to I64. */
                 uint8_t ret_xr_tag = 3; /* XR_TAG_I64 default */
+                bool tag_from_proto = false;
                 if (ctx->func->proto && ctx->func->proto->return_type_info) {
                     uint8_t pt = xr_type_to_xr_tag(ctx->func->proto->return_type_info);
-                    if (pt != 0xFF && pt != 0xFC)
+                    if (pt != 0xFF && pt != 0xFC) {
                         ret_xr_tag = pt;
+                        tag_from_proto = true;
+                    }
                 }
-                if (xm_ref_is_const(blk->jmp.arg) && ret_idx < ctx->func->nconst &&
-                    (!ctx->func->proto || !ctx->func->proto->return_type_info)) {
+                if (!tag_from_proto && xm_ref_is_const(blk->jmp.arg) &&
+                    ret_idx < ctx->func->nconst) {
                     uint8_t crep = ctx->func->consts[ret_idx].rep;
                     if (crep == XR_REP_F64)
                         ret_xr_tag = 4; /* XR_TAG_F64 */
@@ -726,7 +733,8 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                     else
                         ret_xr_tag = 3; /* XR_TAG_I64 */
                 }
-                if (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg) {
+                if (!tag_from_proto && xm_ref_is_vreg(blk->jmp.arg) &&
+                    ret_idx < ctx->func->nvreg) {
                     XmType rct = xm_ref_ctype(ctx->func, blk->jmp.arg);
                     uint8_t ret_vtag = type_kind_to_vtag(rct.kind);
                     uint8_t vt = vtag_to_value_tag(ret_vtag);
