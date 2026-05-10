@@ -1261,10 +1261,13 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
 
-        /* Structured concurrency scope — runtime calls */
+        /* Structured concurrency scope — same hazard as iter/coroutine
+         * ops: lower_call would mis-route the call_args layout through
+         * xr_jit_call_func, silently dropping the scope body.  Bail. */
         case XI_SCOPE_ENTER:
         case XI_SCOPE_EXIT:
-            return lower_call(ctx, blk, v);
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
 
         /* Exception handling */
         case XI_TRY: {
