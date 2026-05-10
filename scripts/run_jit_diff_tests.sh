@@ -139,13 +139,15 @@ run_one_test() {
     # Run interp and jit in parallel (key optimization: halves per-file time)
     local out_interp_file="${tmp_dir}/${idx}.interp"
     local out_jit_file="${tmp_dir}/${idx}.jit"
+    local err_interp_file="${tmp_dir}/${idx}.interp.err"
+    local err_jit_file="${tmp_dir}/${idx}.jit.err"
     local rc_interp_file="${tmp_dir}/${idx}.rc_interp"
     local rc_jit_file="${tmp_dir}/${idx}.rc_jit"
 
     # Subshells use set +e so echo $? runs even after crash signals
-    (set +e; timeout "$timeout_sec" "$xray" test --quiet --no-jit "$test_file" >"$out_interp_file" 2>/dev/null; echo $? >"$rc_interp_file") 2>/dev/null &
+    (set +e; timeout "$timeout_sec" "$xray" test --no-jit "$test_file" >"$out_interp_file" 2>"$err_interp_file"; echo $? >"$rc_interp_file") 2>/dev/null &
     local pid_interp=$!
-    (set +e; timeout "$timeout_sec" "$xray" test --quiet --jit-force "$test_file" >"$out_jit_file" 2>/dev/null; echo $? >"$rc_jit_file") 2>/dev/null &
+    (set +e; timeout "$timeout_sec" "$xray" test --jit-force "$test_file" >"$out_jit_file" 2>"$err_jit_file"; echo $? >"$rc_jit_file") 2>/dev/null &
     local pid_jit=$!
     wait $pid_interp $pid_jit 2>/dev/null
 
@@ -179,7 +181,15 @@ run_one_test() {
         norm_interp=$(sed -E -e 's/\([0-9]+ms\)/(_ms)/g' -e 's/[0-9]+ms/_ms/g' <"$out_interp_file")
         norm_jit=$(sed -E -e 's/\([0-9]+ms\)/(_ms)/g' -e 's/[0-9]+ms/_ms/g' <"$out_jit_file")
         if [ "$norm_interp" = "$norm_jit" ]; then
-            status="PASS"
+            # Guard: check at least one @test actually executed
+            # (summary may appear in stdout or stderr depending on --quiet)
+            local exec_i
+            exec_i=$(cat "$out_interp_file" "$err_interp_file" 2>/dev/null | grep -oE '[0-9]+ passed' | head -1 | grep -oE '[0-9]+' || true)
+            if [ -z "$exec_i" ] || [ "${exec_i:-0}" -eq 0 ]; then
+                status="NO_TESTS"
+            else
+                status="PASS"
+            fi
         else
             status="OUTPUT_DIFF"
             if [ "$verbose" -eq 1 ]; then
@@ -214,6 +224,7 @@ DIFF_FAIL=0
 BOTH_FAIL=0
 JIT_CRASH=0
 TIMEOUT_COUNT=0
+NO_TESTS_COUNT=0
 FAILURES=""
 KNOWN_COUNT=0
 UNEXPECTED_COUNT=0
@@ -232,6 +243,10 @@ for i in "${!filtered_files[@]}"; do
         PASS)
             PASS=$((PASS + 1))
             printf "  [%-3d] %-55s ${GREEN}PASS${NC}\n" "$local_idx" "$rel_path"
+            ;;
+        NO_TESTS)
+            NO_TESTS_COUNT=$((NO_TESTS_COUNT + 1))
+            printf "  [%-3d] %-55s ${YELLOW}NO_TESTS${NC}\n" "$local_idx" "$rel_path"
             ;;
         TIMEOUT_BOTH)
             TIMEOUT_COUNT=$((TIMEOUT_COUNT + 1))
@@ -301,6 +316,9 @@ echo -e "${RED}Diff fail:  $DIFF_FAIL${NC}"
 echo -e "${RED}JIT crash:  $JIT_CRASH${NC}"
 echo -e "${YELLOW}Both fail:  $BOTH_FAIL${NC}  (pre-existing, not JIT bugs)"
 echo -e "${YELLOW}Timeout:    $TIMEOUT_COUNT${NC}"
+if [ "$NO_TESTS_COUNT" -gt 0 ]; then
+    echo -e "${YELLOW}No tests:   $NO_TESTS_COUNT${NC}  (files with no @test functions)"
+fi
 if [ "$USE_ALLOWLIST" -eq 1 ]; then
     echo -e "${YELLOW}Known:      $KNOWN_COUNT${NC}  (in allowlist)"
     echo -e "${RED}Unexpected: $UNEXPECTED_COUNT${NC}  (NEW regressions)"

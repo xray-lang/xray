@@ -128,8 +128,8 @@ $WorkerScript = {
     $relPath = $testFile.Replace($projectRoot, '').TrimStart('\', '/') -replace '\\', '/'
 
     # Run interp and jit (sequential inside one worker; workers run in parallel)
-    $interp = Invoke-Xray $xray "test --quiet --no-jit `"$testFile`"" $timeoutMs
-    $jit    = Invoke-Xray $xray "test --quiet --jit-force `"$testFile`"" $timeoutMs
+    $interp = Invoke-Xray $xray "test --no-jit `"$testFile`"" $timeoutMs
+    $jit    = Invoke-Xray $xray "test --jit-force `"$testFile`"" $timeoutMs
 
     $iRc = $interp.Rc; $jRc = $jit.Rc
 
@@ -146,7 +146,15 @@ $WorkerScript = {
     else {
         $normI = $interp.Out -replace '\(\d+ms\)', '(_ms)' -replace '\d+ms', '_ms'
         $normJ = $jit.Out    -replace '\(\d+ms\)', '(_ms)' -replace '\d+ms', '_ms'
-        if ($normI -eq $normJ) { $status = "PASS" } else { $status = "OUTPUT_DIFF" }
+        if ($normI -eq $normJ) {
+            # Guard: check at least one @test actually executed
+            $execMatch = [regex]::Match($interp.Out, '(\d+) passed')
+            if ($execMatch.Success -and [int]$execMatch.Groups[1].Value -gt 0) {
+                $status = "PASS"
+            } else {
+                $status = "NO_TESTS"
+            }
+        } else { $status = "OUTPUT_DIFF" }
     }
 
     return @{
@@ -177,7 +185,7 @@ for ($i = 0; $i -lt $total; $i++) {
 }
 
 # ── Collect results (in submission order for stable output) ────────────
-$pass = 0; $diffFail = 0; $bothFail = 0; $jitCrash = 0; $timeoutCount = 0
+$pass = 0; $diffFail = 0; $bothFail = 0; $jitCrash = 0; $timeoutCount = 0; $noTestsCount = 0
 $knownCount = 0; $unexpectedCount = 0; $failures = @()
 
 foreach ($job in $pipelines) {
@@ -202,6 +210,10 @@ foreach ($job in $pipelines) {
         "PASS" {
             $pass++
             Write-Host "  $label " -NoNewline; Write-Host "PASS" -ForegroundColor Green
+        }
+        "NO_TESTS" {
+            $noTestsCount++
+            Write-Host "  $label " -NoNewline; Write-Host "NO_TESTS" -ForegroundColor Yellow
         }
         "TIMEOUT_BOTH" {
             $timeoutCount++
@@ -282,6 +294,9 @@ Write-Host "Diff fail:  $diffFail" -ForegroundColor Red
 Write-Host "JIT crash:  $jitCrash" -ForegroundColor Red
 Write-Host "Both fail:  $bothFail  (pre-existing, not JIT bugs)" -ForegroundColor Yellow
 Write-Host "Timeout:    $timeoutCount" -ForegroundColor Yellow
+if ($noTestsCount -gt 0) {
+    Write-Host "No tests:   $noTestsCount  (files with no @test functions)" -ForegroundColor Yellow
+}
 if (-not $SkipAllowlist) {
     Write-Host "Known:      $knownCount  (in allowlist)" -ForegroundColor Yellow
     Write-Host "Unexpected: $unexpectedCount  (NEW regressions)" -ForegroundColor Red
