@@ -1586,14 +1586,24 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
         ctx.block_map[xi_blk->id] = xm_blk;
     }
 
-    /* Set up predecessor edges */
+    /* Set up predecessor edges.  Xi records exception edges (try -> catch)
+     * on the catch block's preds[] without listing the try block in its
+     * succs[]; Xm's verifier walks pred <-> succ bidirectionally and would
+     * fail on those.  Filter to preds whose normal succs[] actually point
+     * back at this block — exception entry into catch blocks is preserved
+     * separately via XmBlock.exception_handler. */
     for (uint32_t i = 0; i < xi_func->nblocks; i++) {
         XiBlock *xi_blk = xi_func->blocks[i];
         if (!xi_blk)
             continue;
         XmBlock *xm_blk = get_block(&ctx, xi_blk);
         for (uint16_t p = 0; p < xi_blk->npreds; p++) {
-            XmBlock *pred = get_block(&ctx, xi_blk->preds[p]);
+            XiBlock *xi_pred = xi_blk->preds[p];
+            if (!xi_pred)
+                continue;
+            if (xi_pred->succs[0] != xi_blk && xi_pred->succs[1] != xi_blk)
+                continue; /* exception edge — keep out of Xm's normal CFG */
+            XmBlock *pred = get_block(&ctx, xi_pred);
             xm_block_add_pred(xm_blk, pred, func->arena);
         }
     }
