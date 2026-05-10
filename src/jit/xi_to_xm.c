@@ -1167,13 +1167,20 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return xm_const_i64(ctx->xm_func, 0);
         }
 
-        /* Iteration — lower as generic calls (runtime handles protocol) */
+        /* Iteration — lower as generic calls (runtime handles protocol).
+         * The iterator object lives in args[0], not a closure callee, so
+         * lower_call's xr_jit_call_func bridge mis-routes the dispatch.
+         * Bail until a dedicated helper wiring exists. */
         case XI_ITER_NEW:
         case XI_ITER_NEXT:
         case XI_ITER_VALID:
-            return lower_call(ctx, blk, v);
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
 
-        /* Coroutine ops — lower as generic calls */
+        /* Coroutine ops — same hazard as struct/iter: args[0] is a
+         * channel ptr / buffer size / task ptr, not a closure callee.
+         * Bail until xi_to_xm wires the xr_jit_chan_* / xr_jit_go /
+         * xr_jit_await helpers with their CALL_C argument layout. */
         case XI_GO:
         case XI_AWAIT:
         case XI_CHAN_SEND:
@@ -1182,7 +1189,8 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_CHAN_TRY_RECV:
         case XI_YIELD:
         case XI_CHAN_NEW:
-            return lower_call(ctx, blk, v);
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
 
         /* Defer — not yet supported in JIT path, skip gracefully */
         case XI_DEFER:
