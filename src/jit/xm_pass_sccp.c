@@ -569,9 +569,10 @@ static void rewrite_to_const(SccpCtx *ctx, XmIns *ins, SccpVal v) {
     }
 }
 
-static bool rewrite_function(SccpCtx *ctx) {
+static bool rewrite_function(SccpCtx *ctx, bool *out_cfg_changed) {
     XmFunc *func = ctx->func;
     bool any = false;
+    bool cfg_changed = false;
 
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         XmBlock *blk = func->blocks[bi];
@@ -590,6 +591,8 @@ static bool rewrite_function(SccpCtx *ctx) {
             blk->phis = NULL;
             blk->jmp.type = XM_JMP_NONE;
             blk->jmp.arg = XM_NONE;
+            if (blk->s1 || blk->s2)
+                cfg_changed = true;
             blk->s1 = NULL;
             blk->s2 = NULL;
             any = true;
@@ -614,8 +617,11 @@ static bool rewrite_function(SccpCtx *ctx) {
         }
 
         /* Simplify BR with a now-constant condition into an
-         * unconditional JMP.  The unreached successor will be compacted
-         * away by the driver after rewrite completes. */
+         * unconditional JMP.  The dropped successor remains in the
+         * function's block array if reachable through other edges, so
+         * its pred list now contains a stale entry pointing at this
+         * block.  Reporting cfg_changed here makes the driver rebuild
+         * preds before the next CFG verifier run. */
         if (blk->jmp.type == XM_JMP_BR) {
             SccpVal c = ref_value(ctx, blk->jmp.arg);
             if (c.kind == SCCP_CONST_BOOL || c.kind == SCCP_CONST_I64) {
@@ -625,9 +631,12 @@ static bool rewrite_function(SccpCtx *ctx) {
                 blk->s1 = taken;
                 blk->s2 = NULL;
                 any = true;
+                cfg_changed = true;
             }
         }
     }
+    if (out_cfg_changed)
+        *out_cfg_changed = cfg_changed;
     return any;
 }
 
@@ -726,7 +735,8 @@ XmPassChange xm_pass_sccp(XmFunc *func) {
         }
     }
 
-    bool any_rewrite = rewrite_function(&ctx);
+    bool edges_dropped = false;
+    bool any_rewrite = rewrite_function(&ctx, &edges_dropped);
 
     /* Compact: physically remove unreachable blocks from the block
      * array so downstream passes never see them.  Entry (block 0) is
@@ -747,6 +757,8 @@ XmPassChange xm_pass_sccp(XmFunc *func) {
     xr_free(ctx.exec_edge);
     xr_free(ctx.cfg.edges);
     xr_free(ctx.ssa.vregs);
-    return (any_rewrite || blocks_removed) ? (XmPassChange) {blocks_removed, true, true, 0, 0, 0}
-                                           : xm_pass_no_change();
+    bool cfg_changed = blocks_removed || edges_dropped;
+    return (any_rewrite || blocks_removed)
+               ? (XmPassChange) {cfg_changed, true, true, 0, 0, 0}
+               : xm_pass_no_change();
 }
