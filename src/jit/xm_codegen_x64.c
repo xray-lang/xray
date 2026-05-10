@@ -707,9 +707,26 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                         x64_mov_rr(&ctx->buf, X64_RAX, ret_reg);
                 }
 
-                /* Compute return type tag */
+                /* Compute return type tag.  proto->return_type_info is the
+                 * authoritative source: handles void (-> NULL) and const
+                 * ret values where xm_ref_ctype gives no information. */
                 uint8_t ret_xr_tag = 3; /* XR_TAG_I64 default */
-                if (ret_idx < ctx->func->nvreg) {
+                if (ctx->func->proto && ctx->func->proto->return_type_info) {
+                    uint8_t pt = xr_type_to_xr_tag(ctx->func->proto->return_type_info);
+                    if (pt != 0xFF && pt != 0xFC)
+                        ret_xr_tag = pt;
+                }
+                if (xm_ref_is_const(blk->jmp.arg) && ret_idx < ctx->func->nconst &&
+                    (!ctx->func->proto || !ctx->func->proto->return_type_info)) {
+                    uint8_t crep = ctx->func->consts[ret_idx].rep;
+                    if (crep == XR_REP_F64)
+                        ret_xr_tag = 4; /* XR_TAG_F64 */
+                    else if (crep == XR_REP_PTR)
+                        ret_xr_tag = 5; /* XR_TAG_PTR */
+                    else
+                        ret_xr_tag = 3; /* XR_TAG_I64 */
+                }
+                if (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg) {
                     XmType rct = xm_ref_ctype(ctx->func, blk->jmp.arg);
                     uint8_t ret_vtag = type_kind_to_vtag(rct.kind);
                     uint8_t vt = vtag_to_value_tag(ret_vtag);

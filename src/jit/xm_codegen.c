@@ -1305,19 +1305,27 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
                 // Return XrJitResult: x0=payload, x1=tag (ARM64 two-register struct).
                 // call_c_stub captures both before restoring live regs, so callers
                 // receive {payload, tag} without any memory side-channel.
-                // Determine return value_tag (x1) from ctype
+                // Determine return value_tag (x1).  proto->return_type_info
+                // is the authoritative source: it handles void (-> NULL) and
+                // const ret values where xm_ref_ctype gives no information.
+                // Fall back to vreg ctype/rep when the proto type is missing
+                // or too coarse (e.g. UNION, T?).
                 uint8_t ret_vtag = VTAG_TAGGED;
                 uint8_t ret_xr_tag = XR_TAG_I64;  // default
-                if (ret_idx < ctx->func->nvreg) {
+                if (ctx->func->proto && ctx->func->proto->return_type_info) {
+                    uint8_t pt = xr_type_to_xr_tag(ctx->func->proto->return_type_info);
+                    if (pt != 0xFF && pt != 0xFC)
+                        ret_xr_tag = pt;
+                }
+                if (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg) {
                     XmType rct = xm_ref_ctype(ctx->func, blk->jmp.arg);
                     ret_vtag = type_kind_to_vtag(rct.kind);
                     uint8_t vt = vtag_to_value_tag(ret_vtag);
                     if (vt != 0xFF) {
                         ret_xr_tag = vt;
-                    } else if (ret_vtag == VTAG_TAGGED) {
-                        // VTAG_TAGGED: type is only known at runtime.
-                        // Use rep as hint, but fall back to 0xFF so the
-                        // caller uses heuristic rather than assuming I64.
+                    } else if (ret_vtag == VTAG_TAGGED &&
+                               (!ctx->func->proto || !ctx->func->proto->return_type_info)) {
+                        // No proto type info — fall back to rep hint.
                         uint8_t mt = ctx->func->vregs[ret_idx].rep;
                         if (mt == XR_REP_F64)
                             ret_xr_tag = XR_TAG_F64;
@@ -1326,6 +1334,18 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
                         else
                             ret_xr_tag = 0xFF;  // unknown: use heuristic
                     }
+                } else if (xm_ref_is_const(blk->jmp.arg) && ret_idx < ctx->func->nconst &&
+                           (!ctx->func->proto || !ctx->func->proto->return_type_info)) {
+                    // Const ret value: derive tag from its rep.  PTR with
+                    // raw=0 (void/null return) is reconstructed as
+                    // XR_TAG_NULL by jit_value_from_tag().
+                    uint8_t crep = ctx->func->consts[ret_idx].rep;
+                    if (crep == XR_REP_F64)
+                        ret_xr_tag = XR_TAG_F64;
+                    else if (crep == XR_REP_PTR)
+                        ret_xr_tag = XR_TAG_PTR;
+                    else
+                        ret_xr_tag = XR_TAG_I64;
                 }
                 // Set x0 = payload FIRST: ret_reg may be x1, and setting x1=tag
                 // below would clobber it before we copy to x0.
