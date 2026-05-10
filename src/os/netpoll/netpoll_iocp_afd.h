@@ -120,7 +120,7 @@ typedef struct _XR_AFD_POLL_INFO {
 } XR_AFD_POLL_INFO;
 
 // ============================================================================
-// AFD context: per-netpoll AFD device handle
+// AFD context: per-netpoll AFD device handle and IOCP backend state.
 // ============================================================================
 
 // The AFD device handle is a single per-IOCP resource: every poll
@@ -129,8 +129,10 @@ typedef struct _XR_AFD_POLL_INFO {
 // XrAfdContext per XrNetpoll on the heap (pointed to from
 // XrNetpoll.backend_state).
 typedef struct XrAfdContext {
-    HANDLE iocp;        // Borrowed; XrNetpoll owns the lifetime
-    HANDLE afd_device;  // Owned; opened via NtCreateFile on \Device\Afd\XrayN
+    HANDLE iocp;                   // Borrowed; XrNetpoll owns the lifetime
+    HANDLE afd_device;             // Owned; opened via NtCreateFile on \Device\Afd\XrayN
+    ULONG_PTR completion_key;      // Stored at CreateIoCompletionPort time; lets dispatch distinguish AFD completions from self-wakeup
+    void *update_queue_head;       // XrPollDesc*; intrusive single-linked stack of pds awaiting AFD poll re-submit
 } XrAfdContext;
 
 // ============================================================================
@@ -138,8 +140,11 @@ typedef struct XrAfdContext {
 // ============================================================================
 
 // Initialize the AFD context: open \Device\Afd, associate it with
-// the given IOCP, and resolve the NT API entry points needed for
-// later xr_afd_poll / xr_afd_cancel calls.
+// the given IOCP under the supplied completion_key, and resolve the
+// NT API entry points needed for later xr_afd_poll / xr_afd_cancel
+// calls. The completion_key is stamped onto every AFD-driven IOCP
+// completion; pick a non-zero value so wakeup packets posted with
+// key=0 stay distinguishable.
 //
 // On the first call this also performs one-time global setup
 // (GetProcAddress for NtCreateFile / NtDeviceIoControlFile /
@@ -148,7 +153,7 @@ typedef struct XrAfdContext {
 //
 // Returns 0 on success, -1 on failure with the caller-side state
 // untouched. GetLastError() holds a translated Win32 error.
-int xr_afd_init(XrAfdContext *ctx, HANDLE iocp);
+int xr_afd_init(XrAfdContext *ctx, HANDLE iocp, ULONG_PTR completion_key);
 
 // Close the AFD device handle. Safe to call on a never-initialized
 // or partially-initialized context (any field that is NULL / 0 is

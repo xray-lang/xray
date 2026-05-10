@@ -151,7 +151,8 @@ static int iouring_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     return 0;
 }
 
-static void iouring_del_fd(XrNetpoll *np, int fd) {
+static void iouring_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
+    (void) pd;  // io_uring cancels by fd; pd is unused
     XrUringState *us = (XrUringState *) np->backend_state;
     if (!us)
         return;

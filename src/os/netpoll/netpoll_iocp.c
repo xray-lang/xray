@@ -150,7 +150,7 @@ static int set_error_from_nt(NTSTATUS status) {
 // by accident. Generated lazily from a process-wide counter.
 static atomic_uint g_afd_device_seq;
 
-int xr_afd_init(XrAfdContext *ctx, HANDLE iocp) {
+int xr_afd_init(XrAfdContext *ctx, HANDLE iocp, ULONG_PTR completion_key) {
     XR_DCHECK(ctx != NULL, "xr_afd_init: NULL ctx");
     XR_DCHECK(iocp != NULL, "xr_afd_init: NULL iocp");
 
@@ -159,6 +159,8 @@ int xr_afd_init(XrAfdContext *ctx, HANDLE iocp) {
 
     ctx->iocp = iocp;
     ctx->afd_device = NULL;
+    ctx->completion_key = completion_key;
+    ctx->update_queue_head = NULL;
 
     // Build a per-instance device path: \Device\Afd\Xray<seq>.
     // The exact name is irrelevant; AFD treats anything under
@@ -185,9 +187,10 @@ int xr_afd_init(XrAfdContext *ctx, HANDLE iocp) {
 
     // Associate the AFD device with our IOCP. Every poll completion
     // submitted via this device handle will be delivered through the
-    // same IOCP that carries wakeups and (eventually) other backend
-    // notifications.
-    if (CreateIoCompletionPort(afd, iocp, 0, 0) == NULL) {
+    // same IOCP carrying self-wakeup packets, so the dispatch loop
+    // distinguishes them by completion_key (AFD = supplied sentinel,
+    // wakeup = 0 via PostQueuedCompletionStatus).
+    if (CreateIoCompletionPort(afd, iocp, completion_key, 0) == NULL) {
         DWORD err = GetLastError();
         CloseHandle(afd);
         SetLastError(err);
@@ -314,13 +317,219 @@ static inline XrAfdContext *iocp_ctx(XrNetpoll *np) {
     return (XrAfdContext *) np->backend_state;
 }
 
-// Sentinel completion key reserved for backend self-wakeup.
+// Completion-key sentinels.
 //
-// Real fds register their XrPollDesc* as the completion key, which is
-// always a non-NULL heap pointer; 0 cleanly identifies the
-// PostQueuedCompletionStatus(NULL) packets emitted by iocp_wakeup so
-// the dispatch loop can drop them without consulting any side table.
+//   WAKEUP — PostQueuedCompletionStatus(NULL) packets emitted by
+//            iocp_wakeup. Hard-coded to 0 so the kernel's default
+//            "no key" packets cannot collide with a live entry.
+//   AFD    — Stamped onto every AFD poll completion via the
+//            CreateIoCompletionPort association in xr_afd_init.
+//            Any non-zero, page-aligned-stable value works; 1 is
+//            small, never collides with a heap pointer (heap blocks
+//            are aligned to MEMORY_ALLOCATION_ALIGNMENT >= 8), and
+//            keeps the dispatch switch trivial.
 #define XR_IOCP_KEY_WAKEUP ((ULONG_PTR) 0)
+#define XR_IOCP_KEY_AFD ((ULONG_PTR) 1)
+
+// ----------------------------------------------------------------------------
+// Per-pd IOCP state.
+//
+// Lives in the opaque iocp_state[XR_IOCP_PD_STATE_SIZE] buffer
+// reserved on every XrPollDesc. We pin its layout via _Static_assert
+// so growth is caught at build time rather than at runtime as a
+// silent buffer overrun.
+//
+// iosb MUST be the first field: AFD completions deliver lpOverlapped
+// pointing at &state->iosb, and we recover the owning XrPollDesc by
+// subtracting offsetof(XrPollDesc, iocp_state) from that pointer.
+// ----------------------------------------------------------------------------
+
+enum {
+    XR_IOCP_POLL_IDLE = 0,       // No outstanding AFD poll
+    XR_IOCP_POLL_PENDING = 1,    // AFD poll submitted; awaiting completion
+    XR_IOCP_POLL_CANCELLED = 2,  // NtCancelIoFileEx called; awaiting drain completion
+};
+
+typedef struct XrIocpPdState {
+    IO_STATUS_BLOCK iosb;             // MUST be first; lpOverlapped recovery
+    XR_AFD_POLL_INFO poll_info;       // Submitted to NtDeviceIoControlFile
+    SOCKET base_socket;               // Resolved once on add_fd
+    uint32_t user_events;             // AFD event mask we want monitored
+    uint32_t pending_events;          // Snapshot at submit time (debug aid)
+    uint8_t poll_status;              // XR_IOCP_POLL_*
+    uint8_t in_update_queue;          // 1 if linked into ctx->update_queue_head
+    uint8_t pad[6];                   // Explicit padding so update_link is 8-byte aligned
+    struct XrPollDesc *update_link;   // Intrusive single-linked stack
+} XrIocpPdState;
+
+_Static_assert(sizeof(XrIocpPdState) <= XR_IOCP_PD_STATE_SIZE,
+               "XrIocpPdState must fit in XR_IOCP_PD_STATE_SIZE");
+_Static_assert(offsetof(XrIocpPdState, iosb) == 0,
+               "iosb must be at offset 0 for lpOverlapped pd recovery");
+
+static inline XrIocpPdState *iocp_pd(XrPollDesc *pd) {
+    return (XrIocpPdState *) pd->iocp_state;
+}
+
+// Recover the owning XrPollDesc from an IO_STATUS_BLOCK pointer
+// returned via OVERLAPPED_ENTRY.lpOverlapped. iosb is the first
+// field of XrIocpPdState which lives at offset
+// offsetof(XrPollDesc, iocp_state) inside the pd, so a single
+// subtraction reverses the pointer arithmetic.
+static inline XrPollDesc *pd_from_iosb(IO_STATUS_BLOCK *iosb) {
+    return (XrPollDesc *) ((unsigned char *) iosb - offsetof(XrPollDesc, iocp_state));
+}
+
+// Translate an AFD event mask into the readiness mode bits the
+// platform-independent layer understands. Mirrors wepoll's mapping
+// but collapses everything into XR_POLL_READ / XR_POLL_WRITE since
+// xnetpoll has no priority-band or hangup channels to speak of.
+//
+// AFD_POLL_LOCAL_CLOSE is handled by the caller before this point
+// (it short-circuits to "both ready" so the caller's next syscall
+// surfaces the EOF / error itself).
+static int iocp_afd_events_to_mode(ULONG afd_events) {
+    int mode = 0;
+    if (afd_events & (AFD_POLL_RECEIVE | AFD_POLL_RECEIVE_EXPEDITED | AFD_POLL_DISCONNECT |
+                      AFD_POLL_ACCEPT | AFD_POLL_ABORT))
+        mode |= XR_POLL_READ;
+    if (afd_events & (AFD_POLL_SEND | AFD_POLL_CONNECT_FAIL))
+        mode |= XR_POLL_WRITE;
+    // CONNECT_FAIL also surfaces as "readable" so an in-flight
+    // connect() can wake on either side and observe the error
+    // through getsockopt(SO_ERROR). Mirrors what libuv does.
+    if (afd_events & AFD_POLL_CONNECT_FAIL)
+        mode |= XR_POLL_READ;
+    return mode;
+}
+
+// ----------------------------------------------------------------------------
+// Update queue: pds whose AFD poll just completed and which are
+// still interested in events get pushed here, then drained back into
+// the AFD driver as a fresh poll request the next time iocp_poll_events
+// runs (or when the caller passes through it). The queue is single-
+// threaded — only the worker calling iocp_poll_events touches it —
+// so a plain pointer + intrusive link is enough.
+// ----------------------------------------------------------------------------
+
+static void iocp_update_queue_push(XrAfdContext *ctx, XrPollDesc *pd) {
+    XrIocpPdState *st = iocp_pd(pd);
+    if (st->in_update_queue)
+        return;
+    st->in_update_queue = 1;
+    st->update_link = (XrPollDesc *) ctx->update_queue_head;
+    ctx->update_queue_head = pd;
+}
+
+static int iocp_submit_poll(XrAfdContext *ctx, XrPollDesc *pd) {
+    XrIocpPdState *st = iocp_pd(pd);
+    if (st->poll_status != XR_IOCP_POLL_IDLE)
+        return 0;  // Already pending or cancelled; do nothing
+
+    // Prime the AFD_POLL_INFO. NumberOfHandles=1 is the only shape
+    // we ever use; Exclusive=FALSE allows multiple poll requests on
+    // the same fd to coexist (we don't issue them, but FALSE is the
+    // documented default).
+    st->poll_info.Timeout.QuadPart = INT64_MAX;
+    st->poll_info.NumberOfHandles = 1;
+    st->poll_info.Exclusive = FALSE;
+    st->poll_info.Handles[0].Handle = (HANDLE) st->base_socket;
+    st->poll_info.Handles[0].Status = 0;
+    st->poll_info.Handles[0].Events = st->user_events;
+
+    if (xr_afd_poll(ctx, &st->poll_info, &st->iosb) < 0) {
+        // Submission failed; leave the state IDLE so the next caller
+        // can decide whether to retry or surface the error. We do
+        // NOT mark it as PENDING because no completion will arrive.
+        return -1;
+    }
+
+    st->poll_status = XR_IOCP_POLL_PENDING;
+    st->pending_events = st->user_events;
+    return 0;
+}
+
+static void iocp_drain_update_queue(XrAfdContext *ctx) {
+    XrPollDesc *head = (XrPollDesc *) ctx->update_queue_head;
+    ctx->update_queue_head = NULL;
+
+    while (head != NULL) {
+        XrIocpPdState *st = iocp_pd(head);
+        XrPollDesc *next = st->update_link;
+        st->update_link = NULL;
+        st->in_update_queue = 0;
+
+        // Skip pds that have been closed in the meantime; their
+        // outstanding poll (if any) has already been cancelled and
+        // the deferred-free path will reclaim the memory.
+        if (!atomic_load(&head->closing) && st->user_events != 0) {
+            (void) iocp_submit_poll(ctx, head);
+        }
+
+        head = next;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Completion handling: one AFD completion turned into readiness for
+// the platform-independent layer. The caller has already verified
+// the completion came from the AFD device (key == XR_IOCP_KEY_AFD)
+// and recovered the owning pd from the IO_STATUS_BLOCK pointer.
+// ----------------------------------------------------------------------------
+
+static void iocp_handle_completion(XrPollDesc *pd, XrReadyList *list) {
+    XrIocpPdState *st = iocp_pd(pd);
+
+    bool was_cancelled = (st->poll_status == XR_IOCP_POLL_CANCELLED);
+    st->poll_status = XR_IOCP_POLL_IDLE;
+    st->pending_events = 0;
+
+    // STATUS_CANCELLED arrives in two scenarios:
+    //   1. iocp_del_fd / xr_netpoll_close called NtCancelIoFileEx
+    //      and we are now draining the canceled completion.
+    //   2. A re-arm was scheduled with an updated event mask while
+    //      a previous poll was still pending — the previous one was
+    //      cancelled to make way. (xray's current event-mask is
+    //      static so this branch is theoretical until we add
+    //      dynamic mask updates, but the handling cost is zero.)
+    //
+    // In both cases we just consume and do not surface readiness.
+    LONG nt_status = (LONG) st->iosb.Status;
+    if (was_cancelled || nt_status == STATUS_CANCELLED)
+        return;
+
+    // pd is closing: the close path already cleared fdmap and queued
+    // the deferred free; we just drop the completion on the floor so
+    // we don't write a stale ready event into a freed pd.
+    if (atomic_load(&pd->closing))
+        return;
+
+    int mode = 0;
+    if (NT_SUCCESS(nt_status) && st->poll_info.NumberOfHandles >= 1) {
+        ULONG events = st->poll_info.Handles[0].Events;
+        if (events & AFD_POLL_LOCAL_CLOSE) {
+            // Socket was closed under us (closesocket() on the
+            // user-visible handle). Surface as both R+W ready so
+            // the caller's next syscall sees -1/EBADF and tears
+            // down the connection.
+            mode = XR_POLL_BOTH;
+        } else {
+            mode = iocp_afd_events_to_mode(events);
+        }
+    } else if (!NT_SUCCESS(nt_status)) {
+        // The poll itself errored (e.g. ERROR_INVALID_HANDLE because
+        // the base socket was closed without going through xray).
+        // Wake both modes so the next syscall surfaces the failure.
+        mode = XR_POLL_BOTH;
+    }
+
+    if (mode != 0)
+        xr_netpoll_ready(list, pd, mode);
+}
+
+// ----------------------------------------------------------------------------
+// Backend ops
+// ----------------------------------------------------------------------------
 
 static int iocp_init(XrNetpoll *np) {
     // WSAStartup is reference-counted by the OS; pairing it with
@@ -344,7 +553,7 @@ static int iocp_init(XrNetpoll *np) {
         return -1;
     }
 
-    if (xr_afd_init(ctx, iocp) < 0) {
+    if (xr_afd_init(ctx, iocp, XR_IOCP_KEY_AFD) < 0) {
         DWORD err = GetLastError();
         xr_free(ctx);
         CloseHandle(iocp);
@@ -365,6 +574,12 @@ static void iocp_cleanup(XrNetpoll *np) {
         return;
     }
 
+    // The update queue is a transient list of pds awaiting re-arm;
+    // by the time we reach cleanup, xnetpoll has already torn the
+    // pollDesc cache down so the linked pds are dead. Just drop the
+    // head pointer; nothing else owns these nodes.
+    ctx->update_queue_head = NULL;
+
     // Order matters: tear down the AFD device before closing the IOCP.
     // AFD's outstanding completions still depend on the IOCP being
     // alive when CloseHandle(afd_device) drains them.
@@ -379,28 +594,88 @@ static void iocp_cleanup(XrNetpoll *np) {
 }
 
 static int iocp_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
-    (void) np;
-    (void) fd;
-    (void) pd;
-    // Real readiness wiring (base-socket resolution + initial AFD
-    // poll submission) lands in the next change set. Returning -1
-    // here makes xr_netpoll_open fail loudly so any caller that
-    // exercises networking surfaces the missing wiring at first
-    // use rather than silently hanging on a poll that never arms.
-    return -1;
+    XR_DCHECK(pd != NULL, "iocp_add_fd: NULL pd");
+    XrAfdContext *ctx = iocp_ctx(np);
+    if (ctx == NULL || ctx->afd_device == NULL)
+        return -1;
+    if (fd < 0)
+        return -1;
+
+    // Resolve the base socket once. Layered Service Providers can
+    // wrap the user-visible SOCKET; AFD only operates on the
+    // bottom-of-stack handle. SIO_BSP_HANDLE_POLL is the modern,
+    // LSP-aware ioctl with SIO_BASE_HANDLE as fallback.
+    SOCKET base = INVALID_SOCKET;
+    if (xr_afd_get_base_socket((SOCKET) fd, &base) < 0)
+        return -1;
+
+    XrIocpPdState *st = iocp_pd(pd);
+    memset(st, 0, sizeof(*st));
+    st->base_socket = base;
+    st->poll_status = XR_IOCP_POLL_IDLE;
+
+    // We watch every event AFD knows about. The platform-independent
+    // layer demultiplexes into XR_POLL_READ / XR_POLL_WRITE based on
+    // which side of the pd's CAS state machine has a waiter; over-
+    // reporting is harmless because the unblock path is idempotent.
+    // AFD_POLL_LOCAL_CLOSE is always included so the backend learns
+    // about closesocket() races even if no user-side I/O is pending.
+    st->user_events = XR_AFD_ALL_POLL_EVENTS;
+
+    if (iocp_submit_poll(ctx, pd) < 0)
+        return -1;
+
+    return 0;
 }
 
-static void iocp_del_fd(XrNetpoll *np, int fd) {
-    (void) np;
+static void iocp_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     (void) fd;
-    // Companion to iocp_add_fd; nothing registered means nothing
-    // to unwind until AFD wiring lands.
+    XR_DCHECK(pd != NULL, "iocp_del_fd: NULL pd");
+    XrAfdContext *ctx = iocp_ctx(np);
+    if (ctx == NULL)
+        return;
+
+    XrIocpPdState *st = iocp_pd(pd);
+
+    // If the pd is queued for re-submission, it is no longer eligible —
+    // pull it off lazily by clearing the flag; the drain loop already
+    // skips closing pds. We cannot easily unlink from the middle of
+    // the intrusive single-linked stack, so the entry stays in the
+    // chain but iocp_drain_update_queue ignores it.
+    st->in_update_queue = 0;
+
+    // No outstanding poll: nothing to cancel. The caller will free
+    // the pd memory immediately, which is safe because no future
+    // AFD completion will reference it.
+    if (st->poll_status != XR_IOCP_POLL_PENDING)
+        return;
+
+    // Cancel the outstanding poll. The completion still lands on the
+    // IOCP with iosb.Status == STATUS_CANCELLED; iocp_handle_completion
+    // sees pd->closing == true (set by xr_netpoll_close before the
+    // del_fd call) and drops the event. The deferred-free path keeps
+    // pd alive until then.
+    if (xr_afd_cancel(ctx, &st->iosb) < 0) {
+        // Cancel failed for an unexpected reason. The pending poll
+        // will eventually fire on its own (e.g., AFD_POLL_LOCAL_CLOSE
+        // when the user closes the socket); the closing flag still
+        // suppresses the readiness translation.
+        return;
+    }
+
+    st->poll_status = XR_IOCP_POLL_CANCELLED;
 }
 
 static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) {
     XrAfdContext *ctx = iocp_ctx(np);
     if (ctx == NULL || ctx->iocp == NULL)
         return -1;
+
+    // Re-arm any pds whose previous poll completed but still have
+    // outstanding interest. Doing this before the dequeue ensures a
+    // fresh AFD poll is in flight by the time we wait, so a freshly
+    // ready socket isn't stuck for an extra round trip.
+    iocp_drain_update_queue(ctx);
 
     DWORD timeout_ms;
     if (delta_ns < 0) {
@@ -418,8 +693,9 @@ static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) 
 
     OVERLAPPED_ENTRY entries[128];
     ULONG count = 0;
-    BOOL ok =
-        GetQueuedCompletionStatusEx(ctx->iocp, entries, 128, &count, timeout_ms, FALSE);
+    BOOL ok = GetQueuedCompletionStatusEx(ctx->iocp, entries,
+                                          (ULONG) (sizeof(entries) / sizeof(entries[0])), &count,
+                                          timeout_ms, FALSE);
 
     if (!ok) {
         return (GetLastError() == WAIT_TIMEOUT) ? 0 : -1;
@@ -436,13 +712,35 @@ static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) 
             continue;
         }
 
-        // Real socket completions get translated into IN/OUT
-        // readiness when the AFD wiring lands. Until then any
-        // non-wakeup completion is dropped on purpose rather than
-        // forwarded as a bogus "both ready" guess.
-        (void) entries[i];
-        (void) list;
+        if (key != XR_IOCP_KEY_AFD) {
+            // Foreign completion (the IOCP is dedicated to netpoll
+            // today, but be defensive in case future code shares it).
+            continue;
+        }
+
+        IO_STATUS_BLOCK *iosb = (IO_STATUS_BLOCK *) entries[i].lpOverlapped;
+        if (iosb == NULL)
+            continue;
+
+        XrPollDesc *pd = pd_from_iosb(iosb);
+        iocp_handle_completion(pd, list);
+
+        // Re-enqueue for re-submission unless closing or unmonitored.
+        // The push is a no-op if pd is already in the queue, so a
+        // burst of completions on the same pd doesn't duplicate.
+        XrIocpPdState *st = iocp_pd(pd);
+        if (!atomic_load(&pd->closing) && st->user_events != 0 &&
+            st->poll_status == XR_IOCP_POLL_IDLE) {
+            iocp_update_queue_push(ctx, pd);
+        }
     }
+
+    // Drain again so the freshly enqueued pds get re-armed before
+    // the caller releases control. This is the wepoll-style
+    // submit-after-process pattern: completions come in, we generate
+    // readiness, then immediately re-arm so the next iteration of
+    // the runtime loop sees the next batch promptly.
+    iocp_drain_update_queue(ctx);
 
     return (int) count;
 }
