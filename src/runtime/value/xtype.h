@@ -387,6 +387,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_BOOL:
             return 1;  // XR_TAG_BOOL: payload 0=false, 1=true
         case XR_KIND_NULL:
+        case XR_KIND_VOID:
             return XR_TAG_NULL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:

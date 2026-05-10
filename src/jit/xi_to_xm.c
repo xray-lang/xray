@@ -1348,7 +1348,13 @@ static void lower_terminator(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
             if (xi_blk->control) {
                 ret_val = get_ref(ctx, xi_blk->control);
             } else {
-                ret_val = xm_const_i64(ctx->xm_func, 0);
+                /* No explicit return value (void return): produce a NULL
+                 * pointer.  Codegen RET reads the const's rep to pick the
+                 * return tag; PTR-with-raw-0 is reconstructed as
+                 * XR_TAG_NULL by jit_value_from_tag().  Using i64 0 here
+                 * would tag the value as I64 and break "result == null"
+                 * checks on the caller side. */
+                ret_val = xm_const_ptr(ctx->xm_func, NULL);
             }
             xm_block_set_ret(xm_blk, ret_val);
             break;
