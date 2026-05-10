@@ -13,7 +13,9 @@
  */
 
 #include "xtype_ref_resolve.h"
+#include "xanalyzer.h"
 #include "xanalyzer_builtin_interfaces.h"
+#include "xanalyzer_symbol.h"
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xisolate_api.h"
@@ -201,4 +203,45 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
 
 XR_FUNC XrType *xr_tref_resolve(XrayIsolate *X, const XrTypeRef *tref) {
     return resolve_impl(X, tref);
+}
+
+/* Look up `name` as a class symbol in analyzer scopes; on hit, return the
+ * canonical XrType (which carries the inheritance chain set up during class
+ * registration).  Returns NULL when no class symbol matches. */
+static XrType *resolve_class_symbol_type(XaAnalyzer *analyzer, const char *name) {
+    if (!analyzer || !name)
+        return NULL;
+
+    XaScope *start = analyzer->current_scope ? analyzer->current_scope : analyzer->global_scope;
+    XaSymbol *sym = xa_scope_lookup(start, name);
+    if (!sym || sym->kind != XA_SYM_CLASS)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    if (!links || !links->type)
+        return NULL;
+
+    /* Only honour CLASS / INSTANCE kinds — interfaces, type aliases, etc.
+     * fall back to the standard resolver to keep their semantics intact. */
+    if (links->type->kind != XR_KIND_CLASS && links->type->kind != XR_KIND_INSTANCE)
+        return NULL;
+
+    return links->type;
+}
+
+XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRef *tref) {
+    if (!tref)
+        return xr_type_new_unknown(NULL);
+    if (!analyzer)
+        return resolve_impl(NULL, tref);
+
+    /* Named class lookup preserves the inheritance chain that
+     * xr_type_new_class() would otherwise drop. */
+    if (tref->kind == XR_TREF_NAMED && tref->name) {
+        XrType *cls = resolve_class_symbol_type(analyzer, tref->name);
+        if (cls)
+            return cls;
+    }
+
+    return resolve_impl(analyzer->isolate, tref);
 }

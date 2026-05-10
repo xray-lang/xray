@@ -1,0 +1,87 @@
+// 1233_generic_class_bound.xr
+// Class upper-bound generics: <T: BaseClass> accepts BaseClass and any
+// of its subclasses, allowing the body to rely on the base API while
+// callers preserve their concrete subtype.
+
+class Animal {
+    name: string
+    constructor(n: string) { this.name = n }
+    species(): string { return "animal" }
+}
+
+class Dog extends Animal {
+    breed: string
+    constructor(n: string, b: string) {
+        super(n)
+        this.breed = b
+    }
+    species(): string { return "dog" }
+}
+
+class Cat extends Animal {
+    constructor(n: string) { super(n) }
+    species(): string { return "cat" }
+}
+
+class Puppy extends Dog {
+    constructor(n: string) {
+        super(n, "Mixed")
+    }
+    species(): string { return "puppy" }
+}
+
+// ===== Direct subclass satisfies upper bound =====
+@test
+fn test_direct_subclass(): void {
+    fn nameOf<T: Animal>(a: T): string { return a.name }
+
+    let dog = Dog("Rex", "Labrador")
+    assert_eq(nameOf<Dog>(dog), "Rex")
+}
+
+@test
+fn test_sibling_subclass(): void {
+    fn nameOf<T: Animal>(a: T): string { return a.name }
+
+    let cat = Cat("Whiskers")
+    assert_eq(nameOf<Cat>(cat), "Whiskers")
+}
+
+// ===== Transitive (grand-child) subclass also satisfies =====
+@test
+fn test_grandchild_subclass(): void {
+    fn nameOf<T: Animal>(a: T): string { return a.name }
+
+    let puppy = Puppy("Buddy")
+    assert_eq(nameOf<Puppy>(puppy), "Buddy")
+}
+
+// ===== Base class itself satisfies (reflexive) =====
+@test
+fn test_base_class_self(): void {
+    fn nameOf<T: Animal>(a: T): string { return a.name }
+
+    let animal = Animal("Generic")
+    assert_eq(nameOf<Animal>(animal), "Generic")
+}
+
+// ===== Type parameter inferred without explicit type arg =====
+@test
+fn test_inferred_type_arg(): void {
+    fn nameOf<T: Animal>(a: T): string { return a.name }
+
+    let dog = Dog("Spot", "Beagle")
+    assert_eq(nameOf(dog), "Spot")
+}
+
+// ===== Class upper bound combined with second unconstrained param =====
+@test
+fn test_class_bound_with_second_param(): void {
+    fn pair<T: Animal, U>(a: T, tag: U): U { return tag }
+
+    let cat = Cat("Mittens")
+    assert_eq(pair<Cat, int>(cat, 7), 7)
+    assert_eq(pair<Cat, string>(cat, "ok"), "ok")
+}
+
+print("All class-bound generic tests passed!")

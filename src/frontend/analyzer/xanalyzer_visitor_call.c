@@ -95,9 +95,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
         // Check constraints — every constraint in the intersection list must hold.
         for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
-            XrType *type_arg = call->type_args[i]
-                                   ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
-                                   : NULL;
+            // Use analyzer-aware resolver so user class type-args carry their
+            // superclass chain — required for `<T: BaseClass>` upper bounds.
+            XrType *type_arg =
+                call->type_args[i]
+                    ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
+                    : NULL;
 
             int constraint_count = 0;
             XrType **constraints =
