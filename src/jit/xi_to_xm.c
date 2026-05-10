@@ -1236,10 +1236,18 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_TYPEOF:
         case XI_GET_BUILTIN:
         case XI_CLASS_CREATE:
+            return lower_call(ctx, blk, v);
+
         case XI_STRUCT_NEW:
         case XI_STRUCT_GET:
         case XI_STRUCT_SET:
-            return lower_call(ctx, blk, v);
+            /* Struct ops use a non-closure argument layout (struct_ptr +
+             * field_idx + value), and lower_call would mis-route them
+             * through xr_jit_call_func.  Bail out until they have proper
+             * lowering via the xr_jit_new_struct / xr_jit_struct_*
+             * runtime helpers. */
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
 
         /* Structured concurrency scope — runtime calls */
         case XI_SCOPE_ENTER:
