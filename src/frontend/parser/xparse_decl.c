@@ -970,6 +970,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     XrTypeAlias *alias_entry = xr_type_scope_define(parser->type_scope, alias_name, NULL);
     if (!alias_entry) {
         xr_parser_error(parser, "duplicate type alias definition");
+        xr_free(alias_name);
         return NULL;
     }
 
@@ -977,6 +978,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     XrTypeRef *type_definition = xr_parse_type_annotation(parser);
     if (!type_definition) {
         xr_parser_error(parser, "invalid type definition");
+        xr_free(alias_name);
         return NULL;
     }
 
