@@ -226,7 +226,13 @@ static void type_prop_scan_once(XmFunc *func) {
                 case XM_CONST_I64:
                     if (xm_ref_is_vreg(ins->dst)) {
                         uint32_t vi = XM_REF_INDEX(ins->dst);
-                        set_vreg_type(func, vi, t_int, VTAG_I64);
+                        // Respect bool/null annotation set by lowering
+                        if (ins->ctype.kind == XM_TK_BOOL)
+                            refine_vreg_vtag(func, vi, VTAG_BOOL);
+                        else if (ins->ctype.kind == XM_TK_NULL)
+                            refine_vreg_vtag(func, vi, VTAG_NULL);
+                        else
+                            set_vreg_type(func, vi, t_int, VTAG_I64);
                     }
                     break;
 
@@ -615,12 +621,20 @@ static void type_prop_scan_once(XmFunc *func) {
                     break;
                 }
 
-                // ---- BOX: propagate source tag ----
+                // ---- BOX: propagate source type through boxing ----
                 case XM_BOX_I64: {
                     if (!xm_ref_is_vreg(ins->dst))
                         break;
                     uint32_t dvi = XM_REF_INDEX(ins->dst);
-                    refine_vreg_vtag(func, dvi, VTAG_I64);
+                    // Propagate source's precise type (BOOL/NULL) if known,
+                    // so return-tag codegen can emit the correct XR_TAG.
+                    uint8_t src_vtag = VTAG_I64;
+                    XmType src_ct = xm_ref_ctype(func, ins->args[0]);
+                    if (src_ct.kind == XM_TK_BOOL)
+                        src_vtag = VTAG_BOOL;
+                    else if (src_ct.kind == XM_TK_NULL)
+                        src_vtag = VTAG_NULL;
+                    refine_vreg_vtag(func, dvi, src_vtag);
                     break;
                 }
                 case XM_BOX_F64: {

@@ -1080,6 +1080,20 @@ XrJitResult xr_jit_upval_get(XrCoroutine *coro, int64_t upval_index) {
     return XR_JIT_VAL(val);
 }
 
+// UPVAL_SET: store value to current closure's upvalue.
+// extra_arg = upvalue index.
+// call_args[0] = raw payload, call_arg_tags[0] = tag.
+XrJitResult xr_jit_upval_set(XrCoroutine *coro, int64_t upval_index) {
+    XrClosure *cl = (XrClosure *) coro->jit_ctx->call_closure;
+    if (!cl || upval_index < 0 || upval_index >= cl->upval_count)
+        return XR_JIT_OK();
+
+    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[0],
+                                     coro->jit_ctx->call_arg_tags[0]);
+    cl->upvals[upval_index] = val;
+    return XR_JIT_OK();
+}
+
 // extra_arg = child proto pointer (cast to int64_t).
 // Flat upvalue model: OP_CLOSURE populates closure->upvals[] from proto descriptors.
 // Returns raw closure pointer.
@@ -1114,24 +1128,16 @@ XrJitResult xr_jit_closure_new(XrCoroutine *coro, int64_t proto_raw) {
 }
 
 // Store a register value into closure->upvals[idx].
-// call_args[0] = raw closure pointer, call_args[1] = raw payload.
-// extra_arg = (upval_index << 8) | tag.
-XrJitResult xr_jit_closure_set_upval(XrCoroutine *coro, int64_t encoded) {
-    int idx = (int) ((uint64_t) encoded >> 8);
-    uint8_t tag = (uint8_t) (encoded & 0xFF);
+// call_args[0] = raw closure pointer, call_args[1] = value payload.
+// call_arg_tags[1] = value tag.  extra_arg = upval_index.
+XrJitResult xr_jit_closure_set_upval(XrCoroutine *coro, int64_t upval_index) {
     XrClosure *cl = (XrClosure *) (uintptr_t) coro->jit_ctx->call_args[0];
-    if (!cl || idx >= cl->upval_count)
+    if (!cl || upval_index < 0 || upval_index >= cl->upval_count)
         return XR_JIT_OK();
 
-    int64_t raw = coro->jit_ctx->call_args[1];
-    XrValue val = {0};
-    if (tag == XR_TAG_PTR) {
-        val = xr_make_ptr_val((void *) (uintptr_t) raw);
-    } else {
-        val.i = raw;
-        val.tag = tag;
-    }
-    cl->upvals[idx] = val;
+    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[1],
+                                     coro->jit_ctx->call_arg_tags[1]);
+    cl->upvals[upval_index] = val;
     return XR_JIT_OK();
 }
 

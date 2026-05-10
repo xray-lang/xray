@@ -76,8 +76,9 @@ XR_FUNC XrJitResult xr_jit_invoke_direct(struct XrCoroutine *coro, int64_t extra
 XR_FUNC XrJitResult xr_jit_closure_new(struct XrCoroutine *coro, int64_t proto_raw);
 XR_FUNC XrJitResult xr_jit_closure_set_upval(struct XrCoroutine *coro, int64_t encoded);
 
-// Flat upvalue read from current closure
+// Flat upvalue read/write on current closure
 XR_FUNC XrJitResult xr_jit_upval_get(struct XrCoroutine *coro, int64_t upval_index);
+XR_FUNC XrJitResult xr_jit_upval_set(struct XrCoroutine *coro, int64_t upval_index);
 
 /* ========== Arithmetic (mixed-type fallback) ========== */
 
