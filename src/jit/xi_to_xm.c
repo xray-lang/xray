@@ -717,12 +717,16 @@ generic_call:
         return result;
     }
 
-    /* Fallback: generic call via xr_jit_call_func bridge */
+    /* Fallback: generic call via xr_jit_call_func bridge.
+     * MAY_THROW ensures codegen emits a post-call exception check: the
+     * callee can throw any exception and, absent an enclosing try block,
+     * the JIT'd caller must deopt so the VM's throw machinery can unwind
+     * through bytecode try frames. */
     XmRef nargs_ref = xm_const_i64(ctx->xm_func, (int64_t) nargs);
     XmRef nargs_val = xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64, XR_REP_I64, nargs_ref);
     XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_call_func);
     XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_DIRECT, XR_REP_I64, nargs_val, fn_ref);
-    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT | XM_FLAG_MAY_THROW;
     xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
     return result;
 }
@@ -984,11 +988,20 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return result;
         }
         case XI_SET_SHARED: {
+            /* Mirror XI_GET_SHARED: lower as CALL_C to xr_jit_set_shared.
+             * The runtime bridge reads the value from jit_ctx->call_args[0]
+             * (populated via the call_arg_pool) and the absolute shared
+             * index from extra_arg. */
             XR_DCHECK(v->nargs == 1, "set_shared: expected 1 arg");
             XmRef val = get_ref(ctx, v->args[0]);
-            XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            xm_emit(ctx->xm_func, blk, XM_STORE, XR_REP_I64, idx, val);
+            int so = ctx->proto ? ctx->proto->shared_offset : 0;
+            int64_t abs_idx = v->aux_int + so;
+            XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_set_shared);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            XmRef call_args[] = {val};
+            xm_func_bind_call_args(ctx->xm_func, result, call_args, 1);
             return val;
         }
 
@@ -1697,9 +1710,20 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
             continue;
         XmBlock *xm_blk = get_block(&ctx, xi_blk);
 
-        /* Snapshot handler before lowering (XI_TRY may change depth) */
-        XmBlock *handler_before =
-            (ctx.try_depth > 0) ? ctx.try_stack[ctx.try_depth - 1].handler : NULL;
+        /* Snapshot handler before lowering (XI_TRY may change depth).
+         * If this block is itself the handler of the topmost try (catch
+         * or finally), look past it: a throw inside the handler must
+         * propagate to the outer try, never re-enter the same handler
+         * (otherwise CALL_C in the catch body would CBNZ back to the
+         * top of the catch and spin forever). */
+        XmBlock *handler_before = NULL;
+        for (int td = ctx.try_depth - 1; td >= 0; td--) {
+            XmBlock *cand = ctx.try_stack[td].handler;
+            if (cand != xm_blk) {
+                handler_before = cand;
+                break;
+            }
+        }
         xm_blk->exception_handler = handler_before;
 
         lower_block_values(&ctx, xi_blk, xm_blk);

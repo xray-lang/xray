@@ -204,7 +204,7 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
             }                                                                                      \
         }                                                                                          \
         xr_vm_unwind_with_trace(isolate, _exc);                                                    \
-        if (VM_HANDLER_COUNT == 0)                                                                 \
+        if (!xr_vm_is_catch_reachable(isolate))                                                    \
             return XR_VM_RUNTIME_ERROR;                                                            \
         goto startfunc;                                                                            \
     } while (0)

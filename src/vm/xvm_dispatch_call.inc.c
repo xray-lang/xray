@@ -438,7 +438,7 @@ op_call_closure:
                 }
                 // JIT exception: skip deopt recovery, let VM handle
                 if (!XR_IS_NULL(VM_EXCEPTION)) {
-                    if (VM_HANDLER_COUNT == 0)
+                    if (!xr_vm_is_catch_reachable(isolate))
                         return XR_VM_RUNTIME_ERROR;
                     goto startfunc;
                 }
@@ -501,7 +501,7 @@ op_call_closure:
                     }
                     // JIT exception: skip deopt recovery, let VM handle
                     if (!XR_IS_NULL(VM_EXCEPTION)) {
-                        if (VM_HANDLER_COUNT == 0)
+                        if (!xr_vm_is_catch_reachable(isolate))
                             return XR_VM_RUNTIME_ERROR;
                         goto startfunc;
                     }
@@ -722,7 +722,7 @@ vmcase(OP_CALLSELF) {
             }
             // JIT exception: skip deopt recovery, let VM handle
             if (!XR_IS_NULL(VM_EXCEPTION)) {
-                if (VM_HANDLER_COUNT == 0)
+                if (!xr_vm_is_catch_reachable(isolate))
                     return XR_VM_RUNTIME_ERROR;
                 goto startfunc;
             }

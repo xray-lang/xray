@@ -393,8 +393,19 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_throw_exception: NULL isolate");
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    // Iterative exception propagation loop
-    while (ctx->handler_count > 0) {
+    // Iterative exception propagation loop.
+    //
+    // Stop at module_base_frame: handlers whose frame_count is at or below
+    // that boundary were installed by a caller VM invocation that entered us
+    // re-entrantly via xr_vm_call_closure. Running an outer handler inside
+    // the inner VM would execute its catch block here, then let the outer
+    // VM resume and re-run the same post-catch code.
+    //
+    // Uncaught within this scope → fall through to the "no handler" tail;
+    // callers detect that condition via xr_vm_is_catch_reachable().
+    int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
+    while (ctx->handler_count > 0 &&
+           ctx->handlers[ctx->handler_count - 1].frame_count > floor) {
         XrExceptionHandler *handler = &ctx->handlers[ctx->handler_count - 1];
 
         // Case 1: Already in finally block — pop and propagate outward
@@ -464,6 +475,16 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
         xr_exception_print(isolate, exception);
         fprintf(stderr, "\n");
     }
+}
+
+bool xr_vm_is_catch_reachable(XrayIsolate *isolate) {
+    if (!isolate)
+        return false;
+    XrVMContext *ctx = xr_vm_current_ctx(isolate);
+    if (!ctx || ctx->handler_count <= 0)
+        return false;
+    int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
+    return ctx->handlers[ctx->handler_count - 1].frame_count > floor;
 }
 
 /* ==========  Isolate API ========== */

@@ -106,6 +106,11 @@ XR_FUNC void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception);
 /* Unified throw: records the full stack trace and performs the
  * unwind in one call. See xvm_exception.c for rationale. */
 XR_FUNC void xr_vm_unwind_with_trace(XrayIsolate *isolate, XrValue exception);
+/* True if a catch handler reachable from the current VM invocation
+ * survived the last unwind. Returns false when the VM should abort the
+ * current dispatch loop and let an outer caller observe the exception
+ * (e.g. xr_vm_call_closure returning XR_VM_RUNTIME_ERROR). */
+XR_FUNC bool xr_vm_is_catch_reachable(XrayIsolate *isolate);
 
 /* ========== Helper Functions ========== */
 

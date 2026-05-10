@@ -345,15 +345,19 @@ TEST(lower_shared_var) {
     XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
     assert(xm != NULL && "shared var lowering should succeed");
 
-    /* Verify: GET_SHARED → XM_CALL_C, SET_SHARED → XM_STORE */
+    /* Both GET_SHARED and SET_SHARED lower through CALL_C bridges
+     * (xr_jit_get_shared / xr_jit_set_shared). XM_STORE with a const
+     * base would land at A64_XZR which encodes as SP in ARM64
+     * memory ops, corrupting the saved frame pointer. */
     XmBlock *blk0 = xm->blocks[0];
-    bool found_store = false, found_call_c = false;
+    int call_c_count = 0;
     for (uint32_t i = 0; i < blk0->nins; i++) {
-        if (blk0->ins[i].op == XM_STORE) found_store = true;
-        if (blk0->ins[i].op == XM_CALL_C) found_call_c = true;
+        if (blk0->ins[i].op == XM_CALL_C) call_c_count++;
+        assert(blk0->ins[i].op != XM_STORE &&
+               "SET_SHARED must not lower to XM_STORE (writes via CALL_C)");
     }
-    assert(found_store && "should contain XM_STORE for SET_SHARED");
-    assert(found_call_c && "should contain XM_CALL_C for GET_SHARED");
+    assert(call_c_count >= 2 &&
+           "should contain XM_CALL_C for both GET_SHARED and SET_SHARED");
 
     xm_func_destroy(xm);
     xi_func_free(f);
