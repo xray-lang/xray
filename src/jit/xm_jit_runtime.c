@@ -1141,6 +1141,74 @@ XrJitResult xr_jit_closure_set_upval(XrCoroutine *coro, int64_t upval_index) {
     return XR_JIT_OK();
 }
 
+// Allocate a Cell for a mutable captured variable, initialize it with the
+// value in call_args[0]/call_arg_tags[0], and return the cell pointer.
+// Multiple closures capturing the same variable must share one cell, so
+// the JIT lowerer is responsible for caching the result per var_id.
+XrJitResult xr_jit_cell_new(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    XrayIsolate *isolate = coro->isolate;
+    if (!isolate)
+        return XR_JIT_NULL();
+    XrCell *cell = xr_cell_new(isolate, coro);
+    if (!cell)
+        return XR_JIT_NULL();
+    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[0],
+                                     coro->jit_ctx->call_arg_tags[0]);
+    return XR_JIT_PTR(cell);
+}
+
+// LOAD_UPVAL with cell indirection: cl->upvals[idx] holds a cell pointer;
+// dereference to return the underlying value.  Used when the corresponding
+// capture has needs_cell=true.
+XrJitResult xr_jit_upval_cell_get(XrCoroutine *coro, int64_t upval_index) {
+    XrClosure *cl = (XrClosure *) coro->jit_ctx->call_closure;
+    if (!cl || upval_index < 0 || upval_index >= cl->upval_count)
+        return XR_JIT_NULL();
+    XrValue cv = cl->upvals[upval_index];
+    if (cv.tag != XR_TAG_PTR || !cv.ptr)
+        return XR_JIT_NULL();
+    XrCell *cell = (XrCell *) cv.ptr;
+    return XR_JIT_VAL(cell->value);
+}
+
+// STORE_UPVAL with cell indirection: cl->upvals[idx] holds a cell pointer;
+// write call_args[0]/call_arg_tags[0] into cell->value.
+XrJitResult xr_jit_upval_cell_set(XrCoroutine *coro, int64_t upval_index) {
+    XrClosure *cl = (XrClosure *) coro->jit_ctx->call_closure;
+    if (!cl || upval_index < 0 || upval_index >= cl->upval_count)
+        return XR_JIT_OK();
+    XrValue cv = cl->upvals[upval_index];
+    if (cv.tag != XR_TAG_PTR || !cv.ptr)
+        return XR_JIT_OK();
+    XrCell *cell = (XrCell *) cv.ptr;
+    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[0],
+                                     coro->jit_ctx->call_arg_tags[0]);
+    return XR_JIT_OK();
+}
+
+// Direct cell_get: call_args[0] is a raw cell pointer; return cell->value.
+// Used by parent function to read a cellified local variable.
+XrJitResult xr_jit_cell_get_direct(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    XrCell *cell = (XrCell *) (uintptr_t) coro->jit_ctx->call_args[0];
+    if (!cell)
+        return XR_JIT_NULL();
+    return XR_JIT_VAL(cell->value);
+}
+
+// Direct cell_set: call_args[0] = cell pointer, call_args[1]/tags[1] = value.
+// Used by parent function to write a cellified local variable.
+XrJitResult xr_jit_cell_set_direct(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    XrCell *cell = (XrCell *) (uintptr_t) coro->jit_ctx->call_args[0];
+    if (!cell)
+        return XR_JIT_OK();
+    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[1],
+                                     coro->jit_ctx->call_arg_tags[1]);
+    return XR_JIT_OK();
+}
+
 // Called from JIT via CALL_C for OP_TOSTRING (JIT mode).
 // jit_call_args[0] = raw value to convert.
 // extra_arg = xr_tag (precise tag from builder).

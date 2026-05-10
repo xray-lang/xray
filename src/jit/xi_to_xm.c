@@ -71,6 +71,13 @@ typedef struct {
     int32_t *slot_idx;
     uint32_t slot_idx_size;
 
+    /* Per-var_id cell pointer cache for needs_cell mutable captures.
+     * When multiple closures created in this function capture the same
+     * variable, all must share one Cell.  Indexed by var_id (0..255).
+     * xm_ref_is_none() means no cell allocated yet. */
+    XmRef cell_ref[256];
+    bool cell_present[256];
+
     bool error;
 } LowerCtx;
 
@@ -761,6 +768,32 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             val = get_ref(ctx, capture_val);
         }
 
+        /* For needs_cell captures, the closure's upvalue must hold a Cell
+         * pointer (not the value).  Multiple closures capturing the same
+         * variable share ONE Cell so writes are mutually visible.  The
+         * cache keyed by var_id mirrors the bytecode emitter's
+         * cell_side_reg / cell_created tracking. */
+        if (needs_cell && capture_val->var_id != 0xFF) {
+            uint8_t vid = capture_val->var_id;
+            if (!ctx->cell_present[vid]) {
+                /* Allocate cell, initialize from current value.
+                 * Use XR_REP_PTR so type prop tags result vreg as VTAG_PTR;
+                 * this ensures call_arg_tags[1] = XR_TAG_PTR when this ref
+                 * is later passed to xr_jit_closure_set_upval, so the
+                 * upvals[] entry stores a tagged PTR (not raw I64). */
+                XmRef cn_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_cell_new);
+                XmRef cn_res =
+                    xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_PTR, cn_fn, xm_const_i64(ctx->xm_func, 0));
+                blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+                XmRef cn_args[] = {val};
+                xm_func_bind_call_args(ctx->xm_func, cn_res, cn_args, 1);
+                ctx->cell_ref[vid] = cn_res;
+                ctx->cell_present[vid] = true;
+            }
+            /* Use cell pointer (instead of raw value) as the upvalue */
+            val = ctx->cell_ref[vid];
+        }
+
         XmRef idx = xm_const_i64(ctx->xm_func, i);
         XmRef set_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_closure_set_upval);
         XmRef set_res = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, set_fn, idx);
@@ -941,10 +974,20 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         }
 
         /* Upvalue access — must call runtime bridge (not XM_LOAD which
-         * reads JIT frame slots, not closure->upvals[]) */
+         * reads JIT frame slots, not closure->upvals[]).
+         *
+         * For needs_cell captures (mutable shared), the upvalue stores a
+         * Cell pointer.  Use the *_cell variants so the runtime helper
+         * dereferences/writes through the cell. */
         case XI_LOAD_UPVAL: {
+            int upi = (int) v->aux_int;
+            bool needs_cell = ctx->xi_func && upi >= 0 &&
+                              upi < (int) ctx->xi_func->ncaptures &&
+                              ctx->xi_func->captures[upi].needs_cell;
+            void *bridge = needs_cell ? (void *) xr_jit_upval_cell_get
+                                      : (void *) xr_jit_upval_get;
             XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_upval_get);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, bridge);
             XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
@@ -952,9 +995,15 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         }
         case XI_STORE_UPVAL: {
             XR_DCHECK(v->nargs == 1, "store_upval: expected 1 arg");
+            int upi = (int) v->aux_int;
+            bool needs_cell = ctx->xi_func && upi >= 0 &&
+                              upi < (int) ctx->xi_func->ncaptures &&
+                              ctx->xi_func->captures[upi].needs_cell;
+            void *bridge = needs_cell ? (void *) xr_jit_upval_cell_set
+                                      : (void *) xr_jit_upval_set;
             XmRef val = get_ref(ctx, v->args[0]);
             XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_upval_set);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, bridge);
             XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             XmRef call_args[] = {val};
@@ -1232,6 +1281,34 @@ static void resolve_phi_args(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
             xm_phi_set_arg(xm_phi, i, arg_ref);
         }
     }
+}
+
+/* Cell-wrap helper: if var_id `vid` is cellified, emit cell_get_direct and
+ * return the dereferenced value's XmRef.  Returns XM_NONE if not cellified. */
+static XmRef maybe_cell_get(LowerCtx *ctx, XmBlock *blk, uint8_t vid) {
+    if (vid == 0xFF || !ctx->cell_present[vid])
+        return XM_NONE;
+    XmRef cg_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_cell_get_direct);
+    XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, cg_fn,
+                           xm_const_i64(ctx->xm_func, 0));
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
+    XmRef args[] = {ctx->cell_ref[vid]};
+    xm_func_bind_call_args(ctx->xm_func, result, args, 1);
+    return result;
+}
+
+/* Cell-wrap helper: if var_id `vid` is cellified, emit cell_set_direct
+ * to mirror `val` back into the shared cell.  No-op otherwise. */
+static void maybe_cell_set(LowerCtx *ctx, XmBlock *blk, uint8_t vid, XmRef val) {
+    if (vid == 0xFF || !ctx->cell_present[vid])
+        return;
+    XmRef cs_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_cell_set_direct);
+    XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, cs_fn,
+                           xm_const_i64(ctx->xm_func, 0));
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    XmRef args[] = {ctx->cell_ref[vid], val};
+    xm_func_bind_call_args(ctx->xm_func, result, args, 2);
 }
 
 /* Lower a single block's instructions */

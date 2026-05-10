@@ -80,6 +80,20 @@ XR_FUNC XrJitResult xr_jit_closure_set_upval(struct XrCoroutine *coro, int64_t e
 XR_FUNC XrJitResult xr_jit_upval_get(struct XrCoroutine *coro, int64_t upval_index);
 XR_FUNC XrJitResult xr_jit_upval_set(struct XrCoroutine *coro, int64_t upval_index);
 
+// Cell-based upvalue access for mutable captures (needs_cell=true).
+// xr_jit_cell_new: allocate Cell, initialize from call_args[0]/tags[0],
+//   return cell pointer.  Caller stores the pointer into closure->upvals.
+// xr_jit_upval_cell_get: cl->upvals[idx] is a cell ptr; deref and return
+//   the underlying value.
+// xr_jit_upval_cell_set: cl->upvals[idx] is a cell ptr; write
+//   call_args[0]/tags[0] into cell->value.
+XR_FUNC XrJitResult xr_jit_cell_new(struct XrCoroutine *coro, int64_t unused);
+XR_FUNC XrJitResult xr_jit_upval_cell_get(struct XrCoroutine *coro, int64_t upval_index);
+XR_FUNC XrJitResult xr_jit_upval_cell_set(struct XrCoroutine *coro, int64_t upval_index);
+// Direct cell access for the parent function (cell pointer in call_args[0])
+XR_FUNC XrJitResult xr_jit_cell_get_direct(struct XrCoroutine *coro, int64_t unused);
+XR_FUNC XrJitResult xr_jit_cell_set_direct(struct XrCoroutine *coro, int64_t unused);
+
 /* ========== Arithmetic (mixed-type fallback) ========== */
 
 XR_FUNC XrJitResult xr_jit_rt_add(struct XrCoroutine *coro, int64_t unused);
