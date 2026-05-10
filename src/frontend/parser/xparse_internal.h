@@ -193,6 +193,15 @@ XR_FUNC AstNode *xr_parse_export_declaration(Parser *parser);
 
 XR_FUNC XrTypeRef *xr_parse_type_annotation(Parser *parser);
 
+/* Parse one or more interface constraints separated by '&', e.g.
+ *   T: Comparable
+ *   T: Comparable & Hashable & Stringable
+ * The leading ':' must already have been consumed.  Returns the array of
+ * constraint type refs and writes the count to *out_count.  When no
+ * constraint is parseable (allocation failure), returns NULL with count 0.
+ */
+XR_FUNC XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count);
+
 /* ========== Destructuring ========== */
 
 XR_FUNC XrDestructurePattern *xr_parse_array_pattern(Parser *parser);

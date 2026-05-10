@@ -107,8 +107,12 @@ struct XaSymbolLinks {
     int inferred_param_count;
 
     // For generic functions/classes
-    const char **type_param_names;    // Type parameter names (e.g., "T", "U")
-    XrType **type_param_constraints;  // Constraints (e.g., Comparable), NULL if none
+    const char **type_param_names;     // Type parameter names (e.g., "T", "U")
+    XrType ***type_param_constraints;  // Per-param intersection constraint lists.
+                                       // type_param_constraints[i] is a pointer to an
+                                       // array of size type_param_constraint_counts[i].
+                                       // NULL when a parameter has no constraints.
+    int *type_param_constraint_counts; // Number of constraints per parameter (0 = none)
     int type_param_count;
 
     // For classes
@@ -247,11 +251,17 @@ XR_FUNC const char **xa_symbol_links_get_param_names(XaSymbolLinks *links, int *
 XR_FUNC bool xa_symbol_is_function(XaSymbol *symbol);
 
 // API: Generic type parameters
+//
+// Each generic parameter (e.g. T, U) carries an intersection-style constraint
+// list: a type satisfies the parameter only if it satisfies every constraint
+// in the list.  An empty list means the parameter is unconstrained.
 XR_FUNC void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
-                                             XrType **constraints, int count);
+                                             XrType ***constraint_lists,
+                                             const int *constraint_counts, int count);
 XR_FUNC int xa_symbol_links_get_type_param_count(XaSymbolLinks *links);
 XR_FUNC const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index);
-XR_FUNC XrType *xa_symbol_links_get_type_param_constraint(XaSymbolLinks *links, int index);
+XR_FUNC XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int index,
+                                                            int *out_count);
 
 // Type alias helpers
 XR_FUNC XaSymbol *xa_scope_define_type_alias(XaScope *scope, const char *name, void *type);
