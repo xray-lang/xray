@@ -650,16 +650,23 @@ static void iocp_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     if (st->poll_status != XR_IOCP_POLL_PENDING)
         return;
 
-    // Cancel the outstanding poll. The completion still lands on the
-    // IOCP with iosb.Status == STATUS_CANCELLED; iocp_handle_completion
-    // sees pd->closing == true (set by xr_netpoll_close before the
-    // del_fd call) and drops the event. The deferred-free path keeps
-    // pd alive until then.
+    // Hand pd ownership to the completion path BEFORE issuing the
+    // cancel. From this point on a completion (cancellation or
+    // legitimate event) will arrive at iocp_handle_completion with
+    // lpOverlapped pointing at &st->iosb; xr_netpoll_close skips
+    // the cache free when this flag is set so the kernel never
+    // dereferences a recycled pd. Even if xr_afd_cancel fails the
+    // pending completion is still in flight, so we set the flag
+    // unconditionally here.
+    atomic_store(&pd->iocp_holds_ref, true);
+
     if (xr_afd_cancel(ctx, &st->iosb) < 0) {
         // Cancel failed for an unexpected reason. The pending poll
         // will eventually fire on its own (e.g., AFD_POLL_LOCAL_CLOSE
         // when the user closes the socket); the closing flag still
-        // suppresses the readiness translation.
+        // suppresses the readiness translation, and iocp_holds_ref
+        // still funnels the eventual completion through the reap
+        // path that frees pd.
         return;
     }
 
@@ -725,13 +732,29 @@ static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) 
         XrPollDesc *pd = pd_from_iosb(iosb);
         iocp_handle_completion(pd, list);
 
+        bool is_closing = atomic_load(&pd->closing);
+        XrIocpPdState *st = iocp_pd(pd);
+
         // Re-enqueue for re-submission unless closing or unmonitored.
         // The push is a no-op if pd is already in the queue, so a
         // burst of completions on the same pd doesn't duplicate.
-        XrIocpPdState *st = iocp_pd(pd);
-        if (!atomic_load(&pd->closing) && st->user_events != 0 &&
+        if (!is_closing && st->user_events != 0 &&
             st->poll_status == XR_IOCP_POLL_IDLE) {
             iocp_update_queue_push(ctx, pd);
+        }
+
+        // Reap pds whose async ref the backend held during close.
+        // xr_netpoll_close deliberately skipped the cache free when
+        // iocp_holds_ref was set; this completion is the contract's
+        // signal that the kernel no longer references the iosb, so
+        // we own the pd outright and can return it to the cache.
+        // No further iocp_state access on pd after this point.
+        if (is_closing && atomic_load(&pd->iocp_holds_ref)) {
+            atomic_store(&pd->iocp_holds_ref, false);
+            XrNetpoll *owning_np = pd->netpoll;
+            if (owning_np != NULL) {
+                xr_poll_cache_free(&owning_np->cache, pd);
+            }
         }
     }
 
