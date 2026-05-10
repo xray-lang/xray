@@ -1070,7 +1070,18 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 /* deopt overflow: fall through to generic path */
             }
 
-            /* Generic fallback: offset from aux_int */
+            /* Property-based access (v->aux = name) on a non-Json receiver
+             * (or no IC info available) cannot lower to a direct field load:
+             * the byte offset depends on the runtime class shape and is not
+             * known at compile time. v->aux_int defaults to 0 here, so a
+             * direct LOAD_FIELD would read from the GC header. Bail out and
+             * let the VM service the property access via OP_GETPROP. */
+            if (v->aux) {
+                ctx->error = true;
+                return xm_const_i64(ctx->xm_func, 0);
+            }
+            /* Indexed access path (aux_int = byte offset) — currently unused
+             * by the frontend but kept for completeness. */
             XmRef off = xm_const_i64(ctx->xm_func, v->aux_int);
             return xm_emit(ctx->xm_func, blk, XM_LOAD_FIELD, XR_REP_I64, obj, off);
         }
@@ -1078,12 +1089,26 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XR_DCHECK(v->nargs >= 2, "store_field: need obj + val");
             XmRef obj = get_ref(ctx, v->args[0]);
             XmRef val = get_ref(ctx, v->args[1]);
+            /* See XI_LOAD_FIELD above — name-based stores cannot be lowered
+             * to a direct memory write because the field byte offset is not
+             * materialised at this stage.  The VM's OP_SETPROP path handles
+             * shape lookup, setter dispatch, and write barriers correctly. */
+            if (v->aux) {
+                ctx->error = true;
+                return val;
+            }
             XmRef off = xm_const_i64(ctx->xm_func, v->aux_int);
-            xm_emit(ctx->xm_func, blk, XM_STORE_FIELD, XR_REP_I64, off, obj);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            /* Bind val as extra arg for codegen */
-            XmRef args[2] = {obj, val};
-            (void) args;
+            /* Codegen contract for XM_STORE_FIELD:
+             *   args[0] = obj, args[1] = val, dst = const(offset),
+             *   rep     = xr_tag (XM_SF_TAG_RUNTIME = infer at codegen).
+             * Build the instruction directly so we can override dst
+             * with the offset constant — xm_emit() always allocates a
+             * fresh vreg for dst, which we don't want here. */
+            xm_emit(ctx->xm_func, blk, XM_STORE_FIELD, XR_REP_VOID, obj, val);
+            XmIns *sf = &blk->ins[blk->nins - 1];
+            sf->rep = XM_SF_TAG_RUNTIME;
+            sf->dst = off;
+            sf->flags |= XM_FLAG_SIDE_EFFECT;
             return val;
         }
 
