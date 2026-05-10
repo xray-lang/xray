@@ -93,24 +93,34 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                        XR_ERR_ANALYZE_GENERIC_COUNT, msg, &loc);
         }
 
-        // Check constraints
+        // Check constraints — every constraint in the intersection list must hold.
         for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
             XrType *type_arg = call->type_args[i]
                                    ? xr_tref_resolve(ctx->analyzer->isolate, call->type_args[i])
                                    : NULL;
-            XrType *constraint = xa_symbol_links_get_type_param_constraint(fn_links, i);
 
-            if (constraint && type_arg && !xr_type_satisfies_constraint(type_arg, constraint)) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = node->line, .column = node->column};
-                const char *param_name = xa_symbol_links_get_type_param_name(fn_links, i);
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
-                         xr_type_to_string(type_arg), xr_type_to_string(constraint),
-                         param_name ? param_name : "?");
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+            int constraint_count = 0;
+            XrType **constraints =
+                xa_symbol_links_get_type_param_constraints(fn_links, i, &constraint_count);
+
+            if (!type_arg || constraint_count == 0)
+                continue;
+
+            for (int j = 0; j < constraint_count; j++) {
+                XrType *constraint = constraints[j];
+                if (constraint && !xr_type_satisfies_constraint(type_arg, constraint)) {
+                    XrLocation loc = {.file = ctx->file_path,
+                                      .line = node->line,
+                                      .column = node->column};
+                    const char *param_name = xa_symbol_links_get_type_param_name(fn_links, i);
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
+                             xr_type_to_string(type_arg), xr_type_to_string(constraint),
+                             param_name ? param_name : "?");
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+                }
             }
         }
     }

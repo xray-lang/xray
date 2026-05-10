@@ -304,3 +304,31 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     xr_parser_error_expected_name(parser, "expected type name");
     return xr_tref_unknown(parser->X);
 }
+
+/* Parse one or more interface constraints joined by '&'.
+ *
+ *   T: Comparable                         -> [Comparable]
+ *   T: Comparable & Hashable              -> [Comparable, Hashable]
+ *   T: Comparable & Hashable & Stringable -> [Comparable, Hashable, Stringable]
+ *
+ * The leading ':' must already have been matched by the caller.  All
+ * constraints are intersected: a type satisfies the parameter only when it
+ * satisfies every listed constraint. */
+XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count) {
+    XR_DCHECK(parser != NULL, "xr_parse_constraint_list: NULL parser");
+    XR_DCHECK(out_count != NULL, "xr_parse_constraint_list: NULL out_count");
+
+    XrTypeRef **list = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    do {
+        XrTypeRef *constraint = xr_parse_type_annotation(parser);
+        if (constraint == NULL)
+            break;
+        XR_PARSE_PUSH(parser, list, count, capacity, constraint);
+    } while (xr_parser_match(parser, TK_AMP));
+
+    *out_count = count;
+    return list;
+}

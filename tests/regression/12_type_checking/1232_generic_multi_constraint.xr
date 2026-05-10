@@ -1,0 +1,91 @@
+// 1232_generic_multi_constraint.xr
+// Multi-constraint generics: <T: A & B & C> intersection-style constraints.
+// All constraints in the intersection must be satisfied for a type to be a
+// valid type argument.
+
+// ===== Single constraint (regression) =====
+@test
+fn test_single_constraint_int(): void {
+    fn first<T: Comparable>(a: T, b: T): T {
+        return a
+    }
+    assert_eq(first(1, 2), 1)
+}
+
+@test
+fn test_single_constraint_string(): void {
+    fn first<T: Comparable>(a: T, b: T): T {
+        return a
+    }
+    assert_eq(first("alpha", "beta"), "alpha")
+}
+
+// ===== Two constraints =====
+@test
+fn test_two_constraints_int(): void {
+    fn passThrough<T: Comparable & Hashable>(x: T): T {
+        return x
+    }
+    assert_eq(passThrough(42), 42)
+}
+
+@test
+fn test_two_constraints_string(): void {
+    fn passThrough<T: Comparable & Hashable>(x: T): T {
+        return x
+    }
+    assert_eq(passThrough("hello"), "hello")
+}
+
+@test
+fn test_two_constraints_float(): void {
+    fn passThrough<T: Comparable & Hashable>(x: T): T {
+        return x
+    }
+    let f = passThrough(3.14)
+    assert(f > 3.0 && f < 4.0)
+}
+
+// ===== Three constraints =====
+@test
+fn test_three_constraints(): void {
+    fn passThrough<T: Comparable & Hashable & Stringable>(x: T): T {
+        return x
+    }
+    assert_eq(passThrough(7), 7)
+    assert_eq(passThrough("ok"), "ok")
+}
+
+// ===== Mixed constraints across multiple type parameters =====
+@test
+fn test_mixed_param_constraints(): void {
+    fn pickValue<K: Hashable, V>(k: K, v: V): V {
+        return v
+    }
+    assert_eq(pickValue(1, "one"), "one")
+    assert_eq(pickValue("key", 42), 42)
+}
+
+// ===== No constraint still works =====
+@test
+fn test_unconstrained_after_constrained(): void {
+    fn id<T>(x: T): T {
+        return x
+    }
+    fn ord<T: Comparable>(x: T): T {
+        return x
+    }
+    assert_eq(id(ord(5)), 5)
+}
+
+// ===== Explicit type arguments =====
+@test
+fn test_explicit_type_args_multi_constraint(): void {
+    fn passThrough<T: Comparable & Hashable>(x: T): T {
+        return x
+    }
+    assert_eq(passThrough<int>(11), 11)
+    assert_eq(passThrough<string>("xy"), "xy")
+}
+
+print("All multi-constraint generic tests passed!")

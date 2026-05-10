@@ -13,6 +13,7 @@
  */
 
 #include "xtype_ref_resolve.h"
+#include "xanalyzer_builtin_interfaces.h"
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xisolate_api.h"
@@ -24,9 +25,16 @@
 static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t);
 
 /* Map a named type to its runtime XrType*.
- * Order: prelude → well-known singletons → generic class fallback. */
+ * Order: built-in interfaces → prelude → well-known singletons → class fallback. */
 static XrType *resolve_named(XrayIsolate *X, const char *name) {
     XR_DCHECK(name != NULL, "resolve_named: NULL name");
+
+    /* Built-in interfaces (Comparable, Hashable, Stringable, Equatable, ...).
+     * These must be resolved as XR_KIND_INTERFACE so generic-constraint checks
+     * can match by interface name rather than treating them as plain classes. */
+    XrType *iface = xa_get_builtin_interface_by_name(name);
+    if (iface)
+        return iface;
 
     /* Prelude lookup (Array, Map, Set, Channel, Json, Bytes, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);

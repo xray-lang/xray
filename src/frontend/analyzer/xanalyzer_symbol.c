@@ -66,6 +66,22 @@ static void links_release_dynamic(XaSymbolLinks *links) {
         }
         xr_free(links->param_names);
     }
+    if (links->type_param_names) {
+        for (int i = 0; i < links->type_param_count; i++) {
+            if (links->type_param_names[i])
+                xr_free((char *) links->type_param_names[i]);
+        }
+        xr_free(links->type_param_names);
+    }
+    if (links->type_param_constraints) {
+        for (int i = 0; i < links->type_param_count; i++) {
+            if (links->type_param_constraints[i])
+                xr_free(links->type_param_constraints[i]);
+        }
+        xr_free(links->type_param_constraints);
+    }
+    if (links->type_param_constraint_counts)
+        xr_free(links->type_param_constraint_counts);
     XaRefLocation *ref = links->references;
     while (ref) {
         XaRefLocation *next = ref->next;
@@ -435,19 +451,37 @@ bool xa_symbol_is_function(XaSymbol *symbol) {
     return symbol->kind == XA_SYM_FUNCTION || symbol->kind == XA_SYM_METHOD;
 }
 
-// Set generic type parameters for a function/class
-void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names, XrType **constraints,
+// Set generic type parameters for a function/class.  Each parameter may
+// carry an intersection-style constraint list (T: A & B & C); the lists
+// are deep-copied into the symbol storage so callers retain ownership of
+// their original buffers.
+void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
+                                     XrType ***constraint_lists, const int *constraint_counts,
                                      int count) {
     if (!links || count <= 0)
         return;
 
     links->type_param_count = count;
     links->type_param_names = xr_malloc(sizeof(const char *) * count);
-    links->type_param_constraints = xr_malloc(sizeof(XrType *) * count);
+    links->type_param_constraints = xr_malloc(sizeof(XrType **) * count);
+    links->type_param_constraint_counts = xr_malloc(sizeof(int) * count);
 
     for (int i = 0; i < count; i++) {
         links->type_param_names[i] = names[i] ? xr_strdup(names[i]) : NULL;
-        links->type_param_constraints[i] = constraints ? constraints[i] : NULL;
+
+        int n = constraint_counts ? constraint_counts[i] : 0;
+        XrType **src = constraint_lists ? constraint_lists[i] : NULL;
+        if (n > 0 && src) {
+            XrType **copy = xr_malloc(sizeof(XrType *) * n);
+            for (int j = 0; j < n; j++) {
+                copy[j] = src[j];
+            }
+            links->type_param_constraints[i] = copy;
+            links->type_param_constraint_counts[i] = n;
+        } else {
+            links->type_param_constraints[i] = NULL;
+            links->type_param_constraint_counts[i] = 0;
+        }
     }
 }
 
@@ -461,9 +495,14 @@ const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index)
     return links->type_param_names[index];
 }
 
-XrType *xa_symbol_links_get_type_param_constraint(XaSymbolLinks *links, int index) {
+XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int index,
+                                                   int *out_count) {
+    if (out_count)
+        *out_count = 0;
     if (!links || index < 0 || index >= links->type_param_count)
         return NULL;
+    if (out_count)
+        *out_count = links->type_param_constraint_counts[index];
     return links->type_param_constraints[index];
 }
 

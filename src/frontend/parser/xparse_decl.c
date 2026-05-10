@@ -201,15 +201,17 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
             memcpy(param_name, param_token.start, param_token.length);
             param_name[param_token.length] = '\0';
 
-            // Parse optional constraint <T: Interface>
-            XrTypeRef *constraint = NULL;
+            // Parse optional intersection constraint <T: Interface1 & Interface2 & ...>
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
             if (xr_parser_match(parser, TK_COLON)) {
-                constraint = xr_parse_type_annotation(parser);
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
             }
 
             XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
             gp->name = param_name;
-            gp->constraint = constraint;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
             XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
 
         } while (xr_parser_match(parser, TK_COMMA));

@@ -113,7 +113,7 @@ void xfmt_emit_type(XrFmtContext *ctx, XrTypeRef *tref) {
     }
 }
 
-// Format generic type parameters <T, U: Constraint>
+// Format generic type parameters <T, U: A & B & ...>
 void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int count) {
     if (count <= 0)
         return;
@@ -123,9 +123,13 @@ void xfmt_emit_generic_params(XrFmtContext *ctx, XrGenericParam **params, int co
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, params[i]->name);
-        if (params[i]->constraint) {
+        if (params[i]->constraint_count > 0 && params[i]->constraints) {
             xfmt_write_str(ctx, ": ");
-            xfmt_emit_type(ctx, params[i]->constraint);
+            for (int j = 0; j < params[i]->constraint_count; j++) {
+                if (j > 0)
+                    xfmt_write_str(ctx, " & ");
+                xfmt_emit_type(ctx, params[i]->constraints[j]);
+            }
         }
     }
     xfmt_write_char(ctx, '>');

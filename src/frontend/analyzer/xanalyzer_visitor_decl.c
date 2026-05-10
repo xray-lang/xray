@@ -264,26 +264,48 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     // Store parameter names for LSP inlay hints
     xa_symbol_links_set_function_sig(links, param_types, param_names, fn->param_count, return_type);
 
-    // Store generic type parameters and constraints
+    // Store generic type parameters and intersection-style constraint lists.
     if (fn->type_param_count > 0 && fn->type_params) {
-        const char **type_param_names = xr_malloc(sizeof(const char *) * fn->type_param_count);
-        XrType **type_param_constraints = xr_malloc(sizeof(XrType *) * fn->type_param_count);
+        int n = fn->type_param_count;
+        const char **type_param_names = xr_malloc(sizeof(const char *) * n);
+        XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * n);
+        int *constraint_counts = xr_malloc(sizeof(int) * n);
 
-        if (type_param_names && type_param_constraints) {
-            for (int i = 0; i < fn->type_param_count; i++) {
-                type_param_names[i] = fn->type_params[i]->name;
-                type_param_constraints[i] =
-                    fn->type_params[i]->constraint
-                        ? xr_tref_resolve(ctx->analyzer->isolate, fn->type_params[i]->constraint)
-                        : NULL;
+        if (type_param_names && constraint_lists && constraint_counts) {
+            for (int i = 0; i < n; i++) {
+                XrGenericParam *gp = fn->type_params[i];
+                type_param_names[i] = gp->name;
+
+                int cn = gp->constraint_count;
+                if (cn > 0 && gp->constraints) {
+                    XrType **resolved = xr_malloc(sizeof(XrType *) * cn);
+                    for (int j = 0; j < cn; j++) {
+                        resolved[j] = gp->constraints[j]
+                                          ? xr_tref_resolve(ctx->analyzer->isolate,
+                                                            gp->constraints[j])
+                                          : NULL;
+                    }
+                    constraint_lists[i] = resolved;
+                    constraint_counts[i] = cn;
+                } else {
+                    constraint_lists[i] = NULL;
+                    constraint_counts[i] = 0;
+                }
             }
 
-            xa_symbol_links_set_type_params(links, type_param_names, type_param_constraints,
-                                            fn->type_param_count);
+            xa_symbol_links_set_type_params(links, type_param_names, constraint_lists,
+                                            constraint_counts, n);
+
+            // set_type_params deep-copies constraint arrays — release temporaries.
+            for (int i = 0; i < n; i++) {
+                if (constraint_lists[i])
+                    xr_free(constraint_lists[i]);
+            }
         }
 
         xr_free(type_param_names);
-        xr_free(type_param_constraints);
+        xr_free(constraint_lists);
+        xr_free(constraint_counts);
     }
 
     if (param_types)
@@ -759,24 +781,47 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Store generic type parameters for the class
+    // Store generic type parameters and intersection-style constraint lists.
     if (cls->type_param_count > 0 && cls->type_params) {
-        const char **type_param_names = xr_malloc(sizeof(const char *) * cls->type_param_count);
-        XrType **type_param_constraints = xr_malloc(sizeof(XrType *) * cls->type_param_count);
+        int n = cls->type_param_count;
+        const char **type_param_names = xr_malloc(sizeof(const char *) * n);
+        XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * n);
+        int *constraint_counts = xr_malloc(sizeof(int) * n);
 
-        for (int i = 0; i < cls->type_param_count; i++) {
-            type_param_names[i] = cls->type_params[i]->name;
-            type_param_constraints[i] =
-                cls->type_params[i]->constraint
-                    ? xr_tref_resolve(ctx->analyzer->isolate, cls->type_params[i]->constraint)
-                    : NULL;
+        if (type_param_names && constraint_lists && constraint_counts) {
+            for (int i = 0; i < n; i++) {
+                XrGenericParam *gp = cls->type_params[i];
+                type_param_names[i] = gp->name;
+
+                int cn = gp->constraint_count;
+                if (cn > 0 && gp->constraints) {
+                    XrType **resolved = xr_malloc(sizeof(XrType *) * cn);
+                    for (int j = 0; j < cn; j++) {
+                        resolved[j] = gp->constraints[j]
+                                          ? xr_tref_resolve(ctx->analyzer->isolate,
+                                                            gp->constraints[j])
+                                          : NULL;
+                    }
+                    constraint_lists[i] = resolved;
+                    constraint_counts[i] = cn;
+                } else {
+                    constraint_lists[i] = NULL;
+                    constraint_counts[i] = 0;
+                }
+            }
+
+            xa_symbol_links_set_type_params(links, type_param_names, constraint_lists,
+                                            constraint_counts, n);
+
+            for (int i = 0; i < n; i++) {
+                if (constraint_lists[i])
+                    xr_free(constraint_lists[i]);
+            }
         }
 
-        xa_symbol_links_set_type_params(links, type_param_names, type_param_constraints,
-                                        cls->type_param_count);
-
         xr_free(type_param_names);
-        xr_free(type_param_constraints);
+        xr_free(constraint_lists);
+        xr_free(constraint_counts);
     }
 
     // Enter class scope
@@ -1125,23 +1170,22 @@ skip_layout:
             xa_symbol_links_set_function_sig(method_links, param_types, param_names,
                                              md->param_count, ret_type);
 
-            // Store generic type parameters for the method
+            // Store generic type parameters for the method.  Method-level
+            // constraints aren't tracked in the method-decl AST yet, so the
+            // intersection lists are empty for now.
             if (md->type_param_count > 0 && md->type_param_names) {
-                const char **type_param_names =
-                    xr_malloc(sizeof(const char *) * md->type_param_count);
-                XrType **type_param_constraints =
-                    xr_malloc(sizeof(XrType *) * md->type_param_count);
+                int mc = md->type_param_count;
+                const char **type_param_names = xr_malloc(sizeof(const char *) * mc);
 
-                for (int j = 0; j < md->type_param_count; j++) {
+                for (int j = 0; j < mc; j++) {
                     type_param_names[j] = md->type_param_names[j];
-                    type_param_constraints[j] = NULL;  // TODO: support method type constraints
                 }
 
                 xa_symbol_links_set_type_params(method_links, type_param_names,
-                                                type_param_constraints, md->type_param_count);
+                                                /* constraint_lists  */ NULL,
+                                                /* constraint_counts */ NULL, mc);
 
                 xr_free(type_param_names);
-                xr_free(type_param_constraints);
             }
 
             xa_class_info_add_method(info, method_sym);

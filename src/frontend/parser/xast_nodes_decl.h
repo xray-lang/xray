@@ -19,10 +19,11 @@
 
 /* ========== Generic / Function Param Helpers ========== */
 
-// Generic type parameter (for <T: Constraint> syntax)
+// Generic type parameter (for <T: Constraint1 & Constraint2> syntax)
 typedef struct XrGenericParam {
-    char *name;             // Type parameter name: T, U, K, V
-    XrTypeRef *constraint;  // Constraint type (can be NULL)
+    char *name;                // Type parameter name: T, U, K, V
+    XrTypeRef **constraints;   // Constraint types joined by '&' (NULL if none)
+    int constraint_count;      // Number of constraints (0 if unconstrained)
 } XrGenericParam;
 
 // Function parameter passing mode for struct value types
