@@ -726,6 +726,13 @@ XrJitResult xr_jit_index_set(XrCoroutine *coro, int64_t extra_arg) {
             int idx = (int) key_val.i;
             if ((unsigned) idx < (unsigned) arr->length) {
                 xr_array_set_element(arr, idx, new_val);
+            } else if (idx == arr->length) {
+                /* Append-style write: OP_NEWARRAY/OP_INDEX_SET emits arr[i]=v for
+                 * i = 0..n-1 right after creating the array.  In the bytecode
+                 * path OP_NEWARRAY pre-pushes the elements; the JIT lowering
+                 * does not, so length is 0 when the first INDEX_SET arrives.
+                 * Match push semantics for the next slot. */
+                xr_array_push(arr, new_val);
             }
         } else if (heap_type == XR_TMAP) {
             XrMap *map = (XrMap *) obj_val.ptr;
