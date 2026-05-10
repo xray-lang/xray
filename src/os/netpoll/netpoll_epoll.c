@@ -54,7 +54,8 @@ static int epoll_np_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     return epoll_ctl(np->poll_fd, EPOLL_CTL_ADD, fd, &ev);
 }
 
-static void epoll_np_del_fd(XrNetpoll *np, int fd) {
+static void epoll_np_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
+    (void) pd;  // epoll identifies entries by fd; pd is unused
     epoll_ctl(np->poll_fd, EPOLL_CTL_DEL, fd, NULL);
 }
 

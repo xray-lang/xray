@@ -686,7 +686,7 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
 
     XrPollDesc *expected = NULL;
     if (!xr_fdmap_cas(np, fd, &expected, pd)) {
-        np->ops->del_fd(np, fd);
+        np->ops->del_fd(np, fd, pd);
         xr_poll_cache_free(&np->cache, pd);
         return expected;
     }
@@ -746,8 +746,11 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         }
     }
 
-    // Unregister from shared kqueue
-    np->ops->del_fd(np, fd);
+    // Unregister from shared backend (kqueue / epoll / iouring / iocp).
+    // pd is still valid here: xnetpoll has just CASed it out of fdmap,
+    // and the deferred-free path below makes sure it survives any
+    // outstanding async work the backend may need to cancel.
+    np->ops->del_fd(np, fd, pd);
 
     xr_netpoll_unblock(pd, XR_POLL_READ, false);
     xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
