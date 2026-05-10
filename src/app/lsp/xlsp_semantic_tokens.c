@@ -370,6 +370,21 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                     }
                 }
             }
+            // Interface properties
+            for (int i = 0; i < iface->property_count; i++) {
+                AstNode *prop = iface->properties[i];
+                if (prop && prop->type == AST_INTERFACE_PROPERTY) {
+                    const char *pname = prop->as.interface_property.name;
+                    if (pname) {
+                        int pcol = prop->column > 0 ? prop->column - 1 : 0;
+                        int mods = XLSP_MOD_ABSTRACT;
+                        if (prop->as.interface_property.is_readonly)
+                            mods |= XLSP_MOD_READONLY;
+                        result_add(result, prop->line - 1, pcol, strlen(pname),
+                                   XLSP_TOKEN_PROPERTY, mods);
+                    }
+                }
+            }
             break;
         }
 

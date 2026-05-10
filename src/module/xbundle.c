@@ -328,6 +328,9 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             for (int i = 0; i < node->as.interface_decl.method_count; i++) {
                 visit_node(ctx, node->as.interface_decl.methods[i], current_dir);
             }
+            for (int i = 0; i < node->as.interface_decl.property_count; i++) {
+                visit_node(ctx, node->as.interface_decl.properties[i], current_dir);
+            }
             break;
 
         case AST_TRY_CATCH:

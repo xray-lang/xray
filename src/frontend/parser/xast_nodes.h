@@ -100,6 +100,7 @@ struct AstNode {
         StructLiteralNode struct_literal;
         InterfaceDeclNode interface_decl;
         InterfaceMethodNode interface_method;
+        InterfacePropertyNode interface_property;
         FieldDeclNode field_decl;
         MethodDeclNode method_decl;
         NewExprNode new_expr;

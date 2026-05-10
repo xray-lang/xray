@@ -143,8 +143,9 @@ typedef enum {
     AST_CLASS_DECL,        // class Dog extends Animal {...}
     AST_STRUCT_DECL,       // struct Point { x: float, y: float }
     AST_STRUCT_LITERAL,    // Point{x: 1.0, y: 2.0}
-    AST_INTERFACE_DECL,    // interface Drawable {...}
-    AST_INTERFACE_METHOD,  // Interface method signature: draw(): void;
+    AST_INTERFACE_DECL,      // interface Drawable {...}
+    AST_INTERFACE_METHOD,    // Interface method signature: draw(): void;
+    AST_INTERFACE_PROPERTY,  // Interface property signature: length: int
     AST_FIELD_DECL,        // name: string
     AST_METHOD_DECL,       // greet() {...}
     AST_NEW_EXPR,          // new Dog("Rex")

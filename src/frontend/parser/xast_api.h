@@ -169,12 +169,18 @@ XR_FUNC AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name, char **
 // Create interface declaration node
 XR_FUNC AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **extends,
                                        int extends_count, AstNode **methods, int method_count,
+                                       AstNode **properties, int property_count,
+                                       XrGenericParam **type_params, int type_param_count,
                                        int line);
 
 // Create interface method signature node
 XR_FUNC AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name, char **parameters,
                                          XrTypeRef **param_types, int param_count,
                                          XrTypeRef *return_type, int line);
+
+// Create interface property signature node (e.g. `length: int`)
+XR_FUNC AstNode *xr_ast_interface_property(XrayIsolate *X, const char *name,
+                                           XrTypeRef *prop_type, bool is_readonly, int line);
 
 // Create field declaration node
 XR_FUNC AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrTypeRef *field_type,
