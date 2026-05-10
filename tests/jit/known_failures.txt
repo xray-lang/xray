@@ -16,3 +16,14 @@
 
 # GC stress: map_set NULL key assertion under --jit-force (GC interaction bug)
 tests/regression/10_stdlib/1207_gc_stress.xr
+
+# Flaky JIT crash: sweep_block calls xr_gc_destroy_logger on a 48-byte
+# object whose type byte (offset 8) reads as XR_TLOGGER (28) but no
+# wrap_logger ever produced it. The body bytes look like 2 XrValue
+# ints (3, 70, 3, 71) — most likely an Array<int> data buffer whose
+# header type was overwritten from elsewhere. Reproduces ~60-75% with
+# --jit-force; identical rate on baseline before any recent fix, so
+# the bug is pre-existing GC memory corruption, not caused by JIT
+# exception or shared-var lowering changes. Root cause investigation
+# pending in docs/known_bugs.md.
+tests/regression/10_stdlib/1206_gc_enhanced.xr
