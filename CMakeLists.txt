@@ -168,9 +168,10 @@ if(ENABLE_UBSAN)
     # - Use after scope, etc.
     add_compile_options(
         -fsanitize=undefined
+        -fno-sanitize=function
         -fno-omit-frame-pointer
     )
-    add_link_options(-fsanitize=undefined)
+    add_link_options(-fsanitize=undefined -fno-sanitize=function)
 endif()
 
 # ThreadSanitizer configuration
