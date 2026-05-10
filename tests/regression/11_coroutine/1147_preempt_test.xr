@@ -24,14 +24,21 @@ fn test_preempt_test() {
     for (let i = 0; i < WORKER_COUNT; i++) {
         go worker(i, resultCh, ITERATIONS)
     }
-    /* 收集所有结果 */
+    /* Collect IDs first; concurrent scheduling makes recv order
+     * non-deterministic, so we sort before printing to keep stdout
+     * stable across runs and across interp/JIT modes. */
+    let ids: Array<int> = []
     let received = 0
     for (let i = 0; i < WORKER_COUNT; i++) {
         let id, ok = resultCh.recv()
         if (ok) {
             received++
-            print("协程 " + string(id) + " 完成")
+            ids.push(id)
         }
+    }
+    ids.sort()
+    for (let i = 0; i < ids.length; i++) {
+        print("协程 " + string(ids[i]) + " 完成")
     }
     /* 验证 */
     if (received == WORKER_COUNT) {
