@@ -1249,10 +1249,17 @@ static bool alloc_free_reg(LsCtx *ctx, LsRange *range, LsRange ***wl, uint32_t *
         if (rbid != UINT32_MAX && o->vreg < ctx->nvreg &&
             bundle_find(ctx->bundle_parent, o->vreg) == rbid)
             continue;
-        // Active range is alive at rstart, conflict is immediate
+        /* Active range is alive at rstart, conflict is immediate.
+         * The deferred-block relaxation only makes sense for *future*
+         * conflicts (Inactive ranges that intersect later): a hot-path
+         * range can tolerate a far-away cold-block use because the
+         * register can be reclaimed before then.  An Active conflict at
+         * rstart, however, means the register is taken right now; there
+         * is no escape regardless of block temperature.  Always record
+         * it as a hot conflict so allocate_free_reg picks a different
+         * register or invokes alloc_blocked_reg/spill. */
         free_any[reg] = rstart;
-        if (!pos_is_deferred(ctx, rstart))
-            free_hot[reg] = rstart;
+        free_hot[reg] = rstart;
     }
 
     // Inactive ranges: may conflict at intersection points
