@@ -116,6 +116,12 @@ typedef struct XrPollDesc {
     struct XrPollDesc *self;
 } XrPollDesc;
 
+// Hot path: every watched fd allocates one of these from the lock-free
+// cache. Growing the struct past 1KB silently doubles the per-fd cost
+// at scale; bumping the cap is fine but should be a deliberate review.
+_Static_assert(sizeof(XrPollDesc) <= 1024,
+               "XrPollDesc must stay <= 1024 bytes (per-fd hot path)");
+
 // ========== Ready Coroutine List ==========
 
 typedef struct XrReadyList {
