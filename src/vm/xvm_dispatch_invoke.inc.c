@@ -73,7 +73,7 @@ invoke_dispatch:;
 #define VM_BUILTIN_INVOKE_CHECK_EXC()                                                              \
     do {                                                                                           \
         if (unlikely(!XR_IS_NULL(VM_EXCEPTION))) {                                                 \
-            if (VM_HANDLER_COUNT == 0)                                                             \
+            if (!xr_vm_is_catch_reachable(isolate))                                                \
                 return XR_VM_RUNTIME_ERROR;                                                        \
             goto startfunc;                                                                        \
         }                                                                                          \
@@ -97,7 +97,7 @@ invoke_dispatch:;
         int _cr = vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
         if (_cr == VM_COLD_BREAK)
             vmbreak;
-        if (VM_HANDLER_COUNT == 0)
+        if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     }
@@ -108,7 +108,7 @@ invoke_dispatch:;
         int _cr = vm_invoke_coro_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
         if (_cr == VM_COLD_BREAK)
             vmbreak;
-        if (VM_HANDLER_COUNT == 0)
+        if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     }
@@ -195,7 +195,7 @@ invoke_dispatch:;
             vmbreak;
         if (_cr == VM_COLD_BLOCKED)
             return XR_VM_BLOCKED;
-        if (VM_HANDLER_COUNT == 0)
+        if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     }
@@ -337,7 +337,7 @@ invoke_enum: {
     if (_cr == VM_COLD_BREAK)
         vmbreak;
     if (_cr == VM_COLD_ERROR) {
-        if (VM_HANDLER_COUNT == 0)
+        if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     }
@@ -361,7 +361,7 @@ invoke_module:
         if (_cr == VM_COLD_FATAL)
             return XR_VM_RUNTIME_ERROR;
         if (_cr == VM_COLD_ERROR) {
-            if (VM_HANDLER_COUNT == 0)
+            if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
@@ -394,7 +394,7 @@ invoke_class_or_instance:;
             vmbreak;
         if (_cr == VM_COLD_STARTFUNC)
             goto startfunc;
-        if (VM_HANDLER_COUNT == 0)
+        if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     } else {
@@ -506,7 +506,7 @@ vmcase(OP_SUPERINVOKE) {
     int _cr = vm_superinvoke(isolate, vm_ctx, i, base, ci, pc);
     if (_cr == VM_COLD_STARTFUNC)
         goto startfunc;
-    if (VM_HANDLER_COUNT == 0)
+    if (!xr_vm_is_catch_reachable(isolate))
         return XR_VM_RUNTIME_ERROR;
     goto startfunc;
 }
@@ -671,7 +671,7 @@ vmcase(OP_INVOKE_BUILTIN) {
     // continue at the catch site or surface the error to
     // the embedder when nothing caught it.
     if (unlikely(!XR_IS_NULL(VM_EXCEPTION))) {
-        if (VM_HANDLER_COUNT == 0)
+        if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     }

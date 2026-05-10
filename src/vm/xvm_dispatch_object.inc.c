@@ -553,7 +553,7 @@ vmcase(OP_GETPROP) {
         if (_cr == VM_COLD_STARTFUNC)
             goto startfunc;
         if (_cr == VM_COLD_ERROR) {
-            if (VM_HANDLER_COUNT == 0)
+            if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
@@ -572,7 +572,7 @@ getprop_instance:;
         if (_cr == VM_COLD_STARTFUNC)
             goto startfunc;
         if (_cr == VM_COLD_ERROR) {
-            if (VM_HANDLER_COUNT == 0)
+            if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
@@ -716,7 +716,7 @@ vmcase(OP_SETPROP) {
         if (_cr == VM_COLD_STARTFUNC)
             goto startfunc;
         if (_cr == VM_COLD_ERROR) {
-            if (VM_HANDLER_COUNT == 0)
+            if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
@@ -732,7 +732,7 @@ vmcase(OP_SETPROP) {
         if (_cr == VM_COLD_STARTFUNC)
             goto startfunc;
         if (_cr == VM_COLD_ERROR) {
-            if (VM_HANDLER_COUNT == 0)
+            if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }

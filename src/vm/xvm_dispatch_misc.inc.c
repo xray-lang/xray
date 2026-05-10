@@ -220,7 +220,7 @@ vmcase(OP_SCOPE_EXIT) {
             }
             savepc();
             xr_vm_unwind_with_trace(isolate, exc);
-            if (VM_HANDLER_COUNT == 0)
+            if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }

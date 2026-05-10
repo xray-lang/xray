@@ -131,8 +131,8 @@ vmcase(OP_END_TRY) {
             VM_DEC_HANDLER_COUNT;  // Pop handler
             xr_vm_throw_exception(isolate, exc);
 
-            // Check if there are upper handlers
-            if (VM_HANDLER_COUNT == 0) {
+            // Check if there are upper handlers reachable in this scope
+            if (!xr_vm_is_catch_reachable(isolate)) {
                 return XR_VM_RUNTIME_ERROR;
             }
             // Jump to upper handler
@@ -180,9 +180,12 @@ vmcase(OP_THROW) {
     // before unwinding to the matching handler).
     xr_vm_unwind_with_trace(isolate, exception);
 
-    // Check if uncaught exception
-    if (VM_HANDLER_COUNT == 0) {
-        // Uncaught exception, return error
+    // Check if the unwind landed on a handler reachable in this scope.
+    // Outer VM handlers (below module_base_frame when called re-entrantly
+    // via xr_vm_call_closure) are intentionally NOT reachable here — the
+    // exception propagates out so the caller can observe it.
+    if (!xr_vm_is_catch_reachable(isolate)) {
+        // Uncaught in this scope, return error
         return XR_VM_RUNTIME_ERROR;
     }
 
