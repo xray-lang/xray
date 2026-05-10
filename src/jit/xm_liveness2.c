@@ -118,11 +118,15 @@ static void iterate_dataflow(XmLive *live, XmFunc *func, const uint32_t *id_to_i
             // Save old live_in for change detection
             xm_bset_copy(&tmp, &bl->live_in);
 
-            // Compute live_out = union of successor live_in sets
+            // Compute live_out = union of successor live_in sets.
+            // Include exception_handler as an implicit successor so vregs
+            // referenced from the catch block stay live across the protected
+            // region — without this, regalloc reuses their physical registers
+            // for unrelated vregs and produces simultaneously-live overlaps.
             xm_bset_zero(&bl->live_out);
 
-            XmBlock *succs[2] = {blk->s1, blk->s2};
-            for (int s = 0; s < 2; s++) {
+            XmBlock *succs[3] = {blk->s1, blk->s2, blk->exception_handler};
+            for (int s = 0; s < 3; s++) {
                 if (!succs[s])
                     continue;
 
