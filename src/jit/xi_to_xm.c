@@ -1192,8 +1192,12 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
 
-        /* Defer — not yet supported in JIT path, skip gracefully */
+        /* Defer — JIT codegen doesn't yet schedule the deferred body
+         * onto the cleanup chain.  Silently dropping it (the previous
+         * behaviour) caused observable output divergence vs the VM, so
+         * bail out and let the VM run functions that contain `defer`. */
         case XI_DEFER:
+            ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
 
         /* Json allocation (treated as generic call for now) */
