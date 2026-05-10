@@ -314,8 +314,12 @@ static void a64_h_mov(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
 static void a64_h_box(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-    if (rd != rn)
+    if (ins->op == XM_BOX_F64) {
+        // FP register → GP register: must use FMOV to transfer float bits
+        a64_buf_emit(&ctx->buf, a64_fmov_to_gpr(rd, rn));
+    } else if (rd != rn) {
         a64_buf_emit(&ctx->buf, a64_mov(rd, rn));
+    }
 }
 
 static void a64_h_unbox_i64(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
@@ -345,10 +349,15 @@ static void a64_h_unbox_f64(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     if (src_type == XR_REP_PTR) {
         A64Reg ptr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
         a64_buf_emit(&ctx->buf, a64_ldr_fp(rd, ptr, XM_XRVALUE_PAYLOAD_OFFSET));
-    } else {
+    } else if (src_type == XR_REP_F64) {
+        // FP → FP: use fmov between FP registers
         A64Reg rn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
         if (rd != rn)
-            a64_buf_emit(&ctx->buf, a64_mov(rd, rn));
+            a64_buf_emit(&ctx->buf, a64_fmov(rd, rn));
+    } else {
+        // GP (TAGGED/I64) → FP: use fmov to transfer bits across domains
+        A64Reg rn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
+        a64_buf_emit(&ctx->buf, a64_fmov_gp_to_fp(rd, rn));
     }
 }
 

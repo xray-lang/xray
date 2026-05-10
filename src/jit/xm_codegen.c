@@ -1302,7 +1302,6 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
                 uint32_t ret_idx = XM_REF_INDEX(blk->jmp.arg);
                 bool is_fp =
                     (ret_idx < ctx->func->nvreg && ctx->func->vregs[ret_idx].rep == XR_REP_F64);
-
                 // Return XrJitResult: x0=payload, x1=tag (ARM64 two-register struct).
                 // call_c_stub captures both before restoring live regs, so callers
                 // receive {payload, tag} without any memory side-channel.

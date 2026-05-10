@@ -238,6 +238,10 @@ static const XrICMethod *ic_method_lookup(const LowerCtx *ctx, int bc_pc) {
     return ic;
 }
 
+/* Forward declaration: lower_closure_new may need to eagerly lower
+ * capture values that appear later in the block (hoisted closures). */
+static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v);
+
 /* ========== Constant Lowering ========== */
 
 static XmRef lower_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -249,7 +253,13 @@ static XmRef lower_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (!type || type->kind == XR_KIND_INT || type->kind == XR_KIND_BOOL ||
         type->kind == XR_KIND_NULL) {
         XmRef cref = xm_const_i64(ctx->xm_func, v->aux_int);
-        return xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64, XR_REP_I64, cref);
+        XmRef result = xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64, XR_REP_I64, cref);
+        // Annotate bool/null so type_prop preserves the tag distinction
+        if (type && type->kind == XR_KIND_BOOL)
+            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_BOOL, 0, 0};
+        else if (type && type->kind == XR_KIND_NULL)
+            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_NULL, 0, 0};
+        return result;
     }
     if (type->kind == XR_KIND_FLOAT) {
         union {
@@ -692,12 +702,74 @@ generic_call:
 }
 
 static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    /* XI_CLOSURE_NEW: aux=child XiFunc*, args=capture values */
-    XmRef proto_ref = xm_const_ptr(ctx->xm_func, v->aux);
+    /* XI_CLOSURE_NEW: aux=child XiFunc*, args=capture values.
+     * xr_jit_closure_new expects XrProto*, not XiFunc*. Look up the
+     * corresponding sub-proto via find_callee_proto. */
+    XiFunc *child_xi = (XiFunc *) v->aux;
+    struct XrProto *child_proto = find_callee_proto(ctx, child_xi);
+    if (!child_proto) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    XmRef proto_ref = xm_const_ptr(ctx->xm_func, (void *) child_proto);
     XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_closure_new);
-    XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, proto_ref, fn_ref);
+    XmRef closure_ref = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, proto_ref);
     blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-    return result;
+
+    /* Populate UPVAL_SRC_REG entries: for each non-NULL capture arg,
+     * call xr_jit_closure_set_upval(closure, value, upval_index).
+     *
+     * For needs_cell captures (hoisted functions), v->args[i] points to a
+     * stale braun_read placeholder created before the real initializer ran.
+     * Scan the Xi block for the actual definition of the same variable. */
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        if (!v->args[i])
+            continue;
+
+        XiValue *capture_val = v->args[i];
+        bool needs_cell = (child_xi && i < child_xi->ncaptures)
+                              ? child_xi->captures[i].needs_cell
+                              : false;
+
+        /* Resolve stale capture: find real definition in the same block */
+        if (needs_cell && capture_val->var_id != 0xFF && capture_val->block) {
+            XiBlock *xi_blk = capture_val->block;
+            uint8_t target_var = capture_val->var_id;
+            for (uint32_t j = 0; j < xi_blk->nvalues; j++) {
+                XiValue *w = xi_blk->values[j];
+                if (!w || w->var_id != target_var || w == capture_val)
+                    continue;
+                /* Skip null placeholders (the stale value we want to replace) */
+                if (w->op == XI_CONST && w->type && w->type->kind == XR_KIND_NULL)
+                    continue;
+                capture_val = w;
+                /* Keep scanning: last non-null definition wins */
+            }
+        }
+
+        /* Materialize the capture value.  If we resolved to a different
+         * (non-stale) Xi value that hasn't been lowered yet (it appears
+         * later in the block), lower it now.  For values already lowered,
+         * get_ref returns the existing XmRef. */
+        XmRef val;
+        if (capture_val != v->args[i]) {
+            /* Resolved to a later definition — lower it eagerly.
+             * Creates a fresh Xm constant materialization; the main loop
+             * will produce another one later which is harmless (DCE cleans). */
+            val = lower_value(ctx, blk, capture_val);
+        } else {
+            val = get_ref(ctx, capture_val);
+        }
+
+        XmRef idx = xm_const_i64(ctx->xm_func, i);
+        XmRef set_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_closure_set_upval);
+        XmRef set_res = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, set_fn, idx);
+        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+        XmRef call_args[] = {closure_ref, val};
+        xm_func_bind_call_args(ctx->xm_func, set_res, call_args, 2);
+    }
+
+    return closure_ref;
 }
 
 static XmRef lower_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -868,17 +940,25 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return val;
         }
 
-        /* Upvalue access */
+        /* Upvalue access — must call runtime bridge (not XM_LOAD which
+         * reads JIT frame slots, not closure->upvals[]) */
         case XI_LOAD_UPVAL: {
             XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            return xm_emit_unary(ctx->xm_func, blk, XM_LOAD, XR_REP_I64, idx);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_upval_get);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
+            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
+            return result;
         }
         case XI_STORE_UPVAL: {
             XR_DCHECK(v->nargs == 1, "store_upval: expected 1 arg");
             XmRef val = get_ref(ctx, v->args[0]);
             XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            xm_emit(ctx->xm_func, blk, XM_STORE, XR_REP_I64, idx, val);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_upval_set);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            XmRef call_args[] = {val};
+            xm_func_bind_call_args(ctx->xm_func, result, call_args, 1);
             return val;
         }
 
