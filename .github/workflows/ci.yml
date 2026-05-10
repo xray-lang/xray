@@ -289,7 +289,7 @@ jobs:
         # Capture coverage data.  --ignore-errors negative works around
         # gcov race-condition counters that occasionally go below zero.
         lcov --capture --directory build --output-file coverage.info \
-          --ignore-errors negative
+          --ignore-errors negative,mismatch
 
         # Remove system headers and test files
         lcov --remove coverage.info \
@@ -297,7 +297,7 @@ jobs:
           '*/tests/*' \
           '*/stdlib/*' \
           --output-file coverage.info \
-          --ignore-errors negative
+          --ignore-errors negative,mismatch
 
         # Generate summary
         lcov --list coverage.info
