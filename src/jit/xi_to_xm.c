@@ -720,7 +720,7 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
     XmRef proto_ref = xm_const_ptr(ctx->xm_func, (void *) child_proto);
     XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_closure_new);
-    XmRef closure_ref = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, proto_ref);
+    XmRef closure_ref = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_PTR, fn_ref, proto_ref);
     blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
 
     /* Populate UPVAL_SRC_REG entries: for each non-NULL capture arg,
