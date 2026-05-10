@@ -1016,9 +1016,18 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_CALL_BUILTIN:
             return lower_call(ctx, blk, v);
 
-        /* Extract multi-return result — placeholder (returns call ref) */
+        /* Extract i-th result from a multi-return call.  aux_int is the
+         * 1-based result index.  Index 1 trivially aliases the first
+         * return value (the call's primary x0/x1 result).  Indices >= 2
+         * require pulling from coro->jit_ctx->ret_vals[] — codegen does
+         * not emit those reads yet, so bail out and let the VM run
+         * the function. */
         case XI_EXTRACT: {
             XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
+            if (v->aux_int > 1) {
+                ctx->error = true;
+                return xm_const_i64(ctx->xm_func, 0);
+            }
             return get_ref(ctx, v->args[0]);
         }
 
@@ -1166,9 +1175,14 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_RANGE:
             return lower_call(ctx, blk, v);
 
-        /* Multi-return packaging */
+        /* Multi-return packaging.  Codegen RET only emits x0/x1, so
+         * extra values would be dropped — bail out for now. */
         case XI_MULTI_RET:
-            if (v->nargs >= 1)
+            if (v->nargs > 1) {
+                ctx->error = true;
+                return xm_const_i64(ctx->xm_func, 0);
+            }
+            if (v->nargs == 1)
                 return get_ref(ctx, v->args[0]);
             return xm_const_i64(ctx->xm_func, 0);
 
