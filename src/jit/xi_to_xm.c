@@ -320,6 +320,17 @@ static uint8_t ref_rep(LowerCtx *ctx, XmRef ref) {
     return XR_REP_I64;
 }
 
+/* Coerce a ref to I64 rep if it isn't already.
+ * F64 → F2I (float-to-int); TAGGED/PTR → UNBOX_I64 (dynamic unbox). */
+static XmRef coerce_to_i64(LowerCtx *ctx, XmBlock *blk, XmRef ref) {
+    uint8_t rr = ref_rep(ctx, ref);
+    if (rr == XR_REP_I64)
+        return ref;
+    if (rr == XR_REP_F64)
+        return xm_emit_unary(ctx->xm_func, blk, XM_F2I, XR_REP_I64, ref);
+    return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_I64, XR_REP_I64, ref);
+}
+
 /* Coerce a ref to F64 rep if it isn't already.
  * I64 → I2F (int-to-float); TAGGED/PTR → UNBOX_F64 (dynamic unbox). */
 static XmRef coerce_to_f64(LowerCtx *ctx, XmBlock *blk, XmRef ref) {
@@ -480,12 +491,13 @@ static XmRef lower_convert(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     bool src_float = is_float_type(v->args[0]->type);
     bool dst_float = is_float_type(v->type);
 
-    if (!src_float && dst_float) {
-        /* int → float */
-        return xm_emit_unary(ctx->xm_func, blk, XM_I2F, XR_REP_F64, arg);
-    } else if (src_float && !dst_float) {
-        /* float → int */
-        return xm_emit_unary(ctx->xm_func, blk, XM_F2I, XR_REP_I64, arg);
+    if (dst_float) {
+        /* int / tagged → float — coerce to F64 (handles I2F + UNBOX_F64) */
+        return coerce_to_f64(ctx, blk, arg);
+    }
+    if (src_float) {
+        /* float / tagged → int */
+        return coerce_to_i64(ctx, blk, arg);
     }
     /* Same type — identity */
     return arg;
