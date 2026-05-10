@@ -402,6 +402,8 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
     XrTypePool *pool = X->current_type_pool;
 
     if (param_count > 0 && param_types) {
+        if ((size_t)param_count > SIZE_MAX / sizeof(XrType *))
+            return NULL;
         type->function.param_types = xr_pool_alloc(pool, sizeof(XrType *) * param_count);
         if (type->function.param_types) {
             memcpy(type->function.param_types, param_types, sizeof(XrType *) * param_count);
