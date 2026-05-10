@@ -135,6 +135,13 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
     if (func->ndeopt >= XM_MAX_DEOPT_POINTS)
         return 0xFFFF;
 
+    /* Refuse deopt without a valid bytecode anchor.  slot_map_bc_pc
+     * returns -1 (UINT32_MAX once cast to uint32_t) when the Xi value
+     * has no corresponding bytecode slot; pre-push and recovery would
+     * then index proto->code at index 0xFFFFFFFF and crash. */
+    if (bc_pc == UINT32_MAX)
+        return 0xFFFF;
+
     uint16_t did = ctx->next_deopt_id++;
 
     /* Grow deopt_infos if needed */
