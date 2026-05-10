@@ -1078,10 +1078,13 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XmRef obj = get_ref(ctx, v->args[0]);
             XmRef key = get_ref(ctx, v->args[1]);
             XmRef val = get_ref(ctx, v->args[2]);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_RT_INDEX_SET, XR_REP_I64, obj, key);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_index_set);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, extra);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            (void) val;
-            return result;
+            XmRef args[3] = {obj, key, val};
+            xm_func_bind_call_args(ctx->xm_func, result, args, 3);
+            return val;
         }
 
         /* Array / Map creation */
