@@ -1,0 +1,116 @@
+// 0851_interface_generic_property.xr
+// 作者：xingleixu@gmail.com
+// 测试：接口的泛型类型参数与属性签名（含 const 修饰）
+//
+// 说明：本文件聚焦于"接口声明"侧的解析能力 —— 泛型类型参数、
+// 属性签名、const 只读属性。`implements Foo<int>` 这类带类型实参的
+// 实现子句目前不支持，相关验证留给类型系统升级后再补充。
+
+// ===== 单类型参数泛型接口 =====
+
+interface Container<T> {
+    get(index: int): T
+    size(): int
+}
+
+@test
+fn test_generic_interface_declares(): void {
+    // 仅验证泛型接口可以被声明且不报语法/类型错误。
+    assert_eq(1, 1)
+}
+
+// ===== 多类型参数泛型接口 =====
+
+interface Pair<K, V> {
+    key(): K
+    value(): V
+}
+
+@test
+fn test_two_type_param_interface(): void {
+    assert_eq(1, 1)
+}
+
+// ===== 接口属性签名 =====
+
+interface HasLength {
+    length: int
+}
+
+class Buffer implements HasLength {
+    size: int
+
+    constructor(s: int) {
+        this.size = s
+    }
+
+    length: int {
+        fn() { return this.size }
+    }
+}
+
+@test
+fn test_interface_property(): void {
+    let b = new Buffer(10)
+    assert_eq(b.length, 10)
+}
+
+// ===== 接口属性 + const 修饰 =====
+
+interface Identifiable {
+    const id: int
+    name: string
+}
+
+class Item implements Identifiable {
+    item_id: int
+    item_name: string
+
+    constructor(id: int, name: string) {
+        this.item_id = id
+        this.item_name = name
+    }
+
+    id: int {
+        fn() { return this.item_id }
+    }
+
+    name: string {
+        fn() { return this.item_name }
+    }
+}
+
+@test
+fn test_interface_const_property(): void {
+    let it = new Item(7, "widget")
+    assert_eq(it.id, 7)
+    assert_eq(it.name, "widget")
+}
+
+// ===== 泛型接口 + 属性混合 =====
+
+interface SizedCollection<T> {
+    length: int
+    first(): T
+}
+
+@test
+fn test_generic_interface_with_property_declares(): void {
+    assert_eq(1, 1)
+}
+
+// ===== 受约束的泛型类型参数 =====
+
+interface Numeric {
+    toFloat(): float
+}
+
+interface Stats<T: Numeric> {
+    mean(): float
+    sum(): T
+}
+
+@test
+fn test_constrained_generic_interface(): void {
+    assert_eq(1, 1)
+}

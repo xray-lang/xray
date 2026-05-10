@@ -884,13 +884,19 @@ AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name, char **field_na
 
 // Create interface declaration node
 AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **extends, int extends_count,
-                               AstNode **methods, int method_count, int line) {
+                               AstNode **methods, int method_count, AstNode **properties,
+                               int property_count, XrGenericParam **type_params,
+                               int type_param_count, int line) {
     AstNode *node = alloc_node(X, AST_INTERFACE_DECL, line);
     node->as.interface_decl.name = (char *) name;
     node->as.interface_decl.extends = extends;
     node->as.interface_decl.extends_count = extends_count;
     node->as.interface_decl.methods = methods;
     node->as.interface_decl.method_count = method_count;
+    node->as.interface_decl.properties = properties;
+    node->as.interface_decl.property_count = property_count;
+    node->as.interface_decl.type_params = type_params;
+    node->as.interface_decl.type_param_count = type_param_count;
     return node;
 }
 
@@ -904,6 +910,16 @@ AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name, char **parame
     node->as.interface_method.param_types = param_types;
     node->as.interface_method.param_count = param_count;
     node->as.interface_method.return_type = return_type;
+    return node;
+}
+
+// Create interface property signature node
+AstNode *xr_ast_interface_property(XrayIsolate *X, const char *name, XrTypeRef *prop_type,
+                                   bool is_readonly, int line) {
+    AstNode *node = alloc_node(X, AST_INTERFACE_PROPERTY, line);
+    node->as.interface_property.name = (char *) name;
+    node->as.interface_property.prop_type = prop_type;
+    node->as.interface_property.is_readonly = is_readonly;
     return node;
 }
 

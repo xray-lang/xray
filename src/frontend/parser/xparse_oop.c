@@ -1382,9 +1382,9 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
 
 // Parse interface declaration
 // Syntax:
-//   interface Drawable [extends Shape, Colorful] {
-//       draw(): void;
-//       getZIndex(): int;
+//   interface Iterable<T> [extends Shape, Colorful] {
+//       iterator(): Iterator<T>
+//       length: int          // property signature
 //   }
 AstNode *xr_parse_interface_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_interface_declaration: NULL parser");
@@ -1396,6 +1396,49 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     xr_parser_consume(parser, TK_NAME, "expected interface name");
     char *interface_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
+
+    // Parse generic type parameters <T, U: Constraint> — mirrors class parsing
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            Token param_token = parser->previous;
+
+            char *param_name = (char *) ast_alloc(parser->X, (size_t) param_token.length + 1);
+            memcpy(param_name, param_token.start, param_token.length);
+            param_name[param_token.length] = '\0';
+
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+            }
+
+            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+
+        } while (xr_parser_match(parser, TK_COMMA));
+
+        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
+    }
+
+    // Register generic type params in type_scope so member type annotations
+    // such as `iterator(): Iterator<T>` recognise T as a type parameter.
+    XrTypeScope *saved_scope = parser->type_scope;
+    if (type_param_count > 0) {
+        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        for (int i = 0; i < type_param_count; i++) {
+            XrTypeRef *tp = xr_tref_type_param(parser->X, type_params[i]->name);
+            xr_type_scope_define(generic_scope, type_params[i]->name, tp);
+        }
+        parser->type_scope = generic_scope;
+    }
 
     // Parse extends clause (optional, interface can extend multiple interfaces)
     char **extends = NULL;
@@ -1415,10 +1458,15 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
     // Parse interface body
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start interface body");
 
-    // Collect method signatures
+    // Collect method and property signatures into separate arrays so consumers
+    // can iterate them with a static guarantee about node kind (mirrors
+    // ClassDeclNode's fields[] / methods[] split).
     AstNode **methods = NULL;
     int method_count = 0;
     int method_capacity = 0;
+    AstNode **properties = NULL;
+    int property_count = 0;
+    int property_capacity = 0;
 
     while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
         // Error recovery to avoid infinite loop
@@ -1429,45 +1477,72 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
             continue;
         }
 
-        // Parse method signature
-        AstNode *method = xr_parse_interface_method(parser);
-        if (!method) {
-            // Skip to next method or end of interface
+        AstNode *member = xr_parse_interface_member(parser);
+        if (!member) {
+            // Skip to next member or end of interface
             if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
                 xr_parser_advance(parser);
             }
             continue;
         }
 
-        XR_PARSE_PUSH(parser, methods, method_count, method_capacity, method);
+        if (member->type == AST_INTERFACE_PROPERTY) {
+            XR_PARSE_PUSH(parser, properties, property_count, property_capacity, member);
+        } else {
+            XR_PARSE_PUSH(parser, methods, method_count, method_capacity, member);
+        }
     }
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end interface body");
     int if_end_line = parser->previous.line;
     int if_end_column = parser->previous.column + 1;
 
+    // Restore type_scope after parsing interface body
+    if (type_param_count > 0) {
+        parser->type_scope = saved_scope;
+    }
+
     // Create interface declaration AST node
     AstNode *node = xr_ast_interface_decl(parser->X, interface_name, extends, extends_count,
-                                          methods, method_count, line);
+                                          methods, method_count, properties, property_count,
+                                          type_params, type_param_count, line);
     node->column = name_column;
     node->end_line = if_end_line;
     node->end_column = if_end_column;
     return node;
 }
 
-// Parse interface method signature
-// Syntax:
-//   draw(): void;
-//   area(precision: int): float;
-AstNode *xr_parse_interface_method(Parser *parser) {
-    int line = parser->current.line;
+// Parse one interface member: either a method signature or a property signature.
+// Method:    name(params): retType
+// Property:  [const] name: type
+//
+// The optional `const` prefix marks a read-only property, mirroring the way
+// object-type fields tolerate `const` in xparse_type.c.  All forms allow an
+// optional trailing semicolon.
+AstNode *xr_parse_interface_member(Parser *parser) {
+    // Optional `const` modifier — only valid for property signatures.
+    bool is_readonly = xr_parser_match(parser, TK_CONST);
 
-    // Parse method name
-    xr_parser_consume(parser, TK_NAME, "expected method name");
-    char *method_name = token_to_string(parser, &parser->previous);
+    // Parse member name
+    xr_parser_consume(parser, TK_NAME, "expected method or property name");
+    char *member_name = token_to_string(parser, &parser->previous);
+    int member_line = parser->previous.line;
 
-    // Parse parameter list
-    xr_parser_consume(parser, TK_LPAREN, "expected '('");
+    // Property signature: `name: type`
+    if (xr_parser_check(parser, TK_COLON)) {
+        xr_parser_advance(parser);  // consume ':'
+        XrTypeRef *prop_type = xr_parse_type_annotation(parser);
+        xr_parser_match(parser, TK_SEMICOLON);  // optional terminator
+        return xr_ast_interface_property(parser->X, member_name, prop_type, is_readonly,
+                                         member_line);
+    }
+
+    if (is_readonly) {
+        xr_parser_error_at_current(parser, "'const' modifier only applies to property signatures");
+    }
+
+    // Method signature: `name(params): retType`
+    xr_parser_consume(parser, TK_LPAREN, "expected '(' or ':' after interface member name");
 
     char **parameters = NULL;
     XrTypeRef **param_types = NULL;
@@ -1521,15 +1596,15 @@ AstNode *xr_parse_interface_method(Parser *parser) {
     }
 
     // Interface method signature ends with semicolon (optional)
-    xr_parser_match(parser, TK_SEMICOLON);  // optional semicolon
+    xr_parser_match(parser, TK_SEMICOLON);
 
     // Create interface method signature node. xr_ast_interface_method
-    // takes ownership of method_name, parameters[] and param_types[].
-    return xr_ast_interface_method(parser->X, method_name, parameters, param_types, param_count,
-                                   return_type, line);
+    // takes ownership of member_name, parameters[] and param_types[].
+    return xr_ast_interface_method(parser->X, member_name, parameters, param_types, param_count,
+                                   return_type, member_line);
 
 fail:
-    // On OOM we still own method_name and any accumulated parameter names.
+    // On OOM we still own member_name and any accumulated parameter names.
     // XrType pointers are shared via the type pool and are not freed here.
     if (parameters) {
         for (int i = 0; i < param_count; i++) {

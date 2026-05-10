@@ -353,6 +353,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_str(ctx, "interface ");
     xfmt_write_str(ctx, iface->name);
+    xfmt_emit_generic_params(ctx, iface->type_params, iface->type_param_count);
 
     if (iface->extends_count > 0) {
         xfmt_write_str(ctx, " extends ");
@@ -366,6 +367,22 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, " {");
     xfmt_write_newline(ctx);
     ctx->indent_level++;
+
+    // Properties first, then methods — matches the canonical order class bodies
+    // emit (fields before methods) and keeps parsed-order semantics stable.
+    for (int i = 0; i < iface->property_count; i++) {
+        AstNode *prop = iface->properties[i];
+        InterfacePropertyNode *p = &prop->as.interface_property;
+        xfmt_write_indent(ctx);
+        if (p->is_readonly)
+            xfmt_write_str(ctx, "const ");
+        xfmt_write_str(ctx, p->name);
+        if (p->prop_type) {
+            xfmt_write_str(ctx, ": ");
+            xfmt_emit_type(ctx, p->prop_type);
+        }
+        xfmt_write_newline(ctx);
+    }
 
     for (int i = 0; i < iface->method_count; i++) {
         AstNode *method = iface->methods[i];

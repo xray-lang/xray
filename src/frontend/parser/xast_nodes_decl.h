@@ -97,12 +97,25 @@ typedef struct InterfaceMethodNode {
     XrTypeRef *return_type;
 } InterfaceMethodNode;
 
+// Property signature inside an interface body, e.g. `length: int` or
+// `const fd: int`. The `is_readonly` flag is set when the declaration is
+// prefixed with `const`, mirroring object-type field syntax.
+typedef struct InterfacePropertyNode {
+    char *name;
+    XrTypeRef *prop_type;
+    bool is_readonly;
+} InterfacePropertyNode;
+
 typedef struct InterfaceDeclNode {
     char *name;
     char **extends;
     int extends_count;
-    AstNode **methods;
+    AstNode **methods;             // AST_INTERFACE_METHOD nodes
     int method_count;
+    AstNode **properties;          // AST_INTERFACE_PROPERTY nodes
+    int property_count;
+    XrGenericParam **type_params;  // Generic type parameters (e.g. `interface Iterable<T>`)
+    int type_param_count;
 } InterfaceDeclNode;
 
 typedef struct FieldDeclNode {

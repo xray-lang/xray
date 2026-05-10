@@ -728,6 +728,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         case AST_MULTI_VAR_DECL:
         case AST_MULTI_ASSIGN:
         case AST_INTERFACE_METHOD:
+        case AST_INTERFACE_PROPERTY:
         case AST_ENUM_MEMBER:
         default:
             // Shallow copy union data for unsupported node types
