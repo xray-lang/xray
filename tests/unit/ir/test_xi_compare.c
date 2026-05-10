@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <unistd.h>
 
 #include "../../../src/vm/xvm_internal.h"
 #include "../../../src/runtime/xisolate_api.h"

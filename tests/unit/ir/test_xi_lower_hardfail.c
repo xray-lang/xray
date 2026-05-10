@@ -17,6 +17,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 /* ========== Test Infrastructure ========== */
 
@@ -55,13 +58,22 @@ static XiFunc *try_lower(const char *source) {
     xa_analyzer_analyze(analyzer, "hardfail_test.xr", program);
 
     /* Redirect stderr to suppress expected error messages during testing */
-    FILE *saved_stderr = stderr;
-    stderr = fopen("/dev/null", "w");
+#ifdef _WIN32
+    freopen("NUL", "w", stderr);
+#else
+    int saved_fd = dup(STDERR_FILENO);
+    freopen("/dev/null", "w", stderr);
+#endif
 
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);
 
-    fclose(stderr);
-    stderr = saved_stderr;
+#ifdef _WIN32
+    freopen("CON", "w", stderr);
+#else
+    fflush(stderr);
+    dup2(saved_fd, STDERR_FILENO);
+    close(saved_fd);
+#endif
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);

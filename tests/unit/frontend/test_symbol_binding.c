@@ -25,6 +25,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 /* ========== Infrastructure ========== */
 
@@ -348,15 +351,24 @@ static bool check_bindings(const char *source, const char *label) {
     }
 
     /* Redirect stderr during lowering to suppress expected diagnostics */
-    FILE *saved = stderr;
-    stderr = fopen("/dev/null", "w");
+#ifdef _WIN32
+    freopen("NUL", "w", stderr);
+#else
+    int saved_fd = dup(STDERR_FILENO);
+    freopen("/dev/null", "w", stderr);
+#endif
     if (program->type == AST_PROGRAM && program->as.program.arena)
         xr_isolate_set_current_arena(g_iso, program->as.program.arena);
     xr_canon_program(program, analyzer, g_iso);
     xr_isolate_set_current_arena(g_iso, NULL);
     XiFunc *func = xi_lower_program(program, analyzer, g_iso);
-    fclose(stderr);
-    stderr = saved;
+#ifdef _WIN32
+    freopen("CON", "w", stderr);
+#else
+    fflush(stderr);
+    dup2(saved_fd, STDERR_FILENO);
+    close(saved_fd);
+#endif
 
     bool ok = (func != NULL);
     if (func) xi_func_free(func);
