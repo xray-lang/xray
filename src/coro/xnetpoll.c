@@ -755,6 +755,19 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
     xr_netpoll_unblock(pd, XR_POLL_READ, false);
     xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
 
+#ifdef XR_OS_WINDOWS
+    // The IOCP backend may still hold an async ref to pd's embedded
+    // iosb (cancellation completion in flight, or a late event
+    // completion already in the IOCP queue). iocp_handle_completion
+    // takes over the free when the completion drains, so we must
+    // skip both immediate and deferred-free here — recycling the pd
+    // before the completion lands hands the kernel a dangling
+    // lpOverlapped pointer.
+    if (atomic_load(&pd->iocp_holds_ref)) {
+        return;
+    }
+#endif
+
     if (can_free_pd) {
         xr_poll_cache_free(&np->cache, pd);
     } else {

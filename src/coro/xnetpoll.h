@@ -127,6 +127,14 @@ typedef struct XrPollDesc {
     // flags + an intrusive update-queue link (8) with comfortable
     // slack for future per-platform extensions.
     _Alignas(void *) unsigned char iocp_state[96];
+    // Set by the IOCP backend's del_fd when an outstanding AFD poll
+    // request still has a completion in flight whose lpOverlapped
+    // points at the embedded iosb. xr_netpoll_close honours the flag
+    // and skips the immediate cache free; iocp_handle_completion
+    // takes over the free when the completion drains. Prevents the
+    // close-before-completion use-after-free that would otherwise
+    // recycle pd memory while the kernel still references it.
+    _Atomic bool iocp_holds_ref;
 #endif
 } XrPollDesc;
 
