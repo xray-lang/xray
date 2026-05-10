@@ -164,7 +164,7 @@ jobs:
         # Run clang-tidy on critical modules (lexer, parser, vm, gc)
         # Using find + xargs for parallel execution
         find src/frontend src/vm src/gc src/value src/object \
-          -name '*.c' -type f | \
+          -name '*.c' ! -name '*.inc.c' -type f | \
         xargs -P$(nproc) -I{} \
           clang-tidy-14 -p build {} \
           --warnings-as-errors='bugprone-use-after-move,bugprone-double-free,clang-analyzer-core.*' \

@@ -922,12 +922,13 @@ static void registry_init(XaGenericRegistry *r) {
 static void registry_add(XaGenericRegistry *r, const char *name, AstNode *node, XrGenericParam **tp,
                          int tp_count) {
     if (r->count >= r->capacity) {
-        r->capacity = r->capacity ? r->capacity * 2 : 8;
+        int new_cap = r->capacity ? r->capacity * 2 : 8;
         XaGenericDecl *_new_r_decls =
-            (XaGenericDecl *) xr_realloc(r->decls, r->capacity * sizeof(XaGenericDecl));
+            (XaGenericDecl *) xr_realloc(r->decls, new_cap * sizeof(XaGenericDecl));
         if (!_new_r_decls)
             return;
         r->decls = _new_r_decls;
+        r->capacity = new_cap;
     }
     XaGenericDecl *d = &r->decls[r->count++];
     d->name = name;

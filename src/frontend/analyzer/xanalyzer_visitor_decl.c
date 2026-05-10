@@ -70,8 +70,12 @@ static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***t
             }
             // Add to collected types
             if (*count >= *cap) {
-                *cap = *cap ? *cap * 2 : 8;
-                *types = xr_realloc(*types, sizeof(XrType *) * (*cap));
+                int new_cap = *cap ? *cap * 2 : 8;
+                XrType **tmp = xr_realloc(*types, sizeof(XrType *) * new_cap);
+                if (!tmp)
+                    break;
+                *types = tmp;
+                *cap = new_cap;
             }
             (*types)[(*count)++] = rt;
             break;

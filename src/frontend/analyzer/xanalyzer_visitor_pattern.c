@@ -230,7 +230,7 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
     // 1. subject_type is already XR_KIND_ENUM
     // 2. subject is a variable whose declared_type resolves to an enum
     //    (parser creates XR_KIND_CLASS for "Color", need to check if it's actually an enum)
-    if (!has_wildcard && !XR_TYPE_IS_ENUM(subject_type) && match->expr &&
+    if (!has_wildcard && subject_type && !XR_TYPE_IS_ENUM(subject_type) && match->expr &&
         match->expr->type == AST_VARIABLE) {
         const char *var_name = match->expr->as.variable.name;
         XaSymbol *var_sym = xa_scope_lookup(ctx->analyzer->current_scope, var_name);
