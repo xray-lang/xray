@@ -1310,21 +1310,23 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
                 // const ret values where xm_ref_ctype gives no information.
                 // Fall back to vreg ctype/rep when the proto type is missing
                 // or too coarse (e.g. UNION, T?).
-                uint8_t ret_vtag = VTAG_TAGGED;
                 uint8_t ret_xr_tag = XR_TAG_I64;  // default
+                bool tag_from_proto = false;
                 if (ctx->func->proto && ctx->func->proto->return_type_info) {
                     uint8_t pt = xr_type_to_xr_tag(ctx->func->proto->return_type_info);
-                    if (pt != 0xFF && pt != 0xFC)
+                    if (pt != 0xFF && pt != 0xFC) {
                         ret_xr_tag = pt;
+                        tag_from_proto = true;
+                    }
                 }
-                if (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg) {
+                if (!tag_from_proto && xm_ref_is_vreg(blk->jmp.arg) &&
+                    ret_idx < ctx->func->nvreg) {
                     XmType rct = xm_ref_ctype(ctx->func, blk->jmp.arg);
-                    ret_vtag = type_kind_to_vtag(rct.kind);
+                    uint8_t ret_vtag = type_kind_to_vtag(rct.kind);
                     uint8_t vt = vtag_to_value_tag(ret_vtag);
                     if (vt != 0xFF) {
                         ret_xr_tag = vt;
-                    } else if (ret_vtag == VTAG_TAGGED &&
-                               (!ctx->func->proto || !ctx->func->proto->return_type_info)) {
+                    } else if (ret_vtag == VTAG_TAGGED) {
                         // No proto type info — fall back to rep hint.
                         uint8_t mt = ctx->func->vregs[ret_idx].rep;
                         if (mt == XR_REP_F64)
@@ -1334,8 +1336,8 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
                         else
                             ret_xr_tag = 0xFF;  // unknown: use heuristic
                     }
-                } else if (xm_ref_is_const(blk->jmp.arg) && ret_idx < ctx->func->nconst &&
-                           (!ctx->func->proto || !ctx->func->proto->return_type_info)) {
+                } else if (!tag_from_proto && xm_ref_is_const(blk->jmp.arg) &&
+                           ret_idx < ctx->func->nconst) {
                     // Const ret value: derive tag from its rep.  PTR with
                     // raw=0 (void/null return) is reconstructed as
                     // XR_TAG_NULL by jit_value_from_tag().

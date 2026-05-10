@@ -20,6 +20,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/lexer/xlex.h"
 
 #include "../runtime/class/xenum.h"
@@ -423,8 +424,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     xi_lower_init(&l, analyzer, isolate);
     l.parent = parent_ctx;
 
-    /* Determine return type */
-    struct XrType *ret_type = fdecl->return_type;
+    /* Determine return type.  fdecl->return_type is an XrTypeRef (AST
+     * syntax); resolve it to a runtime XrType* via the analyzer's
+     * resolver — assigning the XrTypeRef directly mixes up two unrelated
+     * struct layouts and produces garbage values for every downstream
+     * type lookup (JIT codegen RET tag, TFA, etc.). */
+    struct XrType *ret_type = fdecl->return_type
+                                  ? xr_tref_resolve(isolate, fdecl->return_type)
+                                  : l.type_void;
     if (!ret_type)
         ret_type = l.type_void;
 

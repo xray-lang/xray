@@ -1497,6 +1497,9 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
     XmFunc *func = xm_func_new(xi_func->name);
     if (!func)
         return NULL;
+    /* Link the XmFunc back to its source proto so codegen / passes can
+     * read declared return type, param types, etc. */
+    func->proto = proto;
 
     LowerCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
