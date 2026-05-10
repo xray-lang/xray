@@ -498,9 +498,18 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     XrValue args[16];
     for (int i = 0; i < nargs && i < 15; i++) {
         int64_t raw = coro->jit_ctx->call_args[1 + i];
-        uint8_t tag = XR_TAG_I64;
-        if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
-            tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i]));
+        /* call_arg_tags[1+i] is set by emit_call_args_from_pool from the
+         * caller's compile-time/runtime knowledge — use it first.  Only
+         * fall back to proto->param_types when it is UNKNOWN, which is
+         * what unions / dynamic args land as. */
+        uint8_t tag = coro->jit_ctx->call_arg_tags[1 + i];
+        if (tag == XR_RTAG_UNKNOWN || tag == 0) {
+            tag = XR_TAG_I64;
+            if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
+                tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i]));
+            if (tag == XR_RTAG_UNKNOWN)
+                tag = XR_TAG_I64;
+        }
         args[i] = jit_value_from_tag(raw, tag);
     }
 
