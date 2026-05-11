@@ -20,7 +20,7 @@ static const char xr_native_def_int[] = "// Built-in int type — implementation
 
 static const char xr_native_def_json[] = "// Built-in Json type — implementation in src/runtime/object/xjson_methods.c\n\n@native\nclass Json {\n    keys(): Array<string>\n    values(): Array<Json>\n    entries(): Array<[string, Json]>\n    has(key: string): bool\n    get(key: string): Json\n    isEmpty(): bool\n    delete(key: string): void\n    clear(): void\n    toString(): string\n}\n";
 
-static const char xr_native_def_map[] = "// Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K, V> {\n    length: int\n    get(key: K): V?\n    set(key: K, value: V): void\n    has(key: K): bool\n    delete(key: K): bool\n    clear(): void\n    keys(): Array<K>\n    values(): Array<V>\n    entries(): Array<[K, V]>\n    forEach(fn: fn(value: V, key: K): void): void\n}\n";
+static const char xr_native_def_map[] = "// Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K, V> {\n    length: int\n    get(key: K): V?\n    set(key: K, value: V): void\n    has(key: K): bool\n    delete(key: K): bool\n    clear(): void\n    keys(): Array<K>\n    values(): Array<V>\n    entries(): Array<[K, V]>\n    forEach(fn: fn(key: K, value: V): void): void\n}\n";
 
 static const char xr_native_def_regex[] = "// Built-in Regex type — implementation in stdlib/regex/regex_methods.c\n\n@native\nclass Regex {\n    test(text: string): bool\n    find(text: string): string?\n    findAll(text: string): Array<string>\n    replace(text: string, replacement: string): string\n    split(text: string): Array<string>\n}\n";
 
@@ -29,10 +29,6 @@ static const char xr_native_def_set[] = "// Built-in Set<T> type — implementat
 static const char xr_native_def_string[] = "// Built-in string type — implementation in src/runtime/object/xstring_methods.c\n\n@native\nclass string {\n    length: int\n    charAt(index: int): string\n    charCodeAt(index: int): int\n    concat(...strings: string): string\n    includes(search: string): bool\n    indexOf(search: string, start?: int): int\n    lastIndexOf(search: string): int\n    slice(start: int, end?: int): string\n    substring(start: int, end?: int): string\n    substr(start: int, length?: int): string\n    toLowerCase(): string\n    toUpperCase(): string\n    trim(): string\n    trimStart(): string\n    trimEnd(): string\n    split(separator: string, limit?: int): Array<string>\n    replace(search: string, replacement: string): string\n    replaceAll(search: string, replacement: string): string\n    repeat(count: int): string\n    startsWith(search: string): bool\n    endsWith(search: string): bool\n    padStart(length: int, pad?: string): string\n    padEnd(length: int, pad?: string): string\n    match(pattern: string): Array<string>?\n}\n";
 
 static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    length: int\n    append(value: Json): StringBuilder\n    toString(): string\n    clear(): StringBuilder\n}\n";
-
-static const char xr_native_def_weakmap[] = "// Built-in WeakMap type — weak-reference map, keys must be heap objects\n\n@native\nclass WeakMap {\n    get(key: Json): Json?\n    set(key: Json, value: Json): void\n    has(key: Json): bool\n    delete(key: Json): bool\n}\n";
-
-static const char xr_native_def_weakset[] = "// Built-in WeakSet type — weak-reference set, elements must be heap objects\n\n@native\nclass WeakSet {\n    add(value: Json): void\n    has(value: Json): bool\n    delete(value: Json): bool\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X) \
     X("array", xr_native_def_array) \
@@ -49,7 +45,5 @@ static const char xr_native_def_weakset[] = "// Built-in WeakSet type — weak-r
     X("regex", xr_native_def_regex) \
     X("set", xr_native_def_set) \
     X("string", xr_native_def_string) \
-    X("stringbuilder", xr_native_def_stringbuilder) \
-    X("weakmap", xr_native_def_weakmap) \
-    X("weakset", xr_native_def_weakset)
+    X("stringbuilder", xr_native_def_stringbuilder)
 

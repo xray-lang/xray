@@ -14,23 +14,21 @@ fn test_go_await(): void {
     // go 启动协程（同步执行）
     let task1 = go add(10, 20)
     let task2 = go multiply(5, 6)
-    
+
     // await 获取结果
     let result1 = await task1
     let result2 = await task2
-    
+
     print(result1)  // 30
     print(result2)  // 30
-    
+
     // 组合使用
     let task3 = go add(result1, result2)
     let final_result = await task3
     print(final_result)  // 60
-    
+
     print("done")
 }
-
-test_go_await()
 
 // 期望输出：
 // 30

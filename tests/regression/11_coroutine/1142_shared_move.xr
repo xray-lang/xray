@@ -120,10 +120,4 @@ fn test_move_pipeline(): void {
     ch.close()
 }
 
-// Run all tests
-test_shared_const()
-test_move_go()
-test_move_channel_send()
-test_normal_copy()
-test_move_pipeline()
-print("=== All tests passed ===")
+// @test handles execution — no explicit calls needed

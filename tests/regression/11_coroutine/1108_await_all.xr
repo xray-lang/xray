@@ -26,8 +26,6 @@ fn test_await_all(): void {
     print("done")
 }
 
-test_await_all()
-
 // 期望输出：
 // 4
 // 9

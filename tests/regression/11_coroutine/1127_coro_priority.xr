@@ -1,76 +1,75 @@
 /*
-** 测试协程优先级调度
+** 测试协程优先级 API 和调度效果
 ** 作者：xingleixu@gmail.com
-** 
-** 测试内容：
-** 1. Coro.setPriority(task, "high") - 设置高优先级
-** 2. Coro.setPriority(task, "low") - 设置低优先级
-** 3. 高优先级任务先执行
 **
-** 注意：协程通过参数传递数据，避免闭包捕获
+** Test 1: setPriority(task, 0/1/2) API 可用性
+** Test 2: 先创建 LOW 任务、后创建 HIGH 任务，验证 HIGH 仍先完成
+**         每个任务含多次 yield，让调度器按优先级反复择优
 */
 
-// 记录执行顺序（shared const 允许被协程捕获）
+fn compute(n: int): int {
+    return n * n
+}
 
-fn lowTask(arr: Array<string>): string {
-    arr.push("low")
-    return "low"
+fn work_and_report(label: string, ch: Channel<string>): string {
+    let sum = 0
+    for (let i = 0; i < 200; i++) {
+        sum = sum + i
+        if (i % 20 == 0) { yield }
+    }
+    ch.send(label)
+    return label
 }
-fn highTask(arr: Array<string>): string {
-    arr.push("high")
-    return "high"
-}
-fn normalTask(arr: Array<string>): string {
-    arr.push("normal")
-    return "normal"
-}
-fn task0(): int { return 0 }
-fn task2(): int { return 2 }
 
 @test
 fn test_coro_priority() {
-    shared const order: Array<string> = []
+    // Test 1: setPriority API with all priority levels
+    print("test1: setPriority API")
+    let t1 = go compute(3)
+    Coro.setPriority(t1, 0)
+    print("  low:", await t1)
+    let t2 = go compute(4)
+    Coro.setPriority(t2, 1)
+    print("  normal:", await t2)
+    let t3 = go compute(5)
+    Coro.setPriority(t3, 2)
+    print("  high:", await t3)
 
-    // 测试 1：基本优先级设置
-    print("test1: basic priority")
+    // Test 2: Priority scheduling effect
+    // LOW tasks created first (FIFO-advantaged), HIGH tasks created after
+    // If priority works, HIGH still completes earlier
+    print("test2: priority scheduling")
+    const ch = new Channel<string>(20)
 
+    for (let i = 0; i < 10; i++) {
+        let lo = go work_and_report("L", ch)
+        Coro.setPriority(lo, 0)
+    }
+    for (let i = 0; i < 10; i++) {
+        let hi = go work_and_report("H", ch)
+        Coro.setPriority(hi, 2)
+    }
 
+    // Collect completion order (20 recvs = all tasks done)
+    let high_early = 0
+    for (let i = 0; i < 20; i++) {
+        let label = ch.recv()
+        if (i < 10 && label == "H") {
+            high_early = high_early + 1
+        }
+    }
+    ch.close()
 
-
-    // 先创建低优先级任务
-    let t1 = go lowTask(order)
-    Coro.setPriority(t1, 0)  // LOW
-
-    // 再创建高优先级任务
-    let t2 = go highTask(order)
-    Coro.setPriority(t2, 2)  // HIGH
-
-    // 最后创建普通优先级任务
-    let t3 = go normalTask(order)
-    // 默认就是 normal，不需要设置
-
-    // 等待所有完成
-    await t1
-    await t2
-    await t3
-
-    print("  execution order:", order.length)
-    // 高优先级应该先执行
-
-    // 测试 2：使用数字设置优先级
-    print("test2: numeric priority")
-
-
-    let t4 = go task0()
-    Coro.setPriority(t4, 0)  // low
-
-    let t5 = go task2()
-    Coro.setPriority(t5, 2)  // high
-
-    await t4
-    await t5
-
-    print("  t4 result:", t4.result)
-    print("  t5 result:", t5.result)
+    // With priority scheduling, majority of HIGH tasks complete in first half
+    print("  priority effective:", high_early >= 6)
+    print("done")
 }
 
+// 期望输出：
+// test1: setPriority API
+//   low: 9
+//   normal: 16
+//   high: 25
+// test2: priority scheduling
+//   priority effective: true
+// done

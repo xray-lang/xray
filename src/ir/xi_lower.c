@@ -868,11 +868,35 @@ XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analy
     }
     prescan_shared_vars(&l, stmts, count);
 
-    /* Lower all top-level statements */
+    /* Lower function declarations first (hoisting) so they are bound in
+     * their shared slots before any top-level executable code runs.
+     * Matches the analyzer's Pass 1 hoisting and supports forward
+     * references from top-level statements (e.g. `print(fib(5))`
+     * before `fn fib(...)`).  Also hoist functions wrapped in
+     * AST_EXPORT_STMT so `export fn` decls participate equally. */
     for (int i = 0; i < count; i++) {
         if (!l.cur_block)
             break;
-        xi_lower_stmt(&l, stmts[i]);
+        AstNode *s = stmts[i];
+        if (!s)
+            continue;
+        AstNode *decl = (s->type == AST_EXPORT_STMT) ? s->as.export_stmt.declaration : s;
+        if (decl && decl->type == AST_FUNCTION_DECL) {
+            xi_lower_stmt(&l, decl);
+        }
+    }
+
+    /* Lower remaining top-level statements in source order */
+    for (int i = 0; i < count; i++) {
+        if (!l.cur_block)
+            break;
+        AstNode *s = stmts[i];
+        if (!s)
+            continue;
+        AstNode *decl = (s->type == AST_EXPORT_STMT) ? s->as.export_stmt.declaration : s;
+        if (decl && decl->type == AST_FUNCTION_DECL)
+            continue; /* already hoisted above */
+        xi_lower_stmt(&l, s);
     }
 
     if (l.cur_block) {

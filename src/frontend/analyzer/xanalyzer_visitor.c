@@ -709,8 +709,22 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_SCOPE_BLOCK:
-            if (node->as.scope_block.body)
-                xa_visit_collect(ctx, node->as.scope_block.body);
+            /* Pass 2's xa_visit_block_stmt enters a BLOCK scope keyed on the
+             * body AST node. Pass 1 must create the matching scope so that
+             * nested constructs (e.g. for-in) register their symbols under
+             * the same parent chain. Otherwise the for-in scope from Pass 1
+             * becomes a sibling of Pass 2's lookup root and its loop
+             * variable lookup fails. */
+            if (node->as.scope_block.body) {
+                AstNode *body = node->as.scope_block.body;
+                if (body->type == AST_BLOCK) {
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, body);
+                    xa_visit_collect(ctx, body);
+                    xa_analyzer_exit_scope(ctx->analyzer);
+                } else {
+                    xa_visit_collect(ctx, body);
+                }
+            }
             break;
         case AST_EXPR_STMT:
             // Recurse into expression statements (may contain function expressions etc.)

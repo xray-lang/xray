@@ -1,24 +1,20 @@
 // yield 语句测试
 // 作者：xingleixu@gmail.com
-// 
+//
 // 测试 yield 让出执行权功能（类似 Go 的 runtime.Gosched）
-
-// 测试1：主线程中 yield（应该是 no-op）
+// 所有断言基于返回值，不依赖多协程 print 交织顺序
 
 fn task_with_yield(): string {
-    print("test2: step 1")
     yield
-    print("test2: step 2")
     yield
-    print("test2: step 3")
-    return "done"
+    return "yielded"
 }
+
 fn worker(id: int): int {
-    print("test3: worker", id, "start")
     yield
-    print("test3: worker", id, "end")
-    return id
+    return id * 10
 }
+
 fn loop_yield(n: int): int {
     let sum = 0
     for (let i = 0; i < n; i++) {
@@ -29,7 +25,8 @@ fn loop_yield(n: int): int {
     }
     return sum
 }
-fn intensive_yield(id: int, count: int): int {
+
+fn intensive_yield(count: int): int {
     let sum = 0
     for (let i = 0; i < count; i++) {
         sum = sum + i
@@ -40,35 +37,40 @@ fn intensive_yield(id: int, count: int): int {
 
 @test
 fn test_yield() {
+    // Test 1: yield in main (no-op, should not crash)
     print("test1: main yield")
     yield
     print("test1: after yield")
 
-    // 测试2：协程中 yield
-
+    // Test 2: yield in single coroutine
     let t1 = go task_with_yield()
-    await t1
-    print("test2: result =", t1.result)
+    let r1 = await t1
+    print("test2: result =", r1)
 
-    // 测试3：多个协程交替 yield
-
+    // Test 3: multiple workers with yield (verify return values only)
     let w1 = go worker(1)
     let w2 = go worker(2)
-    await all [w1, w2]
-    print("test3: all done")
+    let w3 = go worker(3)
+    await all [w1, w2, w3]
+    print("test3:", w1.result, w2.result, w3.result)
 
-    // 测试4：yield 在循环中
-
+    // Test 4: yield inside loop
     let t4 = go loop_yield(5)
-    await t4
-    print("test4: sum =", t4.result)
+    let r4 = await t4
+    print("test4: sum =", r4)
 
-    // 测试5：多协程密集 yield
-
-    let t5a = go intensive_yield(1, 10)
-    let t5b = go intensive_yield(2, 10)
-    let t5c = go intensive_yield(3, 10)
+    // Test 5: multiple coroutines with intensive yield
+    let t5a = go intensive_yield(10)
+    let t5b = go intensive_yield(10)
+    let t5c = go intensive_yield(10)
     await all [t5a, t5b, t5c]
     print("test5: sums =", t5a.result, t5b.result, t5c.result)
 }
 
+// 期望输出：
+// test1: main yield
+// test1: after yield
+// test2: result = yielded
+// test3: 10 20 30
+// test4: sum = 10
+// test5: sums = 45 45 45
