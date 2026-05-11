@@ -28,6 +28,7 @@
 
 #include "xtask.h"
 #include "xcoroutine.h"
+#include "xworker.h"
 #include "xchannel.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
@@ -87,11 +88,51 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
 
 /* ========== Simple State Setters ========== */
 
+/*
+ * State-transition rules (CAS-protected):
+ *
+ *   ACTIVE      -> COMPLETING / COMPLETED / CANCELLING / CANCELLED / FAILED
+ *   COMPLETING  -> COMPLETED / CANCELLING / CANCELLED / FAILED
+ *   CANCELLING  -> CANCELLED              (cancel wins)
+ *   COMPLETED / FAILED / CANCELLED        (terminal, immutable)
+ *
+ * Why CAS: complete/fail and cancel run on different workers (e.g. a slow
+ * executor finishes its body just as a linked peer fails on another worker
+ * and calls xr_task_cancel_tree on us). Without CAS, the worker that wrote
+ * its terminal value last would silently overwrite the other one — which
+ * is exactly the 1136_task_link race where a slow_work that races a failing
+ * linked peer ends up reported as COMPLETED with result=10000 instead of
+ * CANCELLED. The rule "cancel wins" matches the user-visible semantics of
+ * await on a cancelled task (returns null).
+ */
+
+static bool task_state_is_final(uint8_t s) {
+    return s == XR_TASK_COMPLETED || s == XR_TASK_FAILED || s == XR_TASK_CANCELLED;
+}
+
+/* CAS state from any value in `from_mask` to `to`. Returns true if this call
+ * performed the transition. `from_mask` is a bitmask over (1 << XrTaskState). */
+static bool task_cas_state(XrTask *task, uint32_t from_mask, uint8_t to) {
+    uint8_t expected;
+    do {
+        expected = atomic_load_explicit(&task->state, memory_order_acquire);
+        if (((1u << expected) & from_mask) == 0)
+            return false;
+    } while (!atomic_compare_exchange_weak_explicit(&task->state, &expected, to,
+                                                   memory_order_acq_rel,
+                                                   memory_order_acquire));
+    return true;
+}
+
 void xr_task_complete(XrTask *task, XrValue result) {
     if (!task)
         return;
     task->result = result;
-    atomic_store_explicit(&task->state, XR_TASK_COMPLETED, memory_order_release);
+    /* ACTIVE/COMPLETING -> COMPLETED. Reject CANCELLING/final: a concurrent
+     * cancel from a linked peer already won. */
+    if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING),
+                        XR_TASK_COMPLETED))
+        return;
     xr_task_fire_completion(task);
 }
 
@@ -99,10 +140,12 @@ void xr_task_fail(XrTask *task, XrValue error) {
     if (!task)
         return;
     task->error = error;
-    atomic_store_explicit(&task->state, XR_TASK_FAILED, memory_order_release);
+    if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING),
+                        XR_TASK_FAILED))
+        return;
     xr_task_fire_completion(task);
 
-    // Cancel all bidirectionally linked peers on failure
+    /* Cancel all bidirectionally linked peers on failure. */
     for (XrTaskLink *lk = task->links; lk; lk = lk->next) {
         XrTask *peer = lk->peer;
         if (peer && xr_task_is_active(peer)) {
@@ -114,7 +157,13 @@ void xr_task_fail(XrTask *task, XrValue error) {
 void xr_task_cancel(XrTask *task) {
     if (!task)
         return;
-    atomic_store_explicit(&task->state, XR_TASK_CANCELLED, memory_order_release);
+    /* Cancel can be invoked from XR_VM_CANCELLED (state ACTIVE/COMPLETING),
+     * from cancel_tree's finalize step (state CANCELLING), and from the
+     * user task.cancel() API (any non-final state). Reject only final. */
+    uint32_t from_mask = (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING) |
+                         (1u << XR_TASK_CANCELLING);
+    if (!task_cas_state(task, from_mask, XR_TASK_CANCELLED))
+        return;
     xr_task_fire_completion(task);
 }
 
@@ -164,7 +213,9 @@ void xr_task_try_complete(XrTask *task, XrValue result) {
     child_lock_release(&task->child_lock);
 
     if (has_children) {
-        atomic_store_explicit(&task->state, XR_TASK_COMPLETING, memory_order_release);
+        /* ACTIVE -> COMPLETING; reject if a concurrent cancel already moved
+         * us to CANCELLING/CANCELLED or fail to FAILED. */
+        (void) task_cas_state(task, 1u << XR_TASK_ACTIVE, XR_TASK_COMPLETING);
     } else {
         xr_task_finalize(task, XR_TASK_COMPLETED);
     }
@@ -173,7 +224,18 @@ void xr_task_try_complete(XrTask *task, XrValue result) {
 void xr_task_finalize(XrTask *task, uint8_t final_state) {
     if (!task)
         return;
-    atomic_store_explicit(&task->state, final_state, memory_order_release);
+    /* CAS-reject existing terminal state. final_state itself must be a final
+     * one (COMPLETED / FAILED / CANCELLED) — callers (cancel_tree,
+     * child_completed, fail_with_propagation) guarantee this. */
+    XR_DCHECK(task_state_is_final(final_state), "xr_task_finalize: final_state must be terminal");
+    uint8_t expected;
+    do {
+        expected = atomic_load_explicit(&task->state, memory_order_acquire);
+        if (task_state_is_final(expected))
+            return;
+    } while (!atomic_compare_exchange_weak_explicit(&task->state, &expected, final_state,
+                                                   memory_order_acq_rel,
+                                                   memory_order_acquire));
 
     // Notify parent that this child is done
     if (task->parent) {
@@ -182,6 +244,27 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
 
     // Fire completion listeners
     xr_task_fire_completion(task);
+
+    /* Wake any vm_await waiter. Without this, awaits on a task that reaches
+     * its terminal state via finalize (cancel_tree's no_children branch,
+     * fail_with_propagation's no_children branch, child_completed once the
+     * last child reports back) deadlock — the happy path through
+     * xr_task_complete / xr_task_fail / xr_task_cancel relies on the worker
+     * caller invoking xr_coro_wake_waiter, but cancel propagation via
+     * xr_task_cancel_tree runs on a different worker than the cancelled
+     * task's executor and there is no such caller. Resolve isolate via the
+     * executor coroutine; fall back to current worker if the executor was
+     * already detached (we are running on a worker thread either way). */
+    XrayIsolate *X = NULL;
+    if (task->coro)
+        X = task->coro->isolate;
+    if (!X) {
+        XrWorker *w = xr_current_worker();
+        if (w && w->p.runtime)
+            X = w->p.runtime->isolate;
+    }
+    if (X)
+        xr_task_wake_waiter(X, task);
 }
 
 void xr_task_child_completed(XrTask *parent, XrTask *child) {
@@ -261,8 +344,10 @@ void xr_task_fail_with_propagation(XrTask *task, XrValue error) {
     child_lock_acquire(&task->child_lock);
     bool has_children = (task->first_child != NULL);
     if (has_children) {
-        // Cancel all children before failing
-        atomic_store_explicit(&task->state, XR_TASK_CANCELLING, memory_order_release);
+        /* ACTIVE -> CANCELLING; if a concurrent cancel beat us to it, leave
+         * the state alone. We still walk children below to ensure they get
+         * cancelled regardless of who flipped the state bit. */
+        (void) task_cas_state(task, 1u << XR_TASK_ACTIVE, XR_TASK_CANCELLING);
         for (XrTask *child = task->first_child; child; child = child->next_sibling) {
             xr_task_cancel_tree(child);
         }
@@ -452,10 +537,18 @@ void xr_task_fire_completion(XrTask *task) {
             case XR_COMPLETION_CHANNEL: {
                 /* Monitor notification: send the task itself as event.
                  * Receiver checks task.done/task.result/task.error/task.cancelled
-                 * to determine outcome. Zero allocation, full state access. */
+                 * to determine outcome. Zero allocation, full state access.
+                 *
+                 * Monitor channels are single-shot — the only message they ever
+                 * carry is this completion notification. Close immediately after
+                 * sending so that any subsequent recv() returns the closed
+                 * sentinel instead of blocking forever, and so that the runtime
+                 * channel-leak accounting (create vs close counters checked at
+                 * xworker.c shutdown) stays balanced. */
                 XrChannel *ch = node->as.channel;
                 if (ch) {
                     xr_channel_notify_send(ch, xr_value_from_task(task));
+                    xr_channel_close(ch);
                 }
                 break;
             }

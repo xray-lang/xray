@@ -1,15 +1,20 @@
 // Test task.link() / task.unlink() bidirectional association
 
+import time
+
 fn failing(): int {
     throw "link error"
     return 0
 }
 fn slow_work(): int {
-    let x = 0
-    for (let i = 0; i < 10000; i++) {
-        x = x + 1
-    }
-    return x
+    // Park on a cooperative cancel point. The peer task throws almost
+    // immediately, and the resulting xr_task_cancel_tree must be able to
+    // unblock us so that `await` observes a cancelled (null) result.
+    // A tight CPU loop without a cancel point would let us race past the
+    // peer's failure and finish normally — the assertion below would then
+    // observe the body's return value instead of the cancellation signal.
+    time.sleep(50)
+    return 1
 }
 fn ok(): int {
     return 42
