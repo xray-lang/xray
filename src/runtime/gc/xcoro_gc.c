@@ -585,6 +585,17 @@ void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
         return;
     // Shared objects: track reference but don't mark (managed by refcount)
     if (XR_GC_IS_SHARED(obj)) {
+        /* Defensive: every real shared object is allocated via
+         * xr_sysheap_alloc_shared, which delegates to xr_malloc (libc
+         * malloc, 16-byte aligned on 64-bit targets) or xr_mem_map
+         * (page-aligned).  A "shared-looking" pointer that is NOT
+         * 16-byte aligned can therefore only originate from a
+         * conservative stack scan reading garbage whose byte at
+         * offset 10 happens to have bit 0 set; following it would
+         * cause xr_shared_decref to corrupt unrelated GC objects.
+         * Silently ignore such pointers. */
+        if (((uintptr_t) obj & 0xF) != 0)
+            return;
         /* Global pool strings are owned by XrGlobalStringPool, not refcounted.
          * Skip shared_refs tracking to avoid refcount underflow. */
         if (XR_GC_GET_TYPE(obj) == XR_TSTRING && (obj->extra & STR_FLAG_GLOBAL)) {
