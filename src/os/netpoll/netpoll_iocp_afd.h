@@ -45,6 +45,10 @@
 #endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+// mswsock.h declares the SIO_BSP_HANDLE_POLL / SIO_BASE_HANDLE
+// ioctl codes used by xr_afd_get_base_socket(). It must come
+// after winsock2.h.
+#include <mswsock.h>
 #include <windows.h>
 // winternl.h gives us IO_STATUS_BLOCK, OBJECT_ATTRIBUTES,
 // UNICODE_STRING and PIO_APC_ROUTINE without forcing a link-time
