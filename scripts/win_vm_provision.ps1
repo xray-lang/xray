@@ -73,13 +73,26 @@ if ($PubKey -notmatch '^(ssh-ed25519|ssh-rsa|ecdsa-sha2-\S+)\s+\S+') {
 # =========================================================================
 # 1. OpenSSH Server
 # =========================================================================
+# Two install paths converge here:
+#   a) Windows Capability (Add-WindowsCapability -Online ...)
+#   b) Manual install of the Win32-OpenSSH zip from PowerShell/Win32-OpenSSH
+# On ARM Win11 the capability path can hang for an hour on
+# DISM/TrustedInstaller, so we treat "sshd service exists" as the
+# definitive signal that OpenSSH is installed -- regardless of which
+# path was used -- and skip the capability call in that case.
 Write-Step 'Install OpenSSH Server'
-$sshFeature = Get-WindowsCapability -Online -Name 'OpenSSH.Server*'
-if ($sshFeature.State -ne 'Installed') {
-    Add-WindowsCapability -Online -Name $sshFeature.Name | Out-Null
-    Write-Ok "Installed: $($sshFeature.Name)"
+$sshdSvc = Get-Service sshd -ErrorAction SilentlyContinue
+if ($sshdSvc) {
+    Write-Skip "sshd service already present (state=$($sshdSvc.Status)) -- skipping capability install"
 } else {
-    Write-Skip 'OpenSSH.Server already installed'
+    $sshFeature = Get-WindowsCapability -Online -Name 'OpenSSH.Server*'
+    if ($sshFeature.State -ne 'Installed') {
+        Write-Host '    invoking Add-WindowsCapability (this can take several minutes)...' -ForegroundColor DarkGray
+        Add-WindowsCapability -Online -Name $sshFeature.Name | Out-Null
+        Write-Ok "Installed: $($sshFeature.Name)"
+    } else {
+        Write-Skip 'OpenSSH.Server capability already installed'
+    }
 }
 
 Write-Step 'Configure sshd service (autostart + running)'
@@ -87,17 +100,41 @@ Set-Service -Name sshd -StartupType Automatic
 if ((Get-Service sshd).Status -ne 'Running') { Start-Service sshd }
 Write-Ok 'sshd is running and set to autostart'
 
+Write-Step 'Set active networks to Private (Public profile blocks inbound)'
+# Win11 defaults Parallels Shared and most "unidentified" networks to
+# the Public profile. Public profile inbound is effectively closed
+# unless explicitly overridden, even with a matching Allow rule. For
+# a build/test runner sitting behind a hypervisor NAT, treating those
+# networks as Private is the safe and standard fix.
+Get-NetConnectionProfile | Where-Object NetworkCategory -ne 'Private' | ForEach-Object {
+    Set-NetConnectionProfile -InterfaceIndex $_.InterfaceIndex -NetworkCategory Private
+    Write-Ok "Network '$($_.Name)' (iface $($_.InterfaceIndex)) -> Private"
+}
+
 Write-Step 'Firewall rule for port 22'
-$fwRule = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
-if (-not $fwRule) {
+# Two rules can exist here: our own "OpenSSH-Server-In-TCP" plus a
+# stock one OpenSSH capability installs as DisplayName "OpenSSH SSH
+# Server (sshd)". The stock rule is pinned to Profile=Private,
+# which silently blocks SSH on networks Win11 categorizes as Public
+# (Parallels Shared often is). Force every matching rule to
+# Profile=Any to be robust against either install path.
+$existingByName = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
+if (-not $existingByName) {
     New-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' `
         -DisplayName 'OpenSSH Server (sshd)' `
         -Enabled True -Direction Inbound -Protocol TCP `
         -Action Allow -LocalPort 22 -Profile Any | Out-Null
-    Write-Ok 'Created firewall rule for tcp/22'
+    Write-Ok 'Created firewall rule for tcp/22 (Profile=Any)'
 } else {
-    Write-Skip 'Firewall rule already exists'
+    Write-Skip 'OpenSSH-Server-In-TCP rule already exists'
 }
+# Also widen any stock sshd rule installed by the OpenSSH capability.
+Get-NetFirewallRule -DisplayName '*OpenSSH*' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and $_.Profile -ne 'Any' } |
+    ForEach-Object {
+        Set-NetFirewallRule -Name $_.Name -Profile Any -Enabled True
+        Write-Ok "Widened firewall rule to Profile=Any: $($_.DisplayName)"
+    }
 
 # =========================================================================
 # 2. Authorized keys (BOTH locations)
@@ -186,15 +223,17 @@ Install-WingetPkg 'Python.Python.3.12'
 Install-WingetPkg 'Microsoft.Vcpkg'
 
 if ($SkipBuildTools) {
-    Write-Skip 'MSVC Build Tools (per -SkipBuildTools)'
+    Write-Skip 'MSVC Build Tools (per -SkipBuildTools) -- install separately via vs_BuildTools.exe GUI for visible progress'
 } else {
     Write-Step 'MSVC Build Tools 2022 (this can take 10-15 min)'
     # We pass the workload + components via --override so winget hands
     # them straight to the VS installer. ARM64 host needs x86.x64 cross
-    # tools to emit real x64 binaries.
+    # tools to emit real x64 binaries. installPath is left at the
+    # default ("C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools")
+    # so win_build.sh's hard-coded vcvars path stays valid.
     $vsArgs = @(
         '--override',
-        '--quiet --wait --norestart --nocache --installPath "C:\BuildTools" ' +
+        '--quiet --wait --norestart --nocache ' +
         '--add Microsoft.VisualStudio.Workload.VCTools ' +
         '--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ' +
         '--add Microsoft.VisualStudio.Component.VC.Tools.ARM64 ' +
