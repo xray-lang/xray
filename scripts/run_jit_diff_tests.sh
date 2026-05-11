@@ -61,7 +61,11 @@ done
 # Load allowlist (known failures) — bash 3 compatible (no assoc arrays)
 KNOWN_FAILURES_FILE=$(mktemp /tmp/jit_diff_known.XXXXXX)
 if [ "$USE_ALLOWLIST" -eq 1 ] && [ -f "$ALLOWLIST" ]; then
-    sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$ALLOWLIST" | grep -v '^$' > "$KNOWN_FAILURES_FILE"
+    # `grep -v '^$'` returns rc=1 when allowlist is effectively empty,
+    # which combined with `set -o pipefail` would abort the script.
+    # Tolerate empty allowlists explicitly.
+    sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$ALLOWLIST" \
+        | { grep -v '^$' || true; } > "$KNOWN_FAILURES_FILE"
 fi
 is_known_failure() { grep -qxF "$1" "$KNOWN_FAILURES_FILE" 2>/dev/null; }
 
