@@ -1259,8 +1259,16 @@ static void x64_h_rt_simple(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         x64_emit8(&ctx->buf, 0x94); /* SETE */
         x64_emit8(&ctx->buf, (uint8_t) (0xC0 | ((uint8_t) rd & 7)));
     } else {
-        /* RT_PRINT, RT_ARRAY_LEN, RT_INDEX_GET, RT_INDEX_SET — not yet lowered */
+        /* RT_PRINT, RT_ARRAY_LEN, RT_INDEX_GET, RT_INDEX_SET — not yet
+         * lowered. These ops are side-effect-only (dst is unused), so
+         * emitting a NOP is semantically safe. The NOP itself is
+         * mandatory: the arm64 backend does the same in xm_codegen_mem.c,
+         * and the surrounding pass machinery assumes every XmIns
+         * contributes at least one machine instruction. Skipping the
+         * emit corrupts subsequent branch/jump offsets and surfaces as
+         * STATUS_HEAP_CORRUPTION (0xC0000374) at runtime on Win64. */
         xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
+        x64_nop(&ctx->buf);
     }
 }
 
