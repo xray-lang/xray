@@ -553,8 +553,12 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         case XM_RT_ARRAY_LEN:
         case XM_RT_INDEX_GET:
         case XM_RT_INDEX_SET:
-            /* Not yet lowered to CALL_C; fall through to warning */
+            /* Not yet lowered to CALL_C; emit a NOP so the offset
+             * accounting stays consistent (matches arm64 behaviour in
+             * xm_codegen_mem.c). Skipping the emit corrupts subsequent
+             * branch offsets and surfaces as 0xC0000374 on Win64. */
             xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
+            x64_nop(&ctx->buf);
             break;
 
         case XM_RT_ISNULL: {
