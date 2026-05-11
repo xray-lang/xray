@@ -133,22 +133,32 @@ static XrProto *compile_xi(const char *source) {
 
 /* ========== Execution Capture ========== */
 
-/* Capture path for temp file */
-static const char *g_capture_path = "/tmp/xi_cmp_capture.txt";
-
-/* Read captured output from temp file into heap buffer */
-static char *read_capture(void) {
-    FILE *f = fopen(g_capture_path, "r");
-    if (!f) return NULL;
-
-    char *buf = (char *)xr_malloc(4096);
-    if (!buf) { fclose(f); return NULL; }
-
-    size_t n = fread(buf, 1, 4095, f);
-    fclose(f);
-    buf[n] = '\0';
-    return buf;
-}
+/* Capturing stdout used to go through:
+ *   freopen("/tmp/xi_cmp_capture.txt", "w", stdout) ... freopen("/dev/tty", ...)
+ * which silently breaks on Windows: there is no /tmp by default, and
+ * /dev/tty does not exist at all. Worse, when freopen fails it has
+ * already closed the original stdout, leaving every subsequent printf
+ * writing into a corrupted CRT FILE* -- which surfaces as a /GS stack
+ * cookie failure (STATUS_STACK_BUFFER_OVERRUN, 0xC0000409) the next
+ * time the runtime walks an internal stdio buffer.
+ *
+ * The portable approach is dup() + tmpfile() + dup2(): save the
+ * original stdout fd, point stdout at an anonymous temp file, run the
+ * payload, then restore. tmpfile() handles platform tempdir lookup
+ * and auto-deletes on fclose. */
+#ifdef _WIN32
+#  include <io.h>
+#  define xi_cmp_dup     _dup
+#  define xi_cmp_dup2    _dup2
+#  define xi_cmp_close   _close
+#  define xi_cmp_fileno  _fileno
+#else
+#  include <unistd.h>
+#  define xi_cmp_dup     dup
+#  define xi_cmp_dup2    dup2
+#  define xi_cmp_close   close
+#  define xi_cmp_fileno  fileno
+#endif
 
 /* Execute proto and capture stdout into a heap buffer.
  * Uses xr_coro_reset_for_call (like xcmd_test.c) instead of
@@ -164,13 +174,40 @@ static char *execute_and_capture(XrProto *proto) {
     xr_coro_reset_for_call(main_coro, g_iso, closure);
 
     fflush(stdout);
-    if (!freopen(g_capture_path, "w", stdout)) return NULL;
+
+    int saved_fd = xi_cmp_dup(xi_cmp_fileno(stdout));
+    if (saved_fd < 0) return NULL;
+
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        xi_cmp_close(saved_fd);
+        return NULL;
+    }
+
+    if (xi_cmp_dup2(xi_cmp_fileno(tmp), xi_cmp_fileno(stdout)) < 0) {
+        fclose(tmp);
+        xi_cmp_close(saved_fd);
+        return NULL;
+    }
 
     xr_main_thread_run(g_iso, main_coro);
     fflush(stdout);
 
-    if (!freopen("/dev/tty", "w", stdout)) return NULL;
-    return read_capture();
+    /* Restore stdout before reading -- so any error path below can
+     * still write diagnostics through the real terminal. */
+    xi_cmp_dup2(saved_fd, xi_cmp_fileno(stdout));
+    xi_cmp_close(saved_fd);
+
+    rewind(tmp);
+    char *buf = (char *)xr_malloc(4096);
+    if (!buf) {
+        fclose(tmp);
+        return NULL;
+    }
+    size_t n = fread(buf, 1, 4095, tmp);
+    buf[n] = '\0';
+    fclose(tmp);  /* tmpfile() deletes on close */
+    return buf;
 }
 
 /* ========== Comparison Utilities ========== */
