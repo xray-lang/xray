@@ -7,7 +7,5 @@ fn test_cancelled(): void {
     print(is_cancelled)  // 应输出 false
 }
 
-test_cancelled()
-
 // 期望输出：
 // false

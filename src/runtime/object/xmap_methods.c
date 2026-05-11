@@ -155,6 +155,17 @@ static XrValue xr_map_method_to_string(XrayIsolate *iso, XrValue self, XrValue *
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
+static XrValue xr_map_method_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    if (argc < 1 || !XR_IS_PTR(args[0]))
+        return xr_null();
+    XrMap *m = map_self(self);
+    if (map_is_weak(m))
+        return XR_NOTFOUND;
+    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
+    xr_map_foreach(iso, m, cb);
+    return xr_null();
+}
+
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
@@ -189,6 +200,7 @@ void xr_map_register_native_type(XrayIsolate *isolate) {
         {"hasValue", xr_map_method_has_value, 1},
         {"iterator", xr_map_method_iterator, 0},
         {"entriesIterator", xr_map_method_entries_iterator, 0},
+        {"forEach", xr_map_method_foreach, 1},
         {"toString", xr_map_method_to_string, 0},
         {NULL, NULL, 0},
     };

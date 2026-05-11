@@ -23,8 +23,6 @@ fn test_go_block(): void {
     print("done")
 }
 
-test_go_block()
-
 // 期望输出：
 // 100
 // 200

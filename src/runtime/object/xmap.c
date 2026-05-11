@@ -613,15 +613,14 @@ void xr_map_foreach(XrayIsolate *isolate, XrMap *map, struct XrClosure *callback
         return;
 
     uint32_t size = xr_map_sizenode(map);
-    XrValue args[3];
+    XrValue args[2];
 
     for (uint32_t i = 0; i < size; i++) {
         XrMapNode *n = &map->node[i];
         if (!XR_MAP_NODE_EMPTY(n)) {
-            args[0] = n->value;
-            args[1] = n->key;
-            args[2] = xr_value_from_map(map);
-            xr_vm_call_closure(isolate, callback, args, 3);
+            args[0] = n->key;
+            args[1] = n->value;
+            xr_vm_call_closure(isolate, callback, args, 2);
         }
     }
 }

@@ -1,27 +1,39 @@
 // 测试 task.cancel() 功能
 // 作者：xingleixu@gmail.com
 
-fn compute(x: int): int {
+fn blocked_task(ch: Channel<int>): int {
+    let v = ch.recv()
+    return v
+}
+
+fn quick_task(x: int): int {
     return x * 2
 }
 
 @test
-fn test_main() {
-    // 创建协程
-    let task = go compute(21)
-    
-    // 取消协程（使用对象方法）
-    task.cancel()
-    
-    // 验证协程已被取消
-    // 由于协程是延迟执行的，取消后 await 应该返回 null
-    let result = await task
-    
-    if (result == null) {
-        print("cancel ok")
-    } else {
-        print("cancel failed, got:", result)
-    }
+fn test_cancel() {
+    // Test 1: cancel a task that cannot self-complete (blocked on channel)
+    const ch = new Channel<int>(0)
+    let t1 = go blocked_task(ch)
+    t1.cancel()
+    let r1 = await t1
+    print("t1 cancelled:", t1.cancelled)
+    print("t1 result is null:", r1 == null)
+    ch.close()
+
+    // Test 2: cancel an already-completed task is no-op
+    let t2 = go quick_task(21)
+    let r2 = await t2
+    t2.cancel()
+    print("t2 cancelled:", t2.cancelled)
+    print("t2 result:", r2)
+
+    print("done")
 }
 
-
+// 期望输出：
+// t1 cancelled: true
+// t1 result is null: true
+// t2 cancelled: false
+// t2 result: 42
+// done
