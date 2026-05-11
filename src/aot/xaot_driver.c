@@ -27,6 +27,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../module/xbundle.h"
 #include "../base/xmalloc.h"
+#include "../base/xmemstream.h"
 #include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
 #include "xi_cgen.h"
@@ -372,9 +373,9 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     /* --- Generate combined C source --- */
     char *buf = NULL;
     size_t bufsz = 0;
-    FILE *mem = open_memstream(&buf, &bufsz);
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
     if (!mem) {
-        fprintf(stderr, "Error: open_memstream failed\n");
+        fprintf(stderr, "Error: xr_open_memstream failed\n");
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
     }
@@ -389,7 +390,11 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
             xi_cgen_module(cg_ctx, mem, modules[m]);
         xi_cgen_main(mem, modules, nmodules, entry_index);
     }
-    fclose(mem);
+    if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
+        fprintf(stderr, "Error: xr_close_memstream failed\n");
+        xi_cgen_ctx_free(cg_ctx);
+        goto fail_free_ir;
+    }
     xi_cgen_ctx_free(cg_ctx);
 
     /* Infer runtime features before freeing IR */
@@ -408,16 +413,9 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     printf("[xi-native] Generated %zu bytes of C (%d functions, %d modules)\n", bufsz, total_funcs,
            nmodules);
 
-    /* Copy from system-malloc'd open_memstream buffer to xr_malloc */
-    char *owned = (char *) xr_malloc(bufsz + 1);
-    if (!owned) {
-        free(buf);
-        goto fail_free_names;
-    }
-    memcpy(owned, buf, bufsz + 1);
-    free(buf);
-
-    result->c_source = owned;
+    /* buf is xr_malloc-owned (xr_close_memstream guarantees this on every
+     * platform). Hand it off to the caller as-is. */
+    result->c_source = buf;
     result->total_compiled = total_funcs;
     result->total_aot = total_funcs;
     result->nmodules = nmodules;

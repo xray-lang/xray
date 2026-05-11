@@ -47,13 +47,25 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install zlib (Windows)
+      if: runner.os == 'Windows'
+      # zlib is a hard requirement for stdlib/compress, stdlib/http and
+      # stdlib/ws. macOS/Linux runners ship it via the system; on
+      # Windows we provision it through vcpkg so find_package(ZLIB)
+      # succeeds and compress_zlib.c gets compiled in.
+      shell: pwsh
+      run: |
+        vcpkg install zlib:x64-windows-release
+        echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+        echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
+
     - name: Configure (Unix)
       if: runner.os != 'Windows'
       run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Configure (Windows)
       if: runner.os == 'Windows'
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE" -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
 
     - name: Build
       run: cmake --build build --config Release

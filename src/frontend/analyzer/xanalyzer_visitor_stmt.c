@@ -223,7 +223,8 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    if (var_type && value_type && !XR_TYPE_IS_UNKNOWN(var_type) && !XR_TYPE_IS_UNKNOWN(value_type)) {
+    if (var_type && value_type && !XR_TYPE_IS_UNKNOWN(var_type) &&
+        !XR_TYPE_IS_UNKNOWN(value_type)) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         // Check null safety first (null→T, T?→T)
         bool null_err =
