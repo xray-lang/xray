@@ -802,8 +802,12 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
     }
 
     if (raw_body && raw_body_len > 0) {
-        // Check Content-Encoding for decompression
-#if XR_HAS_COMPRESS
+        // Check Content-Encoding for decompression.
+        // xr_zlib_*_decompress and xr_detect_content_encoding are
+        // implemented in compress_zlib.c, which is only compiled when
+        // system zlib is available (XR_HAS_ZLIB). Without it, fall
+        // through to raw-body passthrough.
+#if XR_HAS_ZLIB
         XrContentEncoding compress_type = XR_CONTENT_ENC_NONE;
         for (size_t i = 0; i < resp.header_count; i++) {
             if (resp.headers[i].name_len == 16 &&
@@ -858,14 +862,14 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
             }
         }
 #else
-        // Compress module not available, copy body as-is
+        // System zlib not available, copy body as-is
         result.body = (char *) xr_malloc(raw_body_len + 1);
         if (result.body) {
             memcpy(result.body, raw_body, raw_body_len);
             result.body[raw_body_len] = '\0';
             result.body_len = raw_body_len;
         }
-#endif  // XR_HAS_COMPRESS
+#endif  // XR_HAS_ZLIB
     }
 
     result.error = XR_HTTP_OK;
