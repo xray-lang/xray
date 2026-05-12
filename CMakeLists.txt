@@ -538,11 +538,18 @@ add_library(xray_core STATIC ${CORE_ALL_SOURCES})
 # gets miscompiled when LTO cross-TU inlines GC/runtime helpers into it,
 # causing incorrect register allocation on ARM64 (x27 holds a NaN-boxed value
 # instead of a pointer). All other TUs keep LTO for GC hot path performance.
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT MSVC)
     set_source_files_properties(
         src/vm/xvm.c
         src/vm/xvm_cold_paths.c
         PROPERTIES COMPILE_OPTIONS "-fno-lto"
+    )
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
+    set_source_files_properties(
+        src/vm/xvm.c
+        PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
     )
 endif()
 

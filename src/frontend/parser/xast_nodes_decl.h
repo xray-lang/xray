@@ -21,9 +21,9 @@
 
 // Generic type parameter (for <T: Constraint1 & Constraint2> syntax)
 typedef struct XrGenericParam {
-    char *name;                // Type parameter name: T, U, K, V
-    XrTypeRef **constraints;   // Constraint types joined by '&' (NULL if none)
-    int constraint_count;      // Number of constraints (0 if unconstrained)
+    char *name;               // Type parameter name: T, U, K, V
+    XrTypeRef **constraints;  // Constraint types joined by '&' (NULL if none)
+    int constraint_count;     // Number of constraints (0 if unconstrained)
 } XrGenericParam;
 
 // Function parameter passing mode for struct value types
@@ -110,9 +110,9 @@ typedef struct InterfaceDeclNode {
     char *name;
     char **extends;
     int extends_count;
-    AstNode **methods;             // AST_INTERFACE_METHOD nodes
+    AstNode **methods;  // AST_INTERFACE_METHOD nodes
     int method_count;
-    AstNode **properties;          // AST_INTERFACE_PROPERTY nodes
+    AstNode **properties;  // AST_INTERFACE_PROPERTY nodes
     int property_count;
     XrGenericParam **type_params;  // Generic type parameters (e.g. `interface Iterable<T>`)
     int type_param_count;

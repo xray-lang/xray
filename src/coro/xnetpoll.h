@@ -141,8 +141,7 @@ typedef struct XrPollDesc {
 // Hot path: every watched fd allocates one of these from the lock-free
 // cache. Growing the struct past 1KB silently doubles the per-fd cost
 // at scale; bumping the cap is fine but should be a deliberate review.
-_Static_assert(sizeof(XrPollDesc) <= 1024,
-               "XrPollDesc must stay <= 1024 bytes (per-fd hot path)");
+_Static_assert(sizeof(XrPollDesc) <= 1024, "XrPollDesc must stay <= 1024 bytes (per-fd hot path)");
 
 // Size of the per-pd IOCP state buffer reserved above. The IOCP
 // backend asserts sizeof(XrIocpPdState) <= XR_IOCP_PD_STATE_SIZE at
@@ -172,11 +171,11 @@ typedef struct XrPollCache {
 typedef struct XrNetpoll XrNetpoll;
 
 typedef struct XrNetpollOps {
-    const char *name;                                              // "kqueue", "epoll", "io_uring", "iocp"
-    int (*init)(XrNetpoll *np);                                    // Create backend handle
-    void (*cleanup)(XrNetpoll *np);                                // Destroy backend handle
-    int (*add_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);          // Register fd
-    void (*del_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);         // Unregister fd
+    const char *name;                                       // "kqueue", "epoll", "io_uring", "iocp"
+    int (*init)(XrNetpoll *np);                             // Create backend handle
+    void (*cleanup)(XrNetpoll *np);                         // Destroy backend handle
+    int (*add_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);   // Register fd
+    void (*del_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);  // Unregister fd
     int (*poll_events)(XrNetpoll *np, int64_t delta_ns, XrReadyList *list);  // Wait & collect
     void (*wakeup)(XrNetpoll *np);                                           // Interrupt wait
 } XrNetpollOps;

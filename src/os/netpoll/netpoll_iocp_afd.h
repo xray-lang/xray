@@ -133,10 +133,12 @@ typedef struct _XR_AFD_POLL_INFO {
 // XrAfdContext per XrNetpoll on the heap (pointed to from
 // XrNetpoll.backend_state).
 typedef struct XrAfdContext {
-    HANDLE iocp;                   // Borrowed; XrNetpoll owns the lifetime
-    HANDLE afd_device;             // Owned; opened via NtCreateFile on \Device\Afd\XrayN
-    ULONG_PTR completion_key;      // Stored at CreateIoCompletionPort time; lets dispatch distinguish AFD completions from self-wakeup
-    void *update_queue_head;       // XrPollDesc*; intrusive single-linked stack of pds awaiting AFD poll re-submit
+    HANDLE iocp;               // Borrowed; XrNetpoll owns the lifetime
+    HANDLE afd_device;         // Owned; opened via NtCreateFile on \Device\Afd\XrayN
+    ULONG_PTR completion_key;  // Stored at CreateIoCompletionPort time; lets dispatch distinguish
+                               // AFD completions from self-wakeup
+    void *update_queue_head;  // XrPollDesc*; intrusive single-linked stack of pds awaiting AFD poll
+                              // re-submit
 } XrAfdContext;
 
 // ============================================================================

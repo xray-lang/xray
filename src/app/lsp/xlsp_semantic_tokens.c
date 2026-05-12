@@ -380,8 +380,8 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                         int mods = XLSP_MOD_ABSTRACT;
                         if (prop->as.interface_property.is_readonly)
                             mods |= XLSP_MOD_READONLY;
-                        result_add(result, prop->line - 1, pcol, strlen(pname),
-                                   XLSP_TOKEN_PROPERTY, mods);
+                        result_add(result, prop->line - 1, pcol, strlen(pname), XLSP_TOKEN_PROPERTY,
+                                   mods);
                     }
                 }
             }

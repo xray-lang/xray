@@ -97,10 +97,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         for (int i = 0; i < call->type_arg_count && i < expected_count; i++) {
             // Use analyzer-aware resolver so user class type-args carry their
             // superclass chain — required for `<T: BaseClass>` upper bounds.
-            XrType *type_arg =
-                call->type_args[i]
-                    ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
-                    : NULL;
+            XrType *type_arg = call->type_args[i]
+                                   ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[i])
+                                   : NULL;
 
             int constraint_count = 0;
             XrType **constraints =
@@ -112,9 +111,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             for (int j = 0; j < constraint_count; j++) {
                 XrType *constraint = constraints[j];
                 if (constraint && !xr_type_satisfies_constraint(type_arg, constraint)) {
-                    XrLocation loc = {.file = ctx->file_path,
-                                      .line = node->line,
-                                      .column = node->column};
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
                     const char *param_name = xa_symbol_links_get_type_param_name(fn_links, i);
                     char msg[256];
                     snprintf(msg, sizeof(msg),

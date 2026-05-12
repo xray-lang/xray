@@ -429,9 +429,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * resolver — assigning the XrTypeRef directly mixes up two unrelated
      * struct layouts and produces garbage values for every downstream
      * type lookup (JIT codegen RET tag, TFA, etc.). */
-    struct XrType *ret_type = fdecl->return_type
-                                  ? xr_tref_resolve(isolate, fdecl->return_type)
-                                  : l.type_void;
+    struct XrType *ret_type =
+        fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : l.type_void;
     if (!ret_type)
         ret_type = l.type_void;
 
