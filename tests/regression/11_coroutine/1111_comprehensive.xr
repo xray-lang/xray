@@ -70,27 +70,15 @@ fn test_select(): void {
     }
 }
 
-// 运行所有测试
-print("=== Producer-Consumer ===")
-test_producer_consumer()
-
-print("=== Defer ===")
-test_defer()
-
-print("=== Select ===")
-test_select()
-
-print("=== Done ===")
-
-// 期望输出：
-// === Producer-Consumer ===
+// 期望输出 test_producer_consumer：
 // 1
 // 2
 // 6
-// === Defer ===
+//
+// 期望输出 test_defer：
 // working
 // resource2
 // resource1
-// === Select ===
+//
+// 期望输出 test_select：
 // 100
-// === Done ===

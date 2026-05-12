@@ -675,7 +675,7 @@ XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction i
     if (fire_and_forget)
         coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
 
-    // Scope tracking: link coro to scope, register waiter on task
+    // Scope tracking: link coro to scope
     {
         XrScopeContext *_scope = parent ? parent->current_scope : NULL;
         if (!_scope && runtime->current_scope)
@@ -689,9 +689,6 @@ XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction i
             _scope->first_child = coro;
             atomic_store_explicit(&_scope->child_lock, false, memory_order_release);
             atomic_fetch_add_explicit(&_scope->count, 1, memory_order_relaxed);
-            atomic_fetch_add_explicit(&parent->wait_count, 1, memory_order_relaxed);
-            task->waiter = parent;
-            task->waiter_index = -2;  // scope mode
 
             // In linked scope, auto-link children for error propagation.
             // Supervisor scope children stay XR_LINK_NONE — errors are collected

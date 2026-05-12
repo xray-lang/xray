@@ -850,12 +850,20 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     ctx.block_offsets = (uint32_t *) xr_calloc(max_blk_id + 1, sizeof(uint32_t));
     ctx.nblock_offsets = max_blk_id + 1;
 
-    /* Allocate code buffer: x86-64 instructions are variable-length (avg ~5 bytes),
-     * estimate 40 bytes per Xm instruction + overhead */
+    /* Allocate code buffer: x86-64 instructions are variable-length.
+     * The worst-case Xm instructions are call-shaped ops (CALL_C
+     * outlines, CALL_KNOWN with caller-save spill/restore, INDEX_GET /
+     * INDEX_SET going through the call_c stub path), each of which can
+     * easily exceed 80 bytes once the slow-path branches and rel32
+     * patch sites are accounted for. The previous 40-byte estimate was
+     * too optimistic and the buffer overflowed silently on functions
+     * with many such ops (e.g. nested iterators). Bump the per-ins
+     * budget and the fixed overhead to cover stubs (deopt / call_c /
+     * barrier / OSR / resume) plus prologue/epilogue. */
     uint32_t total_xm_ins = 0;
     for (uint32_t i = 0; i < func->nblk; i++)
         total_xm_ins += func->blocks[i]->nins + 4;
-    uint32_t alloc_size = total_xm_ins * 40 + 1024;
+    uint32_t alloc_size = total_xm_ins * 96 + 4096;
     alloc_size = (alloc_size + 4095) & ~(uint32_t) 4095;
     if (alloc_size < 8192)
         alloc_size = 8192;
@@ -897,6 +905,18 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     x64_emit_barrier_stubs(&ctx);
     x64_emit_osr_stubs(&ctx, &result);
     x64_emit_resume_entry(&ctx, &result);
+
+    /* Bail out before patching if any emit overflowed the code buffer.
+     * Patch helpers write to recorded byte positions inside what we
+     * already emitted; if the buffer is short, those positions point
+     * past machine instructions that were never actually written and
+     * the resulting code is unsound. Surface a graceful failure so the
+     * background worker can fall back to the interpreter instead of
+     * publishing broken JIT code. */
+    if (ctx.buf.overflow) {
+        result.error = "x64 codegen: code buffer overflow";
+        goto cleanup;
+    }
 
     /* Patch branches + call stubs */
     x64_patch_branches(&ctx);

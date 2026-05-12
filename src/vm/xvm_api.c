@@ -234,7 +234,13 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
 */
 XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
     XR_DCHECK(isolate != NULL, "vm_interpret_proto: NULL isolate");
-    XR_DCHECK(proto != NULL, "vm_interpret_proto: NULL proto");
+    // proto NULL is an expected hardening case (mirrors the closure NULL
+    // handling in xr_vm_call_closure): DCHECK would abort in Debug but is
+    // a no-op in Release, so without an explicit guard a Release build
+    // would dereference NULL inside xr_closure_new -> Win64 SEGFAULT.
+    if (proto == NULL) {
+        return XR_VM_RUNTIME_ERROR;
+    }
     XrCoroutine *main_coro = (XrCoroutine *) isolate->main_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, main_coro);
     if (closure == NULL) {

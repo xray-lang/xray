@@ -1,39 +1,50 @@
 /*
-** 测试 await anySuccess - 等待任一协程成功完成
+** 测试 await anySuccess - 等待任一协程成功完成（跳过失败的）
 ** 作者：xingleixu@gmail.com
 */
 
-// 正常任务
-
-fn success_a(): int {
+fn success(): int {
     return 42
 }
-fn success_b(): int {
-    return 100
+fn failing(): int {
+    throw "error"
+    return 0
 }
 
 @test
 fn test_await_any_success() {
-
-
-    // 测试1：单个成功协程
+    // Test 1: single success
     print("test1: single success")
-    let t1 = go success_a()
+    let t1 = go success()
     let r1 = await anySuccess [t1]
     print("  result:", r1)
 
-    // 测试2：多个成功协程，返回第一个
-    print("test2: multiple success, returns first")
-    let t2 = go success_a()
-    let t3 = go success_b()
+    // Test 2: pre-completed tasks, array-order scan (deterministic)
+    print("test2: pre-completed tasks")
+    let t2 = go success()
+    let t3 = go success()
+    await t2
+    await t3
     let r2 = await anySuccess [t2, t3]
     print("  result:", r2)
 
-    // 测试3：对比 await any
-    print("test3: await any comparison")
-    let t4 = go success_a()
-    let t5 = go success_b()
-    let r3 = await any [t4, t5]
+    // Test 3: one failing + one success — anySuccess skips failure
+    print("test3: skip failure")
+    let t4 = go failing()
+    let t5 = go success()
+    await t4
+    await t5
+    let r3 = await anySuccess [t4, t5]
     print("  result:", r3)
+
+    print("done")
 }
 
+// 期望输出：
+// test1: single success
+//   result: 42
+// test2: pre-completed tasks
+//   result: 42
+// test3: skip failure
+//   result: 42
+// done

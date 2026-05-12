@@ -156,8 +156,16 @@ typedef struct XrTask {
     // Bidirectional link peers (task.link() API)
     struct XrTaskLink *links;  //  8B
 
-    // Completion listeners
-    struct XrCompletionNode *on_completion;  //  8B
+    // Completion listeners.
+    //
+    // Accessed concurrently: a producer thread may call
+    // xr_task_add_completion while the executor thread is in
+    // xr_task_fire_completion. Use atomic ops (Treiber stack push +
+    // atomic_exchange drain) so that no node is registered after the
+    // list has been drained without being fired. The non-atomic uses
+    // (xr_gc_destroy_task, xcoro_gc_traverse) run while the GC has
+    // halted mutators and are therefore safe with plain relaxed loads.
+    _Atomic(struct XrCompletionNode *) on_completion;  //  8B
 
     // Await coordination (single CAS protocol, mirrors old coro->await_state)
     _Atomic int await_state;     //  4B: NONE / WAITING / RESOLVED

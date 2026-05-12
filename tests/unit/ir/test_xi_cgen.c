@@ -17,6 +17,7 @@
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/base/xmemstream.h"
 #include "../../../include/xray_isolate.h"
 
 #include <stdio.h>
@@ -122,11 +123,12 @@ static char *generate_c(XiFunc *ir, const char *module_name) {
 
     char *buf = NULL;
     size_t bufsz = 0;
-    FILE *mem = open_memstream(&buf, &bufsz);
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
     assert(mem != NULL);
 
     xi_cgen_program(ctx, mem, mod);
-    fclose(mem);
+    int rc = xr_close_memstream(mem, &buf, &bufsz);
+    assert(rc == 0);
 
     xi_cgen_ctx_free(ctx);
     if (own_mod) {

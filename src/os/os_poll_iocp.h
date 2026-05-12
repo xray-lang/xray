@@ -12,9 +12,37 @@
 #define XPOLL_IOCP_H
 
 // ============================================================================
-// Platform: IOCP (Windows)
-// Extracted from xnetpoll_iocp.c
+// Platform: IOCP (Windows) — lightweight transport-level poll wrapper
 // ============================================================================
+//
+// KNOWN BUG (XR_BUG_OS_POLL_IOCP_FAKE_READINESS):
+//   xr_poll_wait below treats every IOCP completion as
+//   "both readable and writable" (XR_POLL_IN | XR_POLL_OUT). This
+//   is incorrect under any real workload:
+//
+//     - A plain CreateIoCompletionPort association on a SOCKET only
+//       delivers completions when the user-mode code itself issues
+//       overlapped I/O (WSARecv / WSASend with an OVERLAPPED). Until
+//       that happens the IOCP queue is empty; nothing here surfaces
+//       readiness.
+//     - When a completion does arrive, lpCompletionKey identifies
+//       the user_data pointer but says nothing about IN vs OUT;
+//       the dwNumberOfBytesTransferred + lpOverlapped tell us which
+//       request completed and how, and that distinction is dropped.
+//
+//   Coroutine-side I/O does NOT go through this header — the
+//   netpoll backend (src/os/netpoll/netpoll_iocp.c) implements a
+//   correct \Device\Afd-based readiness translation and is the path
+//   used by stdlib net / http / ws. The lightweight xpoll lives in
+//   the LSP / MCP / CLI transports, where the traffic is small and
+//   single-direction enough that the misreport has not surfaced as
+//   a visible failure.
+//
+//   Fixing this means rebuilding xpoll on top of the AFD wrapper
+//   (or at minimum keeping a per-fd "what did the caller actually
+//   request" map and decoding bytes_transferred). Tracked as a
+//   separate piece of work; the netpoll-focused IOCP rewrite leaves
+//   it untouched on purpose so the change set stays scoped.
 
 static inline int xr_poll_init(XrPoll *p) {
     memset(p, 0, sizeof(XrPoll));

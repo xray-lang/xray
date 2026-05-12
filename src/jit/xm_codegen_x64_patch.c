@@ -24,6 +24,7 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
     typedef struct {
         X64Reg dst, src;
         bool done, is_fp, is_reload;
+        bool is_store;
         int16_t spill_slot;
     } Copy;
     Copy copies[64];
@@ -34,14 +35,20 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
     for (uint32_t i = 0; i < nc && n < 64; i++) {
         X64Reg d =
             ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].dst_idx] : x64_alloc_regs[ec[i].dst_idx];
+        if (ec[i].is_store) {
+            X64Reg s =
+                ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].src_idx] : x64_alloc_regs[ec[i].src_idx];
+            copies[n++] = (Copy) {d, s, false, ec[i].is_fp, false, true, ec[i].spill_slot};
+            continue;
+        }
         if (ec[i].is_reload) {
-            copies[n++] = (Copy) {d, X64_R11, false, ec[i].is_fp, true, ec[i].spill_slot};
+            copies[n++] = (Copy) {d, X64_R11, false, ec[i].is_fp, true, false, ec[i].spill_slot};
             continue;
         }
         X64Reg s =
             ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].src_idx] : x64_alloc_regs[ec[i].src_idx];
         if (d != s)
-            copies[n++] = (Copy) {d, s, false, ec[i].is_fp, false, 0};
+            copies[n++] = (Copy) {d, s, false, ec[i].is_fp, false, false, 0};
     }
     if (n == 0)
         return;
@@ -54,17 +61,25 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
             if (copies[i].done)
                 continue;
             bool blocked = false;
-            for (uint32_t j = 0; j < n; j++) {
-                if (j == i || copies[j].done)
-                    continue;
-                if (!copies[j].is_reload && copies[j].is_fp == copies[i].is_fp &&
-                    copies[j].src == copies[i].dst) {
-                    blocked = true;
-                    break;
+            if (!copies[i].is_store) {
+                for (uint32_t j = 0; j < n; j++) {
+                    if (j == i || copies[j].done)
+                        continue;
+                    if (!copies[j].is_reload && copies[j].is_fp == copies[i].is_fp &&
+                        copies[j].src == copies[i].dst) {
+                        blocked = true;
+                        break;
+                    }
                 }
             }
             if (!blocked) {
-                if (copies[i].is_reload) {
+                if (copies[i].is_store) {
+                    int32_t off = -(X64_SPILL_BASE + copies[i].spill_slot * 8);
+                    if (copies[i].is_fp)
+                        x64_movsd_mr(&ctx->buf, X64_RBP, off, (X64Xmm) copies[i].src);
+                    else
+                        x64_mov_mr(&ctx->buf, X64_RBP, off, copies[i].src);
+                } else if (copies[i].is_reload) {
                     int32_t off = -(X64_SPILL_BASE + copies[i].spill_slot * 8);
                     if (copies[i].is_fp)
                         x64_movsd_rm(&ctx->buf, (X64Xmm) copies[i].dst, X64_RBP, off);
@@ -85,6 +100,15 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
     for (uint32_t i = 0; i < n; i++) {
         if (copies[i].done)
             continue;
+        if (copies[i].is_store) {
+            int32_t off = -(X64_SPILL_BASE + copies[i].spill_slot * 8);
+            if (copies[i].is_fp)
+                x64_movsd_mr(&ctx->buf, X64_RBP, off, (X64Xmm) copies[i].src);
+            else
+                x64_mov_mr(&ctx->buf, X64_RBP, off, copies[i].src);
+            copies[i].done = true;
+            continue;
+        }
         if (copies[i].is_reload) {
             int32_t off = -(X64_SPILL_BASE + copies[i].spill_slot * 8);
             if (copies[i].is_fp)

@@ -966,6 +966,7 @@ XrJitResult xr_jit_scope_enter(XrCoroutine *coro, int64_t extra_arg) {
         scope->errors = NULL;
         scope->first_child = NULL;
         scope->parent = coro->current_scope;
+        scope->owner = coro;
         coro->current_scope = scope;
     }
     return XR_JIT_OK();
@@ -983,7 +984,7 @@ XrJitResult xr_jit_scope_exit(XrCoroutine *coro, int64_t extra_arg) {
     if (!scope)
         return XR_JIT_OK();
 
-    if (atomic_load(&coro->wait_count) > 0) {
+    if (atomic_load(&scope->count) > 0) {
         // Children still running — deopt to interpreter for blocking wait
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
@@ -1047,14 +1048,11 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     if (fire_and_forget)
         child->gc_flags |= XR_CORO_GC_RECYCLABLE;
 
-    // Setup scope tracking (waiter on task, not coro)
+    // Setup scope tracking
     XrScopeContext *scope = coro->current_scope;
     if (scope) {
         child->parent_scope = scope;
         atomic_fetch_add_explicit(&scope->count, 1, memory_order_relaxed);
-        atomic_fetch_add_explicit(&coro->wait_count, 1, memory_order_relaxed);
-        task->waiter = coro;
-        task->waiter_index = -2;  // scope mode
     }
 
     // Schedule the coroutine (no continuation stealing in JIT path)

@@ -55,7 +55,8 @@ static int kqueue_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     return kevent(np->poll_fd, kev, 2, NULL, 0, NULL);
 }
 
-static void kqueue_del_fd(XrNetpoll *np, int fd) {
+static void kqueue_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
+    (void) pd;  // kqueue identifies entries by (fd, filter); pd is unused
     struct kevent kev[2];
     EV_SET(&kev[0], fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     EV_SET(&kev[1], fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
