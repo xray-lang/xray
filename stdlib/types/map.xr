@@ -11,5 +11,5 @@ class Map<K, V> {
     keys(): Array<K>
     values(): Array<V>
     entries(): Array<[K, V]>
-    forEach(fn: fn(value: V, key: K): void): void
+    forEach(fn: fn(key: K, value: V): void): void
 }

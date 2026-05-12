@@ -88,6 +88,14 @@ TEST(test_match_simple) {
     xr_regex_free(re);
 }
 
+TEST(test_literal_no_match_empty_text) {
+    XrRegex *re = RE_COMPILE("a");
+    ASSERT_FALSE(xr_regex_test(re, "", 0));
+    XrMatch match;
+    ASSERT_FALSE(xr_regex_match(re, "", 0, &match));
+    xr_regex_free(re);
+}
+
 TEST(test_match_digits) {
     XrRegex *re = RE_COMPILE("\\d+");
     ASSERT_TRUE(xr_regex_test(re, "abc123", 6));
@@ -737,6 +745,14 @@ TEST(error_string) {
     ASSERT_GT((int)strlen(msg), 0);
 }
 
+TEST(literal_empty_after_many_matches) {
+    XrRegex *re = RE_COMPILE("a");
+    ASSERT_FALSE(xr_regex_test(re, "", 0));
+    XrMatch match;
+    ASSERT_FALSE(xr_regex_match(re, "", 0, &match));
+    xr_regex_free(re);
+}
+
 /* ========================================================================
  * 19. Iterator Tests
  * ======================================================================== */
@@ -826,6 +842,7 @@ TEST_MAIN_BEGIN()
 
     RUN_TEST_SUITE("Basic Matching");
     RUN_TEST(test_match_simple);
+    RUN_TEST(test_literal_no_match_empty_text);
     RUN_TEST(test_match_digits);
     RUN_TEST(find_position);
     RUN_TEST(full_match_success);
@@ -924,6 +941,7 @@ TEST_MAIN_BEGIN()
     RUN_TEST(deeply_nested_groups);
     RUN_TEST(complex_pattern);
     RUN_TEST(error_string);
+    RUN_TEST(literal_empty_after_many_matches);
 
     RUN_TEST_SUITE("Iterator");
     RUN_TEST(iterator_basic);

@@ -9,6 +9,7 @@
 #include "../../../src/jit/xi_to_xm.h"
 #include "../../../src/jit/xm.h"
 #include "../../../src/jit/xm_ops.h"
+#include "../../../src/jit/xm_jit_runtime.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -407,10 +408,17 @@ TEST(lower_index_get) {
     XmBlock *blk0 = xm->blocks[0];
     bool found = false;
     for (uint32_t i = 0; i < blk0->nins; i++) {
-        if (blk0->ins[i].op == XM_RT_INDEX_GET)
+        if (blk0->ins[i].op == XM_CALL_C && blk0->ins[i].args[0] != XM_NONE) {
+            uint32_t ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+            assert(ci < xm->nconst);
+            assert(xm->consts[ci].val.ptr == (void *) xr_jit_index_get);
+            uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
+            assert(vi < xm->nvreg);
+            assert(xm->vregs[vi].call_nargs == 2);
             found = true;
+        }
     }
-    assert(found && "should contain XM_RT_INDEX_GET");
+    assert(found && "should contain CALL_C to xr_jit_index_get");
 
     xm_func_destroy(xm);
     xi_func_free(f);

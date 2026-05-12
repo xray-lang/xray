@@ -1,0 +1,40 @@
+import regex
+
+fn regex_dynamic_match_ok(pattern: string, text: string): bool {
+    let re = regex.compile(pattern)
+    if (re == null) {
+        return false
+    }
+    return regex.find(re, text) != null
+}
+
+fn regex_dynamic_match_text(pattern: string, text: string, expected: string): bool {
+    let re = regex.compile(pattern)
+    if (re == null) {
+        return false
+    }
+    let result = regex.find(re, text)
+    if (result == null) {
+        return false
+    }
+    return result["text"] == expected
+}
+
+@test
+fn test_jit_regex_find_null_and_index_get(): void {
+    for (let i = 0; i < 260; i++) {
+        assert_eq(regex_dynamic_match_ok("(?s)a.b", "a\nb"), true)
+        assert_eq(regex_dynamic_match_ok("hello", "hello"), true)
+        assert_eq(regex_dynamic_match_text("\\P{Han}+", "你好World", "World"), true)
+    }
+
+    let ignorecase = regex.compile("hello", "i")
+    assert_eq(regex.find(ignorecase, "HeLLo") != null, true)
+    assert_eq(regex_dynamic_match_ok("hello", "HELLO"), false)
+
+    let dotall = regex.compile("(?s)a.b")
+    assert_eq(regex.find(dotall, "a\nb") != null, true)
+    assert_eq(regex_dynamic_match_ok("a.b", "a\nb"), false)
+
+    assert_eq(regex_dynamic_match_ok("a", ""), false)
+}

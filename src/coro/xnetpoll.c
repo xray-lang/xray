@@ -15,23 +15,24 @@
 #include "xnetpoll.h"
 #include "../base/xchecks.h"
 
-// The full POSIX-only implementation of this file (kqueue / epoll
-// / pipe / unistd I/O) lives below the platform guard. On Windows
-// we provide a small stub at the bottom that fails every public
-// entry point with a clear error code; a future IOCP backend will
-// replace it.
-#ifndef XR_OS_WINDOWS
+// Cross-platform body. Backend dispatch lives at the bottom of this
+// file (kqueue / epoll / iouring / IOCP); platform-specific syscalls
+// in helpers below are guarded individually so the platform-agnostic
+// algorithms (poll_cache, ready_list, lock-free state machine) are
+// shared across all targets.
 
 #include "xcoroutine.h"  // XrCoroutine
 #include "xworker.h"     // XrRuntime, XrWorker
 #include "xyieldable.h"  // XR_RESUME_TIMEOUT
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include "../os/os_thread.h"
-#include <fcntl.h>
 #include <errno.h>
+#include "../os/os_thread.h"
+#ifndef XR_OS_WINDOWS
+#include <unistd.h>
+#include <fcntl.h>
 #include <sched.h>
+#endif
 
 // ========== Descriptor Cache Pool ==========
 
@@ -260,15 +261,16 @@ void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
 // ========== Common Init/Cleanup ==========
 
 // Create wakeup pipe
+//
+// On Windows the IOCP backend wakes itself via PostQueuedCompletionStatus —
+// no pipe is needed and the wakeup_pipe[] sentinel stays at -1. The
+// per-worker local poll on POSIX still uses a self-pipe to break out of
+// kqueue/epoll_wait when another thread enqueues work.
 static int create_wakeup_pipe(int pipe_fds[2]) {
 #ifdef XR_OS_WINDOWS
-// Windows: a full IOCP-based wakeup integration is tracked separately
-// (see xnetpoll_iocp.c which is not yet wired into netpoll_default_ops).
-// Fail-fast here instead of silently returning -1 — callers that try to
-// initialize netpoll on Windows will see a clear error rather than an
-// ambiguous runtime hang.
-#error                                                                                             \
-    "Windows netpoll wakeup pipe not implemented; wire xnetpoll_iocp.c or build without networking"
+    pipe_fds[0] = -1;
+    pipe_fds[1] = -1;
+    return 0;
 #else
     if (pipe(pipe_fds) < 0) {
         return -1;
@@ -304,6 +306,8 @@ static void close_wakeup_pipe(int pipe_fds[2]) {
 #if defined(XR_HAS_IO_URING)
 #include "../os/netpoll/netpoll_iouring.c"
 #endif
+#elif defined(XR_OS_WINDOWS)
+#include "../os/netpoll/netpoll_iocp.c"
 #endif
 
 // Select best available ops for current platform.
@@ -317,6 +321,8 @@ static const XrNetpollOps *netpoll_default_ops(void) {
 #else
     return &epoll_ops;
 #endif
+#elif defined(XR_OS_WINDOWS)
+    return &iocp_ops;
 #else
     return NULL;
 #endif
@@ -327,6 +333,13 @@ static const XrNetpollOps *netpoll_default_ops(void) {
 // Each worker gets its own kqueue/epoll fd. The global XrNetpoll still
 // owns the fd_map and PollDesc cache. Per-worker poll eliminates
 // cross-worker contention on the shared poller.
+//
+// Windows currently does not implement a per-worker IOCP — all events
+// flow through the single shared IOCP managed by netpoll_iocp. The
+// stubs at the bottom of this section keep the link surface symmetric
+// so coro/worker code paths compile cleanly on every target.
+
+#ifndef XR_OS_WINDOWS
 
 int xr_local_poll_init(XrLocalPoll *lp) {
     if (!lp)
@@ -502,6 +515,54 @@ void xr_local_poll_wakeup(XrLocalPoll *lp) {
     } while (n < 0 && errno == EINTR);
 }
 
+#else  // XR_OS_WINDOWS
+
+// Windows fallback: per-worker local IOCP would be a net win at scale
+// but is not on the critical path right now. Until it lands, every
+// fd is delivered via the shared netpoll IOCP, and these stubs preserve
+// the unified call surface so worker setup / teardown stays branch-free.
+
+int xr_local_poll_init(XrLocalPoll *lp) {
+    if (!lp)
+        return -1;
+    lp->poll_fd = -1;
+    lp->wakeup_pipe[0] = -1;
+    lp->wakeup_pipe[1] = -1;
+    atomic_store(&lp->break_pending, false);
+    // Returning -1 deliberately: callers detect "no per-worker poll"
+    // and fall through to shared netpoll dispatch.
+    return -1;
+}
+
+void xr_local_poll_cleanup(XrLocalPoll *lp) {
+    (void) lp;
+}
+
+int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
+    (void) lp;
+    (void) fd;
+    (void) pd;
+    return -1;
+}
+
+void xr_local_poll_del_fd(XrLocalPoll *lp, int fd) {
+    (void) lp;
+    (void) fd;
+}
+
+int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
+    (void) lp;
+    (void) delta_ns;
+    (void) list;
+    return 0;
+}
+
+void xr_local_poll_wakeup(XrLocalPoll *lp) {
+    (void) lp;
+}
+
+#endif  // XR_OS_WINDOWS
+
 // ========== Unified Public API (ops dispatch) ==========
 
 int xr_netpoll_init(XrNetpoll *np) {
@@ -625,7 +686,7 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
 
     XrPollDesc *expected = NULL;
     if (!xr_fdmap_cas(np, fd, &expected, pd)) {
-        np->ops->del_fd(np, fd);
+        np->ops->del_fd(np, fd, pd);
         xr_poll_cache_free(&np->cache, pd);
         return expected;
     }
@@ -685,11 +746,27 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         }
     }
 
-    // Unregister from shared kqueue
-    np->ops->del_fd(np, fd);
+    // Unregister from shared backend (kqueue / epoll / iouring / iocp).
+    // pd is still valid here: xnetpoll has just CASed it out of fdmap,
+    // and the deferred-free path below makes sure it survives any
+    // outstanding async work the backend may need to cancel.
+    np->ops->del_fd(np, fd, pd);
 
     xr_netpoll_unblock(pd, XR_POLL_READ, false);
     xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
+
+#ifdef XR_OS_WINDOWS
+    // The IOCP backend may still hold an async ref to pd's embedded
+    // iosb (cancellation completion in flight, or a late event
+    // completion already in the IOCP queue). iocp_handle_completion
+    // takes over the free when the completion drains, so we must
+    // skip both immediate and deferred-free here — recycling the pd
+    // before the completion lands hands the kernel a dangling
+    // lpOverlapped pointer.
+    if (atomic_load(&pd->iocp_holds_ref)) {
+        return;
+    }
+#endif
 
     if (can_free_pd) {
         xr_poll_cache_free(&np->cache, pd);
@@ -1041,169 +1118,3 @@ void xr_netpoll_drain_deferred(XrNetpoll *np, XrProc *p) {
         pd = next;
     }
 }
-
-#else  // XR_OS_WINDOWS
-
-/* ============================================================
- * Windows stub backend.
- *
- * The native poller pulls in kqueue (Apple/BSD), epoll (Linux)
- * and a pipe-based wakeup channel. None of those have a direct
- * Win32 equivalent; the long-term plan is an IOCP backend, but
- * shipping that is a separate, sizable effort.
- *
- * For now every public entry point returns a clear failure so
- * the runtime links and any caller that actually exercises
- * networking gets an obvious diagnostic instead of a silent
- * deadlock. Coroutines and pure CPU code paths are unaffected.
- * ============================================================ */
-
-#include "xcoroutine.h"
-#include "xworker.h"
-#include <stdlib.h>
-#include <string.h>
-
-void xr_poll_cache_free(XrPollCache *cache, XrPollDesc *pd) {
-    (void) cache;
-    (void) pd;
-}
-
-XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
-    (void) cache;
-    return NULL;
-}
-
-bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, struct XrayIsolate *X) {
-    (void) pd;
-    (void) mode;
-    (void) X;
-    return false;
-}
-
-void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
-    (void) list;
-    (void) pd;
-    (void) mode;
-}
-
-struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) {
-    (void) pd;
-    (void) mode;
-    (void) io_ready;
-    return NULL;
-}
-
-int xr_local_poll_init(XrLocalPoll *lp) {
-    (void) lp;
-    return -1;
-}
-
-void xr_local_poll_cleanup(XrLocalPoll *lp) {
-    (void) lp;
-}
-
-int xr_local_poll_add_fd(XrLocalPoll *lp, int fd, XrPollDesc *pd) {
-    (void) lp;
-    (void) fd;
-    (void) pd;
-    return -1;
-}
-
-void xr_local_poll_del_fd(XrLocalPoll *lp, int fd) {
-    (void) lp;
-    (void) fd;
-}
-
-int xr_local_poll_events(XrLocalPoll *lp, int64_t delta_ns, XrReadyList *list) {
-    (void) lp;
-    (void) delta_ns;
-    (void) list;
-    return 0;
-}
-
-void xr_local_poll_wakeup(XrLocalPoll *lp) {
-    (void) lp;
-}
-
-int xr_netpoll_init(XrNetpoll *np) {
-    if (np)
-        memset(np, 0, sizeof(*np));
-    return -1;
-}
-
-void xr_netpoll_cleanup(XrNetpoll *np) {
-    (void) np;
-}
-
-XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
-    (void) np;
-    (void) fd;
-    return NULL;
-}
-
-void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
-    (void) np;
-    (void) pd;
-}
-
-int xr_netpoll_wait(XrNetpoll *np, XrPollDesc *pd, int mode, struct XrayIsolate *X) {
-    (void) np;
-    (void) pd;
-    (void) mode;
-    (void) X;
-    return -1;
-}
-
-XrReadyList xr_netpoll_poll(XrNetpoll *np, int64_t delta_ns) {
-    (void) np;
-    (void) delta_ns;
-    XrReadyList r;
-    memset(&r, 0, sizeof r);
-    return r;
-}
-
-void xr_netpoll_break(XrNetpoll *np) {
-    (void) np;
-}
-
-bool xr_netpoll_any_waiters(XrNetpoll *np) {
-    (void) np;
-    return false;
-}
-
-void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, int mode,
-                             XrTimerWheel *tw) {
-    (void) np;
-    (void) pd;
-    (void) deadline;
-    (void) mode;
-    (void) tw;
-}
-
-void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
-    (void) pd;
-    (void) seq;
-    (void) read;
-}
-
-int xr_netpoll_bind_worker(XrPollDesc *pd) {
-    (void) pd;
-    return -1;
-}
-
-struct XrTimerWheel *xr_netpoll_get_timer_wheel(XrPollDesc *pd) {
-    (void) pd;
-    return NULL;
-}
-
-void xr_netpoll_deferred_free(XrNetpoll *np, XrPollDesc *pd) {
-    (void) np;
-    (void) pd;
-}
-
-void xr_netpoll_drain_deferred(XrNetpoll *np, struct XrProc *p) {
-    (void) np;
-    (void) p;
-}
-
-#endif  // XR_OS_WINDOWS

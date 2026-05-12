@@ -302,8 +302,11 @@ XR_NOINLINE int vm_invoke_task_handle(XrayIsolate *isolate, XrValue receiver, in
             VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "task.monitor: failed to create channel");
         }
         if (xr_task_is_done(task)) {
-            // Task already finished: send the task itself immediately
+            // Task already finished: send the task itself immediately and
+            // close the single-shot monitor channel so create/close counters
+            // stay balanced (parity with xr_task_fire_completion).
             xr_channel_notify_send(ch, xr_value_from_task(task));
+            xr_channel_close(ch);
         } else {
             // Task still running: register completion listener
             XrCompletionNode *cn = (XrCompletionNode *) xr_calloc(1, sizeof(XrCompletionNode));

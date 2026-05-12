@@ -216,7 +216,8 @@ typedef struct {
     uint8_t src_idx;  // alloc_regs/alloc_fp_regs index
     bool is_fp;
     bool is_reload;      // true = src is spill slot, not register
-    int16_t spill_slot;  // valid when is_reload = true
+    bool is_store;       // true = dst is spill slot, not register
+    int16_t spill_slot;  // valid when is_reload or is_store is true
 } XraEdgeCopy;
 
 XR_FUNC uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target, XmBlock *from,

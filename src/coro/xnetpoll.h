@@ -114,7 +114,41 @@ typedef struct XrPollDesc {
 
     // self pointer (for timer callback)
     struct XrPollDesc *self;
+
+#ifdef XR_OS_WINDOWS
+    // IOCP backend per-socket state. The actual layout is defined in
+    // netpoll_iocp.c and guarded by a _Static_assert so growth is
+    // caught at build time; keeping the slot opaque here means
+    // xnetpoll.h does not have to drag <winsock2.h> / <windows.h> /
+    // <winternl.h> through every consumer of this header.
+    //
+    // 96 bytes covers IO_STATUS_BLOCK (16) + AFD_POLL_INFO (32) +
+    // SOCKET base_socket (8) + user/pending event masks (8) + state
+    // flags + an intrusive update-queue link (8) with comfortable
+    // slack for future per-platform extensions.
+    _Alignas(void *) unsigned char iocp_state[96];
+    // Set by the IOCP backend's del_fd when an outstanding AFD poll
+    // request still has a completion in flight whose lpOverlapped
+    // points at the embedded iosb. xr_netpoll_close honours the flag
+    // and skips the immediate cache free; iocp_handle_completion
+    // takes over the free when the completion drains. Prevents the
+    // close-before-completion use-after-free that would otherwise
+    // recycle pd memory while the kernel still references it.
+    _Atomic bool iocp_holds_ref;
+#endif
 } XrPollDesc;
+
+// Hot path: every watched fd allocates one of these from the lock-free
+// cache. Growing the struct past 1KB silently doubles the per-fd cost
+// at scale; bumping the cap is fine but should be a deliberate review.
+_Static_assert(sizeof(XrPollDesc) <= 1024,
+               "XrPollDesc must stay <= 1024 bytes (per-fd hot path)");
+
+// Size of the per-pd IOCP state buffer reserved above. The IOCP
+// backend asserts sizeof(XrIocpPdState) <= XR_IOCP_PD_STATE_SIZE at
+// compile time; bumping this value here requires the same review as
+// growing XrPollDesc itself.
+#define XR_IOCP_PD_STATE_SIZE 96
 
 // ========== Ready Coroutine List ==========
 
@@ -138,11 +172,11 @@ typedef struct XrPollCache {
 typedef struct XrNetpoll XrNetpoll;
 
 typedef struct XrNetpollOps {
-    const char *name;                                      // "kqueue", "epoll", "io_uring"
-    int (*init)(XrNetpoll *np);                            // Create backend handle
-    void (*cleanup)(XrNetpoll *np);                        // Destroy backend handle
-    int (*add_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);  // Register fd
-    void (*del_fd)(XrNetpoll *np, int fd);                 // Unregister fd
+    const char *name;                                              // "kqueue", "epoll", "io_uring", "iocp"
+    int (*init)(XrNetpoll *np);                                    // Create backend handle
+    void (*cleanup)(XrNetpoll *np);                                // Destroy backend handle
+    int (*add_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);          // Register fd
+    void (*del_fd)(XrNetpoll *np, int fd, XrPollDesc *pd);         // Unregister fd
     int (*poll_events)(XrNetpoll *np, int64_t delta_ns, XrReadyList *list);  // Wait & collect
     void (*wakeup)(XrNetpoll *np);                                           // Interrupt wait
 } XrNetpollOps;

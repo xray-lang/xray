@@ -1,35 +1,52 @@
 // 测试 await any - 等待任一协程完成
 
-fn slow(n: int): int {
+fn compute(n: int): int {
     return n * 100
 }
 
-fn fast(n: int): int {
-    return n
+fn blocked(ch: Channel<int>): int {
+    return ch.recv()
 }
 
 @test
 fn test_await_any(): void {
-    // 创建协程
-    let t1 = go slow(1)
-    let t2 = go fast(2)
-    let t3 = go slow(3)
-    
-    // await any 返回第一个完成的协程结果
-    // 由于是按序执行，返回 t1 的结果
-    let first = await any [t1, t2, t3]
-    print(first)  // 100 (slow(1))
-    
-    // 如果第一个已完成，await any 直接返回
-    let second = await any [t1, t2, t3]
-    print(second)  // 100 (t1 已完成)
-    
+    // Test 1: await any with single task
+    let t1 = go compute(1)
+    let first = await any [t1]
+    print(first)
+
+    // Test 2: fast path - all tasks already completed, scans in array order
+    let t2 = go compute(2)
+    let t3 = go compute(3)
+    let t4 = go compute(4)
+    await t2
+    await t3
+    await t4
+    let second = await any [t2, t3, t4]
+    print(second)
+
+    // Test 3: re-await on same completed tasks
+    let third = await any [t2, t3, t4]
+    print(third)
+
+    // Test 4: slow path - two blocked tasks, unblock one specifically
+    const ch1 = new Channel<int>(1)
+    const ch2 = new Channel<int>(1)
+    let b1 = go blocked(ch1)
+    let b2 = go blocked(ch2)
+    ch2.send(999)
+    let fourth = await any [b1, b2]
+    print(fourth)
+    b1.cancel()
+    ch1.close()
+    ch2.close()
+
     print("done")
 }
 
-test_await_any()
-
 // 期望输出：
 // 100
-// 100
+// 200
+// 200
+// 999
 // done

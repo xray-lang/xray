@@ -536,6 +536,7 @@ XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
 typedef struct XrScopeContext {
     _Atomic int count;
     struct XrScopeContext *parent;
+    struct XrCoroutine *owner;
     uint8_t mode;                     // XrScopeMode
     _Atomic bool cancel_requested;    // linked scope: set when first child fails
     _Atomic bool child_lock;          // Spinlock — see lock contract above

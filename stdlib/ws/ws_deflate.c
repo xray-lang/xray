@@ -18,7 +18,11 @@
 
 #include "ws_deflate.h"
 
-#if XR_HAS_COMPRESS
+/* xr_deflate_sync_flush / xr_inflate_bounded live in compress_zlib.c,
+ * which the build system only compiles when system zlib is available
+ * (XR_HAS_ZLIB). On platforms without zlib these symbols would be
+ * unresolved at link time, so we fall back to no-op stubs. */
+#if XR_HAS_ZLIB
 #include "../compress/compress.h"
 
 int xr_ws_deflate_compress(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len) {
@@ -30,7 +34,7 @@ int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, u
     return xr_inflate_bounded(in, in_len, max_out, out, out_len);
 }
 #else
-// Stubs when compress module is not available
+// Stubs when system zlib is not available
 int xr_ws_deflate_compress(const uint8_t *in, size_t in_len, uint8_t **out, size_t *out_len) {
     (void) in;
     (void) in_len;
@@ -47,4 +51,4 @@ int xr_ws_deflate_decompress(const uint8_t *in, size_t in_len, size_t max_out, u
     (void) out_len;
     return -1;
 }
-#endif  // XR_HAS_COMPRESS
+#endif  // XR_HAS_ZLIB

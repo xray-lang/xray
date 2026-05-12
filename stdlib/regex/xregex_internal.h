@@ -17,6 +17,7 @@
 
 #include "xregex.h"
 #include "../../src/base/xarena.h"
+#include "../../src/base/xposix_compat.h"  // memmem shim for MSVC
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>

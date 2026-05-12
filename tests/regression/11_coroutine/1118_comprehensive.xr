@@ -2,38 +2,36 @@
 // 作者：xingleixu@gmail.com
 // 展示：go, await, task.cancel(), task.done, task.cancelled, task.result, defer, Channel, select
 
-fn worker(id: int, ch: Channel<int>): int {
-    // 模拟工作
-    let result = id * 10
-    ch.trySend(result)
-    return result
+fn blocked(ch: Channel<int>): int {
+    return ch.recv()
 }
 
 @test
 fn test_main() {
     // === 1. 基本 go/await ===
-    print("=== 基本 go/await ===")
+    print("=== go/await ===")
     let task1 = go { return 42 }
     print("task1 result:", await task1)
 
-    // === 2. 状态检查 ===
-    print("=== 状态检查 ===")
+    // === 2. 状态检查（await 后确定性） ===
+    print("=== status ===")
     let task2 = go { return 100 }
-    print("before await - done:", task2.done)
     await task2
-    print("after await - done:", task2.done)
+    print("done:", task2.done)
     print("result:", task2.result)
 
-    // === 3. 取消协程 ===
-    print("=== 取消协程 ===")
-    let task3 = go { return 200 }
+    // === 3. 取消协程（channel-blocked 保证未完成） ===
+    print("=== cancel ===")
+    const cancel_ch = new Channel<int>(0)
+    let task3 = go blocked(cancel_ch)
     task3.cancel()
-    print("cancelled:", task3.cancelled)
     let result3 = await task3
+    print("cancelled:", task3.cancelled)
     print("cancelled result:", result3)
+    cancel_ch.close()
 
     // === 4. Channel 通信 ===
-    print("=== Channel 通信 ===")
+    print("=== channel ===")
     shared const ch = new Channel(3)
     ch.trySend(1)
     ch.trySend(2)
@@ -41,7 +39,7 @@ fn test_main() {
     print("recv:", ch.tryRecv(), ch.tryRecv(), ch.tryRecv())
 
     // === 5. defer 清理 ===
-    print("=== defer 清理 ===")
+    print("=== defer ===")
     fn cleanup(): void { print("cleanup!") }
     fn with_defer(): int {
         defer cleanup()
@@ -58,14 +56,11 @@ fn test_main() {
     let results = await all [t1, t2, t3]
     print("all results:", results)
 
-    // === 7. await any ===
+    // === 7. await any (single task = deterministic) ===
     print("=== await any ===")
-    let t4 = go { return "first" }
-    let t5 = go { return "second" }
-    let first = await any [t4, t5]
+    let t4 = go { return "winner" }
+    let first = await any [t4]
     print("first result:", first)
 
-    print("=== 完成 ===")
+    print("=== done ===")
 }
-
-

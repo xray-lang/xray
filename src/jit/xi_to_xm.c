@@ -429,7 +429,7 @@ static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (is_float)
         arg = coerce_to_f64(ctx, blk, arg);
 
-    return xm_fold_emit_unary(ctx->xm_func, blk, xm_op, rep, arg);
+    return xm_fold_emit(ctx->xm_func, blk, xm_op, rep, arg, XM_NONE);
 }
 
 /* ========== Comparison Lowering ========== */
@@ -438,6 +438,20 @@ static XmRef lower_comparison(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 2, "comparison: expected 2 args");
     XmRef lhs = get_ref(ctx, v->args[0]);
     XmRef rhs = get_ref(ctx, v->args[1]);
+
+    bool is_eq = (v->op == XI_EQ || v->op == XI_EQ_STRICT);
+    bool is_ne = (v->op == XI_NE || v->op == XI_NE_STRICT);
+    bool lhs_null = v->args[0]->type && v->args[0]->type->kind == XR_KIND_NULL;
+    bool rhs_null = v->args[1]->type && v->args[1]->type->kind == XR_KIND_NULL;
+    if ((is_eq || is_ne) && (lhs_null || rhs_null)) {
+        XmRef val = lhs_null ? rhs : lhs;
+        XmRef isnull = xm_emit_unary(ctx->xm_func, blk, XM_RT_ISNULL, XR_REP_I64, val);
+        if (is_eq)
+            return isnull;
+        XmRef zero_ref = xm_const_i64(ctx->xm_func, 0);
+        XmRef zero = xm_emit_unary(ctx->xm_func, blk, XM_CONST_I64, XR_REP_I64, zero_ref);
+        return xm_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, isnull, zero);
+    }
 
     /* Determine if operands are float (check arg type, not result type) */
     bool is_float = is_float_type(v->args[0]->type);
@@ -942,8 +956,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_ISNULL: {
             XR_DCHECK(v->nargs == 1, "isnull: expected 1 arg");
             XmRef arg = get_ref(ctx, v->args[0]);
-            XmRef zero = xm_const_i64(ctx->xm_func, 0);
-            return xm_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, arg, zero);
+            return xm_emit_unary(ctx->xm_func, blk, XM_RT_ISNULL, XR_REP_I64, arg);
         }
 
         /* Function call */
@@ -1137,7 +1150,14 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XR_DCHECK(v->nargs >= 2, "index_get: need obj + key");
             XmRef obj = get_ref(ctx, v->args[0]);
             XmRef key = get_ref(ctx, v->args[1]);
-            return xm_emit(ctx->xm_func, blk, XM_RT_INDEX_GET, XR_REP_I64, obj, key);
+            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_index_get);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, extra);
+            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
+            XmRef args[2] = {obj, key};
+            xm_func_bind_call_args(ctx->xm_func, result, args, 2);
+            return result;
         }
         case XI_INDEX_SET: {
             XR_DCHECK(v->nargs >= 3, "index_set: need obj + key + val");

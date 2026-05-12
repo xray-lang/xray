@@ -111,11 +111,19 @@ typedef enum {
  * Byte-stream buffer for x86-64 instructions.
  * Unlike ARM64's fixed 4-byte instructions, x86-64 uses variable-length
  * encoding. The buffer tracks byte position rather than instruction count.
+ *
+ * `overflow` flips to true the first time an emit would exceed `capacity`.
+ * Subsequent emits become silent no-ops; the codegen entry point checks
+ * the flag once after emission and reports a graceful "buffer overflow"
+ * error instead of aborting the host process. Patch helpers (e.g.
+ * x64_patch_rel32) write to positions recorded earlier and are bounded
+ * by the same emit checks, so they remain safe to run after overflow.
  */
 typedef struct {
     uint8_t *code;      // byte buffer
     uint32_t pos;       // current write position (bytes)
     uint32_t capacity;  // buffer capacity (bytes)
+    bool overflow;      // sticky: set when an emit would exceed capacity
 } X64Buf;
 
 /* Initialize buffer with externally-allocated memory */
@@ -125,24 +133,35 @@ static inline void x64_buf_init(X64Buf *buf, uint8_t *mem, uint32_t cap_bytes) {
     buf->code = mem;
     buf->pos = 0;
     buf->capacity = cap_bytes;
+    buf->overflow = false;
 }
 
-/* Emit a single byte */
+/* Emit a single byte. On overflow the call becomes a silent no-op so
+ * that the codegen pipeline can continue to a graceful failure point. */
 static inline void x64_emit8(X64Buf *buf, uint8_t b) {
-    XR_DCHECK(buf->pos < buf->capacity, "x64_emit8: buffer overflow");
+    if (buf->pos >= buf->capacity) {
+        buf->overflow = true;
+        return;
+    }
     buf->code[buf->pos++] = b;
 }
 
 /* Emit a 32-bit little-endian immediate/displacement */
 static inline void x64_emit32(X64Buf *buf, uint32_t val) {
-    XR_DCHECK(buf->pos + 4 <= buf->capacity, "x64_emit32: buffer overflow");
+    if (buf->pos + 4 > buf->capacity) {
+        buf->overflow = true;
+        return;
+    }
     memcpy(&buf->code[buf->pos], &val, 4);
     buf->pos += 4;
 }
 
 /* Emit a 64-bit little-endian immediate */
 static inline void x64_emit64(X64Buf *buf, uint64_t val) {
-    XR_DCHECK(buf->pos + 8 <= buf->capacity, "x64_emit64: buffer overflow");
+    if (buf->pos + 8 > buf->capacity) {
+        buf->overflow = true;
+        return;
+    }
     memcpy(&buf->code[buf->pos], &val, 8);
     buf->pos += 8;
 }

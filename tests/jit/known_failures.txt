@@ -14,5 +14,4 @@
 #
 # Format: relative_path  # optional comment
 
-# GC stress: map_set NULL key assertion under --jit-force (GC interaction bug)
-tests/regression/10_stdlib/1207_gc_stress.xr
+# (empty — all previously listed JIT failures have been resolved)

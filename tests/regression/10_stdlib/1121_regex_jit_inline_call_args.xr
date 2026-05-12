@@ -1,0 +1,17 @@
+import regex
+
+fn regex_match_ok(pattern: string, text: string): bool {
+    let re = regex.compile(pattern)
+    if (re == null) {
+        return false
+    }
+    return regex.find(re, text) != null
+}
+
+@test
+fn test_inlined_regex_find_uses_current_args(): void {
+    for (let i = 0; i < 260; i++) {
+        assert_eq(regex_match_ok("", "abc"), true)
+    }
+    assert_eq(regex_match_ok("a", ""), false)
+}
