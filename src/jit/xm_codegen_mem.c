@@ -13,6 +13,37 @@
 #include "xm_codegen_internal.h"
 #include "../base/xchecks.h"
 
+static bool isnull_uses_runtime_tag(CodegenCtx *ctx, XmRef ref, uint32_t *out_vi) {
+    if (!xm_ref_is_vreg(ref))
+        return false;
+    uint32_t vi = XM_REF_INDEX(ref);
+    if (vi >= ctx->func->nvreg || vi >= XR_JIT_MAX_VREG_TAGS)
+        return false;
+    XmType ct = xm_ref_ctype(ctx->func, ref);
+    if (ctx->func->vregs[vi].rep == XR_REP_TAGGED) {
+        *out_vi = vi;
+        return true;
+    }
+    if (ct.kind != XM_TK_TAGGED)
+        return false;
+    XmIns *def = ctx->func->vregs[vi].def;
+    if (!def) {
+        *out_vi = vi;
+        return true;
+    }
+    switch (def->op) {
+        case XM_CALL_C:
+        case XM_CALL_KNOWN:
+        case XM_CALL_KNOWN_REG:
+        case XM_CALL_DIRECT:
+        case XM_CALL_SELF_DIRECT:
+            *out_vi = vi;
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     XR_DCHECK(ctx != NULL, "emit_mem_ops: NULL ctx");
     XR_DCHECK(ins != NULL, "emit_mem_ops: NULL ins");
@@ -1094,10 +1125,27 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // RT_ISNULL: check if value is null (tag == 0)
         // args[0] = value (vreg), result: i64 (0 or 1)
         case XM_RT_ISNULL: {
-            // For PTR type: check if pointer is NULL
+            if (xm_ref_is_vreg(ins->args[0])) {
+                XmType ct = xm_ref_ctype(ctx->func, ins->args[0]);
+                if (ct.kind == XM_TK_NULL) {
+                    a64_buf_emit(&ctx->buf, a64_movz(rd, 1, 0));
+                    break;
+                }
+                if (ct.kind == XM_TK_INT || ct.kind == XM_TK_FLOAT || ct.kind == XM_TK_BOOL) {
+                    a64_buf_emit(&ctx->buf, a64_movz(rd, 0, 0));
+                    break;
+                }
+                uint32_t vi = 0;
+                if (isnull_uses_runtime_tag(ctx, ins->args[0], &vi)) {
+                    int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                    a64_buf_emit(&ctx->buf, a64_ldrb(rd, JIT_CTX_REG, tag_off));
+                    a64_buf_emit(&ctx->buf, a64_cmp_imm(rd, XR_TAG_NULL));
+                    a64_buf_emit(&ctx->buf, a64_cset(rd, A64_CC_EQ));
+                    break;
+                }
+            }
             A64Reg val = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             a64_buf_emit(&ctx->buf, a64_cmp_imm(val, 0));
-            // CSET rd, EQ (rd = 1 if val==0, else 0)
             a64_buf_emit(&ctx->buf, a64_cset(rd, A64_CC_EQ));
             break;
         }

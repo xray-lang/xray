@@ -1305,12 +1305,6 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
     coro->parent_scope = scope;
     atomic_fetch_add(&scope->count, 1);
 
-    // Set waiter on task (scope wake coordination lives on Task)
-    if (parent && coro->task) {
-        atomic_fetch_add(&parent->wait_count, 1);
-        coro->task->waiter = parent;
-        coro->task->waiter_index = -2;  // scope mode
-    }
 }
 
 // ========== Multi-core Runtime Initialization ==========
@@ -1525,22 +1519,15 @@ static void wake_waiter_unlink_from_scope_locked(XrCoroutine *coro, XrScopeConte
 // Step 3: linked-mode "first failure cancels all siblings" path.
 // Caller must hold scope->child_lock and must have already unlinked
 // the failing child from scope->first_child (so we walk only the
-// still-live siblings). Each cancelled sibling has parent_scope
-// cleared and scope->count decremented because xr_coro_cancel does
-// not flow through the worker completion path that normally does it.
-static void wake_waiter_cancel_linked_siblings_locked(XrayIsolate *X, XrScopeContext *scope) {
+// still-live siblings). Each sibling gets a cooperative cancel request;
+// the owner worker observes it at a safepoint and runs the normal
+// completion path that owns parent_scope/count/waiter bookkeeping.
+static void wake_waiter_cancel_linked_siblings_locked(XrScopeContext *scope) {
     for (XrCoroutine *sib = scope->first_child; sib; sib = sib->scope_sibling) {
         if (xr_coro_flags_has(sib, XR_CORO_FLG_DONE))
             continue;
-        xr_coro_cancel(sib);
-        if (sib->task) {
-            xr_task_cancel(sib->task);
-        }
-        sib->parent_scope = NULL;
-        atomic_fetch_sub(&scope->count, 1);
-        if (sib->task) {
-            xr_task_wake_waiter(X, sib->task);
-        }
+        xr_coro_flags_set(sib, XR_CORO_FLG_CANCEL_REQUESTED);
+        xr_coro_request_yield(sib);
     }
 }
 
@@ -1566,13 +1553,20 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
         // Step 3: linked-mode propagation, latch via cancel_requested.
         if (child_failed && scope->mode == XR_SCOPE_LINKED &&
             !atomic_exchange(&scope->cancel_requested, true)) {
-            wake_waiter_cancel_linked_siblings_locked(X, scope);
+            wake_waiter_cancel_linked_siblings_locked(scope);
         }
         scope_lock_release(scope);
 
-        // Step 4 (lock-free): decrement scope count + drop the back-pointer.
-        atomic_fetch_sub(&scope->count, 1);
+        XrCoroutine *owner = scope->owner;
+        bool owner_waiting_scope = owner && owner->current_scope == scope;
+        int remaining = atomic_fetch_sub(&scope->count, 1) - 1;
         coro->parent_scope = NULL;
+        if (remaining == 0 && owner_waiting_scope &&
+            xr_coro_get_wait_reason(xr_coro_flags_load(owner)) ==
+                (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT) &&
+            xr_coro_flags_has(owner, XR_CORO_FLG_BLOCKED)) {
+            xr_coro_ready(X, owner, true);
+        }
     }
 
     // Step 5: delegate to xr_task_wake_waiter (every `go` creates a Task).

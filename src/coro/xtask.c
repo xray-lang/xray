@@ -77,7 +77,7 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
     task->first_child = NULL;
     task->next_sibling = NULL;
     task->links = NULL;
-    task->on_completion = NULL;
+    atomic_store_explicit(&task->on_completion, NULL, memory_order_relaxed);
     atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
     task->waiter_index = -1;
     task->waiter = NULL;
@@ -427,8 +427,29 @@ void xr_task_unlink(XrTask *a, XrTask *b) {
 void xr_task_add_completion(XrTask *task, XrCompletionNode *node) {
     if (!task || !node)
         return;
-    node->next = task->on_completion;
-    task->on_completion = node;
+
+    /* Treiber stack push: CAS the head pointer until we succeed. The
+     * caller (typically xvm_cold_call task.monitor()) already checked
+     * xr_task_is_done() and decided to register a listener, but the
+     * executor on another worker may transition the task to a terminal
+     * state and run xr_task_fire_completion at any point during this
+     * push. Re-check after the CAS lands and self-fire if so; the
+     * atomic_exchange in fire_completion ensures at most one worker
+     * actually drains the list, so the second call from the loser is a
+     * no-op. Without this, a node registered after fire_completion has
+     * already exchanged the list to NULL would never run — which is
+     * exactly the 1132_task_monitor flake on Windows where tryRecv saw
+     * an empty buffer because the monitor channel was never notified. */
+    XrCompletionNode *head;
+    do {
+        head = atomic_load_explicit(&task->on_completion, memory_order_acquire);
+        node->next = head;
+    } while (!atomic_compare_exchange_weak_explicit(&task->on_completion, &head, node,
+                                                   memory_order_acq_rel,
+                                                   memory_order_acquire));
+
+    if (xr_task_is_done(task))
+        xr_task_fire_completion(task);
 }
 
 /* ========== Await Wake (replaces xr_coro_wake_waiter for Task path) ========== */
@@ -523,8 +544,13 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
 void xr_task_fire_completion(XrTask *task) {
     if (!task)
         return;
-    XrCompletionNode *node = task->on_completion;
-    task->on_completion = NULL;
+    /* Atomic exchange so concurrent fire_completion callers (e.g. the
+     * executor finishing the task and a late xr_task_add_completion
+     * that detected the terminal state) both run safely — the loser
+     * gets a NULL list and drops out of the loop without firing
+     * anything twice. */
+    XrCompletionNode *node =
+        atomic_exchange_explicit(&task->on_completion, NULL, memory_order_acq_rel);
 
     while (node) {
         XrCompletionNode *next = node->next;
@@ -576,12 +602,13 @@ void xr_gc_destroy_task(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     }
     task->links = NULL;
 
-    // Free xr_calloc'd completion listeners (unfired, e.g. task cancelled before monitor read)
-    XrCompletionNode *cn = task->on_completion;
+    // Free xr_calloc'd completion listeners (unfired, e.g. task cancelled before monitor read).
+    // Mutators are halted by the GC at this point, so a relaxed load is sufficient.
+    XrCompletionNode *cn = atomic_load_explicit(&task->on_completion, memory_order_relaxed);
     while (cn) {
         XrCompletionNode *next = cn->next;
         xr_free(cn);
         cn = next;
     }
-    task->on_completion = NULL;
+    atomic_store_explicit(&task->on_completion, NULL, memory_order_relaxed);
 }
