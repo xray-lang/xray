@@ -28,10 +28,10 @@
 #include "compress.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/base/xstrcompat.h"
 
 #include <zlib.h>
 #include <string.h>
-#include <strings.h> /* strcasecmp */
 
 /* ========== Custom zlib allocator routing ========== */
 
@@ -479,10 +479,10 @@ XR_FUNC int xr_zlib_deflate_decompress(const void *in, size_t in_len, void **out
 XR_FUNC XrContentEncoding xr_detect_content_encoding(const char *encoding) {
     if (!encoding)
         return XR_CONTENT_ENC_NONE;
-    if (strcasecmp(encoding, "gzip") == 0 || strcasecmp(encoding, "x-gzip") == 0) {
+    if (xr_strcasecmp(encoding, "gzip") == 0 || xr_strcasecmp(encoding, "x-gzip") == 0) {
         return XR_CONTENT_ENC_GZIP;
     }
-    if (strcasecmp(encoding, "deflate") == 0) {
+    if (xr_strcasecmp(encoding, "deflate") == 0) {
         return XR_CONTENT_ENC_DEFLATE;
     }
     return XR_CONTENT_ENC_NONE;
