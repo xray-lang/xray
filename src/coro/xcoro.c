@@ -1304,7 +1304,6 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
     // Record belonging scope (decrement count on complete)
     coro->parent_scope = scope;
     atomic_fetch_add(&scope->count, 1);
-
 }
 
 // ========== Multi-core Runtime Initialization ==========

@@ -1319,8 +1319,7 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
                         tag_from_proto = true;
                     }
                 }
-                if (!tag_from_proto && xm_ref_is_vreg(blk->jmp.arg) &&
-                    ret_idx < ctx->func->nvreg) {
+                if (!tag_from_proto && xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg) {
                     XmType rct = xm_ref_ctype(ctx->func, blk->jmp.arg);
                     uint8_t ret_vtag = type_kind_to_vtag(rct.kind);
                     uint8_t vt = vtag_to_value_tag(ret_vtag);

@@ -140,18 +140,18 @@ typedef enum {
     AST_SET_LITERAL,     // #[1, 2, 3] - set
 
     // OOP nodes
-    AST_CLASS_DECL,        // class Dog extends Animal {...}
-    AST_STRUCT_DECL,       // struct Point { x: float, y: float }
-    AST_STRUCT_LITERAL,    // Point{x: 1.0, y: 2.0}
+    AST_CLASS_DECL,          // class Dog extends Animal {...}
+    AST_STRUCT_DECL,         // struct Point { x: float, y: float }
+    AST_STRUCT_LITERAL,      // Point{x: 1.0, y: 2.0}
     AST_INTERFACE_DECL,      // interface Drawable {...}
     AST_INTERFACE_METHOD,    // Interface method signature: draw(): void;
     AST_INTERFACE_PROPERTY,  // Interface property signature: length: int
-    AST_FIELD_DECL,        // name: string
-    AST_METHOD_DECL,       // greet() {...}
-    AST_NEW_EXPR,          // new Dog("Rex")
-    AST_THIS_EXPR,         // this
-    AST_SUPER_CALL,        // super.greet() or super(args)
-    AST_MEMBER_SET,        // obj.field = value
+    AST_FIELD_DECL,          // name: string
+    AST_METHOD_DECL,         // greet() {...}
+    AST_NEW_EXPR,            // new Dog("Rex")
+    AST_THIS_EXPR,           // this
+    AST_SUPER_CALL,          // super.greet() or super(args)
+    AST_MEMBER_SET,          // obj.field = value
 
     // Enum nodes
     AST_ENUM_DECL,     // enum Status : int { Success = 200 }

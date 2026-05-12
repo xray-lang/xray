@@ -36,8 +36,8 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
         X64Reg d =
             ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].dst_idx] : x64_alloc_regs[ec[i].dst_idx];
         if (ec[i].is_store) {
-            X64Reg s =
-                ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].src_idx] : x64_alloc_regs[ec[i].src_idx];
+            X64Reg s = ec[i].is_fp ? (X64Reg) x64_alloc_fp_regs[ec[i].src_idx]
+                                   : x64_alloc_regs[ec[i].src_idx];
             copies[n++] = (Copy) {d, s, false, ec[i].is_fp, false, true, ec[i].spill_slot};
             continue;
         }

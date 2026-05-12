@@ -1095,8 +1095,7 @@ XrJitResult xr_jit_upval_set(XrCoroutine *coro, int64_t upval_index) {
     if (!cl || upval_index < 0 || upval_index >= cl->upval_count)
         return XR_JIT_OK();
 
-    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[0],
-                                     coro->jit_ctx->call_arg_tags[0]);
+    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
     cl->upvals[upval_index] = val;
     return XR_JIT_OK();
 }
@@ -1142,8 +1141,7 @@ XrJitResult xr_jit_closure_set_upval(XrCoroutine *coro, int64_t upval_index) {
     if (!cl || upval_index < 0 || upval_index >= cl->upval_count)
         return XR_JIT_OK();
 
-    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[1],
-                                     coro->jit_ctx->call_arg_tags[1]);
+    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
     cl->upvals[upval_index] = val;
     return XR_JIT_OK();
 }
@@ -1160,8 +1158,7 @@ XrJitResult xr_jit_cell_new(XrCoroutine *coro, int64_t unused) {
     XrCell *cell = xr_cell_new(isolate, coro);
     if (!cell)
         return XR_JIT_NULL();
-    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[0],
-                                     coro->jit_ctx->call_arg_tags[0]);
+    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
     return XR_JIT_PTR(cell);
 }
 
@@ -1189,8 +1186,7 @@ XrJitResult xr_jit_upval_cell_set(XrCoroutine *coro, int64_t upval_index) {
     if (cv.tag != XR_TAG_PTR || !cv.ptr)
         return XR_JIT_OK();
     XrCell *cell = (XrCell *) cv.ptr;
-    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[0],
-                                     coro->jit_ctx->call_arg_tags[0]);
+    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
     return XR_JIT_OK();
 }
 
@@ -1211,8 +1207,7 @@ XrJitResult xr_jit_cell_set_direct(XrCoroutine *coro, int64_t unused) {
     XrCell *cell = (XrCell *) (uintptr_t) coro->jit_ctx->call_args[0];
     if (!cell)
         return XR_JIT_OK();
-    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[1],
-                                     coro->jit_ctx->call_arg_tags[1]);
+    cell->value = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
     return XR_JIT_OK();
 }
 

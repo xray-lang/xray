@@ -103,11 +103,10 @@ static void portable_civil_from_days(int64_t z, int *y_out, unsigned *m_out, uns
  * fully supported. */
 static time_t portable_timegm(const struct tm *tm) {
     XR_DCHECK(tm != NULL, "portable_timegm: tm must not be NULL");
-    int64_t days = portable_days_from_civil(tm->tm_year + 1900,
-                                            (unsigned) (tm->tm_mon + 1),
+    int64_t days = portable_days_from_civil(tm->tm_year + 1900, (unsigned) (tm->tm_mon + 1),
                                             (unsigned) tm->tm_mday);
-    int64_t secs = days * 86400 + (int64_t) tm->tm_hour * 3600
-                 + (int64_t) tm->tm_min * 60 + (int64_t) tm->tm_sec;
+    int64_t secs = days * 86400 + (int64_t) tm->tm_hour * 3600 + (int64_t) tm->tm_min * 60 +
+                   (int64_t) tm->tm_sec;
     return (time_t) secs;
 }
 

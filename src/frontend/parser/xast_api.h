@@ -179,8 +179,8 @@ XR_FUNC AstNode *xr_ast_interface_method(XrayIsolate *X, const char *name, char 
                                          XrTypeRef *return_type, int line);
 
 // Create interface property signature node (e.g. `length: int`)
-XR_FUNC AstNode *xr_ast_interface_property(XrayIsolate *X, const char *name,
-                                           XrTypeRef *prop_type, bool is_readonly, int line);
+XR_FUNC AstNode *xr_ast_interface_property(XrayIsolate *X, const char *name, XrTypeRef *prop_type,
+                                           bool is_readonly, int line);
 
 // Create field declaration node
 XR_FUNC AstNode *xr_ast_field_decl(XrayIsolate *X, const char *name, XrTypeRef *field_type,

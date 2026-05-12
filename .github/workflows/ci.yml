@@ -32,13 +32,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-2022]
         include:
           - os: ubuntu-latest
             name: Linux
           - os: macos-latest
             name: macOS
-          - os: windows-latest
+          - os: windows-2022
             name: Windows
 
     runs-on: ${{ matrix.os }}
@@ -175,7 +175,7 @@ jobs:
       run: |
         # Run clang-tidy on critical modules (lexer, parser, vm, gc)
         # Using find + xargs for parallel execution
-        find src/frontend src/vm src/gc src/value src/object \
+        find src/frontend src/vm src/runtime/gc src/runtime/value src/runtime/object \
           -name '*.c' ! -name '*.inc.c' -type f | \
         xargs -P$(nproc) -I{} \
           clang-tidy-14 -p build {} \

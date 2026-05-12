@@ -410,8 +410,7 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     // Uncaught within this scope → fall through to the "no handler" tail;
     // callers detect that condition via xr_vm_is_catch_reachable().
     int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
-    while (ctx->handler_count > 0 &&
-           ctx->handlers[ctx->handler_count - 1].frame_count > floor) {
+    while (ctx->handler_count > 0 && ctx->handlers[ctx->handler_count - 1].frame_count > floor) {
         XrExceptionHandler *handler = &ctx->handlers[ctx->handler_count - 1];
 
         // Case 1: Already in finally block — pop and propagate outward

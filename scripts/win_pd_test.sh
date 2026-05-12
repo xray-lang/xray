@@ -175,7 +175,10 @@ process_snapshot() {
     ps_cmd+="\$names=@('cmake','ctest','ninja','cl','link','xray'); "
     ps_cmd+="\$items=@(); foreach(\$n in \$names){ \$items += @(Get-Process -Name \$n -ErrorAction SilentlyContinue) }; "
     ps_cmd+="if(\$items.Count -eq 0){ Write-Host '  no matching process'; exit 0 }; "
-    ps_cmd+="\$items | Sort-Object ProcessName,Id | Select-Object ProcessName,Id,CPU,StartTime | Format-Table -AutoSize"
+    ps_cmd+="\$items | Sort-Object ProcessName,Id | Select-Object ProcessName,Id,CPU,StartTime | Format-Table -AutoSize; "
+    ps_cmd+="Write-Host '----- command lines -----'; "
+    ps_cmd+="Get-CimInstance Win32_Process | Where-Object { \$names -contains \$_.Name.Replace('.exe','') } | "
+    ps_cmd+="Sort-Object Name,ProcessId | Select-Object Name,ProcessId,CommandLine | Format-List"
     if ! host_run_limited "$SNAPSHOT_TIMEOUT" prlctl exec "$PD_VM" powershell -NoProfile -Command "$ps_cmd"; then
         echo "[win-pd] process snapshot unavailable within ${SNAPSHOT_TIMEOUT}s"
     fi

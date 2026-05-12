@@ -758,7 +758,6 @@ XmPassChange xm_pass_sccp(XmFunc *func) {
     xr_free(ctx.cfg.edges);
     xr_free(ctx.ssa.vregs);
     bool cfg_changed = blocks_removed || edges_dropped;
-    return (any_rewrite || blocks_removed)
-               ? (XmPassChange) {cfg_changed, true, true, 0, 0, 0}
-               : xm_pass_no_change();
+    return (any_rewrite || blocks_removed) ? (XmPassChange) {cfg_changed, true, true, 0, 0, 0}
+                                           : xm_pass_no_change();
 }

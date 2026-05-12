@@ -119,8 +119,7 @@ static bool task_cas_state(XrTask *task, uint32_t from_mask, uint8_t to) {
         if (((1u << expected) & from_mask) == 0)
             return false;
     } while (!atomic_compare_exchange_weak_explicit(&task->state, &expected, to,
-                                                   memory_order_acq_rel,
-                                                   memory_order_acquire));
+                                                    memory_order_acq_rel, memory_order_acquire));
     return true;
 }
 
@@ -140,8 +139,7 @@ void xr_task_fail(XrTask *task, XrValue error) {
     if (!task)
         return;
     task->error = error;
-    if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING),
-                        XR_TASK_FAILED))
+    if (!task_cas_state(task, (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING), XR_TASK_FAILED))
         return;
     xr_task_fire_completion(task);
 
@@ -160,8 +158,8 @@ void xr_task_cancel(XrTask *task) {
     /* Cancel can be invoked from XR_VM_CANCELLED (state ACTIVE/COMPLETING),
      * from cancel_tree's finalize step (state CANCELLING), and from the
      * user task.cancel() API (any non-final state). Reject only final. */
-    uint32_t from_mask = (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING) |
-                         (1u << XR_TASK_CANCELLING);
+    uint32_t from_mask =
+        (1u << XR_TASK_ACTIVE) | (1u << XR_TASK_COMPLETING) | (1u << XR_TASK_CANCELLING);
     if (!task_cas_state(task, from_mask, XR_TASK_CANCELLED))
         return;
     xr_task_fire_completion(task);
@@ -234,8 +232,7 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
         if (task_state_is_final(expected))
             return;
     } while (!atomic_compare_exchange_weak_explicit(&task->state, &expected, final_state,
-                                                   memory_order_acq_rel,
-                                                   memory_order_acquire));
+                                                    memory_order_acq_rel, memory_order_acquire));
 
     // Notify parent that this child is done
     if (task->parent) {
@@ -445,8 +442,7 @@ void xr_task_add_completion(XrTask *task, XrCompletionNode *node) {
         head = atomic_load_explicit(&task->on_completion, memory_order_acquire);
         node->next = head;
     } while (!atomic_compare_exchange_weak_explicit(&task->on_completion, &head, node,
-                                                   memory_order_acq_rel,
-                                                   memory_order_acquire));
+                                                    memory_order_acq_rel, memory_order_acquire));
 
     if (xr_task_is_done(task))
         xr_task_fire_completion(task);

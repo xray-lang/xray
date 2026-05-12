@@ -107,12 +107,12 @@ struct XaSymbolLinks {
     int inferred_param_count;
 
     // For generic functions/classes
-    const char **type_param_names;     // Type parameter names (e.g., "T", "U")
-    XrType ***type_param_constraints;  // Per-param intersection constraint lists.
-                                       // type_param_constraints[i] is a pointer to an
-                                       // array of size type_param_constraint_counts[i].
-                                       // NULL when a parameter has no constraints.
-    int *type_param_constraint_counts; // Number of constraints per parameter (0 = none)
+    const char **type_param_names;      // Type parameter names (e.g., "T", "U")
+    XrType ***type_param_constraints;   // Per-param intersection constraint lists.
+                                        // type_param_constraints[i] is a pointer to an
+                                        // array of size type_param_constraint_counts[i].
+                                        // NULL when a parameter has no constraints.
+    int *type_param_constraint_counts;  // Number of constraints per parameter (0 = none)
     int type_param_count;
 
     // For classes

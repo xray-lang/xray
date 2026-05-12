@@ -102,7 +102,7 @@ static int load_nt_api(void) {
 
 #define XR_AFD_LOAD(name)                                                                          \
     do {                                                                                           \
-        g_nt_api.name = (PFN_##name) (uintptr_t) GetProcAddress(ntdll, #name);                     \
+        g_nt_api.name = (PFN_##name)(uintptr_t) GetProcAddress(ntdll, #name);                      \
         if (!g_nt_api.name) {                                                                      \
             atomic_store(&g_nt_api_state, 3);                                                      \
             return -1;                                                                             \
@@ -179,9 +179,9 @@ int xr_afd_init(XrAfdContext *ctx, HANDLE iocp, ULONG_PTR completion_key) {
 
     HANDLE afd = NULL;
     IO_STATUS_BLOCK iosb;
-    NTSTATUS status = g_nt_api.NtCreateFile(&afd, SYNCHRONIZE, &attrs, &iosb, NULL, 0,
-                                            FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, 0, NULL,
-                                            0);
+    NTSTATUS status =
+        g_nt_api.NtCreateFile(&afd, SYNCHRONIZE, &attrs, &iosb, NULL, 0,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN, 0, NULL, 0);
     if (!NT_SUCCESS(status))
         return set_error_from_nt(status);
 
@@ -235,9 +235,9 @@ int xr_afd_poll(XrAfdContext *ctx, XR_AFD_POLL_INFO *info, IO_STATUS_BLOCK *iosb
     // can distinguish a still-in-flight request from a completed one.
     iosb->Status = STATUS_PENDING;
 
-    NTSTATUS status = g_nt_api.NtDeviceIoControlFile(ctx->afd_device, NULL, NULL, iosb, iosb,
-                                                     IOCTL_AFD_POLL, info, sizeof(*info), info,
-                                                     sizeof(*info));
+    NTSTATUS status =
+        g_nt_api.NtDeviceIoControlFile(ctx->afd_device, NULL, NULL, iosb, iosb, IOCTL_AFD_POLL,
+                                       info, sizeof(*info), info, sizeof(*info));
 
     // STATUS_PENDING is the success case for an async submission: the
     // poll is now in flight and will land on the IOCP. STATUS_SUCCESS
@@ -351,15 +351,15 @@ enum {
 };
 
 typedef struct XrIocpPdState {
-    IO_STATUS_BLOCK iosb;             // MUST be first; lpOverlapped recovery
-    XR_AFD_POLL_INFO poll_info;       // Submitted to NtDeviceIoControlFile
-    SOCKET base_socket;               // Resolved once on add_fd
-    uint32_t user_events;             // AFD event mask we want monitored
-    uint32_t pending_events;          // Snapshot at submit time (debug aid)
-    uint8_t poll_status;              // XR_IOCP_POLL_*
-    uint8_t in_update_queue;          // 1 if linked into ctx->update_queue_head
-    uint8_t pad[6];                   // Explicit padding so update_link is 8-byte aligned
-    struct XrPollDesc *update_link;   // Intrusive single-linked stack
+    IO_STATUS_BLOCK iosb;            // MUST be first; lpOverlapped recovery
+    XR_AFD_POLL_INFO poll_info;      // Submitted to NtDeviceIoControlFile
+    SOCKET base_socket;              // Resolved once on add_fd
+    uint32_t user_events;            // AFD event mask we want monitored
+    uint32_t pending_events;         // Snapshot at submit time (debug aid)
+    uint8_t poll_status;             // XR_IOCP_POLL_*
+    uint8_t in_update_queue;         // 1 if linked into ctx->update_queue_head
+    uint8_t pad[6];                  // Explicit padding so update_link is 8-byte aligned
+    struct XrPollDesc *update_link;  // Intrusive single-linked stack
 } XrIocpPdState;
 
 _Static_assert(sizeof(XrIocpPdState) <= XR_IOCP_PD_STATE_SIZE,
@@ -738,8 +738,7 @@ static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) 
         // Re-enqueue for re-submission unless closing or unmonitored.
         // The push is a no-op if pd is already in the queue, so a
         // burst of completions on the same pd doesn't duplicate.
-        if (!is_closing && st->user_events != 0 &&
-            st->poll_status == XR_IOCP_POLL_IDLE) {
+        if (!is_closing && st->user_events != 0 && st->poll_status == XR_IOCP_POLL_IDLE) {
             iocp_update_queue_push(ctx, pd);
         }
 

@@ -496,7 +496,7 @@ const char *xa_symbol_links_get_type_param_name(XaSymbolLinks *links, int index)
 }
 
 XrType **xa_symbol_links_get_type_param_constraints(XaSymbolLinks *links, int index,
-                                                   int *out_count) {
+                                                    int *out_count) {
     if (out_count)
         *out_count = 0;
     if (!links || index < 0 || index >= links->type_param_count)

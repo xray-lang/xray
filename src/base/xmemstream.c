@@ -86,7 +86,7 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
     return (rc == 0) ? 0 : -1;
 }
 
-#else  /* POSIX */
+#else /* POSIX */
 
 XR_FUNC FILE *xr_open_memstream(char **outbuf, size_t *outsize) {
     if (!outbuf || !outsize)
@@ -136,4 +136,4 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
     return 0;
 }
 
-#endif  /* XR_MEMSTREAM_WINDOWS */
+#endif /* XR_MEMSTREAM_WINDOWS */

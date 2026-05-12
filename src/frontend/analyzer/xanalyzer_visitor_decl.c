@@ -282,10 +282,10 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
                     for (int j = 0; j < cn; j++) {
                         // Use analyzer-aware resolver so class-bounded constraints
                         // (e.g. <T: Animal>) keep their inheritance chain.
-                        resolved[j] = gp->constraints[j]
-                                          ? xr_tref_resolve_in_analyzer(ctx->analyzer,
-                                                                        gp->constraints[j])
-                                          : NULL;
+                        resolved[j] =
+                            gp->constraints[j]
+                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
+                                : NULL;
                     }
                     constraint_lists[i] = resolved;
                     constraint_counts[i] = cn;
@@ -801,10 +801,10 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                     for (int j = 0; j < cn; j++) {
                         // Use analyzer-aware resolver so class-bounded constraints
                         // (e.g. <T: Animal>) keep their inheritance chain.
-                        resolved[j] = gp->constraints[j]
-                                          ? xr_tref_resolve_in_analyzer(ctx->analyzer,
-                                                                        gp->constraints[j])
-                                          : NULL;
+                        resolved[j] =
+                            gp->constraints[j]
+                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
+                                : NULL;
                     }
                     constraint_lists[i] = resolved;
                     constraint_counts[i] = cn;
