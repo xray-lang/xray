@@ -63,9 +63,14 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
                 return true;
             }
         }
-    } else if (wr == (XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT) ||
-               wr == (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT)) {
+    } else if (wr == (XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT)) {
         if (atomic_load(&coro->wait_count) == 0) {
+            xr_coro_ready(runtime->isolate, coro, true);
+            return true;
+        }
+    } else if (wr == (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT)) {
+        XrScopeContext *scope = coro->current_scope;
+        if (!scope || atomic_load(&scope->count) == 0) {
             xr_coro_ready(runtime->isolate, coro, true);
             return true;
         }
@@ -183,7 +188,8 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
         case XR_VM_CANCELLED:
             worker->p.yield_streak = 0;
             xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
-            xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED);
+            xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_READY |
+                                          XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
             /* Task/Executor separation: mark task cancelled.
              * Detach AFTER wake_waiter so task->waiter can be read. */
             if (coro->task) {
@@ -865,6 +871,10 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro)
         return XR_VM_RUNTIME_ERROR;
+
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
+        return XR_VM_CANCELLED;
+    }
 
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
         return XR_VM_OK;

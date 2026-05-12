@@ -1249,15 +1249,63 @@ static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 /* ========== Runtime simple ops ========== */
 
+static bool x64_isnull_uses_runtime_tag(X64CodegenCtx *ctx, XmRef ref, uint32_t *out_vi) {
+    if (!xm_ref_is_vreg(ref))
+        return false;
+    uint32_t vi = XM_REF_INDEX(ref);
+    if (vi >= ctx->func->nvreg || vi >= XR_JIT_MAX_VREG_TAGS)
+        return false;
+    XmType ct = xm_ref_ctype(ctx->func, ref);
+    if (ctx->func->vregs[vi].rep == XR_REP_TAGGED) {
+        *out_vi = vi;
+        return true;
+    }
+    if (ct.kind != XM_TK_TAGGED)
+        return false;
+    XmIns *def = ctx->func->vregs[vi].def;
+    if (!def) {
+        *out_vi = vi;
+        return true;
+    }
+    switch (def->op) {
+        case XM_CALL_C:
+        case XM_CALL_KNOWN:
+        case XM_CALL_KNOWN_REG:
+        case XM_CALL_DIRECT:
+        case XM_CALL_SELF_DIRECT:
+            *out_vi = vi;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static void x64_h_rt_simple(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     if (ins->op == XM_RT_ISNULL) {
+        if (xm_ref_is_vreg(ins->args[0])) {
+            XmType ct = xm_ref_ctype(ctx->func, ins->args[0]);
+            if (ct.kind == XM_TK_NULL) {
+                x64_mov_ri32(&ctx->buf, rd, 1);
+                return;
+            }
+            if (ct.kind == XM_TK_INT || ct.kind == XM_TK_FLOAT || ct.kind == XM_TK_BOOL) {
+                x64_mov_ri32(&ctx->buf, rd, 0);
+                return;
+            }
+            uint32_t vi = 0;
+            if (x64_isnull_uses_runtime_tag(ctx, ins->args[0], &vi)) {
+                int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                x64_movzx_rm8(&ctx->buf, rd, X64_JIT_CTX_REG, tag_off);
+                x64_cmp_ri(&ctx->buf, rd, XR_TAG_NULL);
+                x64_mov_ri32(&ctx->buf, rd, 0);
+                x64_setcc(&ctx->buf, X64_CC_E, rd);
+                return;
+            }
+        }
         X64Reg val = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
         x64_xor_rr(&ctx->buf, rd, rd);
         x64_test_rr(&ctx->buf, val, val);
-        x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40);
-        x64_emit8(&ctx->buf, 0x0F);
-        x64_emit8(&ctx->buf, 0x94); /* SETE */
-        x64_emit8(&ctx->buf, (uint8_t) (0xC0 | ((uint8_t) rd & 7)));
+        x64_setcc(&ctx->buf, X64_CC_E, rd);
     } else {
         /* RT_PRINT, RT_ARRAY_LEN, RT_INDEX_GET, RT_INDEX_SET — not yet
          * lowered. These ops are side-effect-only (dst is unused), so

@@ -22,6 +22,29 @@
 
 /* ========== Function Inlining ========== */
 
+static void inline_replace_pred(XmBlock *succ, XmBlock *old_pred, XmBlock *new_pred) {
+    if (!succ || !old_pred || !new_pred)
+        return;
+    for (uint32_t i = 0; i < succ->npred; i++) {
+        if (succ->preds[i] == old_pred) {
+            succ->preds[i] = new_pred;
+            return;
+        }
+    }
+}
+
+static void inline_emit_copy(XmFunc *func, XmBlock *blk, const XmIns *src) {
+    xm_emit_raw(func, blk, src->op, src->rep, src->dst, src->args[0], src->args[1]);
+    XmIns *dst = &blk->ins[blk->nins - 1];
+    dst->flags = src->flags;
+    dst->ctype = src->ctype;
+    if (xm_ref_is_vreg(dst->dst)) {
+        uint32_t vi = XM_REF_INDEX(dst->dst);
+        if (vi < func->nvreg)
+            func->vregs[vi].def = dst;
+    }
+}
+
 /*
  * Inline callee's IR into caller at a specific call site.
  *
@@ -108,15 +131,16 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
     uint32_t post_start = call_ins_idx + 1;
     for (uint32_t i = post_start; i < call_block->nins; i++) {
         XmIns *src = &call_block->ins[i];
-        xm_emit_raw(caller, cont_blk, src->op, src->rep, src->dst, src->args[0], src->args[1]);
-        cont_blk->ins[cont_blk->nins - 1].flags = src->flags;
-        cont_blk->ins[cont_blk->nins - 1].ctype = src->ctype;
+        inline_emit_copy(caller, cont_blk, src);
     }
 
     // Copy terminator to cont_blk
     cont_blk->jmp = call_block->jmp;
     cont_blk->s1 = call_block->s1;
     cont_blk->s2 = call_block->s2;
+    inline_replace_pred(cont_blk->s1, call_block, cont_blk);
+    if (cont_blk->s2 != cont_blk->s1)
+        inline_replace_pred(cont_blk->s2, call_block, cont_blk);
 
     // Truncate call_block (remove the call instruction and everything after)
     call_block->nins = call_ins_idx;
@@ -148,6 +172,7 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
         // Clone instructions with remapping
         for (uint32_t i = 0; i < src_blk->nins; i++) {
             XmIns ins = src_blk->ins[i];  // copy
+            uint32_t src_dst_idx = xm_ref_is_vreg(ins.dst) ? XM_REF_INDEX(ins.dst) : UINT32_MAX;
             // Remap dst and args
             if (xm_ref_is_vreg(ins.dst)) {
                 uint32_t idx = XM_REF_INDEX(ins.dst);
@@ -157,9 +182,21 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
             REMAP_REF(ins.args[0]);
             REMAP_REF(ins.args[1]);
 
-            xm_emit_raw(caller, dst_blk, ins.op, ins.rep, ins.dst, ins.args[0], ins.args[1]);
-            dst_blk->ins[dst_blk->nins - 1].flags = ins.flags;
-            dst_blk->ins[dst_blk->nins - 1].ctype = ins.ctype;
+            inline_emit_copy(caller, dst_blk, &ins);
+
+            if (src_dst_idx < callee_nvreg && xm_ref_is_vreg(ins.dst)) {
+                XmVReg *src_vr = &callee->vregs[src_dst_idx];
+                if (src_vr->call_nargs > 0 && callee->call_arg_pool &&
+                    src_vr->call_arg_start + src_vr->call_nargs <= callee->call_arg_pool_used &&
+                    src_vr->call_nargs <= 16) {
+                    XmRef remapped_args[16];
+                    for (uint16_t ai = 0; ai < src_vr->call_nargs; ai++) {
+                        remapped_args[ai] = callee->call_arg_pool[src_vr->call_arg_start + ai];
+                        REMAP_REF(remapped_args[ai]);
+                    }
+                    xm_func_bind_call_args(caller, ins.dst, remapped_args, src_vr->call_nargs);
+                }
+            }
         }
 
         // Clone terminator
@@ -1524,6 +1561,26 @@ XmPassChange xm_pass_auto_inline(XmFunc *func, XrProto *caller_proto) {
                             }
                         }
                     }
+                    if (func->call_arg_pool) {
+                        for (uint32_t cv = 0; cv < func->nvreg; cv++) {
+                            XmVReg *vr = &func->vregs[cv];
+                            if (vr->call_nargs == 0)
+                                continue;
+                            for (uint16_t ca = 0; ca < vr->call_nargs; ca++) {
+                                uint32_t pos = vr->call_arg_start + ca;
+                                if (pos < func->call_arg_pool_used &&
+                                    func->call_arg_pool[pos] == old_dst)
+                                    func->call_arg_pool[pos] = result;
+                            }
+                        }
+                    }
+                    for (uint32_t di = 0; di < func->ndeopt; di++) {
+                        XmDeoptInfo *info = &func->deopt_infos[di];
+                        for (uint16_t ds = 0; ds < info->nslots; ds++) {
+                            if (info->slots[ds].value == old_dst)
+                                info->slots[ds].value = result;
+                        }
+                    }
                 }
 
                 // Propagate callee return type to inlined result vreg
@@ -1533,6 +1590,8 @@ XmPassChange xm_pass_auto_inline(XmFunc *func, XrProto *caller_proto) {
                         func->vregs[rvi].xrtype = callee->return_type_info;
                 }
 
+                xm_rebuild_preds(func);
+                xm_rebuild_vreg_defs(func);
                 xm_func_destroy(callee_func);
 
                 // Record callee in history for depth tracking

@@ -172,6 +172,7 @@ vmcase(OP_SCOPE_ENTER) {
                             ? xr_array_with_capacity(current, 4)
                             : NULL;
         scope->first_child = NULL;
+        scope->owner = current;
         if (current) {
             scope->parent = current->current_scope;
             current->current_scope = scope;
@@ -199,7 +200,7 @@ vmcase(OP_SCOPE_EXIT) {
         if (!scope)
             vmbreak;
 
-        if (atomic_load(&current->wait_count) > 0) {
+        if (atomic_load(&scope->count) > 0) {
             // Children still running — block and re-execute on resume
             frame->pc = pc - 1;
             uint32_t old_flags = xr_coro_flags_load(current);
@@ -207,6 +208,7 @@ vmcase(OP_SCOPE_EXIT) {
                                               old_flags, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT));
             return XR_VM_BLOCKED;
         }
+        atomic_store(&current->wait_count, 0);
 
         // All children done
         if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {

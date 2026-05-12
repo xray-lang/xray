@@ -665,26 +665,33 @@ static void build_ranges(LsCtx *ctx) {
 
 /*
  * Create fixed intervals for caller-saved registers at CALL points.
- * alloc_regs[0..14] = X1-X15 are all caller-saved in ARM64 ABI.
  * Fixed intervals participate in conflict detection: they prevent the
- * allocator from assigning live-across-call vregs to caller-saved regs,
- * triggering split/spill automatically instead of relying on codegen
+ * allocator from assigning live-across-call vregs to target caller-saved
+ * regs, triggering split/spill automatically instead of relying on codegen
  * hard-coding scratch registers.
  *
  * Fixed intervals are pre-assigned and never evicted or spilled.
  */
 
-// alloc_regs[0..14] = X1-X15 are caller-saved; alloc_regs[15..22] = X20-X27 callee-saved
-#define NUM_CALLER_SAVED_GP 15
-// v0-v7 are caller-saved; v8-v15 are callee-saved
-#define NUM_CALLER_SAVED_FP 8
+#define MAX_CALLER_SAVED_GP 32
+#define MAX_CALLER_SAVED_FP 32
 
 static void build_fixed_intervals(LsCtx *ctx) {
     XmFunc *f = ctx->func;
 
-    /* Pre-create one fixed range per caller-saved register (15 GP + 8 FP).
+    /* Pre-create one fixed range per target caller-saved register.
      * Each accumulates intervals from all CALL points. NULL = no CALL uses this class. */
-    LsRange *gp_fixed[NUM_CALLER_SAVED_GP] = {0}, *fp_fixed[NUM_CALLER_SAVED_FP] = {0};
+    int ngp = xm_current_target->ngpr_caller_save;
+    int nfp = xm_current_target->nfpr_caller_save;
+    if (ngp > xm_current_target->ngpr)
+        ngp = xm_current_target->ngpr;
+    if (nfp > xm_current_target->nfpr)
+        nfp = xm_current_target->nfpr;
+    if (ngp > MAX_CALLER_SAVED_GP)
+        ngp = MAX_CALLER_SAVED_GP;
+    if (nfp > MAX_CALLER_SAVED_FP)
+        nfp = MAX_CALLER_SAVED_FP;
+    LsRange *gp_fixed[MAX_CALLER_SAVED_GP] = {0}, *fp_fixed[MAX_CALLER_SAVED_FP] = {0};
 
     for (uint32_t bi = 0; bi < f->nblk; bi++) {
         XmBlock *blk = f->blocks[bi];
@@ -697,8 +704,7 @@ static void build_fixed_intervals(LsCtx *ctx) {
 
             int32_t call_pos = bs + 2 + 2 * (int32_t) ii;
 
-            // GP caller-saved: alloc_regs[0..14] = X1-X15
-            for (int ci = 0; ci < NUM_CALLER_SAVED_GP; ci++) {
+            for (int ci = 0; ci < ngp; ci++) {
                 if (!gp_fixed[ci]) {
                     LsRange *fr = pool_alloc(&ctx->pool, sizeof(LsRange));
                     memset(fr, 0, sizeof(LsRange));
@@ -715,8 +721,7 @@ static void build_fixed_intervals(LsCtx *ctx) {
                 range_add_iv(ctx, gp_fixed[ci], call_pos, call_pos + 2);
             }
 
-            // FP caller-saved: v0-v7 (8 registers, separate from GP count)
-            for (int ci = 0; ci < NUM_CALLER_SAVED_FP; ci++) {
+            for (int ci = 0; ci < nfp; ci++) {
                 if (!fp_fixed[ci]) {
                     LsRange *fr = pool_alloc(&ctx->pool, sizeof(LsRange));
                     memset(fr, 0, sizeof(LsRange));
@@ -1966,7 +1971,7 @@ uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target, XmBl
 #endif
             if (d >= 0 && s >= 0 && d != s && n < mx) {
                 bool fp = (p->rep == XR_REP_F64);
-                out[n++] = (XraEdgeCopy) {(uint8_t) d, (uint8_t) s, fp, false, 0};
+                out[n++] = (XraEdgeCopy) {(uint8_t) d, (uint8_t) s, fp, false, false, 0};
             }
         }
     }
@@ -1994,11 +1999,15 @@ uint32_t xra_edge_copies(const XraResult *r, XmFunc *func, XmBlock *target, XmBl
         bool fp = (v < func->nvreg && func->vregs[v].rep == XR_REP_F64);
 
         if (from_reg >= 0 && to_reg >= 0) {
-            out[n++] = (XraEdgeCopy) {(uint8_t) to_reg, (uint8_t) from_reg, fp, false, 0};
+            out[n++] = (XraEdgeCopy) {(uint8_t) to_reg, (uint8_t) from_reg, fp, false, false, 0};
         } else if (from_reg < 0 && to_reg >= 0) {
             int16_t slot = xra_vreg_spill(r, v);
             if (slot >= 0)
-                out[n++] = (XraEdgeCopy) {(uint8_t) to_reg, 0, fp, true, slot};
+                out[n++] = (XraEdgeCopy) {(uint8_t) to_reg, 0, fp, true, false, slot};
+        } else if (from_reg >= 0 && to_reg < 0) {
+            int16_t slot = xra_vreg_spill(r, v);
+            if (slot >= 0)
+                out[n++] = (XraEdgeCopy) {0, (uint8_t) from_reg, fp, false, true, slot};
         }
     }
 
