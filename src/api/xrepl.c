@@ -341,8 +341,26 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
      * so the value shows up without the user typing print() explicitly. */
     repl_maybe_echo_last_expr(isolate, ast);
 
-    // Create compiler context
-    XrCompilerContext *ctx = xr_compiler_context_new(isolate);
+    /* Lazy-create the persistent REPL analyzer.  Its global_scope and
+     * type pool survive across inputs, so variables, functions, and
+     * classes declared in earlier inputs keep their full XaSymbol +
+     * inferred type and need no re-seeding from the REPL symbol table. */
+    if (!isolate->repl_analyzer) {
+        isolate->repl_analyzer = xa_analyzer_new(isolate);
+        if (!isolate->repl_analyzer) {
+            xr_program_destroy(ast);
+            return NULL;
+        }
+    }
+
+    /* Per-input state reset on the persistent analyzer.  Diagnostics and
+     * per-AST side tables must not leak across inputs because prior AST
+     * nodes were freed with their owning program arena; their pointers
+     * are stale keys in the analyzer's node_table / selection_table. */
+    xa_analyzer_clear_diagnostics(isolate->repl_analyzer);
+
+    /* Create compiler context that borrows the persistent analyzer. */
+    XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(isolate, isolate->repl_analyzer);
     if (!ctx) {
         xr_program_destroy(ast);
         return NULL;
@@ -351,27 +369,11 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     ctx->repl_mode = true;
     ctx->shared_offset = 0;  // REPL: absolute indices
 
-    // Seed with prior definitions
-    int seeded_count = isolate->repl_symbols->count;
+    /* Seed compiler-side shared_vars from the REPL symbol table.  This
+     * keeps the legacy (ct_infer) path working for cases that still read
+     * ctx->shared_vars, and populates shared_var_count for the final
+     * shared-array size check below. */
     xr_repl_symbols_seed_context(isolate->repl_symbols, ctx);
-
-    /* Seed the analyzer's global scope with prior REPL symbols so that
-     * variable references in this input resolve to real XaSymbols
-     * (instead of producing symbol_id=0, which the Xi IR lowerer rejects
-     * as unresolved).  Type information from prior inputs cannot survive
-     * because each REPL compilation uses a fresh analyzer + type_pool,
-     * so seeded symbols are declared with unknown type.  Analyzer
-     * diagnostics are suppressed by xr_compile() in REPL mode since
-     * unknown types would otherwise produce false-positive warnings. */
-    if (ctx->analyzer) {
-        XrType *any_type = xr_type_new_unknown(isolate);
-        for (int i = 0; i < isolate->repl_symbols->count; i++) {
-            XrReplSymbol *s = &isolate->repl_symbols->symbols[i];
-            if (!s->name || !s->name->data)
-                continue;
-            xa_analyzer_define_var(ctx->analyzer, s->name->data, any_type);
-        }
-    }
 
     // Compile
     XrProto *proto = xr_compile(ctx, ast);
@@ -403,14 +405,14 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
             xr_shared_array_ensure(&isolate->vm.shared, highest_slot - 1);
         }
     }
-    (void) seeded_count;
 
     xr_compiler_context_free(ctx);
 
-    // Restore type pool (compiler context freed its analyzer's pool)
-    if (isolate->analyzer_pool) {
-        isolate->current_type_pool = isolate->analyzer_pool;
-    }
+    /* Keep the persistent REPL analyzer's pool installed as the current
+     * type pool so subsequent parses / analyses in the same REPL session
+     * continue allocating into it.  A script-mode compile would restore
+     * isolate->analyzer_pool here, but REPL never uses that pool. */
+    isolate->current_type_pool = isolate->repl_analyzer->type_pool;
 
     xr_program_destroy(ast);
 

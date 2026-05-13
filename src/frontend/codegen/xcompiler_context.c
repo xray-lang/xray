@@ -11,13 +11,17 @@
 #include "xcompiler_context.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/object/xshape_cache.h"
+#include "../../runtime/xisolate_internal.h"
 #include "../../base/xmalloc.h"
 #include "../xdiag_fmt.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
+/* Shared initializer for both public constructors.  When `analyzer` is
+ * NULL a fresh owned analyzer is created; otherwise the provided one is
+ * borrowed (ownership stays with the caller). */
+static XrCompilerContext *xr_compiler_context_new_impl(XrayIsolate *X, XaAnalyzer *analyzer) {
     XrCompilerContext *ctx = (XrCompilerContext *) xr_malloc(sizeof(XrCompilerContext));
     if (!ctx) {
         return NULL;
@@ -79,10 +83,28 @@ XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
     ctx->const_entry_count = 0;
     ctx->const_entry_capacity = 0;
 
-    // Create unified type analyzer
-    ctx->analyzer = xa_analyzer_new(ctx->X);
+    if (analyzer) {
+        ctx->analyzer = analyzer;
+        ctx->owns_analyzer = false;
+        /* Install the borrowed analyzer's type pool on the isolate so
+         * xr_type_new_* calls during parse / analysis allocate into it. */
+        if (X && analyzer->type_pool) {
+            X->current_type_pool = analyzer->type_pool;
+        }
+    } else {
+        ctx->analyzer = xa_analyzer_new(ctx->X);
+        ctx->owns_analyzer = true;
+    }
 
     return ctx;
+}
+
+XrCompilerContext *xr_compiler_context_new(XrayIsolate *X) {
+    return xr_compiler_context_new_impl(X, NULL);
+}
+
+XrCompilerContext *xr_compiler_context_new_with_analyzer(XrayIsolate *X, XaAnalyzer *analyzer) {
+    return xr_compiler_context_new_impl(X, analyzer);
 }
 
 void xr_compiler_context_free(XrCompilerContext *ctx) {
@@ -119,10 +141,10 @@ void xr_compiler_context_free(XrCompilerContext *ctx) {
         ctx->const_entry_capacity = 0;
     }
 
-    if (ctx->analyzer) {
+    if (ctx->analyzer && ctx->owns_analyzer) {
         xa_analyzer_free(ctx->analyzer);
-        ctx->analyzer = NULL;
     }
+    ctx->analyzer = NULL;
 
     xr_free(ctx);
 }
