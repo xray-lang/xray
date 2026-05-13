@@ -29,7 +29,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Configure
+    - name: Install clang (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq clang
+
+    - name: Configure (Unix)
+      if: runner.os != 'Windows'
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang
+
+    - name: Configure (Windows)
+      if: runner.os == 'Windows'
       run: cmake -B build -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
