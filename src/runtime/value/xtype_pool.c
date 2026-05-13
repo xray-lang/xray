@@ -85,6 +85,12 @@ void *xr_pool_alloc(XrTypePool *pool, size_t size) {
     return pool_alloc(pool, size);
 }
 
+void *xr_pool_alloc_array(XrTypePool *pool, size_t elem_size, size_t count) {
+    if (!pool)
+        return NULL;
+    return xr_arena_alloc_array(&pool->arena, elem_size, count);
+}
+
 // Duplicate string in pool arena
 char *xr_pool_strdup(XrTypePool *pool, const char *str) {
     if (!pool)

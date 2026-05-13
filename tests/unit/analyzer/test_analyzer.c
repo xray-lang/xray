@@ -487,6 +487,40 @@ TEST(type_void_never) {
     ASSERT(xr_type_assignable(xr_type_new_int(NULL), t_never));
 }
 
+TEST(type_rejects_invalid_counts) {
+    XrType *param_types[] = { xr_type_new_int(NULL) };
+    const char *field_names[] = { "value" };
+    XrType *field_types[] = { xr_type_new_string(NULL) };
+
+    ASSERT(xr_type_new_function(g_isolate, param_types, -1, xr_type_new_void(NULL), false) == NULL);
+    ASSERT(xr_type_new_function(g_isolate, NULL, 1, xr_type_new_void(NULL), false) == NULL);
+    ASSERT(xr_type_new_generic_instance(g_isolate, "Box", NULL, NULL, 1) == NULL);
+    ASSERT(xr_type_new_tuple(g_isolate, NULL, 1) == NULL);
+    ASSERT(xr_type_new_tuple(g_isolate, param_types, -1) == NULL);
+    ASSERT(xr_type_new_json_with_fields(g_isolate, NULL, field_types, 1, false) == NULL);
+    ASSERT(xr_type_new_json_with_fields(g_isolate, field_names, NULL, 1, false) == NULL);
+}
+
+TEST(type_function_copy_preserves_metadata) {
+    XrType *param_types[] = { xr_type_new_int(NULL), xr_type_new_string(NULL) };
+    XrType *fn = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
+    ASSERT(fn != NULL);
+
+    uint8_t modes[] = { XR_PARAM_IN, XR_PARAM_REF };
+    fn->function.min_params = 1;
+    fn->function.param_passing_modes = modes;
+
+    XrType *copy = xr_type_copy(g_isolate, fn);
+    ASSERT(copy != NULL);
+    ASSERT(copy != fn);
+    ASSERT(copy->function.param_count == 2);
+    ASSERT(copy->function.min_params == 1);
+    ASSERT(copy->function.param_types != fn->function.param_types);
+    ASSERT(copy->function.param_passing_modes != fn->function.param_passing_modes);
+    ASSERT(copy->function.param_passing_modes[0] == XR_PARAM_IN);
+    ASSERT(copy->function.param_passing_modes[1] == XR_PARAM_REF);
+}
+
 // ============================================================================
 // Inference context tests
 // ============================================================================
@@ -739,6 +773,8 @@ int main(void) {
     RUN_TEST(type_class_instance);
     RUN_TEST(type_function_complex);
     RUN_TEST(type_void_never);
+    RUN_TEST(type_rejects_invalid_counts);
+    RUN_TEST(type_function_copy_preserves_metadata);
 
     printf("\nInference context tests:\n");
     RUN_TEST(infer_context_create);

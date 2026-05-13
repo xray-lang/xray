@@ -52,6 +52,7 @@ typedef struct XrArena {
 
 XR_FUNC void xr_arena_init(XrArena *arena, size_t initial_size);
 XR_FUNC void *xr_arena_alloc(XrArena *arena, size_t size);
+XR_FUNC void *xr_arena_alloc_array(XrArena *arena, size_t elem_size, size_t count);
 XR_FUNC void *xr_arena_alloc_raw(XrArena *arena, size_t size);  // no zeroing
 XR_FUNC void xr_arena_destroy(XrArena *arena);
 XR_FUNC void xr_arena_reset(XrArena *arena);
@@ -82,6 +83,6 @@ XR_FUNC void xr_arena_get_stats(XrArena *arena, XrArenaStats *stats);
 // Convenience macros
 #define xr_arena_new(arena, Type) ((Type *) xr_arena_alloc(arena, sizeof(Type)))
 
-#define xr_arena_array(arena, Type, count) ((Type *) xr_arena_alloc(arena, sizeof(Type) * (count)))
+#define xr_arena_array(arena, Type, count) ((Type *) xr_arena_alloc_array(arena, sizeof(Type), (count)))
 
 #endif  // XARENA_H
