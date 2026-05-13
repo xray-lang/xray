@@ -49,6 +49,7 @@ XR_FUNC XrType *xr_pool_alloc_type(XrTypePool *pool, XrTypeKind kind);
 
 // Allocate memory from pool arena (for type internal fields)
 XR_FUNC void *xr_pool_alloc(XrTypePool *pool, size_t size);
+XR_FUNC void *xr_pool_alloc_array(XrTypePool *pool, size_t elem_size, size_t count);
 XR_FUNC char *xr_pool_strdup(XrTypePool *pool, const char *str);
 
 #endif  // XTYPE_POOL_H

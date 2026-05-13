@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "./xmalloc.h"
 
 // Thread-local segment cache for multi-Isolate support (no lock needed).
@@ -31,8 +32,13 @@ typedef struct {
 static XR_THREAD_LOCAL XrArenaSegmentCache tls_cache = {NULL, 0};
 
 // Align to 8-byte boundary
-static inline size_t align_size(size_t size) {
-    return (size + XR_ARENA_ALIGNMENT - 1) & ~(XR_ARENA_ALIGNMENT - 1);
+static inline bool align_size(size_t size, size_t *aligned_size) {
+    if (!aligned_size)
+        return false;
+    if (size > SIZE_MAX - (XR_ARENA_ALIGNMENT - 1))
+        return false;
+    *aligned_size = (size + XR_ARENA_ALIGNMENT - 1) & ~((size_t) XR_ARENA_ALIGNMENT - 1);
+    return true;
 }
 
 static XrArenaSegment *cache_get_segment(size_t capacity) {
@@ -66,6 +72,10 @@ static bool cache_put_segment(XrArenaSegment *seg) {
 }
 
 static XrArenaSegment *allocate_segment(size_t capacity) {
+    if (capacity > SIZE_MAX - sizeof(XrArenaSegment)) {
+        return NULL;
+    }
+
     // Try cache first
     XrArenaSegment *seg = cache_get_segment(capacity);
     if (seg) {
@@ -93,7 +103,13 @@ void xr_arena_init(XrArena *arena, size_t initial_size) {
         initial_size = XR_ARENA_SEGMENT_SIZE;
     }
 
-    initial_size = align_size(initial_size);
+    if (!align_size(initial_size, &initial_size)) {
+        arena->head = NULL;
+        arena->position = NULL;
+        arena->limit = NULL;
+        arena->total_allocated = 0;
+        return;
+    }
 
     XrArenaSegment *seg = allocate_segment(initial_size);
     if (!seg) {
@@ -116,10 +132,14 @@ static void *bump_alloc(XrArena *arena, size_t size) {
         return NULL;
 
     // Align to 8 bytes
-    size = align_size(size);
+    if (!align_size(size, &size))
+        return NULL;
+    if (!arena->position || !arena->limit || !arena->head)
+        return NULL;
 
     // Need new segment?
-    if (arena->position + size > arena->limit) {
+    size_t available = (size_t) (arena->limit - arena->position);
+    if (size > available) {
         size_t new_capacity = size > XR_ARENA_SEGMENT_SIZE ? size : XR_ARENA_SEGMENT_SIZE;
 
         XrArenaSegment *new_seg = allocate_segment(new_capacity);
@@ -133,6 +153,11 @@ static void *bump_alloc(XrArena *arena, size_t size) {
         arena->position = new_seg->data;
         arena->limit = new_seg->data + new_seg->capacity;
     }
+
+    if (arena->total_allocated > SIZE_MAX - size)
+        return NULL;
+    if (arena->head->size > SIZE_MAX - size)
+        return NULL;
 
     void *result = arena->position;
     arena->position += size;
@@ -148,6 +173,14 @@ void *xr_arena_alloc(XrArena *arena, size_t size) {
     if (result)
         memset(result, 0, size);
     return result;
+}
+
+XR_FUNCDEF void *xr_arena_alloc_array(XrArena *arena, size_t elem_size, size_t count) {
+    if (elem_size == 0 || count == 0)
+        return NULL;
+    if (count > SIZE_MAX / elem_size)
+        return NULL;
+    return xr_arena_alloc(arena, elem_size * count);
 }
 
 void *xr_arena_alloc_raw(XrArena *arena, size_t size) {
@@ -211,6 +244,8 @@ char *xr_arena_strdup(XrArena *arena, const char *str) {
 
 char *xr_arena_strndup(XrArena *arena, const char *str, size_t len) {
     if (!arena || !str)
+        return NULL;
+    if (len == SIZE_MAX)
         return NULL;
 
     char *copy = (char *) xr_arena_alloc(arena, len + 1);
