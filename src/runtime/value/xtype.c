@@ -252,8 +252,7 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
     if (count > 0 && names && types) {
         const char **field_names =
             (const char **) type_alloc_array(pool, sizeof(char *), count, NULL);
-        XrType **field_types =
-            (XrType **) type_alloc_array(pool, sizeof(XrType *), count, NULL);
+        XrType **field_types = (XrType **) type_alloc_array(pool, sizeof(XrType *), count, NULL);
         if (!field_names || !field_types)
             return NULL;
         type->object.field_count = count;
@@ -789,9 +788,8 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
             copy->instance.superclass = type->instance.superclass;
             if (type->instance.type_arg_count > 0 && type->instance.type_args) {
                 size_t type_arg_size;
-                copy->instance.type_args =
-                    (XrType **) type_alloc_array(pool, sizeof(XrType *),
-                                                 type->instance.type_arg_count, &type_arg_size);
+                copy->instance.type_args = (XrType **) type_alloc_array(
+                    pool, sizeof(XrType *), type->instance.type_arg_count, &type_arg_size);
                 if (!copy->instance.type_args)
                     return NULL;
                 memcpy(copy->instance.type_args, type->instance.type_args, type_arg_size);
@@ -808,21 +806,19 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
                 return NULL;
             if (type->function.param_count > 0) {
                 size_t param_size;
-                copy->function.param_types =
-                    (XrType **) type_alloc_array(pool, sizeof(XrType *),
-                                                 type->function.param_count, &param_size);
+                copy->function.param_types = (XrType **) type_alloc_array(
+                    pool, sizeof(XrType *), type->function.param_count, &param_size);
                 if (!copy->function.param_types)
                     return NULL;
                 memcpy(copy->function.param_types, type->function.param_types, param_size);
                 if (type->function.param_passing_modes) {
                     size_t mode_size;
-                    copy->function.param_passing_modes =
-                        (uint8_t *) type_alloc_array(pool, sizeof(uint8_t),
-                                                     type->function.param_count, &mode_size);
+                    copy->function.param_passing_modes = (uint8_t *) type_alloc_array(
+                        pool, sizeof(uint8_t), type->function.param_count, &mode_size);
                     if (!copy->function.param_passing_modes)
                         return NULL;
-                    memcpy(copy->function.param_passing_modes,
-                           type->function.param_passing_modes, mode_size);
+                    memcpy(copy->function.param_passing_modes, type->function.param_passing_modes,
+                           mode_size);
                 }
             }
             copy->function.param_count = type->function.param_count;
@@ -839,10 +835,8 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
                     type->object.type_name ? xr_pool_strdup(pool, type->object.type_name) : NULL;
                 if (type->object.field_names) {
                     size_t field_name_size;
-                    copy->object.field_names =
-                        (const char **) type_alloc_array(pool, sizeof(const char *),
-                                                         type->object.field_count,
-                                                         &field_name_size);
+                    copy->object.field_names = (const char **) type_alloc_array(
+                        pool, sizeof(const char *), type->object.field_count, &field_name_size);
                     if (!copy->object.field_names)
                         return NULL;
                     for (int i = 0; i < type->object.field_count; i++) {
@@ -854,9 +848,8 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
                 }
                 if (type->object.field_types) {
                     size_t field_type_size;
-                    copy->object.field_types =
-                        (XrType **) type_alloc_array(pool, sizeof(XrType *),
-                                                     type->object.field_count, &field_type_size);
+                    copy->object.field_types = (XrType **) type_alloc_array(
+                        pool, sizeof(XrType *), type->object.field_count, &field_type_size);
                     if (!copy->object.field_types)
                         return NULL;
                     memcpy(copy->object.field_types, type->object.field_types, field_type_size);
@@ -874,10 +867,8 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
             copy->union_type.member_count = type->union_type.member_count;
             if (type->union_type.member_count > 0 && type->union_type.members) {
                 size_t union_member_size;
-                copy->union_type.members =
-                    (XrType **) type_alloc_array(pool, sizeof(XrType *),
-                                                 type->union_type.member_count,
-                                                 &union_member_size);
+                copy->union_type.members = (XrType **) type_alloc_array(
+                    pool, sizeof(XrType *), type->union_type.member_count, &union_member_size);
                 if (!copy->union_type.members)
                     return NULL;
                 memcpy(copy->union_type.members, type->union_type.members, union_member_size);
