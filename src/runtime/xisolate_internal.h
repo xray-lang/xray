@@ -168,6 +168,14 @@ struct XrayIsolate {
     /* ========== REPL State ========== */
     struct XrReplSymbolTable *repl_symbols;  // persistent symbol table for REPL incremental mode
 
+    /* Persistent analyzer for REPL incremental compilation.  Owns its
+     * own type pool whose lifetime matches the isolate, so XaSymbol /
+     * XrType pointers installed during one REPL input remain valid for
+     * every subsequent input.  Lazy-created on the first REPL compile
+     * and freed in isolate_cleanup_full.  Outside REPL, compilation
+     * paths create per-compile analyzers as before. */
+    struct XaAnalyzer *repl_analyzer;
+
     /* ========== Debug State (DAP integration) ========== */
     void *debug_state;  // XrDebugState* for debugger integration
     void *debug_hooks;  // XrDebugHooks* for VM callback interface
