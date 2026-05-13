@@ -27,6 +27,7 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/xisolate_api.h"
+#include "../api/xrepl.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -586,13 +587,18 @@ XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
  * gets a shared slot so inner functions can reference them via
  * GETSHARED — including forward references to not-yet-lowered functions.
  */
-static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
+static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t start_shared) {
     XR_DCHECK(l->is_program, "prescan_shared_vars: not a program context");
-    uint16_t next_shared = 0;
+    uint16_t next_shared = start_shared;
 
     /* Temporary array to track which names are exported */
     const char *export_flags[512];
     memset(export_flags, 0, sizeof(export_flags));
+    /* Per-slot owned name (for every slot this module declares — not just
+     * exported).  REPL symbol collection consumes this to recover the
+     * name → slot mapping after lowering. */
+    const char *owned_name_flags[512];
+    memset(owned_name_flags, 0, sizeof(owned_name_flags));
 
     for (int i = 0; i < count; i++) {
         AstNode *s = stmts[i];
@@ -683,19 +689,27 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
                   "prescan_shared_vars: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
+        if (next_shared < 512)
+            owned_name_flags[next_shared] = name;
         if (is_exported && next_shared < 512)
             export_flags[next_shared] = name;
         next_shared++;
     }
     l->func->nshared = next_shared;
 
-    /* Populate export_names on XiFunc for cross-module resolution.
-     * Copy name strings into the arena so they survive AST destruction. */
+    /* Populate export_names (exported only) and slot_owned_names (all
+     * slots declared by this module) on XiFunc.  Both arrays are sized
+     * by next_shared and indexed by absolute shared slot; REPL-seeded
+     * prior slots (< start_shared) are left NULL in both arrays
+     * because this module does not own them.  Copy name strings into
+     * the arena so they survive AST destruction. */
     if (next_shared > 0) {
         const char **names = (const char **) xi_func_arena_alloc(
             l->func, (uint32_t) (next_shared * sizeof(const char *)));
-        if (names) {
-            for (uint16_t si = 0; si < next_shared; si++) {
+        const char **owned = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) (next_shared * sizeof(const char *)));
+        for (uint16_t si = 0; si < next_shared; si++) {
+            if (names) {
                 const char *src = (si < 512) ? export_flags[si] : NULL;
                 if (src) {
                     uint32_t slen = (uint32_t) strlen(src);
@@ -708,8 +722,24 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count) {
                     names[si] = NULL;
                 }
             }
-            l->func->export_names = names;
+            if (owned) {
+                const char *src = (si < 512) ? owned_name_flags[si] : NULL;
+                if (src) {
+                    uint32_t slen = (uint32_t) strlen(src);
+                    char *copy = (char *) xi_func_arena_alloc(l->func, slen + 1);
+                    if (copy) {
+                        memcpy(copy, src, slen + 1);
+                    }
+                    owned[si] = copy;
+                } else {
+                    owned[si] = NULL;
+                }
+            }
         }
+        if (names)
+            l->func->export_names = names;
+        if (owned)
+            l->func->slot_owned_names = owned;
     }
 }
 
@@ -855,6 +885,27 @@ XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analy
     entry->sealed = true;
     l.cur_block = entry;
 
+    /* REPL seed: register prior-input top-level declarations as shared
+     * vars so the current input's references resolve by name to existing
+     * slots and new declarations get slot numbers past the prior range.
+     * isolate->repl_symbols is NULL outside REPL mode, so this is a
+     * no-op for ordinary script compilation. */
+    uint16_t next_shared_start = 0;
+    XrReplSymbolTable *repl_syms = xr_isolate_get_repl_symbols(isolate);
+    if (repl_syms) {
+        for (int i = 0; i < repl_syms->count; i++) {
+            XrReplSymbol *s = &repl_syms->symbols[i];
+            if (!s->name || !s->name->data)
+                continue;
+            int vid = xi_lower_var_create(&l, 0, s->name->data, l.type_any);
+            if (vid < 0 || vid >= XI_LOWER_MAX_VARS)
+                continue;
+            l.shared_map[vid] = (int16_t) s->shared_index;
+            if (s->shared_index + 1 > (int) next_shared_start)
+                next_shared_start = (uint16_t) (s->shared_index + 1);
+        }
+    }
+
     /* Pre-scan: assign shared indices to all top-level declarations */
     AstNode **stmts;
     int count;
@@ -865,7 +916,7 @@ XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analy
         stmts = program_node->as.program.statements;
         count = program_node->as.program.count;
     }
-    prescan_shared_vars(&l, stmts, count);
+    prescan_shared_vars(&l, stmts, count, next_shared_start);
 
     /* Lower function declarations first (hoisting) so they are bound in
      * their shared slots before any top-level executable code runs.
