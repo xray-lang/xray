@@ -641,6 +641,14 @@ typedef struct XiFunc {
      * cross-module import resolution tables.  NULL entries = not exported. */
     const char **export_names; /* array of nshared entries (arena-alloc'd) */
 
+    /* Per-slot owned names: maps shared slot → declaration name, for every
+     * slot this function DECLARES (not seeded from an enclosing REPL
+     * context).  Parallel to export_names but covers non-exported
+     * declarations too.  Enables the REPL symbol table to round-trip
+     * name ↔ slot without scanning the AST or relying on export flags.
+     * NULL for slots seeded by a REPL prior-input. */
+    const char **slot_owned_names; /* array of nshared entries (arena-alloc'd) */
+
     /* Re-export table: entries from "export { a } from './file'" and
      * "export * from './file'" statements. Populated during lowering,
      * emitted as OP_IMPORT + OP_EXPORT/OP_EXPORT_ALL by emit_reexports. */

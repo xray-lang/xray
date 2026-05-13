@@ -18,11 +18,16 @@
 #include "../runtime/xisolate_internal.h"
 #include "../frontend/codegen/xcompiler.h"
 #include "../frontend/codegen/xcompiler_context.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xast_api.h"
 #include "../frontend/lexer/xlex.h"
+#include "../ir/xi.h"
 #include "../runtime/value/xchunk.h"
+#include "../runtime/value/xtype.h"
+#include "../runtime/object/xstring.h"
 #include "../runtime/xexec_state.h"
+#include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
 #include "../base/xdynarray.h"
 #include <stdio.h>
@@ -156,6 +161,99 @@ void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx, i
     }
 }
 
+/* Collect new declarations from the compiled Xi IR function.
+ * proto->xi_func->slot_owned_names has a non-NULL entry for every
+ * shared slot declared by this compilation unit; REPL-seeded prior
+ * slots are NULL.  The slot index is absolute because REPL forces
+ * shared_offset=0.  Names from the arena are interned so they outlive
+ * the XiFunc. */
+static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *isolate,
+                                         XrProto *proto) {
+    if (!table || !proto || !proto->xi_func)
+        return;
+    XiFunc *xf = (XiFunc *) proto->xi_func;
+    if (!xf->slot_owned_names || xf->nshared == 0)
+        return;
+    for (uint16_t slot = 0; slot < xf->nshared; slot++) {
+        const char *name = xf->slot_owned_names[slot];
+        if (!name)
+            continue;
+        size_t nlen = strlen(name);
+        XrString *interned = xr_string_intern(isolate, name, nlen, 0);
+        if (!interned)
+            continue;
+        repl_symbols_add_or_update(table, interned, (int) slot, false);
+    }
+}
+
+/* ========== REPL Auto-echo ==========
+ *
+ * REPL convention: the value of a trailing bare expression is printed.
+ * This mirrors Python / Node.js / SBCL interactive behaviour, which is
+ * what users expect when typing `1 + 2` or `x` at the prompt.
+ *
+ * The rewrite runs on the parsed AST before analysis: if the final
+ * top-level statement is an expression statement AND the expression is
+ * not an obvious imperative call (print/println/dump) or an assignment
+ * / pre-post inc-dec, it is converted in-place to a PRINT statement.
+ *
+ * Rewrite happens before analysis so the analyzer and lowerer handle
+ * the synthesised print like any other print, including propagating
+ * type info and line numbers from the original expression. */
+static bool is_imperative_call_name(const char *name) {
+    if (!name)
+        return false;
+    return strcmp(name, "print") == 0 || strcmp(name, "println") == 0 || strcmp(name, "dump") == 0;
+}
+
+static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
+    if (!program || program->type != AST_PROGRAM)
+        return;
+    AstNode **stmts = program->as.program.statements;
+    int count = program->as.program.count;
+    if (!stmts || count <= 0)
+        return;
+    AstNode *last = stmts[count - 1];
+    if (!last || last->type != AST_EXPR_STMT)
+        return;
+    AstNode *expr = last->as.expr_stmt;
+    if (!expr)
+        return;
+
+    /* Skip rewrites that would cause double output or illegal AST */
+    switch (expr->type) {
+        case AST_ASSIGNMENT:
+        case AST_COMPOUND_ASSIGNMENT:
+        case AST_INC:
+        case AST_DEC:
+            return;
+        case AST_CALL_EXPR: {
+            AstNode *callee = expr->as.call_expr.callee;
+            if (callee && callee->type == AST_VARIABLE &&
+                is_imperative_call_name(callee->as.variable.name)) {
+                return;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+
+    /* Re-install the program arena so xr_ast_print_stmt's allocations
+     * (node + exprs array) share the AST lifetime. */
+    struct XrArena *saved = xr_isolate_get_current_arena(isolate);
+    xr_isolate_set_current_arena(isolate, program->as.program.arena);
+
+    AstNode *args[1] = {expr};
+    AstNode *synth = xr_ast_print_stmt(isolate, args, 1, expr->line);
+
+    xr_isolate_set_current_arena(isolate, saved);
+
+    if (synth) {
+        stmts[count - 1] = synth;
+    }
+}
+
 /* ========== REPL Input Completeness Check ========== */
 
 XrInputStatus xr_repl_check_input(const char *source) {
@@ -239,6 +337,10 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     if (!ast)
         return NULL;
 
+    /* REPL auto-echo: convert a trailing bare expression into a print
+     * so the value shows up without the user typing print() explicitly. */
+    repl_maybe_echo_last_expr(isolate, ast);
+
     // Create compiler context
     XrCompilerContext *ctx = xr_compiler_context_new(isolate);
     if (!ctx) {
@@ -253,11 +355,22 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     int seeded_count = isolate->repl_symbols->count;
     xr_repl_symbols_seed_context(isolate->repl_symbols, ctx);
 
-    // REPL mode: disable analyzer — it cannot see cross-compilation-unit
-    // shared variables seeded from prior inputs, producing false warnings.
+    /* Seed the analyzer's global scope with prior REPL symbols so that
+     * variable references in this input resolve to real XaSymbols
+     * (instead of producing symbol_id=0, which the Xi IR lowerer rejects
+     * as unresolved).  Type information from prior inputs cannot survive
+     * because each REPL compilation uses a fresh analyzer + type_pool,
+     * so seeded symbols are declared with unknown type.  Analyzer
+     * diagnostics are suppressed by xr_compile() in REPL mode since
+     * unknown types would otherwise produce false-positive warnings. */
     if (ctx->analyzer) {
-        xa_analyzer_free(ctx->analyzer);
-        ctx->analyzer = NULL;
+        XrType *any_type = xr_type_new_unknown(isolate);
+        for (int i = 0; i < isolate->repl_symbols->count; i++) {
+            XrReplSymbol *s = &isolate->repl_symbols->symbols[i];
+            if (!s->name || !s->name->data)
+                continue;
+            xa_analyzer_define_var(ctx->analyzer, s->name->data, any_type);
+        }
     }
 
     // Compile
@@ -267,15 +380,30 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
         // Force shared_offset=0 on compiled proto
         proto->shared_offset = 0;
 
-        // Update isolate shared array count
-        if (ctx->shared_var_count > isolate->vm.shared.count) {
-            isolate->vm.shared.count = ctx->shared_var_count;
-            xr_shared_array_ensure(&isolate->vm.shared, ctx->shared_var_count - 1);
-        }
+        /* Collect new declarations from the Xi IR output.  This is the
+         * authoritative source for name → shared slot mappings in the
+         * Xi pipeline; ctx->shared_vars is not populated by the Xi
+         * lowerer, so the legacy xr_repl_symbols_collect path would
+         * miss every new declaration. */
+        repl_symbols_collect_from_xi(isolate->repl_symbols, isolate, proto);
 
-        // Collect new definitions into REPL symbol table
-        xr_repl_symbols_collect(isolate->repl_symbols, ctx, seeded_count);
+        /* Ensure the shared array can hold every slot declared so far
+         * (prior inputs + current input).  The Xi emit path allocated
+         * slots starting at isolate->vm.shared.count, but REPL forces
+         * shared_offset=0, so the highest slot index is now the total
+         * symbol count. */
+        int highest_slot = 0;
+        for (int i = 0; i < isolate->repl_symbols->count; i++) {
+            int idx = isolate->repl_symbols->symbols[i].shared_index;
+            if (idx + 1 > highest_slot)
+                highest_slot = idx + 1;
+        }
+        if (highest_slot > isolate->vm.shared.count) {
+            isolate->vm.shared.count = highest_slot;
+            xr_shared_array_ensure(&isolate->vm.shared, highest_slot - 1);
+        }
     }
+    (void) seeded_count;
 
     xr_compiler_context_free(ctx);
 

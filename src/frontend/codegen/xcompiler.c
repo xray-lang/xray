@@ -50,6 +50,13 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
             for (XaDiagnostic *d = diagnostics; d; d = d->next) {
                 if (d->code == 0)
                     continue;
+                /* REPL mode: suppress analyzer diagnostics — analyzer cannot see
+                 * cross-compilation-unit shared variables seeded from prior inputs
+                 * and would produce false-positive undefined/unused warnings. */
+                if (ctx->repl_mode) {
+                    d->reported = true;
+                    continue;
+                }
                 const char *file = d->location.file ? d->location.file : ctx->source_file;
                 int col = d->location.column > 0 ? d->location.column : 1;
                 if (d->severity == XR_DIAG_SEV_ERROR) {
