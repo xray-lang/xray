@@ -310,7 +310,9 @@ TEST(repl_cross_input_function_mutates_shared) {
 TEST(repl_redefinition_reuses_slot) {
     /* `let x = 1` followed by `let x = 2` should keep one entry in
      * the symbol table, not duplicate it (repl_symbols_add_or_update
-     * promises this contract). */
+     * promises this contract).  Also asserts the second value
+     * actually replaces the first — without value verification the
+     * test passes even with a slot-collision bug. */
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
@@ -330,10 +332,147 @@ TEST(repl_redefinition_reuses_slot) {
     }
     ASSERT_EQ_INT(count_x, 1);
 
+    int64_t v = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "x", &v));
+    ASSERT_EQ_INT(v, 2);
+
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
     xray_isolate_delete(iso);
 }
+
+TEST(repl_function_calls_function_cross_input) {
+    /* fn b defined in input 1, fn a defined in input 2 calls b, then
+     * a() executed in input 3.  Verifies that cross-input function
+     * resolution chains transitively: a's body must resolve b through
+     * the same persistent global table. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *p1 = xr_repl_compile(iso, "fn b(): int { return 100 }\n");
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    XrProto *p2 = xr_repl_compile(iso, "fn a(): int { return b() + 1 }\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    XrProto *p3 = xr_repl_compile(iso, "let r = a()\n");
+    ASSERT_NOT_NULL(p3);
+    xr_execute(iso, p3);
+
+    int64_t r = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r));
+    ASSERT_EQ_INT(r, 101);
+
+    xr_free_code(iso, p3);
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_isolate_delete(iso);
+}
+
+TEST(repl_function_recursive_self_reference) {
+    /* Single-input recursive function — the function name must
+     * resolve to its own slot during its own body lowering.  Locks
+     * down the forward-reference contract for self-recursive top-level
+     * functions in REPL mode. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    const char *src = "fn fact(n: int): int {\n"
+                      "  if (n <= 1) { return 1 }\n"
+                      "  return n * fact(n - 1)\n"
+                      "}\n";
+    XrProto *p1 = xr_repl_compile(iso, src);
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    XrProto *p2 = xr_repl_compile(iso, "let r = fact(5)\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    int64_t r = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r));
+    ASSERT_EQ_INT(r, 120);
+
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_isolate_delete(iso);
+}
+
+TEST(repl_function_mutates_array_cross_input) {
+    /* Mutation through a captured array reference: the array's heap
+     * object identity is shared, so push() in one function call must
+     * be visible to any later lookup of the same name.  The bound
+     * value in the globals table is the array reference, not a slot
+     * snapshot. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *p1 = xr_repl_compile(iso, "let arr: array<int> = []\n");
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    XrProto *p2 = xr_repl_compile(iso, "fn push_one() { arr.push(1) }\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    XrProto *p3 = xr_repl_compile(iso, "push_one(); push_one()\n");
+    ASSERT_NOT_NULL(p3);
+    xr_execute(iso, p3);
+
+    XrProto *p4 = xr_repl_compile(iso, "let n = arr.length\n");
+    ASSERT_NOT_NULL(p4);
+    xr_execute(iso, p4);
+
+    int64_t n = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "n", &n));
+    ASSERT_EQ_INT(n, 2);
+
+    xr_free_code(iso, p4);
+    xr_free_code(iso, p3);
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_isolate_delete(iso);
+}
+
+#if 0
+/* Phase 3 acceptance — currently FAILS: cross-input class
+ * instantiation does not resolve the class name in the second input.
+ * Symptom in REPL: `Point(7, 8).x` reports unresolved variable
+ * 'Point'.  Root cause is the same shared-slot model that bit
+ * functions: class declarations are not visible across inputs
+ * because the persistent symbol path drops them.
+ *
+ * After the globals-dict migration (Phase 3) classes will live in
+ * the globals dict by name like any other top-level binding, and
+ * this test must turn green.  Enable then. */
+TEST(repl_class_instantiation_cross_input) {
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    const char *cls =
+        "class Point {\n"
+        "  let x: int; let y: int\n"
+        "  constructor(x: int, y: int) { this.x = x; this.y = y }\n"
+        "}\n";
+    XrProto *p1 = xr_repl_compile(iso, cls);
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    XrProto *p2 = xr_repl_compile(iso, "let px = Point(7, 8).x\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    int64_t px = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "px", &px));
+    ASSERT_EQ_INT(px, 7);
+
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_isolate_delete(iso);
+}
+#endif
 
 /* ========== Auto-echo (Trailing Expression) ========== */
 
@@ -489,6 +628,9 @@ RUN_TEST(repl_cross_input_function_call);
 RUN_TEST(repl_cross_input_function_reads_shared);
 RUN_TEST(repl_cross_input_function_mutates_shared);
 RUN_TEST(repl_redefinition_reuses_slot);
+RUN_TEST(repl_function_calls_function_cross_input);
+RUN_TEST(repl_function_recursive_self_reference);
+RUN_TEST(repl_function_mutates_array_cross_input);
 
 RUN_TEST_SUITE("REPL Auto-echo");
 RUN_TEST(repl_auto_echo_compiles_bare_expression);
