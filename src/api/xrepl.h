@@ -23,6 +23,7 @@
 #define XREPL_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "../base/xdefs.h"
 
 // Forward declarations
@@ -58,6 +59,13 @@ XR_FUNC XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate);
 /* Return the C string for a REPL symbol's name without leaking the
  * XrString definition to callers (xrepl.h forward-declares XrString). */
 XR_FUNC const char *xr_repl_symbol_cname(const XrReplSymbol *sym);
+
+/* Look up a REPL binding by name and, if it currently holds an integer
+ * value, copy it to *out and return true.  Returns false if the
+ * binding does not exist or holds a non-integer value.  Intended for
+ * tests and tools that need to verify scalar binding state without
+ * pulling in the full XrValue ABI. */
+XR_FUNC bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *out);
 
 // Seed compiler context with prior definitions
 XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx);
