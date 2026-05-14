@@ -508,7 +508,11 @@ void xr_repl_print_vars(XrayIsolate *isolate) {
         XrReplSymbol *sym = &table->symbols[i];
         const char *name = sym->name && sym->name->data ? sym->name->data : "<anon>";
 
-        XrValue val = xr_shared_array_get(&isolate->vm.shared, sym->shared_index);
+        /* Read value from globals dict (REPL backing store) */
+        XrValue val = xr_null();
+        if (isolate->vm.globals && sym->name) {
+            val = xr_global_dict_get(isolate->vm.globals, sym->name);
+        }
         const char *type_name = xr_typeid_name(xr_value_typeid(val));
 
         XrString *str = xr_value_to_string(isolate, val);
