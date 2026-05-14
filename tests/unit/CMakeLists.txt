@@ -243,6 +243,22 @@ add_xray_unit_test(test_regex regex/test_regex.c)
 
 add_xray_unit_test(test_api_defense api/test_api_defense.c)
 
+# test_repl needs the CLI isolate-profile factory (xr_cli_isolate_*)
+# in addition to xray_core, so build it like test_cli_spec with an
+# explicit source list.
+add_executable(test_repl
+    api/test_repl.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_isolate.c
+)
+target_include_directories(test_repl PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/src/app/cli
+    ${CMAKE_SOURCE_DIR}/src/api
+)
+target_link_libraries(test_repl PRIVATE xray_core)
+add_test(NAME test_repl COMMAND test_repl)
+
 # ============================================================================
 # lsp/ — Language Server Protocol (conditional)
 # ============================================================================
