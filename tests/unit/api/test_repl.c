@@ -203,11 +203,15 @@ TEST(repl_cross_input_symbol_resolves) {
 
 TEST(repl_cross_input_function_call) {
     /* Defining a function in input N and calling it in input N+1 is
-     * the primary motivation for the persistent analyzer path. */
+     * the primary motivation for the persistent analyzer path.  The
+     * function value bound to `r` must be the call result (11), not
+     * the closure itself — earlier versions of the REPL emit pipeline
+     * left a stale shared_offset on nested protos, so cross-input
+     * calls returned the closure value instead of invoking it. */
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "fn inc(n) { return n + 1 }\n");
+    XrProto *p1 = xr_repl_compile(iso, "fn inc(n: int): int { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
@@ -219,6 +223,85 @@ TEST(repl_cross_input_function_call) {
     ASSERT_GE(find_symbol(t, "inc"), 0);
     ASSERT_GE(find_symbol(t, "r"), 0);
 
+    int64_t r_val = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r_val));
+    ASSERT_EQ_INT(r_val, 11);
+
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_isolate_delete(iso);
+}
+
+TEST(repl_cross_input_function_reads_shared) {
+    /* Regression: a function body that reads an outer-scope shared
+     * variable must resolve to the correct slot when called from a
+     * later REPL input.  The bug was that xi_emit baked shared_offset
+     * into the nested proto at emit time, but REPL forces absolute
+     * indices on the top-level proto only; nested protos kept the
+     * stale offset and read the wrong slot.  Symptom: `let r =
+     * getx()` bound `r` to the closure itself instead of x's value. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *p1 = xr_repl_compile(iso, "let x = 10\n");
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    XrProto *p2 = xr_repl_compile(iso, "fn getx(): int { return x }\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    XrProto *p3 = xr_repl_compile(iso, "let r = getx()\n");
+    ASSERT_NOT_NULL(p3);
+    xr_execute(iso, p3);
+
+    int64_t r_val = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "r", &r_val));
+    ASSERT_EQ_INT(r_val, 10);
+
+    xr_free_code(iso, p3);
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
+    xray_isolate_delete(iso);
+}
+
+TEST(repl_cross_input_function_mutates_shared) {
+    /* Same offset bug from the read side, exercised on the write
+     * path: a function that increments a shared counter must actually
+     * mutate the right slot across REPL inputs.  Before the fix this
+     * test would observe counter==0 forever because SETSHARED in the
+     * nested proto wrote to the wrong slot, leaving the real counter
+     * untouched. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *p1 = xr_repl_compile(iso, "let counter = 0\n");
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    XrProto *p2 =
+        xr_repl_compile(iso, "fn bump(): int { counter = counter + 1; return counter }\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    XrProto *p3 = xr_repl_compile(iso, "let r1 = bump()\n");
+    ASSERT_NOT_NULL(p3);
+    xr_execute(iso, p3);
+
+    XrProto *p4 = xr_repl_compile(iso, "let r2 = bump()\n");
+    ASSERT_NOT_NULL(p4);
+    xr_execute(iso, p4);
+
+    int64_t r1 = 0, r2 = 0, counter = 0;
+    ASSERT_TRUE(xr_repl_peek_int(iso, "r1", &r1));
+    ASSERT_TRUE(xr_repl_peek_int(iso, "r2", &r2));
+    ASSERT_TRUE(xr_repl_peek_int(iso, "counter", &counter));
+    ASSERT_EQ_INT(r1, 1);
+    ASSERT_EQ_INT(r2, 2);
+    ASSERT_EQ_INT(counter, 2);
+
+    xr_free_code(iso, p4);
+    xr_free_code(iso, p3);
     xr_free_code(iso, p2);
     xr_free_code(iso, p1);
     xray_isolate_delete(iso);
@@ -403,6 +486,8 @@ RUN_TEST(repl_compile_let_and_const_round_trip);
 RUN_TEST_SUITE("REPL Cross-Input Persistence");
 RUN_TEST(repl_cross_input_symbol_resolves);
 RUN_TEST(repl_cross_input_function_call);
+RUN_TEST(repl_cross_input_function_reads_shared);
+RUN_TEST(repl_cross_input_function_mutates_shared);
 RUN_TEST(repl_redefinition_reuses_slot);
 
 RUN_TEST_SUITE("REPL Auto-echo");

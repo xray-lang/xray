@@ -85,6 +85,23 @@ const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
     return sym->name->data;
 }
 
+bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *out) {
+    if (!isolate || !name || !out || !isolate->repl_symbols)
+        return false;
+    XrReplSymbolTable *t = isolate->repl_symbols;
+    for (int i = 0; i < t->count; i++) {
+        const char *cn = xr_repl_symbol_cname(&t->symbols[i]);
+        if (!cn || strcmp(cn, name) != 0)
+            continue;
+        XrValue v = xr_shared_array_get(&isolate->vm.shared, t->symbols[i].shared_index);
+        if (!XR_IS_INT(v))
+            return false;
+        *out = v.i;
+        return true;
+    }
+    return false;
+}
+
 static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
     XR_DCHECK(table != NULL, "repl_symbols_ensure_capacity: NULL table");
     XR_DCHECK(needed > 0, "repl_symbols_ensure_capacity: non-positive needed");
@@ -199,6 +216,22 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *
             continue;
         bool is_const = xf->slot_owned_consts && xf->slot_owned_consts[slot] != 0;
         repl_symbols_add_or_update(table, interned, (int) slot, is_const);
+    }
+}
+
+/* Recursively zero shared_offset on a proto and every nested proto.
+ * Used after xi_emit to undo the offset baked in at emit time, so
+ * REPL inputs all index isolate->vm.shared with absolute indices.
+ * Duplicates xbytecode_io.c's static set_shared_offset_recursive
+ * rather than exposing it — keeps the REPL self-contained. */
+static void xr_repl_zero_shared_offsets(XrProto *proto) {
+    if (!proto)
+        return;
+    proto->shared_offset = 0;
+    uint32_t sub_count = (uint32_t) PROTO_PROTO_COUNT(proto);
+    for (uint32_t i = 0; i < sub_count; i++) {
+        XrProto *sub = PROTO_PROTO(proto, i);
+        xr_repl_zero_shared_offsets(sub);
     }
 }
 
@@ -456,8 +489,19 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     XrProto *proto = xr_compile(ctx, ast);
 
     if (proto && !ctx->had_error) {
-        // Force shared_offset=0 on compiled proto
-        proto->shared_offset = 0;
+        /* REPL uses absolute shared-array indices: every input shares
+         * one global isolate->vm.shared, so shared_offset must be 0
+         * on every proto — including nested function bodies.
+         *
+         * xi_emit set shared_offset = isolate->vm.shared.count at
+         * emit time and propagated that to nested protos.  Without
+         * this recursive override, a function defined in input N
+         * captures the wrong slot when called from input N+1: the
+         * runtime adds the stale offset to the bytecode's Bx,
+         * landing on the slot one or more positions past the real
+         * binding.  Symptom: `fn getx(){return x}; getx()` returns
+         * `getx` itself (the closure) instead of x's value. */
+        xr_repl_zero_shared_offsets(proto);
 
         /* Collect new declarations from the Xi IR output.  This is the
          * authoritative source for name → shared slot mappings in the
