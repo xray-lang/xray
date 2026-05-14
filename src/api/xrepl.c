@@ -237,20 +237,19 @@ static bool is_imperative_call_name(const char *name) {
  * then `it * 10` yields 30. */
 #define REPL_IT_NAME "it"
 
-/* True iff the persistent REPL symbol table already has a binding for
- * `it` — checked once per echo to decide between AST_VAR_DECL (first
- * time) and AST_ASSIGNMENT (subsequent times).  Avoids re-declaration
- * errors from the analyzer / lowerer. */
+/* True iff a binding for `it` already exists — checked once per echo
+ * to decide between AST_VAR_DECL (first time) and AST_ASSIGNMENT
+ * (subsequent times).  Avoids re-declaration errors.  Uses the globals
+ * dict as the authoritative source. */
 static bool repl_has_it_binding(XrayIsolate *isolate) {
-    if (!isolate || !isolate->repl_symbols)
+    if (!isolate || !isolate->vm.globals)
         return false;
-    XrReplSymbolTable *t = isolate->repl_symbols;
-    for (int i = 0; i < t->count; i++) {
-        XrString *name = t->symbols[i].name;
-        if (name && name->data && strcmp(name->data, REPL_IT_NAME) == 0)
-            return true;
-    }
-    return false;
+    uint32_t len = (uint32_t) strlen(REPL_IT_NAME);
+    uint32_t hash = xr_hash_bytes(REPL_IT_NAME, len);
+    XrString *key = xr_string_intern(isolate, REPL_IT_NAME, len, hash);
+    if (!key)
+        return false;
+    return xr_global_dict_has(isolate->vm.globals, key);
 }
 
 static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
@@ -495,52 +494,60 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
  * but values that long are pathological anyway. */
 #define REPL_VARS_HARD_CAP 4096
 
+/* Look up const-ness in the REPL symbol table for a given name.
+ * Returns true if declared as const, false otherwise (including
+ * when the symbol table has no entry for this name). */
+static bool repl_symbol_is_const(XrReplSymbolTable *table, XrString *name) {
+    if (!table || !name)
+        return false;
+    for (int i = 0; i < table->count; i++) {
+        if (table->symbols[i].name == name)
+            return table->symbols[i].is_const;
+    }
+    return false;
+}
+
+/* Visitor callback for xr_global_dict_iter.  Prints one `.vars` row. */
+typedef struct {
+    XrayIsolate *isolate;
+    XrReplSymbolTable *table;
+} ReplVarsCtx;
+
+static void print_vars_visitor(XrString *name, XrValue *value, void *ud) {
+    ReplVarsCtx *ctx = (ReplVarsCtx *) ud;
+    const char *cname = (name && name->data) ? name->data : "<anon>";
+    const char *type_name = xr_typeid_name(xr_value_typeid(*value));
+
+    XrString *str = xr_value_to_string(ctx->isolate, *value);
+    const char *raw = (str && str->data) ? str->data : "<?>";
+    int raw_len = (int) strlen(raw);
+
+    bool truncated = false;
+    int show_len = raw_len;
+    if (show_len > REPL_VARS_HARD_CAP) {
+        show_len = REPL_VARS_HARD_CAP;
+        truncated = true;
+    }
+
+    const char *kw = repl_symbol_is_const(ctx->table, name) ? "const" : "let  ";
+
+    if (show_len <= REPL_VARS_INLINE_WIDTH && !truncated) {
+        printf("  %s %s : %s = %.*s\n", kw, cname, type_name, show_len, raw);
+    } else {
+        printf("  %s %s : %s =\n", kw, cname, type_name);
+        printf("        %.*s%s\n", show_len, raw, truncated ? " .." : "");
+    }
+}
+
 void xr_repl_print_vars(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_repl_print_vars: NULL isolate");
-    if (!isolate || !isolate->repl_symbols || isolate->repl_symbols->count == 0) {
+    if (!isolate || !isolate->vm.globals || xr_global_dict_count(isolate->vm.globals) == 0) {
         printf("  (no bindings)\n");
         return;
     }
 
-    XrReplSymbolTable *table = isolate->repl_symbols;
-
-    for (int i = 0; i < table->count; i++) {
-        XrReplSymbol *sym = &table->symbols[i];
-        const char *name = sym->name && sym->name->data ? sym->name->data : "<anon>";
-
-        /* Read value from globals dict (REPL backing store) */
-        XrValue val = xr_null();
-        if (isolate->vm.globals && sym->name) {
-            val = xr_global_dict_get(isolate->vm.globals, sym->name);
-        }
-        const char *type_name = xr_typeid_name(xr_value_typeid(val));
-
-        XrString *str = xr_value_to_string(isolate, val);
-        const char *raw = (str && str->data) ? str->data : "<?>";
-        int raw_len = (int) strlen(raw);
-
-        /* Apply hard cap on rendered length to bound pathological
-         * cases (very large strings / containers). */
-        bool truncated = false;
-        int show_len = raw_len;
-        if (show_len > REPL_VARS_HARD_CAP) {
-            show_len = REPL_VARS_HARD_CAP;
-            truncated = true;
-        }
-
-        const char *kw = sym->is_const ? "const" : "let  ";
-
-        if (show_len <= REPL_VARS_INLINE_WIDTH && !truncated) {
-            /* Short value: keep inline. */
-            printf("  %s %s : %s = %.*s\n", kw, name, type_name, show_len, raw);
-        } else {
-            /* Long value: drop onto a new indented line so the
-             * header (name : type) stays scannable.  Indent matches
-             * the row prefix (two spaces + "let|const " width). */
-            printf("  %s %s : %s =\n", kw, name, type_name);
-            printf("        %.*s%s\n", show_len, raw, truncated ? " .." : "");
-        }
-    }
+    ReplVarsCtx ctx = {.isolate = isolate, .table = isolate->repl_symbols};
+    xr_global_dict_iter(isolate->vm.globals, print_vars_visitor, &ctx);
 }
 
 void xr_repl_print_type(XrayIsolate *isolate, const char *expr) {

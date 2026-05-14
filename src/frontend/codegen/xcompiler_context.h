@@ -60,7 +60,7 @@ struct XrCompilerContext {
 
     bool had_error;
     bool panic_mode;
-    bool repl_mode;  // REPL incremental mode: allow redefine, shared_offset=0
+    bool repl_mode;  // REPL: emit OP_GETGLOBAL/OP_SETGLOBAL, skip shared slot allocation
     int max_globals;
 
     // Enum type names for type inference
