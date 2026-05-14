@@ -285,6 +285,7 @@ static void print_help_types(ReplState *state) {
     printf("  Array       [1, 2, 3]\n");
     printf("  Map         {\"a\" => 1, \"b\" => 2}\n");
     printf("  Set         #[1, 2, 3]\n");
+    printf("  Json        {name: \"xray\", version: 1}\n");
     printf("  Bytes       Bytes(1024)\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Annotations:\n");
