@@ -394,8 +394,7 @@ static void worker_sleep_timeout_callback(void *arg) {
 }
 
 // Add sleep timer to Worker's Timer Wheel (lock-free, owner-private)
-__attribute__((used)) void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro,
-                                                     int64_t delay_ms) {
+void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t delay_ms) {
     if (!worker || !coro || delay_ms < 0)
         return;
 

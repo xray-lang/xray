@@ -539,9 +539,16 @@ add_library(xray_core STATIC ${CORE_ALL_SOURCES})
 # causing incorrect register allocation on ARM64 (x27 holds a NaN-boxed value
 # instead of a pointer). All other TUs keep LTO for GC hot path performance.
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT MSVC)
+    # xvm.c is compiled without LTO to prevent miscompilation on ARM64.
+    # Files that define functions called from xvm_dispatch_*.inc.c (which
+    # is included into xvm.c) must also be compiled without LTO; otherwise
+    # the Clang LTO plugin on Linux internalizes these symbols before the
+    # regular linker resolves references from the non-LTO xvm.c.o object.
     set_source_files_properties(
         src/vm/xvm.c
         src/vm/xvm_cold_paths.c
+        src/coro/xworker_sched.c
+        src/jit/xm_jit.c
         PROPERTIES COMPILE_OPTIONS "-fno-lto"
     )
 endif()
@@ -550,16 +557,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
         src/vm/xvm.c
         PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
-    )
-endif()
-
-# Disable gc-sections for worker and JIT files to prevent linker from
-# removing functions that are called indirectly (e.g., via function pointers)
-if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT MSVC)
-    set_source_files_properties(
-        src/coro/xworker_sched.c
-        src/jit/xm_jit.c
-        PROPERTIES COMPILE_OPTIONS "-fno-function-sections"
     )
 endif()
 
