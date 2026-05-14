@@ -127,22 +127,19 @@ static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
 }
 
 // Add or update a symbol in the REPL table
-static void repl_symbols_add_or_update(XrReplSymbolTable *table, XrString *name, int shared_index,
-                                       bool is_const) {
-    // Check if already exists (update case: redefinition)
+static void repl_symbols_add_or_update(XrReplSymbolTable *table, XrString *name, bool is_const) {
+    /* Update existing entry on redefinition */
     for (int i = 0; i < table->count; i++) {
         if (table->symbols[i].name != NULL &&
             strcmp(table->symbols[i].name->data, name->data) == 0) {
-            table->symbols[i].shared_index = shared_index;
             table->symbols[i].is_const = is_const;
             return;
         }
     }
 
-    // New symbol
+    /* New symbol */
     repl_symbols_ensure_capacity(table, table->count + 1);
     table->symbols[table->count].name = name;
-    table->symbols[table->count].shared_index = shared_index;
     table->symbols[table->count].is_const = is_const;
     table->count++;
 }
@@ -153,7 +150,7 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
     if (!table || !ctx || table->count == 0)
         return;
 
-    // Ensure ctx->shared_vars has enough capacity
+    /* Ensure ctx->shared_vars has enough capacity */
     while (ctx->shared_var_capacity < table->count) {
         int new_capacity = ctx->shared_var_capacity < 8 ? 8 : ctx->shared_var_capacity * 2;
         XrSharedVar *new_vars =
@@ -169,12 +166,15 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
         ctx->shared_var_capacity = new_capacity;
     }
 
-    // Copy symbols into shared_vars
+    /* Seed names and const flags — slot index is irrelevant for REPL
+     * since the lowerer emits OP_GETGLOBAL/OP_SETGLOBAL by name.
+     * Use sequential indices so prescan_shared_vars recognizes them
+     * as top-level variables (shared_map[vid] >= 0). */
     for (int i = 0; i < table->count; i++) {
         ctx->shared_vars[i].name = table->symbols[i].name;
-        ctx->shared_vars[i].index = table->symbols[i].shared_index;
+        ctx->shared_vars[i].index = i;
         ctx->shared_vars[i].scope_depth = 0;
-        ctx->shared_vars[i].function_depth = 1;  // top-level script depth
+        ctx->shared_vars[i].function_depth = 1;
         ctx->shared_vars[i].is_const = table->symbols[i].is_const;
         ctx->shared_vars[i].state = SHARED_STATE_OWNED;
         ctx->shared_vars[i].moved_line = 0;
@@ -186,10 +186,10 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
 }
 
 /* Collect new declarations from the compiled Xi IR function.
- * proto->xi_func->slot_owned_names has a non-NULL entry for every
- * shared slot declared by this compilation unit; REPL-seeded prior
- * slots are NULL.  Names from the arena are interned so they outlive
- * the XiFunc. */
+ * slot_owned_names has a non-NULL entry for every top-level name
+ * declared by this compilation unit; REPL-seeded prior slots are
+ * NULL.  Names from the arena are interned so they outlive the
+ * XiFunc. */
 static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *isolate,
                                          XrProto *proto) {
     if (!table || !proto || !proto->xi_func)
@@ -206,7 +206,7 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *
         if (!interned)
             continue;
         bool is_const = xf->slot_owned_consts && xf->slot_owned_consts[slot] != 0;
-        repl_symbols_add_or_update(table, interned, (int) slot, is_const);
+        repl_symbols_add_or_update(table, interned, is_const);
     }
 }
 
