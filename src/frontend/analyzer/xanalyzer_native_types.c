@@ -24,6 +24,7 @@
 #include "../../runtime/class/xclass.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../base/xlog.h"
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -427,8 +428,8 @@ XR_FUNC int xa_native_verify_protocol(XrayIsolate *X) {
         XrClass *cls = xr_isolate_get_native_type_class(X, obj_type);
         if (!cls) {
             /* Type declared in .xr but not registered at runtime */
-            fprintf(stderr, "xray: protocol: @native class '%s' declared but not registered\n",
-                    bt->name ? bt->name : "?");
+            xr_log_debug("protocol", "@native class '%s' declared but not registered",
+                         bt->name ? bt->name : "?");
             mismatches++;
             continue;
         }
@@ -446,16 +447,15 @@ XR_FUNC int xa_native_verify_protocol(XrayIsolate *X) {
                 sym = xr_symbol_lookup_in_table(xr_isolate_get_symbol_table(X), mem->name);
             }
             if (sym == SYMBOL_INVALID) {
-                fprintf(stderr, "xray: protocol: '%s.%s' — symbol not interned\n", bt->name,
-                        mem->name);
+                xr_log_debug("protocol", "'%s.%s' — symbol not interned", bt->name, mem->name);
                 mismatches++;
                 continue;
             }
 
             XrMethod *method = xr_class_lookup_method(cls, sym);
             if (!method) {
-                fprintf(stderr, "xray: protocol: '%s.%s' declared in .xr but missing in C\n",
-                        bt->name, mem->name);
+                xr_log_debug("protocol", "'%s.%s' declared in .xr but missing in C", bt->name,
+                             mem->name);
                 mismatches++;
             }
         }

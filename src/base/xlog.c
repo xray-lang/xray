@@ -26,11 +26,11 @@
 
 /* ========== Global State ========== */
 
-#if XR_DEBUG
-XrLogLevel xr_log_min_level = XR_LOG_DEBUG;
-#else
+/* Default to NOTICE in all builds.  Debug/verbose output is opt-in
+ * via xr_log_set_level() or the --verbose CLI flag. */
 XrLogLevel xr_log_min_level = XR_LOG_NOTICE;
-#endif  // ========== Level Names ==========
+
+// ========== Level Names ==========
 
 static const char *level_names[] = {"DEBUG", "VERBOSE", "NOTICE", "WARNING"};
 

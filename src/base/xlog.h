@@ -51,7 +51,7 @@ typedef enum {
 
 /* ========== Runtime Configuration ========== */
 
-// Global minimum log level (default: NOTICE in Release, DEBUG in Debug)
+// Global minimum log level (default: NOTICE; opt-in via --verbose or xr_log_set_level)
 XR_DATA XrLogLevel xr_log_min_level;
 
 // Set minimum log level
