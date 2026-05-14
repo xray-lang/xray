@@ -178,20 +178,36 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         int svar = xi_lower_var_find(l, 0, cd->super_name);
         if (svar >= 0) {
             if (l->is_program && l->shared_map[svar] >= 0) {
-                super_val = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                if (super_val)
-                    super_val->aux_int = l->shared_map[svar];
+                if (l->repl_mode) {
+                    super_val = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                    if (super_val)
+                        super_val->aux = (void *) l->vars[svar].name;
+                } else {
+                    super_val = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                    if (super_val)
+                        super_val->aux_int = l->shared_map[svar];
+                }
             } else {
                 super_val = xi_lower_braun_read(l, svar, l->cur_block);
             }
         }
         if (!super_val) {
-            struct XrType *stype = NULL;
-            int sidx = xi_lower_find_shared(l, 0, cd->super_name, &stype);
-            if (sidx >= 0) {
-                super_val = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                if (super_val)
-                    super_val->aux_int = sidx;
+            if (l->repl_mode) {
+                struct XrType *gt = NULL;
+                const char *gname = xi_lower_find_global_name(l, 0, cd->super_name, &gt);
+                if (gname) {
+                    super_val = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                    if (super_val)
+                        super_val->aux = (void *) gname;
+                }
+            } else {
+                struct XrType *stype = NULL;
+                int sidx = xi_lower_find_shared(l, 0, cd->super_name, &stype);
+                if (sidx >= 0) {
+                    super_val = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                    if (super_val)
+                        super_val->aux_int = sidx;
+                }
             }
         }
     }

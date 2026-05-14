@@ -10,7 +10,8 @@
  * KEY CONCEPT:
  *   Persistent symbol table for cross-compilation-unit name resolution.
  *   Seeds each new compiler context so previously defined names are visible.
- *   Uses shared_offset=0 (absolute indices) to avoid unsigned underflow.
+ *   REPL uses the name-keyed globals dict (OP_GETGLOBAL/OP_SETGLOBAL)
+ *   instead of the slot-indexed shared array.
  */
 
 #include "xrepl.h"
@@ -217,8 +218,7 @@ void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx, i
 /* Collect new declarations from the compiled Xi IR function.
  * proto->xi_func->slot_owned_names has a non-NULL entry for every
  * shared slot declared by this compilation unit; REPL-seeded prior
- * slots are NULL.  The slot index is absolute because REPL forces
- * shared_offset=0.  Names from the arena are interned so they outlive
+ * slots are NULL.  Names from the arena are interned so they outlive
  * the XiFunc. */
 static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *isolate,
                                          XrProto *proto) {
@@ -237,22 +237,6 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *
             continue;
         bool is_const = xf->slot_owned_consts && xf->slot_owned_consts[slot] != 0;
         repl_symbols_add_or_update(table, interned, (int) slot, is_const);
-    }
-}
-
-/* Recursively zero shared_offset on a proto and every nested proto.
- * Used after xi_emit to undo the offset baked in at emit time, so
- * REPL inputs all index isolate->vm.shared with absolute indices.
- * Duplicates xbytecode_io.c's static set_shared_offset_recursive
- * rather than exposing it — keeps the REPL self-contained. */
-static void xr_repl_zero_shared_offsets(XrProto *proto) {
-    if (!proto)
-        return;
-    proto->shared_offset = 0;
-    uint32_t sub_count = (uint32_t) PROTO_PROTO_COUNT(proto);
-    for (uint32_t i = 0; i < sub_count; i++) {
-        XrProto *sub = PROTO_PROTO(proto, i);
-        xr_repl_zero_shared_offsets(sub);
     }
 }
 
@@ -498,54 +482,17 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     }
     ctx->source_file = "<repl>";
     ctx->repl_mode = true;
-    ctx->shared_offset = 0;  // REPL: absolute indices
 
-    /* Seed compiler-side shared_vars from the REPL symbol table.  This
-     * keeps the legacy (ct_infer) path working for cases that still read
-     * ctx->shared_vars, and populates shared_var_count for the final
-     * shared-array size check below. */
+    /* Seed compiler-side shared_vars from the REPL symbol table so
+     * the analyzer can resolve names from prior inputs. */
     xr_repl_symbols_seed_context(isolate->repl_symbols, ctx);
 
-    // Compile
     XrProto *proto = xr_compile(ctx, ast);
 
     if (proto && !ctx->had_error) {
-        /* REPL uses absolute shared-array indices: every input shares
-         * one global isolate->vm.shared, so shared_offset must be 0
-         * on every proto — including nested function bodies.
-         *
-         * xi_emit set shared_offset = isolate->vm.shared.count at
-         * emit time and propagated that to nested protos.  Without
-         * this recursive override, a function defined in input N
-         * captures the wrong slot when called from input N+1: the
-         * runtime adds the stale offset to the bytecode's Bx,
-         * landing on the slot one or more positions past the real
-         * binding.  Symptom: `fn getx(){return x}; getx()` returns
-         * `getx` itself (the closure) instead of x's value. */
-        xr_repl_zero_shared_offsets(proto);
-
-        /* Collect new declarations from the Xi IR output.  This is the
-         * authoritative source for name → shared slot mappings in the
-         * Xi pipeline; ctx->shared_vars is not populated by the Xi
-         * lowerer, so the legacy xr_repl_symbols_collect path would
-         * miss every new declaration. */
+        /* Collect new declarations from the Xi IR output so the REPL
+         * symbol table stays current for .vars display and peek. */
         repl_symbols_collect_from_xi(isolate->repl_symbols, isolate, proto);
-
-        /* Ensure the shared array can hold every slot declared so far
-         * (prior inputs + current input).  The Xi emit path allocated
-         * slots starting at isolate->vm.shared.count, but REPL forces
-         * shared_offset=0, so the highest slot index is now the total
-         * symbol count. */
-        int highest_slot = 0;
-        for (int i = 0; i < isolate->repl_symbols->count; i++) {
-            int idx = isolate->repl_symbols->symbols[i].shared_index;
-            if (idx + 1 > highest_slot)
-                highest_slot = idx + 1;
-        }
-        if (highest_slot > isolate->vm.shared.count) {
-            isolate->vm.shared.count = highest_slot;
-            xr_shared_array_ensure(&isolate->vm.shared, highest_slot - 1);
-        }
     }
 
     xr_compiler_context_free(ctx);

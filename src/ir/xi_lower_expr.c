@@ -344,8 +344,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         return xi_lower_braun_read(l, var_id, l->cur_block);
     }
 
-    /* Check for program-level variable from a nested scope.  In REPL mode
-     * the name-keyed globals dict is used; otherwise shared-slot index. */
+    /* Check for program-level variable from a nested scope */
     if (l->repl_mode) {
         struct XrType *gt = NULL;
         const char *gname = xi_lower_find_global_name(l, sid, name, &gt);
@@ -464,7 +463,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
             }
         }
 
-        /* If this is a program-level shared variable, also update backing store */
+        /* If this is a program-level variable, also update backing store */
         if (l->is_program && l->shared_map[var_id] >= 0) {
             if (l->repl_mode) {
                 XiValue *store =
@@ -1632,20 +1631,36 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     int var_id = xi_lower_var_find(l, 0, cname);
     if (var_id >= 0) {
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-            if (cls)
-                cls->aux_int = l->shared_map[var_id];
+            if (l->repl_mode) {
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                if (cls)
+                    cls->aux = (void *) l->vars[var_id].name;
+            } else {
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                if (cls)
+                    cls->aux_int = l->shared_map[var_id];
+            }
         } else {
             cls = xi_lower_braun_read(l, var_id, l->cur_block);
         }
     }
     if (!cls) {
-        struct XrType *shared_type = NULL;
-        int shared_idx = xi_lower_find_shared(l, 0, cname, &shared_type);
-        if (shared_idx >= 0) {
-            cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-            if (cls)
-                cls->aux_int = shared_idx;
+        if (l->repl_mode) {
+            struct XrType *gt = NULL;
+            const char *gname = xi_lower_find_global_name(l, 0, cname, &gt);
+            if (gname) {
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                if (cls)
+                    cls->aux = (void *) gname;
+            }
+        } else {
+            struct XrType *shared_type = NULL;
+            int shared_idx = xi_lower_find_shared(l, 0, cname, &shared_type);
+            if (shared_idx >= 0) {
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                if (cls)
+                    cls->aux_int = shared_idx;
+            }
         }
     }
     if (!cls) {
@@ -1903,22 +1918,41 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
             /* Resolve class from scope chain */
             int var = xi_lower_var_find(l, 0, tref->name);
             if (var >= 0) {
-                if (l->is_program && l->shared_map && var < l->var_count &&
-                    l->shared_map[var] >= 0) {
-                    type_val = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                    if (type_val)
-                        type_val->aux_int = l->shared_map[var];
+                if (l->is_program && var < l->var_count && l->shared_map[var] >= 0) {
+                    if (l->repl_mode) {
+                        type_val =
+                            xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                        if (type_val)
+                            type_val->aux = (void *) l->vars[var].name;
+                    } else {
+                        type_val =
+                            xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                        if (type_val)
+                            type_val->aux_int = l->shared_map[var];
+                    }
                 } else {
                     type_val = xi_lower_braun_read(l, var, l->cur_block);
                 }
             }
             if (!type_val) {
-                struct XrType *stype = NULL;
-                int sidx = xi_lower_find_shared(l, 0, tref->name, &stype);
-                if (sidx >= 0) {
-                    type_val = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                    if (type_val)
-                        type_val->aux_int = sidx;
+                if (l->repl_mode) {
+                    struct XrType *gt = NULL;
+                    const char *gname = xi_lower_find_global_name(l, 0, tref->name, &gt);
+                    if (gname) {
+                        type_val =
+                            xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                        if (type_val)
+                            type_val->aux = (void *) gname;
+                    }
+                } else {
+                    struct XrType *stype = NULL;
+                    int sidx = xi_lower_find_shared(l, 0, tref->name, &stype);
+                    if (sidx >= 0) {
+                        type_val =
+                            xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                        if (type_val)
+                            type_val->aux_int = sidx;
+                    }
                 }
             }
         }
@@ -2079,20 +2113,36 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_find(l, 0, sname);
         if (var_id >= 0) {
             if (l->is_program && l->shared_map[var_id] >= 0) {
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                if (cls)
-                    cls->aux_int = l->shared_map[var_id];
+                if (l->repl_mode) {
+                    cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                    if (cls)
+                        cls->aux = (void *) l->vars[var_id].name;
+                } else {
+                    cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                    if (cls)
+                        cls->aux_int = l->shared_map[var_id];
+                }
             } else {
                 cls = xi_lower_braun_read(l, var_id, l->cur_block);
             }
         }
         if (!cls) {
-            struct XrType *stype = NULL;
-            int shared_idx = xi_lower_find_shared(l, 0, sname, &stype);
-            if (shared_idx >= 0) {
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                if (cls)
-                    cls->aux_int = shared_idx;
+            if (l->repl_mode) {
+                struct XrType *gt = NULL;
+                const char *gname = xi_lower_find_global_name(l, 0, sname, &gt);
+                if (gname) {
+                    cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
+                    if (cls)
+                        cls->aux = (void *) gname;
+                }
+            } else {
+                struct XrType *shared_type = NULL;
+                int shared_idx = xi_lower_find_shared(l, 0, sname, &shared_type);
+                if (shared_idx >= 0) {
+                    cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
+                    if (cls)
+                        cls->aux_int = shared_idx;
+                }
             }
         }
         if (!cls) {

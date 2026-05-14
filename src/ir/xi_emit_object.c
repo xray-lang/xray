@@ -530,6 +530,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_error(ctx, child_st != XI_EMIT_OK ? child_st : XI_EMIT_ERR_INTERNAL);
         return;
     }
+    /* Propagate shared_offset for module export metadata */
     child_proto->shared_offset = ctx->proto->shared_offset;
 
     /* Populate upvalue descriptors on child proto from captures */
@@ -823,6 +824,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
     XiEmitStatus cst = xi_emit(child, ctx->isolate, &child_proto);
     if (cst != XI_EMIT_OK || !child_proto)
         return -1;
+    /* Propagate shared_offset for module export metadata */
     child_proto->shared_offset = ctx->proto->shared_offset;
 
     for (uint16_t ui = 0; ui < child->ncaptures; ui++) {
