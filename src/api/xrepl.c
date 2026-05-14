@@ -15,7 +15,9 @@
 
 #include "xrepl.h"
 #include "../base/xchecks.h"
+#include "../base/xhash.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/xglobal_dict.h"
 #include "../frontend/codegen/xcompiler.h"
 #include "../frontend/codegen/xcompiler_context.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -88,6 +90,25 @@ const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
 bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *out) {
     if (!isolate || !name || !out || !isolate->repl_symbols)
         return false;
+
+    /* Prefer globals dict (new REPL path) when available */
+    if (isolate->vm.globals) {
+        uint32_t len = (uint32_t) strlen(name);
+        uint32_t hash = xr_hash_bytes(name, len);
+        XrString *key = xr_string_intern(isolate, name, len, hash);
+        if (key) {
+            XrValue v = xr_global_dict_get(isolate->vm.globals, key);
+            if (XR_IS_INT(v)) {
+                *out = v.i;
+                return true;
+            }
+            /* Key exists but not int, or key absent → fall through */
+            if (!XR_IS_NULL(v))
+                return false;
+        }
+    }
+
+    /* Legacy shared-array path */
     XrReplSymbolTable *t = isolate->repl_symbols;
     for (int i = 0; i < t->count; i++) {
         const char *cn = xr_repl_symbol_cname(&t->symbols[i]);

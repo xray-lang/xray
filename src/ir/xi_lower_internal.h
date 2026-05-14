@@ -35,6 +35,8 @@ XR_FUNC int xi_lower_find_shared(XiLower *l, uint32_t symbol_id, const char *nam
                                  struct XrType **out_type);
 XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char *name,
                                      struct XrType **out_type);
+XR_FUNC const char *xi_lower_find_global_name(XiLower *l, uint32_t symbol_id, const char *name,
+                                              struct XrType **out_type);
 
 /* ========== Context Init / Cleanup (xi_lower.c) ========== */
 

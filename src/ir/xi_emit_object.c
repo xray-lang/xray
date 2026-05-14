@@ -634,6 +634,43 @@ XR_FUNC void xi_emit_set_shared(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABx(OP_SETSHARED, val, shared_idx));
 }
 
+/* Name-keyed top-level globals.  v->aux is a const char* with the
+ * binding's source name; the emitter interns it into the proto
+ * constant pool and emits OP_GETGLOBAL / OP_SETGLOBAL.  Used in REPL
+ * mode where every cross-input top-level binding goes through the
+ * runtime globals dict instead of an integer-indexed shared array. */
+XR_FUNC void xi_emit_get_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    const char *name = (const char *) v->aux;
+    if (!name) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    int kx = add_const_string(ctx, name);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_GETGLOBAL, dst, kx));
+}
+
+XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    const char *name = (const char *) v->aux;
+    if (!name) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t val = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    int kx = add_const_string(ctx, name);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABx(OP_SETGLOBAL, val, kx));
+}
+
 /* Runtime global variable lookup */
 XR_FUNC void xi_emit_get_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABx(OP_GETBUILTIN, dst, (int) v->aux_int));

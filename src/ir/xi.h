@@ -267,6 +267,14 @@ typedef enum {
     XI_GET_SHARED, /* load from shared array: aux_int=shared_index */
     XI_SET_SHARED, /* store to shared array: aux_int=shared_index, args[0]=val */
 
+    /* Name-keyed top-level globals (REPL incremental mode).  aux is an
+     * arena-owned C string with the binding's source name; the emitter
+     * interns it into the proto constant pool and emits OP_GETGLOBAL/
+     * OP_SETGLOBAL.  Coexists with XI_GET/SET_SHARED until the script-
+     * mode path also migrates. */
+    XI_GET_GLOBAL, /* load from globals dict: aux=name (const char*) */
+    XI_SET_GLOBAL, /* store to globals dict: aux=name, args[0]=val */
+
     /* Print (builtin, kept as dedicated op for convenience) */
     XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
 

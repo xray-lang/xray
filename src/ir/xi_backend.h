@@ -109,6 +109,8 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         /* Module-level state */
         case XI_GET_SHARED:
         case XI_SET_SHARED:
+        case XI_GET_GLOBAL:
+        case XI_SET_GLOBAL:
 
         /* Coroutine (low-level runtime ops) */
         case XI_GO:

@@ -73,6 +73,10 @@ typedef struct XiPipelineConfig {
     bool dump_ir_after;     /* dump IR to stderr after optimization */
     uint64_t budget_ns;     /* optimization time budget in nanoseconds
                              * (0 = unlimited; use XI_BUDGET_JIT_TIER1_NS for JIT) */
+    bool repl_mode;         /* REPL incremental compilation: top-level bindings
+                             * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
+                             * instead of XI_GET/SET_SHARED (slot-indexed array).
+                             * Default: false (script-mode shared array path). */
 } XiPipelineConfig;
 
 /* ========== Pipeline Result ========== */

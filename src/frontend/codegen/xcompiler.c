@@ -133,6 +133,11 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     /* Xi IR pipeline: single compilation path (no legacy fallback) */
     {
         XiPipelineConfig pipe_cfg = xi_pipeline_default_config();
+        /* REPL mode: top-level bindings go through XrGlobalDict
+         * (name-keyed) instead of the slot-indexed shared array.  This
+         * is the single switch that activates the Phase 2 globals
+         * lowering for the live REPL. */
+        pipe_cfg.repl_mode = ctx->repl_mode;
         XiPipelineResult pipe_res =
             xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);
         if (pipe_res.status == XI_PIPE_OK && pipe_res.proto != NULL) {

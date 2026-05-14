@@ -64,6 +64,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
     switch (user->op) {
         /* ---- GLOBAL_ESCAPE: leaves the function's world ---- */
         case XI_SET_SHARED: /* stored to module-level shared array */
+        case XI_SET_GLOBAL: /* stored to module-level globals dict */
         case XI_GO:         /* launched as goroutine */
         case XI_CHAN_SEND:  /* sent through channel */
         case XI_CHAN_TRY_SEND:
