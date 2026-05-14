@@ -70,10 +70,6 @@ XR_FUNC bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *o
 // Seed compiler context with prior definitions
 XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx);
 
-// Collect new definitions from compiler context after compilation
-XR_FUNC void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx,
-                                     int seeded_count);
-
 /* ========== REPL Input Completeness Check ========== */
 
 typedef enum {
