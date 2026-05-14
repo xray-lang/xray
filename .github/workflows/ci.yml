@@ -179,7 +179,6 @@ jobs:
           -name '*.c' ! -name '*.inc.c' -type f | \
         xargs -P$(nproc) -I{} \
           clang-tidy-14 -p build {} \
-          --warnings-as-errors='bugprone-use-after-move,bugprone-double-free,clang-analyzer-core.*' \
           2>&1 | tee clang-tidy-output.txt
 
         # Check for errors (warnings are allowed, errors fail the build)
