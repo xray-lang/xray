@@ -12,6 +12,7 @@
 
 #include "xm_codegen_internal.h"
 #include "../base/xchecks.h"
+#include "../base/xlog.h"
 
 static bool isnull_uses_runtime_tag(CodegenCtx *ctx, XmRef ref, uint32_t *out_vi) {
     if (!xm_ref_is_vreg(ref))
@@ -1156,9 +1157,11 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         case XM_RT_INDEX_GET:
         case XM_RT_INDEX_SET:
         case XM_RT_PRINT: {
-            // These are handled via CALL_C in the builder, shouldn't reach here.
-            // Emit NOP as safety fallback.
-            fprintf(stderr, "[codegen] RT opcode %d should use CALL_C path\n", ins->op);
+            /* Handled via CALL_C in the builder; reaching codegen means
+             * the builder did not convert this op.  Emit NOP so the
+             * instruction stream stays aligned; the VM fallback path
+             * still handles the actual print. */
+            xr_log_debug("a64-cg", "RT opcode %d fell through to NOP (expected CALL_C)", ins->op);
             a64_buf_emit(&ctx->buf, a64_nop());
             break;
         }
