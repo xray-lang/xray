@@ -65,6 +65,7 @@
 #define KOP_AB_TEST_S XR_OPF_REG_IN, XR_OPF_LIT_S, XR_OPF_LIT_FLAG
 #define KOP_A_TEST XR_OPF_REG_IN, XR_OPF_NONE, XR_OPF_LIT_FLAG
 #define KOP_ABx_K XR_OPF_REG_OUT, XR_OPF_K_IDX, XR_OPF_NONE
+#define KOP_ABx_K_IN XR_OPF_REG_IN, XR_OPF_K_IDX, XR_OPF_NONE
 #define KOP_AsBx_LITS XR_OPF_REG_OUT, XR_OPF_LIT_S, XR_OPF_NONE
 #define KOP_PROTO XR_OPF_REG_OUT, XR_OPF_PROTO_IDX, XR_OPF_NONE
 #define KOP_GLOBAL_GET XR_OPF_REG_OUT, XR_OPF_GLOBAL_IDX, XR_OPF_NONE
@@ -286,6 +287,8 @@
       "select block wait: A=ch_base, B=ch_count, C=case_count")                                    \
     _(GETSHARED, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = shared[Bx]")                                  \
     _(SETSHARED, FMT_GLOBAL, KOP_GLOBAL_SET, "shared[Bx] = R[A]")                                  \
+    _(GETGLOBAL, FMT_ABx, KOP_ABx_K, "R[A] = globals[K[Bx]:string]")                               \
+    _(SETGLOBAL, FMT_ABx, KOP_ABx_K_IN, "globals[K[Bx]:string] = R[A]")                            \
     _(TARRAY_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:typed_array[R[C]]")                           \
     _(TARRAY_GETC, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:typed_array[C]")                         \
     _(TARRAY_SET, FMT_ABC, KOP_ABC_INPLACE, "R[A]:typed_array[R[B]] = R[C]")                       \

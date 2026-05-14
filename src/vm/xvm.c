@@ -50,6 +50,7 @@
 #include "../runtime/xstdlib_bridge.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/xshared.h"
+#include "../runtime/xglobal_dict.h"
 #include "../runtime/gc/xsystem_heap.h"
 
 #include "../runtime/gc/xcoro_gc.h"

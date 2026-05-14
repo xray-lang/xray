@@ -24,6 +24,7 @@
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../runtime/xexec_state.h"
+#include "../../runtime/xglobal_dict.h"
 #include "../value/xstruct_layout.h"
 #include "../class/xclass.h"
 #include <stdlib.h>
@@ -864,6 +865,13 @@ static void mark_coro_roots(XrCoroGC *gc) {
         if (vm) {
             for (int i = 0; i < vm->shared.count; i++) {
                 xr_coro_gc_markvalue(gc, vm->shared.data[i]);
+            }
+            /* Globals dict (OP_SETGLOBAL) is a per-isolate root anchored
+             * to the main coro's heap.  The dict struct itself is
+             * malloc'd; its underlying XrMap is GC-traced as a normal
+             * object once the dict pointer is reachable from this root. */
+            if (vm->globals && vm->globals->map) {
+                xr_coro_gc_markobject(gc, (XrGCHeader *) vm->globals->map);
             }
         }
     }
