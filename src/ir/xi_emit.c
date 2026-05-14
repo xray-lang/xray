@@ -684,8 +684,12 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
         return XI_EMIT_ERR_INTERNAL;
     }
 
-    /* Allocate shared variable slots in the isolate's shared_array
-     * BEFORE emitting blocks, so child protos can inherit the offset. */
+    /* Top-level variables are stored in the name-keyed globals dict
+     * via OP_GETGLOBAL / OP_SETGLOBAL.  The legacy shared array is
+     * still allocated here for module export metadata: the module
+     * system reads exported values from shared slots at import time.
+     * Once the module system migrates to globals dict, this block
+     * can be removed entirely. */
     if (isolate && f->nshared > 0) {
         ctx.proto->shared_offset = isolate->vm.shared.count;
         int total = isolate->vm.shared.count + f->nshared;
