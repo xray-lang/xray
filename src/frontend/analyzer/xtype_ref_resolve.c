@@ -185,7 +185,12 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
                 types[i] = resolve_impl(X, t->children[i]);
             XrType **type_ptrs = types;
             bool is_sealed = !t->extensible;
-            return xr_type_new_json_with_fields(X, names, type_ptrs, count, is_sealed);
+            XrType *result = xr_type_new_json_with_fields(X, names, type_ptrs, count, is_sealed);
+            if (result && t->field_readonly)
+                xr_type_set_json_field_readonly(X, result, t->field_readonly, count);
+            if (result && t->name)
+                xr_type_set_json_type_name(X, result, t->name);
+            return result;
         }
 
         case XR_TREF_FIXED_ARRAY: {

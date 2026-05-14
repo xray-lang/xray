@@ -23,6 +23,58 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
+static bool xa_object_literal_bool_field(AstNode *node, const char *field_name, bool *out_value) {
+    if (!node || node->type != AST_OBJECT_LITERAL || !field_name || !out_value)
+        return false;
+    ObjectLiteralNode *obj = &node->as.object_literal;
+    for (int i = 0; i < obj->count; i++) {
+        if (obj->computed && obj->computed[i])
+            continue;
+        AstNode *key = obj->keys ? obj->keys[i] : NULL;
+        AstNode *value = obj->values ? obj->values[i] : NULL;
+        if (!key || key->type != AST_LITERAL_STRING || !value)
+            continue;
+        if (strcmp(key->as.literal.raw_value.string_val, field_name) != 0)
+            continue;
+        if (value->type == AST_LITERAL_TRUE) {
+            *out_value = true;
+            return true;
+        }
+        if (value->type == AST_LITERAL_FALSE) {
+            *out_value = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool xa_is_module_call(CallExprNode *call, const char *module_name, const char *func_name) {
+    if (!call || !module_name || !func_name || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || strcmp(ma->name, func_name) != 0 || !ma->object ||
+        ma->object->type != AST_VARIABLE)
+        return false;
+    return strcmp(ma->object->as.variable.name, module_name) == 0;
+}
+
+static XrType *xa_csv_parse_return_type(XaInferContext *ctx, CallExprNode *call) {
+    if (!xa_is_module_call(call, "csv", "parse"))
+        return NULL;
+    XrType *row_array =
+        xr_type_new_array(ctx->analyzer->isolate, xr_type_new_string(ctx->analyzer->isolate));
+    XrType *rows_array = xr_type_new_array(ctx->analyzer->isolate, row_array);
+    if (call->arg_count < 2 || !call->arguments[1])
+        return rows_array;
+    bool header = false;
+    if (xa_object_literal_bool_field(call->arguments[1], "header", &header))
+        return header ? xr_type_new_array(ctx->analyzer->isolate,
+                                          xr_type_new_json(ctx->analyzer->isolate))
+                      : rows_array;
+    return NULL;
+}
+
 /* ----------------------------------------------------------------------------
  * Function Call Type Inference
  * Handles: argument count/type checking, generic type argument validation,
@@ -487,6 +539,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type =
             xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count);
     }
+
+    XrType *builtin_override = xa_csv_parse_return_type(ctx, call);
+    if (builtin_override)
+        return_type = builtin_override;
 
     // Apply type substitution for generic method calls: obj.method<T>()
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {

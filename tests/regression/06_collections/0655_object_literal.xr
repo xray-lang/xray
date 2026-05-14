@@ -102,3 +102,13 @@ fn test_object_array(): void {
     assert_eq(points[0].x, 0)
     assert_eq(points[2].y, 2)
 }
+
+@test
+fn test_object_field_shorthand(): void {
+    let users = ["alice", "bob"]
+    let orders = [1, 2, 3]
+    let dashboard = { users, count: orders.length }
+    assert_eq(dashboard.users.length, 2)
+    assert_eq(dashboard.users[0], "alice")
+    assert_eq(dashboard.count, 3)
+}

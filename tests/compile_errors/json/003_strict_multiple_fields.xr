@@ -1,5 +1,6 @@
 // 003_strict_multiple_fields.xr
 // 错误测试：严格类型不允许添加多个新字段
 // 期望错误：类型 'Vec2' 不允许添加字段
-let v: {x,y} = { "x": 1, "y": 2 }
+type Vec2 = { x: int, y: int }
+let v: Vec2 = { "x": 1, "y": 2 }
 v.z = 3

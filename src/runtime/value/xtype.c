@@ -267,6 +267,31 @@ XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType 
     return type;
 }
 
+XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const bool *readonly,
+                                             int count) {
+    if (!type || type->kind != XR_KIND_JSON || !readonly || count <= 0 ||
+        count != type->object.field_count)
+        return;
+    X = resolve_isolate(X);
+    if (!X || !X->current_type_pool)
+        return;
+
+    XrTypePool *pool = X->current_type_pool;
+    type->object.field_readonly = (bool *) type_alloc_array(pool, sizeof(bool), count, NULL);
+    if (!type->object.field_readonly)
+        return;
+    memcpy(type->object.field_readonly, readonly, sizeof(bool) * (size_t) count);
+}
+
+XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char *name) {
+    if (!type || type->kind != XR_KIND_JSON || !name)
+        return;
+    X = resolve_isolate(X);
+    if (!X || !X->current_type_pool)
+        return;
+    type->object.type_name = xr_pool_strdup(X->current_type_pool, name);
+}
+
 // Optional type (T?) - unified: uses is_nullable on the base type itself
 XrType *xr_type_new_optional(XrayIsolate *X, XrType *base_type) {
     return xr_type_make_nullable(X, base_type);
@@ -442,6 +467,50 @@ XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_cou
     type->function.return_type = return_type;
     type->function.is_variadic = is_variadic;
     return type;
+}
+
+XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, const char **names,
+                                              XrType ***constraint_lists,
+                                              const int *constraint_counts, int count) {
+    if (!type || type->kind != XR_KIND_FUNCTION || count <= 0 || !names)
+        return;
+    X = resolve_isolate(X);
+    if (!X || !X->current_type_pool)
+        return;
+
+    XrTypePool *pool = X->current_type_pool;
+    type->function.type_param_names =
+        (const char **) type_alloc_array(pool, sizeof(const char *), count, NULL);
+    type->function.type_param_constraints =
+        (XrType ***) type_alloc_array(pool, sizeof(XrType **), count, NULL);
+    type->function.type_param_constraint_counts =
+        (int *) type_alloc_array(pool, sizeof(int), count, NULL);
+    if (!type->function.type_param_names || !type->function.type_param_constraints ||
+        !type->function.type_param_constraint_counts) {
+        type->function.type_param_count = 0;
+        return;
+    }
+
+    type->function.type_param_count = count;
+    for (int i = 0; i < count; i++) {
+        type->function.type_param_names[i] = names[i] ? xr_pool_strdup(pool, names[i]) : NULL;
+        int n = constraint_counts ? constraint_counts[i] : 0;
+        XrType **src = constraint_lists ? constraint_lists[i] : NULL;
+        type->function.type_param_constraint_counts[i] = n;
+        if (n > 0 && src) {
+            type->function.type_param_constraints[i] =
+                (XrType **) type_alloc_array(pool, sizeof(XrType *), n, NULL);
+            if (!type->function.type_param_constraints[i]) {
+                type->function.type_param_constraint_counts[i] = 0;
+                continue;
+            }
+            for (int j = 0; j < n; j++)
+                type->function.type_param_constraints[i][j] = src[j];
+        } else {
+            type->function.type_param_constraints[i] = NULL;
+            type->function.type_param_constraint_counts[i] = 0;
+        }
+    }
 }
 
 // Tuple type (for multi-value return, compile-time only)
@@ -825,6 +894,11 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
             copy->function.min_params = type->function.min_params;
             copy->function.return_type = type->function.return_type;
             copy->function.is_variadic = type->function.is_variadic;
+            if (type->function.type_param_count > 0 && type->function.type_param_names) {
+                xr_type_set_function_type_params(
+                    X, copy, type->function.type_param_names, type->function.type_param_constraints,
+                    type->function.type_param_constraint_counts, type->function.type_param_count);
+            }
             break;
         case XR_KIND_JSON:
             if (type->object.field_count < 0)
@@ -853,6 +927,15 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
                     if (!copy->object.field_types)
                         return NULL;
                     memcpy(copy->object.field_types, type->object.field_types, field_type_size);
+                }
+                if (type->object.field_readonly) {
+                    size_t field_readonly_size;
+                    copy->object.field_readonly = (bool *) type_alloc_array(
+                        pool, sizeof(bool), type->object.field_count, &field_readonly_size);
+                    if (!copy->object.field_readonly)
+                        return NULL;
+                    memcpy(copy->object.field_readonly, type->object.field_readonly,
+                           field_readonly_size);
                 }
             }
             copy->object.is_sealed = type->object.is_sealed;
@@ -1226,6 +1309,41 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     return false;
 }
 
+static uint8_t function_param_mode(XrType *type, int index) {
+    if (!type || type->kind != XR_KIND_FUNCTION || index < 0 ||
+        index >= type->function.param_count || !type->function.param_passing_modes)
+        return XR_PARAM_VALUE;
+    return type->function.param_passing_modes[index];
+}
+
+static bool function_type_params_equal(XrType *a, XrType *b) {
+    if (!a || !b || a->kind != XR_KIND_FUNCTION || b->kind != XR_KIND_FUNCTION)
+        return false;
+    if (a->function.type_param_count != b->function.type_param_count)
+        return false;
+    for (int i = 0; i < a->function.type_param_count; i++) {
+        int ac = a->function.type_param_constraint_counts
+                     ? a->function.type_param_constraint_counts[i]
+                     : 0;
+        int bc = b->function.type_param_constraint_counts
+                     ? b->function.type_param_constraint_counts[i]
+                     : 0;
+        if (ac != bc)
+            return false;
+        XrType **al =
+            a->function.type_param_constraints ? a->function.type_param_constraints[i] : NULL;
+        XrType **bl =
+            b->function.type_param_constraints ? b->function.type_param_constraints[i] : NULL;
+        for (int j = 0; j < ac; j++) {
+            XrType *at = al ? al[j] : NULL;
+            XrType *bt = bl ? bl[j] : NULL;
+            if (!xr_type_equals(at, bt))
+                return false;
+        }
+    }
+    return true;
+}
+
 // Check if two types are equal
 bool xr_type_equals(XrType *a, XrType *b) {
     if (a == b)
@@ -1280,9 +1398,17 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (a->kind == XR_KIND_FUNCTION) {
         if (a->function.param_count != b->function.param_count)
             return false;
+        if (a->function.min_params != b->function.min_params)
+            return false;
+        if (a->function.is_variadic != b->function.is_variadic)
+            return false;
+        if (!function_type_params_equal(a, b))
+            return false;
         if (!xr_type_equals(a->function.return_type, b->function.return_type))
             return false;
         for (int i = 0; i < a->function.param_count; i++) {
+            if (function_param_mode(a, i) != function_param_mode(b, i))
+                return false;
             if (!xr_type_equals(a->function.param_types[i], b->function.param_types[i])) {
                 return false;
             }
@@ -1291,6 +1417,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
     }
     if (a->kind == XR_KIND_JSON) {
         if (a->object.field_count != b->object.field_count)
+            return false;
+        if (a->object.is_sealed != b->object.is_sealed)
             return false;
         for (int i = 0; i < a->object.field_count; i++) {
             if (!a->object.field_names || !b->object.field_names)
@@ -1307,6 +1435,10 @@ bool xr_type_equals(XrType *a, XrType *b) {
                     return false;
                 }
             }
+            bool ar = a->object.field_readonly ? a->object.field_readonly[i] : false;
+            bool br = b->object.field_readonly ? b->object.field_readonly[i] : false;
+            if (ar != br)
+                return false;
         }
         if (a->object.type_name && b->object.type_name) {
             return strcmp(a->object.type_name, b->object.type_name) == 0;

@@ -148,6 +148,10 @@ struct XrType {
             XrType *return_type;
             uint8_t *param_passing_modes;  // NULL or [param_count] of XR_PARAM_*
             bool is_variadic;
+            const char **type_param_names;
+            XrType ***type_param_constraints;
+            int *type_param_constraint_counts;
+            int type_param_count;
         } function;
 
         // For literal types
@@ -458,6 +462,9 @@ XR_FUNC XrType *xr_type_new_task(XrayIsolate *X, XrType *result_type);
 XR_FUNC XrType *xr_type_new_json(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_json_with_fields(XrayIsolate *X, const char **names, XrType **types,
                                              int count, bool is_sealed);
+XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const bool *readonly,
+                                             int count);
+XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char *name);
 XR_FUNC XrType *xr_type_new_class(XrayIsolate *X, const char *class_name);
 XR_FUNC XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name);
 XR_FUNC XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info);
@@ -486,6 +493,9 @@ XR_FUNC XrType *xr_type_new_type_param_constrained(XrayIsolate *X, const char *n
 // API: Function type
 XR_FUNC XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int param_count,
                                      XrType *return_type, bool is_variadic);
+XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, const char **names,
+                                              XrType ***constraint_lists,
+                                              const int *constraint_counts, int count);
 
 // API: Tuple type (for multi-value return)
 XR_FUNC XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count);

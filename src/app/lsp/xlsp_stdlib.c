@@ -433,8 +433,8 @@ static const XlspSymbolInfo io_symbols[] = {
 // ============================================================================
 
 static const XlspSymbolInfo csv_symbols[] = {
-    {"parse", XLSP_SYM_FUNCTION, "fn(text: string): Array<Array<string>>", "Parses CSV text", NULL,
-     0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(text: string): Array<Array<string>> | Array<Json>",
+     "Parses CSV text", NULL, 0},
     {"parseDetailed", XLSP_SYM_FUNCTION, "fn(text: string): Json", "Parses CSV with headers", NULL,
      0},
     {"parseTsv", XLSP_SYM_FUNCTION, "fn(text: string): Array<Array<string>>", "Parses TSV text",

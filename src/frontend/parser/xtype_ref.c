@@ -169,7 +169,8 @@ XR_FUNC XrTypeRef *xr_tref_tuple(struct XrayIsolate *X, XrTypeRef **elems, int c
 }
 
 XR_FUNC XrTypeRef *xr_tref_object(struct XrayIsolate *X, const char **field_names_src,
-                                  XrTypeRef **field_types, int count, bool extensible) {
+                                  XrTypeRef **field_types, const bool *field_readonly, int count,
+                                  bool extensible) {
     XrTypeRef *t = tref_alloc(X);
     t->kind = XR_TREF_OBJECT;
     t->nchildren = (uint8_t) count;
@@ -179,6 +180,11 @@ XR_FUNC XrTypeRef *xr_tref_object(struct XrayIsolate *X, const char **field_name
         t->field_names = (const char **) ast_alloc_array(X, sizeof(const char *), (size_t) count);
         for (int i = 0; i < count; i++)
             t->field_names[i] = tref_strdup(X, field_names_src[i]);
+        if (field_readonly) {
+            t->field_readonly = (bool *) ast_alloc_array(X, sizeof(bool), (size_t) count);
+            for (int i = 0; i < count; i++)
+                t->field_readonly[i] = field_readonly[i];
+        }
     }
     return t;
 }

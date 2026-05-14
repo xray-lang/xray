@@ -159,6 +159,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     // Create function symbol
     XaSymbol *sym = xa_symbol_new(fn->name, XA_SYM_FUNCTION);
     sym->location.line = node->line;
+    sym->is_const = true;
 
     // Build function type and collect param names
     XrType **param_types = NULL;
@@ -228,6 +229,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     XrType *fn_type = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                            return_type, has_rest);
+    xa_set_function_type_params_from_ast(ctx, fn_type, fn->type_params, fn->type_param_count);
 
     // Set min_params for default parameter support
     if (fn_type) {

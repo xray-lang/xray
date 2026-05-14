@@ -1,5 +1,6 @@
 // 001_readonly_assign.xr
 // 错误测试：不允许修改 const 只读字段
 // 期望错误：字段 'id' 是只读的
-let u: {id,name} = { "id": 1, "name": "Alice" }
+type User = { const id: int, name: string }
+let u: User = { "id": 1, "name": "Alice" }
 u.id = 2

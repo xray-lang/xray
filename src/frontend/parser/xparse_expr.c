@@ -14,6 +14,7 @@
 
 #include "xparse_internal.h"
 #include "xtype_ref.h"
+#include "xtype_scope.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include "../../runtime/xisolate_api.h"
@@ -543,6 +544,42 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_fn_expression: NULL parser");
     int line = parser->previous.line;
 
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            Token param_token = parser->previous;
+            char *param_name = (char *) ast_alloc(parser->X, (size_t) param_token.length + 1);
+            memcpy(param_name, param_token.start, param_token.length);
+            param_name[param_token.length] = '\0';
+
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+            }
+
+            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+        } while (xr_parser_match(parser, TK_COMMA));
+        xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
+    }
+
+    XrTypeScope *saved_scope = parser->type_scope;
+    if (type_param_count > 0) {
+        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        for (int i = 0; i < type_param_count; i++) {
+            XrTypeRef *type_param = xr_tref_type_param(parser->X, type_params[i]->name);
+            xr_type_scope_define(generic_scope, type_params[i]->name, type_param);
+        }
+        parser->type_scope = generic_scope;
+    }
+
     xr_parser_consume(parser, TK_LPAREN, "expected '(' after fn");
     XrParamNode **params = NULL;
     int param_count = 0;
@@ -571,7 +608,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
 
     // Parse optional return type annotation
-    XrType *return_type = NULL;
+    XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
         return_type = xr_parse_type_annotation(parser);
     } else if (xr_parser_check(parser, TK_MINUS)) {
@@ -591,6 +628,12 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
 
     AstNode *func_expr = xr_ast_function_expr(parser->X, params, param_count, body, line);
     func_expr->as.function_expr.return_type = return_type;
+    func_expr->as.function_expr.type_params = type_params;
+    func_expr->as.function_expr.type_param_count = type_param_count;
+
+    if (type_param_count > 0) {
+        parser->type_scope = saved_scope;
+    }
 
     return func_expr;
 }

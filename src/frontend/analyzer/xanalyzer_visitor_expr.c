@@ -37,6 +37,32 @@ static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind
     xa_selection_table_set(st, node, &sel);
 }
 
+static const char *json_type_label(XrType *type) {
+    if (type && XR_TYPE_IS_JSON(type) && type->object.type_name)
+        return type->object.type_name;
+    return xr_type_to_string(type);
+}
+
+static int json_field_index(XrType *type, const char *name) {
+    if (!type || !XR_TYPE_IS_JSON(type) || !name || !type->object.field_names)
+        return -1;
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static void add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
+                                 XrType *expected_type) {
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Index type '%s' is not assignable to expected type '%s'",
+             xr_type_to_string(index_type), xr_type_to_string(expected_type));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 /* ============================================================================
  * Pass 2: Expression Visitors
  * ============================================================================
@@ -566,27 +592,25 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_json(ctx->analyzer->isolate);
     }
     if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0) {
-        if (obj_type->object.field_names && obj_type->object.field_types) {
-            for (int i = 0; i < obj_type->object.field_count; i++) {
-                if (obj_type->object.field_names[i] &&
-                    strcmp(obj_type->object.field_names[i], ma->name) == 0) {
-                    XrType *ft = obj_type->object.field_types[i];
-                    if (!ft)
-                        return xr_type_new_unknown(NULL);
-                    // JSON fields are always nullable (runtime dynamic);
-                    // OBJECT fields return exact type (compile-time fixed)
-                    XrType *result_ft = XR_TYPE_IS_JSON(obj_type)
-                                            ? xr_type_make_nullable(ctx->analyzer->isolate, ft)
-                                            : ft;
-                    record_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, i, result_ft, false);
-                    return result_ft;
-                }
-            }
+        int field_idx = json_field_index(obj_type, ma->name);
+        if (field_idx >= 0 && obj_type->object.field_types) {
+            XrType *ft = obj_type->object.field_types[field_idx];
+            if (!ft)
+                return xr_type_new_unknown(NULL);
+            XrType *result_ft = xr_type_make_nullable(ctx->analyzer->isolate, ft);
+            record_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, field_idx, result_ft, false);
+            return result_ft;
         }
-        // Json is extensible, return unknown for unknown fields
-        if (XR_TYPE_IS_JSON(obj_type)) {
+        if (obj_type->object.is_sealed) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg), "类型 '%s' 没有字段 '%s'", json_type_label(obj_type),
+                     ma->name);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
             return xr_type_new_unknown(NULL);
         }
+        return xr_type_new_unknown(NULL);
     }
 
     return xr_type_new_unknown(NULL);
@@ -600,17 +624,25 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     XrType *container = xa_visit_infer_expr(ctx, ig->array);
 
     /* Visit the index expression so variable references get their symbol_id resolved */
+    XrType *index_type = NULL;
     if (ig->index) {
-        xa_visit_infer_expr(ctx, ig->index);
+        index_type = xa_visit_infer_expr(ctx, ig->index);
     }
 
     if (XR_TYPE_IS_ARRAY(container) && container->container.element_type) {
+        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
+            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return container->container.element_type;
     }
     if (XR_TYPE_IS_MAP(container) && container->map.value_type) {
+        if (index_type && container->map.key_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
+            !xa_typecheck_assignable(container->map.key_type, index_type))
+            add_index_type_error(ctx, node, index_type, container->map.key_type);
         return container->map.value_type;
     }
     if (XR_TYPE_IS_STRING(container)) {
+        if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type))
+            add_index_type_error(ctx, node, index_type, xr_type_new_int(NULL));
         return xr_type_new_string(NULL);  // string[i] => string
     }
 
@@ -628,6 +660,16 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                     if (ft)
                         return xr_type_make_nullable(ctx->analyzer->isolate, ft);
                 }
+            }
+            if (container->object.is_sealed) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg), "类型 '%s' 没有字段 '%s'", json_type_label(container),
+                         key);
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                return xr_type_new_unknown(NULL);
             }
         }
         // No schema or unknown key → result is Json (any JSON value including null)
@@ -1227,10 +1269,20 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
 
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
-        return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, xr_type_new_unknown(NULL),
-                                    false);
+        return xr_type_new_function(NULL, NULL, 0, xr_type_new_unknown(NULL), false);
 
     FunctionDeclNode *fn = &node->as.function_expr;
+    const char **type_param_names = NULL;
+    const char *type_param_buf[8];
+    if (fn->type_param_count > 0 && fn->type_params) {
+        type_param_names = (fn->type_param_count <= 8)
+                               ? type_param_buf
+                               : xr_malloc(sizeof(const char *) * fn->type_param_count);
+        if (type_param_names) {
+            for (int i = 0; i < fn->type_param_count; i++)
+                type_param_names[i] = fn->type_params[i] ? fn->type_params[i]->name : NULL;
+        }
+    }
 
     // Check if has rest parameter
     bool has_rest = false;
@@ -1255,6 +1307,11 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             // Check for explicit type annotation first
             if (p && p->type) {
                 param_types[i] = xr_tref_resolve(ctx->analyzer->isolate, p->type);
+                if (type_param_names) {
+                    param_types[i] =
+                        resolve_class_to_type_param(ctx->analyzer->isolate, param_types[i],
+                                                    type_param_names, fn->type_param_count);
+                }
             }
             // Use expected function type (bidirectional inference)
             else if (expected_fn && i < expected_fn->function.param_count &&
@@ -1296,6 +1353,10 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     // Use expected return type if not explicitly declared
     XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type)
                                           : xr_type_new_unknown(NULL);
+    if (fn->return_type && type_param_names) {
+        return_type = resolve_class_to_type_param(ctx->analyzer->isolate, return_type,
+                                                  type_param_names, fn->type_param_count);
+    }
     if (XR_TYPE_IS_UNKNOWN(return_type) && expected_fn && expected_fn->function.return_type) {
         return_type = expected_fn->function.return_type;
     }
@@ -1367,7 +1428,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             !XR_TYPE_IS_UNKNOWN(expected_fn->function.return_type)) {
             ctx->expected_return_type = expected_fn->function.return_type;
         } else if (fn->return_type) {
-            ctx->expected_return_type = xr_tref_resolve(ctx->analyzer->isolate, fn->return_type);
+            ctx->expected_return_type = return_type;
         } else {
             ctx->expected_return_type = NULL;
         }
@@ -1437,9 +1498,30 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
 
     XrType *result = xr_type_new_function(ctx->analyzer->isolate, param_types, fn->param_count,
                                           return_type, has_rest);
+    if (result) {
+        result->function.min_params = fn->required_count;
+        bool has_modes = false;
+        for (int i = 0; i < fn->param_count && !has_modes; i++) {
+            if (fn->params[i] && fn->params[i]->passing_mode != XR_PARAM_VALUE)
+                has_modes = true;
+        }
+        if (has_modes) {
+            uint8_t *modes = xr_calloc(fn->param_count, sizeof(uint8_t));
+            if (modes) {
+                for (int i = 0; i < fn->param_count; i++) {
+                    if (fn->params[i])
+                        modes[i] = fn->params[i]->passing_mode;
+                }
+                result->function.param_passing_modes = modes;
+            }
+        }
+    }
+    xa_set_function_type_params_from_ast(ctx, result, fn->type_params, fn->type_param_count);
 
     if (param_types)
         xr_free(param_types);
+    if (type_param_names && type_param_names != type_param_buf)
+        xr_free((void *) type_param_names);
     return result;
 }
 

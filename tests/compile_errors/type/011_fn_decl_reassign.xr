@@ -1,0 +1,9 @@
+fn locked(x: int): int {
+    return x
+}
+
+fn replacement(x: int): int {
+    return x + 1
+}
+
+locked = replacement

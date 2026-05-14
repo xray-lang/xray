@@ -122,8 +122,22 @@ XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_name
         if (changed) {
             XrType *result =
                 xr_type_new_function(X, new_params, pc, ret, type->function.is_variadic);
-            if (result)
+            if (result) {
                 result->function.min_params = type->function.min_params;
+                if (type->function.param_passing_modes && pc > 0) {
+                    result->function.param_passing_modes = xr_calloc(pc, sizeof(uint8_t));
+                    if (result->function.param_passing_modes) {
+                        memcpy(result->function.param_passing_modes,
+                               type->function.param_passing_modes, sizeof(uint8_t) * (size_t) pc);
+                    }
+                }
+                if (type->function.type_param_count > 0 && type->function.type_param_names) {
+                    xr_type_set_function_type_params(X, result, type->function.type_param_names,
+                                                     type->function.type_param_constraints,
+                                                     type->function.type_param_constraint_counts,
+                                                     type->function.type_param_count);
+                }
+            }
             if (new_params != stack_params)
                 xr_free(new_params);
             return result;
