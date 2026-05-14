@@ -930,7 +930,6 @@ static void emit_prologue(CodegenCtx *ctx) {
     a64_buf_emit(&ctx->buf, a64_stp(A64_X23, A64_X24, A64_SP, 48));
     add_cs_patch(ctx, 2);
     a64_buf_emit(&ctx->buf, a64_stp(A64_X25, A64_X26, A64_SP, 64));
-    add_cs_patch(ctx, 3);
     a64_buf_emit(&ctx->buf, a64_stp(A64_X27, A64_X28, A64_SP, 80));
     // Save FP callee-saved registers d8-d15
     add_cs_patch(ctx, 4);
@@ -1041,7 +1040,6 @@ static void emit_fast_prologue(CodegenCtx *ctx) {
     a64_buf_emit(&ctx->buf, a64_stp(A64_X23, A64_X24, A64_SP, 48));
     add_cs_patch(ctx, 2);
     a64_buf_emit(&ctx->buf, a64_stp(A64_X25, A64_X26, A64_SP, 64));
-    add_cs_patch(ctx, 3);
     a64_buf_emit(&ctx->buf, a64_stp(A64_X27, A64_X28, A64_SP, 80));
     // Save FP callee-saved registers d8-d15
     add_cs_patch(ctx, 4);
@@ -1107,7 +1105,6 @@ void emit_epilogue(CodegenCtx *ctx) {
     a64_buf_emit(&ctx->buf, a64_ldp(A64_X23, A64_X24, A64_SP, 48));
     add_cs_patch(ctx, 2);
     a64_buf_emit(&ctx->buf, a64_ldp(A64_X25, A64_X26, A64_SP, 64));
-    add_cs_patch(ctx, 3);
     a64_buf_emit(&ctx->buf, a64_ldp(A64_X27, A64_X28, A64_SP, 80));
     // Restore FP callee-saved registers d8-d15
     add_cs_patch(ctx, 4);
@@ -1562,14 +1559,14 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
     }
 
     // NOP-out callee-saved STP/LDP for unused register pairs
-    // GP pairs 0-3: x21/x22..x27/x28 → csaved bits 1-8
+    // GP pairs 0-2: x21/x22..x25/x26 → csaved bits 0-5
     // FP pairs 4-7: d8/d9..d14/d15   → csaved bits 16-23
     for (uint32_t i = 0; i < ctx.ncs_patches; i++) {
         uint8_t pair = ctx.cs_patches[i].pair;
         bool used;
-        if (pair < 4) {
-            // GP pair: bits (pair*2+1) and (pair*2+2) in csaved
-            uint32_t mask = (0x3u << (pair * 2 + 1));
+        if (pair < 3) {
+            // GP pair: bits (pair*2) and (pair*2+1) in csaved
+            uint32_t mask = (0x3u << (pair * 2));
             used = (ctx.xra->callee_saved & mask) != 0;
         } else {
             // FP pair: d(8+2*(pair-4)) and d(9+2*(pair-4)) → bits 16+2*(pair-4)..
