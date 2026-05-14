@@ -557,7 +557,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
              * accounting stays consistent (matches arm64 behaviour in
              * xm_codegen_mem.c). Skipping the emit corrupts subsequent
              * branch offsets and surfaces as 0xC0000374 on Win64. */
-            xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
+            xr_log_debug("x64-cg", "RT opcode %d fell through to NOP (expected CALL_C)", ins->op);
             x64_nop(&ctx->buf);
             break;
 

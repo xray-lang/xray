@@ -15,6 +15,7 @@
 
 #include "xm_jit_debug.h"
 #include "../base/xchecks.h"
+#include "../base/xlog.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 
@@ -496,7 +497,7 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
     sigaction(SIGSEGV, &sa, &g_old_sigsegv);
     sigaction(SIGBUS, &sa, &g_old_sigbus);
 
-    fprintf(stderr, "[JIT-debug] crash handler installed (with alt stack)\n");
+    xr_log_debug("jit", "crash handler installed (with alt stack)");
 }
 
 #else /* _WIN32 */

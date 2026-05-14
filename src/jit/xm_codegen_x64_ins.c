@@ -1315,7 +1315,7 @@ static void x64_h_rt_simple(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
          * contributes at least one machine instruction. Skipping the
          * emit corrupts subsequent branch/jump offsets and surfaces as
          * STATUS_HEAP_CORRUPTION (0xC0000374) at runtime on Win64. */
-        xr_log_warning("x64-cg", "RT opcode %d should use CALL_C path", ins->op);
+        xr_log_debug("x64-cg", "RT opcode %d fell through to NOP (expected CALL_C)", ins->op);
         x64_nop(&ctx->buf);
     }
 }
