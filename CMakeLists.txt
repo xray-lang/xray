@@ -553,6 +553,16 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     )
 endif()
 
+# Disable gc-sections for worker and JIT files to prevent linker from
+# removing functions that are called indirectly (e.g., via function pointers)
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT MSVC)
+    set_source_files_properties(
+        src/coro/xworker_sched.c
+        src/jit/xm_jit.c
+        PROPERTIES COMPILE_OPTIONS "-fno-function-sections"
+    )
+endif()
+
 # Expose AOT runtime header path (xrt_vm.h, xrt_common.h) for cmd_build's C compiler
 add_compile_definitions(XRT_AOT_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/aot")
 
