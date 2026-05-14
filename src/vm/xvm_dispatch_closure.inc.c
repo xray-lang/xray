@@ -71,6 +71,40 @@ vmcase(OP_SETSHARED) {
     vmbreak;
 }
 
+vmcase(OP_GETGLOBAL) {
+    /* OP_GETGLOBAL: name-keyed top-level read.
+     * Bx is a constant-pool index pointing to an interned XrString
+     * with the binding's source-level name; the runtime looks up
+     * isolate->vm.globals by that name.  Unbound names read as null
+     * (matches the analyzer's contract that unresolved top-level
+     * references are diagnosed at compile time, so a runtime miss is
+     * either a stale closure or a deliberate optional probe). */
+    int a = GETARG_A(i);
+    int kx = GETARG_Bx(i);
+    XrValue name_val = PROTO_CONST_FAST(cl->proto, kx);
+    if (XR_IS_STRING(name_val) && isolate->vm.globals) {
+        R(a) = xr_global_dict_get(isolate->vm.globals, XR_TO_STRING(name_val));
+    } else {
+        R(a) = xr_null();
+    }
+    vmbreak;
+}
+
+vmcase(OP_SETGLOBAL) {
+    /* OP_SETGLOBAL: name-keyed top-level write.  Companion of
+     * OP_GETGLOBAL.  Insert-or-overwrite under the interned name in
+     * Bx.  Unlike OP_SETSHARED there is no per-slot decref dance:
+     * the old XrValue lives in a GC-tracked map node and is reclaimed
+     * on the next sweep when no longer referenced. */
+    int a = GETARG_A(i);
+    int kx = GETARG_Bx(i);
+    XrValue name_val = PROTO_CONST_FAST(cl->proto, kx);
+    XR_DCHECK(XR_IS_STRING(name_val), "OP_SETGLOBAL: K[Bx] must be a string");
+    XR_DCHECK(isolate->vm.globals != NULL, "OP_SETGLOBAL: globals dict not initialized");
+    xr_global_dict_set(isolate->vm.globals, XR_TO_STRING(name_val), R(a));
+    vmbreak;
+}
+
 vmcase(OP_CLOSURE) {
     /* OP_CLOSURE: create closure, populate upvals[] from proto descriptors.
     ** All captures are BY_VALUE: const → raw value, let → cell ref.

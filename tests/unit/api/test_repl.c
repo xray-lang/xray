@@ -23,6 +23,9 @@
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../../src/runtime/xisolate_api.h"
+#include "../../../src/runtime/xglobal_dict.h"
+#include "../../../src/runtime/xexec_state.h"
+#include "../../../src/runtime/xisolate_internal.h"
 #include "xrepl.h"
 #include "xcli_isolate.h"
 #include <stdio.h>
@@ -44,6 +47,78 @@ static int find_symbol(const XrReplSymbolTable *t, const char *name) {
             return i;
     }
     return -1;
+}
+
+/* ========== Globals Dict API (Phase 1 of REPL × top-level globals migration) ==========
+ *
+ * The dict is the per-isolate name-keyed top-level binding store.
+ * These tests exercise the C API directly, ahead of the lowering
+ * pipeline switch (Phase 2) — they prove the runtime store is sound
+ * before anything starts emitting OP_GETGLOBAL / OP_SETGLOBAL. */
+
+TEST(globals_dict_initialized_with_isolate) {
+    /* Every isolate constructed through the standard path must have
+     * a non-NULL globals dict ready for use right after init.  This
+     * is the structural invariant the new opcodes rely on. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    ASSERT_NOT_NULL(iso->vm.globals);
+    ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 0);
+    xray_isolate_delete(iso);
+}
+
+TEST(globals_dict_set_get_round_trip) {
+    /* Set a binding under a name; get returns the same XrValue.
+     * Uses xr_compile_time_intern so the key is a real interned
+     * XrString, mirroring the runtime contract for OP_SETGLOBAL. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrString *name = xr_compile_time_intern(iso, "answer", 6);
+    ASSERT_NOT_NULL(name);
+    XrValue v;
+    v.tag = 0;
+    v.i = 42;
+    xr_global_dict_set(iso->vm.globals, name, v);
+
+    ASSERT_TRUE(xr_global_dict_has(iso->vm.globals, name));
+    ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 1);
+    XrValue out = xr_global_dict_get(iso->vm.globals, name);
+    ASSERT_EQ_INT((int) out.i, 42);
+
+    xray_isolate_delete(iso);
+}
+
+TEST(globals_dict_overwrite_keeps_count) {
+    /* Reassigning the same name must not grow the dict — the binding
+     * is identified by name, the integer count is the # of distinct
+     * names. */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrString *name = xr_compile_time_intern(iso, "x", 1);
+    XrValue a = {.i = 1, .tag = 0};
+    XrValue b = {.i = 2, .tag = 0};
+    xr_global_dict_set(iso->vm.globals, name, a);
+    xr_global_dict_set(iso->vm.globals, name, b);
+
+    ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 1);
+    XrValue out = xr_global_dict_get(iso->vm.globals, name);
+    ASSERT_EQ_INT((int) out.i, 2);
+
+    xray_isolate_delete(iso);
+}
+
+TEST(globals_dict_missing_key_returns_null) {
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrString *name = xr_compile_time_intern(iso, "ghost", 5);
+    ASSERT_FALSE(xr_global_dict_has(iso->vm.globals, name));
+    XrValue out = xr_global_dict_get(iso->vm.globals, name);
+    ASSERT_TRUE(XR_IS_NULL(out));
+
+    xray_isolate_delete(iso);
 }
 
 /* ========== Profile Invariants ========== */
@@ -606,6 +681,12 @@ TEST(repl_print_type_simple_expression) {
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
+RUN_TEST_SUITE("Globals Dict");
+RUN_TEST(globals_dict_initialized_with_isolate);
+RUN_TEST(globals_dict_set_get_round_trip);
+RUN_TEST(globals_dict_overwrite_keeps_count);
+RUN_TEST(globals_dict_missing_key_returns_null);
+
 RUN_TEST_SUITE("REPL Profile");
 RUN_TEST(repl_profile_disables_jit);
 RUN_TEST(repl_profile_clears_each_call);

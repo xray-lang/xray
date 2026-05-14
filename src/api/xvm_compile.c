@@ -35,6 +35,7 @@
 #include "../jit/xm_jit.h"
 #endif
 #include "../runtime/object/xstring.h"
+#include "../runtime/xglobal_dict.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -223,6 +224,14 @@ static void init_globals(XrayIsolate *isolate) {
 
     xr_shared_array_init(&isolate->vm.shared);
 
+    /* Name-keyed top-level binding dict.  XrMap allocation lives on
+     * the GC heap, so the main coroutine — already constructed in
+     * xray_isolate_new before xr_vm_init — must exist here. */
+    XR_DCHECK(isolate->main_coro != NULL, "init_globals: main_coro must precede globals dict");
+    isolate->vm.globals = (XrGlobalDict *) xr_malloc(sizeof(XrGlobalDict));
+    XR_CHECK(isolate->vm.globals != NULL, "init_globals: dict allocation failed");
+    xr_global_dict_init(isolate->vm.globals, isolate->main_coro);
+
     // Core class registration is done in isolate_init_full() (xisolate_full.c)
     // because isolate->core is NULL at this point (before init_extra callback).
 
@@ -317,6 +326,14 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
     if (isolate->vm.strings_map != NULL) {
         xr_hashmap_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;
+    }
+
+    /* Globals dict struct is xr_malloc'd; the underlying XrMap nodes
+     * are GC-owned and reclaimed by xr_gc_cleanup later. */
+    if (isolate->vm.globals != NULL) {
+        xr_global_dict_destroy(isolate->vm.globals);
+        xr_free(isolate->vm.globals);
+        isolate->vm.globals = NULL;
     }
 
     // Cleanup coroutine state

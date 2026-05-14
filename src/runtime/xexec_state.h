@@ -151,7 +151,10 @@ typedef struct XrVMState {
     // Builtin globals (read-only, predefined) + shared variables (user-defined)
     XrValue builtins[XR_GLOBALS_MAX];  // predefined builtin globals (Reflect, Array, etc.)
     int builtin_count;
-    XrSharedArray shared;  // dynamic shared variable storage
+    XrSharedArray shared;  // dynamic shared variable storage (legacy slot-indexed top-level;
+                           // being phased out in favor of `globals` below)
+    struct XrGlobalDict *globals;  // name-keyed top-level binding dict (single source of truth
+                                   // post-migration; coexists with `shared` until Phase 3)
 
     // GC state
     size_t bytes_allocated;  // total allocated bytes
