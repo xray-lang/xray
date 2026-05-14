@@ -26,6 +26,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../coro/xworker.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
