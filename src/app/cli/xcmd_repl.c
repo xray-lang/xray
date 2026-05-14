@@ -619,11 +619,11 @@ static char *read_line(ReplState *state, bool is_continuation) {
 
 #ifdef HAS_READLINE
     char *line = readline(prompt);
-    // Only add single-line (non-continuation) input to history here.
-    // Multi-line input is added as a whole after completion in the main loop.
-    if (!is_continuation && line && *line) {
-        add_history(line);
-    }
+    /* History add is deferred to the main loop, which calls
+     * add_history(state.buffer) once the full multi-line input is
+     * structurally complete.  Pressing ↑ then retrieves the entire
+     * block in one go, which readline displays and re-edits sanely
+     * even across newlines. */
     return line;
 #else
     printf("%s", prompt);
@@ -760,6 +760,15 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
 
         // Check if input is complete
         if (is_input_complete(&state)) {
+#ifdef HAS_READLINE
+            /* Record the whole buffer (possibly multi-line) as one
+             * history entry.  Empty buffers are skipped so users do
+             * not see blank entries when they press Enter on an
+             * empty prompt. */
+            if (state.buffer_len > 0) {
+                add_history(state.buffer);
+            }
+#endif
             execute_code(&state, state.buffer);
             reset_buffer(&state);
         }
