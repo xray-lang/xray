@@ -992,8 +992,8 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // the analyzer can read it without going through any backchannel
     // on AstNode itself.
     AstNode *node = xr_ast_type_alias(parser->X, alias_name, NULL, NULL, NULL, 0, line);
+    xr_free(alias_name);  // xr_ast_type_alias copies the name, so we can free the original
     if (!node) {
-        xr_free(alias_name);
         return NULL;
     }
     node->as.type_alias.resolved_type = type_definition;

@@ -638,7 +638,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
+    if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     ArrayLiteralNode *arr = &node->as.array_literal;
@@ -677,7 +677,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
+    if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_map(ctx->analyzer->isolate, xr_type_new_unknown(NULL),
                                xr_type_new_unknown(NULL));
 
@@ -1226,7 +1226,7 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
 }
 
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
+    if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_function(ctx->analyzer->isolate, NULL, 0, xr_type_new_unknown(NULL),
                                     false);
 
@@ -1593,7 +1593,7 @@ void check_coro_capture(XaInferContext *ctx, AstNode *node, int line) {
 }
 
 XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
+    if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_task(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     GoExprNode *go = &node->as.go_expr;

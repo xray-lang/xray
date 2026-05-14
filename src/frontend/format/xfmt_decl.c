@@ -177,6 +177,10 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                 prop_name = prop_name + 4;
             }
 
+            if (!prop_name) {
+                continue;  // Skip if property name is NULL
+            }
+
             // Find the matching setter (if we are the getter) or skip if
             // we already emitted this property from a preceding getter
             MethodDeclNode *getter = m->is_getter ? m : NULL;
@@ -189,7 +193,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
                     const char *oname = other->name;
                     if (strncmp(oname, "get:", 4) == 0 || strncmp(oname, "set:", 4) == 0)
                         oname = oname + 4;
-                    if (strcmp(oname, prop_name) == 0) {
+                    if (oname && strcmp(oname, prop_name) == 0) {
                         if (other->is_getter)
                             getter = other;
                         if (other->is_setter)

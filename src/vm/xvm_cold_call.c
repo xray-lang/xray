@@ -187,6 +187,10 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
             return VM_COLD_BREAK;
         } else if (result == XR_CHAN_BLOCK) {
             // Blocked: set timeout timer
+            if (!current) {
+                base[a] = xr_bool(false);
+                return VM_COLD_BREAK;
+            }
             current->send_value = send_val;
             current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
             XrWorker *worker = xr_current_worker();
@@ -245,6 +249,11 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
             return VM_COLD_BREAK;
         } else if (result == XR_CHAN_BLOCK) {
             // Blocked: set timeout timer
+            if (!current) {
+                base[a] = xr_null();
+                base[a + 1] = xr_bool(false);
+                return VM_COLD_BREAK;
+            }
             current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
             XrWorker *worker = xr_current_worker();
             if (worker) {

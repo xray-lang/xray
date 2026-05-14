@@ -17,6 +17,8 @@
 /* ========== Inline Cache Table Operations ========== */
 
 static void ic_method_init(XrICMethod *ic) {
+    if (!ic)
+        return;
     memset(ic->entries, 0, sizeof(ic->entries));
     ic->count = 0;
     ic->is_megamorphic = 0;
