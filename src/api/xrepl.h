@@ -9,14 +9,10 @@
  *
  * KEY CONCEPT:
  *   Persistent symbol table that survives across REPL compilation units.
- *   Maps variable names to absolute shared array indices, enabling
- *   incremental compilation without replaying history code.
- *
- * WHY THIS DESIGN:
- *   - Each REPL input compiles as independent unit (fresh XrCompilerContext)
- *   - Without this, new compilations cannot resolve names from prior inputs
- *   - Symbol table seeds each new compiler context with prior definitions
- *   - shared_offset=0 in REPL mode: all indices are absolute
+ *   Records which names exist and whether they are const, so each new
+ *   compiler context can resolve names from prior inputs.
+ *   Runtime values live in the globals dict (OP_GETGLOBAL/OP_SETGLOBAL);
+ *   the symbol table is metadata only.
  */
 
 #ifndef XREPL_H
@@ -36,7 +32,6 @@ typedef struct XrProto XrProto;
 
 typedef struct XrReplSymbol {
     XrString *name;
-    int shared_index;  // absolute index in isolate->vm.shared
     bool is_const;
 } XrReplSymbol;
 
@@ -88,8 +83,8 @@ XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
 
 /*
  * Compile source for REPL incremental execution.
- * - Seeds compiler context from isolate->repl_symbols
- * - Uses shared_offset=0 (absolute indices)
+ * - Seeds compiler context from isolate->repl_symbols (name metadata)
+ * - Emits OP_GETGLOBAL/OP_SETGLOBAL for top-level variable access
  * - Updates repl_symbols with new definitions
  * Returns compiled proto, or NULL on error.
  */
@@ -100,9 +95,9 @@ XR_FUNC XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source);
 /*
  * Pretty-print every top-level binding currently visible to the REPL.
  * One line per symbol: "name : typeName = formatted value".  Reads
- * from isolate->repl_symbols and isolate->vm.shared.  Cheap, no
- * compilation or execution side effects.  Safe to call before the
- * first compile (prints nothing).
+ * names from isolate->repl_symbols, values from the globals dict.
+ * Cheap, no compilation or execution side effects.  Safe to call
+ * before the first compile (prints nothing).
  */
 XR_FUNC void xr_repl_print_vars(XrayIsolate *isolate);
 
