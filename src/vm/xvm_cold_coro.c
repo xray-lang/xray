@@ -384,6 +384,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                 int64_t value;
             } TopEntry;
             TopEntry *entries = xr_malloc(sizeof(TopEntry) * VM_CORO_COLLECT_MAX);
+            memset(entries, 0, sizeof(TopEntry) * VM_CORO_COLLECT_MAX);
 
             VmCoroEntry *raw = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
             int count = vm_collect_all_coros(isolate, raw, VM_CORO_COLLECT_MAX);

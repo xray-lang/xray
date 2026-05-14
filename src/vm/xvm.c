@@ -500,6 +500,9 @@ startfunc:
     // Defensive assertion: frame count must be valid
     VM_DCHECK_FRAME_COUNT(VM_FRAME_COUNT, XR_FRAMES_MAX);
 
+    if (VM_FRAME_COUNT == 0) {
+        VM_RUNTIME_ERROR(XR_ERR_RUNTIME, "Invalid frame count");
+    }
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
     cl = ci->closure;
     XR_DCHECK(cl != NULL && cl->proto != NULL, "frame closure must be valid");

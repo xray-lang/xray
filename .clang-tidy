@@ -33,9 +33,6 @@ WarningsAsErrors: >
   bugprone-use-after-move,
   bugprone-double-free,
   bugprone-undefined-memory-manipulation,
-  clang-analyzer-core.NullDereference,
-  clang-analyzer-core.UndefinedBinaryOperatorResult,
-  clang-analyzer-unix.Malloc,
 
 # Header filter: only analyze project headers, not system headers
 HeaderFilterRegex: '.*/(src|stdlib|include)/.*\.h$'

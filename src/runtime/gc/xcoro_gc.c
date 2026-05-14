@@ -675,6 +675,8 @@ static void mark_struct_string_fields(XrCoroGC *gc, XrVMContext *vm_ctx) {
         }
 
         XrValue *stack = vm_ctx->stack;
+        if (!stack)
+            continue;
         for (size_t si = base; si < frame_end; si++) {
             XrValue v = stack[si];
             if (v.tag != XR_TAG_STRUCT_REF || v.ext != 0)
