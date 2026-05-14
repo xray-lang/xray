@@ -144,6 +144,10 @@ static inline const char *xi_op_name(uint16_t op) {
             return "GET_SHARED";
         case XI_SET_SHARED:
             return "SET_SHARED";
+        case XI_GET_GLOBAL:
+            return "GET_GLOBAL";
+        case XI_SET_GLOBAL:
+            return "SET_GLOBAL";
         case XI_PRINT:
             return "PRINT";
         case XI_GO:

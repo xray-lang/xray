@@ -144,6 +144,14 @@ typedef struct XiLower {
     /* Whether this lowering context is for a top-level program */
     bool is_program;
 
+    /* REPL incremental compilation flag.  When true and is_program is
+     * true, top-level variable / function / class bindings lower to
+     * XI_GET_GLOBAL / XI_SET_GLOBAL (name-keyed dict) instead of the
+     * slot-indexed XI_GET_SHARED / XI_SET_SHARED.  Inherited by child
+     * function lowering contexts so nested closures resolve free
+     * top-level names through the dict as well. */
+    bool repl_mode;
+
     /* Nesting depth of try-catch blocks.  When > 0, throw keeps the
      * block alive (PLAIN) so SSA phi nodes correctly include variable
      * modifications made before the throw. */
@@ -177,5 +185,12 @@ XR_FUNC XiFunc *xi_lower_func(struct AstNode *func_node, struct XaAnalyzer *anal
  */
 XR_FUNC XiFunc *xi_lower_program(struct AstNode *program_node, struct XaAnalyzer *analyzer,
                                  struct XrayIsolate *isolate);
+
+/* Same as xi_lower_program but enables REPL incremental compilation.
+ * When repl_mode is true, top-level name resolution / store goes
+ * through the name-keyed XrGlobalDict instead of the slot-indexed
+ * XrSharedArray; cross-input bindings resolve at runtime by name. */
+XR_FUNC XiFunc *xi_lower_program_ex(struct AstNode *program_node, struct XaAnalyzer *analyzer,
+                                    struct XrayIsolate *isolate, bool repl_mode);
 
 #endif  // XI_LOWER_H

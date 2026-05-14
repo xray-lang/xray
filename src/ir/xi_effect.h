@@ -89,6 +89,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_INDEX_GET:
         case XI_JSON_GET_F:
         case XI_GET_SHARED:
+        case XI_GET_GLOBAL:
         case XI_LOAD_UPVAL:
         case XI_ITER_VALID:
         case XI_GET_BUILTIN:
@@ -102,6 +103,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_JSON_INIT_F:
         case XI_JSON_SET_F:
         case XI_SET_SHARED:
+        case XI_SET_GLOBAL:
         case XI_STORE_UPVAL:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
 

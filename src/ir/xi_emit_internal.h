@@ -208,6 +208,8 @@ XR_FUNC void xi_emit_load_upval(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_store_upval(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_get_shared(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_set_shared(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_get_global(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_get_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, uint8_t dst);

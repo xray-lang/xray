@@ -1245,13 +1245,22 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     }
     xi_lower_braun_write(l, var_id, l->cur_block, init_val);
 
-    /* For program-level shared variables, also store into shared array */
+    /* For program-level variables, also store into backing store */
     if (l->is_program && l->shared_map[var_id] >= 0) {
-        XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-        if (store) {
-            store->args[0] = init_val;
-            store->aux_int = l->shared_map[var_id];
-            store->flags |= XI_FLAG_SIDE_EFFECT;
+        if (l->repl_mode) {
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            if (store) {
+                store->args[0] = init_val;
+                store->aux = (void *) l->vars[var_id].name;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        } else {
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = init_val;
+                store->aux_int = l->shared_map[var_id];
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
         }
     }
 }
@@ -1650,13 +1659,24 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_create(l, imp->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
-        /* Store into shared array so nested functions can access via XI_GET_SHARED */
+        /* Store into backing store so nested functions can access */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-            if (store) {
-                store->args[0] = v;
-                store->aux_int = l->shared_map[var_id];
-                store->flags |= XI_FLAG_SIDE_EFFECT;
+            if (l->repl_mode) {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux = (void *) l->vars[var_id].name;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            } else {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux_int = l->shared_map[var_id];
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
             }
         }
         return;
@@ -1704,13 +1724,24 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
-        /* Store into shared array so nested functions can access via XI_GET_SHARED */
+        /* Store into backing store so nested functions can access */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-            if (store) {
-                store->args[0] = v;
-                store->aux_int = l->shared_map[var_id];
-                store->flags |= XI_FLAG_SIDE_EFFECT;
+            if (l->repl_mode) {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux = (void *) l->vars[var_id].name;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            } else {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux_int = l->shared_map[var_id];
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
             }
         }
     }

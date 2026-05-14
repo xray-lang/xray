@@ -323,13 +323,19 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
     uint32_t sid = node->as.variable.symbol_id;
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
-        /* Program-level shared variables must be read from the shared array
-         * because called functions can modify them via XI_SET_SHARED,
+        /* Program-level top-level variables must be read from the
+         * backing store because called functions can modify them,
          * which bypasses the local SSA and leaves it stale. */
         if (l->is_program && l->shared_map[var_id] >= 0) {
             struct XrType *type = l->vars[var_id].type;
             if (!type)
                 type = l->type_any;
+            if (l->repl_mode) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, type, 0);
+                if (v)
+                    v->aux = (void *) l->vars[var_id].name;
+                return v;
+            }
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, type, 0);
             if (v)
                 v->aux_int = l->shared_map[var_id];
@@ -338,16 +344,30 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         return xi_lower_braun_read(l, var_id, l->cur_block);
     }
 
-    /* Check for program-level shared variable (supports forward references) */
-    struct XrType *shared_type = NULL;
-    int shared_idx = xi_lower_find_shared(l, sid, name, &shared_type);
-    if (shared_idx >= 0) {
-        if (!shared_type)
-            shared_type = l->type_any;
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, shared_type, 0);
-        if (v)
-            v->aux_int = shared_idx;
-        return v;
+    /* Check for program-level variable from a nested scope.  In REPL mode
+     * the name-keyed globals dict is used; otherwise shared-slot index. */
+    if (l->repl_mode) {
+        struct XrType *gt = NULL;
+        const char *gname = xi_lower_find_global_name(l, sid, name, &gt);
+        if (gname) {
+            if (!gt)
+                gt = l->type_any;
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, gt, 0);
+            if (v)
+                v->aux = (void *) gname;
+            return v;
+        }
+    } else {
+        struct XrType *shared_type = NULL;
+        int shared_idx = xi_lower_find_shared(l, sid, name, &shared_type);
+        if (shared_idx >= 0) {
+            if (!shared_type)
+                shared_type = l->type_any;
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, shared_type, 0);
+            if (v)
+                v->aux_int = shared_idx;
+            return v;
+        }
     }
 
     /* Not found locally — try upvalue capture from enclosing scope */
@@ -444,28 +464,52 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
             }
         }
 
-        /* If this is a program-level shared variable, also update shared array */
+        /* If this is a program-level shared variable, also update backing store */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-            if (store) {
-                store->args[0] = val;
-                store->aux_int = l->shared_map[var_id];
-                store->flags |= XI_FLAG_SIDE_EFFECT;
+            if (l->repl_mode) {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                if (store) {
+                    store->args[0] = val;
+                    store->aux = (void *) l->vars[var_id].name;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            } else {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                if (store) {
+                    store->args[0] = val;
+                    store->aux_int = l->shared_map[var_id];
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
             }
         }
         return val;
     }
 
-    /* Check for program-level shared variable from nested scope */
-    int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
-    if (shared_idx >= 0) {
-        XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-        if (store) {
-            store->args[0] = val;
-            store->aux_int = shared_idx;
-            store->flags |= XI_FLAG_SIDE_EFFECT;
+    /* Check for program-level variable from nested scope */
+    if (l->repl_mode) {
+        const char *gname = xi_lower_find_global_name(l, sid, name, NULL);
+        if (gname) {
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            if (store) {
+                store->args[0] = val;
+                store->aux = (void *) gname;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+            return val;
         }
-        return val;
+    } else {
+        int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
+        if (shared_idx >= 0) {
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            if (store) {
+                store->args[0] = val;
+                store->aux_int = shared_idx;
+                store->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+            return val;
+        }
     }
 
     /* Try upvalue store for captured mutable variable */
@@ -1424,15 +1468,26 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
         if (var_id >= 0 && var_id < l->var_count && l->vars[var_id].hoisted)
             v->flags |= XI_FLAG_SIDE_EFFECT;
 
-        /* For program-level named functions, also store into shared array
-         * so nested functions can access via XI_GET_SHARED (forward refs). */
+        /* For program-level named functions, also store into backing
+         * store so nested functions can access (forward refs). */
         if (l->is_program && l->shared_map[var_id] >= 0) {
             int slot = l->shared_map[var_id];
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-            if (store) {
-                store->args[0] = v;
-                store->aux_int = slot;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
+            if (l->repl_mode) {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux = (void *) l->vars[var_id].name;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            } else {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux_int = slot;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
             }
             /* Track function → shared slot for module export metadata */
             if (slot >= 0 && slot < XI_LOWER_MAX_VARS)
@@ -2399,11 +2454,20 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     xi_lower_braun_write(l, var_id, l->cur_block, cv);
 
     if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
-        XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-        if (ss) {
-            ss->args[0] = cv;
-            ss->aux_int = l->shared_map[var_id];
-            ss->flags |= XI_FLAG_SIDE_EFFECT;
+        if (l->repl_mode) {
+            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            if (ss) {
+                ss->args[0] = cv;
+                ss->aux = (void *) l->vars[var_id].name;
+                ss->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        } else {
+            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            if (ss) {
+                ss->args[0] = cv;
+                ss->aux_int = l->shared_map[var_id];
+                ss->flags |= XI_FLAG_SIDE_EFFECT;
+            }
         }
     }
 }

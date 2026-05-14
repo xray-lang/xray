@@ -113,6 +113,25 @@ XR_FUNC int xi_lower_find_shared(XiLower *l, uint32_t symbol_id, const char *nam
     return -1;
 }
 
+/* Walk the parent chain to find a program-level REPL global variable
+ * by name.  Returns the arena-owned name string if found (for use as
+ * XI_GET_GLOBAL / XI_SET_GLOBAL aux), or NULL if not found.
+ * Only meaningful when repl_mode is active. */
+XR_FUNC const char *xi_lower_find_global_name(XiLower *l, uint32_t symbol_id, const char *name,
+                                              struct XrType **out_type) {
+    for (XiLower *p = l->parent; p; p = p->parent) {
+        if (!p->is_program || !p->repl_mode)
+            continue;
+        int var_id = xi_lower_var_find(p, symbol_id, name);
+        if (var_id >= 0 && p->shared_map[var_id] >= 0) {
+            if (out_type)
+                *out_type = p->vars[var_id].type;
+            return p->vars[var_id].name;
+        }
+    }
+    return NULL;
+}
+
 /* ========== Upvalue Resolution ========== */
 
 /*
@@ -424,6 +443,10 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
     l.parent = parent_ctx;
+    /* Inherit repl_mode from the enclosing program / function so nested
+     * closures resolve free top-level names through the globals dict. */
+    if (parent_ctx)
+        l.repl_mode = parent_ctx->repl_mode;
 
     /* Determine return type.  fdecl->return_type is an XrTypeRef (AST
      * syntax); resolve it to a runtime XrType* via the analyzer's
@@ -883,12 +906,18 @@ static void build_module_metadata(XiLower *l) {
 
 XR_FUNC XiFunc *xi_lower_program(AstNode *program_node, struct XaAnalyzer *analyzer,
                                  struct XrayIsolate *isolate) {
+    return xi_lower_program_ex(program_node, analyzer, isolate, false);
+}
+
+XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *analyzer,
+                                    struct XrayIsolate *isolate, bool repl_mode) {
     XR_CHECK(program_node != NULL, "xi_lower_program: node is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_program: analyzer is NULL");
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
     l.is_program = true;
+    l.repl_mode = repl_mode;
 
     l.func = xi_func_new("<main>", l.type_void);
     if (!l.func) {

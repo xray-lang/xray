@@ -38,6 +38,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
     XiLower ml;
     xi_lower_init(&ml, l->analyzer, l->isolate);
     ml.parent = l;
+    ml.repl_mode = l->repl_mode;
 
     ml.func = xi_func_new(m->name, m->return_type ? m->return_type : ml.type_void);
     if (!ml.func) {
@@ -290,14 +291,23 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     int var_id = xi_lower_var_create(l, cd->symbol_id, cd->name, l->type_any);
     xi_lower_braun_write(l, var_id, l->cur_block, v);
 
-    /* Top-level classes: also store into shared array for cross-scope access */
+    /* Top-level classes: also store into backing store for cross-scope access */
     if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
         int slot = l->shared_map[var_id];
-        XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
-        if (st) {
-            st->args[0] = v;
-            st->aux_int = slot;
-            st->flags |= XI_FLAG_SIDE_EFFECT;
+        if (l->repl_mode) {
+            XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            if (st) {
+                st->args[0] = v;
+                st->aux = (void *) l->vars[var_id].name;
+                st->flags |= XI_FLAG_SIDE_EFFECT;
+            }
+        } else {
+            XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            if (st) {
+                st->args[0] = v;
+                st->aux_int = slot;
+                st->flags |= XI_FLAG_SIDE_EFFECT;
+            }
         }
         /* Track class → shared slot for module export metadata */
         if (slot >= 0 && slot < XI_LOWER_MAX_VARS)

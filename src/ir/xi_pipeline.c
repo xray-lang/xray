@@ -259,7 +259,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     /* Restore previous arena */
     xr_isolate_set_current_arena(isolate, saved_arena);
 
-    XiFunc *ir = xi_lower_program(program_node, analyzer, isolate);
+    XiFunc *ir = xi_lower_program_ex(program_node, analyzer, isolate, cfg->repl_mode);
 
     /* Canonicalization guarantees: advance stage and invariant mask
      * for the root and all nested child functions. */
