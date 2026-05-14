@@ -270,10 +270,12 @@ TEST(repl_auto_echo_compiles_bare_expression) {
     xray_isolate_delete(iso);
 }
 
-TEST(repl_auto_echo_null_does_not_register_symbol) {
-    /* The trailing-expression rewrite must not create any binding;
-     * only the wrapping print statement.  The symbol table stays
-     * empty when the only "input" is a bare expression. */
+TEST(repl_auto_echo_creates_it_binding) {
+    /* The trailing-expression rewrite must bind the result to `it`
+     * (GHCi convention) so the user can chain off the previous
+     * value.  A bare `null` echo therefore creates exactly one
+     * symbol: `it`, with value null.  The print itself is
+     * suppressed via skip_null. */
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
@@ -282,11 +284,45 @@ TEST(repl_auto_echo_null_does_not_register_symbol) {
     xr_execute(iso, p);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
-    /* Table may have been allocated but should hold zero symbols. */
-    if (t)
-        ASSERT_EQ_INT(t->count, 0);
+    ASSERT_NOT_NULL(t);
+    ASSERT_EQ_INT(t->count, 1);
+    ASSERT_STR_EQ(xr_repl_symbol_cname(&t->symbols[0]), "it");
 
     xr_free_code(iso, p);
+    xray_isolate_delete(iso);
+}
+
+TEST(repl_auto_echo_it_chaining) {
+    /* `it` carries across REPL inputs, so `1 + 2` followed by
+     * `it * 10` evaluates `it` against the prior result (3). */
+    XrayIsolate *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *p1 = xr_repl_compile(iso, "1 + 2\n");
+    ASSERT_NOT_NULL(p1);
+    xr_execute(iso, p1);
+
+    /* Subsequent compile must use AST_ASSIGNMENT for `it` (not a
+     * re-declaration), so it must succeed without analyzer
+     * "redeclared name" errors. */
+    XrProto *p2 = xr_repl_compile(iso, "it * 10\n");
+    ASSERT_NOT_NULL(p2);
+    xr_execute(iso, p2);
+
+    XrReplSymbolTable *t = xr_repl_symbols_of(iso);
+    int idx = find_symbol(t, "it");
+    ASSERT_GE(idx, 0);
+    /* Still exactly one `it` entry after the second echo. */
+    int count_it = 0;
+    for (int i = 0; i < t->count; i++) {
+        const char *n = xr_repl_symbol_cname(&t->symbols[i]);
+        if (n && strcmp(n, "it") == 0)
+            count_it++;
+    }
+    ASSERT_EQ_INT(count_it, 1);
+
+    xr_free_code(iso, p2);
+    xr_free_code(iso, p1);
     xray_isolate_delete(iso);
 }
 
@@ -371,7 +407,8 @@ RUN_TEST(repl_redefinition_reuses_slot);
 
 RUN_TEST_SUITE("REPL Auto-echo");
 RUN_TEST(repl_auto_echo_compiles_bare_expression);
-RUN_TEST(repl_auto_echo_null_does_not_register_symbol);
+RUN_TEST(repl_auto_echo_creates_it_binding);
+RUN_TEST(repl_auto_echo_it_chaining);
 
 RUN_TEST_SUITE("REPL Introspection");
 RUN_TEST(repl_print_vars_empty_is_safe);

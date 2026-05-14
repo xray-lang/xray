@@ -222,6 +222,29 @@ static bool is_imperative_call_name(const char *name) {
     return strcmp(name, "print") == 0 || strcmp(name, "println") == 0 || strcmp(name, "dump") == 0;
 }
 
+/* Name of the implicit REPL "last result" binding.  GHCi convention;
+ * `_` is taken by the match-wildcard token in the xray lexer so cannot
+ * be used as an identifier.  Setting this on every auto-echoed
+ * expression lets the user chain off the previous result: `1 + 2`
+ * then `it * 10` yields 30. */
+#define REPL_IT_NAME "it"
+
+/* True iff the persistent REPL symbol table already has a binding for
+ * `it` — checked once per echo to decide between AST_VAR_DECL (first
+ * time) and AST_ASSIGNMENT (subsequent times).  Avoids re-declaration
+ * errors from the analyzer / lowerer. */
+static bool repl_has_it_binding(XrayIsolate *isolate) {
+    if (!isolate || !isolate->repl_symbols)
+        return false;
+    XrReplSymbolTable *t = isolate->repl_symbols;
+    for (int i = 0; i < t->count; i++) {
+        XrString *name = t->symbols[i].name;
+        if (name && name->data && strcmp(name->data, REPL_IT_NAME) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
     if (!program || program->type != AST_PROGRAM)
         return;
@@ -255,24 +278,57 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
             break;
     }
 
-    /* Re-install the program arena so xr_ast_print_stmt's allocations
-     * (node + exprs array) share the AST lifetime. */
+    /* Re-install the program arena so the new node allocations share
+     * the AST lifetime.  Restored before returning regardless of
+     * partial-failure path. */
     struct XrArena *saved = xr_isolate_get_current_arena(isolate);
     xr_isolate_set_current_arena(isolate, program->as.program.arena);
 
-    AstNode *args[1] = {expr};
-    AstNode *synth = xr_ast_print_stmt(isolate, args, 1, expr->line);
+    /* Build `it = <expr>` or `let it = <expr>` depending on whether
+     * the binding already exists.  Using assignment on subsequent
+     * echoes avoids analyzer-side "name already declared" errors that
+     * would fire for repeated `let it = ...`. */
+    AstNode *bind = NULL;
+    if (repl_has_it_binding(isolate)) {
+        bind = xr_ast_assignment(isolate, REPL_IT_NAME, expr, expr->line);
+    } else {
+        bind = xr_ast_var_decl(isolate, REPL_IT_NAME, expr, /*is_const=*/false, expr->line);
+    }
+
+    /* Print uses a fresh variable reference (not the original expr),
+     * so side effects in `expr` happen exactly once via `bind`. */
+    AstNode *it_ref = xr_ast_variable(isolate, REPL_IT_NAME, expr->line);
+    AstNode *print_args[1] = {it_ref};
+    AstNode *synth = (it_ref) ? xr_ast_print_stmt(isolate, print_args, 1, expr->line) : NULL;
 
     xr_isolate_set_current_arena(isolate, saved);
 
-    if (synth) {
-        /* Auto-echo must stay quiet when the expression evaluates to
-         * null — matching Python / Node.js REPL behaviour.  Setting
-         * skip_null lets the VM evaluate the expression (so side
-         * effects still fire) but print nothing for null values. */
-        synth->as.print_stmt.skip_null = true;
-        stmts[count - 1] = synth;
+    if (!bind || !synth) {
+        /* Fallback to legacy behaviour (print the expression directly)
+         * so a node-allocation failure does not regress to silent
+         * dropping of the trailing expression. */
+        xr_isolate_set_current_arena(isolate, program->as.program.arena);
+        AstNode *args[1] = {expr};
+        AstNode *fb = xr_ast_print_stmt(isolate, args, 1, expr->line);
+        xr_isolate_set_current_arena(isolate, saved);
+        if (fb) {
+            fb->as.print_stmt.skip_null = true;
+            stmts[count - 1] = fb;
+        }
+        return;
     }
+
+    /* Auto-echo must stay quiet when the expression evaluates to null
+     * — matching Python / Node.js REPL behaviour.  skip_null lets the
+     * VM dispatch the binding (so side effects still fire) but print
+     * nothing for null values.  `it` is always updated regardless. */
+    synth->as.print_stmt.skip_null = true;
+
+    /* Replace the trailing expression statement with the binding and
+     * append the print as a new statement.  xr_ast_program_add grows
+     * the program's statements array as needed. */
+    stmts[count - 1] = bind;
+    xr_ast_program_add(isolate, program, synth);
 }
 
 /* ========== REPL Input Completeness Check ========== */
@@ -442,25 +498,20 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
 
 /* ========== Interactive Inspection ========== */
 
-/* Helper: truncate long value formatting to keep `.vars` rows readable.
- * Returns the buffer; if src exceeds max_len, the tail is replaced with
- * "...".  Buffer must be at least max_len + 1 bytes long. */
-static const char *repl_truncate_value(char *buf, int buf_size, const char *src) {
-    int n = (int) strlen(src);
-    if (n + 1 <= buf_size) {
-        memcpy(buf, src, (size_t) (n + 1));
-        return buf;
-    }
-    int cut = buf_size - 4;  // room for "..." + NUL
-    if (cut < 0)
-        cut = 0;
-    memcpy(buf, src, (size_t) cut);
-    buf[cut] = '.';
-    buf[cut + 1] = '.';
-    buf[cut + 2] = '.';
-    buf[cut + 3] = '\0';
-    return buf;
-}
+/* Soft width target for inline value rendering in `.vars`.  Values
+ * whose single-line repr exceeds this are dropped to a new indented
+ * line so the `name : type` header stays scannable.  72 picks a width
+ * that fits comfortably in an 80-column terminal alongside the row
+ * prefix `  let|const  <name> : <type> = `. */
+#define REPL_VARS_INLINE_WIDTH 72
+
+/* Hard cap on how much of a single value's repr we are willing to
+ * dump per `.vars` row before truncating with "..".  Containers
+ * naturally limited by xr_value_to_strbuf's depth handling, but a
+ * 4KB Array.toString() would still flood the REPL — keep things
+ * bounded.  Truncation happens at byte boundaries; not UTF-8 safe
+ * but values that long are pathological anyway. */
+#define REPL_VARS_HARD_CAP 4096
 
 void xr_repl_print_vars(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_repl_print_vars: NULL isolate");
@@ -470,7 +521,6 @@ void xr_repl_print_vars(XrayIsolate *isolate) {
     }
 
     XrReplSymbolTable *table = isolate->repl_symbols;
-    char vbuf[128];
 
     for (int i = 0; i < table->count; i++) {
         XrReplSymbol *sym = &table->symbols[i];
@@ -481,9 +531,29 @@ void xr_repl_print_vars(XrayIsolate *isolate) {
 
         XrString *str = xr_value_to_string(isolate, val);
         const char *raw = (str && str->data) ? str->data : "<?>";
-        const char *shown = repl_truncate_value(vbuf, (int) sizeof(vbuf), raw);
+        int raw_len = (int) strlen(raw);
 
-        printf("  %s %s : %s = %s\n", sym->is_const ? "const" : "let  ", name, type_name, shown);
+        /* Apply hard cap on rendered length to bound pathological
+         * cases (very large strings / containers). */
+        bool truncated = false;
+        int show_len = raw_len;
+        if (show_len > REPL_VARS_HARD_CAP) {
+            show_len = REPL_VARS_HARD_CAP;
+            truncated = true;
+        }
+
+        const char *kw = sym->is_const ? "const" : "let  ";
+
+        if (show_len <= REPL_VARS_INLINE_WIDTH && !truncated) {
+            /* Short value: keep inline. */
+            printf("  %s %s : %s = %.*s\n", kw, name, type_name, show_len, raw);
+        } else {
+            /* Long value: drop onto a new indented line so the
+             * header (name : type) stays scannable.  Indent matches
+             * the row prefix (two spaces + "let|const " width). */
+            printf("  %s %s : %s =\n", kw, name, type_name);
+            printf("        %.*s%s\n", show_len, raw, truncated ? " .." : "");
+        }
     }
 }
 
