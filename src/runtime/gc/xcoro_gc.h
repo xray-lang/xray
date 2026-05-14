@@ -84,6 +84,7 @@
 #include <string.h>
 #include "../../base/xdefs.h"
 #include "../../base/xmalloc.h"
+#include "../value/xvalue.h"
 #include "ximmix.h"
 #include "xgc_internal.h"
 
@@ -450,7 +451,16 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
 /* ========== Mark API ========== */
 
 XR_FUNC void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value);
+
+// Inline fast-path: only pointer-tagged values need GC marking.
+// ~80% of values (int, float, bool, null) short-circuit here without
+// a function call. This replaces the cross-TU inlining that LTO provided.
+static inline void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value) {
+    if (XR_VALUE_NEEDS_GC(value)) {
+        XrGCHeader *obj = XR_VALUE_GCPTR(value);
+        xr_coro_gc_markobject(gc, obj);
+    }
+}
 
 /* ========== Write Barrier API ========== */
 

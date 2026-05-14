@@ -617,12 +617,7 @@ void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
     }
 }
 
-void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value) {
-    if (XR_VALUE_NEEDS_GC(value)) {
-        XrGCHeader *obj = XR_VALUE_GCPTR(value);
-        xr_coro_gc_markobject(gc, obj);
-    }
-}
+// xr_coro_gc_markvalue is now static inline in xcoro_gc.h
 
 /* ========== Mark Roots ========== */
 

@@ -71,12 +71,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         endif()
     endif()
 
-    # LTO for Release builds: enables cross-TU inlining
-    # (critical for GC traverse → markvalue → markobject hot path)
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
-        add_compile_options(-flto)
-        add_link_options(-flto)
-    endif()
 elseif(MSVC)
     # MSVC needs explicit opt-in for C11 atomics. /std:c11 sets the
     # language version; /experimental:c11atomics turns on the
@@ -534,24 +528,6 @@ set(CORE_ALL_SOURCES
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
 
-# Disable LTO for VM interpreter: the huge dispatch loop (7000+ lines, computed goto)
-# gets miscompiled when LTO cross-TU inlines GC/runtime helpers into it,
-# causing incorrect register allocation on ARM64 (x27 holds a NaN-boxed value
-# instead of a pointer). All other TUs keep LTO for GC hot path performance.
-if(CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT MSVC)
-    # xvm.c is compiled without LTO to prevent miscompilation on ARM64.
-    # Files that define functions called from xvm_dispatch_*.inc.c (which
-    # is included into xvm.c) must also be compiled without LTO; otherwise
-    # the Clang LTO plugin on Linux internalizes these symbols before the
-    # regular linker resolves references from the non-LTO xvm.c.o object.
-    set_source_files_properties(
-        src/vm/xvm.c
-        src/vm/xvm_cold_paths.c
-        src/coro/xworker_sched.c
-        src/jit/xm_jit.c
-        PROPERTIES COMPILE_OPTIONS "-fno-lto"
-    )
-endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
