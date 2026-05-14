@@ -213,6 +213,7 @@ AstNode *xr_ast_print_stmt(XrayIsolate *X, AstNode **exprs, int expr_count, int 
         node->as.print_stmt.exprs = NULL;
     }
     node->as.print_stmt.expr_count = expr_count;
+    node->as.print_stmt.skip_null = false;
 
     return node;
 }

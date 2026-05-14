@@ -31,10 +31,22 @@ void xr_cli_isolate_params(XrCliIsolateProfile profile, XrayIsolateParams *out) 
     switch (profile) {
         case XR_CLI_ISOLATE_RUN:
         case XR_CLI_ISOLATE_EVAL:
-        case XR_CLI_ISOLATE_REPL:
         case XR_CLI_ISOLATE_TEST:
             /* Full runtime: all subsystems */
             xray_isolate_setup_full(out);
+            break;
+
+        case XR_CLI_ISOLATE_REPL:
+            /* Full runtime, but JIT is force-disabled.  Each REPL input
+             * is a one-shot top-level proto; tier-up call-count
+             * thresholds will never be reached for the new code, and
+             * compiling the same proto on every input would only add
+             * latency to interactive prompts.  Cross-input shared
+             * variables also bypass the shapes JIT relies on.  Keep
+             * REPL on the interpreter path exclusively — predictable
+             * latency wins over peak throughput here. */
+            xray_isolate_setup_full(out);
+            out->enable_jit = false;
             break;
 
         case XR_CLI_ISOLATE_PARSE:
