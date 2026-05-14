@@ -89,39 +89,22 @@ const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
 }
 
 bool xr_repl_peek_int(XrayIsolate *isolate, const char *name, int64_t *out) {
-    if (!isolate || !name || !out || !isolate->repl_symbols)
+    if (!isolate || !name || !out)
         return false;
 
-    /* Prefer globals dict (new REPL path) when available */
-    if (isolate->vm.globals) {
-        uint32_t len = (uint32_t) strlen(name);
-        uint32_t hash = xr_hash_bytes(name, len);
-        XrString *key = xr_string_intern(isolate, name, len, hash);
-        if (key) {
-            XrValue v = xr_global_dict_get(isolate->vm.globals, key);
-            if (XR_IS_INT(v)) {
-                *out = v.i;
-                return true;
-            }
-            /* Key exists but not int, or key absent → fall through */
-            if (!XR_IS_NULL(v))
-                return false;
-        }
-    }
-
-    /* Legacy shared-array path */
-    XrReplSymbolTable *t = isolate->repl_symbols;
-    for (int i = 0; i < t->count; i++) {
-        const char *cn = xr_repl_symbol_cname(&t->symbols[i]);
-        if (!cn || strcmp(cn, name) != 0)
-            continue;
-        XrValue v = xr_shared_array_get(&isolate->vm.shared, t->symbols[i].shared_index);
-        if (!XR_IS_INT(v))
-            return false;
-        *out = v.i;
-        return true;
-    }
-    return false;
+    /* REPL values live in the globals dict */
+    if (!isolate->vm.globals)
+        return false;
+    uint32_t len = (uint32_t) strlen(name);
+    uint32_t hash = xr_hash_bytes(name, len);
+    XrString *key = xr_string_intern(isolate, name, len, hash);
+    if (!key)
+        return false;
+    XrValue v = xr_global_dict_get(isolate->vm.globals, key);
+    if (!XR_IS_INT(v))
+        return false;
+    *out = v.i;
+    return true;
 }
 
 static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
@@ -200,19 +183,6 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
     }
 
     ctx->shared_var_count = table->count;
-}
-
-void xr_repl_symbols_collect(XrReplSymbolTable *table, XrCompilerContext *ctx, int seeded_count) {
-    if (!table || !ctx)
-        return;
-
-    // Collect new definitions (indices beyond seeded_count)
-    for (int i = seeded_count; i < ctx->shared_var_count; i++) {
-        if (ctx->shared_vars[i].name != NULL) {
-            repl_symbols_add_or_update(table, ctx->shared_vars[i].name, ctx->shared_vars[i].index,
-                                       ctx->shared_vars[i].is_const);
-        }
-    }
 }
 
 /* Collect new declarations from the compiled Xi IR function.
