@@ -209,46 +209,45 @@ static void print_colored(ReplState *state, const char *color, const char *text)
 
 // Print welcome message
 static void print_welcome(ReplState *state) {
-    printf("\n");
-
     if (state->use_color) {
-        printf("  %s----------------------------------------%s\n", XR_CLR_BLUE, XR_CLR_RESET);
-        printf("  %s%s* Xray%s %sv%d.%d.%d%s\n", XR_CLR_BOLD, XR_CLR_CYAN, XR_CLR_RESET,
-               XR_CLR_GRAY, XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH,
-               XR_CLR_RESET);
-        printf("  %s----------------------------------------%s\n", XR_CLR_BLUE, XR_CLR_RESET);
-        printf("  %sType .help for commands, .exit to quit%s\n", XR_CLR_GRAY, XR_CLR_RESET);
+        printf("\n");
+        printf("  Welcome to %s%sXray%s %sv%s%s\n", XR_CLR_BOLD, XR_CLR_CYAN, XR_CLR_RESET,
+               XR_CLR_DIM, XRAY_VERSION_STRING, XR_CLR_RESET);
+        printf("  %sType %s.help%s%s for commands, %s.exit%s%s to quit, "
+               "%sTab%s%s to complete%s\n",
+               XR_CLR_DIM, XR_CLR_RESET, XR_CLR_BOLD, XR_CLR_DIM, XR_CLR_RESET, XR_CLR_BOLD,
+               XR_CLR_DIM, XR_CLR_RESET, XR_CLR_BOLD, XR_CLR_DIM, XR_CLR_RESET);
+        printf("\n");
     } else {
-        printf("  ----------------------------------------\n");
-        printf("  * Xray v%d.%d.%d\n", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
-        printf("  ----------------------------------------\n");
-        printf("  Type .help for commands, .exit to quit\n");
+        printf("\n");
+        printf("  Welcome to Xray v%s\n", XRAY_VERSION_STRING);
+        printf("  Type .help for commands, .exit to quit, Tab to complete\n");
+        printf("\n");
     }
-
-    printf("\n");
 }
 
 // Print brief help
 static void print_help_brief(ReplState *state) {
     printf("\n");
-    print_colored(state, XR_CLR_BOLD, "REPL Commands:\n");
-    printf("  .help            Show this help\n");
-    printf("  .exit, .quit     Exit REPL\n");
-    printf("  .clear           Clear screen\n");
-    printf("  .reset           Reset environment\n");
-    printf("  .load <file>     Load and execute file\n");
-    printf("  .time <expr>     Time expression execution\n");
-    printf("  .vars            List top-level bindings\n");
-    printf("  .type <expr>     Show runtime type of an expression\n");
+    print_colored(state, XR_CLR_BOLD, "Commands\n");
+    printf("  .help              Show this help\n");
+    printf("  .exit  .quit       Exit REPL\n");
+    printf("  .clear             Clear screen\n");
+    printf("  .reset             Reset environment\n");
+    printf("  .load <file>       Load and execute file\n");
+    printf("  .time <expr>       Measure execution time\n");
+    printf("  .vars              Show all bindings\n");
+    printf("  .type <expr>       Show type of expression\n");
 #ifdef HAS_READLINE
-    printf("  .history         Show command history\n");
+    printf("  .history           Show recent history\n");
 #endif
     printf("\n");
-    print_colored(state, XR_CLR_BOLD, "Shortcuts:\n");
-    printf("  Ctrl+C  Cancel    Ctrl+D  Exit    Ctrl+L  Clear\n");
+    print_colored(state, XR_CLR_BOLD, "Keyboard\n");
+    printf("  Tab      Complete    Ctrl+C   Cancel\n");
+    printf("  Ctrl+D   Exit        Ctrl+L   Clear\n");
     printf("\n");
-    print_colored(state, XR_CLR_GRAY, "Type .help <topic> for details: ");
-    printf("syntax, types, coro, operators\n\n");
+    print_colored(state, XR_CLR_DIM, "Topics: ");
+    printf(".help syntax  .help types  .help coro  .help operators\n\n");
 }
 
 // Print syntax help
@@ -788,7 +787,10 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     signal(SIGINT, SIG_DFL);
 
     // Cleanup
-    printf("Bye!\n");
+    if (state.use_color)
+        printf("%sbye%s\n", XR_CLR_DIM, XR_CLR_RESET);
+    else
+        printf("bye\n");
     repl_free_protos(&state);
     xr_multicore_destroy(state.isolate);
     xray_isolate_delete(state.isolate);
