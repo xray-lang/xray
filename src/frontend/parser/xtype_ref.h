@@ -79,15 +79,16 @@ typedef enum {
 /* ========== The Type Reference ========== */
 
 typedef struct XrTypeRef {
-    uint8_t kind;                /* XrTypeRefKind                    */
-    uint8_t nchildren;           /* number of child type refs        */
-    uint8_t native_width;        /* XR_TREF_NW_* for INT_WIDTH /
-                                    FLOAT_WIDTH; 0 otherwise         */
-    bool extensible;             /* OBJECT: has ... marker           */
-    int16_t fixed_length;        /* FIXED_ARRAY: compile-time length */
-    const char *name;            /* NAMED / GENERIC: type name
-                                    (arena-allocated, NUL-terminated) */
-    const char **field_names;    /* OBJECT: per-field names         */
+    uint8_t kind;             /* XrTypeRefKind                    */
+    uint8_t nchildren;        /* number of child type refs        */
+    uint8_t native_width;     /* XR_TREF_NW_* for INT_WIDTH /
+                                 FLOAT_WIDTH; 0 otherwise         */
+    bool extensible;          /* OBJECT: has ... marker           */
+    int16_t fixed_length;     /* FIXED_ARRAY: compile-time length */
+    const char *name;         /* NAMED / GENERIC: type name
+                                 (arena-allocated, NUL-terminated) */
+    const char **field_names; /* OBJECT: per-field names         */
+    bool *field_readonly;
     struct XrTypeRef **children; /* child type refs (arena array) */
 } XrTypeRef;
 
@@ -134,7 +135,8 @@ XR_FUNC XrTypeRef *xr_tref_tuple(struct XrayIsolate *X, XrTypeRef **elems, int c
 /* Object / struct type literal: { f1: T1, f2: T2 } or { f1: T1, ... }
  * |extensible| indicates trailing ... marker. */
 XR_FUNC XrTypeRef *xr_tref_object(struct XrayIsolate *X, const char **field_names,
-                                  XrTypeRef **field_types, int count, bool extensible);
+                                  XrTypeRef **field_types, const bool *field_readonly, int count,
+                                  bool extensible);
 
 /* Fixed-length array: [N]T */
 XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrayIsolate *X, XrTypeRef *elem, int length);

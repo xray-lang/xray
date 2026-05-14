@@ -454,7 +454,8 @@ static XrValue csv_write_file(XrayIsolate *X, XrValue *args, int argc) {
 
 // @module csv
 
-XR_DEFINE_BUILTIN(csv_parse, "parse", "(data: string, options?: Json): Array<Array<string>>",
+XR_DEFINE_BUILTIN(csv_parse, "parse",
+                  "(data: string, options?: Json): Array<Array<string>> | Array<Json>",
                   "Parse CSV string")
 XR_DEFINE_BUILTIN(csv_parse_detailed, "parseDetailed", "(data: string, options?: Json): Json",
                   "Parse CSV with headers")

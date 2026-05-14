@@ -20,6 +20,22 @@
 
 // Forward declarations now in xanalyzer_visitor_internal.h
 
+static const char *json_type_label_local(XrType *type) {
+    if (type && XR_TYPE_IS_JSON(type) && type->object.type_name)
+        return type->object.type_name;
+    return xr_type_to_string(type);
+}
+
+static int json_field_index_local(XrType *type, const char *name) {
+    if (!type || !XR_TYPE_IS_JSON(type) || !name || !type->object.field_names)
+        return -1;
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
+}
+
 /*
  * Recursively convert XR_KIND_CLASS types whose class_name matches a declared
  * type parameter name into XR_KIND_TYPE_PARAM.  The parser has no knowledge of
@@ -95,6 +111,57 @@ XrType *resolve_class_to_type_param(XrayIsolate *X, XrType *type, const char **t
         xr_free(na);
     }
     return type;
+}
+
+XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
+                                                  XrGenericParam **type_params, int count) {
+    if (!ctx || !ctx->analyzer || !fn_type || !XR_TYPE_IS_FUNCTION(fn_type) || count <= 0 ||
+        !type_params)
+        return;
+
+    const char **names = xr_malloc(sizeof(const char *) * count);
+    XrType ***constraint_lists = xr_malloc(sizeof(XrType **) * count);
+    int *constraint_counts = xr_malloc(sizeof(int) * count);
+    if (!names || !constraint_lists || !constraint_counts) {
+        xr_free(names);
+        xr_free(constraint_lists);
+        xr_free(constraint_counts);
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        XrGenericParam *gp = type_params[i];
+        names[i] = gp ? gp->name : NULL;
+        int cn = gp ? gp->constraint_count : 0;
+        constraint_counts[i] = cn;
+        constraint_lists[i] = NULL;
+        if (cn > 0 && gp && gp->constraints) {
+            constraint_lists[i] = xr_malloc(sizeof(XrType *) * cn);
+            if (constraint_lists[i]) {
+                for (int j = 0; j < cn; j++) {
+                    constraint_lists[i][j] =
+                        gp->constraints[j]
+                            ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
+                            : NULL;
+                    constraint_lists[i][j] = resolve_class_to_type_param(
+                        ctx->analyzer->isolate, constraint_lists[i][j], names, count);
+                }
+            } else {
+                constraint_counts[i] = 0;
+            }
+        }
+    }
+
+    xr_type_set_function_type_params(ctx->analyzer->isolate, fn_type, names, constraint_lists,
+                                     constraint_counts, count);
+
+    for (int i = 0; i < count; i++) {
+        if (constraint_lists[i])
+            xr_free(constraint_lists[i]);
+    }
+    xr_free(names);
+    xr_free(constraint_lists);
+    xr_free(constraint_counts);
 }
 
 // Check null→T and T?→T assignment errors.
@@ -1250,6 +1317,29 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
+            if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0 && ms->member) {
+                int field_idx = json_field_index_local(obj_type, ms->member);
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                if (field_idx >= 0) {
+                    bool readonly = obj_type->object.field_readonly
+                                        ? obj_type->object.field_readonly[field_idx]
+                                        : false;
+                    if (readonly) {
+                        char msg[256];
+                        snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
+                                 json_type_label_local(obj_type), ms->member);
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                    }
+                } else if (obj_type->object.is_sealed) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
+                             json_type_label_local(obj_type), ms->member);
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+            }
             // Check in-parameter immutability: v.x = ... where v is 'in' param
             if (ms->object && ms->object->type == AST_VARIABLE) {
                 const char *obj_name = ms->object->as.variable.name;
@@ -1315,7 +1405,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             if (inner && (inner->type == AST_MEMBER_SET || inner->type == AST_ASSIGNMENT ||
                           inner->type == AST_COMPOUND_ASSIGNMENT || inner->type == AST_INC ||
-                          inner->type == AST_DEC)) {
+                          inner->type == AST_DEC || inner->type == AST_INDEX_SET)) {
                 xa_visit_infer_stmt(ctx, inner);
             } else {
                 xa_visit_infer_expr(ctx, inner);
@@ -1760,12 +1850,51 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_INDEX_SET: {
             IndexSetNode *is = &node->as.index_set;
+            XrType *array_type = NULL;
+            XrType *index_type = NULL;
             if (is->array)
-                xa_visit_infer_expr(ctx, is->array);
+                array_type = xa_visit_infer_expr(ctx, is->array);
             if (is->index)
-                xa_visit_infer_expr(ctx, is->index);
+                index_type = xa_visit_infer_expr(ctx, is->index);
             if (is->value)
                 xa_visit_infer_expr(ctx, is->value);
+            if (array_type && XR_TYPE_IS_JSON(array_type) && array_type->object.field_count > 0 &&
+                is->index && is->index->type == AST_LITERAL_STRING) {
+                const char *key = is->index->as.literal.raw_value.string_val;
+                int field_idx = json_field_index_local(array_type, key);
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                if (field_idx >= 0) {
+                    bool readonly = array_type->object.field_readonly
+                                        ? array_type->object.field_readonly[field_idx]
+                                        : false;
+                    if (readonly) {
+                        char msg[256];
+                        snprintf(msg, sizeof(msg), "无法修改只读字段 '%s.%s'（const 修饰）",
+                                 json_type_label_local(array_type), key);
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+                    }
+                } else if (array_type->object.is_sealed) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
+                             json_type_label_local(array_type), key);
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                }
+            } else if (array_type &&
+                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_STRING(array_type)) &&
+                       index_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
+                       !XR_TYPE_IS_INT(index_type)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Index type '%s' is not assignable to expected type 'int'",
+                         xr_type_to_string(index_type));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
             break;
         }
         case AST_DEFER_STMT:

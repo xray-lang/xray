@@ -47,6 +47,8 @@ XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstN
                                                        int count);
 XR_FUNC XrType *resolve_class_to_type_param(XrayIsolate *X, XrType *type, const char **tp_names,
                                             int tp_count);
+XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
+                                                  XrGenericParam **type_params, int count);
 
 // Expression visitors (defined in xanalyzer_visitor_expr.c)
 XR_FUNC XrType *xa_visit_struct_literal(XaInferContext *ctx, AstNode *node);

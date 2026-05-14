@@ -57,8 +57,8 @@ static const XaBuiltinMember g_gen_crypto_functions[] = {
 
 // csv module functions
 static const XaBuiltinMember g_gen_csv_functions[] = {
-    {"parse", "(data: string, options?: Json): Array<Array<string>>", "Parse CSV string", true,
-     false},
+    {"parse", "(data: string, options?: Json): Array<Array<string>> | Array<Json>",
+     "Parse CSV string", true, false},
     {"parseDetailed", "(data: string, options?: Json): Json", "Parse CSV with headers", true,
      false},
     {"parseTsv", "(data: string): Array<Array<string>>", "Parse TSV string", true, false},

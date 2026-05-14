@@ -610,6 +610,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         // Parse key
         AstNode *key = NULL;
         bool is_computed = false;
+        const char *shorthand_name = NULL;
 
         // Computed property syntax: [expr]
         if (xr_parser_match(parser, TK_LBRACKET)) {
@@ -660,6 +661,8 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             key_str[key_token.length] = '\0';
             key = xr_ast_literal_string(parser->X, key_str, line);
             is_computed = false;
+            if (key_token.type == TK_NAME)
+                shorthand_name = key_str;
         } else {
             xr_parser_error(
                 parser,
@@ -686,6 +689,16 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                 return xr_ast_literal_null(parser->X, line);
             }
             separator_determined = true;
+        } else if (shorthand_name &&
+                   (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
+            if (separator_determined && is_map) {
+                xr_parser_error(parser, "cannot mix shorthand object fields with Map literal");
+                return xr_ast_literal_null(parser->X, line);
+            }
+            separator_determined = true;
+            values[count] = xr_ast_variable(parser->X, shorthand_name, line);
+            count++;
+            continue;
         } else {
             xr_parser_error(parser, "expected ':' or '=>' after key");
             return xr_ast_literal_null(parser->X, line);
@@ -986,6 +999,11 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
 
     // Patch the placeholder with the actual type definition.
     alias_entry->type_ref = type_definition;
+    if (type_definition->kind == XR_TREF_OBJECT) {
+        char *type_name = (char *) ast_alloc(parser->X, strlen(alias_name) + 1);
+        strcpy(type_name, alias_name);
+        type_definition->name = type_name;
+    }
 
     // Create AST node so analyzer/LSP can see the declaration.
     // Stash the resolved type in TypeAliasNode::resolved_type so that

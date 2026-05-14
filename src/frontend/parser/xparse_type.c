@@ -151,8 +151,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         bool allow_extension = false;
         const char **fnames = xr_malloc((size_t) capacity * sizeof(const char *));
         XrTypeRef **ftypes = xr_malloc((size_t) capacity * sizeof(XrTypeRef *));
+        bool *freadonly = xr_malloc((size_t) capacity * sizeof(bool));
 
-        XR_CHECK(fnames != NULL && ftypes != NULL,
+        XR_CHECK(fnames != NULL && ftypes != NULL && freadonly != NULL,
                  "parse_type: alloc failed for struct literal fields");
 
         while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
@@ -167,9 +168,11 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                                     "parse_type field_names grow");
                 XR_REALLOC_OR_ABORT(ftypes, (size_t) new_cap * sizeof(XrTypeRef *),
                                     "parse_type field_types grow");
+                XR_REALLOC_OR_ABORT(freadonly, (size_t) new_cap * sizeof(bool),
+                                    "parse_type field_readonly grow");
                 capacity = new_cap;
             }
-            xr_parser_match(parser, TK_CONST);
+            bool is_const = xr_parser_match(parser, TK_CONST);
             xr_parser_consume(parser, TK_NAME, "expected field name");
             fnames[field_count] = strndup(parser->previous.start, parser->previous.length);
 
@@ -179,16 +182,19 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             if (is_optional)
                 ftype = xr_tref_optional(parser->X, ftype);
             ftypes[field_count] = ftype;
+            freadonly[field_count] = is_const;
             field_count++;
             xr_parser_match(parser, TK_COMMA);
         }
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
-        XrTypeRef *result = xr_tref_object(parser->X, fnames, ftypes, field_count, allow_extension);
+        XrTypeRef *result =
+            xr_tref_object(parser->X, fnames, ftypes, freadonly, field_count, allow_extension);
         for (int i = 0; i < field_count; i++)
             xr_free((void *) fnames[i]);
         xr_free(fnames);
         xr_free(ftypes);
+        xr_free(freadonly);
         return result;
     }
 

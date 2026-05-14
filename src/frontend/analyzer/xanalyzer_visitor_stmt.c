@@ -75,10 +75,18 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             bool null_err = xa_check_null_safety(ctx->analyzer, links->declared_type, init_type,
                                                  "Variable initializer", &loc);
             // Check assignment compatibility
-            if (!null_err && !xa_typecheck_assignable(links->declared_type, init_type)) {
+            bool type_mismatch = false;
+            if (XR_TYPE_IS_FUNCTION(links->declared_type)) {
+                type_mismatch = !XR_TYPE_IS_FUNCTION(init_type) ||
+                                !xr_type_equals(links->declared_type, init_type);
+            } else {
+                type_mismatch = !xa_typecheck_assignable(links->declared_type, init_type);
+            }
+            if (!null_err && type_mismatch) {
                 // Json→concrete type: allowed at compile time, runtime check inserted by
                 // codegen. e.g. let x: int = data["key"] is legal but requires runtime validation.
-                if (!xr_is_json_coercion(links->declared_type, init_type)) {
+                if (XR_TYPE_IS_FUNCTION(links->declared_type) ||
+                    !xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'",
                              xr_type_to_string(init_type), xr_type_to_string(links->declared_type));
@@ -229,9 +237,16 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         // Check null safety first (null→T, T?→T)
         bool null_err =
             xa_check_null_safety(ctx->analyzer, var_type, value_type, "Assignment", &loc);
-        if (!null_err && !xa_typecheck_assignable(var_type, value_type)) {
+        bool type_mismatch = false;
+        if (XR_TYPE_IS_FUNCTION(var_type)) {
+            type_mismatch =
+                !XR_TYPE_IS_FUNCTION(value_type) || !xr_type_equals(var_type, value_type);
+        } else {
+            type_mismatch = !xa_typecheck_assignable(var_type, value_type);
+        }
+        if (!null_err && type_mismatch) {
             // Json→concrete type: allowed at compile time, runtime check inserted by codegen.
-            if (!xr_is_json_coercion(var_type, value_type)) {
+            if (XR_TYPE_IS_FUNCTION(var_type) || !xr_is_json_coercion(var_type, value_type)) {
                 char msg[256];
                 snprintf(msg, sizeof(msg), "Type '%s' is not assignable to '%s' (type '%s')",
                          xr_type_to_string(value_type), assign->name, xr_type_to_string(var_type));

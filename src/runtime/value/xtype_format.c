@@ -214,7 +214,57 @@ const char *xr_type_to_string(XrType *type) {
     if (XR_TYPE_IS_FUNCTION(type)) {
         char *ptr = buf;
         size_t remaining = TYPE_STR_BUF_SIZE;
-        int n = snprintf(ptr, remaining, "fn(");
+        int n = snprintf(ptr, remaining, "fn");
+        ptr += n;
+        remaining -= n;
+
+        if (type->function.type_param_count > 0 && remaining > 2) {
+            n = snprintf(ptr, remaining, "<");
+            ptr += n;
+            remaining -= n;
+            for (int i = 0; i < type->function.type_param_count && remaining > 2; i++) {
+                if (i > 0) {
+                    n = snprintf(ptr, remaining, ", ");
+                    ptr += n;
+                    remaining -= n;
+                }
+                const char *name =
+                    (type->function.type_param_names && type->function.type_param_names[i])
+                        ? type->function.type_param_names[i]
+                        : "T";
+                n = snprintf(ptr, remaining, "%s", name);
+                ptr += n;
+                remaining -= n;
+                int cc = type->function.type_param_constraint_counts
+                             ? type->function.type_param_constraint_counts[i]
+                             : 0;
+                XrType **constraints = type->function.type_param_constraints
+                                           ? type->function.type_param_constraints[i]
+                                           : NULL;
+                if (cc > 0 && constraints && remaining > 2) {
+                    n = snprintf(ptr, remaining, ": ");
+                    ptr += n;
+                    remaining -= n;
+                    for (int j = 0; j < cc && remaining > 2; j++) {
+                        if (j > 0) {
+                            n = snprintf(ptr, remaining, " & ");
+                            ptr += n;
+                            remaining -= n;
+                        }
+                        n = snprintf(ptr, remaining, "%s",
+                                     constraints[j] ? xr_type_to_string(constraints[j])
+                                                    : "unknown");
+                        ptr += n;
+                        remaining -= n;
+                    }
+                }
+            }
+            n = snprintf(ptr, remaining, ">");
+            ptr += n;
+            remaining -= n;
+        }
+
+        n = snprintf(ptr, remaining, "(");
         ptr += n;
         remaining -= n;
 
