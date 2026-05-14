@@ -28,10 +28,13 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/xexec_state.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/value/xvalue_format.h"
+#include "../runtime/value/xtype_names.h"
 #include "../base/xmalloc.h"
 #include "../base/xdynarray.h"
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include "../frontend/parser/xparse.h"
 
 /* ========== REPL Symbol Table ========== */
@@ -68,6 +71,18 @@ void xr_repl_symbols_clear(XrReplSymbolTable *table) {
     if (!table)
         return;
     table->count = 0;
+}
+
+XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate) {
+    if (!isolate)
+        return NULL;
+    return isolate->repl_symbols;
+}
+
+const char *xr_repl_symbol_cname(const XrReplSymbol *sym) {
+    if (!sym || !sym->name || !sym->name->data)
+        return NULL;
+    return sym->name->data;
 }
 
 static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
@@ -182,7 +197,8 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *
         XrString *interned = xr_string_intern(isolate, name, nlen, 0);
         if (!interned)
             continue;
-        repl_symbols_add_or_update(table, interned, (int) slot, false);
+        bool is_const = xf->slot_owned_consts && xf->slot_owned_consts[slot] != 0;
+        repl_symbols_add_or_update(table, interned, (int) slot, is_const);
     }
 }
 
@@ -250,6 +266,11 @@ static void repl_maybe_echo_last_expr(XrayIsolate *isolate, AstNode *program) {
     xr_isolate_set_current_arena(isolate, saved);
 
     if (synth) {
+        /* Auto-echo must stay quiet when the expression evaluates to
+         * null — matching Python / Node.js REPL behaviour.  Setting
+         * skip_null lets the VM evaluate the expression (so side
+         * effects still fire) but print nothing for null values. */
+        synth->as.print_stmt.skip_null = true;
         stmts[count - 1] = synth;
     }
 }
@@ -417,4 +438,87 @@ XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source) {
     xr_program_destroy(ast);
 
     return proto;
+}
+
+/* ========== Interactive Inspection ========== */
+
+/* Helper: truncate long value formatting to keep `.vars` rows readable.
+ * Returns the buffer; if src exceeds max_len, the tail is replaced with
+ * "...".  Buffer must be at least max_len + 1 bytes long. */
+static const char *repl_truncate_value(char *buf, int buf_size, const char *src) {
+    int n = (int) strlen(src);
+    if (n + 1 <= buf_size) {
+        memcpy(buf, src, (size_t) (n + 1));
+        return buf;
+    }
+    int cut = buf_size - 4;  // room for "..." + NUL
+    if (cut < 0)
+        cut = 0;
+    memcpy(buf, src, (size_t) cut);
+    buf[cut] = '.';
+    buf[cut + 1] = '.';
+    buf[cut + 2] = '.';
+    buf[cut + 3] = '\0';
+    return buf;
+}
+
+void xr_repl_print_vars(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "xr_repl_print_vars: NULL isolate");
+    if (!isolate || !isolate->repl_symbols || isolate->repl_symbols->count == 0) {
+        printf("  (no bindings)\n");
+        return;
+    }
+
+    XrReplSymbolTable *table = isolate->repl_symbols;
+    char vbuf[128];
+
+    for (int i = 0; i < table->count; i++) {
+        XrReplSymbol *sym = &table->symbols[i];
+        const char *name = sym->name && sym->name->data ? sym->name->data : "<anon>";
+
+        XrValue val = xr_shared_array_get(&isolate->vm.shared, sym->shared_index);
+        const char *type_name = xr_typeid_name(xr_value_typeid(val));
+
+        XrString *str = xr_value_to_string(isolate, val);
+        const char *raw = (str && str->data) ? str->data : "<?>";
+        const char *shown = repl_truncate_value(vbuf, (int) sizeof(vbuf), raw);
+
+        printf("  %s %s : %s = %s\n", sym->is_const ? "const" : "let  ", name, type_name, shown);
+    }
+}
+
+void xr_repl_print_type(XrayIsolate *isolate, const char *expr) {
+    XR_DCHECK(isolate != NULL, "xr_repl_print_type: NULL isolate");
+
+    if (!expr)
+        expr = "";
+    while (*expr && isspace((unsigned char) *expr))
+        expr++;
+
+    if (*expr == '\0') {
+        printf("Usage: .type <expression>\n");
+        return;
+    }
+
+    /* Wrap the user expression in `print(typename(...))` and route
+     * through the normal incremental pipeline.  The added trailing
+     * newline lets users include comments on the same line. */
+    size_t expr_len = strlen(expr);
+    size_t src_size = expr_len + 32;
+    char *src = (char *) xr_malloc(src_size);
+    if (!src)
+        return;
+    snprintf(src, src_size, "print(typename(%s))\n", expr);
+
+    XrProto *proto = xr_repl_compile(isolate, src);
+    xr_free(src);
+
+    if (!proto)
+        return; /* compile error already reported */
+
+    xr_execute(isolate, proto);
+    /* Proto leaked here intentionally: callers in CLI track protos and
+     * free them on .reset / shutdown.  Freeing per-invocation would
+     * also free any sub-protos still reachable via closures.  Pass-
+     * through ownership keeps the model consistent with .load / .time. */
 }

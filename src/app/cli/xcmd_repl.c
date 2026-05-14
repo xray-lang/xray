@@ -58,6 +58,115 @@ typedef struct {
     int proto_capacity;
 } ReplState;
 
+#ifdef HAS_READLINE
+/* ========== Tab Completion ========== */
+
+/* REPL dot commands.  Kept here (rather than in a generic xr_commands
+ * table) because completion is the only consumer and we want the same
+ * file to host the dispatcher and the suggester — keeps them in sync. */
+static const char *const k_repl_dot_commands[] = {
+    ".help", ".exit",    ".quit", ".clear", ".reset", ".load",
+    ".time", ".history", ".vars", ".type",  NULL,
+};
+
+/* Subset of xray keywords useful at REPL top level.  Kept local to
+ * avoid cross-app coupling with src/app/lsp.  Order is not significant
+ * — readline displays matches alphabetically. */
+static const char *const k_repl_keywords[] = {
+    "let",      "const",         "fn",          "class",        "interface", "enum",      "type",
+    "if",       "else",          "while",       "for",          "in",        "is",        "break",
+    "continue", "return",        "match",       "true",         "false",     "null",      "import",
+    "export",   "from",          "as",          "go",           "await",     "select",    "defer",
+    "scope",    "after",         "try",         "catch",        "finally",   "throw",     "new",
+    "this",     "super",         "extends",     "implements",   "static",    "private",   "public",
+    "abstract", "override",      "operator",    "void",         "int",       "float",     "string",
+    "bool",     "Array",         "Map",         "Set",          "Json",      "Channel",   "Bytes",
+    "BigInt",   "StringBuilder", "Exception",   "Regex",        "print",     "dump",      "typeof",
+    "typename", "assert",        "assert_true", "assert_false", "assert_eq", "assert_ne", "copy",
+    "chr",      "Coro",          "CoroPool",    "Reflect",      "Type",      NULL,
+};
+
+/* Set during repl_run() so the readline generator can reach the
+ * current ReplState (and through it, the isolate's repl_symbols).
+ * Readline's generator signature has no userdata pointer, so a
+ * file-scope static is the conventional approach.  Cleared at exit. */
+static ReplState *g_completion_state = NULL;
+
+/* readline word generator.
+ * `state` is 0 on the first call for a given word, then nonzero for
+ * subsequent calls until the generator returns NULL (signals "no more
+ * matches").  We pass each candidate list in turn: dot commands first
+ * iff the word starts with '.', then keywords / builtins, then live
+ * REPL bindings. */
+static char *repl_completion_generator(const char *text, int state) {
+    static int phase;     /* 0 = dots, 1 = keywords, 2 = repl symbols */
+    static int idx;       /* index within the current phase list */
+    static size_t len;    /* cached strlen(text) for prefix match */
+    static bool dot_only; /* true when text begins with '.' */
+
+    if (state == 0) {
+        phase = 0;
+        idx = 0;
+        len = strlen(text);
+        dot_only = (len > 0 && text[0] == '.');
+    }
+
+    /* Phase 0: dot commands (always scanned; cheap and tiny). */
+    if (phase == 0) {
+        while (k_repl_dot_commands[idx]) {
+            const char *cmd = k_repl_dot_commands[idx++];
+            if (strncmp(cmd, text, len) == 0)
+                return xr_strdup(cmd);
+        }
+        phase = 1;
+        idx = 0;
+    }
+
+    /* If the user is clearly typing a dot command, do not pollute
+     * matches with keywords / symbols. */
+    if (dot_only)
+        return NULL;
+
+    /* Phase 1: keywords + builtins. */
+    if (phase == 1) {
+        while (k_repl_keywords[idx]) {
+            const char *kw = k_repl_keywords[idx++];
+            if (strncmp(kw, text, len) == 0)
+                return xr_strdup(kw);
+        }
+        phase = 2;
+        idx = 0;
+    }
+
+    /* Phase 2: user-defined top-level REPL bindings. */
+    if (phase == 2 && g_completion_state && g_completion_state->isolate) {
+        XrReplSymbolTable *table = xr_repl_symbols_of(g_completion_state->isolate);
+        if (table) {
+            while (idx < table->count) {
+                const XrReplSymbol *sym = &table->symbols[idx++];
+                const char *name = xr_repl_symbol_cname(sym);
+                if (!name)
+                    continue;
+                if (strncmp(name, text, len) == 0)
+                    return xr_strdup(name);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static char **repl_completion(const char *text, int start, int end) {
+    (void) start;
+    (void) end;
+    /* Disable readline's default filename completion fallback so that
+     * unmatched words simply offer no suggestions rather than listing
+     * cwd contents (which is almost never what a REPL user wants). */
+    rl_attempted_completion_over = 1;
+    return rl_completion_matches(text, repl_completion_generator);
+}
+#endif  // HAS_READLINE
+
 // Global flag for SIGINT handling
 static volatile sig_atomic_t g_repl_interrupted = 0;
 
@@ -129,6 +238,8 @@ static void print_help_brief(ReplState *state) {
     printf("  .reset           Reset environment\n");
     printf("  .load <file>     Load and execute file\n");
     printf("  .time <expr>     Time expression execution\n");
+    printf("  .vars            List top-level bindings\n");
+    printf("  .type <expr>     Show runtime type of an expression\n");
 #ifdef HAS_READLINE
     printf("  .history         Show command history\n");
 #endif
@@ -432,6 +543,18 @@ static bool handle_command(ReplState *state, const char *input) {
         return true;
     }
 
+    // .vars — list top-level REPL bindings
+    if (strcmp(input, ".vars") == 0) {
+        xr_repl_print_vars(state->isolate);
+        return true;
+    }
+
+    // .type <expr> — show runtime type of an expression
+    if (strncmp(input, ".type", 5) == 0 && (input[5] == '\0' || input[5] == ' ')) {
+        xr_repl_print_type(state->isolate, input + 5);
+        return true;
+    }
+
 #ifdef HAS_READLINE
     // .history
     if (strcmp(input, ".history") == 0) {
@@ -549,6 +672,15 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     if (history_file) {
         read_history(history_file);
     }
+    /* Wire tab completion.  Set the generator and make `g_completion_state`
+     * point at the live ReplState so phase-2 completion can see live
+     * REPL bindings.  Cleared after the loop exits below. */
+    g_completion_state = &state;
+    rl_attempted_completion_function = repl_completion;
+    /* Single-char word break set: anything that ends an identifier.
+     * Notably keeps `.` so dot commands complete as a unit, but allows
+     * space, parens, operators to bound a word. */
+    rl_basic_word_break_characters = (char *) " \t\n\"\\'`@$><=;|&{(";
 #endif
 
     // Create Isolate + Runtime (persistent across inputs for GC safety)
@@ -639,6 +771,8 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
         write_history(history_file);
         xr_free(history_file);
     }
+    g_completion_state = NULL;
+    rl_attempted_completion_function = NULL;
 #endif
 
     // Restore default SIGINT handler

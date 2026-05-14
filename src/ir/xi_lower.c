@@ -599,6 +599,9 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
      * name → slot mapping after lowering. */
     const char *owned_name_flags[512];
     memset(owned_name_flags, 0, sizeof(owned_name_flags));
+    /* Parallel to owned_name_flags: 1 if the declaration was const. */
+    uint8_t owned_const_flags[512];
+    memset(owned_const_flags, 0, sizeof(owned_const_flags));
 
     for (int i = 0; i < count; i++) {
         AstNode *s = stmts[i];
@@ -633,6 +636,7 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
         }
 
         uint32_t sid = 0;
+        bool is_const = false;
         switch (s->type) {
             case AST_FUNCTION_DECL:
                 name = s->as.function_decl.name;
@@ -647,8 +651,11 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
                 name = s->as.struct_decl.name;
                 sid = s->as.struct_decl.symbol_id;
                 break;
-            case AST_VAR_DECL:
             case AST_CONST_DECL:
+                is_const = true;
+                /* fallthrough — share var_decl payload layout */
+                /* fall through */
+            case AST_VAR_DECL:
                 name = s->as.var_decl.name;
                 sid = s->as.var_decl.symbol_id;
                 type = xi_lower_node_type(l, s);
@@ -689,8 +696,10 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
                   "prescan_shared_vars: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
-        if (next_shared < 512)
+        if (next_shared < 512) {
             owned_name_flags[next_shared] = name;
+            owned_const_flags[next_shared] = is_const ? 1u : 0u;
+        }
         if (is_exported && next_shared < 512)
             export_flags[next_shared] = name;
         next_shared++;
@@ -708,6 +717,8 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
             l->func, (uint32_t) (next_shared * sizeof(const char *)));
         const char **owned = (const char **) xi_func_arena_alloc(
             l->func, (uint32_t) (next_shared * sizeof(const char *)));
+        uint8_t *consts =
+            (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(uint8_t)));
         for (uint16_t si = 0; si < next_shared; si++) {
             if (names) {
                 const char *src = (si < 512) ? export_flags[si] : NULL;
@@ -736,10 +747,17 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
                 }
             }
         }
+        if (consts) {
+            for (uint16_t si = 0; si < next_shared; si++) {
+                consts[si] = (si < 512) ? owned_const_flags[si] : 0u;
+            }
+        }
         if (names)
             l->func->export_names = names;
         if (owned)
             l->func->slot_owned_names = owned;
+        if (consts)
+            l->func->slot_owned_consts = consts;
     }
 }
 

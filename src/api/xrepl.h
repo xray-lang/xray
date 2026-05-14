@@ -50,6 +50,15 @@ XR_FUNC XrReplSymbolTable *xr_repl_symbols_new(void);
 XR_FUNC void xr_repl_symbols_free(XrReplSymbolTable *table);
 XR_FUNC void xr_repl_symbols_clear(XrReplSymbolTable *table);
 
+/* Return the isolate's REPL symbol table (NULL before any REPL compile).
+ * Read-only view for tab completion / introspection by CLI / embedders;
+ * callers must not free the table. */
+XR_FUNC XrReplSymbolTable *xr_repl_symbols_of(XrayIsolate *isolate);
+
+/* Return the C string for a REPL symbol's name without leaking the
+ * XrString definition to callers (xrepl.h forward-declares XrString). */
+XR_FUNC const char *xr_repl_symbol_cname(const XrReplSymbol *sym);
+
 // Seed compiler context with prior definitions
 XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx);
 
@@ -81,5 +90,27 @@ XR_FUNC XrInputStatus xr_repl_check_input(const char *source);
  * Returns compiled proto, or NULL on error.
  */
 XR_FUNC XrProto *xr_repl_compile(XrayIsolate *isolate, const char *source);
+
+/* ========== Interactive Inspection ========== */
+
+/*
+ * Pretty-print every top-level binding currently visible to the REPL.
+ * One line per symbol: "name : typeName = formatted value".  Reads
+ * from isolate->repl_symbols and isolate->vm.shared.  Cheap, no
+ * compilation or execution side effects.  Safe to call before the
+ * first compile (prints nothing).
+ */
+XR_FUNC void xr_repl_print_vars(XrayIsolate *isolate);
+
+/*
+ * Show the runtime type name of `expr`.  Synthesises and runs
+ * `print(typename(<expr>))` through the normal incremental compile
+ * pipeline so the expression sees the same scope as bare user input.
+ *
+ * `expr` is evaluated; for a side-effect-free static-only variant,
+ * use the analyzer directly.  Empty / NULL expr is a user error and
+ * reports a message without aborting.
+ */
+XR_FUNC void xr_repl_print_type(XrayIsolate *isolate, const char *expr);
 
 #endif  // XREPL_H

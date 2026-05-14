@@ -649,6 +649,13 @@ typedef struct XiFunc {
      * NULL for slots seeded by a REPL prior-input. */
     const char **slot_owned_names; /* array of nshared entries (arena-alloc'd) */
 
+    /* Per-slot const flag, parallel to slot_owned_names.  Non-zero when
+     * the declaration was AST_CONST_DECL (i.e. `const x = ...`), zero
+     * for `let`, `fn`, `class`, etc.  Carried through to the REPL
+     * symbol table so `.vars` can distinguish let from const without
+     * re-parsing.  May be NULL if no slots owned. */
+    uint8_t *slot_owned_consts; /* array of nshared bytes (arena-alloc'd) */
+
     /* Re-export table: entries from "export { a } from './file'" and
      * "export * from './file'" statements. Populated during lowering,
      * emitted as OP_IMPORT + OP_EXPORT/OP_EXPORT_ALL by emit_reexports. */

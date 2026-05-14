@@ -32,7 +32,8 @@ vmcase(OP_PRINT) {
     /* OP_PRINT: print value with toString support
     ** A: value register
     ** B: 1=add space before (not first argument)
-    ** C: bit0=newline, bit1-2=slot_type hint (0=ANY, 1=I64, 2=F64)
+    ** C: bit0=newline, bit1-2=slot_type hint (0=ANY, 1=I64, 2=F64),
+    **    bit3=skip_null (REPL auto-echo: print nothing if val is null)
     **
     ** If value is instance with toString() method, call it first
     */
@@ -41,6 +42,7 @@ vmcase(OP_PRINT) {
     int c_field = GETARG_C(i);
     int newline = c_field & 1;
     int slot_hint = (c_field >> 1) & 3;
+    int skip_null = (c_field >> 3) & 1;
 
     // Reconstruct tagged value from raw slot if hint provided
     XrValue val;
@@ -51,6 +53,12 @@ vmcase(OP_PRINT) {
     } else {
         val = R(a);
     }
+
+    /* REPL auto-echo suppression: bare expressions that evaluate to
+     * null are silently dropped so the prompt stays clean.  Explicit
+     * `print(null)` does not set skip_null and still prints "null". */
+    if (skip_null && XR_IS_NULL(val))
+        vmbreak;
 
     if (add_space)
         printf(" ");

@@ -1268,8 +1268,12 @@ static void lower_print(XiLower *l, AstNode *node) {
     }
 
     /* Emit one XI_PRINT per argument with correct spacing/newline flags.
-     * aux_int encoding: bit0 = add_space (maps to B field),
-     *                   bit1+ = C field  (bit0 = newline after print) */
+     * aux_int encoding:
+     *   bit0 = add_space   → OP_PRINT B field
+     *   bit1 = newline     → OP_PRINT C bit0
+     *   bits 2..3 = slot type hint → OP_PRINT C bits 1..2 (unused here)
+     *   bit4 = skip_null   → OP_PRINT C bit3 (REPL auto-echo only) */
+    int skip_null = p->skip_null ? 1 : 0;
     for (int i = 0; i < n; i++) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_void, 1);
         if (!v)
@@ -1278,7 +1282,7 @@ static void lower_print(XiLower *l, AstNode *node) {
 
         int add_space = (i > 0) ? 1 : 0;
         int newline = (i == n - 1) ? 1 : 0;
-        v->aux_int = add_space | (newline << 1);
+        v->aux_int = add_space | (newline << 1) | (skip_null << 4);
 
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
