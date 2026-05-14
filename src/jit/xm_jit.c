@@ -1127,7 +1127,8 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
 // Reconstruct extra return values from jit_ctx->ret_vals[] into VM registers.
 // Called after xm_jit_call() succeeds when nresults > 1.
 // results[0] is already filled by xm_jit_call; this fills results[1..ret_count-1].
-void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
+__attribute__((used)) void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results,
+                                                 int nresults) {
     XrJitScratch *ctx = coro->jit_ctx;
     int ret_count = ctx->ret_count;
     if (ret_count <= 1)
@@ -1169,7 +1170,8 @@ void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
 
 /* ========== Mid-Function Deopt Recovery ========== */
 
-int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
+__attribute__((used)) int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame,
+                                                   int maxstack) {
     XrProto *proto = (XrProto *) coro->jit_ctx->call_proto;
     if (!proto || !proto->deopt_table)
         return -1;
