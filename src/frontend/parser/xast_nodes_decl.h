@@ -66,8 +66,8 @@ typedef struct FunctionDeclNode {
 typedef struct ClassDeclNode {
     char *name;
     char *super_name;
-    char *super_module;  // Parent class module (extends module.Class)
-    char **interfaces;
+    char *super_module;      // Parent class module (extends module.Class)
+    XrTypeRef **interfaces;  // Implemented interfaces (e.g. Iterable<int>, Comparable)
     int interface_count;
     AstNode **fields;
     int field_count;
@@ -108,7 +108,7 @@ typedef struct InterfacePropertyNode {
 
 typedef struct InterfaceDeclNode {
     char *name;
-    char **extends;
+    XrTypeRef **extends;  // Parent interfaces (e.g. Pair<K, V>)
     int extends_count;
     AstNode **methods;  // AST_INTERFACE_METHOD nodes
     int method_count;

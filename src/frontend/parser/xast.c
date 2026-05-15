@@ -884,10 +884,10 @@ AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name, char **field_na
 }
 
 // Create interface declaration node
-AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **extends, int extends_count,
-                               AstNode **methods, int method_count, AstNode **properties,
-                               int property_count, XrGenericParam **type_params,
-                               int type_param_count, int line) {
+AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, XrTypeRef **extends,
+                               int extends_count, AstNode **methods, int method_count,
+                               AstNode **properties, int property_count,
+                               XrGenericParam **type_params, int type_param_count, int line) {
     AstNode *node = alloc_node(X, AST_INTERFACE_DECL, line);
     node->as.interface_decl.name = (char *) name;
     node->as.interface_decl.extends = extends;

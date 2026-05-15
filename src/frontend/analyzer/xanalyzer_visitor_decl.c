@@ -43,6 +43,7 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
+#include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
@@ -776,12 +777,19 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->type->is_value_type = true;
     }
 
-    // Store implemented interfaces from 'implements' clause
+    // Store implemented interfaces from 'implements' clause.
+    // Type arguments on parameterized interfaces (e.g. `Iterable<int>`) are
+    // accepted at the syntax level but reduced to the head name here so
+    // existing constraint checks and runtime conformance lookups continue
+    // to match by interface name. Real type-arg-aware matching is planned
+    // as a follow-up that would extend XrClassInfo to keep resolved XrType
+    // entries instead of plain names.
     if (cls->interface_count > 0 && cls->interfaces) {
         info->interface_names = xr_malloc(sizeof(const char *) * cls->interface_count);
         info->interface_count = cls->interface_count;
         for (int i = 0; i < cls->interface_count; i++) {
-            info->interface_names[i] = cls->interfaces[i];
+            const char *head = xr_tref_head_name(cls->interfaces[i]);
+            info->interface_names[i] = head ? head : "";
         }
     }
 

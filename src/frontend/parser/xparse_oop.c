@@ -51,11 +51,6 @@ static inline void oop_free_generic_params(XrGenericParam **type_params, int cou
     (void) count;
 }
 
-static inline void oop_free_string_array(char **arr, int count) {
-    (void) arr;
-    (void) count;
-}
-
 /* ========== Class Declaration Parsing ========== */
 
 // Parse class declaration
@@ -132,17 +127,19 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
         }
     }
 
-    char **interfaces = NULL;
+    // Implemented interfaces are full type references so that
+    // `class IntBox implements Container<int>` and the bare-name form
+    // `class Dog implements Comparable` go through the same path.
+    XrTypeRef **interfaces = NULL;
     int interface_count = 0;
     int interface_capacity = 0;
 
     if (xr_parser_match(parser, TK_IMPLEMENTS)) {
         do {
-            xr_parser_consume(parser, TK_NAME, "expected interface name");
-            char *interface_name = token_to_string(parser, &parser->previous);
-
-            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, interface_name);
-
+            XrTypeRef *iface_ref = xr_parse_type_annotation(parser);
+            if (!iface_ref)
+                break;
+            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, iface_ref);
         } while (xr_parser_match(parser, TK_COMMA));
     }
 
@@ -158,7 +155,9 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
             parser->type_scope = saved_scope;
         }
         oop_free_generic_params(type_params, type_param_count);
-        oop_free_string_array(interfaces, interface_count);
+        // interfaces[] entries are arena-owned XrTypeRefs; nothing to free.
+        (void) interfaces;
+        (void) interface_count;
         return NULL;
     }
 
@@ -347,18 +346,18 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         xr_parser_error_at_current(parser, "structs cannot inherit from other types");
     }
 
-    // Parse implements clause (structs can implement interfaces)
-    char **interfaces = NULL;
+    // Parse implements clause (structs can implement interfaces).
+    // Use full type-reference parser so `implements Container<int>` works.
+    XrTypeRef **interfaces = NULL;
     int interface_count = 0;
     int interface_capacity = 0;
 
     if (xr_parser_match(parser, TK_IMPLEMENTS)) {
         do {
-            xr_parser_consume(parser, TK_NAME, "expected interface name");
-            char *interface_name = token_to_string(parser, &parser->previous);
-
-            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, interface_name);
-
+            XrTypeRef *iface_ref = xr_parse_type_annotation(parser);
+            if (!iface_ref)
+                break;
+            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, iface_ref);
         } while (xr_parser_match(parser, TK_COMMA));
     }
 
@@ -1440,18 +1439,18 @@ AstNode *xr_parse_interface_declaration(Parser *parser) {
         parser->type_scope = generic_scope;
     }
 
-    // Parse extends clause (optional, interface can extend multiple interfaces)
-    char **extends = NULL;
+    // Parse extends clause (optional, interface can extend multiple interfaces).
+    // Use full type-reference parser so `extends Pair<K, V>` works.
+    XrTypeRef **extends = NULL;
     int extends_count = 0;
     int extends_capacity = 0;
 
     if (xr_parser_match(parser, TK_EXTENDS)) {
         do {
-            xr_parser_consume(parser, TK_NAME, "expected interface name");
-            char *parent_name = token_to_string(parser, &parser->previous);
-
-            XR_PARSE_PUSH(parser, extends, extends_count, extends_capacity, parent_name);
-
+            XrTypeRef *parent_ref = xr_parse_type_annotation(parser);
+            if (!parent_ref)
+                break;
+            XR_PARSE_PUSH(parser, extends, extends_count, extends_capacity, parent_ref);
         } while (xr_parser_match(parser, TK_COMMA));
     }
 
