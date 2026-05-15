@@ -646,7 +646,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->super_name = clone_str(src->super_name);
             dst->super_module = clone_str(src->super_module);
             dst->interface_count = src->interface_count;
-            dst->interfaces = clone_str_array(src->interfaces, src->interface_count);
+            dst->interfaces = clone_tref_array(src->interfaces, src->interface_count, map, mc);
             dst->field_count = src->field_count;
             dst->fields = clone_node_array(src->fields, src->field_count, map, mc);
             dst->method_count = src->method_count;

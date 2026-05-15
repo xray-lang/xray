@@ -1,10 +1,11 @@
 // 0851_interface_generic_property.xr
 // 作者：xingleixu@gmail.com
-// 测试：接口的泛型类型参数与属性签名（含 const 修饰）
+// 测试：接口的泛型类型参数、属性签名、以及 implements/extends
+//      子句对参数化接口的承载（语法层面）。
 //
-// 说明：本文件聚焦于"接口声明"侧的解析能力 —— 泛型类型参数、
-// 属性签名、const 只读属性。`implements Foo<int>` 这类带类型实参的
-// 实现子句目前不支持，相关验证留给类型系统升级后再补充。
+// 说明：当前阶段约束匹配仍按裸名进行，所以 `Iterable<int>` 与
+// `Iterable<string>` 在类型层面是等价的；type-arg-aware 校验是后续
+// commit 的工作。
 
 // ===== 单类型参数泛型接口 =====
 
@@ -13,22 +14,68 @@ interface Container<T> {
     size(): int
 }
 
-@test
-fn test_generic_interface_declares(): void {
-    // 仅验证泛型接口可以被声明且不报语法/类型错误。
-    assert_eq(1, 1)
+class IntBox implements Container<int> {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+
+    get(index: int): int {
+        return this.value
+    }
+
+    size(): int {
+        return 1
+    }
 }
 
-// ===== 多类型参数泛型接口 =====
+@test
+fn test_implements_with_type_args(): void {
+    let b = new IntBox(42)
+    assert_eq(b.get(0), 42)
+    assert_eq(b.size(), 1)
+}
+
+// ===== 多类型参数泛型接口 + 带类型实参的 extends =====
 
 interface Pair<K, V> {
     key(): K
     value(): V
 }
 
+interface KVDescriptor<K, V> extends Pair<K, V> {
+    describe(): string
+}
+
+class StringIntEntry implements KVDescriptor<string, int> {
+    k: string
+    v: int
+
+    constructor(k: string, v: int) {
+        this.k = k
+        this.v = v
+    }
+
+    key(): string {
+        return this.k
+    }
+
+    value(): int {
+        return this.v
+    }
+
+    describe(): string {
+        return this.k
+    }
+}
+
 @test
-fn test_two_type_param_interface(): void {
-    assert_eq(1, 1)
+fn test_extends_with_type_args(): void {
+    let e = new StringIntEntry("age", 30)
+    assert_eq(e.key(), "age")
+    assert_eq(e.value(), 30)
+    assert_eq(e.describe(), "age")
 }
 
 // ===== 接口属性签名 =====

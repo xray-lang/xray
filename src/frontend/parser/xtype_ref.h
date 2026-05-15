@@ -150,6 +150,18 @@ static inline bool xr_tref_is_nullable(const XrTypeRef *t) {
     return t && t->kind == XR_TREF_OPTIONAL;
 }
 
+/* Head name of a NAMED or GENERIC type reference.
+ * Returns NULL for any other kind. Useful for the OOP `extends` /
+ * `implements` clauses where the analyzer needs the bare interface or
+ * class name regardless of whether type arguments were supplied. */
+static inline const char *xr_tref_head_name(const XrTypeRef *t) {
+    if (!t)
+        return NULL;
+    if (t->kind == XR_TREF_NAMED || t->kind == XR_TREF_GENERIC)
+        return t->name;
+    return NULL;
+}
+
 /* ========== Debug / Formatting ========== */
 
 /* Return a human-readable string for a type ref (e.g. "Array<int>").

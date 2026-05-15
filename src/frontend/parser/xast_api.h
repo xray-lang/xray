@@ -167,7 +167,7 @@ XR_FUNC AstNode *xr_ast_struct_literal(XrayIsolate *X, const char *name, char **
                                        AstNode **field_values, int field_count, int line);
 
 // Create interface declaration node
-XR_FUNC AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, char **extends,
+XR_FUNC AstNode *xr_ast_interface_decl(XrayIsolate *X, const char *name, XrTypeRef **extends,
                                        int extends_count, AstNode **methods, int method_count,
                                        AstNode **properties, int property_count,
                                        XrGenericParam **type_params, int type_param_count,

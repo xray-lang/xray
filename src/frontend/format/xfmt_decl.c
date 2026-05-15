@@ -128,7 +128,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         for (int i = 0; i < cls->interface_count; i++) {
             if (i > 0)
                 xfmt_write_str(ctx, ", ");
-            xfmt_write_str(ctx, cls->interfaces[i]);
+            xfmt_emit_type(ctx, cls->interfaces[i]);
         }
     }
 
@@ -364,7 +364,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         for (int i = 0; i < iface->extends_count; i++) {
             if (i > 0)
                 xfmt_write_str(ctx, ", ");
-            xfmt_write_str(ctx, iface->extends[i]);
+            xfmt_emit_type(ctx, iface->extends[i]);
         }
     }
 
