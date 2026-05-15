@@ -110,3 +110,12 @@ jobs:
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Trigger VS Code extension publish
+      if: success()
+      env:
+        GH_TOKEN: ${{ secrets.VSCODE_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+      run: |
+        gh api repos/xray-lang/xray-vscode/dispatches \
+          -f event_type=xray-release \
+          -f "client_payload[xray_tag]=${{ github.ref_name }}"
