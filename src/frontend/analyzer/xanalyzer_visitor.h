@@ -45,6 +45,7 @@ XR_FUNC XrType *xa_visit_call(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node);
+XR_FUNC XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_map_literal(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node);

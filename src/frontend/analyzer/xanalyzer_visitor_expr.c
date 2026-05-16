@@ -366,6 +366,39 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    /* Tuple field access via `.N` -- the parser already encoded the
+     * digit run as the member name (see xparse_decl.c). We accept only
+     * digit-only names on tuple receivers; anything else is a hard
+     * error. The numeric value is parsed in C and bounds-checked
+     * against the tuple's static arity. */
+    if (XR_TYPE_IS_TUPLE(obj_type)) {
+        const char *nm = ma->name;
+        bool digits_only = (nm && *nm);
+        for (const char *p = nm; *p && digits_only; p++) {
+            if (*p < '0' || *p > '9')
+                digits_only = false;
+        }
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        if (!digits_only) {
+            char msg[160];
+            snprintf(msg, sizeof(msg), "tuple has no named field '%s'; use .N (zero-based) instead",
+                     nm ? nm : "");
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TUPLE_FIELD_NAME, msg, &loc);
+            return xr_type_new_unknown(NULL);
+        }
+        long idx = strtol(nm, NULL, 10);
+        int arity = obj_type->tuple.element_count;
+        if (idx < 0 || idx >= arity) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "tuple field index %ld out of range (arity %d)", idx, arity);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TUPLE_FIELD_RANGE, msg, &loc);
+            return xr_type_new_unknown(NULL);
+        }
+        return obj_type->tuple.element_types[(int) idx];
+    }
+
     // Enum static member access: EnumName.Member -> enum value of EnumName.
     // The member is checked against the declared enum_member_names so a
     // typo like Color.Yellow is flagged here rather than handed to the
@@ -677,6 +710,46 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     }
 
     return xr_type_new_unknown(NULL);
+}
+
+XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !ctx->analyzer || !node)
+        return xr_type_new_unknown(NULL);
+
+    TupleLiteralNode *tup = &node->as.tuple_literal;
+    /* `()` is the unit literal — the unique value of the unit type
+     * (XR_KIND_UNIT). It is *not* a 0-arity XR_KIND_TUPLE: keeping unit
+     * its own kind lets the rest of the type system stay unchanged for
+     * void-like contexts. */
+    if (tup->count == 0)
+        return xr_type_new_unit(ctx->analyzer->isolate);
+
+    /* Propagate per-element expected types when the surrounding context
+     * supplies a tuple type of matching arity. Each child sees the
+     * matching element-type slot; arity mismatches just disable
+     * propagation rather than erroring here (the type-check pass runs
+     * after inference and reports the mismatch). */
+    XrType *saved_expected = ctx->expected_type;
+    XrType *expected_tuple = NULL;
+    if (saved_expected && XR_TYPE_IS_TUPLE(saved_expected) &&
+        saved_expected->tuple.element_count == tup->count) {
+        expected_tuple = saved_expected;
+    }
+
+    XrType **elem_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) tup->count);
+    if (!elem_types) {
+        ctx->expected_type = saved_expected;
+        return xr_type_new_unknown(NULL);
+    }
+    for (int i = 0; i < tup->count; i++) {
+        ctx->expected_type = expected_tuple ? expected_tuple->tuple.element_types[i] : NULL;
+        elem_types[i] = xa_visit_infer_expr(ctx, tup->elements[i]);
+    }
+    ctx->expected_type = saved_expected;
+
+    XrType *result = xr_type_new_tuple(ctx->analyzer->isolate, elem_types, tup->count);
+    xr_free(elem_types);
+    return result ? result : xr_type_new_unknown(NULL);
 }
 
 XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {

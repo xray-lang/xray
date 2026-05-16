@@ -823,7 +823,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             DestructureDeclNode *dd = &node->as.destructure_decl;
             if (dd->pattern) {
                 XrDestructurePattern *pat = dd->pattern;
-                if (pat->type == PATTERN_ARRAY) {
+                if (pat->type == PATTERN_ARRAY || pat->type == PATTERN_TUPLE) {
                     for (int i = 0; i < pat->as.array.element_count; i++) {
                         XrDestructurePattern *elem = pat->as.array.elements[i];
                         if (elem && elem->type == PATTERN_IDENTIFIER && elem->as.identifier.name) {
@@ -909,6 +909,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         case AST_MEMBER_ACCESS:
         case AST_INDEX_GET:
         case AST_ARRAY_LITERAL:
+        case AST_TUPLE_LITERAL:
         case AST_MAP_LITERAL:
         case AST_OBJECT_LITERAL:
         case AST_NEW_EXPR:
@@ -1001,6 +1002,9 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_ARRAY_LITERAL:
             result = xa_visit_array_literal(ctx, node);
+            break;
+        case AST_TUPLE_LITERAL:
+            result = xa_visit_tuple_literal(ctx, node);
             break;
         case AST_MAP_LITERAL:
             result = xa_visit_map_literal(ctx, node);
@@ -1810,6 +1814,54 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                                 if (links) {
                                     links->type = elem_type;
+                                    links->is_definitely_assigned = true;
+                                }
+                            }
+                        }
+                    }
+                } else if (pat->type == PATTERN_TUPLE) {
+                    /* Tuple destructuring is heterogeneous: each
+                     * sub-pattern receives the type at the matching
+                     * tuple position. Arity must match exactly — there
+                     * is no rest pattern, so a mismatch is always a
+                     * static error. Non-tuple init types still bind
+                     * the variables to unknown so name-resolution in
+                     * the body keeps working after the diagnostic. */
+                    int pat_count = pat->as.array.element_count;
+                    bool init_is_tuple = init_type && XR_TYPE_IS_TUPLE(init_type);
+                    if (init_is_tuple && init_type->tuple.element_count != pat_count) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[160];
+                        snprintf(msg, sizeof(msg),
+                                 "tuple pattern has %d element(s) but value has %d", pat_count,
+                                 init_type->tuple.element_count);
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    } else if (init_type && !XR_TYPE_IS_TUPLE(init_type) &&
+                               !XR_TYPE_IS_UNKNOWN(init_type)) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[160];
+                        snprintf(msg, sizeof(msg),
+                                 "tuple destructuring requires a tuple value, got '%s'",
+                                 xr_type_to_string(init_type));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                    }
+                    for (int i = 0; i < pat_count; i++) {
+                        XrDestructurePattern *elem = pat->as.array.elements[i];
+                        if (elem && elem->type == PATTERN_IDENTIFIER && elem->as.identifier.name) {
+                            XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope,
+                                                            elem->as.identifier.name);
+                            if (sym) {
+                                XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+                                if (links) {
+                                    XrType *t =
+                                        (init_is_tuple && i < init_type->tuple.element_count)
+                                            ? init_type->tuple.element_types[i]
+                                            : xr_type_new_unknown(NULL);
+                                    links->type = t ? t : xr_type_new_unknown(NULL);
                                     links->is_definitely_assigned = true;
                                 }
                             }
