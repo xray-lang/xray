@@ -301,9 +301,8 @@ bool xr_array_is_empty(XrArray *arr) {
 /* ====== Higher-Order Methods ====== */
 
 void xr_array_foreach(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return;
-
+    XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
     for (int i = 0; i < arr->length; i++) {
         XrValue args[1];
         args[0] = xr_array_get_element(arr, i);
@@ -314,8 +313,8 @@ void xr_array_foreach(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback
 // Runtime implementation for dynamic dispatch (inline compilation handles static types)
 
 XrArray *xr_array_map(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return xr_array_new(xr_current_coro(iso));
+    XR_DCHECK(arr != NULL, "xr_array_map: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_map: NULL callback");
     // map always returns Array<any> (callback return type unknown at runtime)
     XrArray *result = xr_array_with_capacity(xr_current_coro(iso), arr->length);
     XrValue *rdata = (XrValue *) result->data;
@@ -331,8 +330,8 @@ XrArray *xr_array_map(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback
 }
 
 XrArray *xr_array_filter(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return xr_array_new(xr_current_coro(iso));
+    XR_DCHECK(arr != NULL, "xr_array_filter: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_filter: NULL callback");
     // filter preserves source elem_type
     XrArray *result = xr_array_with_capacity_typed(xr_current_coro(iso), arr->length,
                                                    (XrArrayElemType) arr->elem_type);
@@ -353,8 +352,8 @@ XrArray *xr_array_filter(XrayIsolate *iso, XrArray *arr, struct XrClosure *callb
 
 XrValue xr_array_reduce(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback,
                         XrValue initial) {
-    if (!arr || !callback)
-        return initial;
+    XR_DCHECK(arr != NULL, "xr_array_reduce: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_reduce: NULL callback");
     XrValue accumulator = initial;
 
     for (int i = 0; i < arr->length; i++) {
@@ -368,8 +367,8 @@ XrValue xr_array_reduce(XrayIsolate *iso, XrArray *arr, struct XrClosure *callba
 }
 
 XrValue xr_array_find(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return xr_null();
+    XR_DCHECK(arr != NULL, "xr_array_find: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_find: NULL callback");
     for (int i = 0; i < arr->length; i++) {
         XrValue elem = xr_array_get_element(arr, i);
         XrValue args[1];
@@ -383,8 +382,8 @@ XrValue xr_array_find(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback
 }
 
 int xr_array_find_index(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return -1;
+    XR_DCHECK(arr != NULL, "xr_array_find_index: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_find_index: NULL callback");
     for (int i = 0; i < arr->length; i++) {
         XrValue args[1];
         args[0] = xr_array_get_element(arr, i);
@@ -397,8 +396,8 @@ int xr_array_find_index(XrayIsolate *iso, XrArray *arr, struct XrClosure *callba
 }
 
 bool xr_array_every(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return true;
+    XR_DCHECK(arr != NULL, "xr_array_every: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_every: NULL callback");
     for (int i = 0; i < arr->length; i++) {
         XrValue args[1];
         args[0] = xr_array_get_element(arr, i);
@@ -411,8 +410,8 @@ bool xr_array_every(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) 
 }
 
 bool xr_array_some(XrayIsolate *iso, XrArray *arr, struct XrClosure *callback) {
-    if (!arr || !callback)
-        return false;
+    XR_DCHECK(arr != NULL, "xr_array_some: NULL arr");
+    XR_DCHECK(callback != NULL, "xr_array_some: NULL callback");
     for (int i = 0; i < arr->length; i++) {
         XrValue args[1];
         args[0] = xr_array_get_element(arr, i);

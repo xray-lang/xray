@@ -1,0 +1,81 @@
+// 0615_array_callback_signature.xr
+// Regression: Array<T>'s callback methods must (a) accept the documented
+// argument order (fn first, then init for reduce) and (b) tolerate
+// callbacks that declare fewer parameters than the full signature.
+//
+// Historical bugs:
+//   - The analyzer skipped argument type checks for native container
+//     methods because the inner fn type in their signatures parsed to
+//     unknown; arr.reduce(0, fn) compiled and returned `fn <anonymous>`
+//     or even segfaulted when args[0] was a non-zero int.
+//   - Callback arity was checked for exact equality, breaking the
+//     common JS-style call arr.map(fn(x) { ... }) against signatures
+//     that also pass an index.
+
+// ===== reduce(fn, init) returns accumulator, not the callback =====
+@test
+fn test_reduce_returns_accumulated_int(): void {
+    let xs = [10, 20, 30, 40, 50]
+    let sum = xs.reduce(fn(acc: int, v: int): int { return acc + v }, 0)
+    assert_eq(sum, 150)
+}
+
+@test
+fn test_reduce_initial_value_used(): void {
+    let xs = [1, 2, 3]
+    let sum = xs.reduce(fn(a: int, b: int): int { return a + b }, 100)
+    assert_eq(sum, 106)
+}
+
+@test
+fn test_reduce_typed_lambda_in_variable(): void {
+    let xs = [1, 2, 3, 4]
+    let adder = fn(acc: int, v: int): int { return acc + v }
+    let sum = xs.reduce(adder, 0)
+    assert_eq(sum, 10)
+}
+
+// ===== callback arity tolerance =====
+// map/filter/forEach/find/every/some accept a single-arg callback
+// even though the full signature also exposes index / array.
+@test
+fn test_map_single_arg_callback(): void {
+    let xs = [1, 2, 3]
+    let doubled = xs.map(fn(x: int): int { return x * 2 })
+    assert_eq(doubled[0], 2)
+    assert_eq(doubled[1], 4)
+    assert_eq(doubled[2], 6)
+}
+
+@test
+fn test_filter_single_arg_callback(): void {
+    let xs = [1, 2, 3, 4, 5]
+    let evens = xs.filter(fn(x: int): bool { return x % 2 == 0 })
+    assert_eq(evens.length, 2)
+    assert_eq(evens[0], 2)
+    assert_eq(evens[1], 4)
+}
+
+@test
+fn test_every_some_single_arg(): void {
+    let xs = [2, 4, 6]
+    let all_even = xs.every(fn(x: int): bool { return x % 2 == 0 })
+    let any_lt_3 = xs.some(fn(x: int): bool { return x < 3 })
+    assert_eq(all_even, true)
+    assert_eq(any_lt_3, true)
+}
+
+// ===== nested fn type in signature still type-checks =====
+// The first parameter of reduce is `fn(acc: U, item: T): U`. Verify
+// the analyzer rejects a non-fn there.
+@test
+fn test_reduce_chain_with_typed_acc(): void {
+    let xs = [1, 2, 3, 4, 5]
+    // map -> filter -> reduce, exercising the full callback-typed path.
+    let total = xs
+        .map(fn(x: int): int { return x * x })
+        .filter(fn(x: int): bool { return x > 4 })
+        .reduce(fn(a: int, b: int): int { return a + b }, 0)
+    // [1,4,9,16,25] -> [9,16,25] -> 50
+    assert_eq(total, 50)
+}

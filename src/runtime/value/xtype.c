@@ -1282,10 +1282,17 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_assignable(tr, sr);
     }
 
-    // Function type compatibility
+    // Function type compatibility.
+    //
+    // Callback arity tolerance: source may declare *fewer* parameters than
+    // target. Trailing target parameters are simply ignored at the call
+    // site, matching JS/Python/Rust and how the xray VM already invokes
+    // such callbacks. This is what lets `arr.map(fn(x) { ... })` satisfy
+    // a `fn(item: T, index: int): U` parameter slot. The source must not
+    // declare *more* parameters than target, since those would never get
+    // a value.
     if (XR_TYPE_IS_FUNCTION(target) && XR_TYPE_IS_FUNCTION(source)) {
-        // Parameter count must match (or target is variadic)
-        if (target->function.param_count != source->function.param_count) {
+        if (source->function.param_count > target->function.param_count) {
             return false;
         }
 
@@ -1300,9 +1307,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             }
         }
 
-        // Parameters: contravariant - target params assignable to source params
-        // Simplified: allow if types match or either side is unknown/type_param
-        for (int i = 0; i < target->function.param_count; i++) {
+        // Parameters: contravariant over the prefix that source declares.
+        // Simplified: allow if types match or either side is unknown/type_param.
+        for (int i = 0; i < source->function.param_count; i++) {
             XrType *t_param = target->function.param_types ? target->function.param_types[i] : NULL;
             XrType *s_param = source->function.param_types ? source->function.param_types[i] : NULL;
 

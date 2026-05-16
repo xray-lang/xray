@@ -653,6 +653,13 @@ const char *xa_builtin_get_type_name(XrType *type) {
 // Parse a type string (e.g., "int", "string?", "Array<int>") to XrType
 static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len);
 
+// Parse a "fn(p: T, ...): R" function type literal from a bounded slice.
+// Mirrors xa_builtin_parse_full_signature but works on [s, s+len) instead
+// of a NUL-terminated string, so it composes safely inside nested type
+// expressions (e.g. the first parameter of Array<T>.reduce, which is
+// itself a function type "fn(acc: U, item: T): U").
+static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len);
+
 // Public wrapper with NUL-terminated string.
 XrType *xa_builtin_parse_type_string(XrayIsolate *X, const char *s) {
     if (!s)
@@ -821,6 +828,13 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         const char *inner = s + 8;
         size_t inner_len = base_len - 9;
         type = xr_type_new_channel(X, parse_type_str(X, inner, inner_len));
+    } else if (base_len >= 3 && strncmp(s, "fn", 2) == 0 && (s[2] == '(' || s[2] == ' ')) {
+        // fn(p: T, ...): R — function type literal. Required for nested
+        // function-typed parameters such as Array<T>.reduce's first
+        // parameter "fn(acc: U, item: T): U" — without this branch the
+        // inner fn type resolves to unknown and the analyzer silently
+        // skips assignability checks for the whole reduce call.
+        type = parse_fn_type_str(X, s, base_len);
     } else if (base_len == 1 && s[0] >= 'A' && s[0] <= 'Z') {
         // Single uppercase letter: generic type parameter (T, K, V, etc.)
         char name[2] = {s[0], '\0'};
@@ -867,6 +881,139 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         type = xr_type_make_nullable(X, type);
     }
     return type;
+}
+
+// Parse a "fn(p: T, ...): R" function type literal from a bounded slice.
+// Operates on [s, s+len) so it can be used recursively inside larger type
+// expressions where the inner fn is not NUL-terminated.
+static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len) {
+    XR_DCHECK(s != NULL, "parse_fn_type_str: NULL s");
+    // Skip "fn" prefix and any spaces before '('.
+    size_t i = 2;
+    while (i < len && s[i] == ' ')
+        i++;
+    if (i >= len || s[i] != '(')
+        return xr_type_new_unknown(X);
+    size_t open = i;
+
+    // Locate the matching ')' at depth 0.
+    int depth = 0;
+    size_t close = len;
+    for (size_t j = open + 1; j < len; j++) {
+        if (s[j] == '(') {
+            depth++;
+        } else if (s[j] == ')') {
+            if (depth == 0) {
+                close = j;
+                break;
+            }
+            depth--;
+        }
+    }
+    if (close == len)
+        return xr_type_new_unknown(X);
+
+    // Parse parameter list between (open, close).
+    XrType *param_types[16];
+    int param_count = 0;
+    bool is_variadic = false;
+    int min_params = 0;
+    bool seen_optional = false;
+
+    size_t p = open + 1;
+    while (p < close && param_count < 16) {
+        while (p < close && (s[p] == ' ' || s[p] == ','))
+            p++;
+        if (p >= close)
+            break;
+
+        // Rest parameter: "...name: T"
+        if (p + 3 <= close && strncmp(s + p, "...", 3) == 0) {
+            is_variadic = true;
+            seen_optional = true;
+            p += 3;
+        }
+
+        // Find ':' at top depth within this slice.
+        size_t colon = close;
+        int d = 0;
+        for (size_t c = p; c < close; c++) {
+            if (s[c] == '<' || s[c] == '(') {
+                d++;
+            } else if (s[c] == '>' || s[c] == ')') {
+                d--;
+            } else if (s[c] == ':' && d == 0) {
+                colon = c;
+                break;
+            } else if (s[c] == ',' && d == 0) {
+                break;
+            }
+        }
+
+        if (colon < close) {
+            bool is_optional = (colon > open + 1 && s[colon - 1] == '?');
+            if (is_optional)
+                seen_optional = true;
+
+            size_t ts = colon + 1;
+            while (ts < close && s[ts] == ' ')
+                ts++;
+
+            size_t te = ts;
+            d = 0;
+            while (te < close) {
+                if (s[te] == '<' || s[te] == '(') {
+                    d++;
+                } else if (s[te] == '>' || s[te] == ')') {
+                    d--;
+                } else if (s[te] == ',' && d == 0) {
+                    break;
+                }
+                te++;
+            }
+
+            param_types[param_count] = parse_type_str(X, s + ts, te - ts);
+            if (!seen_optional)
+                min_params = param_count + 1;
+            param_count++;
+            p = te;
+        } else {
+            while (p < close && s[p] != ',')
+                p++;
+            param_types[param_count] = xr_type_new_unknown(NULL);
+            if (!seen_optional)
+                min_params = param_count + 1;
+            param_count++;
+        }
+    }
+
+    // Parse return type: skip "): " after the closing paren.
+    XrType *ret_type;
+    size_t rt = close + 1;
+    while (rt < len && s[rt] == ' ')
+        rt++;
+    if (rt < len && s[rt] == ':') {
+        rt++;
+        while (rt < len && s[rt] == ' ')
+            rt++;
+        ret_type = parse_type_str(X, s + rt, len - rt);
+    } else {
+        ret_type = xr_type_new_void(NULL);
+    }
+
+    XrType **params = NULL;
+    if (param_count > 0) {
+        params = xr_malloc(sizeof(XrType *) * (size_t) param_count);
+        XR_CHECK(params != NULL, "parse_fn_type_str: param array allocation failed");
+        for (int k = 0; k < param_count; k++)
+            params[k] = param_types[k];
+    }
+    XrType *fn_type = xr_type_new_function(X, params, param_count, ret_type, is_variadic);
+    if (fn_type)
+        fn_type->function.min_params = min_params;
+    if (params)
+        xr_free(params);
+    return fn_type;
 }
 
 // Parse full function signature: "(param: type, param2: type): ReturnType"
