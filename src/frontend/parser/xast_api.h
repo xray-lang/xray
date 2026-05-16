@@ -128,6 +128,12 @@ XR_FUNC AstNode *xr_ast_as_expr(XrayIsolate *X, AstNode *expr, XrTypeRef *type, 
 // Create array literal node
 XR_FUNC AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int count, int line);
 
+// Create tuple literal node.
+// count == 0 produces a unit literal `()`; count == 1 is a unary tuple
+// `(x,)`. The caller owns `elements`; the factory copies the array
+// into the parse arena.
+XR_FUNC AstNode *xr_ast_tuple_literal(XrayIsolate *X, AstNode **elements, int count, int line);
+
 // Create object literal node
 XR_FUNC AstNode *xr_ast_object_literal(XrayIsolate *X, AstNode **keys, AstNode **values,
                                        bool *computed, int count, int line);

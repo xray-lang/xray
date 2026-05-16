@@ -593,6 +593,11 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
                 canon_node(ctx, node->as.array_literal.elements[i]);
             break;
 
+        case AST_TUPLE_LITERAL:
+            for (int i = 0; i < node->as.tuple_literal.count; i++)
+                canon_node(ctx, node->as.tuple_literal.elements[i]);
+            break;
+
         case AST_MAP_LITERAL:
             for (int i = 0; i < node->as.map_literal.count; i++) {
                 canon_node(ctx, node->as.map_literal.keys[i]);

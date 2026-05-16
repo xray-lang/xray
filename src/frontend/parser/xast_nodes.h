@@ -87,6 +87,7 @@ struct AstNode {
         IsExprNode is_expr;
         AsExprNode as_expr;
         ArrayLiteralNode array_literal;
+        TupleLiteralNode tuple_literal;
         IndexGetNode index_get;
         IndexSetNode index_set;
         SliceExprNode slice_expr;
