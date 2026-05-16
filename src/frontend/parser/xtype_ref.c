@@ -70,9 +70,9 @@ XR_FUNC XrTypeRef *xr_tref_bool(struct XrayIsolate *X) {
     return t;
 }
 
-XR_FUNC XrTypeRef *xr_tref_void(struct XrayIsolate *X) {
+XR_FUNC XrTypeRef *xr_tref_unit(struct XrayIsolate *X) {
     XrTypeRef *t = tref_alloc(X);
-    t->kind = XR_TREF_VOID;
+    t->kind = XR_TREF_UNIT;
     return t;
 }
 
@@ -245,7 +245,7 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
         case XR_TREF_BOOL:
             tref_append(buf, pos, cap, "bool");
             break;
-        case XR_TREF_VOID:
+        case XR_TREF_UNIT:
             tref_append(buf, pos, cap, "()");
             break;
         case XR_TREF_NULL:

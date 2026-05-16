@@ -135,7 +135,7 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
             return xr_type_new_string(NULL);
         case XR_TREF_BOOL:
             return xr_type_new_bool(NULL);
-        case XR_TREF_VOID:
+        case XR_TREF_UNIT:
             return xr_type_new_unit(NULL);
         case XR_TREF_NULL:
             return xr_type_new_null(NULL);

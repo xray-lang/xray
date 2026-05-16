@@ -60,8 +60,8 @@ static const char *mono_type_display_name(XrTypeRef *t) {
             return "string";
         case XR_TREF_NULL:
             return "null";
-        case XR_TREF_VOID:
-            return "void";
+        case XR_TREF_UNIT:
+            return "()";
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
             return t->name ? t->name : "object";
@@ -92,8 +92,8 @@ const char *xr_mono_type_tag(XrTypeRef *t) {
             return "str";
         case XR_TREF_NULL:
             return "null";
-        case XR_TREF_VOID:
-            return "void";
+        case XR_TREF_UNIT:
+            return "unit";
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
             return t->name ? t->name : "obj";
