@@ -213,7 +213,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                     params[count++] = xr_parse_type_annotation(parser);
             }
             xr_parser_consume(parser, TK_RPAREN, "expected ')'");
-            XrTypeRef *ret = xr_tref_void(parser->X);
+            XrTypeRef *ret = xr_tref_unit(parser->X);
             if (xr_parser_match(parser, TK_COLON))
                 ret = xr_parse_type_annotation(parser);
             return xr_tref_function(parser->X, params, count, ret);
@@ -281,7 +281,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             xr_parser_emit_removed_syntax(
                 parser, &name_token, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
                 "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
-            return xr_tref_void(parser->X);
+            return xr_tref_unit(parser->X);
         }
 
         /* Generic type arguments: Name<T1, T2, ...> */
