@@ -1,0 +1,4 @@
+// 002_void_var_type.xr
+// Expected: Compile error - `void` keyword was removed
+// Error should mention: E0804, void
+let x: void = null
