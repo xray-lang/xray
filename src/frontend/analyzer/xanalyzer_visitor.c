@@ -129,9 +129,15 @@ XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *f
         return;
     }
 
+    // Collect all names first so resolve_class_to_type_param can safely
+    // read the full names array when checking constraints for early params.
     for (int i = 0; i < count; i++) {
         XrGenericParam *gp = type_params[i];
         names[i] = gp ? gp->name : NULL;
+    }
+
+    for (int i = 0; i < count; i++) {
+        XrGenericParam *gp = type_params[i];
         int cn = gp ? gp->constraint_count : 0;
         constraint_counts[i] = cn;
         constraint_lists[i] = NULL;

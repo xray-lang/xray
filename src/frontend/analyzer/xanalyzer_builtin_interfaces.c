@@ -584,8 +584,12 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope) {
     if (!global_scope)
         return;
-    if (!g_interfaces_initialized)
-        xa_builtin_interfaces_init(X);
+    // Interface XrType*s live in the isolate's type pool, so the global static
+    // cache must be rebuilt for every fresh isolate (e.g. each test file gets
+    // its own isolate via xr_cli_isolate_create()). Without this reset, the
+    // cached pointers would dangle after the first isolate's pool is freed.
+    g_interfaces_initialized = false;
+    xa_builtin_interfaces_init(X);
 
     // Register each interface as a type alias in global scope
     for (int i = 0; i < XA_IFACE_COUNT; i++) {
