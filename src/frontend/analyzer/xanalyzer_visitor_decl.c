@@ -58,7 +58,7 @@ static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***t
     switch (node->type) {
         case AST_RETURN_STMT: {
             ReturnStmtNode *ret = &node->as.return_stmt;
-            XrType *rt = xr_type_new_void(NULL);
+            XrType *rt = xr_type_new_unit(NULL);
             if (ret->value_count == 1 && ret->values && ret->values[0]) {
                 rt = xa_visit_infer(ctx, ret->values[0]);
             } else if (ret->value_count > 1) {
@@ -201,7 +201,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
 
     // Omitted return type defaults to void; error if body has 'return <expr>'
     XrType *return_type = fn->return_type ? xr_tref_resolve(ctx->analyzer->isolate, fn->return_type)
-                                          : xr_type_new_void(NULL);
+                                          : xr_type_new_unit(NULL);
     if (!fn->return_type && fn->name && fn->body) {
         if (xa_body_has_return_expr(fn->body)) {
             char msg[256];
@@ -791,7 +791,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         }
         XrType *ret_type = im->return_type
                                ? xr_tref_resolve_in_analyzer(ctx->analyzer, im->return_type)
-                               : xr_type_new_void(NULL);
+                               : xr_type_new_unit(NULL);
         mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
                                             ret_type, false);
         if (param_types)
@@ -1285,7 +1285,7 @@ skip_layout:
                 ret_type = xa_infer_function_return_type(ctx, md->body);
             }
             if (!ret_type) {
-                ret_type = xr_type_new_void(NULL);
+                ret_type = xr_type_new_unit(NULL);
             }
             if (!md->return_type && !md->is_constructor && !is_accessor && md->body) {
                 if (xa_body_has_return_expr(md->body)) {

@@ -1681,7 +1681,7 @@ XrType *xa_visit_go_expr(XaInferContext *ctx, AstNode *node) {
     GoExprNode *go = &node->as.go_expr;
 
     // Infer the type of the expression being spawned
-    XrType *result_type = xr_type_new_void(NULL);
+    XrType *result_type = xr_type_new_unit(NULL);
     if (go->expr) {
         XrType *expr_type = xa_visit_infer_expr(ctx, go->expr);
         // If spawning a function call, get its return type

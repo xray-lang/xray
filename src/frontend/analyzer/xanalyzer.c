@@ -80,7 +80,7 @@ static void register_builtin_var(XaAnalyzer *analyzer, const char *name, XrType 
 static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // Reusable param types
     XrType *p_any = xr_type_new_unknown(NULL);
-    XrType *t_void = xr_type_new_void(NULL);
+    XrType *t_void = xr_type_new_unit(NULL);
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_float = xr_type_new_float(NULL);
     XrType *t_string = xr_type_new_string(NULL);

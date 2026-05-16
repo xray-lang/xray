@@ -64,7 +64,7 @@ void xa_infer_add_return_type(XaInferContext *ctx, XrType *type) {
 // Compute unified return type from all return statements
 XrType *xa_infer_compute_return_type(XaInferContext *ctx) {
     if (!ctx || ctx->return_type_count == 0) {
-        return xr_type_new_void(NULL);
+        return xr_type_new_unit(NULL);
     }
 
     if (ctx->return_type_count == 1) {

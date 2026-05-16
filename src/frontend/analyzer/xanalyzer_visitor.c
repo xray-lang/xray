@@ -919,7 +919,7 @@ XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node) {
         // Statements
         default:
             xa_visit_infer_stmt(ctx, node);
-            return xr_type_new_void(NULL);
+            return xr_type_new_unit(NULL);
     }
 }
 
@@ -1505,7 +1505,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 ctx->expected_return_type =
                     xr_tref_resolve(ctx->analyzer->isolate, fn_decl->return_type);
             } else {
-                ctx->expected_return_type = xr_type_new_void(NULL);
+                ctx->expected_return_type = xr_type_new_unit(NULL);
             }
 
             // Unified body visitor: idempotent collect + direct traversal
