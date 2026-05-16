@@ -381,8 +381,8 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         return v;
     }
 
-    /* Builtin class names resolve to runtime global variables.
-     * This enables static method calls like Json.size(obj). */
+    /* Builtin class names (PascalCase) resolve to runtime class globals.
+     * Used as namespaces for static method dispatch like Json.parse(s). */
     if (name) {
         static const struct {
             const char *name;
@@ -400,6 +400,30 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
                 if (v) {
                     v->aux_int = builtin_classes[i].index;
                     v->aux = (void *) name;
+                    v->line = (uint32_t) node->line;
+                }
+                return v;
+            }
+        }
+
+        /* Builtin instance / value globals (camelCase / dunder) are populated
+         * per script by xray_isolate_set_script_info: `process` is the Process
+         * instance carrying argv/cwd/argv0, `__file__` / `__dir__` are the
+         * current module's source path and directory. */
+        static const struct {
+            const char *name;
+            int index;
+        } builtin_vars[] = {
+            {"process", XR_GLOBAL_VAR_PROCESS},
+            {"__file__", XR_GLOBAL_VAR_FILE},
+            {"__dir__", XR_GLOBAL_VAR_DIR},
+        };
+        for (int i = 0; i < (int) (sizeof(builtin_vars) / sizeof(builtin_vars[0])); i++) {
+            if (strcmp(name, builtin_vars[i].name) == 0) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, l->type_any, 0);
+                if (v) {
+                    v->aux_int = builtin_vars[i].index;
+                    v->aux = (void *) builtin_vars[i].name;
                     v->line = (uint32_t) node->line;
                 }
                 return v;
