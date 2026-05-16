@@ -708,6 +708,29 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
                        (int32_t) XM_JIT_CALL_ARGS_OFFSET);
 
+            /* NULL guard: an unconditional dereference of a null callee
+             * (e.g. uninitialised call_args[0] when the closure was passed
+             * via a different path) would SIGSEGV at the GC type load
+             * below.  Mirror ARM64's CBZ-to-slow guard (xm_codegen_call.c
+             * XM_CALL_DIRECT) so we route to xr_jit_call_func and let the
+             * VM raise the proper error. */
+            x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+            x64_emit8(&ctx->buf, 0x0F);
+            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
+            uint32_t je_null_d = ctx->buf.pos;
+            x64_emit32(&ctx->buf, 0);
+
+            /* Poison guard: high 16 bits non-zero ⇒ deopt marker survived
+             * in call_args[0] (e.g. 0xdead0001dead0001).  ARM64 uses
+             * `lsr x17, x16, #48; cbnz x17, slow`; emulate with rcx. */
+            x64_mov_rr(&ctx->buf, X64_RCX, X64_SCRATCH_REG);
+            x64_shr_ri(&ctx->buf, X64_RCX, 48);
+            x64_test_rr(&ctx->buf, X64_RCX, X64_RCX);
+            x64_emit8(&ctx->buf, 0x0F);
+            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
+            uint32_t jnz_poison_d = ctx->buf.pos;
+            x64_emit32(&ctx->buf, 0);
+
             /* GC type guard: only XR_TFUNCTION (5) uses fast path.
              * Classes have different layout and need C bridge. */
             x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_GC_TYPE_OFFSET);
@@ -780,6 +803,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
             /* Slow path: xr_jit_call_func(coro, nargs) via call_c_stub */
             uint32_t slow_d_pos = ctx->buf.pos;
+            x64_patch_rel32(&ctx->buf, je_null_d, slow_d_pos);
+            x64_patch_rel32(&ctx->buf, jnz_poison_d, slow_d_pos);
             x64_patch_rel32(&ctx->buf, jne_type_d, slow_d_pos);
             x64_patch_rel32(&ctx->buf, je_proto_d, slow_d_pos);
             x64_patch_rel32(&ctx->buf, je_entry_d, slow_d_pos);
