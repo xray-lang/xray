@@ -5,7 +5,7 @@
 @test
 fn test_match_literal_int() {
     let x = 2
-    let result = match x {
+    let result = match (x) {
         1 => "one"
         2 => "two"
         3 => "three"
@@ -17,7 +17,7 @@ fn test_match_literal_int() {
 @test
 fn test_match_literal_string() {
     let cmd = "start"
-    let result = match cmd {
+    let result = match (cmd) {
         "start" => 1
         "stop" => 2
         "pause" => 3
@@ -29,7 +29,7 @@ fn test_match_literal_string() {
 @test
 fn test_match_default() {
     let x = 100
-    let result = match x {
+    let result = match (x) {
         1 => "one"
         2 => "two"
         _ => "default"
@@ -41,7 +41,7 @@ fn test_match_default() {
 @test
 fn test_match_range() {
     let score = 85
-    let grade = match score {
+    let grade = match (score) {
         90..100 => "A"
         80..90 => "B"
         70..80 => "C"
@@ -54,7 +54,7 @@ fn test_match_range() {
 @test
 fn test_match_range_boundary() {
     let x = 10
-    let result = match x {
+    let result = match (x) {
         0..10 => "less than 10"
         10..20 => "10 to 19"
         _ => "20 or more"
@@ -66,7 +66,7 @@ fn test_match_range_boundary() {
 @test
 fn test_match_multi_value() {
     let day = "Sat"
-    let result = match day {
+    let result = match (day) {
         "Mon", "Tue", "Wed", "Thu", "Fri" => "weekday"
         "Sat", "Sun" => "weekend"
         _ => "unknown"
@@ -77,7 +77,7 @@ fn test_match_multi_value() {
 @test
 fn test_match_multi_number() {
     let x = 5
-    let result = match x {
+    let result = match (x) {
         1, 3, 5, 7, 9 => "odd"
         2, 4, 6, 8, 10 => "even"
         _ => "other"
@@ -89,7 +89,7 @@ fn test_match_multi_number() {
 @test
 fn test_match_guard() {
     let x = 15
-    let result = match x {
+    let result = match (x) {
         n if (n < 0) => "negative"
         n if (n == 0) => "zero"
         n if (n < 10) => "small"
@@ -102,7 +102,7 @@ fn test_match_guard() {
 @test
 fn test_match_guard_complex() {
     let x = 42
-    let result = match x {
+    let result = match (x) {
         n if (n % 2 == 0 && n > 40) => "even and big"
         n if (n % 2 == 0) => "even"
         n if (n > 40) => "odd and big"
@@ -120,7 +120,7 @@ fn test_match_enum() {
         Blue
     }
     let c = Color.Green
-    let result = match c {
+    let result = match (c) {
         Color.Red => "red"
         Color.Green => "green"
         Color.Blue => "blue"
@@ -133,8 +133,8 @@ fn test_match_enum() {
 fn test_match_nested() {
     let x = 5
     let y = 10
-    let result = match x {
-        n if (n > 0) => match y {
+    let result = match (x) {
+        n if (n > 0) => match (y) {
             m if (m > 5) => "x>0, y>5"
             _ => "x>0, y<=5"
         }
@@ -147,7 +147,7 @@ fn test_match_nested() {
 @test
 fn test_match_expression_result() {
     let x = 3
-    let doubled = match x {
+    let doubled = match (x) {
         1 => 2
         2 => 4
         3 => 6
@@ -160,7 +160,7 @@ fn test_match_expression_result() {
 @test
 fn test_match_in_function() {
     fn classify(n: int): string {
-        return match n {
+        return match (n) {
             0 => "zero"
             n if (n > 0) => "positive"
             _ => "negative"
@@ -175,7 +175,7 @@ fn test_match_in_function() {
 @test
 fn test_match_first_wins() {
     let x = 5
-    let result = match x {
+    let result = match (x) {
         n if (n > 0) => "first"
         5 => "five"
         _ => "default"
@@ -186,7 +186,7 @@ fn test_match_first_wins() {
 @test
 fn test_match_all_guards_fail() {
     let x = 0
-    let result = match x {
+    let result = match (x) {
         n if (n > 10) => "big"
         n if (n < -10) => "small"
         _ => "middle"

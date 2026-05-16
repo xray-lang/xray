@@ -1108,7 +1108,7 @@ AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection, AstNode *index_e
 /* ========== Match Expression Node Creation ========== */
 
 // Create match expression node
-// match x { 1 => "one", _ => "other" }
+// match (x) { 1 => "one", _ => "other" }
 AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr, AstNode **arms, int arm_count, int line) {
     AstNode *node = alloc_node(X, AST_MATCH_EXPR, line);
     node->as.match_expr.expr = expr;

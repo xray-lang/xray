@@ -437,7 +437,7 @@ TEST(map_literal) {
 
 TEST(match_expr) {
     XiFunc *f = lower_source("let x = 2\n"
-                             "let y = match x {\n"
+                             "let y = match (x) {\n"
                              "    1 => 10,\n"
                              "    2 => 20,\n"
                              "    _ => 0\n"

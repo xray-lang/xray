@@ -1,0 +1,9 @@
+// 003_match_missing_parens.xr
+// match scrutinee must be parenthesised, mirroring if/for/while.
+// The bare `match expr {` form is a syntax error.
+fn classify(x: int): string {
+    return match x {
+        0 => "zero",
+        _ => "other",
+    }
+}

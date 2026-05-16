@@ -264,7 +264,7 @@ static void print_help_syntax(ReplState *state) {
     printf("  for (let i = 0; i < 10; i++) { }\n");
     printf("  for (item in array) { }\n");
     printf("  while (cond) { }\n");
-    printf("  match x { 1 => \"one\", _ => \"other\" }\n");
+    printf("  match (x) { 1 => \"one\", _ => \"other\" }\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Class:\n");
     printf("  class Point {\n");

@@ -178,7 +178,7 @@ typedef enum {
     AST_MULTI_ASSIGN,    // a, b = b, a
 
     // Match expression
-    AST_MATCH_EXPR,  // match x { 1 => "one", _ => "other" }
+    AST_MATCH_EXPR,  // match (x) { 1 => "one", _ => "other" }
     AST_MATCH_ARM,   // 1 => "one"
 
     // Pattern matching
