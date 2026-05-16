@@ -309,6 +309,13 @@ const char *xr_type_to_string(XrType *type) {
             ptr += n;
             remaining -= n;
         }
+        /* Unary tuple needs an explicit trailing comma so the output
+         * is unambiguously `(T,)` and not the parenthesized type `T`. */
+        if (type->tuple.element_count == 1 && remaining > 2) {
+            n = snprintf(ptr, remaining, ",");
+            ptr += n;
+            remaining -= n;
+        }
         snprintf(ptr, remaining, ")");
         return xr_pool_strdup(pool, buf);
     }
@@ -326,6 +333,15 @@ bool xr_type_is_inherently_immutable(XrType *type) {
         case XR_KIND_NULL:
         case XR_KIND_STRING:
         case XR_KIND_UNIT:
+            return true;
+        case XR_KIND_TUPLE:
+            /* Tuples expose no mutation API at the user level, so the
+             * structural shape is immutable. Deep immutability holds
+             * iff every element type is also inherently immutable. */
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                if (!xr_type_is_inherently_immutable(type->tuple.element_types[i]))
+                    return false;
+            }
             return true;
         default:
             return false;

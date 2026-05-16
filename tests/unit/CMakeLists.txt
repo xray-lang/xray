@@ -47,6 +47,7 @@ add_xray_unit_test(test_xarray object/test_xarray.c)
 add_xray_unit_test(test_xstring object/test_xstring.c)
 add_xray_unit_test(test_xmap object/test_xmap.c)
 add_xray_unit_test(test_xset object/test_xset.c)
+add_xray_unit_test(test_xtuple object/test_xtuple.c)
 
 # ============================================================================
 # frontend/ — Lexer, parser, diagnostics

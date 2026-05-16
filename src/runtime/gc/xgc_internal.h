@@ -148,6 +148,7 @@ XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_cell(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_bound_method(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj);
+XR_FUNC void xr_gc_traverse_tuple(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_error(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_task(XrCoroGC *gc, XrGCHeader *obj);
