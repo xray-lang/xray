@@ -343,6 +343,43 @@ XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name) {
     return type;
 }
 
+// Parameterized interface: e.g. Iterable<int> or Pair<string, User>.
+// Mirrors xr_type_new_generic_instance: stores resolved type arguments
+// alongside the interface name so constraint checks can compare them
+// structurally instead of falling back to bare-name matching.
+XrType *xr_type_new_generic_interface(XrayIsolate *X, const char *interface_name,
+                                      XrType **type_args, int type_arg_count) {
+    if (type_arg_count < 0)
+        return NULL;
+    if (type_arg_count > 0 && !type_args)
+        return NULL;
+    X = resolve_isolate(X);
+    XrType *type = type_alloc(X, XR_KIND_INTERFACE);
+    if (!type)
+        return NULL;
+    XrTypePool *pool = X->current_type_pool;
+
+    type->instance.class_name = interface_name ? xr_pool_strdup(pool, interface_name) : NULL;
+    type->instance.class_ref = NULL;
+    type->instance.superclass = NULL;
+
+    if (type_arg_count > 0) {
+        type->instance.type_args =
+            (XrType **) type_alloc_array(pool, sizeof(XrType *), type_arg_count, NULL);
+        if (!type->instance.type_args)
+            return NULL;
+        type->instance.type_arg_count = type_arg_count;
+        for (int i = 0; i < type_arg_count; i++) {
+            type->instance.type_args[i] = type_args[i];
+        }
+    } else {
+        type->instance.type_args = NULL;
+        type->instance.type_arg_count = 0;
+    }
+
+    return type;
+}
+
 XrType *xr_type_new_bigint(XrayIsolate *X) {
     XrType *type = type_alloc(X, XR_KIND_INSTANCE);
     if (type)
@@ -1293,12 +1330,39 @@ bool xr_type_assignable(XrType *target, XrType *source) {
 
         // Check interface conformance: source class implements target interface.
         // Target may be XR_KIND_INTERFACE (builtin) or XR_KIND_CLASS (user-defined
-        // interface resolved by parser as class name).
+        // interface resolved by parser as class name).  When the target carries
+        // type arguments, both the head name and the parameter list must match;
+        // the bare-name path covers built-ins that ignore parameters.
         const char *target_name = target->instance.class_name;
+        int target_args = target->instance.type_arg_count;
         if (target_name) {
             for (XrClassInfo *ci = source->instance.class_ref; ci; ci = ci->base) {
                 for (int i = 0; i < ci->interface_count; i++) {
-                    if (ci->interface_names[i] && strcmp(ci->interface_names[i], target_name) == 0)
+                    XrType *iface = ci->interface_types[i];
+                    if (!iface || !iface->instance.class_name)
+                        continue;
+                    if (strcmp(iface->instance.class_name, target_name) != 0)
+                        continue;
+                    if (target_args == 0)
+                        return true;
+                    if (iface->instance.type_arg_count != target_args)
+                        continue;
+                    bool args_match = true;
+                    for (int j = 0; j < target_args; j++) {
+                        XrType *t = target->instance.type_args[j];
+                        XrType *s = iface->instance.type_args[j];
+                        if (!t || !s)
+                            continue;
+                        if (XR_TYPE_IS_UNKNOWN(t) || XR_TYPE_IS_UNKNOWN(s))
+                            continue;
+                        if (t->kind == XR_KIND_TYPE_PARAM || s->kind == XR_KIND_TYPE_PARAM)
+                            continue;
+                        if (!xr_type_assignable(t, s)) {
+                            args_match = false;
+                            break;
+                        }
+                    }
+                    if (args_match)
                         return true;
                 }
             }

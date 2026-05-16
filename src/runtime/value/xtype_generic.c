@@ -238,6 +238,60 @@ XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_name
     return type;
 }
 
+// Element type produced when iterating `type` for built-in iterables.
+// Returns NULL when type is not iterable in this sense; the caller falls
+// back to bare-kind checks. Map iterates over keys.
+static XrType *iterable_element_of(XrType *type) {
+    if (!type)
+        return NULL;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+            return type->container.element_type;
+        case XR_KIND_MAP:
+            return type->map.key_type;
+        case XR_KIND_STRING:
+            return type;  // string iterates as single-character string
+        default:
+            return NULL;
+    }
+}
+
+// Index pair (key_type, value_type) produced by built-in indexable types.
+// `key_out`/`value_out` may be set independently; missing slots stay NULL.
+static void indexable_kv_of(XrType *type, XrType **key_out, XrType **value_out) {
+    *key_out = NULL;
+    *value_out = NULL;
+    if (!type)
+        return;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+            *value_out = type->container.element_type;
+            break;
+        case XR_KIND_STRING:
+            *value_out = type;
+            break;
+        case XR_KIND_MAP:
+            *key_out = type->map.key_type;
+            *value_out = type->map.value_type;
+            break;
+        default:
+            break;
+    }
+}
+
+// Compare two type-arg slots tolerantly: unknown / type-param / NULL pass.
+static bool type_arg_match(XrType *expected, XrType *actual) {
+    if (!expected || !actual)
+        return true;
+    if (XR_TYPE_IS_UNKNOWN(expected) || XR_TYPE_IS_UNKNOWN(actual))
+        return true;
+    if (expected->kind == XR_KIND_TYPE_PARAM || actual->kind == XR_KIND_TYPE_PARAM)
+        return true;
+    return xr_type_assignable(expected, actual);
+}
+
 // Check if type satisfies a constraint (for generics)
 bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
     if (!constraint)
@@ -248,9 +302,17 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
     // Check built-in interface constraints by name
     if (constraint->kind == XR_KIND_INTERFACE) {
         const char *iface_name = constraint->instance.class_name;
+        int targs = constraint->instance.type_arg_count;
+        XrType **args = constraint->instance.type_args;
         if (iface_name) {
             if (strcmp(iface_name, "Iterable") == 0) {
-                return xr_kind_is_builtin_iterable(type->kind);
+                if (!xr_kind_is_builtin_iterable(type->kind))
+                    return false;
+                if (targs >= 1 && args && args[0]) {
+                    XrType *elem = iterable_element_of(type);
+                    return type_arg_match(args[0], elem);
+                }
+                return true;
             }
             if (strcmp(iface_name, "Comparable") == 0) {
                 XrTypeKind k = type->kind;
@@ -267,7 +329,21 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
             }
             if (strcmp(iface_name, "Indexable") == 0) {
                 XrTypeKind k = type->kind;
-                return k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP;
+                if (k != XR_KIND_ARRAY && k != XR_KIND_STRING && k != XR_KIND_MAP)
+                    return false;
+                if (targs >= 1 && args) {
+                    XrType *kt = NULL;
+                    XrType *vt = NULL;
+                    indexable_kv_of(type, &kt, &vt);
+                    // For Array/string the key is implicit int; align expectation.
+                    if (!kt && (k == XR_KIND_ARRAY || k == XR_KIND_STRING))
+                        kt = xr_type_new_int(NULL);
+                    if (args[0] && !type_arg_match(args[0], kt))
+                        return false;
+                    if (targs >= 2 && args[1] && !type_arg_match(args[1], vt))
+                        return false;
+                }
+                return true;
             }
             if (strcmp(iface_name, "Equatable") == 0) {
                 return true;  // All types support == and !=
@@ -292,10 +368,11 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
             }
         }
 
-        // For user-defined interfaces: conformance is guaranteed by the
-        // analyzer (see note at the top of this file). Trust prior validation.
+        // User-defined interfaces (or built-ins with type args matched against
+        // user classes) — defer to xr_type_assignable, which now compares
+        // resolved interface_types[] entries including their type arguments.
         if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) {
-            return true;
+            return xr_type_assignable(constraint, type);
         }
         return false;
     }

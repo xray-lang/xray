@@ -84,8 +84,11 @@ struct XrClassInfo {
     // Struct layout (VALUE_TYPE only, computed by analyzer)
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct
 
-    // Implemented interfaces (populated from 'implements' clause)
-    const char **interface_names;
+    // Implemented interfaces (populated from 'implements' clause).
+    // Each entry is a fully resolved XrType*: built-in interfaces become
+    // XR_KIND_INTERFACE singletons, parameterized forms (Iterable<int>)
+    // carry their resolved type_args alongside the interface name.
+    XrType **interface_types;
     int interface_count;
 
     XrLocation location;

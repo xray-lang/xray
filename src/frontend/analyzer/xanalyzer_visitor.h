@@ -26,6 +26,7 @@ XR_FUNC void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_program(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_function(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_class(XaInferContext *ctx, AstNode *node);
+XR_FUNC void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node);
 
 // Pass 1.5: Link class inheritance chains (after all classes collected)

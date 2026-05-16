@@ -42,6 +42,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_builtin_interfaces.h"
 #include "xtype_ref_resolve.h"
 #include "../parser/xtype_ref.h"
 #include "../../base/xchecks.h"
@@ -738,6 +739,162 @@ static void validate_constructor_super_call(XaInferContext *ctx, ClassDeclNode *
     }
 }
 
+// Register a user-defined interface as a class-shaped symbol so the rest of
+// the analyzer (constraint checks, conformance lookups, type-arg resolution)
+// can find it through xa_scope_lookup.  Method and property signatures are
+// kept on info->methods / info->fields, mirroring what xa_visit_collect_class
+// does for real classes — that is what lets the conformance check at the end
+// of class collection enforce method-name parity.
+void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
+    if (!node || node->type != AST_INTERFACE_DECL)
+        return;
+
+    InterfaceDeclNode *iface = &node->as.interface_decl;
+
+    XaSymbol *sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
+    sym->location.line = node->line;
+    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+
+    XrClassInfo *info = xa_class_info_new(iface->name);
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    links->class_info = info;
+    // Represent the interface as a parameterized XR_KIND_INTERFACE: built-in
+    // singletons stay as plain interface types; user `interface Foo<T>` keeps
+    // its declared type parameters so generic resolution can plug arguments
+    // in later (the type_args slot is empty at the declaration site).
+    links->type = xr_type_new_interface(ctx->analyzer->isolate, iface->name);
+    info->base = NULL;  // interfaces never carry an inheritance chain here
+    info->base_name = NULL;
+
+    // Materialise method and property signatures as XaSymbols. Names matter
+    // for conformance; types are best-effort (resolved from XrTypeRef) so the
+    // later signature audit can still inspect them when needed.
+    for (int i = 0; i < iface->method_count; i++) {
+        AstNode *m = iface->methods ? iface->methods[i] : NULL;
+        if (!m || m->type != AST_INTERFACE_METHOD)
+            continue;
+        InterfaceMethodNode *im = &m->as.interface_method;
+        if (!im->name)
+            continue;
+        XaSymbol *msym = xa_symbol_new(im->name, XA_SYM_METHOD);
+        msym->location.line = m->line;
+        XaSymbolLinks *mlinks = xa_analyzer_get_links(ctx->analyzer, msym);
+        XrType **param_types = NULL;
+        if (im->param_count > 0) {
+            param_types = xr_malloc(sizeof(XrType *) * im->param_count);
+            for (int j = 0; j < im->param_count; j++) {
+                param_types[j] =
+                    im->param_types && im->param_types[j]
+                        ? xr_tref_resolve_in_analyzer(ctx->analyzer, im->param_types[j])
+                        : xr_type_new_unknown(NULL);
+            }
+        }
+        XrType *ret_type = im->return_type
+                               ? xr_tref_resolve_in_analyzer(ctx->analyzer, im->return_type)
+                               : xr_type_new_void(NULL);
+        mlinks->type = xr_type_new_function(ctx->analyzer->isolate, param_types, im->param_count,
+                                            ret_type, false);
+        if (param_types)
+            xr_free(param_types);
+        xa_class_info_add_method(info, msym);
+    }
+
+    for (int i = 0; i < iface->property_count; i++) {
+        AstNode *p = iface->properties ? iface->properties[i] : NULL;
+        if (!p || p->type != AST_INTERFACE_PROPERTY)
+            continue;
+        InterfacePropertyNode *ip = &p->as.interface_property;
+        if (!ip->name)
+            continue;
+        XaSymbol *psym = xa_symbol_new(ip->name, XA_SYM_PROPERTY);
+        psym->location.line = p->line;
+        XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, psym);
+        plinks->type = ip->prop_type ? xr_tref_resolve_in_analyzer(ctx->analyzer, ip->prop_type)
+                                     : xr_type_new_unknown(NULL);
+        xa_class_info_add_field(info, psym);
+    }
+}
+
+// Verify that `cls_info` provides every method/property required by every
+// user-defined interface listed in info->interface_types. Built-in interface
+// conformance (Iterable / Comparable / ...) is checked by
+// xr_type_satisfies_constraint and stays outside this loop.
+static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_node,
+                                           XrClassInfo *cls_info) {
+    if (!cls_info || cls_info->interface_count == 0 || !cls_info->interface_types)
+        return;
+
+    for (int i = 0; i < cls_info->interface_count; i++) {
+        XrType *iface_type = cls_info->interface_types[i];
+        if (!iface_type)
+            continue;
+
+        const char *iface_name = iface_type->instance.class_name;
+        if (!iface_name)
+            continue;
+
+        // Built-in interfaces have no XrClassInfo* attached; skip them.
+        if (xa_get_builtin_interface_by_name(iface_name))
+            continue;
+
+        XaSymbol *iface_sym = xa_scope_lookup(ctx->analyzer->current_scope, iface_name);
+        if (!iface_sym || iface_sym->kind != XA_SYM_CLASS)
+            continue;
+        XaSymbolLinks *iface_links = xa_analyzer_get_links(ctx->analyzer, iface_sym);
+        if (!iface_links || !iface_links->class_info)
+            continue;
+        XrClassInfo *iface_info = iface_links->class_info;
+        // Only interfaces — never classes — should drive this audit; a real
+        // class will not appear in an `implements` clause once the parser is
+        // happy, but guard against it anyway by skipping types that look
+        // like ordinary classes (links->type kind == XR_KIND_CLASS).
+        if (iface_links->type && iface_links->type->kind != XR_KIND_INTERFACE)
+            continue;
+
+        // Required methods
+        for (int j = 0; j < iface_info->method_count; j++) {
+            XaSymbol *required = iface_info->methods[j];
+            if (!required || !required->name)
+                continue;
+            XaSymbol *found = xa_class_info_lookup_member(cls_info, required->name);
+            if (!found || found->kind != XA_SYM_METHOD) {
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Class '%s' does not implement method '%s' required by interface '%s'",
+                         cls_info->name ? cls_info->name : "?", required->name, iface_name);
+                XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+            }
+        }
+
+        // Required properties — accept either a plain field/property or an
+        // accessor pair. Computed properties on the class side are stored as
+        // methods named "get:<prop>" / "set:<prop>" (see xparse_oop), so look
+        // up both shapes before reporting a missing member.
+        for (int j = 0; j < iface_info->field_count; j++) {
+            XaSymbol *required = iface_info->fields[j];
+            if (!required || !required->name)
+                continue;
+            XaSymbol *found = xa_class_info_lookup_member(cls_info, required->name);
+            if (!found) {
+                char getter_name[128];
+                snprintf(getter_name, sizeof(getter_name), "get:%s", required->name);
+                found = xa_class_info_lookup_member(cls_info, getter_name);
+            }
+            if (!found) {
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Class '%s' does not provide property '%s' required by interface '%s'",
+                         cls_info->name ? cls_info->name : "?", required->name, iface_name);
+                XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, msg, &loc);
+            }
+        }
+    }
+}
+
 void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!node)
         return;
@@ -777,19 +934,15 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
         links->type->is_value_type = true;
     }
 
-    // Store implemented interfaces from 'implements' clause.
-    // Type arguments on parameterized interfaces (e.g. `Iterable<int>`) are
-    // accepted at the syntax level but reduced to the head name here so
-    // existing constraint checks and runtime conformance lookups continue
-    // to match by interface name. Real type-arg-aware matching is planned
-    // as a follow-up that would extend XrClassInfo to keep resolved XrType
-    // entries instead of plain names.
+    // Resolve every entry in the 'implements' clause to a runtime XrType
+    // so constraint checks and conformance lookups can compare type
+    // arguments structurally instead of falling back to bare-name matches.
     if (cls->interface_count > 0 && cls->interfaces) {
-        info->interface_names = xr_malloc(sizeof(const char *) * cls->interface_count);
+        info->interface_types = xr_malloc(sizeof(XrType *) * cls->interface_count);
         info->interface_count = cls->interface_count;
         for (int i = 0; i < cls->interface_count; i++) {
-            const char *head = xr_tref_head_name(cls->interfaces[i]);
-            info->interface_names[i] = head ? head : "";
+            info->interface_types[i] =
+                xr_tref_resolve_in_analyzer(ctx->analyzer, cls->interfaces[i]);
         }
     }
 
@@ -1271,6 +1424,12 @@ skip_layout:
     }
 
     xa_analyzer_exit_scope(ctx->analyzer);
+
+    // After all fields/methods are collected, enforce that every user-defined
+    // interface listed in `implements` is structurally satisfied by this
+    // class. Built-in interfaces (Iterable, Comparable, ...) are validated
+    // separately when used as generic constraints.
+    xa_check_interface_conformance(ctx, node, info);
 }
 
 void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
