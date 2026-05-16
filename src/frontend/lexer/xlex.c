@@ -498,8 +498,25 @@ static Token number(Scanner *scanner) {
         advance(scanner);
     }
 
+    // A digit run that begins immediately after a member-access dot
+    // (e.g. `t.0`, `).0`, `].0`) belongs to the field index and must
+    // stay an integer — otherwise chained accesses such as `t.0.1`
+    // get mis-lexed as `t . 0.1` (a float). We detect that case by
+    // looking one character back at the lexer source: a literal `.`
+    // there, with another expression-terminating character before it,
+    // means we are tokenising the index part of a member access.
+    bool is_member_index = false;
+    if (scanner->start > scanner->source && scanner->start[-1] == '.' &&
+        scanner->start - 1 > scanner->source) {
+        char before_dot = scanner->start[-2];
+        if (XR_IS_ALPHA(before_dot) || XR_IS_DIGIT(before_dot) || before_dot == '_' ||
+            before_dot == ')' || before_dot == ']') {
+            is_member_index = true;
+        }
+    }
+
     // Check decimal point
-    if (peek(scanner) == '.') {
+    if (!is_member_index && peek(scanner) == '.') {
         if (peek_next(scanner) == '.') {
             // Range operator ..
         } else if (XR_IS_DIGIT(peek_next(scanner))) {

@@ -401,115 +401,125 @@ AstNode *xr_parse_grouping(Parser *parser) {
             xr_parser_error(parser, "expected '=>' after return type annotation");
             return NULL;
         }
-        xr_parser_error(parser, "empty grouping expression");
-        return NULL;
+        /* `()` is the unit literal — the unique value of the unit type
+         * `()`. Constant-folded to a singleton at lower time. */
+        return xr_ast_tuple_literal(parser->X, NULL, 0, line);
     }
 
-    // Case 2: (id) => expr or (id: type, ...) => expr (param list with optional types)
-    if (xr_parser_check(parser, TK_NAME)) {
+    // Case 2: arrow-function head — `(...) =>` or `(...): T =>`.
+    //
+    // To disambiguate from a tuple / grouping expression without committing
+    // to a single parse, scan ahead through balanced parens for the matching
+    // `)` and peek at the next token. `=>` or `:` immediately after the
+    // closing `)` is unambiguously an arrow head (no other expression-
+    // context syntax has either token in that position), so we only enter
+    // the arrow path on a positive match. Anything else falls through to
+    // the general expression-list parse below.
+    bool is_arrow_head = false;
+    {
+        Scanner saved_scan = parser->scanner;
+        Token saved_tok = parser->current;
+        int depth = 1;
+        while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
+            if (xr_parser_check(parser, TK_LPAREN)) {
+                depth++;
+                xr_parser_advance(parser);
+            } else if (xr_parser_check(parser, TK_RPAREN)) {
+                depth--;
+                if (depth == 0)
+                    break;
+                xr_parser_advance(parser);
+            } else {
+                xr_parser_advance(parser);
+            }
+        }
+        if (xr_parser_check(parser, TK_RPAREN))
+            xr_parser_advance(parser);
+        is_arrow_head = xr_parser_check(parser, TK_ARROW) || xr_parser_check(parser, TK_COLON);
+        parser->scanner = saved_scan;
+        parser->current = saved_tok;
+    }
+
+    if (is_arrow_head && xr_parser_check(parser, TK_NAME)) {
+        // Collect params as XrParamNode. The array lives in the parse
+        // arena because it is shallow-copied into the function_expr node.
+        XrParamNode **params =
+            (XrParamNode **) ast_alloc_array(parser->X, sizeof(XrParamNode *), 10);
+        int param_count = 0;
+        char name_buf[256];
+
+        // First param
         Token first_name = parser->current;
         xr_parser_advance(parser);
+        snprintf(name_buf, sizeof(name_buf), "%.*s", first_name.length, first_name.start);
+        params[param_count] =
+            xr_param_node_new(parser->X, name_buf, first_name.line, first_name.column);
+        if (xr_parser_match(parser, TK_COLON)) {
+            params[param_count]->type = xr_parse_type_annotation(parser);
+        }
+        param_count++;
 
-        if (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RPAREN) ||
-            xr_parser_check(parser, TK_COLON)) {
-            // May be arrow function, collect params as XrParamNode.
-            // Params array is shallow-copied into function_expr AST node, so it
-            // must live in the parse arena (not on the heap).
-            XrParamNode **params =
-                (XrParamNode **) ast_alloc_array(parser->X, sizeof(XrParamNode *), 10);
-            int param_count = 0;
-            bool has_type_annotation = false;
-
-            // First param
-            char name_buf[256];
-            snprintf(name_buf, sizeof(name_buf), "%.*s", first_name.length, first_name.start);
-            params[param_count] =
-                xr_param_node_new(parser->X, name_buf, first_name.line, first_name.column);
+        while (xr_parser_match(parser, TK_COMMA)) {
+            xr_parser_consume(parser, TK_NAME, "expected parameter name");
+            Token param = parser->previous;
+            snprintf(name_buf, sizeof(name_buf), "%.*s", param.length, param.start);
+            params[param_count] = xr_param_node_new(parser->X, name_buf, param.line, param.column);
             if (xr_parser_match(parser, TK_COLON)) {
                 params[param_count]->type = xr_parse_type_annotation(parser);
-                has_type_annotation = true;
             }
             param_count++;
+        }
 
-            // Parse remaining params (with optional type annotations)
-            while (xr_parser_match(parser, TK_COMMA)) {
-                xr_parser_consume(parser, TK_NAME, "expected parameter name");
-                Token param = parser->previous;
-                snprintf(name_buf, sizeof(name_buf), "%.*s", param.length, param.start);
-                params[param_count] =
-                    xr_param_node_new(parser->X, name_buf, param.line, param.column);
-                if (xr_parser_match(parser, TK_COLON)) {
-                    params[param_count]->type = xr_parse_type_annotation(parser);
-                    has_type_annotation = true;
-                }
-                param_count++;
-            }
-
-            if (!xr_parser_match(parser, TK_RPAREN)) {
-                xr_parser_error(parser, "expected ')' or '=>'");
-                return NULL;
-            }
-
-            // Optional return type annotation: (n: int): int =>
-            XrType *return_type = NULL;
-            if (xr_parser_check(parser, TK_COLON)) {
-                xr_parser_advance(parser);
-                return_type = xr_parse_type_annotation(parser);
-            }
-
-            if (xr_parser_match(parser, TK_ARROW)) {
-                AstNode *fn = xr_parse_arrow_function_body(parser, params, param_count, line);
-                if (fn && return_type)
-                    fn->as.function_expr.return_type = return_type;
-                return fn;
-            }
-
-            // Had type annotations but no => : syntax error
-            if (has_type_annotation || return_type) {
-                xr_parser_error(parser, "expected '=>' after typed parameter list");
-                return NULL;
-            }
-
-            // Single (name) without => is a regular grouping expression
-            if (param_count == 1) {
-                char *var_name = (char *) xr_malloc(first_name.length + 1);
-                memcpy(var_name, first_name.start, first_name.length);
-                var_name[first_name.length] = '\0';
-                AstNode *expr = xr_ast_variable(parser->X, var_name, line);
-                xr_free(var_name);
-                return xr_ast_grouping(parser->X, expr, line);
-            }
-
-            xr_parser_error(parser, "tuple expressions not supported");
+        if (!xr_parser_match(parser, TK_RPAREN)) {
+            xr_parser_error(parser, "expected ')' or '=>'");
             return NULL;
         }
 
-        // Not arrow function params, regular expression
-        char *var_name = (char *) xr_malloc(first_name.length + 1);
-        strncpy(var_name, first_name.start, first_name.length);
-        var_name[first_name.length] = '\0';
-        AstNode *expr = xr_ast_variable(parser->X, var_name, line);
-        xr_free(var_name);
-
-        // Continue parsing possible infix operators
-        while (xr_get_rule(parser->current.type)->precedence >= PREC_ASSIGNMENT) {
+        XrType *return_type = NULL;
+        if (xr_parser_check(parser, TK_COLON)) {
             xr_parser_advance(parser);
-            InfixParseFn infix_rule = xr_get_rule(parser->previous.type)->infix;
-            if (infix_rule) {
-                expr = infix_rule(parser, expr);
-            } else {
-                break;
-            }
+            return_type = xr_parse_type_annotation(parser);
         }
-
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close grouping");
-        return xr_ast_grouping(parser->X, expr, line);
+        if (!xr_parser_match(parser, TK_ARROW)) {
+            xr_parser_error(parser, "expected '=>' after parameter list");
+            return NULL;
+        }
+        AstNode *fn = xr_parse_arrow_function_body(parser, params, param_count, line);
+        if (fn && return_type)
+            fn->as.function_expr.return_type = return_type;
+        return fn;
     }
 
-    // Regular grouping expression
-    AstNode *expr = xr_parse_expression(parser);
-    xr_parser_consume(parser, TK_RPAREN, "expected ')' to close grouping");
-    return xr_ast_grouping(parser->X, expr, parser->previous.line);
+    // Case 3: parenthesised expression list — tuple if any comma appears
+    // (including a trailing comma for unary tuples `(x,)`), grouping
+    // otherwise.
+    AstNode *first = xr_parse_expression(parser);
+    if (!xr_parser_check(parser, TK_COMMA)) {
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close grouping");
+        return xr_ast_grouping(parser->X, first, line);
+    }
+
+    AstNode **elems = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
+    int count = 0;
+    int cap = 16;
+    elems[count++] = first;
+    while (xr_parser_match(parser, TK_COMMA)) {
+        // Trailing comma is allowed and required for unary tuple `(x,)`.
+        if (xr_parser_check(parser, TK_RPAREN))
+            break;
+        if (count >= cap) {
+            int new_cap = cap * 2;
+            AstNode **resized =
+                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) new_cap);
+            for (int i = 0; i < count; i++)
+                resized[i] = elems[i];
+            elems = resized;
+            cap = new_cap;
+        }
+        elems[count++] = xr_parse_expression(parser);
+    }
+    xr_parser_consume(parser, TK_RPAREN, "expected ')' to close tuple literal");
+    return xr_ast_tuple_literal(parser->X, elems, count, line);
 }
 
 // Parse arrow function body

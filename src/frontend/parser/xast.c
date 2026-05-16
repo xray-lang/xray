@@ -654,6 +654,25 @@ AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int count, int
     return node;
 }
 
+// Create tuple literal node: `()`, `(x,)`, or `(a, b, ...)`. Type
+// inference fills in compile_type from the inferred element types
+// (or the unit singleton for count == 0).
+AstNode *xr_ast_tuple_literal(XrayIsolate *X, AstNode **elements, int count, int line) {
+    AstNode *node = alloc_node(X, AST_TUPLE_LITERAL, line);
+    node->as.tuple_literal.count = count;
+
+    if (count > 0) {
+        node->as.tuple_literal.elements =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) count);
+        for (int i = 0; i < count; i++) {
+            node->as.tuple_literal.elements[i] = elements[i];
+        }
+    } else {
+        node->as.tuple_literal.elements = NULL;
+    }
+    return node;
+}
+
 // Create object literal node (static structure)
 // keys: key expression array (usually string literals)
 // values: value expression array

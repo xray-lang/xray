@@ -101,6 +101,14 @@ typedef struct ArrayLiteralNode {
     int count;
 } ArrayLiteralNode;
 
+// Tuple literal node — `()`, `(x,)`, `(a, b, ...)`.
+// Distinct from ArrayLiteral: tuples are heterogeneous, fixed-arity,
+// and indexed via the dedicated `.N` field access (not `[i]`).
+typedef struct TupleLiteralNode {
+    AstNode **elements;
+    int count;
+} TupleLiteralNode;
+
 // Index access / set / slice
 typedef struct IndexGetNode {
     AstNode *array;

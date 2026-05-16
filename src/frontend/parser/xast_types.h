@@ -138,6 +138,7 @@ typedef enum {
     AST_OBJECT_LITERAL,  // {a: 1, b: 2} - static structure
     AST_MAP_LITERAL,     // {"a"=> 1, "b"=> 2} - dynamic container
     AST_SET_LITERAL,     // #[1, 2, 3] - set
+    AST_TUPLE_LITERAL,   // (a, b, c) - fixed-arity heterogeneous tuple (incl. () unit, (a,) unary)
 
     // OOP nodes
     AST_CLASS_DECL,          // class Dog extends Animal {...}

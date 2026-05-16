@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_parser.c - Unit tests for parser (source â†?AST)
+ * test_parser.c - Unit tests for parser (source -> AST)
  *
  * KEY CONCEPT:
  *   Verifies that the parser produces correct AST structure for various
@@ -68,7 +68,7 @@ TEST(parser_int_literal) {
     ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
     AstNode *expr = stmt->as.expr_stmt;
     ASSERT_EQ_INT(expr->type, AST_LITERAL_INT);
-    ASSERT_EQ_INT((int)expr->as.literal.raw_value.int_val, 42);
+    ASSERT_EQ_INT((int) expr->as.literal.raw_value.int_val, 42);
     teardown();
 }
 
@@ -316,14 +316,12 @@ TEST(parser_object_literal) {
 
 TEST(parser_class_decl) {
     setup();
-    AstNode *stmt = parse_first(
-        "class Dog {\n"
-        "  name: string\n"
-        "  bark() {\n"
-        "    print(\"woof\")\n"
-        "  }\n"
-        "}"
-    );
+    AstNode *stmt = parse_first("class Dog {\n"
+                                "  name: string\n"
+                                "  bark() {\n"
+                                "    print(\"woof\")\n"
+                                "  }\n"
+                                "}");
     ASSERT_EQ_INT(stmt->type, AST_CLASS_DECL);
     ASSERT_STR_EQ(stmt->as.class_decl.name, "Dog");
     teardown();
@@ -353,11 +351,9 @@ TEST(parser_empty_source) {
 
 TEST(parser_multiple_stmts) {
     setup();
-    AstNode *program = parse_ok(
-        "let x = 1\n"
-        "let y = 2\n"
-        "print(x + y)"
-    );
+    AstNode *program = parse_ok("let x = 1\n"
+                                "let y = 2\n"
+                                "print(x + y)");
     ASSERT_TRUE(program->as.program.count >= 3);
     ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_VAR_DECL);
     ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_VAR_DECL);
@@ -381,6 +377,113 @@ TEST(parser_member_access) {
     AstNode *expr = stmt->as.expr_stmt;
     ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
     ASSERT_STR_EQ(expr->as.member_access.name, "field");
+    teardown();
+}
+
+/* ========== Tuple Tests ========== */
+
+TEST(parser_tuple_unit_literal) {
+    setup();
+    /* `()` is the unit literal: a 0-arity AST_TUPLE_LITERAL. */
+    AstNode *stmt = parse_first("let u = ()");
+    ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_NOT_NULL(init);
+    ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(init->as.tuple_literal.count, 0);
+    teardown();
+}
+
+TEST(parser_tuple_unary_literal) {
+    setup();
+    /* `(x,)` -- the trailing comma is what distinguishes a 1-tuple from
+     * a parenthesised scalar. */
+    AstNode *stmt = parse_first("let u = (42,)");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(init->as.tuple_literal.count, 1);
+    teardown();
+}
+
+TEST(parser_tuple_multi_literal) {
+    setup();
+    AstNode *stmt = parse_first("let t = (1, \"hi\", true)");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(init->as.tuple_literal.count, 3);
+    /* Element types should reflect the heterogeneous payload. */
+    ASSERT_EQ_INT(init->as.tuple_literal.elements[0]->type, AST_LITERAL_INT);
+    ASSERT_EQ_INT(init->as.tuple_literal.elements[1]->type, AST_LITERAL_STRING);
+    ASSERT_EQ_INT(init->as.tuple_literal.elements[2]->type, AST_LITERAL_TRUE);
+    teardown();
+}
+
+TEST(parser_tuple_nested_literal) {
+    setup();
+    AstNode *stmt = parse_first("let n = ((1, 2), (3, 4))");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(init->as.tuple_literal.count, 2);
+    AstNode *first = init->as.tuple_literal.elements[0];
+    ASSERT_EQ_INT(first->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(first->as.tuple_literal.count, 2);
+    teardown();
+}
+
+TEST(parser_tuple_with_trailing_comma) {
+    setup();
+    /* Trailing comma is allowed for arity > 1 too. */
+    AstNode *stmt = parse_first("let t = (1, 2, 3,)");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(init->as.tuple_literal.count, 3);
+    teardown();
+}
+
+TEST(parser_grouping_still_works) {
+    setup();
+    /* `(x)` without a trailing comma must remain a grouping, otherwise
+     * every existing parenthesised expression would silently turn into
+     * a 1-tuple. */
+    AstNode *stmt = parse_first("let g = (1 + 2)");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_GROUPING);
+    teardown();
+}
+
+TEST(parser_arrow_fn_not_tuple) {
+    setup();
+    /* `(a, b) => a + b` must still parse as a function expression,
+     * not as a 2-tuple of variable references followed by `=>`. */
+    AstNode *stmt = parse_first("let f = (a, b) => a + b");
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
+    teardown();
+}
+
+TEST(parser_tuple_field_access) {
+    setup();
+    /* `t.0` parses as AST_MEMBER_ACCESS with member name "0" -- the
+     * analyzer recognises digit-only names on tuple receivers. */
+    AstNode *stmt = parse_first("t.0");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
+    ASSERT_STR_EQ(expr->as.member_access.name, "0");
+    teardown();
+}
+
+TEST(parser_tuple_field_access_chained) {
+    setup();
+    /* `t.0.1` -- the lexer recognises that the second digit run starts
+     * right after a member-access dot and refuses to extend it into a
+     * float literal, so the chain tokenises as `t . 0 . 1`. */
+    AstNode *stmt = parse_first("t.0.1");
+    AstNode *expr = stmt->as.expr_stmt;
+    ASSERT_EQ_INT(expr->type, AST_MEMBER_ACCESS);
+    ASSERT_STR_EQ(expr->as.member_access.name, "1");
+    AstNode *inner = expr->as.member_access.object;
+    ASSERT_EQ_INT(inner->type, AST_MEMBER_ACCESS);
+    ASSERT_STR_EQ(inner->as.member_access.name, "0");
     teardown();
 }
 
@@ -432,6 +535,17 @@ int main(void) {
     // Calls
     RUN_TEST(parser_call_expr);
     RUN_TEST(parser_member_access);
+
+    // Tuples
+    RUN_TEST(parser_tuple_unit_literal);
+    RUN_TEST(parser_tuple_unary_literal);
+    RUN_TEST(parser_tuple_multi_literal);
+    RUN_TEST(parser_tuple_nested_literal);
+    RUN_TEST(parser_tuple_with_trailing_comma);
+    RUN_TEST(parser_grouping_still_works);
+    RUN_TEST(parser_arrow_fn_not_tuple);
+    RUN_TEST(parser_tuple_field_access);
+    RUN_TEST(parser_tuple_field_access_chained);
 
     // Error handling
     RUN_TEST(parser_error_returns_null);

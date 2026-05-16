@@ -286,6 +286,24 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
+        // Tuple literal — `()`, `(x,)`, `(a, b, ...)`. The trailing
+        // comma on the arity-1 form is mandatory for roundtrip, since
+        // `(x)` is a grouping, not a 1-tuple.
+        case AST_TUPLE_LITERAL: {
+            xfmt_write_indent(ctx);
+            xfmt_write_char(ctx, '(');
+            TupleLiteralNode *tup = &node->as.tuple_literal;
+            for (int i = 0; i < tup->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_emit_expression(ctx, tup->elements[i]);
+            }
+            if (tup->count == 1)
+                xfmt_write_char(ctx, ',');
+            xfmt_write_char(ctx, ')');
+            break;
+        }
+
         // Object literal
         case AST_OBJECT_LITERAL: {
             xfmt_write_indent(ctx);
