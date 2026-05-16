@@ -239,6 +239,9 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
 #define XR_TYPE_IS_JSON(t) ((t)->kind == XR_KIND_JSON)
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
+// Unit type is the 0-arity tuple. Acts as the canonical "no meaningful value"
+// type for functions returning nothing, replacing the legacy VOID kind.
+#define XR_TYPE_IS_UNIT(t) ((t)->kind == XR_KIND_TUPLE && (t)->tuple.element_count == 0)
 #define XR_TYPE_IS_OPTIONAL(t) ((t)->is_nullable)
 #define XR_TYPE_IS_ENUM(t) ((t)->kind == XR_KIND_ENUM)
 #define XR_TYPE_IS_UNION(t) ((t)->kind == XR_KIND_UNION)
@@ -317,6 +320,8 @@ XR_FUNC XrType *xr_type_new_null(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_unknown(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_never(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_void(XrayIsolate *X);
+// Unit type singleton (0-arity tuple). Canonical "no meaningful value" type.
+XR_FUNC XrType *xr_type_new_unit(XrayIsolate *X);
 
 // API: Native-width types (int8/16/32/64, uint8/16/32/64, float32/64)
 XR_FUNC XrType *xr_type_new_int_width(XrayIsolate *X, int width);    // XrNativeType value

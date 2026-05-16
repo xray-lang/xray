@@ -37,6 +37,7 @@ static XrType g_type_null;
 static XrType g_type_unknown;
 static XrType g_type_never;
 static XrType g_type_void;
+static XrType g_type_unit;
 static XrType g_type_json;
 
 // Nullable singletons (T?)
@@ -70,6 +71,9 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, 0);
     init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
     init_singleton(&g_type_void, XR_KIND_VOID, id++, false, 0);
+    // Unit type singleton: 0-arity tuple. memset by init_singleton already
+    // sets tuple.element_types=NULL and tuple.element_count=0.
+    init_singleton(&g_type_unit, XR_KIND_TUPLE, id++, false, 0);
     init_singleton(&g_type_json, XR_KIND_JSON, id++, false, 0);
 
     init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, 0);
@@ -158,6 +162,13 @@ XrType *xr_type_new_never(XrayIsolate *X) {
 XrType *xr_type_new_void(XrayIsolate *X) {
     (void) X;
     return &g_type_void;
+}
+
+// Unit type: 0-arity tuple, canonical "no meaningful value" type.
+// Returns the same singleton regardless of isolate to enable pointer equality.
+XrType *xr_type_new_unit(XrayIsolate *X) {
+    (void) X;
+    return &g_type_unit;
 }
 
 // Native-width integer type (int8/16/32/64, uint8/16/32/64)
