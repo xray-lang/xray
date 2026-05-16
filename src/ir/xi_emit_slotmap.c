@@ -74,7 +74,7 @@ XR_FUNC XiSlotMap *build_slot_map(EmitCtx *ctx) {
                         tag = 1;
                         break; /* XR_TAG_BOOL */
                     case XR_KIND_NULL:
-                    case XR_KIND_VOID:
+                    case XR_KIND_UNIT:
                         tag = 0;
                         break; /* XR_TAG_NULL */
                     default:

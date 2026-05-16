@@ -806,7 +806,7 @@ static const char *xrtype_name(XrType *t) {
             return "instance";
         case XR_KIND_FUNCTION:
             return "function";
-        case XR_KIND_VOID:
+        case XR_KIND_UNIT:
             return "void";
         default:
             return "?";

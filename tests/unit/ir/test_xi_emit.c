@@ -18,24 +18,24 @@
 #include <string.h>
 
 /* Minimal XrType stubs */
-static XrType stub_int  = { .kind = XR_KIND_INT,    .id = 1, .frozen = true };
-static XrType stub_float= { .kind = XR_KIND_FLOAT,  .id = 2, .frozen = true };
-static XrType stub_bool = { .kind = XR_KIND_BOOL,   .id = 3, .frozen = true };
-static XrType stub_null = { .kind = XR_KIND_NULL,   .id = 4, .frozen = true };
-static XrType stub_void = { .kind = XR_KIND_VOID,   .id = 6, .frozen = true };
-static XrType stub_string={ .kind = XR_KIND_STRING, .id = 5, .frozen = true };
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
+static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
+static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
+static XrType stub_string = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* Helper: create function with sealed entry block */
@@ -191,9 +191,12 @@ TEST(emit_sub_mul_div) {
     bool has_sub = false, has_div = false, has_mul = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
-        if (op == OP_SUB) has_sub = true;
-        if (op == OP_DIV) has_div = true;
-        if (op == OP_MUL) has_mul = true;
+        if (op == OP_SUB)
+            has_sub = true;
+        if (op == OP_DIV)
+            has_div = true;
+        if (op == OP_MUL)
+            has_mul = true;
     }
     assert(has_sub && has_div && has_mul && "should emit SUB, DIV, MUL");
 
@@ -216,7 +219,10 @@ TEST(emit_unary_neg) {
 
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
-        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_UNM) { found = true; break; }
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_UNM) {
+            found = true;
+            break;
+        }
     }
     assert(found && "should emit UNM");
 
@@ -242,7 +248,10 @@ TEST(emit_cmp_eq) {
 
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
-        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CMP_EQ) { found = true; break; }
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CMP_EQ) {
+            found = true;
+            break;
+        }
     }
     assert(found && "should emit CMP_EQ");
 
@@ -312,9 +321,12 @@ TEST(emit_if_then_else) {
     int ret_count = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
-        if (op == OP_TEST) has_test = true;
-        if (op == OP_JMP) has_jmp = true;
-        if (op == OP_RETURN1) ret_count++;
+        if (op == OP_TEST)
+            has_test = true;
+        if (op == OP_JMP)
+            has_jmp = true;
+        if (op == OP_RETURN1)
+            ret_count++;
     }
     assert(has_test && "should emit TEST");
     assert(has_jmp && "should emit JMP");
@@ -342,7 +354,8 @@ TEST(emit_jump_fallthrough) {
     /* Should have: LOADI 99, RETURN1 — no JMP since b1 is the next block */
     int jmp_count = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
-        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_JMP) jmp_count++;
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_JMP)
+            jmp_count++;
     }
     assert(jmp_count == 0 && "should elide fallthrough JMP");
 
@@ -369,7 +382,10 @@ TEST(emit_copy_becomes_move) {
     /* Should have MOVE + RETURN1 */
     bool found_move = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
-        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_MOVE) { found_move = true; break; }
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_MOVE) {
+            found_move = true;
+            break;
+        }
     }
     assert(found_move && "COPY should emit MOVE");
 
@@ -502,8 +518,7 @@ TEST(emit_reg_recycling) {
 
     /* After recycling, dead temps' regs are reused.
      * maxstacksize should be at most 4. */
-    assert(proto->maxstacksize <= 4 &&
-           "register recycling should keep maxstacksize <= 4");
+    assert(proto->maxstacksize <= 4 && "register recycling should keep maxstacksize <= 4");
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
@@ -531,8 +546,7 @@ TEST(emit_reg_pressure) {
 
     /* p1 is live throughout (used in every ADD), so we need:
      * 2 params + at most 2 temps = 4 regs max. */
-    assert(proto->maxstacksize <= 4 &&
-           "sequential chain should recycle intermediates");
+    assert(proto->maxstacksize <= 4 && "sequential chain should recycle intermediates");
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
@@ -708,9 +722,12 @@ TEST(emit_str_concat) {
     bool found_new = false, found_append = false, found_finish = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
-        if (op == OP_STRBUF_NEW) found_new = true;
-        if (op == OP_STRBUF_APPEND) found_append = true;
-        if (op == OP_STRBUF_FINISH) found_finish = true;
+        if (op == OP_STRBUF_NEW)
+            found_new = true;
+        if (op == OP_STRBUF_APPEND)
+            found_append = true;
+        if (op == OP_STRBUF_FINISH)
+            found_finish = true;
     }
     assert(found_new && "should have STRBUF_NEW");
     assert(found_append && "should have STRBUF_APPEND");
@@ -736,17 +753,17 @@ TEST(emit_closure_new) {
     /* Register child in parent's children array (mirrors real lowering) */
     if (f->nchildren >= f->children_cap) {
         uint16_t nc = f->children_cap ? f->children_cap * 2 : 4;
-        XiFunc **tmp = (XiFunc **)xr_realloc(f->children, nc * sizeof(XiFunc *));
+        XiFunc **tmp = (XiFunc **) xr_realloc(f->children, nc * sizeof(XiFunc *));
         assert(tmp != NULL);
         f->children = tmp;
         f->children_cap = nc;
     }
     f->children[f->nchildren++] = child;
-    uint16_t child_idx = (uint16_t)(f->nchildren - 1);
+    uint16_t child_idx = (uint16_t) (f->nchildren - 1);
 
     XiValue *v = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_int, 0);
     assert(v != NULL);
-    v->aux = (void *)child;
+    v->aux = (void *) child;
     v->aux_int = child_idx;
     xi_block_set_return(entry, v);
 
@@ -760,7 +777,8 @@ TEST(emit_closure_new) {
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CLOSURE) {
-            found = true; break;
+            found = true;
+            break;
         }
     }
     assert(found && "CLOSURE_NEW should emit OP_CLOSURE");
@@ -787,7 +805,8 @@ TEST(emit_set_new) {
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_NEWSET) {
-            found = true; break;
+            found = true;
+            break;
         }
     }
     assert(found && "SET_NEW should emit OP_NEWSET");
@@ -804,7 +823,7 @@ TEST(emit_is_check) {
     XiValue *p0 = xi_param(f, entry, 0, &stub_int);
     XiValue *type_const = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
     assert(type_const != NULL);
-    type_const->aux_int = 8;  /* XR_TID_INT */
+    type_const->aux_int = 8; /* XR_TID_INT */
     XiValue *v = xi_value_new(f, entry, XI_IS, &stub_bool, 2);
     assert(v != NULL);
     v->args[0] = p0;
@@ -818,7 +837,8 @@ TEST(emit_is_check) {
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_IS) {
-            found = true; break;
+            found = true;
+            break;
         }
     }
     assert(found && "XI_IS should emit OP_IS");
@@ -834,7 +854,7 @@ TEST(emit_cancelled_builtin) {
 
     XiValue *v = xi_value_new(f, entry, XI_CALL_BUILTIN, &stub_bool, 0);
     assert(v != NULL);
-    v->aux_int = 0;  /* cancelled() */
+    v->aux_int = 0; /* cancelled() */
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
@@ -844,7 +864,8 @@ TEST(emit_cancelled_builtin) {
     bool found = false;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_CANCELLED) {
-            found = true; break;
+            found = true;
+            break;
         }
     }
     assert(found && "CALL_BUILTIN(0) should emit OP_CANCELLED");
@@ -857,10 +878,9 @@ TEST(emit_cancelled_builtin) {
 
 TEST(emit_status_str) {
     assert(strcmp(xi_emit_status_str(XI_EMIT_OK), "OK") == 0);
-    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_TOO_MANY_REGS),
-                  "too many registers (>255)") == 0);
-    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_UNSUPPORTED_OP),
-                  "unsupported Xi IR operation") == 0);
+    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_TOO_MANY_REGS), "too many registers (>255)") == 0);
+    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_UNSUPPORTED_OP), "unsupported Xi IR operation") ==
+           0);
 }
 
 /* ========== Main ========== */
@@ -868,8 +888,8 @@ TEST(emit_status_str) {
 int main(void) {
     printf("=== Xi Emit Unit Tests ===\n\n");
 
-    (void)stub_null;
-    (void)stub_void;
+    (void) stub_null;
+    (void) stub_void;
 
     /* Basic emission */
     run_emit_return_const_int();
@@ -924,7 +944,6 @@ int main(void) {
     /* Error handling */
     run_emit_status_str();
 
-    printf("\n=== %d/%d Xi Emit tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi Emit tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

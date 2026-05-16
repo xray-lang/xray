@@ -14,21 +14,21 @@
 #include <assert.h>
 
 /* Minimal XrType stubs */
-static XrType stub_int  = { .kind = XR_KIND_INT,    .id = 1, .frozen = true };
-static XrType stub_bool = { .kind = XR_KIND_BOOL,   .id = 3, .frozen = true };
-static XrType stub_void = { .kind = XR_KIND_VOID,   .id = 6, .frozen = true };
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
+static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* Helper: create function with sealed entry block */
@@ -344,7 +344,7 @@ TEST(liveness_dead_value) {
     assert(l != NULL);
 
     assert(!xi_is_live_out(l, entry, dead) && "dead not live-out");
-    (void)dead;
+    (void) dead;
 
     xi_liveness_free(l);
     xi_func_free(f);
@@ -355,7 +355,7 @@ TEST(liveness_dead_value) {
 int main(void) {
     printf("=== Xi Analysis Unit Tests ===\n\n");
 
-    (void)stub_void;
+    (void) stub_void;
 
     /* RPO */
     run_rpo_single_block();
@@ -375,7 +375,6 @@ int main(void) {
     run_liveness_diamond();
     run_liveness_dead_value();
 
-    printf("\n=== %d/%d Xi Analysis tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi Analysis tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

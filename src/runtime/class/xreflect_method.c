@@ -211,7 +211,7 @@ static const char *type_kind_to_name(XrTypeKind kind) {
             return "object";
         case XR_KIND_FUNCTION:
             return "function";
-        case XR_KIND_VOID:
+        case XR_KIND_UNIT:
             return "void";
         default:
             return "unknown";

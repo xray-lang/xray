@@ -846,7 +846,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
      * when no annotation exists, and forcing VOID onto the proto would
      * make the RET codegen emit XR_TAG_NULL even when the body actually
      * returns a string, closure, or other pointer. */
-    if (!ctx.proto->return_type_info && f->return_type && f->return_type->kind != XR_KIND_VOID)
+    if (!ctx.proto->return_type_info && f->return_type && f->return_type->kind != XR_KIND_UNIT)
         ctx.proto->return_type_info = f->return_type;
     /* Compile-time escape analysis is the authority on coroutine safety.
      * If compilation succeeds, all functions are safe to call via go. */

@@ -1543,7 +1543,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (!fn_decl->return_type && fn_decl->name) {
                 XrType *inferred_ret = xa_infer_compute_return_type(ctx);
                 if (inferred_ret && !XR_TYPE_IS_UNKNOWN(inferred_ret) &&
-                    !XR_TYPE_IS_VOID(inferred_ret)) {
+                    !XR_TYPE_IS_UNIT(inferred_ret)) {
                     XaSymbol *fn_sym =
                         xa_scope_lookup(ctx->analyzer->current_scope->parent, fn_decl->name);
                     if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {

@@ -36,7 +36,6 @@ static XrType g_type_bool;
 static XrType g_type_null;
 static XrType g_type_unknown;
 static XrType g_type_never;
-static XrType g_type_void;
 static XrType g_type_unit;
 static XrType g_type_json;
 
@@ -70,10 +69,10 @@ void xr_type_global_init(void) {
     init_singleton(&g_type_null, XR_KIND_NULL, id++, false, 0);
     init_singleton(&g_type_unknown, XR_KIND_UNKNOWN, id++, false, 0);
     init_singleton(&g_type_never, XR_KIND_NEVER, id++, false, 0);
-    init_singleton(&g_type_void, XR_KIND_VOID, id++, false, 0);
-    // Unit type singleton: 0-arity tuple. memset by init_singleton already
-    // sets tuple.element_types=NULL and tuple.element_count=0.
-    init_singleton(&g_type_unit, XR_KIND_TUPLE, id++, false, 0);
+    // Unit type singleton: dedicated XR_KIND_UNIT kind, spelled `()` in user
+    // syntax. Acts as the canonical "no meaningful value" type for functions
+    // returning nothing and as the unique value of the empty tuple literal.
+    init_singleton(&g_type_unit, XR_KIND_UNIT, id++, false, 0);
     init_singleton(&g_type_json, XR_KIND_JSON, id++, false, 0);
 
     init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, 0);
@@ -159,13 +158,8 @@ XrType *xr_type_new_never(XrayIsolate *X) {
     (void) X;
     return &g_type_never;
 }
-XrType *xr_type_new_void(XrayIsolate *X) {
-    (void) X;
-    return &g_type_void;
-}
-
-// Unit type: 0-arity tuple, canonical "no meaningful value" type.
-// Returns the same singleton regardless of isolate to enable pointer equality.
+// Unit type singleton (XR_KIND_UNIT, spelled `()` in user syntax). Returns
+// the same singleton regardless of isolate to enable pointer equality.
 XrType *xr_type_new_unit(XrayIsolate *X) {
     (void) X;
     return &g_type_unit;
@@ -1310,7 +1304,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         // Return type: covariant - source return must be assignable to target return
         // Special case: void target accepts any return type
         if (target->function.return_type && source->function.return_type) {
-            if (!XR_TYPE_IS_VOID(target->function.return_type)) {
+            if (!XR_TYPE_IS_UNIT(target->function.return_type)) {
                 if (!xr_type_assignable(target->function.return_type,
                                         source->function.return_type)) {
                     return false;
