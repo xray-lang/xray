@@ -147,7 +147,6 @@ typedef enum {
     TK_SCOPE,   // scope - structured concurrency
 
     // Type keywords
-    TK_VOID,     // void
     TK_INT,      // int (= int64)
     TK_FLOAT,    // float (= float64)
     TK_STRING,   // string

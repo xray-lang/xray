@@ -648,7 +648,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                  // Type keywords
                  xr_parser_check(parser, TK_TYPE_ALIAS) || xr_parser_check(parser, TK_INT) ||
                  xr_parser_check(parser, TK_FLOAT) || xr_parser_check(parser, TK_STRING) ||
-                 xr_parser_check(parser, TK_BOOL) || xr_parser_check(parser, TK_VOID) ||
+                 xr_parser_check(parser, TK_BOOL) ||
                  // Common keywords
                  xr_parser_check(parser, TK_CLASS) || xr_parser_check(parser, TK_ENUM) ||
                  xr_parser_check(parser, TK_STATIC) || xr_parser_check(parser, TK_AS) ||

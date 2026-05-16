@@ -1778,7 +1778,7 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
         // Skip type annotation
         if (xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_INT) ||
             xr_parser_check(parser, TK_STRING) || xr_parser_check(parser, TK_FLOAT) ||
-            xr_parser_check(parser, TK_BOOL) || xr_parser_check(parser, TK_VOID)) {
+            xr_parser_check(parser, TK_BOOL)) {
             xr_parser_advance(parser);
         }
     }

@@ -116,14 +116,6 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return xr_tref_string(parser->X);
     if (xr_parser_match(parser, TK_BOOL))
         return xr_tref_bool(parser->X);
-    if (xr_parser_check(parser, TK_VOID)) {
-        Token tok = parser->current;
-        xr_parser_advance(parser);
-        xr_parser_emit_removed_syntax(
-            parser, &tok, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
-            "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
-        return xr_tref_void(parser->X);
-    }
     if (xr_parser_match(parser, TK_NULL))
         return xr_tref_null(parser->X);
 

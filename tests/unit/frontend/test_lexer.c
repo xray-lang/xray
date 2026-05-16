@@ -22,7 +22,7 @@ static Token scan_single(const char *source) {
 static void assert_token(Token t, XrTokenType expected_type, const char *expected_text) {
     ASSERT_EQ_INT(t.type, expected_type);
     if (expected_text) {
-        ASSERT_EQ_INT(t.length, (int)strlen(expected_text));
+        ASSERT_EQ_INT(t.length, (int) strlen(expected_text));
         ASSERT_TRUE(strncmp(t.start, expected_text, t.length) == 0);
     }
 }
@@ -82,7 +82,8 @@ TEST(lexer_logical_ops) {
 
 TEST(lexer_bitwise_ops) {
     assert_token(scan_single("&"), TK_AMP, "&");
-    assert_token(scan_single("|"), TK_PIPE, "|");  // TK_PIPE used for both bitwise or and union type
+    assert_token(scan_single("|"), TK_PIPE,
+                 "|");  // TK_PIPE used for both bitwise or and union type
     assert_token(scan_single("^"), TK_CARET, "^");
     assert_token(scan_single("~"), TK_TILDE, "~");
     assert_token(scan_single("<<"), TK_LSHIFT, "<<");
@@ -415,21 +416,21 @@ TEST(lexer_multiline_block_comment_position) {
 // driven binary-search lookup table.
 TEST(lexer_keyword_prefix_identifiers) {
     // 2-char keywords prefix-extended to identifiers
-    assert_token(scan_single("iffy"),    TK_NAME, "iffy");
-    assert_token(scan_single("ifElse"),  TK_NAME, "ifElse");
+    assert_token(scan_single("iffy"), TK_NAME, "iffy");
+    assert_token(scan_single("ifElse"), TK_NAME, "ifElse");
     assert_token(scan_single("if_done"), TK_NAME, "if_done");
-    assert_token(scan_single("fnord"),   TK_NAME, "fnord");
-    assert_token(scan_single("isOpen"),  TK_NAME, "isOpen");
+    assert_token(scan_single("fnord"), TK_NAME, "fnord");
+    assert_token(scan_single("isOpen"), TK_NAME, "isOpen");
     assert_token(scan_single("inflate"), TK_NAME, "inflate");
     assert_token(scan_single("gophers"), TK_NAME, "gophers");
-    assert_token(scan_single("asana"),   TK_NAME, "asana");
+    assert_token(scan_single("asana"), TK_NAME, "asana");
     // 3-char keywords prefix-extended
-    assert_token(scan_single("letter"),  TK_NAME, "letter");
-    assert_token(scan_single("intuit"),  TK_NAME, "intuit");
-    assert_token(scan_single("forge"),   TK_NAME, "forge");
-    assert_token(scan_single("newest"),  TK_NAME, "newest");
+    assert_token(scan_single("letter"), TK_NAME, "letter");
+    assert_token(scan_single("intuit"), TK_NAME, "intuit");
+    assert_token(scan_single("forge"), TK_NAME, "forge");
+    assert_token(scan_single("newest"), TK_NAME, "newest");
     // 5-char keyword `class` prefixed
-    assert_token(scan_single("classy"),     TK_NAME, "classy");
+    assert_token(scan_single("classy"), TK_NAME, "classy");
     assert_token(scan_single("classValue"), TK_NAME, "classValue");
     // const vs constructor vs continue
     assert_token(scan_single("consume"), TK_NAME, "consume");
@@ -437,10 +438,10 @@ TEST(lexer_keyword_prefix_identifiers) {
     // null vs nullable
     assert_token(scan_single("nullable"), TK_NAME, "nullable");
     // true vs truely
-    assert_token(scan_single("truely"),   TK_NAME, "truely");
+    assert_token(scan_single("truely"), TK_NAME, "truely");
     // Case-sensitive: lowercase is NOT the type keyword
-    assert_token(scan_single("array"),    TK_NAME, "array");  // != Array
-    assert_token(scan_single("map"),      TK_NAME, "map");    // != Map
+    assert_token(scan_single("array"), TK_NAME, "array");  // != Array
+    assert_token(scan_single("map"), TK_NAME, "map");      // != Map
 }
 
 // Every keyword in xkeywords.def must round-trip to its declared XrTokenType.
@@ -451,46 +452,80 @@ TEST(lexer_keyword_table_completeness) {
         XrTokenType expected;
     } cases[] = {
         // Lowercase keywords
-        {"abstract", TK_ABSTRACT}, {"as", TK_AS}, {"await", TK_AWAIT},
-        {"bool", TK_BOOL}, {"break", TK_BREAK},
-        {"catch", TK_CATCH}, {"class", TK_CLASS},
-        {"const", TK_CONST}, {"constructor", TK_CONSTRUCTOR},
-        {"continue", TK_CONTINUE}, {"defer", TK_DEFER},
-        {"else", TK_ELSE}, {"enum", TK_ENUM},
-        {"export", TK_EXPORT}, {"extends", TK_EXTENDS},
-        {"false", TK_FALSE}, {"final", TK_FINAL}, {"finally", TK_FINALLY},
-        {"float", TK_FLOAT}, {"float32", TK_FLOAT32}, {"float64", TK_FLOAT64},
-        {"fn", TK_FN}, {"for", TK_FOR},
-        {"go", TK_GO}, {"if", TK_IF},
-        {"implements", TK_IMPLEMENTS}, {"import", TK_IMPORT},
-        {"in", TK_IN}, {"int", TK_INT}, {"int8", TK_INT8},
-        {"int16", TK_INT16}, {"int32", TK_INT32}, {"int64", TK_INT64},
-        {"interface", TK_INTERFACE}, {"is", TK_IS},
-        {"let", TK_LET}, {"match", TK_MATCH},
-        {"new", TK_NEW}, {"null", TK_NULL},
-        {"operator", TK_OPERATOR}, {"override", TK_OVERRIDE},
-        {"private", TK_PRIVATE}, {"public", TK_PUBLIC},
+        {"abstract", TK_ABSTRACT},
+        {"as", TK_AS},
+        {"await", TK_AWAIT},
+        {"bool", TK_BOOL},
+        {"break", TK_BREAK},
+        {"catch", TK_CATCH},
+        {"class", TK_CLASS},
+        {"const", TK_CONST},
+        {"constructor", TK_CONSTRUCTOR},
+        {"continue", TK_CONTINUE},
+        {"defer", TK_DEFER},
+        {"else", TK_ELSE},
+        {"enum", TK_ENUM},
+        {"export", TK_EXPORT},
+        {"extends", TK_EXTENDS},
+        {"false", TK_FALSE},
+        {"final", TK_FINAL},
+        {"finally", TK_FINALLY},
+        {"float", TK_FLOAT},
+        {"float32", TK_FLOAT32},
+        {"float64", TK_FLOAT64},
+        {"fn", TK_FN},
+        {"for", TK_FOR},
+        {"go", TK_GO},
+        {"if", TK_IF},
+        {"implements", TK_IMPLEMENTS},
+        {"import", TK_IMPORT},
+        {"in", TK_IN},
+        {"int", TK_INT},
+        {"int8", TK_INT8},
+        {"int16", TK_INT16},
+        {"int32", TK_INT32},
+        {"int64", TK_INT64},
+        {"interface", TK_INTERFACE},
+        {"is", TK_IS},
+        {"let", TK_LET},
+        {"match", TK_MATCH},
+        {"new", TK_NEW},
+        {"null", TK_NULL},
+        {"operator", TK_OPERATOR},
+        {"override", TK_OVERRIDE},
+        {"private", TK_PRIVATE},
+        {"public", TK_PUBLIC},
         {"return", TK_RETURN},
-        {"scope", TK_SCOPE}, {"select", TK_SELECT}, {"shared", TK_SHARED},
-        {"static", TK_STATIC}, {"string", TK_STRING}, {"struct", TK_STRUCT},
+        {"scope", TK_SCOPE},
+        {"select", TK_SELECT},
+        {"shared", TK_SHARED},
+        {"static", TK_STATIC},
+        {"string", TK_STRING},
+        {"struct", TK_STRUCT},
         {"super", TK_SUPER},
-        {"this", TK_THIS}, {"throw", TK_THROW},
-        {"true", TK_TRUE}, {"try", TK_TRY}, {"type", TK_TYPE_ALIAS},
-        {"uint8", TK_UINT8}, {"uint16", TK_UINT16},
-        {"uint32", TK_UINT32}, {"uint64", TK_UINT64},
+        {"this", TK_THIS},
+        {"throw", TK_THROW},
+        {"true", TK_TRUE},
+        {"try", TK_TRY},
+        {"type", TK_TYPE_ALIAS},
+        {"uint8", TK_UINT8},
+        {"uint16", TK_UINT16},
+        {"uint32", TK_UINT32},
+        {"uint64", TK_UINT64},
         {"unknown", TK_UNKNOWN},
-        {"void", TK_VOID}, {"while", TK_WHILE}, {"yield", TK_YIELD},
+        {"while", TK_WHILE},
+        {"yield", TK_YIELD},
         // None of the uppercase native type names are lexer keywords:
         // Array / BigInt / Bytes / Channel / DateTime / Json / Map /
         // Range / Regex / Set / StringBuilder all resolve through the
         // prelude registry as plain identifiers.
     };
-    int n = (int)(sizeof(cases) / sizeof(cases[0]));
+    int n = (int) (sizeof(cases) / sizeof(cases[0]));
     for (int i = 0; i < n; i++) {
         Token t = scan_single(cases[i].spelling);
         if (t.type != cases[i].expected) {
-            printf("FAIL: keyword '%s' expected type %d, got %d\n",
-                   cases[i].spelling, cases[i].expected, t.type);
+            printf("FAIL: keyword '%s' expected type %d, got %d\n", cases[i].spelling,
+                   cases[i].expected, t.type);
         }
         ASSERT_EQ_INT(t.type, cases[i].expected);
     }
@@ -624,6 +659,6 @@ static void run_all_tests(void) {
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray Lexer Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray Lexer Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

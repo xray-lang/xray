@@ -962,7 +962,6 @@ static const char *token_names[] = {
     [TK_MOVE] = "move",
 
     // Type keywords
-    [TK_VOID] = "void",
     [TK_INT] = "int",
     [TK_FLOAT] = "float",
     [TK_STRING] = "string",
