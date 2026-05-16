@@ -102,7 +102,6 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
     if (strcmp(name, "Task") == 0 && nargs >= 1)
         return xr_type_new_task(X, args[0]);
 
-    /* Generic class instance */
     XrType **args_copy = NULL;
     if (nargs > 0) {
         args_copy = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) nargs);
@@ -111,6 +110,15 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
                 args_copy[i] = args[i];
         }
     }
+
+    /* Built-in interface with type args: e.g. Iterable<int>. The bare-name
+     * lookup hands us the interface singleton; pair it with the resolved
+     * arguments so xr_type_satisfies_constraint can compare them. */
+    if (xa_get_builtin_interface_by_name(name)) {
+        return xr_type_new_generic_interface(X, name, args_copy, nargs);
+    }
+
+    /* Generic class instance — fallback for user types */
     return xr_type_new_generic_instance(X, name, NULL, args_copy, nargs);
 }
 
@@ -210,9 +218,10 @@ XR_FUNC XrType *xr_tref_resolve(XrayIsolate *X, const XrTypeRef *tref) {
     return resolve_impl(X, tref);
 }
 
-/* Look up `name` as a class symbol in analyzer scopes; on hit, return the
- * canonical XrType (which carries the inheritance chain set up during class
- * registration).  Returns NULL when no class symbol matches. */
+/* Look up `name` as a class-shaped symbol in analyzer scopes; on hit,
+ * return the canonical XrType (carrying the inheritance chain for classes
+ * or the interface singleton for user-defined interfaces).  Returns NULL
+ * when no matching symbol is registered. */
 static XrType *resolve_class_symbol_type(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)
         return NULL;
@@ -226,9 +235,10 @@ static XrType *resolve_class_symbol_type(XaAnalyzer *analyzer, const char *name)
     if (!links || !links->type)
         return NULL;
 
-    /* Only honour CLASS / INSTANCE kinds — interfaces, type aliases, etc.
-     * fall back to the standard resolver to keep their semantics intact. */
-    if (links->type->kind != XR_KIND_CLASS && links->type->kind != XR_KIND_INSTANCE)
+    /* Honour CLASS, INSTANCE, and INTERFACE kinds. Type aliases fall back to
+     * the standard resolver to preserve their semantics. */
+    if (links->type->kind != XR_KIND_CLASS && links->type->kind != XR_KIND_INSTANCE &&
+        links->type->kind != XR_KIND_INTERFACE)
         return NULL;
 
     return links->type;
@@ -246,6 +256,28 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         XrType *cls = resolve_class_symbol_type(analyzer, tref->name);
         if (cls)
             return cls;
+    }
+
+    /* Generic form: if the head names a user-defined interface, return a
+     * parameterized interface so conformance checks see the type arguments
+     * (e.g. `Container<int>` vs `Container<string>` must not collide). */
+    if (tref->kind == XR_TREF_GENERIC && tref->name) {
+        XrType *head = resolve_class_symbol_type(analyzer, tref->name);
+        if (head && head->kind == XR_KIND_INTERFACE) {
+            int nargs = tref->nchildren;
+            XrType *stack_args[8];
+            XrType **args =
+                (nargs <= 8) ? stack_args : (XrType **) xr_malloc(sizeof(XrType *) * nargs);
+            if (args) {
+                for (int i = 0; i < nargs; i++)
+                    args[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
+                XrType *result =
+                    xr_type_new_generic_interface(analyzer->isolate, tref->name, args, nargs);
+                if (args != stack_args)
+                    xr_free(args);
+                return result;
+            }
+        }
     }
 
     return resolve_impl(analyzer->isolate, tref);

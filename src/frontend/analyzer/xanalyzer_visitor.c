@@ -434,6 +434,21 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
 // Cross-TU: also called from xa_visit_collect_function_body() in
 // xanalyzer_visitor_decl.c for nested function bodies.
 void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts, int count) {
+    // Phase 0: register every interface declaration first so that any class
+    // body parsed in Phase 1 can resolve `implements Foo` against a real
+    // symbol (Foo could appear before or after the class in source order).
+    for (int i = 0; i < count; i++) {
+        AstNode *stmt = stmts[i];
+        if (!stmt)
+            continue;
+        if (stmt->type == AST_INTERFACE_DECL) {
+            xa_visit_collect_interface(ctx, stmt);
+        } else if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.declaration &&
+                   stmt->as.export_stmt.declaration->type == AST_INTERFACE_DECL) {
+            xa_visit_collect_interface(ctx, stmt->as.export_stmt.declaration);
+        }
+    }
+
     // Phase 1: Collect all function/class/enum declarations first (hoisting)
     for (int i = 0; i < count; i++) {
         AstNode *stmt = stmts[i];

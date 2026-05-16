@@ -82,22 +82,23 @@ typedef enum {
 
     // Static analysis errors (350-399)
     XR_ERR_ANALYZE = 350,
-    XR_ERR_ANALYZE_UNDEFINED_VAR,       // Undeclared variable
-    XR_ERR_ANALYZE_TYPE_MISMATCH,       // Type not assignable
-    XR_ERR_ANALYZE_CONST_ASSIGN,        // Cannot assign to const
-    XR_ERR_ANALYZE_NOT_CALLABLE,        // Value is not callable
-    XR_ERR_ANALYZE_WRONG_ARG_COUNT,     // Wrong argument count
-    XR_ERR_ANALYZE_ARG_TYPE,            // Argument type mismatch
-    XR_ERR_ANALYZE_GENERIC_COUNT,       // Wrong type argument count
-    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,  // Type constraint not satisfied
-    XR_ERR_ANALYZE_SUPER_FIRST,         // super() must be first statement
-    XR_ERR_ANALYZE_SUPER_THIS,          // Cannot use 'this' before super()
-    XR_ERR_ANALYZE_SUPER_REQUIRED,      // Must call super() in derived class
-    XR_ERR_ANALYZE_SUPER_INVALID,       // super() in non-derived class
-    XR_ERR_ANALYZE_CLOSURE_CAPTURE,     // Unsafe closure capture in coroutine
-    XR_ERR_ANALYZE_AWAIT_TYPE,          // await expects Task type
-    XR_ERR_ANALYZE_MISSING_TYPE,        // Variable needs type annotation or initializer
-    XR_ERR_ANALYZE_ENUM_MIXED_TYPE,     // Enum members must all have the same value type
+    XR_ERR_ANALYZE_UNDEFINED_VAR,              // Undeclared variable
+    XR_ERR_ANALYZE_TYPE_MISMATCH,              // Type not assignable
+    XR_ERR_ANALYZE_CONST_ASSIGN,               // Cannot assign to const
+    XR_ERR_ANALYZE_NOT_CALLABLE,               // Value is not callable
+    XR_ERR_ANALYZE_WRONG_ARG_COUNT,            // Wrong argument count
+    XR_ERR_ANALYZE_ARG_TYPE,                   // Argument type mismatch
+    XR_ERR_ANALYZE_GENERIC_COUNT,              // Wrong type argument count
+    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,         // Type constraint not satisfied
+    XR_ERR_ANALYZE_SUPER_FIRST,                // super() must be first statement
+    XR_ERR_ANALYZE_SUPER_THIS,                 // Cannot use 'this' before super()
+    XR_ERR_ANALYZE_SUPER_REQUIRED,             // Must call super() in derived class
+    XR_ERR_ANALYZE_SUPER_INVALID,              // super() in non-derived class
+    XR_ERR_ANALYZE_CLOSURE_CAPTURE,            // Unsafe closure capture in coroutine
+    XR_ERR_ANALYZE_AWAIT_TYPE,                 // await expects Task type
+    XR_ERR_ANALYZE_MISSING_TYPE,               // Variable needs type annotation or initializer
+    XR_ERR_ANALYZE_ENUM_MIXED_TYPE,            // Enum members must all have the same value type
+    XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED,  // Class lacks required interface member
 
     // Runtime errors (400-499) — most runtime codes in xerror_codes.h
     XR_ERR_RUNTIME = 400,

@@ -467,6 +467,8 @@ XR_FUNC void xr_type_set_json_field_readonly(XrayIsolate *X, XrType *type, const
 XR_FUNC void xr_type_set_json_type_name(XrayIsolate *X, XrType *type, const char *name);
 XR_FUNC XrType *xr_type_new_class(XrayIsolate *X, const char *class_name);
 XR_FUNC XrType *xr_type_new_interface(XrayIsolate *X, const char *interface_name);
+XR_FUNC XrType *xr_type_new_generic_interface(XrayIsolate *X, const char *interface_name,
+                                              XrType **type_args, int type_arg_count);
 XR_FUNC XrType *xr_type_new_instance(XrayIsolate *X, XrClassInfo *class_info);
 XR_FUNC XrType *xr_type_new_generic_instance(XrayIsolate *X, const char *class_name,
                                              XrClassInfo *class_info, XrType **type_args,
