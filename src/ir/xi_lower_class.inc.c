@@ -40,7 +40,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
     ml.parent = l;
     ml.repl_mode = l->repl_mode;
 
-    ml.func = xi_func_new(m->name, m->return_type ? m->return_type : ml.type_void);
+    ml.func = xi_func_new(m->name, m->return_type ? m->return_type : ml.type_unit);
     if (!ml.func) {
         xi_lower_cleanup(&ml);
         return NULL;
@@ -100,7 +100,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
             XiValue *val = xi_lower_expr(&ml, f->initializer);
             if (!val)
                 continue;
-            XiValue *st = xi_value_new(ml.func, ml.cur_block, XI_STORE_FIELD, ml.type_void, 2);
+            XiValue *st = xi_value_new(ml.func, ml.cur_block, XI_STORE_FIELD, ml.type_unit, 2);
             if (!st)
                 continue;
             st->args[0] = this_val;
@@ -311,14 +311,14 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
         int slot = l->shared_map[var_id];
         if (l->repl_mode) {
-            XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
             if (st) {
                 st->args[0] = v;
                 st->aux = (void *) l->vars[var_id].name;
                 st->flags |= XI_FLAG_SIDE_EFFECT;
             }
         } else {
-            XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            XiValue *st = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
             if (st) {
                 st->args[0] = v;
                 st->aux_int = slot;

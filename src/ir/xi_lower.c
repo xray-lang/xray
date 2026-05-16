@@ -404,7 +404,7 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayI
     l->type_bool = xr_type_new_bool(isolate);
     l->type_string = xr_type_new_string(isolate);
     l->type_null = xr_type_new_null(isolate);
-    l->type_void = xr_type_new_void(isolate);
+    l->type_unit = xr_type_new_unit(isolate);
     l->type_any = xr_type_new_unknown(isolate);
     l->type_bigint = xr_type_new_bigint(isolate);
     l->type_regex = xr_type_new_regex(isolate);
@@ -454,9 +454,9 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * struct layouts and produces garbage values for every downstream
      * type lookup (JIT codegen RET tag, TFA, etc.). */
     struct XrType *ret_type =
-        fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : l.type_void;
+        fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : l.type_unit;
     if (!ret_type)
-        ret_type = l.type_void;
+        ret_type = l.type_unit;
 
     l.func = xi_func_new(fdecl->name ? fdecl->name : "<anonymous>", ret_type);
     if (!l.func) {
@@ -1014,7 +1014,7 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     l.is_program = true;
     l.repl_mode = repl_mode;
 
-    l.func = xi_func_new("<main>", l.type_void);
+    l.func = xi_func_new("<main>", l.type_unit);
     if (!l.func) {
         xi_lower_cleanup(&l);
         return NULL;
