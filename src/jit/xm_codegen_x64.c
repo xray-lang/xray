@@ -736,14 +736,23 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
             if (!xm_ref_is_none(blk->jmp.arg)) {
                 uint32_t ret_idx = XM_REF_INDEX(blk->jmp.arg);
                 bool is_fp =
-                    (ret_idx < ctx->func->nvreg && ctx->func->vregs[ret_idx].rep == XR_REP_F64);
+                    (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg &&
+                     ctx->func->vregs[ret_idx].rep == XR_REP_F64);
 
-                /* Move payload to RAX before tag writes clobber RCX/RDX */
+                /* Move payload to RAX before tag writes clobber RCX/RDX.
+                 *
+                 * Use x64_get_operand (not x64_get_reg) so const refs
+                 * actually materialise into RAX.  x64_get_reg falls
+                 * straight through to SCRATCH_REG for non-vreg refs
+                 * without loading the constant, which produced
+                 * `mov rax, r11` where r11 still held the previous
+                 * call's tag — sending garbage like 0x3 / 0x5 to the
+                 * caller's PTR-decode path. */
                 if (is_fp) {
                     X64Xmm fsrc = x64_get_fp_reg(ctx, blk->jmp.arg);
                     x64_movq_gp_xmm(&ctx->buf, X64_RAX, fsrc);
                 } else {
-                    X64Reg ret_reg = x64_get_reg(ctx, blk->jmp.arg);
+                    X64Reg ret_reg = x64_get_operand(ctx, blk->jmp.arg, X64_RAX);
                     if (ret_reg != X64_RAX)
                         x64_mov_rr(&ctx->buf, X64_RAX, ret_reg);
                 }
