@@ -13,7 +13,7 @@
 // ===== 单线程模式测试 =====
 
 @test
-fn test_single_thread_context(): void {
+fn test_single_thread_context() {
     // 在主线程中执行字符串拼接
     // 应该使用 Isolate 的 vm_ctx.tmp_strbuf
     let result = "hello" + " " + "world"
@@ -29,7 +29,7 @@ fn test_single_thread_context(): void {
 }
 
 @test
-fn test_single_thread_long_concat(): void {
+fn test_single_thread_long_concat() {
     // 测试长字符串拼接（使用 XrStrBuf 路径）
     let base = "x".repeat(100)
     let result = base + base
@@ -43,7 +43,7 @@ fn test_single_thread_long_concat(): void {
 // ===== 多核模式测试 =====
 
 @test
-fn test_multicore_context_isolation(): void {
+fn test_multicore_context_isolation() {
     // 在多个协程中并发执行字符串拼接
     // 每个协程应该使用自己 Worker 的 vm_ctx.tmp_strbuf
     
@@ -70,7 +70,7 @@ fn test_multicore_context_isolation(): void {
 }
 
 @test
-fn test_multicore_concurrent_long_concat(): void {
+fn test_multicore_concurrent_long_concat() {
     // 多个协程并发执行长字符串拼接
     // 验证 Worker 间的缓冲区隔离
     
@@ -100,7 +100,7 @@ fn test_multicore_concurrent_long_concat(): void {
 }
 
 @test
-fn test_context_switch_correctness(): void {
+fn test_context_switch_correctness() {
     // 测试上下文切换时缓冲区选择的正确性
     // 主线程和协程交替执行字符串拼接
     
@@ -122,7 +122,7 @@ fn test_context_switch_correctness(): void {
 }
 
 @test
-fn test_nested_coro_context(): void {
+fn test_nested_coro_context() {
     // 测试嵌套协程的上下文选择
     
     fn inner_task(x: string): string {
@@ -145,7 +145,7 @@ fn test_nested_coro_context(): void {
 // ===== 属性测试：随机并发拼接 =====
 
 @test
-fn test_property_concurrent_concat_correctness(): void {
+fn test_property_concurrent_concat_correctness() {
     // 属性：对于任意数量的并发协程，每个协程的字符串拼接结果应该独立且正确
     
     fn random_concat_task(seed: int): string {
@@ -184,7 +184,7 @@ fn test_property_concurrent_concat_correctness(): void {
 }
 
 @test
-fn test_property_buffer_reuse_safety(): void {
+fn test_property_buffer_reuse_safety() {
     // 属性：缓冲区重用不应该导致数据污染
     
     fn sequential_concat_task(id: int): Array<string> {

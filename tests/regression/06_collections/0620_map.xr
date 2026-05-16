@@ -3,39 +3,39 @@
 // 测试：Map 集合
 // ===== 创建 =====
 @test
-fn test_map_literal(): void {
+fn test_map_literal() {
     let m = { "a" => 1, "b" => 2, "c" => 3 }
     assert_eq(m.length, 3)
 }
 
 @test
-fn test_empty_map(): void {
+fn test_empty_map() {
     let m = #{}
     assert_eq(m.length, 0)
 }
 
 @test
-fn test_single_entry(): void {
+fn test_single_entry() {
     let m = { "key" => "value" }
     assert_eq(m.length, 1)
 }
 
 // ===== 获取 =====
 @test
-fn test_get_basic(): void {
+fn test_get_basic() {
     let m = { "name" => "Alice", "age" => 30 }
     assert_eq(m.get("name"), "Alice")
     assert_eq(m.get("age"), 30)
 }
 
 @test
-fn test_get_missing(): void {
+fn test_get_missing() {
     let m = { "a" => 1 }
     assert_eq(m.get("b"), null)
 }
 
 @test
-fn test_bracket_access(): void {
+fn test_bracket_access() {
     let m = { "x" => 10, "y" => 20 }
     assert_eq(m["x"], 10)
     assert_eq(m["y"], 20)
@@ -43,7 +43,7 @@ fn test_bracket_access(): void {
 
 // ===== 设置 =====
 @test
-fn test_set_new(): void {
+fn test_set_new() {
     let m = #{}
     m.set("key", "value")
     assert_eq(m.get("key"), "value")
@@ -51,7 +51,7 @@ fn test_set_new(): void {
 }
 
 @test
-fn test_set_overwrite(): void {
+fn test_set_overwrite() {
     let m = { "key" => "old" }
     m.set("key", "new")
     assert_eq(m.get("key"), "new")
@@ -59,7 +59,7 @@ fn test_set_overwrite(): void {
 }
 
 @test
-fn test_bracket_assign(): void {
+fn test_bracket_assign() {
     let m = #{}
     m["x"] = 100
     assert_eq(m["x"], 100)
@@ -67,7 +67,7 @@ fn test_bracket_assign(): void {
 
 // ===== 检查 =====
 @test
-fn test_has_key(): void {
+fn test_has_key() {
     let m = { "a" => 1, "b" => 2 }
     assert_eq(m.has("a"), true)
     assert_eq(m.has("c"), false)
@@ -75,7 +75,7 @@ fn test_has_key(): void {
 
 // ===== 删除 =====
 @test
-fn test_delete(): void {
+fn test_delete() {
     let m = { "a" => 1, "b" => 2, "c" => 3 }
     m.delete("b")
     assert_eq(m.length, 2)
@@ -85,7 +85,7 @@ fn test_delete(): void {
 }
 
 @test
-fn test_delete_missing(): void {
+fn test_delete_missing() {
     let m = { "a" => 1 }
     m.delete("b")
     // 不存在的键
@@ -94,7 +94,7 @@ fn test_delete_missing(): void {
 
 // ===== 遍历 =====
 @test
-fn test_iterate_values(): void {
+fn test_iterate_values() {
     let m = { "a" => 1, "b" => 2, "c" => 3 }
     let sum = 0
     for (k, v in m) {
@@ -104,7 +104,7 @@ fn test_iterate_values(): void {
 }
 
 @test
-fn test_collect_keys(): void {
+fn test_collect_keys() {
     let m = { "x" => 10, "y" => 20, "z" => 30 }
     let keys: Array<string> = []
     for (k, v in m) {
@@ -115,14 +115,14 @@ fn test_collect_keys(): void {
 
 // ===== keys/values =====
 @test
-fn test_keys(): void {
+fn test_keys() {
     let m = { "a" => 1, "b" => 2 }
     let keys = m.keys()
     assert_eq(keys.length, 2)
 }
 
 @test
-fn test_values(): void {
+fn test_values() {
     let m = { "a" => 1, "b" => 2 }
     let values = m.values()
     assert_eq(values.length, 2)
@@ -130,7 +130,7 @@ fn test_values(): void {
 
 // ===== 清空 =====
 @test
-fn test_clear(): void {
+fn test_clear() {
     let m = { "a" => 1, "b" => 2, "c" => 3 }
     m.clear()
     assert_eq(m.length, 0)
@@ -138,13 +138,13 @@ fn test_clear(): void {
 
 // ===== 不同类型的键值 =====
 @test
-fn test_string_keys(): void {
+fn test_string_keys() {
     let m = { "hello" => 1, "world" => 2 }
     assert_eq(m.get("hello"), 1)
 }
 
 @test
-fn test_mixed_value_types(): void {
+fn test_mixed_value_types() {
     let m = { "int" => 42, "str" => "hello", "bool" => true, "null" => null }
     assert_eq(m.get("int"), 42)
     assert_eq(m.get("str"), "hello")
@@ -154,7 +154,7 @@ fn test_mixed_value_types(): void {
 
 // ===== 边界条件 =====
 @test
-fn test_many_entries(): void {
+fn test_many_entries() {
     let m = #{}
     for (let i = 0; i < 100; i++) {
         m.set("key" + i.toString(), i)
@@ -164,7 +164,7 @@ fn test_many_entries(): void {
 }
 
 @test
-fn test_overwrite_many_times(): void {
+fn test_overwrite_many_times() {
     let m = { "x" => 0 }
     for (let i = 0; i < 10; i++) {
         m.set("x", i)

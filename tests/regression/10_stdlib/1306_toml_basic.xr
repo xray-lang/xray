@@ -5,7 +5,7 @@ import toml
 // ===== Basic key-value =====
 
 @test
-fn test_parse_basic(): void {
+fn test_parse_basic() {
     let data = "name = \"Alice\"\nage = 30\nactive = true"
     let obj = toml.parse(data)
     assert_eq(obj["name"], "Alice")
@@ -16,7 +16,7 @@ fn test_parse_basic(): void {
 // ===== Table (section) =====
 
 @test
-fn test_parse_table(): void {
+fn test_parse_table() {
     let data = "[server]\nhost = \"localhost\"\nport = 8080"
     let obj = toml.parse(data)
     assert_eq(obj["server"]["host"], "localhost")
@@ -26,7 +26,7 @@ fn test_parse_table(): void {
 // ===== Array =====
 
 @test
-fn test_parse_array(): void {
+fn test_parse_array() {
     let data = "ports = [80, 443, 8080]"
     let obj = toml.parse(data)
     assert_eq(obj["ports"][0], 80)
@@ -36,7 +36,7 @@ fn test_parse_array(): void {
 // ===== Inline table =====
 
 @test
-fn test_parse_inline_table(): void {
+fn test_parse_inline_table() {
     let data = "point = { x = 10, y = 20 }"
     let obj = toml.parse(data)
     assert_eq(obj["point"]["x"], 10)
@@ -45,7 +45,7 @@ fn test_parse_inline_table(): void {
 // ===== Number formats =====
 
 @test
-fn test_parse_number_formats(): void {
+fn test_parse_number_formats() {
     let data = "hex = 0xDEADBEEF\noct = 0o755\nbin = 0b11010110"
     let obj = toml.parse(data)
     assert_eq(obj["hex"], 3735928559)
@@ -56,7 +56,7 @@ fn test_parse_number_formats(): void {
 // ===== Stringify =====
 
 @test
-fn test_stringify(): void {
+fn test_stringify() {
     let config = {"name" => "xray", "version" => 1}
     let result = toml.stringify(config)
     assert(result != null)
@@ -66,7 +66,7 @@ fn test_stringify(): void {
 // ===== Nested tables =====
 
 @test
-fn test_parse_nested_table(): void {
+fn test_parse_nested_table() {
     let data = "[database]\n[database.primary]\nhost = \"db1\"\n[database.replica]\nhost = \"db2\""
     let obj = toml.parse(data)
     assert_eq(obj["database"]["primary"]["host"], "db1")

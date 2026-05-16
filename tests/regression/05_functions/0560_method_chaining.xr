@@ -5,7 +5,7 @@
 // ===== 数组方法链 =====
 
 @test
-fn test_array_filter_map(): void {
+fn test_array_filter_map() {
     let arr = [1, 2, 3, 4, 5, 6]
     let result = arr.filter((x) => x % 2 == 0).map((x) => x * 2)
     assert_eq(result.length, 3)
@@ -15,7 +15,7 @@ fn test_array_filter_map(): void {
 }
 
 @test
-fn test_array_map_filter(): void {
+fn test_array_map_filter() {
     let arr = [1, 2, 3, 4, 5]
     let result = arr.map((x) => x * 2).filter((x) => x > 5)
     assert_eq(result.length, 3)
@@ -25,14 +25,14 @@ fn test_array_map_filter(): void {
 // ===== 字符串方法链 =====
 
 @test
-fn test_string_chain(): void {
+fn test_string_chain() {
     let s = "  Hello World  "
     let result = s.trim().toLowerCase()
     assert_eq(result, "hello world")
 }
 
 @test
-fn test_string_split_join(): void {
+fn test_string_split_join() {
     let s = "a,b,c"
     let parts = s.split(",")
     assert_eq(parts.length, 3)
@@ -59,14 +59,14 @@ class Builder {
 }
 
 @test
-fn test_builder_chain(): void {
+fn test_builder_chain() {
     let b = new Builder()
     let result = b.add("Hello").add(" ").add("World").build()
     assert_eq(result, "Hello World")
 }
 
 @test
-fn test_multiple_chain(): void {
+fn test_multiple_chain() {
     let b = new Builder()
     b.add("a")
     b.add("b")
@@ -77,7 +77,7 @@ fn test_multiple_chain(): void {
 // ===== 复杂链式调用 =====
 
 @test
-fn test_array_complex_chain(): void {
+fn test_array_complex_chain() {
     let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let sum = 0
     numbers.filter((x) => x % 2 == 0).forEach((x) => {

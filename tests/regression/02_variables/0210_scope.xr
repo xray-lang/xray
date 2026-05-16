@@ -3,7 +3,7 @@
 // 测试：变量作用域
 // ===== 块作用域 =====
 @test
-fn test_block_scope_basic(): void {
+fn test_block_scope_basic() {
     let x = 1
 {
         let y = 2
@@ -15,7 +15,7 @@ fn test_block_scope_basic(): void {
 }
 
 @test
-fn test_nested_blocks(): void {
+fn test_nested_blocks() {
     let a = 1
 {
         let b = 2
@@ -30,7 +30,7 @@ fn test_nested_blocks(): void {
 
 // ===== 变量遮蔽 =====
 @test
-fn test_shadow_same_scope_different_block(): void {
+fn test_shadow_same_scope_different_block() {
     let x = 10
 {
         let x = 20
@@ -47,7 +47,7 @@ fn test_shadow_same_scope_different_block(): void {
 }
 
 @test
-fn test_shadow_with_different_type(): void {
+fn test_shadow_with_different_type() {
     let x = 10
     // int
 {
@@ -60,7 +60,7 @@ fn test_shadow_with_different_type(): void {
 
 // ===== 函数作用域 =====
 @test
-fn test_function_scope(): void {
+fn test_function_scope() {
     let x = 100
     fn inner(): int {
         let x = 200
@@ -71,7 +71,7 @@ fn test_function_scope(): void {
 }
 
 @test
-fn test_closure_captures_outer(): void {
+fn test_closure_captures_outer() {
     let x = 10
     fn inner(): int {
         return x
@@ -80,9 +80,9 @@ fn test_closure_captures_outer(): void {
 }
 
 @test
-fn test_closure_modifies_outer(): void {
+fn test_closure_modifies_outer() {
     let x = 10
-    fn modify(): void {
+    fn modify() {
         x = 20
     }
     modify()
@@ -91,7 +91,7 @@ fn test_closure_modifies_outer(): void {
 
 // ===== 循环作用域 =====
 @test
-fn test_for_loop_scope(): void {
+fn test_for_loop_scope() {
     let sum = 0
     for (let i = 0; i < 3; i++) {
         sum += i
@@ -100,7 +100,7 @@ fn test_for_loop_scope(): void {
 }
 
 @test
-fn test_while_loop_scope(): void {
+fn test_while_loop_scope() {
     let i = 0
     let sum = 0
     while (i < 3) {
@@ -113,7 +113,7 @@ fn test_while_loop_scope(): void {
 
 // ===== if 作用域 =====
 @test
-fn test_if_scope(): void {
+fn test_if_scope() {
     let result = 0
     if (true) {
         let x = 10
@@ -123,7 +123,7 @@ fn test_if_scope(): void {
 }
 
 @test
-fn test_if_else_scope(): void {
+fn test_if_else_scope() {
     let result = 0
     let condition = false
     if (condition) {
@@ -138,7 +138,7 @@ fn test_if_else_scope(): void {
 
 // ===== 边界条件 =====
 @test
-fn test_deeply_nested(): void {
+fn test_deeply_nested() {
     let a = 1
 {
         let b = 2

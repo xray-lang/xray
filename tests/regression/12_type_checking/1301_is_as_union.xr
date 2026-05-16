@@ -4,7 +4,7 @@
 // ===== is type guard =====
 
 @test
-fn test_is_basic(): void {
+fn test_is_basic() {
     let x: int | string | bool = 42
     assert_eq(x is int, true)
     assert_eq(x is string, false)
@@ -12,28 +12,28 @@ fn test_is_basic(): void {
 }
 
 @test
-fn test_is_string(): void {
+fn test_is_string() {
     let x: int | string | bool = "hello"
     assert_eq(x is string, true)
     assert_eq(x is int, false)
 }
 
 @test
-fn test_is_bool(): void {
+fn test_is_bool() {
     let x: int | string | bool = true
     assert_eq(x is bool, true)
     assert_eq(x is int, false)
 }
 
 @test
-fn test_is_null(): void {
+fn test_is_null() {
     let x: int? = null
     assert_eq(x is null, true)
     assert_eq(x is int, false)
 }
 
 @test
-fn test_is_array(): void {
+fn test_is_array() {
     let x: Array<int> = [1, 2, 3]
     assert_eq(x is Array, true)
     assert_eq(x is int, false)
@@ -42,7 +42,7 @@ fn test_is_array(): void {
 // ===== as type assertion =====
 
 @test
-fn test_as_safe(): void {
+fn test_as_safe() {
     let x: int | string | bool = 42
     let n = x as int?
     assert_eq(n, 42)
@@ -52,14 +52,14 @@ fn test_as_safe(): void {
 }
 
 @test
-fn test_as_unsafe(): void {
+fn test_as_unsafe() {
     let x: int | string | bool = "hello"
     let s = x as string
     assert_eq(s, "hello")
 }
 
 @test
-fn test_as_safe_chain(): void {
+fn test_as_safe_chain() {
     let x: int | float | string = 3.14
     let n = x as int?
     assert_eq(n, null)
@@ -71,7 +71,7 @@ fn test_as_safe_chain(): void {
 // ===== is type guard narrowing =====
 
 @test
-fn test_is_narrowing_in_if(): void {
+fn test_is_narrowing_in_if() {
     let x: int | string | bool = 42
     let result: int = 0
     if (x is int) {
@@ -81,7 +81,7 @@ fn test_is_narrowing_in_if(): void {
 }
 
 @test
-fn test_is_narrowing_string(): void {
+fn test_is_narrowing_string() {
     let x: int | string | bool = "hello"
     let result: string = ""
     if (x is string) {
@@ -93,7 +93,7 @@ fn test_is_narrowing_string(): void {
 // ===== Union type basics =====
 
 @test
-fn test_union_variable(): void {
+fn test_union_variable() {
     let x: int | string = 42
     assert_eq(x is int, true)
     
@@ -102,7 +102,7 @@ fn test_union_variable(): void {
 }
 
 @test
-fn test_union_function_param(): void {
+fn test_union_function_param() {
     fn process(x: int | string): string {
         if (x is int) {
             return "int"
@@ -114,7 +114,7 @@ fn test_union_function_param(): void {
 }
 
 @test
-fn test_union_nullable(): void {
+fn test_union_nullable() {
     let x: int? = null
     assert_eq(x is null, true)
     assert_eq(x is int, false)

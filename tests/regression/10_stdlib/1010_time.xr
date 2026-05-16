@@ -9,7 +9,7 @@ import time
 // 返回当前时间戳（毫秒）
 
 @test
-fn test_time_now(): void {
+fn test_time_now() {
     let t = time.now()
     assert_eq(t > 0, true)
     // 时间戳应该是一个很大的数（毫秒级）
@@ -20,7 +20,7 @@ fn test_time_now(): void {
 // 返回 CPU 时钟时间（毫秒）
 
 @test
-fn test_time_clock(): void {
+fn test_time_clock() {
     let start = time.clock()
     // 做一些简单计算
     let sum = 0
@@ -35,7 +35,7 @@ fn test_time_clock(): void {
 // 返回单调递增时间（毫秒）
 
 @test
-fn test_time_monotonic(): void {
+fn test_time_monotonic() {
     let t1 = time.monotonic()
     let t2 = time.monotonic()
     assert_eq(t2 >= t1, true)
@@ -45,7 +45,7 @@ fn test_time_monotonic(): void {
 // 睡眠指定毫秒数
 
 @test
-fn test_time_sleep(): void {
+fn test_time_sleep() {
     let start = time.monotonic()
     time.sleep(10)  // 睡眠 10 毫秒
     let end = time.monotonic()

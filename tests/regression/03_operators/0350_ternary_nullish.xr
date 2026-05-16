@@ -5,19 +5,19 @@
 // ===== 三元运算符基础 =====
 
 @test
-fn test_ternary_true(): void {
+fn test_ternary_true() {
     let result = true ? "yes" : "no"
     assert_eq(result, "yes")
 }
 
 @test
-fn test_ternary_false(): void {
+fn test_ternary_false() {
     let result = false ? "yes" : "no"
     assert_eq(result, "no")
 }
 
 @test
-fn test_ternary_expression(): void {
+fn test_ternary_expression() {
     let x = 10
     let result = x > 5 ? "big" : "small"
     assert_eq(result, "big")
@@ -27,7 +27,7 @@ fn test_ternary_expression(): void {
 }
 
 @test
-fn test_ternary_numbers(): void {
+fn test_ternary_numbers() {
     let x = 5
     let max = x > 10 ? x : 10
     assert_eq(max, 10)
@@ -39,14 +39,14 @@ fn test_ternary_numbers(): void {
 // ===== 嵌套三元 =====
 
 @test
-fn test_ternary_nested(): void {
+fn test_ternary_nested() {
     let score = 85
     let grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "D"
     assert_eq(grade, "B")
 }
 
 @test
-fn test_ternary_in_expression(): void {
+fn test_ternary_in_expression() {
     let x = 5
     let result = 10 + (x > 0 ? x : 0)
     assert_eq(result, 15)
@@ -55,37 +55,37 @@ fn test_ternary_in_expression(): void {
 // ===== 空值合并 (??) =====
 
 @test
-fn test_nullish_with_null(): void {
+fn test_nullish_with_null() {
     let x = null
     assert_eq(x ?? "default", "default")
 }
 
 @test
-fn test_nullish_with_value(): void {
+fn test_nullish_with_value() {
     let x = "value"
     assert_eq(x ?? "default", "value")
 }
 
 @test
-fn test_nullish_with_zero(): void {
+fn test_nullish_with_zero() {
     let x = 0
     assert_eq(x ?? 100, 0)  // 0 不是 null/undefined
 }
 
 @test
-fn test_nullish_with_false(): void {
+fn test_nullish_with_false() {
     let x = false
     assert_eq(x ?? true, false)  // false 不是 null
 }
 
 @test
-fn test_nullish_with_empty_string(): void {
+fn test_nullish_with_empty_string() {
     let x = ""
     assert_eq(x ?? "default", "")  // 空字符串不是 null
 }
 
 @test
-fn test_nullish_chain(): void {
+fn test_nullish_chain() {
     let a = null
     let b = null
     let c = "value"
@@ -95,20 +95,20 @@ fn test_nullish_chain(): void {
 // ===== 可选链 (?.) =====
 
 @test
-fn test_optional_chain_null(): void {
+fn test_optional_chain_null() {
     let obj = null
     assert_eq(obj?.name, null)
 }
 
 @test
-fn test_optional_chain_value(): void {
+fn test_optional_chain_value() {
     let obj = { name: "Alice", age: 30 }
     assert_eq(obj?.name, "Alice")
     assert_eq(obj?.age, 30)
 }
 
 @test
-fn test_optional_chain_nested(): void {
+fn test_optional_chain_nested() {
     let data = { user: { name: "Bob" } }
     assert_eq(data?.user?.name, "Bob")
     
@@ -121,7 +121,7 @@ fn test_optional_chain_nested(): void {
 // ===== 组合使用 =====
 
 @test
-fn test_optional_with_nullish(): void {
+fn test_optional_with_nullish() {
     let obj = null
     assert_eq(obj?.name ?? "unknown", "unknown")
     
@@ -130,7 +130,7 @@ fn test_optional_with_nullish(): void {
 }
 
 @test
-fn test_ternary_with_nullish(): void {
+fn test_ternary_with_nullish() {
     let value = null
     let result = value != null ? value : "default"
     assert_eq(result, "default")
@@ -142,13 +142,13 @@ fn test_ternary_with_nullish(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_deeply_nested_optional(): void {
+fn test_deeply_nested_optional() {
     let obj = { a: { b: { c: { d: 42 } } } }
     assert_eq(obj?.a?.b?.c?.d, 42)
 }
 
 @test
-fn test_short_circuit(): void {
+fn test_short_circuit() {
     let count = 0
     fn increment(): null {
         count++

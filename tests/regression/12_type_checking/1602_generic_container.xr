@@ -8,7 +8,7 @@ fn getFirst<T>(arr: Array<T>): T? {
     }
     return null
 }
-fn swap<T>(arr: Array<T>, i: int, j: int): void {
+fn swap<T>(arr: Array<T>, i: int, j: int) {
     let temp = arr[i]
     arr[i] = arr[j]
     arr[j] = temp

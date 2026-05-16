@@ -5,13 +5,13 @@
 // ===== toString() =====
 
 @test
-fn test_toString_large(): void {
+fn test_toString_large() {
     let a = 12345678901234567890n
     assert_eq(a.toString(), "12345678901234567890")
 }
 
 @test
-fn test_toString_negative(): void {
+fn test_toString_negative() {
     let a = -123n
     assert_eq(a.toString(), "-123")
 }
@@ -19,19 +19,19 @@ fn test_toString_negative(): void {
 // ===== abs() =====
 
 @test
-fn test_abs_negative(): void {
+fn test_abs_negative() {
     let a = -999n
     assert_eq(a.abs().toString(), "999")
 }
 
 @test
-fn test_abs_positive(): void {
+fn test_abs_positive() {
     let a = 123n
     assert_eq(a.abs().toString(), "123")
 }
 
 @test
-fn test_abs_zero(): void {
+fn test_abs_zero() {
     let a = 0n
     assert_eq(a.abs().toString(), "0")
 }
@@ -39,19 +39,19 @@ fn test_abs_zero(): void {
 // ===== sign() =====
 
 @test
-fn test_sign_positive(): void {
+fn test_sign_positive() {
     let a = 100n
     assert_eq(a.sign(), 1)
 }
 
 @test
-fn test_sign_negative(): void {
+fn test_sign_negative() {
     let a = -50n
     assert_eq(a.sign(), -1)
 }
 
 @test
-fn test_sign_zero(): void {
+fn test_sign_zero() {
     let a = 0n
     assert_eq(a.sign(), 0)
 }
@@ -59,13 +59,13 @@ fn test_sign_zero(): void {
 // ===== isZero() =====
 
 @test
-fn test_isZero_true(): void {
+fn test_isZero_true() {
     let a = 0n
     assert_eq(a.isZero(), true)
 }
 
 @test
-fn test_isZero_false(): void {
+fn test_isZero_false() {
     let a = 100n
     assert_eq(a.isZero(), false)
 }
@@ -73,19 +73,19 @@ fn test_isZero_false(): void {
 // ===== isNegative() =====
 
 @test
-fn test_isNegative_true(): void {
+fn test_isNegative_true() {
     let a = -50n
     assert_eq(a.isNegative(), true)
 }
 
 @test
-fn test_isNegative_false(): void {
+fn test_isNegative_false() {
     let a = 100n
     assert_eq(a.isNegative(), false)
 }
 
 @test
-fn test_isNegative_zero(): void {
+fn test_isNegative_zero() {
     let a = 0n
     assert_eq(a.isNegative(), false)
 }
@@ -93,19 +93,19 @@ fn test_isNegative_zero(): void {
 // ===== isPositive() =====
 
 @test
-fn test_isPositive_true(): void {
+fn test_isPositive_true() {
     let a = 100n
     assert_eq(a.isPositive(), true)
 }
 
 @test
-fn test_isPositive_false(): void {
+fn test_isPositive_false() {
     let a = -50n
     assert_eq(a.isPositive(), false)
 }
 
 @test
-fn test_isPositive_zero(): void {
+fn test_isPositive_zero() {
     let a = 0n
     assert_eq(a.isPositive(), false)
 }

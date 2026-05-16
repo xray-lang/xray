@@ -5,7 +5,7 @@
 // ===== 基本操作 =====
 
 @test
-fn test_basic_append(): void {
+fn test_basic_append() {
     let sb = new StringBuilder()
     sb.append("Hello")
     sb.append(" ")
@@ -14,7 +14,7 @@ fn test_basic_append(): void {
 }
 
 @test
-fn test_chain_append(): void {
+fn test_chain_append() {
     let sb = new StringBuilder()
     sb.append("a").append("b").append("c")
     assert_eq(sb.toString(), "abc")
@@ -23,7 +23,7 @@ fn test_chain_append(): void {
 // ===== 不同类型 =====
 
 @test
-fn test_append_int(): void {
+fn test_append_int() {
     let sb = new StringBuilder()
     sb.append("num: ")
     sb.append(42)
@@ -31,7 +31,7 @@ fn test_append_int(): void {
 }
 
 @test
-fn test_append_float(): void {
+fn test_append_float() {
     let sb = new StringBuilder()
     sb.append("pi: ")
     sb.append(3.14)
@@ -40,7 +40,7 @@ fn test_append_float(): void {
 }
 
 @test
-fn test_mixed_types(): void {
+fn test_mixed_types() {
     let sb = new StringBuilder()
     sb.append("count=")
     sb.append(100)
@@ -53,7 +53,7 @@ fn test_mixed_types(): void {
 // ===== 循环中使用 =====
 
 @test
-fn test_loop_append(): void {
+fn test_loop_append() {
     let sb = new StringBuilder()
     for (i in 0..5) {
         sb.append("x")
@@ -62,7 +62,7 @@ fn test_loop_append(): void {
 }
 
 @test
-fn test_loop_numbers(): void {
+fn test_loop_numbers() {
     let sb = new StringBuilder()
     for (i in 1..4) {
         if (i > 1) {
@@ -76,7 +76,7 @@ fn test_loop_numbers(): void {
 // ===== clear 方法 =====
 
 @test
-fn test_clear(): void {
+fn test_clear() {
     let sb = new StringBuilder()
     sb.append("test")
     sb.clear()
@@ -85,7 +85,7 @@ fn test_clear(): void {
 }
 
 @test
-fn test_clear_then_reuse(): void {
+fn test_clear_then_reuse() {
     let sb = new StringBuilder()
     sb.append("first")
     assert_eq(sb.toString(), "first")
@@ -97,7 +97,7 @@ fn test_clear_then_reuse(): void {
 // ===== 空 StringBuilder =====
 
 @test
-fn test_empty(): void {
+fn test_empty() {
     let sb = new StringBuilder()
     assert_eq(sb.toString(), "")
 }
@@ -105,7 +105,7 @@ fn test_empty(): void {
 // ===== 大量数据 =====
 
 @test
-fn test_large_append(): void {
+fn test_large_append() {
     let sb = new StringBuilder()
     for (i in 0..100) {
         sb.append("a")

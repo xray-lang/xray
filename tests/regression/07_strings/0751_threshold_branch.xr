@@ -15,7 +15,7 @@
 // ===== 阈值边界精确测试 =====
 
 @test
-fn test_threshold_boundary_exact_63(): void {
+fn test_threshold_boundary_exact_63() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 总长度 = 63（< 64，栈上缓冲区路径）
@@ -30,7 +30,7 @@ fn test_threshold_boundary_exact_63(): void {
 }
 
 @test
-fn test_threshold_boundary_exact_64(): void {
+fn test_threshold_boundary_exact_64() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 总长度 = 64（>= 64，XrStrBuf 路径）
@@ -45,7 +45,7 @@ fn test_threshold_boundary_exact_64(): void {
 }
 
 @test
-fn test_threshold_boundary_exact_65(): void {
+fn test_threshold_boundary_exact_65() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 总长度 = 65（> 64，XrStrBuf 路径）
@@ -62,7 +62,7 @@ fn test_threshold_boundary_exact_65(): void {
 // ===== 属性测试：阈值分支正确性 =====
 
 @test
-fn test_property_threshold_branch_below(): void {
+fn test_property_threshold_branch_below() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 属性：对于任意 len(A) + len(B) < 64 的情况，拼接结果正确
@@ -109,7 +109,7 @@ fn test_property_threshold_branch_below(): void {
 }
 
 @test
-fn test_property_threshold_branch_at_and_above(): void {
+fn test_property_threshold_branch_at_and_above() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 属性：对于任意 len(A) + len(B) >= 64 的情况，拼接结果正确
@@ -157,7 +157,7 @@ fn test_property_threshold_branch_at_and_above(): void {
 // ===== 阈值边界连续性测试 =====
 
 @test
-fn test_threshold_continuity(): void {
+fn test_threshold_continuity() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 测试阈值边界附近的连续性：从 60 到 70 的所有长度
@@ -191,7 +191,7 @@ fn test_threshold_continuity(): void {
 // ===== 不同字符内容测试 =====
 
 @test
-fn test_threshold_with_varied_content_below(): void {
+fn test_threshold_with_varied_content_below() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 测试不同字符内容在阈值以下的拼接
@@ -214,7 +214,7 @@ fn test_threshold_with_varied_content_below(): void {
 }
 
 @test
-fn test_threshold_with_varied_content_above(): void {
+fn test_threshold_with_varied_content_above() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 测试不同字符内容在阈值以上的拼接
@@ -238,7 +238,7 @@ fn test_threshold_with_varied_content_above(): void {
 // ===== 并发阈值边界测试 =====
 
 @test
-fn test_concurrent_threshold_boundary(): void {
+fn test_concurrent_threshold_boundary() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 多协程并发测试阈值边界
@@ -278,7 +278,7 @@ fn test_concurrent_threshold_boundary(): void {
 // ===== 极端情况测试 =====
 
 @test
-fn test_threshold_empty_strings(): void {
+fn test_threshold_empty_strings() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 空字符串拼接（总长度 = 0，< 64）
@@ -289,7 +289,7 @@ fn test_threshold_empty_strings(): void {
 }
 
 @test
-fn test_threshold_one_empty(): void {
+fn test_threshold_one_empty() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 一个空字符串的拼接
@@ -306,7 +306,7 @@ fn test_threshold_one_empty(): void {
 }
 
 @test
-fn test_threshold_single_char(): void {
+fn test_threshold_single_char() {
     // **Feature: string-concat-optimization, Property 4: 长度阈值分支正确性**
     // **Validates: Requirements 2.1, 2.2**
     // 单字符拼接

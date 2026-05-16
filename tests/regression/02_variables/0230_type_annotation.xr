@@ -3,28 +3,28 @@
 // 测试：类型注解
 // ===== 基本类型注解 =====
 @test
-fn test_int_annotation(): void {
+fn test_int_annotation() {
     let x: int = 42
     assert_eq(x, 42)
     assert_eq(typeof(x), Type.int)
 }
 
 @test
-fn test_float_annotation(): void {
+fn test_float_annotation() {
     let x: float = 3.14
     assert_eq(x > 3, true)
     assert_eq(typeof(x), Type.float)
 }
 
 @test
-fn test_string_annotation(): void {
+fn test_string_annotation() {
     let s: string = "hello"
     assert_eq(s, "hello")
     assert_eq(typeof(s), Type.string)
 }
 
 @test
-fn test_bool_annotation(): void {
+fn test_bool_annotation() {
     let flag: bool = true
     assert_eq(flag, true)
     assert_eq(typeof(flag), Type.bool)
@@ -32,21 +32,21 @@ fn test_bool_annotation(): void {
 
 // ===== 集合类型注解 =====
 @test
-fn test_array_annotation(): void {
+fn test_array_annotation() {
     let arr: Array<int> = [1, 2, 3]
     assert_eq(arr.length, 3)
     assert_eq(typeof(arr), Type.Array)
 }
 
 @test
-fn test_map_annotation(): void {
+fn test_map_annotation() {
     let m: Map<string, int> = { "a" => 1 }
     assert_eq(m.get("a"), 1)
     assert_eq(typeof(m), Type.Map)
 }
 
 @test
-fn test_set_annotation(): void {
+fn test_set_annotation() {
     let s: Set<int> = #[1, 2, 3]
     assert_eq(s.length, 3)
     assert_eq(typeof(s), Type.Set)
@@ -54,7 +54,7 @@ fn test_set_annotation(): void {
 
 // ===== 函数参数类型注解 =====
 @test
-fn test_function_param_annotation(): void {
+fn test_function_param_annotation() {
     fn add(a: int, b: int): int {
         return a + b
     }
@@ -62,7 +62,7 @@ fn test_function_param_annotation(): void {
 }
 
 @test
-fn test_function_return_annotation(): void {
+fn test_function_return_annotation() {
     fn double(x: int): int {
         return x * 2
     }
@@ -71,7 +71,7 @@ fn test_function_return_annotation(): void {
 
 // ===== 类字段类型注解 =====
 @test
-fn test_class_field_annotation(): void {
+fn test_class_field_annotation() {
     class Point {
         x: int
         y: int
@@ -88,7 +88,7 @@ fn test_class_field_annotation(): void {
 
 // ===== 复杂类型 =====
 @test
-fn test_nullable_type(): void {
+fn test_nullable_type() {
     let x: int = 10
     let y: int? = null
     if (y == null) {

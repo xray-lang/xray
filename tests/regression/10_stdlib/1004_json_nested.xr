@@ -8,7 +8,7 @@
 // ===== 数组嵌套测试 =====
 
 @test
-fn test_nested_array_2_levels(): void {
+fn test_nested_array_2_levels() {
     let arr = Json.parse("[[1, 2], [3, 4]]")
     assert_eq(arr.length, 2)
     assert_eq(arr[0][0], 1)
@@ -18,7 +18,7 @@ fn test_nested_array_2_levels(): void {
 }
 
 @test
-fn test_nested_array_3_levels(): void {
+fn test_nested_array_3_levels() {
     let arr = Json.parse("[[[1, 2], [3, 4]], [[5, 6], [7, 8]]]")
     assert_eq(arr[0][0][0], 1)
     assert_eq(arr[0][1][1], 4)
@@ -27,14 +27,14 @@ fn test_nested_array_3_levels(): void {
 }
 
 @test
-fn test_nested_array_deep(): void {
+fn test_nested_array_deep() {
     // 6 层嵌套
     let arr = Json.parse("[[[[[[42]]]]]]")
     assert_eq(arr[0][0][0][0][0][0], 42)
 }
 
 @test
-fn test_nested_empty_arrays(): void {
+fn test_nested_empty_arrays() {
     let arr = Json.parse("[[], [[]], [[], []]]")
     assert_eq(arr.length, 3)
     assert_eq(arr[0].length, 0)
@@ -46,27 +46,27 @@ fn test_nested_empty_arrays(): void {
 // ===== 对象嵌套测试 =====
 
 @test
-fn test_nested_object_2_levels(): void {
+fn test_nested_object_2_levels() {
     let obj = Json.parse("{\"user\": {\"name\": \"Alice\", \"age\": 30}}")
     assert_eq(obj.user.name, "Alice")
     assert_eq(obj.user.age, 30)
 }
 
 @test
-fn test_nested_object_3_levels(): void {
+fn test_nested_object_3_levels() {
     let obj = Json.parse("{\"a\": {\"b\": {\"c\": 42}}}")
     assert_eq(obj.a.b.c, 42)
 }
 
 @test
-fn test_nested_object_deep(): void {
+fn test_nested_object_deep() {
     // 深层嵌套对象
     let obj = Json.parse("{\"l1\": {\"l2\": {\"l3\": {\"l4\": {\"value\": 100}}}}}")
     assert_eq(obj.l1.l2.l3.l4.value, 100)
 }
 
 @test
-fn test_nested_empty_objects(): void {
+fn test_nested_empty_objects() {
     let obj = Json.parse("{\"a\": {}, \"b\": {\"c\": {}}}")
     assert_eq(obj.a != null, true)
     assert_eq(obj.b.c != null, true)
@@ -75,7 +75,7 @@ fn test_nested_empty_objects(): void {
 // ===== 混合嵌套测试 =====
 
 @test
-fn test_object_with_arrays(): void {
+fn test_object_with_arrays() {
     let obj = Json.parse("{\"numbers\": [1, 2, 3], \"letters\": [\"a\", \"b\", \"c\"]}")
     assert_eq(obj.numbers.length, 3)
     assert_eq(obj.numbers[0], 1)
@@ -83,7 +83,7 @@ fn test_object_with_arrays(): void {
 }
 
 @test
-fn test_array_with_objects(): void {
+fn test_array_with_objects() {
     let arr = Json.parse("[{\"id\": 1}, {\"id\": 2}, {\"id\": 3}]")
     assert_eq(arr.length, 3)
     assert_eq(arr[0].id, 1)
@@ -92,7 +92,7 @@ fn test_array_with_objects(): void {
 }
 
 @test
-fn test_complex_mixed(): void {
+fn test_complex_mixed() {
     let data = Json.parse("{\"users\": [{\"name\": \"Alice\", \"scores\": [90, 85]}, {\"name\": \"Bob\", \"scores\": [78, 92]}]}")
     assert_eq(data.users.length, 2)
     assert_eq(data.users[0].name, "Alice")
@@ -104,7 +104,7 @@ fn test_complex_mixed(): void {
 // ===== 多键对象测试 =====
 
 @test
-fn test_object_many_keys(): void {
+fn test_object_many_keys() {
     let obj = Json.parse("{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"e\":5,\"f\":6,\"g\":7,\"h\":8,\"i\":9,\"j\":10}")
     assert_eq(obj.a, 1)
     assert_eq(obj.e, 5)
@@ -112,7 +112,7 @@ fn test_object_many_keys(): void {
 }
 
 @test
-fn test_object_long_keys(): void {
+fn test_object_long_keys() {
     let obj = Json.parse("{\"very_long_key_name_here\": 42, \"another_very_long_key\": 100}")
     assert_eq(obj.very_long_key_name_here, 42)
     assert_eq(obj.another_very_long_key, 100)
@@ -121,7 +121,7 @@ fn test_object_long_keys(): void {
 // ===== 大型数组测试 =====
 
 @test
-fn test_large_array(): void {
+fn test_large_array() {
     // 构建大数组
     let jsonStr = "["
     let i = 0
@@ -144,7 +144,7 @@ fn test_large_array(): void {
 // ===== 真实数据结构模拟 =====
 
 @test
-fn test_user_profile(): void {
+fn test_user_profile() {
     let jsonStr = "{\"id\": 12345, \"username\": \"johndoe\", \"email\": \"john@example.com\", \"profile\": {\"firstName\": \"John\", \"lastName\": \"Doe\", \"age\": 28}, \"settings\": {\"theme\": \"dark\", \"notifications\": true}}"
     let user = Json.parse(jsonStr)
     assert_eq(user.id, 12345)
@@ -156,7 +156,7 @@ fn test_user_profile(): void {
 }
 
 @test
-fn test_api_response(): void {
+fn test_api_response() {
     let jsonStr = "{\"status\": \"success\", \"code\": 200, \"data\": {\"items\": [{\"id\": 1, \"name\": \"Item 1\"}, {\"id\": 2, \"name\": \"Item 2\"}], \"total\": 2}, \"meta\": {\"page\": 1, \"limit\": 10}}"
     let response = Json.parse(jsonStr)
     assert_eq(response.status, "success")
@@ -168,7 +168,7 @@ fn test_api_response(): void {
 }
 
 @test
-fn test_geojson_like(): void {
+fn test_geojson_like() {
     let jsonStr = "{\"geoType\": \"Point\", \"coordinates\": [125.6, 10.1]}"
     let geo = Json.parse(jsonStr)
     assert_eq(geo.geoType, "Point")
@@ -178,7 +178,7 @@ fn test_geojson_like(): void {
 }
 
 @test
-fn test_config_file(): void {
+fn test_config_file() {
     let jsonStr = "{\"version\": \"1.0.0\", \"debug\": false, \"database\": {\"host\": \"localhost\", \"port\": 5432, \"name\": \"mydb\"}, \"features\": [\"feature1\", \"feature2\", \"feature3\"]}"
     let config = Json.parse(jsonStr)
     assert_eq(config.version, "1.0.0")
@@ -191,20 +191,20 @@ fn test_config_file(): void {
 // ===== 边界情况 =====
 
 @test
-fn test_single_element_array(): void {
+fn test_single_element_array() {
     let arr = Json.parse("[42]")
     assert_eq(arr.length, 1)
     assert_eq(arr[0], 42)
 }
 
 @test
-fn test_single_key_object(): void {
+fn test_single_key_object() {
     let obj = Json.parse("{\"key\": \"value\"}")
     assert_eq(obj.key, "value")
 }
 
 @test
-fn test_mixed_types_array(): void {
+fn test_mixed_types_array() {
     let arr = Json.parse("[1, \"two\", true, null, 3.14, {\"key\": \"value\"}, [1, 2]]")
     assert_eq(arr.length, 7)
     assert_eq(arr[0], 1)
@@ -217,7 +217,7 @@ fn test_mixed_types_array(): void {
 }
 
 @test
-fn test_null_values_in_object(): void {
+fn test_null_values_in_object() {
     let obj = Json.parse("{\"a\": null, \"b\": null, \"c\": 1}")
     assert_eq(obj.a, null)
     assert_eq(obj.b, null)
@@ -225,7 +225,7 @@ fn test_null_values_in_object(): void {
 }
 
 @test
-fn test_boolean_values_in_object(): void {
+fn test_boolean_values_in_object() {
     let obj = Json.parse("{\"yes\": true, \"no\": false}")
     assert_eq(obj.yes, true)
     assert_eq(obj.no, false)
@@ -234,7 +234,7 @@ fn test_boolean_values_in_object(): void {
 // ===== stringify 嵌套测试 =====
 
 @test
-fn test_stringify_nested_array(): void {
+fn test_stringify_nested_array() {
     let arr = [[1, 2], [3, 4]]
     let jsonStr = Json.stringify(arr)
     let parsed = Json.parse(jsonStr)
@@ -243,7 +243,7 @@ fn test_stringify_nested_array(): void {
 }
 
 @test
-fn test_stringify_nested_object(): void {
+fn test_stringify_nested_object() {
     let obj = { user: { name: "Alice" } }
     let jsonStr = Json.stringify(obj)
     let parsed = Json.parse(jsonStr)
@@ -251,7 +251,7 @@ fn test_stringify_nested_object(): void {
 }
 
 @test
-fn test_stringify_complex(): void {
+fn test_stringify_complex() {
     let data = {
         users: [
             { name: "Alice", age: 30 },

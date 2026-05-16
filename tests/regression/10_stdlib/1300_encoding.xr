@@ -5,17 +5,17 @@ import encoding
 // ===== Hex encode =====
 
 @test
-fn test_hex_encode(): void {
+fn test_hex_encode() {
     assert_eq(encoding.hexEncode("Hello"), "48656c6c6f")
 }
 
 @test
-fn test_hex_encode_empty(): void {
+fn test_hex_encode_empty() {
     assert_eq(encoding.hexEncode(""), "")
 }
 
 @test
-fn test_hex_encode_special(): void {
+fn test_hex_encode_special() {
     // Tab = 0x09, newline = 0x0a
     assert_eq(encoding.hexEncode("\t"), "09")
     assert_eq(encoding.hexEncode("\n"), "0a")
@@ -24,7 +24,7 @@ fn test_hex_encode_special(): void {
 // ===== Hex decode (returns Array<uint8>) =====
 
 @test
-fn test_hex_decode_bytes(): void {
+fn test_hex_decode_bytes() {
     let bytes = encoding.hexDecode("48656c6c6f")
     assert_eq(bytes.length, 5)
     assert_eq(bytes[0], 0x48)  // 'H'
@@ -32,31 +32,31 @@ fn test_hex_decode_bytes(): void {
 }
 
 @test
-fn test_hex_decode_string(): void {
+fn test_hex_decode_string() {
     assert_eq(encoding.hexDecodeString("48656c6c6f"), "Hello")
 }
 
 @test
-fn test_hex_decode_invalid(): void {
+fn test_hex_decode_invalid() {
     assert_eq(encoding.hexDecode("gg"), null)
     assert_eq(encoding.hexDecode("abc"), null)  // odd length
 }
 
 @test
-fn test_hex_decode_empty(): void {
+fn test_hex_decode_empty() {
     let bytes = encoding.hexDecode("")
     assert_eq(bytes.length, 0)
 }
 
 @test
-fn test_hex_decode_uppercase(): void {
+fn test_hex_decode_uppercase() {
     assert_eq(encoding.hexDecodeString("48656C6C6F"), "Hello")
 }
 
 // ===== Hex valid =====
 
 @test
-fn test_hex_valid(): void {
+fn test_hex_valid() {
     assert_eq(encoding.hexValid("48656c6c6f"), true)
     assert_eq(encoding.hexValid("ABCDEF"), true)
     assert_eq(encoding.hexValid("gg"), false)
@@ -67,21 +67,21 @@ fn test_hex_valid(): void {
 // ===== UTF-8 =====
 
 @test
-fn test_utf8_valid(): void {
+fn test_utf8_valid() {
     assert_eq(encoding.utf8Valid("Hello"), true)
     assert_eq(encoding.utf8Valid("你好"), true)
     assert_eq(encoding.utf8Valid(""), true)
 }
 
 @test
-fn test_utf8_count(): void {
+fn test_utf8_count() {
     assert_eq(encoding.utf8Count("Hello"), 5)
     assert_eq(encoding.utf8Count("你好"), 2)
     assert_eq(encoding.utf8Count(""), 0)
 }
 
 @test
-fn test_utf8_byte_length(): void {
+fn test_utf8_byte_length() {
     assert_eq(encoding.utf8ByteLength("Hello"), 5)
     assert_eq(encoding.utf8ByteLength("你好"), 6)  // 3 bytes per CJK char
     assert_eq(encoding.utf8ByteLength(""), 0)
@@ -90,7 +90,7 @@ fn test_utf8_byte_length(): void {
 // ===== UTF-16 =====
 
 @test
-fn test_utf16_encode_decode_le(): void {
+fn test_utf16_encode_decode_le() {
     let u16 = encoding.utf16Encode("AB")
     assert_eq(u16.length, 4)
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
@@ -101,7 +101,7 @@ fn test_utf16_encode_decode_le(): void {
 }
 
 @test
-fn test_utf16_encode_decode_be(): void {
+fn test_utf16_encode_decode_be() {
     let u16 = encoding.utf16Encode("AB", encoding.BE)
     assert_eq(u16.length, 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
@@ -112,7 +112,7 @@ fn test_utf16_encode_decode_be(): void {
 }
 
 @test
-fn test_utf16_cjk(): void {
+fn test_utf16_cjk() {
     let u16 = encoding.utf16Encode("你好")
     assert_eq(u16.length, 4)  // 2 BMP chars x 2 bytes
     let decoded = encoding.utf16Decode(u16)
@@ -120,7 +120,7 @@ fn test_utf16_cjk(): void {
 }
 
 @test
-fn test_utf16_empty(): void {
+fn test_utf16_empty() {
     let u16 = encoding.utf16Encode("")
     assert_eq(u16.length, 0)
     let decoded = encoding.utf16Decode(u16)
@@ -128,7 +128,7 @@ fn test_utf16_empty(): void {
 }
 
 @test
-fn test_endian_constants(): void {
+fn test_endian_constants() {
     assert_eq(encoding.LE, 0)
     assert_eq(encoding.BE, 1)
 }

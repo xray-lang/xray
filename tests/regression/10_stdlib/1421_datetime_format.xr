@@ -8,35 +8,35 @@ import datetime
 // ============================================================
 
 @test
-fn test_format_full(): void {
+fn test_format_full() {
     let dt = datetime.create(2024, 6, 15, 14, 30, 45)
     let formatted = dt.format("YYYY-MM-DD HH:mm:ss")
     assert_eq(formatted, "2024-06-15 14:30:45")
 }
 
 @test
-fn test_format_date_only(): void {
+fn test_format_date_only() {
     let dt = datetime.create(2024, 6, 15, 14, 30, 45)
     let formatted = dt.format("YYYY-MM-DD")
     assert_eq(formatted, "2024-06-15")
 }
 
 @test
-fn test_format_time_only(): void {
+fn test_format_time_only() {
     let dt = datetime.create(2024, 6, 15, 14, 30, 45)
     let formatted = dt.format("HH:mm:ss")
     assert_eq(formatted, "14:30:45")
 }
 
 @test
-fn test_format_compact(): void {
+fn test_format_compact() {
     let dt = datetime.create(2024, 6, 15)
     let formatted = dt.format("YYYYMMDD")
     assert_eq(formatted, "20240615")
 }
 
 @test
-fn test_format_short_time(): void {
+fn test_format_short_time() {
     let dt = datetime.create(2024, 6, 15, 14, 30, 45)
     let formatted = dt.format("HH:mm")
     assert_eq(formatted, "14:30")
@@ -47,35 +47,35 @@ fn test_format_short_time(): void {
 // ============================================================
 
 @test
-fn test_format_new_year(): void {
+fn test_format_new_year() {
     let dt = datetime.create(2024, 1, 1, 0, 0, 0)
     let formatted = dt.format("YYYY-MM-DD HH:mm:ss")
     assert_eq(formatted, "2024-01-01 00:00:00")
 }
 
 @test
-fn test_format_year_end(): void {
+fn test_format_year_end() {
     let dt = datetime.create(2024, 12, 31, 23, 59, 59)
     let formatted = dt.format("YYYY-MM-DD HH:mm:ss")
     assert_eq(formatted, "2024-12-31 23:59:59")
 }
 
 @test
-fn test_format_single_digit_month(): void {
+fn test_format_single_digit_month() {
     let dt = datetime.create(2024, 3, 5)
     let formatted = dt.format("YYYY-MM-DD")
     assert_eq(formatted, "2024-03-05")
 }
 
 @test
-fn test_format_midnight(): void {
+fn test_format_midnight() {
     let dt = datetime.create(2024, 6, 15, 0, 0, 0)
     let formatted = dt.format("HH:mm:ss")
     assert_eq(formatted, "00:00:00")
 }
 
 @test
-fn test_format_noon(): void {
+fn test_format_noon() {
     let dt = datetime.create(2024, 6, 15, 12, 0, 0)
     let formatted = dt.format("HH:mm:ss")
     assert_eq(formatted, "12:00:00")
@@ -86,14 +86,14 @@ fn test_format_noon(): void {
 // ============================================================
 
 @test
-fn test_format_now(): void {
+fn test_format_now() {
     let dt = datetime.now()
     let formatted = dt.format("YYYY-MM-DD")
     assert_eq(formatted.length, 10)
 }
 
 @test
-fn test_format_now_full(): void {
+fn test_format_now_full() {
     let dt = datetime.now()
     let formatted = dt.format("YYYY-MM-DD HH:mm:ss")
     assert_eq(formatted.length, 19)
@@ -104,7 +104,7 @@ fn test_format_now_full(): void {
 // ============================================================
 
 @test
-fn test_to_iso_string_utc(): void {
+fn test_to_iso_string_utc() {
     let dt = datetime.fromTimestamp(1718438400)
     let iso = dt.toISOString()
     assert_true(iso.length > 20)

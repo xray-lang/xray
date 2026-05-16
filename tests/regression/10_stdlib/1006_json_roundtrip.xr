@@ -8,7 +8,7 @@
 // ===== 基本类型往返 =====
 
 @test
-fn test_roundtrip_null(): void {
+fn test_roundtrip_null() {
     let original = null
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -16,7 +16,7 @@ fn test_roundtrip_null(): void {
 }
 
 @test
-fn test_roundtrip_true(): void {
+fn test_roundtrip_true() {
     let original = true
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -24,7 +24,7 @@ fn test_roundtrip_true(): void {
 }
 
 @test
-fn test_roundtrip_false(): void {
+fn test_roundtrip_false() {
     let original = false
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -32,7 +32,7 @@ fn test_roundtrip_false(): void {
 }
 
 @test
-fn test_roundtrip_integer(): void {
+fn test_roundtrip_integer() {
     let original = 42
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -40,7 +40,7 @@ fn test_roundtrip_integer(): void {
 }
 
 @test
-fn test_roundtrip_negative_integer(): void {
+fn test_roundtrip_negative_integer() {
     let original = -100
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -48,7 +48,7 @@ fn test_roundtrip_negative_integer(): void {
 }
 
 @test
-fn test_roundtrip_float(): void {
+fn test_roundtrip_float() {
     let original = 3.14159
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -58,7 +58,7 @@ fn test_roundtrip_float(): void {
 }
 
 @test
-fn test_roundtrip_string(): void {
+fn test_roundtrip_string() {
     let original = "Hello, World!"
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -66,7 +66,7 @@ fn test_roundtrip_string(): void {
 }
 
 @test
-fn test_roundtrip_empty_string(): void {
+fn test_roundtrip_empty_string() {
     let original = ""
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -76,7 +76,7 @@ fn test_roundtrip_empty_string(): void {
 // ===== 数组往返 =====
 
 @test
-fn test_roundtrip_empty_array(): void {
+fn test_roundtrip_empty_array() {
     let original: Array<int> = []
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -84,7 +84,7 @@ fn test_roundtrip_empty_array(): void {
 }
 
 @test
-fn test_roundtrip_integer_array(): void {
+fn test_roundtrip_integer_array() {
     let original = [1, 2, 3, 4, 5]
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -94,7 +94,7 @@ fn test_roundtrip_integer_array(): void {
 }
 
 @test
-fn test_roundtrip_string_array(): void {
+fn test_roundtrip_string_array() {
     let original = ["a", "b", "c"]
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -104,7 +104,7 @@ fn test_roundtrip_string_array(): void {
 }
 
 @test
-fn test_roundtrip_mixed_array(): void {
+fn test_roundtrip_mixed_array() {
     let original = [1, "two", true, null]
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -116,7 +116,7 @@ fn test_roundtrip_mixed_array(): void {
 }
 
 @test
-fn test_roundtrip_nested_array(): void {
+fn test_roundtrip_nested_array() {
     let original = [[1, 2], [3, 4]]
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -128,7 +128,7 @@ fn test_roundtrip_nested_array(): void {
 // ===== 对象往返 =====
 
 @test
-fn test_roundtrip_empty_object(): void {
+fn test_roundtrip_empty_object() {
     let original = {}
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -136,7 +136,7 @@ fn test_roundtrip_empty_object(): void {
 }
 
 @test
-fn test_roundtrip_simple_object(): void {
+fn test_roundtrip_simple_object() {
     let original = { name: "Alice", age: 30 }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -145,7 +145,7 @@ fn test_roundtrip_simple_object(): void {
 }
 
 @test
-fn test_roundtrip_nested_object(): void {
+fn test_roundtrip_nested_object() {
     let original = { user: { name: "Bob", profile: { city: "NYC" } } }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -154,7 +154,7 @@ fn test_roundtrip_nested_object(): void {
 }
 
 @test
-fn test_roundtrip_object_with_array(): void {
+fn test_roundtrip_object_with_array() {
     let original = { numbers: [1, 2, 3], active: true }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -166,7 +166,7 @@ fn test_roundtrip_object_with_array(): void {
 // ===== Unicode 往返 =====
 
 @test
-fn test_roundtrip_chinese(): void {
+fn test_roundtrip_chinese() {
     let original = "你好世界"
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -174,7 +174,7 @@ fn test_roundtrip_chinese(): void {
 }
 
 @test
-fn test_roundtrip_emoji(): void {
+fn test_roundtrip_emoji() {
     let original = "Hello 🌍"
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -182,7 +182,7 @@ fn test_roundtrip_emoji(): void {
 }
 
 @test
-fn test_roundtrip_mixed_unicode(): void {
+fn test_roundtrip_mixed_unicode() {
     let original = { greeting: "你好", emoji: "🎉", text: "Hello" }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -193,7 +193,7 @@ fn test_roundtrip_mixed_unicode(): void {
 // ===== 数字边界往返 =====
 
 @test
-fn test_roundtrip_zero(): void {
+fn test_roundtrip_zero() {
     let original = 0
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -201,7 +201,7 @@ fn test_roundtrip_zero(): void {
 }
 
 @test
-fn test_roundtrip_large_integer(): void {
+fn test_roundtrip_large_integer() {
     // Use max 48-bit integer (NaN Boxing limit)
     let original = 140737488355327
     let jsonStr = Json.stringify(original)
@@ -210,7 +210,7 @@ fn test_roundtrip_large_integer(): void {
 }
 
 @test
-fn test_roundtrip_small_float(): void {
+fn test_roundtrip_small_float() {
     let original = 0.000001
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -220,7 +220,7 @@ fn test_roundtrip_small_float(): void {
 }
 
 @test
-fn test_roundtrip_scientific(): void {
+fn test_roundtrip_scientific() {
     let original = 1.5e10
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -230,7 +230,7 @@ fn test_roundtrip_scientific(): void {
 // ===== 复杂结构往返 =====
 
 @test
-fn test_roundtrip_complex_structure(): void {
+fn test_roundtrip_complex_structure() {
     let original = {
         id: 12345,
         name: "Test User",
@@ -255,7 +255,7 @@ fn test_roundtrip_complex_structure(): void {
 }
 
 @test
-fn test_roundtrip_array_of_objects(): void {
+fn test_roundtrip_array_of_objects() {
     let original = [
         { id: 1, name: "First" },
         { id: 2, name: "Second" },
@@ -274,7 +274,7 @@ fn test_roundtrip_array_of_objects(): void {
 // ===== 双重往返测试 =====
 
 @test
-fn test_double_roundtrip(): void {
+fn test_double_roundtrip() {
     // parse -> stringify -> parse -> stringify
     let json1 = "{\"a\": 1, \"b\": [2, 3]}"
     let obj1 = Json.parse(json1)
@@ -291,7 +291,7 @@ fn test_double_roundtrip(): void {
 // ===== 一致性测试 =====
 
 @test
-fn test_consistency_array(): void {
+fn test_consistency_array() {
     // 同样的数据，多次 stringify 应该得到相同结果
     let data = [1, 2, 3]
     let json1 = Json.stringify(data)
@@ -300,7 +300,7 @@ fn test_consistency_array(): void {
 }
 
 @test
-fn test_consistency_object(): void {
+fn test_consistency_object() {
     // 注意：对象键顺序可能不确定
     let data = { a: 1 }
     let json1 = Json.stringify(data)
@@ -313,7 +313,7 @@ fn test_consistency_object(): void {
 // ===== 边界情况往返 =====
 
 @test
-fn test_roundtrip_deep_nesting(): void {
+fn test_roundtrip_deep_nesting() {
     let original = [[[[[1]]]]]
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -321,7 +321,7 @@ fn test_roundtrip_deep_nesting(): void {
 }
 
 @test
-fn test_roundtrip_many_keys(): void {
+fn test_roundtrip_many_keys() {
     let original = { a: 1, b: 2, c: 3, d: 4, e: 5 }
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)
@@ -330,7 +330,7 @@ fn test_roundtrip_many_keys(): void {
 }
 
 @test
-fn test_roundtrip_long_string(): void {
+fn test_roundtrip_long_string() {
     let original = "x".repeat(100)
     let jsonStr = Json.stringify(original)
     let parsed = Json.parse(jsonStr)

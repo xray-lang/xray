@@ -15,7 +15,7 @@
 // ===== Property 5: 并发拼接正确性 =====
 
 @test
-fn test_property_concurrent_concat_short(): void {
+fn test_property_concurrent_concat_short() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发执行短字符串拼接，结果应独立且正确
@@ -43,7 +43,7 @@ fn test_property_concurrent_concat_short(): void {
 }
 
 @test
-fn test_property_concurrent_concat_long(): void {
+fn test_property_concurrent_concat_long() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发执行长字符串拼接，结果应独立且正确
@@ -74,7 +74,7 @@ fn test_property_concurrent_concat_long(): void {
 }
 
 @test
-fn test_property_concurrent_concat_mixed(): void {
+fn test_property_concurrent_concat_mixed() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程混合执行短/长字符串拼接，结果应独立且正确
@@ -108,7 +108,7 @@ fn test_property_concurrent_concat_mixed(): void {
 }
 
 @test
-fn test_property_concurrent_concat_isolation(): void {
+fn test_property_concurrent_concat_isolation() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     // 属性：每个协程的拼接操作应该完全隔离，不会相互干扰
@@ -147,7 +147,7 @@ fn test_property_concurrent_concat_isolation(): void {
 }
 
 @test
-fn test_property_concurrent_concat_threshold_boundary(): void {
+fn test_property_concurrent_concat_threshold_boundary() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     // 属性：在阈值边界附近的并发拼接应该正确
@@ -179,7 +179,7 @@ fn test_property_concurrent_concat_threshold_boundary(): void {
 }
 
 @test
-fn test_property_concurrent_concat_correctness(): void {
+fn test_property_concurrent_concat_correctness() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     // 属性：并发拼接的结果应该与串行拼接的结果一致

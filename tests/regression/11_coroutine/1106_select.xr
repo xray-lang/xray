@@ -1,7 +1,7 @@
 // 测试 select 多路复用
 
 @test
-fn test_select(): void {
+fn test_select() {
     shared const ch1 = new Channel(2)
     shared const ch2 = new Channel(2)
     

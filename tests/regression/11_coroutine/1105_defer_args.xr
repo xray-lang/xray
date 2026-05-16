@@ -1,16 +1,16 @@
 // 测试 defer 带参数
 
-fn cleanup(msg: string): void {
+fn cleanup(msg: string) {
     print(msg)
 }
 
-fn log_value(name: string, value: int): void {
+fn log_value(name: string, value: int) {
     print(name)
     print(value)
 }
 
 @test
-fn test_defer_args(): void {
+fn test_defer_args() {
     print("start")
     
     // defer 带单参数

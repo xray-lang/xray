@@ -5,7 +5,7 @@
 // ===== AND (&&) =====
 
 @test
-fn test_and_truth_table(): void {
+fn test_and_truth_table() {
     assert_eq(true && true, true)
     assert_eq(true && false, false)
     assert_eq(false && true, false)
@@ -13,13 +13,13 @@ fn test_and_truth_table(): void {
 }
 
 @test
-fn test_and_with_expressions(): void {
+fn test_and_with_expressions() {
     assert_eq((5 > 3) && (2 < 4), true)
     assert_eq((5 > 3) && (2 > 4), false)
 }
 
 @test
-fn test_and_short_circuit(): void {
+fn test_and_short_circuit() {
     let called = false
     fn sideEffect(): bool {
         called = true
@@ -33,7 +33,7 @@ fn test_and_short_circuit(): void {
 }
 
 @test
-fn test_and_chain(): void {
+fn test_and_chain() {
     assert_eq(true && true && true, true)
     assert_eq(true && true && false, false)
     assert_eq(true && false && true, false)
@@ -42,7 +42,7 @@ fn test_and_chain(): void {
 // ===== OR (||) =====
 
 @test
-fn test_or_truth_table(): void {
+fn test_or_truth_table() {
     assert_eq(true || true, true)
     assert_eq(true || false, true)
     assert_eq(false || true, true)
@@ -50,13 +50,13 @@ fn test_or_truth_table(): void {
 }
 
 @test
-fn test_or_with_expressions(): void {
+fn test_or_with_expressions() {
     assert_eq((5 > 10) || (2 < 4), true)
     assert_eq((5 > 10) || (2 > 4), false)
 }
 
 @test
-fn test_or_short_circuit(): void {
+fn test_or_short_circuit() {
     let called = false
     fn sideEffect(): bool {
         called = true
@@ -70,7 +70,7 @@ fn test_or_short_circuit(): void {
 }
 
 @test
-fn test_or_chain(): void {
+fn test_or_chain() {
     assert_eq(false || false || true, true)
     assert_eq(false || false || false, false)
 }
@@ -78,25 +78,25 @@ fn test_or_chain(): void {
 // ===== NOT (!) =====
 
 @test
-fn test_not_basic(): void {
+fn test_not_basic() {
     assert_eq(!true, false)
     assert_eq(!false, true)
 }
 
 @test
-fn test_not_double(): void {
+fn test_not_double() {
     assert_eq(!!true, true)
     assert_eq(!!false, false)
 }
 
 @test
-fn test_not_expression(): void {
+fn test_not_expression() {
     assert_eq(!(5 > 3), false)
     assert_eq(!(5 < 3), true)
 }
 
 @test
-fn test_not_truthy(): void {
+fn test_not_truthy() {
     assert_eq(!0, true)       // 0 是假
     assert_eq(!1, false)      // 非零是真
     assert_eq(!"", true)      // 空字符串是假
@@ -107,20 +107,20 @@ fn test_not_truthy(): void {
 // ===== 组合 =====
 
 @test
-fn test_and_or_combined(): void {
+fn test_and_or_combined() {
     assert_eq(true && true || false, true)
     assert_eq(false || true && true, true)
     assert_eq((true || false) && true, true)
 }
 
 @test
-fn test_not_and(): void {
+fn test_not_and() {
     assert_eq(!(true && false), true)
     assert_eq(!true && false, false)
 }
 
 @test
-fn test_not_or(): void {
+fn test_not_or() {
     assert_eq(!(true || false), false)
     assert_eq(!true || false, false)
     assert_eq(!false || true, true)
@@ -129,14 +129,14 @@ fn test_not_or(): void {
 // ===== 优先级 =====
 
 @test
-fn test_precedence_not_highest(): void {
+fn test_precedence_not_highest() {
     // ! 优先级最高
     assert_eq(!true && true, false)
     assert_eq(!false && true, true)
 }
 
 @test
-fn test_precedence_and_before_or(): void {
+fn test_precedence_and_before_or() {
     // && 优先级高于 ||
     assert_eq(true || false && false, true)   // true || (false && false)
     assert_eq(false || true && true, true)    // false || (true && true)
@@ -145,7 +145,7 @@ fn test_precedence_and_before_or(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_with_null(): void {
+fn test_with_null() {
     // && / || always return bool (not the original operand)
     assert_eq(null || "default", true)
     assert_eq("value" || "default", true)
@@ -153,7 +153,7 @@ fn test_with_null(): void {
 }
 
 @test
-fn test_complex_condition(): void {
+fn test_complex_condition() {
     let x = 5
     let y = 10
     assert_eq(x > 0 && y > 0 && x < y, true)

@@ -3,7 +3,7 @@
 import log
 
 @test
-fn test_enable_source(): void {
+fn test_enable_source() {
     log.setLevel(log.DEBUG)
     log.enableSource(true)
     log.info("with source location")
@@ -13,7 +13,7 @@ fn test_enable_source(): void {
 }
 
 @test
-fn test_source_with_json_format(): void {
+fn test_source_with_json_format() {
     log.setLevel(log.DEBUG)
     log.enableSource(true)
     log.setFormat("json")

@@ -10,7 +10,7 @@ import regex
 
 // \p{Han} - 匹配汉字
 @test
-fn test_p_han(): void {
+fn test_p_han() {
     let re = regex.compile("\\p{Han}+")
     let result = regex.find(re, "Hello你好World世界")
     assert_eq(result != null, true)
@@ -19,7 +19,7 @@ fn test_p_han(): void {
 
 // \p{L} - 匹配所有字母（包括汉字）
 @test
-fn test_p_letter(): void {
+fn test_p_letter() {
     let re = regex.compile("\\p{L}+")
     let result = regex.find(re, "123abc")
     assert_eq(result != null, true)
@@ -28,7 +28,7 @@ fn test_p_letter(): void {
 
 // \p{N} - 匹配数字
 @test
-fn test_p_number(): void {
+fn test_p_number() {
     let re = regex.compile("\\p{N}+")
     let result = regex.find(re, "abc123def")
     assert_eq(result != null, true)
@@ -37,7 +37,7 @@ fn test_p_number(): void {
 
 // \p{Latin} - 匹配拉丁字母
 @test
-fn test_p_latin(): void {
+fn test_p_latin() {
     let re = regex.compile("\\p{Latin}+")
     let result = regex.find(re, "你好HelloWorld")
     assert_eq(result != null, true)
@@ -46,7 +46,7 @@ fn test_p_latin(): void {
 
 // \P{Han} - 匹配非汉字
 @test
-fn test_P_not_han(): void {
+fn test_P_not_han() {
     let re = regex.compile("\\P{Han}+")
     let result = regex.find(re, "你好World")
     assert_eq(result != null, true)
@@ -55,7 +55,7 @@ fn test_P_not_han(): void {
 
 // \p{ASCII} - 匹配 ASCII 字符
 @test
-fn test_p_ascii(): void {
+fn test_p_ascii() {
     let re = regex.compile("\\p{ASCII}+")
     let result = regex.find(re, "Hello世界")
     assert_eq(result != null, true)
@@ -64,7 +64,7 @@ fn test_p_ascii(): void {
 
 // \p{Hiragana} - 匹配平假名
 @test
-fn test_p_hiragana(): void {
+fn test_p_hiragana() {
     let re = regex.compile("\\p{Hiragana}+")
     let result = regex.find(re, "Helloひらがな世界")
     assert_eq(result != null, true)
@@ -73,7 +73,7 @@ fn test_p_hiragana(): void {
 
 // \p{Katakana} - 匹配片假名
 @test
-fn test_p_katakana(): void {
+fn test_p_katakana() {
     let re = regex.compile("\\p{Katakana}+")
     let result = regex.find(re, "Helloカタカナ世界")
     assert_eq(result != null, true)
@@ -82,7 +82,7 @@ fn test_p_katakana(): void {
 
 // 混合匹配
 @test
-fn test_unicode_mixed(): void {
+fn test_unicode_mixed() {
     let text = "abc你好123"
     
     // All letters (including CJK)

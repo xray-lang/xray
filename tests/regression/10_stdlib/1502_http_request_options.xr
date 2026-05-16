@@ -3,7 +3,7 @@
 import http
 
 @test
-fn test_request_options_object(): void {
+fn test_request_options_object() {
     let options = {
         url: "http://127.0.0.1:19998/test",
         method: "POST",
@@ -22,7 +22,7 @@ fn test_request_options_object(): void {
 }
 
 @test
-fn test_request_api_exists(): void {
+fn test_request_api_exists() {
     assert(http.request != null)
 }
 

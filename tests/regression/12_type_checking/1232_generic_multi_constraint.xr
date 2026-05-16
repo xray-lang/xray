@@ -5,7 +5,7 @@
 
 // ===== Single constraint (regression) =====
 @test
-fn test_single_constraint_int(): void {
+fn test_single_constraint_int() {
     fn first<T: Comparable>(a: T, b: T): T {
         return a
     }
@@ -13,7 +13,7 @@ fn test_single_constraint_int(): void {
 }
 
 @test
-fn test_single_constraint_string(): void {
+fn test_single_constraint_string() {
     fn first<T: Comparable>(a: T, b: T): T {
         return a
     }
@@ -22,7 +22,7 @@ fn test_single_constraint_string(): void {
 
 // ===== Two constraints =====
 @test
-fn test_two_constraints_int(): void {
+fn test_two_constraints_int() {
     fn passThrough<T: Comparable & Hashable>(x: T): T {
         return x
     }
@@ -30,7 +30,7 @@ fn test_two_constraints_int(): void {
 }
 
 @test
-fn test_two_constraints_string(): void {
+fn test_two_constraints_string() {
     fn passThrough<T: Comparable & Hashable>(x: T): T {
         return x
     }
@@ -38,7 +38,7 @@ fn test_two_constraints_string(): void {
 }
 
 @test
-fn test_two_constraints_float(): void {
+fn test_two_constraints_float() {
     fn passThrough<T: Comparable & Hashable>(x: T): T {
         return x
     }
@@ -48,7 +48,7 @@ fn test_two_constraints_float(): void {
 
 // ===== Three constraints =====
 @test
-fn test_three_constraints(): void {
+fn test_three_constraints() {
     fn passThrough<T: Comparable & Hashable & Stringable>(x: T): T {
         return x
     }
@@ -58,7 +58,7 @@ fn test_three_constraints(): void {
 
 // ===== Mixed constraints across multiple type parameters =====
 @test
-fn test_mixed_param_constraints(): void {
+fn test_mixed_param_constraints() {
     fn pickValue<K: Hashable, V>(k: K, v: V): V {
         return v
     }
@@ -68,7 +68,7 @@ fn test_mixed_param_constraints(): void {
 
 // ===== No constraint still works =====
 @test
-fn test_unconstrained_after_constrained(): void {
+fn test_unconstrained_after_constrained() {
     fn id<T>(x: T): T {
         return x
     }
@@ -80,7 +80,7 @@ fn test_unconstrained_after_constrained(): void {
 
 // ===== Explicit type arguments =====
 @test
-fn test_explicit_type_args_multi_constraint(): void {
+fn test_explicit_type_args_multi_constraint() {
     fn passThrough<T: Comparable & Hashable>(x: T): T {
         return x
     }

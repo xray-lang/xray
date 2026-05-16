@@ -4,7 +4,7 @@
 // ===== Basic function type parameter =====
 
 @test
-fn test_fn_type_basic(): void {
+fn test_fn_type_basic() {
     fn apply(x: int, f: fn(int): int): int {
         return f(x)
     }
@@ -16,10 +16,10 @@ fn test_fn_type_basic(): void {
 // ===== Function type with void return =====
 
 @test
-fn test_fn_type_void(): void {
+fn test_fn_type_void() {
     let count = 0
     
-    fn forEach(arr: Array<int>, f: fn(int): void): void {
+    fn forEach(arr: Array<int>, f: fn(int)) {
         for (item in arr) {
             f(item)
         }
@@ -34,7 +34,7 @@ fn test_fn_type_void(): void {
 // ===== Function type with no parameters =====
 
 @test
-fn test_fn_type_no_params(): void {
+fn test_fn_type_no_params() {
     fn callIt(f: fn(): int): int {
         return f()
     }
@@ -46,7 +46,7 @@ fn test_fn_type_no_params(): void {
 // ===== Function type with multiple parameters =====
 
 @test
-fn test_fn_type_multi_params(): void {
+fn test_fn_type_multi_params() {
     fn combine(a: int, b: int, f: fn(int, int): int): int {
         return f(a, b)
     }
@@ -58,7 +58,7 @@ fn test_fn_type_multi_params(): void {
 // ===== Function type with string return =====
 
 @test
-fn test_fn_type_string_return(): void {
+fn test_fn_type_string_return() {
     fn transform(x: int, f: fn(int): string): string {
         return f(x)
     }
@@ -70,7 +70,7 @@ fn test_fn_type_string_return(): void {
 // ===== Higher-order: function returning function =====
 
 @test
-fn test_fn_type_higher_order(): void {
+fn test_fn_type_higher_order() {
     fn makeAdder(n: int): fn(int): int {
         return (x) => x + n
     }
@@ -83,7 +83,7 @@ fn test_fn_type_higher_order(): void {
 // ===== Nested function types: fn(fn(int): int): int =====
 
 @test
-fn test_fn_type_nested(): void {
+fn test_fn_type_nested() {
     fn applyTwice(x: int, f: fn(int): int): int {
         return f(f(x))
     }
@@ -95,7 +95,7 @@ fn test_fn_type_nested(): void {
 // ===== Function type in variable declaration =====
 
 @test
-fn test_fn_type_variable(): void {
+fn test_fn_type_variable() {
     let f: fn(int): int = (x) => x * 3
     assert_eq(f(5), 15)
 }
@@ -103,7 +103,7 @@ fn test_fn_type_variable(): void {
 // ===== Optional function type =====
 
 @test
-fn test_fn_type_optional(): void {
+fn test_fn_type_optional() {
     fn maybeApply(x: int, f: fn(int): int): int {
         return f(x)
     }
@@ -114,7 +114,7 @@ fn test_fn_type_optional(): void {
 // ===== Tuple type still works: (int, bool) =====
 
 @test
-fn test_tuple_type_unchanged(): void {
+fn test_tuple_type_unchanged() {
     fn divide(a: int, b: int): (int, bool) {
         if (b == 0) {
             return 0, false

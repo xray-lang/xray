@@ -13,28 +13,28 @@ import crypto
 // ============================================================
 
 @test
-fn test_random_bytes_length_8(): void {
+fn test_random_bytes_length_8() {
     // 生成 8 字节随机数（hex 编码后 16 字符）
     let r = crypto.randomBytes(8)
     assert_eq(r.length, 16)
 }
 
 @test
-fn test_random_bytes_length_16(): void {
+fn test_random_bytes_length_16() {
     // 生成 16 字节随机数（hex 编码后 32 字符）
     let r = crypto.randomBytes(16)
     assert_eq(r.length, 32)
 }
 
 @test
-fn test_random_bytes_length_32(): void {
+fn test_random_bytes_length_32() {
     // 生成 32 字节随机数（hex 编码后 64 字符）
     let r = crypto.randomBytes(32)
     assert_eq(r.length, 64)
 }
 
 @test
-fn test_random_bytes_uniqueness(): void {
+fn test_random_bytes_uniqueness() {
     // 验证每次生成的随机数不同
     let r1 = crypto.randomBytes(16)
     let r2 = crypto.randomBytes(16)
@@ -42,7 +42,7 @@ fn test_random_bytes_uniqueness(): void {
 }
 
 @test
-fn test_random_bytes_hex_format(): void {
+fn test_random_bytes_hex_format() {
     // 验证输出是有效的十六进制字符串
     let r = crypto.randomBytes(4)
     assert_eq(r.length, 8)
@@ -54,14 +54,14 @@ fn test_random_bytes_hex_format(): void {
 // ============================================================
 
 @test
-fn test_uuid_length(): void {
+fn test_uuid_length() {
     // UUID v4 格式：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     let uuid = crypto.uuid()
     assert_eq(uuid.length, 36)
 }
 
 @test
-fn test_uuid_format(): void {
+fn test_uuid_format() {
     // 验证 UUID 包含 4 个破折号
     let uuid = crypto.uuid()
     let parts = uuid.split("-")
@@ -69,7 +69,7 @@ fn test_uuid_format(): void {
 }
 
 @test
-fn test_uuid_parts_length(): void {
+fn test_uuid_parts_length() {
     // 验证各段长度：8-4-4-4-12
     let uuid = crypto.uuid()
     let parts = uuid.split("-")
@@ -81,7 +81,7 @@ fn test_uuid_parts_length(): void {
 }
 
 @test
-fn test_uuid_uniqueness(): void {
+fn test_uuid_uniqueness() {
     // 验证每次生成的 UUID 不同
     let uuid1 = crypto.uuid()
     let uuid2 = crypto.uuid()
@@ -89,7 +89,7 @@ fn test_uuid_uniqueness(): void {
 }
 
 @test
-fn test_uuid_multiple_uniqueness(): void {
+fn test_uuid_multiple_uniqueness() {
     // 生成多个 UUID 验证唯一性
     let uuids: Array<string> = []
     for (i in 0..10) {

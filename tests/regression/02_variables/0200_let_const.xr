@@ -3,20 +3,20 @@
 // 测试：变量声明 let 和 const
 // ===== let 基础 =====
 @test
-fn test_let_declaration(): void {
+fn test_let_declaration() {
     let x = 10
     assert_eq(x, 10)
 }
 
 @test
-fn test_let_reassign(): void {
+fn test_let_reassign() {
     let x = 10
     x = 20
     assert_eq(x, 20)
 }
 
 @test
-fn test_let_multiple(): void {
+fn test_let_multiple() {
     let a = 1
     let b = 2
     let c = 3
@@ -24,7 +24,7 @@ fn test_let_multiple(): void {
 }
 
 @test
-fn test_let_different_types(): void {
+fn test_let_different_types() {
     let i = 42
     let f = 3.14
     let s = "hello"
@@ -39,19 +39,19 @@ fn test_let_different_types(): void {
 
 // ===== const 基础 =====
 @test
-fn test_const_declaration(): void {
+fn test_const_declaration() {
     const PI = 3.14159
     assert_eq(PI, 3.14159)
 }
 
 @test
-fn test_const_string(): void {
+fn test_const_string() {
     const NAME = "xray"
     assert_eq(NAME, "xray")
 }
 
 @test
-fn test_const_expression(): void {
+fn test_const_expression() {
     const BASE = 10
     const MULTIPLIED = BASE * 2
     assert_eq(MULTIPLIED, 20)
@@ -59,7 +59,7 @@ fn test_const_expression(): void {
 
 // ===== 初始化 =====
 @test
-fn test_expression_init(): void {
+fn test_expression_init() {
     let x = 5 + 3
     assert_eq(x, 8)
     let y = x * 2
@@ -67,7 +67,7 @@ fn test_expression_init(): void {
 }
 
 @test
-fn test_function_call_init(): void {
+fn test_function_call_init() {
     fn getValue(): int {
         return 42
     }
@@ -77,26 +77,26 @@ fn test_function_call_init(): void {
 
 // ===== 类型注解 =====
 @test
-fn test_type_annotation_int(): void {
+fn test_type_annotation_int() {
     let x: int = 100
     assert_eq(x, 100)
 }
 
 @test
-fn test_type_annotation_float(): void {
+fn test_type_annotation_float() {
     let f: float = 2.5
     assert_eq(f, 2.5)
 }
 
 @test
-fn test_type_annotation_string(): void {
+fn test_type_annotation_string() {
     let s: string = "typed"
     assert_eq(s, "typed")
 }
 
 // ===== 边界条件 =====
 @test
-fn test_same_name_different_scope(): void {
+fn test_same_name_different_scope() {
     let x = 10
 {
         let x = 20
@@ -106,7 +106,7 @@ fn test_same_name_different_scope(): void {
 }
 
 @test
-fn test_reassign_different_type(): void {
+fn test_reassign_different_type() {
     let x = 10
     x = 20
     // 同类型

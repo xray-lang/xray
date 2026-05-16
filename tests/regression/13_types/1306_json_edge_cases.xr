@@ -3,20 +3,20 @@
 // 测试：Json 边界情况和特殊场景
 // ===== 字段名边界情况 =====
 @test
-fn test_long_field_name(): void {
+fn test_long_field_name() {
     let obj = { "veryLongFieldNameThatExceedsNormalLength": "value" }
     assert_eq(obj.veryLongFieldNameThatExceedsNormalLength, "value")
 }
 
 @test
-fn test_unicode_values(): void {
+fn test_unicode_values() {
     let obj = { "greeting": "你好", "emoji": "🎉" }
     assert_eq(obj.greeting, "你好")
     assert_eq(obj.emoji, "🎉")
 }
 
 @test
-fn test_special_string_values(): void {
+fn test_special_string_values() {
     let obj = { "empty": "", "spaces": "  ", "newline": "line1
 line2",     "tab": "col1	col2" }
     assert_eq(obj.empty, "")
@@ -25,7 +25,7 @@ line2",     "tab": "col1	col2" }
 
 // ===== 大量字段 =====
 @test
-fn test_many_fields(): void {
+fn test_many_fields() {
     let obj = { "f1": 1, "f2": 2, "f3": 3, "f4": 4, "f5": 5, "f6": 6, "f7": 7, "f8": 8, "f9": 9, "f10": 10 }
     assert_eq(obj.f1, 1)
     assert_eq(obj.f5, 5)
@@ -33,7 +33,7 @@ fn test_many_fields(): void {
 }
 
 @test
-fn test_dynamic_add_many(): void {
+fn test_dynamic_add_many() {
     let obj = {}
     for (i in 0..20) {
         obj["field_" + string(i)] = i
@@ -45,7 +45,7 @@ fn test_dynamic_add_many(): void {
 
 // ===== 字段覆盖 =====
 @test
-fn test_field_overwrite(): void {
+fn test_field_overwrite() {
     let obj = { "value": 1 }
     assert_eq(obj.value, 1)
     obj.value = 2
@@ -55,7 +55,7 @@ fn test_field_overwrite(): void {
 }
 
 @test
-fn test_dynamic_overwrite(): void {
+fn test_dynamic_overwrite() {
     let obj = { "x": 1 }
     let key = "x"
     obj[key] = 100
@@ -64,20 +64,20 @@ fn test_dynamic_overwrite(): void {
 
 // ===== null 和 undefined 行为 =====
 @test
-fn test_null_field_value(): void {
+fn test_null_field_value() {
     let obj = { "data": null }
     assert_eq(obj.data, null)
 }
 
 @test
-fn test_missing_field_returns_null(): void {
+fn test_missing_field_returns_null() {
     let obj = { "existing": 1 }
     assert_eq(obj["nonexistent"], null)
 }
 
 // ===== 类型转换 =====
 @test
-fn test_field_type_change(): void {
+fn test_field_type_change() {
     let obj = { "value": 1 }
     assert_eq(obj.value, 1)
     obj.value = "string now"
@@ -88,7 +88,7 @@ fn test_field_type_change(): void {
 
 // ===== 对象作为参数 =====
 @test
-fn test_object_as_parameter(): void {
+fn test_object_as_parameter() {
     fn getField(obj: Json, key: string): string | int {
         return obj[key]
     }
@@ -98,8 +98,8 @@ fn test_object_as_parameter(): void {
 }
 
 @test
-fn test_object_modification_in_function(): void {
-    fn addField(obj: Json, key: string, val: int): void {
+fn test_object_modification_in_function() {
+    fn addField(obj: Json, key: string, val: int) {
         obj[key] = val
     }
     let obj = {}
@@ -109,7 +109,7 @@ fn test_object_modification_in_function(): void {
 
 // ===== 对象比较 =====
 @test
-fn test_object_identity(): void {
+fn test_object_identity() {
     let obj1 = { "x": 1 }
     let obj2 = obj1
     // 引用同一对象
@@ -118,7 +118,7 @@ fn test_object_identity(): void {
 }
 
 @test
-fn test_nested_modification(): void {
+fn test_nested_modification() {
     let parent = { "child": { "value": 1 } }
     let child_ref = parent.child
     child_ref.value = 100

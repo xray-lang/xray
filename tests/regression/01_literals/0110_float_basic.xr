@@ -3,21 +3,21 @@
 // 测试：浮点数字面量基础
 // ===== 正常路径 =====
 @test
-fn test_simple_floats(): void {
+fn test_simple_floats() {
     assert_eq(1, 1)
     assert_eq(3.14, 3.14)
     assert_eq(2.5, 2.5)
 }
 
 @test
-fn test_zero_float(): void {
+fn test_zero_float() {
     assert_eq(0, 0)
     let x = 0
     assert_eq(x, 0)
 }
 
 @test
-fn test_negative_floats(): void {
+fn test_negative_floats() {
     assert_eq(-1.5, -1.5)
     assert_eq(-3.14, -3.14)
     assert_eq(-0.001, -0.001)
@@ -25,7 +25,7 @@ fn test_negative_floats(): void {
 
 // ===== 科学计数法 =====
 @test
-fn test_scientific_notation(): void {
+fn test_scientific_notation() {
     assert_eq(1000, 1000)
     assert_eq(150, 150)
     assert_eq(0.25, 0.25)
@@ -33,35 +33,35 @@ fn test_scientific_notation(): void {
 }
 
 @test
-fn test_scientific_negative_exponent(): void {
+fn test_scientific_negative_exponent() {
     assert_eq(0.001, 0.001)
     assert_eq(0.05, 0.05)
 }
 
 // ===== 下划线分隔符 =====
 @test
-fn test_float_underscore(): void {
+fn test_float_underscore() {
     assert_eq(1000.5, 1000.5)
     assert_eq(3.14159, 3.14159)
 }
 
 // ===== 边界条件 =====
 @test
-fn test_small_decimals(): void {
+fn test_small_decimals() {
     assert_eq(0.1 > 0, true)
     assert_eq(0.01 > 0, true)
     assert_eq(0.001 > 0, true)
 }
 
 @test
-fn test_leading_zero(): void {
+fn test_leading_zero() {
     assert_eq(0.5, 0.5)
     assert_eq(0.123, 0.123)
 }
 
 // ===== 精度测试 =====
 @test
-fn test_float_comparison(): void {
+fn test_float_comparison() {
     // IEEE 754 精度问题：0.1 + 0.2 != 0.3
     let sum = 0.1 + 0.2
     assert_eq(sum > 0.29, true)

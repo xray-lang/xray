@@ -5,7 +5,7 @@
 // ===== 实际应用场景：配置管理 =====
 
 @test
-fn test_config_management(): void {
+fn test_config_management() {
     // 可扩展配置类型
     type AppConfig = { name: string, version: string, ... }
     
@@ -30,7 +30,7 @@ fn test_config_management(): void {
 // ===== 实际应用场景：数据转换 =====
 
 @test
-fn test_data_transformation(): void {
+fn test_data_transformation() {
     // 原始数据
     let rawData = {
         user_name: "alice",
@@ -55,7 +55,7 @@ fn test_data_transformation(): void {
 // ===== 实际应用场景：动态表单 =====
 
 @test
-fn test_dynamic_form(): void {
+fn test_dynamic_form() {
     fn createFormData<T>(fields: Array<string>, values: Array<T>): Json {
         let form = {}
         for (i in 0..fields.length) {
@@ -77,7 +77,7 @@ fn test_dynamic_form(): void {
 // ===== 实际应用场景：API 响应处理 =====
 
 @test
-fn test_api_response(): void {
+fn test_api_response() {
     // 模拟 API 响应
     let response = {
         status: 200,
@@ -106,7 +106,7 @@ fn test_api_response(): void {
 // ===== 实际应用场景：对象工厂 =====
 
 @test
-fn test_object_factory(): void {
+fn test_object_factory() {
     fn createEntity(type_name: string, id: int): Json {
         let prefix = type_name + "_"
         return {
@@ -130,7 +130,7 @@ fn test_object_factory(): void {
 // ===== 实际应用场景：计数器/聚合 =====
 
 @test
-fn test_word_count(): void {
+fn test_word_count() {
     let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
     let counts = {}
     
@@ -150,7 +150,7 @@ fn test_word_count(): void {
 // ===== 实际应用场景：深层嵌套访问 =====
 
 @test
-fn test_deep_nesting(): void {
+fn test_deep_nesting() {
     let data = {
         level1: {
             level2: {
@@ -174,7 +174,7 @@ fn test_deep_nesting(): void {
 // ===== 严格类型与扩展类型对比 =====
 
 @test
-fn test_strict_vs_extensible(): void {
+fn test_strict_vs_extensible() {
     // 严格类型：只能有定义的字段
     type StrictPoint = { x: int, y: int }
     let sp: StrictPoint = { x: 1, y: 2 }

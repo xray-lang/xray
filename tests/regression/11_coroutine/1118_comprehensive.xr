@@ -40,7 +40,7 @@ fn test_main() {
 
     // === 5. defer 清理 ===
     print("=== defer ===")
-    fn cleanup(): void { print("cleanup!") }
+    fn cleanup() { print("cleanup!") }
     fn with_defer(): int {
         defer cleanup()
         print("working...")

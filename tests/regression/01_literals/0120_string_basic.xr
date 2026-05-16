@@ -5,27 +5,27 @@
 // ===== 正常路径 =====
 
 @test
-fn test_simple_string(): void {
+fn test_simple_string() {
     let s = "hello"
     assert_eq(s, "hello")
 }
 
 @test
-fn test_empty_string(): void {
+fn test_empty_string() {
     let s = ""
     assert_eq(s, "")
     assert_eq(s.length, 0)
 }
 
 @test
-fn test_single_char(): void {
+fn test_single_char() {
     let s = "x"
     assert_eq(s, "x")
     assert_eq(s.length, 1)
 }
 
 @test
-fn test_spaces(): void {
+fn test_spaces() {
     let s = "hello world"
     assert_eq(s, "hello world")
     assert_eq(s.length, 11)
@@ -34,25 +34,25 @@ fn test_spaces(): void {
 // ===== 转义序列 =====
 
 @test
-fn test_escape_newline(): void {
+fn test_escape_newline() {
     let s = "line1\nline2"
     assert_eq(s.contains("\n"), true)
 }
 
 @test
-fn test_escape_tab(): void {
+fn test_escape_tab() {
     let s = "col1\tcol2"
     assert_eq(s.contains("\t"), true)
 }
 
 @test
-fn test_escape_quote(): void {
+fn test_escape_quote() {
     let s = "say \"hello\""
     assert_eq(s.contains("\""), true)
 }
 
 @test
-fn test_escape_backslash(): void {
+fn test_escape_backslash() {
     let s = "path\\to\\file"
     assert_eq(s.contains("\\"), true)
 }
@@ -60,20 +60,20 @@ fn test_escape_backslash(): void {
 // ===== Unicode =====
 
 @test
-fn test_unicode_chinese(): void {
+fn test_unicode_chinese() {
     let s = "你好世界"
     assert_eq(s, "你好世界")
     assert_eq(s.length, 4)
 }
 
 @test
-fn test_unicode_emoji(): void {
+fn test_unicode_emoji() {
     let s = "hello 🌍"
     assert_eq(s.contains("🌍"), true)
 }
 
 @test
-fn test_unicode_mixed(): void {
+fn test_unicode_mixed() {
     let s = "Hello 世界 🎉"
     assert_eq(s.length > 5, true)
 }
@@ -81,14 +81,14 @@ fn test_unicode_mixed(): void {
 // ===== 模板字符串 =====
 
 @test
-fn test_template_basic(): void {
+fn test_template_basic() {
     let name = "Alice"
     let s = "Hello, ${name}!"
     assert_eq(s, "Hello, Alice!")
 }
 
 @test
-fn test_template_expression(): void {
+fn test_template_expression() {
     let a = 10
     let b = 20
     let s = "Sum: ${a + b}"
@@ -96,7 +96,7 @@ fn test_template_expression(): void {
 }
 
 @test
-fn test_template_nested(): void {
+fn test_template_nested() {
     let x = 5
     let s = "Value: ${x * 2} (doubled)"
     assert_eq(s.contains("10"), true)
@@ -105,13 +105,13 @@ fn test_template_nested(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_long_string(): void {
+fn test_long_string() {
     let s = "a".repeat(1000)
     assert_eq(s.length, 1000)
 }
 
 @test
-fn test_whitespace_only(): void {
+fn test_whitespace_only() {
     let s = "   "
     assert_eq(s.length, 3)
     assert_eq(s.trim(), "")

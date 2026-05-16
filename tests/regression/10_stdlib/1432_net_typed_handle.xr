@@ -9,7 +9,7 @@
 import net
 
 @test
-fn test_listener_methods(): void {
+fn test_listener_methods() {
     // listen on an ephemeral port (0 → kernel picks)
     const listener = net.listen(0, 16)
     assert_true(listener != null)
@@ -31,7 +31,7 @@ fn test_listener_methods(): void {
 }
 
 @test
-fn test_module_and_method_interop(): void {
+fn test_module_and_method_interop() {
     // The module-level cfunc (net.fd) and the typed method must agree
     // both before and after close.
     const listener = net.listen(0, 1)
@@ -50,7 +50,7 @@ fn test_module_and_method_interop(): void {
 // ============================================================
 
 @test
-fn test_method_dispatch_via_inference(): void {
+fn test_method_dispatch_via_inference() {
     let listener = net.listen(0, 1)
     assert_true(listener != null)
 
@@ -74,7 +74,7 @@ fn test_method_dispatch_via_inference(): void {
 // ============================================================
 
 @test
-fn test_explicit_typed_listener(): void {
+fn test_explicit_typed_listener() {
     let listener: NetListener? = net.listen(0, 1)
     assert_true(listener != null)
 

@@ -3,7 +3,7 @@
 // ===== Basic slice =====
 
 @test
-fn test_slice_basic(): void {
+fn test_slice_basic() {
     let s = "Hello World"
     assert_eq(s.slice(0, 5), "Hello")
     assert_eq(s.slice(6, 11), "World")
@@ -13,7 +13,7 @@ fn test_slice_basic(): void {
 // ===== Negative index =====
 
 @test
-fn test_slice_negative(): void {
+fn test_slice_negative() {
     let s = "Hello World"
     assert_eq(s.slice(-5), "World")
     assert_eq(s.slice(-5, -1), "Worl")
@@ -25,7 +25,7 @@ fn test_slice_negative(): void {
 // ===== Single argument =====
 
 @test
-fn test_slice_single_arg(): void {
+fn test_slice_single_arg() {
     let s = "Hello World"
     assert_eq(s.slice(6), "World")
     assert_eq(s.slice(0), "Hello World")
@@ -34,7 +34,7 @@ fn test_slice_single_arg(): void {
 // ===== Boundary cases =====
 
 @test
-fn test_slice_boundary(): void {
+fn test_slice_boundary() {
     let s = "Hello World"
     assert_eq(s.slice(0, 100), "Hello World")
     assert_eq(s.slice(-100), "Hello World")
@@ -44,7 +44,7 @@ fn test_slice_boundary(): void {
 // ===== Empty string =====
 
 @test
-fn test_slice_empty(): void {
+fn test_slice_empty() {
     assert_eq("".slice(0), "")
     assert_eq("".slice(-1), "")
 }
@@ -52,7 +52,7 @@ fn test_slice_empty(): void {
 // ===== Practical example =====
 
 @test
-fn test_slice_extension(): void {
+fn test_slice_extension() {
     let path = "/home/user/file.txt"
     assert_eq(path.slice(-4), ".txt")
     assert_eq(path.slice(0, -4), "/home/user/file")

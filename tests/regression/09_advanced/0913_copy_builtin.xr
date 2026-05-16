@@ -3,7 +3,7 @@
 // 测试：copy() builtin —— deep copy
 
 @test
-fn test_copy_int(): void {
+fn test_copy_int() {
     // Primitives are value-typed; copy() is essentially a passthrough.
     let x = 42
     let y = copy(x)
@@ -12,7 +12,7 @@ fn test_copy_int(): void {
 }
 
 @test
-fn test_copy_string(): void {
+fn test_copy_string() {
     let s = "hello"
     let t = copy(s)
     assert_eq(t, "hello")
@@ -20,7 +20,7 @@ fn test_copy_string(): void {
 }
 
 @test
-fn test_copy_array_independent(): void {
+fn test_copy_array_independent() {
     let a = [1, 2, 3]
     let b = copy(a)
     a.push(4)
@@ -30,7 +30,7 @@ fn test_copy_array_independent(): void {
 }
 
 @test
-fn test_copy_array_mutate_element(): void {
+fn test_copy_array_mutate_element() {
     let a = [10, 20, 30]
     let b = copy(a)
     a[0] = 999
@@ -39,7 +39,7 @@ fn test_copy_array_mutate_element(): void {
 }
 
 @test
-fn test_copy_nested_array(): void {
+fn test_copy_nested_array() {
     let outer = [[1, 2], [3, 4]]
     let copied = copy(outer)
     // Mutating the inner array of the original must not propagate to the copy.
@@ -49,7 +49,7 @@ fn test_copy_nested_array(): void {
 }
 
 @test
-fn test_copy_map_independent(): void {
+fn test_copy_map_independent() {
     let m = {"a" => 1, "b" => 2}
     let n = copy(m)
     m["c"] = 3
@@ -59,7 +59,7 @@ fn test_copy_map_independent(): void {
 }
 
 @test
-fn test_copy_does_not_corrupt_source(): void {
+fn test_copy_does_not_corrupt_source() {
     // copy() reads R[B] and writes R[A]; verify the source register survives.
     let a = [1, 2, 3]
     let b = copy(a)
@@ -71,14 +71,14 @@ fn test_copy_does_not_corrupt_source(): void {
 }
 
 @test
-fn test_copy_in_expression(): void {
+fn test_copy_in_expression() {
     let a = [10, 20, 30]
     let total = copy(a).length + a.length
     assert_eq(total, 6)
 }
 
 @test
-fn test_copy_chain(): void {
+fn test_copy_chain() {
     let a = [1, 2, 3]
     let b = copy(copy(a))
     a.push(4)

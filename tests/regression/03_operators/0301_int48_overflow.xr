@@ -11,20 +11,20 @@
 // ===== Boundary constants =====
 
 @test
-fn test_int64_max_value(): void {
+fn test_int64_max_value() {
     let max: int = 9223372036854775807
     assert_eq(max, 9223372036854775807)
     assert_eq(typeof(max), Type.int)
 }
 
 @test
-fn test_int64_min_value(): void {
+fn test_int64_min_value() {
     let min: int = -9223372036854775807 - 1
     assert_eq(min, -9223372036854775807 - 1)
 }
 
 @test
-fn test_boundary_identity(): void {
+fn test_boundary_identity() {
     let max: int = 9223372036854775807
     let min: int = -9223372036854775807 - 1
     assert_eq(max - max, 0)
@@ -39,7 +39,7 @@ fn test_boundary_identity(): void {
 // ===== Large values within int64 range =====
 
 @test
-fn test_large_values_still_int(): void {
+fn test_large_values_still_int() {
     let a: int = 140737488355327
     let r = a + 1
     assert_eq(r, 140737488355328)
@@ -47,7 +47,7 @@ fn test_large_values_still_int(): void {
 }
 
 @test
-fn test_large_addition_still_int(): void {
+fn test_large_addition_still_int() {
     let a: int = 100000000000000
     let b: int = 100000000000000
     let r = a + b
@@ -58,13 +58,13 @@ fn test_large_addition_still_int(): void {
 // ===== Addition overflow wraps =====
 
 @test
-fn test_add_near_boundary_ok(): void {
+fn test_add_near_boundary_ok() {
     let a: int = 9223372036854775806
     assert_eq(a + 1, 9223372036854775807)
 }
 
 @test
-fn test_add_overflow_wraps(): void {
+fn test_add_overflow_wraps() {
     let max: int = 9223372036854775807
     let r = max + 1
     // INT64_MAX + 1 wraps to INT64_MIN
@@ -73,7 +73,7 @@ fn test_add_overflow_wraps(): void {
 }
 
 @test
-fn test_add_negative_overflow_wraps(): void {
+fn test_add_negative_overflow_wraps() {
     let min: int = -9223372036854775807 - 1
     let r = min + (-1)
     // INT64_MIN + (-1) wraps to INT64_MAX
@@ -84,13 +84,13 @@ fn test_add_negative_overflow_wraps(): void {
 // ===== Subtraction overflow wraps =====
 
 @test
-fn test_sub_near_boundary_ok(): void {
+fn test_sub_near_boundary_ok() {
     let a: int = -9223372036854775807
     assert_eq(a - 1, -9223372036854775807 - 1)
 }
 
 @test
-fn test_sub_overflow_wraps(): void {
+fn test_sub_overflow_wraps() {
     let min: int = -9223372036854775807 - 1
     let r = min - 1
     // INT64_MIN - 1 wraps to INT64_MAX
@@ -99,7 +99,7 @@ fn test_sub_overflow_wraps(): void {
 }
 
 @test
-fn test_sub_positive_overflow_wraps(): void {
+fn test_sub_positive_overflow_wraps() {
     let max: int = 9223372036854775807
     let r = max - (-1)
     // INT64_MAX - (-1) = INT64_MAX + 1 wraps to INT64_MIN
@@ -110,13 +110,13 @@ fn test_sub_positive_overflow_wraps(): void {
 // ===== Multiplication overflow wraps =====
 
 @test
-fn test_mul_within_range(): void {
+fn test_mul_within_range() {
     let a: int = 1000000
     assert_eq(a * 1000000, 1000000000000)
 }
 
 @test
-fn test_mul_overflow_wraps(): void {
+fn test_mul_overflow_wraps() {
     let max: int = 9223372036854775807
     let r = max * 2
     // INT64_MAX * 2 wraps: result is -2 (unsigned: 0xFFFFFFFFFFFFFFFE)
@@ -125,7 +125,7 @@ fn test_mul_overflow_wraps(): void {
 }
 
 @test
-fn test_mul_both_large_ok(): void {
+fn test_mul_both_large_ok() {
     let a: int = 3000000000
     let b: int = 3000000001
     let r = a * b
@@ -136,14 +136,14 @@ fn test_mul_both_large_ok(): void {
 // ===== Negation overflow wraps =====
 
 @test
-fn test_neg_normal(): void {
+fn test_neg_normal() {
     assert_eq(-42, -42)
     assert_eq(-(-42), 42)
     assert_eq(-140737488355327, -140737488355327)
 }
 
 @test
-fn test_neg_min_wraps(): void {
+fn test_neg_min_wraps() {
     let min: int = -9223372036854775807 - 1
     let r = -min
     // -INT64_MIN wraps to INT64_MIN (two's complement)
@@ -154,7 +154,7 @@ fn test_neg_min_wraps(): void {
 // ===== Left shift within range =====
 
 @test
-fn test_shift_within_range(): void {
+fn test_shift_within_range() {
     let one: int = 1
     assert_eq(one << 46, 70368744177664)
     assert_eq(one << 62, 4611686018427387904)
@@ -163,7 +163,7 @@ fn test_shift_within_range(): void {
 // ===== Compound assignment overflow wraps =====
 
 @test
-fn test_compound_add_wraps(): void {
+fn test_compound_add_wraps() {
     let x: int = 9223372036854775807
     x += 1
     assert_eq(x, -9223372036854775807 - 1)
@@ -171,7 +171,7 @@ fn test_compound_add_wraps(): void {
 }
 
 @test
-fn test_compound_sub_wraps(): void {
+fn test_compound_sub_wraps() {
     let x: int = -9223372036854775807 - 1
     x -= 1
     assert_eq(x, 9223372036854775807)
@@ -179,7 +179,7 @@ fn test_compound_sub_wraps(): void {
 }
 
 @test
-fn test_compound_mul_wraps(): void {
+fn test_compound_mul_wraps() {
     let x: int = 9223372036854775807
     x *= 2
     assert_eq(x, -2)
@@ -189,7 +189,7 @@ fn test_compound_mul_wraps(): void {
 // ===== Compound assignment within range =====
 
 @test
-fn test_compound_near_boundary_ok(): void {
+fn test_compound_near_boundary_ok() {
     let x: int = 9223372036854775806
     x += 1
     assert_eq(x, 9223372036854775807)
@@ -202,7 +202,7 @@ fn test_compound_near_boundary_ok(): void {
 // ===== Negative * negative boundary =====
 
 @test
-fn test_mul_neg_neg_ok(): void {
+fn test_mul_neg_neg_ok() {
     let a: int = 140737488355327
     assert_eq(a * -1, -140737488355327)
 }

@@ -5,7 +5,7 @@
 // ===== 基本接口 =====
 
 interface Drawable {
-    draw(): void
+    draw()
 }
 
 class Circle implements Drawable {
@@ -15,7 +15,7 @@ class Circle implements Drawable {
         this.radius = radius
     }
 
-    draw(): void {        // 实现接口方法
+    draw() {        // 实现接口方法
     }
 
     getRadius(): float {        return this.radius
@@ -23,7 +23,7 @@ class Circle implements Drawable {
 }
 
 @test
-fn test_interface_implementation(): void {
+fn test_interface_implementation() {
     let circle = new Circle(5.0)
     assert_eq(circle.getRadius(), 5.0)
 }
@@ -52,7 +52,7 @@ class Rectangle implements Shape {
 }
 
 @test
-fn test_multi_method_interface(): void {
+fn test_multi_method_interface() {
     let rect = new Rectangle(3.0, 4.0)
     assert_eq(rect.area(), 12.0)
     assert_eq(rect.perimeter(), 14.0)
@@ -75,7 +75,7 @@ class Square implements Shape {
 }
 
 @test
-fn test_multiple_implementations(): void {
+fn test_multiple_implementations() {
     let rect = new Rectangle(2.0, 3.0)
     let square = new Square(4.0)
 
@@ -106,7 +106,7 @@ class Person implements Printable {
 }
 
 @test
-fn test_interface_with_extra_methods(): void {
+fn test_interface_with_extra_methods() {
     let p = new Person("Alice", 30)
     assert_eq(p.greet(), "Hello, Alice")
 }

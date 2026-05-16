@@ -1733,7 +1733,7 @@ static XrCFuncResult ws_echo_serve_yieldable(XrayIsolate *X, XrValue *args, int 
 }
 
 /*
- * ws.serve(port: int, handler: fn(conn): void) -> bool
+ * ws.serve(port: int, handler: fn(conn)) -> bool
  *
  * Start WebSocket server. Creates listen socket, spawns accept loop,
  * blocks caller until server stops.

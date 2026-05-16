@@ -3,10 +3,10 @@
 @native
 class Set<T> {
     length: int
-    add(value: T): void
+    add(value: T)
     has(value: T): bool
     delete(value: T): bool
-    clear(): void
+    clear()
     values(): Array<T>
-    forEach(fn: fn(value: T): void): void
+    forEach(fn: fn(value: T))
 }

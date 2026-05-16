@@ -7,7 +7,7 @@ fn isPermanent(s: int): bool { return s == 301 || s == 308 }
 fn isTemporary(s: int): bool { return s == 302 || s == 303 || s == 307 }
 
 @test
-fn test_redirect_codes(): void {
+fn test_redirect_codes() {
     assert(isRedirect(301))
     assert(isRedirect(302))
     assert(isRedirect(307))
@@ -17,7 +17,7 @@ fn test_redirect_codes(): void {
 }
 
 @test
-fn test_permanent_vs_temporary(): void {
+fn test_permanent_vs_temporary() {
     assert(isPermanent(301))
     assert(isPermanent(308))
     assert(!isPermanent(302))
@@ -27,13 +27,13 @@ fn test_permanent_vs_temporary(): void {
 }
 
 @test
-fn test_location_header(): void {
+fn test_location_header() {
     let resp = { status: 302, headers: { "Location" => "https://example.com/new" } }
     assert_eq(resp.headers.get("Location"), "https://example.com/new")
 }
 
 @test
-fn test_resolve_redirect(): void {
+fn test_resolve_redirect() {
     fn resolve(base: string, loc: string): string {
         if (loc.indexOf("http://") == 0 || loc.indexOf("https://") == 0) { return loc }
         return base + loc

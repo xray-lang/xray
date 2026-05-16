@@ -24,7 +24,7 @@ fn consumer(ch: Channel<int>, expected: int): int {
 }
 
 @test
-fn test_producer_consumer(): void {
+fn test_producer_consumer() {
     shared const ch = new Channel(10)
 
     // 启动多个生产者
@@ -43,12 +43,12 @@ fn test_producer_consumer(): void {
 }
 
 // 资源管理示例
-fn cleanup(name: string): void {
+fn cleanup(name: string) {
     print(name)
 }
 
 @test
-fn test_defer(): void {
+fn test_defer() {
     defer cleanup("resource1")
     defer cleanup("resource2")
     print("working")
@@ -57,7 +57,7 @@ fn test_defer(): void {
 
 // select 多路复用示例
 @test
-fn test_select(): void {
+fn test_select() {
     shared const ch1 = new Channel(1)
     shared const ch2 = new Channel(1)
 

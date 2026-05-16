@@ -30,7 +30,7 @@ class CustomRange {
 // ===== Triple nested for-in =====
 
 @test
-fn test_triple_nested_for_in(): void {
+fn test_triple_nested_for_in() {
     let count = 0
     let sum = 0
     for (i in CustomRange(1, 4)) {
@@ -51,11 +51,11 @@ fn test_triple_nested_for_in(): void {
 class Accumulator {
     total: int
     constructor() { this.total = 0 }
-    add(n: int): void { this.total = this.total + n }    get(): int { return this.total }
+    add(n: int) { this.total = this.total + n }    get(): int { return this.total }
 }
 
 @test
-fn test_nested_for_in_with_method_calls(): void {
+fn test_nested_for_in_with_method_calls() {
     let acc = Accumulator()
     for (i in CustomRange(1, 5)) {
         for (j in CustomRange(1, 5)) {
@@ -69,7 +69,7 @@ fn test_nested_for_in_with_method_calls(): void {
 // ===== Nested for-in with break in inner loop =====
 
 @test
-fn test_nested_for_in_inner_break(): void {
+fn test_nested_for_in_inner_break() {
     let pairs: Array<string> = []
     for (i in CustomRange(1, 6)) {
         for (j in CustomRange(1, 6)) {
@@ -87,7 +87,7 @@ fn test_nested_for_in_inner_break(): void {
 // ===== Nested for-in with continue in outer loop =====
 
 @test
-fn test_nested_for_in_outer_continue(): void {
+fn test_nested_for_in_outer_continue() {
     let results: Array<int> = []
     for (i in CustomRange(1, 6)) {
         if (i % 2 == 0) { continue }
@@ -131,7 +131,7 @@ class StepRange {
 }
 
 @test
-fn test_mixed_iterator_types_nested(): void {
+fn test_mixed_iterator_types_nested() {
     let results: Array<string> = []
     for (i in CustomRange(0, 3)) {
         for (j in StepRange(10, 40, 10)) {
@@ -147,7 +147,7 @@ fn test_mixed_iterator_types_nested(): void {
 // ===== For-in with array operations inside =====
 
 @test
-fn test_for_in_with_array_map(): void {
+fn test_for_in_with_array_map() {
     let results: Array<int> = []
     for (i in CustomRange(1, 4)) {
         let arr = [1, 2, 3]
@@ -164,7 +164,7 @@ fn test_for_in_with_array_map(): void {
 // ===== Nested for-in collecting into shared structure =====
 
 @test
-fn test_nested_for_in_matrix_build(): void {
+fn test_nested_for_in_matrix_build() {
     let matrix: Array<Array<int>> = []
     for (i in CustomRange(0, 3)) {
         let row: Array<int> = []
@@ -183,7 +183,7 @@ fn test_nested_for_in_matrix_build(): void {
 // ===== Iterator reuse across multiple loops =====
 
 @test
-fn test_iterable_reuse(): void {
+fn test_iterable_reuse() {
     let r = CustomRange(1, 4)
     let sum1 = 0
     for (i in r) { sum1 = sum1 + i }
@@ -208,7 +208,7 @@ fn find_pair(target: int): string {
 }
 
 @test
-fn test_nested_for_in_early_return(): void {
+fn test_nested_for_in_early_return() {
     assert_eq(find_pair(12), "2,6")
     assert_eq(find_pair(35), "5,7")
 }
@@ -216,7 +216,7 @@ fn test_nested_for_in_early_return(): void {
 // ===== Stress: many iterations =====
 
 @test
-fn test_nested_stress_100x100(): void {
+fn test_nested_stress_100x100() {
     let count = 0
     for (i in CustomRange(0, 100)) {
         for (j in CustomRange(0, 100)) {
@@ -261,7 +261,7 @@ class FlattenIterable {
 }
 
 @test
-fn test_flatten_iterator(): void {
+fn test_flatten_iterator() {
     let data = [[1, 2], [3], [4, 5, 6]]
     let result: Array<int> = []
     for (v in FlattenIterable(data)) {
@@ -274,7 +274,7 @@ fn test_flatten_iterator(): void {
 }
 
 @test
-fn test_nested_flatten_iterators(): void {
+fn test_nested_flatten_iterators() {
     let data1 = [[1, 2], [3, 4]]
     let data2 = [[10, 20], [30]]
     let products: Array<int> = []
@@ -325,7 +325,7 @@ class FilteredRange {
 }
 
 @test
-fn test_nested_filtered_ranges(): void {
+fn test_nested_filtered_ranges() {
     // Multiples of 3 in [1,20) crossed with multiples of 5 in [1,30)
     let pairs: Array<string> = []
     for (a in FilteredRange(1, 20, 3)) {
@@ -343,7 +343,7 @@ fn test_nested_filtered_ranges(): void {
 // ===== for-in with higher-order + method calls on iterator result =====
 
 @test
-fn test_for_in_with_chained_operations(): void {
+fn test_for_in_with_chained_operations() {
     let results: Array<string> = []
     for (i in CustomRange(1, 5)) {
         let arr = [10, 20, 30]
@@ -365,7 +365,7 @@ fn test_for_in_with_chained_operations(): void {
 // ===== Interleaved iterator and findIndex (tests the call_status bug fix) =====
 
 @test
-fn test_iterator_then_findIndex(): void {
+fn test_iterator_then_findIndex() {
     let sums: Array<int> = []
     for (i in CustomRange(1, 4)) {
         let arr = [1, 2, 3, 4, 5]
@@ -399,7 +399,7 @@ fn collect_custom_range_recursive(depth: int, max_depth: int): Array<string> {
 }
 
 @test
-fn test_recursive_with_iterator(): void {
+fn test_recursive_with_iterator() {
     let result = collect_custom_range_recursive(0, 2)
     // depth 0: 3 branches, each depth 1: 3 branches, each depth 2: leaf
     // Total: 3 * 3 = 9
@@ -411,7 +411,7 @@ fn test_recursive_with_iterator(): void {
 // ===== 4-deep nested for-in with mixed break/continue =====
 
 @test
-fn test_4deep_nested_break_continue(): void {
+fn test_4deep_nested_break_continue() {
     let count = 0
     for (a in CustomRange(0, 5)) {
         if (a == 3) { continue }

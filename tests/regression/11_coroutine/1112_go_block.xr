@@ -1,7 +1,7 @@
 // 测试 go { block } 匿名闭包协程
 
 @test
-fn test_go_block(): void {
+fn test_go_block() {
     // 基本形式
     let t1 = go {
         return 100

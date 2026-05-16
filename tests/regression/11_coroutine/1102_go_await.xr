@@ -10,7 +10,7 @@ fn multiply(x: int, y: int): int {
 }
 
 @test
-fn test_go_await(): void {
+fn test_go_await() {
     // go 启动协程（同步执行）
     let task1 = go add(10, 20)
     let task2 = go multiply(5, 6)

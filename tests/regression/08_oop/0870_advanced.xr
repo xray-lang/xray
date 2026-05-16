@@ -37,7 +37,7 @@ class Rectangle extends Shape {
 }
 
 @test
-fn test_super_method_with_extension(): void {
+fn test_super_method_with_extension() {
     let rect = new Rectangle(5, 3)
     assert_eq(rect.describe(), "Shape: Rectangle (5x3)")
     assert_eq(rect.area(), 15)
@@ -90,7 +90,7 @@ class C extends B {
 }
 
 @test
-fn test_three_level_inheritance(): void {
+fn test_three_level_inheritance() {
     let c = new C(1, 2, 3)
     assert_eq(c.value, 1)
     assert_eq(c.extra, 2)
@@ -127,7 +127,7 @@ class FileLogger extends Logger {
 }
 
 @test
-fn test_super_in_chain(): void {
+fn test_super_in_chain() {
     let fl = new FileLogger("app.log")
     assert_eq(fl.log("test"), "FILE: test -> app.log")
     assert_eq(fl.warn("error"), "[WARN] FILE: error -> app.log")
@@ -146,7 +146,7 @@ class Processor {
 }
 
 @test
-fn test_method_reference(): void {
+fn test_method_reference() {
     let p = new Processor(3)
     assert_eq(p.process(5), 15)
 
@@ -173,7 +173,7 @@ class Calculator {
 }
 
 @test
-fn test_internal_method_calls(): void {
+fn test_internal_method_calls() {
     let calc = new Calculator(10)
     assert_eq(calc.add(5), 15)
     assert_eq(calc.addTwice(3), 26)  // (10+3) + (10+3)
@@ -195,7 +195,7 @@ class Initializer {
 }
 
 @test
-fn test_constructor_calls_method(): void {
+fn test_constructor_calls_method() {
     let init = new Initializer("hello")
     assert_eq(init.data, "hello")
     assert_eq(init.processed, "[hello]")
@@ -216,7 +216,7 @@ class Ordered {
 }
 
 @test
-fn test_field_init_order(): void {
+fn test_field_init_order() {
     let o = new Ordered()
     assert_eq(o.a, 1)
     assert_eq(o.b, 2)
@@ -242,7 +242,7 @@ class Box {
 }
 
 @test
-fn test_object_as_param(): void {
+fn test_object_as_param() {
     let b1 = new Box(10)
     let b2 = new Box(20)
     let b3 = b1.add(b2)
@@ -265,7 +265,7 @@ class Item {
 }
 
 @test
-fn test_object_array(): void {
+fn test_object_array() {
     let items = [
         new Item("apple", 100),
         new Item("banana", 50),
@@ -297,7 +297,7 @@ class MapUser {
 }
 
 @test
-fn test_object_in_map(): void {
+fn test_object_in_map() {
     let users = #{}  // 使用 #{} 创建 Map，不是 {}
     users["alice"] = new MapUser("Alice", 10)
     users["bob"] = new MapUser("Bob", 5)

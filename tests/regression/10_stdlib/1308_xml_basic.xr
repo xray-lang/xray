@@ -5,14 +5,14 @@ import xml
 // ===== Basic parsing =====
 
 @test
-fn test_parse_basic(): void {
+fn test_parse_basic() {
     let data = "<root><item>Hello</item></root>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
 }
 
 @test
-fn test_parse_children(): void {
+fn test_parse_children() {
     let data = "<root><item>Hello</item></root>"
     let doc = xml.parse(data) ?? {}
     let children = doc["children"]
@@ -21,7 +21,7 @@ fn test_parse_children(): void {
 }
 
 @test
-fn test_parse_text(): void {
+fn test_parse_text() {
     let data = "<root><item>Hello</item></root>"
     let doc = xml.parse(data) ?? {}
     let textNode = doc["children"][0]["children"][0]
@@ -31,7 +31,7 @@ fn test_parse_text(): void {
 // ===== Attributes =====
 
 @test
-fn test_parse_attrs(): void {
+fn test_parse_attrs() {
     let data = "<user id=\"123\" name=\"Alice\"/>"
     let doc = xml.parse(data) ?? {}
     let attrs = doc["attrs"]
@@ -42,7 +42,7 @@ fn test_parse_attrs(): void {
 // ===== Nested elements =====
 
 @test
-fn test_parse_deep_nesting(): void {
+fn test_parse_deep_nesting() {
     let data = "<root><a><b><c>deep</c></b></a></root>"
     let doc = xml.parse(data) ?? {}
     let cNode = doc["children"][0]["children"][0]["children"][0]
@@ -52,7 +52,7 @@ fn test_parse_deep_nesting(): void {
 // ===== Multiple children =====
 
 @test
-fn test_parse_multiple_children(): void {
+fn test_parse_multiple_children() {
     let data = "<list><item>1</item><item>2</item><item>3</item></list>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["children"].length, 3)
@@ -61,7 +61,7 @@ fn test_parse_multiple_children(): void {
 // ===== Create element =====
 
 @test
-fn test_create_element(): void {
+fn test_create_element() {
     let elem = xml.element("div")
     assert_eq(elem["tag"], "div")
 }
@@ -69,7 +69,7 @@ fn test_create_element(): void {
 // ===== Empty element =====
 
 @test
-fn test_parse_empty_element(): void {
+fn test_parse_empty_element() {
     let data = "<empty/>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "empty")
@@ -79,7 +79,7 @@ fn test_parse_empty_element(): void {
 // ===== Comments =====
 
 @test
-fn test_parse_preserve_comments(): void {
+fn test_parse_preserve_comments() {
     let data = "<root><!-- comment --><item/></root>"
     let doc = xml.parse(data, { preserveComments: true }) ?? {}
     assert_eq(doc["children"].length, 2)
@@ -88,7 +88,7 @@ fn test_parse_preserve_comments(): void {
 // ===== Stringify =====
 
 @test
-fn test_stringify_compact(): void {
+fn test_stringify_compact() {
     let data = "<msg>Hi</msg>"
     let doc = xml.parse(data) ?? {}
     let str = xml.stringify(doc, { indent: 0, declaration: false })

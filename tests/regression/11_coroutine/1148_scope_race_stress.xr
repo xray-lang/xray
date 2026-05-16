@@ -56,7 +56,7 @@ fn make_ok(id: int): int {
 // Test 1 — supervisor: every failing child must produce one entry in
 // errors[]; total length is deterministic across all iterations.
 @test
-fn test_supervisor_no_lost_updates(): void {
+fn test_supervisor_no_lost_updates() {
     for (let iter = 0; iter < ITERATIONS; iter++) {
         let errs = supervisor scope {
             for (let i = 0; i < FAILING_PER_SCOPE; i++) {
@@ -74,7 +74,7 @@ fn test_supervisor_no_lost_updates(): void {
 // produced by some failing child, with no torn / NULL slots from a
 // concurrent xr_array_push.
 @test
-fn test_supervisor_no_torn_pushes(): void {
+fn test_supervisor_no_torn_pushes() {
     for (let iter = 0; iter < ITERATIONS; iter++) {
         let errs = supervisor scope {
             for (let i = 0; i < FAILING_PER_SCOPE; i++) {
@@ -96,7 +96,7 @@ fn test_supervisor_no_torn_pushes(): void {
 // must throw exactly one error (the latched first_error). The string
 // form must be a valid err_<n> from one of the children.
 @test
-fn test_linked_first_error_deterministic(): void {
+fn test_linked_first_error_deterministic() {
     for (let iter = 0; iter < ITERATIONS; iter++) {
         let caught = false
         let msg = ""
@@ -119,7 +119,7 @@ fn test_linked_first_error_deterministic(): void {
 // Test 4 — supervisor: empty result must stay deterministic when no
 // child fails. Verifies the "all success" path under the same load.
 @test
-fn test_supervisor_all_success(): void {
+fn test_supervisor_all_success() {
     for (let iter = 0; iter < 5; iter++) {
         let errs = supervisor scope {
             for (let i = 0; i < FAILING_PER_SCOPE; i++) {

@@ -3,7 +3,7 @@
 // 测试：数组函数式方法
 // ===== map =====
 @test
-fn test_map_basic(): void {
+fn test_map_basic() {
     let arr = [1, 2, 3, 4, 5]
     let doubled = arr.map(fn(x) {
         return x * 2
@@ -14,7 +14,7 @@ fn test_map_basic(): void {
 }
 
 @test
-fn test_map_empty(): void {
+fn test_map_empty() {
     let arr: Array<int> = []
     let result = arr.map(fn(x) {
         return x * 2
@@ -23,7 +23,7 @@ fn test_map_empty(): void {
 }
 
 @test
-fn test_map_to_different_type(): void {
+fn test_map_to_different_type() {
     let arr = [1, 2, 3]
     let strs = arr.map(fn(x) {
         return x.toString()
@@ -35,7 +35,7 @@ fn test_map_to_different_type(): void {
 
 // ===== filter =====
 @test
-fn test_filter_basic(): void {
+fn test_filter_basic() {
     let arr = [1, 2, 3, 4, 5, 6]
     let evens = arr.filter(fn(x) {
         return x % 2 == 0
@@ -47,7 +47,7 @@ fn test_filter_basic(): void {
 }
 
 @test
-fn test_filter_none(): void {
+fn test_filter_none() {
     let arr = [1, 3, 5, 7]
     let evens = arr.filter(fn(x) {
         return x % 2 == 0
@@ -56,7 +56,7 @@ fn test_filter_none(): void {
 }
 
 @test
-fn test_filter_all(): void {
+fn test_filter_all() {
     let arr = [2, 4, 6, 8]
     let evens = arr.filter(fn(x) {
         return x % 2 == 0
@@ -65,7 +65,7 @@ fn test_filter_all(): void {
 }
 
 @test
-fn test_filter_empty(): void {
+fn test_filter_empty() {
     let arr: Array<int> = []
     let result = arr.filter(fn(x) {
         return true
@@ -75,7 +75,7 @@ fn test_filter_empty(): void {
 
 // ===== reduce =====
 @test
-fn test_reduce_sum(): void {
+fn test_reduce_sum() {
     let arr = [1, 2, 3, 4, 5]
     let sum = arr.reduce(fn(acc, x) {
         return acc + x
@@ -84,7 +84,7 @@ fn test_reduce_sum(): void {
 }
 
 @test
-fn test_reduce_product(): void {
+fn test_reduce_product() {
     let arr = [1, 2, 3, 4]
     let product = arr.reduce(fn(acc, x) {
         return acc * x
@@ -93,7 +93,7 @@ fn test_reduce_product(): void {
 }
 
 @test
-fn test_reduce_max(): void {
+fn test_reduce_max() {
     let arr = [3, 1, 4, 1, 5, 9, 2, 6]
     let max = arr.reduce(fn(a, b) {
         return a > b ? a : b
@@ -102,7 +102,7 @@ fn test_reduce_max(): void {
 }
 
 @test
-fn test_reduce_min(): void {
+fn test_reduce_min() {
     let arr = [3, 1, 4, 1, 5, 9, 2, 6]
     let min = arr.reduce(fn(a, b) {
         return a < b ? a : b
@@ -111,7 +111,7 @@ fn test_reduce_min(): void {
 }
 
 @test
-fn test_reduce_empty(): void {
+fn test_reduce_empty() {
     let arr: Array<int> = []
     let sum = arr.reduce(fn(acc, x) {
         return acc + x
@@ -120,7 +120,7 @@ fn test_reduce_empty(): void {
 }
 
 @test
-fn test_reduce_single(): void {
+fn test_reduce_single() {
     let arr = [42]
     let sum = arr.reduce(fn(acc, x) {
         return acc + x
@@ -130,7 +130,7 @@ fn test_reduce_single(): void {
 
 // ===== forEach =====
 @test
-fn test_foreach_basic(): void {
+fn test_foreach_basic() {
     let arr = [1, 2, 3]
     let sum = 0
     arr.forEach(fn(x) {
@@ -140,7 +140,7 @@ fn test_foreach_basic(): void {
 }
 
 @test
-fn test_foreach_empty(): void {
+fn test_foreach_empty() {
     let arr: Array<int> = []
     let count = 0
     arr.forEach(fn(x) {
@@ -151,7 +151,7 @@ fn test_foreach_empty(): void {
 
 // ===== 链式调用 =====
 @test
-fn test_chain_map_filter(): void {
+fn test_chain_map_filter() {
     let arr = [1, 2, 3, 4, 5]
     let result = arr.map(fn(x) {
         return x * 2
@@ -164,7 +164,7 @@ fn test_chain_map_filter(): void {
 }
 
 @test
-fn test_chain_filter_map(): void {
+fn test_chain_filter_map() {
     let arr = [1, 2, 3, 4, 5, 6]
     let result = arr.filter(fn(x) {
         return x % 2 == 0
@@ -178,7 +178,7 @@ fn test_chain_filter_map(): void {
 }
 
 @test
-fn test_chain_map_filter_reduce(): void {
+fn test_chain_map_filter_reduce() {
     let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let result = arr.filter(fn(x) {
         return x % 2 == 0
@@ -193,7 +193,7 @@ fn test_chain_map_filter_reduce(): void {
 
 // ===== 实际应用 =====
 @test
-fn test_sum_of_squares(): void {
+fn test_sum_of_squares() {
     let arr = [1, 2, 3, 4]
     let sumOfSquares = arr.map(fn(x) {
         return x * x
@@ -204,7 +204,7 @@ fn test_sum_of_squares(): void {
 }
 
 @test
-fn test_count_matches(): void {
+fn test_count_matches() {
     let words = ["apple", "banana", "apricot", "cherry"]
     let startsWithA = words.filter(fn(w) {
         return w.startsWith("a")
@@ -213,7 +213,7 @@ fn test_count_matches(): void {
 }
 
 @test
-fn test_flatten_single_level(): void {
+fn test_flatten_single_level() {
     let nested = [[1, 2], [3, 4], [5, 6]]
     let flat: Array<int> = []
     for (arr in nested) {

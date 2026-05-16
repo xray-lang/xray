@@ -3,7 +3,7 @@
 import ws
 
 @test
-fn test_ws_apis_exist(): void {
+fn test_ws_apis_exist() {
     assert(ws.connect != null)
     assert(ws.send != null)
     assert(ws.recv != null)
@@ -13,7 +13,7 @@ fn test_ws_apis_exist(): void {
 }
 
 @test
-fn test_ws_url_format(): void {
+fn test_ws_url_format() {
     fn isWsUrl(url: string): bool {
         return url.indexOf("ws://") == 0 || url.indexOf("wss://") == 0
     }
@@ -24,7 +24,7 @@ fn test_ws_url_format(): void {
 }
 
 @test
-fn test_ws_message_types(): void {
+fn test_ws_message_types() {
     let text = "Hello WebSocket"
     let binary = new Bytes(10)
     assert_eq(typeof(text), Type.string)

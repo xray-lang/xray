@@ -5,7 +5,7 @@
 // ===== 基础 if =====
 
 @test
-fn test_if_true(): void {
+fn test_if_true() {
     let result = 0
     if (true) {
         result = 1
@@ -14,7 +14,7 @@ fn test_if_true(): void {
 }
 
 @test
-fn test_if_false(): void {
+fn test_if_false() {
     let result = 0
     if (false) {
         result = 1
@@ -23,7 +23,7 @@ fn test_if_false(): void {
 }
 
 @test
-fn test_if_expression(): void {
+fn test_if_expression() {
     let x = 10
     let result = 0
     if (x > 5) {
@@ -35,7 +35,7 @@ fn test_if_expression(): void {
 // ===== if-else =====
 
 @test
-fn test_if_else_true(): void {
+fn test_if_else_true() {
     let result = ""
     if (true) {
         result = "yes"
@@ -46,7 +46,7 @@ fn test_if_else_true(): void {
 }
 
 @test
-fn test_if_else_false(): void {
+fn test_if_else_false() {
     let result = ""
     if (false) {
         result = "yes"
@@ -57,7 +57,7 @@ fn test_if_else_false(): void {
 }
 
 @test
-fn test_if_else_expression(): void {
+fn test_if_else_expression() {
     let x = 3
     let result = ""
     if (x > 5) {
@@ -71,7 +71,7 @@ fn test_if_else_expression(): void {
 // ===== if-else if-else =====
 
 @test
-fn test_elseif_first(): void {
+fn test_elseif_first() {
     let x = 1
     let result = ""
     if (x == 1) {
@@ -85,7 +85,7 @@ fn test_elseif_first(): void {
 }
 
 @test
-fn test_elseif_second(): void {
+fn test_elseif_second() {
     let x = 2
     let result = ""
     if (x == 1) {
@@ -99,7 +99,7 @@ fn test_elseif_second(): void {
 }
 
 @test
-fn test_elseif_else(): void {
+fn test_elseif_else() {
     let x = 3
     let result = ""
     if (x == 1) {
@@ -113,7 +113,7 @@ fn test_elseif_else(): void {
 }
 
 @test
-fn test_multiple_elseif(): void {
+fn test_multiple_elseif() {
     let score = 75
     let grade = ""
     if (score >= 90) {
@@ -133,7 +133,7 @@ fn test_multiple_elseif(): void {
 // ===== 嵌套 if =====
 
 @test
-fn test_nested_if(): void {
+fn test_nested_if() {
     let x = 5
     let y = 10
     let result = ""
@@ -151,7 +151,7 @@ fn test_nested_if(): void {
 }
 
 @test
-fn test_deep_nested(): void {
+fn test_deep_nested() {
     let a = 1
     let b = 2
     let c = 3
@@ -170,7 +170,7 @@ fn test_deep_nested(): void {
 // ===== 真值判断 =====
 
 @test
-fn test_truthy_number(): void {
+fn test_truthy_number() {
     let result = ""
     if (1) { result = "truthy" } else { result = "falsy" }
     assert_eq(result, "truthy")
@@ -180,7 +180,7 @@ fn test_truthy_number(): void {
 }
 
 @test
-fn test_truthy_string(): void {
+fn test_truthy_string() {
     let result = ""
     if ("hello") { result = "truthy" } else { result = "falsy" }
     assert_eq(result, "truthy")
@@ -190,7 +190,7 @@ fn test_truthy_string(): void {
 }
 
 @test
-fn test_truthy_null(): void {
+fn test_truthy_null() {
     let result = ""
     if (null) { result = "truthy" } else { result = "falsy" }
     assert_eq(result, "falsy")
@@ -199,7 +199,7 @@ fn test_truthy_null(): void {
 // ===== 复合条件 =====
 
 @test
-fn test_and_condition(): void {
+fn test_and_condition() {
     let x = 5
     let y = 10
     let result = false
@@ -210,7 +210,7 @@ fn test_and_condition(): void {
 }
 
 @test
-fn test_or_condition(): void {
+fn test_or_condition() {
     let x = -5
     let y = 10
     let result = false
@@ -221,7 +221,7 @@ fn test_or_condition(): void {
 }
 
 @test
-fn test_not_condition(): void {
+fn test_not_condition() {
     let flag = false
     let result = 0
     if (!flag) {
@@ -233,7 +233,7 @@ fn test_not_condition(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_empty_if_body(): void {
+fn test_empty_if_body() {
     let x = 10
     if (x < 5) {
         // 空体
@@ -242,7 +242,7 @@ fn test_empty_if_body(): void {
 }
 
 @test
-fn test_if_only_once(): void {
+fn test_if_only_once() {
     let count = 0
     let x = 10
     

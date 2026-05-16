@@ -9,7 +9,7 @@ fn regex_match_ok(pattern: string, text: string): bool {
 }
 
 @test
-fn test_inlined_regex_find_uses_current_args(): void {
+fn test_inlined_regex_find_uses_current_args() {
     for (let i = 0; i < 260; i++) {
         assert_eq(regex_match_ok("", "abc"), true)
     }

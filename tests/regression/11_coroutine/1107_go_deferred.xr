@@ -5,7 +5,7 @@
 // 注意：协程通过返回值获取结果，不共享可变状态
 
 @test
-fn test_deferred(): void {
+fn test_deferred() {
     print("start")
     
     // 简单测试：每个协程返回独立的值

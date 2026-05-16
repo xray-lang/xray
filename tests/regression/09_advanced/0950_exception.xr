@@ -5,13 +5,13 @@
 
 // 1. 基本 try-catch
 
-fn thr7(): void { throw "from_fn" }
+fn thr7() { throw "from_fn" }
 let f8 = false
-fn fn8(): void { try { throw "x" } finally { f8 = true } }
-fn d4(): void { throw "deep" }
-fn d3(): void { d4() }
-fn d2(): void { d3() }
-fn d1(): void { d2() }
+fn fn8() { try { throw "x" } finally { f8 = true } }
+fn d4() { throw "deep" }
+fn d3() { d4() }
+fn d2() { d3() }
+fn d1() { d2() }
 fn r12(): string {
     try { return "ret" } finally { }
     return "no"

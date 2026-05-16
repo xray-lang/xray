@@ -5,7 +5,7 @@
 // ===== 简单函数 =====
 
 @test
-fn test_simple_function(): void {
+fn test_simple_function() {
     fn greet(): string {
         return "hello"
     }
@@ -13,9 +13,9 @@ fn test_simple_function(): void {
 }
 
 @test
-fn test_function_no_return(): void {
+fn test_function_no_return() {
     let result = 0
-    fn setResult(): void {
+    fn setResult() {
         result = 42
     }
     setResult()
@@ -25,7 +25,7 @@ fn test_function_no_return(): void {
 // ===== 参数 =====
 
 @test
-fn test_single_param(): void {
+fn test_single_param() {
     fn double(x: int): int {
         return x * 2
     }
@@ -33,7 +33,7 @@ fn test_single_param(): void {
 }
 
 @test
-fn test_multiple_params(): void {
+fn test_multiple_params() {
     fn add(a: int, b: int): int {
         return a + b
     }
@@ -41,7 +41,7 @@ fn test_multiple_params(): void {
 }
 
 @test
-fn test_many_params(): void {
+fn test_many_params() {
     fn sum(a: int, b: int, c: int, d: int, e: int): int {
         return a + b + c + d + e
     }
@@ -51,37 +51,37 @@ fn test_many_params(): void {
 // ===== 返回值 =====
 
 @test
-fn test_return_int(): void {
+fn test_return_int() {
     fn getInt(): int { return 42 }
     assert_eq(getInt(), 42)
 }
 
 @test
-fn test_return_float(): void {
+fn test_return_float() {
     fn getFloat(): float { return 3.14 }
     assert_eq(getFloat(), 3.14)
 }
 
 @test
-fn test_return_string(): void {
+fn test_return_string() {
     fn getString(): string { return "hello" }
     assert_eq(getString(), "hello")
 }
 
 @test
-fn test_return_bool(): void {
+fn test_return_bool() {
     fn getBool(): bool { return true }
     assert_eq(getBool(), true)
 }
 
 @test
-fn test_return_null(): void {
+fn test_return_null() {
     fn getNull(): int? { return null }
     assert_eq(getNull(), null)
 }
 
 @test
-fn test_return_array(): void {
+fn test_return_array() {
     fn getArray(): Array<int> { return [1, 2, 3] }
     let arr = getArray()
     assert_eq(arr.length, 3)
@@ -90,7 +90,7 @@ fn test_return_array(): void {
 // ===== 提前返回 =====
 
 @test
-fn test_early_return(): void {
+fn test_early_return() {
     fn check(x: int): string {
         if (x > 10) {
             return "big"
@@ -102,7 +102,7 @@ fn test_early_return(): void {
 }
 
 @test
-fn test_multiple_returns(): void {
+fn test_multiple_returns() {
     fn classify(x: int): string {
         if (x < 0) { return "negative" }
         if (x == 0) { return "zero" }
@@ -116,7 +116,7 @@ fn test_multiple_returns(): void {
 // ===== 局部变量 =====
 
 @test
-fn test_local_variables(): void {
+fn test_local_variables() {
     fn compute(x: int): int {
         let a = x * 2
         let b = a + 10
@@ -126,7 +126,7 @@ fn test_local_variables(): void {
 }
 
 @test
-fn test_shadow_outer(): void {
+fn test_shadow_outer() {
     let x = 100
     fn inner(): int {
         let x = 10
@@ -139,7 +139,7 @@ fn test_shadow_outer(): void {
 // ===== 函数调用表达式 =====
 
 @test
-fn test_call_in_expression(): void {
+fn test_call_in_expression() {
     fn double(x: int): int { return x * 2 }
     
     let result = double(5) + double(3)
@@ -147,7 +147,7 @@ fn test_call_in_expression(): void {
 }
 
 @test
-fn test_nested_call(): void {
+fn test_nested_call() {
     fn double(x: int): int { return x * 2 }
     
     let result = double(double(3))
@@ -155,7 +155,7 @@ fn test_nested_call(): void {
 }
 
 @test
-fn test_call_as_argument(): void {
+fn test_call_as_argument() {
     fn add(a: int, b: int): int { return a + b }
     fn double(x: int): int { return x * 2 }
     
@@ -166,7 +166,7 @@ fn test_call_as_argument(): void {
 // ===== 函数作为条件 =====
 
 @test
-fn test_function_as_condition(): void {
+fn test_function_as_condition() {
     fn isPositive(x: int): bool { return x > 0 }
     
     let result = ""
@@ -181,15 +181,15 @@ fn test_function_as_condition(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_empty_function(): void {
-    fn empty(): void { }
+fn test_empty_function() {
+    fn empty() { }
     let result = empty()
     assert_eq(result, null)
 }
 
 @test
-fn test_return_only(): void {
-    fn returnOnly(): void { return }
+fn test_return_only() {
+    fn returnOnly() { return }
     let result = returnOnly()
     assert_eq(result, null)
 }

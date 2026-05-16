@@ -1,7 +1,7 @@
 // 测试 select 发送分支
 
 @test
-fn test_select_send(): void {
+fn test_select_send() {
     shared const ch = new Channel(2)
     
     // 发送分支：val to ch => ...

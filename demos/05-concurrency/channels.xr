@@ -21,14 +21,14 @@ ch.close()
 // === Producer-Consumer pattern ===
 const data = Channel(5)
 
-fn producer(out: Channel<int>, count: int): void {
+fn producer(out: Channel<int>, count: int) {
     for (i in 0..count) {
         out.send(i * i)
     }
     out.close()
 }
 
-fn consumer(input: Channel<int>): void {
+fn consumer(input: Channel<int>) {
     while (true) {
         let val = input.recv()
         if (val == null) { break }
@@ -42,7 +42,7 @@ consumer(data)
 // === Fan-out: one producer, multiple consumers ===
 const work = Channel(10)
 
-fn worker(id: int, jobs: Channel<int>): void {
+fn worker(id: int, jobs: Channel<int>) {
     while (true) {
         let job = jobs.recv()
         if (job == null) { break }

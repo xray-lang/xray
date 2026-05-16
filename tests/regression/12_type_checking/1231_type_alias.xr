@@ -7,7 +7,7 @@ type Age = int
 type Name = string
 
 @test
-fn test_basic_alias(): void {
+fn test_basic_alias() {
     let a: Age = 25
     let n: Name = "Alice"
     assert_eq(a, 25)
@@ -19,7 +19,7 @@ fn test_basic_alias(): void {
 type Point = { x: float, y: float }
 
 @test
-fn test_struct_alias(): void {
+fn test_struct_alias() {
     let p: Point = { x: 1.0, y: 2.0 }
     assert_eq(p.x, 1.0)
     assert_eq(p.y, 2.0)
@@ -31,7 +31,7 @@ type Mapper = fn(int): int
 type Predicate = fn(int): bool
 
 @test
-fn test_fn_type_alias(): void {
+fn test_fn_type_alias() {
     fn apply(x: int, f: Mapper): int {
         return f(x)
     }
@@ -45,7 +45,7 @@ fn test_fn_type_alias(): void {
 type StringList = Array<string>
 
 @test
-fn test_container_alias(): void {
+fn test_container_alias() {
     let names: StringList = ["Alice", "Bob", "Charlie"]
     assert_eq(names.length, 3)
     assert_eq(names[0], "Alice")
@@ -56,7 +56,7 @@ fn test_container_alias(): void {
 type MaybeInt = int?
 
 @test
-fn test_optional_alias(): void {
+fn test_optional_alias() {
     let x: MaybeInt = 42
     let y: MaybeInt = null
     assert_eq(x, 42)
@@ -68,7 +68,7 @@ fn test_optional_alias(): void {
 type Callback = fn(int): int
 
 @test
-fn test_nested_alias(): void {
+fn test_nested_alias() {
     fn applyTwice(x: int, f: Callback): int {
         return f(f(x))
     }
@@ -79,7 +79,7 @@ fn test_nested_alias(): void {
 // ===== Type alias in return type =====
 
 @test
-fn test_alias_in_return(): void {
+fn test_alias_in_return() {
     fn getAge(): Age {
         return 30
     }
@@ -88,13 +88,13 @@ fn test_alias_in_return(): void {
 
 // ===== Type alias with void function =====
 
-type Action = fn(int): void
+type Action = fn(int)
 
 @test
-fn test_void_fn_alias(): void {
+fn test_void_fn_alias() {
     let sum = 0
     
-    fn forEach(arr: Array<int>, f: Action): void {
+    fn forEach(arr: Array<int>, f: Action) {
         for (item in arr) {
             f(item)
         }

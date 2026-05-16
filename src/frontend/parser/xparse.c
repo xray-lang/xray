@@ -22,6 +22,7 @@
 #include "xtype_scope.h"
 #include "xstring_pool.h"
 #include "../xdiag_fmt.h"
+#include "../../runtime/xerror_codes.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -406,6 +407,41 @@ void xr_parser_error_at_previous(Parser *parser, const char *message) {
 // Report error at current position
 void xr_parser_error(Parser *parser, const char *message) {
     xr_parser_error_at_current(parser, message);
+}
+
+// Emit a "removed syntax" diagnostic with help and explanatory note.
+// Prints two lines: the primary error (with code and caret) followed by a
+// note line that suggests the modern replacement. Skips emission while in
+// panic mode so cascade errors are suppressed.
+//
+// `title` is the short error headline (e.g. "`void` keyword was removed").
+// `note`  is the help/explanation that follows the underline.
+void xr_parser_emit_removed_syntax(Parser *parser, Token *token, int code, const char *title,
+                                   const char *note) {
+    XR_DCHECK(parser != NULL, "emit_removed_syntax: NULL parser");
+    XR_DCHECK(token != NULL, "emit_removed_syntax: NULL token");
+    XR_DCHECK(title != NULL, "emit_removed_syntax: NULL title");
+
+    if (parser->panic_mode)
+        return;
+
+    parser->panic_mode = 1;
+    parser->had_error = 1;
+    parser->error_count++;
+
+    if (parser->error_callback) {
+        parser->error_callback(parser->error_callback_data, token->line, token->column, token->line,
+                               token->column + token->length, title);
+        return;
+    }
+
+    int tok_len = token->type == TK_EOF ? 0 : token->length;
+    xr_diag_print(XR_DIAG_ERROR, code, title, parser->source_file, token->line, token->column,
+                  tok_len, parser->scanner.source, token->start);
+    if (note) {
+        xr_diag_print(XR_DIAG_NOTE, 0, note, parser->source_file, token->line, token->column,
+                      tok_len, parser->scanner.source, token->start);
+    }
 }
 
 /*

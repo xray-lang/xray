@@ -6,7 +6,7 @@
 
 // ===== Store null to field =====
 @test
-fn test_store_null(): void {
+fn test_store_null() {
     let obj = { "val": 42 }
     obj.val = null
     assert_eq(obj.val, null)
@@ -14,14 +14,14 @@ fn test_store_null(): void {
 
 // ===== Store true/false to field =====
 @test
-fn test_store_true(): void {
+fn test_store_true() {
     let obj = { "val": 0 }
     obj.val = true
     assert_eq(obj.val, true)
 }
 
 @test
-fn test_store_false(): void {
+fn test_store_false() {
     let obj = { "val": 1 }
     obj.val = false
     assert_eq(obj.val, false)
@@ -29,14 +29,14 @@ fn test_store_false(): void {
 
 // ===== Store int to field =====
 @test
-fn test_store_int(): void {
+fn test_store_int() {
     let obj = { "val": null }
     obj.val = 42
     assert_eq(obj.val, 42)
 }
 
 @test
-fn test_store_negative_int(): void {
+fn test_store_negative_int() {
     let obj = { "val": 0 }
     obj.val = -123
     assert_eq(obj.val, -123)
@@ -44,14 +44,14 @@ fn test_store_negative_int(): void {
 
 // ===== Store float to field =====
 @test
-fn test_store_float(): void {
+fn test_store_float() {
     let obj = { "val": 0 }
     obj.val = 3.14
     assert_eq(obj.val, 3.14)
 }
 
 @test
-fn test_store_negative_float(): void {
+fn test_store_negative_float() {
     let obj = { "val": 0 }
     obj.val = -2.718
     assert_eq(obj.val, -2.718)
@@ -59,14 +59,14 @@ fn test_store_negative_float(): void {
 
 // ===== Store string to field =====
 @test
-fn test_store_string(): void {
+fn test_store_string() {
     let obj = { "val": 0 }
     obj.val = "hello"
     assert_eq(obj.val, "hello")
 }
 
 @test
-fn test_store_empty_string(): void {
+fn test_store_empty_string() {
     let obj = { "val": 42 }
     obj.val = ""
     assert_eq(obj.val, "")
@@ -74,7 +74,7 @@ fn test_store_empty_string(): void {
 
 // ===== Store object to field =====
 @test
-fn test_store_nested_object(): void {
+fn test_store_nested_object() {
     let obj = { "child": null }
     obj.child = { "x": 10, "y": 20 }
     assert_eq(obj.child.x, 10)
@@ -83,7 +83,7 @@ fn test_store_nested_object(): void {
 
 // ===== Type transition: overwrite with different types =====
 @test
-fn test_type_transition_int_to_null(): void {
+fn test_type_transition_int_to_null() {
     let obj = { "val": 42 }
     assert_eq(obj.val, 42)
     obj.val = null
@@ -91,7 +91,7 @@ fn test_type_transition_int_to_null(): void {
 }
 
 @test
-fn test_type_transition_null_to_string(): void {
+fn test_type_transition_null_to_string() {
     let obj = { "val": null }
     assert_eq(obj.val, null)
     obj.val = "hello"
@@ -99,7 +99,7 @@ fn test_type_transition_null_to_string(): void {
 }
 
 @test
-fn test_type_transition_bool_to_int(): void {
+fn test_type_transition_bool_to_int() {
     let obj = { "val": true }
     assert_eq(obj.val, true)
     obj.val = 99
@@ -107,7 +107,7 @@ fn test_type_transition_bool_to_int(): void {
 }
 
 @test
-fn test_type_transition_string_to_float(): void {
+fn test_type_transition_string_to_float() {
     let obj = { "val": "abc" }
     assert_eq(obj.val, "abc")
     obj.val = 1.5
@@ -116,7 +116,7 @@ fn test_type_transition_string_to_float(): void {
 
 // ===== Multiple fields with mixed types =====
 @test
-fn test_multi_field_mixed_types(): void {
+fn test_multi_field_mixed_types() {
     let obj = { "a": null, "b": true, "c": false, "d": 42, "e": 3.14, "f": "hi" }
     assert_eq(obj.a, null)
     assert_eq(obj.b, true)
@@ -128,7 +128,7 @@ fn test_multi_field_mixed_types(): void {
 
 // ===== Store in loop (JIT hot path) =====
 @test
-fn test_store_in_loop(): void {
+fn test_store_in_loop() {
     let obj = { "sum": 0 }
     for (let i = 0; i < 100; i++) {
         obj.sum = obj.sum + i
@@ -138,7 +138,7 @@ fn test_store_in_loop(): void {
 
 // ===== Store function result to field =====
 @test
-fn test_store_function_result(): void {
+fn test_store_function_result() {
     fn compute(x: int): int {
         return x * x + 1
     }

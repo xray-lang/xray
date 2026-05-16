@@ -100,6 +100,9 @@ XR_FUNC bool xr_parser_match_name(Parser *parser, const char *name);
 XR_FUNC void xr_parser_error(Parser *parser, const char *message);
 XR_FUNC void xr_parser_error_at_current(Parser *parser, const char *message);
 XR_FUNC void xr_parser_error_at_previous(Parser *parser, const char *message);
+// Emit a [Exxx] error + note pair for legacy/removed syntax. Sets panic_mode.
+XR_FUNC void xr_parser_emit_removed_syntax(Parser *parser, Token *token, int code,
+                                           const char *title, const char *note);
 XR_FUNC void xr_parser_synchronize(Parser *parser);
 XR_FUNC void xr_parser_error_expected_name(Parser *parser, const char *context);
 XR_FUNC bool xr_parser_check_asi_hint(Parser *parser);

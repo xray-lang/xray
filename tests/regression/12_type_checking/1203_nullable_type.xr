@@ -5,7 +5,7 @@
 
 // ===== Nullable Type Annotation =====
 @test
-fn test_nullable_annotation(): void {
+fn test_nullable_annotation() {
     let x: int? = null
     assert_eq(x, null)
     x = 42
@@ -13,7 +13,7 @@ fn test_nullable_annotation(): void {
 }
 
 @test
-fn test_nullable_assignment(): void {
+fn test_nullable_assignment() {
     let x: int? = 10
     assert_eq(x, 10)
     x = null
@@ -22,7 +22,7 @@ fn test_nullable_assignment(): void {
 
 // ===== Null Check Narrowing =====
 @test
-fn test_null_check_if(): void {
+fn test_null_check_if() {
     let x: int? = 42
     if (x != null) {
         let y = x + 1
@@ -31,7 +31,7 @@ fn test_null_check_if(): void {
 }
 
 @test
-fn test_null_check_else(): void {
+fn test_null_check_else() {
     let x: int? = null
     let result = 0
     if (x == null) {
@@ -43,7 +43,7 @@ fn test_null_check_else(): void {
 }
 
 @test
-fn test_null_coalescing(): void {
+fn test_null_coalescing() {
     let x: int? = null
     let y = x ?? 100
     assert_eq(y, 100)
@@ -54,7 +54,7 @@ fn test_null_coalescing(): void {
 
 // ===== Optional Chaining =====
 @test
-fn test_optional_chain_basic(): void {
+fn test_optional_chain_basic() {
     class Person {
         name: string
 
@@ -72,7 +72,7 @@ fn test_optional_chain_basic(): void {
 }
 
 @test
-fn test_optional_chain_method(): void {
+fn test_optional_chain_method() {
     let arr: Array<int>? = null
     let len = arr?.length
     assert_eq(len, null)
@@ -83,7 +83,7 @@ fn test_optional_chain_method(): void {
 
 // ===== Function with Nullable Parameters =====
 @test
-fn test_nullable_param(): void {
+fn test_nullable_param() {
     fn greet(name: string?): string {
         if (name == null) {
             return "Hello, Guest"
@@ -95,7 +95,7 @@ fn test_nullable_param(): void {
 }
 
 @test
-fn test_nullable_return(): void {
+fn test_nullable_return() {
     fn findIndex(arr: Array<int>, target: int): int? {
         for (let i = 0; i < arr.length; i++) {
             if (arr[i] == target) {
@@ -113,7 +113,7 @@ fn test_nullable_return(): void {
 
 // ===== Nested Null Checks =====
 @test
-fn test_nested_nullable(): void {
+fn test_nested_nullable() {
     class Address {
         city: string
 
@@ -139,7 +139,7 @@ fn test_nested_nullable(): void {
 
 // ===== Truthiness Narrowing =====
 @test
-fn test_truthiness_string(): void {
+fn test_truthiness_string() {
     let s: string? = ""
     // Empty string is falsy
     if (s) {
@@ -152,7 +152,7 @@ fn test_truthiness_string(): void {
 }
 
 @test
-fn test_truthiness_number(): void {
+fn test_truthiness_number() {
     let n: int? = 0
     // 0 is falsy
     if (n) {
@@ -166,7 +166,7 @@ fn test_truthiness_number(): void {
 
 // ===== Collection Nullable Elements =====
 @test
-fn test_array_nullable_elements(): void {
+fn test_array_nullable_elements() {
     let arr = [1, null, 3]
     assert_eq(arr[0], 1)
     assert_eq(arr[1], null)
@@ -174,7 +174,7 @@ fn test_array_nullable_elements(): void {
 }
 
 @test
-fn test_map_nullable_values(): void {
+fn test_map_nullable_values() {
     let m = { "a" => 1, "b" => null }
     assert_eq(m.get("a"), 1)
     assert_eq(m.get("b"), null)

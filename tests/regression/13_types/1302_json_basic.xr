@@ -3,14 +3,14 @@
 // 测试：Json 对象基础功能
 // ===== 匿名对象（自动允许扩展）=====
 @test
-fn test_anonymous_object(): void {
+fn test_anonymous_object() {
     let user = { "name": "Alice", "age": 30 }
     assert_eq(user.name, "Alice")
     assert_eq(user.age, 30)
 }
 
 @test
-fn test_anonymous_object_dynamic_add(): void {
+fn test_anonymous_object_dynamic_add() {
     let obj = { "x": 1 }
     obj.y = 2
     // 动态添加字段
@@ -21,14 +21,14 @@ fn test_anonymous_object_dynamic_add(): void {
 }
 
 @test
-fn test_empty_object(): void {
+fn test_empty_object() {
     let obj = {}
     obj.name = "test"
     assert_eq(obj.name, "test")
 }
 
 @test
-fn test_nested_object(): void {
+fn test_nested_object() {
     let person = { "name": "Bob", "address": { "city": "Shanghai", "zip": "200000" } }
     assert_eq(person.name, "Bob")
     assert_eq(person.address.city, "Shanghai")
@@ -37,7 +37,7 @@ fn test_nested_object(): void {
 
 // ===== Json 类型注解 =====
 @test
-fn test_json_type_annotation(): void {
+fn test_json_type_annotation() {
     let cfg: Json = { "port": 8080 }
     cfg.host = "localhost"
     // Json 允许动态添加
@@ -46,7 +46,7 @@ fn test_json_type_annotation(): void {
 }
 
 @test
-fn test_json_return_type(): void {
+fn test_json_return_type() {
     fn createConfig(): Json {
         return { "debug": true }
     }
@@ -58,7 +58,7 @@ fn test_json_return_type(): void {
 
 // ===== 字段类型多样性 =====
 @test
-fn test_various_field_types(): void {
+fn test_various_field_types() {
     let obj = { "int_val": 42, "float_val": 3.14, "str_val": "hello", "bool_val": true, "null_val": null, "arr_val": [1, 2, 3] }
     assert_eq(obj.int_val, 42)
     assert_eq(obj.float_val, 3.14)

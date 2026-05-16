@@ -48,7 +48,7 @@ class Vector2D {
 }
 
 @test
-fn test_property5_add_operator(): void {
+fn test_property5_add_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new Vector2D(1.0, 2.0)
@@ -59,7 +59,7 @@ fn test_property5_add_operator(): void {
 }
 
 @test
-fn test_property5_sub_operator(): void {
+fn test_property5_sub_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new Vector2D(5.0, 7.0)
@@ -70,7 +70,7 @@ fn test_property5_sub_operator(): void {
 }
 
 @test
-fn test_property5_mul_operator(): void {
+fn test_property5_mul_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let v = new Vector2D(2.0, 3.0)
@@ -80,7 +80,7 @@ fn test_property5_mul_operator(): void {
 }
 
 @test
-fn test_property5_div_operator(): void {
+fn test_property5_div_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let v = new Vector2D(10.0, 20.0)
@@ -90,7 +90,7 @@ fn test_property5_div_operator(): void {
 }
 
 @test
-fn test_property5_eq_operator(): void {
+fn test_property5_eq_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new Vector2D(1.0, 2.0)
@@ -101,7 +101,7 @@ fn test_property5_eq_operator(): void {
 }
 
 @test
-fn test_property5_chained_operations(): void {
+fn test_property5_chained_operations() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new Vector2D(1.0, 1.0)
@@ -139,7 +139,7 @@ class Money {
 }
 
 @test
-fn test_property5_comparison_operators(): void {
+fn test_property5_comparison_operators() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new Money(100)
@@ -177,7 +177,7 @@ class BitSet {
 }
 
 @test
-fn test_property5_bitwise_and(): void {
+fn test_property5_bitwise_and() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let bs1 = new BitSet(12)  // 0b1100
@@ -187,7 +187,7 @@ fn test_property5_bitwise_and(): void {
 }
 
 @test
-fn test_property5_bitwise_or(): void {
+fn test_property5_bitwise_or() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let bs1 = new BitSet(12)  // 0b1100
@@ -197,7 +197,7 @@ fn test_property5_bitwise_or(): void {
 }
 
 @test
-fn test_property5_bitwise_xor(): void {
+fn test_property5_bitwise_xor() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let bs1 = new BitSet(12)  // 0b1100
@@ -219,13 +219,13 @@ class Matrix {
         return this.data[index]
     }
     
-    operator[]=(index: int, value: int): void {
+    operator[]=(index: int, value: int) {
         this.data[index] = value
     }
 }
 
 @test
-fn test_property5_subscript_get(): void {
+fn test_property5_subscript_get() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let m = new Matrix()
@@ -236,7 +236,7 @@ fn test_property5_subscript_get(): void {
 }
 
 @test
-fn test_property5_subscript_set(): void {
+fn test_property5_subscript_set() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let m = new Matrix()
@@ -263,7 +263,7 @@ class Vector3D extends Vector2D {
 }
 
 @test
-fn test_property5_inherited_operator(): void {
+fn test_property5_inherited_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new Vector3D(1.0, 2.0, 3.0)
@@ -292,7 +292,7 @@ class Point {
 }
 
 @test
-fn test_property6_no_operator_overload(): void {
+fn test_property6_no_operator_overload() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
     let p1 = new Point(1, 2)
@@ -305,7 +305,7 @@ fn test_property6_no_operator_overload(): void {
 }
 
 @test
-fn test_property6_primitive_arithmetic(): void {
+fn test_property6_primitive_arithmetic() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证原始类型的算术运算不受影响
@@ -320,7 +320,7 @@ fn test_property6_primitive_arithmetic(): void {
 }
 
 @test
-fn test_property6_primitive_comparison(): void {
+fn test_property6_primitive_comparison() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证原始类型的比较运算不受影响
@@ -336,7 +336,7 @@ fn test_property6_primitive_comparison(): void {
 }
 
 @test
-fn test_property6_primitive_bitwise(): void {
+fn test_property6_primitive_bitwise() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证原始类型的位运算不受影响
@@ -349,7 +349,7 @@ fn test_property6_primitive_bitwise(): void {
 }
 
 @test
-fn test_property6_float_arithmetic(): void {
+fn test_property6_float_arithmetic() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证浮点数算术运算不受影响
@@ -363,7 +363,7 @@ fn test_property6_float_arithmetic(): void {
 }
 
 @test
-fn test_property6_string_concat(): void {
+fn test_property6_string_concat() {
     // **Feature: operator-overload-optimization, Property 6: 向后兼容性 - 无运算符重载**
     // **Validates: Requirements 5.2**
     // 验证字符串拼接不受影响
@@ -376,7 +376,7 @@ fn test_property6_string_concat(): void {
 // ===== 混合测试：有运算符重载和无运算符重载的类混合使用 =====
 
 @test
-fn test_mixed_classes(): void {
+fn test_mixed_classes() {
     // 同时使用有运算符重载和无运算符重载的类
     let v1 = new Vector2D(1.0, 2.0)
     let v2 = new Vector2D(3.0, 4.0)
@@ -415,7 +415,7 @@ class ModVector {
 }
 
 @test
-fn test_property5_mod_operator(): void {
+fn test_property5_mod_operator() {
     // **Feature: operator-overload-optimization, Property 5: 向后兼容性 - 有运算符重载**
     // **Validates: Requirements 5.1, 5.3**
     let a = new ModVector(17, 23)

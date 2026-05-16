@@ -14,7 +14,7 @@
 // ===== 测试1: 并发拼接隔离性 =====
 
 @test
-fn test_concurrent_concat_isolation(): void {
+fn test_concurrent_concat_isolation() {
     // 多个协程同时执行字符串拼接
     // 每个协程的结果应该独立，不受其他协程影响
     
@@ -45,7 +45,7 @@ fn test_concurrent_concat_isolation(): void {
 // ===== 测试2: 长字符串并发隔离性 =====
 
 @test
-fn test_long_string_isolation(): void {
+fn test_long_string_isolation() {
     // 测试长字符串拼接（使用 XrStrBuf 路径）的隔离性
     // 长字符串更容易暴露缓冲区共享问题
     
@@ -79,7 +79,7 @@ fn test_long_string_isolation(): void {
 // ===== 测试3: 交替拼接隔离性 =====
 
 @test
-fn test_interleaved_concat_isolation(): void {
+fn test_interleaved_concat_isolation() {
     // 测试交替执行拼接时的隔离性
     // 模拟高并发场景下的缓冲区竞争
     
@@ -115,7 +115,7 @@ fn test_interleaved_concat_isolation(): void {
 // ===== 测试4: 缓冲区内容不泄漏 =====
 
 @test
-fn test_buffer_content_no_leak(): void {
+fn test_buffer_content_no_leak() {
     // 验证一个协程的缓冲区内容不会泄漏到另一个协程
     // 使用唯一标记来检测泄漏
     
@@ -159,7 +159,7 @@ fn test_buffer_content_no_leak(): void {
 // ===== 测试5: 主线程与协程隔离 =====
 
 @test
-fn test_main_thread_coro_isolation(): void {
+fn test_main_thread_coro_isolation() {
     // 验证主线程和协程的缓冲区是隔离的
     
     // 主线程执行拼接
@@ -189,7 +189,7 @@ fn test_main_thread_coro_isolation(): void {
 // ===== 测试6: 高并发压力测试 =====
 
 @test
-fn test_high_concurrency_isolation(): void {
+fn test_high_concurrency_isolation() {
     // 高并发场景下的隔离性测试
     // 大量协程同时执行字符串拼接
     
@@ -230,7 +230,7 @@ fn test_high_concurrency_isolation(): void {
 // ===== 测试7: 混合长短字符串隔离 =====
 
 @test
-fn test_mixed_length_isolation(): void {
+fn test_mixed_length_isolation() {
     // 测试混合长短字符串拼接的隔离性
     // 一些协程使用短字符串路径，一些使用长字符串路径
     
@@ -267,7 +267,7 @@ fn test_mixed_length_isolation(): void {
 // ===== 属性测试: 随机并发隔离性 =====
 
 @test
-fn test_property_random_isolation(): void {
+fn test_property_random_isolation() {
     // 属性：对于任意数量的并发协程执行任意字符串拼接，
     // 每个协程的结果应该只包含该协程产生的内容
     

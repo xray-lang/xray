@@ -9,7 +9,7 @@ import yaml
 // ===== Anchor and Alias =====
 
 @test
-fn test_anchor_alias(): void {
+fn test_anchor_alias() {
     // Basic anchor/alias: scalar value
     let data = "anchor: &val hello\nalias: *val"
     let obj = yaml.parse(data)
@@ -18,7 +18,7 @@ fn test_anchor_alias(): void {
 }
 
 @test
-fn test_anchor_alias_number(): void {
+fn test_anchor_alias_number() {
     let data = "port: &p 8080\nbackup_port: *p"
     let obj = yaml.parse(data)
     assert_eq(obj["port"], 8080)
@@ -28,7 +28,7 @@ fn test_anchor_alias_number(): void {
 // ===== Literal Block Scalar =====
 
 @test
-fn test_literal_block(): void {
+fn test_literal_block() {
     let data = "text: |\n  line one\n  line two\n  line three"
     let obj = yaml.parse(data)
     let text = obj["text"]
@@ -38,7 +38,7 @@ fn test_literal_block(): void {
 }
 
 @test
-fn test_literal_block_strip(): void {
+fn test_literal_block_strip() {
     let data = "text: |-\n  hello\n  world"
     let obj = yaml.parse(data)
     let text = obj["text"]
@@ -48,7 +48,7 @@ fn test_literal_block_strip(): void {
 }
 
 @test
-fn test_literal_block_keep(): void {
+fn test_literal_block_keep() {
     let data = "text: |+\n  hello\n  world\n\n\n"
     let obj = yaml.parse(data)
     let text = obj["text"]
@@ -59,7 +59,7 @@ fn test_literal_block_keep(): void {
 // ===== Folded Block Scalar =====
 
 @test
-fn test_folded_block(): void {
+fn test_folded_block() {
     let data = "text: >\n  line one\n  line two\n  line three"
     let obj = yaml.parse(data)
     let text = obj["text"]
@@ -69,7 +69,7 @@ fn test_folded_block(): void {
 }
 
 @test
-fn test_folded_block_strip(): void {
+fn test_folded_block_strip() {
     let data = "text: >-\n  hello\n  world"
     let obj = yaml.parse(data)
     let text = obj["text"]
@@ -80,7 +80,7 @@ fn test_folded_block_strip(): void {
 // ===== Multi-document =====
 
 @test
-fn test_parse_all(): void {
+fn test_parse_all() {
     // parseAll splits on document end marker '...'
     let data = "first: 1\n...\nsecond: 2\n...\nthird: 3"
     let docs = yaml.parseAll(data)
@@ -89,7 +89,7 @@ fn test_parse_all(): void {
 }
 
 @test
-fn test_parse_all_single(): void {
+fn test_parse_all_single() {
     // Single document with --- header
     let data = "---\na: 1\nb: 2"
     let docs = yaml.parseAll(data)
@@ -101,21 +101,21 @@ fn test_parse_all_single(): void {
 // ===== Hex and Octal Numbers =====
 
 @test
-fn test_hex_numbers(): void {
+fn test_hex_numbers() {
     let data = "hex: 0xFF"
     let obj = yaml.parse(data)
     assert_eq(obj["hex"], 255)
 }
 
 @test
-fn test_hex_number_upper(): void {
+fn test_hex_number_upper() {
     let data = "val: 0x1A"
     let obj = yaml.parse(data)
     assert_eq(obj["val"], 26)
 }
 
 @test
-fn test_octal_numbers(): void {
+fn test_octal_numbers() {
     let data = "oct: 0o77"
     let obj = yaml.parse(data)
     assert_eq(obj["oct"], 63)
@@ -124,7 +124,7 @@ fn test_octal_numbers(): void {
 // ===== String that looks like hex but is not =====
 
 @test
-fn test_string_not_hex(): void {
+fn test_string_not_hex() {
     let data = "word: cafe"
     let obj = yaml.parse(data)
     // "cafe" should be a string, not parsed as hex number
@@ -132,7 +132,7 @@ fn test_string_not_hex(): void {
 }
 
 @test
-fn test_string_abcdef(): void {
+fn test_string_abcdef() {
     let data = "word: abcdef"
     let obj = yaml.parse(data)
     assert_eq(obj["word"], "abcdef")
@@ -141,7 +141,7 @@ fn test_string_abcdef(): void {
 // ===== Special Float Values =====
 
 @test
-fn test_infinity(): void {
+fn test_infinity() {
     let data = "pos: .inf\nneg: -.inf"
     let obj = yaml.parse(data)
     assert(obj["pos"] > 999999999)
@@ -149,7 +149,7 @@ fn test_infinity(): void {
 }
 
 @test
-fn test_nan(): void {
+fn test_nan() {
     let data = "val: .nan"
     let obj = yaml.parse(data)
     // NaN != NaN
@@ -159,7 +159,7 @@ fn test_nan(): void {
 // ===== Tilde as null =====
 
 @test
-fn test_tilde_null(): void {
+fn test_tilde_null() {
     let data = "val: ~"
     let obj = yaml.parse(data)
     assert_eq(obj["val"], null)
@@ -168,7 +168,7 @@ fn test_tilde_null(): void {
 // ===== Empty mapping value =====
 
 @test
-fn test_empty_value(): void {
+fn test_empty_value() {
     let data = "key:"
     let obj = yaml.parse(data)
     assert_eq(obj["key"], null)
@@ -177,14 +177,14 @@ fn test_empty_value(): void {
 // ===== Unicode escape in double-quoted strings =====
 
 @test
-fn test_unicode_escape(): void {
+fn test_unicode_escape() {
     let data = "char: \"\\u0041\""
     let obj = yaml.parse(data)
     assert_eq(obj["char"], "A")
 }
 
 @test
-fn test_unicode_escape_multibyte(): void {
+fn test_unicode_escape_multibyte() {
     let data = "char: \"\\u00E9\""
     let obj = yaml.parse(data)
     // U+00E9 = é (2-byte UTF-8)
@@ -194,7 +194,7 @@ fn test_unicode_escape_multibyte(): void {
 // ===== Escape sequences in double-quoted strings =====
 
 @test
-fn test_escape_sequences(): void {
+fn test_escape_sequences() {
     let data = "tab: \"hello\\tworld\"\nnl: \"line1\\nline2\""
     let obj = yaml.parse(data)
     assert(obj["tab"].indexOf("\t") >= 0)
@@ -204,7 +204,7 @@ fn test_escape_sequences(): void {
 // ===== Stringify Json object =====
 
 @test
-fn test_stringify_json(): void {
+fn test_stringify_json() {
     let config = {name: "xray", version: 1, debug: false}
     let result = yaml.stringify(config)
     assert(result != null)
@@ -217,7 +217,7 @@ fn test_stringify_json(): void {
 }
 
 @test
-fn test_stringify_nested_json(): void {
+fn test_stringify_nested_json() {
     let data = {
         server: {
             host: "localhost",
@@ -231,7 +231,7 @@ fn test_stringify_nested_json(): void {
 }
 
 @test
-fn test_stringify_json_roundtrip(): void {
+fn test_stringify_json_roundtrip() {
     let original = {a: 1, b: "hello", c: true, d: null}
     let yaml_str = yaml.stringify(original)
     let parsed = yaml.parse(yaml_str)
@@ -244,7 +244,7 @@ fn test_stringify_json_roundtrip(): void {
 // ===== Stringify Map =====
 
 @test
-fn test_stringify_map(): void {
+fn test_stringify_map() {
     let m = {"key1" => "val1", "key2" => 42}
     let result = yaml.stringify(m)
     assert(result != null)
@@ -254,19 +254,19 @@ fn test_stringify_map(): void {
 // ===== Error robustness =====
 
 @test
-fn test_empty_input(): void {
+fn test_empty_input() {
     let result = yaml.parse("")
     assert_eq(result, null)
 }
 
 @test
-fn test_whitespace_only(): void {
+fn test_whitespace_only() {
     let result = yaml.parse("   \n\n  ")
     assert_eq(result, null)
 }
 
 @test
-fn test_comment_only(): void {
+fn test_comment_only() {
     // Comments followed by empty lines are skipped
     let result = yaml.parse("# this is a comment\n")
     // Parser may return non-null for partial comment lines
@@ -277,7 +277,7 @@ fn test_comment_only(): void {
 // ===== Mixed inline comments =====
 
 @test
-fn test_inline_comments(): void {
+fn test_inline_comments() {
     let data = "name: Alice # user name\nage: 30 # years"
     let obj = yaml.parse(data)
     assert_eq(obj["name"], "Alice")
@@ -287,7 +287,7 @@ fn test_inline_comments(): void {
 // ===== Negative numbers =====
 
 @test
-fn test_negative_numbers(): void {
+fn test_negative_numbers() {
     let data = "neg_int: -42\nneg_float: -3.14"
     let obj = yaml.parse(data)
     assert_eq(obj["neg_int"], -42)
@@ -297,7 +297,7 @@ fn test_negative_numbers(): void {
 // ===== Quoted keys =====
 
 @test
-fn test_flow_quoted_keys(): void {
+fn test_flow_quoted_keys() {
     // Quoted keys work in flow mappings
     let data = "data: {\"key one\": 1, 'key two': 2}"
     let obj = yaml.parse(data)

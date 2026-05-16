@@ -15,7 +15,7 @@ fn bounded_same<U: Comparable & Hashable>(x: U): U {
 }
 
 @test
-fn test_let_function_expression_reassignment_exact_signature(): void {
+fn test_let_function_expression_reassignment_exact_signature() {
     let f = fn(x: int): int {
         return x + 1
     }
@@ -26,7 +26,7 @@ fn test_let_function_expression_reassignment_exact_signature(): void {
 }
 
 @test
-fn test_let_generic_function_expression_reassignment_shape_equal(): void {
+fn test_let_generic_function_expression_reassignment_shape_equal() {
     let f = fn<T>(x: T): T {
         return x
     }
@@ -37,7 +37,7 @@ fn test_let_generic_function_expression_reassignment_shape_equal(): void {
 }
 
 @test
-fn test_let_named_generic_function_reassignment_shape_equal(): void {
+fn test_let_named_generic_function_reassignment_shape_equal() {
     let f = id
     f = same
     let g = bounded

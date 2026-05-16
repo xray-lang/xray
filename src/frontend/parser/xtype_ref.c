@@ -246,7 +246,7 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             tref_append(buf, pos, cap, "bool");
             break;
         case XR_TREF_VOID:
-            tref_append(buf, pos, cap, "void");
+            tref_append(buf, pos, cap, "()");
             break;
         case XR_TREF_NULL:
             tref_append(buf, pos, cap, "null");
@@ -313,7 +313,7 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             if (t->nchildren > 0)
                 tref_to_str_impl(t->children[t->nchildren - 1], buf, pos, cap);
             else
-                tref_append(buf, pos, cap, "void");
+                tref_append(buf, pos, cap, "()");
             break;
         }
 

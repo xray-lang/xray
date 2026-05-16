@@ -21,7 +21,7 @@ fn regex_dynamic_match_text(pattern: string, text: string, expected: string): bo
 }
 
 @test
-fn test_jit_regex_find_null_and_index_get(): void {
+fn test_jit_regex_find_null_and_index_get() {
     for (let i = 0; i < 260; i++) {
         assert_eq(regex_dynamic_match_ok("(?s)a.b", "a\nb"), true)
         assert_eq(regex_dynamic_match_ok("hello", "hello"), true)

@@ -6,7 +6,7 @@
 // ===== reduce nested findIndex =====
 
 @test
-fn test_reduce_nested_findIndex(): void {
+fn test_reduce_nested_findIndex() {
     let data = [[10, 20, 30], [40, 50, 60], [70, 80, 90]]
     // For each row, find index of element > 25, then sum those indices
     let indexSum = data.reduce(fn(acc, row) {
@@ -18,7 +18,7 @@ fn test_reduce_nested_findIndex(): void {
 }
 
 @test
-fn test_findIndex_with_nested_reduce(): void {
+fn test_findIndex_with_nested_reduce() {
     let matrix = [[1, 2, 3], [10, 20, 30], [4, 5, 6]]
     // Find first row where sum > 20
     let idx = matrix.findIndex(fn(row) {
@@ -28,7 +28,7 @@ fn test_findIndex_with_nested_reduce(): void {
 }
 
 @test
-fn test_findIndex_with_nested_every(): void {
+fn test_findIndex_with_nested_every() {
     let groups = [[2, 4, 6], [1, 3, 5], [8, 10, 12]]
     // Find first group where all elements are even
     let idx = groups.findIndex(fn(g) {
@@ -46,7 +46,7 @@ fn test_findIndex_with_nested_every(): void {
 // ===== map + reduce combination =====
 
 @test
-fn test_map_then_reduce_nested(): void {
+fn test_map_then_reduce_nested() {
     let students = [
         { name: "Alice", scores: [85, 90, 95] },
         { name: "Bob", scores: [70, 75, 80] },
@@ -71,7 +71,7 @@ fn test_map_then_reduce_nested(): void {
 // ===== filter + map + reduce pipeline =====
 
 @test
-fn test_filter_map_reduce_pipeline(): void {
+fn test_filter_map_reduce_pipeline() {
     let data = [
         { category: "A", values: [1, 2, 3] },
         { category: "B", values: [10, 20] },
@@ -90,7 +90,7 @@ fn test_filter_map_reduce_pipeline(): void {
 // ===== Nested map producing nested arrays =====
 
 @test
-fn test_nested_map_with_filter(): void {
+fn test_nested_map_with_filter() {
     let matrix = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]]
     let result = matrix.map(fn(row) {
         return row.filter(fn(x) { return x % 2 == 0 }).map(fn(x) { return x * x })
@@ -105,7 +105,7 @@ fn test_nested_map_with_filter(): void {
 // ===== forEach nested with side effects =====
 
 @test
-fn test_nested_forEach_with_accumulation(): void {
+fn test_nested_forEach_with_accumulation() {
     let data = [[1, 2], [3, 4], [5, 6]]
     let products: Array<int> = []
     data.forEach(fn(row) {
@@ -122,7 +122,7 @@ fn test_nested_forEach_with_accumulation(): void {
 // ===== some/every nested =====
 
 @test
-fn test_some_with_nested_some(): void {
+fn test_some_with_nested_some() {
     let matrix = [[1, 3, 5], [2, 4, 6], [7, 9, 11]]
     // Is there any row that has at least one element divisible by 4?
     let result = matrix.some(fn(row) {
@@ -132,7 +132,7 @@ fn test_some_with_nested_some(): void {
 }
 
 @test
-fn test_every_with_nested_filter(): void {
+fn test_every_with_nested_filter() {
     let groups = [[2, 4, 6], [8, 10, 12], [14, 16, 18]]
     // Check: every group, after filtering >5, has at least 2 elements
     let result = groups.every(fn(g) {
@@ -145,7 +145,7 @@ fn test_every_with_nested_filter(): void {
 // ===== reduce building complex structure =====
 
 @test
-fn test_reduce_build_nested_map(): void {
+fn test_reduce_build_nested_map() {
     let entries = [
         { group: "fruit", item: "apple" },
         { group: "veg", item: "carrot" },
@@ -169,7 +169,7 @@ fn test_reduce_build_nested_map(): void {
 // ===== Chain with closure capturing loop variable =====
 
 @test
-fn test_higher_order_with_for_loop(): void {
+fn test_higher_order_with_for_loop() {
     let results: Array<int> = []
     for (let i = 0; i < 3; i++) {
         let arr = [1, 2, 3]
@@ -185,7 +185,7 @@ fn test_higher_order_with_for_loop(): void {
 // ===== map + findIndex + reduce cross-combination =====
 
 @test
-fn test_map_findIndex_reduce_combo(): void {
+fn test_map_findIndex_reduce_combo() {
     let data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
 
     // Map each row to its max value via reduce
@@ -207,7 +207,7 @@ fn test_map_findIndex_reduce_combo(): void {
 // ===== findIndex with inline reduce in callback =====
 
 @test
-fn test_findIndex_inline_reduce(): void {
+fn test_findIndex_inline_reduce() {
     let data = [[5, 1, 3], [2, 8, 4], [7, 6, 9]]
     // Find first row where reduce(max) > 8
     let idx = data.findIndex(fn(row) {
@@ -223,7 +223,7 @@ fn test_findIndex_inline_reduce(): void {
 // ===== Deep nesting: 4 levels of higher-order =====
 
 @test
-fn test_four_level_nesting(): void {
+fn test_four_level_nesting() {
     let data = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
     let flat_sum = data.reduce(fn(total, plane) {
         return total + plane.reduce(fn(subtotal, row) {
@@ -238,7 +238,7 @@ fn test_four_level_nesting(): void {
 // ===== map(reduce) + findIndex chain (call_status bug regression) =====
 
 @test
-fn test_map_reduce_findIndex_chain(): void {
+fn test_map_reduce_findIndex_chain() {
     let rows = [[3, 7, 2], [1, 1, 1], [10, 20, 30]]
     let sums = rows.map(fn(r) {
         return r.reduce(fn(a, b) { return a + b }, 0)
@@ -254,7 +254,7 @@ fn test_map_reduce_findIndex_chain(): void {
 // ===== map + filter + findIndex + every cross combination =====
 
 @test
-fn test_multi_method_chain(): void {
+fn test_multi_method_chain() {
     let data = [[1, 2, 3, 4, 5], [10, 20, 30], [7, 8]]
     // For each row: filter evens, then check if all evens > 5
     let results = data.map(fn(row) {
@@ -273,7 +273,7 @@ fn test_multi_method_chain(): void {
 // ===== Nested some with map =====
 
 @test
-fn test_nested_some_with_map(): void {
+fn test_nested_some_with_map() {
     let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     // Does any row, when doubled, contain a value > 15?
     let found = matrix.some(fn(row) {
@@ -287,7 +287,7 @@ fn test_nested_some_with_map(): void {
 // ===== reduce building array of arrays =====
 
 @test
-fn test_reduce_builds_grouped_arrays(): void {
+fn test_reduce_builds_grouped_arrays() {
     let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     // Group into chunks of 3
     let seed: Array<int> = []
@@ -310,7 +310,7 @@ fn test_reduce_builds_grouped_arrays(): void {
 // ===== filter + map + reduce + findIndex interleaved in loop =====
 
 @test
-fn test_interleaved_in_loop(): void {
+fn test_interleaved_in_loop() {
     let datasets = [
         [5, 12, 3, 8, 1],
         [20, 15, 10, 5, 25],
@@ -336,7 +336,7 @@ fn test_interleaved_in_loop(): void {
 // ===== 5-level deep nesting: map(map(filter(reduce))) =====
 
 @test
-fn test_five_level_deep(): void {
+fn test_five_level_deep() {
     let data = [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]]
     // For each plane: for each row: filter odd, sum, collect
     let result = data.map(fn(plane) {
@@ -355,7 +355,7 @@ fn test_five_level_deep(): void {
 // ===== Stress: large array with chained operations =====
 
 @test
-fn test_stress_large_chain(): void {
+fn test_stress_large_chain() {
     let arr: Array<int> = []
     for (let i = 0; i < 500; i++) { arr.push(i) }
     let result = arr
@@ -372,7 +372,7 @@ fn test_stress_large_chain(): void {
 // ===== forEach nested with index tracking =====
 
 @test
-fn test_forEach_with_index_accumulator(): void {
+fn test_forEach_with_index_accumulator() {
     let matrix = [[10, 20, 30], [40, 50, 60]]
     let indexed: Array<string> = []
     let rowIdx = 0

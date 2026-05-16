@@ -21,10 +21,10 @@ fn consumer(ch: Channel<int>): int {
     return sum
 }
 
-fn cleanup(): void { print("cleanup done") }
+fn cleanup() { print("cleanup done") }
 
 @test
-fn test_combined(): void {
+fn test_combined() {
     print("=== 协程综合测试 ===")
 
     // 1. 创建缓冲 Channel

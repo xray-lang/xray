@@ -5,25 +5,25 @@ import os
 // ===== Constants =====
 
 @test
-fn test_platform(): void {
+fn test_platform() {
     let p = os.platform
     assert(p == "darwin" || p == "linux" || p == "windows")
 }
 
 @test
-fn test_arch(): void {
+fn test_arch() {
     let a = os.arch
     assert(a == "arm64" || a == "x64" || a == "x86")
 }
 
 @test
-fn test_sep(): void {
+fn test_sep() {
     let s = os.sep
     assert(s == "/" || s == "\\")
 }
 
 @test
-fn test_eol(): void {
+fn test_eol() {
     let e = os.eol
     assert(e == "\n" || e == "\r\n")
 }
@@ -31,20 +31,20 @@ fn test_eol(): void {
 // ===== Environment Variables =====
 
 @test
-fn test_getenv_path(): void {
+fn test_getenv_path() {
     let path = os.getenv("PATH")
     assert(path != null)
     assert(path.length > 0)
 }
 
 @test
-fn test_getenv_nonexistent(): void {
+fn test_getenv_nonexistent() {
     let val = os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345")
     assert_eq(val, null)
 }
 
 @test
-fn test_setenv_getenv(): void {
+fn test_setenv_getenv() {
     os.setenv("XRAY_TEST_VAR", "hello_xray")
     let val = os.getenv("XRAY_TEST_VAR")
     assert_eq(val, "hello_xray")
@@ -56,7 +56,7 @@ fn test_setenv_getenv(): void {
 }
 
 @test
-fn test_setenv_overwrite(): void {
+fn test_setenv_overwrite() {
     os.setenv("XRAY_TEST_OW", "first")
     assert_eq(os.getenv("XRAY_TEST_OW"), "first")
 
@@ -67,7 +67,7 @@ fn test_setenv_overwrite(): void {
 }
 
 @test
-fn test_environ(): void {
+fn test_environ() {
     let env = os.environ()
     assert(env != null)
     // PATH should exist; Windows may store it as "Path"
@@ -81,27 +81,27 @@ fn test_environ(): void {
 // ===== Process Info =====
 
 @test
-fn test_getpid(): void {
+fn test_getpid() {
     let pid = os.getpid()
     assert(pid > 0)
 }
 
 @test
-fn test_getcwd(): void {
+fn test_getcwd() {
     let cwd = os.getcwd()
     assert(cwd != null)
     assert(cwd.length > 0)
 }
 
 @test
-fn test_hostname(): void {
+fn test_hostname() {
     let h = os.hostname()
     assert(h != null)
     assert(h.length > 0)
 }
 
 @test
-fn test_tmpdir(): void {
+fn test_tmpdir() {
     let tmp = os.tmpdir()
     assert(tmp != null)
     assert(tmp.length > 0)
@@ -110,7 +110,7 @@ fn test_tmpdir(): void {
 // ===== chdir =====
 
 @test
-fn test_chdir(): void {
+fn test_chdir() {
     let original = os.getcwd()
     let tmp = os.tmpdir()
 

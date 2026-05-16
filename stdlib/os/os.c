@@ -732,7 +732,7 @@ XR_DEFINE_BUILTIN(os_setenv, "setenv", "(name: string, value: string): bool",
                   "Set environment variable")
 XR_DEFINE_BUILTIN(os_unsetenv, "unsetenv", "(name: string): bool", "Unset environment variable")
 XR_DEFINE_BUILTIN(os_environ, "environ", "(): Map<string, string>", "Get all environment variables")
-XR_DEFINE_BUILTIN(os_exit, "exit", "(code?: int): void", "Exit process")
+XR_DEFINE_BUILTIN(os_exit, "exit", "(code?: int)", "Exit process")
 XR_DEFINE_BUILTIN(os_getpid, "getpid", "(): int", "Get process ID")
 XR_DEFINE_BUILTIN(os_getcwd, "getcwd", "(): string", "Get current working directory")
 XR_DEFINE_BUILTIN(os_chdir, "chdir", "(path: string): bool", "Change working directory")
@@ -756,7 +756,7 @@ XR_DEFINE_BUILTIN(os_loadavg, "loadavg", "(): Array<float>",
 // Process & signal
 XR_DEFINE_BUILTIN(os_ppid, "ppid", "(): int", "Get parent process ID")
 XR_DEFINE_BUILTIN(os_kill, "kill", "(pid: int, signal?: int): bool", "Send signal to process")
-XR_DEFINE_BUILTIN(os_sleep, "sleep", "(ms: int): void", "Sleep for milliseconds")
+XR_DEFINE_BUILTIN(os_sleep, "sleep", "(ms: int)", "Sleep for milliseconds")
 XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in seconds")
 
 // Process execution

@@ -7,26 +7,26 @@ import time
 // ===== time 模块函数 =====
 
 @test
-fn test_time_now(): void {
+fn test_time_now() {
     let t = time.now()
     assert_eq(t > 0, true)
 }
 
 @test
-fn test_time_clock(): void {
+fn test_time_clock() {
     let c = time.clock()
     assert_eq(c >= 0, true)
 }
 
 @test
-fn test_time_milliseconds(): void {
+fn test_time_milliseconds() {
     // time.now() returns milliseconds since epoch
     let ms = time.now()
     assert_eq(ms > 0, true)
 }
 
 @test
-fn test_time_monotonic(): void {
+fn test_time_monotonic() {
     let m1 = time.monotonic()
     let m2 = time.monotonic()
     assert_eq(m2 >= m1, true)
@@ -35,7 +35,7 @@ fn test_time_monotonic(): void {
 // ===== 模块属性访问 =====
 
 @test
-fn test_module_method_call(): void {
+fn test_module_method_call() {
     let t1 = time.now()
     let t2 = time.now()
     assert_eq(t2 >= t1, true)

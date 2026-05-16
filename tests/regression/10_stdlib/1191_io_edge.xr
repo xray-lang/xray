@@ -5,30 +5,30 @@ import io
 // ===== Non-existent file =====
 
 @test
-fn test_read_nonexistent(): void {
+fn test_read_nonexistent() {
     let content = io.readFile("/tmp/xray_nonexistent_file_12345.txt")
     assert_eq(content, null)
 }
 
 @test
-fn test_exists_nonexistent(): void {
+fn test_exists_nonexistent() {
     assert_eq(io.exists("/tmp/xray_nonexistent_path_12345"), false)
 }
 
 @test
-fn test_is_file_nonexistent(): void {
+fn test_is_file_nonexistent() {
     assert_eq(io.isFile("/tmp/xray_nonexistent_12345"), false)
 }
 
 @test
-fn test_is_dir_nonexistent(): void {
+fn test_is_dir_nonexistent() {
     assert_eq(io.isDir("/tmp/xray_nonexistent_12345"), false)
 }
 
 // ===== Empty file =====
 
 @test
-fn test_write_empty(): void {
+fn test_write_empty() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "")
     assert_eq(io.fileSize(tmp), 0)
@@ -40,7 +40,7 @@ fn test_write_empty(): void {
 // ===== Overwrite =====
 
 @test
-fn test_overwrite_file(): void {
+fn test_overwrite_file() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "first content")
     io.writeFile(tmp, "second")
@@ -52,7 +52,7 @@ fn test_overwrite_file(): void {
 // ===== Large content =====
 
 @test
-fn test_large_write_read(): void {
+fn test_large_write_read() {
     let tmp = io.tempFile() ?? ""
     let data = ""
     for (let i = 0; i < 100; i++) {
@@ -67,7 +67,7 @@ fn test_large_write_read(): void {
 // ===== readDirRecursive =====
 
 @test
-fn test_read_dir_recursive(): void {
+fn test_read_dir_recursive() {
     let tmpDir = io.tempDir() ?? ""
     io.mkdirp(tmpDir + "/a/b")
     io.writeFile(tmpDir + "/file1.txt", "1")
@@ -82,7 +82,7 @@ fn test_read_dir_recursive(): void {
 // ===== Remove non-existent =====
 
 @test
-fn test_remove_nonexistent(): void {
+fn test_remove_nonexistent() {
     // Should not crash
     io.remove("/tmp/xray_nonexistent_file_12345.txt")
 }
@@ -90,7 +90,7 @@ fn test_remove_nonexistent(): void {
 // ===== readLines empty file =====
 
 @test
-fn test_read_lines_empty(): void {
+fn test_read_lines_empty() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "")
     let lines = io.readLines(tmp)
@@ -102,7 +102,7 @@ fn test_read_lines_empty(): void {
 // ===== readLines single line (no newline) =====
 
 @test
-fn test_read_lines_single(): void {
+fn test_read_lines_single() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "single line")
     let lines = io.readLines(tmp)

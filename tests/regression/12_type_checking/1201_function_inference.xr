@@ -2,7 +2,7 @@
 // Test function type inference
 // ===== Return Type Inference =====
 @test
-fn test_implicit_return_int(): void {
+fn test_implicit_return_int() {
     fn add(a: int, b: int): int {
         return a + b
     }
@@ -12,7 +12,7 @@ fn test_implicit_return_int(): void {
 }
 
 @test
-fn test_implicit_return_string(): void {
+fn test_implicit_return_string() {
     fn greet(name: string): string {
         return "Hello, " + name
     }
@@ -22,7 +22,7 @@ fn test_implicit_return_string(): void {
 }
 
 @test
-fn test_explicit_return_type(): void {
+fn test_explicit_return_type() {
     fn double(x: int): int {
         return x * 2
     }
@@ -32,9 +32,9 @@ fn test_explicit_return_type(): void {
 }
 
 @test
-fn test_void_return(): void {
+fn test_void_return() {
     let called = false
-    fn doSomething(): void {
+    fn doSomething() {
         called = true
     }
     doSomething()
@@ -43,7 +43,7 @@ fn test_void_return(): void {
 
 // ===== Parameter Type Inference =====
 @test
-fn test_typed_params(): void {
+fn test_typed_params() {
     fn multiply(a: int, b: int): int {
         return a * b
     }
@@ -51,7 +51,7 @@ fn test_typed_params(): void {
 }
 
 @test
-fn test_mixed_typed_params(): void {
+fn test_mixed_typed_params() {
     fn format(name: string, age: int): string {
         return name + " is " + string(age)
     }
@@ -60,7 +60,7 @@ fn test_mixed_typed_params(): void {
 
 // ===== Multi-value Return =====
 @test
-fn test_multi_return(): void {
+fn test_multi_return() {
     fn divmod(a: int, b: int): (int, int) {
         return a / b, a % b
     }
@@ -70,7 +70,7 @@ fn test_multi_return(): void {
 }
 
 @test
-fn test_multi_return_typed(): void {
+fn test_multi_return_typed() {
     fn minmax(a: int, b: int): (int, int) {
         if (a < b) {
             return a, b
@@ -84,7 +84,7 @@ fn test_multi_return_typed(): void {
 
 // ===== Closure Type Inference =====
 @test
-fn test_closure_captures(): void {
+fn test_closure_captures() {
     let multiplier = 3
     fn triple(x: int): int {
         return x * multiplier
@@ -93,7 +93,7 @@ fn test_closure_captures(): void {
 }
 
 @test
-fn test_counter_closure(): void {
+fn test_counter_closure() {
     fn makeCounter(): fn(): int {
         let count = 0
         return fn() {
@@ -109,7 +109,7 @@ fn test_counter_closure(): void {
 
 // ===== Arrow Function Inference =====
 @test
-fn test_arrow_single_expr(): void {
+fn test_arrow_single_expr() {
     let double = fn(x: int) {
         return x * 2
     }
@@ -117,7 +117,7 @@ fn test_arrow_single_expr(): void {
 }
 
 @test
-fn test_arrow_with_block(): void {
+fn test_arrow_with_block() {
     let factorial = fn(n: int): int {
         if (n <= 1) {
             return 1
@@ -128,7 +128,7 @@ fn test_arrow_with_block(): void {
 }
 
 @test
-fn test_arrow_multi_param(): void {
+fn test_arrow_multi_param() {
     let add = fn(a: int, b: int) {
         return a + b
     }
@@ -137,7 +137,7 @@ fn test_arrow_multi_param(): void {
 
 // ===== Higher Order Functions =====
 @test
-fn test_callback_inference(): void {
+fn test_callback_inference() {
     let arr = [1, 2, 3, 4, 5]
     let doubled = arr.map(fn(x) {
         return x * 2
@@ -147,7 +147,7 @@ fn test_callback_inference(): void {
 }
 
 @test
-fn test_filter_inference(): void {
+fn test_filter_inference() {
     let arr = [1, 2, 3, 4, 5]
     let evens = arr.filter(fn(x) {
         return x % 2 == 0
@@ -158,7 +158,7 @@ fn test_filter_inference(): void {
 }
 
 @test
-fn test_reduce_inference(): void {
+fn test_reduce_inference() {
     let arr = [1, 2, 3, 4, 5]
     let sum = arr.reduce(fn(acc, x) {
         return acc + x
@@ -168,7 +168,7 @@ fn test_reduce_inference(): void {
 
 // ===== Recursive Function Inference =====
 @test
-fn test_recursive_fibonacci(): void {
+fn test_recursive_fibonacci() {
     fn fib(n: int): int {
         if (n <= 1) {
             return n
@@ -180,7 +180,7 @@ fn test_recursive_fibonacci(): void {
 
 // Mutual recursion - now supported via function hoisting
 @test
-fn test_mutual_recursion(): void {
+fn test_mutual_recursion() {
     fn isEven(n: int): bool {
         if (n == 0) {
             return true

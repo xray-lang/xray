@@ -3,7 +3,7 @@
 
 // ===== keys() =====
 @test
-fn test_keys(): void {
+fn test_keys() {
     let obj = { name: "Alice", age: 30 }
     let k = obj.keys()
     assert_eq(k.length, 2)
@@ -12,14 +12,14 @@ fn test_keys(): void {
 }
 
 @test
-fn test_keys_empty(): void {
+fn test_keys_empty() {
     let obj = {}
     assert_eq(obj.keys().length, 0)
 }
 
 // ===== values() =====
 @test
-fn test_values(): void {
+fn test_values() {
     let obj = { x: 10, y: 20 }
     let v = obj.values()
     assert_eq(v.length, 2)
@@ -29,7 +29,7 @@ fn test_values(): void {
 
 // ===== has() =====
 @test
-fn test_has(): void {
+fn test_has() {
     let obj = { name: "Alice", age: 30 }
     assert_true(obj.has("name"))
     assert_true(obj.has("age"))
@@ -38,7 +38,7 @@ fn test_has(): void {
 
 // ===== Combined =====
 @test
-fn test_combined(): void {
+fn test_combined() {
     let data = { a: 1, b: "two", c: true }
     assert_eq(data.keys().length, 3)
     assert_eq(data.values().length, 3)
@@ -48,7 +48,7 @@ fn test_combined(): void {
 
 // ===== Parsed Json =====
 @test
-fn test_parsed_json(): void {
+fn test_parsed_json() {
     let data = Json.parse("{\"x\": 1, \"y\": 2}")
     assert_true(data.has("x"))
     assert_eq(data.keys().length, 2)

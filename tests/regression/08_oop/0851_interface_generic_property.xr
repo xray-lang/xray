@@ -31,7 +31,7 @@ class IntBox implements Container<int> {
 }
 
 @test
-fn test_implements_with_type_args(): void {
+fn test_implements_with_type_args() {
     let b = new IntBox(42)
     assert_eq(b.get(0), 42)
     assert_eq(b.size(), 1)
@@ -71,7 +71,7 @@ class StringIntEntry implements KVDescriptor<string, int> {
 }
 
 @test
-fn test_extends_with_type_args(): void {
+fn test_extends_with_type_args() {
     let e = new StringIntEntry("age", 30)
     assert_eq(e.key(), "age")
     assert_eq(e.value(), 30)
@@ -97,7 +97,7 @@ class Buffer implements HasLength {
 }
 
 @test
-fn test_interface_property(): void {
+fn test_interface_property() {
     let b = new Buffer(10)
     assert_eq(b.length, 10)
 }
@@ -128,7 +128,7 @@ class Item implements Identifiable {
 }
 
 @test
-fn test_interface_const_property(): void {
+fn test_interface_const_property() {
     let it = new Item(7, "widget")
     assert_eq(it.id, 7)
     assert_eq(it.name, "widget")
@@ -142,7 +142,7 @@ interface SizedCollection<T> {
 }
 
 @test
-fn test_generic_interface_with_property_declares(): void {
+fn test_generic_interface_with_property_declares() {
     assert_eq(1, 1)
 }
 
@@ -158,6 +158,6 @@ interface Stats<T: Numeric> {
 }
 
 @test
-fn test_constrained_generic_interface(): void {
+fn test_constrained_generic_interface() {
     assert_eq(1, 1)
 }

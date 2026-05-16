@@ -8,7 +8,7 @@ fn isClientError(status: int): bool { return status >= 400 && status < 500 }
 fn isServerError(status: int): bool { return status >= 500 && status < 600 }
 
 @test
-fn test_2xx_success(): void {
+fn test_2xx_success() {
     assert(isSuccess(200))
     assert(isSuccess(201))
     assert(isSuccess(204))
@@ -17,7 +17,7 @@ fn test_2xx_success(): void {
 }
 
 @test
-fn test_3xx_redirect(): void {
+fn test_3xx_redirect() {
     assert(isRedirect(301))
     assert(isRedirect(302))
     assert(isRedirect(304))
@@ -27,7 +27,7 @@ fn test_3xx_redirect(): void {
 }
 
 @test
-fn test_4xx_client_error(): void {
+fn test_4xx_client_error() {
     assert(isClientError(400))
     assert(isClientError(401))
     assert(isClientError(403))
@@ -38,7 +38,7 @@ fn test_4xx_client_error(): void {
 }
 
 @test
-fn test_5xx_server_error(): void {
+fn test_5xx_server_error() {
     assert(isServerError(500))
     assert(isServerError(502))
     assert(isServerError(503))

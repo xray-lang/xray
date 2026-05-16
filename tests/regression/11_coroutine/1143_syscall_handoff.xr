@@ -7,11 +7,11 @@
 */
 
 import time
-fn slow_worker(ch: Channel<string>): void {
+fn slow_worker(ch: Channel<string>) {
     time.sleep(200)
     ch.send("slow done")
 }
-fn fast_worker(id: int, ch: Channel<string>): void {
+fn fast_worker(id: int, ch: Channel<string>) {
     let sum = 0
     for (let i = 0; i < 100; i++) {
         sum = sum + i

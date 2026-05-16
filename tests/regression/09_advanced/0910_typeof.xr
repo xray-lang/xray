@@ -5,7 +5,7 @@
 // ===== 基本类型 =====
 
 @test
-fn test_typeof_int(): void {
+fn test_typeof_int() {
     let x = 42
     assert_eq(typeof(x), Type.int)
     // Bare literals without type context are NaN-boxed
@@ -14,46 +14,46 @@ fn test_typeof_int(): void {
 }
 
 @test
-fn test_typeof_float(): void {
+fn test_typeof_float() {
     let x = 3.14
     assert_eq(typeof(x), Type.float)
     assert_eq(typeof(0.0), Type.float)
 }
 
 @test
-fn test_typeof_string(): void {
+fn test_typeof_string() {
     let s = "hello"
     assert_eq(typeof(s), Type.string)
     assert_eq(typeof(""), Type.string)
 }
 
 @test
-fn test_typeof_bool(): void {
+fn test_typeof_bool() {
     assert_eq(typeof(true), Type.bool)
     assert_eq(typeof(false), Type.bool)
 }
 
 @test
-fn test_typeof_null(): void {
+fn test_typeof_null() {
     assert_eq(typeof(null), Type.null)
 }
 
 // ===== 集合类型 =====
 
 @test
-fn test_typeof_array(): void {
+fn test_typeof_array() {
     let arr = [1, 2, 3]
     assert_eq(typeof(arr), Type.Array)
 }
 
 @test
-fn test_typeof_map(): void {
+fn test_typeof_map() {
     let m = {"key" => "value"}
     assert_eq(typeof(m), Type.Map)
 }
 
 @test
-fn test_typeof_set(): void {
+fn test_typeof_set() {
     let s = #[1, 2, 3]
     assert_eq(typeof(s), Type.Set)
 }
@@ -61,7 +61,7 @@ fn test_typeof_set(): void {
 // ===== 函数类型 =====
 
 @test
-fn test_typeof_function(): void {
+fn test_typeof_function() {
     fn add(a: int, b: int): int { return a + b }
     assert_eq(typeof(add), Type.function)
     
@@ -77,7 +77,7 @@ class MyClass {
 }
 
 @test
-fn test_typeof_instance(): void {
+fn test_typeof_instance() {
     let obj = new MyClass(10)
     assert_eq(typename(obj), "MyClass")
 }

@@ -3,7 +3,7 @@
 
 // Test 1: Basic overflow - add many fields dynamically
 @test
-fn test_overflow_basic(): void {
+fn test_overflow_basic() {
     let obj = {}
     obj.a = 1
     obj.b = 2
@@ -34,7 +34,7 @@ fn test_overflow_basic(): void {
 
 // Test 2: Overflow field update
 @test
-fn test_overflow_update(): void {
+fn test_overflow_update() {
     let obj = {}
     obj.f0 = 0
     obj.f1 = 1
@@ -62,7 +62,7 @@ fn test_overflow_update(): void {
 
 // Test 3: for-in iteration over overflow fields
 @test
-fn test_overflow_forin(): void {
+fn test_overflow_forin() {
     let obj = {}
     obj.p1 = 1
     obj.p2 = 2
@@ -88,7 +88,7 @@ fn test_overflow_forin(): void {
 
 // Test 4: Dynamic string-keyed access with overflow
 @test
-fn test_overflow_dynamic_key(): void {
+fn test_overflow_dynamic_key() {
     let obj = {}
     for (i in 0..15) {
         obj["field_" + string(i)] = i * 2
@@ -100,7 +100,7 @@ fn test_overflow_dynamic_key(): void {
 
 // Test 5: for-in key order with overflow
 @test
-fn test_overflow_forin_keys(): void {
+fn test_overflow_forin_keys() {
     let obj = {}
     obj.alpha   = 1
     obj.beta    = 2

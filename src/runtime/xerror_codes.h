@@ -75,4 +75,11 @@
 #define XR_ERR_MOD_NO_EXPORT 503
 #define XR_ERR_MOD_CIRCULAR 504
 
+// Removed-syntax errors (E08xx): legacy forms that the parser explicitly
+// rejects with a help/note suggesting the modern replacement.
+#define XR_ERR_SYN_RETURN_MULTI_REMOVED 801  // return a, b => return (a, b)
+#define XR_ERR_SYN_LET_MULTI_REMOVED 802     // let x, y = => let (x, y) =
+#define XR_ERR_SYN_FOR_FLAT_REMOVED 803      // for (k, v in m) => for ((k, v) in m)
+#define XR_ERR_SYN_VOID_REMOVED 804          // void => ()
+
 #endif  // XERROR_CODES_H

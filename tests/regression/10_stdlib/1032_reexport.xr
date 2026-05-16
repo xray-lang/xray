@@ -8,21 +8,21 @@
 import "./reexport_test" as lib
 
 @test
-fn test_reexport_named(): void {
+fn test_reexport_named() {
     // 测试选择性 re-export
     let user = lib.getUser()
     assert_eq(user, "Alice")
 }
 
 @test
-fn test_reexport_alias(): void {
+fn test_reexport_alias() {
     // 测试带别名的 re-export
     let age = lib.getAge()
     assert_eq(age, 25)
 }
 
 @test
-fn test_reexport_all(): void {
+fn test_reexport_all() {
     // 测试全量 re-export
     let product = lib.getProduct()
     assert_eq(product, "iPhone")

@@ -8,7 +8,7 @@ class Json {
     has(key: string): bool
     get(key: string): Json
     isEmpty(): bool
-    delete(key: string): void
-    clear(): void
+    delete(key: string)
+    clear()
     toString(): string
 }

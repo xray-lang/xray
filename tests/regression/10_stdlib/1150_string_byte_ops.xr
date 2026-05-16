@@ -3,7 +3,7 @@
 // ===== byteAt =====
 
 @test
-fn test_byte_at(): void {
+fn test_byte_at() {
     let s = "ACGT"
     assert_eq(s.byteAt(0), "A")
     assert_eq(s.byteAt(1), "C")
@@ -12,7 +12,7 @@ fn test_byte_at(): void {
 }
 
 @test
-fn test_byte_at_out_of_bounds(): void {
+fn test_byte_at_out_of_bounds() {
     let s = "ACGT"
     assert_eq(s.byteAt(4), null)
     assert_eq(s.byteAt(100), null)
@@ -21,7 +21,7 @@ fn test_byte_at_out_of_bounds(): void {
 // ===== reverseBytes =====
 
 @test
-fn test_reverse_bytes(): void {
+fn test_reverse_bytes() {
     assert_eq("ACGT".reverseBytes(), "TGCA")
     assert_eq("Hello".reverseBytes(), "olleH")
     assert_eq("".reverseBytes(), "")
@@ -31,7 +31,7 @@ fn test_reverse_bytes(): void {
 // ===== byteAt vs charAt consistency =====
 
 @test
-fn test_byte_at_equals_char_at_ascii(): void {
+fn test_byte_at_equals_char_at_ascii() {
     let dna = "ACGTACGTACGT"
     let i = 0
     while (i < dna.byteLength) {
@@ -41,7 +41,7 @@ fn test_byte_at_equals_char_at_ascii(): void {
 }
 
 @test
-fn test_reverse_bytes_equals_reverse_ascii(): void {
+fn test_reverse_bytes_equals_reverse_ascii() {
     let dna = "ACGTACGTACGT"
     assert_eq(dna.reverse(), dna.reverseBytes())
 }
@@ -71,7 +71,7 @@ fn reverseComplement(seq: string): string {
 }
 
 @test
-fn test_reverse_complement(): void {
+fn test_reverse_complement() {
     assert_eq(reverseComplement("ACGT"), "ACGT")
     assert_eq(reverseComplement("AAAA"), "TTTT")
     assert_eq(reverseComplement("CCCC"), "GGGG")

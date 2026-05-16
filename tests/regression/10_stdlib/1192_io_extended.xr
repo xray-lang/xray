@@ -4,7 +4,7 @@ import io
 import os
 
 @test
-fn test_basic_file_ops(): void {
+fn test_basic_file_ops() {
     let tmp = io.tempFile() ?? ""
     assert(io.exists(tmp))
     io.writeFile(tmp, "hello\nworld\ntest")
@@ -16,7 +16,7 @@ fn test_basic_file_ops(): void {
 }
 
 @test
-fn test_file_info(): void {
+fn test_file_info() {
     let tmp = io.tempFile() ?? ""
     io.writeFile(tmp, "test content")
     let st = io.stat(tmp)
@@ -29,7 +29,7 @@ fn test_file_info(): void {
 }
 
 @test
-fn test_directory_ops(): void {
+fn test_directory_ops() {
     let tmpDir = io.tempDir() ?? ""
     assert(io.isDir(tmpDir))
     let nested = tmpDir + "/a/b/c"
@@ -45,7 +45,7 @@ fn test_directory_ops(): void {
 }
 
 @test
-fn test_copy_and_move(): void {
+fn test_copy_and_move() {
     let src = io.tempFile() ?? ""
     io.writeFile(src, "copy test")
     let dst = src + ".copy"
@@ -61,7 +61,7 @@ fn test_copy_and_move(): void {
 }
 
 @test
-fn test_touch_and_chmod(): void {
+fn test_touch_and_chmod() {
     let tmp = io.tempFile() ?? ""
     io.remove(tmp)
     io.touch(tmp)
@@ -77,14 +77,14 @@ fn test_touch_and_chmod(): void {
 }
 
 @test
-fn test_realpath(): void {
+fn test_realpath() {
     let cwd = io.cwd() ?? ""
     let resolved = io.realpath(".") ?? ""
     assert_eq(resolved, cwd)
 }
 
 @test
-fn test_chdir(): void {
+fn test_chdir() {
     let original = io.cwd() ?? ""
     let tmpDir = io.tempDir() ?? ""
     let tmpDirReal = io.realpath(tmpDir) ?? ""

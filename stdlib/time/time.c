@@ -122,7 +122,7 @@ XR_DEFINE_BUILTIN(xr_time_clock, "clock", "(): int", "CPU clock time in millisec
 XR_DEFINE_BUILTIN(xr_time_monotonic, "monotonic", "(): int", "Monotonic time in milliseconds")
 XR_DEFINE_BUILTIN(xr_time_nanos, "nanos", "(): int", "Monotonic time in nanoseconds")
 XR_DEFINE_BUILTIN(xr_time_micros, "micros", "(): int", "Monotonic time in microseconds")
-XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int): void", "Sleep for milliseconds")
+XR_DEFINE_BUILTIN(xr_time_sleep, "sleep", "(ms: int)", "Sleep for milliseconds")
 
 XR_FUNC XrModule *xr_load_module_time(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_time: NULL isolate");

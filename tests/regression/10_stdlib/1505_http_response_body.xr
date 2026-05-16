@@ -3,34 +3,34 @@
 import http
 
 @test
-fn test_text_response(): void {
+fn test_text_response() {
     let resp = { status: 200, body: "Hello World", contentType: "text/plain" }
     assert_eq(resp.body, "Hello World")
     assert_eq(resp.contentType, "text/plain")
 }
 
 @test
-fn test_json_response(): void {
+fn test_json_response() {
     let resp = { status: 200, body: '{"name": "test"}', contentType: "application/json" }
     assert(resp.body.indexOf("name") >= 0)
     assert_eq(resp.contentType, "application/json")
 }
 
 @test
-fn test_html_response(): void {
+fn test_html_response() {
     let resp = { status: 200, body: "<html><body>Hello</body></html>", contentType: "text/html" }
     assert(resp.body.indexOf("<html>") >= 0)
 }
 
 @test
-fn test_empty_response(): void {
+fn test_empty_response() {
     let resp = { status: 204, body: "" }
     assert_eq(resp.body, "")
     assert_eq(resp.status, 204)
 }
 
 @test
-fn test_large_body(): void {
+fn test_large_body() {
     let body = ""
     for (let i = 0; i < 1000; i++) { body = body + "x" }
     assert_eq(body.length, 1000)

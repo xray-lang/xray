@@ -5,7 +5,7 @@ import time
 // ===== Monotonic clock ordering =====
 
 @test
-fn test_monotonic_ordering(): void {
+fn test_monotonic_ordering() {
     let t1 = time.monotonic()
     let t2 = time.monotonic()
     let t3 = time.monotonic()
@@ -16,14 +16,14 @@ fn test_monotonic_ordering(): void {
 // ===== time.now precision =====
 
 @test
-fn test_now_returns_milliseconds(): void {
+fn test_now_returns_milliseconds() {
     let t = time.now()
     // Should be in milliseconds (13+ digits since 2001)
     assert(t > 1000000000000)
 }
 
 @test
-fn test_now_advances(): void {
+fn test_now_advances() {
     let t1 = time.now()
     time.sleep(10)
     let t2 = time.now()
@@ -33,7 +33,7 @@ fn test_now_advances(): void {
 // ===== time.clock accumulates =====
 
 @test
-fn test_clock_non_negative(): void {
+fn test_clock_non_negative() {
     let c = time.clock()
     assert(c >= 0)
 }
@@ -41,7 +41,7 @@ fn test_clock_non_negative(): void {
 // ===== time.sleep boundary =====
 
 @test
-fn test_sleep_zero(): void {
+fn test_sleep_zero() {
     let start = time.monotonic()
     time.sleep(0)
     let end = time.monotonic()
@@ -49,7 +49,7 @@ fn test_sleep_zero(): void {
 }
 
 @test
-fn test_sleep_small(): void {
+fn test_sleep_small() {
     let start = time.monotonic()
     time.sleep(1)
     let end = time.monotonic()

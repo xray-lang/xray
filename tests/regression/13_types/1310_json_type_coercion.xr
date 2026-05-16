@@ -6,7 +6,7 @@
 
 // ===== Rule 1: json["key"] returns Json, no error =====
 @test
-fn test_json_subscript_returns_json(): void {
+fn test_json_subscript_returns_json() {
     let data: Json = { "name": "xray", "version": 1 }
     let val = data["name"]
     // val is Json, can be used directly
@@ -15,28 +15,28 @@ fn test_json_subscript_returns_json(): void {
 
 // ===== Rule 2: let x: int = json["key"] — allowed with runtime check =====
 @test
-fn test_json_to_int_coercion(): void {
+fn test_json_to_int_coercion() {
     let data: Json = { "port": 8080 }
     let port: int = data["port"]
     assert_eq(port, 8080)
 }
 
 @test
-fn test_json_to_string_coercion(): void {
+fn test_json_to_string_coercion() {
     let data: Json = { "host": "localhost" }
     let host: string = data["host"]
     assert_eq(host, "localhost")
 }
 
 @test
-fn test_json_to_float_coercion(): void {
+fn test_json_to_float_coercion() {
     let data: Json = { "pi": 3.14 }
     let pi: float = data["pi"]
     assert_eq(pi, 3.14)
 }
 
 @test
-fn test_json_to_bool_coercion(): void {
+fn test_json_to_bool_coercion() {
     let data: Json = { "debug": true }
     let debug: bool = data["debug"]
     assert_eq(debug, true)
@@ -44,7 +44,7 @@ fn test_json_to_bool_coercion(): void {
 
 // ===== Rule 2b: assignment coercion =====
 @test
-fn test_json_assignment_coercion(): void {
+fn test_json_assignment_coercion() {
     let data: Json = { "count": 42 }
     let count: int = 0
     count = data["count"]
@@ -53,7 +53,7 @@ fn test_json_assignment_coercion(): void {
 
 // ===== Rule 3: Runtime CHECKTYPE throws on mismatch =====
 @test
-fn test_json_type_mismatch_throws(): void {
+fn test_json_type_mismatch_throws() {
     let data: Json = { "name": "xray" }
     let caught = false
     try {
@@ -67,7 +67,7 @@ fn test_json_type_mismatch_throws(): void {
 }
 
 @test
-fn test_json_type_mismatch_float_to_int(): void {
+fn test_json_type_mismatch_float_to_int() {
     let data: Json = { "val": 3.14 }
     let caught = false
     try {
@@ -81,7 +81,7 @@ fn test_json_type_mismatch_float_to_int(): void {
 
 // ===== Rule 4: Untyped let — no CHECKTYPE, just Json =====
 @test
-fn test_json_untyped_let(): void {
+fn test_json_untyped_let() {
     let data: Json = { "mixed": [1, "two", true] }
     let val = data["mixed"]
     // val is Json, no runtime check needed
@@ -92,7 +92,7 @@ fn test_json_untyped_let(): void {
 
 // ===== Rule 5: Dot access also works =====
 @test
-fn test_json_dot_access_coercion(): void {
+fn test_json_dot_access_coercion() {
     let data: Json = { "port": 9090 }
     // Dot access returns the actual value
     assert_eq(data.port, 9090)
@@ -100,7 +100,7 @@ fn test_json_dot_access_coercion(): void {
 
 // ===== Rule 6: Array is a valid Json field type =====
 @test
-fn test_json_to_array_coercion(): void {
+fn test_json_to_array_coercion() {
     let data: Json = { "items": [1, 2, 3] }
     let items: Array<int> = data["items"]
     assert_eq(items.length, 3)
@@ -109,7 +109,7 @@ fn test_json_to_array_coercion(): void {
 }
 
 @test
-fn test_json_array_mismatch_throws(): void {
+fn test_json_array_mismatch_throws() {
     let data: Json = { "name": "xray" }
     let caught = false
     try {

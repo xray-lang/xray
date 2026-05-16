@@ -31,7 +31,7 @@ class Vector2 {
 }
 
 @test
-fn test_operator_add(): void {
+fn test_operator_add() {
     let a = new Vector2(1, 2)
     let b = new Vector2(3, 4)
     let c = a + b
@@ -40,7 +40,7 @@ fn test_operator_add(): void {
 }
 
 @test
-fn test_operator_sub(): void {
+fn test_operator_sub() {
     let a = new Vector2(5, 7)
     let b = new Vector2(2, 3)
     let c = a - b
@@ -49,7 +49,7 @@ fn test_operator_sub(): void {
 }
 
 @test
-fn test_operator_mul(): void {
+fn test_operator_mul() {
     let v = new Vector2(2, 3)
     let scaled = v * 2
     assert_eq(scaled.x, 4)
@@ -57,7 +57,7 @@ fn test_operator_mul(): void {
 }
 
 @test
-fn test_operator_eq(): void {
+fn test_operator_eq() {
     let a = new Vector2(1, 2)
     let b = new Vector2(1, 2)
     let c = new Vector2(3, 4)
@@ -78,13 +78,13 @@ class Matrix {
         return this.data[index]
     }
     
-    operator[]=(index: int, value: int): void {
+    operator[]=(index: int, value: int) {
         this.data[index] = value
     }
 }
 
 @test
-fn test_subscript_get(): void {
+fn test_subscript_get() {
     let m = new Matrix()
     m.data[0] = 10
     m.data[1] = 20
@@ -93,7 +93,7 @@ fn test_subscript_get(): void {
 }
 
 @test
-fn test_subscript_set(): void {
+fn test_subscript_set() {
     let m = new Matrix()
     m[0] = 100
     m[1] = 200
@@ -128,7 +128,7 @@ class Money {
 }
 
 @test
-fn test_comparison_operators(): void {
+fn test_comparison_operators() {
     let a = new Money(100)
     let b = new Money(200)
     
@@ -141,7 +141,7 @@ fn test_comparison_operators(): void {
 // ===== 链式运算 =====
 
 @test
-fn test_chained_operations(): void {
+fn test_chained_operations() {
     let a = new Vector2(1, 1)
     let b = new Vector2(2, 2)
     let c = new Vector2(3, 3)

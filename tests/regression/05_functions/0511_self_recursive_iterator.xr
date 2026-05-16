@@ -5,7 +5,7 @@
 // detection in loops that use iterators.
 
 @test
-fn test_recursive_sum_with_forin(): void {
+fn test_recursive_sum_with_forin() {
     fn sum_list(arr: Array<int>, idx: int): int {
         if (idx >= arr.length) {
             return 0
@@ -17,7 +17,7 @@ fn test_recursive_sum_with_forin(): void {
 }
 
 @test
-fn test_recursive_flatten(): void {
+fn test_recursive_flatten() {
     fn flatten(arr: Array<Array<int>>): Array<int> {
         let result: Array<int> = []
         for (sub in arr) {
@@ -35,7 +35,7 @@ fn test_recursive_flatten(): void {
 }
 
 @test
-fn test_recursive_fibonacci(): void {
+fn test_recursive_fibonacci() {
     fn fib(n: int): int {
         if (n <= 1) { return n }
         return fib(n - 1) + fib(n - 2)
@@ -47,7 +47,7 @@ fn test_recursive_fibonacci(): void {
 }
 
 @test
-fn test_recursive_with_array_iteration(): void {
+fn test_recursive_with_array_iteration() {
     fn count_nested(arr: Array<int>, depth: int): int {
         if (depth <= 0) {
             return arr.length
@@ -64,7 +64,7 @@ fn test_recursive_with_array_iteration(): void {
 }
 
 @test
-fn test_mutual_recursion_with_loop(): void {
+fn test_mutual_recursion_with_loop() {
     fn is_even(n: int): bool {
         if (n == 0) { return true }
         return is_odd(n - 1)

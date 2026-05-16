@@ -2,7 +2,7 @@
 // BigInt comparison operators test
 
 @test
-fn test_bigint_equality(): void {
+fn test_bigint_equality() {
     let a = 1000000000000n
     let c = 1000000000000n
     assert_eq(a == c, true)
@@ -10,7 +10,7 @@ fn test_bigint_equality(): void {
 }
 
 @test
-fn test_bigint_inequality(): void {
+fn test_bigint_inequality() {
     let a = 1000000000000n
     let b = 2000000000000n
     assert_eq(a != b, true)
@@ -18,7 +18,7 @@ fn test_bigint_inequality(): void {
 }
 
 @test
-fn test_bigint_less_than(): void {
+fn test_bigint_less_than() {
     let a = 1000000000000n
     let b = 2000000000000n
     assert_eq(a < b, true)
@@ -26,7 +26,7 @@ fn test_bigint_less_than(): void {
 }
 
 @test
-fn test_bigint_greater_than(): void {
+fn test_bigint_greater_than() {
     let a = 1000000000000n
     let b = 2000000000000n
     assert_eq(b > a, true)
@@ -34,7 +34,7 @@ fn test_bigint_greater_than(): void {
 }
 
 @test
-fn test_bigint_less_equal(): void {
+fn test_bigint_less_equal() {
     let a = 100n
     let b = 100n
     let c = 200n
@@ -44,7 +44,7 @@ fn test_bigint_less_equal(): void {
 }
 
 @test
-fn test_bigint_greater_equal(): void {
+fn test_bigint_greater_equal() {
     let a = 100n
     let b = 100n
     let c = 50n
@@ -54,7 +54,7 @@ fn test_bigint_greater_equal(): void {
 }
 
 @test
-fn test_mixed_bigint_int_comparison(): void {
+fn test_mixed_bigint_int_comparison() {
     let big = 100n
     let small = 50
     assert_eq(big > small, true)
@@ -65,7 +65,7 @@ fn test_mixed_bigint_int_comparison(): void {
 }
 
 @test
-fn test_bigint_type_annotation(): void {
+fn test_bigint_type_annotation() {
     let x: BigInt = 123n
     assert_eq(x.toString(), "123")
 }

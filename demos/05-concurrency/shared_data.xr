@@ -14,7 +14,7 @@ shared const CONFIG = {
     maxRetries: 3
 }
 
-fn worker1(id: int): void {
+fn worker1(id: int) {
     // All workers can safely read CONFIG (no copy, no lock)
     print("worker-${id}: host=${CONFIG.host}, port=${CONFIG.port}")
 }
@@ -29,7 +29,7 @@ scope {
 // Values sent through channels are deep-copied (pointer types)
 const ch = Channel(1)
 
-fn sender(ch: Channel<int>): void {
+fn sender(ch: Channel<int>) {
     ch.send(42)
 }
 
@@ -40,7 +40,7 @@ ch.close()
 
 // === Rule 3: Function parameters (deep copy) ===
 // When you pass data to go, it's deep-copied to the child coroutine
-fn processData(data: Array<int>): void {
+fn processData(data: Array<int>) {
     // This is a separate copy — mutations don't affect the original
     data.push(999)
     print("child sees: ${data}")

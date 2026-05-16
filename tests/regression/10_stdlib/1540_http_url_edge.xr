@@ -5,7 +5,7 @@ import http
 // ===== Basic roundtrip =====
 
 @test
-fn test_url_encode_decode_roundtrip(): void {
+fn test_url_encode_decode_roundtrip() {
     let original = "hello world"
     let encoded = http.urlEncode(original)
     let decoded = http.urlDecode(encoded)
@@ -15,7 +15,7 @@ fn test_url_encode_decode_roundtrip(): void {
 // ===== Special characters =====
 
 @test
-fn test_url_encode_special(): void {
+fn test_url_encode_special() {
     let encoded = http.urlEncode("a+b=c&d")
     assert(encoded.contains("%"))
     let decoded = http.urlDecode(encoded)
@@ -23,7 +23,7 @@ fn test_url_encode_special(): void {
 }
 
 @test
-fn test_url_encode_symbols(): void {
+fn test_url_encode_symbols() {
     let original = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
     let encoded = http.urlEncode(original)
     let decoded = http.urlDecode(encoded)
@@ -33,7 +33,7 @@ fn test_url_encode_symbols(): void {
 // ===== Chinese characters =====
 
 @test
-fn test_url_encode_chinese(): void {
+fn test_url_encode_chinese() {
     let original = "你好世界"
     let encoded = http.urlEncode(original)
     assert(encoded.contains("%"))
@@ -44,7 +44,7 @@ fn test_url_encode_chinese(): void {
 // ===== Pure ASCII (no encoding needed) =====
 
 @test
-fn test_url_encode_ascii_passthrough(): void {
+fn test_url_encode_ascii_passthrough() {
     let ascii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     let encoded = http.urlEncode(ascii)
     assert_eq(encoded, ascii)
@@ -53,13 +53,13 @@ fn test_url_encode_ascii_passthrough(): void {
 // ===== Empty string =====
 
 @test
-fn test_url_encode_empty(): void {
+fn test_url_encode_empty() {
     let encoded = http.urlEncode("")
     assert(encoded == null || encoded == "")
 }
 
 @test
-fn test_url_decode_empty(): void {
+fn test_url_decode_empty() {
     let decoded = http.urlDecode("")
     assert(decoded == null || decoded == "")
 }
@@ -67,7 +67,7 @@ fn test_url_decode_empty(): void {
 // ===== Space encoding =====
 
 @test
-fn test_url_encode_space(): void {
+fn test_url_encode_space() {
     let encoded = http.urlEncode("hello world")
     assert_eq(encoded, "hello%20world")
 }
@@ -75,7 +75,7 @@ fn test_url_encode_space(): void {
 // ===== Double encoding prevention =====
 
 @test
-fn test_url_decode_percent(): void {
+fn test_url_decode_percent() {
     let decoded = http.urlDecode("hello%20world")
     assert_eq(decoded, "hello world")
 }
@@ -83,7 +83,7 @@ fn test_url_decode_percent(): void {
 // ===== Long string =====
 
 @test
-fn test_url_encode_long(): void {
+fn test_url_encode_long() {
     let original = ""
     for (let i = 0; i < 50; i++) {
         original = original + "param" + string(i) + "=value" + string(i) + "&"

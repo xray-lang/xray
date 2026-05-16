@@ -26,7 +26,7 @@ class Dog extends Animal {
 }
 
 @test
-fn test_basic_inheritance(): void {
+fn test_basic_inheritance() {
     let dog = new Dog("Buddy")
     assert_eq(dog.name, "Buddy")
     assert_eq(dog.speak(), "Buddy barks")
@@ -44,7 +44,7 @@ class Cat extends Animal {
 }
 
 @test
-fn test_method_override(): void {
+fn test_method_override() {
     let cat = new Cat("Whiskers")
     assert_eq(cat.speak(), "Whiskers meows")
 }
@@ -81,7 +81,7 @@ class Car extends Vehicle {
 }
 
 @test
-fn test_multi_field_inheritance(): void {
+fn test_multi_field_inheritance() {
     let car = new Car("Toyota", "Camry")
 
     assert_eq(car.brand, "Toyota")
@@ -92,7 +92,7 @@ fn test_multi_field_inheritance(): void {
 // ===== 多态 =====
 
 @test
-fn test_polymorphism(): void {
+fn test_polymorphism() {
     let animal = new Animal("Generic")
     let dog = new Dog("Rex")
 
@@ -126,7 +126,7 @@ class Derived extends Base {
 }
 
 @test
-fn test_inherited_field_access(): void {
+fn test_inherited_field_access() {
     let d = new Derived(10, 5)
     assert_eq(d.value, 10)
     assert_eq(d.extra, 5)
@@ -163,7 +163,7 @@ class Student extends Person {
 }
 
 @test
-fn test_base_multi_params(): void {
+fn test_base_multi_params() {
     let s = new Student("Alice", 18, 12)
     assert_eq(s.name, "Alice")
     assert_eq(s.age, 18)
@@ -171,7 +171,7 @@ fn test_base_multi_params(): void {
 }
 
 @test
-fn test_method_override_with_parent_fields(): void {
+fn test_method_override_with_parent_fields() {
     let s = new Student("Bob", 17, 11)
     let info = s.info()
     assert_eq(info.contains("Bob"), true)
@@ -193,7 +193,7 @@ class Bird extends Animal {
 }
 
 @test
-fn test_super_method_call(): void {
+fn test_super_method_call() {
     let bird = new Bird("Tweety")
     assert_eq(bird.speak(), "Bird: Tweety chirps")
     assert_eq(bird.parentSpeak(), "Tweety makes a sound")

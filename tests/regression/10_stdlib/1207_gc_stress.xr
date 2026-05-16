@@ -9,7 +9,7 @@ import gc
 // Bug #4 pattern: interned strings must survive gc.collect()
 // Exercises: global string pool ACCESSED flag + markobject path
 @test
-fn test_string_pool_survival(): void {
+fn test_string_pool_survival() {
     let strings: Array<string> = []
     for (let i = 0; i < 500; i++) {
         strings.push("interned_str_" + string(i))
@@ -34,7 +34,7 @@ fn test_string_pool_survival(): void {
 // Bug #4 + #2 pattern: string keys inside maps inside arrays
 // Exercises: traverse_map marking string keys + ACCESSED flag
 @test
-fn test_nested_string_key_survival(): void {
+fn test_nested_string_key_survival() {
     let data: Array<Json> = []
     for (let i = 0; i < 200; i++) {
         let m = {"val" => i * 3, "name" => "field_" + string(i)}
@@ -59,7 +59,7 @@ fn test_nested_string_key_survival(): void {
 // --- Test 3: Closure upvalue survival ---
 // Exercises: traverse_closure + upvalue marking
 @test
-fn test_closure_upvalue_gc(): void {
+fn test_closure_upvalue_gc() {
     let closures: Array<fn(): string> = []
     for (let i = 0; i < 100; i++) {
         let captured = "captured_" + string(i)
@@ -87,7 +87,7 @@ fn test_closure_upvalue_gc(): void {
 // Bug #1 pattern: allocations interleaved with GC must not overwrite each other
 // Exercises: alloc_marks stability during mark phase
 @test
-fn test_rapid_alloc_collect(): void {
+fn test_rapid_alloc_collect() {
     let survivors: Array<Array<Json>> = []
     for (let cycle = 0; cycle < 20; cycle++) {
         let batch: Array<Json> = []
@@ -115,7 +115,7 @@ fn test_rapid_alloc_collect(): void {
 // --- Test 5: Mixed container types under GC ---
 // Exercises: traverse completeness for Array, Map, Set, Json-like objects
 @test
-fn test_mixed_container_gc(): void {
+fn test_mixed_container_gc() {
     let arr: Array<Array<int | string>> = []
     let map = {}
     let data: Array<Json> = []
@@ -148,7 +148,7 @@ fn test_mixed_container_gc(): void {
 // Bug #3 pattern: old generation objects referencing young objects
 // Exercises: remembered set / write barrier
 @test
-fn test_generational_cross_reference(): void {
+fn test_generational_cross_reference() {
     // Create long-lived container
     let long_lived: Array<Json> = []
     for (let i = 0; i < 50; i++) {
@@ -182,7 +182,7 @@ fn test_generational_cross_reference(): void {
 // --- Test 7: String concatenation churn ---
 // Heavy string allocation: tests interned string pool under extreme pressure
 @test
-fn test_string_concat_churn(): void {
+fn test_string_concat_churn() {
     let results: Array<string> = []
     for (let i = 0; i < 100; i++) {
         let s = ""
@@ -205,7 +205,7 @@ fn test_string_concat_churn(): void {
 // --- Test 8: Class instance field GC ---
 // Exercises: traverse_instance marking all fields
 @test
-fn test_instance_field_gc(): void {
+fn test_instance_field_gc() {
     class Node {
         value: int
         label: string
