@@ -594,6 +594,47 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
         ctx->cur_ins_idx = i;
         x64_emit_xm_ins(ctx, &blk->ins[i]);
         x64_maybe_spill(ctx, blk->ins[i].dst);
+
+        /* Exception check after call-sites.  xr_jit_throw sets
+         * coro->jit_ctx->exception to the pending exception; the callee
+         * returns normally and the caller decides what to do.  Without
+         * this check, throws from nested JIT-compiled callees silently
+         * propagate as if no error occurred — the catch handler is never
+         * entered and the outer code sees stale state (e.g. catch var
+         * remains its initialiser).  ARM64 codegen emits the equivalent
+         * sequence; this is the missing x64 mirror. */
+        {
+            uint16_t op = blk->ins[i].op;
+            if (op == XM_CALL_C || op == XM_CALL_DIRECT || op == XM_CALL_SELF_DIRECT ||
+                op == XM_CALL_KNOWN_REG || op == XM_CALL_KNOWN || op == XM_CALL ||
+                op == XM_CALL_C_LEAF) {
+                if (blk->exception_handler) {
+                    /* In try block: load jit_ctx->exception, branch to
+                     * catch handler if non-zero. */
+                    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                               (int32_t) XM_JIT_EXCEPTION_OFFSET);
+                    x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+                    CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap,
+                                  "too many patches (exc handler)");
+                    X64BranchPatch *p = &ctx->patches[ctx->npatch];
+                    x64_emit8(&ctx->buf, 0x0F);
+                    x64_emit8(&ctx->buf, 0x85); /* JNE rel32 */
+                    p->emit_pos = ctx->buf.pos;
+                    p->target_blk = blk->exception_handler->id;
+                    p->type = X64_PATCH_JCC;
+                    p->cc = X64_CC_NE;
+                    ctx->npatch++;
+                    x64_emit32(&ctx->buf, 0);
+                } else if (blk->ins[i].flags & XM_FLAG_MAY_THROW) {
+                    /* No catch handler but may throw: deopt to VM so its
+                     * try-catch machinery unwinds through bytecode frames. */
+                    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                               (int32_t) XM_JIT_EXCEPTION_OFFSET);
+                    x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+                    x64_emit_deopt_jcc(ctx, X64_CC_NE);
+                }
+            }
+        }
     }
 
     /* Emit terminator */
