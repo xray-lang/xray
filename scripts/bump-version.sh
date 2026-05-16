@@ -9,9 +9,17 @@
 # Single source of truth: xray/CMakeLists.txt -> project(Xray VERSION x.y.z).
 # This script keeps the following files in sync:
 #
-#   xray/CMakeLists.txt          project(Xray VERSION x.y.z)
-#   xray-vscode/package.json     "version": "x.y.z"
-#   xray-website/package.json    "version": "x.y.z"
+#   xray/CMakeLists.txt          project(Xray VERSION x.y.z)         -> <new-version>
+#   xray-vscode/package.json     "version": "x.y.z"                  -> minor + 1, patch = 0
+#   xray-website/package.json    "version": "x.y.z"                  -> <new-version>
+#
+# Versioning rules:
+#   - xray and xray-website track the xray core release version 1:1.
+#   - xray-vscode is published to the VS Code Marketplace, which forbids
+#     version regressions. It therefore lives on an independent line:
+#     each xray release bumps its MINOR by 1 and resets PATCH to 0
+#     (1.0.x -> 1.1.0 -> 1.2.0 -> ...). Standalone vscode-only fixes
+#     should bump PATCH directly (1.1.0 -> 1.1.1) outside this script.
 #
 # The xray-website displayed version is injected at build time from
 # CMakeLists.txt by vite.config.ts, so no website source files need
@@ -148,6 +156,25 @@ path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 PY
 }
 
+# Compute the next xray-vscode version: bump MINOR by 1, reset PATCH to 0.
+# Reads the current version from package.json and prints the next one on
+# stdout. Aborts if the file is missing or has an unexpected version format.
+compute_vscode_next_version() {
+    local file="$1"
+    [[ -f "$file" ]] || { echo ""; return; }
+    local cur
+    cur="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("version",""))' "$file")"
+    [[ -n "$cur" ]] || fatal "xray-vscode: missing version field in $file"
+    python3 - "$cur" <<'PY'
+import sys
+parts = sys.argv[1].split(".")
+if len(parts) != 3 or not all(p.isdigit() for p in parts):
+    raise SystemExit(f"xray-vscode: unexpected version format '{sys.argv[1]}'")
+major, minor, _patch = (int(p) for p in parts)
+print(f"{major}.{minor + 1}.0")
+PY
+}
+
 commit_repo() {
     local repo="$1" label="$2" file="$3" new="$4"
     [[ -d "$repo/.git" ]] || { warn "$label: not a git repo, skip commit"; return; }
@@ -183,13 +210,20 @@ if (( DO_COMMIT )) && (( ! DRY_RUN )); then
     require_clean "$WEBSITE_REPO" "xray-website"
 fi
 
+# xray-vscode follows its own version line (see header). Compute its next
+# version up front so dry-run and commits both see the same value.
+VSCODE_NEW_VER="$(compute_vscode_next_version "$VSCODE_PKG")"
+if [[ -n "$VSCODE_NEW_VER" ]]; then
+    note "xray-vscode next version: $VSCODE_NEW_VER (minor bump on xray release)"
+fi
+
 # ---------- apply ----------
 bump_cmake     "$CUR_VER" "$NEW_VER"
-bump_pkg_json  "$VSCODE_PKG"  "xray-vscode"  "$NEW_VER"
+bump_pkg_json  "$VSCODE_PKG"  "xray-vscode"  "$VSCODE_NEW_VER"
 bump_pkg_json  "$WEBSITE_PKG" "xray-website" "$NEW_VER"
 
 commit_repo "$XRAY_REPO"    "xray"         "$CMAKE_FILE"  "$NEW_VER"
-commit_repo "$VSCODE_REPO"  "xray-vscode"  "$VSCODE_PKG"  "$NEW_VER"
+commit_repo "$VSCODE_REPO"  "xray-vscode"  "$VSCODE_PKG"  "$VSCODE_NEW_VER"
 commit_repo "$WEBSITE_REPO" "xray-website" "$WEBSITE_PKG" "$NEW_VER"
 
 note "Done."
