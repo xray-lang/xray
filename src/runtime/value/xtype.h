@@ -62,7 +62,7 @@ typedef enum XrTypeKind {
     XR_KIND_FUNCTION,
     XR_KIND_UNKNOWN,
     XR_KIND_NEVER,
-    XR_KIND_VOID,
+    XR_KIND_UNIT,  // Unit (0-arity tuple): canonical "no meaningful value" type
     XR_KIND_ENUM,
     XR_KIND_TYPE_PARAM,
     XR_KIND_TUPLE,
@@ -232,16 +232,16 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
 #define XR_TYPE_IS_INSTANCE(t) ((t)->kind == XR_KIND_INSTANCE)
 #define XR_TYPE_IS_UNKNOWN(t) ((t)->kind == XR_KIND_UNKNOWN)
 #define XR_TYPE_IS_NEVER(t) ((t)->kind == XR_KIND_NEVER)
-#define XR_TYPE_IS_VOID(t) ((t)->kind == XR_KIND_VOID)
 #define XR_TYPE_IS_CLASS(t) ((t)->kind == XR_KIND_CLASS)
 #define XR_TYPE_IS_INTERFACE(t) ((t)->kind == XR_KIND_INTERFACE)
 #define XR_TYPE_IS_NULLABLE(t) ((t)->is_nullable || ((t)->kind == XR_KIND_NULL))
 #define XR_TYPE_IS_JSON(t) ((t)->kind == XR_KIND_JSON)
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
-// Unit type is the 0-arity tuple. Acts as the canonical "no meaningful value"
-// type for functions returning nothing, replacing the legacy VOID kind.
-#define XR_TYPE_IS_UNIT(t) ((t)->kind == XR_KIND_TUPLE && (t)->tuple.element_count == 0)
+// Unit type is the canonical "no meaningful value" type for functions
+// returning nothing. Spelled `()` in user syntax (0-arity tuple literal),
+// stored internally as a dedicated XR_KIND_UNIT kind for fast dispatch.
+#define XR_TYPE_IS_UNIT(t) ((t)->kind == XR_KIND_UNIT)
 #define XR_TYPE_IS_OPTIONAL(t) ((t)->is_nullable)
 #define XR_TYPE_IS_ENUM(t) ((t)->kind == XR_KIND_ENUM)
 #define XR_TYPE_IS_UNION(t) ((t)->kind == XR_KIND_UNION)
@@ -259,7 +259,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
             return XR_REP_I64;
         case XR_KIND_FLOAT:
             return XR_REP_F64;
-        case XR_KIND_VOID:
+        case XR_KIND_UNIT:
             return XR_REP_VOID;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:
@@ -319,8 +319,9 @@ XR_FUNC XrType *xr_type_new_bool(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_null(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_unknown(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_never(XrayIsolate *X);
-XR_FUNC XrType *xr_type_new_void(XrayIsolate *X);
-// Unit type singleton (0-arity tuple). Canonical "no meaningful value" type.
+// Unit type singleton (XR_KIND_UNIT, spelled `()` in user syntax). The
+// canonical "no meaningful value" type used for functions that return
+// nothing and for the empty tuple literal.
 XR_FUNC XrType *xr_type_new_unit(XrayIsolate *X);
 
 // API: Native-width types (int8/16/32/64, uint8/16/32/64, float32/64)
@@ -396,7 +397,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_BOOL:
             return 1;  // XR_TAG_BOOL: payload 0=false, 1=true
         case XR_KIND_NULL:
-        case XR_KIND_VOID:
+        case XR_KIND_UNIT:
             return XR_TAG_NULL;
         case XR_KIND_STRING:
         case XR_KIND_ARRAY:

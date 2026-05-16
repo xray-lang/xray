@@ -35,7 +35,7 @@ static bool type_needs_arc(const struct XrType *type) {
         case XR_KIND_FLOAT:
         case XR_KIND_BOOL:
         case XR_KIND_NULL:
-        case XR_KIND_VOID:
+        case XR_KIND_UNIT:
         case XR_KIND_NEVER:
             return false;
         default:

@@ -471,10 +471,10 @@ TEST(type_function_complex) {
 }
 
 TEST(type_void_never) {
-    XrType *t_void = xr_type_new_void(NULL);
+    XrType *t_void = xr_type_new_unit(NULL);
     XrType *t_never = xr_type_new_never(NULL);
 
-    ASSERT(XR_TYPE_IS_VOID(t_void));
+    ASSERT(XR_TYPE_IS_UNIT(t_void));
     ASSERT(XR_TYPE_IS_NEVER(t_never));
 
     // never is assignable to anything
@@ -486,8 +486,8 @@ TEST(type_rejects_invalid_counts) {
     const char *field_names[] = {"value"};
     XrType *field_types[] = {xr_type_new_string(NULL)};
 
-    ASSERT(xr_type_new_function(g_isolate, param_types, -1, xr_type_new_void(NULL), false) == NULL);
-    ASSERT(xr_type_new_function(g_isolate, NULL, 1, xr_type_new_void(NULL), false) == NULL);
+    ASSERT(xr_type_new_function(g_isolate, param_types, -1, xr_type_new_unit(NULL), false) == NULL);
+    ASSERT(xr_type_new_function(g_isolate, NULL, 1, xr_type_new_unit(NULL), false) == NULL);
     ASSERT(xr_type_new_generic_instance(g_isolate, "Box", NULL, NULL, 1) == NULL);
     ASSERT(xr_type_new_tuple(g_isolate, NULL, 1) == NULL);
     ASSERT(xr_type_new_tuple(g_isolate, param_types, -1) == NULL);
@@ -595,7 +595,7 @@ TEST(compile_type_primitives) {
     ASSERT(XR_TYPE_IS_STRING(xr_type_new_string(NULL)));
     ASSERT(XR_TYPE_IS_BOOL(xr_type_new_bool(NULL)));
     ASSERT(XR_TYPE_IS_NULL(xr_type_new_null(NULL)));
-    ASSERT(XR_TYPE_IS_VOID(xr_type_new_void(NULL)));
+    ASSERT(XR_TYPE_IS_UNIT(xr_type_new_unit(NULL)));
 }
 
 TEST(compile_type_containers) {
