@@ -133,9 +133,9 @@ static void fmt_template_string(XrFmtContext *ctx, AstNode *node) {
 
 static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
-    xfmt_write_str(ctx, "match ");
+    xfmt_write_str(ctx, "match (");
     xfmt_emit_expression(ctx, node->as.match_expr.expr);
-    xfmt_write_str(ctx, " {");
+    xfmt_write_str(ctx, ") {");
     xfmt_write_newline(ctx);
     ctx->indent_level++;
 

@@ -144,7 +144,7 @@ static AstNode *parse_match_arm(Parser *parser) {
 
 /*
  * Parse match expression (prefix)
- * match x {
+ * match (x) {
  *     1 => "one",
  *     2 => "two",
  *     _ => "other"
@@ -154,15 +154,19 @@ AstNode *xr_parse_match_expr(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_match_expr: NULL parser");
     int line = parser->previous.line;  // match keyword already consumed
 
-    // Parse match expression
+    // Scrutinee must be parenthesised, mirroring `if (...)`, `for (...)`,
+    // `while (...)`. Required parens also disambiguate tuple scrutinees
+    // (`match (x, y) { (a, b) => ... }`) from a sequence of bare names.
+    xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'match'");
+
     AstNode *expr = xr_parse_expression(parser);
     if (!expr) {
         xr_parser_error(parser, "expected match expression");
         return NULL;
     }
 
-    // Consume '{'
-    xr_parser_consume(parser, TK_LBRACE, "expected '{' after match expression");
+    xr_parser_consume(parser, TK_RPAREN, "expected ')' after match scrutinee");
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' after match scrutinee");
 
     // Parse all arms
     AstNode **arms = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);

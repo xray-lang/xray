@@ -8,7 +8,7 @@
  * xanalyzer_visitor_pattern.c - Pass 2 visitor for match expressions
  *
  * KEY CONCEPT:
- *   `match expr { pattern => body, ... }` is the analyzer's most
+ *   `match (expr) { pattern => body, ... }` is the analyzer's most
  *   complex expression: it must (a) infer the union of all arm body
  *   types, (b) thread variable bindings through arm scopes, and
  *   (c) verify exhaustiveness for both enum subjects and `typeof()`

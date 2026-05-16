@@ -76,7 +76,7 @@ print("NotFound = ${HttpStatus.NotFound.value}")
 
 // Match with enum
 fn statusMessage(s: HttpStatus): string {
-    return match s {
+    return match (s) {
         HttpStatus.OK => "Success",
         HttpStatus.NotFound => "Not Found",
         HttpStatus.ServerError => "Internal Error",

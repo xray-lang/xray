@@ -125,7 +125,7 @@ fn test_typeof_conditional() {
 @test
 fn test_typeof_switch() {
     fn typeLabel<T>(x: T): string {
-        return match typeof(x) {
+        return match (typeof(x)) {
             Type.int => "integer",
             Type.float => "decimal",
             Type.string => "text",

@@ -17,6 +17,7 @@
 #include "../gc/xgc.h"
 #include "../gc/xcoro_gc.h"
 #include "../../base/xdefs.h"
+#include "../../base/xhash.h"
 
 /* ========== Allocation ========== */
 
@@ -105,18 +106,30 @@ bool xr_tuple_equals(XrTuple *a, XrTuple *b) {
 /* ========== Hash ========== */
 
 /*
- * FNV-1a style mix over per-element 32-bit hashes, plus the arity in
- * the seed so `()` and `(0,)` do not collide. Returned as 64-bit for
- * future widening; current callers truncate to 32 if desired.
+ * 64-bit FNV-1a fold over the per-element XrValue hashes, with the
+ * arity mixed in first so `()` and `(0,)` cannot collide. Constants
+ * come from xhash.h so the tuple hash stays bit-identical with every
+ * other FNV-based hash in the codebase. Returned as 64-bit; callers
+ * that only need 32 bits can truncate.
  */
 uint64_t xr_tuple_hash(XrTuple *t) {
     if (!t)
         return 0;
-    uint64_t h = 0xcbf29ce484222325ULL ^ (uint64_t) t->element_count;
+    uint64_t h = XR_FNV64_OFFSET_BASIS;
+    /* Mix the arity byte by byte so the whole 16 bits actually steer
+     * the hash state, instead of being reduced to a single XOR. */
+    uint16_t arity = t->element_count;
+    for (int i = 0; i < (int) sizeof(arity); i++) {
+        h ^= (uint64_t) ((arity >> (i * 8)) & 0xFF);
+        h *= XR_FNV64_PRIME;
+    }
+    /* xr_hash_value returns 32-bit, so likewise fold each byte. */
     for (uint16_t i = 0; i < t->element_count; i++) {
         uint32_t eh = xr_hash_value(t->elements[i]);
-        h ^= (uint64_t) eh;
-        h *= 0x100000001b3ULL;
+        for (int b = 0; b < 4; b++) {
+            h ^= (uint64_t) ((eh >> (b * 8)) & 0xFF);
+            h *= XR_FNV64_PRIME;
+        }
     }
     return h;
 }
