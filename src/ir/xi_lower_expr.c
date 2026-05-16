@@ -491,7 +491,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         if (l->is_program && l->shared_map[var_id] >= 0) {
             if (l->repl_mode) {
                 XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
                 if (store) {
                     store->args[0] = val;
                     store->aux = (void *) l->vars[var_id].name;
@@ -499,7 +499,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 }
             } else {
                 XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
                 if (store) {
                     store->args[0] = val;
                     store->aux_int = l->shared_map[var_id];
@@ -514,7 +514,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     if (l->repl_mode) {
         const char *gname = xi_lower_find_global_name(l, sid, name, NULL);
         if (gname) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
             if (store) {
                 store->args[0] = val;
                 store->aux = (void *) gname;
@@ -525,7 +525,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     } else {
         int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
         if (shared_idx >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
             if (store) {
                 store->args[0] = val;
                 store->aux_int = shared_idx;
@@ -544,7 +544,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         XR_DCHECK(upval_idx < (int) l->func->ncaptures, "upval_idx out of range for needs_cell");
         propagate_needs_cell(l, upval_idx);
 
-        XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL, l->type_void, 1);
+        XiValue *store = xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL, l->type_unit, 1);
         if (store) {
             store->args[0] = val;
             store->aux_int = upval_idx;
@@ -877,7 +877,7 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     /* Populate: INDEX_SET for each element */
     for (int i = 0; i < n; i++) {
         XiValue *idx = xi_const_int(l->func, l->cur_block, i, l->type_int);
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_void, 3);
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
         if (!set)
             break;
         set->args[0] = arr_val;
@@ -909,7 +909,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* assert(cond) / assert(cond, msg) → XI_ASSERT */
     if (strcmp(fname, "assert") == 0 && (call->arg_count == 1 || call->arg_count == 2)) {
         XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_void, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_unit, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = cond;
@@ -922,7 +922,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* assert_true(cond) → XI_ASSERT aux_int=0 */
     if (strcmp(fname, "assert_true") == 0 && call->arg_count == 1) {
         XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_void, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_unit, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = cond;
@@ -935,7 +935,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* assert_false(cond) → XI_ASSERT aux_int=1 */
     if (strcmp(fname, "assert_false") == 0 && call->arg_count == 1) {
         XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_void, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_unit, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = cond;
@@ -949,7 +949,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     if (strcmp(fname, "assert_eq") == 0 && call->arg_count == 2) {
         XiValue *actual = xi_lower_expr(l, call->arguments[0]);
         XiValue *expected = xi_lower_expr(l, call->arguments[1]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_EQ, l->type_void, 2);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_EQ, l->type_unit, 2);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = actual;
@@ -963,7 +963,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     if (strcmp(fname, "assert_ne") == 0 && call->arg_count == 2) {
         XiValue *actual = xi_lower_expr(l, call->arguments[0]);
         XiValue *unexpected = xi_lower_expr(l, call->arguments[1]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_NE, l->type_void, 2);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_NE, l->type_unit, 2);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = actual;
@@ -976,7 +976,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     /* assert_throws(fn) → XI_ASSERT_THROWS */
     if (strcmp(fname, "assert_throws") == 0 && call->arg_count == 1) {
         XiValue *fn_val = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_THROWS, l->type_void, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_THROWS, l->type_unit, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = fn_val;
@@ -1011,7 +1011,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         int nargs = (int) call->arg_count;
         XiValue *v =
-            xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, l->type_void, (uint16_t) nargs);
+            xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, l->type_unit, (uint16_t) nargs);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = arg;
@@ -1421,7 +1421,7 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
 
     /* Populate: INDEX_SET for each key-value pair */
     for (int i = 0; i < n; i++) {
-        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_void, 3);
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
         if (!set)
             break;
         set->args[0] = map_val;
@@ -1497,7 +1497,7 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
             int slot = l->shared_map[var_id];
             if (l->repl_mode) {
                 XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
                 if (store) {
                     store->args[0] = v;
                     store->aux = (void *) l->vars[var_id].name;
@@ -1505,7 +1505,7 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
                 }
             } else {
                 XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
                 if (store) {
                     store->args[0] = v;
                     store->aux_int = slot;
@@ -1869,7 +1869,7 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
 
     /* Populate: CALL_METHOD("add") for each element */
     for (int i = 0; i < n; i++) {
-        XiValue *add = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_void, 2);
+        XiValue *add = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_unit, 2);
         if (!add)
             break;
         add->args[0] = set_val;
@@ -2210,7 +2210,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
                 int fidx = struct_field_index(slayout, sl->field_names[i]);
                 if (fidx < 0)
                     continue;
-                XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, l->type_void, 2);
+                XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, l->type_unit, 2);
                 if (!set)
                     break;
                 set->args[0] = inst;
@@ -2235,7 +2235,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         for (int i = 0; i < n; i++) {
             if (!val_vals[i] || !sl->field_names[i])
                 continue;
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, l->type_void, 2);
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_STORE_FIELD, l->type_unit, 2);
             if (!set)
                 break;
             set->args[0] = call;
@@ -2263,7 +2263,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     obj->line = (uint32_t) node->line;
 
     for (int i = 0; i < n; i++) {
-        XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_void, 2);
+        XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_unit, 2);
         if (!init)
             break;
         init->args[0] = obj;
@@ -2364,7 +2364,7 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     l->cur_block = throw_blk;
     XiValue *msg =
         xi_const_str(l->func, l->cur_block, "force unwrap of null value", l->type_string);
-    XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_void, 1);
+    XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
     if (thr) {
         thr->args[0] = msg;
         thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
@@ -2529,14 +2529,14 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
 
     if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
         if (l->repl_mode) {
-            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
             if (ss) {
                 ss->args[0] = cv;
                 ss->aux = (void *) l->vars[var_id].name;
                 ss->flags |= XI_FLAG_SIDE_EFFECT;
             }
         } else {
-            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
             if (ss) {
                 ss->args[0] = cv;
                 ss->aux_int = l->shared_map[var_id];
@@ -2648,7 +2648,7 @@ static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
     for (int i = 0; i < n; i++) {
         if (!key_vals[i]) {
             /* Static key → indexed init */
-            XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_void, 2);
+            XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_unit, 2);
             if (!init)
                 break;
             init->args[0] = obj_val;
@@ -2657,7 +2657,7 @@ static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
             init->flags |= XI_FLAG_SIDE_EFFECT;
         } else {
             /* Computed key → dynamic index-set: obj[key] = val */
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_void, 3);
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
             if (!set)
                 break;
             set->args[0] = obj_val;

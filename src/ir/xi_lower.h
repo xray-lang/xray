@@ -109,7 +109,7 @@ typedef struct XiLower {
     struct XrType *type_bool;
     struct XrType *type_string;
     struct XrType *type_null;
-    struct XrType *type_void;
+    struct XrType *type_unit;
     struct XrType *type_any;
     struct XrType *type_bigint;
     struct XrType *type_regex;

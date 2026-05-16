@@ -113,7 +113,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
 XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
     ScopeBlockNode *sb = &node->as.scope_block;
 
-    XiValue *enter = xi_value_new(l->func, l->cur_block, XI_SCOPE_ENTER, l->type_void, 0);
+    XiValue *enter = xi_value_new(l->func, l->cur_block, XI_SCOPE_ENTER, l->type_unit, 0);
     if (enter) {
         enter->aux_int = sb->scope_mode;
         enter->flags |= XI_FLAG_SIDE_EFFECT;
@@ -122,7 +122,7 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
 
     xi_lower_stmt(l, sb->body);
 
-    struct XrType *res_type = (sb->scope_mode == 2) ? l->type_any : l->type_void;
+    struct XrType *res_type = (sb->scope_mode == 2) ? l->type_any : l->type_unit;
     XiValue *exit_v = xi_value_new(l->func, l->cur_block, XI_SCOPE_EXIT, res_type, 0);
     if (exit_v) {
         exit_v->aux_int = sb->scope_mode;
@@ -775,7 +775,7 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
     XiBlock *exc_blk = xi_block_new(l->func);
     XiBlock *merge = xi_block_new(l->func);
 
-    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_void, 0);
+    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
     if (try_op) {
         try_op->aux = (void *) exc_blk;
         try_op->aux_int = -1; /* no separate finally block */
@@ -838,7 +838,7 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
     }
 
     if (l->cur_block && catch_op) {
-        XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_void, 1);
+        XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
         if (rethrow) {
             rethrow->args[0] = catch_op;
             rethrow->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
@@ -854,7 +854,7 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
     l->dead_after_throw = false;
 
     if (l->cur_block) {
-        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_void, 0);
+        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
         if (end_op) {
             end_op->flags |= XI_FLAG_SIDE_EFFECT;
             end_op->line = (uint32_t) node->line;
@@ -873,7 +873,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     XiBlock *finally_blk = tc->finally_body ? xi_block_new(l->func) : NULL;
     XiBlock *normal_target = finally_blk ? finally_blk : merge;
 
-    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_void, 0);
+    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
     if (try_op) {
         try_op->aux = (void *) catch_blk;
         try_op->aux_int = finally_blk ? (int64_t) finally_blk->id : -1;
@@ -931,7 +931,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         l->cur_block = finally_blk;
         l->dead_after_throw = false;
 
-        XiValue *fin_op = xi_value_new(l->func, l->cur_block, XI_FINALLY, l->type_void, 0);
+        XiValue *fin_op = xi_value_new(l->func, l->cur_block, XI_FINALLY, l->type_unit, 0);
         if (fin_op) {
             fin_op->flags |= XI_FLAG_SIDE_EFFECT;
             fin_op->line = (uint32_t) node->line;
@@ -948,7 +948,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     l->dead_after_throw = false;
 
     if (l->cur_block) {
-        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_void, 0);
+        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
         if (end_op) {
             end_op->flags |= XI_FLAG_SIDE_EFFECT;
             end_op->line = (uint32_t) node->line;
@@ -988,7 +988,7 @@ static void lower_defer(XiLower *l, AstNode *node) {
         XR_DCHECK(nargs <= 250, "lower_defer: too many arguments");
 
         XiValue *v =
-            xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_void, (uint16_t) (1 + nargs));
+            xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, (uint16_t) (1 + nargs));
         if (!v)
             return;
         v->args[0] = callee;
@@ -1006,7 +1006,7 @@ static void lower_defer(XiLower *l, AstNode *node) {
         if (!callee || !l->cur_block)
             return;
 
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_void, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
         if (!v)
             return;
         v->args[0] = callee;
@@ -1016,7 +1016,7 @@ static void lower_defer(XiLower *l, AstNode *node) {
 }
 
 static void lower_yield_stmt(XiLower *l) {
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_void, 0);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
     if (v)
         v->flags |= XI_FLAG_SIDE_EFFECT;
 }
@@ -1248,14 +1248,14 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     /* For program-level variables, also store into backing store */
     if (l->is_program && l->shared_map[var_id] >= 0) {
         if (l->repl_mode) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
             if (store) {
                 store->args[0] = init_val;
                 store->aux = (void *) l->vars[var_id].name;
                 store->flags |= XI_FLAG_SIDE_EFFECT;
             }
         } else {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
             if (store) {
                 store->args[0] = init_val;
                 store->aux_int = l->shared_map[var_id];
@@ -1284,7 +1284,7 @@ static void lower_print(XiLower *l, AstNode *node) {
      *   bit4 = skip_null   → OP_PRINT C bit3 (REPL auto-echo only) */
     int skip_null = p->skip_null ? 1 : 0;
     for (int i = 0; i < n; i++) {
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_void, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
         if (!v)
             return;
         v->args[0] = arg_vals[i];
@@ -1304,7 +1304,7 @@ static void lower_throw(XiLower *l, AstNode *node) {
     if (!val)
         return;
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_void, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
     if (!v)
         return;
     v->args[0] = val;
@@ -1663,7 +1663,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         if (l->is_program && l->shared_map[var_id] >= 0) {
             if (l->repl_mode) {
                 XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
                 if (store) {
                     store->args[0] = v;
                     store->aux = (void *) l->vars[var_id].name;
@@ -1671,7 +1671,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
                 }
             } else {
                 XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_void, 1);
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
                 if (store) {
                     store->args[0] = v;
                     store->aux_int = l->shared_map[var_id];
@@ -1726,7 +1726,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 
         /* Store into globals dict so nested functions can access */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_void, 1);
+            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
             if (store) {
                 store->args[0] = v;
                 store->aux = (void *) l->vars[var_id].name;
