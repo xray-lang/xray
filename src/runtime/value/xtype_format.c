@@ -35,8 +35,8 @@ const char *xr_type_to_string(XrType *type) {
         return TYPE_NAME_UNKNOWN;
     if (XR_TYPE_IS_NEVER(type))
         return TYPE_NAME_NEVER;
-    if (XR_TYPE_IS_VOID(type))
-        return TYPE_NAME_VOID;
+    if (XR_TYPE_IS_VOID(type) || XR_TYPE_IS_UNIT(type))
+        return TYPE_NAME_UNIT;
     if (XR_TYPE_IS_INT(type) && !type->is_nullable)
         return TYPE_NAME_INT;
     if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable)
@@ -282,8 +282,9 @@ const char *xr_type_to_string(XrType *type) {
             remaining -= n;
         }
 
-        const char *ret_str =
-            type->function.return_type ? xr_type_to_string(type->function.return_type) : "void";
+        const char *ret_str = type->function.return_type
+                                  ? xr_type_to_string(type->function.return_type)
+                                  : TYPE_NAME_UNIT;
         snprintf(ptr, remaining, "): %s", ret_str);
         return xr_pool_strdup(pool, buf);
     }
