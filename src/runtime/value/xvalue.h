@@ -170,6 +170,8 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_DATETIME(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TDATETIME)
 #define XR_IS_EXCEPTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TEXCEPTION)
 #define XR_IS_ERROR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TERROR)
+#define XR_IS_TUPLE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TTUPLE)
+#define XR_TO_TUPLE(v) ((struct XrTuple *) XR_TO_PTR(v))
 
 /* ========== Struct Ref ========== */
 

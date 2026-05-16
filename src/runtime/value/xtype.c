@@ -564,9 +564,9 @@ XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
         return xr_type_new_unit(X);
     if (!element_types)
         return NULL;
-    if (count == 1 && element_types && element_types[0]) {
-        return element_types[0];  // Single element is not a tuple
-    }
+    /* Unary tuple `(T,)` is intentionally a distinct type from T:
+     * generic / macro contexts need the wrapper to be observable,
+     * and the user spelling carries an explicit trailing comma. */
 
     XrType *type = type_alloc(X, XR_KIND_TUPLE);
     if (!type)
@@ -1263,6 +1263,27 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         return xr_type_equals(target->fixed_array.element_type, source->fixed_array.element_type);
     }
 
+    // Tuple covariance: same arity, element-wise assignable. Tuples
+    // and arrays are deliberately distinct shapes — no implicit
+    // conversion either way (a fixed-arity heterogeneous tuple has
+    // nothing to do with a homogeneous resizable Array).
+    if (target->kind == XR_KIND_TUPLE && source->kind == XR_KIND_TUPLE) {
+        if (target->tuple.element_count != source->tuple.element_count)
+            return false;
+        for (int i = 0; i < target->tuple.element_count; i++) {
+            XrType *te = target->tuple.element_types[i];
+            XrType *se = source->tuple.element_types[i];
+            if (!te || !se) {
+                /* Unknown element type: stay permissive, matches the
+                 * fallback used by other container rules above. */
+                continue;
+            }
+            if (!xr_type_assignable(te, se))
+                return false;
+        }
+        return true;
+    }
+
     // Set type compatibility (invariant, with unknown element fallback)
     if (XR_TYPE_IS_SET(target) && XR_TYPE_IS_SET(source)) {
         if (!target->container.element_type || !source->container.element_type)
@@ -1537,6 +1558,19 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (a->kind == XR_KIND_FIXED_ARRAY) {
         return a->fixed_array.length == b->fixed_array.length &&
                xr_type_equals(a->fixed_array.element_type, b->fixed_array.element_type);
+    }
+    if (a->kind == XR_KIND_TUPLE) {
+        /* Structural equivalence: same arity and element-wise equal
+         * types. Unit (XR_KIND_UNIT) is a distinct kind, already
+         * accepted by the early `a->kind != b->kind` guard, so the
+         * empty tuple shape never reaches this branch. */
+        if (a->tuple.element_count != b->tuple.element_count)
+            return false;
+        for (int i = 0; i < a->tuple.element_count; i++) {
+            if (!xr_type_equals(a->tuple.element_types[i], b->tuple.element_types[i]))
+                return false;
+        }
+        return true;
     }
 
     return true;

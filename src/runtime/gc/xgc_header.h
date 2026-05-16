@@ -97,6 +97,7 @@ typedef enum {
     XR_TTASK,         // Lightweight GC-managed coroutine handle (Task/Executor separation)
     XR_TNETCONN,      // Typed TCP / UDP / TLS connection handle (src/io/xnet_handle.h)
     XR_TNETLISTENER,  // Typed TCP listener handle (src/io/xnet_handle.h)
+    XR_TTUPLE,        // Tuple object: fixed-arity, GC-traced XrValue elements
 } XrObjType;
 
 /* ========== Unified GC Header (16 bytes) ========== */

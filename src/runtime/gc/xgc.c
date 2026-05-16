@@ -98,6 +98,11 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TNETCONN] = {xr_gc_destroy_net_conn, NULL, NULL, NULL},
     [XR_TNETLISTENER] = {xr_gc_destroy_net_listener, NULL, NULL, NULL},
 
+    // Tuple — single Immix block (header + flexible XrValue array). No
+    // side resources, so no destroy hook; traverse scans elements as
+    // potential GC roots.
+    [XR_TTUPLE] = {NULL, xr_gc_traverse_tuple, NULL, NULL},
+
     // XR_TRANGE / XR_TBLOB / XR_TSTRING are pure leaves with no
     // capabilities; their slots are zero-initialised by default.
 };
