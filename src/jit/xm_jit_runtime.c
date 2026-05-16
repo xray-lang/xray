@@ -547,11 +547,22 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
         return XR_JIT_OK();
     }
 
-    // Reconstruct XrValue from raw payload
+    // Reconstruct XrValue from raw payload. The XI_THROW arg is the
+    // unboxed payload of an arbitrary value (string ptr, Exception ptr,
+    // even an int boxed as ptr). The XR_IS_* family depends on
+    // XrValue.heap_type, so we must recover it from the GC header
+    // before any check runs — otherwise xr_is_exception() will see
+    // heap_type=0 and report false for a real Exception, the auto-wrap
+    // path will fire spuriously, and the original value gets stored as
+    // userData with heap_type=0, breaking every downstream
+    // XR_IS_STRING / XR_IS_PTR-typed check on the caught value.
     XrValue exception;
     exception.descriptor = 0;
     exception.tag = XR_TAG_PTR;
     exception.i = exception_raw;
+    if (exception_raw != 0 && (exception_raw & 0x7) == 0) {
+        exception.heap_type = (uint16_t) ((XrGCHeader *) exception.ptr)->type;
+    }
 
     // Auto-wrap non-exception values
     if (!xr_is_exception(exception)) {
