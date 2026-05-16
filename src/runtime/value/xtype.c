@@ -566,8 +566,8 @@ XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count) {
     X = resolve_isolate(X);
     if (count < 0)
         return NULL;
-    if (count <= 0)
-        return xr_type_new_void(X);
+    if (count == 0)
+        return xr_type_new_unit(X);
     if (!element_types)
         return NULL;
     if (count == 1 && element_types && element_types[0]) {

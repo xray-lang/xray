@@ -412,11 +412,11 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
 
     ReturnStmtNode *ret = &node->as.return_stmt;
 
-    XrType *return_type = xr_type_new_void(NULL);
+    XrType *return_type = xr_type_new_unit(NULL);
 
     if (ret->value_count == 0) {
         // No return value
-        return_type = xr_type_new_void(NULL);
+        return_type = xr_type_new_unit(NULL);
     } else if (ret->value_count == 1) {
         // Single return value
         if (ret->values[0]) {

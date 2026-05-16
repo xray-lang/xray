@@ -189,7 +189,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_FINDINDEX:
                 return xr_type_new_int(NULL);
             case SYMBOL_FOREACH:
-                return xr_type_new_void(NULL);
+                return xr_type_new_unit(NULL);
             case SYMBOL_INDEXOF:
                 return xr_type_new_int(NULL);
             case SYMBOL_INCLUDES:
@@ -200,7 +200,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
                 return xr_type_new_array(X, xr_type_new_unknown(NULL));
             case SYMBOL_PUSH:
             case SYMBOL_UNSHIFT:
-                return xr_type_new_void(NULL);
+                return xr_type_new_unit(NULL);
             case SYMBOL_POP:
             case SYMBOL_SHIFT: {
                 XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
@@ -275,7 +275,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_SET:
             case SYMBOL_CLEAR:
             case SYMBOL_FOREACH:
-                return xr_type_new_void(NULL);
+                return xr_type_new_unit(NULL);
             case SYMBOL_HAS:
             case SYMBOL_DELETE:
                 return xr_type_new_bool(NULL);
@@ -302,7 +302,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_ADD:
             case SYMBOL_CLEAR:
             case SYMBOL_FOREACH:
-                return xr_type_new_void(NULL);
+                return xr_type_new_unit(NULL);
             case SYMBOL_HAS:
             case SYMBOL_DELETE:
                 return xr_type_new_bool(NULL);
@@ -318,7 +318,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
         switch (sym) {
             case SYMBOL_SEND:
             case SYMBOL_CLOSE:
-                return xr_type_new_void(NULL);
+                return xr_type_new_unit(NULL);
             case SYMBOL_RECV:
                 return elem_type ? elem_type : xr_type_new_unknown(NULL);
             case SYMBOL_TRYSEND:
@@ -434,7 +434,7 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             }
             case SYMBOL_DELETE:
             case SYMBOL_CLEAR:
-                return xr_type_new_void(NULL);
+                return xr_type_new_unit(NULL);
             case SYMBOL_TOSTRING:
                 return xr_type_new_string(NULL);
             default:
@@ -754,7 +754,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
     } else if (base_len == 6 && strncmp(s, TYPE_NAME_STRING, 6) == 0) {
         type = xr_type_new_string(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
-        type = xr_type_new_void(NULL);
+        type = xr_type_new_unit(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
         type = xr_type_new_json(NULL);
     } else if (base_len == 7 && strncmp(s, TYPE_NAME_UNKNOWN, 7) == 0) {
@@ -1033,7 +1033,7 @@ static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len) {
             rt++;
         ret_type = parse_type_str(X, s + rt, len - rt);
     } else {
-        ret_type = xr_type_new_void(NULL);
+        ret_type = xr_type_new_unit(NULL);
     }
 
     XrType **params = NULL;
@@ -1080,7 +1080,7 @@ XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
     if (!close || close <= open) {
         // Empty params "()"
         XrType *ret_type = xa_builtin_parse_return_type_from_sig(X, sig);
-        return xr_type_new_function(X, NULL, 0, ret_type ? ret_type : xr_type_new_void(NULL),
+        return xr_type_new_function(X, NULL, 0, ret_type ? ret_type : xr_type_new_unit(NULL),
                                     false);
     }
 
@@ -1168,7 +1168,7 @@ XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
     // Parse return type
     XrType *ret_type = xa_builtin_parse_return_type_from_sig(X, sig);
     if (!ret_type)
-        ret_type = xr_type_new_void(NULL);
+        ret_type = xr_type_new_unit(NULL);
 
     // Build function type
     XrType **params = NULL;
@@ -1201,7 +1201,7 @@ XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char *sig) {
         p += 3;
     }
     if (!ret || *ret == '\0')
-        return xr_type_new_void(NULL);
+        return xr_type_new_unit(NULL);
 
     return parse_type_str(X, ret, strlen(ret));
 }
