@@ -1,0 +1,8 @@
+// 017_tuple_destructure_arity.xr
+// Tuple destructuring patterns must have exactly the same arity as
+// the value being destructured. There is no rest pattern, so a
+// mismatch is always a static error.
+fn main() {
+    let (a, b) = (1, 2, 3)
+    print(a)
+}

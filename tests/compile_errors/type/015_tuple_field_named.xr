@@ -1,0 +1,7 @@
+// 015_tuple_field_named.xr
+// Tuple field access requires a numeric index `.0`, `.1`, ...
+// Named field access on a tuple value is rejected at compile time.
+fn main() {
+    let t = (1, "hi", true)
+    print(t.foo)
+}

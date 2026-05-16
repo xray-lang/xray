@@ -1,0 +1,7 @@
+// 016_tuple_field_oor.xr
+// Tuple field index must be within the tuple's static arity.
+// Out-of-range indices are caught at compile time.
+fn main() {
+    let t = (1, 2, 3)
+    print(t.5)
+}

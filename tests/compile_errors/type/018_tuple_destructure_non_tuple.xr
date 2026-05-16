@@ -1,0 +1,7 @@
+// 018_tuple_destructure_non_tuple.xr
+// Tuple destructuring requires a tuple value. Trying to destructure
+// a scalar like `int` is a static error.
+fn main() {
+    let (a, b) = 42
+    print(a)
+}

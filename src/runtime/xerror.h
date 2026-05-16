@@ -99,6 +99,8 @@ typedef enum {
     XR_ERR_ANALYZE_MISSING_TYPE,               // Variable needs type annotation or initializer
     XR_ERR_ANALYZE_ENUM_MIXED_TYPE,            // Enum members must all have the same value type
     XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED,  // Class lacks required interface member
+    XR_ERR_ANALYZE_TUPLE_FIELD_NAME,           // Tuple accessed with non-numeric field name
+    XR_ERR_ANALYZE_TUPLE_FIELD_RANGE,          // Tuple field index out of range
 
     // Runtime errors (400-499) — most runtime codes in xerror_codes.h
     XR_ERR_RUNTIME = 400,
