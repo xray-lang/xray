@@ -26,6 +26,7 @@
 #include "../value/xvalue_format.h"
 #include "../gc/xalloc_unified.h"
 #include "../gc/xcoro_gc.h"
+#include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
 #include <string.h>
@@ -33,6 +34,21 @@
 static inline XrArray *array_self(XrValue self) {
     XR_DCHECK(XR_IS_ARRAY(self), "array method: receiver is not an array");
     return XR_TO_ARRAY(self);
+}
+
+// Safely unwrap a callback argument. Returns the closure pointer, or NULL
+// after raising a runtime error if the value isn't a function. The analyzer
+// rejects non-function arguments statically, so this guards only against
+// dynamic-dispatch paths (e.g. unchecked `as` casts) that might slip past
+// it. Raising an explicit error here is the alternative to the historical
+// blind cast `(XrClosure *) XR_TO_PTR(args[0])`, which crashed on any
+// non-zero non-pointer payload.
+static struct XrClosure *callback_arg(XrayIsolate *iso, XrValue v, const char *method) {
+    struct XrClosure *cb = xr_value_to_closure(v);
+    if (!cb) {
+        xr_runtime_error(iso, "Array.%s: callback must be a function\n", method);
+    }
+    return cb;
 }
 
 /* === Mutation === */
@@ -119,9 +135,16 @@ static XrValue m_fill(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 
 static XrValue m_sort(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
+    // sort's compareFn is optional. When absent we fall back to the
+    // default comparator; when present we require it to actually be a
+    // function (the analyzer enforces this statically, but typecheck
+    // here too so a bad dynamic value can't slip into the comparator
+    // call chain).
     struct XrClosure *cmp = NULL;
-    if (argc >= 1 && XR_IS_PTR(args[0])) {
-        cmp = (struct XrClosure *) XR_TO_PTR(args[0]);
+    if (argc >= 1 && !XR_IS_NULL(args[0])) {
+        cmp = callback_arg(iso, args[0], "sort");
+        if (!cmp)
+            return self;
     }
     xr_array_sort(iso, arr, cmp);
     return self;
@@ -249,68 +272,74 @@ static XrValue m_join(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 static XrValue m_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    xr_array_foreach(iso, arr, cb);
+    struct XrClosure *cb = callback_arg(iso, args[0], "forEach");
+    if (!cb)
+        return xr_null();
+    xr_array_foreach(iso, array_self(self), cb);
     return xr_null();
 }
 
 static XrValue m_filter(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1) {
+    if (argc < 1)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    }
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_value_from_array(xr_array_filter(iso, arr, cb));
+    struct XrClosure *cb = callback_arg(iso, args[0], "filter");
+    if (!cb)
+        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+    return xr_value_from_array(xr_array_filter(iso, array_self(self), cb));
 }
 
 static XrValue m_map(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1) {
+    if (argc < 1)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    }
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_value_from_array(xr_array_map(iso, arr, cb));
+    struct XrClosure *cb = callback_arg(iso, args[0], "map");
+    if (!cb)
+        return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
+    return xr_value_from_array(xr_array_map(iso, array_self(self), cb));
 }
 
 static XrValue m_reduce(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_array_reduce(iso, arr, cb, args[1]);
+    struct XrClosure *cb = callback_arg(iso, args[0], "reduce");
+    if (!cb)
+        return xr_null();
+    return xr_array_reduce(iso, array_self(self), cb, args[1]);
 }
 
 static XrValue m_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_array_find(iso, arr, cb);
+    struct XrClosure *cb = callback_arg(iso, args[0], "find");
+    if (!cb)
+        return xr_null();
+    return xr_array_find(iso, array_self(self), cb);
 }
 
 static XrValue m_find_index(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(-1);
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_int(xr_array_find_index(iso, arr, cb));
+    struct XrClosure *cb = callback_arg(iso, args[0], "findIndex");
+    if (!cb)
+        return xr_int(-1);
+    return xr_int(xr_array_find_index(iso, array_self(self), cb));
 }
 
 static XrValue m_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(true);
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_bool(xr_array_every(iso, arr, cb));
+    struct XrClosure *cb = callback_arg(iso, args[0], "every");
+    if (!cb)
+        return xr_bool(true);
+    return xr_bool(xr_array_every(iso, array_self(self), cb));
 }
 
 static XrValue m_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
-    XrArray *arr = array_self(self);
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
-    return xr_bool(xr_array_some(iso, arr, cb));
+    struct XrClosure *cb = callback_arg(iso, args[0], "some");
+    if (!cb)
+        return xr_bool(false);
+    return xr_bool(xr_array_some(iso, array_self(self), cb));
 }
 
 /* === toString === */
