@@ -29,23 +29,44 @@ for dir in "$SCRIPT_DIR"/*/; do
     echo ""
     echo "Category: $category"
     echo "----------------------------------------"
-    
+
     for file in "$dir"*.xr; do
         [ -f "$file" ] || continue
-        
+
         TOTAL=$((TOTAL + 1))
         filename=$(basename "$file")
-        
-        # Run xray and capture output
-        output=$("$XRAY" "$file" 2>&1)
+
+        # Run xray and capture output; strip ANSI color escape codes so
+        # .expected substring matching is robust regardless of terminal.
+        raw_output=$("$XRAY" "$file" 2>&1)
         exit_code=$?
-        
+        output=$(printf '%s' "$raw_output" | sed -E $'s/\x1B\\[[0-9;]*[a-zA-Z]//g')
+
         # Expected: non-zero exit code (compile error)
         if [ $exit_code -ne 0 ]; then
             # Check it's a compile error, not a crash
             if echo "$output" | grep -qi "error\|Error\|ERROR"; then
-                echo -e "  ${GREEN}✓${NC} $filename - correctly rejected"
-                PASSED=$((PASSED + 1))
+                # If an .expected sibling exists, every non-empty line of it
+                # must appear as a substring in the output (pins error codes).
+                expected_file="${file}.expected"
+                missing=""
+                if [ -f "$expected_file" ]; then
+                    while IFS= read -r line; do
+                        # Skip empty lines
+                        [ -z "$line" ] && continue
+                        if ! echo "$output" | grep -qF "$line"; then
+                            missing="$missing\n      - $line"
+                        fi
+                    done < "$expected_file"
+                fi
+                if [ -z "$missing" ]; then
+                    echo -e "  ${GREEN}✓${NC} $filename - correctly rejected"
+                    PASSED=$((PASSED + 1))
+                else
+                    echo -e "  ${RED}✗${NC} $filename - error message missing expected lines:$missing"
+                    echo "    Output: $output"
+                    FAILED=$((FAILED + 1))
+                fi
             else
                 echo -e "  ${YELLOW}?${NC} $filename - failed but no error message"
                 echo "    Output: $output"
