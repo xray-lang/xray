@@ -209,6 +209,7 @@ XR_FUNC XrTypeRef **xr_parse_constraint_list(Parser *parser, int *out_count);
 /* ========== Destructuring ========== */
 
 XR_FUNC XrDestructurePattern *xr_parse_array_pattern(Parser *parser);
+XR_FUNC XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser);
 XR_FUNC XrDestructurePattern *xr_parse_object_pattern(Parser *parser);
 XR_FUNC XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser);
 XR_FUNC AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const);

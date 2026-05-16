@@ -79,6 +79,58 @@ XrDestructurePattern *xr_parse_array_pattern(Parser *parser) {
     return xr_pattern_array(parser->X, elements, count);
 }
 
+// Parse flat tuple destructuring pattern: `()`, `(x,)`, `(a, b, ...)`.
+//
+// `(x)` without the trailing comma is *not* a 1-tuple pattern — it is
+// just a parenthesised identifier, mirroring the rule for tuple
+// expressions. Callers therefore only enter this helper when they
+// have positively identified a tuple destructuring head (the dispatch
+// logic in xr_parse_let_stmt / fn-param / for-in handles the
+// disambiguation).
+XrDestructurePattern *xr_parse_tuple_pattern(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_tuple_pattern: NULL parser");
+    // '(' already consumed
+    XrDestructurePattern **elements = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity = (capacity == 0) ? 4 : capacity * 2;
+            XrDestructurePattern **_new_elements = (XrDestructurePattern **) ast_alloc_array(
+                parser->X, sizeof(XrDestructurePattern *), (size_t) capacity);
+            if (old_capacity > 0 && elements)
+                memcpy(_new_elements, elements,
+                       sizeof(XrDestructurePattern *) * (size_t) old_capacity);
+            elements = _new_elements;
+        }
+
+        if (xr_parser_match(parser, TK_UNDERSCORE)) {
+            elements[count++] = xr_pattern_skip(parser->X);
+        } else if (xr_parser_match(parser, TK_NAME)) {
+            char *name = copy_token_string(parser, &parser->previous);
+            elements[count++] = xr_pattern_identifier(parser->X, name, NULL);
+        } else {
+            xr_parser_error_expected_name(parser,
+                                          "expected identifier or '_' in tuple destructuring");
+            return NULL;
+        }
+
+        // A trailing comma at the end is allowed (and mandatory for
+        // the unary form `(x,)`); otherwise comma separates elements.
+        if (xr_parser_check(parser, TK_RPAREN))
+            break;
+        if (!xr_parser_match(parser, TK_COMMA)) {
+            xr_parser_error(parser, "expected ',' or ')'");
+            return NULL;
+        }
+    }
+
+    xr_parser_consume(parser, TK_RPAREN, "expected ')'");
+    return xr_pattern_tuple(parser->X, elements, count);
+}
+
 // Parse flat object destructuring: {name, age}
 // Variable names must match field names exactly (no renaming, no defaults).
 XrDestructurePattern *xr_parse_object_pattern(Parser *parser) {
@@ -142,10 +194,12 @@ XrDestructurePattern *xr_parse_destructure_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_destructure_pattern: NULL parser");
     if (xr_parser_match(parser, TK_LBRACKET)) {
         return xr_parse_array_pattern(parser);
+    } else if (xr_parser_match(parser, TK_LPAREN)) {
+        return xr_parse_tuple_pattern(parser);
     } else if (xr_parser_match(parser, TK_LBRACE)) {
         return xr_parse_object_pattern(parser);
     } else {
-        xr_parser_error(parser, "expected '[' or '{' for destructuring");
+        xr_parser_error(parser, "expected '(', '[' or '{' for destructuring");
         return NULL;
     }
 }

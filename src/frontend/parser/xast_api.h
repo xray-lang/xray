@@ -280,6 +280,8 @@ XR_FUNC AstNode *xr_ast_range(XrayIsolate *X, AstNode *start, AstNode *end, int 
 // Create destructure patterns (flat only)
 XR_FUNC XrDestructurePattern *xr_pattern_array(XrayIsolate *X, XrDestructurePattern **elements,
                                                int count);
+XR_FUNC XrDestructurePattern *xr_pattern_tuple(XrayIsolate *X, XrDestructurePattern **elements,
+                                               int count);
 XR_FUNC XrDestructurePattern *xr_pattern_object(XrayIsolate *X, char **fields,
                                                 XrDestructurePattern **patterns, int count,
                                                 bool use_shorthand);
