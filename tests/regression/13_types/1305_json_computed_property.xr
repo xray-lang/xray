@@ -3,14 +3,14 @@
 
 // ===== Basic computed property =====
 @test
-fn test_basic_computed_property(): void {
+fn test_basic_computed_property() {
     let key = "name"
     let obj = { [key]: "Alice" }
     assert_eq(obj["name"], "Alice")
 }
 
 @test
-fn test_computed_with_value_expr(): void {
+fn test_computed_with_value_expr() {
     let key = "sum"
     let obj = { [key]: 1 + 2 + 3 }
     assert_eq(obj["sum"], 6)
@@ -18,7 +18,7 @@ fn test_computed_with_value_expr(): void {
 
 // ===== Mixed static and computed =====
 @test
-fn test_mixed_static_computed(): void {
+fn test_mixed_static_computed() {
     let k = "dynamic"
     let obj = { "static_field": 1, [k]: 2 }
     assert_eq(obj.static_field, 1)
@@ -26,7 +26,7 @@ fn test_mixed_static_computed(): void {
 }
 
 @test
-fn test_multiple_computed(): void {
+fn test_multiple_computed() {
     let k1 = "first"
     let k2 = "second"
     let obj = { [k1]: 1, [k2]: 2, "third": 3 }
@@ -36,7 +36,7 @@ fn test_multiple_computed(): void {
 }
 
 @test
-fn test_computed_at_different_positions(): void {
+fn test_computed_at_different_positions() {
     let k = "middle"
     let obj = { "start": 0, [k]: 1, "end": 2 }
     assert_eq(obj.start, 0)
@@ -46,14 +46,14 @@ fn test_computed_at_different_positions(): void {
 
 // ===== Expression as key =====
 @test
-fn test_concat_expression_key(): void {
+fn test_concat_expression_key() {
     let prefix = "user_"
     let obj = { [prefix + "id"]: 123 }
     assert_eq(obj["user_id"], 123)
 }
 
 @test
-fn test_complex_expression_key(): void {
+fn test_complex_expression_key() {
     let base = "field"
     let idx = 1
     let obj = { [base + "_" + string(idx)]: "value1" }
@@ -62,7 +62,7 @@ fn test_complex_expression_key(): void {
 
 // ===== Computed property in function =====
 @test
-fn test_computed_in_function(): void {
+fn test_computed_in_function() {
     fn makeObj(key: string, value: int): Json {
         return { [key]: value }
     }
@@ -73,7 +73,7 @@ fn test_computed_in_function(): void {
 }
 
 @test
-fn test_computed_with_index_keys(): void {
+fn test_computed_with_index_keys() {
     let keys = ["x", "y", "z"]
     let values = [10, 20, 30]
     let obj0 = { [keys[0]]: values[0] }
@@ -86,7 +86,7 @@ fn test_computed_with_index_keys(): void {
 
 // ===== Computed + dynamic add =====
 @test
-fn test_computed_then_dynamic_add(): void {
+fn test_computed_then_dynamic_add() {
     let k = "initial"
     let obj = { [k]: 1 }
     obj.added = 2

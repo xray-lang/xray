@@ -6,7 +6,7 @@
 print("=== defer 块语法测试 ===")
 
 @test
-fn test_simple(): void {
+fn test_simple() {
     print("开始")
     
     defer {
@@ -22,7 +22,7 @@ test_simple()
 print("=== 多个 defer 块 ===")
 
 @test
-fn test_multi(): void {
+fn test_multi() {
     defer {
         print("defer 1")
     }
@@ -41,12 +41,12 @@ test_multi()
 // 测试 defer 块与普通 defer 混合
 print("=== defer 混合测试 ===")
 
-fn cleanup(): void {
+fn cleanup() {
     print("cleanup 函数")
 }
 
 @test
-fn test_mixed(): void {
+fn test_mixed() {
     defer cleanup()
     
     defer {

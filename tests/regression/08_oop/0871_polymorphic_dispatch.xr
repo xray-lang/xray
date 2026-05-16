@@ -62,7 +62,7 @@ class Bird extends Animal {
 
 // Monomorphic call site: always Dog
 @test
-fn test_monomorphic_dispatch(): void {
+fn test_monomorphic_dispatch() {
     let dog = new Dog("Rex")
     let total = 0
     for (let i = 0; i < 10; i++) {
@@ -74,7 +74,7 @@ fn test_monomorphic_dispatch(): void {
 
 // Polymorphic call site: Dog and Cat
 @test
-fn test_polymorphic_dispatch(): void {
+fn test_polymorphic_dispatch() {
     let animals = [new Dog("Rex"), new Cat("Whiskers"), new Dog("Buddy")]
     let results: Array<string> = []
     for (let i = 0; i < animals.length; i++) {
@@ -87,7 +87,7 @@ fn test_polymorphic_dispatch(): void {
 
 // Megamorphic: Dog, Cat, Bird
 @test
-fn test_megamorphic_dispatch(): void {
+fn test_megamorphic_dispatch() {
     let animals = [new Dog("D"), new Cat("C"), new Bird("B")]
     let total_legs = 0
     for (let i = 0; i < animals.length; i++) {
@@ -98,7 +98,7 @@ fn test_megamorphic_dispatch(): void {
 
 // Method with side effects through virtual dispatch
 @test
-fn test_virtual_dispatch_with_state(): void {
+fn test_virtual_dispatch_with_state() {
     let dog = new Dog("Max")
     let results: Array<string> = []
     for (let i = 0; i < 5; i++) {
@@ -112,7 +112,7 @@ fn test_virtual_dispatch_with_state(): void {
 
 // Mixed dispatch: base class and derived
 @test
-fn test_base_and_derived(): void {
+fn test_base_and_derived() {
     let base = new Animal("Generic")
     let derived = new Dog("Specific")
     assert_eq(base.speak(), "Generic says ...")

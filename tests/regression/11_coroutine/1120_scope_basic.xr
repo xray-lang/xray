@@ -22,10 +22,10 @@ fn task3(arr: Array<string>): int {
     arr.push("task3 end")
     return 3
 }
-fn inner1_task(arr: Array<string>): void {
+fn inner1_task(arr: Array<string>) {
     arr.push("inner1")
 }
-fn nested_task(arr: Array<string>): void {
+fn nested_task(arr: Array<string>) {
     arr.push("nested_coro")
 }
 

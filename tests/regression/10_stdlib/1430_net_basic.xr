@@ -13,7 +13,7 @@ import net
 // ============================================================
 
 @test
-fn test_lookup_localhost(): void {
+fn test_lookup_localhost() {
     // 解析 localhost
     let addr = net.lookup("localhost")
     assert_true(addr != null)
@@ -22,7 +22,7 @@ fn test_lookup_localhost(): void {
 }
 
 @test
-fn test_lookup_invalid_host(): void {
+fn test_lookup_invalid_host() {
     // 解析无效主机名应返回 null 或被 DNS 劫持返回 IP
     // 某些 ISP/DNS 会对不存在的域名返回有效 IP（DNS hijacking）
     let addr = net.lookup("this-host-does-not-exist-12345.invalid")
@@ -35,19 +35,19 @@ fn test_lookup_invalid_host(): void {
 // ============================================================
 
 @test
-fn test_net_module_exists(): void {
+fn test_net_module_exists() {
     // 验证 net 模块可以正常导入
     assert_true(net != null)
 }
 
 @test
-fn test_net_dial_exists(): void {
+fn test_net_dial_exists() {
     // 验证 dial 函数存在
     assert_true(net.dial != null)
 }
 
 @test
-fn test_net_lookup_exists(): void {
+fn test_net_lookup_exists() {
     // 验证 lookup 函数存在
     assert_true(net.lookup != null)
 }
@@ -57,7 +57,7 @@ fn test_net_lookup_exists(): void {
 // ============================================================
 
 @test
-fn test_lookup_ipv6_localhost(): void {
+fn test_lookup_ipv6_localhost() {
     // localhost 支持 IPv6 解析
     // 注意：结果可能是 IPv4 或 IPv6，取决于系统配置
     let addr = net.lookup("localhost")
@@ -65,7 +65,7 @@ fn test_lookup_ipv6_localhost(): void {
 }
 
 @test
-fn test_lookup_returns_valid_address(): void {
+fn test_lookup_returns_valid_address() {
     // 验证返回的地址格式正确
     let addr = net.lookup("localhost")
     if (addr != null) {

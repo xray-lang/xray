@@ -22,7 +22,7 @@ print("keys: ${scores.keys()}")
 print("values: ${scores.values()}")
 
 // Iterate
-scores.forEach((key: string, val: int): void => {
+scores.forEach((key: string, val: int) => {
     print("  ${key} => ${val}")
 })
 

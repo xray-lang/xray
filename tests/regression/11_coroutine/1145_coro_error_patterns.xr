@@ -3,7 +3,7 @@
 //         await any, Coro.monitor error notification
 
 import time
-fn test_basic_error(): void {
+fn test_basic_error() {
     let t1 = go {
         let x = 1 / 0
         return x
@@ -20,7 +20,7 @@ fn test_basic_error(): void {
     print("t2.result:", t2.result)
     print("await result:", r)
 }
-fn test_try_catch_cannot_catch(): void {
+fn test_try_catch_cannot_catch() {
     try {
         let t = go {
             throw "something went wrong"
@@ -33,7 +33,7 @@ fn test_try_catch_cannot_catch(): void {
         print("UNEXPECTED: caught:", e)
     }
 }
-fn test_try_catch_in_coro(): void {
+fn test_try_catch_in_coro() {
     let t = go {
         try {
             let x = 1 / 0
@@ -46,7 +46,7 @@ fn test_try_catch_in_coro(): void {
     print("result:", r)
     print("t.error:", t.error)
 }
-fn test_manual_error_check(): void {
+fn test_manual_error_check() {
     fn risky_task(n: int): int {
         if (n == 0) {
             throw "cannot process zero"
@@ -63,7 +63,7 @@ fn test_manual_error_check(): void {
         print("Task succeeded:", t.result)
     }
 }
-fn test_await_all_with_errors(): void {
+fn test_await_all_with_errors() {
     let tasks = [
         go { return "ok-1" },
         go { throw "fail-2" },
@@ -80,7 +80,7 @@ fn test_await_all_with_errors(): void {
         }
     }
 }
-fn test_await_any(): void {
+fn test_await_any() {
     let tasks = [
         go { time.sleep(100); return "slow" },
         go { return "fast" }
@@ -88,7 +88,7 @@ fn test_await_any(): void {
     let r = await any(tasks)
     print("First result:", r)
 }
-fn test_monitor_error(): void {
+fn test_monitor_error() {
     let t = go(name: "err-worker") {
         time.sleep(10)
         throw "worker crashed"

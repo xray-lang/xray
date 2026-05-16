@@ -3,7 +3,7 @@
 import http
 
 @test
-fn test_request_headers(): void {
+fn test_request_headers() {
     let h = {
         "Content-Type" => "application/json",
         "Accept" => "*/*",
@@ -16,7 +16,7 @@ fn test_request_headers(): void {
 }
 
 @test
-fn test_common_headers(): void {
+fn test_common_headers() {
     let h = {
         "Content-Type" => "text/html; charset=utf-8",
         "Cache-Control" => "no-cache",
@@ -27,13 +27,13 @@ fn test_common_headers(): void {
 }
 
 @test
-fn test_empty_headers(): void {
+fn test_empty_headers() {
     let h = #{}
     assert_eq(h.get("X-Not-Exist"), null)
 }
 
 @test
-fn test_multi_value_header_split(): void {
+fn test_multi_value_header_split() {
     let header = "text/html, application/json, text/plain"
     let values = header.split(", ")
     assert_eq(values.length, 3)

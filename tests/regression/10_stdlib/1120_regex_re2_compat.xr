@@ -37,21 +37,21 @@ fn match_eq(pattern: string, text: string, expected: string): bool {
 // ============================================================================
 
 @test
-fn test_literal_single_char(): void {
+fn test_literal_single_char() {
     assert_eq(match_ok("a", "a"), true)
     assert_eq(match_ok("a", "b"), false)
     assert_eq(match_ok("a", ""), false)
 }
 
 @test
-fn test_literal_in_string(): void {
+fn test_literal_in_string() {
     assert_eq(match_ok("a", "zyzzyva"), true)
     assert_eq(match_ok("a", "cab"), true)
     assert_eq(match_ok("hello", "hello world"), true)
 }
 
 @test
-fn test_literal_multi_char(): void {
+fn test_literal_multi_char() {
     assert_eq(match_ok("abc", "abc"), true)
     assert_eq(match_ok("abc", "xabcy"), true)
     assert_eq(match_ok("abc", "ab"), false)
@@ -62,7 +62,7 @@ fn test_literal_multi_char(): void {
 // ============================================================================
 
 @test
-fn test_star_quantifier(): void {
+fn test_star_quantifier() {
     assert_eq(match_ok("a*", ""), true)
     assert_eq(match_ok("a*", "a"), true)
     assert_eq(match_ok("a*", "aaa"), true)
@@ -70,7 +70,7 @@ fn test_star_quantifier(): void {
 }
 
 @test
-fn test_plus_quantifier(): void {
+fn test_plus_quantifier() {
     assert_eq(match_ok("a+", ""), false)
     assert_eq(match_ok("a+", "a"), true)
     assert_eq(match_ok("a+", "aaa"), true)
@@ -78,7 +78,7 @@ fn test_plus_quantifier(): void {
 }
 
 @test
-fn test_question_quantifier(): void {
+fn test_question_quantifier() {
     assert_eq(match_ok("a?", ""), true)
     assert_eq(match_ok("a?", "a"), true)
     assert_eq(match_ok("a?", "aa"), true)
@@ -86,14 +86,14 @@ fn test_question_quantifier(): void {
 }
 
 @test
-fn test_repeat_exact(): void {
+fn test_repeat_exact() {
     assert_eq(match_ok("a{2}", "a"), false)
     assert_eq(match_ok("a{2}", "aa"), true)
     assert_eq(match_ok("a{2}", "aaa"), true)
 }
 
 @test
-fn test_repeat_range(): void {
+fn test_repeat_range() {
     assert_eq(match_ok("a{2,3}", "a"), false)
     assert_eq(match_ok("a{2,3}", "aa"), true)
     assert_eq(match_ok("a{2,3}", "aaa"), true)
@@ -101,7 +101,7 @@ fn test_repeat_range(): void {
 }
 
 @test
-fn test_repeat_min(): void {
+fn test_repeat_min() {
     assert_eq(match_ok("a{2,}", "a"), false)
     assert_eq(match_ok("a{2,}", "aa"), true)
     assert_eq(match_ok("a{2,}", "aaaa"), true)
@@ -112,7 +112,7 @@ fn test_repeat_min(): void {
 // ============================================================================
 
 @test
-fn test_anchor_begin(): void {
+fn test_anchor_begin() {
     assert_eq(match_ok("^a", "a"), true)
     assert_eq(match_ok("^a", "ba"), false)
     assert_eq(match_ok("^", "x"), true)
@@ -120,7 +120,7 @@ fn test_anchor_begin(): void {
 }
 
 @test
-fn test_anchor_end(): void {
+fn test_anchor_end() {
     assert_eq(match_ok("a$", "a"), true)
     assert_eq(match_ok("a$", "ab"), false)
     assert_eq(match_ok("$", "x"), true)
@@ -128,7 +128,7 @@ fn test_anchor_end(): void {
 }
 
 @test
-fn test_anchor_both(): void {
+fn test_anchor_both() {
     assert_eq(match_ok("^a$", "a"), true)
     assert_eq(match_ok("^a$", "ab"), false)
     assert_eq(match_ok("^a$", "ba"), false)
@@ -137,7 +137,7 @@ fn test_anchor_both(): void {
 }
 
 @test
-fn test_anchor_with_alt(): void {
+fn test_anchor_with_alt() {
     assert_eq(match_ok("^(foo|bar)$", "foo"), true)
     assert_eq(match_ok("^(foo|bar)$", "bar"), true)
     assert_eq(match_ok("^(foo|bar)$", "baz"), false)
@@ -148,7 +148,7 @@ fn test_anchor_with_alt(): void {
 // ============================================================================
 
 @test
-fn test_char_class_simple(): void {
+fn test_char_class_simple() {
     assert_eq(match_ok("[abc]", "a"), true)
     assert_eq(match_ok("[abc]", "b"), true)
     assert_eq(match_ok("[abc]", "c"), true)
@@ -156,7 +156,7 @@ fn test_char_class_simple(): void {
 }
 
 @test
-fn test_char_class_range(): void {
+fn test_char_class_range() {
     assert_eq(match_ok("[a-z]", "a"), true)
     assert_eq(match_ok("[a-z]", "m"), true)
     assert_eq(match_ok("[a-z]", "z"), true)
@@ -165,7 +165,7 @@ fn test_char_class_range(): void {
 }
 
 @test
-fn test_char_class_negated(): void {
+fn test_char_class_negated() {
     assert_eq(match_ok("[^a]", "b"), true)
     assert_eq(match_ok("[^a]", "a"), false)
     assert_eq(match_ok("[^a-z]", "A"), true)
@@ -176,7 +176,7 @@ fn test_char_class_negated(): void {
 }
 
 @test
-fn test_char_class_combined(): void {
+fn test_char_class_combined() {
     assert_eq(match_ok("[a-zA-Z]", "a"), true)
     assert_eq(match_ok("[a-zA-Z]", "Z"), true)
     assert_eq(match_ok("[a-zA-Z0-9]", "5"), true)
@@ -187,7 +187,7 @@ fn test_char_class_combined(): void {
 // ============================================================================
 
 @test
-fn test_digit_class(): void {
+fn test_digit_class() {
     assert_eq(match_ok("\\d", "0"), true)
     assert_eq(match_ok("\\d", "9"), true)
     assert_eq(match_ok("\\d", "a"), false)
@@ -195,7 +195,7 @@ fn test_digit_class(): void {
 }
 
 @test
-fn test_word_class(): void {
+fn test_word_class() {
     assert_eq(match_ok("\\w", "a"), true)
     assert_eq(match_ok("\\w", "Z"), true)
     assert_eq(match_ok("\\w", "0"), true)
@@ -204,7 +204,7 @@ fn test_word_class(): void {
 }
 
 @test
-fn test_space_class(): void {
+fn test_space_class() {
     assert_eq(match_ok("\\s", " "), true)
     assert_eq(match_ok("\\s", "\t"), true)
     assert_eq(match_ok("\\s", "\n"), true)
@@ -212,7 +212,7 @@ fn test_space_class(): void {
 }
 
 @test
-fn test_negated_classes(): void {
+fn test_negated_classes() {
     assert_eq(match_ok("\\D", "a"), true)
     assert_eq(match_ok("\\D", "0"), false)
     assert_eq(match_ok("\\W", "-"), true)
@@ -226,21 +226,21 @@ fn test_negated_classes(): void {
 // ============================================================================
 
 @test
-fn test_alternation_simple(): void {
+fn test_alternation_simple() {
     assert_eq(match_ok("a|b", "a"), true)
     assert_eq(match_ok("a|b", "b"), true)
     assert_eq(match_ok("a|b", "c"), false)
 }
 
 @test
-fn test_alternation_words(): void {
+fn test_alternation_words() {
     assert_eq(match_ok("foo|bar", "foo"), true)
     assert_eq(match_ok("foo|bar", "bar"), true)
     assert_eq(match_ok("foo|bar", "baz"), false)
 }
 
 @test
-fn test_alternation_in_group(): void {
+fn test_alternation_in_group() {
     assert_eq(match_ok("(a|b)c", "ac"), true)
     assert_eq(match_ok("(a|b)c", "bc"), true)
     assert_eq(match_ok("(a|b)c", "cc"), false)
@@ -251,27 +251,27 @@ fn test_alternation_in_group(): void {
 // ============================================================================
 
 @test
-fn test_capture_group(): void {
+fn test_capture_group() {
     assert_eq(match_ok("(a)", "a"), true)
     assert_eq(match_ok("(ab)", "ab"), true)
     assert_eq(match_ok("(a)(b)", "ab"), true)
 }
 
 @test
-fn test_noncapture_group(): void {
+fn test_noncapture_group() {
     assert_eq(match_ok("(?:a)", "a"), true)
     assert_eq(match_ok("(?:ab)+", "abab"), true)
 }
 
 @test
-fn test_nested_groups(): void {
+fn test_nested_groups() {
     assert_eq(match_ok("((a))", "a"), true)
     assert_eq(match_ok("(a(b)c)", "abc"), true)
     assert_eq(match_ok("((a)(b))", "ab"), true)
 }
 
 @test
-fn test_deeply_nested(): void {
+fn test_deeply_nested() {
     assert_eq(match_ok("((((((((((x))))))))))", "x"), true)
 }
 
@@ -280,7 +280,7 @@ fn test_deeply_nested(): void {
 // ============================================================================
 
 @test
-fn test_word_boundary(): void {
+fn test_word_boundary() {
     assert_eq(match_ok("\\bfoo\\b", "foo"), true)
     assert_eq(match_ok("\\bfoo\\b", "foo bar"), true)
     assert_eq(match_ok("\\bfoo\\b", "foobar"), false)
@@ -288,14 +288,14 @@ fn test_word_boundary(): void {
 }
 
 @test
-fn test_word_boundary_single(): void {
+fn test_word_boundary_single() {
     assert_eq(match_ok("\\bx\\b", "x"), true)
     assert_eq(match_ok("\\bx\\b", "<x>"), true)
     assert_eq(match_ok("\\bx\\b", "ax"), false)
 }
 
 @test
-fn test_not_word_boundary(): void {
+fn test_not_word_boundary() {
     assert_eq(match_ok("\\Bfoo", "xfoo"), true)
     assert_eq(match_ok("foo\\B", "foobar"), true)
 }
@@ -305,7 +305,7 @@ fn test_not_word_boundary(): void {
 // ============================================================================
 
 @test
-fn test_dot(): void {
+fn test_dot() {
     assert_eq(match_ok(".", "a"), true)
     assert_eq(match_ok(".", "1"), true)
     assert_eq(match_ok(".", " "), true)
@@ -313,7 +313,7 @@ fn test_dot(): void {
 }
 
 @test
-fn test_dot_star(): void {
+fn test_dot_star() {
     assert_eq(match_ok("a.*b", "ab"), true)
     assert_eq(match_ok("a.*b", "axxb"), true)
     assert_eq(match_ok("a.*b", "a\nb"), false)  // 不跨行
@@ -324,7 +324,7 @@ fn test_dot_star(): void {
 // ============================================================================
 
 @test
-fn test_escape_metachar(): void {
+fn test_escape_metachar() {
     assert_eq(match_ok("\\.", "a.b"), true)
     assert_eq(match_ok("\\.", "ab"), false)
     assert_eq(match_ok("\\^", "^"), true)
@@ -333,7 +333,7 @@ fn test_escape_metachar(): void {
 }
 
 @test
-fn test_escape_special(): void {
+fn test_escape_special() {
     assert_eq(match_ok("\\|", "|"), true)
     assert_eq(match_ok("\\(", "("), true)
     assert_eq(match_ok("\\)", ")"), true)
@@ -345,7 +345,7 @@ fn test_escape_special(): void {
 }
 
 @test
-fn test_escape_sequences(): void {
+fn test_escape_sequences() {
     assert_eq(match_ok("\\t", "\t"), true)
     assert_eq(match_ok("\\n", "\n"), true)
     assert_eq(match_ok("\\r", "\r"), true)
@@ -356,35 +356,35 @@ fn test_escape_sequences(): void {
 // ============================================================================
 
 @test
-fn test_unicode_han(): void {
+fn test_unicode_han() {
     assert_eq(match_ok("\\p{Han}", "你"), true)
     assert_eq(match_ok("\\p{Han}", "a"), false)
     assert_eq(match_ok("\\p{Han}+", "你好世界"), true)
 }
 
 @test
-fn test_unicode_latin(): void {
+fn test_unicode_latin() {
     assert_eq(match_ok("\\p{Latin}", "a"), true)
     assert_eq(match_ok("\\p{Latin}", "Z"), true)
     assert_eq(match_ok("\\p{Latin}", "你"), false)
 }
 
 @test
-fn test_unicode_number(): void {
+fn test_unicode_number() {
     assert_eq(match_ok("\\p{N}", "0"), true)
     assert_eq(match_ok("\\p{N}", "9"), true)
     assert_eq(match_ok("\\p{N}+", "123"), true)
 }
 
 @test
-fn test_unicode_negated(): void {
+fn test_unicode_negated() {
     assert_eq(match_ok("\\P{Han}", "a"), true)
     assert_eq(match_ok("\\P{Han}", "你"), false)
     assert_eq(match_eq("\\P{Han}+", "你好World", "World"), true)
 }
 
 @test
-fn test_unicode_mixed(): void {
+fn test_unicode_mixed() {
     assert_eq(match_eq("\\p{Han}+", "Hello你好World", "你好"), true)
     assert_eq(match_eq("\\p{Latin}+", "你好Hello世界", "Hello"), true)
 }
@@ -394,19 +394,19 @@ fn test_unicode_mixed(): void {
 // ============================================================================
 
 @test
-fn test_utf8_literal(): void {
+fn test_utf8_literal() {
     assert_eq(match_ok("本", "本"), true)
     assert_eq(match_ok("日本語", "日本語"), true)
 }
 
 @test
-fn test_utf8_dot(): void {
+fn test_utf8_dot() {
     assert_eq(match_ok("...", "日本語"), true)
     assert_eq(match_ok("..", "你好"), true)
 }
 
 @test
-fn test_utf8_greek(): void {
+fn test_utf8_greek() {
     assert_eq(match_ok("α", "α"), true)
     assert_eq(match_ok("α+", "αβγ"), true)
 }
@@ -416,22 +416,22 @@ fn test_utf8_greek(): void {
 // ============================================================================
 
 @test
-fn test_lazy_star(): void {
+fn test_lazy_star() {
     assert_eq(match_eq("a*?", "aaa", ""), true)
 }
 
 @test
-fn test_lazy_plus(): void {
+fn test_lazy_plus() {
     assert_eq(match_eq("a+?", "aaa", "a"), true)
 }
 
 @test
-fn test_lazy_question(): void {
+fn test_lazy_question() {
     assert_eq(match_eq("a??", "a", ""), true)
 }
 
 @test
-fn test_lazy_repeat(): void {
+fn test_lazy_repeat() {
     assert_eq(match_eq("a{2,}?", "aaaa", "aa"), true)
 }
 
@@ -440,7 +440,7 @@ fn test_lazy_repeat(): void {
 // ============================================================================
 
 @test
-fn test_ignorecase_inline(): void {
+fn test_ignorecase_inline() {
     let re = regex.compile("(?i)hello")
     let result = regex.find(re, "HELLO")
     assert_eq(result != null, true)
@@ -448,7 +448,7 @@ fn test_ignorecase_inline(): void {
 }
 
 @test
-fn test_ignorecase_flag(): void {
+fn test_ignorecase_flag() {
     let re = regex.compile("hello", "i")
     let result = regex.find(re, "HeLLo")
     assert_eq(result != null, true)
@@ -456,7 +456,7 @@ fn test_ignorecase_flag(): void {
 }
 
 @test
-fn test_case_sensitive(): void {
+fn test_case_sensitive() {
     assert_eq(match_ok("hello", "HELLO"), false)
 }
 
@@ -465,14 +465,14 @@ fn test_case_sensitive(): void {
 // ============================================================================
 
 @test
-fn test_multiline_begin(): void {
+fn test_multiline_begin() {
     let re = regex.compile("(?m)^world")
     let result = regex.find(re, "hello\nworld")
     assert_eq(result != null, true)
 }
 
 @test
-fn test_multiline_end(): void {
+fn test_multiline_end() {
     let re = regex.compile("(?m)hello$")
     let result = regex.find(re, "hello\nworld")
     assert_eq(result != null, true)
@@ -483,14 +483,14 @@ fn test_multiline_end(): void {
 // ============================================================================
 
 @test
-fn test_dotall(): void {
+fn test_dotall() {
     let re = regex.compile("(?s)a.b")
     let result = regex.find(re, "a\nb")
     assert_eq(result != null, true)
 }
 
 @test
-fn test_dot_no_newline(): void {
+fn test_dot_no_newline() {
     assert_eq(match_ok("a.b", "a\nb"), false)
 }
 
@@ -499,21 +499,21 @@ fn test_dot_no_newline(): void {
 // ============================================================================
 
 @test
-fn test_replace(): void {
+fn test_replace() {
     let re = regex.compile("\\d+")
     let result = regex.replace(re, "abc123def", "XXX")
     assert_eq(result, "abcXXXdef")
 }
 
 @test
-fn test_replace_all(): void {
+fn test_replace_all() {
     let re = regex.compile("\\d+")
     let result = regex.replaceAll(re, "a1b2c3", "X")
     assert_eq(result, "aXbXcX")
 }
 
 @test
-fn test_split(): void {
+fn test_split() {
     let re = regex.compile(",\\s*")
     let parts = regex.split(re, "a, b, c")
     assert_eq(parts.length, 3)
@@ -527,19 +527,19 @@ fn test_split(): void {
 // ============================================================================
 
 @test
-fn test_empty_pattern(): void {
+fn test_empty_pattern() {
     assert_eq(match_ok("", "abc"), true)  // 空模式匹配空字符串
 }
 
 @test
-fn test_empty_text(): void {
+fn test_empty_text() {
     assert_eq(match_ok("a", ""), false)
     assert_eq(match_ok("a*", ""), true)
     assert_eq(match_ok("a?", ""), true)
 }
 
 @test
-fn test_complex_pattern(): void {
+fn test_complex_pattern() {
     assert_eq(match_ok("(a+|b)+", "ab"), true)
     assert_eq(match_ok("((a|b)+)", "abab"), true)
     assert_eq(match_ok("a(b|c)*d", "abbbcd"), true)

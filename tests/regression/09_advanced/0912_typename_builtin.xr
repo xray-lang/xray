@@ -5,32 +5,32 @@
 // ===== 基本类型 =====
 
 @test
-fn test_typename_int(): void {
+fn test_typename_int() {
     assert_eq(typename(42), "int")
     assert_eq(typename(0), "int")
     assert_eq(typename(-100), "int")
 }
 
 @test
-fn test_typename_float(): void {
+fn test_typename_float() {
     assert_eq(typename(3.14), "float")
     assert_eq(typename(0.0), "float")
 }
 
 @test
-fn test_typename_string(): void {
+fn test_typename_string() {
     assert_eq(typename("hello"), "string")
     assert_eq(typename(""), "string")
 }
 
 @test
-fn test_typename_bool(): void {
+fn test_typename_bool() {
     assert_eq(typename(true), "bool")
     assert_eq(typename(false), "bool")
 }
 
 @test
-fn test_typename_null(): void {
+fn test_typename_null() {
     let n: int? = null
     assert_eq(typename(n), "null")
 }
@@ -38,19 +38,19 @@ fn test_typename_null(): void {
 // ===== 容器类型 =====
 
 @test
-fn test_typename_array(): void {
+fn test_typename_array() {
     let a = [1, 2, 3]
     assert_eq(typename(a), "Array")
 }
 
 @test
-fn test_typename_map(): void {
+fn test_typename_map() {
     let m = {"a" => 1}
     assert_eq(typename(m), "Map")
 }
 
 @test
-fn test_typename_set(): void {
+fn test_typename_set() {
     let s = #[1, 2, 3]
     assert_eq(typename(s), "Set")
 }
@@ -67,7 +67,7 @@ class Point {
 }
 
 @test
-fn test_typename_instance(): void {
+fn test_typename_instance() {
     let p = Point(3, 4)
     // For class instances typename() returns the class name.
     assert_eq(typename(p), "Point")
@@ -76,7 +76,7 @@ fn test_typename_instance(): void {
 // ===== 寄存器使用 =====
 
 @test
-fn test_typename_does_not_corrupt_argument(): void {
+fn test_typename_does_not_corrupt_argument() {
     // typename() reads R[B]; verify the source register is intact afterwards.
     let v = 42
     let n = typename(v)
@@ -85,7 +85,7 @@ fn test_typename_does_not_corrupt_argument(): void {
 }
 
 @test
-fn test_typename_in_expression(): void {
+fn test_typename_in_expression() {
     let s = "hello"
     let result = typename(s) + ":" + s
     assert_eq(result, "string:hello")

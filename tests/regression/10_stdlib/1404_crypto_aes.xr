@@ -14,7 +14,7 @@ import crypto
 // ============================================================
 
 @test
-fn test_encrypt_decrypt_basic(): void {
+fn test_encrypt_decrypt_basic() {
     let key = "my-secret-key"
     let plaintext = "Hello World"
     let encrypted = crypto.encrypt(key, plaintext)
@@ -23,7 +23,7 @@ fn test_encrypt_decrypt_basic(): void {
 }
 
 @test
-fn test_encrypt_decrypt_empty(): void {
+fn test_encrypt_decrypt_empty() {
     let key = "key"
     let plaintext = ""
     let encrypted = crypto.encrypt(key, plaintext)
@@ -32,7 +32,7 @@ fn test_encrypt_decrypt_empty(): void {
 }
 
 @test
-fn test_encrypt_decrypt_long_text(): void {
+fn test_encrypt_decrypt_long_text() {
     let key = "secret-key-123"
     let plaintext = "The quick brown fox jumps over the lazy dog. This is a longer text to test multi-block encryption."
     let encrypted = crypto.encrypt(key, plaintext)
@@ -41,7 +41,7 @@ fn test_encrypt_decrypt_long_text(): void {
 }
 
 @test
-fn test_encrypt_output_is_hex(): void {
+fn test_encrypt_output_is_hex() {
     let encrypted = crypto.encrypt("key", "test")
     // Output should be hex string (IV 32 chars + at least 32 chars ciphertext)
     assert_true(encrypted.length >= 64)
@@ -50,7 +50,7 @@ fn test_encrypt_output_is_hex(): void {
 }
 
 @test
-fn test_encrypt_different_each_time(): void {
+fn test_encrypt_different_each_time() {
     // Due to random IV, same input should produce different output
     let e1 = crypto.encrypt("key", "test")
     let e2 = crypto.encrypt("key", "test")
@@ -58,7 +58,7 @@ fn test_encrypt_different_each_time(): void {
 }
 
 @test
-fn test_decrypt_wrong_key(): void {
+fn test_decrypt_wrong_key() {
     let encrypted = crypto.encrypt("correct-key", "secret data")
     // Decrypt with wrong key should return null (padding validation fails)
     let result = crypto.decrypt("wrong-key", encrypted)
@@ -66,7 +66,7 @@ fn test_decrypt_wrong_key(): void {
 }
 
 @test
-fn test_encrypt_decrypt_exactly_16_bytes(): void {
+fn test_encrypt_decrypt_exactly_16_bytes() {
     // Exactly one block - PKCS7 adds full block of padding
     let key = "key"
     let plaintext = "1234567890123456"
@@ -76,7 +76,7 @@ fn test_encrypt_decrypt_exactly_16_bytes(): void {
 }
 
 @test
-fn test_encrypt_decrypt_unicode(): void {
+fn test_encrypt_decrypt_unicode() {
     let key = "unicode-key"
     let plaintext = "Hello World!"
     let encrypted = crypto.encrypt(key, plaintext)

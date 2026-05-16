@@ -9,7 +9,7 @@ fn blocked(ch: Channel<int>): int {
 }
 
 @test
-fn test_await_any(): void {
+fn test_await_any() {
     // Test 1: await any with single task
     let t1 = go compute(1)
     let first = await any [t1]

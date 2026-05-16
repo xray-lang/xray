@@ -9,7 +9,7 @@ class Container<T> {
         this.items = []
     }
 
-    add(item: T): void {
+    add(item: T) {
         this.items.push(item)
     }
 

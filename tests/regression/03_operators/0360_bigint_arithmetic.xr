@@ -5,14 +5,14 @@
 // ===== 加法 =====
 
 @test
-fn test_add_small(): void {
+fn test_add_small() {
     let a = 100n
     let b = 200n
     assert_eq((a + b).toString(), "300")
 }
 
 @test
-fn test_add_large(): void {
+fn test_add_large() {
     let a = 999999999999999999999999999999n
     let b = 1n
     assert_eq((a + b).toString(), "1000000000000000000000000000000")
@@ -21,14 +21,14 @@ fn test_add_large(): void {
 // ===== 减法 =====
 
 @test
-fn test_sub_basic(): void {
+fn test_sub_basic() {
     let a = 200n
     let b = 100n
     assert_eq((a - b).toString(), "100")
 }
 
 @test
-fn test_sub_negative_result(): void {
+fn test_sub_negative_result() {
     let a = 100n
     let b = 200n
     assert_eq((a - b).toString(), "-100")
@@ -37,14 +37,14 @@ fn test_sub_negative_result(): void {
 // ===== 乘法 =====
 
 @test
-fn test_mul_basic(): void {
+fn test_mul_basic() {
     let a = 100n
     let b = 200n
     assert_eq((a * b).toString(), "20000")
 }
 
 @test
-fn test_mul_large(): void {
+fn test_mul_large() {
     let a = 12345678901234567890n
     let b = 2n
     assert_eq((a * b).toString(), "24691357802469135780")
@@ -53,14 +53,14 @@ fn test_mul_large(): void {
 // ===== 除法 =====
 
 @test
-fn test_div_basic(): void {
+fn test_div_basic() {
     let a = 100n
     let b = 3n
     assert_eq((a / b).toString(), "33")
 }
 
 @test
-fn test_div_exact(): void {
+fn test_div_exact() {
     let a = 100n
     let b = 10n
     assert_eq((a / b).toString(), "10")
@@ -69,14 +69,14 @@ fn test_div_exact(): void {
 // ===== 取模 =====
 
 @test
-fn test_mod_basic(): void {
+fn test_mod_basic() {
     let a = 100n
     let b = 3n
     assert_eq((a % b).toString(), "1")
 }
 
 @test
-fn test_mod_no_remainder(): void {
+fn test_mod_no_remainder() {
     let a = 100n
     let b = 10n
     assert_eq((a % b).toString(), "0")
@@ -85,13 +85,13 @@ fn test_mod_no_remainder(): void {
 // ===== 取负 =====
 
 @test
-fn test_negate_positive(): void {
+fn test_negate_positive() {
     let a = 999n
     assert_eq((-a).toString(), "-999")
 }
 
 @test
-fn test_negate_negative(): void {
+fn test_negate_negative() {
     let a = -999n
     assert_eq((-a).toString(), "999")
 }

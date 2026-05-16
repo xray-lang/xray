@@ -5,7 +5,7 @@
 // ===== Basic function hoisting =====
 
 @test
-fn test_call_before_definition(): void {
+fn test_call_before_definition() {
     let result = add(10, 20)
     assert_eq(result, 30)
 }
@@ -17,7 +17,7 @@ fn add(a: int, b: int): int {
 // ===== Mutual recursion =====
 
 @test
-fn test_mutual_recursion(): void {
+fn test_mutual_recursion() {
     assert_eq(isEven(4), true)
     assert_eq(isEven(3), false)
     assert_eq(isOdd(3), true)
@@ -48,7 +48,7 @@ class Dog {
 }
 
 @test
-fn test_fn_before_class(): void {
+fn test_fn_before_class() {
     let d = createDog("Rex")
     assert_eq(d.name, "Rex")
 }
@@ -66,7 +66,7 @@ fn addBrackets(s: string): string {
 }
 
 @test
-fn test_class_method_uses_later_fn(): void {
+fn test_class_method_uses_later_fn() {
     let f = new Formatter()
     assert_eq(f.format("hello"), "[hello]")
 }
@@ -78,7 +78,7 @@ fn multiply(x: int, y: int): int {
 }
 
 @test
-fn test_definition_before_call(): void {
+fn test_definition_before_call() {
     assert_eq(multiply(3, 4), 12)
 }
 
@@ -91,14 +91,14 @@ fn scaled(x: int): int {
 }
 
 @test
-fn test_fn_captures_variable(): void {
+fn test_fn_captures_variable() {
     assert_eq(scaled(5), 50)
 }
 
 // ===== Block-level hoisting =====
 
 @test
-fn test_block_call_before_definition(): void {
+fn test_block_call_before_definition() {
     let r = greetBlock("world")
     assert_eq(r, "hello world")
     
@@ -108,7 +108,7 @@ fn test_block_call_before_definition(): void {
 }
 
 @test
-fn test_block_closure_capture_with_hoisting(): void {
+fn test_block_closure_capture_with_hoisting() {
     let x = 10
     let result = getDoubled()
     assert_eq(result, 20)
@@ -119,7 +119,7 @@ fn test_block_closure_capture_with_hoisting(): void {
 }
 
 @test
-fn test_block_mutual_recursion(): void {
+fn test_block_mutual_recursion() {
     assert_eq(blockEven(4), true)
     assert_eq(blockEven(3), false)
     

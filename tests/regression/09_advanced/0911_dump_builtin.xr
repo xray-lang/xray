@@ -8,21 +8,21 @@
 // 仍然可用，能抓到 OP_DUMP 字段错位等导致的寄存器读写串扰。
 
 @test
-fn test_dump_int(): void {
+fn test_dump_int() {
     let x = 42
     dump(x)
     assert_eq(x, 42)
 }
 
 @test
-fn test_dump_float(): void {
+fn test_dump_float() {
     let f = 3.14
     dump(f)
     assert(f > 3.13 && f < 3.15)
 }
 
 @test
-fn test_dump_string(): void {
+fn test_dump_string() {
     let s = "hello"
     dump(s)
     assert_eq(s, "hello")
@@ -30,21 +30,21 @@ fn test_dump_string(): void {
 }
 
 @test
-fn test_dump_bool(): void {
+fn test_dump_bool() {
     let b = true
     dump(b)
     assert_eq(b, true)
 }
 
 @test
-fn test_dump_null(): void {
+fn test_dump_null() {
     let n: int? = null
     dump(n)
     assert_eq(n == null, true)
 }
 
 @test
-fn test_dump_array(): void {
+fn test_dump_array() {
     let a = [1, 2, 3]
     dump(a)
     assert_eq(a.length, 3)
@@ -54,7 +54,7 @@ fn test_dump_array(): void {
 }
 
 @test
-fn test_dump_map(): void {
+fn test_dump_map() {
     // The original reported bug: dump(map) printed last value (92) instead
     // of the map. Even though stdout cannot be asserted, the codegen bug
     // also corrupted the register holding the map. This case verifies the
@@ -67,7 +67,7 @@ fn test_dump_map(): void {
 }
 
 @test
-fn test_dump_set(): void {
+fn test_dump_set() {
     let s = #[1, 2, 3]
     dump(s)
     assert_eq(s.length, 3)
@@ -75,7 +75,7 @@ fn test_dump_set(): void {
 }
 
 @test
-fn test_dump_with_indent(): void {
+fn test_dump_with_indent() {
     let data = {"name" => "alice", "score" => 95}
     dump(data, 2)
     dump(data, 4)
@@ -87,7 +87,7 @@ fn test_dump_with_indent(): void {
 }
 
 @test
-fn test_dump_inside_function(): void {
+fn test_dump_inside_function() {
     // Regression for: dump() inside a function body must not interfere
     // with the function's return register or local variables.
     fn helper(v: int): int {
@@ -100,7 +100,7 @@ fn test_dump_inside_function(): void {
 }
 
 @test
-fn test_dump_nested_expr(): void {
+fn test_dump_nested_expr() {
     let arr = [10, 20, 30]
     let idx = 1
     dump(arr[idx])
@@ -110,7 +110,7 @@ fn test_dump_nested_expr(): void {
 }
 
 @test
-fn test_dump_in_loop(): void {
+fn test_dump_in_loop() {
     let total = 0
     for (i in 0..5) {
         dump(i)
@@ -120,7 +120,7 @@ fn test_dump_in_loop(): void {
 }
 
 @test
-fn test_dump_return_is_null(): void {
+fn test_dump_return_is_null() {
     // dump() must return null so that `let x = dump(...)` does not crash.
     let r = dump(42)
     assert_eq(r == null, true)

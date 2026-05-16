@@ -13,7 +13,7 @@ import regex
 // ========================================
 
 @test
-fn test_lazy_plus(): void {
+fn test_lazy_plus() {
     let re = regex.compile("a+?")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
@@ -21,7 +21,7 @@ fn test_lazy_plus(): void {
 }
 
 @test
-fn test_lazy_star(): void {
+fn test_lazy_star() {
     let re = regex.compile("a*?")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
@@ -29,7 +29,7 @@ fn test_lazy_star(): void {
 }
 
 @test
-fn test_lazy_question(): void {
+fn test_lazy_question() {
     let re = regex.compile("a??")
     let result = regex.find(re, "a")
     assert_eq(result != null, true)
@@ -37,7 +37,7 @@ fn test_lazy_question(): void {
 }
 
 @test
-fn test_lazy_repeat(): void {
+fn test_lazy_repeat() {
     let re = regex.compile("a{2,}?")
     let result = regex.find(re, "aaaa")
     assert_eq(result != null, true)
@@ -45,7 +45,7 @@ fn test_lazy_repeat(): void {
 }
 
 @test
-fn test_greedy_plus(): void {
+fn test_greedy_plus() {
     let re = regex.compile("a+")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
@@ -53,7 +53,7 @@ fn test_greedy_plus(): void {
 }
 
 @test
-fn test_greedy_star(): void {
+fn test_greedy_star() {
     let re = regex.compile("a*")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
@@ -65,7 +65,7 @@ fn test_greedy_star(): void {
 // ========================================
 
 @test
-fn test_ignorecase_inline(): void {
+fn test_ignorecase_inline() {
     let re = regex.compile("(?i)hello")
     let result = regex.find(re, "HELLO World")
     assert_eq(result != null, true)
@@ -73,7 +73,7 @@ fn test_ignorecase_inline(): void {
 }
 
 @test
-fn test_ignorecase_flag(): void {
+fn test_ignorecase_flag() {
     let re = regex.compile("hello", "i")
     let result = regex.find(re, "HeLLo")
     assert_eq(result != null, true)
@@ -81,7 +81,7 @@ fn test_ignorecase_flag(): void {
 }
 
 @test
-fn test_case_sensitive(): void {
+fn test_case_sensitive() {
     let re = regex.compile("hello")
     let result = regex.find(re, "HELLO")
     assert_eq(result, null)
@@ -92,7 +92,7 @@ fn test_case_sensitive(): void {
 // ========================================
 
 @test
-fn test_multiline_caret(): void {
+fn test_multiline_caret() {
     let re = regex.compile("(?m)^world")
     let result = regex.find(re, "hello\nworld")
     assert_eq(result != null, true)
@@ -100,7 +100,7 @@ fn test_multiline_caret(): void {
 }
 
 @test
-fn test_multiline_dollar(): void {
+fn test_multiline_dollar() {
     let re = regex.compile("(?m)hello$")
     let result = regex.find(re, "hello\nworld")
     assert_eq(result != null, true)
@@ -112,7 +112,7 @@ fn test_multiline_dollar(): void {
 // ========================================
 
 @test
-fn test_dotall(): void {
+fn test_dotall() {
     let re = regex.compile("(?s)a.b")
     let result = regex.find(re, "a\nb")
     assert_eq(result != null, true)
@@ -120,7 +120,7 @@ fn test_dotall(): void {
 }
 
 @test
-fn test_dot_no_newline(): void {
+fn test_dot_no_newline() {
     let re = regex.compile("a.b")
     let result = regex.find(re, "a\nb")
     assert_eq(result, null)
@@ -131,7 +131,7 @@ fn test_dot_no_newline(): void {
 // ========================================
 
 @test
-fn test_combined_flags(): void {
+fn test_combined_flags() {
     // (?im) 忽略大小写 + 多行
     let re = regex.compile("(?im)^hello")
     let result = regex.find(re, "world\nHELLO")

@@ -3,7 +3,7 @@
 // 测试：数组基础
 // ===== 创建 =====
 @test
-fn test_array_literal(): void {
+fn test_array_literal() {
     let arr = [1, 2, 3]
     assert_eq(arr.length, 3)
     assert_eq(arr[0], 1)
@@ -12,21 +12,21 @@ fn test_array_literal(): void {
 }
 
 @test
-fn test_empty_array(): void {
+fn test_empty_array() {
     let arr: Array<int> = []
     assert_eq(arr.length, 0)
     assert_eq(arr.isEmpty, true)
 }
 
 @test
-fn test_single_element(): void {
+fn test_single_element() {
     let arr = [42]
     assert_eq(arr.length, 1)
     assert_eq(arr[0], 42)
 }
 
 @test
-fn test_mixed_types(): void {
+fn test_mixed_types() {
     let arr = [1, "hello", 3.14, true, null]
     assert_eq(arr.length, 5)
     assert_eq(arr[0], 1)
@@ -37,7 +37,7 @@ fn test_mixed_types(): void {
 }
 
 @test
-fn test_nested_array(): void {
+fn test_nested_array() {
     let matrix = [[1, 2], [3, 4], [5, 6]]
     assert_eq(matrix.length, 3)
     assert_eq(matrix[0][0], 1)
@@ -47,7 +47,7 @@ fn test_nested_array(): void {
 
 // ===== 访问 =====
 @test
-fn test_index_access(): void {
+fn test_index_access() {
     let arr = [10, 20, 30, 40, 50]
     assert_eq(arr[0], 10)
     assert_eq(arr[2], 30)
@@ -55,14 +55,14 @@ fn test_index_access(): void {
 }
 
 @test
-fn test_out_of_bounds(): void {
+fn test_out_of_bounds() {
     let arr = [1, 2, 3]
     assert_eq(arr[100], null)
     assert_eq(arr[-1], null)
 }
 
 @test
-fn test_dynamic_index(): void {
+fn test_dynamic_index() {
     let arr = [10, 20, 30]
     let i = 1
     assert_eq(arr[i], 20)
@@ -71,7 +71,7 @@ fn test_dynamic_index(): void {
 
 // ===== 修改 =====
 @test
-fn test_index_assignment(): void {
+fn test_index_assignment() {
     let arr = [1, 2, 3]
     arr[0] = 10
     arr[2] = 30
@@ -82,7 +82,7 @@ fn test_index_assignment(): void {
 
 // ===== push/pop =====
 @test
-fn test_push(): void {
+fn test_push() {
     let arr: Array<int> = []
     arr.push(1)
     arr.push(2)
@@ -93,7 +93,7 @@ fn test_push(): void {
 }
 
 @test
-fn test_pop(): void {
+fn test_pop() {
     let arr = [1, 2, 3]
     let last = arr.pop()
     assert_eq(last, 3)
@@ -104,7 +104,7 @@ fn test_pop(): void {
 }
 
 @test
-fn test_pop_empty(): void {
+fn test_pop_empty() {
     let arr: Array<int> = []
     let result = arr.pop()
     assert_eq(result, null)
@@ -113,7 +113,7 @@ fn test_pop_empty(): void {
 
 // ===== shift/unshift =====
 @test
-fn test_shift(): void {
+fn test_shift() {
     let arr = [1, 2, 3]
     let first = arr.shift()
     assert_eq(first, 1)
@@ -122,7 +122,7 @@ fn test_shift(): void {
 }
 
 @test
-fn test_unshift(): void {
+fn test_unshift() {
     let arr = [2, 3]
     arr.unshift(1)
     assert_eq(arr[0], 1)
@@ -130,7 +130,7 @@ fn test_unshift(): void {
 }
 
 @test
-fn test_shift_empty(): void {
+fn test_shift_empty() {
     let arr: Array<int> = []
     let result = arr.shift()
     assert_eq(result, null)
@@ -138,7 +138,7 @@ fn test_shift_empty(): void {
 
 // ===== 查找 =====
 @test
-fn test_indexOf(): void {
+fn test_indexOf() {
     let arr = ["a", "b", "c", "b"]
     assert_eq(arr.indexOf("a"), 0)
     assert_eq(arr.indexOf("b"), 1)
@@ -147,7 +147,7 @@ fn test_indexOf(): void {
 }
 
 @test
-fn test_has(): void {
+fn test_has() {
     let arr = [1, 2, 3]
     assert_eq(arr.has(2), true)
     assert_eq(arr.has(5), false)
@@ -155,7 +155,7 @@ fn test_has(): void {
 
 // ===== 转换 =====
 @test
-fn test_join(): void {
+fn test_join() {
     let arr = ["a", "b", "c"]
     assert_eq(arr.join(","), "a,b,c")
     assert_eq(arr.join("-"), "a-b-c")
@@ -163,7 +163,7 @@ fn test_join(): void {
 }
 
 @test
-fn test_reverse(): void {
+fn test_reverse() {
     let arr = [1, 2, 3, 4, 5]
     arr.reverse()
     assert_eq(arr[0], 5)
@@ -171,7 +171,7 @@ fn test_reverse(): void {
 }
 
 @test
-fn test_clear(): void {
+fn test_clear() {
     let arr = [1, 2, 3]
     arr.clear()
     assert_eq(arr.length, 0)
@@ -180,7 +180,7 @@ fn test_clear(): void {
 
 // ===== 边界条件 =====
 @test
-fn test_large_array(): void {
+fn test_large_array() {
     let arr: Array<int> = []
     for (let i = 0; i < 100; i++) {
         arr.push(i)
@@ -191,7 +191,7 @@ fn test_large_array(): void {
 }
 
 @test
-fn test_array_of_arrays(): void {
+fn test_array_of_arrays() {
     let arr: Array<Array<int>> = []
     arr.push([1, 2])
     arr.push([3, 4])

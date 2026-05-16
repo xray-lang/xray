@@ -3,21 +3,21 @@
 // 测试：布尔值和 null
 // ===== 布尔值基础 =====
 @test
-fn test_bool_true(): void {
+fn test_bool_true() {
     assert_eq(true, true)
     let b = true
     assert_eq(b, true)
 }
 
 @test
-fn test_bool_false(): void {
+fn test_bool_false() {
     assert_eq(false, false)
     let b = false
     assert_eq(b, false)
 }
 
 @test
-fn test_bool_equality(): void {
+fn test_bool_equality() {
     assert_eq(true == true, true)
     assert_eq(false == false, true)
     assert_eq(true == false, false)
@@ -26,7 +26,7 @@ fn test_bool_equality(): void {
 
 // ===== 布尔运算 =====
 @test
-fn test_bool_and(): void {
+fn test_bool_and() {
     assert_eq(true && true, true)
     assert_eq(true && false, false)
     assert_eq(false && true, false)
@@ -34,7 +34,7 @@ fn test_bool_and(): void {
 }
 
 @test
-fn test_bool_or(): void {
+fn test_bool_or() {
     assert_eq(true || true, true)
     assert_eq(true || false, true)
     assert_eq(false || true, true)
@@ -42,7 +42,7 @@ fn test_bool_or(): void {
 }
 
 @test
-fn test_bool_not(): void {
+fn test_bool_not() {
     assert_eq(!true, false)
     assert_eq(!false, true)
     assert_eq(!!true, true)
@@ -50,14 +50,14 @@ fn test_bool_not(): void {
 
 // ===== null 基础 =====
 @test
-fn test_null_basic(): void {
+fn test_null_basic() {
     let x = null
     assert_eq(x, null)
     assert_eq(x == null, true)
 }
 
 @test
-fn test_null_comparison(): void {
+fn test_null_comparison() {
     let x = null
     let y = null
     assert_eq(x == y, true)
@@ -65,7 +65,7 @@ fn test_null_comparison(): void {
 }
 
 @test
-fn test_null_vs_value(): void {
+fn test_null_vs_value() {
     let x = null
     let y = 0
     assert_eq(x == y, false)
@@ -74,7 +74,7 @@ fn test_null_vs_value(): void {
 
 // ===== 真值判断 =====
 @test
-fn test_truthy_values(): void {
+fn test_truthy_values() {
     // 非零数字为真
     if (1) {
         assert(true)
@@ -100,7 +100,7 @@ fn test_truthy_values(): void {
 }
 
 @test
-fn test_falsy_values(): void {
+fn test_falsy_values() {
     // 零为假
     if (0) {
         assert(false)
@@ -129,7 +129,7 @@ fn test_falsy_values(): void {
 
 // ===== 空值合并 =====
 @test
-fn test_nullish_coalesce(): void {
+fn test_nullish_coalesce() {
     let x = null
     assert_eq(x ?? "default", "default")
     let y = "value"
@@ -140,7 +140,7 @@ fn test_nullish_coalesce(): void {
 
 // ===== 可选链 =====
 @test
-fn test_optional_chain(): void {
+fn test_optional_chain() {
     let obj = null
     assert_eq(obj?.property, null)
     let data = { "name": "test" }

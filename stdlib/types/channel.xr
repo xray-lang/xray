@@ -2,10 +2,10 @@
 
 @native
 class Channel<T> {
-    send(value: T): void
+    send(value: T)
     recv(): T
     trySend(value: T): bool
     tryRecv(): (T, bool)
-    close(): void
+    close()
     closed: bool
 }

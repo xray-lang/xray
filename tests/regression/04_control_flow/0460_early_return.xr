@@ -5,7 +5,7 @@
 // ===== 函数提前返回 =====
 
 @test
-fn test_early_return(): void {
+fn test_early_return() {
     fn findPositive(arr: Array<int>): int {
         for (x in arr) {
             if (x > 0) {
@@ -20,7 +20,7 @@ fn test_early_return(): void {
 }
 
 @test
-fn test_guard_clause(): void {
+fn test_guard_clause() {
     fn divide(a: int, b: int): int? {
         if (b == 0) {
             return null
@@ -35,7 +35,7 @@ fn test_guard_clause(): void {
 // ===== 多条件提前返回 =====
 
 @test
-fn test_multiple_guards(): void {
+fn test_multiple_guards() {
     fn classify(n: int): string {
         if (n < 0) { return "negative" }
         if (n == 0) { return "zero" }
@@ -54,7 +54,7 @@ fn test_multiple_guards(): void {
 // ===== 嵌套循环提前返回 =====
 
 @test
-fn test_nested_return(): void {
+fn test_nested_return() {
     fn findPair(arr: Array<int>, target: int): Array<int>? {
         for (i in 0..arr.length) {
             for (j in (i+1)..arr.length) {
@@ -75,7 +75,7 @@ fn test_nested_return(): void {
 // ===== 递归提前返回 =====
 
 @test
-fn test_recursive_return(): void {
+fn test_recursive_return() {
     fn binarySearch(arr: Array<int>, target: int, low: int, high: int): int {
         if (low > high) {
             return -1
@@ -98,10 +98,10 @@ fn test_recursive_return(): void {
 // ===== 空返回 =====
 
 @test
-fn test_void_return(): void {
+fn test_void_return() {
     let executed = false
     
-    fn process(flag: bool): void {
+    fn process(flag: bool) {
         if (!flag) {
             return
         }

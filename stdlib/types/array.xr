@@ -3,10 +3,10 @@
 @native
 class Array<T> {
     length: int
-    push(value: T): void
+    push(value: T)
     pop(): T?
     shift(): T?
-    unshift(value: T): void
+    unshift(value: T)
     slice(start?: int, end?: int): Array<T>
     splice(start: int, deleteCount?: int, ...items: T): Array<T>
     concat(...arrays: Array<T>): Array<T>
@@ -18,7 +18,7 @@ class Array<T> {
     map(fn: fn(item: T, index: int): U): Array<U>
     filter(fn: fn(item: T, index: int): bool): Array<T>
     reduce(fn: fn(acc: U, item: T): U, initial: U): U
-    forEach(fn: fn(item: T, index: int): void): void
+    forEach(fn: fn(item: T, index: int))
     find(fn: fn(item: T): bool): T?
     findIndex(fn: fn(item: T): bool): int
     every(fn: fn(item: T): bool): bool

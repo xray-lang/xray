@@ -11,7 +11,7 @@
 
 // Test 1: shared const — concurrent read (zero-copy via refcount)
 @test
-fn test_shared_const(): void {
+fn test_shared_const() {
     print("=== Test shared const ===")
 
     shared const config = {
@@ -38,7 +38,7 @@ fn test_shared_const(): void {
 
 // Test 2: move with go — ownership transfer to coroutine
 @test
-fn test_move_go(): void {
+fn test_move_go() {
     print("=== Test move go ===")
 
     shared let data = { count: 10 }
@@ -56,7 +56,7 @@ fn test_move_go(): void {
 
 // Test 3: move with ch.send — ownership transfer via channel
 @test
-fn test_move_channel_send(): void {
+fn test_move_channel_send() {
     print("=== Test move channel send ===")
 
     shared const ch = new Channel(1)
@@ -73,7 +73,7 @@ fn test_move_channel_send(): void {
 
 // Test 4: normal variable — deep copy to coroutine (no move)
 @test
-fn test_normal_copy(): void {
+fn test_normal_copy() {
     print("=== Test normal copy ===")
 
     let arr = [1, 2, 3]
@@ -91,14 +91,14 @@ fn test_normal_copy(): void {
 
 // Test 5: move in pipeline — sequential ownership transfer via channel
 @test
-fn test_move_pipeline(): void {
+fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
     shared const ch = new Channel(1)
     shared let msg = { step: 0 }
 
     // Stage 1: modify and move-send
-    let t1 = go fn(c: Channel<Json>, d: Json): void {
+    let t1 = go fn(c: Channel<Json>, d: Json) {
         d.step = d.step + 1
         print("stage1:", d.step)
         c.send(d)

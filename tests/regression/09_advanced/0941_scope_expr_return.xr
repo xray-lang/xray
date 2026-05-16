@@ -13,7 +13,7 @@ fn child_fail(msg: string): int {
 }
 
 @test
-fn test_supervisor_scope_returns_errors(): void {
+fn test_supervisor_scope_returns_errors() {
     let errors = supervisor scope {
         go child_fail("err_a")
         go child_fail("err_b")
@@ -22,7 +22,7 @@ fn test_supervisor_scope_returns_errors(): void {
 }
 
 @test
-fn test_supervisor_scope_no_errors(): void {
+fn test_supervisor_scope_no_errors() {
     let errors = supervisor scope {
         go child_ok()
         go child_ok()
@@ -31,7 +31,7 @@ fn test_supervisor_scope_no_errors(): void {
 }
 
 @test
-fn test_supervisor_scope_mixed(): void {
+fn test_supervisor_scope_mixed() {
     let errors = supervisor scope {
         go child_ok()
         go child_fail("mixed_err")
@@ -41,7 +41,7 @@ fn test_supervisor_scope_mixed(): void {
 }
 
 @test
-fn test_supervisor_scope_single_failure(): void {
+fn test_supervisor_scope_single_failure() {
     let errors = supervisor scope {
         go child_fail("single")
     }
@@ -50,7 +50,7 @@ fn test_supervisor_scope_single_failure(): void {
 }
 
 @test
-fn test_supervisor_scope_as_statement(): void {
+fn test_supervisor_scope_as_statement() {
     supervisor scope {
         go child_ok()
         go child_fail("ignored")

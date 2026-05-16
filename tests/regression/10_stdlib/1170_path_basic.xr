@@ -5,13 +5,13 @@ import path
 // ===== Constants =====
 
 @test
-fn test_sep(): void {
+fn test_sep() {
     let s = path.sep
     assert(s == "/" || s == "\\")
 }
 
 @test
-fn test_delimiter(): void {
+fn test_delimiter() {
     let d = path.delimiter
     assert(d == ":" || d == ";")
 }
@@ -19,25 +19,25 @@ fn test_delimiter(): void {
 // ===== join =====
 
 @test
-fn test_join_basic(): void {
+fn test_join_basic() {
     let result = path.join("foo", "bar")
     assert_eq(result, "foo/bar")
 }
 
 @test
-fn test_join_multiple(): void {
+fn test_join_multiple() {
     let result = path.join("foo", "bar", "baz")
     assert_eq(result, "foo/bar/baz")
 }
 
 @test
-fn test_join_with_slash(): void {
+fn test_join_with_slash() {
     let result = path.join("/usr", "local", "bin")
     assert_eq(result, "/usr/local/bin")
 }
 
 @test
-fn test_join_trailing_slash(): void {
+fn test_join_trailing_slash() {
     let result = path.join("foo/", "bar")
     assert_eq(result, "foo/bar")
 }
@@ -45,19 +45,19 @@ fn test_join_trailing_slash(): void {
 // ===== dirname =====
 
 @test
-fn test_dirname_basic(): void {
+fn test_dirname_basic() {
     let result = path.dirname("/usr/local/bin/xray")
     assert_eq(result, "/usr/local/bin")
 }
 
 @test
-fn test_dirname_file_only(): void {
+fn test_dirname_file_only() {
     let result = path.dirname("file.txt")
     assert_eq(result, ".")
 }
 
 @test
-fn test_dirname_root(): void {
+fn test_dirname_root() {
     let result = path.dirname("/")
     assert_eq(result, "/")
 }
@@ -65,19 +65,19 @@ fn test_dirname_root(): void {
 // ===== basename =====
 
 @test
-fn test_basename_basic(): void {
+fn test_basename_basic() {
     let result = path.basename("/usr/local/bin/xray")
     assert_eq(result, "xray")
 }
 
 @test
-fn test_basename_with_ext(): void {
+fn test_basename_with_ext() {
     let result = path.basename("/home/user/file.txt")
     assert_eq(result, "file.txt")
 }
 
 @test
-fn test_basename_no_dir(): void {
+fn test_basename_no_dir() {
     let result = path.basename("file.txt")
     assert_eq(result, "file.txt")
 }
@@ -85,25 +85,25 @@ fn test_basename_no_dir(): void {
 // ===== extname =====
 
 @test
-fn test_extname_basic(): void {
+fn test_extname_basic() {
     let result = path.extname("file.txt")
     assert_eq(result, ".txt")
 }
 
 @test
-fn test_extname_no_ext(): void {
+fn test_extname_no_ext() {
     let result = path.extname("Makefile")
     assert_eq(result, "")
 }
 
 @test
-fn test_extname_multiple_dots(): void {
+fn test_extname_multiple_dots() {
     let result = path.extname("archive.tar.gz")
     assert_eq(result, ".gz")
 }
 
 @test
-fn test_extname_dotfile(): void {
+fn test_extname_dotfile() {
     let result = path.extname(".gitignore")
     assert_eq(result, "")
 }
@@ -111,13 +111,13 @@ fn test_extname_dotfile(): void {
 // ===== normalize =====
 
 @test
-fn test_normalize_dots(): void {
+fn test_normalize_dots() {
     let result = path.normalize("/usr/local/../bin/./xray")
     assert_eq(result, "/usr/bin/xray")
 }
 
 @test
-fn test_normalize_double_slash(): void {
+fn test_normalize_double_slash() {
     let result = path.normalize("/usr//local///bin")
     assert_eq(result, "/usr/local/bin")
 }
@@ -125,12 +125,12 @@ fn test_normalize_double_slash(): void {
 // ===== isAbsolute =====
 
 @test
-fn test_is_absolute_true(): void {
+fn test_is_absolute_true() {
     assert_eq(path.isAbsolute("/usr/bin"), true)
 }
 
 @test
-fn test_is_absolute_false(): void {
+fn test_is_absolute_false() {
     assert_eq(path.isAbsolute("foo/bar"), false)
     assert_eq(path.isAbsolute("./foo"), false)
 }
@@ -138,13 +138,13 @@ fn test_is_absolute_false(): void {
 // ===== resolve =====
 
 @test
-fn test_resolve_absolute(): void {
+fn test_resolve_absolute() {
     let result = path.resolve("/foo", "bar")
     assert_eq(result, "/foo/bar")
 }
 
 @test
-fn test_resolve_returns_absolute(): void {
+fn test_resolve_returns_absolute() {
     let result = path.resolve("foo")
     assert(path.isAbsolute(result))
 }
@@ -152,13 +152,13 @@ fn test_resolve_returns_absolute(): void {
 // ===== relative =====
 
 @test
-fn test_relative_basic(): void {
+fn test_relative_basic() {
     let result = path.relative("/usr/local/bin", "/usr/local/lib")
     assert_eq(result, "../lib")
 }
 
 @test
-fn test_relative_same(): void {
+fn test_relative_same() {
     let result = path.relative("/usr/local", "/usr/local")
     assert_eq(result, ".")
 }
@@ -166,26 +166,26 @@ fn test_relative_same(): void {
 // ===== relative (edge cases) =====
 
 @test
-fn test_relative_prefix_mismatch(): void {
+fn test_relative_prefix_mismatch() {
     // BUG-4 regression: /foo vs /foobar should not treat /foo as common prefix
     let result = path.relative("/foo", "/foobar")
     assert_eq(result, "../foobar")
 }
 
 @test
-fn test_relative_child(): void {
+fn test_relative_child() {
     let result = path.relative("/usr/local", "/usr/local/bin")
     assert_eq(result, "bin")
 }
 
 @test
-fn test_relative_parent(): void {
+fn test_relative_parent() {
     let result = path.relative("/usr/local/bin", "/usr/local")
     assert_eq(result, "..")
 }
 
 @test
-fn test_relative_deep(): void {
+fn test_relative_deep() {
     let result = path.relative("/a/b/c", "/a/x/y")
     assert_eq(result, "../../x/y")
 }
@@ -193,19 +193,19 @@ fn test_relative_deep(): void {
 // ===== normalize (edge cases) =====
 
 @test
-fn test_normalize_relative_dotdot(): void {
+fn test_normalize_relative_dotdot() {
     let result = path.normalize("foo/bar/../../baz")
     assert_eq(result, "baz")
 }
 
 @test
-fn test_normalize_absolute_dotdot_at_root(): void {
+fn test_normalize_absolute_dotdot_at_root() {
     let result = path.normalize("/../foo")
     assert_eq(result, "/foo")
 }
 
 @test
-fn test_normalize_only_dot(): void {
+fn test_normalize_only_dot() {
     assert_eq(path.normalize("."), ".")
     assert_eq(path.normalize(""), ".")
 }
@@ -213,7 +213,7 @@ fn test_normalize_only_dot(): void {
 // ===== parse =====
 
 @test
-fn test_parse_basic(): void {
+fn test_parse_basic() {
     let p = path.parse("/home/user/file.txt")
     assert_eq(p.get("base"), "file.txt")
     assert_eq(p.get("ext"), ".txt")
@@ -223,7 +223,7 @@ fn test_parse_basic(): void {
 // ===== format =====
 
 @test
-fn test_format_basic(): void {
+fn test_format_basic() {
     let obj = {
         "dir" => "/home/user",
         "base" => "file.txt"

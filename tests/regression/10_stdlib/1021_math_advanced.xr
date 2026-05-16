@@ -6,13 +6,13 @@ import math
 // ===== Trigonometric: tan =====
 
 @test
-fn test_tan_zero(): void {
+fn test_tan_zero() {
     let t = math.tan(0)
     assert(t > -0.01 && t < 0.01)
 }
 
 @test
-fn test_tan_pi_quarter(): void {
+fn test_tan_pi_quarter() {
     let t = math.tan(math.PI / 4)
     assert(t > 0.99 && t < 1.01)
 }
@@ -20,7 +20,7 @@ fn test_tan_pi_quarter(): void {
 // ===== Inverse trigonometric =====
 
 @test
-fn test_asin(): void {
+fn test_asin() {
     let result = math.asin(0)
     assert(result > -0.01 && result < 0.01)
 
@@ -29,7 +29,7 @@ fn test_asin(): void {
 }
 
 @test
-fn test_acos(): void {
+fn test_acos() {
     let result = math.acos(1)
     assert(result > -0.01 && result < 0.01)
 
@@ -38,7 +38,7 @@ fn test_acos(): void {
 }
 
 @test
-fn test_atan(): void {
+fn test_atan() {
     let result = math.atan(0)
     assert(result > -0.01 && result < 0.01)
 
@@ -47,7 +47,7 @@ fn test_atan(): void {
 }
 
 @test
-fn test_atan2(): void {
+fn test_atan2() {
     let result = math.atan2(0, 1)
     assert(result > -0.01 && result < 0.01)
 
@@ -61,7 +61,7 @@ fn test_atan2(): void {
 // ===== Logarithmic =====
 
 @test
-fn test_log(): void {
+fn test_log() {
     let result = math.log(1)
     assert(result > -0.01 && result < 0.01)  // ln(1) = 0
 
@@ -70,7 +70,7 @@ fn test_log(): void {
 }
 
 @test
-fn test_log10(): void {
+fn test_log10() {
     let result = math.log10(1)
     assert(result > -0.01 && result < 0.01)
 
@@ -79,7 +79,7 @@ fn test_log10(): void {
 }
 
 @test
-fn test_log2(): void {
+fn test_log2() {
     let result = math.log2(1)
     assert(result > -0.01 && result < 0.01)
 
@@ -90,7 +90,7 @@ fn test_log2(): void {
 // ===== Exponential =====
 
 @test
-fn test_exp(): void {
+fn test_exp() {
     let result = math.exp(0)
     assert(result > 0.99 && result < 1.01)  // e^0 = 1
 
@@ -101,22 +101,22 @@ fn test_exp(): void {
 // ===== clamp =====
 
 @test
-fn test_clamp_within(): void {
+fn test_clamp_within() {
     assert_eq(math.clamp(5, 0, 10), 5)
 }
 
 @test
-fn test_clamp_below(): void {
+fn test_clamp_below() {
     assert_eq(math.clamp(-5, 0, 10), 0)
 }
 
 @test
-fn test_clamp_above(): void {
+fn test_clamp_above() {
     assert_eq(math.clamp(15, 0, 10), 10)
 }
 
 @test
-fn test_clamp_boundary(): void {
+fn test_clamp_boundary() {
     assert_eq(math.clamp(0, 0, 10), 0)
     assert_eq(math.clamp(10, 0, 10), 10)
 }
@@ -124,7 +124,7 @@ fn test_clamp_boundary(): void {
 // ===== randomInt =====
 
 @test
-fn test_random_int_range(): void {
+fn test_random_int_range() {
     for (let i = 0; i < 20; i++) {
         let r = math.randomInt(1, 10)
         assert(r >= 1 && r <= 10)
@@ -132,7 +132,7 @@ fn test_random_int_range(): void {
 }
 
 @test
-fn test_random_int_same(): void {
+fn test_random_int_same() {
     for (let i = 0; i < 10; i++) {
         let r = math.randomInt(5, 5)
         assert_eq(r, 5)
@@ -142,26 +142,26 @@ fn test_random_int_same(): void {
 // ===== sign =====
 
 @test
-fn test_sign_positive(): void {
+fn test_sign_positive() {
     assert_eq(math.sign(42), 1)
     assert_eq(math.sign(0.5), 1)
 }
 
 @test
-fn test_sign_negative(): void {
+fn test_sign_negative() {
     assert_eq(math.sign(-42), -1)
     assert_eq(math.sign(-0.5), -1)
 }
 
 @test
-fn test_sign_zero(): void {
+fn test_sign_zero() {
     assert_eq(math.sign(0), 0)
 }
 
 // ===== isNaN / isFinite =====
 
 @test
-fn test_isNaN(): void {
+fn test_isNaN() {
     assert_eq(math.isNaN(math.NAN), true)
     assert_eq(math.isNaN(0), false)
     assert_eq(math.isNaN(3.14), false)
@@ -169,7 +169,7 @@ fn test_isNaN(): void {
 }
 
 @test
-fn test_isFinite(): void {
+fn test_isFinite() {
     assert_eq(math.isFinite(42), true)
     assert_eq(math.isFinite(3.14), true)
     assert_eq(math.isFinite(math.INF), false)
@@ -179,14 +179,14 @@ fn test_isFinite(): void {
 // ===== Constants: INF, NAN =====
 
 @test
-fn test_inf_constant(): void {
+fn test_inf_constant() {
     assert(math.INF > 0)
     assert(math.INF > 999999999)
     assert_eq(math.isFinite(math.INF), false)
 }
 
 @test
-fn test_nan_constant(): void {
+fn test_nan_constant() {
     assert_eq(math.isNaN(math.NAN), true)
     // NaN != NaN
     assert_eq(math.NAN == math.NAN, false)

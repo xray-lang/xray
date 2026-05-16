@@ -6,5 +6,5 @@ class Task {
     cancelled: bool
     result: Json
     error: string?
-    cancel(): void
+    cancel()
 }

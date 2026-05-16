@@ -3,14 +3,14 @@
 import log
 
 @test
-fn test_child_logger_creation(): void {
+fn test_child_logger_creation() {
     log.setLevel(log.DEBUG)
     let httpLog = log.child("module", "http", "version", "1.0")
     assert(httpLog != null)
 }
 
 @test
-fn test_child_logger_methods(): void {
+fn test_child_logger_methods() {
     log.setLevel(log.DEBUG)
     log.setFormat("json")
     let httpLog = log.child("module", "http")
@@ -23,7 +23,7 @@ fn test_child_logger_methods(): void {
 }
 
 @test
-fn test_nested_child_logger(): void {
+fn test_nested_child_logger() {
     log.setLevel(log.DEBUG)
     let httpLog = log.child("module", "http")
     let dbLog = httpLog.child("component", "database")

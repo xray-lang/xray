@@ -14,35 +14,35 @@ import crypto
 // ============================================================
 
 @test
-fn test_md5_empty_string(): void {
+fn test_md5_empty_string() {
     // 空字符串的 MD5 哈希值
     let hash = crypto.md5("")
     assert_eq(hash, "d41d8cd98f00b204e9800998ecf8427e")
 }
 
 @test
-fn test_md5_hello(): void {
+fn test_md5_hello() {
     // "hello" 的 MD5 哈希值
     let hash = crypto.md5("hello")
     assert_eq(hash, "5d41402abc4b2a76b9719d911017c592")
 }
 
 @test
-fn test_md5_hello_world(): void {
+fn test_md5_hello_world() {
     // "Hello World" 的 MD5 哈希值
     let hash = crypto.md5("Hello World")
     assert_eq(hash, "b10a8db164e0754105b7a99be72e3fe5")
 }
 
 @test
-fn test_md5_numbers(): void {
+fn test_md5_numbers() {
     // 数字字符串的 MD5 哈希值
     let hash = crypto.md5("123456")
     assert_eq(hash, "e10adc3949ba59abbe56e057f20f883e")
 }
 
 @test
-fn test_md5_long_string(): void {
+fn test_md5_long_string() {
     // 较长字符串的 MD5
     let hash = crypto.md5("The quick brown fox jumps over the lazy dog")
     assert_eq(hash, "9e107d9d372bb6826bd81d3542a419d6")
@@ -53,28 +53,28 @@ fn test_md5_long_string(): void {
 // ============================================================
 
 @test
-fn test_sha1_empty_string(): void {
+fn test_sha1_empty_string() {
     // 空字符串的 SHA1 哈希值
     let hash = crypto.sha1("")
     assert_eq(hash, "da39a3ee5e6b4b0d3255bfef95601890afd80709")
 }
 
 @test
-fn test_sha1_hello(): void {
+fn test_sha1_hello() {
     // "hello" 的 SHA1 哈希值
     let hash = crypto.sha1("hello")
     assert_eq(hash, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d")
 }
 
 @test
-fn test_sha1_hello_world(): void {
+fn test_sha1_hello_world() {
     // "Hello World" 的 SHA1 哈希值
     let hash = crypto.sha1("Hello World")
     assert_eq(hash, "0a4d55a8d778e5022fab701977c5d840bbc486d0")
 }
 
 @test
-fn test_sha1_long_string(): void {
+fn test_sha1_long_string() {
     // 较长字符串的 SHA1
     let hash = crypto.sha1("The quick brown fox jumps over the lazy dog")
     assert_eq(hash, "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12")
@@ -85,28 +85,28 @@ fn test_sha1_long_string(): void {
 // ============================================================
 
 @test
-fn test_sha256_empty_string(): void {
+fn test_sha256_empty_string() {
     // 空字符串的 SHA256 哈希值
     let hash = crypto.sha256("")
     assert_eq(hash, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 }
 
 @test
-fn test_sha256_hello(): void {
+fn test_sha256_hello() {
     // "hello" 的 SHA256 哈希值
     let hash = crypto.sha256("hello")
     assert_eq(hash, "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
 }
 
 @test
-fn test_sha256_hello_world(): void {
+fn test_sha256_hello_world() {
     // "Hello World" 的 SHA256 哈希值
     let hash = crypto.sha256("Hello World")
     assert_eq(hash, "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e")
 }
 
 @test
-fn test_sha256_long_string(): void {
+fn test_sha256_long_string() {
     // 较长字符串的 SHA256
     let hash = crypto.sha256("The quick brown fox jumps over the lazy dog")
     assert_eq(hash, "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592")
@@ -117,7 +117,7 @@ fn test_sha256_long_string(): void {
 // ============================================================
 
 @test
-fn test_hash_lengths(): void {
+fn test_hash_lengths() {
     // MD5 始终返回 32 字符
     assert_eq(crypto.md5("test").length, 32)
     

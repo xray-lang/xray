@@ -2,7 +2,7 @@
 // Comprehensive generic function tests
 // ===== Basic Generic Functions =====
 @test
-fn test_identity_int(): void {
+fn test_identity_int() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -12,7 +12,7 @@ fn test_identity_int(): void {
 }
 
 @test
-fn test_identity_string(): void {
+fn test_identity_string() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -22,7 +22,7 @@ fn test_identity_string(): void {
 }
 
 @test
-fn test_identity_float(): void {
+fn test_identity_float() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -31,7 +31,7 @@ fn test_identity_float(): void {
 }
 
 @test
-fn test_identity_bool(): void {
+fn test_identity_bool() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -40,7 +40,7 @@ fn test_identity_bool(): void {
 }
 
 @test
-fn test_identity_array(): void {
+fn test_identity_array() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -51,7 +51,7 @@ fn test_identity_array(): void {
 
 // ===== Multiple Type Parameters =====
 @test
-fn test_pair_creation(): void {
+fn test_pair_creation() {
     fn makePair<T, U>(a: T, b: U): (T, U) {
         return a, b
     }
@@ -61,7 +61,7 @@ fn test_pair_creation(): void {
 }
 
 @test
-fn test_swap_types(): void {
+fn test_swap_types() {
     fn swap<T, U>(a: T, b: U): (U, T) {
         return b, a
     }
@@ -71,7 +71,7 @@ fn test_swap_types(): void {
 }
 
 @test
-fn test_triple_params(): void {
+fn test_triple_params() {
     fn triple<A, B, C>(a: A, b: B, c: C): (A, B, C) {
         return a, b, c
     }
@@ -83,7 +83,7 @@ fn test_triple_params(): void {
 
 // ===== Generic Functions with Array Parameters =====
 @test
-fn test_array_first(): void {
+fn test_array_first() {
     fn first<T>(arr: Array<T>): T? {
         if (arr.length > 0) {
             return arr[0]
@@ -96,7 +96,7 @@ fn test_array_first(): void {
 }
 
 @test
-fn test_array_last(): void {
+fn test_array_last() {
     fn last<T>(arr: Array<T>): T? {
         if (arr.length > 0) {
             return arr[arr.length - 1]
@@ -109,8 +109,8 @@ fn test_array_last(): void {
 }
 
 @test
-fn test_array_swap_elements(): void {
-    fn swapElements<T>(arr: Array<T>, i: int, j: int): void {
+fn test_array_swap_elements() {
+    fn swapElements<T>(arr: Array<T>, i: int, j: int) {
         let temp = arr[i]
         arr[i] = arr[j]
         arr[j] = temp
@@ -126,7 +126,7 @@ fn test_array_swap_elements(): void {
 }
 
 @test
-fn test_array_contains(): void {
+fn test_array_contains() {
     fn contains<T>(arr: Array<T>, target: T): bool {
         for (item in arr) {
             if (item == target) {
@@ -142,7 +142,7 @@ fn test_array_contains(): void {
 }
 
 @test
-fn test_array_find_index(): void {
+fn test_array_find_index() {
     fn findIndex<T>(arr: Array<T>, target: T): int {
         for (let i = 0; i < arr.length; i++) {
             if (arr[i] == target) {
@@ -158,7 +158,7 @@ fn test_array_find_index(): void {
 
 // ===== Generic Functions with Return Types =====
 @test
-fn test_wrap_in_array(): void {
+fn test_wrap_in_array() {
     fn wrap<T>(x: T): Array<T> {
         return [x]
     }
@@ -171,7 +171,7 @@ fn test_wrap_in_array(): void {
 }
 
 @test
-fn test_repeat_value(): void {
+fn test_repeat_value() {
     fn repeat<T>(x: T, n: int): Array<T> {
         let result: Array<T> = []
         for (let i = 0; i < n; i++) {
@@ -190,7 +190,7 @@ fn test_repeat_value(): void {
 
 // ===== Generic Higher-Order Functions =====
 @test
-fn test_generic_apply(): void {
+fn test_generic_apply() {
     fn apply<T, R>(x: T, f: fn(T): R): R {
         return f(x)
     }
@@ -205,7 +205,7 @@ fn test_generic_apply(): void {
 }
 
 @test
-fn test_generic_transform(): void {
+fn test_generic_transform() {
     fn transform<T>(arr: Array<T>, f: fn(T): T): Array<T> {
         let result: Array<T> = []
         for (item in arr) {
@@ -223,7 +223,7 @@ fn test_generic_transform(): void {
 
 // ===== Generic with Optional Return =====
 @test
-fn test_safe_get(): void {
+fn test_safe_get() {
     fn safeGet<T>(arr: Array<T>, index: int): T? {
         if (index >= 0 && index < arr.length) {
             return arr[index]
@@ -236,7 +236,7 @@ fn test_safe_get(): void {
 }
 
 @test
-fn test_find_element(): void {
+fn test_find_element() {
     fn find<T>(arr: Array<T>, predicate: fn(T): bool): T? {
         for (item in arr) {
             if (predicate(item)) {
@@ -257,7 +257,7 @@ fn test_find_element(): void {
 
 // ===== Nested Generic Calls =====
 @test
-fn test_nested_generic_calls(): void {
+fn test_nested_generic_calls() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -271,7 +271,7 @@ fn test_nested_generic_calls(): void {
 }
 
 @test
-fn test_chained_generic_operations(): void {
+fn test_chained_generic_operations() {
     fn first<T>(arr: Array<T>): T? {
         if (arr.length > 0) {
             return arr[0]
@@ -288,7 +288,7 @@ fn test_chained_generic_operations(): void {
 
 // ===== Generic Functions with Complex Types =====
 @test
-fn test_generic_with_map(): void {
+fn test_generic_with_map() {
     fn getOrDefault<K, V>(m: Map<K, V>, key: K, defaultVal: V): V {
         if (m.has(key)) {
             return m.get(key)
@@ -301,7 +301,7 @@ fn test_generic_with_map(): void {
 }
 
 @test
-fn test_generic_merge_arrays(): void {
+fn test_generic_merge_arrays() {
     fn merge<T>(a: Array<T>, b: Array<T>): Array<T> {
         let result: Array<T> = []
         for (item in a) {
@@ -320,7 +320,7 @@ fn test_generic_merge_arrays(): void {
 
 // ===== Type Inference Edge Cases =====
 @test
-fn test_infer_from_return_usage(): void {
+fn test_infer_from_return_usage() {
     fn identity<T>(x: T): T {
         return x
     }
@@ -333,7 +333,7 @@ fn test_infer_from_return_usage(): void {
 }
 
 @test
-fn test_infer_from_array_literal(): void {
+fn test_infer_from_array_literal() {
     fn first<T>(arr: Array<T>): T? {
         if (arr.length > 0) {
             return arr[0]
@@ -347,7 +347,7 @@ fn test_infer_from_array_literal(): void {
 
 // ===== Generic Functions with Default Values =====
 @test
-fn test_generic_with_default(): void {
+fn test_generic_with_default() {
     fn valueOrDefault<T>(val: T?, defaultVal: T): T {
         if (val != null) {
             return val

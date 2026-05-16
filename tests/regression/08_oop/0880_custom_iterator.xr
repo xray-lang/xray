@@ -39,7 +39,7 @@ class CustomRange {
 }
 
 @test
-fn test_basic_range_iterator(): void {
+fn test_basic_range_iterator() {
     let sum = 0
     for (i in CustomRange(1, 6)) {
         sum = sum + i
@@ -48,7 +48,7 @@ fn test_basic_range_iterator(): void {
 }
 
 @test
-fn test_empty_range(): void {
+fn test_empty_range() {
     let count = 0
     for (i in CustomRange(5, 5)) {
         count = count + 1
@@ -57,7 +57,7 @@ fn test_empty_range(): void {
 }
 
 @test
-fn test_single_element_range(): void {
+fn test_single_element_range() {
     let result = 0
     for (i in CustomRange(42, 43)) {
         result = i
@@ -110,7 +110,7 @@ class StepRange {
 }
 
 @test
-fn test_step_range_forward(): void {
+fn test_step_range_forward() {
     let values: Array<int> = []
     for (i in StepRange(0, 10, 2)) {
         values.push(i)
@@ -124,7 +124,7 @@ fn test_step_range_forward(): void {
 }
 
 @test
-fn test_step_range_backward(): void {
+fn test_step_range_backward() {
     let values: Array<int> = []
     for (i in StepRange(10, 0, -2)) {
         values.push(i)
@@ -179,7 +179,7 @@ class Fibonacci {
 }
 
 @test
-fn test_fibonacci_iterator(): void {
+fn test_fibonacci_iterator() {
     let values: Array<int> = []
     for (n in Fibonacci(8)) {
         values.push(n)
@@ -230,7 +230,7 @@ class Chars {
 }
 
 @test
-fn test_char_iterator(): void {
+fn test_char_iterator() {
     let chars: Array<string> = []
     for (ch in Chars("hello")) {
         chars.push(ch)
@@ -246,7 +246,7 @@ fn test_char_iterator(): void {
 // ===== 嵌套迭代 =====
 
 @test
-fn test_nested_iteration(): void {
+fn test_nested_iteration() {
     let pairs: Array<string> = []
     for (i in CustomRange(1, 4)) {
         for (j in CustomRange(1, 4)) {
@@ -262,7 +262,7 @@ fn test_nested_iteration(): void {
 // ===== 迭代器与 break/continue =====
 
 @test
-fn test_iterator_with_break(): void {
+fn test_iterator_with_break() {
     let sum = 0
     for (i in CustomRange(1, 100)) {
         if (i > 5) {
@@ -274,7 +274,7 @@ fn test_iterator_with_break(): void {
 }
 
 @test
-fn test_iterator_with_continue(): void {
+fn test_iterator_with_continue() {
     let sum = 0
     for (i in CustomRange(1, 11)) {
         if (i % 2 == 0) {
@@ -288,7 +288,7 @@ fn test_iterator_with_continue(): void {
 // ===== 迭代器变量作为表达式 =====
 
 @test
-fn test_iterator_inline(): void {
+fn test_iterator_inline() {
     let sum = 0
     for (i in CustomRange(1, 6)) {
         sum = sum + i * i
@@ -299,7 +299,7 @@ fn test_iterator_inline(): void {
 // ===== 迭代器与变量存储 =====
 
 @test
-fn test_iterator_stored_in_variable(): void {
+fn test_iterator_stored_in_variable() {
     let r = CustomRange(1, 4)
     let sum = 0
     for (i in r) {

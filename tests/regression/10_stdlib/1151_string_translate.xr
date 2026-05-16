@@ -3,7 +3,7 @@
 // ===== translateBytes =====
 
 @test
-fn test_translate_bytes_basic(): void {
+fn test_translate_bytes_basic() {
     let COMP = {"A" => "T", "T" => "A", "C" => "G", "G" => "C"}
     assert_eq("ACGT".translateBytes(COMP), "TGCA")
     assert_eq("AAAA".translateBytes(COMP), "TTTT")
@@ -12,14 +12,14 @@ fn test_translate_bytes_basic(): void {
 }
 
 @test
-fn test_translate_bytes_partial(): void {
+fn test_translate_bytes_partial() {
     let partial = {"A" => "X"}
     assert_eq("ABCD".translateBytes(partial), "XBCD")
     assert_eq("AAAA".translateBytes(partial), "XXXX")
 }
 
 @test
-fn test_translate_bytes_reverse_complement(): void {
+fn test_translate_bytes_reverse_complement() {
     let COMP = {"A" => "T", "T" => "A", "C" => "G", "G" => "C"}
     assert_eq("ACGTACGT".reverseBytes().translateBytes(COMP), "ACGTACGT")
     assert_eq("AACC".reverseBytes().translateBytes(COMP), "GGTT")
@@ -28,21 +28,21 @@ fn test_translate_bytes_reverse_complement(): void {
 // ===== translate (Unicode) =====
 
 @test
-fn test_translate_unicode(): void {
+fn test_translate_unicode() {
     let cnTable = {"你" => "我", "好" => "坏"}
     assert_eq("你好".translate(cnTable), "我坏")
     assert_eq("你好你".translate(cnTable), "我坏我")
 }
 
 @test
-fn test_translate_ascii_consistency(): void {
+fn test_translate_ascii_consistency() {
     let asciiTable = {"H" => "h", "W" => "w"}
     assert_eq("HW".translate(asciiTable), "hw")
     assert_eq("HW".translateBytes(asciiTable), "hw")
 }
 
 @test
-fn test_translate_empty_table(): void {
+fn test_translate_empty_table() {
     let empty = #{}
     assert_eq("ABC".translateBytes(empty), "ABC")
     assert_eq("ABC".translate(empty), "ABC")

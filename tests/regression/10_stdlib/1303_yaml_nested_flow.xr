@@ -8,7 +8,7 @@ import yaml
 // ===== Flow mapping nested in flow mapping =====
 
 @test
-fn test_nested_flow_mapping(): void {
+fn test_nested_flow_mapping() {
     let data = "outer: {inner: {a: 1, b: 2}, c: 3}"
     let obj = yaml.parse(data)
     let outer = obj["outer"]
@@ -20,7 +20,7 @@ fn test_nested_flow_mapping(): void {
 // ===== Flow sequence nested in flow mapping =====
 
 @test
-fn test_flow_sequence_in_flow_mapping(): void {
+fn test_flow_sequence_in_flow_mapping() {
     let data = "config: {ports: [80, 443, 8080], host: localhost}"
     let obj = yaml.parse(data)
     let cfg = obj["config"]
@@ -33,7 +33,7 @@ fn test_flow_sequence_in_flow_mapping(): void {
 // ===== Flow mapping nested in flow sequence =====
 
 @test
-fn test_flow_mapping_in_flow_sequence(): void {
+fn test_flow_mapping_in_flow_sequence() {
     let data = "items: [{name: alice, age: 30}, {name: bob, age: 25}]"
     let obj = yaml.parse(data)
     let items = obj["items"]
@@ -46,7 +46,7 @@ fn test_flow_mapping_in_flow_sequence(): void {
 // ===== Flow sequence nested in flow sequence =====
 
 @test
-fn test_nested_flow_sequence(): void {
+fn test_nested_flow_sequence() {
     let data = "matrix: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]"
     let obj = yaml.parse(data)
     let m = obj["matrix"]
@@ -59,7 +59,7 @@ fn test_nested_flow_sequence(): void {
 // ===== Multiple flow mappings at same level =====
 
 @test
-fn test_multiple_flow_mappings(): void {
+fn test_multiple_flow_mappings() {
     let data = "a: {x: 1}\nb: {y: 2}\nc: {z: 3}"
     let obj = yaml.parse(data)
     assert_eq(obj["a"]["x"], 1)
@@ -70,7 +70,7 @@ fn test_multiple_flow_mappings(): void {
 // ===== Flow mapping with various value types =====
 
 @test
-fn test_flow_mapping_mixed_values(): void {
+fn test_flow_mapping_mixed_values() {
     let data = "mix: {num: 42, str: hello, flag: true, nothing: null}"
     let obj = yaml.parse(data)
     let mix = obj["mix"]
@@ -83,7 +83,7 @@ fn test_flow_mapping_mixed_values(): void {
 // ===== Empty flow structures =====
 
 @test
-fn test_empty_flow_structures(): void {
+fn test_empty_flow_structures() {
     let data = "empty_map: {}\nempty_list: []"
     let obj = yaml.parse(data)
     assert(obj["empty_map"] != null)
@@ -93,7 +93,7 @@ fn test_empty_flow_structures(): void {
 // ===== Deeply nested flow =====
 
 @test
-fn test_deep_nested_flow(): void {
+fn test_deep_nested_flow() {
     let data = "deep: {l1: {l2: {l3: 42}}}"
     let obj = yaml.parse(data)
     assert_eq(obj["deep"]["l1"]["l2"]["l3"], 42)
@@ -102,7 +102,7 @@ fn test_deep_nested_flow(): void {
 // ===== Flow mapping with quoted keys =====
 
 @test
-fn test_flow_mapping_quoted_keys(): void {
+fn test_flow_mapping_quoted_keys() {
     let data = "data: {\"key one\": 1, 'key two': 2}"
     let obj = yaml.parse(data)
     let d = obj["data"]
@@ -113,7 +113,7 @@ fn test_flow_mapping_quoted_keys(): void {
 // ===== Complex real-world-like YAML =====
 
 @test
-fn test_complex_yaml_config(): void {
+fn test_complex_yaml_config() {
     let data = "app:\n  name: myapp\n  version: 1\n  database:\n    host: localhost\n    port: 5432\n  features: [auth, logging, cache]\n  limits: {max_conn: 100, timeout: 30}"
     let obj = yaml.parse(data)
     let app = obj["app"]
@@ -130,7 +130,7 @@ fn test_complex_yaml_config(): void {
 // ===== Block sequence with flow mapping items =====
 
 @test
-fn test_flow_in_block_sequence(): void {
+fn test_flow_in_block_sequence() {
     let data = "servers:\n  - {host: a.com, port: 80}\n  - {host: b.com, port: 443}"
     let obj = yaml.parse(data)
     let servers = obj["servers"]
@@ -143,7 +143,7 @@ fn test_flow_in_block_sequence(): void {
 // ===== Block sequence with nested block mappings =====
 
 @test
-fn test_block_sequence_nested_mappings(): void {
+fn test_block_sequence_nested_mappings() {
     let data = "users:\n  - name: Alice\n    age: 30\n  - name: Bob\n    age: 25"
     let obj = yaml.parse(data)
     let users = obj["users"]
@@ -156,7 +156,7 @@ fn test_block_sequence_nested_mappings(): void {
 // ===== Block sequence with 3+ multi-line items =====
 
 @test
-fn test_block_sequence_three_items(): void {
+fn test_block_sequence_three_items() {
     let data = "tasks:\n  - id: 1\n    status: done\n  - id: 2\n    status: pending\n  - id: 3\n    status: active"
     let obj = yaml.parse(data)
     let tasks = obj["tasks"]
@@ -170,7 +170,7 @@ fn test_block_sequence_three_items(): void {
 // ===== Block sequence with mixed inline and block items =====
 
 @test
-fn test_block_sequence_mixed_items(): void {
+fn test_block_sequence_mixed_items() {
     let data = "items:\n  - simple\n  - {complex: true}\n  - name: nested\n    value: 42"
     let obj = yaml.parse(data)
     let items = obj["items"]
@@ -183,7 +183,7 @@ fn test_block_sequence_mixed_items(): void {
 // ===== Deeply nested block structure =====
 
 @test
-fn test_deep_block_nesting(): void {
+fn test_deep_block_nesting() {
     let data = "l1:\n  l2:\n    l3:\n      value: deep"
     let obj = yaml.parse(data)
     assert_eq(obj["l1"]["l2"]["l3"]["value"], "deep")
@@ -192,7 +192,7 @@ fn test_deep_block_nesting(): void {
 // ===== Block sequence inside block sequence (via multiline) =====
 
 @test
-fn test_block_mapping_with_multiple_sequences(): void {
+fn test_block_mapping_with_multiple_sequences() {
     let data = "fruits: [apple, banana]\nvegs: [carrot, pea]"
     let obj = yaml.parse(data)
     assert_eq(obj["fruits"][0], "apple")
@@ -204,7 +204,7 @@ fn test_block_mapping_with_multiple_sequences(): void {
 // ===== Real-world: docker-compose-like YAML =====
 
 @test
-fn test_docker_compose_like(): void {
+fn test_docker_compose_like() {
     let data = "services:\n  web:\n    image: nginx\n    ports: [80, 443]\n  db:\n    image: postgres\n    ports: [5432]"
     let obj = yaml.parse(data)
     let svc = obj["services"]
@@ -218,7 +218,7 @@ fn test_docker_compose_like(): void {
 // ===== YAML multiline and special values =====
 
 @test
-fn test_yaml_special_values(): void {
+fn test_yaml_special_values() {
     let data = "t1: true\nt2: false\nn1: null\nn2: ~\ni1: 42\nf1: 3.14"
     let obj = yaml.parse(data)
     assert_eq(obj["t1"], true)

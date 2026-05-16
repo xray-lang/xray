@@ -14,7 +14,7 @@
 
 // ===== 测试1: 多协程并发短字符串拼接 =====
 @test
-fn test_concurrent_short_concat(): void {
+fn test_concurrent_short_concat() {
     print("\n[测试1] 多协程并发短字符串拼接")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
@@ -50,7 +50,7 @@ fn test_concurrent_short_concat(): void {
 
 // ===== 测试2: 多协程并发长字符串拼接 =====
 @test
-fn test_concurrent_long_concat(): void {
+fn test_concurrent_long_concat() {
     print("\n[测试2] 多协程并发长字符串拼接")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
@@ -95,7 +95,7 @@ fn test_concurrent_long_concat(): void {
 
 // ===== 测试3: 多协程混合短长字符串拼接 =====
 @test
-fn test_concurrent_mixed_concat(): void {
+fn test_concurrent_mixed_concat() {
     print("\n[测试3] 多协程混合短长字符串拼接")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
@@ -142,7 +142,7 @@ fn test_concurrent_mixed_concat(): void {
 
 // ===== 测试4: 高并发循环拼接 =====
 @test
-fn test_concurrent_loop_concat(): void {
+fn test_concurrent_loop_concat() {
     print("\n[测试4] 高并发循环拼接")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
@@ -183,7 +183,7 @@ fn test_concurrent_loop_concat(): void {
 
 // ===== 测试5: 并发阈值边界拼接 =====
 @test
-fn test_concurrent_threshold_boundary(): void {
+fn test_concurrent_threshold_boundary() {
     print("\n[测试5] 并发阈值边界拼接")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
@@ -226,7 +226,7 @@ fn test_concurrent_threshold_boundary(): void {
 
 // ===== 测试6: 并发数据隔离性验证 =====
 @test
-fn test_concurrent_data_isolation(): void {
+fn test_concurrent_data_isolation() {
     print("\n[测试6] 并发数据隔离性验证")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
@@ -279,7 +279,7 @@ fn test_concurrent_data_isolation(): void {
 
 // ===== 测试7: 大规模并发压力测试 =====
 @test
-fn test_stress_concurrent_concat(): void {
+fn test_stress_concurrent_concat() {
     print("\n[测试7] 大规模并发压力测试")
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**

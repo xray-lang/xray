@@ -6,7 +6,7 @@
 */
 
 import time
-fn worker(id: int, ch: Channel<int>, iterations: int): void {
+fn worker(id: int, ch: Channel<int>, iterations: int) {
     for (let i = 0; i < iterations; i++) {
         time.sleep(5)
     }

@@ -53,7 +53,7 @@ class Counter {
 
     constructor() { this.count = 0 }
 
-    increment(): void { this.count = this.count + 1 }
+    increment() { this.count = this.count + 1 }
     getCount(): int { return this.count }
 
     static create(): Counter {

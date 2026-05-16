@@ -12,27 +12,27 @@ import crypto
 // ============================================================
 
 @test
-fn test_timing_safe_equal_same(): void {
+fn test_timing_safe_equal_same() {
     assert_true(crypto.timingSafeEqual("hello", "hello"))
 }
 
 @test
-fn test_timing_safe_equal_different(): void {
+fn test_timing_safe_equal_different() {
     assert_true(!crypto.timingSafeEqual("hello", "world"))
 }
 
 @test
-fn test_timing_safe_equal_different_length(): void {
+fn test_timing_safe_equal_different_length() {
     assert_true(!crypto.timingSafeEqual("short", "longer string"))
 }
 
 @test
-fn test_timing_safe_equal_empty(): void {
+fn test_timing_safe_equal_empty() {
     assert_true(crypto.timingSafeEqual("", ""))
 }
 
 @test
-fn test_timing_safe_equal_hmac_verify(): void {
+fn test_timing_safe_equal_hmac_verify() {
     // Typical usage: verify HMAC
     let expected = crypto.hmac("sha256", "secret", "data")
     let actual = crypto.hmac("sha256", "secret", "data")
@@ -40,7 +40,7 @@ fn test_timing_safe_equal_hmac_verify(): void {
 }
 
 @test
-fn test_timing_safe_equal_hmac_mismatch(): void {
+fn test_timing_safe_equal_hmac_mismatch() {
     let expected = crypto.hmac("sha256", "secret", "data")
     let tampered = crypto.hmac("sha256", "secret", "tampered")
     assert_true(!crypto.timingSafeEqual(expected, tampered))
@@ -51,7 +51,7 @@ fn test_timing_safe_equal_hmac_mismatch(): void {
 // ============================================================
 
 @test
-fn test_all_hash_lengths(): void {
+fn test_all_hash_lengths() {
     assert_eq(crypto.md5("x").length, 32)
     assert_eq(crypto.sha1("x").length, 40)
     assert_eq(crypto.sha256("x").length, 64)
@@ -59,7 +59,7 @@ fn test_all_hash_lengths(): void {
 }
 
 @test
-fn test_all_hmac_lengths(): void {
+fn test_all_hmac_lengths() {
     assert_eq(crypto.hmac("md5", "k", "d").length, 32)
     assert_eq(crypto.hmac("sha1", "k", "d").length, 40)
     assert_eq(crypto.hmac("sha256", "k", "d").length, 64)

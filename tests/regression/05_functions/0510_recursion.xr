@@ -5,7 +5,7 @@
 // ===== 阶乘 =====
 
 @test
-fn test_factorial(): void {
+fn test_factorial() {
     fn factorial(n: int): int {
         if (n <= 1) { return 1 }
         return n * factorial(n - 1)
@@ -20,7 +20,7 @@ fn test_factorial(): void {
 // ===== 斐波那契 =====
 
 @test
-fn test_fibonacci(): void {
+fn test_fibonacci() {
     fn fib(n: int): int {
         if (n <= 1) { return n }
         return fib(n - 1) + fib(n - 2)
@@ -36,7 +36,7 @@ fn test_fibonacci(): void {
 // ===== 累加 =====
 
 @test
-fn test_sum_to(): void {
+fn test_sum_to() {
     fn sumTo(n: int): int {
         if (n <= 0) { return 0 }
         return n + sumTo(n - 1)
@@ -51,7 +51,7 @@ fn test_sum_to(): void {
 // ===== 最大公约数 =====
 
 @test
-fn test_gcd(): void {
+fn test_gcd() {
     fn gcd(a: int, b: int): int {
         if (b == 0) { return a }
         return gcd(b, a % b)
@@ -66,7 +66,7 @@ fn test_gcd(): void {
 // ===== 幂运算 =====
 
 @test
-fn test_power(): void {
+fn test_power() {
     fn power(base: int, exp: int): int {
         if (exp == 0) { return 1 }
         return base * power(base, exp - 1)
@@ -81,7 +81,7 @@ fn test_power(): void {
 // ===== 数组递归 =====
 
 @test
-fn test_array_sum(): void {
+fn test_array_sum() {
     fn arraySum(arr: Array<int>, i: int): int {
         if (i >= arr.length) { return 0 }
         return arr[i] + arraySum(arr, i + 1)
@@ -93,9 +93,9 @@ fn test_array_sum(): void {
 }
 
 @test
-fn test_count_down(): void {
+fn test_count_down() {
     let result: Array<int> = []
-    fn countdown(n: int): void {
+    fn countdown(n: int) {
         if (n <= 0) { return }
         result.push(n)
         countdown(n - 1)
@@ -110,7 +110,7 @@ fn test_count_down(): void {
 // ===== 二分查找 =====
 
 @test
-fn test_binary_search(): void {
+fn test_binary_search() {
     fn binarySearch(arr: Array<int>, target: int, low: int, high: int): int {
         if (low > high) { return -1 }
         let mid = (low + high) / 2
@@ -131,7 +131,7 @@ fn test_binary_search(): void {
 // ===== 相互递归 =====
 
 @test
-fn test_mutual_recursion(): void {
+fn test_mutual_recursion() {
     fn isEven(n: int): bool {
         if (n == 0) { return true }
         return isOdd(n - 1)
@@ -152,7 +152,7 @@ fn test_mutual_recursion(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_deep_recursion(): void {
+fn test_deep_recursion() {
     fn recurse(n: int): int {
         if (n <= 0) { return 0 }
         return 1 + recurse(n - 1)

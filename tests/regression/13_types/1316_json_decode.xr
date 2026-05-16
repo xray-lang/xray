@@ -4,12 +4,12 @@
 type User = { name: string, age: int }
 
 @test
-fn test_sanity(): void {
+fn test_sanity() {
     assert_eq(1 + 1, 2)
 }
 
 @test
-fn test_decode_basic(): void {
+fn test_decode_basic() {
     let json = Json.parse('{"name": "Alice", "age": 30}')
     let user = Json.decode<User>(json)
     assert(user != null)
@@ -18,14 +18,14 @@ fn test_decode_basic(): void {
 }
 
 @test
-fn test_decode_missing_field(): void {
+fn test_decode_missing_field() {
     let partial = Json.parse('{"name": "Bob"}')
     let bad = Json.decode<User>(partial)
     assert_eq(bad, null)
 }
 
 @test
-fn test_decode_wrong_type(): void {
+fn test_decode_wrong_type() {
     // Decode currently validates field presence, not field types.
     // All required fields exist → decode succeeds with the raw values.
     let wrong = Json.parse('{"name": 123, "age": 30}')
@@ -35,7 +35,7 @@ fn test_decode_wrong_type(): void {
 }
 
 @test
-fn test_decode_extra_fields(): void {
+fn test_decode_extra_fields() {
     let extra = Json.parse('{"name": "Carol", "age": 25, "email": "c@test.com"}')
     let user = Json.decode<User>(extra)
     assert(user != null)
@@ -44,7 +44,7 @@ fn test_decode_extra_fields(): void {
 }
 
 @test
-fn test_decode_non_object(): void {
+fn test_decode_non_object() {
     let arr = Json.parse("[1, 2, 3]")
     let bad = Json.decode<User>(arr)
     assert_eq(bad, null)
@@ -54,7 +54,7 @@ fn test_decode_non_object(): void {
 type Config = { host: string, port: int, debug: bool }
 
 @test
-fn test_decode_bool_field(): void {
+fn test_decode_bool_field() {
     let json = Json.parse('{"host": "localhost", "port": 8080, "debug": true}')
     let cfg = Json.decode<Config>(json)
     assert(cfg != null)
@@ -66,7 +66,7 @@ fn test_decode_bool_field(): void {
 type Point = { x: float, y: float }
 
 @test
-fn test_decode_float_fields(): void {
+fn test_decode_float_fields() {
     let json = Json.parse('{"x": 1.5, "y": 2.7}')
     let pt = Json.decode<Point>(json)
     assert(pt != null)
@@ -75,7 +75,7 @@ fn test_decode_float_fields(): void {
 }
 
 @test
-fn test_decode_null_input(): void {
+fn test_decode_null_input() {
     let n = Json.parse("null")
     let bad = Json.decode<User>(n)
     assert_eq(bad, null)

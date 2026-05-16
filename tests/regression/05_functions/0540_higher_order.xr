@@ -5,7 +5,7 @@
 // ===== 函数作为参数 =====
 
 @test
-fn test_function_as_param(): void {
+fn test_function_as_param() {
     fn apply(f: fn(int): int, x: int): int {
         return f(x)
     }
@@ -18,7 +18,7 @@ fn test_function_as_param(): void {
 }
 
 @test
-fn test_binary_function_param(): void {
+fn test_binary_function_param() {
     fn combine(f: fn(int, int): int, a: int, b: int): int {
         return f(a, b)
     }
@@ -33,7 +33,7 @@ fn test_binary_function_param(): void {
 // ===== 函数作为返回值 =====
 
 @test
-fn test_function_factory(): void {
+fn test_function_factory() {
     fn createGreeter(greeting: string): fn(string): string {
         fn greet(name: string): string {
             return greeting + ", " + name + "!"
@@ -51,7 +51,7 @@ fn test_function_factory(): void {
 // ===== 函数组合 =====
 
 @test
-fn test_compose(): void {
+fn test_compose() {
     fn compose(f: fn(int): int, g: fn(int): int): fn(int): int {
         fn composed(x: int): int {
             return f(g(x))
@@ -72,7 +72,7 @@ fn test_compose(): void {
 // ===== 部分应用 =====
 
 @test
-fn test_partial(): void {
+fn test_partial() {
     fn add(a: int, b: int): int {
         return a + b
     }
@@ -92,15 +92,15 @@ fn test_partial(): void {
 // ===== 回调模式 =====
 
 @test
-fn test_callback(): void {
+fn test_callback() {
     let received = 0
     
-    fn processAsync(callback: fn(int): void): void {
+    fn processAsync(callback: fn(int)) {
         let result = 42
         callback(result)
     }
     
-    fn handler(value: int): void {
+    fn handler(value: int) {
         received = value
     }
     
@@ -111,7 +111,7 @@ fn test_callback(): void {
 // ===== 自定义迭代器 =====
 
 @test
-fn test_custom_map(): void {
+fn test_custom_map() {
     fn myMap(arr: Array<int>, transform: fn(int): int): Array<int> {
         let result: Array<int> = []
         for (x in arr) {
@@ -131,7 +131,7 @@ fn test_custom_map(): void {
 }
 
 @test
-fn test_custom_filter(): void {
+fn test_custom_filter() {
     fn myFilter(arr: Array<int>, predicate: fn(int): bool): Array<int> {
         let result: Array<int> = []
         for (x in arr) {
@@ -152,7 +152,7 @@ fn test_custom_filter(): void {
 }
 
 @test
-fn test_custom_reduce(): void {
+fn test_custom_reduce() {
     fn myReduce(arr: Array<int>, reducer: fn(int, int): int, initial: int): int {
         let acc = initial
         for (x in arr) {
@@ -172,7 +172,7 @@ fn test_custom_reduce(): void {
 // ===== 管道 =====
 
 @test
-fn test_pipe(): void {
+fn test_pipe() {
     fn double(x: int): int { return x * 2 }
     fn addTen(x: int): int { return x + 10 }
     fn square(x: int): int { return x * x }
@@ -188,7 +188,7 @@ fn test_pipe(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_identity_function(): void {
+fn test_identity_function() {
     fn identity<T>(x: T): T { return x }
     
     assert_eq(identity(42), 42)
@@ -197,7 +197,7 @@ fn test_identity_function(): void {
 }
 
 @test
-fn test_constant_function(): void {
+fn test_constant_function() {
     fn makeConstant(value: int): fn(): int {
         fn constant(): int {
             return value

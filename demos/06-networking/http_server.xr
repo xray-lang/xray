@@ -12,12 +12,12 @@ import http
 // === Define routes ===
 
 // Simple text response
-http.route("GET", "/", (req: Json, res: Json): void => {
+http.route("GET", "/", (req: Json, res: Json) => {
     res.send("Welcome to Xray HTTP Server!")
 })
 
 // JSON response
-http.route("GET", "/api/hello", (req: Json, res: Json): void => {
+http.route("GET", "/api/hello", (req: Json, res: Json) => {
     res.json({
         message: "Hello from Xray!",
         method: req.method,
@@ -26,7 +26,7 @@ http.route("GET", "/api/hello", (req: Json, res: Json): void => {
 })
 
 // Echo back request body
-http.route("POST", "/api/echo", (req: Json, res: Json): void => {
+http.route("POST", "/api/echo", (req: Json, res: Json) => {
     let body = req.body
     res.json({
         echo: body,
@@ -35,7 +35,7 @@ http.route("POST", "/api/echo", (req: Json, res: Json): void => {
 })
 
 // Dynamic path (query params)
-http.route("GET", "/api/greet", (req: Json, res: Json): void => {
+http.route("GET", "/api/greet", (req: Json, res: Json) => {
     let name = req.query.name ?? "World"
     res.json({ greeting: "Hello, ${name}!" })
 })

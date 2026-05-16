@@ -5,7 +5,7 @@ fn compute(n: int): int {
 }
 
 @test
-fn test_await_all(): void {
+fn test_await_all() {
     // 创建多个协程
     let t1 = go compute(2)
     let t2 = go compute(3)

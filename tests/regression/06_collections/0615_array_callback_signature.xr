@@ -14,21 +14,21 @@
 
 // ===== reduce(fn, init) returns accumulator, not the callback =====
 @test
-fn test_reduce_returns_accumulated_int(): void {
+fn test_reduce_returns_accumulated_int() {
     let xs = [10, 20, 30, 40, 50]
     let sum = xs.reduce(fn(acc: int, v: int): int { return acc + v }, 0)
     assert_eq(sum, 150)
 }
 
 @test
-fn test_reduce_initial_value_used(): void {
+fn test_reduce_initial_value_used() {
     let xs = [1, 2, 3]
     let sum = xs.reduce(fn(a: int, b: int): int { return a + b }, 100)
     assert_eq(sum, 106)
 }
 
 @test
-fn test_reduce_typed_lambda_in_variable(): void {
+fn test_reduce_typed_lambda_in_variable() {
     let xs = [1, 2, 3, 4]
     let adder = fn(acc: int, v: int): int { return acc + v }
     let sum = xs.reduce(adder, 0)
@@ -39,7 +39,7 @@ fn test_reduce_typed_lambda_in_variable(): void {
 // map/filter/forEach/find/every/some accept a single-arg callback
 // even though the full signature also exposes index / array.
 @test
-fn test_map_single_arg_callback(): void {
+fn test_map_single_arg_callback() {
     let xs = [1, 2, 3]
     let doubled = xs.map(fn(x: int): int { return x * 2 })
     assert_eq(doubled[0], 2)
@@ -48,7 +48,7 @@ fn test_map_single_arg_callback(): void {
 }
 
 @test
-fn test_filter_single_arg_callback(): void {
+fn test_filter_single_arg_callback() {
     let xs = [1, 2, 3, 4, 5]
     let evens = xs.filter(fn(x: int): bool { return x % 2 == 0 })
     assert_eq(evens.length, 2)
@@ -57,7 +57,7 @@ fn test_filter_single_arg_callback(): void {
 }
 
 @test
-fn test_every_some_single_arg(): void {
+fn test_every_some_single_arg() {
     let xs = [2, 4, 6]
     let all_even = xs.every(fn(x: int): bool { return x % 2 == 0 })
     let any_lt_3 = xs.some(fn(x: int): bool { return x < 3 })
@@ -69,7 +69,7 @@ fn test_every_some_single_arg(): void {
 // The first parameter of reduce is `fn(acc: U, item: T): U`. Verify
 // the analyzer rejects a non-fn there.
 @test
-fn test_reduce_chain_with_typed_acc(): void {
+fn test_reduce_chain_with_typed_acc() {
     let xs = [1, 2, 3, 4, 5]
     // map -> filter -> reduce, exercising the full callback-typed path.
     let total = xs
@@ -86,7 +86,7 @@ fn test_reduce_chain_with_typed_acc(): void {
 // non-function argument is rejected statically by the analyzer and the
 // runtime never sees a bogus pointer.
 @test
-fn test_map_foreach_callback(): void {
+fn test_map_foreach_callback() {
     let m: Map<string, int> = new Map()
     m.set("a", 1)
     m.set("b", 2)

@@ -23,20 +23,20 @@ class Point {
 }
 
 @test
-fn test_class_instance_type(): void {
+fn test_class_instance_type() {
     let p = Point(3, 4)
     assert_eq(typename(p), "Point")
 }
 
 @test
-fn test_class_field_access(): void {
+fn test_class_field_access() {
     let p = Point(3, 4)
     assert_eq(p.x, 3)
     assert_eq(p.y, 4)
 }
 
 @test
-fn test_class_method_call(): void {
+fn test_class_method_call() {
     let p = Point(3, 4)
     let d = p.distance()
     assert_eq(typeof(d), Type.float)
@@ -44,7 +44,7 @@ fn test_class_method_call(): void {
 }
 
 @test
-fn test_class_method_return_type(): void {
+fn test_class_method_return_type() {
     let p = Point(0, 0)
     let s = p.toString()
     assert_eq(typeof(s), Type.string)
@@ -82,13 +82,13 @@ class Dog extends Animal {
 }
 
 @test
-fn test_inheritance_type(): void {
+fn test_inheritance_type() {
     let d = Dog("Rex", "Labrador")
     assert_eq(typename(d), "Dog")
 }
 
 @test
-fn test_inheritance_field(): void {
+fn test_inheritance_field() {
     let d = Dog("Rex", "Labrador")
     assert_eq(d.name, "Rex")
     // Inherited field
@@ -96,7 +96,7 @@ fn test_inheritance_field(): void {
 }
 
 @test
-fn test_inheritance_method(): void {
+fn test_inheritance_method() {
     let d = Dog("Rex", "Labrador")
     assert_eq(d.speak(), "Rex barks")
     // Overridden
@@ -104,7 +104,7 @@ fn test_inheritance_method(): void {
 }
 
 @test
-fn test_polymorphism(): void {
+fn test_polymorphism() {
     let animals = [Animal("Generic"), Dog("Rex", "Lab")]
     assert_eq(animals[0].speak(), "Generic makes a sound")
     assert_eq(animals[1].speak(), "Rex barks")
@@ -114,7 +114,7 @@ fn test_polymorphism(): void {
 class Counter {
     static count: int = 0
 
-    static increment(): void {
+    static increment() {
         Counter.count = Counter.count + 1
     }
 
@@ -124,7 +124,7 @@ class Counter {
 }
 
 @test
-fn test_static_field(): void {
+fn test_static_field() {
     Counter.count = 0
     // Reset
     assert_eq(Counter.count, 0)
@@ -133,7 +133,7 @@ fn test_static_field(): void {
 }
 
 @test
-fn test_static_method(): void {
+fn test_static_method() {
     Counter.count = 0
     // Reset
     Counter.increment()
@@ -153,24 +153,24 @@ class Box {
         return this.value
     }
 
-    set(value: int): void {        this.value = value
+    set(value: int) {        this.value = value
     }
 }
 
 @test
-fn test_box_int(): void {
+fn test_box_int() {
     let b = Box(42)
     assert_eq(b.get(), 42)
 }
 
 @test
-fn test_box_string(): void {
+fn test_box_string() {
     let b = Box("hello")
     assert_eq(b.get(), "hello")
 }
 
 @test
-fn test_box_mutation(): void {
+fn test_box_mutation() {
     let b = Box(1)
     b.set(2)
     assert_eq(b.get(), 2)
@@ -178,14 +178,14 @@ fn test_box_mutation(): void {
 
 // ===== is Operator =====
 @test
-fn test_is_operator_class(): void {
+fn test_is_operator_class() {
     let d = Dog("Rex", "Lab")
     assert(d is Dog)
     assert(d is Animal)
 }
 
 @test
-fn test_is_operator_primitives(): void {
+fn test_is_operator_primitives() {
     let x = 42
     assert(x is int)
     let s = "hello"
@@ -222,7 +222,7 @@ class Circle {
 }
 
 @test
-fn test_different_classes(): void {
+fn test_different_classes() {
     let rect = Rectangle(4, 5)
     let circ = Circle(3)
     assert_eq(typename(rect), "Rectangle")

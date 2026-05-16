@@ -5,14 +5,14 @@
 // ===== 基本可选链 =====
 
 @test
-fn test_optional_property_access(): void {
+fn test_optional_property_access() {
     let person = { name: "Alice", age: 25 }
     let name = person?.name
     assert_eq(name, "Alice")
 }
 
 @test
-fn test_optional_on_null(): void {
+fn test_optional_on_null() {
     let person = null
     let name = person?.name
     assert_eq(name, null)
@@ -21,7 +21,7 @@ fn test_optional_on_null(): void {
 // ===== 嵌套可选链 =====
 
 @test
-fn test_nested_optional_chain(): void {
+fn test_nested_optional_chain() {
     let data = {
         user: {
             profile: {
@@ -34,7 +34,7 @@ fn test_nested_optional_chain(): void {
 }
 
 @test
-fn test_nested_null_in_chain(): void {
+fn test_nested_null_in_chain() {
     let data = {
         user: null
     }
@@ -45,7 +45,7 @@ fn test_nested_null_in_chain(): void {
 // ===== 可选链与索引访问 =====
 
 @test
-fn test_optional_index_access(): void {
+fn test_optional_index_access() {
     let data = {
         items: [1, 2, 3]
     }
@@ -54,7 +54,7 @@ fn test_optional_index_access(): void {
 }
 
 @test
-fn test_optional_array_chain(): void {
+fn test_optional_array_chain() {
     let data = {
         values: [10, 20, 30]
     }
@@ -66,7 +66,7 @@ fn test_optional_array_chain(): void {
 // ===== 与空值合并组合 =====
 
 @test
-fn test_optional_with_nullish(): void {
+fn test_optional_with_nullish() {
     let config = {
         settings: null
     }
@@ -75,7 +75,7 @@ fn test_optional_with_nullish(): void {
 }
 
 @test
-fn test_optional_value_with_nullish(): void {
+fn test_optional_value_with_nullish() {
     let config = {
         settings: {
             theme: "dark"

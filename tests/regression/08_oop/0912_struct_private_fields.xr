@@ -5,7 +5,7 @@ struct Account {
     private _balance: float = 0.0
     name: string
 
-    deposit(amount: float): void {
+    deposit(amount: float) {
         this._balance = this._balance + amount
     }
 
@@ -24,7 +24,7 @@ struct Account {
 struct Counter {
     private _count: int = 0
 
-    increment(): void {
+    increment() {
         this._count = this._count + 1
     }
 

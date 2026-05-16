@@ -4,7 +4,7 @@ import net
 
 // @test module exports exist
 @test
-fn test_net_core_apis(): void {
+fn test_net_core_apis() {
     assert(net.dial != null)
     assert(net.listen != null)
     assert(net.accept != null)
@@ -17,7 +17,7 @@ fn test_net_core_apis(): void {
 
 // @test TLS APIs exist
 @test
-fn test_net_tls_apis(): void {
+fn test_net_tls_apis() {
     assert(net.hasTLS != null)
     let tls = net.hasTLS()
     assert(typeof(tls) == Type.bool)
@@ -25,7 +25,7 @@ fn test_net_tls_apis(): void {
 
 // @test UDP APIs exist
 @test
-fn test_net_udp_apis(): void {
+fn test_net_udp_apis() {
     assert(net.udpBind != null)
     assert(net.sendTo != null)
     assert(net.recvFrom != null)
@@ -33,7 +33,7 @@ fn test_net_udp_apis(): void {
 
 // @test DNS lookup - multiple calls consistent
 @test
-fn test_lookup_consistent(): void {
+fn test_lookup_consistent() {
     let a1 = net.lookup("localhost")
     let a2 = net.lookup("localhost")
     assert_eq(a1, a2)
@@ -41,7 +41,7 @@ fn test_lookup_consistent(): void {
 
 // @test DNS lookup - returns string or null
 @test
-fn test_lookup_type(): void {
+fn test_lookup_type() {
     let addr = net.lookup("localhost")
     if (addr != null) {
         assert_eq(typeof(addr), Type.string)

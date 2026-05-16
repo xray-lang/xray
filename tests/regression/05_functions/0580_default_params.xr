@@ -13,7 +13,7 @@
 
 // Basic default parameter
 
-fn greet(name: string = "World"): void {
+fn greet(name: string = "World") {
     print("Hello, " + name)
 }
 fn add(a: int, b: int = 10, c: int = 100): int {

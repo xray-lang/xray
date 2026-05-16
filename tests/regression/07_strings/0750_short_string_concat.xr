@@ -15,7 +15,7 @@
 // ===== 短字符串拼接测试（栈上缓冲区路径）=====
 
 @test
-fn test_short_concat_basic(): void {
+fn test_short_concat_basic() {
     // **Feature: string-concat-optimization, Property 3: 短字符串拼接正确性**
     // **Validates: Requirements 2.1, 2.2, 5.2**
     // 基础短字符串拼接，总长度 < 64
@@ -27,7 +27,7 @@ fn test_short_concat_basic(): void {
 }
 
 @test
-fn test_short_concat_empty(): void {
+fn test_short_concat_empty() {
     // 空字符串拼接
     assert_eq("" + "", "")
     assert_eq("" + "test", "test")
@@ -35,14 +35,14 @@ fn test_short_concat_empty(): void {
 }
 
 @test
-fn test_short_concat_single_char(): void {
+fn test_short_concat_single_char() {
     // 单字符拼接
     assert_eq("a" + "b", "ab")
     assert_eq("x" + "y" + "z", "xyz")
 }
 
 @test
-fn test_short_concat_boundary_62(): void {
+fn test_short_concat_boundary_62() {
     // 边界测试：总长度 = 62（< 64，使用栈上缓冲区）
     let a = "a".repeat(31)
     let b = "b".repeat(31)
@@ -53,7 +53,7 @@ fn test_short_concat_boundary_62(): void {
 }
 
 @test
-fn test_short_concat_boundary_63(): void {
+fn test_short_concat_boundary_63() {
     // 边界测试：总长度 = 63（< 64，使用栈上缓冲区）
     let a = "a".repeat(32)
     let b = "b".repeat(31)
@@ -66,7 +66,7 @@ fn test_short_concat_boundary_63(): void {
 // ===== 长字符串拼接测试（XrStrBuf 路径）=====
 
 @test
-fn test_long_concat_boundary_64(): void {
+fn test_long_concat_boundary_64() {
     // 边界测试：总长度 = 64（>= 64，使用 XrStrBuf）
     let a = "a".repeat(32)
     let b = "b".repeat(32)
@@ -77,7 +77,7 @@ fn test_long_concat_boundary_64(): void {
 }
 
 @test
-fn test_long_concat_boundary_65(): void {
+fn test_long_concat_boundary_65() {
     // 边界测试：总长度 = 65（> 64，使用 XrStrBuf）
     let a = "a".repeat(33)
     let b = "b".repeat(32)
@@ -88,7 +88,7 @@ fn test_long_concat_boundary_65(): void {
 }
 
 @test
-fn test_long_concat_large(): void {
+fn test_long_concat_large() {
     // 大字符串拼接
     let a = "x".repeat(100)
     let b = "y".repeat(100)
@@ -103,7 +103,7 @@ fn test_long_concat_large(): void {
 // ===== 属性测试：拼接正确性 =====
 
 @test
-fn test_property_concat_correctness_short(): void {
+fn test_property_concat_correctness_short() {
     // 属性：对于任意短字符串，拼接结果应该正确
     // 测试多种长度组合（总长度 < 64）
     let test_cases = [
@@ -138,7 +138,7 @@ fn test_property_concat_correctness_short(): void {
 }
 
 @test
-fn test_property_concat_correctness_long(): void {
+fn test_property_concat_correctness_long() {
     // 属性：对于任意长字符串，拼接结果应该正确
     // 测试多种长度组合（总长度 >= 64）
     let test_cases = [
@@ -164,7 +164,7 @@ fn test_property_concat_correctness_long(): void {
 }
 
 @test
-fn test_property_concat_consistency(): void {
+fn test_property_concat_consistency() {
     // 属性：无论使用哪种路径，相同输入应该产生相同结果
     // 测试边界附近的拼接
     
@@ -192,14 +192,14 @@ fn test_property_concat_consistency(): void {
 // ===== 链式拼接测试 =====
 
 @test
-fn test_chained_concat_short(): void {
+fn test_chained_concat_short() {
     // 链式短字符串拼接
     let result = "a" + "b" + "c" + "d" + "e"
     assert_eq(result, "abcde")
 }
 
 @test
-fn test_chained_concat_mixed(): void {
+fn test_chained_concat_mixed() {
     // 链式拼接，从短到长
     let result = "x"
     for (let i = 0; i < 10; i++) {
@@ -213,7 +213,7 @@ fn test_chained_concat_mixed(): void {
 // ===== 特殊字符测试 =====
 
 @test
-fn test_concat_with_special_chars(): void {
+fn test_concat_with_special_chars() {
     // 包含特殊字符的拼接
     let a = "hello\n"
     let b = "world\t"
@@ -222,7 +222,7 @@ fn test_concat_with_special_chars(): void {
 }
 
 @test
-fn test_concat_with_unicode(): void {
+fn test_concat_with_unicode() {
     // Unicode 字符拼接
     let a = "你好"
     let b = "世界"
@@ -233,7 +233,7 @@ fn test_concat_with_unicode(): void {
 // ===== 循环拼接测试 =====
 
 @test
-fn test_loop_concat_short(): void {
+fn test_loop_concat_short() {
     // 循环中的短字符串拼接
     let result = ""
     for (let i = 0; i < 10; i++) {
@@ -244,7 +244,7 @@ fn test_loop_concat_short(): void {
 }
 
 @test
-fn test_loop_concat_crossing_threshold(): void {
+fn test_loop_concat_crossing_threshold() {
     // 循环拼接，跨越阈值边界
     let result = ""
     for (let i = 0; i < 100; i++) {
@@ -257,7 +257,7 @@ fn test_loop_concat_crossing_threshold(): void {
 // ===== 并发拼接测试 =====
 
 @test
-fn test_concurrent_short_concat(): void {
+fn test_concurrent_short_concat() {
     // 多协程并发短字符串拼接
     fn short_concat_task(id: int): string {
         let a = "task" + string(id)
@@ -279,7 +279,7 @@ fn test_concurrent_short_concat(): void {
 }
 
 @test
-fn test_concurrent_long_concat(): void {
+fn test_concurrent_long_concat() {
     // 多协程并发长字符串拼接
     fn long_concat_task(id: int): string {
         let a = "x".repeat(50)
@@ -304,7 +304,7 @@ fn test_concurrent_long_concat(): void {
 }
 
 @test
-fn test_concurrent_mixed_concat(): void {
+fn test_concurrent_mixed_concat() {
     // 多协程混合短长字符串拼接
     fn mixed_concat_task(id: int): string {
         // 偶数 id 使用短字符串，奇数 id 使用长字符串

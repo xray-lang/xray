@@ -6,7 +6,7 @@
 // ===== Mutable capture via cell (counter pattern) =====
 
 @test
-fn test_cell_counter_basic(): void {
+fn test_cell_counter_basic() {
     fn make(): fn(): int {
         let n = 0
         fn inc(): int {
@@ -24,7 +24,7 @@ fn test_cell_counter_basic(): void {
 // ===== Two independent cells in one function =====
 
 @test
-fn test_two_cells(): void {
+fn test_two_cells() {
     fn make(): fn(bool): int {
         let a = 0
         let b = 100
@@ -49,7 +49,7 @@ fn test_two_cells(): void {
 // ===== Transitive capture (UPVAL_SRC_UPVAL) =====
 
 @test
-fn test_transitive_capture(): void {
+fn test_transitive_capture() {
     fn outer(): fn(): int {
         let x = 10
         fn middle(): fn(): int {
@@ -69,7 +69,7 @@ fn test_transitive_capture(): void {
 // ===== Const capture (no cell needed) =====
 
 @test
-fn test_const_capture(): void {
+fn test_const_capture() {
     fn make(base: int): fn(int): int {
         const FACTOR = 3
         fn calc(x: int): int {
@@ -85,10 +85,10 @@ fn test_const_capture(): void {
 // ===== Cell in loop — multiple closures sharing same cell =====
 
 @test
-fn test_cell_shared_by_closures(): void {
+fn test_cell_shared_by_closures() {
     let count = 0
-    fn inc(): void { count++ }
-    fn dec(): void { count-- }
+    fn inc() { count++ }
+    fn dec() { count-- }
     fn get(): int { return count }
 
     inc()
@@ -102,7 +102,7 @@ fn test_cell_shared_by_closures(): void {
 // ===== Hot loop with cell get/set (JIT inline path) =====
 
 @test
-fn test_cell_hot_loop(): void {
+fn test_cell_hot_loop() {
     fn make(): fn(int): int {
         let total = 0
         fn add(n: int): int {
@@ -122,7 +122,7 @@ fn test_cell_hot_loop(): void {
 // ===== Cell with different value types =====
 
 @test
-fn test_cell_string_value(): void {
+fn test_cell_string_value() {
     fn make(): fn(string): string {
         let result = ""
         fn append(s: string): string {
@@ -138,7 +138,7 @@ fn test_cell_string_value(): void {
 }
 
 @test
-fn test_cell_float_value(): void {
+fn test_cell_float_value() {
     fn make(): fn(float): float {
         let total = 0.0
         fn add(x: float): float {
@@ -155,7 +155,7 @@ fn test_cell_float_value(): void {
 // ===== Multiple independent closure instances =====
 
 @test
-fn test_many_instances(): void {
+fn test_many_instances() {
     fn make(): fn(): int {
         let n = 0
         fn inc(): int {

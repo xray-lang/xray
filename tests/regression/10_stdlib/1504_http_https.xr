@@ -11,7 +11,7 @@ fn getDefaultPort(url: string): int {
 }
 
 @test
-fn test_protocol_detection(): void {
+fn test_protocol_detection() {
     assert(isHttps("https://example.com"))
     assert(!isHttps("http://example.com"))
     assert(isHttp("http://example.com"))
@@ -19,7 +19,7 @@ fn test_protocol_detection(): void {
 }
 
 @test
-fn test_default_ports(): void {
+fn test_default_ports() {
     assert_eq(getDefaultPort("https://example.com"), 443)
     assert_eq(getDefaultPort("http://example.com"), 80)
     assert_eq(getDefaultPort("ftp://example.com"), -1)

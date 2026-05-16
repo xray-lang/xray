@@ -5,7 +5,7 @@ import xml
 // ===== Entity decoding =====
 
 @test
-fn test_entity_decode_named(): void {
+fn test_entity_decode_named() {
     let data = "<root>&lt;hello&gt; &amp; &quot;world&quot; &apos;!</root>"
     let doc = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
@@ -13,7 +13,7 @@ fn test_entity_decode_named(): void {
 }
 
 @test
-fn test_entity_decode_numeric_decimal(): void {
+fn test_entity_decode_numeric_decimal() {
     let data = "<root>&#65;&#66;&#67;</root>"
     let doc = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
@@ -21,7 +21,7 @@ fn test_entity_decode_numeric_decimal(): void {
 }
 
 @test
-fn test_entity_decode_numeric_hex(): void {
+fn test_entity_decode_numeric_hex() {
     let data = "<root>&#x41;&#x42;&#x43;</root>"
     let doc = xml.parse(data) ?? {}
     let text = doc["children"][0]["text"]
@@ -29,7 +29,7 @@ fn test_entity_decode_numeric_hex(): void {
 }
 
 @test
-fn test_entity_decode_unicode(): void {
+fn test_entity_decode_unicode() {
     // &#x4e2d; = 中, &#x6587; = 文
     let data = "<root>&#x4e2d;&#x6587;</root>"
     let doc = xml.parse(data) ?? {}
@@ -40,7 +40,7 @@ fn test_entity_decode_unicode(): void {
 // ===== Attribute entity decoding =====
 
 @test
-fn test_attr_entity_decode(): void {
+fn test_attr_entity_decode() {
     let data = "<a href=\"a&amp;b\"/>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["attrs"]["href"], "a&b")
@@ -49,7 +49,7 @@ fn test_attr_entity_decode(): void {
 // ===== CDATA =====
 
 @test
-fn test_cdata_preserve(): void {
+fn test_cdata_preserve() {
     let data = "<root><![CDATA[<not-xml>&]]></root>"
     let doc = xml.parse(data) ?? {}
     let child = doc["children"][0]
@@ -58,7 +58,7 @@ fn test_cdata_preserve(): void {
 }
 
 @test
-fn test_cdata_as_text(): void {
+fn test_cdata_as_text() {
     let data = "<root><![CDATA[content]]></root>"
     let doc = xml.parse(data, { preserveCData: false }) ?? {}
     let child = doc["children"][0]
@@ -69,7 +69,7 @@ fn test_cdata_as_text(): void {
 // ===== Self-closing with attributes =====
 
 @test
-fn test_self_closing_with_attrs(): void {
+fn test_self_closing_with_attrs() {
     let data = "<root><img src=\"a.png\" alt=\"pic\"/></root>"
     let doc = xml.parse(data) ?? {}
     let img = doc["children"][0]
@@ -82,7 +82,7 @@ fn test_self_closing_with_attrs(): void {
 // ===== Processing instruction =====
 
 @test
-fn test_skip_processing_instruction(): void {
+fn test_skip_processing_instruction() {
     let data = "<?xml version=\"1.0\"?><root>OK</root>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
@@ -91,7 +91,7 @@ fn test_skip_processing_instruction(): void {
 // ===== Create element with attrs =====
 
 @test
-fn test_create_element_with_attrs(): void {
+fn test_create_element_with_attrs() {
     let elem = xml.element("div", { class: "container", id: "main" })
     assert_eq(elem["tag"], "div")
     assert_eq(elem["attrs"]["class"], "container")
@@ -102,21 +102,21 @@ fn test_create_element_with_attrs(): void {
 // ===== Create text/comment/cdata nodes =====
 
 @test
-fn test_create_text_node(): void {
+fn test_create_text_node() {
     let node = xml.text("hello")
     assert_eq(node["type"], "text")
     assert_eq(node["text"], "hello")
 }
 
 @test
-fn test_create_comment_node(): void {
+fn test_create_comment_node() {
     let node = xml.comment(" a comment ")
     assert_eq(node["type"], "comment")
     assert_eq(node["text"], " a comment ")
 }
 
 @test
-fn test_create_cdata_node(): void {
+fn test_create_cdata_node() {
     let node = xml.cdata("<raw>&data")
     assert_eq(node["type"], "cdata")
     assert_eq(node["text"], "<raw>&data")
@@ -125,7 +125,7 @@ fn test_create_cdata_node(): void {
 // ===== Create document =====
 
 @test
-fn test_create_document(): void {
+fn test_create_document() {
     let doc = xml.document()
     assert_eq(doc["type"], "document")
 }
@@ -133,7 +133,7 @@ fn test_create_document(): void {
 // ===== Stringify roundtrip =====
 
 @test
-fn test_stringify_roundtrip(): void {
+fn test_stringify_roundtrip() {
     let data = "<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>"
     let doc = xml.parse(data) ?? {}
     let str = xml.stringify(doc, { indent: 0, declaration: false })
@@ -147,7 +147,7 @@ fn test_stringify_roundtrip(): void {
 // ===== Parse detailed with errors =====
 
 @test
-fn test_parse_detailed_valid(): void {
+fn test_parse_detailed_valid() {
     let result = xml.parseDetailed("<ok/>")
     assert_eq(result["doc"]["tag"], "ok")
     assert_eq(result["errors"].length, 0)
@@ -156,7 +156,7 @@ fn test_parse_detailed_valid(): void {
 // ===== Whitespace handling =====
 
 @test
-fn test_whitespace_stripped_by_default(): void {
+fn test_whitespace_stripped_by_default() {
     let data = "<root>  \n  <item/>\n  </root>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["children"].length, 1)
@@ -164,7 +164,7 @@ fn test_whitespace_stripped_by_default(): void {
 }
 
 @test
-fn test_whitespace_preserved(): void {
+fn test_whitespace_preserved() {
     let data = "<root> text </root>"
     let doc = xml.parse(data, { preserveWhitespace: true }) ?? {}
     // Should preserve whitespace-only text nodes
@@ -174,14 +174,14 @@ fn test_whitespace_preserved(): void {
 // ===== DOCTYPE handling =====
 
 @test
-fn test_skip_doctype(): void {
+fn test_skip_doctype() {
     let data = "<!DOCTYPE html><root>OK</root>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
 }
 
 @test
-fn test_skip_doctype_with_internal_subset(): void {
+fn test_skip_doctype_with_internal_subset() {
     let data = "<!DOCTYPE root [ <!ELEMENT root (#PCDATA)> ]><root>OK</root>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["tag"], "root")
@@ -192,7 +192,7 @@ fn test_skip_doctype_with_internal_subset(): void {
 // ===== Escape in stringify =====
 
 @test
-fn test_stringify_escapes_text(): void {
+fn test_stringify_escapes_text() {
     let elem = xml.element("p")
     // Manually build a node with special chars
     let data = "<p>&lt;script&gt;</p>"
@@ -204,7 +204,7 @@ fn test_stringify_escapes_text(): void {
 // ===== Mixed content =====
 
 @test
-fn test_mixed_content(): void {
+fn test_mixed_content() {
     let data = "<root>Hello<b>World</b>!</root>"
     let doc = xml.parse(data) ?? {}
     assert_eq(doc["children"].length, 3)

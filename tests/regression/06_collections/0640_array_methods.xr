@@ -3,7 +3,7 @@
 // 测试：数组方法扩展
 // ===== slice =====
 @test
-fn test_slice_basic(): void {
+fn test_slice_basic() {
     let arr = [1, 2, 3, 4, 5]
     let s = arr.slice(1, 4)
     assert_eq(s.length, 3)
@@ -12,7 +12,7 @@ fn test_slice_basic(): void {
 }
 
 @test
-fn test_slice_from_start(): void {
+fn test_slice_from_start() {
     let arr = [1, 2, 3, 4, 5]
     let s = arr.slice(0, 2)
     assert_eq(s.length, 2)
@@ -20,7 +20,7 @@ fn test_slice_from_start(): void {
 }
 
 @test
-fn test_slice_to_end(): void {
+fn test_slice_to_end() {
     let arr = [1, 2, 3, 4, 5]
     let s = arr.slice(3, 5)
     assert_eq(s.length, 2)
@@ -29,7 +29,7 @@ fn test_slice_to_end(): void {
 
 // ===== concat =====
 @test
-fn test_concat_arrays(): void {
+fn test_concat_arrays() {
     let a = [1, 2]
     let b = [3, 4]
     let c = a.concat(b)
@@ -40,7 +40,7 @@ fn test_concat_arrays(): void {
 
 // ===== find =====
 @test
-fn test_find_element(): void {
+fn test_find_element() {
     let arr = [10, 20, 30, 40]
     let found = arr.find(fn(x) {
         return x > 25
@@ -49,7 +49,7 @@ fn test_find_element(): void {
 }
 
 @test
-fn test_find_not_found(): void {
+fn test_find_not_found() {
     let arr = [1, 2, 3]
     let found = arr.find(fn(x) {
         return x > 100
@@ -59,7 +59,7 @@ fn test_find_not_found(): void {
 
 // ===== findIndex =====
 @test
-fn test_find_index(): void {
+fn test_find_index() {
     let arr = ["a", "b", "c", "d"]
     let idx = arr.findIndex(fn(x) {
         return x == "c"
@@ -68,7 +68,7 @@ fn test_find_index(): void {
 }
 
 @test
-fn test_find_index_not_found(): void {
+fn test_find_index_not_found() {
     let arr = [1, 2, 3]
     let idx = arr.findIndex(fn(x) {
         return x > 100
@@ -78,7 +78,7 @@ fn test_find_index_not_found(): void {
 
 // ===== every =====
 @test
-fn test_every_true(): void {
+fn test_every_true() {
     let arr = [2, 4, 6, 8]
     let result = arr.every(fn(x) {
         return x % 2 == 0
@@ -87,7 +87,7 @@ fn test_every_true(): void {
 }
 
 @test
-fn test_every_false(): void {
+fn test_every_false() {
     let arr = [2, 3, 4, 6]
     let result = arr.every(fn(x) {
         return x % 2 == 0
@@ -97,7 +97,7 @@ fn test_every_false(): void {
 
 // ===== some =====
 @test
-fn test_some_true(): void {
+fn test_some_true() {
     let arr = [1, 3, 5, 6]
     let result = arr.some(fn(x) {
         return x % 2 == 0
@@ -106,7 +106,7 @@ fn test_some_true(): void {
 }
 
 @test
-fn test_some_false(): void {
+fn test_some_false() {
     let arr = [1, 3, 5, 7]
     let result = arr.some(fn(x) {
         return x % 2 == 0
@@ -116,7 +116,7 @@ fn test_some_false(): void {
 
 // ===== fill =====
 @test
-fn test_fill(): void {
+fn test_fill() {
     let arr = [1, 2, 3, 4, 5]
     arr.fill(0)
     assert_eq(arr[0], 0)
@@ -125,7 +125,7 @@ fn test_fill(): void {
 
 // ===== sort =====
 @test
-fn test_sort_numbers(): void {
+fn test_sort_numbers() {
     let arr = [3, 1, 4, 1, 5, 9, 2, 6]
     arr.sort()
     assert_eq(arr[0], 1)
@@ -134,7 +134,7 @@ fn test_sort_numbers(): void {
 }
 
 @test
-fn test_sort_strings(): void {
+fn test_sort_strings() {
     let arr = ["banana", "apple", "cherry"]
     arr.sort()
     assert_eq(arr[0], "apple")

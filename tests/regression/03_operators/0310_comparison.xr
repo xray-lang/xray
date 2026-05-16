@@ -5,7 +5,7 @@
 // ===== 等于 =====
 
 @test
-fn test_eq_integers(): void {
+fn test_eq_integers() {
     assert_eq(5 == 5, true)
     assert_eq(5 == 6, false)
     assert_eq(0 == 0, true)
@@ -13,27 +13,27 @@ fn test_eq_integers(): void {
 }
 
 @test
-fn test_eq_floats(): void {
+fn test_eq_floats() {
     assert_eq(3.14 == 3.14, true)
     assert_eq(3.14 == 3.15, false)
 }
 
 @test
-fn test_eq_strings(): void {
+fn test_eq_strings() {
     assert_eq("hello" == "hello", true)
     assert_eq("hello" == "world", false)
     assert_eq("" == "", true)
 }
 
 @test
-fn test_eq_bool(): void {
+fn test_eq_bool() {
     assert_eq(true == true, true)
     assert_eq(false == false, true)
     assert_eq(true == false, false)
 }
 
 @test
-fn test_eq_null(): void {
+fn test_eq_null() {
     assert_eq(null == null, true)
     let x = null
     assert_eq(x == null, true)
@@ -42,19 +42,19 @@ fn test_eq_null(): void {
 // ===== 不等于 =====
 
 @test
-fn test_ne_integers(): void {
+fn test_ne_integers() {
     assert_eq(5 != 6, true)
     assert_eq(5 != 5, false)
 }
 
 @test
-fn test_ne_strings(): void {
+fn test_ne_strings() {
     assert_eq("a" != "b", true)
     assert_eq("a" != "a", false)
 }
 
 @test
-fn test_ne_mixed(): void {
+fn test_ne_mixed() {
     assert_eq(1 != null, true)
     assert_eq("" != null, true)
 }
@@ -62,7 +62,7 @@ fn test_ne_mixed(): void {
 // ===== 小于 =====
 
 @test
-fn test_lt_integers(): void {
+fn test_lt_integers() {
     assert_eq(3 < 5, true)
     assert_eq(5 < 5, false)
     assert_eq(5 < 3, false)
@@ -70,13 +70,13 @@ fn test_lt_integers(): void {
 }
 
 @test
-fn test_lt_floats(): void {
+fn test_lt_floats() {
     assert_eq(3.14 < 3.15, true)
     assert_eq(3.14 < 3.14, false)
 }
 
 @test
-fn test_lt_strings(): void {
+fn test_lt_strings() {
     assert_eq("a" < "b", true)
     assert_eq("abc" < "abd", true)
     assert_eq("b" < "a", false)
@@ -85,14 +85,14 @@ fn test_lt_strings(): void {
 // ===== 小于等于 =====
 
 @test
-fn test_le_integers(): void {
+fn test_le_integers() {
     assert_eq(3 <= 5, true)
     assert_eq(5 <= 5, true)
     assert_eq(6 <= 5, false)
 }
 
 @test
-fn test_le_floats(): void {
+fn test_le_floats() {
     assert_eq(3.14 <= 3.14, true)
     assert_eq(3.14 <= 3.15, true)
 }
@@ -100,7 +100,7 @@ fn test_le_floats(): void {
 // ===== 大于 =====
 
 @test
-fn test_gt_integers(): void {
+fn test_gt_integers() {
     assert_eq(5 > 3, true)
     assert_eq(5 > 5, false)
     assert_eq(3 > 5, false)
@@ -108,13 +108,13 @@ fn test_gt_integers(): void {
 }
 
 @test
-fn test_gt_floats(): void {
+fn test_gt_floats() {
     assert_eq(3.15 > 3.14, true)
     assert_eq(3.14 > 3.14, false)
 }
 
 @test
-fn test_gt_strings(): void {
+fn test_gt_strings() {
     assert_eq("b" > "a", true)
     assert_eq("a" > "b", false)
 }
@@ -122,14 +122,14 @@ fn test_gt_strings(): void {
 // ===== 大于等于 =====
 
 @test
-fn test_ge_integers(): void {
+fn test_ge_integers() {
     assert_eq(5 >= 3, true)
     assert_eq(5 >= 5, true)
     assert_eq(3 >= 5, false)
 }
 
 @test
-fn test_ge_floats(): void {
+fn test_ge_floats() {
     assert_eq(3.14 >= 3.14, true)
     assert_eq(3.15 >= 3.14, true)
 }
@@ -137,7 +137,7 @@ fn test_ge_floats(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_compare_with_zero(): void {
+fn test_compare_with_zero() {
     assert_eq(0 == 0, true)
     assert_eq(0 < 1, true)
     assert_eq(0 > -1, true)
@@ -145,7 +145,7 @@ fn test_compare_with_zero(): void {
 }
 
 @test
-fn test_chain_comparison(): void {
+fn test_chain_comparison() {
     let x = 5
     assert_eq(3 < x && x < 10, true)
     assert_eq(0 <= x && x <= 10, true)

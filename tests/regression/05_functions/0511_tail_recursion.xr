@@ -4,7 +4,7 @@
 
 // ===== Accumulator-style fibonacci =====
 @test
-fn test_fib_tail(): void {
+fn test_fib_tail() {
     fn fib_acc(n: int, a: int, b: int): int {
         if (n <= 0) { return a }
         if (n == 1) { return b }
@@ -26,7 +26,7 @@ fn test_fib_tail(): void {
 
 // ===== Parameter swap correctness =====
 @test
-fn test_swap_params(): void {
+fn test_swap_params() {
     fn swap_count(a: int, b: int, n: int): int {
         if (n <= 0) { return a }
         return swap_count(b, a, n - 1)
@@ -41,7 +41,7 @@ fn test_swap_params(): void {
 
 // ===== Tail-recursive GCD =====
 @test
-fn test_gcd_tail(): void {
+fn test_gcd_tail() {
     fn gcd(a: int, b: int): int {
         if (b == 0) { return a }
         return gcd(b, a % b)
@@ -56,7 +56,7 @@ fn test_gcd_tail(): void {
 
 // ===== Tail-recursive factorial =====
 @test
-fn test_factorial_tail(): void {
+fn test_factorial_tail() {
     fn fact(n: int, acc: int): int {
         if (n <= 1) { return acc }
         return fact(n - 1, n * acc)
@@ -70,7 +70,7 @@ fn test_factorial_tail(): void {
 
 // ===== Deep tail recursion (no stack overflow) =====
 @test
-fn test_deep_tail_recursion(): void {
+fn test_deep_tail_recursion() {
     fn count_down(n: int): int {
         if (n <= 0) { return 0 }
         return count_down(n - 1)
@@ -83,7 +83,7 @@ fn test_deep_tail_recursion(): void {
 
 // ===== Tail-recursive sum =====
 @test
-fn test_sum_tail(): void {
+fn test_sum_tail() {
     fn sum_acc(n: int, acc: int): int {
         if (n <= 0) { return acc }
         return sum_acc(n - 1, acc + n)
@@ -97,7 +97,7 @@ fn test_sum_tail(): void {
 
 // ===== Non-tail recursion still works =====
 @test
-fn test_non_tail_recursion(): void {
+fn test_non_tail_recursion() {
     fn fib_naive(n: int): int {
         if (n <= 1) { return n }
         return fib_naive(n - 1) + fib_naive(n - 2)
@@ -111,7 +111,7 @@ fn test_non_tail_recursion(): void {
 
 // ===== Single param tail recursion =====
 @test
-fn test_single_param(): void {
+fn test_single_param() {
     fn collatz_steps(n: int): int {
         if (n <= 1) { return 0 }
         if (n % 2 == 0) {
@@ -129,7 +129,7 @@ fn test_single_param(): void {
 
 // ===== Tail-recursive with boolean result =====
 @test
-fn test_is_even_tail(): void {
+fn test_is_even_tail() {
     fn is_even(n: int): bool {
         if (n == 0) { return true }
         if (n == 1) { return false }
@@ -145,7 +145,7 @@ fn test_is_even_tail(): void {
 
 // ===== Non-recursive tail call (OP_TAILCALL for variable calls) =====
 @test
-fn test_non_recursive_tailcall(): void {
+fn test_non_recursive_tailcall() {
     fn add(a: int, b: int): int { return a + b }
     fn mul(a: int, b: int): int { return a * b }
 
@@ -162,7 +162,7 @@ fn test_non_recursive_tailcall(): void {
 
 // ===== Mutual recursion with tail calls =====
 @test
-fn test_mutual_tail_recursion(): void {
+fn test_mutual_tail_recursion() {
     fn is_even(n: int): bool {
         if (n == 0) { return true }
         return is_odd(n - 1)
@@ -181,7 +181,7 @@ fn test_mutual_tail_recursion(): void {
 
 // ===== Non-tail position: ensure regular calls still work =====
 @test
-fn test_non_tail_regular_call(): void {
+fn test_non_tail_regular_call() {
     fn double(x: int): int { return x * 2 }
     fn add_then_double(a: int, b: int): int {
         let sum = a + b
@@ -194,7 +194,7 @@ fn test_non_tail_regular_call(): void {
 
 // ===== Instance method tail recursion (OP_INVOKE_TAIL) =====
 @test
-fn test_method_tail_recursion(): void {
+fn test_method_tail_recursion() {
     class Accumulator {
         total: int
         constructor() { this.total = 0 }
@@ -213,7 +213,7 @@ fn test_method_tail_recursion(): void {
 
 // ===== Cross-method tail call on same instance =====
 @test
-fn test_method_cross_tail(): void {
+fn test_method_cross_tail() {
     class Toggler {
         state: bool
         steps: int
@@ -258,7 +258,7 @@ class MathUtil {
 }
 
 @test
-fn test_static_tail_recursion(): void {
+fn test_static_tail_recursion() {
     assert_eq(MathUtil.factorial(10, 1), 3628800)
     assert_eq(MathUtil.factorial(1, 1), 1)
     assert_eq(MathUtil.countdown(100), "done")
@@ -266,7 +266,7 @@ fn test_static_tail_recursion(): void {
 
 // ===== Deep method tail recursion (stack overflow without TCO) =====
 @test
-fn test_deep_method_tail_recursion(): void {
+fn test_deep_method_tail_recursion() {
     class DeepCounter {
         val: int
         constructor() { this.val = 0 }

@@ -4,12 +4,12 @@
 class Map<K, V> {
     length: int
     get(key: K): V?
-    set(key: K, value: V): void
+    set(key: K, value: V)
     has(key: K): bool
     delete(key: K): bool
-    clear(): void
+    clear()
     keys(): Array<K>
     values(): Array<V>
     entries(): Array<[K, V]>
-    forEach(fn: fn(key: K, value: V): void): void
+    forEach(fn: fn(key: K, value: V))
 }

@@ -8,7 +8,7 @@ import gc
 // Parent objects reference child objects. During incremental GC,
 // child lines must not be treated as free holes.
 @test
-fn test_nested_object_survival(): void {
+fn test_nested_object_survival() {
     gc.disable()
     let containers: Array<Json> = []
     for (let i = 0; i < 200; i++) {
@@ -37,7 +37,7 @@ fn test_nested_object_survival(): void {
 // Create objects, trigger GC, then create more objects.
 // The new objects must not overwrite old live objects.
 @test
-fn test_alloc_interleaved_with_gc(): void {
+fn test_alloc_interleaved_with_gc() {
     gc.disable()
     let phase1: Array<Json> = []
     for (let i = 0; i < 100; i++) {
@@ -64,7 +64,7 @@ fn test_alloc_interleaved_with_gc(): void {
 // Build a linked-list-like structure. GC must traverse the full chain
 // and mark all lines before hole scanning can reclaim anything.
 @test
-fn test_deep_reference_chain(): void {
+fn test_deep_reference_chain() {
     gc.disable()
     let head: Json = {"value": 0, "next": null}
     let current: Json = head
@@ -91,7 +91,7 @@ fn test_deep_reference_chain(): void {
 // Rapidly create and discard temp objects while keeping a live set.
 // Exercises hole scanning after GC reclaims dead temp objects.
 @test
-fn test_high_churn_with_live_roots(): void {
+fn test_high_churn_with_live_roots() {
     gc.disable()
     let live: Array<string> = []
     for (let i = 0; i < 50; i++) {
@@ -117,7 +117,7 @@ fn test_high_churn_with_live_roots(): void {
 // --- Test 5: Multiple GC cycles ---
 // Run several full GC cycles with allocation in between.
 @test
-fn test_multiple_gc_cycles(): void {
+fn test_multiple_gc_cycles() {
     gc.disable()
     for (let cycle = 0; cycle < 10; cycle++) {
         let data: Array<Json> = []

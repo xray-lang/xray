@@ -1,7 +1,7 @@
 // 测试 scope 块
 
 @test
-fn test_scope(): void {
+fn test_scope() {
     let x = 1
 
     // scope 创建新的词法作用域

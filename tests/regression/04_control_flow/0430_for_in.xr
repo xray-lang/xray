@@ -5,7 +5,7 @@
 // ===== 数组遍历 =====
 
 @test
-fn test_for_in_array(): void {
+fn test_for_in_array() {
     let arr = [1, 2, 3, 4, 5]
     let sum = 0
     for (x in arr) {
@@ -15,7 +15,7 @@ fn test_for_in_array(): void {
 }
 
 @test
-fn test_for_in_empty_array(): void {
+fn test_for_in_empty_array() {
     let arr: Array<int> = []
     let count = 0
     for (x in arr) {
@@ -25,7 +25,7 @@ fn test_for_in_empty_array(): void {
 }
 
 @test
-fn test_for_in_single(): void {
+fn test_for_in_single() {
     let arr = [42]
     let result = 0
     for (x in arr) {
@@ -35,7 +35,7 @@ fn test_for_in_single(): void {
 }
 
 @test
-fn test_for_in_strings(): void {
+fn test_for_in_strings() {
     let arr = ["a", "b", "c"]
     let result = ""
     for (s in arr) {
@@ -47,7 +47,7 @@ fn test_for_in_strings(): void {
 // ===== 范围遍历 =====
 
 @test
-fn test_for_in_range(): void {
+fn test_for_in_range() {
     let sum = 0
     for (i in 0..5) {
         sum += i
@@ -56,7 +56,7 @@ fn test_for_in_range(): void {
 }
 
 @test
-fn test_for_in_range_start(): void {
+fn test_for_in_range_start() {
     let sum = 0
     for (i in 3..6) {
         sum += i
@@ -65,7 +65,7 @@ fn test_for_in_range_start(): void {
 }
 
 @test
-fn test_for_in_range_empty(): void {
+fn test_for_in_range_empty() {
     let count = 0
     for (i in 5..5) {
         count++
@@ -74,7 +74,7 @@ fn test_for_in_range_empty(): void {
 }
 
 @test
-fn test_for_in_range_one(): void {
+fn test_for_in_range_one() {
     let count = 0
     for (i in 5..6) {
         count++
@@ -85,7 +85,7 @@ fn test_for_in_range_one(): void {
 // ===== Map 遍历 =====
 
 @test
-fn test_for_in_map(): void {
+fn test_for_in_map() {
     let m = {"a" => 1, "b" => 2, "c" => 3}
     let sum = 0
     for (k, v in m) {
@@ -95,7 +95,7 @@ fn test_for_in_map(): void {
 }
 
 @test
-fn test_for_in_map_keys(): void {
+fn test_for_in_map_keys() {
     let m = {"x" => 10, "y" => 20}
     let keys: Array<string> = []
     for (k, v in m) {
@@ -105,7 +105,7 @@ fn test_for_in_map_keys(): void {
 }
 
 @test
-fn test_for_in_empty_map(): void {
+fn test_for_in_empty_map() {
     let m = #{}
     let count = 0
     for (kv in m) {
@@ -117,7 +117,7 @@ fn test_for_in_empty_map(): void {
 // ===== break/continue =====
 
 @test
-fn test_for_in_break(): void {
+fn test_for_in_break() {
     let arr = [1, 2, 3, 4, 5]
     let sum = 0
     for (x in arr) {
@@ -130,7 +130,7 @@ fn test_for_in_break(): void {
 }
 
 @test
-fn test_for_in_continue(): void {
+fn test_for_in_continue() {
     let arr = [1, 2, 3, 4, 5]
     let sum = 0
     for (x in arr) {
@@ -145,7 +145,7 @@ fn test_for_in_continue(): void {
 // ===== 嵌套 =====
 
 @test
-fn test_for_in_nested_array(): void {
+fn test_for_in_nested_array() {
     let matrix = [[1, 2], [3, 4], [5, 6]]
     let sum = 0
     for (row in matrix) {
@@ -157,7 +157,7 @@ fn test_for_in_nested_array(): void {
 }
 
 @test
-fn test_for_in_nested_range(): void {
+fn test_for_in_nested_range() {
     let total = 0
     for (i in 0..3) {
         for (j in 0..3) {
@@ -170,7 +170,7 @@ fn test_for_in_nested_range(): void {
 // ===== 实际应用 =====
 
 @test
-fn test_for_in_collect(): void {
+fn test_for_in_collect() {
     let arr = [1, 2, 3, 4]
     let squares: Array<int> = []
     for (x in arr) {
@@ -182,7 +182,7 @@ fn test_for_in_collect(): void {
 }
 
 @test
-fn test_for_in_filter(): void {
+fn test_for_in_filter() {
     let arr = [1, 2, 3, 4, 5, 6]
     let evens: Array<int> = []
     for (x in arr) {
@@ -194,7 +194,7 @@ fn test_for_in_filter(): void {
 }
 
 @test
-fn test_for_in_transform(): void {
+fn test_for_in_transform() {
     let names = ["alice", "bob", "charlie"]
     let upper: Array<string> = []
     for (name in names) {

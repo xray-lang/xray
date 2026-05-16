@@ -16,6 +16,7 @@
 #include "xparse_internal.h"
 #include "xtype_ref.h"
 #include "xtype_scope.h"
+#include "../../runtime/xerror_codes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
 #include <stdlib.h>
@@ -115,8 +116,14 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return xr_tref_string(parser->X);
     if (xr_parser_match(parser, TK_BOOL))
         return xr_tref_bool(parser->X);
-    if (xr_parser_match(parser, TK_VOID))
+    if (xr_parser_check(parser, TK_VOID)) {
+        Token tok = parser->current;
+        xr_parser_advance(parser);
+        xr_parser_emit_removed_syntax(
+            parser, &tok, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
+            "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
         return xr_tref_void(parser->X);
+    }
     if (xr_parser_match(parser, TK_NULL))
         return xr_tref_null(parser->X);
 
@@ -279,8 +286,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             return xr_tref_string(parser->X);
         }
         if (strcmp(temp_name, "void") == 0) {
-            xr_parser_error(parser, "use 'void' only as function return type");
-            return xr_tref_unknown(parser->X);
+            xr_parser_emit_removed_syntax(
+                parser, &name_token, XR_ERR_SYN_VOID_REMOVED, "`void` keyword was removed",
+                "use Unit type `()` instead - xray uses 0-arity tuple as Unit");
+            return xr_tref_void(parser->X);
         }
 
         /* Generic type arguments: Name<T1, T2, ...> */

@@ -32,7 +32,7 @@ class Puppy extends Dog {
 
 // ===== Direct subclass satisfies upper bound =====
 @test
-fn test_direct_subclass(): void {
+fn test_direct_subclass() {
     fn nameOf<T: Animal>(a: T): string { return a.name }
 
     let dog = Dog("Rex", "Labrador")
@@ -40,7 +40,7 @@ fn test_direct_subclass(): void {
 }
 
 @test
-fn test_sibling_subclass(): void {
+fn test_sibling_subclass() {
     fn nameOf<T: Animal>(a: T): string { return a.name }
 
     let cat = Cat("Whiskers")
@@ -49,7 +49,7 @@ fn test_sibling_subclass(): void {
 
 // ===== Transitive (grand-child) subclass also satisfies =====
 @test
-fn test_grandchild_subclass(): void {
+fn test_grandchild_subclass() {
     fn nameOf<T: Animal>(a: T): string { return a.name }
 
     let puppy = Puppy("Buddy")
@@ -58,7 +58,7 @@ fn test_grandchild_subclass(): void {
 
 // ===== Base class itself satisfies (reflexive) =====
 @test
-fn test_base_class_self(): void {
+fn test_base_class_self() {
     fn nameOf<T: Animal>(a: T): string { return a.name }
 
     let animal = Animal("Generic")
@@ -67,7 +67,7 @@ fn test_base_class_self(): void {
 
 // ===== Type parameter inferred without explicit type arg =====
 @test
-fn test_inferred_type_arg(): void {
+fn test_inferred_type_arg() {
     fn nameOf<T: Animal>(a: T): string { return a.name }
 
     let dog = Dog("Spot", "Beagle")
@@ -76,7 +76,7 @@ fn test_inferred_type_arg(): void {
 
 // ===== Class upper bound combined with second unconstrained param =====
 @test
-fn test_class_bound_with_second_param(): void {
+fn test_class_bound_with_second_param() {
     fn pair<T: Animal, U>(a: T, tag: U): U { return tag }
 
     let cat = Cat("Mittens")

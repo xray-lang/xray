@@ -3,7 +3,7 @@
 // 测试：match 表达式
 // ===== 字面量匹配 =====
 @test
-fn test_match_literal_int(): void {
+fn test_match_literal_int() {
     let x = 2
     let result = match x {
         1 => "one"
@@ -15,7 +15,7 @@ fn test_match_literal_int(): void {
 }
 
 @test
-fn test_match_literal_string(): void {
+fn test_match_literal_string() {
     let cmd = "start"
     let result = match cmd {
         "start" => 1
@@ -27,7 +27,7 @@ fn test_match_literal_string(): void {
 }
 
 @test
-fn test_match_default(): void {
+fn test_match_default() {
     let x = 100
     let result = match x {
         1 => "one"
@@ -39,7 +39,7 @@ fn test_match_default(): void {
 
 // ===== 范围匹配 =====
 @test
-fn test_match_range(): void {
+fn test_match_range() {
     let score = 85
     let grade = match score {
         90..100 => "A"
@@ -52,7 +52,7 @@ fn test_match_range(): void {
 }
 
 @test
-fn test_match_range_boundary(): void {
+fn test_match_range_boundary() {
     let x = 10
     let result = match x {
         0..10 => "less than 10"
@@ -64,7 +64,7 @@ fn test_match_range_boundary(): void {
 
 // ===== 多值匹配 =====
 @test
-fn test_match_multi_value(): void {
+fn test_match_multi_value() {
     let day = "Sat"
     let result = match day {
         "Mon", "Tue", "Wed", "Thu", "Fri" => "weekday"
@@ -75,7 +75,7 @@ fn test_match_multi_value(): void {
 }
 
 @test
-fn test_match_multi_number(): void {
+fn test_match_multi_number() {
     let x = 5
     let result = match x {
         1, 3, 5, 7, 9 => "odd"
@@ -87,7 +87,7 @@ fn test_match_multi_number(): void {
 
 // ===== 守卫条件 =====
 @test
-fn test_match_guard(): void {
+fn test_match_guard() {
     let x = 15
     let result = match x {
         n if (n < 0) => "negative"
@@ -100,7 +100,7 @@ fn test_match_guard(): void {
 }
 
 @test
-fn test_match_guard_complex(): void {
+fn test_match_guard_complex() {
     let x = 42
     let result = match x {
         n if (n % 2 == 0 && n > 40) => "even and big"
@@ -113,7 +113,7 @@ fn test_match_guard_complex(): void {
 
 // ===== 枚举匹配 =====
 @test
-fn test_match_enum(): void {
+fn test_match_enum() {
     enum Color {
         Red,
         Green,
@@ -130,7 +130,7 @@ fn test_match_enum(): void {
 
 // ===== 嵌套 match =====
 @test
-fn test_match_nested(): void {
+fn test_match_nested() {
     let x = 5
     let y = 10
     let result = match x {
@@ -145,7 +145,7 @@ fn test_match_nested(): void {
 
 // ===== match 表达式求值 =====
 @test
-fn test_match_expression_result(): void {
+fn test_match_expression_result() {
     let x = 3
     let doubled = match x {
         1 => 2
@@ -158,7 +158,7 @@ fn test_match_expression_result(): void {
 }
 
 @test
-fn test_match_in_function(): void {
+fn test_match_in_function() {
     fn classify(n: int): string {
         return match n {
             0 => "zero"
@@ -173,7 +173,7 @@ fn test_match_in_function(): void {
 
 // ===== 边界条件 =====
 @test
-fn test_match_first_wins(): void {
+fn test_match_first_wins() {
     let x = 5
     let result = match x {
         n if (n > 0) => "first"
@@ -184,7 +184,7 @@ fn test_match_first_wins(): void {
 }
 
 @test
-fn test_match_all_guards_fail(): void {
+fn test_match_all_guards_fail() {
     let x = 0
     let result = match x {
         n if (n > 10) => "big"

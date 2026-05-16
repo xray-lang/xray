@@ -5,27 +5,27 @@
 // ===== length 属性（字符数）=====
 
 @test
-fn test_length_ascii(): void {
+fn test_length_ascii() {
     assert_eq("Hello".length, 5)
     assert_eq("".length, 0)
     assert_eq("x".length, 1)
 }
 
 @test
-fn test_length_chinese(): void {
+fn test_length_chinese() {
     assert_eq("你好".length, 2)
     assert_eq("你好世界".length, 4)
     assert_eq("中".length, 1)
 }
 
 @test
-fn test_length_emoji(): void {
+fn test_length_emoji() {
     assert_eq("🎉".length, 1)
     assert_eq("🎉🎊🌍".length, 3)
 }
 
 @test
-fn test_length_mixed(): void {
+fn test_length_mixed() {
     assert_eq("Hello世界".length, 7)
     assert_eq("Hello世界🌍".length, 8)
     assert_eq("a中b".length, 3)
@@ -34,32 +34,32 @@ fn test_length_mixed(): void {
 // ===== byteLength 属性（字节数）=====
 
 @test
-fn test_byteLength_ascii(): void {
+fn test_byteLength_ascii() {
     assert_eq("Hello".byteLength, 5)
     assert_eq("".byteLength, 0)
 }
 
 @test
-fn test_byteLength_chinese(): void {
+fn test_byteLength_chinese() {
     assert_eq("你好".byteLength, 6)       // 2 * 3 bytes
     assert_eq("你好世界".byteLength, 12)  // 4 * 3 bytes
 }
 
 @test
-fn test_byteLength_emoji(): void {
+fn test_byteLength_emoji() {
     assert_eq("🎉".byteLength, 4)         // 4 bytes
     assert_eq("🎉🎊🌍".byteLength, 12)    // 3 * 4 bytes
 }
 
 @test
-fn test_byteLength_mixed(): void {
+fn test_byteLength_mixed() {
     assert_eq("Hello世界🌍".byteLength, 15)  // 5 + 6 + 4
 }
 
 // ===== 字符串索引 str[i] =====
 
 @test
-fn test_index_ascii(): void {
+fn test_index_ascii() {
     let s = "Hello"
     assert_eq(s[0], "H")
     assert_eq(s[1], "e")
@@ -67,7 +67,7 @@ fn test_index_ascii(): void {
 }
 
 @test
-fn test_index_chinese(): void {
+fn test_index_chinese() {
     let s = "你好世界"
     assert_eq(s[0], "你")
     assert_eq(s[1], "好")
@@ -75,7 +75,7 @@ fn test_index_chinese(): void {
 }
 
 @test
-fn test_index_emoji(): void {
+fn test_index_emoji() {
     let s = "🎉🎊🌍"
     assert_eq(s[0], "🎉")
     assert_eq(s[1], "🎊")
@@ -83,7 +83,7 @@ fn test_index_emoji(): void {
 }
 
 @test
-fn test_index_mixed(): void {
+fn test_index_mixed() {
     let s = "Hello世界🌍"
     assert_eq(s[0], "H")
     assert_eq(s[5], "世")
@@ -92,7 +92,7 @@ fn test_index_mixed(): void {
 }
 
 @test
-fn test_index_out_of_bounds(): void {
+fn test_index_out_of_bounds() {
     let s = "abc"
     assert_eq(s[10], null)
     assert_eq(s[100], null)
@@ -101,19 +101,19 @@ fn test_index_out_of_bounds(): void {
 // ===== charAt 方法 =====
 
 @test
-fn test_charAt_ascii(): void {
+fn test_charAt_ascii() {
     assert_eq("Hello".charAt(0), "H")
     assert_eq("Hello".charAt(4), "o")
 }
 
 @test
-fn test_charAt_chinese(): void {
+fn test_charAt_chinese() {
     assert_eq("你好世界".charAt(0), "你")
     assert_eq("你好世界".charAt(1), "好")
 }
 
 @test
-fn test_charAt_emoji(): void {
+fn test_charAt_emoji() {
     assert_eq("🎉🎊".charAt(0), "🎉")
     assert_eq("🎉🎊".charAt(1), "🎊")
 }
@@ -121,7 +121,7 @@ fn test_charAt_emoji(): void {
 // ===== codePointAt 方法 =====
 
 @test
-fn test_codePointAt_ascii(): void {
+fn test_codePointAt_ascii() {
     assert_eq("A".codePointAt(0), 65)
     assert_eq("Z".codePointAt(0), 90)
     assert_eq("a".codePointAt(0), 97)
@@ -129,14 +129,14 @@ fn test_codePointAt_ascii(): void {
 }
 
 @test
-fn test_codePointAt_chinese(): void {
+fn test_codePointAt_chinese() {
     assert_eq("世".codePointAt(0), 19990)  // U+4E16
     assert_eq("界".codePointAt(0), 30028)  // U+754C
     assert_eq("你".codePointAt(0), 20320)  // U+4F60
 }
 
 @test
-fn test_codePointAt_emoji(): void {
+fn test_codePointAt_emoji() {
     assert_eq("🎉".codePointAt(0), 127881)  // U+1F389
     assert_eq("🌍".codePointAt(0), 127757)  // U+1F30D
 }
@@ -144,7 +144,7 @@ fn test_codePointAt_emoji(): void {
 // ===== 字符遍历 =====
 
 @test
-fn test_iterate_mixed(): void {
+fn test_iterate_mixed() {
     let s = "Hi你好"
     let chars: Array<string> = []
     for (let i = 0; i < s.length; i++) {
@@ -160,13 +160,13 @@ fn test_iterate_mixed(): void {
 // ===== 字符串比较 =====
 
 @test
-fn test_compare_chinese(): void {
+fn test_compare_chinese() {
     assert_eq("你好" == "你好", true)
     assert_eq("你好" != "世界", true)
 }
 
 @test
-fn test_compare_emoji(): void {
+fn test_compare_emoji() {
     assert_eq("🎉" == "🎉", true)
     assert_eq("🎉" != "🎊", true)
 }
@@ -174,14 +174,14 @@ fn test_compare_emoji(): void {
 // ===== 字符串拼接 =====
 
 @test
-fn test_concat_mixed(): void {
+fn test_concat_mixed() {
     let s = "Hello" + "世界"
     assert_eq(s, "Hello世界")
     assert_eq(s.length, 7)
 }
 
 @test
-fn test_concat_emoji(): void {
+fn test_concat_emoji() {
     let s = "🎉" + "开始"
     assert_eq(s, "🎉开始")
     assert_eq(s.length, 3)
@@ -190,7 +190,7 @@ fn test_concat_emoji(): void {
 // ===== charLength 属性 =====
 
 @test
-fn test_charLength(): void {
+fn test_charLength() {
     assert_eq("Hello".charLength, 5)
     assert_eq("你好世界".charLength, 4)
     assert_eq("🎉🎊🌍".charLength, 3)
@@ -199,13 +199,13 @@ fn test_charLength(): void {
 // ===== substring（字节级）=====
 
 @test
-fn test_substring_ascii(): void {
+fn test_substring_ascii() {
     assert_eq("Hello".substring(0, 5), "Hello")
     assert_eq("Hello".substring(0, 2), "He")
 }
 
 @test
-fn test_substring_chinese(): void {
+fn test_substring_chinese() {
     // substring 是字节级操作，中文每字符 3 字节
     assert_eq("你好世界".substring(0, 6), "你好")
     assert_eq("你好世界".substring(0, 3), "你")

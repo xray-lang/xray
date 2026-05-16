@@ -4,7 +4,7 @@
 // calling XR_ARRAY_MARK_GC_PTRS, so GC could collect live objects.
 
 @test
-fn test_array_push_json_objects(): void {
+fn test_array_push_json_objects() {
     let arr: Array<Json> = []
     for (i in 0..100) {
         arr.push({ id: i, name: "item" + string(i) })
@@ -15,7 +15,7 @@ fn test_array_push_json_objects(): void {
 }
 
 @test
-fn test_array_push_strings(): void {
+fn test_array_push_strings() {
     let arr: Array<string> = []
     for (i in 0..200) {
         arr.push("string_" + string(i))
@@ -26,7 +26,7 @@ fn test_array_push_strings(): void {
 }
 
 @test
-fn test_array_push_mixed_types(): void {
+fn test_array_push_mixed_types() {
     let arr: Array<Json> = []
     for (i in 0..50) {
         arr.push(i)
@@ -42,7 +42,7 @@ fn test_array_push_mixed_types(): void {
 }
 
 @test
-fn test_array_set_overwrites(): void {
+fn test_array_set_overwrites() {
     let arr: Array<Json> = [{}, {}, {}, {}, {}]
     for (i in 0..5) {
         arr[i] = { index: i, data: "value_" + string(i) }
@@ -53,7 +53,7 @@ fn test_array_set_overwrites(): void {
 }
 
 @test
-fn test_nested_array_push(): void {
+fn test_nested_array_push() {
     let outer: Array<Array<int>> = []
     for (i in 0..20) {
         let inner: Array<int> = []

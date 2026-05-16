@@ -18,7 +18,7 @@ final class Config {
 }
 
 @test
-fn test_final_class_basic(): void {
+fn test_final_class_basic() {
     let cfg = new Config("host", 8080)
     assert_eq(cfg.name, "host")
     assert_eq(cfg.value, 8080)
@@ -45,7 +45,7 @@ class Child extends Base {
 }
 
 @test
-fn test_final_method_normal_override(): void {
+fn test_final_method_normal_override() {
     let b = new Base()
     assert_eq(b.greet(), "hello from Base")
     assert_eq(b.normal(), "normal from Base")
@@ -80,7 +80,7 @@ final class Cat extends Animal {
 }
 
 @test
-fn test_final_class_with_parent(): void {
+fn test_final_class_with_parent() {
     let cat = new Cat("Kitty")
     assert_eq(cat.speak(), "Kitty meows")
     assert_eq(cat.name, "Kitty")
@@ -99,7 +99,7 @@ class MathUtil {
 }
 
 @test
-fn test_final_static_method(): void {
+fn test_final_static_method() {
     assert_eq(MathUtil.pi(), 3.14159)
     assert_eq(MathUtil.compute(5.0), 10.0)
 }
@@ -115,7 +115,7 @@ class Settings {
 }
 
 @test
-fn test_final_field(): void {
+fn test_final_field() {
     let s = new Settings()
     assert_eq(s.maxRetries, 3)
     assert_eq(s.timeout, 1000)
@@ -136,7 +136,7 @@ class Service {
 }
 
 @test
-fn test_combined_modifiers(): void {
+fn test_combined_modifiers() {
     let svc = new Service()
     assert_eq(svc.getSecret(), "key123")
     assert_eq(svc.normal(), "service")

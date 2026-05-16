@@ -1,7 +1,7 @@
 // 测试 Channel 创建和基本操作
 
 @test
-fn test_channel(): void {
+fn test_channel() {
     // 创建缓冲 Channel（容量 3）
     shared const ch = new Channel(3)
     print(ch != null)  // true

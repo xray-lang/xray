@@ -18,22 +18,22 @@ fn move_value(v: Vec2): Vec2 {
 fn length_sq(v: in Vec2): float {
     return v.x * v.x + v.y * v.y
 }
-fn translate(v: ref Vec2, dx: float, dy: float): void {
+fn translate(v: ref Vec2, dx: float, dy: float) {
     v.x = v.x + dx
     v.y = v.y + dy
 }
-fn add_to(target: ref Vec2, src: in Vec2): void {
+fn add_to(target: ref Vec2, src: in Vec2) {
     target.x = target.x + src.x
     target.y = target.y + src.y
 }
-fn scale(v: ref Vec2, factor: float): void {
+fn scale(v: ref Vec2, factor: float) {
     v.x = v.x * factor
     v.y = v.y * factor
 }
 fn dot(a: in Vec2, b: in Vec2): float {
     return a.x * b.x + a.y * b.y
 }
-fn normalize(v: ref Vec2): void {
+fn normalize(v: ref Vec2) {
     let len = length_sq(v)
     if (len > 0.0) {
         let inv = 1.0 / len

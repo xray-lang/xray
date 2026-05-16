@@ -5,7 +5,7 @@
 // ===== 算术复合赋值 =====
 
 @test
-fn test_add_assign(): void {
+fn test_add_assign() {
     let x = 10
     x += 5
     assert_eq(x, 15)
@@ -15,7 +15,7 @@ fn test_add_assign(): void {
 }
 
 @test
-fn test_sub_assign(): void {
+fn test_sub_assign() {
     let x = 10
     x -= 3
     assert_eq(x, 7)
@@ -25,7 +25,7 @@ fn test_sub_assign(): void {
 }
 
 @test
-fn test_mul_assign(): void {
+fn test_mul_assign() {
     let x = 5
     x *= 3
     assert_eq(x, 15)
@@ -35,7 +35,7 @@ fn test_mul_assign(): void {
 }
 
 @test
-fn test_div_assign(): void {
+fn test_div_assign() {
     let x = 20
     x /= 4
     assert_eq(x, 5)
@@ -45,7 +45,7 @@ fn test_div_assign(): void {
 }
 
 @test
-fn test_mod_assign(): void {
+fn test_mod_assign() {
     let x = 17
     x %= 5
     assert_eq(x, 2)
@@ -54,35 +54,35 @@ fn test_mod_assign(): void {
 // ===== 位运算复合赋值 =====
 
 @test
-fn test_and_assign(): void {
+fn test_and_assign() {
     let x = 0b1111
     x &= 0b1010
     assert_eq(x, 0b1010)
 }
 
 @test
-fn test_or_assign(): void {
+fn test_or_assign() {
     let x = 0b1010
     x |= 0b0101
     assert_eq(x, 0b1111)
 }
 
 @test
-fn test_xor_assign(): void {
+fn test_xor_assign() {
     let x = 0b1111
     x ^= 0b1010
     assert_eq(x, 0b0101)
 }
 
 @test
-fn test_shl_assign(): void {
+fn test_shl_assign() {
     let x = 1
     x <<= 3
     assert_eq(x, 8)
 }
 
 @test
-fn test_shr_assign(): void {
+fn test_shr_assign() {
     let x = 16
     x >>= 2
     assert_eq(x, 4)
@@ -93,14 +93,14 @@ fn test_shr_assign(): void {
 // xray 仅支持后置自增自减，且只能单独成行
 
 @test
-fn test_increment_postfix(): void {
+fn test_increment_postfix() {
     let x = 5
     x++
     assert_eq(x, 6)
 }
 
 @test
-fn test_decrement_postfix(): void {
+fn test_decrement_postfix() {
     let x = 5
     x--
     assert_eq(x, 4)
@@ -109,7 +109,7 @@ fn test_decrement_postfix(): void {
 // ===== 链式操作 =====
 
 @test
-fn test_chain_increment(): void {
+fn test_chain_increment() {
     let x = 0
     x++
     x++
@@ -120,7 +120,7 @@ fn test_chain_increment(): void {
 // ===== 浮点数 =====
 
 @test
-fn test_float_compound(): void {
+fn test_float_compound() {
     let x = 1.5
     x += 2.5
     assert_eq(x, 4.0)
@@ -132,7 +132,7 @@ fn test_float_compound(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_assign_zero(): void {
+fn test_assign_zero() {
     let x = 10
     x += 0
     assert_eq(x, 10)
@@ -142,7 +142,7 @@ fn test_assign_zero(): void {
 }
 
 @test
-fn test_negative_increment(): void {
+fn test_negative_increment() {
     let x = 0
     x--
     assert_eq(x, -1)

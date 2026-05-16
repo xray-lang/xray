@@ -5,27 +5,27 @@ import os
 // ===== User Information =====
 
 @test
-fn test_username(): void {
+fn test_username() {
     let name = os.username()
     assert(name != null)
     assert(name.length > 0)
 }
 
 @test
-fn test_homedir(): void {
+fn test_homedir() {
     let home = os.homedir()
     assert(home != null)
     assert(home.length > 0)
 }
 
 @test
-fn test_uid(): void {
+fn test_uid() {
     let id = os.uid()
     assert(id >= 0)
 }
 
 @test
-fn test_gid(): void {
+fn test_gid() {
     let id = os.gid()
     assert(id >= 0)
 }
@@ -33,33 +33,33 @@ fn test_gid(): void {
 // ===== System Information =====
 
 @test
-fn test_cpuCount(): void {
+fn test_cpuCount() {
     let n = os.cpuCount()
     assert(n >= 1)
 }
 
 @test
-fn test_totalMemory(): void {
+fn test_totalMemory() {
     let mem = os.totalMemory()
     // At least 64MB
     assert(mem > 64 * 1024 * 1024)
 }
 
 @test
-fn test_freeMemory(): void {
+fn test_freeMemory() {
     let mem = os.freeMemory()
     assert(mem > 0)
 }
 
 @test
-fn test_uptime(): void {
+fn test_uptime() {
     let up = os.uptime()
     // System must have been running for at least 1 second
     assert(up > 1.0)
 }
 
 @test
-fn test_loadavg(): void {
+fn test_loadavg() {
     let avg = os.loadavg()
     assert(avg != null)
     assert_eq(avg.length, 3)
@@ -72,13 +72,13 @@ fn test_loadavg(): void {
 // ===== Process & Signal =====
 
 @test
-fn test_ppid(): void {
+fn test_ppid() {
     let ppid = os.ppid()
     assert(ppid > 0)
 }
 
 @test
-fn test_clock(): void {
+fn test_clock() {
     let t = os.clock()
     assert(t >= 0.0)
 }
@@ -86,7 +86,7 @@ fn test_clock(): void {
 // ===== Process Execution =====
 
 @test
-fn test_exec_echo(): void {
+fn test_exec_echo() {
     let result = os.exec("echo hello")
     assert(result != null)
     let stdout = result.get("stdout")
@@ -96,7 +96,7 @@ fn test_exec_echo(): void {
 }
 
 @test
-fn test_exec_stderr(): void {
+fn test_exec_stderr() {
     // Windows _popen cannot capture stderr separately
     if (os.platform == "windows") {
         return
@@ -110,7 +110,7 @@ fn test_exec_stderr(): void {
 }
 
 @test
-fn test_exec_exit_code(): void {
+fn test_exec_exit_code() {
     let result = os.exec("exit 42")
     assert(result != null)
     let code = result.get("exitCode")
@@ -118,7 +118,7 @@ fn test_exec_exit_code(): void {
 }
 
 @test
-fn test_exec_command_output(): void {
+fn test_exec_command_output() {
     if (os.platform == "windows") {
         // Windows echo adds \r\n; printf not available
         let result = os.exec("echo abc")
@@ -136,21 +136,21 @@ fn test_exec_command_output(): void {
 // ===== Edge Cases =====
 
 @test
-fn test_setenv_return_value(): void {
+fn test_setenv_return_value() {
     let ok = os.setenv("XRAY_TEST_RET", "val")
     assert_eq(ok, true)
     os.unsetenv("XRAY_TEST_RET")
 }
 
 @test
-fn test_unsetenv_return_value(): void {
+fn test_unsetenv_return_value() {
     os.setenv("XRAY_TEST_UNSET", "val")
     let ok = os.unsetenv("XRAY_TEST_UNSET")
     assert_eq(ok, true)
 }
 
 @test
-fn test_chdir_invalid_path(): void {
+fn test_chdir_invalid_path() {
     let ok = os.chdir("/nonexistent_xray_test_path_12345")
     assert_eq(ok, false)
 }

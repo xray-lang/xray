@@ -3,7 +3,7 @@
 import http
 
 @test
-fn test_http_client_apis_exist(): void {
+fn test_http_client_apis_exist() {
     assert(http.get != null)
     assert(http.post != null)
     assert(http.put != null)
@@ -12,7 +12,7 @@ fn test_http_client_apis_exist(): void {
 }
 
 @test
-fn test_http_server_apis_exist(): void {
+fn test_http_server_apis_exist() {
     assert(http.route != null)
     assert(http.listen != null)
     assert(http.urlEncode != null)

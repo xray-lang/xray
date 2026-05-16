@@ -5,7 +5,7 @@
 // ===== while 中的 break =====
 
 @test
-fn test_while_break(): void {
+fn test_while_break() {
     let i = 0
     let sum = 0
     while (i < 100) {
@@ -22,7 +22,7 @@ fn test_while_break(): void {
 // ===== while 中的 continue =====
 
 @test
-fn test_while_continue(): void {
+fn test_while_continue() {
     let i = 0
     let sum = 0
     while (i < 10) {
@@ -38,7 +38,7 @@ fn test_while_continue(): void {
 // ===== for 中的 break =====
 
 @test
-fn test_for_break(): void {
+fn test_for_break() {
     let sum = 0
     for (i in 0..100) {
         if (i >= 5) {
@@ -52,7 +52,7 @@ fn test_for_break(): void {
 // ===== for 中的 continue =====
 
 @test
-fn test_for_continue(): void {
+fn test_for_continue() {
     let sum = 0
     for (i in 0..10) {
         if (i % 2 == 0) {
@@ -66,7 +66,7 @@ fn test_for_continue(): void {
 // ===== 嵌套循环 break =====
 
 @test
-fn test_nested_break(): void {
+fn test_nested_break() {
     let count = 0
     for (i in 0..5) {
         for (j in 0..5) {
@@ -82,7 +82,7 @@ fn test_nested_break(): void {
 // ===== 条件 break =====
 
 @test
-fn test_conditional_break(): void {
+fn test_conditional_break() {
     let arr = [1, 2, 3, -1, 4, 5]
     let sum = 0
     for (x in arr) {
@@ -97,7 +97,7 @@ fn test_conditional_break(): void {
 // ===== 条件 continue =====
 
 @test
-fn test_conditional_continue(): void {
+fn test_conditional_continue() {
     let arr = [1, -2, 3, -4, 5]
     let sum = 0
     for (x in arr) {
@@ -112,7 +112,7 @@ fn test_conditional_continue(): void {
 // ===== break 后代码不执行 =====
 
 @test
-fn test_code_after_break(): void {
+fn test_code_after_break() {
     let executed = false
     for (i in 0..10) {
         break
@@ -124,7 +124,7 @@ fn test_code_after_break(): void {
 // ===== 空循环体中的 break =====
 
 @test
-fn test_immediate_break(): void {
+fn test_immediate_break() {
     let count = 0
     while (true) {
         count = count + 1

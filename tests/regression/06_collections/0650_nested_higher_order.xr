@@ -3,7 +3,7 @@
 // Test: Complex nested higher-order functions for type inference
 // ===== Deep Chained Operations (3+ levels) =====
 @test
-fn test_triple_chain_map(): void {
+fn test_triple_chain_map() {
     let arr = [1, 2, 3, 4, 5]
     let result = arr.map(fn(x) {
         return x * 2
@@ -19,7 +19,7 @@ fn test_triple_chain_map(): void {
 }
 
 @test
-fn test_quad_chain_mixed(): void {
+fn test_quad_chain_mixed() {
     let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let result = arr.filter(fn(x) {
         return x % 2 == 0
@@ -37,7 +37,7 @@ fn test_quad_chain_mixed(): void {
 }
 
 @test
-fn test_five_level_chain(): void {
+fn test_five_level_chain() {
     let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     let result = arr.map(fn(x) {
         return x * 2
@@ -56,7 +56,7 @@ fn test_five_level_chain(): void {
 
 // ===== Nested Array Operations =====
 @test
-fn test_map_over_nested_array(): void {
+fn test_map_over_nested_array() {
     let matrix = [[1, 2], [3, 4], [5, 6]]
     let doubled = matrix.map(fn(row) {
         return row.map(fn(x) {
@@ -70,7 +70,7 @@ fn test_map_over_nested_array(): void {
 }
 
 @test
-fn test_filter_then_map_nested(): void {
+fn test_filter_then_map_nested() {
     let data = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     let result = data.filter(fn(row) {
         return row[0] > 2
@@ -87,7 +87,7 @@ fn test_filter_then_map_nested(): void {
 }
 
 @test
-fn test_triple_nested_map(): void {
+fn test_triple_nested_map() {
     let cube = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
     let result = cube.map(fn(plane) {
         return plane.map(fn(row) {
@@ -102,7 +102,7 @@ fn test_triple_nested_map(): void {
 }
 
 @test
-fn test_nested_reduce(): void {
+fn test_nested_reduce() {
     let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     let rowSums = matrix.map(fn(row) {
         return row.reduce(fn(a, b) {
@@ -120,7 +120,7 @@ fn test_nested_reduce(): void {
 }
 
 @test
-fn test_flatten_with_reduce(): void {
+fn test_flatten_with_reduce() {
     let nested = [[1, 2], [3, 4, 5], [6]]
     let flat = nested.reduce(fn(acc, arr) {
         return acc.concat(arr)
@@ -132,7 +132,7 @@ fn test_flatten_with_reduce(): void {
 
 // ===== Complex Type Transformations =====
 @test
-fn test_map_to_objects_then_filter(): void {
+fn test_map_to_objects_then_filter() {
     let nums = [1, 2, 3, 4, 5]
     let objects = nums.map(fn(n) {
         return ({ "value": n, "doubled": n * 2 })
@@ -146,7 +146,7 @@ fn test_map_to_objects_then_filter(): void {
 }
 
 @test
-fn test_chain_with_type_change(): void {
+fn test_chain_with_type_change() {
     let words = ["apple", "banana", "cherry", "date"]
     let result = words.map(fn(w) {
         return w.length
@@ -162,7 +162,7 @@ fn test_chain_with_type_change(): void {
 }
 
 @test
-fn test_reduce_to_map(): void {
+fn test_reduce_to_map() {
     let pairs = [["a", 1], ["b", 2], ["c", 3]]
     let obj = pairs.reduce(fn(acc, pair) {
         acc[pair[0]] = pair[1]
@@ -175,7 +175,7 @@ fn test_reduce_to_map(): void {
 
 // ===== Higher-Order Functions with Closures =====
 @test
-fn test_map_with_closure_capture(): void {
+fn test_map_with_closure_capture() {
     let multiplier = 10
     let arr = [1, 2, 3, 4, 5]
     let result = arr.map(fn(x) {
@@ -186,7 +186,7 @@ fn test_map_with_closure_capture(): void {
 }
 
 @test
-fn test_nested_closure_capture(): void {
+fn test_nested_closure_capture() {
     let base = 100
     let matrix = [[1, 2], [3, 4]]
     let result = matrix.map(fn(row) {
@@ -200,7 +200,7 @@ fn test_nested_closure_capture(): void {
 }
 
 @test
-fn test_filter_with_external_predicate(): void {
+fn test_filter_with_external_predicate() {
     let threshold = 5
     let arr = [1, 3, 5, 7, 9]
     fn isAboveThreshold(x: int): bool {
@@ -213,7 +213,7 @@ fn test_filter_with_external_predicate(): void {
 
 // ===== Combining Multiple Array Operations =====
 @test
-fn test_parallel_operations_then_combine(): void {
+fn test_parallel_operations_then_combine() {
     let arr = [1, 2, 3, 4, 5]
     let doubled = arr.map(fn(x) {
         return x * 2
@@ -231,7 +231,7 @@ fn test_parallel_operations_then_combine(): void {
 }
 
 @test
-fn test_zip_with_reduce(): void {
+fn test_zip_with_reduce() {
     let a = [1, 2, 3]
     let b = [4, 5, 6]
     let indices = [0, 1, 2]
@@ -243,7 +243,7 @@ fn test_zip_with_reduce(): void {
 
 // ===== every/some with Complex Predicates =====
 @test
-fn test_every_with_nested_check(): void {
+fn test_every_with_nested_check() {
     let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     let allPositive = matrix.every(fn(row) {
         return row.every(fn(x) {
@@ -260,7 +260,7 @@ fn test_every_with_nested_check(): void {
 }
 
 @test
-fn test_some_with_nested_check(): void {
+fn test_some_with_nested_check() {
     let matrix = [[1, 3, 5], [2, 4, 6], [7, 9, 11]]
     let hasEvenRow = matrix.some(fn(row) {
         return row.every(fn(x) {
@@ -271,7 +271,7 @@ fn test_some_with_nested_check(): void {
 }
 
 @test
-fn test_find_with_complex_predicate(): void {
+fn test_find_with_complex_predicate() {
     let data = [{ "name": "Alice", "scores": [85, 90, 95] }, { "name": "Bob", "scores": [70, 75, 80] }, { "name": "Carol", "scores": [90, 92, 94] }]
     let highAchiever = data.find(fn(person) {
         return person.scores.every(fn(s) {
@@ -283,7 +283,7 @@ fn test_find_with_complex_predicate(): void {
 
 // ===== Function Composition with Higher-Order Functions =====
 @test
-fn test_compose_transformations(): void {
+fn test_compose_transformations() {
     fn double(arr: Array<int>): Array<int> {
         return arr.map(fn(x: int): int {
             return x * 2
@@ -310,7 +310,7 @@ fn test_compose_transformations(): void {
 }
 
 @test
-fn test_pipeline_of_operations(): void {
+fn test_pipeline_of_operations() {
     let operations = [fn(arr: Array<int>) {
         return arr.filter(fn(x) {
             return x > 2
@@ -336,7 +336,7 @@ fn test_pipeline_of_operations(): void {
 
 // ===== Edge Cases with Empty and Single Element =====
 @test
-fn test_chain_with_empty_intermediate(): void {
+fn test_chain_with_empty_intermediate() {
     let arr = [1, 2, 3, 4, 5]
     let result = arr.filter(fn(x) {
         return x > 100
@@ -349,7 +349,7 @@ fn test_chain_with_empty_intermediate(): void {
 }
 
 @test
-fn test_chain_with_single_element(): void {
+fn test_chain_with_single_element() {
     let arr = [42]
     let result = arr.map(fn(x) {
         return x * 2
@@ -364,7 +364,7 @@ fn test_chain_with_single_element(): void {
 
 // ===== forEach with Side Effects =====
 @test
-fn test_nested_foreach(): void {
+fn test_nested_foreach() {
     let matrix = [[1, 2], [3, 4], [5, 6]]
     let sum = 0
     matrix.forEach(fn(row) {
@@ -376,7 +376,7 @@ fn test_nested_foreach(): void {
 }
 
 @test
-fn test_foreach_with_index_simulation(): void {
+fn test_foreach_with_index_simulation() {
     let arr = ["a", "b", "c"]
     let indexed: Array<Json> = []
     let idx = 0
@@ -391,7 +391,7 @@ fn test_foreach_with_index_simulation(): void {
 
 // ===== Complex Data Transformations =====
 @test
-fn test_group_by_simulation(): void {
+fn test_group_by_simulation() {
     let items = [{ "category": "fruit", "name": "apple" }, { "category": "vegetable", "name": "carrot" }, { "category": "fruit", "name": "banana" }, { "category": "vegetable", "name": "broccoli" }]
     let fruits = items.filter(fn(item) {
         return item.category == "fruit"
@@ -405,7 +405,7 @@ fn test_group_by_simulation(): void {
 }
 
 @test
-fn test_unique_via_reduce(): void {
+fn test_unique_via_reduce() {
     let arr = [1, 2, 2, 3, 3, 3, 4, 4, 4, 4]
     let seen = #[]
     let unique = arr.filter(fn(x) {
@@ -421,7 +421,7 @@ fn test_unique_via_reduce(): void {
 }
 
 @test
-fn test_count_by_reduce(): void {
+fn test_count_by_reduce() {
     let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
     let counts = words.reduce(fn(acc, word) {
         if (acc[word] == null) {
@@ -437,7 +437,7 @@ fn test_count_by_reduce(): void {
 
 // ===== Return Type Inference Through Chains =====
 @test
-fn test_mixed_return_types(): void {
+fn test_mixed_return_types() {
     let arr = [1, 2, 3]
     // int -> string -> int (length)
     let lengths = arr.map(fn(x) {
@@ -451,7 +451,7 @@ fn test_mixed_return_types(): void {
 }
 
 @test
-fn test_boolean_chain(): void {
+fn test_boolean_chain() {
     let arr = [1, 2, 3, 4, 5]
     let bools = arr.map(fn(x) {
         return x % 2 == 0
@@ -465,7 +465,7 @@ fn test_boolean_chain(): void {
 
 // ===== Deeply Nested with Multiple Types =====
 @test
-fn test_complex_data_pipeline(): void {
+fn test_complex_data_pipeline() {
     let users = [{ "name": "Alice", "purchases": [100, 200, 300] }, { "name": "Bob", "purchases": [50, 150] }, { "name": "Carol", "purchases": [500, 600, 700, 800] }]
     // Calculate total per user, filter high spenders, get names
     let highSpenders = users.map(fn(user) {
@@ -484,7 +484,7 @@ fn test_complex_data_pipeline(): void {
 }
 
 @test
-fn test_matrix_operations(): void {
+fn test_matrix_operations() {
     let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     // Get column sums
     let colSums = [0, 1, 2].map(fn(col) {
@@ -500,7 +500,7 @@ fn test_matrix_operations(): void {
 }
 
 @test
-fn test_findIndex_chain(): void {
+fn test_findIndex_chain() {
     let data = [[1, 2], [3, 4], [5, 6], [7, 8]]
     // Find first row where sum > 10
     let idx = data.findIndex(fn(row) {

@@ -21,7 +21,7 @@ class Complex {
         // 字段已自动初始化
     }
 
-    addItem(key: string, value: int): void {
+    addItem(key: string, value: int) {
         this._map[key] = value
         this._arr.push(value)
     }
@@ -60,7 +60,7 @@ class Counter {
 
     constructor() {}
 
-    add(item: string): void {
+    add(item: string) {
         this._items.push(item)
     }
 

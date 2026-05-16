@@ -5,7 +5,7 @@ import log
 // ===== Level constants =====
 
 @test
-fn test_log_level_constants(): void {
+fn test_log_level_constants() {
     assert_eq(log.DEBUG, 10)
     assert_eq(log.INFO, 20)
     assert_eq(log.WARN, 30)
@@ -16,14 +16,14 @@ fn test_log_level_constants(): void {
 // ===== isEnabled =====
 
 @test
-fn test_is_enabled_default(): void {
+fn test_is_enabled_default() {
     // Default level is INFO
     assert_eq(log.isEnabled(log.INFO), true)
     assert_eq(log.isEnabled(log.ERROR), true)
 }
 
 @test
-fn test_set_level(): void {
+fn test_set_level() {
     log.setLevel(log.DEBUG)
     assert_eq(log.isEnabled(log.DEBUG), true)
     // Restore default
@@ -33,7 +33,7 @@ fn test_set_level(): void {
 // ===== Log output (should not crash) =====
 
 @test
-fn test_log_functions(): void {
+fn test_log_functions() {
     log.setLevel(log.DEBUG)
     log.debug("debug message")
     log.info("info message")
@@ -43,14 +43,14 @@ fn test_log_functions(): void {
 }
 
 @test
-fn test_log_with_attrs(): void {
+fn test_log_with_attrs() {
     log.info("server started", "port", 8080, "host", "localhost")
 }
 
 // ===== Format =====
 
 @test
-fn test_log_json_format(): void {
+fn test_log_json_format() {
     log.setFormat("json")
     log.info("json format test", "key", "value")
     log.setFormat("text")

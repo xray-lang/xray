@@ -7,7 +7,7 @@
 class Counter {
     static count: int = 0
     
-    static increment(): void {
+    static increment() {
         Counter.count = Counter.count + 1
     }
     
@@ -17,14 +17,14 @@ class Counter {
 }
 
 @test
-fn test_static_field(): void {
+fn test_static_field() {
     assert_eq(Counter.count, 0)
     Counter.count = 5
     assert_eq(Counter.count, 5)
 }
 
 @test
-fn test_static_method(): void {
+fn test_static_method() {
     Counter.count = 0
     Counter.increment()
     assert_eq(Counter.getCount(), 1)
@@ -40,7 +40,7 @@ class MathConstants {
 }
 
 @test
-fn test_static_constants(): void {
+fn test_static_constants() {
     assert_eq(MathConstants.PI > 3.14, true)
     assert_eq(MathConstants.E > 2.71, true)
 }
@@ -67,7 +67,7 @@ class Point {
 }
 
 @test
-fn test_factory_method(): void {
+fn test_factory_method() {
     let p = Point.origin()
     assert_eq(p.x, 0)
     assert_eq(p.y, 0)
@@ -86,13 +86,13 @@ class Item {
         this.name = name
     }
     
-    static resetId(): void {
+    static resetId() {
         Item.nextId = 1
     }
 }
 
 @test
-fn test_mixed_static_instance(): void {
+fn test_mixed_static_instance() {
     Item.resetId()
     let a = new Item("Apple")
     let b = new Item("Banana")
@@ -115,7 +115,7 @@ class Calculator {
 }
 
 @test
-fn test_static_call_static(): void {
+fn test_static_call_static() {
     assert_eq(Calculator.add(2, 3), 5)
     assert_eq(Calculator.addThree(1, 2, 3), 6)
 }

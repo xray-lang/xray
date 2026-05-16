@@ -3,14 +3,14 @@
 // 测试：对象字面量（Json/Struct 统一类型）
 // ===== 基本对象 =====
 @test
-fn test_basic_object(): void {
+fn test_basic_object() {
     let point = { "x": 10, "y": 20 }
     assert_eq(point.x, 10)
     assert_eq(point.y, 20)
 }
 
 @test
-fn test_object_field_modify(): void {
+fn test_object_field_modify() {
     let point = { "x": 10, "y": 20 }
     point.x = 100
     point.y = 200
@@ -20,7 +20,7 @@ fn test_object_field_modify(): void {
 
 // ===== 多字段对象 =====
 @test
-fn test_multi_field_object(): void {
+fn test_multi_field_object() {
     let person = { "name": "Alice", "age": 25, "active": true }
     assert_eq(person.name, "Alice")
     assert_eq(person.age, 25)
@@ -28,7 +28,7 @@ fn test_multi_field_object(): void {
 }
 
 @test
-fn test_object_field_update(): void {
+fn test_object_field_update() {
     let person = { "name": "Bob", "age": 30 }
     person.age = 31
     assert_eq(person.age, 31)
@@ -36,7 +36,7 @@ fn test_object_field_update(): void {
 
 // ===== 嵌套对象 =====
 @test
-fn test_nested_object(): void {
+fn test_nested_object() {
     let rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
     assert_eq(rect.origin.x, 0)
     assert_eq(rect.origin.y, 0)
@@ -45,7 +45,7 @@ fn test_nested_object(): void {
 }
 
 @test
-fn test_nested_object_modify(): void {
+fn test_nested_object_modify() {
     let rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
     rect.origin.x = 10
     rect.size.width = 200
@@ -55,7 +55,7 @@ fn test_nested_object_modify(): void {
 
 // ===== 单字段对象 =====
 @test
-fn test_single_field_object(): void {
+fn test_single_field_object() {
     let single = { "value": 42 }
     assert_eq(single.value, 42)
     single.value = 99
@@ -64,7 +64,7 @@ fn test_single_field_object(): void {
 
 // ===== 不同类型值 =====
 @test
-fn test_mixed_types(): void {
+fn test_mixed_types() {
     let data = { "count": 100, "ratio": 0.5, "name": "test", "flag": true, "empty": null }
     assert_eq(data.count, 100)
     assert_eq(data.ratio, 0.5)
@@ -75,7 +75,7 @@ fn test_mixed_types(): void {
 
 // ===== 对象作为函数参数 =====
 @test
-fn test_object_as_param(): void {
+fn test_object_as_param() {
     fn getX(p: Json): int {
         return p.x
     }
@@ -85,7 +85,7 @@ fn test_object_as_param(): void {
 
 // ===== 对象作为返回值 =====
 @test
-fn test_object_as_return(): void {
+fn test_object_as_return() {
     fn makePoint(x: int, y: int): Json {
         return { "x": x, "y": y }
     }
@@ -96,7 +96,7 @@ fn test_object_as_return(): void {
 
 // ===== 对象数组 =====
 @test
-fn test_object_array(): void {
+fn test_object_array() {
     let points = [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }, { "x": 2, "y": 2 }]
     assert_eq(points.length, 3)
     assert_eq(points[0].x, 0)
@@ -104,7 +104,7 @@ fn test_object_array(): void {
 }
 
 @test
-fn test_object_field_shorthand(): void {
+fn test_object_field_shorthand() {
     let users = ["alice", "bob"]
     let orders = [1, 2, 3]
     let dashboard = { users, count: orders.length }

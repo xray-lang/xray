@@ -9,7 +9,7 @@ import time
 const ch1 = Channel(1)
 const ch2 = Channel(1)
 
-fn sendDelayed(ch: Channel<string>, msg: string, delay: int): void {
+fn sendDelayed(ch: Channel<string>, msg: string, delay: int) {
     time.sleep(delay)
     ch.send(msg)
 }
@@ -28,7 +28,7 @@ ch1.close()
 ch2.close()
 
 // === defer: LIFO cleanup ===
-fn processFile(): void {
+fn processFile() {
     print("open file")
     defer { print("close file") }    // runs when function exits
     defer { print("flush buffer") }  // runs before close (LIFO order)
@@ -41,11 +41,11 @@ processFile()
 // === scope: structured concurrency ===
 // scope {} waits for ALL goroutines inside to finish before continuing
 print("\n--- scope demo ---")
-fn taskA(): void {
+fn taskA() {
     time.sleep(30)
     print("  task A done")
 }
-fn taskB(): void {
+fn taskB() {
     time.sleep(10)
     print("  task B done")
 }
@@ -59,7 +59,7 @@ print("all tasks in scope completed")
 print("\n--- parallel pipeline ---")
 const results = Channel(3)
 
-fn fetchData(id: int, out: Channel<string>): void {
+fn fetchData(id: int, out: Channel<string>) {
     time.sleep(10)
     out.send("data-${id}")
 }

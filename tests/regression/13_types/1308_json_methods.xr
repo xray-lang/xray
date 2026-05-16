@@ -4,7 +4,7 @@
 
 // ===== Json.size() =====
 @test
-fn test_json_size(): void {
+fn test_json_size() {
     let obj = { "name": "Alice", "age": 30 }
     assert_eq(Json.size(obj), 2)
     let empty = {}
@@ -12,7 +12,7 @@ fn test_json_size(): void {
 }
 
 @test
-fn test_json_size_after_add(): void {
+fn test_json_size_after_add() {
     let obj = { "x": 1 }
     assert_eq(Json.size(obj), 1)
     obj.y = 2
@@ -23,7 +23,7 @@ fn test_json_size_after_add(): void {
 
 // ===== Json.keys() =====
 @test
-fn test_json_keys(): void {
+fn test_json_keys() {
     let obj = { "name": "Alice", "age": 30 }
     let k = Json.keys(obj)
     assert_eq(k.length, 2)
@@ -32,7 +32,7 @@ fn test_json_keys(): void {
 }
 
 @test
-fn test_json_keys_empty(): void {
+fn test_json_keys_empty() {
     let obj = {}
     let k = Json.keys(obj)
     assert_eq(k.length, 0)
@@ -40,7 +40,7 @@ fn test_json_keys_empty(): void {
 
 // ===== Json.values() =====
 @test
-fn test_json_values(): void {
+fn test_json_values() {
     let obj = { "x": 10, "y": 20 }
     let v = Json.values(obj)
     assert_eq(v.length, 2)
@@ -50,7 +50,7 @@ fn test_json_values(): void {
 
 // ===== Json.entries() =====
 @test
-fn test_json_entries(): void {
+fn test_json_entries() {
     let obj = { "a": 1, "b": 2 }
     let e = Json.entries(obj)
     assert_eq(e.length, 2)
@@ -60,7 +60,7 @@ fn test_json_entries(): void {
 
 // ===== Json.has() =====
 @test
-fn test_json_has(): void {
+fn test_json_has() {
     let obj = { "name": "Alice", "age": 30 }
     assert_true(Json.has(obj, "name"))
     assert_true(Json.has(obj, "age"))
@@ -70,7 +70,7 @@ fn test_json_has(): void {
 
 // ===== Json.get() =====
 @test
-fn test_json_get(): void {
+fn test_json_get() {
     let obj = { "name": "Alice", "age": 30 }
     assert_eq(Json.get(obj, "name"), "Alice")
     assert_eq(Json.get(obj, "age"), 30)
@@ -78,7 +78,7 @@ fn test_json_get(): void {
 }
 
 @test
-fn test_json_get_with_default(): void {
+fn test_json_get_with_default() {
     let obj = { "name": "Alice" }
     assert_eq(Json.get(obj, "name", "default"), "Alice")
     assert_eq(Json.get(obj, "email", "unknown"), "unknown")
@@ -87,7 +87,7 @@ fn test_json_get_with_default(): void {
 
 // ===== Json.isEmpty() =====
 @test
-fn test_json_is_empty(): void {
+fn test_json_is_empty() {
     let empty = {}
     assert_true(Json.isEmpty(empty))
     let obj = { "x": 1 }
@@ -96,7 +96,7 @@ fn test_json_is_empty(): void {
 
 // ===== Combined test =====
 @test
-fn test_json_methods_combined(): void {
+fn test_json_methods_combined() {
     let user = { "name": "Bob", "score": 100 }
     assert_eq(Json.size(user), 2)
     assert_true(Json.has(user, "name"))
@@ -109,7 +109,7 @@ fn test_json_methods_combined(): void {
 
 // ===== Json.size() avoids field name conflict =====
 @test
-fn test_json_size_no_conflict(): void {
+fn test_json_size_no_conflict() {
     let obj = { "size": 100, "length": 200, "keys": "mykeys" }
     // field access returns user field values (no conflict!)
     assert_eq(obj.size, 100)

@@ -8,42 +8,42 @@
 // ===== Basic int64 arithmetic =====
 
 @test
-fn test_int64_add(): void {
+fn test_int64_add() {
     let a: int = 100
     let b: int = 200
     assert_eq(a + b, 300)
 }
 
 @test
-fn test_int64_sub(): void {
+fn test_int64_sub() {
     let a: int = 100
     let b: int = 200
     assert_eq(a - b, -100)
 }
 
 @test
-fn test_int64_mul(): void {
+fn test_int64_mul() {
     let a: int = 1000000
     let b: int = 1000000
     assert_eq(a * b, 1000000000000)
 }
 
 @test
-fn test_int64_div(): void {
+fn test_int64_div() {
     let a: int = 100
     let b: int = 3
     assert_eq(a / b, 33)
 }
 
 @test
-fn test_int64_mod(): void {
+fn test_int64_mod() {
     let a: int = 100
     let b: int = 3
     assert_eq(a % b, 1)
 }
 
 @test
-fn test_int64_neg(): void {
+fn test_int64_neg() {
     let a: int = 42
     assert_eq(-a, -42)
 }
@@ -51,7 +51,7 @@ fn test_int64_neg(): void {
 // ===== Beyond 48-bit: assert_eq with both I64 operands =====
 
 @test
-fn test_int64_beyond_48bit_add(): void {
+fn test_int64_beyond_48bit_add() {
     let a: int = 140737488355327
     let b: int = 1
     let result: int = a + b
@@ -60,7 +60,7 @@ fn test_int64_beyond_48bit_add(): void {
 }
 
 @test
-fn test_int64_large_multiply_verify(): void {
+fn test_int64_large_multiply_verify() {
     let a: int = 1000000000
     let b: int = 1000000000
     let result: int = a * b
@@ -69,7 +69,7 @@ fn test_int64_large_multiply_verify(): void {
 }
 
 @test
-fn test_int64_negative_large(): void {
+fn test_int64_negative_large() {
     let a: int = -140737488355328
     let b: int = -1
     let result: int = a + b
@@ -81,7 +81,7 @@ fn test_int64_negative_large(): void {
 // when the literal exceeds 48-bit range.
 
 @test
-fn test_int64_assert_eq_large_literal(): void {
+fn test_int64_assert_eq_large_literal() {
     let a: int = 140737488355327
     let b: int = a + 1
     // b = 140737488355328 (>48-bit), assert_eq second arg is I64 expr
@@ -93,7 +93,7 @@ fn test_int64_assert_eq_large_literal(): void {
 // assert(result > a) where both are I64 — does it box?
 
 @test
-fn test_int64_comparison_expr(): void {
+fn test_int64_comparison_expr() {
     let a: int = 140737488355327
     let b: int = 1
     let result: int = a + b
@@ -102,14 +102,14 @@ fn test_int64_comparison_expr(): void {
 }
 
 @test
-fn test_int64_comparison_expr_lt(): void {
+fn test_int64_comparison_expr_lt() {
     let a: int = 140737488355327
     let result: int = a + 1000
     assert(a < result)
 }
 
 @test
-fn test_int64_comparison_eq_expr(): void {
+fn test_int64_comparison_eq_expr() {
     let a: int = 140737488355327
     let b: int = a
     assert(a == b)
@@ -118,14 +118,14 @@ fn test_int64_comparison_eq_expr(): void {
 // ===== Division by zero =====
 
 @test
-fn test_int64_div_by_zero(): void {
+fn test_int64_div_by_zero() {
     let a: int = 42
     let zero: int = 0
     assert_throws(fn() { let r = a / zero })
 }
 
 @test
-fn test_int64_mod_by_zero(): void {
+fn test_int64_mod_by_zero() {
     let a: int = 42
     let zero: int = 0
     assert_throws(fn() { let r = a % zero })
@@ -134,7 +134,7 @@ fn test_int64_mod_by_zero(): void {
 // ===== Bitwise operations =====
 
 @test
-fn test_int64_bitwise(): void {
+fn test_int64_bitwise() {
     let a: int = 0xFF00
     let b: int = 0x0FF0
     assert_eq(a & b, 0x0F00)
@@ -145,7 +145,7 @@ fn test_int64_bitwise(): void {
 // ===== Shift operations beyond 48-bit =====
 
 @test
-fn test_int64_shift_large(): void {
+fn test_int64_shift_large() {
     let a: int = 1
     let r47: int = a << 47
     // 2^47 = 140737488355328, verify via shift back
@@ -153,7 +153,7 @@ fn test_int64_shift_large(): void {
 }
 
 @test
-fn test_int64_shift_62(): void {
+fn test_int64_shift_62() {
     let a: int = 1
     let r62: int = a << 62
     assert_eq(r62 >> 62, 1)
@@ -162,14 +162,14 @@ fn test_int64_shift_62(): void {
 // ===== Compound assignment beyond 48-bit =====
 
 @test
-fn test_int64_compound_add_large(): void {
+fn test_int64_compound_add_large() {
     let x: int = 140737488355327
     x += 1000
     assert_eq(x - 1000, 140737488355327)
 }
 
 @test
-fn test_int64_compound_mul_large(): void {
+fn test_int64_compound_mul_large() {
     let x: int = 1000000000
     x *= 1000000000
     assert_eq(x / 1000000000, 1000000000)
@@ -178,13 +178,13 @@ fn test_int64_compound_mul_large(): void {
 // ===== typeof =====
 
 @test
-fn test_typeof_int64(): void {
+fn test_typeof_int64() {
     let a: int = 42
     assert_eq(typeof(a), Type.int)
 }
 
 @test
-fn test_typeof_float64(): void {
+fn test_typeof_float64() {
     let a: float = 3.14
     assert_eq(typeof(a), Type.float)
 }

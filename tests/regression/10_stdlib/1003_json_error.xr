@@ -8,20 +8,20 @@
 // ===== 使用 isValid 检测无效 JSON =====
 
 @test
-fn test_invalid_empty(): void {
+fn test_invalid_empty() {
     // 空字符串
     assert_eq(Json.isValid(""), false)
 }
 
 @test
-fn test_invalid_whitespace_only(): void {
+fn test_invalid_whitespace_only() {
     // 只有空白
     assert_eq(Json.isValid("   "), false)
     assert_eq(Json.isValid("\n\t"), false)
 }
 
 @test
-fn test_invalid_incomplete_object(): void {
+fn test_invalid_incomplete_object() {
     // 不完整的对象
     assert_eq(Json.isValid("{"), false)
     assert_eq(Json.isValid("{\"key\""), false)
@@ -30,7 +30,7 @@ fn test_invalid_incomplete_object(): void {
 }
 
 @test
-fn test_invalid_incomplete_array(): void {
+fn test_invalid_incomplete_array() {
     // 不完整的数组
     assert_eq(Json.isValid("["), false)
     assert_eq(Json.isValid("[1,"), false)
@@ -38,53 +38,53 @@ fn test_invalid_incomplete_array(): void {
 }
 
 @test
-fn test_invalid_incomplete_string(): void {
+fn test_invalid_incomplete_string() {
     // 不完整的字符串
     assert_eq(Json.isValid("\"hello"), false)
     assert_eq(Json.isValid("\""), false)
 }
 
 @test
-fn test_invalid_unquoted_key(): void {
+fn test_invalid_unquoted_key() {
     // 未引用的键
     assert_eq(Json.isValid("{key: 1}"), false)
 }
 
 @test
-fn test_invalid_single_quote(): void {
+fn test_invalid_single_quote() {
     // 单引号字符串（JSON 不支持）
     assert_eq(Json.isValid("'hello'"), false)
     assert_eq(Json.isValid("{'key': 1}"), false)
 }
 
 @test
-fn test_invalid_trailing_comma_array(): void {
+fn test_invalid_trailing_comma_array() {
     // 数组尾随逗号（严格 JSON 不支持）
     assert_eq(Json.isValid("[1, 2, 3,]"), false)
 }
 
 @test
-fn test_invalid_trailing_comma_object(): void {
+fn test_invalid_trailing_comma_object() {
     // 对象尾随逗号
     assert_eq(Json.isValid("{\"a\": 1,}"), false)
 }
 
 @test
-fn test_invalid_leading_zero(): void {
+fn test_invalid_leading_zero() {
     // 前导零（除了 0 本身）
     assert_eq(Json.isValid("01"), false)
     assert_eq(Json.isValid("007"), false)
 }
 
 @test
-fn test_invalid_plus_sign(): void {
+fn test_invalid_plus_sign() {
     // 正号（JSON 不支持 +）
     assert_eq(Json.isValid("+1"), false)
     assert_eq(Json.isValid("+3.14"), false)
 }
 
 @test
-fn test_invalid_bare_words(): void {
+fn test_invalid_bare_words() {
     // 裸词（非关键字）
     assert_eq(Json.isValid("undefined"), false)
     assert_eq(Json.isValid("NaN"), false)
@@ -92,7 +92,7 @@ fn test_invalid_bare_words(): void {
 }
 
 @test
-fn test_invalid_control_chars(): void {
+fn test_invalid_control_chars() {
     // 控制字符（JSON 不允许未转义的控制字符）
     // 这些测试需要构造包含控制字符的字符串
     // 简化：测试无效转义
@@ -100,7 +100,7 @@ fn test_invalid_control_chars(): void {
 }
 
 @test
-fn test_invalid_bad_escape(): void {
+fn test_invalid_bad_escape() {
     // 无效转义序列
     assert_eq(Json.isValid("\"\\q\""), false)
     assert_eq(Json.isValid("\"\\a\""), false)
@@ -108,7 +108,7 @@ fn test_invalid_bad_escape(): void {
 }
 
 @test
-fn test_invalid_bad_unicode_escape(): void {
+fn test_invalid_bad_unicode_escape() {
     // 无效 Unicode 转义
     assert_eq(Json.isValid("\"\\u\""), false)
     assert_eq(Json.isValid("\"\\u0\""), false)
@@ -119,7 +119,7 @@ fn test_invalid_bad_unicode_escape(): void {
 }
 
 @test
-fn test_invalid_extra_data(): void {
+fn test_invalid_extra_data() {
     // 多余数据
     assert_eq(Json.isValid("1 2"), false)
     assert_eq(Json.isValid("true false"), false)
@@ -127,20 +127,20 @@ fn test_invalid_extra_data(): void {
 }
 
 @test
-fn test_invalid_missing_colon(): void {
+fn test_invalid_missing_colon() {
     // 缺少冒号
     assert_eq(Json.isValid("{\"key\" 1}"), false)
 }
 
 @test
-fn test_invalid_missing_comma(): void {
+fn test_invalid_missing_comma() {
     // 缺少逗号
     assert_eq(Json.isValid("[1 2]"), false)
     assert_eq(Json.isValid("{\"a\": 1 \"b\": 2}"), false)
 }
 
 @test
-fn test_invalid_wrong_bracket(): void {
+fn test_invalid_wrong_bracket() {
     // 括号不匹配
     assert_eq(Json.isValid("[}"), false)
     assert_eq(Json.isValid("{]"), false)
@@ -150,7 +150,7 @@ fn test_invalid_wrong_bracket(): void {
 // ===== 有效 JSON 确认测试 =====
 
 @test
-fn test_valid_primitives(): void {
+fn test_valid_primitives() {
     assert_eq(Json.isValid("null"), true)
     assert_eq(Json.isValid("true"), true)
     assert_eq(Json.isValid("false"), true)
@@ -160,7 +160,7 @@ fn test_valid_primitives(): void {
 }
 
 @test
-fn test_valid_collections(): void {
+fn test_valid_collections() {
     assert_eq(Json.isValid("[]"), true)
     assert_eq(Json.isValid("{}"), true)
     assert_eq(Json.isValid("[1, 2, 3]"), true)
@@ -168,14 +168,14 @@ fn test_valid_collections(): void {
 }
 
 @test
-fn test_valid_nested(): void {
+fn test_valid_nested() {
     assert_eq(Json.isValid("[[[]]]"), true)
     assert_eq(Json.isValid("{{}}"), false)  // 嵌套对象需要键
     assert_eq(Json.isValid("{\"a\": {\"b\": {}}}"), true)
 }
 
 @test
-fn test_valid_with_whitespace(): void {
+fn test_valid_with_whitespace() {
     // 空白应该被正确处理
     assert_eq(Json.isValid("  42  "), true)
     assert_eq(Json.isValid("\n\t{\n\t}\n\t"), true)
@@ -185,20 +185,20 @@ fn test_valid_with_whitespace(): void {
 // ===== tryParse 错误处理测试 =====
 
 @test
-fn test_tryparse_success(): void {
+fn test_tryparse_success() {
     let result = Json.tryParse("[1, 2, 3]")
     assert_eq(result.error, null)
     assert_eq(result.value.length, 3)
 }
 
 @test
-fn test_tryparse_error_incomplete(): void {
+fn test_tryparse_error_incomplete() {
     let result = Json.tryParse("{incomplete")
     assert_eq(result.error != null, true)
 }
 
 @test
-fn test_tryparse_error_invalid(): void {
+fn test_tryparse_error_invalid() {
     let result = Json.tryParse("not valid json")
     assert_eq(result.error != null, true)
 }
@@ -206,7 +206,7 @@ fn test_tryparse_error_invalid(): void {
 // ===== typeof 测试 =====
 
 @test
-fn test_typeof_valid(): void {
+fn test_typeof_valid() {
     assert_eq(typeof(Json.parse("42")), Type.int)
     assert_eq(typeof(Json.parse("\"hello\"")), Type.string)
     assert_eq(typeof(Json.parse("true")), Type.bool)
@@ -217,7 +217,7 @@ fn test_typeof_valid(): void {
 }
 
 @test
-fn test_typeof_invalid(): void {
+fn test_typeof_invalid() {
     // Invalid JSON parse returns null
     let t = Json.parse("invalid")
     assert_eq(t, null)
@@ -226,7 +226,7 @@ fn test_typeof_invalid(): void {
 // ===== 边界情况测试 =====
 
 @test
-fn test_deep_nesting_valid(): void {
+fn test_deep_nesting_valid() {
     // 合理深度的嵌套应该工作
     let s = "[[[[[[1]]]]]]"
     assert_eq(Json.isValid(s), true)
@@ -235,7 +235,7 @@ fn test_deep_nesting_valid(): void {
 }
 
 @test
-fn test_long_array(): void {
+fn test_long_array() {
     // 长数组
     let s = "[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]"
     assert_eq(Json.isValid(s), true)
@@ -245,7 +245,7 @@ fn test_long_array(): void {
 }
 
 @test
-fn test_long_string(): void {
+fn test_long_string() {
     // 长字符串
     let s = "\"" + "x".repeat(1000) + "\""
     assert_eq(Json.isValid(s), true)

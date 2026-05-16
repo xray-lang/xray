@@ -56,7 +56,7 @@ class Stack<T> {
 
     constructor() { this.items = [] }
 
-    push(item: T): void { this.items.push(item) }
+    push(item: T) { this.items.push(item) }
 
     pop(): T? {
         if (this.items.length == 0) { return null }

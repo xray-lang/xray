@@ -2,8 +2,8 @@
 // Regression: C primitive methods must propagate exceptions to try/catch
 
 @test
-fn test_json_stringify_catches_function(): void {
-    let f = fn(): void {}
+fn test_json_stringify_catches_function() {
+    let f = fn() {}
     let obj = { handler: f }
     let caught = false
     try {
@@ -15,8 +15,8 @@ fn test_json_stringify_catches_function(): void {
 }
 
 @test
-fn test_json_stringify_catches_nested(): void {
-    let inner = fn(): void {}
+fn test_json_stringify_catches_nested() {
+    let inner = fn() {}
     let obj = { callback: inner }
     let caught = false
     let msg = ""
@@ -31,14 +31,14 @@ fn test_json_stringify_catches_nested(): void {
 }
 
 @test
-fn test_json_stringify_normal_succeeds(): void {
+fn test_json_stringify_normal_succeeds() {
     let result = Json.stringify({a: 1, b: "hello"})
     assert_eq(result.length > 0, true)
 }
 
 @test
-fn test_exception_after_catch_continues(): void {
-    let f = fn(): void {}
+fn test_exception_after_catch_continues() {
+    let f = fn() {}
     let obj = { handler: f }
     let step1 = false
     let step2 = false
@@ -53,8 +53,8 @@ fn test_exception_after_catch_continues(): void {
 }
 
 @test
-fn test_multiple_catch_blocks(): void {
-    let f = fn(): void {}
+fn test_multiple_catch_blocks() {
+    let f = fn() {}
     let count = 0
     for (i in 0..3) {
         let obj = { handler: f }

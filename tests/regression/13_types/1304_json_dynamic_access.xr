@@ -3,7 +3,7 @@
 // 测试：动态字段访问 obj[expr]
 // ===== 基本动态访问 =====
 @test
-fn test_dynamic_get(): void {
+fn test_dynamic_get() {
     let obj = { "name": "Alice", "age": 30 }
     let key = "name"
     assert_eq(obj[key], "Alice")
@@ -12,7 +12,7 @@ fn test_dynamic_get(): void {
 }
 
 @test
-fn test_dynamic_set(): void {
+fn test_dynamic_set() {
     let obj = { "x": 1 }
     let key = "y"
     obj[key] = 2
@@ -21,7 +21,7 @@ fn test_dynamic_set(): void {
 }
 
 @test
-fn test_dynamic_add_field(): void {
+fn test_dynamic_add_field() {
     let obj = {}
     let key = "newField"
     obj[key] = "value"
@@ -30,7 +30,7 @@ fn test_dynamic_add_field(): void {
 
 // ===== 表达式作为键 =====
 @test
-fn test_expression_key_get(): void {
+fn test_expression_key_get() {
     let obj = { "field_1": "one", "field_2": "two" }
     let prefix = "field_"
     assert_eq(obj[prefix + "1"], "one")
@@ -38,7 +38,7 @@ fn test_expression_key_get(): void {
 }
 
 @test
-fn test_expression_key_set(): void {
+fn test_expression_key_set() {
     let obj = {}
     let prefix = "user_"
     obj[prefix + "name"] = "Alice"
@@ -49,7 +49,7 @@ fn test_expression_key_set(): void {
 
 // ===== 循环中的动态访问 =====
 @test
-fn test_dynamic_in_loop(): void {
+fn test_dynamic_in_loop() {
     let obj = {}
     let keys = ["a", "b", "c"]
     let values = [1, 2, 3]
@@ -62,7 +62,7 @@ fn test_dynamic_in_loop(): void {
 }
 
 @test
-fn test_dynamic_read_loop(): void {
+fn test_dynamic_read_loop() {
     let data = { "x": 10, "y": 20, "z": 30 }
     let keys = ["x", "y", "z"]
     let sum = 0
@@ -74,7 +74,7 @@ fn test_dynamic_read_loop(): void {
 
 // ===== 混合静态和动态访问 =====
 @test
-fn test_mixed_access(): void {
+fn test_mixed_access() {
     let obj = { "name": "test", "value": 42 }
     // 静态访问
     assert_eq(obj.name, "test")
@@ -89,7 +89,7 @@ fn test_mixed_access(): void {
 
 // ===== 嵌套对象动态访问 =====
 @test
-fn test_nested_dynamic_access(): void {
+fn test_nested_dynamic_access() {
     let data = { "user": { "name": "Alice", "role": "admin" }, "config": { "debug": true } }
     let section = "user"
     let field = "name"

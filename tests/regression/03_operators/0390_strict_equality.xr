@@ -7,7 +7,7 @@
 // ===== 数组引用相等 =====
 
 @test
-fn test_array_reference_equal(): void {
+fn test_array_reference_equal() {
     let a = [1, 2, 3]
     let b = a  // 同一引用
     assert_eq(a === b, true)
@@ -15,7 +15,7 @@ fn test_array_reference_equal(): void {
 }
 
 @test
-fn test_array_value_equal(): void {
+fn test_array_value_equal() {
     let a = [1, 2, 3]
     let b = [1, 2, 3]  // 不同引用，相同值
     assert_eq(a == b, true)   // 值相等
@@ -23,7 +23,7 @@ fn test_array_value_equal(): void {
 }
 
 @test
-fn test_array_different(): void {
+fn test_array_different() {
     let a = [1, 2, 3]
     let b = [1, 2, 4]
     assert_eq(a == b, false)
@@ -33,14 +33,14 @@ fn test_array_different(): void {
 // ===== 对象引用相等 =====
 
 @test
-fn test_object_reference_equal(): void {
+fn test_object_reference_equal() {
     let obj = { x: 10, y: 20 }
     let ref2 = obj
     assert_eq(obj === ref2, true)
 }
 
 @test
-fn test_object_value_equal(): void {
+fn test_object_value_equal() {
     let a = { x: 10, y: 20 }
     let b = { x: 10, y: 20 }
     assert_eq(a == b, true)   // 值相等
@@ -50,7 +50,7 @@ fn test_object_value_equal(): void {
 // ===== 字符串（interning） =====
 
 @test
-fn test_string_interning(): void {
+fn test_string_interning() {
     let a = "hello"
     let b = "hello"
     // 字符串 interning：相同字符串共享引用
@@ -61,7 +61,7 @@ fn test_string_interning(): void {
 // ===== 基本类型 =====
 
 @test
-fn test_int_equality(): void {
+fn test_int_equality() {
     let a = 42
     let b = 42
     assert_eq(a == b, true)
@@ -69,7 +69,7 @@ fn test_int_equality(): void {
 }
 
 @test
-fn test_null_equality(): void {
+fn test_null_equality() {
     let a = null
     let b = null
     assert_eq(a == b, true)
@@ -88,14 +88,14 @@ class Point {
 }
 
 @test
-fn test_instance_reference_equal(): void {
+fn test_instance_reference_equal() {
     let p1 = new Point(1, 2)
     let p2 = p1
     assert_eq(p1 === p2, true)
 }
 
 @test
-fn test_instance_different_objects(): void {
+fn test_instance_different_objects() {
     let p1 = new Point(1, 2)
     let p2 = new Point(1, 2)
     assert_eq(p1 === p2, false)  // 不同实例
@@ -104,7 +104,7 @@ fn test_instance_different_objects(): void {
 // ===== !== 运算符 =====
 
 @test
-fn test_not_strict_equal(): void {
+fn test_not_strict_equal() {
     let a = [1, 2]
     let b = [1, 2]
     assert_eq(a !== b, true)   // 不同引用

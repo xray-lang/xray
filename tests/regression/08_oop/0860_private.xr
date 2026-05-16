@@ -11,7 +11,7 @@ class Account {
         this.balance = initial
     }
 
-    deposit(amount: int): void {        this.balance = this.balance + amount
+    deposit(amount: int) {        this.balance = this.balance + amount
     }
 
     withdraw(amount: int): bool {        if (amount <= this.balance) {
@@ -26,20 +26,20 @@ class Account {
 }
 
 @test
-fn test_private_field_access(): void {
+fn test_private_field_access() {
     let acc = new Account(100)
     assert_eq(acc.getBalance(), 100)
 }
 
 @test
-fn test_private_field_modify(): void {
+fn test_private_field_modify() {
     let acc = new Account(100)
     acc.deposit(50)
     assert_eq(acc.getBalance(), 150)
 }
 
 @test
-fn test_private_field_withdraw(): void {
+fn test_private_field_withdraw() {
     let acc = new Account(100)
     let success = acc.withdraw(30)
     assert_eq(success, true)
@@ -67,7 +67,7 @@ class User {
 }
 
 @test
-fn test_multiple_private_fields(): void {
+fn test_multiple_private_fields() {
     let user = new User("Alice", "alice@test.com", "secret123")
     assert_eq(user.name, "Alice")
     assert_eq(user.checkPassword("secret123"), true)
@@ -86,7 +86,7 @@ class BankAccount {
     getBalance(): int {        return this.balance
     }
 
-    addAmount(amount: int): void {        this.balance = this.balance + amount
+    addAmount(amount: int) {        this.balance = this.balance + amount
     }
 }
 
@@ -98,13 +98,13 @@ class SavingsAccount extends BankAccount {
         this.interestRate = rate
     }
 
-    applyInterest(): void {        let interest = (this.getBalance() * this.interestRate).floor()
+    applyInterest() {        let interest = (this.getBalance() * this.interestRate).floor()
         this.addAmount(interest)
     }
 }
 
 @test
-fn test_private_with_inheritance(): void {
+fn test_private_with_inheritance() {
     let savings = new SavingsAccount(1000, 0.1)
     assert_eq(savings.getBalance(), 1000)
     savings.applyInterest()

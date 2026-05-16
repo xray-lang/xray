@@ -3,14 +3,14 @@
 import http
 
 @test
-fn test_h2_apis_exist(): void {
+fn test_h2_apis_exist() {
     assert(http.h2Get != null)
     assert(http.h2Post != null)
     assert(http.h2Request != null)
 }
 
 @test
-fn test_h2_options_object(): void {
+fn test_h2_options_object() {
     let opts = {
         url: "https://example.com/api",
         method: "POST",

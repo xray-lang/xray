@@ -5,7 +5,7 @@
 // ===== 基础闭包 =====
 
 @test
-fn test_closure_basic(): void {
+fn test_closure_basic() {
     fn makeCounter(): fn(): int {
         let count = 0
         fn increment(): int {
@@ -22,7 +22,7 @@ fn test_closure_basic(): void {
 }
 
 @test
-fn test_closure_multiple_instances(): void {
+fn test_closure_multiple_instances() {
     fn makeCounter(): fn(): int {
         let count = 0
         fn increment(): int {
@@ -45,7 +45,7 @@ fn test_closure_multiple_instances(): void {
 // ===== 参数捕获 =====
 
 @test
-fn test_capture_param(): void {
+fn test_capture_param() {
     fn makeAdder(x: int): fn(int): int {
         fn add(y: int): int {
             return x + y
@@ -62,7 +62,7 @@ fn test_capture_param(): void {
 }
 
 @test
-fn test_capture_multiple_params(): void {
+fn test_capture_multiple_params() {
     fn makeRange(min: int, max: int): fn(int): bool {
         fn isInRange(x: int): bool {
             return x >= min && x <= max
@@ -81,10 +81,10 @@ fn test_capture_multiple_params(): void {
 // ===== 修改外层变量 =====
 
 @test
-fn test_modify_outer(): void {
+fn test_modify_outer() {
     let x = 10
     
-    fn modify(): void {
+    fn modify() {
         x = 20
     }
     
@@ -94,7 +94,7 @@ fn test_modify_outer(): void {
 }
 
 @test
-fn test_accumulator(): void {
+fn test_accumulator() {
     fn makeAccumulator(): fn(int): int {
         let total = 0
         fn add(n: int): int {
@@ -113,7 +113,7 @@ fn test_accumulator(): void {
 // ===== 嵌套闭包 =====
 
 @test
-fn test_nested_closure(): void {
+fn test_nested_closure() {
     fn outer(x: int): fn(int): fn(int): int {
         fn middle(y: int): fn(int): int {
             fn inner(z: int): int {
@@ -129,7 +129,7 @@ fn test_nested_closure(): void {
 }
 
 @test
-fn test_deeply_nested(): void {
+fn test_deeply_nested() {
     fn level1(a: int): fn(int): fn(int): fn(int): int {
         fn level2(b: int): fn(int): fn(int): int {
             fn level3(c: int): fn(int): int {
@@ -150,7 +150,7 @@ fn test_deeply_nested(): void {
 // ===== 闭包工厂 =====
 
 @test
-fn test_multiplier_factory(): void {
+fn test_multiplier_factory() {
     fn createMultiplier(factor: int): fn(int): int {
         fn multiply(x: int): int {
             return x * factor
@@ -166,7 +166,7 @@ fn test_multiplier_factory(): void {
 }
 
 @test
-fn test_greeting_factory(): void {
+fn test_greeting_factory() {
     fn createGreeter(greeting: string): fn(string): string {
         fn greet(name: string): string {
             return greeting + ", " + name + "!"
@@ -184,7 +184,7 @@ fn test_greeting_factory(): void {
 // ===== 闭包与循环 =====
 
 @test
-fn test_closure_captures_value(): void {
+fn test_closure_captures_value() {
     let funcs: Array<fn(): int> = []
     for (let i = 0; i < 3; i++) {
         let val = i  // 每次循环创建新变量
@@ -202,7 +202,7 @@ fn test_closure_captures_value(): void {
 // ===== 边界条件 =====
 
 @test
-fn test_closure_no_capture(): void {
+fn test_closure_no_capture() {
     fn outer(): fn(): int {
         fn inner(): int {
             return 42
@@ -215,7 +215,7 @@ fn test_closure_no_capture(): void {
 }
 
 @test
-fn test_closure_capture_const(): void {
+fn test_closure_capture_const() {
     const VALUE = 100
     
     fn getClosure(): fn(): int {

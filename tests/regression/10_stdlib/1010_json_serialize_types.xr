@@ -6,20 +6,20 @@ import datetime
 enum Color { Red, Green, Blue }
 
 @test
-fn test_stringify_enum(): void {
+fn test_stringify_enum() {
     let obj = { color: Color.Red }
     let s = Json.stringify(obj)
     assert_eq(s, '{"color":"Red"}')
 }
 
 @test
-fn test_stringify_enum_value_direct(): void {
+fn test_stringify_enum_value_direct() {
     let s = Json.stringify(Color.Blue)
     assert_eq(s, '"Blue"')
 }
 
 @test
-fn test_stringify_datetime(): void {
+fn test_stringify_datetime() {
     let dt = datetime.createUTC(2026, 4, 30, 9, 0, 0)
     let s = Json.stringify(dt)
     // ISO 8601 format
@@ -29,7 +29,7 @@ fn test_stringify_datetime(): void {
 }
 
 @test
-fn test_stringify_datetime_in_object(): void {
+fn test_stringify_datetime_in_object() {
     let dt = datetime.createUTC(2026, 1, 15, 12, 30, 0)
     let obj = { created: dt, name: "test" }
     let s = Json.stringify(obj)
@@ -39,8 +39,8 @@ fn test_stringify_datetime_in_object(): void {
 }
 
 @test
-fn test_stringify_non_serializable_throws(): void {
-    let f = fn(): void {}
+fn test_stringify_non_serializable_throws() {
+    let f = fn() {}
     let obj = { handler: f }
     let caught = false
     try {

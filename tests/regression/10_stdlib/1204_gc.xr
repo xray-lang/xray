@@ -4,35 +4,35 @@ import gc
 
 // @test gc.isrunning returns bool
 @test
-fn test_gc_isrunning(): void {
+fn test_gc_isrunning() {
     let running = gc.isrunning()
     assert_eq(typeof(running), Type.bool)
 }
 
 // @test gc.count returns non-negative
 @test
-fn test_gc_count(): void {
+fn test_gc_count() {
     let kb = gc.count()
     assert(kb >= 0)
 }
 
 // @test gc.countb returns non-negative bytes
 @test
-fn test_gc_countb(): void {
+fn test_gc_countb() {
     let bytes = gc.countb()
     assert(bytes >= 0)
 }
 
 // @test gc.objects returns non-negative
 @test
-fn test_gc_objects(): void {
+fn test_gc_objects() {
     let objs = gc.objects()
     assert(objs >= 0)
 }
 
 // @test gc.state returns valid state string
 @test
-fn test_gc_state(): void {
+fn test_gc_state() {
     let state = gc.state()
     assert_eq(typeof(state), Type.string)
     assert(state.length > 0)
@@ -40,21 +40,21 @@ fn test_gc_state(): void {
 
 // @test gc.collect does not crash
 @test
-fn test_gc_collect(): void {
+fn test_gc_collect() {
     gc.collect()
     assert(true)
 }
 
 // @test gc.step does not crash
 @test
-fn test_gc_step(): void {
+fn test_gc_step() {
     gc.step()
     assert(true)
 }
 
 // @test allocation increases memory
 @test
-fn test_alloc_increases_memory(): void {
+fn test_alloc_increases_memory() {
     gc.collect()
     let before = gc.countb()
     let arr: Array<string> = []

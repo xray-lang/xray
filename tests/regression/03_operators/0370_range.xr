@@ -5,7 +5,7 @@
 // ===== 基本范围 =====
 
 @test
-fn test_basic_range(): void {
+fn test_basic_range() {
     let sum = 0
     for (i in 0..5) {
         sum = sum + i
@@ -14,7 +14,7 @@ fn test_basic_range(): void {
 }
 
 @test
-fn test_range_start_one(): void {
+fn test_range_start_one() {
     let sum = 0
     for (i in 1..5) {
         sum = sum + i
@@ -25,7 +25,7 @@ fn test_range_start_one(): void {
 // ===== 范围边界 =====
 
 @test
-fn test_range_single(): void {
+fn test_range_single() {
     let count = 0
     for (i in 0..1) {
         count = count + 1
@@ -34,7 +34,7 @@ fn test_range_single(): void {
 }
 
 @test
-fn test_range_empty(): void {
+fn test_range_empty() {
     let count = 0
     for (i in 5..5) {
         count = count + 1
@@ -45,7 +45,7 @@ fn test_range_empty(): void {
 // ===== 范围与变量 =====
 
 @test
-fn test_range_variable_end(): void {
+fn test_range_variable_end() {
     let n = 5
     let sum = 0
     for (i in 0..n) {
@@ -55,7 +55,7 @@ fn test_range_variable_end(): void {
 }
 
 @test
-fn test_range_both_variables(): void {
+fn test_range_both_variables() {
     let start = 2
     let end = 6
     let sum = 0
@@ -68,7 +68,7 @@ fn test_range_both_variables(): void {
 // ===== 范围嵌套 =====
 
 @test
-fn test_nested_ranges(): void {
+fn test_nested_ranges() {
     let count = 0
     for (i in 0..3) {
         for (j in 0..3) {
@@ -81,7 +81,7 @@ fn test_nested_ranges(): void {
 // ===== 范围与数组 =====
 
 @test
-fn test_range_array_index(): void {
+fn test_range_array_index() {
     let arr = [10, 20, 30, 40, 50]
     let sum = 0
     for (i in 0..arr.length) {
@@ -93,7 +93,7 @@ fn test_range_array_index(): void {
 // ===== 范围计算 =====
 
 @test
-fn test_range_expression_end(): void {
+fn test_range_expression_end() {
     let n = 3
     let sum = 0
     for (i in 0..(n * 2)) {

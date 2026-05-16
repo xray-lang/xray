@@ -6,7 +6,7 @@
 // ===== parse 基础 =====
 
 @test
-fn test_parse_number(): void {
+fn test_parse_number() {
     let n = Json.parse("42")
     assert_eq(n, 42)
 
@@ -15,26 +15,26 @@ fn test_parse_number(): void {
 }
 
 @test
-fn test_parse_string(): void {
+fn test_parse_string() {
     let s = Json.parse("\"hello\"")
     assert_eq(s, "hello")
 }
 
 @test
-fn test_parse_bool(): void {
+fn test_parse_bool() {
     assert_eq(Json.parse("true"), true)
     assert_eq(Json.parse("false"), false)
 }
 
 @test
-fn test_parse_null(): void {
+fn test_parse_null() {
     assert_eq(Json.parse("null"), null)
 }
 
 // ===== parse 数组 =====
 
 @test
-fn test_parse_array(): void {
+fn test_parse_array() {
     let arr = Json.parse("[1, 2, 3]")
     assert_eq(arr.length, 3)
     assert_eq(arr[0], 1)
@@ -42,13 +42,13 @@ fn test_parse_array(): void {
 }
 
 @test
-fn test_parse_empty_array(): void {
+fn test_parse_empty_array() {
     let arr = Json.parse("[]")
     assert_eq(arr.length, 0)
 }
 
 @test
-fn test_parse_nested_array(): void {
+fn test_parse_nested_array() {
     let arr = Json.parse("[[1, 2], [3, 4]]")
     assert_eq(arr[0][0], 1)
     assert_eq(arr[1][1], 4)
@@ -57,20 +57,20 @@ fn test_parse_nested_array(): void {
 // ===== parse 对象 =====
 
 @test
-fn test_parse_object(): void {
+fn test_parse_object() {
     let obj = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
     assert_eq(obj.name, "Alice")
     assert_eq(obj.age, 30)
 }
 
 @test
-fn test_parse_empty_object(): void {
+fn test_parse_empty_object() {
     let obj = Json.parse("{}")
     assert_eq(obj != null, true)
 }
 
 @test
-fn test_parse_nested_object(): void {
+fn test_parse_nested_object() {
     let obj = Json.parse("{\"user\": {\"name\": \"Bob\"}}")
     assert_eq(obj.user.name, "Bob")
 }
@@ -78,42 +78,42 @@ fn test_parse_nested_object(): void {
 // ===== stringify 基础 =====
 
 @test
-fn test_stringify_number(): void {
+fn test_stringify_number() {
     assert_eq(Json.stringify(42), "42")
     assert_eq(Json.stringify(3.14), "3.14")
 }
 
 @test
-fn test_stringify_string(): void {
+fn test_stringify_string() {
     assert_eq(Json.stringify("hello"), "\"hello\"")
 }
 
 @test
-fn test_stringify_bool(): void {
+fn test_stringify_bool() {
     assert_eq(Json.stringify(true), "true")
     assert_eq(Json.stringify(false), "false")
 }
 
 @test
-fn test_stringify_null(): void {
+fn test_stringify_null() {
     assert_eq(Json.stringify(null), "null")
 }
 
 // ===== stringify 集合 =====
 
 @test
-fn test_stringify_array(): void {
+fn test_stringify_array() {
     let arr = [1, 2, 3]
     assert_eq(Json.stringify(arr), "[1,2,3]")
 }
 
 @test
-fn test_stringify_empty_array(): void {
+fn test_stringify_empty_array() {
     assert_eq(Json.stringify([]), "[]")
 }
 
 @test
-fn test_stringify_object(): void {
+fn test_stringify_object() {
     let obj = { name: "Alice" }
     let s = Json.stringify(obj)
     assert_eq(s.contains("name"), true)
@@ -123,7 +123,7 @@ fn test_stringify_object(): void {
 // ===== 往返测试 =====
 
 @test
-fn test_roundtrip_number(): void {
+fn test_roundtrip_number() {
     let original = 42
     let s = Json.stringify(original)
     let parsed = Json.parse(s)
@@ -131,7 +131,7 @@ fn test_roundtrip_number(): void {
 }
 
 @test
-fn test_roundtrip_array(): void {
+fn test_roundtrip_array() {
     let original = [1, 2, 3]
     let s = Json.stringify(original)
     let parsed = Json.parse(s)
@@ -142,7 +142,7 @@ fn test_roundtrip_array(): void {
 // ===== isValid =====
 
 @test
-fn test_isValid(): void {
+fn test_isValid() {
     assert_eq(Json.isValid("42"), true)
     assert_eq(Json.isValid("[1, 2, 3]"), true)
     assert_eq(Json.isValid("invalid json"), false)
@@ -152,7 +152,7 @@ fn test_isValid(): void {
 // ===== typeof =====
 
 @test
-fn test_typeof(): void {
+fn test_typeof() {
     assert_eq(typeof(Json.parse("42")), Type.int)
     assert_eq(typeof(Json.parse("\"hello\"")), Type.string)
     assert_eq(typeof(Json.parse("true")), Type.bool)
@@ -164,13 +164,13 @@ fn test_typeof(): void {
 // ===== 特殊字符 =====
 
 @test
-fn test_escape_characters(): void {
+fn test_escape_characters() {
     let s = Json.parse("\"hello\\nworld\"")
     assert_eq(s.contains("\n"), true)
 }
 
 @test
-fn test_unicode(): void {
+fn test_unicode() {
     let s = Json.parse("\"你好\"")
     assert_eq(s, "你好")
 }
