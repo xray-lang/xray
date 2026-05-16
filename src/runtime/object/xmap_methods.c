@@ -14,6 +14,7 @@
 #include "xiterator.h"
 #include "xexception.h"
 #include "xstring.h"
+#include "../closure/xclosure.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../value/xtype_names.h"
@@ -156,12 +157,16 @@ static XrValue xr_map_method_to_string(XrayIsolate *iso, XrValue self, XrValue *
 }
 
 static XrValue xr_map_method_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_PTR(args[0]))
+    if (argc < 1)
+        return xr_null();
+    struct XrClosure *cb = xr_closure_from_arg(iso, args[0], "Map.forEach");
+    if (!cb)
         return xr_null();
     XrMap *m = map_self(self);
+    // WeakMap deliberately disables forEach: holding callbacks could keep
+    // entries alive across collection windows, defeating weak semantics.
     if (map_is_weak(m))
         return XR_NOTFOUND;
-    struct XrClosure *cb = (struct XrClosure *) XR_TO_PTR(args[0]);
     xr_map_foreach(iso, m, cb);
     return xr_null();
 }

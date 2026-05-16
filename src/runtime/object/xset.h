@@ -84,10 +84,6 @@ XR_FUNC bool xr_set_is_superset(XrSet *set1, XrSet *set2);
 /* ========== Iteration Methods ========== */
 
 XR_FUNC XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set);
-struct XrClosure;
-XR_FUNC void xr_set_foreach(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
-XR_FUNC XrSet *xr_set_map(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
-XR_FUNC XrSet *xr_set_filter(XrSet *set, XrayIsolate *isolate, struct XrClosure *callback);
 
 /* ========== Internal Functions ========== */
 

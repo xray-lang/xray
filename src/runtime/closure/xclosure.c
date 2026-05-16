@@ -12,6 +12,8 @@
 #include "../../base/xchecks.h"
 #include "../gc/xgc.h"
 #include "../gc/xcoro_gc.h"
+#include "../value/xvalue.h"
+#include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../coro/xcoroutine.h"
 
@@ -45,5 +47,14 @@ XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCorouti
         closure->upvals[i] = xr_null();
     }
 
+    return closure;
+}
+
+XrClosure *xr_closure_from_arg(XrayIsolate *isolate, XrValue v, const char *api_name) {
+    XrClosure *closure = xr_value_to_closure(v);
+    if (!closure) {
+        xr_runtime_error(isolate, "%s: callback must be a function\n",
+                         api_name ? api_name : "callback");
+    }
     return closure;
 }

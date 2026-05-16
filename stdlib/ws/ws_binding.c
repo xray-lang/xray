@@ -25,6 +25,7 @@
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xmap.h"
+#include "../../src/runtime/closure/xclosure.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/coro/xcoroutine.h"
@@ -1363,7 +1364,15 @@ typedef struct {
  */
 static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
     (void) result;
-    if (argc < 2 || !XR_IS_INT(args[0]) || !XR_IS_PTR(args[1]))
+    if (argc < 2 || !XR_IS_INT(args[0]))
+        return XR_CFUNC_DONE;
+
+    // The handler closure was already validated in ws_serve_yieldable; this
+    // entry runs per accepted connection and ws_serve passes the same value
+    // through unchanged. Re-check here so a corrupted dispatch path still
+    // fails loudly instead of casting a non-closure to XrClosure*.
+    XrClosure *handler = xr_closure_from_arg(X, args[1], "ws.serve handler");
+    if (!handler)
         return XR_CFUNC_DONE;
 
     int fd = (int) XR_TO_INT(args[0]);
@@ -1376,7 +1385,7 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
 
     ctx->X = X;
     ctx->fd = fd;
-    ctx->handler = (XrClosure *) XR_TO_PTR(args[1]);
+    ctx->handler = handler;
     ctx->runtime = (XrRuntime *) X->vm.runtime;
     ctx->upgrade_buf = (char *) xr_malloc(WS_UPGRADE_BUF_SIZE);
     if (!ctx->upgrade_buf) {
@@ -1741,8 +1750,10 @@ static XrCFuncResult ws_serve_yieldable(XrayIsolate *X, XrValue *args, int argc,
 
     int port = (int) XR_TO_INT(args[0]);
 
-    // args[1] must be a closure
-    if (!XR_IS_PTR(args[1])) {
+    // The handler arg must be a real closure -- XR_IS_PTR would also accept
+    // any other heap object (string, array, json, ...) and the connection
+    // path would later call xr_vm_call_closure on a garbage pointer.
+    if (!xr_closure_from_arg(X, args[1], "ws.serve")) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
