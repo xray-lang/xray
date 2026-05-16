@@ -1786,6 +1786,22 @@ XrDestructurePattern *xr_pattern_array(XrayIsolate *X, XrDestructurePattern **el
     return pattern;
 }
 
+// Create tuple destructuring pattern
+// let (a, b, c) = tuple — element_count == 0 represents the unit
+// pattern `()`, count == 1 the unary form `(x,)`. Storage shape
+// matches array pattern so visitors that walk children can reuse
+// the array.elements traversal; the PATTERN_TUPLE tag tells the
+// lowerer to emit .N field reads instead of [i] index loads.
+XrDestructurePattern *xr_pattern_tuple(XrayIsolate *X, XrDestructurePattern **elements, int count) {
+    (void) X;
+    XrDestructurePattern *pattern =
+        (XrDestructurePattern *) ast_alloc(X, sizeof(XrDestructurePattern));
+    pattern->type = PATTERN_TUPLE;
+    pattern->as.array.elements = elements;
+    pattern->as.array.element_count = count;
+    return pattern;
+}
+
 // Create object destructuring pattern (curly braces)
 // let {name, age} = person or let {name: userName} = person
 XrDestructurePattern *xr_pattern_object(XrayIsolate *X, char **fields,

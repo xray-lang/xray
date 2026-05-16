@@ -237,6 +237,7 @@ typedef enum {
 typedef enum {
     PATTERN_ARRAY,       // [a, b, c]
     PATTERN_OBJECT,      // {name, age}
+    PATTERN_TUPLE,       // (a, b, c) — fixed-arity positional, lowered to .0/.1/...
     PATTERN_IDENTIFIER,  // x
     PATTERN_SKIP         // _
 } PatternType;

@@ -472,6 +472,84 @@ TEST(parser_tuple_field_access) {
     teardown();
 }
 
+TEST(parser_tuple_destructure_let) {
+    setup();
+    /* `let (a, b) = pair` — produces AST_DESTRUCTURE_DECL whose
+     * pattern is PATTERN_TUPLE with two identifier sub-patterns. */
+    AstNode *stmt = parse_first("let (a, b) = pair");
+    ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
+    XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
+    ASSERT_NOT_NULL(p);
+    ASSERT_EQ_INT(p->type, PATTERN_TUPLE);
+    ASSERT_EQ_INT(p->as.array.element_count, 2);
+    ASSERT_EQ_INT(p->as.array.elements[0]->type, PATTERN_IDENTIFIER);
+    ASSERT_STR_EQ(p->as.array.elements[0]->as.identifier.name, "a");
+    ASSERT_EQ_INT(p->as.array.elements[1]->type, PATTERN_IDENTIFIER);
+    ASSERT_STR_EQ(p->as.array.elements[1]->as.identifier.name, "b");
+    teardown();
+}
+
+TEST(parser_tuple_destructure_with_skip) {
+    setup();
+    /* `_` slots produce PATTERN_SKIP rather than PATTERN_IDENTIFIER,
+     * matching the array-pattern convention. */
+    AstNode *stmt = parse_first("let (x, _, z) = triple");
+    XrDestructurePattern *p = stmt->as.destructure_decl.pattern;
+    ASSERT_EQ_INT(p->type, PATTERN_TUPLE);
+    ASSERT_EQ_INT(p->as.array.element_count, 3);
+    ASSERT_EQ_INT(p->as.array.elements[1]->type, PATTERN_SKIP);
+    teardown();
+}
+
+TEST(parser_tuple_destructure_const) {
+    setup();
+    AstNode *stmt = parse_first("const (a, b) = pair");
+    ASSERT_EQ_INT(stmt->type, AST_DESTRUCTURE_DECL);
+    /* The is_const flag distinguishes `let` from `const`. */
+    ASSERT_TRUE(stmt->as.destructure_decl.is_const);
+    teardown();
+}
+
+TEST(parser_tuple_destructure_fn_param) {
+    setup();
+    /* `fn f((x, y): (int, int)) ...` — the parser hoists the
+     * destructuring pattern off the param into a synthetic
+     * `let (x, y) = __param0` at the head of the function body and
+     * nulls out param->pattern. Verify the pattern landed on the body
+     * with the right shape. */
+    AstNode *stmt = parse_first("fn f((x, y): (int, int)): int { return x + y }");
+    ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
+    ASSERT_EQ_INT(stmt->as.function_decl.param_count, 1);
+    AstNode *body = stmt->as.function_decl.body;
+    ASSERT_NOT_NULL(body);
+    ASSERT_EQ_INT(body->type, AST_BLOCK);
+    ASSERT_TRUE(body->as.block.count >= 1);
+    AstNode *first = body->as.block.statements[0];
+    ASSERT_EQ_INT(first->type, AST_DESTRUCTURE_DECL);
+    XrDestructurePattern *p = first->as.destructure_decl.pattern;
+    ASSERT_EQ_INT(p->type, PATTERN_TUPLE);
+    ASSERT_EQ_INT(p->as.array.element_count, 2);
+    teardown();
+}
+
+TEST(parser_tuple_destructure_for_in) {
+    setup();
+    /* `for ((k, v) in pairs) { body }` desugars at parse time to a
+     * for-in loop over a synthesised hidden iterator variable, with a
+     * destructuring `let` injected at the top of the body block. */
+    AstNode *stmt = parse_first("for ((k, v) in pairs) { print(k) }");
+    ASSERT_EQ_INT(stmt->type, AST_FOR_IN_STMT);
+    /* The injected destructure_decl is the first statement of the body. */
+    AstNode *body = stmt->as.for_in_stmt.body;
+    ASSERT_NOT_NULL(body);
+    ASSERT_EQ_INT(body->type, AST_BLOCK);
+    ASSERT_TRUE(body->as.block.count >= 1);
+    AstNode *first = body->as.block.statements[0];
+    ASSERT_EQ_INT(first->type, AST_DESTRUCTURE_DECL);
+    ASSERT_EQ_INT(first->as.destructure_decl.pattern->type, PATTERN_TUPLE);
+    teardown();
+}
+
 TEST(parser_tuple_field_access_chained) {
     setup();
     /* `t.0.1` -- the lexer recognises that the second digit run starts
@@ -546,6 +624,11 @@ int main(void) {
     RUN_TEST(parser_arrow_fn_not_tuple);
     RUN_TEST(parser_tuple_field_access);
     RUN_TEST(parser_tuple_field_access_chained);
+    RUN_TEST(parser_tuple_destructure_let);
+    RUN_TEST(parser_tuple_destructure_with_skip);
+    RUN_TEST(parser_tuple_destructure_const);
+    RUN_TEST(parser_tuple_destructure_fn_param);
+    RUN_TEST(parser_tuple_destructure_for_in);
 
     // Error handling
     RUN_TEST(parser_error_returns_null);

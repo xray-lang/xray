@@ -272,8 +272,9 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 break;
             }
 
-            // Check for destructure pattern param: [x, y] or {x, y}
-            if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE)) {
+            // Check for destructure pattern param: [x, y], {x, y} or (x, y)
+            if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
+                xr_parser_check(parser, TK_LPAREN)) {
                 XrDestructurePattern *pattern = xr_parse_destructure_pattern(parser);
                 if (!pattern) {
                     xr_parser_error(parser, "failed to parse destructure parameter");
@@ -286,6 +287,15 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
                 XrParamNode *param = xr_param_node_new(parser->X, temp_name, line, 0);
                 param->pattern = pattern;
+
+                /* A destructured parameter still needs a type annotation
+                 * so the analyzer can infer the constituent types. The
+                 * annotation lives on the outer XrParamNode and applies
+                 * to the temp variable that the destructure binds to. */
+                if (xr_parser_match(parser, TK_COLON)) {
+                    param->type = xr_parse_type_annotation(parser);
+                }
+
                 params[param_count++] = param;
                 required_count++;
             } else {
@@ -1253,7 +1263,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
      */
     if (xr_parser_match(parser, TK_LET)) {
         // Check if destructure declaration
-        if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE)) {
+        if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
+            xr_parser_check(parser, TK_LPAREN)) {
             return xr_parse_destructure_declaration(parser, false);
         }
 
@@ -1355,7 +1366,8 @@ AstNode *xr_parse_declaration(Parser *parser) {
     // Constant declaration (supports comma separation)
     if (xr_parser_match(parser, TK_CONST)) {
         // Check if destructure declaration
-        if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE)) {
+        if (xr_parser_check(parser, TK_LBRACKET) || xr_parser_check(parser, TK_LBRACE) ||
+            xr_parser_check(parser, TK_LPAREN)) {
             return xr_parse_destructure_declaration(parser, true);
         }
 

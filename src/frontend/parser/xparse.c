@@ -692,8 +692,10 @@ AstNode *xr_parse_statement(Parser *parser) {
         if (xr_parser_check(parser, TK_LPAREN)) {
             xr_parser_advance(parser);
 
-            // Try to identify for-in pattern (support _ as blank identifier)
-            // Also detect keywords used as loop variables to give better errors
+            // Try to identify for-in pattern (support _ as blank
+            // identifier and `(...)` tuple destructuring heads).
+            // Also detect keywords used as loop variables to give
+            // better errors.
             bool might_be_forin =
                 xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_UNDERSCORE);
             if (!might_be_forin && parser->current.type >= TK_FIRST_KEYWORD &&
@@ -701,7 +703,30 @@ AstNode *xr_parse_statement(Parser *parser) {
                 // Keyword used as loop variable — route to for-in for proper error
                 might_be_forin = true;
             }
-            if (might_be_forin) {
+            if (xr_parser_check(parser, TK_LPAREN)) {
+                /* `for ((` -- a tuple destructuring head. Skip the
+                 * balanced parens so the `in` check below sees the
+                 * token after `)`. We do not interpret the contents;
+                 * any malformed pattern is reported by the destructure
+                 * parser when we re-enter from xr_parse_for_in_statement. */
+                xr_parser_advance(parser);
+                int depth = 1;
+                while (depth > 0 && !xr_parser_check(parser, TK_EOF)) {
+                    if (xr_parser_check(parser, TK_LPAREN))
+                        depth++;
+                    else if (xr_parser_check(parser, TK_RPAREN))
+                        depth--;
+                    if (depth == 0) {
+                        xr_parser_advance(parser);
+                        break;
+                    }
+                    xr_parser_advance(parser);
+                }
+                if (xr_parser_check(parser, TK_IN)) {
+                    *parser = checkpoint;
+                    return xr_parse_for_in_statement(parser);
+                }
+            } else if (might_be_forin) {
                 xr_parser_advance(parser);
 
                 // Check for comma (key-value pattern)

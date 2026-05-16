@@ -139,15 +139,40 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
 
     xr_parser_consume(parser, TK_LPAREN, "expected '(' after for");
 
-    // Support _ as blank identifier (discards value)
-    if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
-        xr_parser_error_expected_name(parser, "expected loop variable name");
-        return NULL;
+    /* Tuple destructuring head: `for ((x, y) in coll) { body }`.
+     *
+     * We consume the tuple pattern eagerly, synthesise a hidden iteration
+     * variable, and after the body is parsed prepend `let (...) = __tmp`
+     * to it. The result is identical to writing the destructuring `let`
+     * by hand, so all downstream stages see only the canonical form. */
+    XrDestructurePattern *tuple_pattern = NULL;
+    char *tuple_tmp_name = NULL;
+    if (xr_parser_match(parser, TK_LPAREN)) {
+        tuple_pattern = xr_parse_tuple_pattern(parser);
+        if (!tuple_pattern)
+            return NULL;
+        char buf[32];
+        /* Line-derived suffix keeps the synthesised name stable across
+         * re-parses while still being unique within a single function. */
+        snprintf(buf, sizeof(buf), "__for_in_tuple_%d", line);
+        tuple_tmp_name = (char *) ast_alloc(parser->X, strlen(buf) + 1);
+        memcpy(tuple_tmp_name, buf, strlen(buf) + 1);
     }
-    xr_parser_advance(parser);
-    char *first_name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
-    memcpy(first_name, parser->previous.start, parser->previous.length);
-    first_name[parser->previous.length] = '\0';
+
+    char *first_name = NULL;
+    if (tuple_tmp_name) {
+        first_name = tuple_tmp_name;
+    } else {
+        // Support _ as blank identifier (discards value)
+        if (parser->current.type != TK_NAME && parser->current.type != TK_UNDERSCORE) {
+            xr_parser_error_expected_name(parser, "expected loop variable name");
+            return NULL;
+        }
+        xr_parser_advance(parser);
+        first_name = (char *) ast_alloc(parser->X, (size_t) parser->previous.length + 1);
+        memcpy(first_name, parser->previous.start, parser->previous.length);
+        first_name[parser->previous.length] = '\0';
+    }
 
     // Check for comma (key-value pattern)
     char *second_name = NULL;
@@ -188,6 +213,28 @@ AstNode *xr_parse_for_in_statement(Parser *parser) {
     }
     xr_parser_advance(parser);
     AstNode *body = xr_parse_block(parser);
+
+    /* Inject the synthesised destructuring `let` at the top of the
+     * loop body. We rebuild the body block in place: the new array
+     * holds destructure_decl followed by the original statements,
+     * preserving program order. */
+    if (tuple_pattern && body && body->type == AST_BLOCK) {
+        AstNode *iter_var = xr_ast_variable(parser->X, tuple_tmp_name, line);
+        AstNode *destructure_decl =
+            xr_ast_destructure_decl(parser->X, tuple_pattern, iter_var, false, line);
+
+        int old_count = body->as.block.count;
+        int new_capacity =
+            (old_count + 1 > body->as.block.capacity) ? old_count + 1 : body->as.block.capacity;
+        AstNode **new_stmts =
+            (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) new_capacity);
+        new_stmts[0] = destructure_decl;
+        for (int i = 0; i < old_count; i++)
+            new_stmts[i + 1] = body->as.block.statements[i];
+        body->as.block.statements = new_stmts;
+        body->as.block.count = old_count + 1;
+        body->as.block.capacity = new_capacity;
+    }
 
     AstNode *stmt =
         is_keyvalue ? xr_ast_for_in_keyvalue_stmt(parser->X, first_name, second_name, item_type,

@@ -176,6 +176,21 @@ void xfmt_emit_pattern(XrFmtContext *ctx, XrDestructurePattern *pattern) {
             xfmt_write_char(ctx, ']');
             break;
 
+        case PATTERN_TUPLE:
+            xfmt_write_char(ctx, '(');
+            for (int i = 0; i < pattern->as.array.element_count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_emit_pattern(ctx, pattern->as.array.elements[i]);
+            }
+            /* Unary tuple pattern needs the trailing comma so the
+             * roundtripped surface form does not collapse to a
+             * grouping like `(x)`. */
+            if (pattern->as.array.element_count == 1)
+                xfmt_write_char(ctx, ',');
+            xfmt_write_char(ctx, ')');
+            break;
+
         case PATTERN_OBJECT:
             xfmt_write_char(ctx, '{');
             for (int i = 0; i < pattern->as.object.field_count; i++) {

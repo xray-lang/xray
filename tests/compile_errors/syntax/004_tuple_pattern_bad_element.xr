@@ -1,0 +1,7 @@
+// 004_tuple_pattern_bad_element.xr
+// Tuple destructuring elements must be plain identifiers or `_`.
+// Numeric / string / nested-call expressions in the pattern are
+// rejected at parse time.
+fn main() {
+    let (a, 42, c) = (1, 2, 3)
+}
