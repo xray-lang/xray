@@ -41,6 +41,7 @@
 #define TYPE_NAME_BOOL "bool"
 #define TYPE_NAME_NULL "null"
 #define TYPE_NAME_VOID "void"
+#define TYPE_NAME_UNIT "()"
 #define TYPE_NAME_NEVER "never"
 
 /* ========== Container Types ========== */
