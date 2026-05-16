@@ -1,8 +1,8 @@
-// Expected: compile error — first argument to Array<T> callback methods
-// must be a function, not an int. Regression: previously the analyzer
-// silently skipped argument-type checks for native container methods
-// because the inner `fn(...)` literal in their signatures parsed to
-// unknown, which caused arr.reduce(0, fn) to compile (and segfault at
+// Expected: compile error — callback-typed parameters on Array<T> and
+// Map<K, V> methods must be functions, not ints. Regression: previously
+// the analyzer silently skipped argument-type checks for native container
+// methods because the inner `fn(...)` literal in their signatures parsed
+// to unknown, which caused arr.reduce(0, fn) to compile (and segfault at
 // runtime when args[0] was a non-zero int) instead of being rejected.
 
 let xs = [1, 2, 3]
@@ -14,3 +14,6 @@ let bad4 = xs.find(0)
 let bad5 = xs.every(0)
 let bad6 = xs.some(0)
 xs.forEach(0)
+
+let m: Map<string, int> = new Map()
+m.forEach(0)

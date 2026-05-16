@@ -38,6 +38,7 @@
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
+#include "../../src/runtime/closure/xclosure.h"
 #include "../../src/runtime/gc/xgc_internal.h"
 #include "../../src/base/xmalloc.h"
 #include <stdio.h>
@@ -52,10 +53,6 @@ extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
                                          XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
                                                                 XrValue *),
                                          XrValue *args, int argc, const char *name);
-
-// Closure check macro (XR_TFUNCTION is closure type)
-#define XR_IS_CLOSURE(v)                                                                           \
-    (XR_IS_PTR(v) && XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(v)) == XR_TFUNCTION)
 
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
@@ -803,12 +800,16 @@ static XrValue http_route(XrayIsolate *X, XrValue *args, int argc) {
     memcpy(path_copy, path, path_len);
     path_copy[path_len] = '\0';
 
-    // Check third argument type
+    // The handler arg is polymorphic: closure / string / json. We dispatch
+    // on the runtime tag and only allocate path_copy after a known shape
+    // matches, so xr_value_is_closure is the right test here -- we don't
+    // want xr_closure_from_arg's error path firing on the legitimate
+    // string / json branches below.
     XrValue handler_arg = args[2];
 
-    if (XR_IS_CLOSURE(handler_arg)) {
+    if (xr_value_is_closure(handler_arg)) {
         // Closure callback - register dynamic route
-        XrClosure *closure = (XrClosure *) XR_TO_PTR(handler_arg);
+        XrClosure *closure = xr_value_to_closure(handler_arg);
         xr_http_server_route(ctx->server, method, path_copy, closure);
     } else if (XR_IS_STRING(handler_arg)) {
         // Static string response - copy and register
@@ -929,9 +930,9 @@ static XrValue http_ws_route(XrayIsolate *X, XrValue *args, int argc) {
     if (!path)
         return xr_null();
 
-    if (!XR_IS_CLOSURE(args[1]))
+    XrClosure *closure = xr_closure_from_arg(X, args[1], "http.websocket");
+    if (!closure)
         return xr_null();
-    XrClosure *closure = (XrClosure *) XR_TO_PTR(args[1]);
 
     char *path_copy = (char *) xr_malloc(path_len + 1);
     if (!path_copy)
@@ -975,9 +976,8 @@ static XrValue http_set_conn_handler(XrayIsolate *X, XrValue *args, int argc) {
         }
     }
 
-    if (XR_IS_CLOSURE(args[0])) {
-        XrClosure *closure = (XrClosure *) XR_TO_PTR(args[0]);
-
+    XrClosure *closure = xr_closure_from_arg(X, args[0], "http.setConnHandler");
+    if (closure) {
         /*
          * Check if closure has upvalues.
          * HTTP callback closures should not have mutable upvalues because:

@@ -36,19 +36,13 @@ static inline XrArray *array_self(XrValue self) {
     return XR_TO_ARRAY(self);
 }
 
-// Safely unwrap a callback argument. Returns the closure pointer, or NULL
-// after raising a runtime error if the value isn't a function. The analyzer
-// rejects non-function arguments statically, so this guards only against
-// dynamic-dispatch paths (e.g. unchecked `as` casts) that might slip past
-// it. Raising an explicit error here is the alternative to the historical
-// blind cast `(XrClosure *) XR_TO_PTR(args[0])`, which crashed on any
-// non-zero non-pointer payload.
-static struct XrClosure *callback_arg(XrayIsolate *iso, XrValue v, const char *method) {
-    struct XrClosure *cb = xr_value_to_closure(v);
-    if (!cb) {
-        xr_runtime_error(iso, "Array.%s: callback must be a function\n", method);
-    }
-    return cb;
+// Build the diagnostic tag "Array.<method>" for xr_closure_from_arg.
+// The composed name lives on the stack; xr_runtime_error copies it into
+// the isolate's error buffer before returning, so a stack address is safe.
+static struct XrClosure *array_callback(XrayIsolate *iso, XrValue v, const char *method) {
+    char tag[32];
+    snprintf(tag, sizeof(tag), "Array.%s", method);
+    return xr_closure_from_arg(iso, v, tag);
 }
 
 /* === Mutation === */
@@ -142,7 +136,7 @@ static XrValue m_sort(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     // call chain).
     struct XrClosure *cmp = NULL;
     if (argc >= 1 && !XR_IS_NULL(args[0])) {
-        cmp = callback_arg(iso, args[0], "sort");
+        cmp = array_callback(iso, args[0], "sort");
         if (!cmp)
             return self;
     }
@@ -272,7 +266,7 @@ static XrValue m_join(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 static XrValue m_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    struct XrClosure *cb = callback_arg(iso, args[0], "forEach");
+    struct XrClosure *cb = array_callback(iso, args[0], "forEach");
     if (!cb)
         return xr_null();
     xr_array_foreach(iso, array_self(self), cb);
@@ -282,7 +276,7 @@ static XrValue m_foreach(XrayIsolate *iso, XrValue self, XrValue *args, int argc
 static XrValue m_filter(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    struct XrClosure *cb = callback_arg(iso, args[0], "filter");
+    struct XrClosure *cb = array_callback(iso, args[0], "filter");
     if (!cb)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
     return xr_value_from_array(xr_array_filter(iso, array_self(self), cb));
@@ -291,7 +285,7 @@ static XrValue m_filter(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
 static XrValue m_map(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    struct XrClosure *cb = callback_arg(iso, args[0], "map");
+    struct XrClosure *cb = array_callback(iso, args[0], "map");
     if (!cb)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
     return xr_value_from_array(xr_array_map(iso, array_self(self), cb));
@@ -300,7 +294,7 @@ static XrValue m_map(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 static XrValue m_reduce(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 2)
         return xr_null();
-    struct XrClosure *cb = callback_arg(iso, args[0], "reduce");
+    struct XrClosure *cb = array_callback(iso, args[0], "reduce");
     if (!cb)
         return xr_null();
     return xr_array_reduce(iso, array_self(self), cb, args[1]);
@@ -309,7 +303,7 @@ static XrValue m_reduce(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
 static XrValue m_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
-    struct XrClosure *cb = callback_arg(iso, args[0], "find");
+    struct XrClosure *cb = array_callback(iso, args[0], "find");
     if (!cb)
         return xr_null();
     return xr_array_find(iso, array_self(self), cb);
@@ -318,7 +312,7 @@ static XrValue m_find(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 static XrValue m_find_index(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_int(-1);
-    struct XrClosure *cb = callback_arg(iso, args[0], "findIndex");
+    struct XrClosure *cb = array_callback(iso, args[0], "findIndex");
     if (!cb)
         return xr_int(-1);
     return xr_int(xr_array_find_index(iso, array_self(self), cb));
@@ -327,7 +321,7 @@ static XrValue m_find_index(XrayIsolate *iso, XrValue self, XrValue *args, int a
 static XrValue m_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(true);
-    struct XrClosure *cb = callback_arg(iso, args[0], "every");
+    struct XrClosure *cb = array_callback(iso, args[0], "every");
     if (!cb)
         return xr_bool(true);
     return xr_bool(xr_array_every(iso, array_self(self), cb));
@@ -336,7 +330,7 @@ static XrValue m_every(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
 static XrValue m_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1)
         return xr_bool(false);
-    struct XrClosure *cb = callback_arg(iso, args[0], "some");
+    struct XrClosure *cb = array_callback(iso, args[0], "some");
     if (!cb)
         return xr_bool(false);
     return xr_bool(xr_array_some(iso, array_self(self), cb));

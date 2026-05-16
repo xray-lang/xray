@@ -79,3 +79,19 @@ fn test_reduce_chain_with_typed_acc(): void {
     // [1,4,9,16,25] -> [9,16,25] -> 50
     assert_eq(total, 50)
 }
+
+// ===== Map.forEach goes through the same callback-arg path =====
+// Same root cause: Map.forEach used to blind-cast args[0] to XrClosure*.
+// After the runtime fix it funnels through xr_closure_from_arg, so any
+// non-function argument is rejected statically by the analyzer and the
+// runtime never sees a bogus pointer.
+@test
+fn test_map_foreach_callback(): void {
+    let m: Map<string, int> = new Map()
+    m.set("a", 1)
+    m.set("b", 2)
+    m.set("c", 3)
+    let n: int = 0
+    m.forEach(fn(k: string, v: int) { n = n + v })
+    assert_eq(n, 6)
+}

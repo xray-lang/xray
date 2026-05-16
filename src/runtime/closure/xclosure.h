@@ -43,4 +43,13 @@ typedef struct XrClosure {
 XR_FUNC XrClosure *xr_closure_new(struct XrayIsolate *isolate, XrProto *proto,
                                   struct XrCoroutine *coro);
 
+// Extract a closure pointer from a callback argument value. Returns the
+// closure on success, or NULL after raising a runtime error tagged with
+// `api_name` (e.g. "Array.reduce", "ws.serve") when the value isn't a
+// function. All native APIs that accept callbacks must funnel through
+// this helper instead of `XR_TO_PTR(v)` -- the latter blindly returns
+// any non-zero payload as a pointer and crashes on non-pointer values.
+XR_FUNC XrClosure *xr_closure_from_arg(struct XrayIsolate *isolate, XrValue v,
+                                       const char *api_name);
+
 #endif  // XCLOSURE_H

@@ -609,6 +609,8 @@ bool xr_map_has_value(XrMap *map, XrValue value) {
 }
 
 void xr_map_foreach(XrayIsolate *isolate, XrMap *map, struct XrClosure *callback) {
+    XR_DCHECK(map != NULL, "xr_map_foreach: NULL map");
+    XR_DCHECK(callback != NULL, "xr_map_foreach: NULL callback");
     if (xr_map_isdummy(map))
         return;
 
