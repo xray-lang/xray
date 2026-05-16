@@ -1141,6 +1141,16 @@ static void traverse_object(XrCoroGC *gc, XrGCHeader *obj) {
  */
 static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
     XR_DCHECK(block != NULL, "sweep_block: NULL block");
+    // Flush deferred alloc_marks from JIT inline allocations before reading
+    // block->alloc_marks.  JIT fast path bumps immix.cursor without marking
+    // the occupied lines; without this flush sweep_block would rebuild
+    // alloc_marks treating those lines as free, and the next hole scan
+    // would allocate over still-live objects chained into local_allgc,
+    // eventually crashing here at `curr->marked` with garbage `curr`.
+    // Idempotent: flush_marks returns immediately once mark_cursor catches
+    // up to cursor, so calling per-block is cheap.
+    xr_immix_flush_marks(&gc->immix);
+
     // sweep_block called from: incremental SWEEP, entergen (PAUSE), fullgc (SWEEP),
     // youngcollection (PAUSE in GEN mode)
     // Fast path: no object in this block was marked AND no BLACK survivors exist.
