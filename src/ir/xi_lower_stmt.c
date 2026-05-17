@@ -1094,8 +1094,77 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             if (!name)
                 break;
             uint32_t sid = pat->as.identifier.symbol_id;
-            int var_id = xi_lower_var_create(l, sid, name, l->type_any);
-            xi_lower_braun_write(l, var_id, l->cur_block, src);
+            /* Resolution order mirrors lower_assignment: local var
+             * (with shared-slot follow-up if program-level), then
+             * shared from an enclosing scope, then upvalue. The
+             * destructure-decl form is handled by the create-write
+             * fast path below; only the assign form needs the wider
+             * search because the identifier may resolve outward. */
+            int var_id = xi_lower_var_find(l, sid, name);
+            if (var_id >= 0) {
+                xi_lower_braun_write(l, var_id, l->cur_block, src);
+                if (l->is_program && l->shared_map[var_id] >= 0) {
+                    if (l->repl_mode) {
+                        XiValue *store =
+                            xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
+                        if (store) {
+                            store->args[0] = src;
+                            store->aux = (void *) l->vars[var_id].name;
+                            store->flags |= XI_FLAG_SIDE_EFFECT;
+                        }
+                    } else {
+                        XiValue *store =
+                            xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
+                        if (store) {
+                            store->args[0] = src;
+                            store->aux_int = l->shared_map[var_id];
+                            store->flags |= XI_FLAG_SIDE_EFFECT;
+                        }
+                    }
+                }
+                break;
+            }
+            if (l->repl_mode) {
+                const char *gname = xi_lower_find_global_name(l, sid, name, NULL);
+                if (gname) {
+                    XiValue *store =
+                        xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
+                    if (store) {
+                        store->args[0] = src;
+                        store->aux = (void *) gname;
+                        store->flags |= XI_FLAG_SIDE_EFFECT;
+                    }
+                    break;
+                }
+            } else {
+                int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
+                if (shared_idx >= 0) {
+                    XiValue *store =
+                        xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
+                    if (store) {
+                        store->args[0] = src;
+                        store->aux_int = shared_idx;
+                        store->flags |= XI_FLAG_SIDE_EFFECT;
+                    }
+                    break;
+                }
+            }
+            int upval_idx = xi_lower_resolve_upvalue(l, sid, name, NULL);
+            if (upval_idx >= 0) {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_STORE_UPVAL, l->type_unit, 1);
+                if (store) {
+                    store->args[0] = src;
+                    store->aux_int = upval_idx;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+                break;
+            }
+            /* Fall through: declaration-style binding (create fresh
+             * local). Reached for destructure-decl PATTERN_IDENTIFIER
+             * because the analyzer has not pre-bound the symbol. */
+            int new_var = xi_lower_var_create(l, sid, name, l->type_any);
+            xi_lower_braun_write(l, new_var, l->cur_block, src);
             break;
         }
         default:
@@ -1112,89 +1181,13 @@ static void lower_destructure_decl(XiLower *l, AstNode *node) {
     lower_destructure_bind(l, dd->pattern, init);
 }
 
-/* Destructure assignment: [a, b] = [b, a] */
+/* Destructure assignment: [a, b] = [b, a] or (a, b) = (b, a) */
 static void lower_destructure_assign(XiLower *l, AstNode *node) {
     DestructureAssignNode *da = &node->as.destructure_assign;
     XiValue *rhs = xi_lower_expr(l, da->value);
     if (!rhs || !da->pattern)
         return;
     lower_destructure_bind(l, da->pattern, rhs);
-}
-
-/* Multi-value declaration: let a, b = foo()
- *
- * When a single call expression provides all values, the VM returns
- * multiple results to consecutive registers (OP_CALL C=nresults).
- * We encode nresults in XI_CALL's aux_int bits 8-15 and use
- * XI_EXTRACT to reference the i-th result register. */
-static void lower_multi_var_decl(XiLower *l, AstNode *node) {
-    MultiVarDeclNode *mv = &node->as.multi_var_decl;
-
-    /* Single call returning multiple values: let x, y = pair() */
-    if (mv->value_count == 1 && mv->name_count > 1 && mv->values[0]->type == AST_CALL_EXPR) {
-        XiValue *call_val = xi_lower_expr(l, mv->values[0]);
-        if (!call_val)
-            return;
-
-        /* Encode return count in aux_int upper bits (preserving self_call flag) */
-        int flags = (int) (call_val->aux_int & 0xFF);
-        call_val->aux_int = flags | (mv->name_count << 8);
-
-        /* First name binds to the call result directly */
-        struct XrType *vtype = call_val->type ? call_val->type : l->type_any;
-        int var0 = xi_lower_var_create(l, 0, mv->names[0], vtype);
-        xi_lower_braun_write(l, var0, l->cur_block, call_val);
-
-        /* Remaining names extracted from consecutive result registers */
-        for (int i = 1; i < mv->name_count; i++) {
-            XiValue *ext = xi_value_new(l->func, l->cur_block, XI_EXTRACT, l->type_any, 1);
-            if (!ext)
-                break;
-            ext->args[0] = call_val;
-            ext->aux_int = i;
-            int var_i = xi_lower_var_create(l, 0, mv->names[i], l->type_any);
-            xi_lower_braun_write(l, var_i, l->cur_block, ext);
-        }
-        return;
-    }
-
-    /* General case: evaluate each value expression */
-    for (int i = 0; i < mv->name_count && i < mv->value_count; i++) {
-        XiValue *val = xi_lower_expr(l, mv->values[i]);
-        struct XrType *vtype = val ? val->type : l->type_any;
-        int var_id = xi_lower_var_create(l, 0, mv->names[i], vtype);
-        if (val)
-            xi_lower_braun_write(l, var_id, l->cur_block, val);
-    }
-    /* Names without values get null */
-    for (int i = mv->value_count; i < mv->name_count; i++) {
-        int var_id = xi_lower_var_create(l, 0, mv->names[i], l->type_any);
-        XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
-        xi_lower_braun_write(l, var_id, l->cur_block, null_val);
-    }
-}
-
-/* Multi-value assignment: a, b = b, a */
-static void lower_multi_assign(XiLower *l, AstNode *node) {
-    MultiAssignNode *ma = &node->as.multi_assign;
-    /* Evaluate all RHS first to support swaps */
-    XiValue *rhs_vals[32];
-    int n = ma->value_count > 32 ? 32 : ma->value_count;
-    for (int i = 0; i < n; i++)
-        rhs_vals[i] = xi_lower_expr(l, ma->values[i]);
-
-    /* Assign to each target */
-    for (int i = 0; i < ma->target_count && i < n; i++) {
-        AstNode *tgt = ma->targets[i];
-        if (tgt && tgt->type == AST_VARIABLE) {
-            const char *name = tgt->as.variable.name;
-            struct XrType *vtype = rhs_vals[i] ? rhs_vals[i]->type : l->type_any;
-            uint32_t sid = tgt->as.variable.symbol_id;
-            int var_id = xi_lower_var_create(l, sid, name, vtype);
-            if (rhs_vals[i])
-                xi_lower_braun_write(l, var_id, l->cur_block, rhs_vals[i]);
-        }
-    }
 }
 
 /* ========== Basic Statement Lowering (from xi_lower_expr.c) ========== */
@@ -1848,14 +1841,6 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             break;
         case AST_DESTRUCTURE_ASSIGN:
             lower_destructure_assign(l, node);
-            break;
-
-        /* Multi-value declarations and assignments */
-        case AST_MULTI_VAR_DECL:
-            lower_multi_var_decl(l, node);
-            break;
-        case AST_MULTI_ASSIGN:
-            lower_multi_assign(l, node);
             break;
 
         /* Module system: import creates XI_IMPORT_REF for selective imports.

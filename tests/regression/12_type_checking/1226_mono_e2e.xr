@@ -9,7 +9,7 @@ fn id<T>(x: T): T {
     return x
 }
 fn pair<A, B>(a: A, b: B): (A, B) {
-    return a, b
+    return (a, b)
 }
 fn add_one<T>(x: T): T {
     return x + 1
@@ -31,11 +31,11 @@ fn test_mono_e2e() {
 
     // === Multi-type-parameter monomorphization ===
 
-    let p1a, p1b = pair<int, float>(10, 2.5)
+    let (p1a, p1b) = pair<int, float>(10, 2.5)
     assert_eq(p1a, 10)
     assert_eq(p1b, 2.5)
 
-    let p2a, p2b = pair<string, int>("age", 30)
+    let (p2a, p2b) = pair<string, int>("age", 30)
     assert_eq(p2a, "age")
     assert_eq(p2b, 30)
 

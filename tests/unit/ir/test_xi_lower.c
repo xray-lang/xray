@@ -743,7 +743,7 @@ TEST(destructure_decl) {
 TEST(multi_assign) {
     XiFunc *f = lower_source("let a = 1\n"
                              "let b = 2\n"
-                             "a, b = b, a\n"
+                             "(a, b) = (b, a)\n"
                              "print(a)\n"
                              "print(b)\n");
     assert(f != NULL);

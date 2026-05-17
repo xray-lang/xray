@@ -1860,31 +1860,6 @@ AstNode *xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern
     return node;
 }
 
-// Create multi-value declaration node
-// let a, b = 1, 2  or  let a, b = foo()  or  let a, b, c
-AstNode *xr_ast_multi_var_decl(XrayIsolate *X, char **names, int name_count, AstNode **values,
-                               int value_count, bool is_const, int line) {
-    AstNode *node = alloc_node(X, AST_MULTI_VAR_DECL, line);
-    node->as.multi_var_decl.names = names;
-    node->as.multi_var_decl.name_count = name_count;
-    node->as.multi_var_decl.values = values;
-    node->as.multi_var_decl.value_count = value_count;
-    node->as.multi_var_decl.is_const = is_const;
-    return node;
-}
-
-// Create multi-value assignment node
-// a, b = b, a
-AstNode *xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count, AstNode **values,
-                             int value_count, int line) {
-    AstNode *node = alloc_node(X, AST_MULTI_ASSIGN, line);
-    node->as.multi_assign.targets = targets;
-    node->as.multi_assign.target_count = target_count;
-    node->as.multi_assign.values = values;
-    node->as.multi_assign.value_count = value_count;
-    return node;
-}
-
 /* ========== Match Expression AST Node Creation ========== */
 
 /* ========== Type Alias Node ========== */

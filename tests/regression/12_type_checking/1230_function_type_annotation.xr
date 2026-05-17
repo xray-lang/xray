@@ -117,16 +117,16 @@ fn test_fn_type_optional() {
 fn test_tuple_type_unchanged() {
     fn divide(a: int, b: int): (int, bool) {
         if (b == 0) {
-            return 0, false
+            return (0, false)
         }
-        return a / b, true
+        return (a / b, true)
     }
     
-    let result, ok = divide(10, 3)
+    let (result, ok) = divide(10, 3)
     assert_eq(result, 3)
     assert_eq(ok, true)
     
-    let result2, ok2 = divide(10, 0)
+    let (result2, ok2) = divide(10, 0)
     assert_eq(result2, 0)
     assert_eq(ok2, false)
 }

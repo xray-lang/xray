@@ -39,13 +39,11 @@ fn test_syscall_handoff() {
     let fast_done = 0
     let slow_done = false
     for (let i = 0; i < FAST_COUNT + 1; i++) {
-        let msg, ok = resultCh.recv()
-        if (ok) {
-            if (msg == "slow done") {
-                slow_done = true
-            } else {
-                fast_done++
-            }
+        let msg = resultCh.recv()
+        if (msg == "slow done") {
+            slow_done = true
+        } else {
+            fast_done++
         }
     }
 

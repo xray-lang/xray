@@ -6,7 +6,7 @@ fn identity<T>(x: T): T {
     return x
 }
 fn makePair<A, B>(a: A, b: B): (A, B) {
-    return a, b
+    return (a, b)
 }
 fn first<T>(arr: Array<T>): T? {
     if (arr.length > 0) {
@@ -45,11 +45,11 @@ fn test_generic_functions() {
     // Multiple type parameters
 
     // Test 3: Multiple type params - implicit
-    let p1a, p1b = makePair(1, "one")
+    let (p1a, p1b) = makePair(1, "one")
     assert_eq(p1a, 1)
     assert_eq(p1b, "one")
     // Test 4: Multiple type params - explicit  
-    let p2a, p2b = makePair<string, int>("age", 30)
+    let (p2a, p2b) = makePair<string, int>("age", 30)
     assert_eq(p2a, "age")
     assert_eq(p2b, 30)
 

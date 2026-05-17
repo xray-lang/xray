@@ -581,6 +581,19 @@ AstNode *xr_parse_precedence(Parser *parser, Precedence precedence) {
         if (rule->infix == NULL) {
             break;
         }
+        // `(` and `[` at statement boundaries: a fresh line opening
+        // with one of these is the start of a new statement (a tuple
+        // literal LHS, a destructure assignment, or an array literal),
+        // not a call/index continuation of the previous expression.
+        // xray has no `;` terminator, so without this the sequence
+        //     let p = (b, a)
+        //     (a, b) = p
+        // parses as `let p = (b, a)(a, b) = p` and the LHS of `=`
+        // ends up an AST_CALL_EXPR. Same rule as Go.
+        if ((parser->current.type == TK_LPAREN || parser->current.type == TK_LBRACKET) &&
+            parser->current.line > parser->previous.line) {
+            break;
+        }
         xr_parser_advance(parser);
         left = rule->infix(parser, left);
     }
@@ -596,45 +609,24 @@ AstNode *xr_parse_expression(Parser *parser) {
 
 /* ========== Statement Parsing ========== */
 
-// Parse expression statement
-// Supports multi-value assignment: a, b = b, a
+// Parse expression statement.
+// Multi-value forms (a, b = b, a) are no longer accepted: tuple
+// destructure-assignment `(a, b) = (b, a)` is the canonical form and
+// is handled by xr_parse_assignment via the AST_TUPLE_LITERAL branch.
 AstNode *xr_parse_expr_statement(Parser *parser) {
     int line = parser->current.line;
+    (void) line;
 
     // Use PREC_TERNARY to avoid parsing assignment
     AstNode *first_expr = xr_parse_precedence(parser, PREC_TERNARY);
 
-    // Check for multi-value assignment: expr, expr = expr, expr
+    // Bare comma at statement position is the obsolete multi-value
+    // form. Point users at the tuple destructure equivalent instead
+    // of letting it fall through with a generic error.
     if (xr_parser_check(parser, TK_COMMA)) {
-        AstNode **targets = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) 16);
-        int target_count = 0;
-        int target_capacity = 16;
-        targets[target_count++] = first_expr;
-
-        while (xr_parser_match(parser, TK_COMMA)) {
-            XR_PARSE_PUSH(parser, targets, target_count, target_capacity,
-                          xr_parse_precedence(parser, PREC_TERNARY));
-        }
-
-        if (xr_parser_match(parser, TK_ASSIGN)) {
-            // Parse right-side values
-            AstNode **values =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) 16);
-            int value_count = 0;
-            int value_capacity = 16;
-
-            values[value_count++] = xr_parse_expression(parser);
-
-            while (xr_parser_match(parser, TK_COMMA)) {
-                XR_PARSE_PUSH(parser, values, value_count, value_capacity,
-                              xr_parse_expression(parser));
-            }
-
-            return xr_ast_multi_assign(parser->X, targets, target_count, values, value_count, line);
-        } else {
-            xr_parser_error(parser, "expected '=' in multi-value assignment");
-            return NULL;
-        }
+        xr_parser_error(parser, "bare multi-value assignment is not supported; "
+                                "use tuple destructure: (a, b) = (b, a)");
+        return NULL;
     }
 
     // Regular expression statement, check for assignment operators
@@ -646,6 +638,15 @@ AstNode *xr_parse_expr_statement(Parser *parser) {
                 first_expr = infix_rule(parser, first_expr);
             }
         }
+    }
+
+    // Destructure-assign is a statement, not an expression: it
+    // produces no value and must dispatch through xi_lower_stmt's
+    // dedicated case. Wrapping it in AST_EXPR_STMT routes it through
+    // xi_lower_expr which has no matching case, fails silently in
+    // release builds, and yields a NULL IR.
+    if (first_expr && first_expr->type == AST_DESTRUCTURE_ASSIGN) {
+        return first_expr;
     }
 
     return xr_ast_expr_stmt(parser->X, first_expr, parser->previous.line);
@@ -1507,7 +1508,7 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
         // Arena bulk-frees left/member; no individual free needed.
         return node;
     }
-    // Destructure assignment: [a, b] = arr or {x, y} = obj
+    // Destructure assignment: [a, b] = arr or (a, b) = pair or {x, y} = obj
     else if (left->type == AST_ARRAY_LITERAL) {
         XrDestructurePattern *pattern = convert_array_literal_to_pattern(parser->X, left);
         if (!pattern) {
@@ -1515,6 +1516,14 @@ AstNode *xr_parse_assignment(Parser *parser, AstNode *left) {
             return NULL;
         }
 
+        AstNode *value = xr_parse_expression(parser);
+        return xr_ast_destructure_assign(parser->X, pattern, value, line);
+    } else if (left->type == AST_TUPLE_LITERAL) {
+        XrDestructurePattern *pattern = convert_tuple_literal_to_pattern(parser->X, left);
+        if (!pattern) {
+            xr_parser_error(parser, "destructure target must be variable list, e.g. (a, b)");
+            return NULL;
+        }
         AstNode *value = xr_parse_expression(parser);
         return xr_ast_destructure_assign(parser->X, pattern, value, line);
     } else if (left->type == AST_OBJECT_LITERAL) {

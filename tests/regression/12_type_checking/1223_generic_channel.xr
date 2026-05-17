@@ -31,11 +31,11 @@ fn test_generic_channel() {
     // tryRecv with generic channel
     shared const tryCh: Channel<int> = new Channel(1)
     // Empty channel
-    let val1, ok1 = tryCh.tryRecv()
+    let (val1, ok1) = tryCh.tryRecv()
     assert(!ok1)
     // With value
     tryCh.send(999)
-    let val2, ok2 = tryCh.tryRecv()
+    let (val2, ok2) = tryCh.tryRecv()
     assert(ok2)
     assert_eq(val2, 999)
     // trySend with generic channel

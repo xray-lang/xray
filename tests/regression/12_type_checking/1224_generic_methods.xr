@@ -18,7 +18,7 @@ class Container<T> {
     }
 
     pair(a: T, b: T): (T, T) {
-        return a, b
+        return (a, b)
     }
 }
 class Util {
@@ -65,7 +65,7 @@ fn test_generic_methods() {
     let strWrapped = sc.wrap("test")
     assert_eq(strWrapped[0], "test")
     // Test 3: Pair method (multi-value return)
-    let x, y = c.pair(10, 20)
+    let (x, y) = c.pair(10, 20)
     assert_eq(x, 10)
     assert_eq(y, 20)
 

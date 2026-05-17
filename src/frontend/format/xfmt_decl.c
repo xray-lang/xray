@@ -39,25 +39,6 @@ void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
 }
 
-void xfmt_emit_multi_var_decl(XrFmtContext *ctx, AstNode *node) {
-    xfmt_write_indent(ctx);
-    MultiVarDeclNode *decl = &node->as.multi_var_decl;
-
-    xfmt_write_str(ctx, decl->is_const ? "const " : "let ");
-    for (int i = 0; i < decl->name_count; i++) {
-        if (i > 0)
-            xfmt_write_str(ctx, ", ");
-        xfmt_write_str(ctx, decl->names[i]);
-    }
-    xfmt_write_str(ctx, " = ");
-    for (int i = 0; i < decl->value_count; i++) {
-        if (i > 0)
-            xfmt_write_str(ctx, ", ");
-        xfmt_emit_expression(ctx, decl->values[i]);
-    }
-    xfmt_write_newline(ctx);
-}
-
 void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     DestructureDeclNode *decl = &node->as.destructure_decl;

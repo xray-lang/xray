@@ -18,9 +18,9 @@ print(greet("Bob", "Hi"))
 
 // === Multiple return values ===
 fn divmod(a: int, b: int): (int, int) {
-    return a / b, a % b
+    return (a / b, a % b)
 }
-let q, r = divmod(17, 5)
+let (q, r) = divmod(17, 5)
 print("17 / 5 = ${q} remainder ${r}")
 
 // === Arrow functions (must have type annotations) ===

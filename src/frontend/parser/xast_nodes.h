@@ -119,8 +119,6 @@ struct AstNode {
         ExportStmtNode export_stmt;
         DestructureDeclNode destructure_decl;
         DestructureAssignNode destructure_assign;
-        MultiVarDeclNode multi_var_decl;
-        MultiAssignNode multi_assign;
         MatchExprNode match_expr;
         MatchArmNode match_arm;
         PatternLiteralNode pattern_literal;

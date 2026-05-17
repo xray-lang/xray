@@ -67,9 +67,9 @@ scope {
 const ch2 = Channel(1)
 ch2.send(42)
 
-let val, ok = ch2.tryRecv()
+let (val, ok) = ch2.tryRecv()
 print("tryRecv: val=${val}, ok=${ok}")
 
-let val2, ok2 = ch2.tryRecv()
+let (val2, ok2) = ch2.tryRecv()
 print("tryRecv empty: val=${val2}, ok=${ok2}")
 ch2.close()

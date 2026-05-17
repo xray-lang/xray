@@ -23,8 +23,8 @@ fn test_select_send() {
     }
     
     // 接收并验证（使用多值返回）
-    let v1, ok1 = ch.tryRecv()
-    let v2, ok2 = ch.tryRecv()
+    let (v1, ok1) = ch.tryRecv()
+    let (v2, ok2) = ch.tryRecv()
     print(v1)  // 100
     print(v2)  // 200
     print(ok1 && ok2)  // true

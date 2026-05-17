@@ -725,8 +725,6 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         case AST_CHAN_RECV:
         case AST_DESTRUCTURE_DECL:
         case AST_DESTRUCTURE_ASSIGN:
-        case AST_MULTI_VAR_DECL:
-        case AST_MULTI_ASSIGN:
         case AST_INTERFACE_METHOD:
         case AST_INTERFACE_PROPERTY:
         case AST_ENUM_MEMBER:

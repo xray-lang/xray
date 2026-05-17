@@ -14,7 +14,7 @@ fn consumer(ch: Channel<int>, expected: int): int {
     let received = 0
     let i = 0
     while (i < expected) {
-        let msg, ok = ch.tryRecv()
+        let (msg, ok) = ch.tryRecv()
         if (ok) {
             received = received + 1
         }

@@ -933,44 +933,35 @@ AstNode *xr_parse_member_access(Parser *parser, AstNode *object) {
 }
 
 /*
- * Parse return statement (multiple return values)
- * return a, b, c or return
+ * Parse return statement. Multi-value returns are no longer
+ * supported: a function returns at most one value, and that value
+ * may be a tuple expression (`return (a, b)`) when multiple results
+ * are needed.
  */
 AstNode *xr_parse_return_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_return_statement: NULL parser");
     int line = parser->previous.line;
     xr_parser_advance(parser);  // Consume 'return'
 
-    // Check if there are return values
+    // Bare `return` or `return` followed by block-close: void return.
     if (parser->current.type == TK_RBRACE ||  // Block end
         parser->current.type == TK_EOF) {     // File end
-        // No return value
         return xr_ast_return_stmt(parser->X, NULL, 0, line);
     }
 
-    // Parse multiple return value expressions (comma separated)
-    AstNode **values = NULL;
-    int count = 0;
-    int capacity = 0;
+    AstNode *value = xr_parse_expression(parser);
 
-    do {
-        // Expand capacity
-        if (count >= capacity) {
-            int _old_cap_capacity = (int) capacity;
-            capacity = (_old_cap_capacity == 0) ? 4 : _old_cap_capacity * 2;
-            AstNode **_new_values =
-                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
-            if (_old_cap_capacity > 0 && values)
-                memcpy(_new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity);
-            values = _new_values;
-        }
+    // Comma after the return expression is the obsolete multi-value
+    // form. Redirect users to the tuple equivalent.
+    if (xr_parser_check(parser, TK_COMMA)) {
+        xr_parser_error(parser, "multi-value return is not supported; "
+                                "use a tuple: `return (a, b)`");
+        return NULL;
+    }
 
-        // Parse expression
-        values[count++] = xr_parse_expression(parser);
-
-    } while (xr_parser_match(parser, TK_COMMA));
-
-    return xr_ast_return_stmt(parser->X, values, count, line);
+    AstNode **values = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 1);
+    values[0] = value;
+    return xr_ast_return_stmt(parser->X, values, 1, line);
 }
 
 /*
@@ -1278,60 +1269,16 @@ AstNode *xr_parse_declaration(Parser *parser) {
             first_name[parser->current.length] = '\0';
             xr_parser_advance(parser);
 
-            // Check following token to determine declaration type
+            // `let a, b = ...` (bare multi-variable) is the obsolete
+            // multi-value form. Tuple destructure `let (a, b) = ...`
+            // is the canonical replacement.
             if (xr_parser_check(parser, TK_COMMA)) {
-                // Multi-variable declaration: let a, b, c or let a, b = expr1, expr2
-                char **names = (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) 16);
-                int name_count = 0;
-                int name_capacity = 16;
-                names[name_count++] = first_name;
-
-                while (xr_parser_match(parser, TK_COMMA)) {
-                    if (!xr_parser_check(parser, TK_NAME)) {
-                        xr_parser_error_expected_name(parser, "expected variable name");
-                        return NULL;
-                    }
-
-                    if (name_count >= name_capacity) {
-                        int old_name_capacity = name_capacity;
-                        name_capacity *= 2;
-                        char **_new_names = (char **) ast_alloc_array(parser->X, sizeof(char *),
-                                                                      (size_t) name_capacity);
-                        if (old_name_capacity > 0 && names) {
-                            memcpy(_new_names, names, sizeof(char *) * (size_t) old_name_capacity);
-                        }
-                        names = _new_names;
-                    }
-                    char *name = (char *) ast_alloc(parser->X, (size_t) parser->current.length + 1);
-                    memcpy(name, parser->current.start, parser->current.length);
-                    name[parser->current.length] = '\0';
-                    names[name_count++] = name;
-                    xr_parser_advance(parser);
-                }
-
-                if (xr_parser_match(parser, TK_ASSIGN)) {
-                    // Multi-value declaration: let a, b = expr1, expr2 or let a, b = foo()
-                    AstNode **values =
-                        (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) 16);
-                    int value_count = 0;
-                    int value_capacity = 16;
-
-                    // Parse right-side value expression list
-                    values[value_count++] = xr_parse_precedence(parser, PREC_TERNARY);
-
-                    while (xr_parser_match(parser, TK_COMMA)) {
-                        XR_PARSE_PUSH(parser, values, value_count, value_capacity,
-                                      xr_parse_precedence(parser, PREC_TERNARY));
-                    }
-
-                    return xr_ast_multi_var_decl(parser->X, names, name_count, values, value_count,
-                                                 false, saved_line);
-                } else {
-                    // Multi-variable declaration without initialization: let a, b, c
-                    return xr_ast_multi_var_decl(parser->X, names, name_count, NULL, 0, false,
-                                                 saved_line);
-                }
-            } else {
+                xr_parser_error(parser, "multi-variable declaration is not supported; "
+                                        "use tuple destructure: `let (a, b) = ...`");
+                return NULL;
+            }
+            {
+                // Single variable declaration: let a or let a = expr or let a: Type = expr
                 // Single variable declaration: let a or let a = expr or let a: Type = expr
                 XrType *var_type = NULL;
                 if (xr_parser_match(parser, TK_COLON)) {
@@ -1579,6 +1526,34 @@ XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X, AstNode *
     }
 
     return xr_pattern_array(X, elements, count);
+}
+
+/*
+ * Convert tuple literal to destructure pattern (for destructuring assignment)
+ * (a, b, c) -> tuple destructure pattern
+ * Mirrors convert_array_literal_to_pattern; only succeeds when every element
+ * is a bare variable reference, since assignment targets cannot evaluate
+ * sub-expressions.
+ */
+XrDestructurePattern *convert_tuple_literal_to_pattern(XrayIsolate *X, AstNode *tuple_literal) {
+    if (tuple_literal->type != AST_TUPLE_LITERAL) {
+        return NULL;
+    }
+
+    int count = tuple_literal->as.tuple_literal.count;
+    XrDestructurePattern **elements = (XrDestructurePattern **) ast_alloc_array(
+        X, sizeof(XrDestructurePattern *), (size_t) count);
+
+    for (int i = 0; i < count; i++) {
+        AstNode *element = tuple_literal->as.tuple_literal.elements[i];
+        if (element->type == AST_VARIABLE) {
+            elements[i] = xr_pattern_identifier(X, element->as.variable.name, NULL);
+        } else {
+            return NULL;
+        }
+    }
+
+    return xr_pattern_tuple(X, elements, count);
 }
 
 /*

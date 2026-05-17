@@ -11,7 +11,7 @@ fn first<T>(arr: Array<T>): T? {
     return null
 }
 fn pair<T, U>(a: T, b: U): (T, U) {
-    return a, b
+    return (a, b)
 }
 
 @test
@@ -42,7 +42,7 @@ fn test_generic_inference() {
     // Should be "a"
     // Generic function with multiple params
 
-    let pa, pb = pair(1, "two")
+    let (pa, pb) = pair(1, "two")
     print(pa, pb)
     // Should be 1 two
     print("Generic inference test completed")

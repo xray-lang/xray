@@ -53,23 +53,6 @@ typedef struct DestructureAssignNode {
     AstNode *value;
 } DestructureAssignNode;
 
-// Multi-value declaration node
-typedef struct MultiVarDeclNode {
-    char **names;
-    int name_count;
-    AstNode **values;
-    int value_count;
-    bool is_const;
-} MultiVarDeclNode;
-
-// Multi-value assignment node
-typedef struct MultiAssignNode {
-    AstNode **targets;
-    int target_count;
-    AstNode **values;
-    int value_count;
-} MultiAssignNode;
-
 /* ========== Calls & Type-Discriminating Exprs ========== */
 
 // Function call node — supports generic call syntax: foo<int, string>(arg1, arg2)

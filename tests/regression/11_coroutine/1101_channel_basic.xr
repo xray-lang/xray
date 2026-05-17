@@ -19,16 +19,16 @@ fn test_channel() {
     print(ok4)  // false
     
     // 非阻塞接收（返回多值）
-    let v1, ok1r = ch.tryRecv()
-    let v2, ok2r = ch.tryRecv()
-    let v3, ok3r = ch.tryRecv()
+    let (v1, ok1r) = ch.tryRecv()
+    let (v2, ok2r) = ch.tryRecv()
+    let (v3, ok3r) = ch.tryRecv()
     print(v1)  // 10
     print(v2)  // 20
     print(v3)  // 30
     print(ok1r && ok2r && ok3r)  // true
     
     // 缓冲区为空，再次接收返回 ok=false
-    let v4, ok4r = ch.tryRecv()
+    let (v4, ok4r) = ch.tryRecv()
     print(ok4r)  // false
     
     // 关闭 Channel

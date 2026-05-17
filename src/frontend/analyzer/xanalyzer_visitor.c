@@ -850,19 +850,6 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             }
             break;
         }
-        case AST_MULTI_VAR_DECL: {
-            MultiVarDeclNode *mv = &node->as.multi_var_decl;
-            for (int i = 0; i < mv->name_count; i++) {
-                if (mv->names[i]) {
-                    XaSymbol *sym = xa_symbol_new(mv->names[i], XA_SYM_VARIABLE);
-                    sym->is_const = mv->is_const;
-                    sym->location.line = node->line;
-                    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
-                }
-            }
-            break;
-        }
-
         default:
             break;
     }
@@ -1903,25 +1890,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             break;
         }
-        case AST_MULTI_VAR_DECL: {
-            MultiVarDeclNode *mv = &node->as.multi_var_decl;
-            for (int i = 0; i < mv->name_count; i++) {
-                if (mv->names[i]) {
-                    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, mv->names[i]);
-                    if (sym) {
-                        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-                        if (links) {
-                            XrType *val_type = (mv->values && i < mv->value_count && mv->values[i])
-                                                   ? xa_visit_infer_expr(ctx, mv->values[i])
-                                                   : xr_type_new_unknown(NULL);
-                            links->type = val_type;
-                            links->is_definitely_assigned = true;
-                        }
-                    }
-                }
-            }
-            break;
-        }
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
                 xa_visit_infer_expr(ctx, node->as.print_stmt.exprs[i]);
@@ -2025,7 +1993,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
              * lowerer can find existing variables via Braun SSA. */
             if (da->pattern) {
                 XrDestructurePattern *pat = da->pattern;
-                if (pat->type == PATTERN_ARRAY) {
+                if (pat->type == PATTERN_ARRAY || pat->type == PATTERN_TUPLE) {
                     for (int i = 0; i < pat->as.array.element_count; i++) {
                         XrDestructurePattern *elem = pat->as.array.elements[i];
                         if (elem && elem->type == PATTERN_IDENTIFIER && elem->as.identifier.name) {
@@ -2046,18 +2014,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         }
                     }
                 }
-            }
-            break;
-        }
-        case AST_MULTI_ASSIGN: {
-            MultiAssignNode *ma = &node->as.multi_assign;
-            for (int i = 0; i < ma->target_count; i++) {
-                if (ma->targets[i])
-                    xa_visit_infer_expr(ctx, ma->targets[i]);
-            }
-            for (int i = 0; i < ma->value_count; i++) {
-                if (ma->values[i])
-                    xa_visit_infer_expr(ctx, ma->values[i]);
             }
             break;
         }

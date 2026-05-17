@@ -12,9 +12,9 @@ fn producer(ch: Channel<int>): string {
 // 消费者：从 Channel 接收数据（使用多值返回）
 fn consumer(ch: Channel<int>): int {
     let sum = 0
-    let v1, ok1 = ch.tryRecv()
-    let v2, ok2 = ch.tryRecv()
-    let v3, ok3 = ch.tryRecv()
+    let (v1, ok1) = ch.tryRecv()
+    let (v2, ok2) = ch.tryRecv()
+    let (v3, ok3) = ch.tryRecv()
     if (ok1) { sum = sum + v1 }
     if (ok2) { sum = sum + v2 }
     if (ok3) { sum = sum + v3 }

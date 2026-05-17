@@ -173,10 +173,6 @@ typedef enum {
     AST_DESTRUCTURE_DECL,    // let [a, b] = arr
     AST_DESTRUCTURE_ASSIGN,  // [a, b] = [b, a]
 
-    // Multi-value assignment
-    AST_MULTI_VAR_DECL,  // let a, b = foo()
-    AST_MULTI_ASSIGN,    // a, b = b, a
-
     // Match expression
     AST_MATCH_EXPR,  // match (x) { 1 => "one", _ => "other" }
     AST_MATCH_ARM,   // 1 => "one"

@@ -82,7 +82,6 @@ XR_FUNC void xfmt_emit_program(XrFmtContext *ctx, AstNode *node);
 
 // xfmt_decl.c
 XR_FUNC void xfmt_emit_var_decl(XrFmtContext *ctx, AstNode *node);
-XR_FUNC void xfmt_emit_multi_var_decl(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_destructure_decl(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node);
 XR_FUNC void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node);

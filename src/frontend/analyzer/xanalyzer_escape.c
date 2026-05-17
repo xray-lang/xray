@@ -553,14 +553,6 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             ea_walk(ctx, node->as.as_expr.expr);
             break;
 
-        case AST_MULTI_VAR_DECL: {
-            MultiVarDeclNode *mvd = &node->as.multi_var_decl;
-            for (int i = 0; i < mvd->value_count; i++) {
-                ea_walk(ctx, mvd->values[i]);
-            }
-            break;
-        }
-
         case AST_CLASS_DECL:
         case AST_STRUCT_DECL: {
             ClassDeclNode *cls = &node->as.class_decl;

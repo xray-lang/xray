@@ -30,11 +30,9 @@ fn test_preempt_test() {
     let ids: Array<int> = []
     let received = 0
     for (let i = 0; i < WORKER_COUNT; i++) {
-        let id, ok = resultCh.recv()
-        if (ok) {
-            received++
-            ids.push(id)
-        }
+        let id = resultCh.recv()
+        received++
+        ids.push(id)
     }
     ids.sort()
     for (let i = 0; i < ids.length; i++) {

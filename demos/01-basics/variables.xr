@@ -37,9 +37,9 @@ print("value = ${value}")
 
 // === Multiple assignment ===
 fn divmod(a: int, b: int): (int, int) {
-    return a / b, a % b
+    return (a / b, a % b)
 }
-let quotient, remainder = divmod(17, 5)
+let (quotient, remainder) = divmod(17, 5)
 print("17 / 5 = ${quotient} remainder ${remainder}")
 
 // === Destructuring ===
