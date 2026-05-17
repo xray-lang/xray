@@ -20,6 +20,8 @@
 #include "xstring_methods.h"
 #include "xstring.h"
 #include "xarray.h"
+#include "xtuple.h"
+#include "xiterator.h"
 #include "xmap.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
@@ -416,6 +418,44 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return xr_string_value(str_self(self));
 }
 
+/* === Iteration === */
+
+/* Lazy entries iterator used by `for (i, c in s)` lowering.
+ * Yields [index, char] pairs by UTF-8 character index, mirroring the
+ * existing charAt semantics. */
+static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrString *s = str_self(self);
+    XrIterator *iter = xr_iterator_new_from_string(xr_current_coro(iso), s, iso);
+    return iter ? xr_value_from_iterator(iter) : xr_null();
+}
+
+/* Eager entries() returning Array<(int, string)>. Each element is a
+ * real (index, char) tuple, matching the static signature and the
+ * XI_TUPLE_GET destructuring used by `for ((i, c) in s.entries())`. */
+static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrString *s = str_self(self);
+    struct XrCoroutine *coro = xr_current_coro(iso);
+    size_t n = xr_string_char_length(s);
+    XrArray *out = xr_array_with_capacity(coro, n > 0 ? (int) n : 1);
+    if (!out)
+        return xr_null();
+    for (size_t i = 0; i < n; i++) {
+        XrString *ch = xr_string_char_at_unicode(iso, s, i);
+        XrTuple *pair = xr_tuple_new(coro, 2);
+        if (!pair)
+            return xr_null();
+        xr_tuple_set(pair, 0, xr_int((int64_t) i));
+        xr_tuple_set(pair, 1, ch ? xr_string_value(ch) : xr_null());
+        xr_array_set(out, (int) i, xr_value_from_tuple(pair));
+    }
+    out->length = (int32_t) n;
+    return xr_value_from_array(out);
+}
+
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
@@ -467,6 +507,9 @@ void xr_string_register_native_type(XrayIsolate *isolate) {
         /* Regex */
         {"match", m_match, 1},
         {"toString", m_to_string, 0},
+        /* Iteration */
+        {"entries", m_entries, 0},
+        {"entriesIterator", m_entries_iterator, 0},
         {NULL, NULL, 0},
     };
     static const XrNativeTypeInfo string_info = {

@@ -26,4 +26,5 @@ class Array<T> {
     flat(depth?: int): Array<T>
     fill(value: T, start?: int, end?: int): Array<T>
     copyWithin(target: int, start: int, end?: int): Array<T>
+    entries(): Array<(int, T)>
 }

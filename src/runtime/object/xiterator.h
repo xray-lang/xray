@@ -23,40 +23,48 @@
 struct XrMap;
 struct XrSet;
 struct XrJson;
+struct XrArray;
+struct XrString;
 
 /* ========== Iterator Type Constants ========== */
 
 typedef enum {
     XR_ITERATOR_MAP = 0,
     XR_ITERATOR_SET = 1,
-    XR_ITERATOR_JSON = 2
+    XR_ITERATOR_JSON = 2,
+    XR_ITERATOR_ARRAY = 3,
+    XR_ITERATOR_STRING = 4,
 } XrIteratorType;
 
 /* ========== Iterator Structure ========== */
 
 /*
- * XrIterator - Lazy iterator for Map/Set
+ * XrIterator - Lazy iterator for Map/Set/Json/Array/String
  *
- * Generates [key, value] pairs on-demand instead of pre-building entries array.
- * Supports both Map and Set iteration.
+ * Generates [key, value] (or [index, element]) pairs on-demand instead of
+ * pre-building an entries array. Used by `for (k, v in coll)` lowering: the
+ * compiler always invokes `coll.entriesIterator()` and pulls pairs one by
+ * one with hasNext()/next().
  *
  * Advantages:
- * - Memory: only Iterator object (16-24 bytes) + single temp [k,v] array (24 bytes)
+ * - Memory: only Iterator object (~32 bytes) + single temp [k,v] array (24 bytes)
  * - Performance: avoids pre-generating all entries array
  * - Early exit: if loop breaks, unvisited elements are never created
  */
 typedef struct XrIterator {
     XrGCHeader gc;        // GC header
-    XrIteratorType type;  // iterator type (Map or Set)
+    XrIteratorType type;  // iterator kind
     union {
-        struct XrMap *map;     // Map iterator: reference to source Map
-        struct XrSet *set;     // Set iterator: reference to source Set
-        struct XrJson *json;   // Json iterator: reference to source Json
-    } source;                  // source object (union, selected by type)
-    uint32_t scan_index;       // internal scan position
-    uint32_t total_count;      // total field count (Json fast mode only)
-    struct XrCoroutine *coro;  // coroutine (for creating temp arrays)
-    void *context;             // extra context (Json: XrSymbolTable*)
+        struct XrMap *map;        // Map iterator
+        struct XrSet *set;        // Set iterator
+        struct XrJson *json;      // Json iterator
+        struct XrArray *array;    // Array iterator
+        struct XrString *string;  // String iterator
+    } source;                     // source object (union, selected by type)
+    uint32_t scan_index;          // internal scan position
+    uint32_t total_count;         // total field count (Json fast mode only)
+    struct XrCoroutine *coro;     // coroutine (for creating temp arrays)
+    void *context;                // extra context (Json: XrSymbolTable*)
 } XrIterator;
 
 /* ========== Iterator API ========== */
@@ -71,6 +79,14 @@ XR_FUNC XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct Xr
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
 XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *json,
                                               struct XrayIsolate *isolate);
+
+// Create iterator from Array (lazy, yields [index, element] pairs)
+XR_FUNC XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray *arr);
+
+// Create iterator from string (lazy, yields [index, char] pairs).
+// `isolate` is needed so we can intern the per-rune single-character strings.
+XR_FUNC XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
+                                                struct XrayIsolate *isolate);
 
 // Check if more elements available
 XR_FUNC bool xr_iterator_has_next(XrIterator *iter);

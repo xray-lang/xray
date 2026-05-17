@@ -21,6 +21,8 @@
 #include "xarray_methods.h"
 #include "xarray.h"
 #include "xstring.h"
+#include "xtuple.h"
+#include "xiterator.h"
 #include "../closure/xclosure.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
@@ -344,6 +346,44 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
+/* === Iteration === */
+
+/* Lazy entries iterator used by `for (i, e in arr)` lowering.
+ * Yields [index, element] pairs one at a time, matching the (i, e)
+ * destructuring shape produced by the parser. */
+static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrArray *arr = array_self(self);
+    XrIterator *iter = xr_iterator_new_from_array(xr_current_coro(iso), arr);
+    return iter ? xr_value_from_iterator(iter) : xr_null();
+}
+
+/* Eager entries() returning Array<(int, T)>. Mirrors Map.entries():
+ * each element is a real (index, value) tuple, so callers can use
+ * `.0` / `.1` access and `for ((i, e) in arr.entries())` destructures
+ * via XI_TUPLE_GET, exactly as the static signature implies. */
+static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrArray *arr = array_self(self);
+    struct XrCoroutine *coro = xr_current_coro(iso);
+    int32_t n = arr->length;
+    XrArray *out = xr_array_with_capacity(coro, n > 0 ? n : 1);
+    if (!out)
+        return xr_null();
+    for (int32_t i = 0; i < n; i++) {
+        XrTuple *pair = xr_tuple_new(coro, 2);
+        if (!pair)
+            return xr_null();
+        xr_tuple_set(pair, 0, xr_int((int64_t) i));
+        xr_tuple_set(pair, 1, xr_array_get_element(arr, i));
+        xr_array_set(out, i, xr_value_from_tuple(pair));
+    }
+    out->length = n;
+    return xr_value_from_array(out);
+}
+
 /* ========== XrClass Registration ========== */
 
 #include "xnative_type.h"
@@ -380,6 +420,9 @@ void xr_array_register_native_type(XrayIsolate *isolate) {
         {"some", m_some, 1},
         /* Conversion */
         {"toString", m_to_string, 0},
+        /* Iteration */
+        {"entries", m_entries, 0},
+        {"entriesIterator", m_entries_iterator, 0},
         {NULL, NULL, 0},
     };
     static const XrNativeMethod array_statics[] = {

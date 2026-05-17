@@ -26,4 +26,5 @@ class string {
     padStart(length: int, pad?: string): string
     padEnd(length: int, pad?: string): string
     match(pattern: string): Array<string>?
+    entries(): Array<(int, string)>
 }
