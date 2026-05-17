@@ -427,6 +427,17 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
         return true;
     }
 
+    if (type->kind == XR_KIND_JSON) {
+        // Single-variable iteration yields each field name (a string),
+        // matching Map.iterator(). Pair iteration goes through
+        // entriesIterator() and is handled by the analyzer's keyvalue
+        // branch.
+        if (out_element_type) {
+            *out_element_type = xr_type_new_string(NULL);
+        }
+        return true;
+    }
+
     // For custom class iterable checking, use xa_analyzer_is_iterable()
     return false;
 }

@@ -36,6 +36,17 @@ static XrValue xr_json_method_entries_iterator(XrayIsolate *iso, XrValue self, X
     return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
+/* Single-variable `for (k in jsonObj)` lowering: yields each key string,
+ * mirroring Map.iterator() so the two key-value containers behave the
+ * same way. */
+static XrValue xr_json_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrCoroutine *coro = xr_current_coro(iso);
+    XrIterator *iter = xr_iterator_keys_from_json(coro, json_self(self), iso);
+    return iter ? xr_value_from_iterator(iter) : xr_null();
+}
+
 static XrValue xr_json_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -164,6 +175,7 @@ static XrValue xr_json_method_is_object(XrayIsolate *iso, XrValue self, XrValue 
 
 void xr_json_register_native_type(XrayIsolate *isolate) {
     static const XrNativeMethod json_methods[] = {
+        {"iterator", xr_json_method_iterator, 0},
         {"entriesIterator", xr_json_method_entries_iterator, 0},
         {"toString", xr_json_method_to_string, 0},
         {"keys", xr_json_method_keys, 0},

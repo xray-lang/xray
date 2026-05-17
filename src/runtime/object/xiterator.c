@@ -27,7 +27,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Create iterator from Map (lazy, no pre-generation)
+// Create iterator from Map (lazy, no pre-generation). Default mode = PAIRS:
+// next() yields (k, v) tuples. Used by entriesIterator and `for (k, v in m)`.
 XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map_param) {
     XR_DCHECK(coro != NULL, "iterator_new_from_map: NULL coro");
     XR_DCHECK(map_param != NULL, "iterator_new_from_map: NULL map");
@@ -47,6 +48,16 @@ XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map
     iter->coro = coro;
 
     iter->type = XR_ITERATOR_MAP;
+    iter->mode = XR_ITER_MODE_PAIRS;
+    return iter;
+}
+
+// Same source as xr_iterator_new_from_map, but next() yields each key K
+// instead of a (K, V) tuple. Used by single-variable `for (k in m)`.
+XrIterator *xr_iterator_keys_from_map(struct XrCoroutine *coro, struct XrMap *map_param) {
+    XrIterator *iter = xr_iterator_new_from_map(coro, map_param);
+    if (iter)
+        iter->mode = XR_ITER_MODE_KEYS;
     return iter;
 }
 
@@ -69,6 +80,7 @@ XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set
     iter->source.set = set_param;
     iter->scan_index = 0;
     iter->coro = coro;
+    iter->mode = XR_ITER_MODE_VALUES;  // Set has no separate key projection.
 
     return iter;
 }
@@ -87,6 +99,7 @@ XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray 
     iter->coro = coro;
     iter->total_count = 0;
     iter->context = NULL;
+    iter->mode = XR_ITER_MODE_PAIRS;
     return iter;
 }
 
@@ -106,6 +119,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
     iter->coro = coro;
     iter->total_count = (uint32_t) xr_string_char_length(s);
     iter->context = (void *) isolate;
+    iter->mode = XR_ITER_MODE_PAIRS;
     return iter;
 }
 
@@ -127,7 +141,19 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *j
 
     XrShape *shape = xr_json_shape(isolate, json);
     iter->total_count = shape ? shape->field_count : 0;
+    iter->mode = XR_ITER_MODE_PAIRS;
 
+    return iter;
+}
+
+// Same source as xr_iterator_new_from_json, but next() yields each key
+// (a string) instead of a (key, value) tuple. Used by single-variable
+// `for (k in jsonObj)`.
+XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrJson *json,
+                                       struct XrayIsolate *isolate) {
+    XrIterator *iter = xr_iterator_new_from_json(coro, json, isolate);
+    if (iter)
+        iter->mode = XR_ITER_MODE_KEYS;
     return iter;
 }
 
@@ -211,11 +237,14 @@ XrValue xr_iterator_next(XrIterator *iter) {
 
             // Skip empty nodes
             if (!XR_MAP_NODE_EMPTY(node)) {
-                /* Found valid node, build a (key, value) tuple on demand.
-                 * Tuples are the canonical pair shape that
-                 * `for ((k, v) in m.entries())` and `for (k, v in m)`
-                 * destructure; the analyzer reasons about them with
-                 * exact element types. */
+                if (iter->mode == XR_ITER_MODE_KEYS) {
+                    return node->key;
+                }
+                if (iter->mode == XR_ITER_MODE_VALUES) {
+                    return node->value;
+                }
+                /* PAIRS: build a (key, value) tuple on demand. Used by
+                 * entriesIterator() and `for (k, v in m)`. */
                 XrTuple *pair = xr_tuple_new(iter->coro, 2);
                 if (!pair)
                     return xr_null();
@@ -271,6 +300,12 @@ XrValue xr_iterator_next(XrIterator *iter) {
                 if (name) {
                     key_str = xr_string_value(xr_string_intern(X, name, strlen(name), 0));
                 }
+            }
+            if (iter->mode == XR_ITER_MODE_KEYS) {
+                return key_str;
+            }
+            if (iter->mode == XR_ITER_MODE_VALUES) {
+                return value;
             }
             XrTuple *pair = xr_tuple_new(iter->coro, 2);
             if (!pair)

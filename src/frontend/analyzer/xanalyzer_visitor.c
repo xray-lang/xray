@@ -1728,11 +1728,42 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         value_type = xr_type_new_string(NULL);
                         item_type = xr_type_new_int(NULL);  // key is index
                     }
+                } else if (XR_TYPE_IS_TUPLE(coll_type)) {
+                    /* Tuples are heterogeneous by design — there is no
+                     * single element type. Iteration would either widen
+                     * to a useless union or reach for `any`, neither of
+                     * which is acceptable in xray. The user wants .N /
+                     * destructuring / pattern matching, not for-in. */
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "tuple type '%s' is not iterable; use '.0', '.1' or destructure "
+                             "with 'let (a, b, ...) = t' instead",
+                             xr_type_to_string(coll_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 } else {
-                    // Custom iterable: check iterator() -> next() protocol
+                    /* Anything else (instance of a class / struct, json
+                     * literal type, etc.) iterates only via the
+                     * iterator() / hasNext() / next() protocol. If the
+                     * type doesn't satisfy that contract we emit a
+                     * compile-time diagnostic — the alternative is a
+                     * runtime "method 'iterator' not found" which is
+                     * strictly worse. */
                     XrType *elem = NULL;
                     if (xa_analyzer_is_iterable(ctx->analyzer, coll_type, &elem) && elem) {
                         item_type = elem;
+                    } else {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "type '%s' is not iterable; expected an Array, Map, Set, string, "
+                                 "Json, range or a class with an 'iterator()' method",
+                                 xr_type_to_string(coll_type));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
                 }
             }
