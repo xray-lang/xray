@@ -36,6 +36,15 @@ typedef enum {
     XR_ITERATOR_STRING = 4,
 } XrIteratorType;
 
+/* Yield mode. PAIRS is used by `for (k, v in coll)` (entriesIterator);
+ * KEYS / VALUES are used by single-variable `for (k in coll)` to pick
+ * which projection of the underlying entry to expose. */
+typedef enum {
+    XR_ITER_MODE_PAIRS = 0,
+    XR_ITER_MODE_KEYS = 1,
+    XR_ITER_MODE_VALUES = 2,
+} XrIteratorMode;
+
 /* ========== Iterator Structure ========== */
 
 /*
@@ -54,6 +63,9 @@ typedef enum {
 typedef struct XrIterator {
     XrGCHeader gc;        // GC header
     XrIteratorType type;  // iterator kind
+    uint8_t mode;         // XrIteratorMode (pairs / keys / values projection)
+    uint8_t _pad0;
+    uint16_t _pad1;
     union {
         struct XrMap *map;        // Map iterator
         struct XrSet *set;        // Set iterator
@@ -69,16 +81,25 @@ typedef struct XrIterator {
 
 /* ========== Iterator API ========== */
 
-// Create iterator from Map (lazy, no pre-generation)
+// Create iterator from Map (lazy, no pre-generation).
+// Default mode is PAIRS — yields (key, value) tuples (used by entriesIterator).
 struct XrCoroutine;
 XR_FUNC XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map);
+
+// Same source, KEYS mode — yields each key (used by single-var for-in `for (k in m)`).
+XR_FUNC XrIterator *xr_iterator_keys_from_map(struct XrCoroutine *coro, struct XrMap *map);
 
 // Create iterator from Set (lazy, no pre-generation)
 XR_FUNC XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set);
 
-// Create iterator from Json (lazy, converts SymbolId keys to strings)
+// Create iterator from Json (lazy, converts SymbolId keys to strings).
+// Default mode is PAIRS — yields (string_key, value) tuples.
 XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *json,
                                               struct XrayIsolate *isolate);
+
+// Same source, KEYS mode — yields each key string.
+XR_FUNC XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrJson *json,
+                                               struct XrayIsolate *isolate);
 
 // Create iterator from Array (lazy, yields [index, element] pairs)
 XR_FUNC XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray *arr);

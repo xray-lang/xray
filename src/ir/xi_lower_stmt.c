@@ -804,13 +804,18 @@ static void lower_for_in_enum_loop(XiLower *l, AstNode *node, XiValue *init_val,
 
 /* ========== For-In Dispatcher ========== */
 
-/* Check if collection type uses builtin length+index iteration (array,
- * string, map, set, bytes) or needs the custom iterator protocol. */
-static bool is_builtin_iterable_collection(XiLower *l, AstNode *coll_node) {
+/* Whether the collection's static type is iterable via the fast
+ * length + INDEX_GET path. Only Array, Set and string qualify: those
+ * have integer indexable layouts that produce the loop variable's
+ * canonical type directly. Map / Json instead route through the
+ * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
+ * yield real keys and `for (k in obj)` yield string keys, matching
+ * the analyzer's item-type inference and Python / Go conventions. */
+static bool is_index_iterable_collection(XiLower *l, AstNode *coll_node) {
     struct XrType *t = xi_lower_node_type(l, coll_node);
     if (!t || t->kind == XR_KIND_UNKNOWN)
         return true; /* unknown: assume builtin for backward compat */
-    return xr_kind_is_builtin_iterable(t->kind);
+    return t->kind == XR_KIND_ARRAY || t->kind == XR_KIND_SET || t->kind == XR_KIND_STRING;
 }
 
 XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
@@ -853,8 +858,11 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     }
 
-    /* Class instances with iterator() use the custom protocol */
-    if (!is_builtin_iterable_collection(l, s->collection)) {
+    /* Anything that isn't a fast index-iterable collection (Map, Json,
+     * tuple, struct, custom class) goes through the iterator() protocol.
+     * The analyzer is responsible for rejecting collection types that
+     * have no iterator() method (tuple / struct without one). */
+    if (!is_index_iterable_collection(l, s->collection)) {
         lower_for_in_custom_iterator(l, node, coll);
         return;
     }

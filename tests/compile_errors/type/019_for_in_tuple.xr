@@ -1,0 +1,8 @@
+// Iterating a tuple is rejected at compile time: tuple elements have
+// heterogeneous types, so there is no canonical loop-variable type.
+// Use `.0` / `.1`, destructuring, or pattern matching instead.
+
+let t = (1, "hello", true)
+for (e in t) {
+    print(e)
+}

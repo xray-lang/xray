@@ -114,6 +114,32 @@ fn test_for_in_empty_map() {
     assert_eq(count, 0)
 }
 
+// ===== Map / Json single-var iteration yields keys =====
+
+@test
+fn test_for_in_map_single_var_yields_key() {
+    let m: Map<string, int> = #{"a" => 1, "b" => 2, "c" => 3}
+    let acc = ""
+    for (k in m) {
+        acc += k
+    }
+    // Map iteration order is insertion order in xray.
+    assert_eq(acc, "abc")
+}
+
+@test
+fn test_for_in_json_single_var_yields_key() {
+    let j: Json = {x: 1, y: 2, z: 3}
+    let keys: Array<string> = []
+    for (k in j) {
+        keys.push(k)
+    }
+    assert_eq(keys.length, 3)
+    assert_eq(keys[0], "x")
+    assert_eq(keys[1], "y")
+    assert_eq(keys[2], "z")
+}
+
 // ===== Array index-element shorthand =====
 
 @test

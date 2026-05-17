@@ -128,15 +128,17 @@ static XrValue xr_map_method_has_value(XrayIsolate *iso, XrValue self, XrValue *
 }
 
 static XrValue xr_map_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
     (void) args;
     (void) argc;
     XrMap *m = map_self(self);
     if (map_is_weak(m))
         return XR_NOTFOUND;
-    /* Legacy semantics: regular map's iterator() returns null;
-     * for-in iteration uses entriesIterator. */
-    return xr_null();
+    /* Single-variable `for (k in m)` resolves through this method.
+     * It yields each key K, matching the analyzer's item-type inference
+     * (which already binds the loop variable to map.key_type). Use
+     * m.values() / m.entries() for the other projections. */
+    XrIterator *iter = xr_iterator_keys_from_map(xr_current_coro(iso), m);
+    return iter ? xr_value_from_iterator(iter) : xr_null();
 }
 
 static XrValue xr_map_method_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args,

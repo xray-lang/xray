@@ -1,0 +1,14 @@
+// A struct without an explicit iterator() method is not iterable.
+// Iterating its fields would require a heterogeneous element type;
+// users should access fields by name or define iterator() if they
+// genuinely want for-in support on their type.
+
+struct Point {
+    x: float
+    y: float
+}
+
+let p = Point{ x: 1.0, y: 2.0 }
+for (e in p) {
+    print(e)
+}
