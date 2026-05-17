@@ -126,6 +126,10 @@ static inline const char *xi_op_name(uint16_t op) {
             return "ARRAY_NEW";
         case XI_MAP_NEW:
             return "MAP_NEW";
+        case XI_TUPLE_NEW:
+            return "TUPLE_NEW";
+        case XI_TUPLE_GET:
+            return "TUPLE_GET";
         case XI_CALL:
             return "CALL";
         case XI_CALL_METHOD:

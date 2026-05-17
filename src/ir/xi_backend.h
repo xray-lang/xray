@@ -95,6 +95,10 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_STRUCT_GET:
         case XI_STRUCT_SET:
 
+        /* Tuple native storage (direct bytecode: OP_NEWTUPLE / OP_TUPLE_GET) */
+        case XI_TUPLE_NEW:
+        case XI_TUPLE_GET:
+
         /* Call family (the universal lowering target) */
         case XI_CALL:
         case XI_CALL_METHOD:

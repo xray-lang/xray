@@ -663,6 +663,30 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         return v;
     }
 
+    /* Tuple `.N` → XI_TUPLE_GET (analyzer has already bounds-checked N).
+     * The member name is always a digit run for tuples; if it's not we
+     * leave the access alone and let LOAD_FIELD's runtime guard handle
+     * the bad code (it can't actually reach here after analyzer rules
+     * are enforced, but stays robust if a later refactor introduces an
+     * unverified path). */
+    if (obj->type && obj->type->kind == XR_KIND_TUPLE && ma->name) {
+        bool digits_only = (ma->name[0] != '\0');
+        for (const char *p = ma->name; *p && digits_only; p++) {
+            if (*p < '0' || *p > '9')
+                digits_only = false;
+        }
+        if (digits_only) {
+            long idx = strtol(ma->name, NULL, 10);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, result_type, 1);
+            if (!v)
+                return NULL;
+            v->args[0] = obj;
+            v->aux_int = idx;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+    }
+
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;
@@ -852,6 +876,32 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
+}
+
+static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
+    TupleLiteralNode *tup = &node->as.tuple_literal;
+    uint16_t n = (uint16_t) tup->count;
+
+    /* Evaluate all elements first so the resulting XI_TUPLE_NEW value
+     * has a fully-typed args array.  Each child is an arbitrary
+     * expression; the emitter handles register placement. */
+    XiValue *elem_vals[64];
+    uint16_t safe_n = n > 64 ? 64 : n;
+    for (uint16_t i = 0; i < safe_n; i++) {
+        elem_vals[i] = xi_lower_expr(l, tup->elements[i]);
+        if (!elem_vals[i])
+            return NULL;
+    }
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiValue *tup_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_NEW, result_type, safe_n);
+    if (!tup_val)
+        return NULL;
+    for (uint16_t i = 0; i < safe_n; i++)
+        tup_val->args[i] = elem_vals[i];
+    tup_val->aux_int = safe_n;
+    tup_val->line = (uint32_t) node->line;
+    return tup_val;
 }
 
 static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
@@ -2755,6 +2805,8 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
             return lower_index_set(l, node);
         case AST_ARRAY_LITERAL:
             return lower_array_literal(l, node);
+        case AST_TUPLE_LITERAL:
+            return lower_tuple_literal(l, node);
         case AST_MAP_LITERAL:
             return lower_map_literal(l, node);
 

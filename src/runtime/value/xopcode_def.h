@@ -151,6 +151,8 @@
     _(RETURN1, FMT_A, KOP_A_USE, "return R[A] (fast)")                                             \
     _(NEWARRAY, FMT_ABC, KOP_NEW_CONTAINER, "R[A] = [], B=capacity, C=storage")                    \
     _(NEWMAP, FMT_ABC, KOP_NEW_CONTAINER, "R[A] = #{}, B=capacity, C=storage")                     \
+    _(NEWTUPLE, FMT_AB, KOP_AB_NEW_LIT, "R[A] = (R[A+1]..R[A+B]), B=arity")                        \
+    _(TUPLE_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].C (tuple, C=field_index)")                 \
     _(NEWSET, FMT_AB, KOP_AB_NEW_LIT, "R[A] = #[], B=storage")                                     \
     _(NEWSTRINGBUILDER, FMT_AB, KOP_AB_NEW_LIT, "R[A] = new StringBuilder(), B=storage")           \
     _(NEWRANGE, FMT_ABC, KOP_ABC_BIN, "R[A] = Range(R[B], R[C])")                                  \

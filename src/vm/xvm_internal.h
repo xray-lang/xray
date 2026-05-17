@@ -25,6 +25,7 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
+#include "../runtime/object/xtuple.h"
 #include "../runtime/object/xset.h"
 #include "../runtime/object/xjson.h"
 #include "../runtime/class/xinstance.h"

@@ -248,6 +248,8 @@ typedef enum {
                      * result: T? (sealed Json or null on validation failure) */
     XI_ARRAY_NEW,   /* new array: args[0]=capacity */
     XI_MAP_NEW,     /* new map: args[0]=capacity */
+    XI_TUPLE_NEW,   /* new tuple: args[0..n-1]=elements, aux_int=n (arity) */
+    XI_TUPLE_GET,   /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
 
     /* Function calls */
     XI_CALL,         /* function call: args[0]=callee, args[1..n]=params

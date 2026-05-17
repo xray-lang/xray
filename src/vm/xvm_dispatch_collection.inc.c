@@ -95,6 +95,52 @@ vmcase(OP_NEWARRAY) {
     vmbreak;
 }
 
+vmcase(OP_NEWTUPLE) {
+    /* OP_NEWTUPLE: build a new tuple from B consecutive elements
+    ** A = destination register
+    ** B = arity (== element count)
+    ** C = unused
+    **
+    ** Elements are read from R[A+1..A+B] (same convention as the
+    ** untyped path of OP_NEWARRAY).  Tuples are immutable from user
+    ** code, so the construction-then-publish pattern is the only
+    ** writer of element slots.
+    */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    XrTuple *tup = xr_tuple_new(VM_CURRENT_CORO, (uint16_t) b);
+    if (tup) {
+        for (int j = 0; j < b; j++)
+            xr_tuple_set(tup, (uint16_t) j, R(a + 1 + j));
+    }
+    R(a) = xr_value_from_tuple(tup);
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
+vmcase(OP_TUPLE_GET) {
+    /* OP_TUPLE_GET: read a tuple field by compile-time index
+    ** A = destination register
+    ** B = tuple register
+    ** C = zero-based field index (0..arity-1)
+    **
+    ** The analyzer has already bounds-checked C against the tuple's
+    ** static arity, so out-of-range access here is impossible from
+    ** legal source.  xr_tuple_get keeps a defensive guard regardless
+    ** (it returns null on bad input rather than dereferencing past
+    ** the flexible array).
+    */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrValue tv = R(b);
+    if (!XR_IS_TUPLE(tv)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "OP_TUPLE_GET: receiver is not a tuple");
+    }
+    R(a) = xr_tuple_get(XR_TO_TUPLE(tv), (uint16_t) c);
+    vmbreak;
+}
+
 vmcase(OP_NEWMAP) {
     /* OP_NEWMAP: create Map
     ** A = destination register

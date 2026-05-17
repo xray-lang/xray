@@ -88,6 +88,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_STRUCT_GET:
         case XI_INDEX_GET:
         case XI_JSON_GET_F:
+        case XI_TUPLE_GET:
         case XI_GET_SHARED:
         case XI_GET_GLOBAL:
         case XI_LOAD_UPVAL:
@@ -113,6 +114,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_JSON_DECODE:
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
+        case XI_TUPLE_NEW:
         case XI_SET_NEW:
         case XI_CHAN_NEW:
         case XI_CLOSURE_NEW:

@@ -87,6 +87,12 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
              * all other args are captured values → HEAP_ESCAPE. */
             return (arg_idx >= 1) ? XI_ESC_HEAP : XI_ESC_NONE;
 
+        /* ---- HEAP_ESCAPE: tuple stores every element ---- */
+        case XI_TUPLE_NEW:
+            /* Every arg is a tuple element retained by the new tuple.
+             * Tuples are immutable, so this is the only writer. */
+            return XI_ESC_HEAP;
+
         /* ---- ARG_ESCAPE: passed out of function ---- */
         case XI_THROW: /* exception leaves the function */
             return XI_ESC_ARG;
@@ -158,6 +164,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         case XI_LOAD_FIELD:
         case XI_STRUCT_GET:
         case XI_JSON_GET_F:
+        case XI_TUPLE_GET:
             return XI_ESC_NONE;
 
         /* ---- Assertions: consume value for checking, no escape ---- */

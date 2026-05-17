@@ -308,6 +308,7 @@ XrValue xr_string_value(XrString *str) {
 DEFINE_VALUE_OPS_WITH_MACRO(array, XR_IS_ARRAY, XrArray)
 DEFINE_VALUE_OPS_WITH_MACRO(map, XR_IS_MAP, struct XrMap)
 DEFINE_VALUE_OPS_WITH_MACRO(set, XR_IS_SET, struct XrSet)
+DEFINE_VALUE_OPS_WITH_MACRO(tuple, XR_IS_TUPLE, struct XrTuple)
 DEFINE_VALUE_OPS_WITH_MACRO(module, XR_IS_MODULE, struct XrModule)
 
 /* ========== OOP Value Operations ========== */

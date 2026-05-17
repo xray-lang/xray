@@ -194,6 +194,8 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst);
