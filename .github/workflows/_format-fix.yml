@@ -1,0 +1,49 @@
+name: Format Fix (one-shot)
+
+# One-shot workflow: pin clang-format-19 (matches the version the
+# `Code Format Check` job uses), reformat the tree, and push the
+# result back. Manual trigger only — delete the file once the
+# format gate is green.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  format-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install clang-format-19
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-format-19
+
+      - name: Reformat C/H files
+        run: |
+          set -e
+          find src include tests -type f \( -name '*.c' -o -name '*.h' \) \
+              -not -path '*/generated/*' \
+              -print0 | xargs -0 clang-format-19 -i
+          git diff --stat
+
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if git diff --quiet; then
+            echo "No format diff to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Auto-format with clang-format-19"
+          git push origin HEAD:main
