@@ -654,6 +654,24 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 
+    /* Diag: dump obj+AST context when obj->type looks corrupted. */
+    if (obj->type) {
+        unsigned char b = *(unsigned char *) &obj->type->is_value_type;
+        if (b != 0 && b != 1) {
+            const char *obj_name = (ma->object && ma->object->type == AST_VARIABLE)
+                                       ? ma->object->as.variable.name
+                                       : "(non-variable)";
+            fprintf(stderr,
+                    "[diag lower_member_access] member='%s' obj_kind=%d "
+                    "obj_var=%u obj_type=%p ast_kind=%d ast_var='%s' line=%d\n",
+                    ma->name ? ma->name : "(null)", (int) obj->kind,
+                    (unsigned) obj->var_id, (void *) obj->type,
+                    ma->object ? (int) ma->object->type : -1,
+                    obj_name ? obj_name : "(null)", node->line);
+            fflush(stderr);
+        }
+    }
+
     /* Struct with compile-time layout → XI_STRUCT_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
     XrStructLayout *slayout = struct_layout_of(obj->type);
