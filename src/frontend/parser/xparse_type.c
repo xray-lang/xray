@@ -222,8 +222,20 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         parser->current = saved_current;
     }
 
-    /* Tuple type: (T1, T2) */
+    /* Tuple type: (T1, T2) -- and the unit type "()", which is the
+     * canonical return-type syntax for procedures and surfaces in
+     * sources like `fn deep(): () { throw "boom" }`. The empty
+     * parenthesis form is *not* an empty tuple (xr_tref_tuple asserts
+     * count > 0); it is the unit/void marker, which is what the
+     * function-return path in xparse_decl already manufactures via
+     * xr_tref_unit when the colon is omitted. We need the same
+     * decoding here so that explicit `: ()` annotations parse to the
+     * same canonical form instead of fatally tripping the empty-tuple
+     * DCHECK. */
     if (xr_parser_match(parser, TK_LPAREN)) {
+        if (xr_parser_match(parser, TK_RPAREN)) {
+            return xr_tref_unit(parser->X);
+        }
         XrTypeRef *elems[16];
         int count = 0;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
