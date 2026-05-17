@@ -40,7 +40,15 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
     ml.parent = l;
     ml.repl_mode = l->repl_mode;
 
-    ml.func = xi_func_new(m->name, m->return_type ? m->return_type : ml.type_void);
+    /* MethodDeclNode->return_type is XrTypeRef* (AST syntax). Resolve it
+     * to a runtime XrType* before assigning to XiFunc->return_type;
+     * mixing the two struct layouts produces garbage downstream when
+     * lowering reads bool fields like is_value_type / is_nullable. */
+    struct XrType *m_ret =
+        m->return_type ? xr_tref_resolve(l->isolate, m->return_type) : ml.type_void;
+    if (!m_ret)
+        m_ret = ml.type_void;
+    ml.func = xi_func_new(m->name, m_ret);
     if (!ml.func) {
         xi_lower_cleanup(&ml);
         return NULL;
@@ -71,9 +79,16 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
         base = 1;
     }
 
-    /* User-declared parameters */
+    /* User-declared parameters. m->param_types is XrTypeRef** (AST
+     * syntax), not XrType** — resolve each entry through the analyzer
+     * resolver so XiValue->type carries a real runtime type. */
     for (int i = 0; i < m->param_count; i++) {
-        struct XrType *pt = (m->param_types && m->param_types[i]) ? m->param_types[i] : ml.type_any;
+        struct XrType *pt = ml.type_any;
+        if (m->param_types && m->param_types[i]) {
+            struct XrType *resolved = xr_tref_resolve(l->isolate, m->param_types[i]);
+            if (resolved)
+                pt = resolved;
+        }
         XiValue *p = xi_param(ml.func, entry, (uint16_t) (base + i), pt);
         ml.func->params[base + i] = p;
         XR_DCHECK(m->parameters != NULL && m->parameters[i] != NULL,
