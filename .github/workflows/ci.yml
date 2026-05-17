@@ -445,6 +445,26 @@ jobs:
               -DENABLE_UBSAN=ON
               -DCMAKE_C_COMPILER=clang
               -DCMAKE_CXX_COMPILER=clang++
+            build_config: Debug
+
+          - name: linux-msan-jit
+            # MemorySanitizer (Clang). Reads of uninitialised memory
+            # across heap / stack / register are the primary signal here.
+            # GitHub-hosted ubuntu runners do not ship an instrumented
+            # libc, so cross-library false positives are expected to
+            # appear until either an MSan-instrumented libc / libc++ is
+            # vendored or per-library blacklists are tightened. The
+            # job-level `continue-on-error: true` (W1 baseline) keeps
+            # this matrix slot informational while the real signal-to-
+            # noise ratio is measured.
+            os: ubuntu-latest
+            short_name: linux-msan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_MSAN=ON
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+            build_config: Debug
 
           - name: macos-arm64-asan-jit
             os: macos-latest
@@ -453,6 +473,21 @@ jobs:
               -DCMAKE_BUILD_TYPE=Debug
               -DENABLE_ASAN=ON
               -DENABLE_UBSAN=ON
+            build_config: Debug
+
+          - name: macos-x64-asan-jit
+            # macos-13 is the only currently-available Intel runner.
+            # The runner image is in deprecation but no x86_64-capable
+            # successor exists; once it disappears we either drop this
+            # slot or self-host. Until then it is the only signal we
+            # have for x86_64-specific JIT codegen bugs on macOS.
+            os: macos-13
+            short_name: macos-x64-asan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_ASAN=ON
+              -DENABLE_UBSAN=ON
+            build_config: Debug
 
           - name: windows-msvc-debug-jit
             os: windows-2022
@@ -461,6 +496,18 @@ jobs:
             # explicit sanitizer flag is needed and MSVC ASan adds
             # noise around CRT internals.
             cmake_flags: -DCMAKE_BUILD_TYPE=Debug
+            build_config: Debug
+
+          - name: windows-msvc-release-jit
+            os: windows-2022
+            short_name: windows-msvc-release
+            # Release build (/MD) drops the Debug-CRT heap fill that
+            # surfaced bug #5 (stale R11 read on XM_JMP_RET) on the
+            # windows-msvc-debug job. The pair forces optimisation- and
+            # heap-fill-sensitive regressions to fail on whichever
+            # matrix slot they manifest in, instead of the lucky one.
+            cmake_flags: -DCMAKE_BUILD_TYPE=Release
+            build_config: Release
 
     runs-on: ${{ matrix.os }}
     name: JIT-force PR (${{ matrix.short_name }})
@@ -473,6 +520,12 @@ jobs:
       XRAY_JIT_FORCE: "1"
       ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1"
       UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+      # MSan reports on this matrix are informational (continue-on-error
+      # at job level). halt_on_error=0 lets each test surface every
+      # uninit read instead of aborting on the first one, which gives
+      # a clearer picture of the false-positive surface from
+      # non-instrumented system libraries.
+      MSAN_OPTIONS: "halt_on_error=0:print_stats=1:abort_on_error=0:exit_code=86"
       # Dump per-test stdout/stderr (incl. sanitizer reports) at the
       # end of the regression run so the W2 triage no longer needs a
       # local sanitizer build to read root causes.
@@ -515,7 +568,7 @@ jobs:
           -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
 
       - name: Build
-        run: cmake --build build --config Debug -j
+        run: cmake --build build --config ${{ matrix.build_config }} -j
 
       - name: Stage vcpkg runtime DLLs next to xray.exe (Windows)
         # vcpkg's x64-windows-release triplet links against shared zlib;
@@ -526,7 +579,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $bin = "${{ github.workspace }}/build/Debug"
+          $bin = "${{ github.workspace }}/build/${{ matrix.build_config }}"
           $dll = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-release/bin"
           if (Test-Path $dll) {
             Copy-Item -Path "$dll/*.dll" -Destination $bin -Force
@@ -558,6 +611,6 @@ jobs:
         run: |
           ./scripts/run_regression_tests.sh
         env:
-          XRAY_PATH: ./build/Debug/xray.exe
+          XRAY_PATH: ./build/${{ matrix.build_config }}/xray.exe
           XRAY_BUILD_DIR: ./build
           XRAY_TEST_TIMEOUT: "60"
