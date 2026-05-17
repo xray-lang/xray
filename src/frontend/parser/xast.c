@@ -1161,6 +1161,15 @@ AstNode *xr_ast_pattern_multi(XrayIsolate *X, AstNode **patterns, int count, int
     return node;
 }
 
+// Create tuple pattern node — positional, fixed arity.
+// (a, b)  /  (0, _)  /  ((x, y), z)
+AstNode *xr_ast_pattern_tuple(XrayIsolate *X, AstNode **patterns, int count, int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_TUPLE, line);
+    node->as.pattern_tuple.patterns = patterns;
+    node->as.pattern_tuple.count = count;
+    return node;
+}
+
 // Destroy a program AST and its owning arena.
 // Releases every AST node, array, and string allocated during parsing in O(1).
 // For program nodes from xr_parse_recoverable (LSP), the caller owns the

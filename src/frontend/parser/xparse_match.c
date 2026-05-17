@@ -20,29 +20,79 @@
  * Supports:
  * - Literal pattern: 1, "hello", true, HttpStatus.OK
  * - Range pattern: 1..10
- * - Multi-value pattern: 1, 2, 3
+ * - Multi-value pattern (alternation): 1, 2, 3
  * - Wildcard pattern: _
+ * - Tuple pattern: (a, b) / (0, _) / ((x, y), z)
  */
-static AstNode *parse_pattern(Parser *parser) {
-    XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
+static AstNode *parse_pattern(Parser *parser);
+static AstNode *parse_pattern_single(Parser *parser);
+
+/* Parse a positional tuple pattern starting at the current `(` token.
+ * `()`, `(p,)` and `(p1, p2, ...)` are all accepted; sub-patterns
+ * recurse through parse_pattern_single (NOT the alternation form), so
+ * a comma inside the tuple terminates the element instead of starting
+ * a `1 | 2 | 3`-style alternation. */
+static AstNode *parse_tuple_pattern(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_tuple_pattern: NULL parser");
+    int line = parser->current.line;
+    xr_parser_consume(parser, TK_LPAREN, "expected '(' to start tuple pattern");
+
+    AstNode **patterns = NULL;
+    int count = 0;
+    int capacity = 0;
+
+    while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity = (capacity == 0) ? 4 : capacity * 2;
+            AstNode **_new =
+                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            if (old_capacity > 0 && patterns)
+                memcpy(_new, patterns, sizeof(AstNode *) * (size_t) old_capacity);
+            patterns = _new;
+        }
+
+        AstNode *sub = parse_pattern_single(parser);
+        if (!sub)
+            return NULL;
+        patterns[count++] = sub;
+
+        if (xr_parser_check(parser, TK_RPAREN))
+            break;
+        if (!xr_parser_match(parser, TK_COMMA)) {
+            xr_parser_error(parser, "expected ',' or ')' in tuple pattern");
+            return NULL;
+        }
+    }
+
+    xr_parser_consume(parser, TK_RPAREN, "expected ')' to close tuple pattern");
+    return xr_ast_pattern_tuple(parser->X, patterns, count, line);
+}
+
+/* Parse exactly one pattern atom — wildcard, tuple destructure,
+ * literal, range, or binding identifier. Crucially this does NOT
+ * collapse a trailing `, …` into an alternation pattern; the caller
+ * (a tuple-element loop or a match-arm head) decides how to interpret
+ * the comma. */
+static AstNode *parse_pattern_single(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_pattern_single: NULL parser");
     int line = parser->current.line;
 
-    // Wildcard pattern
     if (xr_parser_match(parser, TK_UNDERSCORE)) {
         return xr_ast_pattern_wildcard(parser->X, line);
     }
 
-    // Parse first value (may be literal or enum access)
-    // Use PREC_CALL to support member access expressions (e.g. HttpStatus.OK)
+    if (xr_parser_check(parser, TK_LPAREN)) {
+        return parse_tuple_pattern(parser);
+    }
+
     AstNode *first = xr_parse_precedence(parser, PREC_CALL);
     if (!first) {
         xr_parser_error(parser, "expected pattern");
         return NULL;
     }
 
-    // Check if range pattern
     if (xr_parser_match(parser, TK_RANGE)) {
-        // Range pattern: 1..10
         AstNode *end = xr_parse_precedence(parser, PREC_CALL);
         if (!end) {
             xr_parser_error(parser, "expected range end value");
@@ -51,41 +101,52 @@ static AstNode *parse_pattern(Parser *parser) {
         return xr_ast_pattern_range(parser->X, first, end, line);
     }
 
-    // Check if multi-value pattern
-    if (xr_parser_check(parser, TK_COMMA)) {
-        // Multi-value pattern: 1, 2, 3
-        AstNode **patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
-        int count = 0;
-        int capacity = 16;
+    return xr_ast_pattern_literal(parser->X, first, line);
+}
 
-        // First pattern
-        patterns[count++] = xr_ast_pattern_literal(parser->X, first, line);
+/* Top-level match-arm pattern: parse one atom, then optionally fold
+ * in further atoms separated by `,` into an alternation pattern up
+ * to the `=>`. This is the only place where a top-level comma starts
+ * an alternation; tuple sub-elements use parse_pattern_single. */
+static AstNode *parse_pattern(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
+    int line = parser->current.line;
 
-        // Subsequent patterns
-        while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_ARROW)) {
-            if (count >= capacity) {
-                int old_capacity = capacity;
-                capacity *= 2;
-                AstNode **_new_patterns =
-                    (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
-                if (old_capacity > 0 && patterns)
-                    memcpy(_new_patterns, patterns, sizeof(AstNode *) * (size_t) old_capacity);
-                patterns = _new_patterns;
-            }
+    AstNode *first = parse_pattern_single(parser);
+    if (!first)
+        return NULL;
 
-            AstNode *value = xr_parse_precedence(parser, PREC_CALL);
-            if (!value) {
-                xr_parser_error(parser, "expected pattern value");
-                break;
-            }
-            patterns[count++] = xr_ast_pattern_literal(parser->X, value, line);
+    if (!xr_parser_check(parser, TK_COMMA))
+        return first;
+
+    /* Alternation: `p1, p2, p3 => ...` — gather until the arrow.
+     * The first atom may itself be a tuple/range/wildcard pattern. */
+    AstNode **patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
+    int count = 0;
+    int capacity = 16;
+    patterns[count++] = first;
+
+    while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_ARROW) &&
+           !xr_parser_check(parser, TK_IF)) {
+        if (count >= capacity) {
+            int old_capacity = capacity;
+            capacity *= 2;
+            AstNode **_new_patterns =
+                (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) capacity);
+            if (old_capacity > 0 && patterns)
+                memcpy(_new_patterns, patterns, sizeof(AstNode *) * (size_t) old_capacity);
+            patterns = _new_patterns;
         }
 
-        return xr_ast_pattern_multi(parser->X, patterns, count, line);
+        AstNode *next = parse_pattern_single(parser);
+        if (!next) {
+            xr_parser_error(parser, "expected pattern value");
+            break;
+        }
+        patterns[count++] = next;
     }
 
-    // Single literal pattern
-    return xr_ast_pattern_literal(parser->X, first, line);
+    return xr_ast_pattern_multi(parser->X, patterns, count, line);
 }
 
 /*

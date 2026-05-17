@@ -153,6 +153,65 @@ static void collect_matched_enum_members(AstNode *pattern, const char ***names, 
     }
 }
 
+// Detect whether the pattern introduces any name bindings.
+// Top-level `name => ...` and any AST_VARIABLE buried inside a tuple
+// pattern both count; everything else (literals, ranges, wildcards,
+// alternations) is binding-free.
+static bool pattern_has_binding(AstNode *pattern) {
+    if (!pattern)
+        return false;
+    if (pattern->type == AST_PATTERN_LITERAL) {
+        AstNode *pval = pattern->as.pattern_literal.value;
+        return pval && pval->type == AST_VARIABLE;
+    }
+    if (pattern->type == AST_PATTERN_TUPLE) {
+        PatternTupleNode *tp = &pattern->as.pattern_tuple;
+        for (int i = 0; i < tp->count; i++) {
+            if (pattern_has_binding(tp->patterns[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+// Recursively register binding symbols introduced by `pattern` into the
+// current scope. `slot_type` is the static type of the value flowing
+// into this position; for tuple sub-slots it's drawn from the tuple's
+// declared element types when the scrutinee is a known tuple type.
+static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrType *slot_type) {
+    if (!ctx || !pattern)
+        return;
+
+    if (pattern->type == AST_PATTERN_LITERAL) {
+        AstNode *pval = pattern->as.pattern_literal.value;
+        if (pval && pval->type == AST_VARIABLE) {
+            XaSymbol *bind_sym = xa_symbol_new(pval->as.variable.name, XA_SYM_VARIABLE);
+            bind_sym->location.line = pval->line;
+            xa_scope_add_symbol(ctx->analyzer->current_scope, bind_sym);
+            XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
+            if (bind_links) {
+                bind_links->type = slot_type ? slot_type : xr_type_new_unknown(NULL);
+                bind_links->is_definitely_assigned = true;
+            }
+            pval->as.variable.symbol_id = bind_sym->id;
+        }
+        return;
+    }
+
+    if (pattern->type == AST_PATTERN_TUPLE) {
+        PatternTupleNode *tp = &pattern->as.pattern_tuple;
+        for (int i = 0; i < tp->count; i++) {
+            AstNode *sub = tp->patterns[i];
+            if (!sub)
+                continue;
+            XrType *elem_type = NULL;
+            if (slot_type && XR_TYPE_IS_TUPLE(slot_type))
+                elem_type = xr_type_tuple_get(slot_type, i);
+            register_pattern_bindings(ctx, sub, elem_type);
+        }
+    }
+}
+
 XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -185,22 +244,14 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
             has_wildcard = true;
         }
 
-        // Register binding variable if pattern is a variable capture (e.g. n if (n < 0) => ...)
-        bool has_binding = false;
-        if (arm_node->pattern && arm_node->pattern->type == AST_PATTERN_LITERAL) {
-            AstNode *pval = arm_node->pattern->as.pattern_literal.value;
-            if (pval && pval->type == AST_VARIABLE) {
-                has_binding = true;
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, arm);
-                XaSymbol *bind_sym = xa_symbol_new(pval->as.variable.name, XA_SYM_VARIABLE);
-                bind_sym->location.line = pval->line;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, bind_sym);
-                XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
-                if (bind_links) {
-                    bind_links->type = subject_type ? subject_type : xr_type_new_unknown(NULL);
-                    bind_links->is_definitely_assigned = true;
-                }
-            }
+        // Register binding variables in the pattern. Both top-level
+        // bare-name patterns (`n if (n < 0) => ...`) and identifiers
+        // captured by a tuple destructure (`(x, _) => x + 1`) need
+        // fresh scoped symbols typed from the matching subject slot.
+        bool has_binding = pattern_has_binding(arm_node->pattern);
+        if (has_binding) {
+            xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, arm);
+            register_pattern_bindings(ctx, arm_node->pattern, subject_type);
         }
 
         // Infer guard if present

@@ -253,6 +253,27 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 continue;
             }
 
+            /* Tuple projection: TUPLE_GET(TUPLE_NEW(e0..en-1), idx) → COPY(e_idx).
+             * Tuples are immutable, so the source slot is always the literal
+             * element passed at construction time.  Out-of-range indices are
+             * impossible: the analyzer rejects them and the verifier asserts
+             * arity, so reaching this peephole with idx >= nargs would be a
+             * compiler bug — leave the GET intact and let later stages fail
+             * loudly. */
+            if (v->op == XI_TUPLE_GET && v->nargs == 1 && v->args[0] &&
+                v->args[0]->op == XI_TUPLE_NEW) {
+                XiValue *tup = v->args[0];
+                int64_t idx = v->aux_int;
+                if (idx >= 0 && (uint16_t) idx < tup->nargs && tup->args[(uint16_t) idx]) {
+                    v->op = XI_COPY;
+                    v->args[0] = tup->args[(uint16_t) idx];
+                    v->aux_int = 0;
+                    /* nargs already 1; type stays as the projected element's type */
+                    chg.values_changed = true;
+                    continue;
+                }
+            }
+
             /* Binary: need exactly 2 args */
             if (v->nargs != 2)
                 continue;

@@ -592,6 +592,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.pattern_multi.patterns = clone_node_array(node->as.pattern_multi.patterns,
                                                             node->as.pattern_multi.count, map, mc);
             break;
+        case AST_PATTERN_TUPLE:
+            n->as.pattern_tuple.count = node->as.pattern_tuple.count;
+            n->as.pattern_tuple.patterns = clone_node_array(node->as.pattern_tuple.patterns,
+                                                            node->as.pattern_tuple.count, map, mc);
+            break;
 
         // === Coroutine nodes ===
         case AST_GO_EXPR:

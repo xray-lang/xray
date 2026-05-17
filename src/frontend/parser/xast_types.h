@@ -181,7 +181,8 @@ typedef enum {
     AST_PATTERN_LITERAL,   // 1, "hello", true
     AST_PATTERN_RANGE,     // 1..10
     AST_PATTERN_WILDCARD,  // _
-    AST_PATTERN_MULTI,     // 1, 2, 3
+    AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
+    AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
 
     // Type alias
     AST_TYPE_ALIAS,  // type User = { name: string, age: int }
