@@ -205,11 +205,16 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     if (!pool)
         return;
 
-    // Set shutdown flag
-    atomic_store(&pool->running, false);
-
-    // Wake all waiting async threads
+    // Set shutdown flag *inside* the mutex, paired with the broadcast,
+    // so that any thread sitting in cond_wait observes the flip on the
+    // same happens-before edge it uses to relock the mutex. The previous
+    // ordering (store outside, broadcast inside) opened a window where
+    // a waiter that had just popped from cond_wait could re-check the
+    // loop predicate at xasync.c:97 against a value MSan tracked as
+    // released by xr_runtime_destroy's free(pool), surfacing the
+    // shutdown UAF reported on 1148_scope_race_stress.xr.
     xr_mutex_lock(&pool->queue_mutex);
+    atomic_store(&pool->running, false);
     xr_cond_broadcast(&pool->queue_cond);
     xr_mutex_unlock(&pool->queue_mutex);
 
