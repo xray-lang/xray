@@ -584,6 +584,29 @@ static void gc_record_shared_ref(XrCoroGC *gc, XrGCHeader *obj) {
 void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
     if (!obj)
         return;
+    // Validate that obj actually looks like a GCHeader.  Conservative
+    // stack scanning (mark_coro_roots) reads XrValue slots in vm_ctx.stack
+    // and treats any slot whose tag byte equals XR_TAG_PTR as a live
+    // reference.  In JIT-compiled frames vm_ctx.stack is never written
+    // (the JIT keeps locals in registers / its own spill slots), so the
+    // tag/heap_type/ptr triplet observed there can be leftover bytes from
+    // an earlier collection.  A stale tag=PTR with a stale ptr that no
+    // longer addresses a live object would otherwise pass through here,
+    // and reallymarkobject would happily set the "marked" byte at
+    // obj+9 — corrupting whatever GCHeader.gc_next byte happens to live
+    // at that address in another, still-live chain link (the 1206 crash:
+    // 0x248 → 0x448 corruption traced to markobject(0x...278), where
+    // 0x278+9 == 0x281 is byte 1 of the adjacent 0x280 MAP's gc_next).
+    //
+    // A genuine GC object satisfies all four checks; arbitrary bytes from
+    // an uninitialised stack slot do not, so this rejects the garbage
+    // without missing any live root.
+    if (((uintptr_t) obj & 7) != 0)
+        return;  // GCHeader is always 8-byte aligned
+    if (obj->type >= XGC_MAX_TYPES)
+        return;  // type id is a small enum
+    if (obj->objsize < sizeof(XrGCHeader) || (obj->objsize & 7) != 0)
+        return;  // objsize is header + payload, 8-byte aligned, >=16
     // Shared objects: track reference but don't mark (managed by refcount)
     if (XR_GC_IS_SHARED(obj)) {
         /* Defensive: every real shared object is allocated via
@@ -922,7 +945,19 @@ static void mark_coro_roots(XrCoroGC *gc) {
     if (coro->jit_ctx && coro->jit_ctx->call_closure)
         xr_coro_gc_markobject(gc, (XrGCHeader *) coro->jit_ctx->call_closure);
 
-    // Mark JIT GC stack map roots (compile-time bitmap)
+    // Mark JIT GC stack map roots (compile-time bitmap).  The frame layout
+    // (callee-saved offsets, SPILL_BASE=176, FP-chain offsets 160/168) and
+    // register-index meanings (x1-x15 caller-saved, x21-x27 callee-saved)
+    // below are ARM64-specific.  On x64 the JIT prologue uses PUSH r64 to
+    // save callee-saved GPs and SPILL_BASE is 88 (Win64) / 40 (SysV); reading
+    // these offsets as if they were ARM64 produces garbage pointers that get
+    // passed to xr_coro_gc_markobject, which then writes the "marked" byte
+    // (offset 9) of the garbage address — corrupting a nearby chain link's
+    // gc_next byte 1 and turning e.g. 0x248 into 0x448, which is exactly the
+    // chain corruption that crashes sweep_block in 1206_gc_enhanced under
+    // --jit-force.  A proper x64 GC stack map scanner is future work; for now
+    // we only run this block on AArch64.
+#if defined(__aarch64__) || defined(_M_ARM64)
     // Innermost frame: scan registers (from safepoint_saved_sp) + spill slots
     // Caller frames: scan spill slots only (PTR regs written back before calls)
     if (coro->jit_ctx && coro->jit_ctx->active_stack_map) {
@@ -1082,6 +1117,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
             }
         }
     }
+#endif  // __aarch64__ || _M_ARM64
 
     // Mark external roots registered by C extensions
     for (XrCoroGCRootEntry *re = gc->root_callbacks; re; re = re->next) {
