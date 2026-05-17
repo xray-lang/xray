@@ -662,9 +662,9 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
                                        ? ma->object->as.variable.name
                                        : "(non-variable)";
             fprintf(stderr,
-                    "[diag lower_member_access] member='%s' obj_kind=%d "
+                    "[diag lower_member_access] member='%s' obj_op=%u "
                     "obj_var=%u obj_type=%p ast_kind=%d ast_var='%s' line=%d\n",
-                    ma->name ? ma->name : "(null)", (int) obj->kind,
+                    ma->name ? ma->name : "(null)", (unsigned) obj->op,
                     (unsigned) obj->var_id, (void *) obj->type,
                     ma->object ? (int) ma->object->type : -1,
                     obj_name ? obj_name : "(null)", node->line);
