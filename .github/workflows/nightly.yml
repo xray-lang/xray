@@ -173,7 +173,14 @@ jobs:
 
     env:
       XRAY_JIT_FORCE: "1"
-      MSAN_OPTIONS: "halt_on_error=1:print_stats=1:abort_on_error=1"
+      # halt_on_error=0 + exit_code=86 lets every uninit read in a single
+      # test surface (instead of aborting on the first), and marks the
+      # test as failed without taking the whole runner down. Mirrors the
+      # PR matrix linux-msan slot in ci.yml.
+      MSAN_OPTIONS: "halt_on_error=0:print_stats=1:abort_on_error=0:exit_code=86"
+      # Dump per-test stdout/stderr (sanitizer trace) on failure so triage
+      # does not need a local MSan build. Mirrors PR matrix in ci.yml.
+      XRAY_TEST_DUMP_FAILED: "1"
 
     steps:
       - uses: actions/checkout@v4
