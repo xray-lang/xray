@@ -51,6 +51,28 @@ The verification protocol for each bug:
   recommended way to reproduce on a host with a more aggressive
   scheduler (or on the original author's machine).
 
+## Gating-script differential verification
+
+The 082 plan §3.4 / §5.3 require that every CI-gating script is
+itself verified by deliberately introducing the violation it
+catches and confirming the script fails. Each row below is a
+one-shot perturbation re-applied locally on this host (Windows
+MSVC Debug, main @ 6abdb3b), then immediately reverted via
+`git checkout --` once the script's exit code and message were
+captured.
+
+| ID | Script | Perturbation | Expected | Observed |
+|---|---|---|---|---|
+| C.4.1 | `scripts/check_temp_workarounds.sh` | Delete the `sweep-flush` row from `tests/known_temp_workarounds.md` | tag without matching row | exit=1, "source tags without a matching row: sweep-flush" |
+| C.4.2 | `scripts/check_temp_workarounds.sh` | Rename `"throw-heap-type"` to `"throw-heap-type-XX"` in `src/jit/xm_jit_runtime.c` | mismatch reported in both directions | exit=1, "source tags without a matching row: throw-heap-type-XX" + "table rows without a matching source tag: throw-heap-type" |
+| E.5.1 | `scripts/check_codegen_invariants.sh` (E.1) | Append a `switch / default: break;` block to `src/jit/xm_jit_runtime.c` | new silent fallback rejected | exit=1, "FAIL: new silent fallback(s) introduced outside baseline" |
+| E.5.2 | `scripts/check_codegen_invariants.sh` (E.2) | Append `void deprecated_call(void) {}` to `src/jit/xm_jit_runtime.c` | legacy/banned name rejected | exit=1, "FAIL: legacy wrapper / compat shim found: src/jit/xm_jit_runtime.c:1690:void deprecated_call(void) {}" |
+
+E.5.3 (`build/generated/` tracked-in-git rejection) was not
+exercised because it would require staging an actual file under
+the build tree; the check is a one-line `git ls-files | rg`
+whose behaviour is uncontroversial.
+
 ## Why this file is one-shot, not living
 
 - New bugs get their own dedicated regression files in
