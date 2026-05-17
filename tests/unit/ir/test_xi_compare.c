@@ -78,10 +78,14 @@ static XrProto *compile_legacy(const char *source) {
     /* Create context first — its analyzer installs a type pool on the
      * isolate, which the parser needs for creating type annotations. */
     XrCompilerContext *ctx = xr_compiler_context_new(g_iso);
-    if (!ctx) return NULL;
+    if (!ctx)
+        return NULL;
 
     AstNode *program = xr_parse(g_iso, source);
-    if (!program) { xr_compiler_context_free(ctx); return NULL; }
+    if (!program) {
+        xr_compiler_context_free(ctx);
+        return NULL;
+    }
 
     /* Use the context's built-in analyzer */
     xa_analyzer_analyze(ctx->analyzer, "compare.xr", program);
@@ -107,16 +111,19 @@ static XrProto *compile_xi(const char *source) {
     /* Create analyzer first — it installs a type pool on the isolate,
      * which the parser needs for creating type annotations. */
     XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
-    if (!analyzer) return NULL;
+    if (!analyzer)
+        return NULL;
 
     AstNode *program = xr_parse(g_iso, source);
-    if (!program) { xa_analyzer_free(analyzer); return NULL; }
+    if (!program) {
+        xa_analyzer_free(analyzer);
+        return NULL;
+    }
 
     xa_analyzer_analyze(analyzer, "compare.xr", program);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
-    XiPipelineResult res = xi_pipeline_compile_program(
-        program, analyzer, g_iso, &cfg);
+    XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
@@ -147,17 +154,17 @@ static XrProto *compile_xi(const char *source) {
  * payload, then restore. tmpfile() handles platform tempdir lookup
  * and auto-deletes on fclose. */
 #ifdef _WIN32
-#  include <io.h>
-#  define xi_cmp_dup     _dup
-#  define xi_cmp_dup2    _dup2
-#  define xi_cmp_close   _close
-#  define xi_cmp_fileno  _fileno
+#include <io.h>
+#define xi_cmp_dup _dup
+#define xi_cmp_dup2 _dup2
+#define xi_cmp_close _close
+#define xi_cmp_fileno _fileno
 #else
-#  include <unistd.h>
-#  define xi_cmp_dup     dup
-#  define xi_cmp_dup2    dup2
-#  define xi_cmp_close   close
-#  define xi_cmp_fileno  fileno
+#include <unistd.h>
+#define xi_cmp_dup dup
+#define xi_cmp_dup2 dup2
+#define xi_cmp_close close
+#define xi_cmp_fileno fileno
 #endif
 
 /* Execute proto and capture stdout into a heap buffer.
@@ -165,18 +172,22 @@ static XrProto *compile_xi(const char *source) {
  * xr_execute, which doesn't fully reset coro state between
  * sequential runs on the same isolate. */
 static char *execute_and_capture(XrProto *proto) {
-    if (!proto || !g_iso) return NULL;
+    if (!proto || !g_iso)
+        return NULL;
 
     XrCoroutine *main_coro = xr_isolate_get_main_coro(g_iso);
-    if (!main_coro) return NULL;
+    if (!main_coro)
+        return NULL;
     XrClosure *closure = xr_closure_new(g_iso, proto, main_coro);
-    if (!closure) return NULL;
+    if (!closure)
+        return NULL;
     xr_coro_reset_for_call(main_coro, g_iso, closure);
 
     fflush(stdout);
 
     int saved_fd = xi_cmp_dup(xi_cmp_fileno(stdout));
-    if (saved_fd < 0) return NULL;
+    if (saved_fd < 0)
+        return NULL;
 
     FILE *tmp = tmpfile();
     if (!tmp) {
@@ -199,14 +210,14 @@ static char *execute_and_capture(XrProto *proto) {
     xi_cmp_close(saved_fd);
 
     rewind(tmp);
-    char *buf = (char *)xr_malloc(4096);
+    char *buf = (char *) xr_malloc(4096);
     if (!buf) {
         fclose(tmp);
         return NULL;
     }
     size_t n = fread(buf, 1, 4095, tmp);
     buf[n] = '\0';
-    fclose(tmp);  /* tmpfile() deletes on close */
+    fclose(tmp); /* tmpfile() deletes on close */
     return buf;
 }
 
@@ -218,26 +229,26 @@ static void build_histogram(const XrProto *proto, int hist[256]) {
     int count = PROTO_CODE_COUNT(proto);
     for (int i = 0; i < count; i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
-        if (op < 256) hist[op]++;
+        if (op < 256)
+            hist[op]++;
     }
 }
 
 /* Print opcode sequence for debugging */
 static void dump_opcodes(const char *label, const XrProto *proto) {
     int count = PROTO_CODE_COUNT(proto);
-    fprintf(stderr, "  %s (%d insts, maxstack=%d):",
-            label, count, proto->maxstacksize);
+    fprintf(stderr, "  %s (%d insts, maxstack=%d):", label, count, proto->maxstacksize);
     for (int i = 0; i < count && i < 30; i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
         fprintf(stderr, " %s", xr_opcode_name(op));
     }
-    if (count > 30) fprintf(stderr, " ...(+%d)", count - 30);
+    if (count > 30)
+        fprintf(stderr, " ...(+%d)", count - 30);
     fprintf(stderr, "\n");
 }
 
 /* Compare two protos, return similarity score 0.0-1.0 */
-static double compare_protos(const XrProto *legacy, const XrProto *xi,
-                             bool verbose) {
+static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verbose) {
     int hist_l[256], hist_x[256];
     build_histogram(legacy, hist_l);
     build_histogram(xi, hist_x);
@@ -246,30 +257,30 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi,
     int intersection = 0, union_total = 0;
     for (int i = 0; i < 256; i++) {
         int a = hist_l[i], b = hist_x[i];
-        if (a == 0 && b == 0) continue;
+        if (a == 0 && b == 0)
+            continue;
         int min = a < b ? a : b;
         int max = a > b ? a : b;
         intersection += min;
         union_total += max;
     }
 
-    double similarity = union_total > 0
-        ? (double)intersection / union_total : 1.0;
+    double similarity = union_total > 0 ? (double) intersection / union_total : 1.0;
 
     if (verbose) {
         dump_opcodes("legacy", legacy);
         dump_opcodes("xi    ", xi);
-        fprintf(stderr, "  similarity=%.2f  legacy_insts=%d  xi_insts=%d"
+        fprintf(stderr,
+                "  similarity=%.2f  legacy_insts=%d  xi_insts=%d"
                 "  legacy_stack=%d  xi_stack=%d\n",
-                similarity,
-                PROTO_CODE_COUNT(legacy), PROTO_CODE_COUNT(xi),
-                legacy->maxstacksize, xi->maxstacksize);
+                similarity, PROTO_CODE_COUNT(legacy), PROTO_CODE_COUNT(xi), legacy->maxstacksize,
+                xi->maxstacksize);
 
         /* Show opcode differences */
         for (int i = 0; i < 256; i++) {
             if (hist_l[i] != hist_x[i] && (hist_l[i] > 0 || hist_x[i] > 0)) {
-                fprintf(stderr, "    %-20s legacy=%d  xi=%d\n",
-                        xr_opcode_name((OpCode)i), hist_l[i], hist_x[i]);
+                fprintf(stderr, "    %-20s legacy=%d  xi=%d\n", xr_opcode_name((OpCode) i),
+                        hist_l[i], hist_x[i]);
             }
         }
     }
@@ -279,20 +290,20 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi,
 
 /* ========== Test Macro ========== */
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
-#define SKIP(name, reason) \
-    static void run_##name(void) { \
-        printf("--- " #name " --- SKIP: " reason "\n"); \
-        tests_skipped++; \
+#define SKIP(name, reason)                                                                         \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " --- SKIP: " reason "\n");                                            \
+        tests_skipped++;                                                                           \
     }
 
 /* ========== Dual-path comparison helper ========== */
@@ -300,9 +311,9 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi,
 typedef struct {
     const char *source;
     const char *label;
-    bool expect_xi_success;    /* true = Xi pipeline must succeed */
-    double min_similarity;     /* minimum opcode histogram similarity */
-    bool check_exec;           /* compare VM execution output */
+    bool expect_xi_success; /* true = Xi pipeline must succeed */
+    double min_similarity;  /* minimum opcode histogram similarity */
+    bool check_exec;        /* compare VM execution output */
 } CompareSpec;
 
 static void run_compare(CompareSpec spec) {
@@ -324,8 +335,7 @@ static void run_compare(CompareSpec spec) {
 
     /* Both succeeded — compare */
     double sim = compare_protos(p_legacy, p_xi, true);
-    fprintf(stderr, "  → similarity = %.2f (min=%.2f)\n",
-            sim, spec.min_similarity);
+    fprintf(stderr, "  → similarity = %.2f (min=%.2f)\n", sim, spec.min_similarity);
 
     if (sim < spec.min_similarity) {
         fprintf(stderr, "  ⚠ similarity below threshold!\n");
@@ -358,16 +368,18 @@ static void run_compare(CompareSpec spec) {
 
         if (out_l && out_x) {
             bool match = (strcmp(out_l, out_x) == 0);
-            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n",
-                    out_l, out_x, match ? "MATCH" : "MISMATCH");
+            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n", out_l, out_x,
+                    match ? "MATCH" : "MISMATCH");
             assert(match && "execution output must match between legacy and Xi");
         } else {
             fprintf(stderr, "  exec: skipped (capture failed: legacy=%s xi=%s)\n",
                     out_l ? "ok" : "fail", out_x ? "ok" : "fail");
         }
 
-        if (out_l) xr_free(out_l);
-        if (out_x) xr_free(out_x);
+        if (out_l)
+            xr_free(out_l);
+        if (out_x)
+            xr_free(out_x);
     }
 
     if (spec.check_exec) {
@@ -404,7 +416,7 @@ static bool proto_has_opcode(const XrProto *proto, OpCode target) {
 typedef struct {
     const char *source;
     const char *label;
-    OpCode expect_op;      /* opcode that must appear in Xi output */
+    OpCode expect_op; /* opcode that must appear in Xi output */
     bool check_exec;
 } FusionSpec;
 
@@ -416,8 +428,7 @@ static void run_fusion(FusionSpec spec) {
     assert(p_xi != NULL && "Xi pipeline must succeed");
 
     bool has_op = proto_has_opcode(p_xi, spec.expect_op);
-    fprintf(stderr, "  xi has %s: %s\n",
-            xr_opcode_name(spec.expect_op), has_op ? "yes" : "NO");
+    fprintf(stderr, "  xi has %s: %s\n", xr_opcode_name(spec.expect_op), has_op ? "yes" : "NO");
     assert(has_op && "expected fused opcode not found in Xi output");
 
     if (spec.check_exec) {
@@ -425,12 +436,14 @@ static void run_fusion(FusionSpec spec) {
         char *out_x = execute_and_capture(p_xi);
         if (out_l && out_x) {
             bool match = (strcmp(out_l, out_x) == 0);
-            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n",
-                    out_l, out_x, match ? "MATCH" : "MISMATCH");
+            fprintf(stderr, "  exec: legacy=[%s] xi=[%s] %s\n", out_l, out_x,
+                    match ? "MATCH" : "MISMATCH");
             assert(match && "execution output must match");
         }
-        if (out_l) xr_free(out_l);
-        if (out_x) xr_free(out_x);
+        if (out_l)
+            xr_free(out_l);
+        if (out_x)
+            xr_free(out_x);
     }
 
     if (spec.check_exec) {
@@ -447,7 +460,7 @@ static void run_fusion(FusionSpec spec) {
 /* --- Constants --- */
 
 TEST(cmp_int_const) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 42\nprint(x)",
         .label = "int constant",
         .expect_xi_success = true,
@@ -457,7 +470,7 @@ TEST(cmp_int_const) {
 }
 
 TEST(cmp_float_const) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 3.14\nprint(x)",
         .label = "float constant",
         .expect_xi_success = true,
@@ -467,7 +480,7 @@ TEST(cmp_float_const) {
 }
 
 TEST(cmp_bool_const) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = true\nlet b = false\nprint(a)\nprint(b)",
         .label = "bool constants",
         .expect_xi_success = true,
@@ -477,7 +490,7 @@ TEST(cmp_bool_const) {
 }
 
 TEST(cmp_string_const) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let s = \"hello\"\nprint(s)",
         .label = "string constant",
         .expect_xi_success = true,
@@ -487,7 +500,7 @@ TEST(cmp_string_const) {
 }
 
 TEST(cmp_null_const) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = null\nprint(x)",
         .label = "null constant",
         .expect_xi_success = true,
@@ -499,7 +512,7 @@ TEST(cmp_null_const) {
 /* --- Arithmetic --- */
 
 TEST(cmp_add) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 10\nlet b = 20\nlet c = a + b\nprint(c)",
         .label = "addition",
         .expect_xi_success = true,
@@ -509,7 +522,7 @@ TEST(cmp_add) {
 }
 
 TEST(cmp_arith_chain) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 1 + 2 * 3 - 4\nprint(x)",
         .label = "arithmetic chain (const folded)",
         .expect_xi_success = true,
@@ -519,7 +532,7 @@ TEST(cmp_arith_chain) {
 }
 
 TEST(cmp_unary_neg) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 10\nlet y = -x\nprint(y)",
         .label = "unary negation",
         .expect_xi_success = true,
@@ -531,7 +544,7 @@ TEST(cmp_unary_neg) {
 /* --- Control Flow --- */
 
 TEST(cmp_if_else) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 5\nif (x > 3) { print(1) } else { print(0) }",
         .label = "if-else",
         .expect_xi_success = true,
@@ -541,7 +554,7 @@ TEST(cmp_if_else) {
 }
 
 TEST(cmp_if_const_true) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "if (true) { print(1) } else { print(2) }",
         .label = "if with const true (branch elimination)",
         .expect_xi_success = true,
@@ -551,7 +564,7 @@ TEST(cmp_if_const_true) {
 }
 
 TEST(cmp_while_loop) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let i = 0\nwhile (i < 5) { i = i + 1 }\nprint(i)",
         .label = "while loop",
         .expect_xi_success = true,
@@ -563,7 +576,7 @@ TEST(cmp_while_loop) {
 /* --- Multiple Statements --- */
 
 TEST(cmp_multi_print) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "print(1)\nprint(2)\nprint(3)",
         .label = "multiple prints",
         .expect_xi_success = true,
@@ -573,7 +586,7 @@ TEST(cmp_multi_print) {
 }
 
 TEST(cmp_multi_vars) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 1\nlet b = 2\nlet c = 3\n"
                   "let d = a + b + c\nprint(d)",
         .label = "multiple variables + sum",
@@ -586,7 +599,7 @@ TEST(cmp_multi_vars) {
 /* --- Variable Reassignment --- */
 
 TEST(cmp_var_reassign) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 10\nx = x + 5\nx = x * 2\nprint(x)",
         .label = "variable reassignment chain",
         .expect_xi_success = true,
@@ -598,7 +611,7 @@ TEST(cmp_var_reassign) {
 /* --- Comparison Operators --- */
 
 TEST(cmp_comparisons) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 5\nlet b = 10\n"
                   "print(a < b)\nprint(a > b)\n"
                   "print(a == b)\nprint(a != b)",
@@ -612,7 +625,7 @@ TEST(cmp_comparisons) {
 /* --- Logical Operators --- */
 
 TEST(cmp_logical_and) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = true\nlet b = false\n"
                   "print(a && b)\nprint(a && true)",
         .label = "logical AND (short-circuit)",
@@ -623,7 +636,7 @@ TEST(cmp_logical_and) {
 }
 
 TEST(cmp_logical_or) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = false\nlet b = true\n"
                   "print(a || b)\nprint(false || false)",
         .label = "logical OR (short-circuit)",
@@ -634,7 +647,7 @@ TEST(cmp_logical_or) {
 }
 
 TEST(cmp_logical_not) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = true\nprint(!a)\nprint(!false)",
         .label = "logical NOT",
         .expect_xi_success = true,
@@ -646,7 +659,7 @@ TEST(cmp_logical_not) {
 /* --- For Loop --- */
 
 TEST(cmp_for_loop) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let sum = 0\n"
                   "for (let i = 1; i <= 5; i = i + 1) { sum = sum + i }\n"
                   "print(sum)",
@@ -660,7 +673,7 @@ TEST(cmp_for_loop) {
 /* --- Nested Control Flow --- */
 
 TEST(cmp_nested_if) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 15\n"
                   "if (x > 20) { print(1) }\n"
                   "else if (x > 10) { print(2) }\n"
@@ -675,7 +688,7 @@ TEST(cmp_nested_if) {
 /* --- Compound Assignment --- */
 
 TEST(cmp_compound_assign) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)",
         .label = "compound assignment operators",
         .expect_xi_success = true,
@@ -687,7 +700,7 @@ TEST(cmp_compound_assign) {
 /* --- Ternary Expression --- */
 
 TEST(cmp_ternary) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 5\n"
                   "let y = x > 3 ? 100 : 200\n"
                   "print(y)",
@@ -701,7 +714,7 @@ TEST(cmp_ternary) {
 /* --- Break and Continue --- */
 
 TEST(cmp_while_break) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let i = 0\n"
                   "while (true) {\n"
                   "  if (i >= 3) { break }\n"
@@ -715,7 +728,7 @@ TEST(cmp_while_break) {
 }
 
 TEST(cmp_while_continue) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let sum = 0\nlet i = 0\n"
                   "while (i < 6) {\n"
                   "  i = i + 1\n"
@@ -732,7 +745,7 @@ TEST(cmp_while_continue) {
 /* --- Function Declaration + Call --- */
 
 TEST(cmp_func_call) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn add(a: int, b: int): int { return a + b }\n"
                   "let r = add(3, 4)\nprint(r)",
         .label = "function declaration and call",
@@ -743,7 +756,7 @@ TEST(cmp_func_call) {
 }
 
 TEST(cmp_func_recursive) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn fib(n: int): int {\n"
                   "  if (n <= 1) { return n }\n"
                   "  return fib(n - 1) + fib(n - 2)\n"
@@ -758,7 +771,7 @@ TEST(cmp_func_recursive) {
 /* --- Nested Loops --- */
 
 TEST(cmp_nested_loop) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let sum = 0\n"
                   "let i = 0\nwhile (i < 3) {\n"
                   "  let j = 0\n  while (j < 3) {\n"
@@ -774,7 +787,7 @@ TEST(cmp_nested_loop) {
 /* --- String Operations --- */
 
 TEST(cmp_string_concat) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = \"hello\"\nlet b = \" world\"\n"
                   "let c = a + b\nprint(c)",
         .label = "string concatenation",
@@ -786,7 +799,7 @@ TEST(cmp_string_concat) {
 
 TEST(cmp_string_concat_chain) {
     /* Multi-operand chain: "a" + "b" + "c" + "d" flattened to single STRBUF */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = \"hello\"\n"
                   "let b = \" \"\n"
                   "let c = \"world\"\n"
@@ -803,7 +816,7 @@ TEST(cmp_string_concat_chain) {
 /* --- Mixed Types --- */
 
 TEST(cmp_mixed_arith) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 10\nlet b = 3\n"
                   "print(a / b)\nprint(a % b)",
         .label = "integer division and modulo",
@@ -816,7 +829,7 @@ TEST(cmp_mixed_arith) {
 /* --- Nested Function Calls --- */
 
 TEST(cmp_nested_call) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn add(a: int, b: int): int { return a + b }\n"
                   "print(add(1, add(2, 3)))",
         .label = "nested function calls",
@@ -827,7 +840,7 @@ TEST(cmp_nested_call) {
 }
 
 TEST(cmp_func_early_return) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn abs(n: int): int {\n"
                   "  if (n < 0) { return -n }\n"
                   "  return n\n"
@@ -840,7 +853,7 @@ TEST(cmp_func_early_return) {
 }
 
 TEST(cmp_factorial) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn fact(n: int): int {\n"
                   "  if (n <= 1) { return 1 }\n"
                   "  return n * fact(n - 1)\n"
@@ -855,7 +868,7 @@ TEST(cmp_factorial) {
 /* --- Float Arithmetic --- */
 
 TEST(cmp_float_arith) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 3.14\nlet y = 2.0\n"
                   "print(x + y)\nprint(x * y)",
         .label = "float arithmetic",
@@ -868,7 +881,7 @@ TEST(cmp_float_arith) {
 /* --- Scope Shadowing --- */
 
 TEST(cmp_block_scope) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 10\n"
                   "if (true) {\n"
                   "  let y = x + 5\n"
@@ -884,7 +897,7 @@ TEST(cmp_block_scope) {
 /* --- Complex Expressions --- */
 
 TEST(cmp_complex_expr) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 2\nlet b = 3\nlet c = 4\n"
                   "let r = (a + b) * c - a\nprint(r)",
         .label = "complex arithmetic expression",
@@ -895,7 +908,7 @@ TEST(cmp_complex_expr) {
 }
 
 TEST(cmp_for_accumulate) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let sum = 0\n"
                   "for (let i = 1; i <= 10; i = i + 1) {\n"
                   "  sum = sum + i\n"
@@ -908,7 +921,7 @@ TEST(cmp_for_accumulate) {
 }
 
 TEST(cmp_chained_comparison) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 5\nlet b = 10\nlet c = 3\n"
                   "if (a > c && b > a) { print(1) } else { print(0) }",
         .label = "chained comparison with logical and",
@@ -919,7 +932,7 @@ TEST(cmp_chained_comparison) {
 }
 
 TEST(cmp_while_countdown) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let n = 5\nlet result = 1\n"
                   "while (n > 0) {\n"
                   "  result = result * n\n"
@@ -933,7 +946,7 @@ TEST(cmp_while_countdown) {
 }
 
 TEST(cmp_bool_logic) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let t = true\nlet f = false\n"
                   "print(t && t)\nprint(t && f)\n"
                   "print(f || t)\nprint(f || f)",
@@ -947,7 +960,7 @@ TEST(cmp_bool_logic) {
 /* --- Multiple Functions --- */
 
 TEST(cmp_multi_func) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn double(x: int): int { return x * 2 }\n"
                   "fn inc(x: int): int { return x + 1 }\n"
                   "print(inc(double(3)))",
@@ -961,7 +974,7 @@ TEST(cmp_multi_func) {
 /* --- Bitwise Operations --- */
 
 TEST(cmp_bitwise_and_or) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 12\nlet b = 10\n"
                   "print(a & b)\nprint(a | b)",
         .label = "bitwise AND and OR",
@@ -972,7 +985,7 @@ TEST(cmp_bitwise_and_or) {
 }
 
 TEST(cmp_bitwise_xor_shift) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 5\n"
                   "print(a ^ 3)\nprint(a << 2)\nprint(a >> 1)",
         .label = "bitwise XOR and shifts",
@@ -983,7 +996,7 @@ TEST(cmp_bitwise_xor_shift) {
 }
 
 TEST(cmp_bitwise_not) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 0\nprint(~a)\n"
                   "let b = 255\nprint(~b)",
         .label = "bitwise NOT",
@@ -996,7 +1009,7 @@ TEST(cmp_bitwise_not) {
 /* --- Increment / Decrement --- */
 
 TEST(cmp_increment) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 5\nx++\nprint(x)\n"
                   "x--\nx--\nprint(x)",
         .label = "increment and decrement operators",
@@ -1009,7 +1022,7 @@ TEST(cmp_increment) {
 /* --- Array Literal and Indexing --- */
 
 TEST(cmp_array_literal) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let arr = [10, 20, 30]\n"
                   "print(arr[0])\nprint(arr[1])\nprint(arr[2])",
         .label = "array literal and index access",
@@ -1020,7 +1033,7 @@ TEST(cmp_array_literal) {
 }
 
 TEST(cmp_array_assign) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let arr = [1, 2, 3]\n"
                   "arr[1] = 99\nprint(arr[1])",
         .label = "array index assignment",
@@ -1033,7 +1046,7 @@ TEST(cmp_array_assign) {
 /* --- Nested Ternary --- */
 
 TEST(cmp_nested_ternary) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 5\n"
                   "let r = x > 10 ? 1 : (x > 3 ? 2 : 3)\n"
                   "print(r)",
@@ -1047,7 +1060,7 @@ TEST(cmp_nested_ternary) {
 /* --- Multi-branch If-Else --- */
 
 TEST(cmp_if_else_chain) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 15\n"
                   "if (x > 20) { print(1) }\n"
                   "else if (x > 10) { print(2) }\n"
@@ -1063,7 +1076,7 @@ TEST(cmp_if_else_chain) {
 /* --- Deeply Nested Arithmetic --- */
 
 TEST(cmp_deep_arith) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a = 2\nlet b = 3\nlet c = 4\nlet d = 5\n"
                   "let r = ((a + b) * (c - d) + a * b) * c\n"
                   "print(r)",
@@ -1077,7 +1090,7 @@ TEST(cmp_deep_arith) {
 /* --- While with Multiple Conditions --- */
 
 TEST(cmp_while_multi_cond) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let i = 0\nlet sum = 0\n"
                   "while (i < 10 && sum < 20) {\n"
                   "  sum = sum + i\n"
@@ -1093,7 +1106,7 @@ TEST(cmp_while_multi_cond) {
 /* --- Map Literal --- */
 
 TEST(cmp_map_literal) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let m = {\"a\": 1, \"b\": 2}\n"
                   "print(m[\"a\"])\nprint(m[\"b\"])",
         .label = "map literal and key access",
@@ -1106,7 +1119,7 @@ TEST(cmp_map_literal) {
 /* --- Template String --- */
 
 TEST(cmp_template_string) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let name = \"world\"\n"
                   "let msg = \"hello ${name}\"\n"
                   "print(msg)",
@@ -1120,7 +1133,7 @@ TEST(cmp_template_string) {
 /* --- For-in Loop --- */
 
 TEST(cmp_for_in_array) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let arr = [10, 20, 30]\n"
                   "let sum = 0\n"
                   "for (item in arr) { sum = sum + item }\n"
@@ -1133,7 +1146,7 @@ TEST(cmp_for_in_array) {
 }
 
 TEST(cmp_for_in_range) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let sum = 0\n"
                   "for (i in 0..5) { sum = sum + i }\n"
                   "print(sum)",
@@ -1147,7 +1160,7 @@ TEST(cmp_for_in_range) {
 /* --- Closure with Captures --- */
 
 TEST(cmp_closure_capture) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn make_adder(x: int): fn(int): int {\n"
                   "  fn adder(y: int): int { return x + y }\n"
                   "  return adder\n"
@@ -1165,7 +1178,7 @@ TEST(cmp_closure_capture) {
 
 TEST(cmp_type_convert) {
     /* as cast: type matches -> value passes through */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x: Json = 42\n"
                   "let y = x as int\n"
                   "print(y)",
@@ -1178,7 +1191,7 @@ TEST(cmp_type_convert) {
 
 TEST(cmp_as_safe_match) {
     /* as? (safe cast): type matches -> value passes through */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x: Json = \"hello\"\n"
                   "let y = x as string?\n"
                   "print(y)",
@@ -1191,7 +1204,7 @@ TEST(cmp_as_safe_match) {
 
 TEST(cmp_as_safe_mismatch) {
     /* as? (safe cast): type mismatch -> null */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x: Json = \"hello\"\n"
                   "let y = x as int?\n"
                   "print(y)",
@@ -1204,7 +1217,7 @@ TEST(cmp_as_safe_mismatch) {
 
 TEST(cmp_as_unsafe_mismatch) {
     /* as (unsafe cast): type mismatch -> throw (both legacy and Xi throw) */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x: Json = \"hello\"\n"
                   "let y = x as int\n"
                   "print(y)",
@@ -1218,7 +1231,7 @@ TEST(cmp_as_unsafe_mismatch) {
 /* --- Nullish Coalesce --- */
 
 TEST(cmp_nullish_coalesce) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let a: int? = null\n"
                   "let b = a ?? 42\n"
                   "print(b)\n"
@@ -1235,7 +1248,7 @@ TEST(cmp_nullish_coalesce) {
 /* --- Match Expression --- */
 
 TEST(cmp_match_expr) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 3\n"
                   "let r = match x {\n"
                   "  1 => 10\n"
@@ -1253,7 +1266,7 @@ TEST(cmp_match_expr) {
 /* --- Try-Catch --- */
 
 TEST(cmp_try_catch) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let result = 0\n"
                   "try {\n"
                   "  result = 42\n"
@@ -1270,7 +1283,7 @@ TEST(cmp_try_catch) {
 /* --- Slice Expression --- */
 
 TEST(cmp_slice) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let arr = [1, 2, 3, 4, 5]\n"
                   "let s = arr[1:3]\n"
                   "print(s)",
@@ -1284,7 +1297,7 @@ TEST(cmp_slice) {
 /* --- Scope with Nested Functions --- */
 
 TEST(cmp_nested_func_scope) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn outer(): int {\n"
                   "  let x = 10\n"
                   "  fn inner(): int { return x * 2 }\n"
@@ -1300,7 +1313,7 @@ TEST(cmp_nested_func_scope) {
 /* --- Multiple Return Values --- */
 
 TEST(cmp_func_no_return) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn greet(name: string) {\n"
                   "  print(\"hello\")\n"
                   "  print(name)\n"
@@ -1315,7 +1328,7 @@ TEST(cmp_func_no_return) {
 /* --- Optional Chaining --- */
 
 TEST(cmp_optional_chain) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x: int? = null\n"
                   "let v = x ?? -1\n"
                   "print(v)",
@@ -1329,7 +1342,7 @@ TEST(cmp_optional_chain) {
 /* --- Method Calls on Builtins --- */
 
 TEST(cmp_array_push) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let arr = [10, 20]\n"
                   "arr.push(30)\n"
                   "print(arr.length)\nprint(arr[2])",
@@ -1341,7 +1354,7 @@ TEST(cmp_array_push) {
 }
 
 TEST(cmp_string_method) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let s = \"hello\"\n"
                   "print(s.length)\n"
                   "print(s.toUpperCase())",
@@ -1355,7 +1368,7 @@ TEST(cmp_string_method) {
 /* --- Higher-Order Functions --- */
 
 TEST(cmp_higher_order) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn makeAdder(x: int): fn(int): int {\n"
                   "    return fn(y: int): int { return x + y }\n"
                   "}\n"
@@ -1372,7 +1385,7 @@ TEST(cmp_higher_order) {
 /* --- Nested For-In --- */
 
 TEST(cmp_nested_for_in) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let total = 0\n"
                   "let matrix = [[1, 2], [3, 4]]\n"
                   "for (row in matrix) {\n"
@@ -1391,7 +1404,7 @@ TEST(cmp_nested_for_in) {
 /* --- For-In with String --- */
 
 TEST(cmp_for_in_string) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let count = 0\n"
                   "for (c in \"hello\") {\n"
                   "    count += 1\n"
@@ -1407,7 +1420,7 @@ TEST(cmp_for_in_string) {
 /* --- Array Map/Filter-like Patterns --- */
 
 TEST(cmp_array_sum_func) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn sum(arr: Array<int>): int {\n"
                   "    let total = 0\n"
                   "    for (x in arr) {\n"
@@ -1426,7 +1439,7 @@ TEST(cmp_array_sum_func) {
 /* --- Multiple Closures --- */
 
 TEST(cmp_multi_closure) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 10\n"
                   "let add = fn(a: int): int { return a + x }\n"
                   "let mul = fn(a: int): int { return a * x }\n"
@@ -1442,7 +1455,7 @@ TEST(cmp_multi_closure) {
 /* --- Fibonacci (complex recursion) --- */
 
 TEST(cmp_fibonacci) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn fib(n: int): int {\n"
                   "    if (n <= 1) { return n }\n"
                   "    return fib(n - 1) + fib(n - 2)\n"
@@ -1458,7 +1471,7 @@ TEST(cmp_fibonacci) {
 /* --- Transitive Closure Capture (3 levels deep) --- */
 
 TEST(cmp_transitive_capture) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn outer(): int {\n"
                   "    let x = 10\n"
                   "    fn middle(): int {\n"
@@ -1478,7 +1491,7 @@ TEST(cmp_transitive_capture) {
 /* --- Closure Counter (mutable capture via cell) --- */
 
 TEST(cmp_closure_counter) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn counter(): fn(): int {\n"
                   "    let n = 0\n"
                   "    return fn(): int { n += 1; return n }\n"
@@ -1497,7 +1510,7 @@ TEST(cmp_closure_counter) {
 /* --- Function Composition (captures two function params) --- */
 
 TEST(cmp_compose) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn compose(f: fn(int): int, g: fn(int): int): fn(int): int {\n"
                   "    return fn(x: int): int { return f(g(x)) }\n"
                   "}\n"
@@ -1515,7 +1528,7 @@ TEST(cmp_compose) {
 /* --- Callback / Higher-Order Apply --- */
 
 TEST(cmp_apply_fn) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn apply(f: fn(int): int, x: int): int {\n"
                   "    return f(x)\n"
                   "}\n"
@@ -1533,7 +1546,7 @@ TEST(cmp_apply_fn) {
 /* --- Find Max in Array --- */
 
 TEST(cmp_find_max) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let nums = [5, 3, 8, 1, 9, 2]\n"
                   "let max = nums[0]\n"
                   "for (n in nums) {\n"
@@ -1550,7 +1563,7 @@ TEST(cmp_find_max) {
 /* --- Mutual Recursion (even/odd) --- */
 
 TEST(cmp_mutual_recursion) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn is_even(n: int): bool {\n"
                   "    if (n == 0) { return true }\n"
                   "    return is_odd(n - 1)\n"
@@ -1571,7 +1584,7 @@ TEST(cmp_mutual_recursion) {
 /* --- Power Function (recursive) --- */
 
 TEST(cmp_power) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn power(base: int, exp: int): int {\n"
                   "    if (exp == 0) { return 1 }\n"
                   "    return base * power(base, exp - 1)\n"
@@ -1587,7 +1600,7 @@ TEST(cmp_power) {
 /* --- GCD (Euclidean algorithm) --- */
 
 TEST(cmp_gcd) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn gcd(a: int, b: int): int {\n"
                   "    if (b == 0) { return a }\n"
                   "    return gcd(b, a % b)\n"
@@ -1605,7 +1618,7 @@ TEST(cmp_gcd) {
 /* --- Basic class instantiation and field access --- */
 
 TEST(cmp_class_basic) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "class Point {\n"
                   "    x: int\n"
                   "    y: int\n"
@@ -1627,7 +1640,7 @@ TEST(cmp_class_basic) {
 /* --- Class with method --- */
 
 TEST(cmp_class_method) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "class Box {\n"
                   "    value: int\n"
                   "    constructor(v) {\n"
@@ -1648,7 +1661,7 @@ TEST(cmp_class_method) {
 /* --- Struct literal --- */
 
 TEST(cmp_struct_literal) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let obj = { name: \"Alice\", age: 30 }\n"
                   "print(obj[\"name\"])\n"
                   "print(obj[\"age\"])",
@@ -1662,7 +1675,7 @@ TEST(cmp_struct_literal) {
 /* --- Class inheritance --- */
 
 TEST(cmp_class_inherit) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "class Animal {\n"
                   "    name: string\n"
                   "    constructor(name: string) {\n"
@@ -1689,7 +1702,7 @@ TEST(cmp_class_inherit) {
 /* ========== Enum Tests ========== */
 
 TEST(cmp_enum_basic) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "enum Color {\n"
                   "    Red,\n"
                   "    Green,\n"
@@ -1708,7 +1721,7 @@ TEST(cmp_enum_basic) {
 /* ========== For-in Map Tests ========== */
 
 TEST(cmp_for_in_map) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let m = { a: 1, b: 2, c: 3 }\n"
                   "let sum = 0\n"
                   "for (k, v in m) {\n"
@@ -1725,7 +1738,7 @@ TEST(cmp_for_in_map) {
 /* ========== Additional Closure Tests ========== */
 
 TEST(cmp_closure_adder) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn make_adder(n: int): fn(int): int {\n"
                   "    return fn(x: int): int { return x + n }\n"
                   "}\n"
@@ -1741,7 +1754,7 @@ TEST(cmp_closure_adder) {
 }
 
 TEST(cmp_closure_accumulator) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn make_acc(): fn(int): int {\n"
                   "    let total = 0\n"
                   "    return fn(n: int): int { total += n; return total }\n"
@@ -1760,7 +1773,7 @@ TEST(cmp_closure_accumulator) {
 /* ========== Misc Pattern Tests ========== */
 
 TEST(cmp_nested_closure) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn outer(): fn(): fn(): int {\n"
                   "    let val = 42\n"
                   "    return fn(): fn(): int {\n"
@@ -1776,7 +1789,7 @@ TEST(cmp_nested_closure) {
 }
 
 TEST(cmp_string_for_in) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let count = 0\n"
                   "for (ch in \"hello\") {\n"
                   "    count += 1\n"
@@ -1792,7 +1805,7 @@ TEST(cmp_string_for_in) {
 /* ========== Destructuring / Multi-assign / Collection Tests ========== */
 
 TEST(cmp_destructure_array) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let arr = [10, 20, 30]\n"
                   "let [a, b, c] = arr\n"
                   "print(a)\n"
@@ -1806,7 +1819,7 @@ TEST(cmp_destructure_array) {
 }
 
 TEST(cmp_destructure_object) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let { name, age } = { name: \"alice\", age: 30 }\n"
                   "print(name)\n"
                   "print(age)",
@@ -1818,7 +1831,7 @@ TEST(cmp_destructure_object) {
 }
 
 TEST(cmp_multi_var_decl) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn pair(): (int, int) { return 10, 20 }\n"
                   "let x, y = pair()\n"
                   "print(x)\n"
@@ -1831,7 +1844,7 @@ TEST(cmp_multi_var_decl) {
 }
 
 TEST(cmp_multi_assign) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let x = 1\n"
                   "let y = 2\n"
                   "x, y = y, x\n"
@@ -1845,7 +1858,7 @@ TEST(cmp_multi_assign) {
 }
 
 TEST(cmp_set_literal) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let s = #[1, 2, 3, 2, 1]\n"
                   "print(s.size())",
         .label = "set literal with duplicates",
@@ -1856,7 +1869,7 @@ TEST(cmp_set_literal) {
 }
 
 TEST(cmp_object_literal) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "let obj = { name: \"alice\", age: 30 }\n"
                   "print(obj[\"name\"])\n"
                   "print(obj[\"age\"])",
@@ -1872,14 +1885,13 @@ TEST(cmp_object_literal) {
 TEST(cmp_defer_simple) {
     /* Legacy analyzer doesn't recognize 'print' as a builtin inside defer
      * expressions, so use a user-defined cleanup function instead. */
-    run_compare((CompareSpec){
-        .source =
-            "fn cleanup() { print(\"deferred\") }\n"
-            "fn f() {\n"
-            "  defer cleanup()\n"
-            "  print(\"body\")\n"
-            "}\n"
-            "f()",
+    run_compare((CompareSpec) {
+        .source = "fn cleanup() { print(\"deferred\") }\n"
+                  "fn f() {\n"
+                  "  defer cleanup()\n"
+                  "  print(\"body\")\n"
+                  "}\n"
+                  "f()",
         .label = "defer: cleanup after function body",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1888,16 +1900,15 @@ TEST(cmp_defer_simple) {
 }
 
 TEST(cmp_defer_lifo) {
-    run_compare((CompareSpec){
-        .source =
-            "fn first() { print(\"first\") }\n"
-            "fn second() { print(\"second\") }\n"
-            "fn f() {\n"
-            "  defer first()\n"
-            "  defer second()\n"
-            "  print(\"body\")\n"
-            "}\n"
-            "f()",
+    run_compare((CompareSpec) {
+        .source = "fn first() { print(\"first\") }\n"
+                  "fn second() { print(\"second\") }\n"
+                  "fn f() {\n"
+                  "  defer first()\n"
+                  "  defer second()\n"
+                  "  print(\"body\")\n"
+                  "}\n"
+                  "f()",
         .label = "defer: LIFO ordering",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1907,7 +1918,7 @@ TEST(cmp_defer_lifo) {
 
 TEST(cmp_yield_basic) {
     /* yield in main should be a no-op (no other coroutines) */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "print(\"before\")\nyield\nprint(\"after\")",
         .label = "yield: no-op without other coroutines",
         .expect_xi_success = true,
@@ -1918,7 +1929,7 @@ TEST(cmp_yield_basic) {
 
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "const ch = new Channel()\nprint(typeof(ch))",
         .label = "Channel(): unbuffered channel construction",
         .expect_xi_success = true,
@@ -1928,7 +1939,7 @@ TEST(cmp_chan_new_unbuf) {
 }
 
 TEST(cmp_chan_new_buffered) {
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "const ch: Channel<int> = new Channel(4)\nprint(typeof(ch))",
         .label = "Channel(N): buffered channel construction",
         .expect_xi_success = true,
@@ -1939,13 +1950,12 @@ TEST(cmp_chan_new_buffered) {
 
 TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
-    run_compare((CompareSpec){
-        .source =
-            "const ch: Channel<int> = new Channel(2)\n"
-            "ch.send(10)\n"
-            "ch.send(20)\n"
-            "print(ch.recv())\n"
-            "print(ch.recv())",
+    run_compare((CompareSpec) {
+        .source = "const ch: Channel<int> = new Channel(2)\n"
+                  "ch.send(10)\n"
+                  "ch.send(20)\n"
+                  "print(ch.recv())\n"
+                  "print(ch.recv())",
         .label = "Channel(2): single-coro send+recv",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1956,12 +1966,11 @@ TEST(cmp_chan_send_recv_buffered) {
 TEST(cmp_go_simple) {
     /* go fn() — basic coroutine spawn + await.
      * Output ordering may differ; only verify compiles and runs. */
-    run_compare((CompareSpec){
-        .source =
-            "fn worker() { print(\"worker\") }\n"
-            "let task = go worker()\n"
-            "await task\n"
-            "print(\"done\")",
+    run_compare((CompareSpec) {
+        .source = "fn worker() { print(\"worker\") }\n"
+                  "let task = go worker()\n"
+                  "await task\n"
+                  "print(\"done\")",
         .label = "go fn(): basic spawn + await",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1971,13 +1980,12 @@ TEST(cmp_go_simple) {
 
 TEST(cmp_go_with_chan) {
     /* go + channel: producer/consumer pattern */
-    run_compare((CompareSpec){
-        .source =
-            "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-            "const ch: Channel<int> = new Channel(1)\n"
-            "let task = go producer(ch)\n"
-            "print(ch.recv())\n"
-            "await task",
+    run_compare((CompareSpec) {
+        .source = "fn producer(ch: Channel<int>) { ch.send(42) }\n"
+                  "const ch: Channel<int> = new Channel(1)\n"
+                  "let task = go producer(ch)\n"
+                  "print(ch.recv())\n"
+                  "await task",
         .label = "go + channel: producer/consumer",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -1987,7 +1995,7 @@ TEST(cmp_go_with_chan) {
 
 TEST(cmp_cancelled) {
     /* cancelled() returns false in main coroutine */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "print(cancelled())",
         .label = "cancelled(): false in main",
         .expect_xi_success = true,
@@ -1998,7 +2006,7 @@ TEST(cmp_cancelled) {
 
 TEST(cmp_scope_basic) {
     /* scope { body } — basic structured concurrency block */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "scope {\n"
                   "  print(\"inside\")\n"
                   "}\n"
@@ -2012,7 +2020,7 @@ TEST(cmp_scope_basic) {
 
 TEST(cmp_select_recv) {
     /* select with channel recv */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn producer(ch: Channel<int>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
@@ -2032,7 +2040,7 @@ TEST(cmp_select_recv) {
 
 TEST(cmp_await_all) {
     /* await [t1, t2] — wait for all */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn double(x: int): int {\n"
                   "  return x * 2\n"
                   "}\n"
@@ -2049,7 +2057,7 @@ TEST(cmp_await_all) {
 
 TEST(cmp_await_any) {
     /* await any [t1, t2] — wait for first */
-    run_compare((CompareSpec){
+    run_compare((CompareSpec) {
         .source = "fn double(x: int): int {\n"
                   "  return x * 2\n"
                   "}\n"
@@ -2067,7 +2075,7 @@ TEST(cmp_await_any) {
 /* ========== Instruction Fusion Tests ========== */
 
 TEST(fusion_addi) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x + 1 }\nprint(f(10))",
         .label = "ADDI: x + small_const",
         .expect_op = OP_ADDI,
@@ -2076,7 +2084,7 @@ TEST(fusion_addi) {
 }
 
 TEST(fusion_addi_commutative) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return 3 + x }\nprint(f(10))",
         .label = "ADDI commutative: small_const + x",
         .expect_op = OP_ADDI,
@@ -2085,7 +2093,7 @@ TEST(fusion_addi_commutative) {
 }
 
 TEST(fusion_subi) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x - 3 }\nprint(f(10))",
         .label = "SUBI: x - small_const",
         .expect_op = OP_SUBI,
@@ -2094,7 +2102,7 @@ TEST(fusion_subi) {
 }
 
 TEST(fusion_muli) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x * 7 }\nprint(f(5))",
         .label = "MULI: x * small_const",
         .expect_op = OP_MULI,
@@ -2103,7 +2111,7 @@ TEST(fusion_muli) {
 }
 
 TEST(fusion_muli_commutative) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return 7 * x }\nprint(f(5))",
         .label = "MULI commutative: small_const * x",
         .expect_op = OP_MULI,
@@ -2112,7 +2120,7 @@ TEST(fusion_muli_commutative) {
 }
 
 TEST(fusion_addk) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x + 1000 }\nprint(f(10))",
         .label = "ADDK: x + large_const",
         .expect_op = OP_ADDK,
@@ -2121,7 +2129,7 @@ TEST(fusion_addk) {
 }
 
 TEST(fusion_addk_commutative) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return 1000 + x }\nprint(f(10))",
         .label = "ADDK commutative: large_const + x",
         .expect_op = OP_ADDK,
@@ -2130,7 +2138,7 @@ TEST(fusion_addk_commutative) {
 }
 
 TEST(fusion_subk) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x - 500 }\nprint(f(2000))",
         .label = "SUBK: x - large_const",
         .expect_op = OP_SUBK,
@@ -2139,7 +2147,7 @@ TEST(fusion_subk) {
 }
 
 TEST(fusion_mulk) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x * 1000 }\nprint(f(3))",
         .label = "MULK: x * large_const",
         .expect_op = OP_MULK,
@@ -2148,7 +2156,7 @@ TEST(fusion_mulk) {
 }
 
 TEST(fusion_mulk_commutative) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return 1000 * x }\nprint(f(3))",
         .label = "MULK commutative: large_const * x",
         .expect_op = OP_MULK,
@@ -2157,7 +2165,7 @@ TEST(fusion_mulk_commutative) {
 }
 
 TEST(fusion_divk) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x / 500 }\nprint(f(5000))",
         .label = "DIVK: x / large_const",
         .expect_op = OP_DIVK,
@@ -2166,7 +2174,7 @@ TEST(fusion_divk) {
 }
 
 TEST(fusion_modk) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int): int { return x % 1000 }\nprint(f(12345))",
         .label = "MODK: x % large_const",
         .expect_op = OP_MODK,
@@ -2175,7 +2183,7 @@ TEST(fusion_modk) {
 }
 
 TEST(fusion_lti_branch) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int) { if (x < 10) { print(1) } else { print(0) } }\nf(5)",
         .label = "LTI: branch x < small_const",
         .expect_op = OP_LTI,
@@ -2184,7 +2192,7 @@ TEST(fusion_lti_branch) {
 }
 
 TEST(fusion_eqi_branch) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int) { if (x == 5) { print(1) } else { print(0) } }\nf(5)",
         .label = "EQI: branch x == small_const",
         .expect_op = OP_EQI,
@@ -2193,7 +2201,7 @@ TEST(fusion_eqi_branch) {
 }
 
 TEST(fusion_lei_branch) {
-    run_fusion((FusionSpec){
+    run_fusion((FusionSpec) {
         .source = "fn f(x: int) { if (x <= 10) { print(1) } else { print(0) } }\nf(10)",
         .label = "LEI: branch x <= small_const",
         .expect_op = OP_LEI,
@@ -2204,8 +2212,7 @@ TEST(fusion_lei_branch) {
 /* ========== Summary Report ========== */
 
 static void print_summary(void) {
-    printf("\n=== %d/%d Xi Compare tests passed",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi Compare tests passed", tests_passed, tests_passed + tests_failed);
     if (tests_skipped > 0)
         printf(" (%d skipped)", tests_skipped);
     printf(" ===\n");

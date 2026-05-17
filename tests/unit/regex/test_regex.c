@@ -22,11 +22,9 @@
  * Helper Macros
  * ======================================================================== */
 
-#define RE_COMPILE(pattern) \
-    xr_regex_compile(pattern, XR_RE_NONE, NULL)
+#define RE_COMPILE(pattern) xr_regex_compile(pattern, XR_RE_NONE, NULL)
 
-#define RE_COMPILE_FLAGS(pattern, flags) \
-    xr_regex_compile(pattern, flags, NULL)
+#define RE_COMPILE_FLAGS(pattern, flags) xr_regex_compile(pattern, flags, NULL)
 
 /* ========================================================================
  * 1. Compilation Tests
@@ -112,8 +110,8 @@ TEST(find_position) {
     // groups[0] is full match
     ASSERT_NOT_NULL(match.groups[0].start);
     ASSERT_NOT_NULL(match.groups[0].end);
-    int start = (int)(match.groups[0].start - input);
-    int end = (int)(match.groups[0].end - input);
+    int start = (int) (match.groups[0].start - input);
+    int end = (int) (match.groups[0].end - input);
     ASSERT_EQ_INT(start, 3);
     ASSERT_EQ_INT(end, 6);
     xr_regex_free(re);
@@ -140,7 +138,7 @@ TEST(find_at_offset) {
     // Find starting from offset 6 (past first digits)
     bool found = xr_regex_match_at(re, input, 12, 6, &match);
     ASSERT_TRUE(found);
-    int start = (int)(match.groups[0].start - input);
+    int start = (int) (match.groups[0].start - input);
     ASSERT_EQ_INT(start, 9);
     xr_regex_free(re);
 }
@@ -153,18 +151,18 @@ TEST(capture_simple) {
     XrRegex *re = RE_COMPILE("(\\w+)@(\\w+)");
     XrMatch match;
     const char *text = "contact: user@host.com";
-    bool found = xr_regex_match(re, text, (int)strlen(text), &match);
+    bool found = xr_regex_match(re, text, (int) strlen(text), &match);
     ASSERT_TRUE(found);
     ASSERT_GE(match.group_count, 3);
     // groups[0] = full match "user@host"
-    int len0 = (int)(match.groups[0].end - match.groups[0].start);
+    int len0 = (int) (match.groups[0].end - match.groups[0].start);
     ASSERT_EQ_INT(len0, 9);
     // groups[1] = "user"
-    int len1 = (int)(match.groups[1].end - match.groups[1].start);
+    int len1 = (int) (match.groups[1].end - match.groups[1].start);
     ASSERT_EQ_INT(len1, 4);
     ASSERT(memcmp(match.groups[1].start, "user", 4) == 0);
     // groups[2] = "host"
-    int len2 = (int)(match.groups[2].end - match.groups[2].start);
+    int len2 = (int) (match.groups[2].end - match.groups[2].start);
     ASSERT_EQ_INT(len2, 4);
     ASSERT(memcmp(match.groups[2].start, "host", 4) == 0);
     xr_regex_free(re);
@@ -382,7 +380,7 @@ TEST(greedy_plus) {
     XrMatch match;
     bool found = xr_regex_match(re, "aaa", 3, &match);
     ASSERT_TRUE(found);
-    int len = (int)(match.groups[0].end - match.groups[0].start);
+    int len = (int) (match.groups[0].end - match.groups[0].start);
     ASSERT_EQ_INT(len, 3);
     xr_regex_free(re);
 }
@@ -392,7 +390,7 @@ TEST(lazy_plus) {
     XrMatch match;
     bool found = xr_regex_match(re, "aaa", 3, &match);
     ASSERT_TRUE(found);
-    int len = (int)(match.groups[0].end - match.groups[0].start);
+    int len = (int) (match.groups[0].end - match.groups[0].start);
     ASSERT_EQ_INT(len, 1);
     xr_regex_free(re);
 }
@@ -402,7 +400,7 @@ TEST(lazy_star) {
     XrMatch match;
     bool found = xr_regex_match(re, "aaa", 3, &match);
     ASSERT_TRUE(found);
-    int len = (int)(match.groups[0].end - match.groups[0].start);
+    int len = (int) (match.groups[0].end - match.groups[0].start);
     ASSERT_EQ_INT(len, 0);
     xr_regex_free(re);
 }
@@ -412,7 +410,7 @@ TEST(lazy_repeat) {
     XrMatch match;
     bool found = xr_regex_match(re, "aaaa", 4, &match);
     ASSERT_TRUE(found);
-    int len = (int)(match.groups[0].end - match.groups[0].start);
+    int len = (int) (match.groups[0].end - match.groups[0].start);
     ASSERT_EQ_INT(len, 2);
     xr_regex_free(re);
 }
@@ -481,7 +479,7 @@ TEST(ignorecase_match_text) {
     XrMatch match;
     bool found = xr_regex_match(re, "Say HELLO there", 15, &match);
     ASSERT_TRUE(found);
-    int len = (int)(match.groups[0].end - match.groups[0].start);
+    int len = (int) (match.groups[0].end - match.groups[0].start);
     ASSERT_EQ_INT(len, 5);
     ASSERT(memcmp(match.groups[0].start, "HELLO", 5) == 0);
     xr_regex_free(re);
@@ -646,13 +644,13 @@ TEST(find_all_basic) {
     ASSERT_EQ_INT(count, 3);
     ASSERT_NOT_NULL(matches);
     // First match: "1"
-    int len0 = (int)(matches[0].groups[0].end - matches[0].groups[0].start);
+    int len0 = (int) (matches[0].groups[0].end - matches[0].groups[0].start);
     ASSERT_EQ_INT(len0, 1);
     // Second match: "22"
-    int len1 = (int)(matches[1].groups[0].end - matches[1].groups[0].start);
+    int len1 = (int) (matches[1].groups[0].end - matches[1].groups[0].start);
     ASSERT_EQ_INT(len1, 2);
     // Third match: "333"
-    int len2 = (int)(matches[2].groups[0].end - matches[2].groups[0].start);
+    int len2 = (int) (matches[2].groups[0].end - matches[2].groups[0].start);
     ASSERT_EQ_INT(len2, 3);
     xr_regex_find_all_free(matches);
     xr_regex_free(re);
@@ -742,7 +740,7 @@ TEST(complex_pattern) {
 TEST(error_string) {
     const char *msg = xr_regex_error_str(XR_RE_ERR_SYNTAX);
     ASSERT_NOT_NULL(msg);
-    ASSERT_GT((int)strlen(msg), 0);
+    ASSERT_GT((int) strlen(msg), 0);
 }
 
 TEST(literal_empty_after_many_matches) {
@@ -780,13 +778,15 @@ TEST(iterator_reset) {
 
     XrMatch match;
     int count = 0;
-    while (xr_regex_iter_next(iter, &match)) count++;
+    while (xr_regex_iter_next(iter, &match))
+        count++;
     ASSERT_EQ_INT(count, 3);
 
     // Reset and iterate again
     xr_regex_iter_reset(iter);
     count = 0;
-    while (xr_regex_iter_next(iter, &match)) count++;
+    while (xr_regex_iter_next(iter, &match))
+        count++;
     ASSERT_EQ_INT(count, 3);
 
     xr_regex_iter_free(iter);
@@ -831,126 +831,126 @@ TEST(inline_combined) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Compilation");
-    RUN_TEST(compile_basic);
-    RUN_TEST(compile_empty);
-    RUN_TEST(compile_invalid_unmatched_paren);
-    RUN_TEST(compile_invalid_unmatched_bracket);
-    RUN_TEST(compile_invalid_bad_repeat);
-    RUN_TEST(compile_flags);
-    RUN_TEST(compile_is_valid);
+RUN_TEST_SUITE("Compilation");
+RUN_TEST(compile_basic);
+RUN_TEST(compile_empty);
+RUN_TEST(compile_invalid_unmatched_paren);
+RUN_TEST(compile_invalid_unmatched_bracket);
+RUN_TEST(compile_invalid_bad_repeat);
+RUN_TEST(compile_flags);
+RUN_TEST(compile_is_valid);
 
-    RUN_TEST_SUITE("Basic Matching");
-    RUN_TEST(test_match_simple);
-    RUN_TEST(test_literal_no_match_empty_text);
-    RUN_TEST(test_match_digits);
-    RUN_TEST(find_position);
-    RUN_TEST(full_match_success);
-    RUN_TEST(full_match_failure);
-    RUN_TEST(find_at_offset);
+RUN_TEST_SUITE("Basic Matching");
+RUN_TEST(test_match_simple);
+RUN_TEST(test_literal_no_match_empty_text);
+RUN_TEST(test_match_digits);
+RUN_TEST(find_position);
+RUN_TEST(full_match_success);
+RUN_TEST(full_match_failure);
+RUN_TEST(find_at_offset);
 
-    RUN_TEST_SUITE("Capture Groups");
-    RUN_TEST(capture_simple);
-    RUN_TEST(capture_count);
-    RUN_TEST(capture_nested);
-    RUN_TEST(noncapture_group);
+RUN_TEST_SUITE("Capture Groups");
+RUN_TEST(capture_simple);
+RUN_TEST(capture_count);
+RUN_TEST(capture_nested);
+RUN_TEST(noncapture_group);
 
-    RUN_TEST_SUITE("Character Classes");
-    RUN_TEST(charclass_simple);
-    RUN_TEST(charclass_range);
-    RUN_TEST(charclass_negated);
-    RUN_TEST(charclass_combined);
-    RUN_TEST(predefined_digit);
-    RUN_TEST(predefined_word);
-    RUN_TEST(predefined_space);
-    RUN_TEST(predefined_negated);
+RUN_TEST_SUITE("Character Classes");
+RUN_TEST(charclass_simple);
+RUN_TEST(charclass_range);
+RUN_TEST(charclass_negated);
+RUN_TEST(charclass_combined);
+RUN_TEST(predefined_digit);
+RUN_TEST(predefined_word);
+RUN_TEST(predefined_space);
+RUN_TEST(predefined_negated);
 
-    RUN_TEST_SUITE("Anchors");
-    RUN_TEST(anchor_begin);
-    RUN_TEST(anchor_end);
-    RUN_TEST(anchor_both);
-    RUN_TEST(word_boundary);
-    RUN_TEST(not_word_boundary);
+RUN_TEST_SUITE("Anchors");
+RUN_TEST(anchor_begin);
+RUN_TEST(anchor_end);
+RUN_TEST(anchor_both);
+RUN_TEST(word_boundary);
+RUN_TEST(not_word_boundary);
 
-    RUN_TEST_SUITE("Quantifiers");
-    RUN_TEST(quantifier_star);
-    RUN_TEST(quantifier_plus);
-    RUN_TEST(quantifier_question);
-    RUN_TEST(quantifier_exact);
-    RUN_TEST(quantifier_range);
-    RUN_TEST(quantifier_min);
+RUN_TEST_SUITE("Quantifiers");
+RUN_TEST(quantifier_star);
+RUN_TEST(quantifier_plus);
+RUN_TEST(quantifier_question);
+RUN_TEST(quantifier_exact);
+RUN_TEST(quantifier_range);
+RUN_TEST(quantifier_min);
 
-    RUN_TEST_SUITE("Greedy vs Non-greedy");
-    RUN_TEST(greedy_plus);
-    RUN_TEST(lazy_plus);
-    RUN_TEST(lazy_star);
-    RUN_TEST(lazy_repeat);
+RUN_TEST_SUITE("Greedy vs Non-greedy");
+RUN_TEST(greedy_plus);
+RUN_TEST(lazy_plus);
+RUN_TEST(lazy_star);
+RUN_TEST(lazy_repeat);
 
-    RUN_TEST_SUITE("Alternation");
-    RUN_TEST(alternation_simple);
-    RUN_TEST(alternation_words);
-    RUN_TEST(alternation_in_group);
+RUN_TEST_SUITE("Alternation");
+RUN_TEST(alternation_simple);
+RUN_TEST(alternation_words);
+RUN_TEST(alternation_in_group);
 
-    RUN_TEST_SUITE("Dot");
-    RUN_TEST(dot_basic);
-    RUN_TEST(dot_dotall);
+RUN_TEST_SUITE("Dot");
+RUN_TEST(dot_basic);
+RUN_TEST(dot_dotall);
 
-    RUN_TEST_SUITE("Ignore Case");
-    RUN_TEST(ignorecase_basic);
-    RUN_TEST(ignorecase_match_text);
-    RUN_TEST(case_sensitive);
+RUN_TEST_SUITE("Ignore Case");
+RUN_TEST(ignorecase_basic);
+RUN_TEST(ignorecase_match_text);
+RUN_TEST(case_sensitive);
 
-    RUN_TEST_SUITE("Multiline Mode");
-    RUN_TEST(multiline_caret);
-    RUN_TEST(multiline_dollar);
+RUN_TEST_SUITE("Multiline Mode");
+RUN_TEST(multiline_caret);
+RUN_TEST(multiline_dollar);
 
-    RUN_TEST_SUITE("Escape Sequences");
-    RUN_TEST(escape_metachar);
-    RUN_TEST(escape_backslash);
-    RUN_TEST(escape_tab_newline);
+RUN_TEST_SUITE("Escape Sequences");
+RUN_TEST(escape_metachar);
+RUN_TEST(escape_backslash);
+RUN_TEST(escape_tab_newline);
 
-    RUN_TEST_SUITE("Replace");
-    RUN_TEST(replace_first);
-    RUN_TEST(replace_all);
-    RUN_TEST(replace_alloc);
-    RUN_TEST(replace_with_capture_ref);
-    RUN_TEST(replace_no_match);
+RUN_TEST_SUITE("Replace");
+RUN_TEST(replace_first);
+RUN_TEST(replace_all);
+RUN_TEST(replace_alloc);
+RUN_TEST(replace_with_capture_ref);
+RUN_TEST(replace_no_match);
 
-    RUN_TEST_SUITE("Split");
-    RUN_TEST(split_basic);
-    RUN_TEST(split_no_match);
-    RUN_TEST(split_with_limit);
+RUN_TEST_SUITE("Split");
+RUN_TEST(split_basic);
+RUN_TEST(split_no_match);
+RUN_TEST(split_with_limit);
 
-    RUN_TEST_SUITE("Count and FindAll");
-    RUN_TEST(count_basic);
-    RUN_TEST(count_no_match);
-    RUN_TEST(find_all_basic);
+RUN_TEST_SUITE("Count and FindAll");
+RUN_TEST(count_basic);
+RUN_TEST(count_no_match);
+RUN_TEST(find_all_basic);
 
-    RUN_TEST_SUITE("Escape Utility");
-    RUN_TEST(escape_special_chars);
+RUN_TEST_SUITE("Escape Utility");
+RUN_TEST(escape_special_chars);
 
-    RUN_TEST_SUITE("Unicode Properties");
-    RUN_TEST(unicode_han);
-    RUN_TEST(unicode_latin);
-    RUN_TEST(unicode_number);
-    RUN_TEST(unicode_negated);
+RUN_TEST_SUITE("Unicode Properties");
+RUN_TEST(unicode_han);
+RUN_TEST(unicode_latin);
+RUN_TEST(unicode_number);
+RUN_TEST(unicode_negated);
 
-    RUN_TEST_SUITE("Edge Cases");
-    RUN_TEST(empty_pattern_empty_text);
-    RUN_TEST(empty_pattern_nonempty_text);
-    RUN_TEST(deeply_nested_groups);
-    RUN_TEST(complex_pattern);
-    RUN_TEST(error_string);
-    RUN_TEST(literal_empty_after_many_matches);
+RUN_TEST_SUITE("Edge Cases");
+RUN_TEST(empty_pattern_empty_text);
+RUN_TEST(empty_pattern_nonempty_text);
+RUN_TEST(deeply_nested_groups);
+RUN_TEST(complex_pattern);
+RUN_TEST(error_string);
+RUN_TEST(literal_empty_after_many_matches);
 
-    RUN_TEST_SUITE("Iterator");
-    RUN_TEST(iterator_basic);
-    RUN_TEST(iterator_reset);
+RUN_TEST_SUITE("Iterator");
+RUN_TEST(iterator_basic);
+RUN_TEST(iterator_reset);
 
-    RUN_TEST_SUITE("Inline Flags");
-    RUN_TEST(inline_ignorecase);
-    RUN_TEST(inline_multiline);
-    RUN_TEST(inline_dotall);
-    RUN_TEST(inline_combined);
+RUN_TEST_SUITE("Inline Flags");
+RUN_TEST(inline_ignorecase);
+RUN_TEST(inline_multiline);
+RUN_TEST(inline_dotall);
+RUN_TEST(inline_combined);
 
 TEST_MAIN_END()

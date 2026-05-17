@@ -65,7 +65,8 @@ static void teardown(void) {
 // message via ASSERT_NOT_NULL().
 static char *parse_and_format(const char *source) {
     AstNode *ast = xr_parse_with_trivia(g_iso, source, "<test>");
-    if (!ast) return NULL;
+    if (!ast)
+        return NULL;
     char *out = xfmt_format_ast(ast, NULL, g_iso);
     xr_program_destroy(ast);
     return out;
@@ -82,9 +83,8 @@ static bool contains(const char *haystack, const char *needle) {
 
 TEST(leading_line_comment_preserved) {
     setup();
-    const char *src =
-        "// pre-amble\n"
-        "let x = 5;\n";
+    const char *src = "// pre-amble\n"
+                      "let x = 5;\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
     // The pre-amble comment must precede the let on its own line.
@@ -112,10 +112,9 @@ TEST(trailing_comment_does_not_steal_next_line_leading) {
     setup();
     // A comment that lives on a line BY ITSELF must remain leading
     // for the NEXT statement, not trailing of the previous one.
-    const char *src =
-        "let x = 5;\n"
-        "// belongs to y\n"
-        "let y = 6;\n";
+    const char *src = "let x = 5;\n"
+                      "// belongs to y\n"
+                      "let y = 6;\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
 
@@ -131,11 +130,10 @@ TEST(multiline_block_comment_stays_leading) {
     setup();
     // Multi-line `/* ... */` after a statement is NOT a trailing
     // candidate; it becomes the next statement's leading.
-    const char *src =
-        "let x = 5;\n"
-        "/* multi\n"
-        "   line */\n"
-        "let y = 6;\n";
+    const char *src = "let x = 5;\n"
+                      "/* multi\n"
+                      "   line */\n"
+                      "let y = 6;\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
 
@@ -149,12 +147,11 @@ TEST(multiline_block_comment_stays_leading) {
 
 TEST(format_is_idempotent_with_comments) {
     setup();
-    const char *src =
-        "// header\n"
-        "let x = 5; // tail-x\n"
-        "let y = 6;\n"
-        "// before-z\n"
-        "let z = 7;\n";
+    const char *src = "// header\n"
+                      "let x = 5; // tail-x\n"
+                      "let y = 6;\n"
+                      "// before-z\n"
+                      "let z = 7;\n";
 
     char *first = parse_and_format(src);
     ASSERT_NOT_NULL(first);
@@ -175,10 +172,9 @@ TEST(trailing_comment_on_block_decl) {
     setup();
     // Trailing comments on closing braces of block-bodied declarations
     // must travel with the outer declaration, not the inner block.
-    const char *src =
-        "fn foo() {\n"
-        "    let x = 1;\n"
-        "} // end-foo\n";
+    const char *src = "fn foo() {\n"
+                      "    let x = 1;\n"
+                      "} // end-foo\n";
     char *out = parse_and_format(src);
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "}  // end-foo\n"));
@@ -191,11 +187,11 @@ TEST(trailing_comment_on_block_decl) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("Formatter comment fidelity (L-06 / F)");
-    RUN_TEST(leading_line_comment_preserved);
-    RUN_TEST(trailing_line_comment_preserved);
-    RUN_TEST(trailing_comment_does_not_steal_next_line_leading);
-    RUN_TEST(multiline_block_comment_stays_leading);
-    RUN_TEST(format_is_idempotent_with_comments);
-    RUN_TEST(trailing_comment_on_block_decl);
+RUN_TEST_SUITE("Formatter comment fidelity (L-06 / F)");
+RUN_TEST(leading_line_comment_preserved);
+RUN_TEST(trailing_line_comment_preserved);
+RUN_TEST(trailing_comment_does_not_steal_next_line_leading);
+RUN_TEST(multiline_block_comment_stays_leading);
+RUN_TEST(format_is_idempotent_with_comments);
+RUN_TEST(trailing_comment_on_block_decl);
 TEST_MAIN_END()

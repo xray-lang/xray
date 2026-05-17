@@ -161,7 +161,7 @@ static void test_emit_and_execute(void) {
     xm_code_make_writable(code, 64);
 #endif
 
-    uint32_t *p = (uint32_t *)code;
+    uint32_t *p = (uint32_t *) code;
     p[0] = a64_movz(A64_X0, 42, 0);
     p[1] = a64_ret();
 
@@ -169,7 +169,7 @@ static void test_emit_and_execute(void) {
     xm_code_flush_icache(code, 64);
 
     typedef int64_t (*Func)(void);
-    int64_t result = ((Func)code)();
+    int64_t result = ((Func) code)();
     assert(result == 42);
 
     xm_code_alloc_destroy(&alloc);
@@ -192,7 +192,7 @@ static void test_emit_add_function(void) {
     xm_code_make_writable(code, 64);
 #endif
 
-    uint32_t *p = (uint32_t *)code;
+    uint32_t *p = (uint32_t *) code;
     p[0] = a64_add(A64_X0, A64_X0, A64_X1);
     p[1] = a64_ret();
 
@@ -200,9 +200,9 @@ static void test_emit_add_function(void) {
     xm_code_flush_icache(code, 64);
 
     typedef int64_t (*AddFunc)(int64_t, int64_t);
-    assert(((AddFunc)code)(10, 20) == 30);
-    assert(((AddFunc)code)(100, -58) == 42);
-    assert(((AddFunc)code)(0, 0) == 0);
+    assert(((AddFunc) code)(10, 20) == 30);
+    assert(((AddFunc) code)(100, -58) == 42);
+    assert(((AddFunc) code)(0, 0) == 0);
 
     xm_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
@@ -235,23 +235,23 @@ static void test_emit_factorial_like(void) {
 #endif
 
     A64Buf buf;
-    a64_buf_init(&buf, (uint32_t *)code, 32);
+    a64_buf_init(&buf, (uint32_t *) code, 32);
 
-    a64_buf_emit(&buf, a64_movz(A64_X1, 1, 0));       // 0: result = 1
-    a64_buf_emit(&buf, a64_cmp_imm(A64_X0, 0));        // 1: cmp n, 0
-    a64_buf_emit(&buf, a64_bcond(A64_CC_LE, 4));        // 2: b.le done (+4 â†?pc 6)
-    a64_buf_emit(&buf, a64_mul(A64_X1, A64_X1, A64_X0)); // 3: result *= n
-    a64_buf_emit(&buf, a64_sub_imm(A64_X0, A64_X0, 1)); // 4: n--
-    a64_buf_emit(&buf, a64_b(-4));                       // 5: b loop (-4 â†?pc 1)
-    a64_buf_emit(&buf, a64_mov(A64_X0, A64_X1));        // 6: return result
-    a64_buf_emit(&buf, a64_ret());                       // 7: ret
+    a64_buf_emit(&buf, a64_movz(A64_X1, 1, 0));           // 0: result = 1
+    a64_buf_emit(&buf, a64_cmp_imm(A64_X0, 0));           // 1: cmp n, 0
+    a64_buf_emit(&buf, a64_bcond(A64_CC_LE, 4));          // 2: b.le done (+4 â†?pc 6)
+    a64_buf_emit(&buf, a64_mul(A64_X1, A64_X1, A64_X0));  // 3: result *= n
+    a64_buf_emit(&buf, a64_sub_imm(A64_X0, A64_X0, 1));   // 4: n--
+    a64_buf_emit(&buf, a64_b(-4));                        // 5: b loop (-4 â†?pc 1)
+    a64_buf_emit(&buf, a64_mov(A64_X0, A64_X1));          // 6: return result
+    a64_buf_emit(&buf, a64_ret());                        // 7: ret
 
     uint32_t code_size = a64_buf_offset(&buf);
     xm_code_make_executable(code, code_size);
     xm_code_flush_icache(code, code_size);
 
     typedef int64_t (*FactFunc)(int64_t);
-    FactFunc fact = (FactFunc)code;
+    FactFunc fact = (FactFunc) code;
 
     assert(fact(0) == 1);
     assert(fact(1) == 1);
@@ -276,7 +276,7 @@ static void test_load_imm64(void) {
 #endif
 
     A64Buf buf;
-    a64_buf_init(&buf, (uint32_t *)code, 32);
+    a64_buf_init(&buf, (uint32_t *) code, 32);
 
     // Load 0xDEADBEEFCAFEBABE into X0, then RET
     int count = a64_load_imm64(&buf, A64_X0, 0xDEADBEEFCAFEBABEULL);
@@ -289,13 +289,13 @@ static void test_load_imm64(void) {
     xm_code_flush_icache(code, code_size);
 
     typedef uint64_t (*U64Func)(void);
-    uint64_t result = ((U64Func)code)();
+    uint64_t result = ((U64Func) code)();
     assert(result == 0xDEADBEEFCAFEBABEULL);
 
     xm_code_alloc_destroy(&alloc);
     fprintf(stderr, " PASS\n");
 }
-#endif // __aarch64__
+#endif  // __aarch64__
 
 int main(void) {
     xr_test_suppress_dialogs();

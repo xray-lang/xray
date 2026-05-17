@@ -54,7 +54,8 @@ static void teardown(void) {
 /* Parse with trivia and format to a heap string. Returns NULL on error. */
 static char *parse_and_format(const char *source, const char *filename) {
     AstNode *ast = xr_parse_with_trivia(g_iso, source, filename);
-    if (!ast) return NULL;
+    if (!ast)
+        return NULL;
     char *out = xfmt_format_ast(ast, NULL, g_iso);
     xr_program_destroy(ast);
     return out;
@@ -63,14 +64,21 @@ static char *parse_and_format(const char *source, const char *filename) {
 /* Read an entire file into a heap buffer. Returns NULL on failure. */
 static char *read_file_contents(const char *path) {
     FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f)
+        return NULL;
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
-    if (sz < 0) { fclose(f); return NULL; }
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
     fseek(f, 0, SEEK_SET);
-    char *buf = (char *)xr_malloc((size_t)sz + 1);
-    if (!buf) { fclose(f); return NULL; }
-    size_t n = fread(buf, 1, (size_t)sz, f);
+    char *buf = (char *) xr_malloc((size_t) sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t n = fread(buf, 1, (size_t) sz, f);
     buf[n] = '\0';
     fclose(f);
     return buf;
@@ -87,14 +95,16 @@ static bool contains(const char *haystack, const char *needle) {
 /* Check idempotency for a single .xr file. Returns 1 on pass, 0 on fail. */
 static int check_idempotent(const char *path) {
     char *src = read_file_contents(path);
-    if (!src) return 1;  /* skip unreadable files */
+    if (!src)
+        return 1; /* skip unreadable files */
 
     /* First format pass. If the file does not parse (e.g. intentional
      * error tests) we skip silently — idempotency only applies to
      * syntactically valid programs. */
     char *fmt1 = parse_and_format(src, path);
     xr_free(src);
-    if (!fmt1) return 1;  /* skip unparseable files */
+    if (!fmt1)
+        return 1; /* skip unparseable files */
 
     /* Second format pass. If the formatted output cannot be re-parsed,
      * the formatter emitted syntax the parser rejects (known gaps for
@@ -103,7 +113,7 @@ static int check_idempotent(const char *path) {
     if (!fmt2) {
         fprintf(stderr, "  SKIP (re-parse): %s\n", path);
         free(fmt1);
-        return -1;  /* skip */
+        return -1; /* skip */
     }
 
     int ok = (strcmp(fmt1, fmt2) == 0);
@@ -112,8 +122,10 @@ static int check_idempotent(const char *path) {
         const char *a = fmt1, *b = fmt2;
         int line = 1;
         while (*a && *b && *a == *b) {
-            if (*a == '\n') line++;
-            a++; b++;
+            if (*a == '\n')
+                line++;
+            a++;
+            b++;
         }
         fprintf(stderr, "    first diff at line %d\n", line);
         fprintf(stderr, "    fmt1: \"%.40s\"\n", a);
@@ -128,18 +140,21 @@ static int check_idempotent(const char *path) {
 /* Recursively scan a directory for .xr files and check idempotency. */
 static int scan_dir(const char *dir_path, int *total, int *passed, int *skipped) {
     DIR *d = opendir(dir_path);
-    if (!d) return 0;
+    if (!d)
+        return 0;
 
     struct dirent *ent;
     while ((ent = readdir(d)) != NULL) {
-        if (ent->d_name[0] == '.') continue;
+        if (ent->d_name[0] == '.')
+            continue;
 
         /* Build full path. */
         char path[1024];
         snprintf(path, sizeof(path), "%s/%s", dir_path, ent->d_name);
 
         struct stat st;
-        if (stat(path, &st) != 0) continue;
+        if (stat(path, &st) != 0)
+            continue;
 
         if (S_ISDIR(st.st_mode)) {
             scan_dir(path, total, passed, skipped);
@@ -164,12 +179,8 @@ TEST(idempotency_regression_corpus) {
 
     /* Locate regression test directory relative to the test binary.
      * Build dir is <repo>/build, tests run from there. */
-    const char *dirs[] = {
-        "../tests/regression",
-        "../../tests/regression",
-        "../../../tests/regression",
-        NULL
-    };
+    const char *dirs[] = {"../tests/regression", "../../tests/regression",
+                          "../../../tests/regression", NULL};
 
     const char *regression_dir = NULL;
     struct stat st;
@@ -190,8 +201,8 @@ TEST(idempotency_regression_corpus) {
     scan_dir(regression_dir, &total, &passed, &skipped);
 
     int tested = total - skipped;
-    fprintf(stderr, "  Formatter idempotency: %d/%d tested (%d skipped re-parse)\n",
-            passed, tested, skipped);
+    fprintf(stderr, "  Formatter idempotency: %d/%d tested (%d skipped re-parse)\n", passed, tested,
+            skipped);
     ASSERT_TRUE(tested > 0);
     /* All files that survive re-parse must be idempotent. */
     ASSERT_EQ(passed, tested);
@@ -205,12 +216,11 @@ TEST(idempotency_regression_corpus) {
 
 TEST(doc_comment_before_function) {
     setup();
-    const char *src =
-        "/// This is a doc comment\n"
-        "/// with two lines\n"
-        "fn foo(): int {\n"
-        "    return 42\n"
-        "}\n";
+    const char *src = "/// This is a doc comment\n"
+                      "/// with two lines\n"
+                      "fn foo(): int {\n"
+                      "    return 42\n"
+                      "}\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "/// This is a doc comment"));
@@ -221,9 +231,8 @@ TEST(doc_comment_before_function) {
 
 TEST(block_comment_before_statement) {
     setup();
-    const char *src =
-        "/* block comment */\n"
-        "let x = 5\n";
+    const char *src = "/* block comment */\n"
+                      "let x = 5\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "/* block comment */"));
@@ -233,11 +242,10 @@ TEST(block_comment_before_statement) {
 
 TEST(comment_before_class) {
     setup();
-    const char *src =
-        "// MyClass docs\n"
-        "class MyClass {\n"
-        "    x: int\n"
-        "}\n";
+    const char *src = "// MyClass docs\n"
+                      "class MyClass {\n"
+                      "    x: int\n"
+                      "}\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "// MyClass docs"));
@@ -326,18 +334,18 @@ TEST(no_arrow_return_type_emitted) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("Formatter roundtrip (E6)");
+RUN_TEST_SUITE("Formatter roundtrip (E6)");
 
-    RUN_TEST(idempotency_regression_corpus);
+RUN_TEST(idempotency_regression_corpus);
 
-    RUN_TEST(doc_comment_before_function);
-    RUN_TEST(block_comment_before_statement);
-    RUN_TEST(comment_before_class);
+RUN_TEST(doc_comment_before_function);
+RUN_TEST(block_comment_before_statement);
+RUN_TEST(comment_before_class);
 
-    RUN_TEST(string_escape_roundtrip);
-    RUN_TEST(template_string_roundtrip);
-    RUN_TEST(unicode_string_roundtrip);
-    RUN_TEST(empty_string_roundtrip);
+RUN_TEST(string_escape_roundtrip);
+RUN_TEST(template_string_roundtrip);
+RUN_TEST(unicode_string_roundtrip);
+RUN_TEST(empty_string_roundtrip);
 
-    RUN_TEST(no_arrow_return_type_emitted);
+RUN_TEST(no_arrow_return_type_emitted);
 TEST_MAIN_END()

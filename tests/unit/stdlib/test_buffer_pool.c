@@ -23,7 +23,7 @@ TEST(netbuf_init_free) {
     ASSERT_TRUE(xr_netbuf_init(&buf, 256));
     ASSERT_NOT_NULL(buf._base);
     ASSERT_NOT_NULL(buf.bytes);
-    ASSERT_EQ_INT((int)buf.size, 0);
+    ASSERT_EQ_INT((int) buf.size, 0);
     ASSERT_TRUE(buf.capacity >= 256);
     xr_netbuf_free(&buf);
     ASSERT_TRUE(buf._base == NULL);
@@ -40,7 +40,7 @@ TEST(netbuf_reserve_advance) {
     memcpy(wp, "Hello, World!", 13);
     xr_netbuf_advance(&buf, 13);
 
-    ASSERT_EQ_INT((int)buf.size, 13);
+    ASSERT_EQ_INT((int) buf.size, 13);
     ASSERT_EQ_INT(memcmp(buf.bytes, "Hello, World!", 13), 0);
 
     xr_netbuf_free(&buf);
@@ -57,7 +57,7 @@ TEST(netbuf_consume) {
     xr_netbuf_advance(&buf, 10);
 
     xr_netbuf_consume(&buf, 4);
-    ASSERT_EQ_INT((int)buf.size, 6);
+    ASSERT_EQ_INT((int) buf.size, 6);
     ASSERT_EQ_INT(memcmp(buf.bytes, "456789", 6), 0);
 
     xr_netbuf_free(&buf);
@@ -76,7 +76,7 @@ TEST(netbuf_auto_compact) {
 
     // Consume more than half capacity -> triggers auto-compact
     xr_netbuf_consume(&buf, 40);
-    ASSERT_EQ_INT((int)buf.size, 8);
+    ASSERT_EQ_INT((int) buf.size, 8);
     // After auto-compact, bytes should be at _base
     ASSERT_TRUE(buf.bytes == buf._base);
 
@@ -97,7 +97,7 @@ TEST(netbuf_growth) {
         xr_netbuf_advance(&buf, 16);
     }
 
-    ASSERT_EQ_INT((int)buf.size, 1600);
+    ASSERT_EQ_INT((int) buf.size, 1600);
     ASSERT_TRUE(buf.capacity >= 1600);
 
     xr_netbuf_free(&buf);
@@ -115,7 +115,7 @@ TEST(netbuf_reset) {
     xr_netbuf_consume(&buf, 32);
 
     xr_netbuf_reset(&buf);
-    ASSERT_EQ_INT((int)buf.size, 0);
+    ASSERT_EQ_INT((int) buf.size, 0);
     ASSERT_TRUE(buf.bytes == buf._base);
 
     xr_netbuf_free(&buf);
@@ -128,7 +128,7 @@ TEST(netbuf_acquire_release) {
     ASSERT_NOT_NULL(buf);
     ASSERT_NOT_NULL(buf->bytes);
     ASSERT_TRUE(buf->capacity >= 256);
-    ASSERT_EQ_INT((int)buf->size, 0);
+    ASSERT_EQ_INT((int) buf->size, 0);
 
     // Write some data
     char *wp = xr_netbuf_reserve(buf, 10);
@@ -140,7 +140,7 @@ TEST(netbuf_acquire_release) {
     // Acquire again - should reuse from TLS pool
     XrNetBuffer *buf2 = xr_netbuf_acquire(256);
     ASSERT_NOT_NULL(buf2);
-    ASSERT_EQ_INT((int)buf2->size, 0);
+    ASSERT_EQ_INT((int) buf2->size, 0);
 
     xr_netbuf_release(buf2);
     xr_netbuf_pool_cleanup();
@@ -166,26 +166,26 @@ TEST(netbuf_multiple_acquires) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("NetBuffer - Init/Free");
-    RUN_TEST(netbuf_init_free);
+RUN_TEST_SUITE("NetBuffer - Init/Free");
+RUN_TEST(netbuf_init_free);
 
-    RUN_TEST_SUITE("NetBuffer - Reserve/Advance");
-    RUN_TEST(netbuf_reserve_advance);
+RUN_TEST_SUITE("NetBuffer - Reserve/Advance");
+RUN_TEST(netbuf_reserve_advance);
 
-    RUN_TEST_SUITE("NetBuffer - Consume");
-    RUN_TEST(netbuf_consume);
+RUN_TEST_SUITE("NetBuffer - Consume");
+RUN_TEST(netbuf_consume);
 
-    RUN_TEST_SUITE("NetBuffer - Auto-Compact");
-    RUN_TEST(netbuf_auto_compact);
+RUN_TEST_SUITE("NetBuffer - Auto-Compact");
+RUN_TEST(netbuf_auto_compact);
 
-    RUN_TEST_SUITE("NetBuffer - Growth");
-    RUN_TEST(netbuf_growth);
+RUN_TEST_SUITE("NetBuffer - Growth");
+RUN_TEST(netbuf_growth);
 
-    RUN_TEST_SUITE("NetBuffer - Reset");
-    RUN_TEST(netbuf_reset);
+RUN_TEST_SUITE("NetBuffer - Reset");
+RUN_TEST(netbuf_reset);
 
-    RUN_TEST_SUITE("NetBuffer - TLS Pool");
-    RUN_TEST(netbuf_acquire_release);
-    RUN_TEST(netbuf_multiple_acquires);
+RUN_TEST_SUITE("NetBuffer - TLS Pool");
+RUN_TEST(netbuf_acquire_release);
+RUN_TEST(netbuf_multiple_acquires);
 
 TEST_MAIN_END()

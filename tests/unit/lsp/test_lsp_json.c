@@ -19,20 +19,22 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 #define TEST(name) static void test_##name(void)
-#define RUN_TEST(name) do { \
-    printf("  Testing %s... ", #name); \
-    test_##name(); \
-    printf("PASS\n"); \
-    tests_passed++; \
-} while(0)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Testing %s... ", #name);                                                         \
+        test_##name();                                                                             \
+        printf("PASS\n");                                                                          \
+        tests_passed++;                                                                            \
+    } while (0)
 
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf("FAIL at line %d: %s\n", __LINE__, #cond); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
@@ -69,7 +71,7 @@ TEST(parse_number_integer) {
     ASSERT(v != NULL);
     ASSERT(xjson_is_number(v));
     ASSERT(v->is_integer);
-    ASSERT_EQ((int)v->as.integer, 42);
+    ASSERT_EQ((int) v->as.integer, 42);
     xjson_free(v);
 }
 
@@ -78,7 +80,7 @@ TEST(parse_number_negative) {
     ASSERT(v != NULL);
     ASSERT(xjson_is_number(v));
     ASSERT(v->is_integer);
-    ASSERT_EQ((int)v->as.integer, -123);
+    ASSERT_EQ((int) v->as.integer, -123);
     xjson_free(v);
 }
 
@@ -129,9 +131,9 @@ TEST(parse_array_numbers) {
     ASSERT(v != NULL);
     ASSERT(xjson_is_array(v));
     ASSERT_EQ(xjson_array_len(v), 3);
-    ASSERT_EQ((int)xjson_array_get(v, 0)->as.integer, 1);
-    ASSERT_EQ((int)xjson_array_get(v, 1)->as.integer, 2);
-    ASSERT_EQ((int)xjson_array_get(v, 2)->as.integer, 3);
+    ASSERT_EQ((int) xjson_array_get(v, 0)->as.integer, 1);
+    ASSERT_EQ((int) xjson_array_get(v, 1)->as.integer, 2);
+    ASSERT_EQ((int) xjson_array_get(v, 2)->as.integer, 3);
     xjson_free(v);
 }
 
@@ -175,16 +177,15 @@ TEST(parse_nested_object) {
 }
 
 TEST(parse_lsp_message) {
-    const char *json =
-        "{"
-        "  \"jsonrpc\": \"2.0\","
-        "  \"id\": 1,"
-        "  \"method\": \"initialize\","
-        "  \"params\": {"
-        "    \"processId\": 12345,"
-        "    \"rootUri\": \"file:///workspace\""
-        "  }"
-        "}";
+    const char *json = "{"
+                       "  \"jsonrpc\": \"2.0\","
+                       "  \"id\": 1,"
+                       "  \"method\": \"initialize\","
+                       "  \"params\": {"
+                       "    \"processId\": 12345,"
+                       "    \"rootUri\": \"file:///workspace\""
+                       "  }"
+                       "}";
 
     XrJsonValue *v = xjson_parse(json, strlen(json));
     ASSERT(v != NULL);
@@ -243,7 +244,7 @@ TEST(build_array) {
     xjson_array_push(arr, xjson_new_string("three"));
 
     ASSERT_EQ(xjson_array_len(arr), 3);
-    ASSERT_EQ((int)xjson_array_get(arr, 0)->as.number, 1);
+    ASSERT_EQ((int) xjson_array_get(arr, 0)->as.number, 1);
     ASSERT_STR_EQ(xjson_array_get(arr, 2)->as.string, "three");
 
     xjson_free(arr);
@@ -420,7 +421,8 @@ TEST(roundtrip_complex) {
 
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
-    (void)argc; (void)argv;
+    (void) argc;
+    (void) argv;
 
     printf("\n=== LSP JSON Parser Unit Tests ===\n\n");
 
@@ -464,8 +466,7 @@ int main(int argc, char **argv) {
     RUN_TEST(array_out_of_bounds);
     RUN_TEST(roundtrip_complex);
 
-    printf("\n=== Results: %d passed, %d failed ===\n\n",
-           tests_passed, tests_failed);
+    printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 
     return tests_failed > 0 ? 1 : 0;
 }

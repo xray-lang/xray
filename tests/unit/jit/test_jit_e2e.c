@@ -40,11 +40,11 @@
  * xm_codegen_arm64).
  */
 #if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
-#  define xm_codegen_native(func, alloc) xm_codegen_arm64((func), (alloc))
+#define xm_codegen_native(func, alloc) xm_codegen_arm64((func), (alloc))
 #elif defined(__x86_64__) || defined(__amd64__) || defined(_M_X64)
-#  define xm_codegen_native(func, alloc) xm_codegen_x64((func), (alloc))
+#define xm_codegen_native(func, alloc) xm_codegen_x64((func), (alloc))
 #else
-#  error "test_jit_e2e: unsupported architecture"
+#error "test_jit_e2e: unsupported architecture"
 #endif
 
 // Unified JIT calling convention: (coro, args_ptr) -> raw result
@@ -74,12 +74,10 @@ static void *g_safepoint_page = NULL;
 static void jit_env_init(void) {
     if (g_safepoint_page == NULL) {
 #ifdef _WIN32
-        g_safepoint_page = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE,
-                                        PAGE_READWRITE);
+        g_safepoint_page = VirtualAlloc(NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         assert(g_safepoint_page != NULL && "VirtualAlloc safepoint_page");
 #else
-        g_safepoint_page = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
-                                MAP_ANON | MAP_PRIVATE, -1, 0);
+        g_safepoint_page = mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
         assert(g_safepoint_page != MAP_FAILED && "mmap safepoint_page");
 #endif
     }
@@ -99,51 +97,51 @@ static void jit_env_reset(void) {
 }
 
 static inline intptr_t jit_test_coro(void) {
-    return (intptr_t)&g_jit_coro;
+    return (intptr_t) &g_jit_coro;
 }
 
 // Helper: call JIT with 0 args
 static inline int64_t jit_call0(void *code) {
     jit_env_reset();
-    return ((JitFn)code)(jit_test_coro(), NULL);
+    return ((JitFn) code)(jit_test_coro(), NULL);
 }
 // Helper: call JIT with 1 arg
 static inline int64_t jit_call1(void *code, int64_t a0) {
     jit_env_reset();
     int64_t args[] = {a0};
-    return ((JitFn)code)(jit_test_coro(), args);
+    return ((JitFn) code)(jit_test_coro(), args);
 }
 // Helper: call JIT with 2 args
 static inline int64_t jit_call2(void *code, int64_t a0, int64_t a1) {
     jit_env_reset();
     int64_t args[] = {a0, a1};
-    return ((JitFn)code)(jit_test_coro(), args);
+    return ((JitFn) code)(jit_test_coro(), args);
 }
 // Helper: call JIT with 3 args
 static inline int64_t jit_call3(void *code, int64_t a0, int64_t a1, int64_t a2) {
     jit_env_reset();
     int64_t args[] = {a0, a1, a2};
-    return ((JitFn)code)(jit_test_coro(), args);
+    return ((JitFn) code)(jit_test_coro(), args);
 }
 // Helper: call JIT with 5 args (used by OSR-pressure regression)
-static inline int64_t jit_call5(void *code, int64_t a0, int64_t a1, int64_t a2,
-                                int64_t a3, int64_t a4) {
+static inline int64_t jit_call5(void *code, int64_t a0, int64_t a1, int64_t a2, int64_t a3,
+                                int64_t a4) {
     jit_env_reset();
     int64_t args[] = {a0, a1, a2, a3, a4};
-    return ((JitFn)code)(jit_test_coro(), args);
+    return ((JitFn) code)(jit_test_coro(), args);
 }
 // Helper: call JIT with N args from a caller-owned array (used by 12-param
 // pressure regressions). Caller must keep `args` alive for the call.
 static inline int64_t jit_calln(void *code, const int64_t *args) {
     jit_env_reset();
-    return ((JitFn)code)(jit_test_coro(), (int64_t *)args);
+    return ((JitFn) code)(jit_test_coro(), (int64_t *) args);
 }
 // Helper: call JIT with 1 f64 arg (bits as int64)
 static inline int64_t jit_call1_f64(void *code, double a0) {
     jit_env_reset();
     int64_t args[1];
     memcpy(&args[0], &a0, 8);
-    return ((JitFn)code)(jit_test_coro(), args);
+    return ((JitFn) code)(jit_test_coro(), args);
 }
 // Helper: call JIT with 2 f64 args
 static inline int64_t jit_call2_f64(void *code, double a0, double a1) {
@@ -151,7 +149,7 @@ static inline int64_t jit_call2_f64(void *code, double a0, double a1) {
     int64_t args[2];
     memcpy(&args[0], &a0, 8);
     memcpy(&args[1], &a1, 8);
-    return ((JitFn)code)(jit_test_coro(), args);
+    return ((JitFn) code)(jit_test_coro(), args);
 }
 
 /*
@@ -169,7 +167,8 @@ static inline int64_t jit_call2_f64(void *code, double a0, double a1) {
 static bool skip_auto_pipeline = false;
 static XmCodegenResult safe_codegen(XmFunc *f, XmCodeAlloc *a) {
     xm_rebuild_preds(f);
-    if (!skip_auto_pipeline) xm_run_pipeline(f, XM_OPT_BASIC);
+    if (!skip_auto_pipeline)
+        xm_run_pipeline(f, XM_OPT_BASIC);
     skip_auto_pipeline = false;
     return xm_codegen_native(f, a);
 }
@@ -177,11 +176,14 @@ static XmCodegenResult safe_codegen(XmFunc *f, XmCodeAlloc *a) {
 static void crash_handler(int sig) {
     const char *msg = "\n!!! SIGNAL received: ";
     write(2, msg, strlen(msg));
-    if (sig == SIGSEGV) write(2, "SIGSEGV\n", 8);
+    if (sig == SIGSEGV)
+        write(2, "SIGSEGV\n", 8);
 #ifdef SIGBUS
-    else if (sig == SIGBUS) write(2, "SIGBUS\n", 7);
+    else if (sig == SIGBUS)
+        write(2, "SIGBUS\n", 7);
 #endif
-    else write(2, "OTHER\n", 6);
+    else
+        write(2, "OTHER\n", 6);
     _exit(128 + sig);
 }
 
@@ -215,7 +217,7 @@ static void test_return_constant(void) {
     fprintf(stderr, "    code_size=%u bytes\n", res.code_size);
 
     int64_t result = jit_call0(res.code);
-    fprintf(stderr, "    result=%lld\n", (long long)result);
+    fprintf(stderr, "    result=%lld\n", (long long) result);
     assert(result == 42);
 
     xm_code_alloc_destroy(&alloc);
@@ -642,11 +644,21 @@ static void test_loop_sum(void) {
 
     // sum(0) = 0, sum(1) = 1, sum(5) = 15, sum(10) = 55, sum(100) = 5050
     int64_t r;
-    r = jit_call1(res.code,0);  fprintf(stderr, "    sum(0)=%lld\n", (long long)r);  assert(r == 0);
-    r = jit_call1(res.code,1);  fprintf(stderr, "    sum(1)=%lld\n", (long long)r);  assert(r == 1);
-    r = jit_call1(res.code,5);  fprintf(stderr, "    sum(5)=%lld\n", (long long)r);  assert(r == 15);
-    r = jit_call1(res.code,10); fprintf(stderr, "    sum(10)=%lld\n", (long long)r); assert(r == 55);
-    r = jit_call1(res.code,100);fprintf(stderr, "    sum(100)=%lld\n", (long long)r);assert(r == 5050);
+    r = jit_call1(res.code, 0);
+    fprintf(stderr, "    sum(0)=%lld\n", (long long) r);
+    assert(r == 0);
+    r = jit_call1(res.code, 1);
+    fprintf(stderr, "    sum(1)=%lld\n", (long long) r);
+    assert(r == 1);
+    r = jit_call1(res.code, 5);
+    fprintf(stderr, "    sum(5)=%lld\n", (long long) r);
+    assert(r == 15);
+    r = jit_call1(res.code, 10);
+    fprintf(stderr, "    sum(10)=%lld\n", (long long) r);
+    assert(r == 55);
+    r = jit_call1(res.code, 100);
+    fprintf(stderr, "    sum(100)=%lld\n", (long long) r);
+    assert(r == 5050);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -732,12 +744,12 @@ static void test_fibonacci(void) {
     func->num_params = 1;
     XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = n
 
-    XmBlock *entry     = xm_func_add_block(func, "entry");
-    XmBlock *base      = xm_func_add_block(func, "base");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmBlock *base = xm_func_add_block(func, "base");
     XmBlock *loop_init = xm_func_add_block(func, "loop_init");
-    XmBlock *loop      = xm_func_add_block(func, "loop");
-    XmBlock *body      = xm_func_add_block(func, "body");
-    XmBlock *done      = xm_func_add_block(func, "done");
+    XmBlock *loop = xm_func_add_block(func, "loop");
+    XmBlock *body = xm_func_add_block(func, "body");
+    XmBlock *done = xm_func_add_block(func, "done");
 
     // @entry: if (n <= 1) goto base else goto loop_init
     XmRef c1_entry = xm_const_i64(func, 1);
@@ -783,12 +795,12 @@ static void test_fibonacci(void) {
     xm_block_set_ret(done, b_ref);
 
     // Set Phi args
-    xm_phi_set_arg(phi_a, 0, v_a_init);   // from loop_init
-    xm_phi_set_arg(phi_a, 1, b_ref);      // from body: a' = b
-    xm_phi_set_arg(phi_b, 0, v_b_init);   // from loop_init
-    xm_phi_set_arg(phi_b, 1, v_t);        // from body: b' = t = a+b
-    xm_phi_set_arg(phi_i, 0, v_i_init);   // from loop_init
-    xm_phi_set_arg(phi_i, 1, v_i_next);   // from body
+    xm_phi_set_arg(phi_a, 0, v_a_init);  // from loop_init
+    xm_phi_set_arg(phi_a, 1, b_ref);     // from body: a' = b
+    xm_phi_set_arg(phi_b, 0, v_b_init);  // from loop_init
+    xm_phi_set_arg(phi_b, 1, v_t);       // from body: b' = t = a+b
+    xm_phi_set_arg(phi_i, 0, v_i_init);  // from loop_init
+    xm_phi_set_arg(phi_i, 1, v_i_next);  // from body
 
     XmCodeAlloc alloc;
     xm_code_alloc_init(&alloc);
@@ -798,14 +810,30 @@ static void test_fibonacci(void) {
 
     // fib(0)=0, fib(1)=1, fib(2)=1, fib(5)=5, fib(10)=55, fib(20)=6765, fib(30)=832040
     int64_t r;
-    r = jit_call1(res.code,0);  fprintf(stderr, "    fib(0)=%lld\n", (long long)r);   assert(r == 0);
-    r = jit_call1(res.code,1);  fprintf(stderr, "    fib(1)=%lld\n", (long long)r);   assert(r == 1);
-    r = jit_call1(res.code,2);  fprintf(stderr, "    fib(2)=%lld\n", (long long)r);   assert(r == 1);
-    r = jit_call1(res.code,5);  fprintf(stderr, "    fib(5)=%lld\n", (long long)r);   assert(r == 5);
-    r = jit_call1(res.code,10); fprintf(stderr, "    fib(10)=%lld\n", (long long)r);  assert(r == 55);
-    r = jit_call1(res.code,20); fprintf(stderr, "    fib(20)=%lld\n", (long long)r);  assert(r == 6765);
-    r = jit_call1(res.code,30); fprintf(stderr, "    fib(30)=%lld\n", (long long)r);  assert(r == 832040);
-    r = jit_call1(res.code,40); fprintf(stderr, "    fib(40)=%lld\n", (long long)r);  assert(r == 102334155);
+    r = jit_call1(res.code, 0);
+    fprintf(stderr, "    fib(0)=%lld\n", (long long) r);
+    assert(r == 0);
+    r = jit_call1(res.code, 1);
+    fprintf(stderr, "    fib(1)=%lld\n", (long long) r);
+    assert(r == 1);
+    r = jit_call1(res.code, 2);
+    fprintf(stderr, "    fib(2)=%lld\n", (long long) r);
+    assert(r == 1);
+    r = jit_call1(res.code, 5);
+    fprintf(stderr, "    fib(5)=%lld\n", (long long) r);
+    assert(r == 5);
+    r = jit_call1(res.code, 10);
+    fprintf(stderr, "    fib(10)=%lld\n", (long long) r);
+    assert(r == 55);
+    r = jit_call1(res.code, 20);
+    fprintf(stderr, "    fib(20)=%lld\n", (long long) r);
+    assert(r == 6765);
+    r = jit_call1(res.code, 30);
+    fprintf(stderr, "    fib(30)=%lld\n", (long long) r);
+    assert(r == 832040);
+    r = jit_call1(res.code, 40);
+    fprintf(stderr, "    fib(40)=%lld\n", (long long) r);
+    assert(r == 102334155);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -879,14 +907,20 @@ static void test_loop_sum_safepoint(void) {
     fprintf(stderr, " code_size=%u\n", res.code_size);
 
     int64_t r;
-    r = jit_call1(res.code, 0);   assert(r == 0);
-    r = jit_call1(res.code, 1);   assert(r == 1);
-    r = jit_call1(res.code, 5);   assert(r == 15);
-    r = jit_call1(res.code, 10);  assert(r == 55);
-    r = jit_call1(res.code, 100); assert(r == 5050);
+    r = jit_call1(res.code, 0);
+    assert(r == 0);
+    r = jit_call1(res.code, 1);
+    assert(r == 1);
+    r = jit_call1(res.code, 5);
+    assert(r == 15);
+    r = jit_call1(res.code, 10);
+    assert(r == 55);
+    r = jit_call1(res.code, 100);
+    assert(r == 5050);
     // Large N to trigger safepoint reset (> 4000 iterations)
-    r = jit_call1(res.code, 10000); assert(r == 50005000);
-    fprintf(stderr, "    sum_sp(10000)=%lld\n", (long long)r);
+    r = jit_call1(res.code, 10000);
+    assert(r == 50005000);
+    fprintf(stderr, "    sum_sp(10000)=%lld\n", (long long) r);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -927,7 +961,7 @@ static void test_write_barrier(void) {
 
     // Load a constant and return it
     XmRef c99 = xm_const_i64(func, 99);
-    XmRef v2  = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c99);
+    XmRef v2 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c99);
     xm_block_set_ret(entry, v2);
 
     // Verify: before pass, nins == 2 (STORE_FIELD + CONST_I64)
@@ -955,9 +989,9 @@ static void test_write_barrier(void) {
     // STORE_FIELD now actually writes to memory at GC_HEADER_SIZE offset
     uint8_t fake_obj[48];
     memset(fake_obj, 0, sizeof(fake_obj));
-    int64_t result = jit_call1(res.code, (int64_t)(intptr_t)fake_obj);
+    int64_t result = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
     assert(result == 99);
-    fprintf(stderr, " exec OK (ret=%lld)", (long long)result);
+    fprintf(stderr, " exec OK (ret=%lld)", (long long) result);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -1029,7 +1063,7 @@ static void test_const_fold(void) {
     XmBlock *entry = xm_func_add_block(func, "entry");
     XmRef c10 = xm_const_i64(func, 10);
     XmRef c20 = xm_const_i64(func, 20);
-    XmRef c5  = xm_const_i64(func, 5);
+    XmRef c5 = xm_const_i64(func, 5);
 
     XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c10);
     XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c20);
@@ -1060,7 +1094,7 @@ static void test_const_fold(void) {
     assert(res.success);
     int64_t result = jit_call0(res.code);
     assert(result == 150);
-    fprintf(stderr, " exec=%lld", (long long)result);
+    fprintf(stderr, " exec=%lld", (long long) result);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -1101,7 +1135,7 @@ static void test_pipeline(void) {
     assert(res.success);
     int64_t result = jit_call1(res.code, 5);
     assert(result == 50);
-    fprintf(stderr, " exec=%lld", (long long)result);
+    fprintf(stderr, " exec=%lld", (long long) result);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -1146,7 +1180,7 @@ static void test_cse(void) {
     assert(res.success);
     int64_t result = jit_call1(res.code, 5);
     assert(result == 100);
-    fprintf(stderr, " exec=%lld", (long long)result);
+    fprintf(stderr, " exec=%lld", (long long) result);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -1176,23 +1210,23 @@ static void test_licm(void) {
     XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // v0 = n
 
     XmBlock *entry = xm_func_add_block(func, "entry");
-    XmBlock *loop  = xm_func_add_block(func, "loop");
-    XmBlock *body  = xm_func_add_block(func, "body");
+    XmBlock *loop = xm_func_add_block(func, "loop");
+    XmBlock *body = xm_func_add_block(func, "body");
     XmBlock *exit_ = xm_func_add_block(func, "exit");
 
     // @entry: init sum=0, i=1, jmp @loop
     XmRef c0 = xm_const_i64(func, 0);
     XmRef c1 = xm_const_i64(func, 1);
     XmRef init_sum = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c0);
-    XmRef init_i   = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef init_i = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
     xm_block_set_jmp(entry, loop);
 
     // @loop: add predecessors first, then create phi nodes
     xm_block_add_pred(loop, entry, func->arena);
     xm_block_add_pred(loop, body, func->arena);
-    XmPhi *phi_i_node   = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_i_node = xm_add_phi(func, loop, XR_REP_I64);
     XmPhi *phi_sum_node = xm_add_phi(func, loop, XR_REP_I64);
-    XmRef phi_i   = phi_i_node->dst;
+    XmRef phi_i = phi_i_node->dst;
     XmRef phi_sum = phi_sum_node->dst;
     XmRef cmp = xm_emit(func, loop, XM_LE, XR_REP_I64, phi_i, p0);
     xm_block_set_br(loop, cmp, body, exit_);
@@ -1232,7 +1266,7 @@ static void test_licm(void) {
     XmCodegenResult res = safe_codegen(func, &alloc);
     assert(res.success);
     int64_t result = jit_call1(res.code, 10);
-    fprintf(stderr, " exec=%lld", (long long)result);
+    fprintf(stderr, " exec=%lld", (long long) result);
     assert(result == 210);
 
     xm_code_alloc_destroy(&alloc);
@@ -1294,8 +1328,8 @@ static void test_rt_mixed_add(void) {
 
     XmFunc *func = xm_func_new("rt_mixed_add");
     func->num_params = 2;
-    XmRef p0 = xm_new_vreg(func, XR_REP_I64);   // x: i64
-    XmRef p1 = xm_new_vreg(func, XR_REP_F64);   // y: f64
+    XmRef p0 = xm_new_vreg(func, XR_REP_I64);  // x: i64
+    XmRef p1 = xm_new_vreg(func, XR_REP_F64);  // y: f64
 
     XmBlock *entry = xm_func_add_block(func, "entry");
 
@@ -1412,7 +1446,7 @@ static void test_select_rep(void) {
     assert(res.success);
 
     int64_t result = jit_call1(res.code, 10);
-    fprintf(stderr, " f(10)=%lld", (long long)result);
+    fprintf(stderr, " f(10)=%lld", (long long) result);
     assert(result == 11);
 
     xm_code_alloc_destroy(&alloc);
@@ -1457,7 +1491,7 @@ static void test_inline_basic(void) {
     xm_block_set_ret(f_entry, f_result);
 
     // Inline g into f at the NOP instruction (index 0)
-    XmRef call_args[] = { f_p0 };  // g(x) — pass x as argument
+    XmRef call_args[] = {f_p0};  // g(x) — pass x as argument
     XmRef inlined = xm_inline_function(caller, f_entry, 0, callee, call_args, 1);
     fprintf(stderr, " inlined=%s", xm_ref_is_none(inlined) ? "NONE" : "ok");
     assert(!xm_ref_is_none(inlined));
@@ -1467,8 +1501,7 @@ static void test_inline_basic(void) {
     // Find the continuation block and patch its ADD's arg
     XmBlock *cont = NULL;
     for (uint32_t bi = 0; bi < caller->nblk; bi++) {
-        if (caller->blocks[bi]->label &&
-            strstr(caller->blocks[bi]->label, "inline.cont")) {
+        if (caller->blocks[bi]->label && strstr(caller->blocks[bi]->label, "inline.cont")) {
             cont = caller->blocks[bi];
             break;
         }
@@ -1492,7 +1525,7 @@ static void test_inline_basic(void) {
     fprintf(stderr, " code=%u", res.code_size);
 
     int64_t r = jit_call1(res.code, 10);
-    fprintf(stderr, " f(10)=%lld", (long long)r);
+    fprintf(stderr, " f(10)=%lld", (long long) r);
     assert(r == 30);
 
     xm_code_alloc_destroy(&alloc);
@@ -1522,12 +1555,12 @@ static void test_osr_entry(void) {
     XmFunc *func = xm_func_new("sum_loop");
     func->num_params = 3;
     XmRef p_count = xm_new_vreg(func, XR_REP_I64);  // vreg 0: count
-    XmRef p_step  = xm_new_vreg(func, XR_REP_I64);  // vreg 1: step
-    XmRef p_idx   = xm_new_vreg(func, XR_REP_I64);  // vreg 2: idx_start
+    XmRef p_step = xm_new_vreg(func, XR_REP_I64);   // vreg 1: step
+    XmRef p_idx = xm_new_vreg(func, XR_REP_I64);    // vreg 2: idx_start
 
     XmBlock *entry = xm_func_add_block(func, "entry");
-    XmBlock *loop  = xm_func_add_block(func, "loop");
-    XmBlock *exit  = xm_func_add_block(func, "exit");
+    XmBlock *loop = xm_func_add_block(func, "loop");
+    XmBlock *exit = xm_func_add_block(func, "exit");
 
     // entry: sum=0, goto loop
     XmRef c0 = xm_const_i64(func, 0);
@@ -1541,8 +1574,8 @@ static void test_osr_entry(void) {
     // loop: Phi nodes for count, idx, sum
     loop->is_loop_header = true;
     XmPhi *phi_count = xm_add_phi(func, loop, XR_REP_I64);
-    XmPhi *phi_idx   = xm_add_phi(func, loop, XR_REP_I64);
-    XmPhi *phi_sum   = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_idx = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_sum = xm_add_phi(func, loop, XR_REP_I64);
 
     // pred 0 = entry, pred 1 = loop (back-edge)
     xm_phi_set_arg(phi_count, 0, p_count);
@@ -1579,7 +1612,7 @@ static void test_osr_entry(void) {
     // Set bc_slot for each vreg so OSR stub can load from values[] array.
     // Without this, OSR stub sees bc_slot=-1 and skips loading live vregs.
     for (uint32_t v = 0; v < func->nvreg; v++) {
-        func->vregs[v].bc_slot = (int16_t)v;
+        func->vregs[v].bc_slot = (int16_t) v;
     }
 
     // Compile. We call xm_codegen_arm64 directly because preds+phis are
@@ -1594,14 +1627,14 @@ static void test_osr_entry(void) {
 
     // Test 1: normal call — sum_loop(5, 1, 0) = 1+2+3+4+5 = 15
     int64_t r1 = jit_call3(res.code, 5, 1, 0);
-    fprintf(stderr, " normal=%lld", (long long)r1);
+    fprintf(stderr, " normal=%lld", (long long) r1);
     assert(r1 == 15);
 
     // Test 2: OSR entry — enter loop with count=3, step=1, idx=7, sum=10
     // Expected: iteration 1: idx=8,sum=18; iter 2: idx=9,sum=27; iter 3: idx=10,sum=37
     if (res.nosr > 0) {
         XmOsrEntry *osr = &res.osr_entries[0];
-        void *osr_code = (uint8_t *)res.code + osr->entry_offset;
+        void *osr_code = (uint8_t *) res.code + osr->entry_offset;
 
         // Prepare values array indexed by vreg
         // We need to know which vregs the OSR stub loads.
@@ -1622,7 +1655,7 @@ static void test_osr_entry(void) {
         XrValue osr_result;
         jit_env_reset();
         bool ok = xm_jit_osr_enter(osr_code, &g_jit_coro, values, XR_SLOT_I64, &osr_result);
-        fprintf(stderr, " osr_ok=%d osr=%lld", ok, (long long)osr_result.i);
+        fprintf(stderr, " osr_ok=%d osr=%lld", ok, (long long) osr_result.i);
         assert(ok);
         assert(osr_result.i == 37);
     } else {
@@ -1666,13 +1699,13 @@ static void test_deopt_guard(void) {
 
     // Guard passes: f(10) = 11
     int64_t r1 = jit_call1(res.code, 10);
-    fprintf(stderr, " f(10)=%lld", (long long)r1);
+    fprintf(stderr, " f(10)=%lld", (long long) r1);
     assert(r1 == 11);
 
     // Guard fails: f(0) = DEOPT_MARKER
     int64_t r2 = jit_call1(res.code, 0);
-    fprintf(stderr, " f(0)=0x%llx", (unsigned long long)r2);
-    assert(r2 == (int64_t)0xDEAD0001DEAD0001LL);
+    fprintf(stderr, " f(0)=0x%llx", (unsigned long long) r2);
+    assert(r2 == (int64_t) 0xDEAD0001DEAD0001LL);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -1719,8 +1752,8 @@ static void test_load_field(void) {
     int64_t expected = 0x12345678LL;
     memcpy(fake_obj + 32 + 8, &expected, 8);  // fields[1].payload
 
-    int64_t result = jit_call1(res.code, (int64_t)(intptr_t)fake_obj);
-    fprintf(stderr, " result=0x%llx", (long long)result);
+    int64_t result = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
+    fprintf(stderr, " result=0x%llx", (long long) result);
     assert(result == expected);
 
     xm_code_alloc_destroy(&alloc);
@@ -1776,8 +1809,8 @@ static void test_store_load_field(void) {
     uint8_t fake_obj[80];
     memset(fake_obj, 0, sizeof(fake_obj));
 
-    int64_t result = jit_call1(res.code, (int64_t)(intptr_t)fake_obj);
-    fprintf(stderr, " result=%lld", (long long)result);
+    int64_t result = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
+    fprintf(stderr, " result=%lld", (long long) result);
     assert(result == 999);
 
     // Verify the store actually wrote payload at byte 48+8=56
@@ -1801,8 +1834,8 @@ static void test_store_load_field(void) {
  *     ret v1
  */
 static XrJitResult jit_test_add42(void *coro, int64_t x) {
-    (void)coro;
-    return (XrJitResult){x + 42, 3};
+    (void) coro;
+    return (XrJitResult) {x + 42, 3};
 }
 
 static void test_call_c(void) {
@@ -1815,7 +1848,7 @@ static void test_call_c(void) {
     XmBlock *entry = xm_func_add_block(func, "entry");
 
     // CALL_C: args[0] = func ptr (const), args[1] = extra arg (v0)
-    XmRef fn_ref = xm_const_ptr(func, (void *)jit_test_add42);
+    XmRef fn_ref = xm_const_ptr(func, (void *) jit_test_add42);
     XmRef v1 = xm_emit(func, entry, XM_CALL_C, XR_REP_I64, fn_ref, p0);
     xm_block_set_ret(entry, v1);
 
@@ -1827,15 +1860,15 @@ static void test_call_c(void) {
 
     // call_c_test(100) → jit_test_add42(coro=0, 100) → 142
     int64_t r1 = jit_call1(res.code, 100);
-    fprintf(stderr, " f(100)=%lld", (long long)r1);
+    fprintf(stderr, " f(100)=%lld", (long long) r1);
     assert(r1 == 142);
 
     int64_t r2 = jit_call1(res.code, 0);
-    fprintf(stderr, " f(0)=%lld", (long long)r2);
+    fprintf(stderr, " f(0)=%lld", (long long) r2);
     assert(r2 == 42);
 
     int64_t r3 = jit_call1(res.code, -10);
-    fprintf(stderr, " f(-10)=%lld", (long long)r3);
+    fprintf(stderr, " f(-10)=%lld", (long long) r3);
     assert(r3 == 32);
 
     xm_code_alloc_destroy(&alloc);
@@ -1888,16 +1921,16 @@ static void test_guard_class(void) {
     uint16_t shape_id = 42;
     memcpy(fake_obj + 10, &shape_id, 2);
 
-    int64_t r1 = jit_call1(res.code, (int64_t)(intptr_t)fake_obj);
-    fprintf(stderr, " match=%lld", (long long)r1);
+    int64_t r1 = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
+    fprintf(stderr, " match=%lld", (long long) r1);
     assert(r1 == 1);
 
     // Change shape_id to 99 → should deopt
     shape_id = 99;
     memcpy(fake_obj + 10, &shape_id, 2);
-    int64_t r2 = jit_call1(res.code, (int64_t)(intptr_t)fake_obj);
-    fprintf(stderr, " mismatch=0x%llx", (unsigned long long)r2);
-    assert(r2 == (int64_t)0xDEAD0001DEAD0001LL);
+    int64_t r2 = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
+    fprintf(stderr, " mismatch=0x%llx", (unsigned long long) r2);
+    assert(r2 == (int64_t) 0xDEAD0001DEAD0001LL);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -1919,8 +1952,8 @@ static void test_guard_class(void) {
  * Tests that CALL_C correctly handles const_ptr for both fn and arg.
  */
 static XrJitResult jit_test_make_obj(void *coro, int64_t shape_raw) {
-    (void)coro;
-    return (XrJitResult){shape_raw, 5};
+    (void) coro;
+    return (XrJitResult) {shape_raw, 5};
 }
 
 static void test_call_c_const_arg(void) {
@@ -1940,8 +1973,8 @@ static void test_call_c_const_arg(void) {
     XmBlock *entry = xm_func_add_block(func, "entry");
 
     // CALL_C with both args as const_ptr
-    XmRef fn_ref = xm_const_ptr(func, (void *)jit_test_make_obj);
-    XmRef shape_ref = xm_const_ptr(func, (void *)fake_buf);
+    XmRef fn_ref = xm_const_ptr(func, (void *) jit_test_make_obj);
+    XmRef shape_ref = xm_const_ptr(func, (void *) fake_buf);
     XmRef v0 = xm_emit(func, entry, XM_CALL_C, XR_REP_PTR, fn_ref, shape_ref);
 
     // LOAD_FIELD at byte_offset 16 (Json field[0])
@@ -1956,7 +1989,7 @@ static void test_call_c_const_arg(void) {
     fprintf(stderr, " code=%u", res.code_size);
 
     int64_t result = jit_call0(res.code);
-    fprintf(stderr, " result=0x%llx", (long long)result);
+    fprintf(stderr, " result=0x%llx", (long long) result);
     assert(result == 0xCAFE);
 
     xm_code_alloc_destroy(&alloc);
@@ -1992,8 +2025,8 @@ static void test_int_sub_chain(void) {
     XmRef p1 = xm_new_vreg(func, XR_REP_I64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
-    XmRef inner = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, p1);  // x - y
-    XmRef outer = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, inner); // x - (x-y)
+    XmRef inner = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, p1);     // x - y
+    XmRef outer = xm_emit(func, entry, XM_SUB, XR_REP_I64, p0, inner);  // x - (x-y)
     xm_block_set_ret(entry, outer);
 
     XmCodeAlloc alloc;
@@ -2005,8 +2038,8 @@ static void test_int_sub_chain(void) {
     int64_t r1 = jit_call2(res.code, 100, 7);
     int64_t r2 = jit_call2(res.code, -3, -10);
     int64_t r3 = jit_call2(res.code, 0, 42);
-    fprintf(stderr, " f(100,7)=%lld f(-3,-10)=%lld f(0,42)=%lld",
-            (long long)r1, (long long)r2, (long long)r3);
+    fprintf(stderr, " f(100,7)=%lld f(-3,-10)=%lld f(0,42)=%lld", (long long) r1, (long long) r2,
+            (long long) r3);
     assert(r1 == 7);
     assert(r2 == -10);
     assert(r3 == 42);
@@ -2032,7 +2065,7 @@ static void test_fp_noncommutative_chain(void) {
 
     XmBlock *entry = xm_func_add_block(func, "entry");
     XmRef diff = xm_emit(func, entry, XM_FSUB, XR_REP_F64, p0, p1);   // x - y
-    XmRef quo  = xm_emit(func, entry, XM_FDIV, XR_REP_F64, diff, p1); // (x-y)/y
+    XmRef quo = xm_emit(func, entry, XM_FDIV, XR_REP_F64, diff, p1);  // (x-y)/y
     xm_block_set_ret(entry, quo);
 
     XmCodeAlloc alloc;
@@ -2041,11 +2074,13 @@ static void test_fp_noncommutative_chain(void) {
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
-    int64_t r1 = jit_call2_f64(res.code, 10.0, 4.0);   // 1.5
-    int64_t r2 = jit_call2_f64(res.code, 21.0, 7.0);   // 2.0
-    int64_t r3 = jit_call2_f64(res.code, -3.0, 3.0);   // -2.0
+    int64_t r1 = jit_call2_f64(res.code, 10.0, 4.0);  // 1.5
+    int64_t r2 = jit_call2_f64(res.code, 21.0, 7.0);  // 2.0
+    int64_t r3 = jit_call2_f64(res.code, -3.0, 3.0);  // -2.0
     double f1, f2, f3;
-    memcpy(&f1, &r1, 8); memcpy(&f2, &r2, 8); memcpy(&f3, &r3, 8);
+    memcpy(&f1, &r1, 8);
+    memcpy(&f2, &r2, 8);
+    memcpy(&f3, &r3, 8);
     fprintf(stderr, " f(10,4)=%g f(21,7)=%g f(-3,3)=%g", f1, f2, f3);
     assert(f1 == 1.5);
     assert(f2 == 2.0);
@@ -2059,13 +2094,13 @@ static void test_fp_noncommutative_chain(void) {
 /* C helper for test_call_c_fp_live_across_call: returns 16.0 to make the
  * expected sum a clean 136.0 = (0+1+...+15) + 16. */
 static XrJitResult jit_test_fp16_const(void *coro, int64_t x_raw) {
-    (void)coro;
+    (void) coro;
     double x;
     memcpy(&x, &x_raw, 8);
     double result = x * 2.0;
     int64_t result_raw;
     memcpy(&result_raw, &result, 8);
-    return (XrJitResult){result_raw, 4};
+    return (XrJitResult) {result_raw, 4};
 }
 
 /*
@@ -2091,14 +2126,15 @@ static void test_call_c_fp_live_across_call(void) {
     XmFunc *func = xm_func_new("fp_live_call_c");
     func->num_params = 16;
     XmRef ps[16];
-    for (int i = 0; i < 16; i++) ps[i] = xm_new_vreg(func, XR_REP_F64);
+    for (int i = 0; i < 16; i++)
+        ps[i] = xm_new_vreg(func, XR_REP_F64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
 
     // CALL_C(jit_test_fp16_const, 8.0) -> 16.0; result kept live too.
-    XmRef fn   = xm_const_ptr(func, (void *)jit_test_fp16_const);
-    XmRef c8   = xm_const_f64(func, 8.0);
-    XmRef c8v  = xm_emit_unary(func, entry, XM_CONST_F64, XR_REP_F64, c8);
+    XmRef fn = xm_const_ptr(func, (void *) jit_test_fp16_const);
+    XmRef c8 = xm_const_f64(func, 8.0);
+    XmRef c8v = xm_emit_unary(func, entry, XM_CONST_F64, XR_REP_F64, c8);
     XmRef call_res = xm_emit(func, entry, XM_CALL_C, XR_REP_F64, fn, c8v);
 
     // Now sum p0..p15 + call_res. All 16 ps[i] must remain live across
@@ -2118,7 +2154,7 @@ static void test_call_c_fp_live_across_call(void) {
 
     int64_t buf[16];
     for (int i = 0; i < 16; i++) {
-        double v = (double)i;
+        double v = (double) i;
         memcpy(&buf[i], &v, 8);
     }
     int64_t raw = jit_calln(res.code, buf);
@@ -2151,20 +2187,20 @@ static void test_binop_pressure_chain(void) {
     XmFunc *func = xm_func_new("binop_pressure");
     func->num_params = 12;
     XmRef ps[12];
-    for (int i = 0; i < 12; i++) ps[i] = xm_new_vreg(func, XR_REP_I64);
+    for (int i = 0; i < 12; i++)
+        ps[i] = xm_new_vreg(func, XR_REP_I64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
     // pair-add: a01, a23, ... a1011
     XmRef pair[6];
     for (int i = 0; i < 6; i++)
-        pair[i] = xm_emit(func, entry, XM_ADD, XR_REP_I64,
-                           ps[i*2], ps[i*2 + 1]);
+        pair[i] = xm_emit(func, entry, XM_ADD, XR_REP_I64, ps[i * 2], ps[i * 2 + 1]);
     // sub-pair: pair[0]-pair[1], pair[2]-pair[3], pair[4]-pair[5]
     XmRef diff0 = xm_emit(func, entry, XM_SUB, XR_REP_I64, pair[0], pair[1]);
     XmRef diff1 = xm_emit(func, entry, XM_SUB, XR_REP_I64, pair[2], pair[3]);
     XmRef diff2 = xm_emit(func, entry, XM_SUB, XR_REP_I64, pair[4], pair[5]);
     // sum the three diffs
-    XmRef s01  = xm_emit(func, entry, XM_ADD, XR_REP_I64, diff0, diff1);
+    XmRef s01 = xm_emit(func, entry, XM_ADD, XR_REP_I64, diff0, diff1);
     XmRef total = xm_emit(func, entry, XM_ADD, XR_REP_I64, s01, diff2);
     xm_block_set_ret(entry, total);
 
@@ -2179,13 +2215,15 @@ static void test_binop_pressure_chain(void) {
     //   diff = (-4, -4, -4)
     //   total = -12
     int64_t buf[12];
-    for (int i = 0; i < 12; i++) buf[i] = i + 1;
+    for (int i = 0; i < 12; i++)
+        buf[i] = i + 1;
     int64_t r1 = jit_calln(res.code, buf);
-    fprintf(stderr, " f(1..12)=%lld", (long long)r1);
+    fprintf(stderr, " f(1..12)=%lld", (long long) r1);
     assert(r1 == -12);
 
     // Inputs all zero -> 0
-    for (int i = 0; i < 12; i++) buf[i] = 0;
+    for (int i = 0; i < 12; i++)
+        buf[i] = 0;
     int64_t r2 = jit_calln(res.code, buf);
     assert(r2 == 0);
 
@@ -2207,7 +2245,8 @@ static void test_deopt_with_spill_pressure(void) {
     XmFunc *func = xm_func_new("deopt_spill_pressure");
     func->num_params = 12;
     XmRef ps[12];
-    for (int i = 0; i < 12; i++) ps[i] = xm_new_vreg(func, XR_REP_I64);
+    for (int i = 0; i < 12; i++)
+        ps[i] = xm_new_vreg(func, XR_REP_I64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
 
@@ -2235,16 +2274,17 @@ static void test_deopt_with_spill_pressure(void) {
 
     // success path: sum 1..12 = 78
     int64_t buf[12];
-    for (int i = 0; i < 12; i++) buf[i] = i + 1;
+    for (int i = 0; i < 12; i++)
+        buf[i] = i + 1;
     int64_t r1 = jit_calln(res.code, buf);
-    fprintf(stderr, " sum=%lld", (long long)r1);
+    fprintf(stderr, " sum=%lld", (long long) r1);
     assert(r1 == 78);
 
     // deopt path: p0 == 0 triggers GUARD_NONNULL
     buf[0] = 0;
     int64_t r2 = jit_calln(res.code, buf);
-    fprintf(stderr, " deopt=0x%llx", (unsigned long long)r2);
-    assert(r2 == (int64_t)0xDEAD0001DEAD0001LL);
+    fprintf(stderr, " deopt=0x%llx", (unsigned long long) r2);
+    assert(r2 == (int64_t) 0xDEAD0001DEAD0001LL);
 
     xm_code_alloc_destroy(&alloc);
     xm_func_destroy(func);
@@ -2267,28 +2307,27 @@ static void test_call_self_direct(void) {
     XmRef p0 = xm_new_vreg(func, XR_REP_I64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
-    XmBlock *base  = xm_func_add_block(func, "base");
-    XmBlock *rec   = xm_func_add_block(func, "rec");
+    XmBlock *base = xm_func_add_block(func, "base");
+    XmBlock *rec = xm_func_add_block(func, "rec");
 
     // entry: cmp = (p0 == 0); br cmp, @base, @rec
-    XmRef cz   = xm_const_i64(func, 0);
+    XmRef cz = xm_const_i64(func, 0);
     XmRef zero = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, cz);
-    XmRef cmp  = xm_emit(func, entry, XM_EQ, XR_REP_I64, p0, zero);
+    XmRef cmp = xm_emit(func, entry, XM_EQ, XR_REP_I64, p0, zero);
     xm_block_set_br(entry, cmp, base, rec);
 
     // @base: ret 0
     xm_block_set_ret(base, zero);
 
     // @rec: n_minus_1 = p0 - 1; rec = CALL_SELF_DIRECT(n_minus_1); ret p0 + rec
-    XmRef c1   = xm_const_i64(func, 1);
-    XmRef one  = xm_emit_unary(func, rec, XM_CONST_I64, XR_REP_I64, c1);
-    XmRef nm1  = xm_emit(func, rec, XM_SUB, XR_REP_I64, p0, one);
-    XmRef call_res = xm_emit(func, rec, XM_CALL_SELF_DIRECT, XR_REP_I64,
-                               nm1, XM_NONE);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef one = xm_emit_unary(func, rec, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef nm1 = xm_emit(func, rec, XM_SUB, XR_REP_I64, p0, one);
+    XmRef call_res = xm_emit(func, rec, XM_CALL_SELF_DIRECT, XR_REP_I64, nm1, XM_NONE);
     rec->ins[rec->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
     // Bind the single argument in the call_arg_pool so emit_call_args_from_pool
     // sets up the correct tag-pack and (for x64) jit_ctx->call_args[0].
-    XmRef pool_args[1] = { nm1 };
+    XmRef pool_args[1] = {nm1};
     xm_func_bind_call_args(func, call_res, pool_args, 1);
     XmRef sum = xm_emit(func, rec, XM_ADD, XR_REP_I64, p0, call_res);
     xm_block_set_ret(rec, sum);
@@ -2299,12 +2338,12 @@ static void test_call_self_direct(void) {
     assert(res.success);
     fprintf(stderr, " code=%u fast=%u", res.code_size, res.fast_entry_offset);
 
-    int64_t r0  = jit_call1(res.code, 0);
-    int64_t r1  = jit_call1(res.code, 1);
-    int64_t r5  = jit_call1(res.code, 5);
+    int64_t r0 = jit_call1(res.code, 0);
+    int64_t r1 = jit_call1(res.code, 1);
+    int64_t r5 = jit_call1(res.code, 5);
     int64_t r10 = jit_call1(res.code, 10);
-    fprintf(stderr, " f(0)=%lld f(1)=%lld f(5)=%lld f(10)=%lld",
-            (long long)r0, (long long)r1, (long long)r5, (long long)r10);
+    fprintf(stderr, " f(0)=%lld f(1)=%lld f(5)=%lld f(10)=%lld", (long long) r0, (long long) r1,
+            (long long) r5, (long long) r10);
     assert(r0 == 0);
     assert(r1 == 1);
     assert(r5 == 15);   // 5+4+3+2+1
@@ -2340,12 +2379,12 @@ static void test_osr_entry_pressure(void) {
     XmRef p4 = xm_new_vreg(func, XR_REP_I64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
-    XmBlock *loop  = xm_func_add_block(func, "loop");
-    XmBlock *body  = xm_func_add_block(func, "body");
+    XmBlock *loop = xm_func_add_block(func, "loop");
+    XmBlock *body = xm_func_add_block(func, "body");
     XmBlock *exit_ = xm_func_add_block(func, "exit");
 
     // entry: sum = 0; jmp @loop
-    XmRef cz   = xm_const_i64(func, 0);
+    XmRef cz = xm_const_i64(func, 0);
     XmRef zero = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, cz);
     xm_block_set_jmp(entry, loop);
     xm_block_add_pred(loop, entry, func->arena);
@@ -2354,13 +2393,13 @@ static void test_osr_entry_pressure(void) {
     // @loop (header): phi nodes
     loop->is_loop_header = true;
     XmPhi *phi_count = xm_add_phi(func, loop, XR_REP_I64);
-    XmPhi *phi_sum   = xm_add_phi(func, loop, XR_REP_I64);
+    XmPhi *phi_sum = xm_add_phi(func, loop, XR_REP_I64);
     xm_phi_set_arg(phi_count, 0, p_count);  // entry value
-    xm_phi_set_arg(phi_sum,   0, zero);
+    xm_phi_set_arg(phi_sum, 0, zero);
 
     // cond = (phi_count > 0) ? body : exit
     XmRef cz_b = xm_const_i64(func, 0);
-    XmRef zb   = xm_emit_unary(func, loop, XM_CONST_I64, XR_REP_I64, cz_b);
+    XmRef zb = xm_emit_unary(func, loop, XM_CONST_I64, XR_REP_I64, cz_b);
     XmRef cond = xm_emit(func, loop, XM_LT, XR_REP_I64, zb, phi_count->dst);
     xm_block_set_br(loop, cond, body, exit_);
     xm_block_add_pred(body, loop, func->arena);
@@ -2368,18 +2407,16 @@ static void test_osr_entry_pressure(void) {
 
     // @body: sum += p1+p2+p3+p4 ; count -= 1 ; jmp @loop
     // Chain ADDs to keep p1..p4 + intermediates all live at end of body.
-    XmRef s12   = xm_emit(func, body, XM_ADD, XR_REP_I64, p1, p2);
-    XmRef s34   = xm_emit(func, body, XM_ADD, XR_REP_I64, p3, p4);
+    XmRef s12 = xm_emit(func, body, XM_ADD, XR_REP_I64, p1, p2);
+    XmRef s34 = xm_emit(func, body, XM_ADD, XR_REP_I64, p3, p4);
     XmRef delta = xm_emit(func, body, XM_ADD, XR_REP_I64, s12, s34);
-    XmRef new_sum = xm_emit(func, body, XM_ADD, XR_REP_I64,
-                              phi_sum->dst, delta);
-    XmRef c1   = xm_const_i64(func, 1);
-    XmRef one  = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1);
-    XmRef new_count = xm_emit(func, body, XM_SUB, XR_REP_I64,
-                                phi_count->dst, one);
+    XmRef new_sum = xm_emit(func, body, XM_ADD, XR_REP_I64, phi_sum->dst, delta);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef one = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1);
+    XmRef new_count = xm_emit(func, body, XM_SUB, XR_REP_I64, phi_count->dst, one);
     xm_block_set_jmp(body, loop);
     xm_phi_set_arg(phi_count, 1, new_count);
-    xm_phi_set_arg(phi_sum,   1, new_sum);
+    xm_phi_set_arg(phi_sum, 1, new_sum);
 
     // @exit: ret phi_sum
     xm_block_set_ret(exit_, phi_sum->dst);
@@ -2395,16 +2432,18 @@ static void test_osr_entry_pressure(void) {
 
     // Run the same compiled code 4 rounds with different inputs to
     // verify no stale frame state leaks across calls.
-    struct { int64_t count, p1, p2, p3, p4, expected; } cases[] = {
-        { 3, 1, 2, 3, 4, 30 },   // 3 * 10
-        { 5, 1, 1, 1, 1, 20 },   // 5 * 4
-        { 0, 7, 8, 9, 10, 0 },   // loop body never runs
-        { 4, -1, 2, -3, 4, 8 },  // 4 * 2
+    struct {
+        int64_t count, p1, p2, p3, p4, expected;
+    } cases[] = {
+        {3, 1, 2, 3, 4, 30},   // 3 * 10
+        {5, 1, 1, 1, 1, 20},   // 5 * 4
+        {0, 7, 8, 9, 10, 0},   // loop body never runs
+        {4, -1, 2, -3, 4, 8},  // 4 * 2
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
-        int64_t r = jit_call5(res.code, cases[i].count, cases[i].p1,
-                              cases[i].p2, cases[i].p3, cases[i].p4);
-        fprintf(stderr, " r%zu=%lld", i, (long long)r);
+        int64_t r =
+            jit_call5(res.code, cases[i].count, cases[i].p1, cases[i].p2, cases[i].p3, cases[i].p4);
+        fprintf(stderr, " r%zu=%lld", i, (long long) r);
         assert(r == cases[i].expected);
     }
 
@@ -2437,11 +2476,14 @@ static void test_osr_entry_pressure(void) {
 static void test_spill_only_param_init(void) {
     fprintf(stderr, "  test_spill_only_param_init...");
 
-    enum { NPARAM = 24 };
+    enum {
+        NPARAM = 24
+    };
     XmFunc *func = xm_func_new("spill_only_param");
     func->num_params = NPARAM;
     XmRef ps[NPARAM];
-    for (int i = 0; i < NPARAM; i++) ps[i] = xm_new_vreg(func, XR_REP_I64);
+    for (int i = 0; i < NPARAM; i++)
+        ps[i] = xm_new_vreg(func, XR_REP_I64);
 
     XmBlock *entry = xm_func_add_block(func, "entry");
     XmRef acc = ps[0];
@@ -2457,19 +2499,22 @@ static void test_spill_only_param_init(void) {
 
     int64_t buf[NPARAM];
 
-    for (int i = 0; i < NPARAM; i++) buf[i] = 1;
+    for (int i = 0; i < NPARAM; i++)
+        buf[i] = 1;
     int64_t r1 = jit_calln(res.code, buf);
-    fprintf(stderr, " ones=%lld", (long long)r1);
+    fprintf(stderr, " ones=%lld", (long long) r1);
     assert(r1 == 24);
 
-    for (int i = 0; i < NPARAM; i++) buf[i] = i + 1;
+    for (int i = 0; i < NPARAM; i++)
+        buf[i] = i + 1;
     int64_t r2 = jit_calln(res.code, buf);
-    fprintf(stderr, " seq=%lld", (long long)r2);
+    fprintf(stderr, " seq=%lld", (long long) r2);
     assert(r2 == 300);  // 1+2+...+24
 
-    for (int i = 0; i < NPARAM; i++) buf[i] = (i % 2 == 0) ? -(i + 1) : (i + 1);
+    for (int i = 0; i < NPARAM; i++)
+        buf[i] = (i % 2 == 0) ? -(i + 1) : (i + 1);
     int64_t r3 = jit_calln(res.code, buf);
-    fprintf(stderr, " mix=%lld", (long long)r3);
+    fprintf(stderr, " mix=%lld", (long long) r3);
     assert(r3 == 12);
 
     xm_code_alloc_destroy(&alloc);
@@ -2498,20 +2543,20 @@ static void test_alloc_inline(void) {
     static uint8_t heap_raw[16384 * 2];
     memset(fake_gc, 0, sizeof(fake_gc));
     memset(heap_raw, 0, sizeof(heap_raw));
-    uintptr_t aligned = ((uintptr_t)heap_raw + 16383) & ~(uintptr_t)0x3FFF;
-    uint8_t *heap_buf = (uint8_t *)aligned;
+    uintptr_t aligned = ((uintptr_t) heap_raw + 16383) & ~(uintptr_t) 0x3FFF;
+    uint8_t *heap_buf = (uint8_t *) aligned;
 
     // gc->immix.cursor at offset 256 (past the block header)
-    char *cursor = (char*)heap_buf + 256;
+    char *cursor = (char *) heap_buf + 256;
     memcpy(fake_gc + 0, &cursor, 8);
     // gc->immix.limit at offset 8
-    char *limit = (char*)heap_buf + 16384;
+    char *limit = (char *) heap_buf + 16384;
     memcpy(fake_gc + 8, &limit, 8);
     // gc->currentwhite = 0x01 at XM_GC_CURRENTWHITE_OFFSET (109)
     fake_gc[109] = 0x01;
 
     jit_env_reset();
-    g_jit_coro.coro_gc = (struct XrCoroGC *)fake_gc;
+    g_jit_coro.coro_gc = (struct XrCoroGC *) fake_gc;
 
     XmFunc *func = xm_func_new("alloc_inline");
     func->num_params = 0;
@@ -2533,20 +2578,20 @@ static void test_alloc_inline(void) {
     // Call directly: jit_calln would re-zero jit_ctx (we want our fake
     // coro_gc to stay attached). The fake env is already in g_jit_ctx.
     int64_t args[] = {};
-    int64_t result = ((JitFn)res.code)(jit_test_coro(), args);
-    fprintf(stderr, " result=%p", (void*)result);
+    int64_t result = ((JitFn) res.code)(jit_test_coro(), args);
+    fprintf(stderr, " result=%p", (void *) result);
 
     // Fast path should return original cursor (heap_buf + 256)
-    assert(result == (int64_t)(intptr_t)cursor);
+    assert(result == (int64_t) (intptr_t) cursor);
 
     // Verify cursor advanced by 48
     char *new_cursor;
     memcpy(&new_cursor, fake_gc + 0, 8);
     assert(new_cursor == cursor + 48);
-    fprintf(stderr, " cursor_advanced=%d", (int)(new_cursor - cursor));
+    fprintf(stderr, " cursor_advanced=%d", (int) (new_cursor - cursor));
 
     // Verify GC header at result:
-    uint8_t *hdr = (uint8_t*)(intptr_t)result;
+    uint8_t *hdr = (uint8_t *) (intptr_t) result;
     // gc_next = 0 (8 bytes at offset 0)
     int64_t gc_next = 0;
     memcpy(&gc_next, hdr, 8);

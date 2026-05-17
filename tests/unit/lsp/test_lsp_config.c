@@ -21,20 +21,22 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 #define TEST(name) static void test_##name(void)
-#define RUN_TEST(name) do { \
-    printf("  Testing %s... ", #name); \
-    test_##name(); \
-    printf("PASS\n"); \
-    tests_passed++; \
-} while(0)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Testing %s... ", #name);                                                         \
+        test_##name();                                                                             \
+        printf("PASS\n");                                                                          \
+        tests_passed++;                                                                            \
+    } while (0)
 
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf("FAIL at line %d: %s\n", __LINE__, #cond); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
@@ -206,16 +208,21 @@ TEST(ignore_null_safety) {
 static char *create_temp_toml(const char *content) {
     char template[] = "/tmp/xray_test_XXXXXX";
     char *tmpdir = mkdtemp(template);
-    if (!tmpdir) return NULL;
+    if (!tmpdir)
+        return NULL;
 
     char *dir = xr_strdup(tmpdir);
-    if (!dir) return NULL;
+    if (!dir)
+        return NULL;
 
     char path[256];
     snprintf(path, sizeof(path), "%s/xray.toml", dir);
 
     FILE *f = fopen(path, "w");
-    if (!f) { xr_free(dir); return NULL; }
+    if (!f) {
+        xr_free(dir);
+        return NULL;
+    }
     fputs(content, f);
     fclose(f);
 
@@ -223,7 +230,8 @@ static char *create_temp_toml(const char *content) {
 }
 
 static void cleanup_temp_toml(char *dir) {
-    if (!dir) return;
+    if (!dir)
+        return;
     char path[256];
     snprintf(path, sizeof(path), "%s/xray.toml", dir);
     unlink(path);
@@ -232,14 +240,12 @@ static void cleanup_temp_toml(char *dir) {
 }
 
 TEST(toml_load_basic) {
-    char *dir = create_temp_toml(
-        "[lsp]\n"
-        "diagnostics_enabled = false\n"
-        "diagnostic_debounce_ms = 500\n"
-        "completion_max_items = 50\n"
-        "format_tab_size = 2\n"
-        "format_insert_spaces = false\n"
-    );
+    char *dir = create_temp_toml("[lsp]\n"
+                                 "diagnostics_enabled = false\n"
+                                 "diagnostic_debounce_ms = 500\n"
+                                 "completion_max_items = 50\n"
+                                 "format_tab_size = 2\n"
+                                 "format_insert_spaces = false\n");
     ASSERT(dir != NULL);
 
     XlspConfig config;
@@ -269,11 +275,9 @@ TEST(toml_load_ignore_array) {
     // next section boundary, which conflicts with array value brackets.
     // When [lsp] is the LAST section, there is no next '[' section marker,
     // so the parser falls back to strlen() and correctly parses the array.
-    char *dir = create_temp_toml(
-        "[lsp]\n"
-        "diagnostics_enabled = true\n"
-        "ignore = [\"node_modules\", \"build\", \"*.log\"]\n"
-    );
+    char *dir = create_temp_toml("[lsp]\n"
+                                 "diagnostics_enabled = true\n"
+                                 "ignore = [\"node_modules\", \"build\", \"*.log\"]\n");
     ASSERT(dir != NULL);
 
     XlspConfig config;
@@ -290,11 +294,9 @@ TEST(toml_load_ignore_array) {
 }
 
 TEST(toml_load_inlay_hints) {
-    char *dir = create_temp_toml(
-        "[lsp]\n"
-        "inlay_hints_type_annotations = false\n"
-        "inlay_hints_parameter_names = false\n"
-    );
+    char *dir = create_temp_toml("[lsp]\n"
+                                 "inlay_hints_type_annotations = false\n"
+                                 "inlay_hints_parameter_names = false\n");
     ASSERT(dir != NULL);
 
     XlspConfig config;
@@ -321,10 +323,8 @@ TEST(toml_load_missing_file) {
 }
 
 TEST(toml_load_no_lsp_section) {
-    char *dir = create_temp_toml(
-        "[build]\n"
-        "target = \"native\"\n"
-    );
+    char *dir = create_temp_toml("[build]\n"
+                                 "target = \"native\"\n");
     ASSERT(dir != NULL);
 
     XlspConfig config;
@@ -338,10 +338,8 @@ TEST(toml_load_no_lsp_section) {
 
 TEST(toml_load_partial_config) {
     // Only some fields present â€?others should remain at their preset values
-    char *dir = create_temp_toml(
-        "[lsp]\n"
-        "format_tab_size = 8\n"
-    );
+    char *dir = create_temp_toml("[lsp]\n"
+                                 "format_tab_size = 8\n");
     ASSERT(dir != NULL);
 
     XlspConfig config;
@@ -377,7 +375,8 @@ TEST(toml_null_safety) {
 
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
-    (void)argc; (void)argv;
+    (void) argc;
+    (void) argv;
 
     printf("\n=== LSP Configuration Unit Tests ===\n\n");
 
@@ -403,8 +402,7 @@ int main(int argc, char **argv) {
     RUN_TEST(toml_load_partial_config);
     RUN_TEST(toml_null_safety);
 
-    printf("\n=== Results: %d passed, %d failed ===\n\n",
-           tests_passed, tests_failed);
+    printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 
     return tests_failed > 0 ? 1 : 0;
 }

@@ -68,7 +68,7 @@ TEST(parser_int_literal) {
     ASSERT_EQ_INT(stmt->type, AST_EXPR_STMT);
     AstNode *expr = stmt->as.expr_stmt;
     ASSERT_EQ_INT(expr->type, AST_LITERAL_INT);
-    ASSERT_EQ_INT((int)expr->as.literal.raw_value.int_val, 42);
+    ASSERT_EQ_INT((int) expr->as.literal.raw_value.int_val, 42);
     teardown();
 }
 
@@ -316,14 +316,12 @@ TEST(parser_object_literal) {
 
 TEST(parser_class_decl) {
     setup();
-    AstNode *stmt = parse_first(
-        "class Dog {\n"
-        "  name: string\n"
-        "  bark() {\n"
-        "    print(\"woof\")\n"
-        "  }\n"
-        "}"
-    );
+    AstNode *stmt = parse_first("class Dog {\n"
+                                "  name: string\n"
+                                "  bark() {\n"
+                                "    print(\"woof\")\n"
+                                "  }\n"
+                                "}");
     ASSERT_EQ_INT(stmt->type, AST_CLASS_DECL);
     ASSERT_STR_EQ(stmt->as.class_decl.name, "Dog");
     teardown();
@@ -353,11 +351,9 @@ TEST(parser_empty_source) {
 
 TEST(parser_multiple_stmts) {
     setup();
-    AstNode *program = parse_ok(
-        "let x = 1\n"
-        "let y = 2\n"
-        "print(x + y)"
-    );
+    AstNode *program = parse_ok("let x = 1\n"
+                                "let y = 2\n"
+                                "print(x + y)");
     ASSERT_TRUE(program->as.program.count >= 3);
     ASSERT_EQ_INT(program->as.program.statements[0]->type, AST_VAR_DECL);
     ASSERT_EQ_INT(program->as.program.statements[1]->type, AST_VAR_DECL);

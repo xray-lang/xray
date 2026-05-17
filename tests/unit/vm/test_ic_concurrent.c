@@ -38,31 +38,31 @@
 #include "base/xmalloc.h"
 
 #include "os/os_thread.h"
-#include <stdlib.h>  /* qsort */
+#include <stdlib.h> /* qsort */
 #include <stdint.h>
 #include <stdatomic.h>
 #include <string.h>
 
 /* Tunables — kept moderate so the test stays well below 1s on CI. */
-#define IC_STRESS_THREADS    4
+#define IC_STRESS_THREADS 4
 #define IC_STRESS_ITERATIONS 5000
 #define IC_STRESS_PROTO_INSTS 16
 
 typedef struct {
-    XrProto *shared_proto;          /* owned by main thread */
-    int      tid;                   /* 0..N-1, used as sentinel */
-    _Atomic uint64_t errors;        /* incremented on any mismatch */
+    XrProto *shared_proto;   /* owned by main thread */
+    int tid;                 /* 0..N-1, used as sentinel */
+    _Atomic uint64_t errors; /* incremented on any mismatch */
 } IcStressArg;
 
 /* Per-thread workload: own ctx, hammer the shared proto's IC slots
  * but only inside that ctx's tables. */
 static void *ic_stress_worker(void *raw) {
-    IcStressArg *arg = (IcStressArg *)raw;
+    IcStressArg *arg = (IcStressArg *) raw;
     XrProto *p = arg->shared_proto;
     /* A recognisable per-thread sentinel that should never appear in
      * any other thread's tables; if it does, ICs are leaking across
      * ctx boundaries. */
-    int sentinel_field  = 0xF000 + arg->tid;
+    int sentinel_field = 0xF000 + arg->tid;
     int sentinel_method = 0xC000 + arg->tid;
 
     for (int i = 0; i < IC_STRESS_ITERATIONS; i++) {
@@ -75,15 +75,14 @@ static void *ic_stress_worker(void *raw) {
             atomic_fetch_add_explicit(&arg->errors, 1u, memory_order_relaxed);
             continue;
         }
-        if (ft->count != IC_STRESS_PROTO_INSTS ||
-            mt->count != IC_STRESS_PROTO_INSTS) {
+        if (ft->count != IC_STRESS_PROTO_INSTS || mt->count != IC_STRESS_PROTO_INSTS) {
             atomic_fetch_add_explicit(&arg->errors, 1u, memory_order_relaxed);
         }
 
         /* Mutate a local IC slot with the per-thread sentinel. */
         ft->caches[0].cached_symbol = sentinel_field;
         ft->caches[0].state = XR_IC_FIELD_MONO;
-        mt->caches[0].total_count = (uint32_t)sentinel_method;
+        mt->caches[0].total_count = (uint32_t) sentinel_method;
 
         /* Take a snapshot — these run on a foreground thread in
          * production, so we exercise the hot path here. */
@@ -95,7 +94,7 @@ static void *ic_stress_worker(void *raw) {
             /* Snapshot must reflect THIS thread's writes, not some
              * other thread's. */
             if (fs->caches[0].cached_symbol != sentinel_field ||
-                ms->caches[0].total_count != (uint32_t)sentinel_method) {
+                ms->caches[0].total_count != (uint32_t) sentinel_method) {
                 atomic_fetch_add_explicit(&arg->errors, 1u, memory_order_relaxed);
             }
             xr_ic_field_table_free(fs);
@@ -106,7 +105,7 @@ static void *ic_stress_worker(void *raw) {
          * another thread had mutated this ctx, the sentinel would
          * change. */
         if (ft->caches[0].cached_symbol != sentinel_field ||
-            mt->caches[0].total_count != (uint32_t)sentinel_method) {
+            mt->caches[0].total_count != (uint32_t) sentinel_method) {
             atomic_fetch_add_explicit(&arg->errors, 1u, memory_order_relaxed);
         }
 
@@ -114,8 +113,7 @@ static void *ic_stress_worker(void *raw) {
          * alloc/free path under contention. */
         if (i & 1) {
             xr_vm_ctx_free_ic_tables(&ctx);
-            if (ctx.ic_tables_capacity != 0 ||
-                ctx.ic_field_tables != NULL ||
+            if (ctx.ic_tables_capacity != 0 || ctx.ic_field_tables != NULL ||
                 ctx.ic_method_tables != NULL) {
                 atomic_fetch_add_explicit(&arg->errors, 1u, memory_order_relaxed);
             }
@@ -130,7 +128,7 @@ TEST(ic_concurrent_workers_stay_isolated) {
     XrProto *shared = xr_vm_proto_new();
     ASSERT_NOT_NULL(shared);
     for (int i = 0; i < IC_STRESS_PROTO_INSTS; i++) {
-        xr_vm_proto_write(shared, (XrInstruction)0, 1);
+        xr_vm_proto_write(shared, (XrInstruction) 0, 1);
     }
 
     xr_thread_t threads[IC_STRESS_THREADS];
@@ -139,8 +137,7 @@ TEST(ic_concurrent_workers_stay_isolated) {
         args[t].shared_proto = shared;
         args[t].tid = t;
         atomic_store_explicit(&args[t].errors, 0u, memory_order_relaxed);
-        bool ok = xr_thread_create(&threads[t], ic_stress_worker,
-                                    &args[t]);
+        bool ok = xr_thread_create(&threads[t], ic_stress_worker, &args[t]);
         ASSERT_TRUE(ok);
     }
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
@@ -149,10 +146,9 @@ TEST(ic_concurrent_workers_stay_isolated) {
 
     uint64_t total_errors = 0;
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
-        total_errors += atomic_load_explicit(&args[t].errors,
-                                              memory_order_relaxed);
+        total_errors += atomic_load_explicit(&args[t].errors, memory_order_relaxed);
     }
-    ASSERT_EQ_INT((long long)total_errors, 0LL);
+    ASSERT_EQ_INT((long long) total_errors, 0LL);
 
     xr_vm_proto_free(shared);
 }
@@ -174,7 +170,7 @@ typedef struct {
 } IdRecord;
 
 static void *proto_id_alloc_worker(void *raw) {
-    IdRecord *rec = (IdRecord *)raw;
+    IdRecord *rec = (IdRecord *) raw;
     for (int i = 0; i < IC_PROTO_ID_PER_THREAD; i++) {
         XrProto *p = xr_vm_proto_new();
         rec->ids[i] = p ? p->proto_id : 0u;
@@ -184,19 +180,18 @@ static void *proto_id_alloc_worker(void *raw) {
 }
 
 static int cmp_u32(const void *a, const void *b) {
-    uint32_t x = *(const uint32_t *)a;
-    uint32_t y = *(const uint32_t *)b;
+    uint32_t x = *(const uint32_t *) a;
+    uint32_t y = *(const uint32_t *) b;
     return (x < y) ? -1 : (x > y);
 }
 
 TEST(proto_id_allocation_is_race_free) {
     xr_thread_t threads[IC_STRESS_THREADS];
-    IdRecord  records[IC_STRESS_THREADS];
+    IdRecord records[IC_STRESS_THREADS];
 
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
         memset(&records[t], 0, sizeof(records[t]));
-        bool ok = xr_thread_create(&threads[t], proto_id_alloc_worker,
-                                    &records[t]);
+        bool ok = xr_thread_create(&threads[t], proto_id_alloc_worker, &records[t]);
         ASSERT_TRUE(ok);
     }
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
@@ -205,7 +200,7 @@ TEST(proto_id_allocation_is_race_free) {
 
     /* Merge all ids into one buffer and sort to detect duplicates. */
     int total = IC_STRESS_THREADS * IC_PROTO_ID_PER_THREAD;
-    uint32_t *all = (uint32_t *)xr_malloc((size_t)total * sizeof(uint32_t));
+    uint32_t *all = (uint32_t *) xr_malloc((size_t) total * sizeof(uint32_t));
     ASSERT_NOT_NULL(all);
     int n = 0;
     for (int t = 0; t < IC_STRESS_THREADS; t++) {
@@ -213,11 +208,12 @@ TEST(proto_id_allocation_is_race_free) {
             all[n++] = records[t].ids[i];
         }
     }
-    qsort(all, (size_t)total, sizeof(uint32_t), cmp_u32);
+    qsort(all, (size_t) total, sizeof(uint32_t), cmp_u32);
 
     int duplicates = 0;
     for (int i = 1; i < total; i++) {
-        if (all[i] == all[i - 1]) duplicates++;
+        if (all[i] == all[i - 1])
+            duplicates++;
     }
     xr_free(all);
 
@@ -227,9 +223,9 @@ TEST(proto_id_allocation_is_race_free) {
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("Per-ctx IC under thread contention");
-    RUN_TEST(ic_concurrent_workers_stay_isolated);
+RUN_TEST_SUITE("Per-ctx IC under thread contention");
+RUN_TEST(ic_concurrent_workers_stay_isolated);
 
-    RUN_TEST_SUITE("proto_id atomic allocation");
-    RUN_TEST(proto_id_allocation_is_race_free);
+RUN_TEST_SUITE("proto_id atomic allocation");
+RUN_TEST(proto_id_allocation_is_race_free);
 TEST_MAIN_END()

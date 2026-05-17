@@ -48,9 +48,12 @@ TEST(simd_char_class_alnum) {
 }
 
 TEST(simd_char_class_hex) {
-    for (char c = '0'; c <= '9'; c++) ASSERT_TRUE(XR_IS_HEX(c));
-    for (char c = 'a'; c <= 'f'; c++) ASSERT_TRUE(XR_IS_HEX(c));
-    for (char c = 'A'; c <= 'F'; c++) ASSERT_TRUE(XR_IS_HEX(c));
+    for (char c = '0'; c <= '9'; c++)
+        ASSERT_TRUE(XR_IS_HEX(c));
+    for (char c = 'a'; c <= 'f'; c++)
+        ASSERT_TRUE(XR_IS_HEX(c));
+    for (char c = 'A'; c <= 'F'; c++)
+        ASSERT_TRUE(XR_IS_HEX(c));
     ASSERT_FALSE(XR_IS_HEX('g'));
     ASSERT_FALSE(XR_IS_HEX('G'));
     ASSERT_FALSE(XR_IS_HEX(' '));
@@ -208,35 +211,35 @@ TEST(simd_memset_f64) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("SIMD - Character Classification");
-    RUN_TEST(simd_char_class_digit);
-    RUN_TEST(simd_char_class_alpha);
-    RUN_TEST(simd_char_class_alnum);
-    RUN_TEST(simd_char_class_hex);
-    RUN_TEST(simd_char_class_ws);
-    RUN_TEST(simd_char_class_newline);
-    RUN_TEST(simd_char_class_whitespace);
-    RUN_TEST(simd_char_class_ident);
+RUN_TEST_SUITE("SIMD - Character Classification");
+RUN_TEST(simd_char_class_digit);
+RUN_TEST(simd_char_class_alpha);
+RUN_TEST(simd_char_class_alnum);
+RUN_TEST(simd_char_class_hex);
+RUN_TEST(simd_char_class_ws);
+RUN_TEST(simd_char_class_newline);
+RUN_TEST(simd_char_class_whitespace);
+RUN_TEST(simd_char_class_ident);
 
-    RUN_TEST_SUITE("SIMD - Conversion Tables");
-    RUN_TEST(simd_hex_to_val);
-    RUN_TEST(simd_digit_to_val);
+RUN_TEST_SUITE("SIMD - Conversion Tables");
+RUN_TEST(simd_hex_to_val);
+RUN_TEST(simd_digit_to_val);
 
-    RUN_TEST_SUITE("SIMD - Detection");
-    RUN_TEST(simd_detect);
+RUN_TEST_SUITE("SIMD - Detection");
+RUN_TEST(simd_detect);
 
-    RUN_TEST_SUITE("SIMD - Find Functions");
-    RUN_TEST(simd_find_char);
-    RUN_TEST(simd_find_char_first);
-    RUN_TEST(simd_skip_ws);
-    RUN_TEST(simd_skip_whitespace);
-    RUN_TEST(simd_find_newline);
-    RUN_TEST(simd_find_string_end);
+RUN_TEST_SUITE("SIMD - Find Functions");
+RUN_TEST(simd_find_char);
+RUN_TEST(simd_find_char_first);
+RUN_TEST(simd_skip_ws);
+RUN_TEST(simd_skip_whitespace);
+RUN_TEST(simd_find_newline);
+RUN_TEST(simd_find_string_end);
 
-    RUN_TEST_SUITE("SIMD - Memset");
-    RUN_TEST(simd_memset32);
-    RUN_TEST(simd_memset64);
-    RUN_TEST(simd_memset_f32);
-    RUN_TEST(simd_memset_f64);
+RUN_TEST_SUITE("SIMD - Memset");
+RUN_TEST(simd_memset32);
+RUN_TEST(simd_memset64);
+RUN_TEST(simd_memset_f32);
+RUN_TEST(simd_memset_f64);
 
 TEST_MAIN_END()

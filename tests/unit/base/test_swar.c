@@ -150,27 +150,27 @@ TEST(swar_parse_8_digits) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("SWAR - Parse Unsigned Integer");
-    RUN_TEST(swar_parse_uint_basic);
-    RUN_TEST(swar_parse_uint_large);
-    RUN_TEST(swar_parse_uint_invalid);
+RUN_TEST_SUITE("SWAR - Parse Unsigned Integer");
+RUN_TEST(swar_parse_uint_basic);
+RUN_TEST(swar_parse_uint_large);
+RUN_TEST(swar_parse_uint_invalid);
 
-    RUN_TEST_SUITE("SWAR - Parse Signed Integer");
-    RUN_TEST(swar_parse_int_positive);
-    RUN_TEST(swar_parse_int_negative);
-    RUN_TEST(swar_parse_int_invalid);
+RUN_TEST_SUITE("SWAR - Parse Signed Integer");
+RUN_TEST(swar_parse_int_positive);
+RUN_TEST(swar_parse_int_negative);
+RUN_TEST(swar_parse_int_invalid);
 
-    RUN_TEST_SUITE("SWAR - Parse Hex");
-    RUN_TEST(swar_parse_hex_basic);
-    RUN_TEST(swar_parse_hex_mixed_case);
-    RUN_TEST(swar_parse_hex_invalid);
+RUN_TEST_SUITE("SWAR - Parse Hex");
+RUN_TEST(swar_parse_hex_basic);
+RUN_TEST(swar_parse_hex_mixed_case);
+RUN_TEST(swar_parse_hex_invalid);
 
-    RUN_TEST_SUITE("SWAR - Digit Detection");
-    RUN_TEST(swar_is_digits_true);
-    RUN_TEST(swar_is_digits_false);
-    RUN_TEST(swar_is_8_digits);
+RUN_TEST_SUITE("SWAR - Digit Detection");
+RUN_TEST(swar_is_digits_true);
+RUN_TEST(swar_is_digits_false);
+RUN_TEST(swar_is_8_digits);
 
-    RUN_TEST_SUITE("SWAR - Parse 8 Digits");
-    RUN_TEST(swar_parse_8_digits);
+RUN_TEST_SUITE("SWAR - Parse 8 Digits");
+RUN_TEST(swar_parse_8_digits);
 
 TEST_MAIN_END()

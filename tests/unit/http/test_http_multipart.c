@@ -37,7 +37,7 @@ TEST(form_data_append_text) {
     ASSERT_NOT_NULL(form->fields);
     ASSERT_EQ_INT(form->fields->type, XR_FORM_FIELD_TEXT);
     ASSERT_STR_EQ(form->fields->name, "name");
-    ASSERT_EQ_INT((int)form->fields->value_len, 8);
+    ASSERT_EQ_INT((int) form->fields->value_len, 8);
     xr_form_data_free(form);
 }
 
@@ -55,14 +55,13 @@ TEST(form_data_append_multiple_texts) {
 TEST(form_data_append_file) {
     XrFormData *form = xr_form_data_new();
     const char *data = "file content here";
-    xr_form_data_append_file(form, "upload", "test.txt",
-                              "text/plain", data, strlen(data));
+    xr_form_data_append_file(form, "upload", "test.txt", "text/plain", data, strlen(data));
     ASSERT_EQ_INT(form->field_count, 1);
     ASSERT_NOT_NULL(form->fields);
     ASSERT_EQ_INT(form->fields->type, XR_FORM_FIELD_FILE);
     ASSERT_STR_EQ(form->fields->name, "upload");
     ASSERT_STR_EQ(form->fields->filename, "test.txt");
-    ASSERT_EQ_INT((int)form->fields->file_size, (int)strlen(data));
+    ASSERT_EQ_INT((int) form->fields->file_size, (int) strlen(data));
     xr_form_data_free(form);
 }
 
@@ -79,7 +78,7 @@ TEST(form_data_build) {
     int ret = xr_form_data_build(form, &body, &body_len, &content_type);
     ASSERT_EQ_INT(ret, 0);
     ASSERT_NOT_NULL(body);
-    ASSERT_GT((int)body_len, 0);
+    ASSERT_GT((int) body_len, 0);
     ASSERT_NOT_NULL(content_type);
 
     // Content-Type should contain "multipart/form-data" and boundary
@@ -98,9 +97,8 @@ TEST(form_data_build) {
 TEST(form_data_build_with_file) {
     XrFormData *form = xr_form_data_new();
     xr_form_data_append(form, "desc", "A file", 6);
-    xr_form_data_append_file(form, "file", "data.bin",
-                              "application/octet-stream",
-                              "\x01\x02\x03", 3);
+    xr_form_data_append_file(form, "file", "data.bin", "application/octet-stream", "\x01\x02\x03",
+                             3);
 
     char *body = NULL;
     size_t body_len = 0;
@@ -155,22 +153,22 @@ TEST(form_data_build_empty) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("FormData - Create/Free");
-    RUN_TEST(form_data_new_free);
+RUN_TEST_SUITE("FormData - Create/Free");
+RUN_TEST(form_data_new_free);
 
-    RUN_TEST_SUITE("FormData - Text Fields");
-    RUN_TEST(form_data_append_text);
-    RUN_TEST(form_data_append_multiple_texts);
+RUN_TEST_SUITE("FormData - Text Fields");
+RUN_TEST(form_data_append_text);
+RUN_TEST(form_data_append_multiple_texts);
 
-    RUN_TEST_SUITE("FormData - File Fields");
-    RUN_TEST(form_data_append_file);
+RUN_TEST_SUITE("FormData - File Fields");
+RUN_TEST(form_data_append_file);
 
-    RUN_TEST_SUITE("FormData - Build");
-    RUN_TEST(form_data_build);
-    RUN_TEST(form_data_build_with_file);
-    RUN_TEST(form_data_build_empty);
+RUN_TEST_SUITE("FormData - Build");
+RUN_TEST(form_data_build);
+RUN_TEST(form_data_build_with_file);
+RUN_TEST(form_data_build_empty);
 
-    RUN_TEST_SUITE("FormData - Content Type");
-    RUN_TEST(form_data_content_type);
+RUN_TEST_SUITE("FormData - Content Type");
+RUN_TEST(form_data_content_type);
 
 TEST_MAIN_END()

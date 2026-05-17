@@ -48,7 +48,8 @@ static XiFunc *try_lower(const char *source) {
     assert(g_iso != NULL);
 
     AstNode *program = xr_parse(g_iso, source);
-    if (!program) return NULL;
+    if (!program)
+        return NULL;
 
     XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
     if (!analyzer) {
@@ -80,14 +81,14 @@ static XiFunc *try_lower(const char *source) {
     return func;
 }
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- %s ---\n", #name); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- %s ---\n", #name);                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* ========== Negative Tests: Lowerer Must Reject ========== */
@@ -107,11 +108,9 @@ TEST(unresolved_variable_in_expression) {
 
 TEST(unresolved_variable_in_function) {
     /* Undeclared variable inside a function body. */
-    XiFunc *f = try_lower(
-        "fn foo(): int {\n"
-        "    return missing_z\n"
-        "}\n"
-    );
+    XiFunc *f = try_lower("fn foo(): int {\n"
+                          "    return missing_z\n"
+                          "}\n");
     assert(f == NULL && "lowerer must reject unresolved variable in function");
 }
 
@@ -142,7 +141,7 @@ int main(void) {
 
     teardown();
 
-    printf("\n=== %d/%d Xi Lower Hard-Fail tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi Lower Hard-Fail tests passed ===\n", tests_passed,
+           tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

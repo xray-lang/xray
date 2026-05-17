@@ -43,7 +43,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
 
     /* Create null-terminated string from fuzzer input */
-    char *input = (char *)malloc(size + 1);
+    char *input = (char *) malloc(size + 1);
     if (!input) {
         return 0;
     }

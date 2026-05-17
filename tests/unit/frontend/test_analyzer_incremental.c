@@ -76,18 +76,19 @@ static void teardown(void) {
 // Find a file entry by path; returns NULL if not registered.
 static XaFileEntry *find_entry(XaAnalyzer *a, const char *file) {
     for (XaFileEntry *e = a->files; e; e = e->next) {
-        if (e->path && strcmp(e->path, file) == 0) return e;
+        if (e->path && strcmp(e->path, file) == 0)
+            return e;
     }
     return NULL;
 }
 
 // Add a symbol owned by a particular file. Returns the symbol pointer
 // (still owned by the analyzer's global scope).
-static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name,
-                                    const char *file) {
+static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name, const char *file) {
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_FUNCTION);
     XaSymbolLinks *links = xa_analyzer_get_links(a, sym);
-    if (links) links->file_path = file;
+    if (links)
+        links->file_path = file;
     xa_scope_add_symbol(a->global_scope, sym);
     return sym;
 }
@@ -179,10 +180,8 @@ TEST(get_dirty_files_returns_marked_files) {
     // Sanity: every reported entry must be one of the three we added.
     int hits = 0;
     for (int i = 0; i < n; i++) {
-        if (dirty[i] && (
-                strcmp(dirty[i], "a.xr") == 0 ||
-                strcmp(dirty[i], "b.xr") == 0 ||
-                strcmp(dirty[i], "c.xr") == 0)) {
+        if (dirty[i] && (strcmp(dirty[i], "a.xr") == 0 || strcmp(dirty[i], "b.xr") == 0 ||
+                         strcmp(dirty[i], "c.xr") == 0)) {
             hits++;
         }
     }
@@ -190,7 +189,7 @@ TEST(get_dirty_files_returns_marked_files) {
 
     // The list buffer is owned by the caller (per existing tests it
     // is xr_malloc'd by xa_analyzer_get_dirty_files).
-    xr_free((void *)dirty);
+    xr_free((void *) dirty);
 
     xa_analyzer_free(a);
 }
@@ -206,7 +205,7 @@ TEST(mark_file_dirty_propagation) {
     XaSymbol *caller_sym = add_symbol_in_file(a, "caller", "caller.xr");
     XaSymbol *callee_sym = add_symbol_in_file(a, "callee", "callee.xr");
 
-    XaIncrementalCtx *incr = (XaIncrementalCtx *)a->incremental;
+    XaIncrementalCtx *incr = (XaIncrementalCtx *) a->incremental;
     ASSERT_NOT_NULL(incr);
     xa_dep_add(incr, caller_sym->id, callee_sym->id, XA_DEP_REFERENCE);
 
@@ -228,7 +227,7 @@ TEST(mark_file_dirty_propagation) {
     // and grow `dirty_symbols` until OOM (manifests as a hang under
     // the test framework).
     XaChangeSet cs = {0};
-    cs.modified_symbols = (uint32_t *)xr_malloc(sizeof(uint32_t));
+    cs.modified_symbols = (uint32_t *) xr_malloc(sizeof(uint32_t));
     ASSERT_NOT_NULL(cs.modified_symbols);
     cs.modified_symbols[0] = callee_sym->id;
     cs.modified_count = 1;
@@ -269,7 +268,8 @@ TEST(api_is_null_safe) {
     const char **dirty = xa_analyzer_get_dirty_files(a, &n);
     // Empty analyzer -> 0 dirty files, valid pointer or NULL is OK.
     ASSERT_EQ_INT(n, 0);
-    if (dirty) xr_free((void *)dirty);
+    if (dirty)
+        xr_free((void *) dirty);
 
     xa_analyzer_free(a);
 }
@@ -291,14 +291,14 @@ TEST(dead_API_is_actually_dead) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    setup();
-    RUN_TEST_SUITE("incremental analysis closed loop");
-    RUN_TEST(invalidate_range_registers_untracked_file);
-    RUN_TEST(invalidate_range_marks_known_file_dirty);
-    RUN_TEST(invalidate_range_unused_lines_do_not_matter_yet);
-    RUN_TEST(get_dirty_files_returns_marked_files);
-    RUN_TEST(mark_file_dirty_propagation);
-    RUN_TEST(api_is_null_safe);
-    RUN_TEST(dead_API_is_actually_dead);
-    teardown();
+setup();
+RUN_TEST_SUITE("incremental analysis closed loop");
+RUN_TEST(invalidate_range_registers_untracked_file);
+RUN_TEST(invalidate_range_marks_known_file_dirty);
+RUN_TEST(invalidate_range_unused_lines_do_not_matter_yet);
+RUN_TEST(get_dirty_files_returns_marked_files);
+RUN_TEST(mark_file_dirty_propagation);
+RUN_TEST(api_is_null_safe);
+RUN_TEST(dead_API_is_actually_dead);
+teardown();
 TEST_MAIN_END()

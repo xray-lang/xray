@@ -17,13 +17,13 @@
 #include <string.h>
 
 /* Minimal XrType stubs */
-static XrType stub_int   = { .kind = XR_KIND_INT,    .id = 1, .frozen = true };
-static XrType stub_float = { .kind = XR_KIND_FLOAT,  .id = 2, .frozen = true };
-static XrType stub_bool  = { .kind = XR_KIND_BOOL,   .id = 3, .frozen = true };
-static XrType stub_null  = { .kind = XR_KIND_NULL,   .id = 4, .frozen = true };
-static XrType stub_str   = { .kind = XR_KIND_STRING, .id = 5, .frozen = true };
-static XrType stub_void  = { .kind = XR_KIND_VOID,   .id = 6, .frozen = true };
-static XrType stub_func  = { .kind = XR_KIND_FUNCTION, .id = 7, .frozen = true };
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
+static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
+static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
+static XrType stub_void = {.kind = XR_KIND_VOID, .id = 6, .frozen = true};
+static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -36,14 +36,14 @@ static XiFunc *make_func(const char *name, XrType *ret_type) {
     return f;
 }
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* ========== Constant Folding Tests ========== */
@@ -263,7 +263,7 @@ TEST(const_fold_bnot) {
 
     xi_opt_const_fold(f);
 
-    assert(bn->op == XI_CONST && bn->aux_int == ~(int64_t)0);
+    assert(bn->op == XI_CONST && bn->aux_int == ~(int64_t) 0);
     xi_func_free(f);
 }
 
@@ -420,8 +420,8 @@ TEST(dce_removes_unused) {
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
-    xi_const_int(f, blk, 42, &stub_int);    /* dead */
-    XiValue *c2 = xi_const_int(f, blk, 99, &stub_int);  /* live */
+    xi_const_int(f, blk, 42, &stub_int);               /* dead */
+    XiValue *c2 = xi_const_int(f, blk, 99, &stub_int); /* live */
     xi_block_set_return(blk, c2);
 
     uint32_t before = blk->nvalues;
@@ -431,7 +431,8 @@ TEST(dce_removes_unused) {
     /* c2 should remain (used by return) */
     bool found = false;
     for (uint32_t i = 0; i < blk->nvalues; i++) {
-        if (blk->values[i] == c2) found = true;
+        if (blk->values[i] == c2)
+            found = true;
     }
     assert(found && "live value should remain");
     xi_func_free(f);
@@ -453,7 +454,8 @@ TEST(dce_keeps_side_effects) {
     /* Print should survive */
     bool found = false;
     for (uint32_t i = 0; i < blk->nvalues; i++) {
-        if (blk->values[i]->op == XI_PRINT) found = true;
+        if (blk->values[i]->op == XI_PRINT)
+            found = true;
     }
     assert(found && "side-effecting value should not be removed");
     xi_func_free(f);
@@ -466,8 +468,8 @@ TEST(dce_cascading) {
 
     XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
     XiValue *c2 = xi_const_int(f, blk, 2, &stub_int);
-    xi_binary(f, blk, XI_ADD, &stub_int, c1, c2);  /* dead */
-    XiValue *c99 = xi_const_int(f, blk, 99, &stub_int);  /* live */
+    xi_binary(f, blk, XI_ADD, &stub_int, c1, c2);       /* dead */
+    XiValue *c99 = xi_const_int(f, blk, 99, &stub_int); /* live */
     xi_block_set_return(blk, c99);
 
     xi_opt_dce(f);
@@ -534,7 +536,8 @@ TEST(opt_run_combined) {
     /* copy should be removed by DCE */
     bool found_copy = false;
     for (uint32_t i = 0; i < blk->nvalues; i++) {
-        if (blk->values[i] == cp) found_copy = true;
+        if (blk->values[i] == cp)
+            found_copy = true;
     }
     assert(!found_copy && "dead copy should be removed");
     xi_func_free(f);
@@ -816,7 +819,7 @@ TEST(verify_null_type) {
     XiBlock *blk = f->entry;
 
     XiValue *v = xi_value_new(f, blk, XI_CONST, &stub_int, 0);
-    v->type = NULL;  /* intentionally break invariant */
+    v->type = NULL; /* intentionally break invariant */
 
     char errbuf[256] = {0};
     bool ok = xi_verify(f, errbuf, sizeof(errbuf));
@@ -861,7 +864,7 @@ TEST(verify_if_block_missing_control) {
     blk->kind = XI_BLOCK_IF;
     blk->succs[0] = then_blk;
     blk->succs[1] = else_blk;
-    blk->control = NULL;  /* broken! */
+    blk->control = NULL; /* broken! */
 
     char errbuf[256] = {0};
     bool ok = xi_verify(f, errbuf, sizeof(errbuf));
@@ -885,7 +888,8 @@ TEST(verify_after_optimization) {
 
     char errbuf[256] = {0};
     bool ok = xi_verify(f, errbuf, sizeof(errbuf));
-    if (!ok) printf("  verify error: %s\n", errbuf);
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
     assert(ok && "function should be valid after optimization");
     xi_func_free(f);
 }
@@ -937,8 +941,8 @@ TEST(select_rep_no_change_for_call) {
 
     XiValue *p0 = xi_param(f, blk, 0, &stub_func);
     XiValue *call = xi_value_new(f, blk, XI_CALL, &stub_func, 2);
-    call->args[0] = p0;  /* callee */
-    call->args[1] = p0;  /* arg */
+    call->args[0] = p0; /* callee */
+    call->args[1] = p0; /* arg */
     call->flags |= XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(blk, call);
 
@@ -1035,8 +1039,8 @@ TEST(box_elim_no_false_positive) {
 int main(void) {
     printf("=== Xi Opt Unit Tests ===\n\n");
 
-    (void)stub_null;
-    (void)stub_str;
+    (void) stub_null;
+    (void) stub_str;
 
     /* Constant folding */
     run_const_fold_int_add();
@@ -1111,7 +1115,6 @@ int main(void) {
     run_box_elim_box_of_unbox();
     run_box_elim_no_false_positive();
 
-    printf("\n=== %d/%d Xi Opt tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi Opt tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

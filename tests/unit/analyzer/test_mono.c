@@ -17,11 +17,11 @@
 /* ========== Name Mangling Tests ========== */
 
 TEST(mono_type_tag_basic) {
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrTypeRef float_t = { .kind = XR_TREF_FLOAT };
-    XrTypeRef str_t = { .kind = XR_TREF_STRING };
-    XrTypeRef bool_t = { .kind = XR_TREF_BOOL };
-    XrTypeRef unknown_t = { .kind = XR_TREF_UNKNOWN };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef float_t = {.kind = XR_TREF_FLOAT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
+    XrTypeRef unknown_t = {.kind = XR_TREF_UNKNOWN};
 
     ASSERT_STR_EQ(xr_mono_type_tag(&int_t), "i64");
     ASSERT_STR_EQ(xr_mono_type_tag(&float_t), "f64");
@@ -32,17 +32,17 @@ TEST(mono_type_tag_basic) {
 }
 
 TEST(mono_mangle_single) {
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrTypeRef *args[] = { &int_t };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef *args[] = {&int_t};
     char *result = xr_mono_mangle("identity", args, 1);
     ASSERT_STR_EQ(result, "identity$i64");
     free(result);
 }
 
 TEST(mono_mangle_multi) {
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrTypeRef str_t = { .kind = XR_TREF_STRING };
-    XrTypeRef *args[] = { &int_t, &str_t };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *args[] = {&int_t, &str_t};
     char *result = xr_mono_mangle("map", args, 2);
     ASSERT_STR_EQ(result, "map$i64_str");
     free(result);
@@ -65,11 +65,11 @@ TEST(mono_mangle_zero_args) {
 /* ========== Type Substitution Tests ========== */
 
 TEST(type_substitute_type_param) {
-    XrTypeRef param_t = { .kind = XR_TREF_TYPE_PARAM };
+    XrTypeRef param_t = {.kind = XR_TREF_TYPE_PARAM};
     param_t.name = "T";
 
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrMonoTypeMap map[] = { { "T", &int_t } };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrMonoTypeMap map[] = {{"T", &int_t}};
 
     XrTypeRef *result = xr_mono_type_substitute(&param_t, map, 1);
     ASSERT(result != NULL);
@@ -77,11 +77,11 @@ TEST(type_substitute_type_param) {
 }
 
 TEST(type_substitute_no_match) {
-    XrTypeRef param_t = { .kind = XR_TREF_TYPE_PARAM };
+    XrTypeRef param_t = {.kind = XR_TREF_TYPE_PARAM};
     param_t.name = "U";
 
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrMonoTypeMap map[] = { { "T", &int_t } };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrMonoTypeMap map[] = {{"T", &int_t}};
 
     XrTypeRef *result = xr_mono_type_substitute(&param_t, map, 1);
     // No match, returns original
@@ -89,9 +89,9 @@ TEST(type_substitute_no_match) {
 }
 
 TEST(type_substitute_non_param) {
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrTypeRef concrete = { .kind = XR_TREF_FLOAT };
-    XrMonoTypeMap map[] = { { "T", &concrete } };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef concrete = {.kind = XR_TREF_FLOAT};
+    XrMonoTypeMap map[] = {{"T", &concrete}};
 
     XrTypeRef *result = xr_mono_type_substitute(&int_t, map, 1);
     // Non-param type is unchanged
@@ -100,14 +100,15 @@ TEST(type_substitute_non_param) {
 
 TEST(type_substitute_array_element) {
     // Array<T> where T=int â†?Array<int>
-    XrTypeRef param_t = { .kind = XR_TREF_TYPE_PARAM };
+    XrTypeRef param_t = {.kind = XR_TREF_TYPE_PARAM};
     param_t.name = "T";
 
     XrTypeRef *elem_child = &param_t;
-    XrTypeRef array_t = { .kind = XR_TREF_NAMED, .name = "Array", .nchildren = 1, .children = &elem_child };
+    XrTypeRef array_t = {
+        .kind = XR_TREF_NAMED, .name = "Array", .nchildren = 1, .children = &elem_child};
 
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrMonoTypeMap map[] = { { "T", &int_t } };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrMonoTypeMap map[] = {{"T", &int_t}};
 
     XrTypeRef *result = xr_mono_type_substitute(&array_t, map, 1);
     ASSERT(result != NULL);
@@ -132,13 +133,13 @@ TEST(ast_clone_null) {
 }
 
 TEST(ast_clone_literal_int) {
-    AstNode node = { .type = AST_LITERAL_INT, .line = 42, .column = 5 };
+    AstNode node = {.type = AST_LITERAL_INT, .line = 42, .column = 5};
     node.as.literal.kind = LITERAL_KIND_INT;
     node.as.literal.raw_value.int_val = 123;
 
     AstNode *clone = xr_ast_clone(&node, NULL, 0);
     ASSERT(clone != NULL);
-    ASSERT(clone != &node); // Must be a different allocation
+    ASSERT(clone != &node);  // Must be a different allocation
     ASSERT_EQ(clone->type, AST_LITERAL_INT);
     ASSERT_EQ(clone->line, 42);
     ASSERT_EQ(clone->column, 5);
@@ -147,7 +148,7 @@ TEST(ast_clone_literal_int) {
 }
 
 TEST(ast_clone_literal_string) {
-    AstNode node = { .type = AST_LITERAL_STRING, .line = 1 };
+    AstNode node = {.type = AST_LITERAL_STRING, .line = 1};
     node.as.literal.kind = LITERAL_KIND_STRING;
     node.as.literal.raw_value.string_val = "hello";
 
@@ -156,17 +157,17 @@ TEST(ast_clone_literal_string) {
     ASSERT_STR_EQ(clone->as.literal.raw_value.string_val, "hello");
     // String must be a separate copy
     ASSERT(clone->as.literal.raw_value.string_val != node.as.literal.raw_value.string_val);
-    free((void *)clone->as.literal.raw_value.string_val);
+    free((void *) clone->as.literal.raw_value.string_val);
     free(clone);
 }
 
 TEST(ast_clone_binary) {
-    AstNode left = { .type = AST_LITERAL_INT, .line = 1 };
+    AstNode left = {.type = AST_LITERAL_INT, .line = 1};
     left.as.literal.raw_value.int_val = 10;
-    AstNode right = { .type = AST_LITERAL_INT, .line = 1 };
+    AstNode right = {.type = AST_LITERAL_INT, .line = 1};
     right.as.literal.raw_value.int_val = 20;
 
-    AstNode add = { .type = AST_BINARY_ADD, .line = 1 };
+    AstNode add = {.type = AST_BINARY_ADD, .line = 1};
     add.as.binary.left = &left;
     add.as.binary.right = &right;
 
@@ -185,13 +186,13 @@ TEST(ast_clone_binary) {
 }
 
 TEST(ast_clone_variable) {
-    AstNode node = { .type = AST_VARIABLE, .line = 5 };
+    AstNode node = {.type = AST_VARIABLE, .line = 5};
     node.as.variable.name = "x";
 
     AstNode *clone = xr_ast_clone(&node, NULL, 0);
     ASSERT(clone != NULL);
     ASSERT_STR_EQ(clone->as.variable.name, "x");
-    ASSERT(clone->as.variable.name != node.as.variable.name); // Deep copy
+    ASSERT(clone->as.variable.name != node.as.variable.name);  // Deep copy
     free(clone->as.variable.name);
     free(clone);
 }
@@ -203,17 +204,17 @@ TEST(ast_clone_with_type_substitution) {
     // This test now exercises that path via VarDeclNode::type_annotation.
     // type_annotation is now XrTypeRef*; a NAMED ref matching the type param
     // name will be substituted by the mono clone.
-    XrTypeRef param_tref = { .kind = XR_TREF_NAMED, .name = "T" };
+    XrTypeRef param_tref = {.kind = XR_TREF_NAMED, .name = "T"};
 
-    AstNode node = { .type = AST_VAR_DECL, .line = 1 };
+    AstNode node = {.type = AST_VAR_DECL, .line = 1};
     node.as.var_decl.name = "result";
     node.as.var_decl.initializer = NULL;
     node.as.var_decl.is_const = false;
     node.as.var_decl.storage_mode = 0;
     node.as.var_decl.type_annotation = &param_tref;
 
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrMonoTypeMap map[] = { { "T", &int_t } };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrMonoTypeMap map[] = {{"T", &int_t}};
 
     AstNode *clone = xr_ast_clone(&node, map, 1);
     ASSERT(clone != NULL);
@@ -230,8 +231,8 @@ TEST(mono_collector_basic) {
     xa_mono_collector_init(&c);
     ASSERT_EQ(c.count, 0);
 
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrTypeRef *args[] = { &int_t };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef *args[] = {&int_t};
     const char *name = xa_mono_collector_add(&c, "identity", args, 1, false);
     ASSERT(name != NULL);
     ASSERT_STR_EQ(name, "identity$i64");
@@ -244,25 +245,25 @@ TEST(mono_collector_dedup) {
     XaMonoCollector c;
     xa_mono_collector_init(&c);
 
-    XrTypeRef int_t = { .kind = XR_TREF_INT };
-    XrTypeRef *args1[] = { &int_t };
+    XrTypeRef int_t = {.kind = XR_TREF_INT};
+    XrTypeRef *args1[] = {&int_t};
     xa_mono_collector_add(&c, "identity", args1, 1, false);
 
     // bool has different slot type from int (BOOL=11 vs I64=7) â†?separate instance
-    XrTypeRef bool_t = { .kind = XR_TREF_BOOL };
-    XrTypeRef *args2[] = { &bool_t };
+    XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
+    XrTypeRef *args2[] = {&bool_t};
     xa_mono_collector_add(&c, "identity", args2, 1, false);
     ASSERT_EQ(c.count, 2);
 
     // Same int type again â†?should deduplicate
-    XrTypeRef int_t2 = { .kind = XR_TREF_INT };
-    XrTypeRef *args2b[] = { &int_t2 };
+    XrTypeRef int_t2 = {.kind = XR_TREF_INT};
+    XrTypeRef *args2b[] = {&int_t2};
     xa_mono_collector_add(&c, "identity", args2b, 1, false);
     ASSERT_EQ(c.count, 2);
 
     // float has different rep â†?separate instance
-    XrTypeRef float_t = { .kind = XR_TREF_FLOAT };
-    XrTypeRef *args3[] = { &float_t };
+    XrTypeRef float_t = {.kind = XR_TREF_FLOAT};
+    XrTypeRef *args3[] = {&float_t};
     xa_mono_collector_add(&c, "identity", args3, 1, false);
     ASSERT_EQ(c.count, 3);
 

@@ -27,7 +27,7 @@ TEST(malloc_basic) {
 }
 
 TEST(calloc_zeroed) {
-    int *arr = (int *)xr_calloc(10, sizeof(int));
+    int *arr = (int *) xr_calloc(10, sizeof(int));
     ASSERT_NOT_NULL(arr);
     for (int i = 0; i < 10; i++) {
         ASSERT_EQ_INT(arr[i], 0);
@@ -36,11 +36,14 @@ TEST(calloc_zeroed) {
 }
 
 TEST(realloc_grow) {
-    int *arr = (int *)xr_malloc(4 * sizeof(int));
+    int *arr = (int *) xr_malloc(4 * sizeof(int));
     ASSERT_NOT_NULL(arr);
-    arr[0] = 10; arr[1] = 20; arr[2] = 30; arr[3] = 40;
+    arr[0] = 10;
+    arr[1] = 20;
+    arr[2] = 30;
+    arr[3] = 40;
 
-    arr = (int *)xr_realloc(arr, 8 * sizeof(int));
+    arr = (int *) xr_realloc(arr, 8 * sizeof(int));
     ASSERT_NOT_NULL(arr);
     ASSERT_EQ_INT(arr[0], 10);
     ASSERT_EQ_INT(arr[3], 40);
@@ -76,7 +79,10 @@ TEST(strdup_empty) {
 TEST(grow_array_macro) {
     int *arr = XR_GROW_ARRAY(int, NULL, 0, 4);
     ASSERT_NOT_NULL(arr);
-    arr[0] = 1; arr[1] = 2; arr[2] = 3; arr[3] = 4;
+    arr[0] = 1;
+    arr[1] = 2;
+    arr[2] = 3;
+    arr[3] = 4;
 
     arr = XR_GROW_ARRAY(int, arr, 4, 8);
     ASSERT_NOT_NULL(arr);
@@ -86,7 +92,10 @@ TEST(grow_array_macro) {
 }
 
 TEST(allocate_macro) {
-    typedef struct { int x; int y; } Point;
+    typedef struct {
+        int x;
+        int y;
+    } Point;
     Point *p = XR_ALLOCATE(Point);
     ASSERT_NOT_NULL(p);
     p->x = 10;
@@ -104,16 +113,18 @@ TEST(grow_capacity_macro) {
 }
 
 TEST(xr_realloc_macro_grow_ok) {
-    int *arr = (int *)xr_malloc(4 * sizeof(int));
+    int *arr = (int *) xr_malloc(4 * sizeof(int));
     ASSERT_NOT_NULL(arr);
-    for (int i = 0; i < 4; i++) arr[i] = i + 1;
+    for (int i = 0; i < 4; i++)
+        arr[i] = i + 1;
 
     bool ok = XR_REALLOC(arr, 16 * sizeof(int));
     ASSERT_TRUE(ok);
     ASSERT_NOT_NULL(arr);
     ASSERT_EQ_INT(arr[0], 1);
     ASSERT_EQ_INT(arr[3], 4);
-    for (int i = 4; i < 16; i++) arr[i] = i * 10;
+    for (int i = 4; i < 16; i++)
+        arr[i] = i * 10;
     ASSERT_EQ_INT(arr[15], 150);
 
     xr_free(arr);
@@ -130,7 +141,10 @@ TEST(xr_realloc_macro_from_null) {
 }
 
 TEST(xr_realloc_macro_struct_field) {
-    typedef struct { int *data; size_t cap; } Vec;
+    typedef struct {
+        int *data;
+        size_t cap;
+    } Vec;
     Vec v = {NULL, 0};
 
     bool ok = XR_REALLOC(v.data, 8 * sizeof(int));
@@ -147,7 +161,7 @@ TEST(xr_realloc_macro_struct_field) {
 }
 
 TEST(xr_realloc_macro_zero_size_is_free) {
-    int *arr = (int *)xr_malloc(4 * sizeof(int));
+    int *arr = (int *) xr_malloc(4 * sizeof(int));
     ASSERT_NOT_NULL(arr);
 
     bool ok = XR_REALLOC(arr, 0);
