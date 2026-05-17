@@ -502,9 +502,7 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
 #define XR_JIT_ASAN_BUILD 1
 #endif
 #ifdef XR_JIT_ASAN_BUILD
-    xr_log_debug("jit",
-                 "crash handler skipped: AddressSanitizer is active "
-                 "and owns the signal handlers");
+    xr_log_debug("jit", "crash handler skipped: ASan owns SIGSEGV/SIGBUS");
     return;
 #else
 
