@@ -59,25 +59,21 @@ jobs:
       - name: Build
         run: cmake --build build -j
 
-      - name: Run jit_fuzz.sh for 30 minutes
+      - name: Run JIT fuzz for 30 minutes
+        env:
+          XRAY_BIN: ./build/xray
+          # FUZZ_DURATION_SEC defaults to 1800 inside the script,
+          # set here explicitly so the nightly budget is visible in
+          # the workflow file.
+          FUZZ_DURATION_SEC: "1800"
         run: |
-          chmod +x ./scripts/jit_fuzz.sh
-          # jit_fuzz.sh is iteration-driven; wrap with timeout(1) so
-          # the wall-clock budget is enforced regardless of iteration
-          # speed. Exit code 124 from timeout means the budget was
-          # exhausted without the fuzzer finding a bug, which is a
-          # successful run from the gating perspective.
-          set +e
-          timeout --preserve-status 30m \
-              ./scripts/jit_fuzz.sh -b ./build/xray -n 1000000 -t 5
-          rc=$?
-          set -e
-          if [ ${rc} -eq 124 ] || [ ${rc} -eq 0 ]; then
-              echo "fuzz completed within budget (rc=${rc})"
-              exit 0
-          fi
-          echo "fuzz reported failure rc=${rc}"
-          exit ${rc}
+          chmod +x ./scripts/jit_fuzz.sh ./scripts/run_fuzz_30min.sh
+          # run_fuzz_30min.sh enforces the wall-clock budget itself
+          # and returns:
+          #   0 - budget elapsed, no diff/crash captured
+          #   1 - at least one diff or crash captured
+          #   2 - infrastructure error (binary / inner script missing)
+          bash ./scripts/run_fuzz_30min.sh
 
       - name: Upload failing fuzz cases
         if: always()
@@ -137,30 +133,17 @@ jobs:
         run: cmake --build build -j
 
       - name: Run GC-heavy regression tests 10 times
-        # Pick the GC-heaviest regressions and burn them in a loop.
-        # When scripts/run_gc_stress.sh is delivered in W2 this block
-        # will be replaced by a single invocation of that script.
-        # 1205 / 1207 are in NOJIT_TESTS by design, so they run
-        # without --jit-force; 1206 exercises the JIT path.
+        env:
+          XRAY_BIN: ./build/xray
+        # run_gc_stress.sh selects the same set as the previous inline
+        # loop: 1206 under --jit-force, 1205 / 1207 under --no-jit (the
+        # NOJIT_TESTS designation lives in tests/known_failures.txt).
+        # Failure tails for any crashed iteration land in
+        # tests/tmp/gc_stress_failures.log which the artifact upload
+        # below would pick up if added in a follow-up.
         run: |
-          jit_tests=(
-            tests/regression/10_stdlib/1206_gc_enhanced.xr
-          )
-          nojit_tests=(
-            tests/regression/10_stdlib/1205_gc_incremental_pressure.xr
-            tests/regression/10_stdlib/1207_gc_stress.xr
-          )
-          for i in $(seq 1 10); do
-            echo "==== round ${i} ===="
-            for t in "${jit_tests[@]}"; do
-              if [ ! -f "${t}" ]; then continue; fi
-              ./build/xray test --jit-force "${t}" || exit 1
-            done
-            for t in "${nojit_tests[@]}"; do
-              if [ ! -f "${t}" ]; then continue; fi
-              ./build/xray test --no-jit "${t}" || exit 1
-            done
-          done
+          chmod +x ./scripts/run_gc_stress.sh
+          bash ./scripts/run_gc_stress.sh 10
 
   # ---------------------------------------------------------------------------
   # 3. Linux MSan + JIT-force
@@ -242,22 +225,11 @@ jobs:
 
       - name: Run Win11 coroutine 4 cases 5x
         shell: bash
+        env:
+          XRAY_BIN: ./build/Release/xray.exe
+        # repro_win11_coro_burn.sh pins the same four cases that
+        # exposed STATUS_HEAP_CORRUPTION in May 2026 (1115 cancel,
+        # 1109 await_any, 1127 priority, 1128 yield) and writes
+        # failure tails to tests/tmp/win11_coro_failures.log.
         run: |
-          # The four coroutine scenarios that exposed
-          # STATUS_HEAP_CORRUPTION in May 2026. Each is run five
-          # times because the underlying race / corruption is
-          # probabilistic.
-          cases=(
-            tests/regression/11_coroutine/1115_cancel.xr
-            tests/regression/11_coroutine/1109_await_any.xr
-            tests/regression/11_coroutine/1127_coro_priority.xr
-            tests/regression/11_coroutine/1128_yield.xr
-          )
-          rc=0
-          for i in 1 2 3 4 5; do
-            for c in "${cases[@]}"; do
-              echo "==== round ${i}: ${c} ===="
-              ./build/Release/xray.exe test --jit-force "${c}" || rc=1
-            done
-          done
-          exit ${rc}
+          bash ./scripts/repro_win11_coro_burn.sh 5
