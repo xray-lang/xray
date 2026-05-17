@@ -1,0 +1,20 @@
+# tests/known_failures.txt
+# ----------------------------------------------------------------------------
+# Temporarily disabled tests. Every active line must carry four fields:
+#
+#   <test path>  ISSUE=<url>  ADDED=YYYY-MM-DD  OWNER=<email>
+#
+# Comment lines (this header) and blank lines are ignored.
+#
+# Rules (enforced by scripts/check_known_failures_freshness.sh, gated in CI):
+#   - ADDED <= 30 days old. Older entries fail CI unconditionally.
+#   - ISSUE must point at a tracking ticket.
+#   - OWNER must be a reachable contact.
+#   - Removing a fixed test means deleting its line; do not "comment out".
+#
+# Adding an entry here is a short-term escape hatch. The default expectation
+# is to fix the underlying test instead.
+# ----------------------------------------------------------------------------
+#
+# Example (commented out so this file starts empty):
+# tests/regression/09_jit_x64/082_throw_heap_type.xr  ISSUE=https://github.com/xray-lang/xray/issues/9999  ADDED=2026-05-17  OWNER=xingleixu@gmail.com

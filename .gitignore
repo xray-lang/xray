@@ -9,6 +9,12 @@ build-*/
 build_*/
 cmake-build-*/
 
+# Generated codegen artifacts (from xisa generator).
+# Source of truth lives in src/jit/codegen/*.isa; generated files are
+# rebuilt every clean configure. They must never be committed to git.
+# See docs/tasks/076-codegen-master-spec.md §7 reverse-invariants #11.
+build/generated/
+
 # ============================================================================
 # Build artifacts
 # ============================================================================
