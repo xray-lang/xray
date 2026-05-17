@@ -52,7 +52,9 @@ bin/
 # ============================================================================
 # Internal design
 # ============================================================================
-docs/
+# Note: docs/ is intentionally NOT ignored at the repo level so IDE / Cascade
+# tooling can read and edit it. If a user wants docs/ untracked in their local
+# checkout, add `docs/` to .git/info/exclude (already set up in this repo).
 
 # ============================================================================
 # Temporary test files
