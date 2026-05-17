@@ -1,4 +1,4 @@
-// 0301_int48_overflow.xr
+// 0301_int64_overflow.xr
 // Test: 64-bit integer wrap-on-overflow semantics
 //
 // Tagged Union uses full 64-bit signed integer range:
