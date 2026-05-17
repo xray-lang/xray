@@ -494,12 +494,12 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
      * crash handler.
      */
 #if defined(__has_feature)
-#  if __has_feature(address_sanitizer)
-#    define XR_JIT_ASAN_BUILD 1
-#  endif
+#if __has_feature(address_sanitizer)
+#define XR_JIT_ASAN_BUILD 1
+#endif
 #endif
 #if !defined(XR_JIT_ASAN_BUILD) && defined(__SANITIZE_ADDRESS__)
-#  define XR_JIT_ASAN_BUILD 1
+#define XR_JIT_ASAN_BUILD 1
 #endif
 #ifdef XR_JIT_ASAN_BUILD
     xr_log_debug("jit",
