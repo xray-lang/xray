@@ -88,26 +88,42 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
 
 /* ========== Constant Folding ========== */
 
-/* Try to fold a binary op on two integer constants. */
+/* Try to fold a binary op on two integer constants.
+ *
+ * xray integer semantics: signed 64-bit, wrap-on-overflow (Go/Rust/Java).
+ * C signed overflow is UB, so wrap arithmetic is performed via uint64_t and
+ * cast back to int64_t (implementation-defined but well-defined on every
+ * two's-complement target xray supports: x64, arm64, riscv64).
+ * INT64_MIN / -1 and INT64_MIN %% -1 are special-cased to match the
+ * runtime VM and JIT, which also produce INT64_MIN / 0 respectively.
+ */
 static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
     switch (op) {
         case XI_ADD:
-            *result = a + b;
+            *result = (int64_t)((uint64_t)a + (uint64_t)b);
             return true;
         case XI_SUB:
-            *result = a - b;
+            *result = (int64_t)((uint64_t)a - (uint64_t)b);
             return true;
         case XI_MUL:
-            *result = a * b;
+            *result = (int64_t)((uint64_t)a * (uint64_t)b);
             return true;
         case XI_DIV:
             if (b == 0)
                 return false;
+            if (a == INT64_MIN && b == -1) {
+                *result = INT64_MIN;
+                return true;
+            }
             *result = a / b;
             return true;
         case XI_MOD:
             if (b == 0)
                 return false;
+            if (a == INT64_MIN && b == -1) {
+                *result = 0;
+                return true;
+            }
             *result = a % b;
             return true;
         case XI_BAND:
@@ -120,9 +136,15 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) 
             *result = a ^ b;
             return true;
         case XI_SHL:
-            *result = a << (b & 63);
+            /* Left shift of a negative or shift that overflows the sign bit
+             * is UB on signed; do it on uint64_t and cast back. Shift amount
+             * is masked to 6 bits to match runtime semantics. */
+            *result = (int64_t)((uint64_t)a << (b & 63));
             return true;
         case XI_SHR:
+            /* Arithmetic right shift on negative values is
+             * implementation-defined in C99/C11 but well-defined on every
+             * compiler xray supports (GCC, Clang, MSVC all sign-extend). */
             *result = a >> (b & 63);
             return true;
         default:
@@ -214,10 +236,12 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
 
-            /* Fold unary NEG on const int */
+            /* Fold unary NEG on const int.
+             * -INT64_MIN is UB on signed; negate on uint64_t then cast back
+             * to preserve wrap-on-overflow semantics (matches VM and JIT). */
             if (v->op == XI_NEG && v->nargs == 1 && is_const_int(v->args[0])) {
                 v->op = XI_CONST;
-                v->aux_int = -(v->args[0]->aux_int);
+                v->aux_int = (int64_t)(0u - (uint64_t)v->args[0]->aux_int);
                 v->nargs = 0;
                 chg.values_changed = true;
                 continue;
