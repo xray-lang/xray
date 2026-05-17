@@ -14,13 +14,13 @@ fn test_channel_timeout() {
     print("test1: recvTimeout with data")
     shared const ch1 = new Channel(1)
     ch1.send(42)
-    let result1, ok1 = ch1.recvTimeout(1000)
+    let (result1, ok1) = ch1.recvTimeout(1000)
     print("  result:", result1, "ok:", ok1)  // expect: 42, true
 
     // 测试 2：recvTimeout 超时（Channel 无数据）
     print("test2: recvTimeout timeout")
     shared const ch2 = new Channel(1)
-    let result2, ok2 = ch2.recvTimeout(100)  // 100ms 超时
+    let (result2, ok2) = ch2.recvTimeout(100)  // 100ms 超时
     if (!ok2) {
         print("  timeout (null)")  // expect: timeout
     } else {
@@ -61,7 +61,7 @@ fn test_channel_timeout() {
     let consumer = go {
         let count = 0
         while (true) {
-            let val, ok = ch5.recvTimeout(200)
+            let (val, ok) = ch5.recvTimeout(200)
             if (!ok) {
                 break
             }

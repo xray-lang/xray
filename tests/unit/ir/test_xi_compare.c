@@ -1832,11 +1832,11 @@ TEST(cmp_destructure_object) {
 
 TEST(cmp_multi_var_decl) {
     run_compare((CompareSpec) {
-        .source = "fn pair(): (int, int) { return 10, 20 }\n"
-                  "let x, y = pair()\n"
+        .source = "fn pair(): (int, int) { return (10, 20) }\n"
+                  "let (x, y) = pair()\n"
                   "print(x)\n"
                   "print(y)",
-        .label = "multi-value var declaration",
+        .label = "tuple-return var declaration",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,
@@ -1847,10 +1847,10 @@ TEST(cmp_multi_assign) {
     run_compare((CompareSpec) {
         .source = "let x = 1\n"
                   "let y = 2\n"
-                  "x, y = y, x\n"
+                  "(x, y) = (y, x)\n"
                   "print(x)\n"
                   "print(y)",
-        .label = "multi-value swap assignment",
+        .label = "tuple destructure swap assignment",
         .expect_xi_success = true,
         .min_similarity = 0.1,
         .check_exec = true,

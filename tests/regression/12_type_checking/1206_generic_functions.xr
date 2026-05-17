@@ -53,9 +53,9 @@ fn test_identity_array() {
 @test
 fn test_pair_creation() {
     fn makePair<T, U>(a: T, b: U): (T, U) {
-        return a, b
+        return (a, b)
     }
-    let x, y = makePair(1, "one")
+    let (x, y) = makePair(1, "one")
     assert_eq(x, 1)
     assert_eq(y, "one")
 }
@@ -63,9 +63,9 @@ fn test_pair_creation() {
 @test
 fn test_swap_types() {
     fn swap<T, U>(a: T, b: U): (U, T) {
-        return b, a
+        return (b, a)
     }
-    let x, y = swap("hello", 42)
+    let (x, y) = swap("hello", 42)
     assert_eq(x, 42)
     assert_eq(y, "hello")
 }
@@ -73,9 +73,9 @@ fn test_swap_types() {
 @test
 fn test_triple_params() {
     fn triple<A, B, C>(a: A, b: B, c: C): (A, B, C) {
-        return a, b, c
+        return (a, b, c)
     }
-    let x, y, z = triple(1, "two", true)
+    let (x, y, z) = triple(1, "two", true)
     assert_eq(x, 1)
     assert_eq(y, "two")
     assert_eq(z, true)

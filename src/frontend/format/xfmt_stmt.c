@@ -213,10 +213,6 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_var_decl(ctx, node);
             break;
 
-        case AST_MULTI_VAR_DECL:
-            xfmt_emit_multi_var_decl(ctx, node);
-            break;
-
         case AST_DESTRUCTURE_DECL:
             xfmt_emit_destructure_decl(ctx, node);
             break;
@@ -228,24 +224,6 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_expression(ctx, node->as.destructure_assign.value);
             xfmt_write_newline(ctx);
             break;
-
-        case AST_MULTI_ASSIGN: {
-            xfmt_write_indent(ctx);
-            MultiAssignNode *ma = &node->as.multi_assign;
-            for (int i = 0; i < ma->target_count; i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, ma->targets[i]);
-            }
-            xfmt_write_str(ctx, " = ");
-            for (int i = 0; i < ma->value_count; i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_emit_expression(ctx, ma->values[i]);
-            }
-            xfmt_write_newline(ctx);
-            break;
-        }
 
         case AST_FUNCTION_DECL:
             xfmt_emit_function_decl(ctx, node);

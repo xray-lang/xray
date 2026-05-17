@@ -62,9 +62,9 @@ fn test_mixed_typed_params() {
 @test
 fn test_multi_return() {
     fn divmod(a: int, b: int): (int, int) {
-        return a / b, a % b
+        return (a / b, a % b)
     }
-    let q, r = divmod(17, 5)
+    let (q, r) = divmod(17, 5)
     assert_eq(q, 3)
     assert_eq(r, 2)
 }
@@ -73,11 +73,11 @@ fn test_multi_return() {
 fn test_multi_return_typed() {
     fn minmax(a: int, b: int): (int, int) {
         if (a < b) {
-            return a, b
+            return (a, b)
         }
-        return b, a
+        return (b, a)
     }
-    let min, max = minmax(10, 5)
+    let (min, max) = minmax(10, 5)
     assert_eq(min, 5)
     assert_eq(max, 10)
 }

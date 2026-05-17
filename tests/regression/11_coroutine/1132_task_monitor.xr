@@ -11,7 +11,7 @@ fn test_monitor_success() {
     let t = go compute()
     let ch = t.monitor()
     let r = await t
-    let val, ok = ch.tryRecv()
+    let (val, ok) = ch.tryRecv()
     assert(ok, "monitor channel should have value after task completes")
     assert(val.done, "monitor should receive completed task")
     assert(val.result == 42, "monitor task should carry result")
@@ -21,7 +21,7 @@ fn test_monitor_fail() {
     let t = go failing()
     let ch = t.monitor()
     await t
-    let val, ok = ch.tryRecv()
+    let (val, ok) = ch.tryRecv()
     assert(ok, "monitor channel should have value after task fails")
     assert(val.done, "monitor should receive completed task on failure")
     assert(val.error == "monitor test error", "monitor task should carry error")
@@ -31,7 +31,7 @@ fn test_monitor_already_done() {
     let t = go compute()
     let r = await t
     let ch = t.monitor()
-    let val, ok = ch.tryRecv()
+    let (val, ok) = ch.tryRecv()
     assert(ok, "monitor on completed task should have immediate value")
     assert(val.done, "monitor should receive completed task (already done)")
     assert(val.result == 42, "monitor task should carry result (already done)")

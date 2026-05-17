@@ -216,6 +216,8 @@ XR_FUNC AstNode *xr_parse_destructure_declaration(Parser *parser, bool is_const)
 
 XR_FUNC XrDestructurePattern *convert_array_literal_to_pattern(XrayIsolate *X,
                                                                AstNode *array_literal);
+XR_FUNC XrDestructurePattern *convert_tuple_literal_to_pattern(XrayIsolate *X,
+                                                               AstNode *tuple_literal);
 XR_FUNC XrDestructurePattern *convert_object_literal_to_pattern(XrayIsolate *X,
                                                                 AstNode *object_literal);
 

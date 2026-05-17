@@ -34,6 +34,7 @@
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
+#include "../runtime/object/xtuple.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/object/xutf8.h"
@@ -58,13 +59,17 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
         return VM_COLD_BREAK;
     }
 
-    // ch.tryRecv() → (value, ok) multi-return — unified helper
+    // ch.tryRecv() → (value, ok) tuple — unified helper
     if (nargs == 0 && method_symbol == SYMBOL_TRYRECV) {
         XrCoroutine *recv_coro = vm_ctx ? (XrCoroutine *) vm_ctx->current_coro : NULL;
         XrValue recv_val;
         bool recv_ok = xr_chan_try_recv(isolate, ch, &recv_val, recv_coro);
-        base[a] = recv_val;
-        base[a + 1] = xr_bool(recv_ok);
+        XrTuple *result = xr_tuple_new(recv_coro, 2);
+        if (result) {
+            xr_tuple_set(result, 0, recv_val);
+            xr_tuple_set(result, 1, xr_bool(recv_ok));
+        }
+        base[a] = xr_value_from_tuple(result);
         return VM_COLD_BREAK;
     }
 
@@ -206,33 +211,47 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
         return VM_COLD_BREAK;
     }
 
-    // ch.recvTimeout(timeout) - receive with timeout
+    // ch.recvTimeout(timeout) → (value, ok) tuple
     if (nargs == 1 && method_symbol == SYMBOL_RECVTIMEOUT) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         int64_t timeout_ms = XR_TO_INT(base[a + 2]);
+
+        /* pack (value, ok) into base[a] as a fresh tuple */
+#define VM_RECV_TUPLE_RESULT(VAL_EXPR, OK_EXPR)                                                    \
+    do {                                                                                           \
+        XrValue _vt_v = (VAL_EXPR);                                                                \
+        bool _vt_ok = (OK_EXPR);                                                                   \
+        XrTuple *_vt_t = xr_tuple_new(current, 2);                                                 \
+        if (_vt_t) {                                                                               \
+            xr_tuple_set(_vt_t, 0, _vt_v);                                                         \
+            xr_tuple_set(_vt_t, 1, xr_bool(_vt_ok));                                               \
+        }                                                                                          \
+        base[a] = xr_value_from_tuple(_vt_t);                                                      \
+    } while (0)
 
         // Check if woken from timeout
         if (current && xr_coro_resume_load(current) == XR_RESUME_TIMEOUT) {
             xr_coro_resume_store(current, XR_RESUME_OK);
             current->wait_channel = NULL;
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
+            VM_RECV_TUPLE_RESULT(xr_null(), false);
             return VM_COLD_BREAK;
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            base[a + 1] = xr_bool(true);  // Value already in recv_slot
+            // Sender wrote the value via recv_slot (= &base[a]) before
+            // wake; lift it into a (value, true) tuple in place.
+            VM_RECV_TUPLE_RESULT(base[a], true);
             return VM_COLD_BREAK;
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
             xr_coro_resume_store(current, XR_RESUME_OK);
             current->wait_channel = NULL;
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
+            VM_RECV_TUPLE_RESULT(xr_null(), false);
             return VM_COLD_BREAK;
         }
 
-        // Set recv_slot
+        // Set recv_slot — sender writes raw value here, resume path
+        // wraps it into a tuple (see RESUME_CHANNEL branch above).
         if (current) {
             current->recv_slot = &base[a];
         }
@@ -241,18 +260,15 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
         XrValue value;
         XrChanResult result = xr_channel_recv(ch, &value, current);
         if (result == XR_CHAN_OK) {
-            base[a] = value;
-            base[a + 1] = xr_bool(true);
+            VM_RECV_TUPLE_RESULT(value, true);
             return VM_COLD_BREAK;
         } else if (result == XR_CHAN_CLOSED) {
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
+            VM_RECV_TUPLE_RESULT(xr_null(), false);
             return VM_COLD_BREAK;
         } else if (result == XR_CHAN_BLOCK) {
             // Blocked: set timeout timer
             if (!current) {
-                base[a] = xr_null();
-                base[a + 1] = xr_bool(false);
+                VM_RECV_TUPLE_RESULT(xr_null(), false);
                 return VM_COLD_BREAK;
             }
             current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
@@ -264,9 +280,9 @@ XR_NOINLINE int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrC
             frame->call_status |= XR_CALL_YIELDED;
             return VM_COLD_BLOCKED;
         }
-        base[a] = xr_null();
-        base[a + 1] = xr_bool(false);
+        VM_RECV_TUPLE_RESULT(xr_null(), false);
         return VM_COLD_BREAK;
+#undef VM_RECV_TUPLE_RESULT
     }
 
     // toString fallback for Channel

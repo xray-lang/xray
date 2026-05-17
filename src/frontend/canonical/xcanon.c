@@ -704,19 +704,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             break;
         }
 
-        /* ---- Multi-value declarations / assignments ---- */
-        case AST_MULTI_VAR_DECL:
-            for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
-                canon_node(ctx, node->as.multi_var_decl.values[i]);
-            break;
-
-        case AST_MULTI_ASSIGN:
-            for (int i = 0; i < node->as.multi_assign.target_count; i++)
-                canon_node(ctx, node->as.multi_assign.targets[i]);
-            for (int i = 0; i < node->as.multi_assign.value_count; i++)
-                canon_node(ctx, node->as.multi_assign.values[i]);
-            break;
-
         /* ---- Destructuring ---- */
         case AST_DESTRUCTURE_DECL:
             canon_node(ctx, node->as.destructure_decl.initializer);

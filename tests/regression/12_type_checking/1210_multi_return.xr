@@ -1,23 +1,24 @@
 /*
- * Multi-value return type safety tests
- * Tests tuple type annotation syntax and multi-value return compilation
+ * Tuple return type safety tests
+ * Functions that need to surface multiple results return a tuple and
+ * callers destructure with tuple patterns.
  */
 
-// Test 1: Basic multi-value return with type annotation
+// Test 1: Basic tuple return
 fn divide(a: int, b: int): (int, bool) {
     if (b == 0) {
-        return 0, false
+        return (0, false)
     }
-    return a / b, true
+    return (a / b, true)
 }
 
 @test
-fn test_multi_return_basic() {
-    let result, ok = divide(10, 2)
+fn test_tuple_return_basic() {
+    let (result, ok) = divide(10, 2)
     assert_eq(result, 5)
     assert_eq(ok, true)
-    
-    let result2, ok2 = divide(10, 0)
+
+    let (result2, ok2) = divide(10, 0)
     assert_eq(result2, 0)
     assert_eq(ok2, false)
 }
@@ -27,53 +28,53 @@ fn minmax(a: int, b: int, c: int): (int, int, int) {
     let min_val = a
     let max_val = a
     let sum = a + b + c
-    
+
     if (b < min_val) { min_val = b }
     if (c < min_val) { min_val = c }
     if (b > max_val) { max_val = b }
     if (c > max_val) { max_val = c }
-    
-    return min_val, max_val, sum
+
+    return (min_val, max_val, sum)
 }
 
 @test
 fn test_triple_return() {
-    let min_v, max_v, sum = minmax(3, 1, 5)
+    let (min_v, max_v, sum) = minmax(3, 1, 5)
     assert_eq(min_v, 1)
     assert_eq(max_v, 5)
     assert_eq(sum, 9)
 }
 
-// Test 3: Take fewer values than returned
+// Test 3: Field access on a returned tuple without full destructure
 fn quadruple(): (int, int, int, int) {
-    return 1, 2, 3, 4
+    return (1, 2, 3, 4)
 }
 
 @test
 fn test_partial_capture() {
-    // Only capture first two values
-    let a, b = quadruple()
-    assert_eq(a, 1)
-    assert_eq(b, 2)
+    // Tuple field access lets callers pick only the elements they need
+    let q = quadruple()
+    assert_eq(q.0, 1)
+    assert_eq(q.1, 2)
 }
 
-// Test 4: Multi-value return in conditional
+// Test 4: Tuple return in a conditional
 fn safeDivide(a: int, b: int): (float, bool) {
     if (b == 0) {
-        return 0.0, false
+        return (0.0, false)
     }
-    return float(a) / float(b), true
+    return (float(a) / float(b), true)
 }
 
 @test
-fn test_conditional_multi_return() {
-    let r1, ok1 = safeDivide(10, 4)
+fn test_conditional_tuple_return() {
+    let (r1, ok1) = safeDivide(10, 4)
     assert_eq(ok1, true)
     assert(r1 > 2.4 && r1 < 2.6)
-    
-    let r2, ok2 = safeDivide(5, 0)
+
+    let (r2, ok2) = safeDivide(5, 0)
     assert_eq(ok2, false)
     assert_eq(r2, 0.0)
 }
 
-print("all multi-return tests passed")
+print("all tuple return tests passed")

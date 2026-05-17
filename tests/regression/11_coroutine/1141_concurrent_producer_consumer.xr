@@ -17,12 +17,12 @@ fn test_main() {
     }
     
     // 消费者接收数据（使用多值返回）
-    let v1, ok1 = ch.tryRecv()
-    let v2, ok2 = ch.tryRecv()
-    let v3, ok3 = ch.tryRecv()
-    let v4, ok4 = ch.tryRecv()
-    let v5, ok5 = ch.tryRecv()
-    let v6, ok6 = ch.tryRecv()
+    let (v1, ok1) = ch.tryRecv()
+    let (v2, ok2) = ch.tryRecv()
+    let (v3, ok3) = ch.tryRecv()
+    let (v4, ok4) = ch.tryRecv()
+    let (v5, ok5) = ch.tryRecv()
+    let (v6, ok6) = ch.tryRecv()
     
     print(v1)  // 100
     print(v2)  // 101

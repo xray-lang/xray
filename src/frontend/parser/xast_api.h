@@ -295,14 +295,6 @@ XR_FUNC AstNode *xr_ast_destructure_decl(XrayIsolate *X, XrDestructurePattern *p
 XR_FUNC AstNode *xr_ast_destructure_assign(XrayIsolate *X, XrDestructurePattern *pattern,
                                            AstNode *value, int line);
 
-// Create multi-value declaration node
-XR_FUNC AstNode *xr_ast_multi_var_decl(XrayIsolate *X, char **names, int name_count,
-                                       AstNode **values, int value_count, bool is_const, int line);
-
-// Create multi-value assignment node
-XR_FUNC AstNode *xr_ast_multi_assign(XrayIsolate *X, AstNode **targets, int target_count,
-                                     AstNode **values, int value_count, int line);
-
 // Create match expression node
 XR_FUNC AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr, AstNode **arms, int arm_count,
                                    int line);

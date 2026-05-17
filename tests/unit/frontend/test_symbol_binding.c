@@ -55,7 +55,8 @@ static void teardown(void) {
 /* Count AST_VARIABLE nodes with unresolved symbol_id (== 0).
  * Recursively walks only the most common child-bearing node types. */
 static int count_unresolved_vars(AstNode *node) {
-    if (!node) return 0;
+    if (!node)
+        return 0;
     int count = 0;
 
     if (node->type == AST_VARIABLE) {
@@ -86,7 +87,8 @@ static int count_unresolved_vars(AstNode *node) {
         case AST_COMPOUND_ASSIGNMENT:
             count += count_unresolved_vars(node->as.compound_assignment.value);
             break;
-        case AST_INC: case AST_DEC:
+        case AST_INC:
+        case AST_DEC:
             break;
         case AST_EXPR_STMT:
             count += count_unresolved_vars(node->as.expr_stmt);
@@ -161,18 +163,34 @@ static int count_unresolved_vars(AstNode *node) {
             count += count_unresolved_vars(node->as.ternary.true_expr);
             count += count_unresolved_vars(node->as.ternary.false_expr);
             break;
-        case AST_NULLISH_COALESCE: case AST_RANGE:
-        case AST_BINARY_ADD: case AST_BINARY_SUB: case AST_BINARY_MUL:
-        case AST_BINARY_DIV: case AST_BINARY_MOD: case AST_BINARY_EQ:
-        case AST_BINARY_NE:  case AST_BINARY_LT:  case AST_BINARY_LE:
-        case AST_BINARY_GT:  case AST_BINARY_GE:  case AST_BINARY_AND:
-        case AST_BINARY_OR:  case AST_BINARY_BAND: case AST_BINARY_BOR:
-        case AST_BINARY_BXOR: case AST_BINARY_LSHIFT: case AST_BINARY_RSHIFT:
-        case AST_BINARY_EQ_STRICT: case AST_BINARY_NE_STRICT:
+        case AST_NULLISH_COALESCE:
+        case AST_RANGE:
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
             count += count_unresolved_vars(node->as.binary.left);
             count += count_unresolved_vars(node->as.binary.right);
             break;
-        case AST_UNARY_NEG: case AST_UNARY_NOT: case AST_UNARY_BNOT:
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
             count += count_unresolved_vars(node->as.unary.operand);
             break;
         case AST_GROUPING:
@@ -277,7 +295,8 @@ static int count_unresolved_vars(AstNode *node) {
         case AST_SELECT_STMT: {
             SelectStmtNode *sel = &node->as.select_stmt;
             for (int i = 0; i < sel->case_count; i++) {
-                if (!sel->cases[i]) continue;
+                if (!sel->cases[i])
+                    continue;
                 SelectCaseNode *sc = &sel->cases[i]->as.select_case;
                 count += count_unresolved_vars(sc->channel);
                 count += count_unresolved_vars(sc->value);
@@ -291,16 +310,6 @@ static int count_unresolved_vars(AstNode *node) {
         case AST_SCOPE_BLOCK:
             count += count_unresolved_vars(node->as.scope_block.body);
             break;
-        case AST_MULTI_VAR_DECL:
-            for (int i = 0; i < node->as.multi_var_decl.value_count; i++)
-                count += count_unresolved_vars(node->as.multi_var_decl.values[i]);
-            break;
-        case AST_MULTI_ASSIGN:
-            for (int i = 0; i < node->as.multi_assign.target_count; i++)
-                count += count_unresolved_vars(node->as.multi_assign.targets[i]);
-            for (int i = 0; i < node->as.multi_assign.value_count; i++)
-                count += count_unresolved_vars(node->as.multi_assign.values[i]);
-            break;
         case AST_DESTRUCTURE_DECL:
             count += count_unresolved_vars(node->as.destructure_decl.initializer);
             break;
@@ -312,18 +321,32 @@ static int count_unresolved_vars(AstNode *node) {
             break;
         /* Leaf nodes with no variable children */
         case AST_VARIABLE:
-        case AST_LITERAL_INT: case AST_LITERAL_FLOAT: case AST_LITERAL_STRING:
-        case AST_LITERAL_TRUE: case AST_LITERAL_FALSE: case AST_LITERAL_NULL:
-        case AST_LITERAL_BIGINT: case AST_LITERAL_REGEX:
-        case AST_BREAK_STMT: case AST_CONTINUE_STMT:
-        case AST_THIS_EXPR: case AST_CANCELLED_EXPR:
-        case AST_ENUM_ACCESS: case AST_ENUM_MEMBER:
-        case AST_IMPORT_STMT: case AST_TYPE_ALIAS:
-        case AST_INTERFACE_DECL: case AST_INTERFACE_METHOD:
-        case AST_YIELD_STMT: case AST_METHOD_DECL:
-        case AST_PATTERN_LITERAL: case AST_PATTERN_RANGE:
-        case AST_PATTERN_WILDCARD: case AST_PATTERN_MULTI:
-        case AST_CHAN_SEND: case AST_CHAN_RECV:
+        case AST_LITERAL_INT:
+        case AST_LITERAL_FLOAT:
+        case AST_LITERAL_STRING:
+        case AST_LITERAL_TRUE:
+        case AST_LITERAL_FALSE:
+        case AST_LITERAL_NULL:
+        case AST_LITERAL_BIGINT:
+        case AST_LITERAL_REGEX:
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT:
+        case AST_THIS_EXPR:
+        case AST_CANCELLED_EXPR:
+        case AST_ENUM_ACCESS:
+        case AST_ENUM_MEMBER:
+        case AST_IMPORT_STMT:
+        case AST_TYPE_ALIAS:
+        case AST_INTERFACE_DECL:
+        case AST_INTERFACE_METHOD:
+        case AST_YIELD_STMT:
+        case AST_METHOD_DECL:
+        case AST_PATTERN_LITERAL:
+        case AST_PATTERN_RANGE:
+        case AST_PATTERN_WILDCARD:
+        case AST_PATTERN_MULTI:
+        case AST_CHAN_SEND:
+        case AST_CHAN_RECV:
             break;
         default:
             break;
@@ -346,8 +369,7 @@ static bool check_bindings(const char *source, const char *label) {
     /* Spot-check: no AST_VARIABLE nodes should have symbol_id=0 */
     int unresolved = count_unresolved_vars(program);
     if (unresolved > 0) {
-        fprintf(stderr, "  [%s] %d unresolved variable(s) after analysis\n",
-                label, unresolved);
+        fprintf(stderr, "  [%s] %d unresolved variable(s) after analysis\n", label, unresolved);
     }
 
     /* Redirect stderr during lowering to suppress expected diagnostics */
@@ -371,7 +393,8 @@ static bool check_bindings(const char *source, const char *label) {
 #endif
 
     bool ok = (func != NULL);
-    if (func) xi_func_free(func);
+    if (func)
+        xi_func_free(func);
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
 
@@ -381,14 +404,14 @@ static bool check_bindings(const char *source, const char *label) {
     return ok && (unresolved == 0);
 }
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- %s ---\n", #name); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- %s ---\n", #name);                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* ========== Binding Pattern Tests ========== */
@@ -410,174 +433,144 @@ TEST(compound_assignment) {
 }
 
 TEST(shadowing) {
-    assert(check_bindings(
-        "let x = 1\n"
-        "{\n"
-        "    let x = 2\n"
-        "    print(x)\n"
-        "}\n"
-        "print(x)\n",
-        "shadowing"
-    ));
+    assert(check_bindings("let x = 1\n"
+                          "{\n"
+                          "    let x = 2\n"
+                          "    print(x)\n"
+                          "}\n"
+                          "print(x)\n",
+                          "shadowing"));
 }
 
 TEST(nested_scope) {
-    assert(check_bindings(
-        "let a = 1\n"
-        "{\n"
-        "    let b = a + 1\n"
-        "    {\n"
-        "        let c = b + 1\n"
-        "        print(c)\n"
-        "    }\n"
-        "}\n",
-        "nested_scope"
-    ));
+    assert(check_bindings("let a = 1\n"
+                          "{\n"
+                          "    let b = a + 1\n"
+                          "    {\n"
+                          "        let c = b + 1\n"
+                          "        print(c)\n"
+                          "    }\n"
+                          "}\n",
+                          "nested_scope"));
 }
 
 TEST(function_params) {
-    assert(check_bindings(
-        "fn add(a: int, b: int): int {\n"
-        "    return a + b\n"
-        "}\n"
-        "print(add(1, 2))\n",
-        "function_params"
-    ));
+    assert(check_bindings("fn add(a: int, b: int): int {\n"
+                          "    return a + b\n"
+                          "}\n"
+                          "print(add(1, 2))\n",
+                          "function_params"));
 }
 
 TEST(closure_capture) {
-    assert(check_bindings(
-        "let x = 10\n"
-        "fn foo(): int {\n"
-        "    return x + 1\n"
-        "}\n"
-        "print(foo())\n",
-        "closure_capture"
-    ));
+    assert(check_bindings("let x = 10\n"
+                          "fn foo(): int {\n"
+                          "    return x + 1\n"
+                          "}\n"
+                          "print(foo())\n",
+                          "closure_capture"));
 }
 
 TEST(nested_closure) {
-    assert(check_bindings(
-        "let outer = 1\n"
-        "fn foo(): int {\n"
-        "    let mid = 2\n"
-        "    fn bar(): int {\n"
-        "        return outer + mid\n"
-        "    }\n"
-        "    return bar()\n"
-        "}\n",
-        "nested_closure"
-    ));
+    assert(check_bindings("let outer = 1\n"
+                          "fn foo(): int {\n"
+                          "    let mid = 2\n"
+                          "    fn bar(): int {\n"
+                          "        return outer + mid\n"
+                          "    }\n"
+                          "    return bar()\n"
+                          "}\n",
+                          "nested_closure"));
 }
 
 TEST(for_in_binding) {
-    assert(check_bindings(
-        "const arr = [1, 2, 3]\n"
-        "for (item in arr) {\n"
-        "    print(item)\n"
-        "}\n",
-        "for_in_binding"
-    ));
+    assert(check_bindings("const arr = [1, 2, 3]\n"
+                          "for (item in arr) {\n"
+                          "    print(item)\n"
+                          "}\n",
+                          "for_in_binding"));
 }
 
 TEST(for_in_kv_binding) {
-    assert(check_bindings(
-        "const arr = [10, 20, 30]\n"
-        "for (i, val in arr) {\n"
-        "    print(i)\n"
-        "    print(val)\n"
-        "}\n",
-        "for_in_kv_binding"
-    ));
+    assert(check_bindings("const arr = [10, 20, 30]\n"
+                          "for (i, val in arr) {\n"
+                          "    print(i)\n"
+                          "    print(val)\n"
+                          "}\n",
+                          "for_in_kv_binding"));
 }
 
 TEST(if_else_scoping) {
-    assert(check_bindings(
-        "let x = 10\n"
-        "if (x > 5) {\n"
-        "    let y = x + 1\n"
-        "    print(y)\n"
-        "} else {\n"
-        "    let z = x - 1\n"
-        "    print(z)\n"
-        "}\n",
-        "if_else_scoping"
-    ));
+    assert(check_bindings("let x = 10\n"
+                          "if (x > 5) {\n"
+                          "    let y = x + 1\n"
+                          "    print(y)\n"
+                          "} else {\n"
+                          "    let z = x - 1\n"
+                          "    print(z)\n"
+                          "}\n",
+                          "if_else_scoping"));
 }
 
 TEST(while_loop_scoping) {
-    assert(check_bindings(
-        "let i = 0\n"
-        "while (i < 10) {\n"
-        "    print(i)\n"
-        "    i += 1\n"
-        "}\n",
-        "while_loop_scoping"
-    ));
+    assert(check_bindings("let i = 0\n"
+                          "while (i < 10) {\n"
+                          "    print(i)\n"
+                          "    i += 1\n"
+                          "}\n",
+                          "while_loop_scoping"));
 }
 
 TEST(ternary_binding) {
-    assert(check_bindings(
-        "let x = 5\n"
-        "let y = x > 3 ? x + 1 : x - 1\n"
-        "print(y)\n",
-        "ternary_binding"
-    ));
+    assert(check_bindings("let x = 5\n"
+                          "let y = x > 3 ? x + 1 : x - 1\n"
+                          "print(y)\n",
+                          "ternary_binding"));
 }
 
 TEST(template_string_binding) {
-    assert(check_bindings(
-        "let name = \"world\"\n"
-        "let msg = \"hello ${name}\"\n"
-        "print(msg)\n",
-        "template_string_binding"
-    ));
+    assert(check_bindings("let name = \"world\"\n"
+                          "let msg = \"hello ${name}\"\n"
+                          "print(msg)\n",
+                          "template_string_binding"));
 }
 
 TEST(multiple_functions) {
-    assert(check_bindings(
-        "fn a(): int { return 1 }\n"
-        "fn b(): int { return a() + 1 }\n"
-        "print(b())\n",
-        "multiple_functions"
-    ));
+    assert(check_bindings("fn a(): int { return 1 }\n"
+                          "fn b(): int { return a() + 1 }\n"
+                          "print(b())\n",
+                          "multiple_functions"));
 }
 
 TEST(class_method_this) {
-    assert(check_bindings(
-        "class Foo {\n"
-        "    x: int\n"
-        "    init(val: int) {\n"
-        "        this.x = val\n"
-        "    }\n"
-        "    get(): int {\n"
-        "        return this.x\n"
-        "    }\n"
-        "}\n",
-        "class_method_this"
-    ));
+    assert(check_bindings("class Foo {\n"
+                          "    x: int\n"
+                          "    init(val: int) {\n"
+                          "        this.x = val\n"
+                          "    }\n"
+                          "    get(): int {\n"
+                          "        return this.x\n"
+                          "    }\n"
+                          "}\n",
+                          "class_method_this"));
 }
 
 TEST(try_catch_binding) {
-    assert(check_bindings(
-        "try {\n"
-        "    let x = 42\n"
-        "    print(x)\n"
-        "} catch (e) {\n"
-        "    print(e)\n"
-        "}\n",
-        "try_catch_binding"
-    ));
+    assert(check_bindings("try {\n"
+                          "    let x = 42\n"
+                          "    print(x)\n"
+                          "} catch (e) {\n"
+                          "    print(e)\n"
+                          "}\n",
+                          "try_catch_binding"));
 }
 
 TEST(array_and_map_literal) {
-    assert(check_bindings(
-        "let a = [1, 2, 3]\n"
-        "let m = {\"key\": a}\n"
-        "print(a)\n"
-        "print(m)\n",
-        "array_and_map_literal"
-    ));
+    assert(check_bindings("let a = [1, 2, 3]\n"
+                          "let m = {\"key\": a}\n"
+                          "print(a)\n"
+                          "print(m)\n",
+                          "array_and_map_literal"));
 }
 
 /* ========== Main ========== */
@@ -607,7 +600,7 @@ int main(void) {
 
     teardown();
 
-    printf("\n=== %d/%d Symbol Binding tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Symbol Binding tests passed ===\n", tests_passed,
+           tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }
