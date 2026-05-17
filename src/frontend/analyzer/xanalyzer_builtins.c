@@ -848,12 +848,13 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         // inner fn type resolves to unknown and the analyzer silently
         // skips assignability checks for the whole reduce call.
         type = parse_fn_type_str(X, s, base_len);
-    } else if (base_len >= 2 && s[0] == '[' && s[base_len - 1] == ']') {
-        // [T, U, ...] tuple literal, used inside generic containers such
-        // as Map.entries(): Array<[K, V]> and Json.entries(): Array<[
-        // string, Json]>. Without this branch the inner tuple resolves
-        // to unknown and Array<unknown> propagates back, defeating any
-        // downstream type check on the returned pairs.
+    } else if (base_len >= 2 && ((s[0] == '[' && s[base_len - 1] == ']') ||
+                                 (s[0] == '(' && s[base_len - 1] == ')'))) {
+        // Tuple type — both `(T, U, ...)` (real Xray syntax) and
+        // `[T, U, ...]` are accepted. The fn / generic-container
+        // branches above run first, so a leading `(` here is
+        // unambiguous: it is a tuple type, not a parenthesised group
+        // (signature strings have no grouping form).
         const char *inner = s + 1;
         size_t inner_len = base_len - 2;
         XrType *elems[XR_UNION_MAX_MEMBERS];
@@ -882,7 +883,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         if (count > 0)
             type = xr_type_new_tuple(X, elems, count);
         else
-            type = xr_type_new_unknown(X);
+            type = xr_type_new_unit(X);
     } else if (base_len == 1 && s[0] >= 'A' && s[0] <= 'Z') {
         // Single uppercase letter: generic type parameter (T, K, V, etc.)
         char name[2] = {s[0], '\0'};
