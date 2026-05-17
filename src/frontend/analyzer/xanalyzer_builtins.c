@@ -283,8 +283,14 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
                 return xr_type_new_array(X, key_type);
             case SYMBOL_VALUES:
                 return xr_type_new_array(X, val_type);
-            case SYMBOL_ENTRIES:
-                return xr_type_new_array(X, xr_type_new_unknown(NULL));
+            case SYMBOL_ENTRIES: {
+                /* Map.entries(): Array<(K, V)> — each pair is a
+                 * heterogeneous arity-2 tuple, so `for ((k, v) in
+                 * m.entries())` destructures with the right typing. */
+                XrType *pair_elems[2] = {key_type, val_type};
+                XrType *pair = xr_type_new_tuple(X, pair_elems, 2);
+                return xr_type_new_array(X, pair ? pair : xr_type_new_unknown(NULL));
+            }
             case SYMBOL_MAP:
                 return xr_type_new_map(X, key_type, xr_type_new_unknown(NULL));
             case SYMBOL_FILTER:
@@ -421,8 +427,15 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_KEYS:
                 return xr_type_new_array(X, xr_type_new_string(NULL));
             case SYMBOL_VALUES:
-            case SYMBOL_ENTRIES:
                 return xr_type_new_array(X, xr_type_new_json(NULL));
+            case SYMBOL_ENTRIES: {
+                /* Json.entries(): Array<(string, Json)> — every key
+                 * in a Json object is a string at runtime; the value
+                 * is the existential Json type. */
+                XrType *pair_elems[2] = {xr_type_new_string(NULL), xr_type_new_json(NULL)};
+                XrType *pair = xr_type_new_tuple(X, pair_elems, 2);
+                return xr_type_new_array(X, pair ? pair : xr_type_new_unknown(NULL));
+            }
             case SYMBOL_HAS:
             case SYMBOL_IS_EMPTY:
                 return xr_type_new_bool(NULL);

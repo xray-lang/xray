@@ -25,6 +25,7 @@
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
 #include "xarray.h"
+#include "xtuple.h"
 #include "xiterator.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
@@ -581,10 +582,17 @@ XrArray *xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *n = &map->node[i];
             if (!XR_MAP_NODE_EMPTY(n)) {
-                XrArray *pair = xr_array_with_capacity(coro, 2);
-                xr_array_push(pair, n->key);
-                xr_array_push(pair, n->value);
-                xr_array_push(arr, xr_value_from_array(pair));
+                /* Each entry is a (key, value) tuple — heterogeneous
+                 * arity-2 product, exactly what destructuring `for
+                 * ((k, v) in m.entries())` expects. Tuples are the
+                 * structurally correct shape; the older array-of-two
+                 * placeholder leaked the wrong type signature. */
+                XrTuple *pair = xr_tuple_new(coro, 2);
+                if (pair) {
+                    xr_tuple_set(pair, 0, n->key);
+                    xr_tuple_set(pair, 1, n->value);
+                }
+                xr_array_push(arr, xr_value_from_tuple(pair));
             }
         }
     }

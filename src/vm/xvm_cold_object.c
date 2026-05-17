@@ -32,6 +32,7 @@
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
+#include "../runtime/object/xtuple.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/object/xutf8.h"
@@ -631,6 +632,42 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                           name ? name : "?");
         }
         return VM_COLD_BREAK;
+    }
+
+    // Tuple property access: digit-only names map to xr_tuple_get;
+    // .length surfaces the arity so user code can introspect when the
+    // type was lost to analyzer.
+    if (XR_IS_TUPLE(obj)) {
+        XrTuple *tup = XR_TO_TUPLE(obj);
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        if (prop_symbol == SYMBOL_LENGTH) {
+            base[a] = xr_int((xr_Integer) tup->element_count);
+            return VM_COLD_BREAK;
+        }
+        if (name && name[0]) {
+            bool digits_only = true;
+            for (const char *p = name; *p; p++) {
+                if (*p < '0' || *p > '9') {
+                    digits_only = false;
+                    break;
+                }
+            }
+            if (digits_only) {
+                long idx = strtol(name, NULL, 10);
+                if (idx >= 0 && idx < (long) tup->element_count) {
+                    base[a] = xr_tuple_get(tup, (uint16_t) idx);
+                } else {
+                    VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                                  "tuple field index %ld out of range (arity %u)", idx,
+                                  (unsigned) tup->element_count);
+                }
+                return VM_COLD_BREAK;
+            }
+        }
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                      "tuple has no named field '%s'; use .N (zero-based) instead",
+                      name ? name : "?");
     }
 
     // Array property access

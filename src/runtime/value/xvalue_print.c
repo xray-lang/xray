@@ -23,6 +23,7 @@
 #include "../object/xarray.h"
 #include "../object/xmap.h"
 #include "../object/xset.h"
+#include "../object/xtuple.h"
 #include "../xisolate_api.h"
 #include "../../base/xconstants.h"
 #include "../symbol/xsymbol_table.h"
@@ -126,6 +127,30 @@ static void dump_array(XrArray *arr, DumpContext *ctx) {
     ctx->depth--;
     dump_newline(ctx);
     printf("]");
+}
+
+// Dump tuple: render with parentheses (a, b, c), matching the literal
+// syntax. Unary tuple uses the canonical trailing comma form so the
+// print round-trip preserves the arity distinction from a scalar.
+static void dump_tuple(XrTuple *tup, DumpContext *ctx) {
+    XR_DCHECK(tup != NULL, "dump_tuple: NULL tuple");
+    XR_DCHECK(XR_GC_GET_TYPE(&tup->gc) == XR_TTUPLE, "dump_tuple: object is not a tuple");
+    printf("(");
+    uint16_t n = tup->element_count;
+    if (n == 0) {
+        printf(")");
+        return;
+    }
+    ctx->depth++;
+    for (uint16_t i = 0; i < n; i++) {
+        if (i > 0)
+            printf(", ");
+        dump_value_internal(tup->elements[i], ctx);
+    }
+    if (n == 1)
+        printf(",");
+    ctx->depth--;
+    printf(")");
 }
 
 // Dump Map
@@ -293,6 +318,9 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
         switch (type) {
             case XR_TARRAY:
                 dump_array((XrArray *) gc, ctx);
+                return;
+            case XR_TTUPLE:
+                dump_tuple((XrTuple *) gc, ctx);
                 return;
             case XR_TMAP:
                 dump_map((XrMap *) gc, ctx);

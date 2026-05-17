@@ -54,8 +54,10 @@ fn test_json_entries() {
     let obj = { "a": 1, "b": 2 }
     let e = Json.entries(obj)
     assert_eq(e.length, 2)
-    assert_eq(e[0].length, 2)
-    assert_eq(e[1].length, 2)
+    assert_eq(e[0].0, "a")
+    assert_eq(e[0].1, 1)
+    assert_eq(e[1].0, "b")
+    assert_eq(e[1].1, 2)
 }
 
 // ===== Json.has() =====

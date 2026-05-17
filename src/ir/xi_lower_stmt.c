@@ -304,7 +304,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
 static void lower_for_in_loop(XiLower *l, AstNode *node, XiValue *init_val, XiValue *limit,
                               XiValue *get_item_coll) {
     ForInStmtNode *s = &node->as.for_in_stmt;
-    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+    (void) s;
+    struct XrType *item_type = xi_lower_node_type(l, node);
 
     int sid = l->synthetic_id++;
     char buf[32];
@@ -466,7 +467,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     entry->flags |= XI_FLAG_SIDE_EFFECT;
     entry->line = line;
 
-    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+    struct XrType *item_type = xi_lower_node_type(l, node);
 
     XiValue *idx0 = xi_const_int(l->func, l->cur_block, 0, l->type_int);
     XiValue *key_val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, item_type, 2);
@@ -578,7 +579,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     next_val->flags |= XI_FLAG_SIDE_EFFECT;
     next_val->line = line;
 
-    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+    struct XrType *item_type = xi_lower_node_type(l, node);
     int item_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
     xi_lower_braun_write(l, item_var, l->cur_block, next_val);
 
@@ -600,7 +601,7 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 static void lower_for_in_enum_loop(XiLower *l, AstNode *node, XiValue *init_val, XiValue *limit,
                                    XiValue *enum_cls) {
     ForInStmtNode *s = &node->as.for_in_stmt;
-    struct XrType *item_type = s->item_type ? s->item_type : l->type_any;
+    struct XrType *item_type = xi_lower_node_type(l, node);
 
     int sid = l->synthetic_id++;
     char buf[32];
