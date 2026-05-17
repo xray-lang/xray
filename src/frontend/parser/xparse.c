@@ -1369,7 +1369,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         if (!xr_parser_check(parser, TK_RPAREN)) {
             do {
                 XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
-                              xr_parse_expression(parser));
+                              xr_parse_call_argument(parser));
             } while (xr_parser_match(parser, TK_COMMA));
         }
 

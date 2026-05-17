@@ -119,6 +119,7 @@ XR_FUNC AstNode *xr_parse_variable(Parser *parser);
 XR_FUNC AstNode *xr_parse_assignment(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee);
+XR_FUNC AstNode *xr_parse_call_argument(Parser *parser);
 XR_FUNC AstNode *xr_parse_array_literal(Parser *parser);
 XR_FUNC AstNode *xr_parse_object_literal(Parser *parser);
 XR_FUNC AstNode *xr_parse_empty_map_literal(Parser *parser);

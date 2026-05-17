@@ -87,10 +87,23 @@ typedef struct ArrayLiteralNode {
 // Tuple literal node — `()`, `(x,)`, `(a, b, ...)`.
 // Distinct from ArrayLiteral: tuples are heterogeneous, fixed-arity,
 // and indexed via the dedicated `.N` field access (not `[i]`).
+//
+// Elements may include AST_SPREAD_EXPR nodes — `(...t, x)` splices the
+// tuple `t` into the literal at compile time. The arity of every spread
+// source must be statically known; the analyzer expands the per-element
+// types and the lowerer emits one TUPLE_GET per spliced slot.
 typedef struct TupleLiteralNode {
     AstNode **elements;
     int count;
 } TupleLiteralNode;
+
+// Spread element: `...expr`. Only valid as a child of a tuple literal
+// or as an argument inside a call expression. The wrapped expression
+// must evaluate to a tuple of known arity; that arity is spliced into
+// the surrounding literal / argument list at static-analysis time.
+typedef struct SpreadExprNode {
+    AstNode *expr;
+} SpreadExprNode;
 
 // Index access / set / slice
 typedef struct IndexGetNode {

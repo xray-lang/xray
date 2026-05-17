@@ -1001,6 +1001,28 @@ XrType *xr_type_copy(XrayIsolate *X, XrType *type) {
                 copy->union_type.members = NULL;
             }
             break;
+        case XR_KIND_TUPLE:
+            /* Without this branch a copied tuple collapses to arity-0
+             * (rendered as `()`), silently breaking every generic
+             * substitution that uses a tuple as the actual type
+             * — e.g. `Channel<(int, string)>.send(value: T)` ends up
+             * with parameter type `()`. */
+            copy->tuple.element_count = type->tuple.element_count;
+            if (type->tuple.element_count > 0 && type->tuple.element_types) {
+                size_t tuple_elem_size;
+                copy->tuple.element_types = (XrType **) type_alloc_array(
+                    pool, sizeof(XrType *), type->tuple.element_count, &tuple_elem_size);
+                if (!copy->tuple.element_types)
+                    return NULL;
+                memcpy(copy->tuple.element_types, type->tuple.element_types, tuple_elem_size);
+            } else {
+                copy->tuple.element_types = NULL;
+            }
+            break;
+        case XR_KIND_FIXED_ARRAY:
+            copy->fixed_array.element_type = type->fixed_array.element_type;
+            copy->fixed_array.length = type->fixed_array.length;
+            break;
         default:
             break;
     }

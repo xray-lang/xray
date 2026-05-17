@@ -724,30 +724,95 @@ XrType *xa_visit_tuple_literal(XaInferContext *ctx, AstNode *node) {
     if (tup->count == 0)
         return xr_type_new_unit(ctx->analyzer->isolate);
 
-    /* Propagate per-element expected types when the surrounding context
-     * supplies a tuple type of matching arity. Each child sees the
-     * matching element-type slot; arity mismatches just disable
-     * propagation rather than erroring here (the type-check pass runs
-     * after inference and reports the mismatch). */
+    /* Detect spread elements upfront: their static arity decides the
+     * final tuple arity, so we can no longer push expected-type slots
+     * 1:1 onto child elements. Without spreads we keep the existing
+     * bidirectional propagation. */
+    bool has_spread = false;
+    for (int i = 0; i < tup->count; i++) {
+        if (tup->elements[i] && tup->elements[i]->type == AST_SPREAD_EXPR) {
+            has_spread = true;
+            break;
+        }
+    }
+
     XrType *saved_expected = ctx->expected_type;
     XrType *expected_tuple = NULL;
-    if (saved_expected && XR_TYPE_IS_TUPLE(saved_expected) &&
+    if (!has_spread && saved_expected && XR_TYPE_IS_TUPLE(saved_expected) &&
         saved_expected->tuple.element_count == tup->count) {
         expected_tuple = saved_expected;
     }
 
-    XrType **elem_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) tup->count);
+    /* Two-pass build: collect per-slot types into a growable buffer.
+     * Spreads of known tuple types contribute their element types one
+     * by one; non-tuple spread sources emit an error and are skipped. */
+    int cap = tup->count + 8;
+    XrType **elem_types = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) cap);
     if (!elem_types) {
         ctx->expected_type = saved_expected;
         return xr_type_new_unknown(NULL);
     }
+    int slot = 0;
+
     for (int i = 0; i < tup->count; i++) {
+        AstNode *child = tup->elements[i];
+        if (!child)
+            continue;
+
+        if (child->type == AST_SPREAD_EXPR) {
+            ctx->expected_type = NULL;
+            XrType *src = xa_visit_infer_expr(ctx, child->as.spread_expr.expr);
+            if (!src || !XR_TYPE_IS_TUPLE(src)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = child->line, .column = child->column};
+                char msg[160];
+                snprintf(msg, sizeof(msg),
+                         "Spread '...' source must be a tuple of statically known arity, got '%s'",
+                         src ? xr_type_to_string(src) : "<unknown>");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                continue;
+            }
+            int ec = src->tuple.element_count;
+            if (slot + ec > cap) {
+                int new_cap = (slot + ec + 8) * 2;
+                XrType **resized =
+                    (XrType **) xr_realloc(elem_types, sizeof(XrType *) * (size_t) new_cap);
+                if (!resized) {
+                    xr_free(elem_types);
+                    ctx->expected_type = saved_expected;
+                    return xr_type_new_unknown(NULL);
+                }
+                elem_types = resized;
+                cap = new_cap;
+            }
+            for (int j = 0; j < ec; j++)
+                elem_types[slot++] = src->tuple.element_types[j];
+            continue;
+        }
+
         ctx->expected_type = expected_tuple ? expected_tuple->tuple.element_types[i] : NULL;
-        elem_types[i] = xa_visit_infer_expr(ctx, tup->elements[i]);
+        if (slot >= cap) {
+            int new_cap = cap * 2;
+            XrType **resized =
+                (XrType **) xr_realloc(elem_types, sizeof(XrType *) * (size_t) new_cap);
+            if (!resized) {
+                xr_free(elem_types);
+                ctx->expected_type = saved_expected;
+                return xr_type_new_unknown(NULL);
+            }
+            elem_types = resized;
+            cap = new_cap;
+        }
+        elem_types[slot++] = xa_visit_infer_expr(ctx, child);
     }
     ctx->expected_type = saved_expected;
 
-    XrType *result = xr_type_new_tuple(ctx->analyzer->isolate, elem_types, tup->count);
+    if (slot == 0) {
+        xr_free(elem_types);
+        return xr_type_new_unit(ctx->analyzer->isolate);
+    }
+    XrType *result = xr_type_new_tuple(ctx->analyzer->isolate, elem_types, slot);
     xr_free(elem_types);
     return result ? result : xr_type_new_unknown(NULL);
 }

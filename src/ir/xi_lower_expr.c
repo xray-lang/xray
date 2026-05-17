@@ -880,20 +880,43 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
 
 static XiValue *lower_tuple_literal(XiLower *l, AstNode *node) {
     TupleLiteralNode *tup = &node->as.tuple_literal;
-    uint16_t n = (uint16_t) tup->count;
-
-    /* Evaluate all elements first so the resulting XI_TUPLE_NEW value
-     * has a fully-typed args array.  Each child is an arbitrary
-     * expression; the emitter handles register placement. */
-    XiValue *elem_vals[64];
-    uint16_t safe_n = n > 64 ? 64 : n;
-    for (uint16_t i = 0; i < safe_n; i++) {
-        elem_vals[i] = xi_lower_expr(l, tup->elements[i]);
-        if (!elem_vals[i])
-            return NULL;
-    }
-
     struct XrType *result_type = xi_lower_node_type(l, node);
+
+    /* First pass: evaluate every element value, expanding spreads into
+     * one TUPLE_GET per source slot. The flat list `elem_vals[]`
+     * mirrors the final tuple's element layout exactly. */
+    XiValue *elem_vals[64];
+    uint16_t slot = 0;
+    for (int i = 0; i < tup->count && slot < 64; i++) {
+        AstNode *child = tup->elements[i];
+        if (!child)
+            continue;
+
+        if (child->type == AST_SPREAD_EXPR) {
+            XiValue *src = xi_lower_expr(l, child->as.spread_expr.expr);
+            if (!src)
+                return NULL;
+            int arity = src->type ? xr_type_tuple_count(src->type) : 0;
+            for (int j = 0; j < arity && slot < 64; j++) {
+                struct XrType *et = xr_type_tuple_get(src->type, j);
+                XiValue *get =
+                    xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
+                if (!get)
+                    return NULL;
+                get->args[0] = src;
+                get->aux_int = j;
+                elem_vals[slot++] = get;
+            }
+            continue;
+        }
+
+        elem_vals[slot] = xi_lower_expr(l, child);
+        if (!elem_vals[slot])
+            return NULL;
+        slot++;
+    }
+    uint16_t safe_n = slot;
+
     XiValue *tup_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_NEW, result_type, safe_n);
     if (!tup_val)
         return NULL;
@@ -1214,6 +1237,54 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
     return v;
 }
 
+/* Lower the argument list of a call, expanding any AST_SPREAD_EXPR
+ * `...t` into one TUPLE_GET per static element of the source tuple.
+ * Returns the effective argument count written into `out`. The
+ * caller-supplied `pmodes`/`pcount` apply XR_PARAM_VALUE deep-copy
+ * semantics to value-type slots; spread-expanded slots are not copied
+ * (the source tuple already owns the element). */
+static int lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiValue **out, int max,
+                                         const uint8_t *pmodes, int pcount) {
+    int slot = 0;
+    for (int i = 0; i < call->arg_count && slot < max; i++) {
+        AstNode *child = call->arguments[i];
+        if (!child)
+            continue;
+
+        if (child->type == AST_SPREAD_EXPR) {
+            XiValue *src = xi_lower_expr(l, child->as.spread_expr.expr);
+            if (!src)
+                return -1;
+            int arity = src->type ? xr_type_tuple_count(src->type) : 0;
+            for (int j = 0; j < arity && slot < max; j++) {
+                struct XrType *et = xr_type_tuple_get(src->type, j);
+                XiValue *get =
+                    xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
+                if (!get)
+                    return -1;
+                get->args[0] = src;
+                get->aux_int = j;
+                out[slot++] = get;
+            }
+            continue;
+        }
+
+        XiValue *a = xi_lower_expr(l, child);
+        if (!a)
+            return -1;
+        uint8_t mode = (pmodes && slot < pcount) ? pmodes[slot] : XR_PARAM_VALUE;
+        if (a->type && a->type->is_value_type && mode == XR_PARAM_VALUE) {
+            XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
+            if (cpy) {
+                cpy->args[0] = a;
+                a = cpy;
+            }
+        }
+        out[slot++] = a;
+    }
+    return slot;
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -1275,10 +1346,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
 
         XiValue *arg_vals[32];
-        int n = call->arg_count > 32 ? 32 : call->arg_count;
-        for (int i = 0; i < n; i++) {
-            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
-        }
+        int n = lower_call_args_expand_spread(l, call, arg_vals, 32, NULL, 0);
+        if (n < 0)
+            return NULL;
 
         struct XrType *result_type = xi_lower_node_type(l, node);
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */
@@ -1304,8 +1374,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return bi;
     }
 
-    uint16_t nargs = (uint16_t) (call->arg_count + 1); /* callee + args */
-
     /* Evaluate callee and all arguments before creating CALL */
     XiValue *callee_val = xi_lower_expr(l, call->callee);
 
@@ -1320,22 +1388,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     }
 
     XiValue *arg_vals[32];
-    int n = call->arg_count > 32 ? 32 : call->arg_count;
-    for (int i = 0; i < n; i++) {
-        arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
-        /* Value types (structs) passed as arguments need deep copy to
-         * ensure callee modifications don't affect the caller's binding.
-         * Skip copy for in/ref parameters (they pass by reference). */
-        uint8_t mode = (pmodes && i < pcount) ? pmodes[i] : XR_PARAM_VALUE;
-        XiValue *a = arg_vals[i];
-        if (a && a->type && a->type->is_value_type && mode == XR_PARAM_VALUE) {
-            XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
-            if (cpy) {
-                cpy->args[0] = a;
-                arg_vals[i] = cpy;
-            }
-        }
-    }
+    int n = lower_call_args_expand_spread(l, call, arg_vals, 32, pmodes, pcount);
+    if (n < 0)
+        return NULL;
+    uint16_t nargs = (uint16_t) (n + 1); /* callee + args */
 
     /* Detect self-call: callee resolves to the self-reference variable.
      * Use var_id comparison (not pointer equality) because braun_read

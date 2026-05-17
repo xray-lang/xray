@@ -459,7 +459,21 @@ fail:
     return NULL;
 }
 
-// Parse function call: add(1, 2)
+// Parse one call argument, optionally a spread `...expr`. The spread
+// source must be a tuple value; the analyzer expands its static arity
+// into individual positional arguments.
+AstNode *xr_parse_call_argument(Parser *parser) {
+    int line = parser->current.line;
+    if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+        AstNode *inner = xr_parse_expression(parser);
+        if (!inner)
+            return NULL;
+        return xr_ast_spread_expr(parser->X, inner, line);
+    }
+    return xr_parse_expression(parser);
+}
+
+// Parse function call: add(1, 2) or add(...t, 3)
 AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
     int line = parser->previous.line;
@@ -470,7 +484,8 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
+                          xr_parse_call_argument(parser));
         } while (xr_parser_match(parser, TK_COMMA));
     }
 
