@@ -17,6 +17,7 @@ xray demos/01-basics/hello.xr
 | [hello.xr](01-basics/hello.xr) | print, string interpolation |
 | [variables.xr](01-basics/variables.xr) | let, const, types, nullable, destructuring |
 | [functions.xr](01-basics/functions.xr) | fn, arrow functions, default params, rest params, recursion |
+| [tuples.xr](01-basics/tuples.xr) | tuple literals, `.N` access, destructure, match patterns, spread, generics |
 | [control_flow.xr](01-basics/control_flow.xr) | if/else, while, for, for-in, match, try/catch |
 
 ### 02 — Collections
@@ -76,6 +77,13 @@ const PI = 3.14        // immutable
 // Functions (params MUST have type annotations)
 fn add(a: int, b: int): int { return a + b }
 let double = (x: int): int => x * 2
+
+// Tuples (heterogeneous, fixed arity, .N access)
+let p: (int, string) = (1, "hi")
+print(p.0); print(p.1)
+fn divmod(a: int, b: int): (int, int) { return (a / b, a % b) }
+let (q, r) = divmod(17, 5)
+let combined = (...p, true)         // spread → (1, "hi", true)
 
 // Concurrency
 let task = go compute(42)      // spawn coroutine

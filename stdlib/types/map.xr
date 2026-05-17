@@ -10,6 +10,6 @@ class Map<K, V> {
     clear()
     keys(): Array<K>
     values(): Array<V>
-    entries(): Array<[K, V]>
+    entries(): Array<(K, V)>
     forEach(fn: fn(key: K, value: V))
 }
