@@ -476,6 +476,38 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
         return;
     }
 
+    /* Skip the entire crash-handler install under AddressSanitizer.
+     *
+     * The historical implementation registers a process-wide
+     * sigaltstack pointing at a 64KB BSS buffer.  ASan's per-thread
+     * destructor (UnsetAlternateSignalStack) tries to munmap the
+     * stack returned by sigaltstack(2), and BSS is not an mmap
+     * region — munmap fails with EINVAL, which ASan promotes to
+     * "CHECK failed: unable to unmmap" and aborts the process.
+     *
+     * The net effect is that any coroutine-heavy --jit-force test
+     * deadlocks on thread teardown and the runner reports it as a
+     * timeout with a 64KB deallocate failure.  ASan already produces
+     * a far better signal/stack report than this handler, so the
+     * correct fix is to leave its handler in place when ASan is
+     * active.  Native (non-sanitizer) builds keep the JIT-aware
+     * crash handler.
+     */
+#if defined(__has_feature)
+#  if __has_feature(address_sanitizer)
+#    define XR_JIT_ASAN_BUILD 1
+#  endif
+#endif
+#if !defined(XR_JIT_ASAN_BUILD) && defined(__SANITIZE_ADDRESS__)
+#  define XR_JIT_ASAN_BUILD 1
+#endif
+#ifdef XR_JIT_ASAN_BUILD
+    xr_log_debug("jit",
+                 "crash handler skipped: AddressSanitizer is active "
+                 "and owns the signal handlers");
+    return;
+#else
+
 // Allocate alternate signal stack so handler works during stack overflow
 // Use fixed 64KB instead of SIGSTKSZ which is not a compile-time constant on glibc 2.34+
 #define JIT_ALT_STACK_SIZE (64 * 1024)
@@ -498,6 +530,7 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
     sigaction(SIGBUS, &sa, &g_old_sigbus);
 
     xr_log_debug("jit", "crash handler installed (with alt stack)");
+#endif /* XR_JIT_ASAN_BUILD */
 }
 
 #else /* _WIN32 */
