@@ -464,6 +464,10 @@ jobs:
       XRAY_JIT_FORCE: "1"
       ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1"
       UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+      # Dump per-test stdout/stderr (incl. sanitizer reports) at the
+      # end of the regression run so the W2 triage no longer needs a
+      # local sanitizer build to read root causes.
+      XRAY_TEST_DUMP_FAILED: "1"
 
     steps:
       - uses: actions/checkout@v4

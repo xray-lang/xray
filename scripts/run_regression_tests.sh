@@ -191,13 +191,21 @@ run_one_test() {
         echo "PASS:${exec_count}" > "${result_file}"
     elif [ ${exit_code} -eq 124 ]; then
         echo "TIMEOUT:0" > "${result_file}"
+        # XRAY_TEST_DUMP_FAILED=1 preserves the captured output so CI
+        # can attach sanitizer reports to the failure summary.
+        if [ "${XRAY_TEST_DUMP_FAILED:-0}" = "1" ]; then
+            printf '%s\n' "${output}" > "${RESULTS_DIR}/${test_name}.out"
+        fi
     else
         echo "FAIL:${exec_count}" > "${result_file}"
+        if [ "${XRAY_TEST_DUMP_FAILED:-0}" = "1" ]; then
+            printf '%s\n' "${output}" > "${RESULTS_DIR}/${test_name}.out"
+        fi
     fi
 }
 export -f run_one_test is_in_list
 export XRAY_BIN TIMEOUT_SECS TIMEOUT_CMD RESULTS_DIR
-export SKIP_TESTS NOJIT_TESTS
+export SKIP_TESTS NOJIT_TESTS XRAY_TEST_DUMP_FAILED
 
 # 开始时间
 start_time=$(date +%s)
@@ -266,6 +274,25 @@ echo ""
 
 # 如果有失败的测试，列出它们
 if [ ${failed_tests} -gt 0 ]; then
+    # XRAY_TEST_DUMP_FAILED=1: dump per-test stdout/stderr (incl. sanitizer
+    # reports) before the summary. Useful for CI triage; off by default
+    # to keep local output clean.
+    if [ "${XRAY_TEST_DUMP_FAILED:-0}" = "1" ]; then
+        echo -e "${YELLOW}--- begin per-test failure output (XRAY_TEST_DUMP_FAILED=1) ---${NC}"
+        for test in "${failed_test_list[@]}"; do
+            # Strip trailing " (timeout)" annotation, if any.
+            name="${test% (timeout)}"
+            out_file="${RESULTS_DIR}/${name}.out"
+            if [ -f "${out_file}" ]; then
+                echo -e "${RED}>>> ${name} >>>${NC}"
+                cat "${out_file}"
+                echo -e "${RED}<<< ${name} <<<${NC}"
+                echo ""
+            fi
+        done
+        echo -e "${YELLOW}--- end per-test failure output ---${NC}"
+        echo ""
+    fi
     echo -e "${RED}失败的测试:${NC}"
     for test in "${failed_test_list[@]}"; do
         echo "  - ${test}"
