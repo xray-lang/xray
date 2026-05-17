@@ -301,6 +301,18 @@ typedef struct {
 static inline void xr_sparse_set_init(XrSparseSet *s, int capacity) {
     s->sparse = (int *) xr_re_alloc(capacity * sizeof(int));
     s->dense = (int *) xr_re_alloc(capacity * sizeof(int));
+    // Briggs/Torczon sparse-set normally leaves sparse[] uninitialised
+    // and relies on the contains() guard `sparse[i] < size` to filter
+    // out stray entries. That trick is correct, but MSan reports the
+    // read as use-of-uninitialized-value because it cannot follow the
+    // data-flow invariant. Zeroing sparse[] keeps the algorithm intact
+    // (sparse[i] = 0 still satisfies `0 < size` => the dense check
+    // dense[0] == i decides membership exactly when i == dense[0],
+    // which is the same as before any insert wrote sparse[i]). Dense
+    // remains uninitialised: it is only read at sparse[i] which is
+    // either 0 (handled by size guard) or was set by a prior insert
+    // that also wrote dense[size].
+    memset(s->sparse, 0, capacity * sizeof(int));
     s->size = 0;
     s->capacity = capacity;
 }
