@@ -2485,6 +2485,132 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     return copy ? copy : val;
 }
 
+/* try? expr / try! expr — exception-folding expressions.
+ *
+ *   try? expr   If expr throws, the value is null; otherwise it is the
+ *               operand value.  Result type widens to T?.
+ *   try! expr   Asserts no throw; if expr throws, the original exception
+ *               is re-thrown.  Result type is unchanged.
+ *
+ * CFG layout (try?):
+ *     cur ──XI_TRY──► try_blk ──evaluate operand──► merge
+ *                       │                            │
+ *                       └──(on throw)─► catch_blk ───┘
+ *                                       (binds exc, produces null)
+ *     merge: phi(operand_value, null) + XI_END_TRY
+ *
+ * CFG layout (try!):
+ *     cur ──XI_TRY──► try_blk ──evaluate operand──► merge
+ *                       │
+ *                       └──(on throw)─► catch_blk: XI_CATCH + XI_THROW
+ *                                       (unreachable, no edge to merge)
+ *     merge: single pred → no phi; XI_END_TRY only.
+ *
+ * The XI_TRY / XI_CATCH / XI_END_TRY emission mirrors lower_try_catch_impl;
+ * the difference is that the catch handler produces an expression value
+ * instead of executing a user-provided body. */
+static XiValue *lower_try_expr(XiLower *l, AstNode *node) {
+    bool is_force = (node->type == AST_TRY_FORCE);
+    int line = node->line;
+
+    XiBlock *try_blk = xi_block_new(l->func);
+    XiBlock *catch_blk = xi_block_new(l->func);
+    XiBlock *merge = xi_block_new(l->func);
+
+    /* Emit XI_TRY in the current block pointing at the catch handler. */
+    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
+    if (try_op) {
+        try_op->aux = (void *) catch_blk;
+        try_op->aux_int = -1; /* no separate finally block */
+        try_op->flags |= XI_FLAG_SIDE_EFFECT;
+        try_op->line = (uint32_t) line;
+    }
+
+    xi_block_set_jump(l->cur_block, try_blk);
+    xi_lower_braun_seal(l, try_blk);
+
+    /* Try body: evaluate the operand.  try_depth keeps any inner throw
+     * from collapsing its block, so SSA phis include the latest writes. */
+    l->cur_block = try_blk;
+    l->dead_after_throw = false;
+    l->try_depth++;
+    XiValue *value = xi_lower_expr(l, node->as.unary.operand);
+    l->try_depth--;
+    XiBlock *try_exit = l->cur_block;
+    if (try_exit)
+        xi_block_set_jump(try_exit, merge);
+
+    /* Catch handler.  VM preserves register state on throw, so we wire
+     * the predecessor edge from the try-body exit so Braun SSA sees the
+     * most recent writes from inside the operand. */
+    XiBlock *catch_pred = try_exit ? try_exit : try_blk;
+    xi_block_add_pred(catch_blk, catch_pred);
+    xi_lower_braun_seal(l, catch_blk);
+    l->cur_block = catch_blk;
+    l->dead_after_throw = false;
+
+    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
+    if (catch_op) {
+        catch_op->flags |= XI_FLAG_SIDE_EFFECT;
+        catch_op->line = (uint32_t) line;
+    }
+
+    XiValue *catch_null = NULL;
+    if (is_force) {
+        /* try!: re-throw the original exception.  The catch block has no
+         * outgoing edge to merge — merge will have a single predecessor
+         * (the normal try exit). */
+        if (catch_op) {
+            XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
+            if (rethrow) {
+                rethrow->args[0] = catch_op;
+                rethrow->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+                rethrow->line = (uint32_t) line;
+            }
+        }
+        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+        l->cur_block->control = catch_op;
+        l->cur_block = NULL;
+    } else {
+        /* try?: produce a null value and merge. */
+        catch_null = xi_const_null(l->func, l->cur_block, l->type_null);
+        xi_block_set_jump(l->cur_block, merge);
+    }
+
+    xi_lower_braun_seal(l, merge);
+    l->cur_block = merge;
+
+    /* End-try marker (paired with XI_TRY).  Must precede the result phi
+     * read so the emitter places the matching OP_END_TRY before the
+     * subsequent value use. */
+    XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+    if (end_op) {
+        end_op->flags |= XI_FLAG_SIDE_EFFECT;
+        end_op->line = (uint32_t) line;
+    }
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+
+    if (is_force) {
+        /* Single predecessor: forward the try-body value directly. */
+        if (value)
+            return value;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+
+    /* try?: phi(try_exit_value, null). */
+    XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+    if (phi) {
+        for (uint16_t i = 0; i < merge->npreds; i++) {
+            if (merge->preds[i] == try_exit)
+                phi->value.args[i] = value ? value : catch_null;
+            else
+                phi->value.args[i] = catch_null;
+        }
+    }
+    return phi ? &phi->value : (value ? value : catch_null);
+}
+
 static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
     (void) node;
     struct XrType *this_type = xi_lower_node_type(l, node);
@@ -2921,6 +3047,11 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         /* Force unwrap: expr! */
         case AST_FORCE_UNWRAP:
             return lower_force_unwrap(l, node);
+
+        /* Try-modified expressions: try? expr / try! expr */
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
+            return lower_try_expr(l, node);
 
         /* OOP: this / super */
         case AST_THIS_EXPR:

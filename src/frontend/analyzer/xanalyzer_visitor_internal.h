@@ -56,6 +56,7 @@ XR_FUNC XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_nullish_coalesce(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node);
+XR_FUNC XrType *xa_visit_try_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC void check_closure_capture(XaInferContext *ctx, AstNode *node, int line);
 XR_FUNC void check_coro_capture(XaInferContext *ctx, AstNode *node, int line);

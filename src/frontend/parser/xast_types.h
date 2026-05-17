@@ -85,6 +85,8 @@ typedef enum {
     AST_NULLISH_COALESCE,  // a ?? b
     AST_OPTIONAL_CHAIN,    // obj?.prop
     AST_FORCE_UNWRAP,      // expr! (force unwrap nullable)
+    AST_TRY_OPTIONAL,      // try? expr (fold thrown exception to null; type T -> T?)
+    AST_TRY_FORCE,         // try! expr (panic on thrown exception; type unchanged)
     AST_AS_EXPR,           // expr as Type (explicit type cast)
     AST_RANGE,             // 1..10
 

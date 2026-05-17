@@ -647,6 +647,8 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             break;
 
         case AST_FORCE_UNWRAP:
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
             canon_node(ctx, node->as.unary.operand);
             break;
 

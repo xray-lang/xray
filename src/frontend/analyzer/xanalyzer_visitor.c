@@ -1032,6 +1032,10 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_FORCE_UNWRAP:
             result = xa_visit_force_unwrap(ctx, node);
             break;
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
+            result = xa_visit_try_expr(ctx, node);
+            break;
         case AST_AS_EXPR:
             result = xa_visit_as_expr(ctx, node);
             break;

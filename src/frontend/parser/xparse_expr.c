@@ -895,6 +895,55 @@ AstNode *xr_parse_force_unwrap(Parser *parser, AstNode *operand) {
     return xr_ast_unary(parser->X, AST_FORCE_UNWRAP, operand, line);
 }
 
+// Parse try-modified expression: try? expr or try! expr.
+//
+// try? expr  — folds any thrown exception into null; result type is T?
+//              (where T is the operand type, deduplicated against null).
+// try! expr  — panics at runtime if expr throws; result type is unchanged.
+//
+// Both bind at PREC_UNARY so they swallow trailing postfix operators like
+// member access, calls and optional chains:
+//     try? a.b.c()?.d  ==  try? (a.b.c()?.d)
+// Combine with ?? for fallback:
+//     try? f(x) ?? default
+// Note that block-form `try { ... } catch ...` is a statement, dispatched
+// by xr_parse_statement before reaching this prefix handler.
+AstNode *xr_parse_try_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_try_expr: NULL parser");
+    // xr_parse_precedence consumed the 'try' token before dispatching here,
+    // so parser->previous is TK_TRY and parser->current is the qualifier.
+    int line = parser->previous.line;
+
+    AstNodeType kind;
+    const char *form;
+    if (parser->current.type == TK_QUESTION) {
+        kind = AST_TRY_OPTIONAL;
+        form = "try?";
+        xr_parser_advance(parser);
+    } else if (parser->current.type == TK_NOT) {
+        kind = AST_TRY_FORCE;
+        form = "try!";
+        xr_parser_advance(parser);
+    } else {
+        // Bare `try` in expression position is reserved for future use.
+        // Right now block-form try is a statement; reaching here means the
+        // user wrote something like `let x = try expr` which has no meaning.
+        xr_parser_error_at_current(parser,
+                                   "'try' in expression position must be followed by '?' or '!'; "
+                                   "use 'try { ... } catch (e) { ... }' as a statement");
+        return NULL;
+    }
+
+    AstNode *operand = xr_parse_precedence(parser, PREC_UNARY);
+    if (!operand) {
+        xr_parser_error_at_current(parser, "expected expression after try modifier");
+        (void) form;
+        return NULL;
+    }
+
+    return xr_ast_unary(parser->X, kind, operand, line);
+}
+
 // Parse as cast: expr as Type / expr as Type?
 // Bare container types allowed: 'x as Array' for runtime type casts.
 AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
