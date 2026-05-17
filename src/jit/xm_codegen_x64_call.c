@@ -231,7 +231,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Collect live caller-saved regs */
             X64Reg live_gp[8];
             int ngp = x64_live_gp(ctx, live_gp, rd);
-            X64Xmm live_fp_arr[14];
+            X64Xmm live_fp_arr[X64_MAX_FP_REGS];
             int nfp = x64_live_fp(ctx, live_fp_arr);
 
             /* Save caller-saved regs to stack (16-byte aligned) */
@@ -394,7 +394,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Save live caller-saved regs to stack (16-byte aligned) */
             X64Reg live_gp[8];
             int ngp = x64_live_gp(ctx, live_gp, rd);
-            X64Xmm live_fp_arr[14];
+            X64Xmm live_fp_arr[X64_MAX_FP_REGS];
             int nfp = x64_live_fp(ctx, live_fp_arr);
             int32_t save_frame = (((ngp + nfp) * 8 + 15) & ~15);
             if (save_frame > 0) {
@@ -553,7 +553,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Save live caller-saved regs */
             X64Reg live_gp[8];
             int ngp = x64_live_gp(ctx, live_gp, rd);
-            X64Xmm live_fp_arr[14];
+            X64Xmm live_fp_arr[X64_MAX_FP_REGS];
             int nfp = x64_live_fp(ctx, live_fp_arr);
             int32_t save_frame = (((ngp + nfp) * 8 + 15) & ~15);
             if (save_frame > 0) {
