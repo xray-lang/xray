@@ -522,21 +522,27 @@ static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
     void *fault_pc = (void *) rec->ExceptionAddress;
     const char *kind = "UNKNOWN";
     switch (rec->ExceptionCode) {
-        case EXCEPTION_ACCESS_VIOLATION:   kind = "ACCESS_VIOLATION"; break;
-        case EXCEPTION_STACK_OVERFLOW:     kind = "STACK_OVERFLOW"; break;
-        case EXCEPTION_ILLEGAL_INSTRUCTION:kind = "ILLEGAL_INSTRUCTION"; break;
-        case EXCEPTION_INT_DIVIDE_BY_ZERO: kind = "INT_DIV_BY_ZERO"; break;
+        case EXCEPTION_ACCESS_VIOLATION:
+            kind = "ACCESS_VIOLATION";
+            break;
+        case EXCEPTION_STACK_OVERFLOW:
+            kind = "STACK_OVERFLOW";
+            break;
+        case EXCEPTION_ILLEGAL_INSTRUCTION:
+            kind = "ILLEGAL_INSTRUCTION";
+            break;
+        case EXCEPTION_INT_DIVIDE_BY_ZERO:
+            kind = "INT_DIV_BY_ZERO";
+            break;
     }
 
     fprintf(stderr, "\n=== JIT CRASH: %s ===\n", kind);
     fprintf(stderr, "  PC      = %p\n", fault_pc);
-    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
-        rec->NumberParameters >= 2) {
-        const char *op = rec->ExceptionInformation[0] == 0 ? "read"
-                        : rec->ExceptionInformation[0] == 1 ? "write"
-                        : "exec";
-        fprintf(stderr, "  Fault   = %s @ %p\n", op,
-                (void *) rec->ExceptionInformation[1]);
+    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2) {
+        const char *op = rec->ExceptionInformation[0] == 0   ? "read"
+                         : rec->ExceptionInformation[0] == 1 ? "write"
+                                                             : "exec";
+        fprintf(stderr, "  Fault   = %s @ %p\n", op, (void *) rec->ExceptionInformation[1]);
     }
 #ifdef _M_X64
     CONTEXT *ctx = info->ContextRecord;
@@ -559,18 +565,18 @@ static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
         HMODULE mod = NULL;
         if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                    GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                               (LPCWSTR) fault_pc, &mod) && mod) {
+                               (LPCWSTR) fault_pc, &mod) &&
+            mod) {
             wchar_t name[MAX_PATH] = {0};
             GetModuleFileNameW(mod, name, MAX_PATH);
             uintptr_t base = (uintptr_t) mod;
             uintptr_t rva = (uintptr_t) fault_pc - base;
-            fprintf(stderr, "  module  = %ls  base=%p  RVA=0x%zx\n", name,
-                    (void *) base, (size_t) rva);
+            fprintf(stderr, "  module  = %ls  base=%p  RVA=0x%zx\n", name, (void *) base,
+                    (size_t) rva);
         }
         static int sym_inited = 0;
         if (!sym_inited) {
-            SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME |
-                          SYMOPT_LOAD_LINES);
+            SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES);
             SymInitialize(GetCurrentProcess(), NULL, TRUE);
             sym_inited = 1;
         }
@@ -579,17 +585,13 @@ static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
         sym->SizeOfStruct = sizeof(SYMBOL_INFO);
         sym->MaxNameLen = 512;
         DWORD64 disp = 0;
-        if (SymFromAddr(GetCurrentProcess(), (DWORD64) (uintptr_t) fault_pc,
-                        &disp, sym)) {
-            fprintf(stderr, "  symbol  = %s+0x%llx\n", sym->Name,
-                    (unsigned long long) disp);
+        if (SymFromAddr(GetCurrentProcess(), (DWORD64) (uintptr_t) fault_pc, &disp, sym)) {
+            fprintf(stderr, "  symbol  = %s+0x%llx\n", sym->Name, (unsigned long long) disp);
             IMAGEHLP_LINE64 line = {sizeof(IMAGEHLP_LINE64)};
             DWORD line_disp = 0;
-            if (SymGetLineFromAddr64(GetCurrentProcess(),
-                                     (DWORD64) (uintptr_t) fault_pc,
+            if (SymGetLineFromAddr64(GetCurrentProcess(), (DWORD64) (uintptr_t) fault_pc,
                                      &line_disp, &line)) {
-                fprintf(stderr, "  source  = %s:%u\n", line.FileName,
-                        (unsigned) line.LineNumber);
+                fprintf(stderr, "  source  = %s:%u\n", line.FileName, (unsigned) line.LineNumber);
             }
         }
     }
@@ -598,15 +600,15 @@ static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
     if (region) {
         size_t off = (size_t) ((uintptr_t) fault_pc - (uintptr_t) region->code);
         fprintf(stderr, "  in JIT  = %s+0x%zx  (region %p, size %u, fast=+0x%x)\n",
-                region->name ? region->name : "?", off, region->code,
-                region->code_size, region->fast_entry_offset);
+                region->name ? region->name : "?", off, region->code, region->code_size,
+                region->fast_entry_offset);
         /* Print a short hex dump around the fault PC. */
         size_t start = off >= 8 ? off - 8 : 0;
         size_t end = off + 16 < region->code_size ? off + 16 : region->code_size;
         fprintf(stderr, "  bytes   =");
         for (size_t i = start; i < end; i++) {
-            fprintf(stderr, " %s%02x%s", i == off ? "[" : "",
-                    ((unsigned char *) region->code)[i], i == off ? "]" : "");
+            fprintf(stderr, " %s%02x%s", i == off ? "[" : "", ((unsigned char *) region->code)[i],
+                    i == off ? "]" : "");
         }
         fprintf(stderr, "\n");
     } else {

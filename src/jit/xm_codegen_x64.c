@@ -735,9 +735,8 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
              * RCX or RDX, which are clobbered by the tag writes below. */
             if (!xm_ref_is_none(blk->jmp.arg)) {
                 uint32_t ret_idx = XM_REF_INDEX(blk->jmp.arg);
-                bool is_fp =
-                    (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg &&
-                     ctx->func->vregs[ret_idx].rep == XR_REP_F64);
+                bool is_fp = (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg &&
+                              ctx->func->vregs[ret_idx].rep == XR_REP_F64);
 
                 /* Move payload to RAX before tag writes clobber RCX/RDX.
                  *
