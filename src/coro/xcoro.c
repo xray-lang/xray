@@ -1479,9 +1479,17 @@ static inline void scope_lock_release(XrScopeContext *scope) {
 //
 // Returns true iff the child reported a non-null string error.
 static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeContext *scope) {
-    if (scope->mode == XR_SCOPE_WAIT || !coro->task)
+    /* coro->task is cleared by the scheduler when a sibling worker
+     * recycles the coroutine slot, and our caller's scope->child_lock
+     * does not pin that field. Loading the pointer once into a local
+     * is therefore necessary for correctness, not defensive: a second
+     * deref would re-read the field and UBSan flags the resulting NULL
+     * access on the LINKED-cancel race.
+     */
+    XrTask *task = coro->task;
+    if (scope->mode == XR_SCOPE_WAIT || !task)
         return false;
-    XrValue err = coro->task->error;
+    XrValue err = task->error;
     if (XR_IS_NULL(err) || !XR_IS_STRING(err))
         return false;
 

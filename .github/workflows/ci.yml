@@ -508,6 +508,25 @@ jobs:
       - name: Build
         run: cmake --build build --config Debug -j
 
+      - name: Stage vcpkg runtime DLLs next to xray.exe (Windows)
+        # vcpkg's x64-windows-release triplet links against shared zlib;
+        # the Debug-config build directory does not auto-deploy those
+        # DLLs, so the regression runner used to fail every test with
+        # "error while loading shared libraries: z.dll". Copy the
+        # release-triplet DLLs alongside the binary before tests run.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "${{ github.workspace }}/build/Debug"
+          $dll = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-release/bin"
+          if (Test-Path $dll) {
+            Copy-Item -Path "$dll/*.dll" -Destination $bin -Force
+            Get-ChildItem $bin -Filter '*.dll' | ForEach-Object { $_.Name }
+          } else {
+            Write-Host "vcpkg release bin dir not found: $dll"
+            Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed" -Recurse -Filter '*.dll' | Select-Object FullName
+          }
+
       - name: Run regression tests (--jit-force, Unix)
         if: runner.os != 'Windows'
         run: |
