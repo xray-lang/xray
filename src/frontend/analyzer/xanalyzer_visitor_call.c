@@ -357,9 +357,34 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     // Infer argument types
-    int arg_count = call->arg_count;
     int param_count = callee_type->function.param_count;
     bool is_variadic = callee_type->function.is_variadic;
+
+    /* Spread expansion: walk arguments once, building a flat per-slot
+     * view that splices each `...tuple` arg into its individual element
+     * slots. With no spreads this is just call->arguments / call->arg_count. */
+    int eff_count = 0;
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *a = call->arguments[i];
+        if (a && a->type == AST_SPREAD_EXPR) {
+            XrType *src = xa_visit_infer_expr(ctx, a->as.spread_expr.expr);
+            if (src && XR_TYPE_IS_TUPLE(src)) {
+                eff_count += src->tuple.element_count;
+            } else {
+                XrLocation loc = {.file = ctx->file_path, .line = a->line, .column = a->column};
+                char msg[160];
+                snprintf(msg, sizeof(msg),
+                         "Spread '...' argument must be a tuple of statically known arity, "
+                         "got '%s'",
+                         src ? xr_type_to_string(src) : "<unknown>");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            }
+        } else {
+            eff_count++;
+        }
+    }
+    int arg_count = eff_count;
 
     // Check argument count (use min_params for functions with default parameters)
     int min_params = callee_type->function.min_params;
@@ -415,38 +440,79 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    for (int i = 0; i < arg_count && i < param_count; i++) {
-        XrType *param_type = param_types ? param_types[i] : NULL;
+    /* Effective-slot iteration: a spread `...t` arg contributes one
+     * slot per element of the source tuple. Each slot is checked
+     * against the next parameter; non-tuple spread sources contribute
+     * zero slots (the diagnostic was already emitted above). */
+    int slot = 0;
+    for (int i = 0; i < call->arg_count; i++) {
+        AstNode *arg_node = call->arguments[i];
+        if (!arg_node)
+            continue;
 
-        // Bidirectional inference: propagate parameter type to argument
-        XrType *saved_expected = ctx->expected_type;
-        if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
-            ctx->expected_type = param_type;
-        }
-        XrType *arg_type = xa_visit_infer_expr(ctx, call->arguments[i]);
-        ctx->expected_type = saved_expected;
-
-        if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            {
-                // Check null safety then assignability. Json coercion
-                // is the same compile-time fallback used by var-decl /
-                // assignment / return checks: typed instance -> Json
-                // sink (and Json -> typed instance with a runtime
-                // OP_CHECKTYPE) compiles, anything stricter errors.
+        if (arg_node->type == AST_SPREAD_EXPR) {
+            /* xa_visit_infer_expr was already called above for the
+             * count check; re-querying gives the cached node type. */
+            XrType *src = xa_analyzer_get_node_type(ctx->analyzer, arg_node->as.spread_expr.expr);
+            if (!src) {
+                XrType *saved_expected = ctx->expected_type;
+                ctx->expected_type = NULL;
+                src = xa_visit_infer_expr(ctx, arg_node->as.spread_expr.expr);
+                ctx->expected_type = saved_expected;
+            }
+            if (!src || !XR_TYPE_IS_TUPLE(src))
+                continue;
+            for (int j = 0; j < src->tuple.element_count && slot < param_count; j++, slot++) {
+                XrType *param_type = param_types ? param_types[slot] : NULL;
+                if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
+                    continue;
+                XrType *arg_type = src->tuple.element_types[j];
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
                 bool null_err =
                     xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
                 if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
                     !xr_is_json_coercion(param_type, arg_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
-                             "Argument %d: type '%s' is not assignable to parameter type '%s'",
-                             i + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                             "Argument %d (from spread): type '%s' is not assignable to "
+                             "parameter type '%s'",
+                             slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
                 }
             }
+            continue;
         }
+
+        if (slot >= param_count) {
+            slot++;
+            continue;
+        }
+
+        XrType *param_type = param_types ? param_types[slot] : NULL;
+        XrType *saved_expected = ctx->expected_type;
+        if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
+            ctx->expected_type = param_type;
+        }
+        XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
+        ctx->expected_type = saved_expected;
+
+        if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            bool null_err =
+                xa_check_null_safety(ctx->analyzer, param_type, arg_type, "Argument", &loc);
+            if (!null_err && !xa_typecheck_assignable(param_type, arg_type) &&
+                !xr_is_json_coercion(param_type, arg_type)) {
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Argument %d: type '%s' is not assignable to parameter type '%s'",
+                         slot + 1, xr_type_to_string(arg_type), xr_type_to_string(param_type));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_ARG_TYPE, msg, &loc);
+            }
+        }
+        slot++;
     }
 
     // Restore callback context

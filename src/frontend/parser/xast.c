@@ -654,6 +654,13 @@ AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int count, int
     return node;
 }
 
+// Create spread expression node: `...expr`.
+AstNode *xr_ast_spread_expr(XrayIsolate *X, AstNode *expr, int line) {
+    AstNode *node = alloc_node(X, AST_SPREAD_EXPR, line);
+    node->as.spread_expr.expr = expr;
+    return node;
+}
+
 // Create tuple literal node: `()`, `(x,)`, or `(a, b, ...)`. Type
 // inference fills in compile_type from the inferred element types
 // (or the unit singleton for count == 0).

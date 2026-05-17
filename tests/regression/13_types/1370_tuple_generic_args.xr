@@ -1,0 +1,100 @@
+// 1370_tuple_generic_args.xr
+// 测试：tuple 作为泛型类型参数（Channel/Array/Map/Set 以及用户泛型函数）
+
+// ===== Channel<(T, U)>: tuple payload through coroutine channel =====
+@test
+fn test_channel_tuple_send_recv() {
+    shared const ch: Channel<(int, string)> = new Channel(2)
+    ch.send((1, "hello"))
+    ch.send((2, "world"))
+    let (n1, s1) = ch.recv()
+    let (n2, s2) = ch.recv()
+    assert_eq(n1, 1)
+    assert_eq(s1, "hello")
+    assert_eq(n2, 2)
+    assert_eq(s2, "world")
+    ch.close()
+}
+
+// ===== Array<(K, V)>: indexed and destructured access =====
+@test
+fn test_array_of_tuples() {
+    let pairs: Array<(string, int)> = [("a", 1), ("b", 2), ("c", 3)]
+    assert_eq(pairs.length, 3)
+    assert_eq(pairs[0].0, "a")
+    assert_eq(pairs[1].1, 2)
+
+    let (k, v) = pairs[2]
+    assert_eq(k, "c")
+    assert_eq(v, 3)
+}
+
+// ===== Array<(K, V)> in for-in destructure =====
+@test
+fn test_for_in_array_tuple() {
+    let pairs: Array<(string, int)> = [("a", 1), ("b", 2)]
+    let total = 0
+    let concat = ""
+    for ((k, v) in pairs) {
+        total = total + v
+        concat = concat + k
+    }
+    assert_eq(total, 3)
+    assert_eq(concat, "ab")
+}
+
+// ===== User generic fn: (A, B) param + return =====
+fn first<A, B>(t: (A, B)): A {
+    return t.0
+}
+
+fn second<A, B>(t: (A, B)): B {
+    return t.1
+}
+
+fn pair<A, B>(a: A, b: B): (A, B) {
+    return (a, b)
+}
+
+@test
+fn test_user_generic_tuple_fn() {
+    let p = pair(42, "answer")
+    assert_eq(first(p), 42)
+    assert_eq(second(p), "answer")
+
+    let q = pair(true, 3.14)
+    assert_eq(first(q), true)
+    assert_eq(second(q), 3.14)
+}
+
+// ===== Map<K, (V1, V2)>: value is a tuple =====
+@test
+fn test_map_with_tuple_values() {
+    let m: Map<string, (int, bool)> = new Map()
+    m.set("a", (1, true))
+    m.set("b", (2, false))
+    assert_eq(m.length, 2)
+
+    let va = m.get("a")
+    if (va != null) {
+        assert_eq(va.0, 1)
+        assert_eq(va.1, true)
+    }
+}
+
+// ===== Nested tuples through generics (field access path) =====
+@test
+fn test_nested_tuple_generic() {
+    let triples: Array<((int, int), string)> = []
+    triples.push(((1, 2), "first"))
+    triples.push(((3, 4), "second"))
+
+    let first = triples[0]
+    assert_eq(first.0.0, 1)
+    assert_eq(first.0.1, 2)
+    assert_eq(first.1, "first")
+
+    let second = triples[1]
+    assert_eq(second.0.0, 3)
+    assert_eq(second.1, "second")
+}

@@ -492,9 +492,24 @@ AstNode *xr_parse_grouping(Parser *parser) {
 
     // Case 3: parenthesised expression list — tuple if any comma appears
     // (including a trailing comma for unary tuples `(x,)`), grouping
-    // otherwise.
-    AstNode *first = xr_parse_expression(parser);
+    // otherwise. Each element may be a spread (`...expr`) which is
+    // statically expanded by the analyzer into the host tuple.
+    AstNode *first = NULL;
+    int first_line = parser->current.line;
+    if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+        AstNode *inner = xr_parse_expression(parser);
+        if (!inner)
+            return NULL;
+        first = xr_ast_spread_expr(parser->X, inner, first_line);
+    } else {
+        first = xr_parse_expression(parser);
+    }
     if (!xr_parser_check(parser, TK_COMMA)) {
+        if (first && first->type == AST_SPREAD_EXPR) {
+            xr_parser_error(parser,
+                            "spread '...' is only valid inside a tuple literal of arity >= 1; "
+                            "wrap with a trailing comma to form a tuple");
+        }
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to close grouping");
         return xr_ast_grouping(parser->X, first, line);
     }
@@ -516,7 +531,15 @@ AstNode *xr_parse_grouping(Parser *parser) {
             elems = resized;
             cap = new_cap;
         }
-        elems[count++] = xr_parse_expression(parser);
+        int elem_line = parser->current.line;
+        if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
+            AstNode *inner = xr_parse_expression(parser);
+            if (!inner)
+                return NULL;
+            elems[count++] = xr_ast_spread_expr(parser->X, inner, elem_line);
+        } else {
+            elems[count++] = xr_parse_expression(parser);
+        }
     }
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to close tuple literal");
     return xr_ast_tuple_literal(parser->X, elems, count, line);
@@ -738,7 +761,8 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
 
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
-            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
+            XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
+                          xr_parse_call_argument(parser));
         } while (xr_parser_match(parser, TK_COMMA));
     }
 

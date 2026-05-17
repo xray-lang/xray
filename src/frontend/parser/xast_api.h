@@ -134,6 +134,11 @@ XR_FUNC AstNode *xr_ast_array_literal(XrayIsolate *X, AstNode **elements, int co
 // into the parse arena.
 XR_FUNC AstNode *xr_ast_tuple_literal(XrayIsolate *X, AstNode **elements, int count, int line);
 
+// Create spread element node: `...expr` (only valid as a tuple-literal
+// element or as a function-call argument). The wrapped expression must
+// evaluate to a tuple of statically known arity.
+XR_FUNC AstNode *xr_ast_spread_expr(XrayIsolate *X, AstNode *expr, int line);
+
 // Create object literal node
 XR_FUNC AstNode *xr_ast_object_literal(XrayIsolate *X, AstNode **keys, AstNode **values,
                                        bool *computed, int count, int line);

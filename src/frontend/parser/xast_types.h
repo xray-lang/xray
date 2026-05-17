@@ -184,6 +184,10 @@ typedef enum {
     AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
     AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
 
+    // Spread element: `...expr` inside tuple literal or call argument list.
+    // Statically expanded — the source must be a tuple of known arity.
+    AST_SPREAD_EXPR,
+
     // Type alias
     AST_TYPE_ALIAS,  // type User = { name: string, age: int }
 
