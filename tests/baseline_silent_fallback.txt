@@ -7,7 +7,7 @@
 # Any *new* silent fallback outside this list is rejected by CI.
 src/jit/xm_codegen.c:1367
 src/jit/xm_codegen_mem.c:163
-src/jit/xm_codegen_x64.c:816
+src/jit/xm_codegen_x64.c:815
 src/jit/xm_codegen_x64_ins.c:461
 src/jit/xm_codegen_x64_ins.c:600
 src/jit/xm_codegen_x64_ins.c:700
