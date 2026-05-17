@@ -516,6 +516,13 @@ jobs:
         env:
           XRAY_PATH: ./build/xray
           XRAY_BUILD_DIR: ./build
+          # ASan + UBSan + JIT-force triples per-test runtime vs the
+          # plain interpreter (instrumented JIT compile + deopt paths
+          # cost the most), so the default 10s budget races coroutine
+          # / channel stress tests on the Linux runners. Bumping to
+          # 60s keeps slow-but-correct runs green; any test still
+          # exceeding this is a real hang and worth investigating.
+          XRAY_TEST_TIMEOUT: "60"
 
       - name: Run regression tests (--jit-force, Windows)
         if: runner.os == 'Windows'
@@ -525,3 +532,4 @@ jobs:
         env:
           XRAY_PATH: ./build/Debug/xray.exe
           XRAY_BUILD_DIR: ./build
+          XRAY_TEST_TIMEOUT: "60"
