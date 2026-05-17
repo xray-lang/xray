@@ -44,8 +44,10 @@ for test_file in $(find "${TEST_DIR}" -name "*.xr" -type f | sort); do
     printf "[%3d] %-45s ... " "${total}" "${test_name}"
 
     # 运行编译器（期望失败）
-    output=$(timeout 3 "${XRAY_BIN}" "${test_file}" 2>&1)
+    raw_output=$(timeout 3 "${XRAY_BIN}" "${test_file}" 2>&1)
     exit_code=$?
+    # strip ANSI escape sequences for matching
+    output=$(echo "$raw_output" | sed $'s/\x1b\\[[0-9;]*m//g')
 
     # 检查是否编译失败
     if [ ${exit_code} -eq 0 ]; then
@@ -58,7 +60,7 @@ for test_file in $(find "${TEST_DIR}" -name "*.xr" -type f | sort); do
     # 如果有 .expected 文件，验证错误消息
     if [ -f "${expected_file}" ]; then
         expected_msg=$(cat "${expected_file}" | head -1)
-        if echo "${output}" | grep -q "${expected_msg}"; then
+        if echo "${output}" | grep -Fq "${expected_msg}"; then
             echo -e "${GREEN}✓ PASS${NC}"
             passed=$((passed + 1))
         else
