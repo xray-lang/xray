@@ -223,6 +223,14 @@ void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj) {
             if (iter->source.json)
                 xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.json);
             break;
+        case XR_ITERATOR_ARRAY:
+            if (iter->source.array)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.array);
+            break;
+        case XR_ITERATOR_STRING:
+            if (iter->source.string)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.string);
+            break;
     }
     // coro is a raw runtime pointer, not a GC object; context is XrayIsolate* or
     // XrSymbolTable* — neither is GC-managed. No further marking needed.

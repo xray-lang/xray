@@ -574,11 +574,15 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
 
     struct XrType *item_type = xi_lower_node_type(l, node);
 
-    XiValue *idx0 = xi_const_int(l->func, l->cur_block, 0, l->type_int);
-    XiValue *key_val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, item_type, 2);
+    /* The iterator yields a (key, value) tuple per step (see
+     * xr_iterator_next: Map/Json/Array/String all build XrTuple pairs).
+     * Read each slot with TUPLE_GET so the access matches the runtime
+     * representation; downstream peephole can fold this against a
+     * fresh TUPLE_NEW when the source is inlinable. */
+    XiValue *key_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, item_type, 1);
     if (key_val) {
         key_val->args[0] = entry;
-        key_val->args[1] = idx0;
+        key_val->aux_int = 0;
         key_val->line = line;
     }
     int key_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
@@ -586,11 +590,10 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
         xi_lower_braun_write(l, key_var, l->cur_block, key_val);
 
     if (s->value_name) {
-        XiValue *idx1 = xi_const_int(l->func, l->cur_block, 1, l->type_int);
-        XiValue *val_val = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, l->type_any, 2);
+        XiValue *val_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, l->type_any, 1);
         if (val_val) {
             val_val->args[0] = entry;
-            val_val->args[1] = idx1;
+            val_val->aux_int = 1;
             val_val->line = line;
         }
         int val_var = xi_lower_var_create(l, s->value_symbol_id, s->value_name, l->type_any);

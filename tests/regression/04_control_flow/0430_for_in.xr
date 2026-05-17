@@ -114,6 +114,86 @@ fn test_for_in_empty_map() {
     assert_eq(count, 0)
 }
 
+// ===== Array index-element shorthand =====
+
+@test
+fn test_for_in_array_index_elem() {
+    let arr = ["x", "y", "z"]
+    let indexed = ""
+    for (i, e in arr) {
+        indexed += "${i}:${e};"
+    }
+    assert_eq(indexed, "0:x;1:y;2:z;")
+}
+
+@test
+fn test_for_in_array_index_sum() {
+    let arr = [10, 20, 30, 40]
+    let idx_sum = 0
+    let elem_sum = 0
+    for (i, e in arr) {
+        idx_sum += i
+        elem_sum += e
+    }
+    assert_eq(idx_sum, 6)
+    assert_eq(elem_sum, 100)
+}
+
+@test
+fn test_for_in_array_index_empty() {
+    let arr: Array<int> = []
+    let count = 0
+    for (i, e in arr) {
+        count++
+    }
+    assert_eq(count, 0)
+}
+
+@test
+fn test_for_in_array_entries_method() {
+    let arr = [100, 200, 300]
+    let acc = ""
+    for ((i, e) in arr.entries()) {
+        acc += "${i}=${e},"
+    }
+    assert_eq(acc, "0=100,1=200,2=300,")
+}
+
+// ===== string index-char shorthand =====
+
+@test
+fn test_for_in_string_index_char() {
+    let s = "abc"
+    let acc = ""
+    for (i, c in s) {
+        acc += "${i}:${c};"
+    }
+    assert_eq(acc, "0:a;1:b;2:c;")
+}
+
+@test
+fn test_for_in_string_index_unicode() {
+    let s = "你好"
+    let count = 0
+    let last_idx = -1
+    for (i, c in s) {
+        count++
+        last_idx = i
+    }
+    assert_eq(count, 2)
+    assert_eq(last_idx, 1)
+}
+
+@test
+fn test_for_in_string_entries_method() {
+    let s = "hi"
+    let acc = ""
+    for ((i, c) in s.entries()) {
+        acc += "${i}-${c}|"
+    }
+    assert_eq(acc, "0-h|1-i|")
+}
+
 // ===== break/continue =====
 
 @test

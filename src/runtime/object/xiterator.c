@@ -17,6 +17,7 @@
 #include "xmap.h"  // Must be included before xarray.h, XrMap definition is required
 #include "xset.h"
 #include "xarray.h"
+#include "xtuple.h"
 #include "xjson.h"
 #include "../symbol/xsymbol_table.h"
 #include "xstring.h"
@@ -69,6 +70,42 @@ XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set
     iter->scan_index = 0;
     iter->coro = coro;
 
+    return iter;
+}
+
+// Create iterator from Array (lazy, yields [index, element] pairs)
+XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
+    XR_DCHECK(coro != NULL, "iterator_new_from_array: NULL coro");
+    XR_DCHECK(arr != NULL, "iterator_new_from_array: NULL array");
+    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
+    if (!iter)
+        return NULL;
+    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
+    iter->type = XR_ITERATOR_ARRAY;
+    iter->source.array = arr;
+    iter->scan_index = 0;
+    iter->coro = coro;
+    iter->total_count = 0;
+    iter->context = NULL;
+    return iter;
+}
+
+// Create iterator from string (lazy, yields [index, char] pairs).
+// The index is the UTF-8 character index, matching string.charAt() semantics.
+XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrString *s,
+                                        struct XrayIsolate *isolate) {
+    XR_DCHECK(coro != NULL, "iterator_new_from_string: NULL coro");
+    XR_DCHECK(s != NULL, "iterator_new_from_string: NULL string");
+    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
+    if (!iter)
+        return NULL;
+    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
+    iter->type = XR_ITERATOR_STRING;
+    iter->source.string = s;
+    iter->scan_index = 0;
+    iter->coro = coro;
+    iter->total_count = (uint32_t) xr_string_char_length(s);
+    iter->context = (void *) isolate;
     return iter;
 }
 
@@ -137,6 +174,15 @@ bool xr_iterator_has_next(XrIterator *iter) {
             return false;
 
         return iter->scan_index < iter->total_count;
+    } else if (iter->type == XR_ITERATOR_ARRAY) {
+        XrArray *arr = iter->source.array;
+        if (!arr)
+            return false;
+        return (int32_t) iter->scan_index < arr->length;
+    } else if (iter->type == XR_ITERATOR_STRING) {
+        if (!iter->source.string)
+            return false;
+        return iter->scan_index < iter->total_count;
     }
 
     return false;
@@ -165,18 +211,17 @@ XrValue xr_iterator_next(XrIterator *iter) {
 
             // Skip empty nodes
             if (!XR_MAP_NODE_EMPTY(node)) {
-                // Found valid node, create [k,v] array on-demand
-                XrArray *pair = xr_array_with_capacity(iter->coro, 2);
-                if (!pair) {
+                /* Found valid node, build a (key, value) tuple on demand.
+                 * Tuples are the canonical pair shape that
+                 * `for ((k, v) in m.entries())` and `for (k, v in m)`
+                 * destructure; the analyzer reasons about them with
+                 * exact element types. */
+                XrTuple *pair = xr_tuple_new(iter->coro, 2);
+                if (!pair)
                     return xr_null();
-                }
-
-                // Add elements manually
-                ((XrValue *) pair->data)[0] = node->key;
-                ((XrValue *) pair->data)[1] = node->value;
-                pair->length = 2;
-
-                return xr_value_from_array(pair);
+                xr_tuple_set(pair, 0, node->key);
+                xr_tuple_set(pair, 1, node->value);
+                return xr_value_from_tuple(pair);
             }
         }
 
@@ -219,10 +264,6 @@ XrValue xr_iterator_next(XrIterator *iter) {
             SymbolId sym = shape->field_symbols[idx];
             XrValue value = xr_json_get_field_any(X, json, idx);
 
-            XrArray *pair = xr_array_with_capacity(iter->coro, 2);
-            if (!pair)
-                return xr_null();
-
             // Convert SymbolId to string
             XrValue key_str = xr_null();
             if (st) {
@@ -231,11 +272,38 @@ XrValue xr_iterator_next(XrIterator *iter) {
                     key_str = xr_string_value(xr_string_intern(X, name, strlen(name), 0));
                 }
             }
-            ((XrValue *) pair->data)[0] = key_str;
-            ((XrValue *) pair->data)[1] = value;
-            pair->length = 2;
-            return xr_value_from_array(pair);
+            XrTuple *pair = xr_tuple_new(iter->coro, 2);
+            if (!pair)
+                return xr_null();
+            xr_tuple_set(pair, 0, key_str);
+            xr_tuple_set(pair, 1, value);
+            return xr_value_from_tuple(pair);
         }
+    } else if (iter->type == XR_ITERATOR_ARRAY) {
+        XrArray *arr = iter->source.array;
+        if (!arr || (int32_t) iter->scan_index >= arr->length)
+            return xr_null();
+        uint32_t idx = iter->scan_index++;
+        XrValue elem = xr_array_get_element(arr, (int32_t) idx);
+        XrTuple *pair = xr_tuple_new(iter->coro, 2);
+        if (!pair)
+            return xr_null();
+        xr_tuple_set(pair, 0, xr_int((int64_t) idx));
+        xr_tuple_set(pair, 1, elem);
+        return xr_value_from_tuple(pair);
+    } else if (iter->type == XR_ITERATOR_STRING) {
+        XrString *s = iter->source.string;
+        if (!s || iter->scan_index >= iter->total_count)
+            return xr_null();
+        XrayIsolate *X = (XrayIsolate *) iter->context;
+        uint32_t idx = iter->scan_index++;
+        XrString *ch = xr_string_char_at_unicode(X, s, (size_t) idx);
+        XrTuple *pair = xr_tuple_new(iter->coro, 2);
+        if (!pair)
+            return xr_null();
+        xr_tuple_set(pair, 0, xr_int((int64_t) idx));
+        xr_tuple_set(pair, 1, ch ? xr_string_value(ch) : xr_null());
+        return xr_value_from_tuple(pair);
     }
 
     return xr_null();
