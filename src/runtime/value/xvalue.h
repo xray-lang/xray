@@ -360,6 +360,11 @@ XR_FUNC XrValue xr_value_from_array(struct XrArray *arr);
 XR_FUNC bool xr_value_is_array(XrValue v);
 XR_FUNC struct XrArray *xr_value_to_array(XrValue v);
 
+struct XrTuple;
+XR_FUNC XrValue xr_value_from_tuple(struct XrTuple *tup);
+XR_FUNC bool xr_value_is_tuple(XrValue v);
+XR_FUNC struct XrTuple *xr_value_to_tuple(XrValue v);
+
 struct XrMap;
 XR_FUNC XrValue xr_value_from_map(struct XrMap *map);
 XR_FUNC bool xr_value_is_map(XrValue v);
@@ -426,6 +431,7 @@ XR_STATIC_ASSERT(sizeof(double) == 8, "double must be 8 bytes");
         XrString *: xr_string_value,                                                               \
         struct XrString *: xr_string_value,                                                        \
         struct XrArray *: xr_value_from_array,                                                     \
+        struct XrTuple *: xr_value_from_tuple,                                                     \
         struct XrMap *: xr_value_from_map,                                                         \
         struct XrSet *: xr_value_from_set,                                                         \
         struct XrClass *: xr_value_from_class,                                                     \

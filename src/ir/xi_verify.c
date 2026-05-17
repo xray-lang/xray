@@ -454,7 +454,9 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_JSON_DECODE] = 1, /* args[0]=string_data */
     [XI_ARRAY_NEW] = 0xFF,
     [XI_MAP_NEW] = 0xFF,
-    [XI_CALL] = 0xFF, /* callee + params: variadic */
+    [XI_TUPLE_NEW] = 0xFF, /* args[0..n-1]=elements; nargs encoded by lowerer */
+    [XI_TUPLE_GET] = 1,    /* args[0]=tuple */
+    [XI_CALL] = 0xFF,      /* callee + params: variadic */
     [XI_CALL_METHOD] = 0xFF,
     [XI_CALL_BUILTIN] = 0xFF,
     [XI_EXTRACT] = 1,
@@ -893,6 +895,7 @@ static bool verify_is_heap_alloc(uint16_t op) {
     switch (op) {
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
+        case XI_TUPLE_NEW:
         case XI_SET_NEW:
         case XI_JSON_NEW:
         case XI_CLOSURE_NEW:

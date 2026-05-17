@@ -46,6 +46,7 @@ static inline bool xi_op_is_heap_alloc(uint16_t op) {
     switch (op) {
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
+        case XI_TUPLE_NEW:
         case XI_SET_NEW:
         case XI_JSON_NEW:
         case XI_CLOSURE_NEW:

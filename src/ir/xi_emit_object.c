@@ -324,6 +324,43 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, cap, c_field));
 }
 
+/* Tuple creation: N elements in args[0..N-1].  We need them in
+ * R[dst+1..dst+N] for OP_NEWTUPLE to scoop them up in order, so any
+ * arg whose home register differs from its target slot is moved
+ * first.  Tuples are immutable, so this single-shot construction
+ * is the only writer of element slots. */
+XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    uint16_t n = v->nargs;
+    /* Account for the contiguous element registers in maxstacksize. */
+    {
+        uint8_t top = (uint8_t) (dst + n);
+        if (top > ctx->max_reg)
+            ctx->max_reg = top;
+    }
+    for (uint16_t a = 0; a < n; a++) {
+        uint8_t src = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (dst + 1 + a);
+        if (src != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
+    }
+    emit_inst(ctx, CREATE_ABC(OP_NEWTUPLE, dst, (uint8_t) n, 0));
+}
+
+/* Tuple field load: args[0] = tuple, aux_int = zero-based index. */
+XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t tup = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint8_t idx = (uint8_t) (v->aux_int & 0xFF);
+    emit_inst(ctx, CREATE_ABC(OP_TUPLE_GET, dst, tup, idx));
+}
+
 /* Map creation */
 XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t cap = 0;

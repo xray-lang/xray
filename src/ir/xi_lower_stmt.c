@@ -1050,6 +1050,25 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             }
             break;
         }
+        case PATTERN_TUPLE: {
+            /* Tuples are heterogeneous and immutable: each element comes
+             * from a fixed compile-time position, read via XI_TUPLE_GET.
+             * The analyzer has bounds-checked arity at the decl site, so
+             * we trust pat->as.array.element_count here. */
+            int n = pat->as.array.element_count;
+            for (int i = 0; i < n; i++) {
+                XrDestructurePattern *elem = pat->as.array.elements[i];
+                if (!elem)
+                    continue;
+                XiValue *val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, l->type_any, 1);
+                if (val) {
+                    val->args[0] = src;
+                    val->aux_int = i;
+                }
+                lower_destructure_bind(l, elem, val);
+            }
+            break;
+        }
         case PATTERN_OBJECT: {
             int n = pat->as.object.field_count;
             for (int i = 0; i < n; i++) {
