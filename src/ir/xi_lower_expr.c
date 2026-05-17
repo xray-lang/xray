@@ -45,28 +45,14 @@ static const char *arena_strdup(XiFunc *f, const char *s) {
     return copy;
 }
 
-/* Return the XrStructLayout for a struct instance type, or NULL. */
+/* Return the XrStructLayout for a struct instance type, or NULL.
+ *
+ * Order matters: kind narrows the union access before the is_value_type
+ * read, so non-instance types (Array, Map, ...) never observe the bool
+ * field even when type lowering hands us an unrelated XrType layout. */
 static XrStructLayout *struct_layout_of(struct XrType *t) {
     if (!t)
         return NULL;
-    /* Diagnostic: jit-force generic regressions caught is_value_type
-     * holding non-bool bytes (2/3) here. Dump the type so CI logs
-     * pinpoint which kind/id is corrupted. Remove once root-caused. */
-    {
-        unsigned char b = *(unsigned char *) &t->is_value_type;
-        if (b != 0 && b != 1) {
-            fprintf(stderr,
-                    "[diag struct_layout_of] t=%p kind=%d id=%u byte=%u "
-                    "nullable=%u const=%u literal=%u weak=%u nw=%u\n",
-                    (void *) t, (int) t->kind, (unsigned) t->id, (unsigned) b,
-                    (unsigned) *(unsigned char *) &t->is_nullable,
-                    (unsigned) *(unsigned char *) &t->is_const,
-                    (unsigned) *(unsigned char *) &t->is_literal,
-                    (unsigned) *(unsigned char *) &t->is_weak,
-                    (unsigned) t->native_width);
-            fflush(stderr);
-        }
-    }
     if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
         return NULL;
     if (!t->is_value_type)
@@ -653,24 +639,6 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         return NULL;
 
     struct XrType *result_type = xi_lower_node_type(l, node);
-
-    /* Diag: dump obj+AST context when obj->type looks corrupted. */
-    if (obj->type) {
-        unsigned char b = *(unsigned char *) &obj->type->is_value_type;
-        if (b != 0 && b != 1) {
-            const char *obj_name = (ma->object && ma->object->type == AST_VARIABLE)
-                                       ? ma->object->as.variable.name
-                                       : "(non-variable)";
-            fprintf(stderr,
-                    "[diag lower_member_access] member='%s' obj_op=%u "
-                    "obj_var=%u obj_type=%p ast_kind=%d ast_var='%s' line=%d\n",
-                    ma->name ? ma->name : "(null)", (unsigned) obj->op,
-                    (unsigned) obj->var_id, (void *) obj->type,
-                    ma->object ? (int) ma->object->type : -1,
-                    obj_name ? obj_name : "(null)", node->line);
-            fflush(stderr);
-        }
-    }
 
     /* Struct with compile-time layout → XI_STRUCT_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
