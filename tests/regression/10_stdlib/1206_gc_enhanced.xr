@@ -1,5 +1,44 @@
 // Test enhanced gc module - covers new APIs and edge cases
 // Added after gc module optimization (P0-P3)
+//
+// REGRESSION: Bugs #8 / #10 / #11 - GC chain corruption under
+//             --jit-force (commits 5f7a535 + 2e1dacc).
+// FAIL_AT:    pre-5f7a535 / pre-2e1dacc on x64 with --jit-force,
+//             >50% rate on the 1205+1206+1207 GC-stress combo
+//             -> Bug #8 (5f7a535): sweep_block rebuilt
+//                block->alloc_marks without first flushing the
+//                deferred JIT-inline-allocator marks; lines actually
+//                holding live objects were treated as free, the hole
+//                scanner allocated new objects on top of still-live
+//                ones, and the next sweep walked a corrupted
+//                local_allgc list and crashed on a garbage curr ptr
+//                (e.g. 0x0000_0004_0000_0005).
+//             -> Bug #10 (2e1dacc): mark_coro_roots scanned the JIT
+//                GC stack map using ARM64 frame layout constants on
+//                x64; the "pointers" so obtained were garbage that
+//                reallymarkobject dereferenced and stamped 0x04 over
+//                neighbouring live chain links.
+//             -> Bug #11 (2e1dacc): conservative stack scan of
+//                coro->vm_ctx.stack tagged JIT-frame XrValue slots as
+//                live PTRs, but the JIT never writes vm_ctx.stack, so
+//                those triplets were stale leftovers from earlier
+//                interpreter activations and the ptr no longer aimed
+//                at a valid object start.
+// PASS_AT:    5f7a535+ (xr_immix_flush_marks at sweep_block entry,
+//             idempotent so steady-state cost is negligible) AND
+//             2e1dacc+ (ARM64-only guard around the stack-map scan,
+//             plus four-shape GCHeader validate at markobject entry).
+//             1206 under --jit-force: 30/30 burn-in green on
+//             Windows x64.
+// REQUIRES_JIT_FORCE  (for Bugs #10 / #11; Bug #8 also surfaces
+//                     under --no-jit when JIT inline allocator runs
+//                     in the same process, but the 1206 case is the
+//                     historical reproducer under JIT-force).
+//
+// Triggering combination: 1206 alone gives partial coverage;
+// `scripts/run_gc_stress.sh 10` exercises 1205/1206/1207 in
+// rotation, which is the exact sequence that surfaced all three
+// bugs during the May 2026 burn-in.
 
 import gc
 
