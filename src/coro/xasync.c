@@ -34,14 +34,21 @@ static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q);
 // Async thread main function
 // Loop: 1. Get task from queue, 2. Execute invoke (blocking op),
 //       3. Put result in Worker's completion queue
+//
+// Shutdown is signalled by async_pool_destroy clearing pool->running
+// under the queue mutex and broadcasting the cond. The pop then
+// returns NULL, which is our single "go home" signal here; no extra
+// running flag check is needed (and reading running outside the mutex
+// would re-introduce a data race besides costing the MSan shadow
+// propagation hole that motivated the _Atomic -> bool switch).
 static void *async_thread_main(void *arg) {
     XrAsyncPool *pool = (XrAsyncPool *) arg;
 
-    while (atomic_load(&pool->running)) {
+    for (;;) {
         // Get task from queue
         XrAsyncJob *job = async_queue_pop(pool);
         if (!job) {
-            continue;  // Woken but no task (maybe shutdown signal)
+            break;  // Shutdown signalled (running=false under mutex)
         }
 
         // Execute task (blocking op here)
@@ -89,12 +96,14 @@ static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job) {
     xr_mutex_unlock(&pool->queue_mutex);
 }
 
-// Dequeue task (blocking wait)
+// Dequeue task (blocking wait).
+// Returns NULL only on shutdown (caller must treat that as terminal).
 static XrAsyncJob *async_queue_pop(XrAsyncPool *pool) {
     xr_mutex_lock(&pool->queue_mutex);
 
-    // Wait for task or shutdown signal
-    while (!pool->queue_head && atomic_load(&pool->running)) {
+    // Wait for task or shutdown signal. Both predicates are guarded by
+    // queue_mutex; spurious cond_wake re-checks here.
+    while (!pool->queue_head && pool->running) {
         xr_cond_wait(&pool->queue_cond, &pool->queue_mutex);
     }
 
@@ -178,8 +187,11 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
         atomic_store(&pool->ready_queues[i].head, (XrAsyncJob *) NULL);
     }
 
-    // Set running flag
-    atomic_store(&pool->running, true);
+    // Set running flag. No store fence needed: threads do not exist
+    // yet, and xr_async_pool_start_threads is called only after this
+    // returns. By the time async_thread_main runs, the pthread_create
+    // happens-before edge already publishes pool->running == true.
+    pool->running = true;
 }
 
 // Create async threads (called lazily on first spawn)
@@ -214,7 +226,7 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     // released by xr_runtime_destroy's free(pool), surfacing the
     // shutdown UAF reported on 1148_scope_race_stress.xr.
     xr_mutex_lock(&pool->queue_mutex);
-    atomic_store(&pool->running, false);
+    pool->running = false;
     xr_cond_broadcast(&pool->queue_cond);
     xr_mutex_unlock(&pool->queue_mutex);
 

@@ -69,7 +69,13 @@ typedef struct XrAsyncPool {
     // Thread management
     int thread_count;
     xr_thread_t *threads;
-    _Atomic bool running;
+    // Shutdown flag. Plain bool; every read and write happens with
+    // queue_mutex held, so the mutex's acquire/release fences carry the
+    // happens-before edge. Using _Atomic here surfaces as MSan
+    // use-of-uninitialized-value at xasync.c:97 on Clang/MSan because
+    // Clang does not always propagate shadow bytes through
+    // __atomic_load builtins for _Atomic bool.
+    bool running;
 
     // Task queue
     XrAsyncJob *queue_head;
