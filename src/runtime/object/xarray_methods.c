@@ -348,9 +348,21 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 
 /* === Iteration === */
 
+/* Element iterator: yields each T directly. Mostly redundant with the
+ * fast index-based for-in path, but exposed so users can drive
+ * iteration manually (Iterator<T> is part of the public protocol). */
+static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrArray *arr = array_self(self);
+    XrIterator *iter = xr_iterator_new_from_array(xr_current_coro(iso), arr);
+    if (iter)
+        iter->mode = XR_ITER_MODE_VALUES;
+    return iter ? xr_value_from_iterator(iter) : xr_null();
+}
+
 /* Lazy entries iterator used by `for (i, e in arr)` lowering.
- * Yields [index, element] pairs one at a time, matching the (i, e)
- * destructuring shape produced by the parser. */
+ * Yields (index, element) tuples one at a time. */
 static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -422,6 +434,7 @@ void xr_array_register_native_type(XrayIsolate *isolate) {
         {"toString", m_to_string, 0},
         /* Iteration */
         {"entries", m_entries, 0},
+        {"iterator", m_iterator, 0},
         {"entriesIterator", m_entries_iterator, 0},
         {NULL, NULL, 0},
     };

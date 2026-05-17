@@ -9,4 +9,6 @@ class Set<T> {
     clear()
     values(): Array<T>
     forEach(fn: fn(value: T))
+    // Iteration protocol — yields each element T (used by for-in).
+    iterator(): Iterator<T>
 }

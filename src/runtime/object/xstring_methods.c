@@ -420,9 +420,19 @@ static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int ar
 
 /* === Iteration === */
 
+/* Character iterator: yields each character (length-1 string). */
+static XrValue m_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrString *s = str_self(self);
+    XrIterator *iter = xr_iterator_new_from_string(xr_current_coro(iso), s, iso);
+    if (iter)
+        iter->mode = XR_ITER_MODE_VALUES;
+    return iter ? xr_value_from_iterator(iter) : xr_null();
+}
+
 /* Lazy entries iterator used by `for (i, c in s)` lowering.
- * Yields [index, char] pairs by UTF-8 character index, mirroring the
- * existing charAt semantics. */
+ * Yields (index, char) tuples by UTF-8 character index. */
 static XrValue m_entries_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -509,6 +519,7 @@ void xr_string_register_native_type(XrayIsolate *isolate) {
         {"toString", m_to_string, 0},
         /* Iteration */
         {"entries", m_entries, 0},
+        {"iterator", m_iterator, 0},
         {"entriesIterator", m_entries_iterator, 0},
         {NULL, NULL, 0},
     };

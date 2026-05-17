@@ -140,6 +140,52 @@ fn test_for_in_json_single_var_yields_key() {
     assert_eq(keys[2], "z")
 }
 
+// ===== Direct iterator() protocol =====
+
+@test
+fn test_iterator_array_manual() {
+    let arr = [10, 20, 30]
+    let it = arr.iterator()
+    let sum = 0
+    while (it.hasNext()) {
+        sum += it.next()
+    }
+    assert_eq(sum, 60)
+}
+
+@test
+fn test_iterator_string_manual() {
+    let it = "abc".iterator()
+    let acc = ""
+    while (it.hasNext()) {
+        acc += it.next()
+    }
+    assert_eq(acc, "abc")
+}
+
+@test
+fn test_iterator_map_manual_yields_keys() {
+    let m: Map<string, int> = #{"a" => 1, "b" => 2}
+    let it = m.iterator()
+    let acc = ""
+    while (it.hasNext()) {
+        acc += it.next()
+    }
+    assert_eq(acc, "ab")
+}
+
+@test
+fn test_entries_iterator_yields_tuples() {
+    let arr = [10, 20]
+    let it = arr.entriesIterator()
+    let acc = ""
+    while (it.hasNext()) {
+        let pair = it.next()
+        acc += "${pair.0}=${pair.1};"
+    }
+    assert_eq(acc, "0=10;1=20;")
+}
+
 // ===== Array index-element shorthand =====
 
 @test

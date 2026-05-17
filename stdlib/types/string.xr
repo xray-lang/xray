@@ -26,5 +26,10 @@ class string {
     padStart(length: int, pad?: string): string
     padEnd(length: int, pad?: string): string
     match(pattern: string): Array<string>?
+    // Iteration protocol — iterator() yields each character, while
+    // entriesIterator() yields (charIndex, character) tuples. Both
+    // are used by for-in lowering and may be called directly.
+    iterator(): Iterator<string>
+    entriesIterator(): Iterator<(int, string)>
     entries(): Array<(int, string)>
 }

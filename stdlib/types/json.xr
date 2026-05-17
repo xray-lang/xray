@@ -5,6 +5,11 @@ class Json {
     keys(): Array<string>
     values(): Array<Json>
     entries(): Array<(string, Json)>
+    // Iteration protocol — iterator() yields each field name (used by
+    // single-variable `for (k in jsonObj)`); entriesIterator() yields
+    // (fieldName, value) tuples (used by `for (k, v in jsonObj)`).
+    iterator(): Iterator<string>
+    entriesIterator(): Iterator<(string, Json)>
     has(key: string): bool
     get(key: string): Json
     isEmpty(): bool
