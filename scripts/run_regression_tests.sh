@@ -45,7 +45,25 @@ elif [ -f "${PROJECT_ROOT}/build-release/xray" ]; then
 else
     BUILD_DIR="${PROJECT_ROOT}/build"
 fi
-XRAY_BIN="${BUILD_DIR}/xray"
+
+# Locate the actual binary. Layouts encountered in CI:
+#   Linux / macOS / mingw     : ${BUILD_DIR}/xray
+#   MSVC multi-config Debug   : ${BUILD_DIR}/Debug/xray.exe
+#   MSVC multi-config Release : ${BUILD_DIR}/Release/xray.exe
+# XRAY_PATH env wins if the caller already knows the path (e.g. CI).
+if [ -n "${XRAY_PATH:-}" ] && [ -f "${XRAY_PATH}" ]; then
+    XRAY_BIN="${XRAY_PATH}"
+elif [ -f "${BUILD_DIR}/xray" ]; then
+    XRAY_BIN="${BUILD_DIR}/xray"
+elif [ -f "${BUILD_DIR}/xray.exe" ]; then
+    XRAY_BIN="${BUILD_DIR}/xray.exe"
+elif [ -f "${BUILD_DIR}/Debug/xray.exe" ]; then
+    XRAY_BIN="${BUILD_DIR}/Debug/xray.exe"
+elif [ -f "${BUILD_DIR}/Release/xray.exe" ]; then
+    XRAY_BIN="${BUILD_DIR}/Release/xray.exe"
+else
+    XRAY_BIN="${BUILD_DIR}/xray"
+fi
 
 # Configuration
 TIMEOUT_SECS=${XRAY_TEST_TIMEOUT:-10}
