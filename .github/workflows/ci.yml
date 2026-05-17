@@ -53,6 +53,15 @@ jobs:
         chmod +x ./scripts/check_known_failures_freshness.sh
         ./scripts/check_known_failures_freshness.sh
 
+    - name: DEFENSIVE-TEMP reconciliation (tag <-> docs table)
+      # Two-way reconciliation between every `DEFENSIVE-TEMP[NNN]` tag
+      # in src/ and the table in docs/known_temp_workarounds.md. A tag
+      # without a row, or a row without a tag, blocks merge — so removing
+      # a workaround forces same-commit removal of both artifacts.
+      run: |
+        chmod +x ./scripts/check_temp_workarounds.sh
+        ./scripts/check_temp_workarounds.sh
+
   # ===========================================================================
   # Build & Test (multi-platform)
   # ===========================================================================
