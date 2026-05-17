@@ -1,3 +1,18 @@
+// REGRESSION: Bug #3/#4 - x64 JIT exception propagation across nested
+//             calls (commit 9da287d).
+// FAIL_AT:    pre-9da287d on x64 with --jit-force
+//             -> Bug #3: throws from JIT-compiled callees were silently
+//                discarded because x64 backend skipped the
+//                JNE-after-call exception check that ARM64 already emits.
+//             -> Bug #4: even when the catch handler did run, the
+//                rebuilt XrValue had heap_type=0, so xr_is_exception()
+//                misclassified real Exception objects and auto-wrapped
+//                them, breaking downstream XR_IS_STRING / XR_IS_PTR.
+// PASS_AT:    9da287d+ on x64 (JNE patch + heap_type recovery) and on
+//             ARM64 (already correct).
+// REQUIRES_JIT_FORCE
+// Triggering shape: deeply nested fn that throw, with try-catch at
+// outer scope (test_basic_*, test_finally_*, test_rethrow_* below).
 /*
 ** 异常处理测试用例
 ** 作者：xingleixu@gmail.com
