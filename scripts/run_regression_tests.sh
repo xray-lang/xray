@@ -124,9 +124,16 @@ run_one_test() {
     fi
 
     # Determine flags
+    # XRAY_JIT_FORCE=1 forces all eligible tests through the JIT path,
+    # mirroring the PR-gate sanitizer matrix that exposed the May 2026
+    # x64 codegen / GC corruption family. NOJIT_TESTS still wins
+    # because those scenarios deliberately exercise interpreter-only
+    # behaviour (stress / scope-race / GC-pressure).
     local jit_flag=""
     if is_in_list "${test_name}" "${NOJIT_TESTS}"; then
         jit_flag="--no-jit"
+    elif [ "${XRAY_JIT_FORCE:-0}" = "1" ]; then
+        jit_flag="--jit-force"
     fi
 
     # All regression tests use @test functions — run with 'xray test'
