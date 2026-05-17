@@ -134,6 +134,34 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
 
 /* ========== Pattern Test ========== */
 
+/* True iff the pattern can be reached as part of a tuple slot and acts
+ * purely as a binding/wildcard — no equality test, just a name capture
+ * that always matches. */
+static bool pattern_is_irrefutable_binding(AstNode *pattern) {
+    if (!pattern)
+        return true;
+    if (pattern->type == AST_PATTERN_WILDCARD)
+        return true;
+    if (pattern->type == AST_PATTERN_LITERAL) {
+        AstNode *pval = pattern->as.pattern_literal.value;
+        if (pval && pval->type == AST_VARIABLE)
+            return true;
+    }
+    return false;
+}
+
+/* Resolve the static element type for tuple slot `idx`. Falls back to
+ * `type_any` when the analyzer hasn't proven a tuple type for the
+ * subject (e.g. the source uses Json or untyped values). */
+static struct XrType *tuple_elem_type(XiLower *l, struct XrType *subject_type, int idx) {
+    if (subject_type) {
+        struct XrType *et = xr_type_tuple_get(subject_type, idx);
+        if (et)
+            return et;
+    }
+    return l->type_any;
+}
+
 XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pattern) {
     if (!pattern || !subject)
         return NULL;
@@ -143,6 +171,14 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
 
         case AST_PATTERN_LITERAL: {
+            /* A bare AST_VARIABLE literal at this depth is a nested
+             * binding (e.g. inside `(0, x)`); its match test is
+             * unconditional — the actual capture is performed by
+             * lower_pattern_bindings before the test runs. */
+            AstNode *pval = pattern->as.pattern_literal.value;
+            if (pval && pval->type == AST_VARIABLE)
+                return xi_const_bool(l->func, l->cur_block, true, l->type_bool);
+
             XiValue *lit = xi_lower_expr(l, pattern->as.pattern_literal.value);
             if (!lit)
                 return NULL;
@@ -175,8 +211,76 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             return result ? result : xi_const_bool(l->func, l->cur_block, false, l->type_bool);
         }
 
+        case AST_PATTERN_TUPLE: {
+            /* Per-slot conjunction: TUPLE_GET each refutable slot and
+             * AND its sub-test. Irrefutable slots (wildcard / binding)
+             * contribute nothing to the test — they are always true and
+             * folding them in would just bloat the IR. */
+            PatternTupleNode *tp = &pattern->as.pattern_tuple;
+            XiValue *result = NULL;
+            for (int i = 0; i < tp->count; i++) {
+                AstNode *sub = tp->patterns[i];
+                if (pattern_is_irrefutable_binding(sub))
+                    continue;
+                struct XrType *et = tuple_elem_type(l, subject->type, i);
+                XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
+                if (!get)
+                    return NULL;
+                get->args[0] = subject;
+                get->aux_int = i;
+                XiValue *test = xi_lower_pattern_test(l, get, sub);
+                if (!test)
+                    continue;
+                if (!result)
+                    result = test;
+                else
+                    result = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, result, test);
+            }
+            /* All-irrefutable tuple pattern (e.g. `(_, _)`) matches anything
+             * the analyzer let through — emit a constant true. */
+            return result ? result : xi_const_bool(l->func, l->cur_block, true, l->type_bool);
+        }
+
         default:
             return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
+    }
+}
+
+/* Walk the pattern tree and bind every AST_VARIABLE leaf to the
+ * corresponding subject value. Tuple sub-patterns reach their slot via
+ * a fresh XI_TUPLE_GET; subsequent loads of the same slot get folded
+ * by the const_fold tuple-projection peephole when paired with a
+ * TUPLE_NEW source. */
+static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *pattern) {
+    if (!pattern || !subject)
+        return;
+
+    if (pattern->type == AST_PATTERN_LITERAL) {
+        AstNode *pval = pattern->as.pattern_literal.value;
+        if (pval && pval->type == AST_VARIABLE) {
+            const char *bname = pval->as.variable.name;
+            uint32_t bsid = pval->as.variable.symbol_id;
+            int var_id =
+                xi_lower_var_create(l, bsid, bname, subject->type ? subject->type : l->type_any);
+            xi_lower_braun_write(l, var_id, l->cur_block, subject);
+        }
+        return;
+    }
+
+    if (pattern->type == AST_PATTERN_TUPLE) {
+        PatternTupleNode *tp = &pattern->as.pattern_tuple;
+        for (int i = 0; i < tp->count; i++) {
+            AstNode *sub = tp->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            struct XrType *et = tuple_elem_type(l, subject->type, i);
+            XiValue *get = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et, 1);
+            if (!get)
+                continue;
+            get->args[0] = subject;
+            get->aux_int = i;
+            lower_pattern_bindings(l, get, sub);
+        }
     }
 }
 
@@ -201,26 +305,27 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         AstNode *arm_node = m->arms[i];
         MatchArmNode *arm = &arm_node->as.match_arm;
 
-        /* Detect binding pattern: AST_PATTERN_LITERAL wrapping AST_VARIABLE.
-         * Bind the match subject to the named variable so guard expressions
-         * (and the arm body) can reference it. The pattern test is always
-         * true — selection is determined entirely by the guard. */
-        bool is_binding = false;
+        /* Bind every named slot in the pattern (top-level bare name or
+         * AST_VARIABLEs nested inside a tuple pattern) before lowering
+         * the test or guard, so both can reference the captures.
+         *
+         * is_top_binding is the legacy "bare-name pattern" case where
+         * the match test reduces to TRUE and selection is decided
+         * entirely by the optional guard. Tuple patterns don't get
+         * that shortcut: their refutable slots still need TUPLE_GET-
+         * based equality testing. */
+        lower_pattern_bindings(l, subject, arm->pattern);
+
+        bool is_top_binding = false;
         if (arm->pattern && arm->pattern->type == AST_PATTERN_LITERAL) {
             AstNode *pval = arm->pattern->as.pattern_literal.value;
-            if (pval && pval->type == AST_VARIABLE) {
-                is_binding = true;
-                const char *bname = pval->as.variable.name;
-                uint32_t bsid = pval->as.variable.symbol_id;
-                int var_id = xi_lower_var_create(l, bsid, bname,
-                                                 subject->type ? subject->type : l->type_any);
-                xi_lower_braun_write(l, var_id, l->cur_block, subject);
-            }
+            if (pval && pval->type == AST_VARIABLE)
+                is_top_binding = true;
         }
 
         XiValue *test;
-        if (is_binding) {
-            /* Binding always matches; guard narrows. */
+        if (is_top_binding) {
+            /* Bare-name pattern always matches; guard narrows. */
             test = arm->guard ? xi_lower_expr(l, arm->guard) : NULL;
         } else {
             test = xi_lower_pattern_test(l, subject, arm->pattern);

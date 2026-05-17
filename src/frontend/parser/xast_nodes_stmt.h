@@ -145,6 +145,17 @@ typedef struct PatternMultiNode {
     int count;
 } PatternMultiNode;
 
+/* Positional tuple pattern: `(p0, p1, ...)`.
+ * Each sub-pattern is itself a regular AST_PATTERN_* node, so tuple
+ * patterns nest naturally and may contain wildcards, bindings (a bare
+ * AST_VARIABLE wrapped in AST_PATTERN_LITERAL) or further tuples. The
+ * arity is fixed at parse time and validated against the scrutinee's
+ * static tuple type by the analyzer. */
+typedef struct PatternTupleNode {
+    AstNode **patterns;
+    int count;
+} PatternTupleNode;
+
 /* ========== Coroutine / Concurrency ==========
  *
  * Supports:

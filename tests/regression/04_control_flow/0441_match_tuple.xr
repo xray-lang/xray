@@ -1,0 +1,102 @@
+// 0441_match_tuple.xr
+// 测试：match 表达式中的 tuple pattern
+// 覆盖：字面量元组、通配符位、绑定捕获、嵌套 tuple、guard
+
+// ===== 全字面量 tuple =====
+@test
+fn test_match_tuple_all_literal() {
+    let p: (int, int) = (0, 0)
+    let result = match (p) {
+        (0, 0) => "origin"
+        (1, 1) => "one-one"
+        _ => "other"
+    }
+    assert_eq(result, "origin")
+}
+
+// ===== tuple 中混合通配符 =====
+@test
+fn test_match_tuple_wildcard_slot() {
+    fn axis(p: (int, int)): string {
+        return match (p) {
+            (0, 0) => "origin"
+            (0, _) => "y-axis"
+            (_, 0) => "x-axis"
+            _ => "general"
+        }
+    }
+    assert_eq(axis((0, 0)), "origin")
+    assert_eq(axis((0, 5)), "y-axis")
+    assert_eq(axis((7, 0)), "x-axis")
+    assert_eq(axis((3, 4)), "general")
+}
+
+// ===== tuple 中绑定捕获 =====
+@test
+fn test_match_tuple_binding() {
+    fn first_or_zero(p: (int, int)): int {
+        return match (p) {
+            (0, _) => 0
+            (x, _) => x
+        }
+    }
+    assert_eq(first_or_zero((0, 99)), 0)
+    assert_eq(first_or_zero((42, 99)), 42)
+}
+
+// ===== tuple binding + guard =====
+@test
+fn test_match_tuple_binding_with_guard() {
+    fn classify(p: (int, int)): string {
+        return match (p) {
+            (x, y) if (x == y) => "diagonal"
+            (x, y) if (x + y == 0) => "anti-diagonal"
+            _ => "general"
+        }
+    }
+    assert_eq(classify((4, 4)), "diagonal")
+    assert_eq(classify((3, -3)), "anti-diagonal")
+    assert_eq(classify((1, 2)), "general")
+}
+
+// ===== 嵌套 tuple pattern =====
+@test
+fn test_match_tuple_nested() {
+    fn extract(p: ((int, int), int)): int {
+        return match (p) {
+            ((0, _), _) => -1
+            ((a, _), _) => a
+        }
+    }
+    assert_eq(extract(((0, 9), 7)), -1)
+    assert_eq(extract(((42, 9), 7)), 42)
+}
+
+// ===== tuple-of-tuple 完整解构 =====
+@test
+fn test_match_tuple_full_destructure() {
+    fn flatten(p: ((int, int), int)): int {
+        return match (p) {
+            ((a, b), c) => a + b + c
+        }
+    }
+    assert_eq(flatten(((1, 2), 3)), 6)
+}
+
+// ===== 异构元素类型 =====
+@test
+fn test_match_tuple_heterogeneous() {
+    fn describe(p: (int, string)): string {
+        return match (p) {
+            (0, _) => "zero with anything"
+            (_, "key") => "anything with key"
+            (n, s) if (n > 0) => "positive number"
+            _ => "fallback"
+        }
+    }
+    assert_eq(describe((0, "abc")), "zero with anything")
+    // Top-down match: `(_, "key")` matches before the guarded arm.
+    assert_eq(describe((5, "key")), "anything with key")
+    assert_eq(describe((7, "x")), "positive number")
+    assert_eq(describe((-1, "x")), "fallback")
+}

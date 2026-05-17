@@ -978,6 +978,112 @@ TEST(select_rep_arith_chain_stays_unboxed) {
     xi_func_free(f);
 }
 
+/* ========== Tuple Projection Peephole Tests ========== */
+
+/* TUPLE_GET(TUPLE_NEW(a, b), 0) collapses to COPY(a). */
+TEST(tuple_get_of_tuple_new_first) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *e0 = xi_const_int(f, blk, 7, &stub_int);
+    XiValue *e1 = xi_const_int(f, blk, 9, &stub_int);
+    XiValue *tup = xi_value_new(f, blk, XI_TUPLE_NEW, &stub_int, 2);
+    tup->args[0] = e0;
+    tup->args[1] = e1;
+    tup->aux_int = 2;
+
+    XiValue *get = xi_value_new(f, blk, XI_TUPLE_GET, &stub_int, 1);
+    get->args[0] = tup;
+    get->aux_int = 0;
+    xi_block_set_return(blk, get);
+
+    xi_opt_const_fold(f);
+
+    assert(get->op == XI_COPY && "TUPLE_GET(TUPLE_NEW, 0) should collapse to COPY");
+    assert(get->args[0] == e0 && "COPY should forward to the original element");
+    assert(get->aux_int == 0 && "COPY should clear the slot index");
+    xi_func_free(f);
+}
+
+/* TUPLE_GET(TUPLE_NEW(a, b), 1) collapses to COPY(b). */
+TEST(tuple_get_of_tuple_new_second) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *e0 = xi_const_int(f, blk, 11, &stub_int);
+    XiValue *e1 = xi_const_int(f, blk, 13, &stub_int);
+    XiValue *tup = xi_value_new(f, blk, XI_TUPLE_NEW, &stub_int, 2);
+    tup->args[0] = e0;
+    tup->args[1] = e1;
+    tup->aux_int = 2;
+
+    XiValue *get = xi_value_new(f, blk, XI_TUPLE_GET, &stub_int, 1);
+    get->args[0] = tup;
+    get->aux_int = 1;
+    xi_block_set_return(blk, get);
+
+    xi_opt_const_fold(f);
+
+    assert(get->op == XI_COPY && "TUPLE_GET(TUPLE_NEW, 1) should collapse to COPY");
+    assert(get->args[0] == e1 && "COPY should forward to element[1]");
+    xi_func_free(f);
+}
+
+/* TUPLE_GET on a tuple that did NOT come from TUPLE_NEW must stay intact —
+ * we cannot synthesise the source slot otherwise. */
+TEST(tuple_get_unrelated_source_keeps_op) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *p0 = xi_param(f, blk, 0, &stub_int);
+    XiValue *get = xi_value_new(f, blk, XI_TUPLE_GET, &stub_int, 1);
+    get->args[0] = p0;
+    get->aux_int = 0;
+    xi_block_set_return(blk, get);
+
+    xi_opt_const_fold(f);
+
+    assert(get->op == XI_TUPLE_GET && "TUPLE_GET on non-NEW source must remain");
+    assert(get->args[0] == p0 && "source should be untouched");
+    xi_func_free(f);
+}
+
+/* DCE should reap the TUPLE_NEW once every TUPLE_GET has been collapsed
+ * to copies that no longer reference it. */
+TEST(tuple_new_eliminated_after_full_projection) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *e0 = xi_const_int(f, blk, 100, &stub_int);
+    XiValue *e1 = xi_const_int(f, blk, 200, &stub_int);
+    XiValue *tup = xi_value_new(f, blk, XI_TUPLE_NEW, &stub_int, 2);
+    tup->args[0] = e0;
+    tup->args[1] = e1;
+    tup->aux_int = 2;
+
+    XiValue *get0 = xi_value_new(f, blk, XI_TUPLE_GET, &stub_int, 1);
+    get0->args[0] = tup;
+    get0->aux_int = 0;
+    XiValue *get1 = xi_value_new(f, blk, XI_TUPLE_GET, &stub_int, 1);
+    get1->args[0] = tup;
+    get1->aux_int = 1;
+    XiValue *sum = xi_binary(f, blk, XI_ADD, &stub_int, get0, get1);
+    xi_block_set_return(blk, sum);
+
+    /* Run the standard pipeline so peephole + copy_prop + dce all apply. */
+    xi_opt_run(f);
+
+    bool tuple_new_alive = false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        if (blk->values[i] && blk->values[i]->op == XI_TUPLE_NEW) {
+            tuple_new_alive = true;
+            break;
+        }
+    }
+    assert(!tuple_new_alive && "TUPLE_NEW should be DCE'd once all GETs project away");
+    xi_func_free(f);
+}
+
 /* ========== BOX/UNBOX Peephole Tests ========== */
 
 TEST(box_elim_unbox_of_box) {
@@ -1109,6 +1215,12 @@ int main(void) {
     run_select_rep_unbox_param_for_arith();
     run_select_rep_no_change_for_call();
     run_select_rep_arith_chain_stays_unboxed();
+
+    /* Tuple projection peephole */
+    run_tuple_get_of_tuple_new_first();
+    run_tuple_get_of_tuple_new_second();
+    run_tuple_get_unrelated_source_keeps_op();
+    run_tuple_new_eliminated_after_full_projection();
 
     /* BOX/UNBOX peephole */
     run_box_elim_unbox_of_box();
