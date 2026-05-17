@@ -29,7 +29,7 @@ TEST(arena_alloc_single) {
     XrArena arena;
     xr_arena_init(&arena, 1024);
 
-    int *p = (int *)xr_arena_alloc(&arena, sizeof(int));
+    int *p = (int *) xr_arena_alloc(&arena, sizeof(int));
     ASSERT_NOT_NULL(p);
 
     *p = 42;
@@ -42,9 +42,9 @@ TEST(arena_alloc_multiple) {
     XrArena arena;
     xr_arena_init(&arena, 1024);
 
-    int *a = (int *)xr_arena_alloc(&arena, sizeof(int));
-    int *b = (int *)xr_arena_alloc(&arena, sizeof(int));
-    int *c = (int *)xr_arena_alloc(&arena, sizeof(int));
+    int *a = (int *) xr_arena_alloc(&arena, sizeof(int));
+    int *b = (int *) xr_arena_alloc(&arena, sizeof(int));
+    int *c = (int *) xr_arena_alloc(&arena, sizeof(int));
 
     ASSERT_NOT_NULL(a);
     ASSERT_NOT_NULL(b);
@@ -166,7 +166,7 @@ TEST(arena_reset) {
     xr_arena_reset(&arena);
 
     // After reset, can reuse memory
-    int *p = (int *)xr_arena_alloc(&arena, sizeof(int));
+    int *p = (int *) xr_arena_alloc(&arena, sizeof(int));
     ASSERT_NOT_NULL(p);
     *p = 999;
     ASSERT_EQ_INT(*p, 999);
@@ -199,7 +199,7 @@ TEST(arena_growth) {
 
     // Allocate more than initial capacity
     for (int i = 0; i < 100; i++) {
-        int *p = (int *)xr_arena_alloc(&arena, sizeof(int));
+        int *p = (int *) xr_arena_alloc(&arena, sizeof(int));
         ASSERT_NOT_NULL(p);
         *p = i;
     }
@@ -216,7 +216,7 @@ TEST(arena_large_allocation) {
 
     // Allocate larger than segment size
     size_t large_size = XR_ARENA_SEGMENT_SIZE * 2;
-    char *large = (char *)xr_arena_alloc(&arena, large_size);
+    char *large = (char *) xr_arena_alloc(&arena, large_size);
     ASSERT_NOT_NULL(large);
 
     // Should be usable
@@ -257,17 +257,17 @@ TEST(arena_alignment) {
     xr_arena_init(&arena, 1024);
 
     // Allocate various sizes
-    char *c = (char *)xr_arena_alloc(&arena, 1);
-    int *i = (int *)xr_arena_alloc(&arena, sizeof(int));
-    double *d = (double *)xr_arena_alloc(&arena, sizeof(double));
+    char *c = (char *) xr_arena_alloc(&arena, 1);
+    int *i = (int *) xr_arena_alloc(&arena, sizeof(int));
+    double *d = (double *) xr_arena_alloc(&arena, sizeof(double));
 
     ASSERT_NOT_NULL(c);
     ASSERT_NOT_NULL(i);
     ASSERT_NOT_NULL(d);
 
     // Check alignment (pointers should be aligned to XR_ARENA_ALIGNMENT)
-    ASSERT_TRUE(((uintptr_t)i % XR_ARENA_ALIGNMENT) == 0);
-    ASSERT_TRUE(((uintptr_t)d % XR_ARENA_ALIGNMENT) == 0);
+    ASSERT_TRUE(((uintptr_t) i % XR_ARENA_ALIGNMENT) == 0);
+    ASSERT_TRUE(((uintptr_t) d % XR_ARENA_ALIGNMENT) == 0);
 
     xr_arena_destroy(&arena);
 }
@@ -299,7 +299,7 @@ TEST(arena_stress_many_small) {
 
     // Many small allocations
     for (int i = 0; i < 10000; i++) {
-        int *p = (int *)xr_arena_alloc(&arena, sizeof(int));
+        int *p = (int *) xr_arena_alloc(&arena, sizeof(int));
         ASSERT_NOT_NULL(p);
         *p = i;
     }
@@ -358,6 +358,6 @@ static void run_all_tests(void) {
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray Arena Allocator Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray Arena Allocator Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

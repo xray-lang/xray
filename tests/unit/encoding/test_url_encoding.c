@@ -121,7 +121,7 @@ TEST(url_roundtrip) {
         int enc_len = xr_url_encode(inputs[i], in_len, enc, sizeof(enc));
         ASSERT_GT(enc_len, 0);
 
-        int dec_len = xr_url_decode(enc, (size_t)enc_len, dec, sizeof(dec));
+        int dec_len = xr_url_decode(enc, (size_t) enc_len, dec, sizeof(dec));
         ASSERT_GT(dec_len, 0);
         ASSERT_STR_EQ(dec, inputs[i]);
     }
@@ -138,7 +138,7 @@ TEST(url_form_roundtrip) {
         int enc_len = xr_url_encode_form(inputs[i], in_len, enc, sizeof(enc));
         ASSERT_GT(enc_len, 0);
 
-        int dec_len = xr_url_decode_form(enc, (size_t)enc_len, dec, sizeof(dec));
+        int dec_len = xr_url_decode_form(enc, (size_t) enc_len, dec, sizeof(dec));
         ASSERT_GT(dec_len, 0);
         ASSERT_STR_EQ(dec, inputs[i]);
     }
@@ -148,25 +148,25 @@ TEST(url_form_roundtrip) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("URL - RFC 3986 Encode");
-    RUN_TEST(url_encode_passthrough);
-    RUN_TEST(url_encode_special);
-    RUN_TEST(url_encode_unicode);
-    RUN_TEST(url_encode_empty);
+RUN_TEST_SUITE("URL - RFC 3986 Encode");
+RUN_TEST(url_encode_passthrough);
+RUN_TEST(url_encode_special);
+RUN_TEST(url_encode_unicode);
+RUN_TEST(url_encode_empty);
 
-    RUN_TEST_SUITE("URL - RFC 3986 Decode");
-    RUN_TEST(url_decode_basic);
-    RUN_TEST(url_decode_passthrough);
-    RUN_TEST(url_decode_empty);
-    RUN_TEST(url_decode_plus_not_space);
+RUN_TEST_SUITE("URL - RFC 3986 Decode");
+RUN_TEST(url_decode_basic);
+RUN_TEST(url_decode_passthrough);
+RUN_TEST(url_decode_empty);
+RUN_TEST(url_decode_plus_not_space);
 
-    RUN_TEST_SUITE("URL - Form Encode/Decode");
-    RUN_TEST(url_form_encode_space);
-    RUN_TEST(url_form_decode_plus);
-    RUN_TEST(url_form_decode_percent);
+RUN_TEST_SUITE("URL - Form Encode/Decode");
+RUN_TEST(url_form_encode_space);
+RUN_TEST(url_form_decode_plus);
+RUN_TEST(url_form_decode_percent);
 
-    RUN_TEST_SUITE("URL - Roundtrip");
-    RUN_TEST(url_roundtrip);
-    RUN_TEST(url_form_roundtrip);
+RUN_TEST_SUITE("URL - Roundtrip");
+RUN_TEST(url_roundtrip);
+RUN_TEST(url_form_roundtrip);
 
 TEST_MAIN_END()

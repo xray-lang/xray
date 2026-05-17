@@ -71,11 +71,11 @@ TEST(config_init_null) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Config - Default Values");
-    RUN_TEST(config_default_values);
+RUN_TEST_SUITE("Config - Default Values");
+RUN_TEST(config_default_values);
 
-    RUN_TEST_SUITE("Config - Init");
-    RUN_TEST(config_init);
-    RUN_TEST(config_init_null);
+RUN_TEST_SUITE("Config - Init");
+RUN_TEST(config_init);
+RUN_TEST(config_init_null);
 
 TEST_MAIN_END()

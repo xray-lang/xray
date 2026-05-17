@@ -24,7 +24,7 @@ bool xr_hex_valid(const char *hex, size_t len);
 
 TEST(hex_encode_empty) {
     char buf[4];
-    int n = xr_hex_encode((const uint8_t*)"", 0, buf);
+    int n = xr_hex_encode((const uint8_t *) "", 0, buf);
     ASSERT_EQ_INT(n, 0);
 }
 
@@ -79,16 +79,17 @@ TEST(hex_valid_true) {
 }
 
 TEST(hex_valid_false) {
-    ASSERT_FALSE(xr_hex_valid("0g", 2));       // 'g' invalid
+    ASSERT_FALSE(xr_hex_valid("0g", 2));  // 'g' invalid
     ASSERT_FALSE(xr_hex_valid("xyz", 3));
-    ASSERT_FALSE(xr_hex_valid("abc", 3));       // odd length
+    ASSERT_FALSE(xr_hex_valid("abc", 3));  // odd length
 }
 
 /* ========== Roundtrip ========== */
 
 TEST(hex_roundtrip) {
     uint8_t original[256];
-    for (int i = 0; i < 256; i++) original[i] = (uint8_t)i;
+    for (int i = 0; i < 256; i++)
+        original[i] = (uint8_t) i;
 
     char encoded[514];
     int enc_len = xr_hex_encode(original, 256, encoded);
@@ -96,7 +97,7 @@ TEST(hex_roundtrip) {
     encoded[enc_len] = '\0';
 
     uint8_t decoded[256];
-    int dec_len = xr_hex_decode(encoded, (size_t)enc_len, decoded);
+    int dec_len = xr_hex_decode(encoded, (size_t) enc_len, decoded);
     ASSERT_EQ_INT(dec_len, 256);
     ASSERT_TRUE(memcmp(decoded, original, 256) == 0);
 }
@@ -105,21 +106,21 @@ TEST(hex_roundtrip) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Hex - Encode");
-    RUN_TEST(hex_encode_empty);
-    RUN_TEST(hex_encode_basic);
-    RUN_TEST(hex_encode_all_bytes);
+RUN_TEST_SUITE("Hex - Encode");
+RUN_TEST(hex_encode_empty);
+RUN_TEST(hex_encode_basic);
+RUN_TEST(hex_encode_all_bytes);
 
-    RUN_TEST_SUITE("Hex - Decode");
-    RUN_TEST(hex_decode_basic);
-    RUN_TEST(hex_decode_uppercase);
-    RUN_TEST(hex_decode_empty);
+RUN_TEST_SUITE("Hex - Decode");
+RUN_TEST(hex_decode_basic);
+RUN_TEST(hex_decode_uppercase);
+RUN_TEST(hex_decode_empty);
 
-    RUN_TEST_SUITE("Hex - Validation");
-    RUN_TEST(hex_valid_true);
-    RUN_TEST(hex_valid_false);
+RUN_TEST_SUITE("Hex - Validation");
+RUN_TEST(hex_valid_true);
+RUN_TEST(hex_valid_false);
 
-    RUN_TEST_SUITE("Hex - Roundtrip");
-    RUN_TEST(hex_roundtrip);
+RUN_TEST_SUITE("Hex - Roundtrip");
+RUN_TEST(hex_roundtrip);
 
 TEST_MAIN_END()

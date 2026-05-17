@@ -100,13 +100,13 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
 static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
     switch (op) {
         case XI_ADD:
-            *result = (int64_t)((uint64_t)a + (uint64_t)b);
+            *result = (int64_t) ((uint64_t) a + (uint64_t) b);
             return true;
         case XI_SUB:
-            *result = (int64_t)((uint64_t)a - (uint64_t)b);
+            *result = (int64_t) ((uint64_t) a - (uint64_t) b);
             return true;
         case XI_MUL:
-            *result = (int64_t)((uint64_t)a * (uint64_t)b);
+            *result = (int64_t) ((uint64_t) a * (uint64_t) b);
             return true;
         case XI_DIV:
             if (b == 0)
@@ -139,7 +139,7 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) 
             /* Left shift of a negative or shift that overflows the sign bit
              * is UB on signed; do it on uint64_t and cast back. Shift amount
              * is masked to 6 bits to match runtime semantics. */
-            *result = (int64_t)((uint64_t)a << (b & 63));
+            *result = (int64_t) ((uint64_t) a << (b & 63));
             return true;
         case XI_SHR:
             /* Arithmetic right shift on negative values is
@@ -241,7 +241,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
              * to preserve wrap-on-overflow semantics (matches VM and JIT). */
             if (v->op == XI_NEG && v->nargs == 1 && is_const_int(v->args[0])) {
                 v->op = XI_CONST;
-                v->aux_int = (int64_t)(0u - (uint64_t)v->args[0]->aux_int);
+                v->aux_int = (int64_t) (0u - (uint64_t) v->args[0]->aux_int);
                 v->nargs = 0;
                 chg.values_changed = true;
                 continue;

@@ -38,7 +38,8 @@ static XrayIsolate *make_quiet_isolate(void) {
     xray_isolate_params_init(&params);
     xray_isolate_setup_full(&params);
     XrayIsolate *iso = xray_isolate_new(&params);
-    if (!iso) return NULL;
+    if (!iso)
+        return NULL;
     xr_isolate_set_suppress_exception_print(iso, true);
     return iso;
 }
@@ -51,14 +52,13 @@ TEST(unwind_records_full_call_chain) {
 
     /* deep() -> level3() -> level2() -> level1() -> top-level
      * (5 frames active when throw fires). */
-    const char *src =
-        "fn deep(): void {\n"
-        "    throw \"boom\"\n"
-        "}\n"
-        "fn level3(): void { deep() }\n"
-        "fn level2(): void { level3() }\n"
-        "fn level1(): void { level2() }\n"
-        "level1()\n";
+    const char *src = "fn deep(): void {\n"
+                      "    throw \"boom\"\n"
+                      "}\n"
+                      "fn level3(): void { deep() }\n"
+                      "fn level2(): void { level3() }\n"
+                      "fn level1(): void { level2() }\n"
+                      "level1()\n";
 
     int rc = xray_isolate_dostring(iso, src);
     /* Uncaught throw — dostring returns non-zero. */
@@ -87,9 +87,8 @@ TEST(runtime_error_records_trace) {
      * by zero on big-int. The VM's BigInt division returns
      * XR_NOTFOUND on /0 and the dispatcher throws
      * XR_ERR_DIV_BY_ZERO via the runtime-error macro. */
-    const char *src =
-        "fn divider(a: int, b: int): int { return a / b }\n"
-        "let r = divider(10, 0)\n";
+    const char *src = "fn divider(a: int, b: int): int { return a / b }\n"
+                      "let r = divider(10, 0)\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT(rc != 0);
@@ -117,14 +116,13 @@ TEST(catch_clears_pending_exception_state) {
      * dispatcher's VM_BUILTIN_INVOKE_CHECK_EXC would see the
      * stale value and unwind spuriously, terminating the script
      * before reaching the final asserts. */
-    const char *src =
-        "let wm = new WeakMap()\n"
-        "let caught = false\n"
-        "try { wm.set(42, \"x\") } catch (e) { caught = true }\n"
-        "assert(caught)\n"
-        "let key = { id: 1 }\n"
-        "wm.set(key, \"ok\")\n"
-        "assert_eq(wm.get(key), \"ok\")\n";
+    const char *src = "let wm = new WeakMap()\n"
+                      "let caught = false\n"
+                      "try { wm.set(42, \"x\") } catch (e) { caught = true }\n"
+                      "assert(caught)\n"
+                      "let key = { id: 1 }\n"
+                      "wm.set(key, \"ok\")\n"
+                      "assert_eq(wm.get(key), \"ok\")\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -156,11 +154,10 @@ TEST(caught_exception_trace_survives_catch) {
     /* Throw four frames deep, then immediately re-throw from the
      * catch handler so the test C code can inspect the trace on
      * the second (uncaught) flight. */
-    const char *src =
-        "fn deep(): void { throw \"deep\" }\n"
-        "fn level2(): void { deep() }\n"
-        "fn level1(): void { level2() }\n"
-        "try { level1() } catch (e) { throw e }\n";
+    const char *src = "fn deep(): void { throw \"deep\" }\n"
+                      "fn level2(): void { deep() }\n"
+                      "fn level1(): void { level2() }\n"
+                      "try { level1() } catch (e) { throw e }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT(rc != 0);
@@ -185,13 +182,13 @@ TEST(caught_exception_trace_survives_catch) {
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("Unified throw/unwind contract");
-    RUN_TEST(unwind_records_full_call_chain);
-    RUN_TEST(runtime_error_records_trace);
+RUN_TEST_SUITE("Unified throw/unwind contract");
+RUN_TEST(unwind_records_full_call_chain);
+RUN_TEST(runtime_error_records_trace);
 
-    RUN_TEST_SUITE("Catch state cleanup");
-    RUN_TEST(catch_clears_pending_exception_state);
+RUN_TEST_SUITE("Catch state cleanup");
+RUN_TEST(catch_clears_pending_exception_state);
 
-    RUN_TEST_SUITE("Stack trace surface");
-    RUN_TEST(caught_exception_trace_survives_catch);
+RUN_TEST_SUITE("Stack trace surface");
+RUN_TEST(caught_exception_trace_survives_catch);
 TEST_MAIN_END()

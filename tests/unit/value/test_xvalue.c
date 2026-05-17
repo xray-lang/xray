@@ -57,12 +57,12 @@ TEST(value_int_min) {
 
 TEST(value_int_full_64bit) {
     // Values that exceed the older narrower integer payload assumption
-    int64_t large_pos = (int64_t)1 << 50;
+    int64_t large_pos = (int64_t) 1 << 50;
     XrValue v1 = xr_int(large_pos);
     ASSERT_TRUE(XR_IS_INT(v1));
     ASSERT_EQ_INT(XR_TO_INT(v1), large_pos);
 
-    int64_t large_neg = -((int64_t)1 << 50);
+    int64_t large_neg = -((int64_t) 1 << 50);
     XrValue v2 = xr_int(large_neg);
     ASSERT_TRUE(XR_IS_INT(v2));
     ASSERT_EQ_INT(XR_TO_INT(v2), large_neg);
@@ -196,7 +196,7 @@ TEST(value_is_number) {
 TEST(value_as_number) {
     // Int to number
     XrValue int_val = xr_int(42);
-    ASSERT_FLOAT_EQ((double)XR_TO_INT(int_val), 42.0, 1e-10);
+    ASSERT_FLOAT_EQ((double) XR_TO_INT(int_val), 42.0, 1e-10);
 
     // Float to number
     XrValue float_val = xr_float(3.14);
@@ -206,10 +206,14 @@ TEST(value_as_number) {
 /* ========== Truthiness Tests ========== */
 
 static inline bool is_truthy(XrValue v) {
-    if (XR_IS_NULL(v)) return false;
-    if (XR_IS_BOOL(v)) return XR_TO_BOOL(v);
-    if (XR_IS_INT(v)) return XR_TO_INT(v) != 0;
-    if (XR_IS_FLOAT(v)) return XR_TO_FLOAT(v) != 0.0;
+    if (XR_IS_NULL(v))
+        return false;
+    if (XR_IS_BOOL(v))
+        return XR_TO_BOOL(v);
+    if (XR_IS_INT(v))
+        return XR_TO_INT(v) != 0;
+    if (XR_IS_FLOAT(v))
+        return XR_TO_FLOAT(v) != 0.0;
     return true;
 }
 
@@ -299,7 +303,7 @@ TEST(value_tagged_union_integrity) {
 
 TEST(value_float_precision) {
     // Test that float precision is preserved
-    double vals[] = {0.1, 0.2, 0.3, 1.0/3.0, M_PI, M_E};
+    double vals[] = {0.1, 0.2, 0.3, 1.0 / 3.0, M_PI, M_E};
     for (int i = 0; i < 6; i++) {
         XrValue v = xr_float(vals[i]);
         ASSERT_FLOAT_EQ(XR_TO_FLOAT(v), vals[i], 1e-15);
@@ -308,7 +312,7 @@ TEST(value_float_precision) {
 
 TEST(value_sizeof) {
     // Tagged Union must be 16 bytes
-    ASSERT_EQ_INT((int)sizeof(XrValue), 16);
+    ASSERT_EQ_INT((int) sizeof(XrValue), 16);
 }
 
 TEST(value_memset_zero_is_null) {
@@ -316,7 +320,7 @@ TEST(value_memset_zero_is_null) {
     XrValue v;
     memset(&v, 0, sizeof(v));
     ASSERT_TRUE(XR_IS_NULL(v));
-    ASSERT_EQ_INT((int)v.tag, (int)XR_TAG_NULL);
+    ASSERT_EQ_INT((int) v.tag, (int) XR_TAG_NULL);
 }
 
 /* ========== Numeric Type Tests ========== */
@@ -327,8 +331,8 @@ TEST(value_int_type_checks) {
     ASSERT_FALSE(XR_IS_INT(xr_float(1.0)));
     ASSERT_FALSE(XR_IS_INT(xr_null()));
 
-    ASSERT_EQ_INT((int)xr_value_to_i64(xr_int(42)), 42);
-    ASSERT_EQ_INT((int)xr_value_to_i64(xr_float(1.0)), 0);
+    ASSERT_EQ_INT((int) xr_value_to_i64(xr_int(42)), 42);
+    ASSERT_EQ_INT((int) xr_value_to_i64(xr_float(1.0)), 0);
 }
 
 TEST(value_float_type_checks) {
@@ -411,10 +415,9 @@ static void run_all_tests(void) {
 
     RUN_TEST_SUITE("Precise Extraction");
     RUN_TEST(value_to_f64_conversion);
-
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray Value System Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray Value System Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

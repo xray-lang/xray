@@ -35,7 +35,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     }
 
     /* Create null-terminated string from fuzzer input */
-    char *input = (char *)malloc(size + 1);
+    char *input = (char *) malloc(size + 1);
     if (!input) {
         return 0;
     }
@@ -49,7 +49,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     /* Scan all tokens until EOF or error */
     Token token;
     int token_count = 0;
-    const int max_tokens = 100000;  /* Prevent infinite loops */
+    const int max_tokens = 100000; /* Prevent infinite loops */
 
     do {
         token = xr_scanner_scan(&scanner);

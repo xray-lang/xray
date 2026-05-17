@@ -18,21 +18,21 @@
 #include <string.h>
 
 /* Minimal XrType stubs */
-static XrType stub_int   = { .kind = XR_KIND_INT,   .id = 1, .frozen = true };
-static XrType stub_float = { .kind = XR_KIND_FLOAT, .id = 2, .frozen = true };
-static XrType stub_bool  = { .kind = XR_KIND_BOOL,  .id = 3, .frozen = true };
-static XrType stub_void  = { .kind = XR_KIND_VOID,  .id = 6, .frozen = true };
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
+static XrType stub_void = {.kind = XR_KIND_VOID, .id = 6, .frozen = true};
 
 static int tests_passed = 0;
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* Helper: create function with sealed entry block */
@@ -225,7 +225,7 @@ TEST(lower_phi) {
 
     /* Merge block should have a phi node */
     XmBlock *xm_merge = xm->blocks[3];
-    (void)xm_merge;
+    (void) xm_merge;
     assert(xm_merge->phis != NULL && "merge block should have phi");
 
     xm_func_destroy(xm);
@@ -309,7 +309,7 @@ TEST(lower_print) {
 
     XiValue *pr = xi_value_new(f, entry, XI_PRINT, &stub_void, 1);
     pr->args[0] = x;
-    pr->aux_int = 1;  /* newline flag */
+    pr->aux_int = 1; /* newline flag */
     xi_block_set_return(entry, NULL);
 
     XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
@@ -353,12 +353,12 @@ TEST(lower_shared_var) {
     XmBlock *blk0 = xm->blocks[0];
     int call_c_count = 0;
     for (uint32_t i = 0; i < blk0->nins; i++) {
-        if (blk0->ins[i].op == XM_CALL_C) call_c_count++;
+        if (blk0->ins[i].op == XM_CALL_C)
+            call_c_count++;
         assert(blk0->ins[i].op != XM_STORE &&
                "SET_SHARED must not lower to XM_STORE (writes via CALL_C)");
     }
-    assert(call_c_count >= 2 &&
-           "should contain XM_CALL_C for both GET_SHARED and SET_SHARED");
+    assert(call_c_count >= 2 && "should contain XM_CALL_C for both GET_SHARED and SET_SHARED");
 
     xm_func_destroy(xm);
     xi_func_free(f);
@@ -372,7 +372,7 @@ TEST(lower_load_field) {
     XiValue *obj = xi_param(f, entry, 0, &stub_int);
     XiValue *load = xi_value_new(f, entry, XI_LOAD_FIELD, &stub_int, 1);
     load->args[0] = obj;
-    load->aux_int = 0;  /* field index */
+    load->aux_int = 0; /* field index */
     xi_block_set_return(entry, load);
 
     XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);

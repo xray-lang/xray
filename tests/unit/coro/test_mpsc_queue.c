@@ -44,7 +44,7 @@ struct XrCoroutine {
 // Re-declare functions (they're in xray_core lib)
 void xr_mpsc_init(XrMPSCQueue *q);
 void xr_mpsc_push(XrMPSCQueue *q, struct XrCoroutine *coro);
-struct XrCoroutine* xr_mpsc_drain(XrMPSCQueue *q);
+struct XrCoroutine *xr_mpsc_drain(XrMPSCQueue *q);
 bool xr_mpsc_empty(XrMPSCQueue *q);
 
 // Helper: create a mock coroutine on stack
@@ -142,7 +142,10 @@ TEST(mpsc_push_drain_push) {
     // Count second batch
     int count = 0;
     struct XrCoroutine *cur = list2;
-    while (cur) { count++; cur = cur->sched_link; }
+    while (cur) {
+        count++;
+        cur = cur->sched_link;
+    }
     ASSERT_EQ_INT(count, 3);
 }
 
@@ -181,7 +184,10 @@ TEST(mpsc_stress_sequential) {
 
         struct XrCoroutine *list = xr_mpsc_drain(&q);
         int count = 0;
-        while (list) { count++; list = list->sched_link; }
+        while (list) {
+            count++;
+            list = list->sched_link;
+        }
         ASSERT_EQ_INT(count, 5);
         ASSERT_TRUE(xr_mpsc_empty(&q));
     }
@@ -191,19 +197,19 @@ TEST(mpsc_stress_sequential) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("MPSC Queue - Init");
-    RUN_TEST(mpsc_init);
+RUN_TEST_SUITE("MPSC Queue - Init");
+RUN_TEST(mpsc_init);
 
-    RUN_TEST_SUITE("MPSC Queue - Push/Drain");
-    RUN_TEST(mpsc_push_single);
-    RUN_TEST(mpsc_push_multiple);
-    RUN_TEST(mpsc_drain_empty);
-    RUN_TEST(mpsc_push_drain_push);
+RUN_TEST_SUITE("MPSC Queue - Push/Drain");
+RUN_TEST(mpsc_push_single);
+RUN_TEST(mpsc_push_multiple);
+RUN_TEST(mpsc_drain_empty);
+RUN_TEST(mpsc_push_drain_push);
 
-    RUN_TEST_SUITE("MPSC Queue - Ordering");
-    RUN_TEST(mpsc_treiber_order);
+RUN_TEST_SUITE("MPSC Queue - Ordering");
+RUN_TEST(mpsc_treiber_order);
 
-    RUN_TEST_SUITE("MPSC Queue - Stress");
-    RUN_TEST(mpsc_stress_sequential);
+RUN_TEST_SUITE("MPSC Queue - Stress");
+RUN_TEST(mpsc_stress_sequential);
 
 TEST_MAIN_END()

@@ -48,94 +48,109 @@ static void teardown(void) {
 
 /* Find the first AST_MEMBER_ACCESS node in the tree. */
 static AstNode *find_member_access(AstNode *node) {
-    if (!node) return NULL;
-    if (node->type == AST_MEMBER_ACCESS) return node;
+    if (!node)
+        return NULL;
+    if (node->type == AST_MEMBER_ACCESS)
+        return node;
 
     switch (node->type) {
-    case AST_PROGRAM:
-    case AST_BLOCK:
-        for (int i = 0; i < node->as.program.count; i++) {
-            AstNode *r = find_member_access(node->as.program.statements[i]);
-            if (r) return r;
+        case AST_PROGRAM:
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.program.count; i++) {
+                AstNode *r = find_member_access(node->as.program.statements[i]);
+                if (r)
+                    return r;
+            }
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            return find_member_access(node->as.var_decl.initializer);
+        case AST_EXPR_STMT:
+            return find_member_access(node->as.expr_stmt);
+        case AST_CALL_EXPR: {
+            AstNode *r = find_member_access(node->as.call_expr.callee);
+            if (r)
+                return r;
+            for (int i = 0; i < node->as.call_expr.arg_count; i++) {
+                r = find_member_access(node->as.call_expr.arguments[i]);
+                if (r)
+                    return r;
+            }
+            break;
         }
-        break;
-    case AST_VAR_DECL: case AST_CONST_DECL:
-        return find_member_access(node->as.var_decl.initializer);
-    case AST_EXPR_STMT:
-        return find_member_access(node->as.expr_stmt);
-    case AST_CALL_EXPR: {
-        AstNode *r = find_member_access(node->as.call_expr.callee);
-        if (r) return r;
-        for (int i = 0; i < node->as.call_expr.arg_count; i++) {
-            r = find_member_access(node->as.call_expr.arguments[i]);
-            if (r) return r;
+        case AST_PRINT_STMT:
+            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
+                AstNode *r = find_member_access(node->as.print_stmt.exprs[i]);
+                if (r)
+                    return r;
+            }
+            break;
+        case AST_FUNCTION_DECL:
+        case AST_FUNCTION_EXPR:
+            return find_member_access(node->as.function_decl.body);
+        case AST_IF_STMT: {
+            AstNode *r = find_member_access(node->as.if_stmt.condition);
+            if (r)
+                return r;
+            r = find_member_access(node->as.if_stmt.then_branch);
+            if (r)
+                return r;
+            return find_member_access(node->as.if_stmt.else_branch);
         }
-        break;
-    }
-    case AST_PRINT_STMT:
-        for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-            AstNode *r = find_member_access(node->as.print_stmt.exprs[i]);
-            if (r) return r;
-        }
-        break;
-    case AST_FUNCTION_DECL: case AST_FUNCTION_EXPR:
-        return find_member_access(node->as.function_decl.body);
-    case AST_IF_STMT: {
-        AstNode *r = find_member_access(node->as.if_stmt.condition);
-        if (r) return r;
-        r = find_member_access(node->as.if_stmt.then_branch);
-        if (r) return r;
-        return find_member_access(node->as.if_stmt.else_branch);
-    }
-    default:
-        break;
+        default:
+            break;
     }
     return NULL;
 }
 
 /* Find the first AST_ENUM_ACCESS node in the tree. */
 static AstNode *find_enum_access(AstNode *node) {
-    if (!node) return NULL;
-    if (node->type == AST_ENUM_ACCESS) return node;
+    if (!node)
+        return NULL;
+    if (node->type == AST_ENUM_ACCESS)
+        return node;
 
     switch (node->type) {
-    case AST_PROGRAM:
-    case AST_BLOCK:
-        for (int i = 0; i < node->as.program.count; i++) {
-            AstNode *r = find_enum_access(node->as.program.statements[i]);
-            if (r) return r;
-        }
-        break;
-    case AST_VAR_DECL: case AST_CONST_DECL:
-        return find_enum_access(node->as.var_decl.initializer);
-    case AST_EXPR_STMT:
-        return find_enum_access(node->as.expr_stmt);
-    case AST_PRINT_STMT:
-        for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
-            AstNode *r = find_enum_access(node->as.print_stmt.exprs[i]);
-            if (r) return r;
-        }
-        break;
-    default:
-        break;
+        case AST_PROGRAM:
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.program.count; i++) {
+                AstNode *r = find_enum_access(node->as.program.statements[i]);
+                if (r)
+                    return r;
+            }
+            break;
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            return find_enum_access(node->as.var_decl.initializer);
+        case AST_EXPR_STMT:
+            return find_enum_access(node->as.expr_stmt);
+        case AST_PRINT_STMT:
+            for (int i = 0; i < node->as.print_stmt.expr_count; i++) {
+                AstNode *r = find_enum_access(node->as.print_stmt.exprs[i]);
+                if (r)
+                    return r;
+            }
+            break;
+        default:
+            break;
     }
     return NULL;
 }
 
 /* ========== Test helper ========== */
 
-#define TEST(name) \
-    static bool test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- %s ---\n", #name); \
-        if (test_##name()) { \
-            printf("  PASS\n"); \
-            tests_passed++; \
-        } else { \
-            printf("  FAIL\n"); \
-            tests_failed++; \
-        } \
-    } \
+#define TEST(name)                                                                                 \
+    static bool test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- %s ---\n", #name);                                                             \
+        if (test_##name()) {                                                                       \
+            printf("  PASS\n");                                                                    \
+            tests_passed++;                                                                        \
+        } else {                                                                                   \
+            printf("  FAIL\n");                                                                    \
+            tests_failed++;                                                                        \
+        }                                                                                          \
+    }                                                                                              \
     static bool test_##name(void)
 
 typedef struct {
@@ -157,8 +172,10 @@ static AnalysisResult analyze(const char *source) {
 }
 
 static void cleanup(AnalysisResult *r) {
-    if (r->analyzer) xa_analyzer_free(r->analyzer);
-    if (r->program) xr_program_destroy(r->program);
+    if (r->analyzer)
+        xa_analyzer_free(r->analyzer);
+    if (r->program)
+        xr_program_destroy(r->program);
     r->analyzer = NULL;
     r->program = NULL;
 }
@@ -166,28 +183,26 @@ static void cleanup(AnalysisResult *r) {
 /* ========== Tests ========== */
 
 TEST(class_field_access_has_selection) {
-    AnalysisResult r = analyze(
-        "class Point {\n"
-        "    x: int\n"
-        "    y: int\n"
-        "    constructor(x: int, y: int) {\n"
-        "        this.x = x\n"
-        "        this.y = y\n"
-        "    }\n"
-        "}\n"
-        "let p = new Point(1, 2)\n"
-        "print(p.x)\n"
-    );
-    if (!r.program) return false;
+    AnalysisResult r = analyze("class Point {\n"
+                               "    x: int\n"
+                               "    y: int\n"
+                               "    constructor(x: int, y: int) {\n"
+                               "        this.x = x\n"
+                               "        this.y = y\n"
+                               "    }\n"
+                               "}\n"
+                               "let p = new Point(1, 2)\n"
+                               "print(p.x)\n");
+    if (!r.program)
+        return false;
 
     AstNode *ma = find_member_access(r.program);
     bool ok = false;
     if (ma) {
         const XaSelection *sel = xa_analyzer_get_selection(r.analyzer, ma);
         if (sel) {
-            printf("    selection kind=%d receiver=%p result=%p field_idx=%d\n",
-                   sel->kind, (void *)sel->receiver_type,
-                   (void *)sel->result_type, sel->field_index);
+            printf("    selection kind=%d receiver=%p result=%p field_idx=%d\n", sel->kind,
+                   (void *) sel->receiver_type, (void *) sel->result_type, sel->field_index);
             ok = true;
         } else {
             fprintf(stderr, "    no selection recorded for member access 'p.x'\n");
@@ -201,20 +216,19 @@ TEST(class_field_access_has_selection) {
 }
 
 TEST(method_call_has_selection) {
-    AnalysisResult r = analyze(
-        "class Greeter {\n"
-        "    name: string\n"
-        "    constructor(n: string) {\n"
-        "        this.name = n\n"
-        "    }\n"
-        "    greet(): string {\n"
-        "        return \"hello\"\n"
-        "    }\n"
-        "}\n"
-        "let g = new Greeter(\"world\")\n"
-        "print(g.greet())\n"
-    );
-    if (!r.program) return false;
+    AnalysisResult r = analyze("class Greeter {\n"
+                               "    name: string\n"
+                               "    constructor(n: string) {\n"
+                               "        this.name = n\n"
+                               "    }\n"
+                               "    greet(): string {\n"
+                               "        return \"hello\"\n"
+                               "    }\n"
+                               "}\n"
+                               "let g = new Greeter(\"world\")\n"
+                               "print(g.greet())\n");
+    if (!r.program)
+        return false;
 
     /* g.greet() parses as CALL(MEMBER_ACCESS(g, "greet"), []) */
     AstNode *ma = find_member_access(r.program);
@@ -236,15 +250,14 @@ TEST(method_call_has_selection) {
 }
 
 TEST(enum_member_has_selection) {
-    AnalysisResult r = analyze(
-        "enum Color : string {\n"
-        "    Red = \"red\",\n"
-        "    Blue = \"blue\"\n"
-        "}\n"
-        "let c = Color.Red\n"
-        "print(c)\n"
-    );
-    if (!r.program) return false;
+    AnalysisResult r = analyze("enum Color : string {\n"
+                               "    Red = \"red\",\n"
+                               "    Blue = \"blue\"\n"
+                               "}\n"
+                               "let c = Color.Red\n"
+                               "print(c)\n");
+    if (!r.program)
+        return false;
 
     /* Color.Red may be rewritten by the analyzer from AST_MEMBER_ACCESS
      * to AST_ENUM_ACCESS.  Check both: selection on the original node,
@@ -282,25 +295,23 @@ TEST(enum_member_has_selection) {
 }
 
 TEST(selection_table_has_entries_after_analysis) {
-    AnalysisResult r = analyze(
-        "class Box {\n"
-        "    value: int\n"
-        "    constructor(v: int) {\n"
-        "        this.value = v\n"
-        "    }\n"
-        "    get(): int {\n"
-        "        return this.value\n"
-        "    }\n"
-        "}\n"
-        "let b = new Box(42)\n"
-        "let v = b.get()\n"
-        "let w = b.value\n"
-        "print(v, w)\n"
-    );
-    if (!r.program) return false;
+    AnalysisResult r = analyze("class Box {\n"
+                               "    value: int\n"
+                               "    constructor(v: int) {\n"
+                               "        this.value = v\n"
+                               "    }\n"
+                               "    get(): int {\n"
+                               "        return this.value\n"
+                               "    }\n"
+                               "}\n"
+                               "let b = new Box(42)\n"
+                               "let v = b.get()\n"
+                               "let w = b.value\n"
+                               "print(v, w)\n");
+    if (!r.program)
+        return false;
 
-    const XaSelectionTable *t =
-        (const XaSelectionTable *)r.analyzer->selection_table;
+    const XaSelectionTable *t = (const XaSelectionTable *) r.analyzer->selection_table;
     int sz = xa_selection_table_size(t);
     printf("    selection table size = %d\n", sz);
     bool ok = (sz > 0);
@@ -313,12 +324,11 @@ TEST(selection_table_has_entries_after_analysis) {
 }
 
 TEST(builtin_method_has_selection) {
-    AnalysisResult r = analyze(
-        "let arr = [1, 2, 3]\n"
-        "let n = arr.length\n"
-        "print(n)\n"
-    );
-    if (!r.program) return false;
+    AnalysisResult r = analyze("let arr = [1, 2, 3]\n"
+                               "let n = arr.length\n"
+                               "print(n)\n");
+    if (!r.program)
+        return false;
 
     AstNode *ma = find_member_access(r.program);
     bool ok = false;
@@ -353,8 +363,7 @@ int main(void) {
     run_selection_table_has_entries_after_analysis();
     run_builtin_method_has_selection();
 
-    printf("\n=== Results: %d passed, %d failed ===\n\n",
-           tests_passed, tests_failed);
+    printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 
     teardown();
     return tests_failed > 0 ? 1 : 0;

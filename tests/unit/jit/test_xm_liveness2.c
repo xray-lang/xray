@@ -105,8 +105,8 @@ static void test_diamond(void) {
 
     /* merge: phi(v2, v3), ret */
     XmPhi *phi = xm_add_phi(func, merge, XR_REP_I64);
-    xm_phi_set_arg(phi, 0, v2);  /* from then */
-    xm_phi_set_arg(phi, 1, v3);  /* from else */
+    xm_phi_set_arg(phi, 0, v2); /* from then */
+    xm_phi_set_arg(phi, 1, v3); /* from else */
     xm_block_set_ret(merge, phi->dst);
 
     XmLive live;
@@ -176,8 +176,8 @@ static void test_loop(void) {
     XmBlock *exit_blk = xm_func_add_block(func, "exit");
 
     /* Build CFG edges first so phi gets correct narg */
-    xm_block_add_pred(header, entry, func->arena);  /* pred 0 */
-    xm_block_add_pred(header, body, func->arena);   /* pred 1 (back-edge) */
+    xm_block_add_pred(header, entry, func->arena); /* pred 0 */
+    xm_block_add_pred(header, body, func->arena);  /* pred 1 (back-edge) */
     xm_block_add_pred(body, header, func->arena);
     xm_block_add_pred(exit_blk, header, func->arena);
 
@@ -200,7 +200,7 @@ static void test_loop(void) {
     XmRef vc1 = xm_emit_unary(func, body, XM_CONST_I64, XR_REP_I64, c1);
     XmRef v3 = xm_emit(func, body, XM_ADD, XR_REP_I64, phi_i->dst, vc1);
     xm_block_set_jmp(body, header);
-    xm_phi_set_arg(phi_i, 1, v3);  /* back-edge */
+    xm_phi_set_arg(phi_i, 1, v3); /* back-edge */
 
     /* exit: return phi_i */
     xm_block_set_ret(exit_blk, phi_i->dst);
@@ -255,7 +255,7 @@ static void test_dead_var(void) {
     XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c42);
     XmRef c99 = xm_const_i64(func, 99);
     XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c99);
-    (void)v0;
+    (void) v0;
     xm_block_set_ret(entry, v1);
 
     XmLive live;
@@ -301,7 +301,7 @@ static void test_passthrough(void) {
 
     XmRef c0 = xm_const_i64(func, 0);
     XmRef v1 = xm_emit_unary(func, mid, XM_CONST_I64, XR_REP_I64, c0);
-    (void)v1;
+    (void) v1;
     xm_block_set_jmp(mid, tail);
     xm_block_add_pred(tail, mid, func->arena);
 

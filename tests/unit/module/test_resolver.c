@@ -129,17 +129,18 @@ TEST(depgraph_topo_sort_null_args) {
 /* ========== Resolution Tests ========== */
 
 // Mock package info callback for testing
-static XrPackageInfo* mock_get_info(const char *name, void *user_data) {
-    (void)user_data;
+static XrPackageInfo *mock_get_info(const char *name, void *user_data) {
+    (void) user_data;
 
-    XrPackageInfo *info = (XrPackageInfo*)xr_calloc(1, sizeof(XrPackageInfo));
-    if (!info) return NULL;
+    XrPackageInfo *info = (XrPackageInfo *) xr_calloc(1, sizeof(XrPackageInfo));
+    if (!info)
+        return NULL;
 
     info->name = xr_strdup(name);
 
     // Provide some versions
     info->version_count = 3;
-    info->versions = (char**)xr_malloc(3 * sizeof(char*));
+    info->versions = (char **) xr_malloc(3 * sizeof(char *));
     info->versions[0] = xr_strdup("1.0.0");
     info->versions[1] = xr_strdup("1.1.0");
     info->versions[2] = xr_strdup("1.2.0");
@@ -180,11 +181,12 @@ TEST(resolve_multiple_roots) {
 }
 
 // Mock that returns no versions
-static XrPackageInfo* mock_get_info_empty(const char *name, void *user_data) {
-    (void)user_data;
+static XrPackageInfo *mock_get_info_empty(const char *name, void *user_data) {
+    (void) user_data;
 
-    XrPackageInfo *info = (XrPackageInfo*)xr_calloc(1, sizeof(XrPackageInfo));
-    if (!info) return NULL;
+    XrPackageInfo *info = (XrPackageInfo *) xr_calloc(1, sizeof(XrPackageInfo));
+    if (!info)
+        return NULL;
 
     info->name = xr_strdup(name);
     info->version_count = 0;
@@ -243,27 +245,27 @@ TEST(package_info_free_null) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Dependency Graph");
-    RUN_TEST(depgraph_new_and_free);
-    RUN_TEST(depgraph_add_root);
-    RUN_TEST(depgraph_find);
-    RUN_TEST(depgraph_find_null_args);
+RUN_TEST_SUITE("Dependency Graph");
+RUN_TEST(depgraph_new_and_free);
+RUN_TEST(depgraph_add_root);
+RUN_TEST(depgraph_find);
+RUN_TEST(depgraph_find_null_args);
 
-    RUN_TEST_SUITE("Cycle Detection");
-    RUN_TEST(depgraph_no_cycle);
-    RUN_TEST(depgraph_many_roots);
+RUN_TEST_SUITE("Cycle Detection");
+RUN_TEST(depgraph_no_cycle);
+RUN_TEST(depgraph_many_roots);
 
-    RUN_TEST_SUITE("Topological Sort");
-    RUN_TEST(depgraph_topo_sort_empty);
-    RUN_TEST(depgraph_topo_sort_single);
-    RUN_TEST(depgraph_topo_sort_null_args);
+RUN_TEST_SUITE("Topological Sort");
+RUN_TEST(depgraph_topo_sort_empty);
+RUN_TEST(depgraph_topo_sort_single);
+RUN_TEST(depgraph_topo_sort_null_args);
 
-    RUN_TEST_SUITE("Dependency Resolution");
-    RUN_TEST(resolve_simple);
-    RUN_TEST(resolve_multiple_roots);
-    RUN_TEST(resolve_no_matching_version);
-    RUN_TEST(resolve_with_lockfile);
-    RUN_TEST(resolve_result_free_null);
-    RUN_TEST(package_info_free_null);
+RUN_TEST_SUITE("Dependency Resolution");
+RUN_TEST(resolve_simple);
+RUN_TEST(resolve_multiple_roots);
+RUN_TEST(resolve_no_matching_version);
+RUN_TEST(resolve_with_lockfile);
+RUN_TEST(resolve_result_free_null);
+RUN_TEST(package_info_free_null);
 
 TEST_MAIN_END()

@@ -31,14 +31,14 @@ static XrayIsolate *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        tests_passed++; \
-        printf("  PASS\n"); \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        tests_passed++;                                                                            \
+        printf("  PASS\n");                                                                        \
+    }                                                                                              \
     static void test_##name(void)
 
 static void setup(void) {
@@ -64,7 +64,8 @@ static XiFunc *compile_to_ir(const char *source) {
     assert(g_iso != NULL);
 
     XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
-    if (!analyzer) return NULL;
+    if (!analyzer)
+        return NULL;
 
     AstNode *program = xr_parse(g_iso, source);
     if (!program) {
@@ -77,17 +78,15 @@ static XiFunc *compile_to_ir(const char *source) {
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
-    cfg.run_emit = false;  /* cgen needs raw IR tree, not bytecode */
+    cfg.run_emit = false; /* cgen needs raw IR tree, not bytecode */
 
-    XiPipelineResult res = xi_pipeline_compile_program(
-        program, analyzer, g_iso, &cfg);
+    XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
 
     if (res.status != XI_PIPE_OK) {
-        fprintf(stderr, "  PIPELINE FAILED: %s\n",
-                xi_pipe_status_str(res.status));
+        fprintf(stderr, "  PIPELINE FAILED: %s\n", xi_pipe_status_str(res.status));
         xi_pipeline_result_free(&res);
         return NULL;
     }
@@ -115,7 +114,8 @@ static char *generate_c(XiFunc *ir, const char *module_name) {
         assert(mod != NULL);
         own_mod = true;
     } else {
-        if (!mod->name) mod->name = module_name;
+        if (!mod->name)
+            mod->name = module_name;
     }
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
@@ -170,12 +170,14 @@ TEST(cgen_simple_arith) {
 
 TEST(cgen_variable_and_print) {
     /* Variable assignment and print */
-    const char *src =
-        "let x = 42\n"
-        "print(x)\n";
+    const char *src = "let x = 42\n"
+                      "print(x)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -191,16 +193,18 @@ TEST(cgen_variable_and_print) {
 
 TEST(cgen_if_else) {
     /* Conditional control flow */
-    const char *src =
-        "let x = 10\n"
-        "if (x > 5) {\n"
-        "    print(1)\n"
-        "} else {\n"
-        "    print(0)\n"
-        "}\n";
+    const char *src = "let x = 10\n"
+                      "if (x > 5) {\n"
+                      "    print(1)\n"
+                      "} else {\n"
+                      "    print(0)\n"
+                      "}\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -216,14 +220,16 @@ TEST(cgen_if_else) {
 
 TEST(cgen_multi_print) {
     /* Multiple print statements */
-    const char *src =
-        "let a = 10\n"
-        "let b = 20\n"
-        "let c = a + b\n"
-        "print(c)\n";
+    const char *src = "let a = 10\n"
+                      "let b = 20\n"
+                      "let c = a + b\n"
+                      "print(c)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -240,15 +246,17 @@ TEST(cgen_multi_print) {
 
 TEST(cgen_while_loop) {
     /* While loop generates blocks and back edges */
-    const char *src =
-        "let i = 0\n"
-        "while (i < 5) {\n"
-        "    i = i + 1\n"
-        "}\n"
-        "print(i)\n";
+    const char *src = "let i = 0\n"
+                      "while (i < 5) {\n"
+                      "    i = i + 1\n"
+                      "}\n"
+                      "print(i)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -267,7 +275,10 @@ TEST(cgen_string_literal) {
     const char *src = "print(\"hello world\")";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -282,13 +293,15 @@ TEST(cgen_string_literal) {
 
 TEST(cgen_function_call) {
     /* Function definition and call */
-    const char *src =
-        "fn add(a: int, b: int): int { return a + b }\n"
-        "let r = add(3, 4)\n"
-        "print(r)\n";
+    const char *src = "fn add(a: int, b: int): int { return a + b }\n"
+                      "let r = add(3, 4)\n"
+                      "print(r)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -305,15 +318,17 @@ TEST(cgen_function_call) {
 
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
-    const char *src =
-        "fn fact(n: int): int {\n"
-        "    if (n <= 1) { return 1 }\n"
-        "    return n * fact(n - 1)\n"
-        "}\n"
-        "print(fact(5))\n";
+    const char *src = "fn fact(n: int): int {\n"
+                      "    if (n <= 1) { return 1 }\n"
+                      "    return n * fact(n - 1)\n"
+                      "}\n"
+                      "print(fact(5))\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -327,15 +342,17 @@ TEST(cgen_recursive) {
 }
 
 TEST(cgen_for_loop) {
-    const char *src =
-        "let sum = 0\n"
-        "for (let i = 1; i <= 10; i = i + 1) {\n"
-        "    sum = sum + i\n"
-        "}\n"
-        "print(sum)\n";
+    const char *src = "let sum = 0\n"
+                      "for (let i = 1; i <= 10; i = i + 1) {\n"
+                      "    sum = sum + i\n"
+                      "}\n"
+                      "print(sum)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    if (!ir) { printf("  SKIP\n"); return; }
+    if (!ir) {
+        printf("  SKIP\n");
+        return;
+    }
 
     char *code = generate_c(ir, "test");
     assert(code != NULL);
@@ -367,7 +384,6 @@ int main(void) {
 
     teardown();
 
-    printf("\n=== %d/%d Xi CGen tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi CGen tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

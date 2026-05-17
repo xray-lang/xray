@@ -71,7 +71,7 @@ TEST(node_table_set_then_get) {
     XrType ty;
     ty.kind = XR_KIND_INT;
 
-    xa_node_table_set_type(t, &n, (struct XrType *)&ty);
+    xa_node_table_set_type(t, &n, (struct XrType *) &ty);
     ASSERT_EQ_INT(xa_node_table_size(t), 1);
 
     XrType *got = xa_node_table_get_type(t, &n);
@@ -89,7 +89,7 @@ TEST(node_table_get_returns_null_for_unknown) {
     XrType ty;
     ty.kind = XR_KIND_INT;
 
-    xa_node_table_set_type(t, &known, (struct XrType *)&ty);
+    xa_node_table_set_type(t, &known, (struct XrType *) &ty);
 
     // `unknown` was never inserted: get must return NULL, not the type
     // of `known` (i.e. no false positive from hash collision).
@@ -106,7 +106,7 @@ TEST(node_table_set_null_clears_entry) {
     XrType ty;
     ty.kind = XR_KIND_FLOAT;
 
-    xa_node_table_set_type(t, &n, (struct XrType *)&ty);
+    xa_node_table_set_type(t, &n, (struct XrType *) &ty);
     ASSERT_EQ_INT(xa_node_table_size(t), 1);
 
     // NULL value clears the entry; size must drop, get must return NULL.
@@ -130,13 +130,13 @@ TEST(node_table_set_overwrites_existing) {
     ty1.kind = XR_KIND_INT;
     ty2.kind = XR_KIND_STRING;
 
-    xa_node_table_set_type(t, &n, (struct XrType *)&ty1);
+    xa_node_table_set_type(t, &n, (struct XrType *) &ty1);
     ASSERT_EQ_INT(xa_node_table_size(t), 1);
     ASSERT_EQ_PTR(xa_node_table_get_type(t, &n), &ty1);
 
     // Overwrite same key with a different type: size unchanged, get
     // returns the new value.
-    xa_node_table_set_type(t, &n, (struct XrType *)&ty2);
+    xa_node_table_set_type(t, &n, (struct XrType *) &ty2);
     ASSERT_EQ_INT(xa_node_table_size(t), 1);
     ASSERT_EQ_PTR(xa_node_table_get_type(t, &n), &ty2);
 
@@ -151,11 +151,13 @@ TEST(node_table_clear_drops_all_entries) {
     ty.kind = XR_KIND_BOOL;
 
     // Insert a handful of distinct keys.
-    enum { N = 16 };
+    enum {
+        N = 16
+    };
     AstNode nodes[N];
     for (int i = 0; i < N; i++) {
-        nodes[i] = make_node((uint32_t)(100 + i));
-        xa_node_table_set_type(t, &nodes[i], (struct XrType *)&ty);
+        nodes[i] = make_node((uint32_t) (100 + i));
+        xa_node_table_set_type(t, &nodes[i], (struct XrType *) &ty);
     }
     ASSERT_EQ_INT(xa_node_table_size(t), N);
 
@@ -168,7 +170,7 @@ TEST(node_table_clear_drops_all_entries) {
     }
 
     // Table is reusable after clear.
-    xa_node_table_set_type(t, &nodes[0], (struct XrType *)&ty);
+    xa_node_table_set_type(t, &nodes[0], (struct XrType *) &ty);
     ASSERT_EQ_INT(xa_node_table_size(t), 1);
 
     xa_node_table_free(t);
@@ -182,16 +184,18 @@ TEST(node_table_growth_preserves_entries) {
     XaNodeTable *t = xa_node_table_new();
     ASSERT_NOT_NULL(t);
 
-    enum { N = 256 };
-    AstNode *nodes = (AstNode *)malloc(sizeof(AstNode) * N); /* xr:allow-raw-alloc */
-    XrType *types = (XrType *)malloc(sizeof(XrType) * N); /* xr:allow-raw-alloc */
+    enum {
+        N = 256
+    };
+    AstNode *nodes = (AstNode *) malloc(sizeof(AstNode) * N); /* xr:allow-raw-alloc */
+    XrType *types = (XrType *) malloc(sizeof(XrType) * N);    /* xr:allow-raw-alloc */
     ASSERT_NOT_NULL(nodes);
     ASSERT_NOT_NULL(types);
 
     for (int i = 0; i < N; i++) {
-        nodes[i] = make_node((uint32_t)(1000 + i));
+        nodes[i] = make_node((uint32_t) (1000 + i));
         types[i].kind = XR_KIND_INT;
-        xa_node_table_set_type(t, &nodes[i], (struct XrType *)&types[i]);
+        xa_node_table_set_type(t, &nodes[i], (struct XrType *) &types[i]);
     }
     ASSERT_EQ_INT(xa_node_table_size(t), N);
 
@@ -221,7 +225,7 @@ TEST(node_table_null_safe_api) {
     ty.kind = XR_KIND_INT;
 
     // NULL node on set / get -- no-op / NULL respectively.
-    xa_node_table_set_type(t, NULL, (struct XrType *)&ty);
+    xa_node_table_set_type(t, NULL, (struct XrType *) &ty);
     ASSERT_EQ_INT(xa_node_table_size(t), 0);
     ASSERT_NULL(xa_node_table_get_type(t, NULL));
 
@@ -244,9 +248,7 @@ TEST(node_table_scope_symbol_bindings) {
     // Set full binding facts (scope/symbol as opaque pointers).
     int fake_scope = 42;
     int fake_symbol = 99;
-    xa_node_table_set(t, &n, &ty,
-                      (struct XaScope *)&fake_scope,
-                      (struct XaSymbol *)&fake_symbol);
+    xa_node_table_set(t, &n, &ty, (struct XaScope *) &fake_scope, (struct XaSymbol *) &fake_symbol);
     ASSERT_EQ_INT(xa_node_table_size(t), 1);
     ASSERT_EQ_PTR(xa_node_table_get_type(t, &n), &ty);
     ASSERT_EQ_PTR(xa_node_table_get_scope(t, &n), &fake_scope);
@@ -304,7 +306,7 @@ TEST(analyzer_set_then_get_round_trip) {
     // Initially unknown.
     ASSERT_NULL(xa_analyzer_get_node_type(a, &n));
 
-    xa_analyzer_set_node_type(a, &n, (struct XrType *)&ty);
+    xa_analyzer_set_node_type(a, &n, (struct XrType *) &ty);
     XrType *got = xa_analyzer_get_node_type(a, &n);
     ASSERT_EQ_PTR(got, &ty);
 
@@ -330,7 +332,7 @@ TEST(analyzer_tables_are_independent_per_analyzer) {
     XrType ty;
     ty.kind = XR_KIND_STRING;
 
-    xa_analyzer_set_node_type(a1, &n, (struct XrType *)&ty);
+    xa_analyzer_set_node_type(a1, &n, (struct XrType *) &ty);
 
     XrType *via_a1 = xa_analyzer_get_node_type(a1, &n);
     XrType *via_a2 = xa_analyzer_get_node_type(a2, &n);
@@ -347,18 +349,18 @@ TEST(analyzer_tables_are_independent_per_analyzer) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("xa_node_table direct API");
-    RUN_TEST(node_table_set_then_get);
-    RUN_TEST(node_table_get_returns_null_for_unknown);
-    RUN_TEST(node_table_set_null_clears_entry);
-    RUN_TEST(node_table_set_overwrites_existing);
-    RUN_TEST(node_table_clear_drops_all_entries);
-    RUN_TEST(node_table_growth_preserves_entries);
-    RUN_TEST(node_table_null_safe_api);
-    RUN_TEST(node_table_scope_symbol_bindings);
+RUN_TEST_SUITE("xa_node_table direct API");
+RUN_TEST(node_table_set_then_get);
+RUN_TEST(node_table_get_returns_null_for_unknown);
+RUN_TEST(node_table_set_null_clears_entry);
+RUN_TEST(node_table_set_overwrites_existing);
+RUN_TEST(node_table_clear_drops_all_entries);
+RUN_TEST(node_table_growth_preserves_entries);
+RUN_TEST(node_table_null_safe_api);
+RUN_TEST(node_table_scope_symbol_bindings);
 
-    RUN_TEST_SUITE("xa_analyzer node_type wrappers");
-    RUN_TEST(analyzer_node_type_null_safe);
-    RUN_TEST(analyzer_set_then_get_round_trip);
-    RUN_TEST(analyzer_tables_are_independent_per_analyzer);
+RUN_TEST_SUITE("xa_analyzer node_type wrappers");
+RUN_TEST(analyzer_node_type_null_safe);
+RUN_TEST(analyzer_set_then_get_round_trip);
+RUN_TEST(analyzer_tables_are_independent_per_analyzer);
 TEST_MAIN_END()

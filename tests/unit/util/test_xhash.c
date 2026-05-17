@@ -182,11 +182,12 @@ TEST(short_hash_distribution) {
         uint8_t short_h = xr_short_hash(full_hash);
         buckets[short_h & 0x7F]++;
     }
-    
+
     // Each bucket should have at least some entries
     int non_empty = 0;
     for (int i = 0; i < 128; i++) {
-        if (buckets[i] > 0) non_empty++;
+        if (buckets[i] > 0)
+            non_empty++;
     }
     // At least 50% of buckets should be used
     ASSERT_GT(non_empty, 64);
@@ -200,7 +201,7 @@ TEST(hash_collision_rate) {
     const int TABLE_SIZE = 16384;  // Power of 2
     int collisions = 0;
     int *table = calloc(TABLE_SIZE, sizeof(int));
-    
+
     for (int i = 0; i < N; i++) {
         uint32_t h = xr_hash_int(i);
         int bucket = h % TABLE_SIZE;
@@ -209,11 +210,11 @@ TEST(hash_collision_rate) {
         }
         table[bucket]++;
     }
-    
+
     free(table);
-    
+
     // Collision rate should be reasonable (< 50%)
-    double collision_rate = (double)collisions / N;
+    double collision_rate = (double) collisions / N;
     ASSERT_LT(collision_rate, 0.5);
 }
 
@@ -227,39 +228,39 @@ static void run_all_tests(void) {
     RUN_TEST(hash_bytes_different_strings);
     RUN_TEST(hash_bytes_length_sensitive);
     RUN_TEST(hash_bytes_binary_data);
-    
+
     RUN_TEST_SUITE("Hash Bytes 64-bit");
     RUN_TEST(hash_bytes64_empty);
     RUN_TEST(hash_bytes64_deterministic);
     RUN_TEST(hash_bytes64_distribution);
-    
+
     RUN_TEST_SUITE("Hash Integer");
     RUN_TEST(hash_int_zero);
     RUN_TEST(hash_int_positive);
     RUN_TEST(hash_int_negative);
     RUN_TEST(hash_int_large);
     RUN_TEST(hash_int_deterministic);
-    
+
     RUN_TEST_SUITE("Hash Float");
     RUN_TEST(hash_float_zero);
     RUN_TEST(hash_float_positive);
     RUN_TEST(hash_float_negative);
     RUN_TEST(hash_float_deterministic);
     RUN_TEST(hash_float_special_values);
-    
+
     RUN_TEST_SUITE("Hash Bool");
     RUN_TEST(hash_bool_true_false);
     RUN_TEST(hash_bool_deterministic);
-    
+
     RUN_TEST_SUITE("Short Hash");
     RUN_TEST(short_hash_range);
     RUN_TEST(short_hash_distribution);
-    
+
     RUN_TEST_SUITE("Collision Rate");
     RUN_TEST(hash_collision_rate);
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray Hash Function Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray Hash Function Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

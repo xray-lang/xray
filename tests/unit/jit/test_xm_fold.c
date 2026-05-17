@@ -73,7 +73,8 @@ static double get_f64_val(XmFunc *func, XmRef ref) {
 
 static void test_identity_add_zero(void) {
     fprintf(stderr, "  test_identity_add_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -93,7 +94,8 @@ static void test_identity_add_zero(void) {
 
 static void test_identity_sub_zero(void) {
     fprintf(stderr, "  test_identity_sub_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -109,7 +111,8 @@ static void test_identity_sub_zero(void) {
 
 static void test_identity_mul_one(void) {
     fprintf(stderr, "  test_identity_mul_one...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -129,7 +132,8 @@ static void test_identity_mul_one(void) {
 
 static void test_identity_div_one(void) {
     fprintf(stderr, "  test_identity_div_one...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -145,7 +149,8 @@ static void test_identity_div_one(void) {
 
 static void test_identity_or_zero(void) {
     fprintf(stderr, "  test_identity_or_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -165,7 +170,8 @@ static void test_identity_or_zero(void) {
 
 static void test_identity_and_allones(void) {
     fprintf(stderr, "  test_identity_and_allones...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -185,7 +191,8 @@ static void test_identity_and_allones(void) {
 
 static void test_identity_xor_zero(void) {
     fprintf(stderr, "  test_identity_xor_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -201,7 +208,8 @@ static void test_identity_xor_zero(void) {
 
 static void test_identity_shift_zero(void) {
     fprintf(stderr, "  test_identity_shift_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -223,7 +231,8 @@ static void test_identity_shift_zero(void) {
 
 static void test_annihilation_mul_zero(void) {
     fprintf(stderr, "  test_annihilation_mul_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -243,7 +252,8 @@ static void test_annihilation_mul_zero(void) {
 
 static void test_annihilation_and_zero(void) {
     fprintf(stderr, "  test_annihilation_and_zero...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -265,7 +275,8 @@ static void test_annihilation_and_zero(void) {
 
 static void test_self_sub(void) {
     fprintf(stderr, "  test_self_sub...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -280,7 +291,8 @@ static void test_self_sub(void) {
 
 static void test_self_xor(void) {
     fprintf(stderr, "  test_self_xor...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -295,7 +307,8 @@ static void test_self_xor(void) {
 
 static void test_self_and(void) {
     fprintf(stderr, "  test_self_and...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -310,7 +323,8 @@ static void test_self_and(void) {
 
 static void test_self_or(void) {
     fprintf(stderr, "  test_self_or...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -327,7 +341,8 @@ static void test_self_or(void) {
 
 static void test_double_neg(void) {
     fprintf(stderr, "  test_double_neg...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -346,7 +361,8 @@ static void test_double_neg(void) {
 
 static void test_double_not(void) {
     fprintf(stderr, "  test_double_not...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -365,7 +381,8 @@ static void test_double_not(void) {
 
 static void test_double_fneg(void) {
     fprintf(stderr, "  test_double_fneg...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_f64(func, blk, 3.14);
@@ -386,7 +403,8 @@ static void test_double_fneg(void) {
 
 static void test_f2i_i2f_roundtrip(void) {
     fprintf(stderr, "  test_f2i_i2f_roundtrip...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_i64(func, blk, 42);
@@ -405,7 +423,8 @@ static void test_f2i_i2f_roundtrip(void) {
 
 static void test_i2f_f2i_roundtrip(void) {
     fprintf(stderr, "  test_i2f_f2i_roundtrip...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_f64(func, blk, 3.14);
@@ -426,7 +445,8 @@ static void test_i2f_f2i_roundtrip(void) {
 
 static void test_const_fold_i64(void) {
     fprintf(stderr, "  test_const_fold_i64...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef a = make_i64(func, blk, 10);
@@ -458,7 +478,8 @@ static void test_const_fold_i64(void) {
 
 static void test_const_fold_i64_bitwise(void) {
     fprintf(stderr, "  test_const_fold_i64_bitwise...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef a = make_i64(func, blk, 0xFF);
@@ -494,7 +515,8 @@ static void test_const_fold_i64_bitwise(void) {
 
 static void test_const_fold_i64_cmp(void) {
     fprintf(stderr, "  test_const_fold_i64_cmp...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef a = make_i64(func, blk, 10);
@@ -532,7 +554,8 @@ static void test_const_fold_i64_cmp(void) {
 
 static void test_const_fold_f64(void) {
     fprintf(stderr, "  test_const_fold_f64...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef a = make_f64(func, blk, 2.5);
@@ -561,7 +584,8 @@ static void test_const_fold_f64(void) {
 
 static void test_const_fold_f64_cmp(void) {
     fprintf(stderr, "  test_const_fold_f64_cmp...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef a = make_f64(func, blk, 1.0);
@@ -591,7 +615,8 @@ static void test_const_fold_f64_cmp(void) {
 
 static void test_float_identity(void) {
     fprintf(stderr, "  test_float_identity...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef x = make_f64(func, blk, 3.14);
@@ -630,7 +655,8 @@ static void test_float_identity(void) {
 
 static void test_no_fold_dynamic(void) {
     fprintf(stderr, "  test_no_fold_dynamic...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     /* Create a vreg that is NOT a CONST_I64 (simulate a param) */
@@ -655,7 +681,8 @@ static void test_no_fold_dynamic(void) {
 
 static void test_div_by_zero_not_folded(void) {
     fprintf(stderr, "  test_div_by_zero_not_folded...");
-    XmFunc *func; XmBlock *blk;
+    XmFunc *func;
+    XmBlock *blk;
     setup(&func, &blk);
 
     XmRef a = make_i64(func, blk, 10);
@@ -665,7 +692,7 @@ static void test_div_by_zero_not_folded(void) {
     uint32_t nins_before = blk->nins;
     XmRef r = xm_fold_emit(func, blk, XM_DIV, XR_REP_I64, a, zero);
     assert(blk->nins == nins_before + 1);
-    (void)r;
+    (void) r;
 
     /* 10 % 0 â†?NOT folded */
     nins_before = blk->nins;

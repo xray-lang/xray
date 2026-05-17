@@ -36,7 +36,7 @@ TEST(intmap_set_get_single) {
 
     void *got = xr_intmap_get(map, 100);
     ASSERT_NOT_NULL(got);
-    ASSERT_EQ_INT(*(int*)got, 42);
+    ASSERT_EQ_INT(*(int *) got, 42);
 
     xr_intmap_free(map);
 }
@@ -46,14 +46,14 @@ TEST(intmap_set_get_multiple) {
     int vals[5] = {10, 20, 30, 40, 50};
 
     for (int i = 0; i < 5; i++) {
-        xr_intmap_set(map, (uint32_t)(i + 1), &vals[i]);
+        xr_intmap_set(map, (uint32_t) (i + 1), &vals[i]);
     }
     ASSERT_EQ_UINT(map->count, 5);
 
     for (int i = 0; i < 5; i++) {
-        void *got = xr_intmap_get(map, (uint32_t)(i + 1));
+        void *got = xr_intmap_get(map, (uint32_t) (i + 1));
         ASSERT_NOT_NULL(got);
-        ASSERT_EQ_INT(*(int*)got, vals[i]);
+        ASSERT_EQ_INT(*(int *) got, vals[i]);
     }
 
     xr_intmap_free(map);
@@ -64,11 +64,11 @@ TEST(intmap_overwrite) {
     int a = 1, b = 2;
 
     xr_intmap_set(map, 42, &a);
-    ASSERT_EQ_INT(*(int*)xr_intmap_get(map, 42), 1);
+    ASSERT_EQ_INT(*(int *) xr_intmap_get(map, 42), 1);
 
     xr_intmap_set(map, 42, &b);
     ASSERT_EQ_UINT(map->count, 1);  // count unchanged
-    ASSERT_EQ_INT(*(int*)xr_intmap_get(map, 42), 2);
+    ASSERT_EQ_INT(*(int *) xr_intmap_get(map, 42), 2);
 
     xr_intmap_free(map);
 }
@@ -166,7 +166,7 @@ TEST(intmap_tombstone_reuse) {
     // Re-insert at same key should reuse tombstone slot
     xr_intmap_set(map, 5, &v2);
     ASSERT_EQ_UINT(map->count, 1);
-    ASSERT_EQ_INT(*(int*)xr_intmap_get(map, 5), 2);
+    ASSERT_EQ_INT(*(int *) xr_intmap_get(map, 5), 2);
 
     xr_intmap_free(map);
 }
@@ -178,7 +178,7 @@ TEST(intmap_grow) {
     // Insert enough to trigger resize (>75% load)
     int vals[32];
     for (uint32_t i = 0; i < 14; i++) {  // 14/16 = 87.5% > 75%
-        vals[i] = (int)(i * 10);
+        vals[i] = (int) (i * 10);
         xr_intmap_set(map, i + 1, &vals[i]);
     }
 
@@ -189,7 +189,7 @@ TEST(intmap_grow) {
     for (uint32_t i = 0; i < 14; i++) {
         void *got = xr_intmap_get(map, i + 1);
         ASSERT_NOT_NULL(got);
-        ASSERT_EQ_INT(*(int*)got, (int)(i * 10));
+        ASSERT_EQ_INT(*(int *) got, (int) (i * 10));
     }
 
     xr_intmap_free(map);
@@ -198,9 +198,9 @@ TEST(intmap_grow) {
 /* ========== Foreach ========== */
 
 static void count_callback(uint32_t key, void *value, void *userdata) {
-    (void)key;
-    (void)value;
-    int *count = (int*)userdata;
+    (void) key;
+    (void) value;
+    int *count = (int *) userdata;
     (*count)++;
 }
 
@@ -231,7 +231,7 @@ TEST(intmap_arena) {
     int v = 77;
     xr_intmap_set(map, 1, &v);
     ASSERT_EQ_UINT(map->count, 1);
-    ASSERT_EQ_INT(*(int*)xr_intmap_get(map, 1), 77);
+    ASSERT_EQ_INT(*(int *) xr_intmap_get(map, 1), 77);
 
     // No xr_intmap_free needed - arena handles it
     xr_arena_destroy(&arena);
@@ -257,34 +257,34 @@ TEST(intmap_null_safety) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("IntMap - Basic Operations");
-    RUN_TEST(intmap_create_free);
-    RUN_TEST(intmap_set_get_single);
-    RUN_TEST(intmap_set_get_multiple);
-    RUN_TEST(intmap_overwrite);
+RUN_TEST_SUITE("IntMap - Basic Operations");
+RUN_TEST(intmap_create_free);
+RUN_TEST(intmap_set_get_single);
+RUN_TEST(intmap_set_get_multiple);
+RUN_TEST(intmap_overwrite);
 
-    RUN_TEST_SUITE("IntMap - Has / Delete");
-    RUN_TEST(intmap_has);
-    RUN_TEST(intmap_delete);
-    RUN_TEST(intmap_delete_nonexistent);
+RUN_TEST_SUITE("IntMap - Has / Delete");
+RUN_TEST(intmap_has);
+RUN_TEST(intmap_delete);
+RUN_TEST(intmap_delete_nonexistent);
 
-    RUN_TEST_SUITE("IntMap - Clear");
-    RUN_TEST(intmap_clear);
+RUN_TEST_SUITE("IntMap - Clear");
+RUN_TEST(intmap_clear);
 
-    RUN_TEST_SUITE("IntMap - Reserved Keys");
-    RUN_TEST(intmap_reserved_keys);
+RUN_TEST_SUITE("IntMap - Reserved Keys");
+RUN_TEST(intmap_reserved_keys);
 
-    RUN_TEST_SUITE("IntMap - Tombstone / Rehash");
-    RUN_TEST(intmap_tombstone_reuse);
-    RUN_TEST(intmap_grow);
+RUN_TEST_SUITE("IntMap - Tombstone / Rehash");
+RUN_TEST(intmap_tombstone_reuse);
+RUN_TEST(intmap_grow);
 
-    RUN_TEST_SUITE("IntMap - Foreach");
-    RUN_TEST(intmap_foreach);
+RUN_TEST_SUITE("IntMap - Foreach");
+RUN_TEST(intmap_foreach);
 
-    RUN_TEST_SUITE("IntMap - Arena");
-    RUN_TEST(intmap_arena);
+RUN_TEST_SUITE("IntMap - Arena");
+RUN_TEST(intmap_arena);
 
-    RUN_TEST_SUITE("IntMap - NULL Safety");
-    RUN_TEST(intmap_null_safety);
+RUN_TEST_SUITE("IntMap - NULL Safety");
+RUN_TEST(intmap_null_safety);
 
 TEST_MAIN_END()

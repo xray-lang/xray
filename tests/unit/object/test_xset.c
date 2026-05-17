@@ -235,7 +235,7 @@ TEST(set_many_entries) {
     for (int i = 0; i < N; i++) {
         xr_set_add(set, xr_int(i));
     }
-    ASSERT_EQ_INT(xr_set_size(set), (uint32_t)N);
+    ASSERT_EQ_INT(xr_set_size(set), (uint32_t) N);
 
     for (int i = 0; i < N; i++) {
         ASSERT_TRUE(xr_set_has(set, xr_int(i)));

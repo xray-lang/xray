@@ -55,20 +55,27 @@ static void scan_pair(const char *source, Token *a, Token *b) {
 // Trivia chain accessors with safe defaults.
 static int trivia_count(XrTrivia *t) {
     int n = 0;
-    while (t) { n++; t = t->next; }
+    while (t) {
+        n++;
+        t = t->next;
+    }
     return n;
 }
 
 static bool trivia_text_eq(XrTrivia *t, const char *expected) {
-    if (!t) return expected == NULL;
-    int elen = (int)strlen(expected);
-    if (t->length != elen) return false;
-    return memcmp(t->start, expected, (size_t)elen) == 0;
+    if (!t)
+        return expected == NULL;
+    int elen = (int) strlen(expected);
+    if (t->length != elen)
+        return false;
+    return memcmp(t->start, expected, (size_t) elen) == 0;
 }
 
 static void free_token_trivia(Token *t) {
-    if (t->leading_trivia)  xr_trivia_free_chain(t->leading_trivia);
-    if (t->trailing_trivia) xr_trivia_free_chain(t->trailing_trivia);
+    if (t->leading_trivia)
+        xr_trivia_free_chain(t->leading_trivia);
+    if (t->trailing_trivia)
+        xr_trivia_free_chain(t->trailing_trivia);
     t->leading_trivia = NULL;
     t->trailing_trivia = NULL;
 }
@@ -225,13 +232,13 @@ TEST(collect_trivia_off_disables_trailing) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("L-06 trailing trivia attachment");
-    RUN_TEST(trailing_line_comment_same_line);
-    RUN_TEST(trailing_line_comment_after_horizontal_whitespace);
-    RUN_TEST(comment_after_newline_is_leading_of_next);
-    RUN_TEST(trailing_inline_block_comment_same_line);
-    RUN_TEST(multiline_block_comment_is_leading_of_next);
-    RUN_TEST(eof_token_never_has_trailing);
-    RUN_TEST(no_trailing_means_no_state_leak);
-    RUN_TEST(collect_trivia_off_disables_trailing);
+RUN_TEST_SUITE("L-06 trailing trivia attachment");
+RUN_TEST(trailing_line_comment_same_line);
+RUN_TEST(trailing_line_comment_after_horizontal_whitespace);
+RUN_TEST(comment_after_newline_is_leading_of_next);
+RUN_TEST(trailing_inline_block_comment_same_line);
+RUN_TEST(multiline_block_comment_is_leading_of_next);
+RUN_TEST(eof_token_never_has_trailing);
+RUN_TEST(no_trailing_means_no_state_leak);
+RUN_TEST(collect_trivia_off_disables_trailing);
 TEST_MAIN_END()

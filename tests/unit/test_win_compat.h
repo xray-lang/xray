@@ -31,4 +31,4 @@ static inline void xr_test_suppress_dialogs(void) {
 #endif
 }
 
-#endif // XR_TEST_WIN_COMPAT_H
+#endif  // XR_TEST_WIN_COMPAT_H

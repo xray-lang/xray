@@ -93,10 +93,10 @@ TEST(prelude_lookup_unknown_returns_null) {
 /* ========== Entry point ========== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("prelude/init");
-    RUN_TEST(prelude_field_populated_after_full_init);
-    RUN_TEST(prelude_get_symbols_accessor_returns_same_pointer);
-    RUN_TEST(prelude_get_symbols_handles_null_isolate);
-    RUN_TEST(prelude_table_skeleton_is_consistent);
-    RUN_TEST(prelude_lookup_unknown_returns_null);
+RUN_TEST_SUITE("prelude/init");
+RUN_TEST(prelude_field_populated_after_full_init);
+RUN_TEST(prelude_get_symbols_accessor_returns_same_pointer);
+RUN_TEST(prelude_get_symbols_handles_null_isolate);
+RUN_TEST(prelude_table_skeleton_is_consistent);
+RUN_TEST(prelude_lookup_unknown_returns_null);
 TEST_MAIN_END()

@@ -51,10 +51,13 @@ static void teardown(void) {
 // Walk a `let _ = <expr>` program down to the initializer expression.
 // Returns NULL if the shape is unexpected (caller should ASSERT).
 static AstNode *first_initializer(AstNode *program) {
-    if (!program || program->type != AST_PROGRAM) return NULL;
-    if (program->as.program.count < 1) return NULL;
+    if (!program || program->type != AST_PROGRAM)
+        return NULL;
+    if (program->as.program.count < 1)
+        return NULL;
     AstNode *stmt = program->as.program.statements[0];
-    if (!stmt || stmt->type != AST_VAR_DECL) return NULL;
+    if (!stmt || stmt->type != AST_VAR_DECL)
+        return NULL;
     return stmt->as.var_decl.initializer;
 }
 
@@ -62,7 +65,8 @@ static AstNode *first_initializer(AstNode *program) {
 // step fails; callers ASSERT on the return.
 static AstNode *format_and_reparse(AstNode *program) {
     char *formatted = xfmt_format_ast(program, &xfmt_default_config, X);
-    if (!formatted) return NULL;
+    if (!formatted)
+        return NULL;
     AstNode *reparsed = xr_parse(X, formatted);
     xr_free(formatted);
     return reparsed;
@@ -234,14 +238,14 @@ TEST(xfmt_string_control_byte_hex_escape) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("xfmt_literal - string round-trip");
-    RUN_TEST(xfmt_string_simple_ascii);
-    RUN_TEST(xfmt_string_embedded_quote);
-    RUN_TEST(xfmt_string_backslash_and_newline);
-    RUN_TEST(xfmt_string_control_byte_hex_escape);
+RUN_TEST_SUITE("xfmt_literal - string round-trip");
+RUN_TEST(xfmt_string_simple_ascii);
+RUN_TEST(xfmt_string_embedded_quote);
+RUN_TEST(xfmt_string_backslash_and_newline);
+RUN_TEST(xfmt_string_control_byte_hex_escape);
 
-    RUN_TEST_SUITE("xfmt_literal - template no backticks");
-    RUN_TEST(xfmt_template_no_backticks);
-    RUN_TEST(xfmt_template_dollar_escaped);
+RUN_TEST_SUITE("xfmt_literal - template no backticks");
+RUN_TEST(xfmt_template_no_backticks);
+RUN_TEST(xfmt_template_dollar_escaped);
 
 TEST_MAIN_END()

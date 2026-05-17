@@ -35,7 +35,7 @@ TEST(xml_element_new_basic) {
     ASSERT_NOT_NULL(node);
     ASSERT_EQ_INT(node->type, XR_XML_ELEMENT);
     ASSERT_NOT_NULL(node->tag);
-    ASSERT_EQ_INT((int)node->tag_len, 3);
+    ASSERT_EQ_INT((int) node->tag_len, 3);
     ASSERT_EQ_INT(strncmp(node->tag, "div", 3), 0);
     ASSERT_EQ_INT(node->child_count, 0);
     ASSERT_EQ_INT(node->attr_count, 0);
@@ -46,7 +46,7 @@ TEST(xml_element_new_long_tag) {
     const char *tag = "my-custom-element";
     XrXmlNode *node = xr_xml_element_new(tag, strlen(tag));
     ASSERT_NOT_NULL(node);
-    ASSERT_EQ_INT((int)node->tag_len, (int)strlen(tag));
+    ASSERT_EQ_INT((int) node->tag_len, (int) strlen(tag));
     xr_xml_node_free(node);
 }
 
@@ -57,7 +57,7 @@ TEST(xml_text_new_basic) {
     ASSERT_NOT_NULL(node);
     ASSERT_EQ_INT(node->type, XR_XML_TEXT);
     ASSERT_NOT_NULL(node->content);
-    ASSERT_EQ_INT((int)node->content_len, 11);
+    ASSERT_EQ_INT((int) node->content_len, 11);
     xr_xml_node_free(node);
 }
 
@@ -68,7 +68,7 @@ TEST(xml_comment_new_basic) {
     ASSERT_NOT_NULL(node);
     ASSERT_EQ_INT(node->type, XR_XML_COMMENT);
     ASSERT_NOT_NULL(node->content);
-    ASSERT_EQ_INT((int)node->content_len, 9);
+    ASSERT_EQ_INT((int) node->content_len, 9);
     xr_xml_node_free(node);
 }
 
@@ -78,7 +78,7 @@ TEST(xml_cdata_new_basic) {
     XrXmlNode *node = xr_xml_cdata_new("<raw>data</raw>", 15);
     ASSERT_NOT_NULL(node);
     ASSERT_EQ_INT(node->type, XR_XML_CDATA);
-    ASSERT_EQ_INT((int)node->content_len, 15);
+    ASSERT_EQ_INT((int) node->content_len, 15);
     xr_xml_node_free(node);
 }
 
@@ -194,31 +194,31 @@ TEST(xml_write_config_defaults) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("XML - Document");
-    RUN_TEST(xml_document_new);
+RUN_TEST_SUITE("XML - Document");
+RUN_TEST(xml_document_new);
 
-    RUN_TEST_SUITE("XML - Element");
-    RUN_TEST(xml_element_new_basic);
-    RUN_TEST(xml_element_new_long_tag);
+RUN_TEST_SUITE("XML - Element");
+RUN_TEST(xml_element_new_basic);
+RUN_TEST(xml_element_new_long_tag);
 
-    RUN_TEST_SUITE("XML - Text/Comment/CDATA");
-    RUN_TEST(xml_text_new_basic);
-    RUN_TEST(xml_comment_new_basic);
-    RUN_TEST(xml_cdata_new_basic);
+RUN_TEST_SUITE("XML - Text/Comment/CDATA");
+RUN_TEST(xml_text_new_basic);
+RUN_TEST(xml_comment_new_basic);
+RUN_TEST(xml_cdata_new_basic);
 
-    RUN_TEST_SUITE("XML - Append Child");
-    RUN_TEST(xml_append_child_single);
-    RUN_TEST(xml_append_child_multiple);
+RUN_TEST_SUITE("XML - Append Child");
+RUN_TEST(xml_append_child_single);
+RUN_TEST(xml_append_child_multiple);
 
-    RUN_TEST_SUITE("XML - Attributes");
-    RUN_TEST(xml_set_attr_single);
-    RUN_TEST(xml_set_attr_multiple);
+RUN_TEST_SUITE("XML - Attributes");
+RUN_TEST(xml_set_attr_single);
+RUN_TEST(xml_set_attr_multiple);
 
-    RUN_TEST_SUITE("XML - Deep Tree");
-    RUN_TEST(xml_deep_tree);
+RUN_TEST_SUITE("XML - Deep Tree");
+RUN_TEST(xml_deep_tree);
 
-    RUN_TEST_SUITE("XML - Config");
-    RUN_TEST(xml_parse_config_defaults);
-    RUN_TEST(xml_write_config_defaults);
+RUN_TEST_SUITE("XML - Config");
+RUN_TEST(xml_parse_config_defaults);
+RUN_TEST(xml_write_config_defaults);
 
 TEST_MAIN_END()

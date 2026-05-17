@@ -126,19 +126,19 @@ TEST(log_warning_level_filters_lower) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Log - Level Configuration");
-    RUN_TEST(log_default_level);
-    RUN_TEST(log_set_get_level);
-    RUN_TEST(log_level_enum_order);
+RUN_TEST_SUITE("Log - Level Configuration");
+RUN_TEST(log_default_level);
+RUN_TEST(log_set_get_level);
+RUN_TEST(log_level_enum_order);
 
-    RUN_TEST_SUITE("Log - Output (no crash)");
-    RUN_TEST(log_debug_no_crash);
-    RUN_TEST(log_verbose_no_crash);
-    RUN_TEST(log_notice_no_crash);
-    RUN_TEST(log_warning_no_crash);
+RUN_TEST_SUITE("Log - Output (no crash)");
+RUN_TEST(log_debug_no_crash);
+RUN_TEST(log_verbose_no_crash);
+RUN_TEST(log_notice_no_crash);
+RUN_TEST(log_warning_no_crash);
 
-    RUN_TEST_SUITE("Log - Suppression");
-    RUN_TEST(log_silent_suppresses_all);
-    RUN_TEST(log_warning_level_filters_lower);
+RUN_TEST_SUITE("Log - Suppression");
+RUN_TEST(log_silent_suppresses_all);
+RUN_TEST(log_warning_level_filters_lower);
 
 TEST_MAIN_END()

@@ -176,8 +176,8 @@ TEST(semver_compare_prerelease_numeric) {
 
 TEST(semver_compare_no_overflow) {
     // Regression test for integer overflow in compare
-    XrSemVer a = { .major = 2147483647, .minor = 0, .patch = 0 };
-    XrSemVer b = { .major = 0, .minor = 0, .patch = 0 };
+    XrSemVer a = {.major = 2147483647, .minor = 0, .patch = 0};
+    XrSemVer b = {.major = 0, .minor = 0, .patch = 0};
     ASSERT_GT(xr_semver_compare(&a, &b), 0);
     ASSERT_LT(xr_semver_compare(&b, &a), 0);
 }
@@ -373,7 +373,8 @@ TEST(semver_select_best) {
     int best = xr_semver_select_best(versions, 4, &c);
     ASSERT_EQ_INT(best, 2);  // 1.5.0 is best match for ^1.0.0
 
-    for (int i = 0; i < 4; i++) xr_semver_free(&versions[i]);
+    for (int i = 0; i < 4; i++)
+        xr_semver_free(&versions[i]);
     xr_constraint_free(&c);
 }
 
@@ -388,7 +389,8 @@ TEST(semver_select_best_no_match) {
     int best = xr_semver_select_best(versions, 2, &c);
     ASSERT_EQ_INT(best, -1);
 
-    for (int i = 0; i < 2; i++) xr_semver_free(&versions[i]);
+    for (int i = 0; i < 2; i++)
+        xr_semver_free(&versions[i]);
     xr_constraint_free(&c);
 }
 
@@ -396,52 +398,52 @@ TEST(semver_select_best_no_match) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("SemVer Parsing");
-    RUN_TEST(semver_parse_basic);
-    RUN_TEST(semver_parse_with_v_prefix);
-    RUN_TEST(semver_parse_with_prerelease);
-    RUN_TEST(semver_parse_with_build);
-    RUN_TEST(semver_parse_with_prerelease_and_build);
-    RUN_TEST(semver_parse_major_only);
-    RUN_TEST(semver_parse_major_minor_only);
-    RUN_TEST(semver_parse_zero);
-    RUN_TEST(semver_parse_invalid_leading_zero);
-    RUN_TEST(semver_parse_invalid_empty);
-    RUN_TEST(semver_parse_invalid_null);
-    RUN_TEST(semver_parse_invalid_trailing);
-    RUN_TEST(semver_is_valid);
+RUN_TEST_SUITE("SemVer Parsing");
+RUN_TEST(semver_parse_basic);
+RUN_TEST(semver_parse_with_v_prefix);
+RUN_TEST(semver_parse_with_prerelease);
+RUN_TEST(semver_parse_with_build);
+RUN_TEST(semver_parse_with_prerelease_and_build);
+RUN_TEST(semver_parse_major_only);
+RUN_TEST(semver_parse_major_minor_only);
+RUN_TEST(semver_parse_zero);
+RUN_TEST(semver_parse_invalid_leading_zero);
+RUN_TEST(semver_parse_invalid_empty);
+RUN_TEST(semver_parse_invalid_null);
+RUN_TEST(semver_parse_invalid_trailing);
+RUN_TEST(semver_is_valid);
 
-    RUN_TEST_SUITE("SemVer Comparison");
-    RUN_TEST(semver_compare_equal);
-    RUN_TEST(semver_compare_major);
-    RUN_TEST(semver_compare_minor);
-    RUN_TEST(semver_compare_patch);
-    RUN_TEST(semver_compare_prerelease_vs_release);
-    RUN_TEST(semver_compare_prerelease_numeric);
-    RUN_TEST(semver_compare_no_overflow);
+RUN_TEST_SUITE("SemVer Comparison");
+RUN_TEST(semver_compare_equal);
+RUN_TEST(semver_compare_major);
+RUN_TEST(semver_compare_minor);
+RUN_TEST(semver_compare_patch);
+RUN_TEST(semver_compare_prerelease_vs_release);
+RUN_TEST(semver_compare_prerelease_numeric);
+RUN_TEST(semver_compare_no_overflow);
 
-    RUN_TEST_SUITE("SemVer to String");
-    RUN_TEST(semver_to_string_basic);
-    RUN_TEST(semver_to_string_with_prerelease);
+RUN_TEST_SUITE("SemVer to String");
+RUN_TEST(semver_to_string_basic);
+RUN_TEST(semver_to_string_with_prerelease);
 
-    RUN_TEST_SUITE("Constraint Parsing");
-    RUN_TEST(constraint_parse_caret);
-    RUN_TEST(constraint_parse_tilde);
-    RUN_TEST(constraint_parse_ge);
-    RUN_TEST(constraint_parse_any);
-    RUN_TEST(constraint_parse_any_with_trailing_rejected);
-    RUN_TEST(constraint_parse_exact);
+RUN_TEST_SUITE("Constraint Parsing");
+RUN_TEST(constraint_parse_caret);
+RUN_TEST(constraint_parse_tilde);
+RUN_TEST(constraint_parse_ge);
+RUN_TEST(constraint_parse_any);
+RUN_TEST(constraint_parse_any_with_trailing_rejected);
+RUN_TEST(constraint_parse_exact);
 
-    RUN_TEST_SUITE("Constraint Matching");
-    RUN_TEST(constraint_match_caret_major);
-    RUN_TEST(constraint_match_caret_zero_minor);
-    RUN_TEST(constraint_match_caret_zero_zero);
-    RUN_TEST(constraint_match_tilde);
-    RUN_TEST(constraint_match_any);
-    RUN_TEST(constraint_match_ge);
+RUN_TEST_SUITE("Constraint Matching");
+RUN_TEST(constraint_match_caret_major);
+RUN_TEST(constraint_match_caret_zero_minor);
+RUN_TEST(constraint_match_caret_zero_zero);
+RUN_TEST(constraint_match_tilde);
+RUN_TEST(constraint_match_any);
+RUN_TEST(constraint_match_ge);
 
-    RUN_TEST_SUITE("Select Best Version");
-    RUN_TEST(semver_select_best);
-    RUN_TEST(semver_select_best_no_match);
+RUN_TEST_SUITE("Select Best Version");
+RUN_TEST(semver_select_best);
+RUN_TEST(semver_select_best_no_match);
 
 TEST_MAIN_END()

@@ -14,11 +14,11 @@
 #include <assert.h>
 
 /* Minimal XrType stubs for testing without an isolate */
-static XrType stub_int  = { .kind = XR_KIND_INT,   .id = 1, .frozen = true };
-static XrType stub_float = { .kind = XR_KIND_FLOAT, .id = 2, .frozen = true };
-static XrType stub_bool = { .kind = XR_KIND_BOOL,  .id = 3, .frozen = true };
-static XrType stub_null = { .kind = XR_KIND_NULL,  .id = 4, .frozen = true };
-static XrType stub_str  = { .kind = XR_KIND_STRING,.id = 5, .frozen = true };
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
+static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
+static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 
 /* Test 1: fn add(a: int, b: int) -> int { return a + b } */
 static void test_simple_add(void) {

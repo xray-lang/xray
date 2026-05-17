@@ -32,9 +32,8 @@ TEST(lockfile_add_package) {
     XrLockfile *lock = xr_lockfile_new();
     ASSERT_NOT_NULL(lock);
 
-    bool ok = xr_lockfile_add_package(lock, "xray/redis", "1.2.3",
-                                       "https://pkg.xray-lang.org/xray/redis/1.2.3",
-                                       "sha256:abc123");
+    bool ok = xr_lockfile_add_package(
+        lock, "xray/redis", "1.2.3", "https://pkg.xray-lang.org/xray/redis/1.2.3", "sha256:abc123");
     ASSERT_TRUE(ok);
     ASSERT_EQ_INT(lock->package_count, 1);
 
@@ -125,8 +124,7 @@ TEST(lockfile_save_and_load) {
     // Create and save
     XrLockfile *lock = xr_lockfile_new();
     xr_lockfile_add_package(lock, "xray/redis", "1.2.3",
-                            "https://pkg.xray-lang.org/dl/redis-1.2.3.tar.gz",
-                            "sha256:deadbeef");
+                            "https://pkg.xray-lang.org/dl/redis-1.2.3.tar.gz", "sha256:deadbeef");
     xr_lockfile_add_dependency(lock, "xray/redis", "xray/net@^1.0.0");
 
     xr_lockfile_add_package(lock, "xray/http", "2.0.0", "", "");
@@ -199,20 +197,20 @@ TEST(lockfile_many_packages) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Lockfile Creation");
-    RUN_TEST(lockfile_new);
-    RUN_TEST(lockfile_add_package);
-    RUN_TEST(lockfile_add_duplicate_updates);
-    RUN_TEST(lockfile_has);
-    RUN_TEST(lockfile_remove);
-    RUN_TEST(lockfile_add_dependency);
+RUN_TEST_SUITE("Lockfile Creation");
+RUN_TEST(lockfile_new);
+RUN_TEST(lockfile_add_package);
+RUN_TEST(lockfile_add_duplicate_updates);
+RUN_TEST(lockfile_has);
+RUN_TEST(lockfile_remove);
+RUN_TEST(lockfile_add_dependency);
 
-    RUN_TEST_SUITE("Lockfile Save/Load");
-    RUN_TEST(lockfile_save_and_load);
-    RUN_TEST(lockfile_load_nonexistent);
+RUN_TEST_SUITE("Lockfile Save/Load");
+RUN_TEST(lockfile_save_and_load);
+RUN_TEST(lockfile_load_nonexistent);
 
-    RUN_TEST_SUITE("Lockfile Edge Cases");
-    RUN_TEST(lockfile_null_args);
-    RUN_TEST(lockfile_many_packages);
+RUN_TEST_SUITE("Lockfile Edge Cases");
+RUN_TEST(lockfile_null_args);
+RUN_TEST(lockfile_many_packages);
 
 TEST_MAIN_END()

@@ -51,20 +51,22 @@ static void teardown_pool(void) {
 }
 
 #define TEST(name) static void test_##name(void)
-#define RUN_TEST(name) do { \
-    printf("  Running %s... ", #name); \
-    test_##name(); \
-    printf("PASSED\n"); \
-    tests_passed++; \
-} while(0)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Running %s... ", #name);                                                         \
+        test_##name();                                                                             \
+        printf("PASSED\n");                                                                        \
+        tests_passed++;                                                                            \
+    } while (0)
 
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf("FAILED at %s:%d: %s\n", __FILE__, __LINE__, #cond); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAILED at %s:%d: %s\n", __FILE__, __LINE__, #cond);                            \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 // ============================================================================
 // Type tests
@@ -106,11 +108,9 @@ TEST(type_containers) {
     ASSERT(XR_TYPE_IS_MAP(map));
     ASSERT(map->map.key_type == key);
     ASSERT(map->map.value_type == val);
-
 }
 
 TEST(type_union) {
-
     // Test 1: T | null = T? (nullable type)
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_null = xr_type_new_null(NULL);
@@ -129,7 +129,6 @@ TEST(type_union) {
     XrType *t_int2 = xr_type_new_int(NULL);
     XrType *same = xr_type_union(g_isolate, t_int, t_int2);
     ASSERT(XR_TYPE_IS_INT(same));
-
 }
 
 TEST(type_assignable) {
@@ -191,7 +190,6 @@ TEST(type_to_string) {
 
     ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
-
 }
 
 TEST(type_narrowing) {
@@ -207,7 +205,6 @@ TEST(type_narrowing) {
     // Exclude null
     XrType *non_null = xr_type_non_nullable(g_isolate, u);
     ASSERT(XR_TYPE_IS_INT(non_null));
-
 }
 
 // ============================================================================
@@ -259,7 +256,6 @@ TEST(scope_lookup) {
     xa_scope_free(global);
 }
 
-
 // ============================================================================
 // Analyzer tests
 // ============================================================================
@@ -277,8 +273,9 @@ TEST(analyzer_create) {
 TEST(analyzer_diagnostics) {
     XaAnalyzer *a = xa_analyzer_new(g_isolate);
 
-    XrLocation loc = { .file = "test.xr", .line = 10, .column = 5 };
-    xa_analyzer_add_diagnostic(a, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR, "Test error", &loc);
+    XrLocation loc = {.file = "test.xr", .line = 10, .column = 5};
+    xa_analyzer_add_diagnostic(a, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNDEFINED_VAR, "Test error",
+                               &loc);
 
     int count;
     XaDiagnostic *diags = xa_analyzer_get_diagnostics(a, &count);
@@ -412,7 +409,6 @@ TEST(narrow_by_typeof) {
     // NOTE: 'any' type is a special marker type (XR_KIND_ANY flag only),
     // not a union of all types. Typeof narrowing on 'any' returns 'never'
     // because any doesn't have specific type flags.
-
 }
 
 TEST(narrow_by_null) {
@@ -439,7 +435,6 @@ TEST(narrow_by_null) {
     // For nullable int, non-null part should be int
     ASSERT(XR_TYPE_IS_INT(not_null));
     ASSERT(!not_null->is_nullable);
-
 }
 
 // ============================================================================
@@ -465,7 +460,7 @@ TEST(type_function_complex) {
     XrType *param2 = xr_type_new_string(NULL);
     XrType *ret = xr_type_new_array(g_isolate, xr_type_new_int(NULL));
 
-    XrType *params[] = { param1, param2 };
+    XrType *params[] = {param1, param2};
     XrType *fn = xr_type_new_function(g_isolate, params, 2, ret, false);
 
     ASSERT(XR_TYPE_IS_FUNCTION(fn));
@@ -473,7 +468,6 @@ TEST(type_function_complex) {
     ASSERT(XR_TYPE_IS_INT(fn->function.param_types[0]));
     ASSERT(XR_TYPE_IS_STRING(fn->function.param_types[1]));
     ASSERT(XR_TYPE_IS_ARRAY(fn->function.return_type));
-
 }
 
 TEST(type_void_never) {
@@ -488,9 +482,9 @@ TEST(type_void_never) {
 }
 
 TEST(type_rejects_invalid_counts) {
-    XrType *param_types[] = { xr_type_new_int(NULL) };
-    const char *field_names[] = { "value" };
-    XrType *field_types[] = { xr_type_new_string(NULL) };
+    XrType *param_types[] = {xr_type_new_int(NULL)};
+    const char *field_names[] = {"value"};
+    XrType *field_types[] = {xr_type_new_string(NULL)};
 
     ASSERT(xr_type_new_function(g_isolate, param_types, -1, xr_type_new_void(NULL), false) == NULL);
     ASSERT(xr_type_new_function(g_isolate, NULL, 1, xr_type_new_void(NULL), false) == NULL);
@@ -502,11 +496,11 @@ TEST(type_rejects_invalid_counts) {
 }
 
 TEST(type_function_copy_preserves_metadata) {
-    XrType *param_types[] = { xr_type_new_int(NULL), xr_type_new_string(NULL) };
+    XrType *param_types[] = {xr_type_new_int(NULL), xr_type_new_string(NULL)};
     XrType *fn = xr_type_new_function(g_isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(fn != NULL);
 
-    uint8_t modes[] = { XR_PARAM_IN, XR_PARAM_REF };
+    uint8_t modes[] = {XR_PARAM_IN, XR_PARAM_REF};
     fn->function.min_params = 1;
     fn->function.param_passing_modes = modes;
 
@@ -612,7 +606,8 @@ TEST(compile_type_containers) {
     ASSERT(XR_TYPE_IS_INT(arr->container.element_type));
 
     // Map<string, int> using new API
-    XrType *map = xr_type_new_map(g_analyzer->isolate, xr_type_new_string(NULL), xr_type_new_int(NULL));
+    XrType *map =
+        xr_type_new_map(g_analyzer->isolate, xr_type_new_string(NULL), xr_type_new_int(NULL));
     ASSERT(XR_TYPE_IS_MAP(map));
     ASSERT(XR_TYPE_IS_STRING(map->map.key_type));
     ASSERT(XR_TYPE_IS_INT(map->map.value_type));
@@ -620,8 +615,9 @@ TEST(compile_type_containers) {
 
 TEST(compile_type_function) {
     // fn(int, string): bool using new API
-    XrType *param_types[] = { xr_type_new_int(NULL), xr_type_new_string(NULL) };
-    XrType *fn = xr_type_new_function(g_analyzer->isolate, param_types, 2, xr_type_new_bool(NULL), false);
+    XrType *param_types[] = {xr_type_new_int(NULL), xr_type_new_string(NULL)};
+    XrType *fn =
+        xr_type_new_function(g_analyzer->isolate, param_types, 2, xr_type_new_bool(NULL), false);
     ASSERT(XR_TYPE_IS_FUNCTION(fn));
     ASSERT(fn->function.param_count == 2);
     ASSERT(XR_TYPE_IS_INT(fn->function.param_types[0]));
@@ -693,7 +689,6 @@ TEST(deeply_nested_types) {
     const char *str = xr_type_to_string(outer_arr);
     ASSERT(str != NULL);
     ASSERT(strstr(str, "Array") != NULL);
-
 }
 
 TEST(union_type_dedup) {

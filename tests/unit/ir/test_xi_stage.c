@@ -22,8 +22,8 @@
 #include <assert.h>
 
 /* Minimal XrType stubs */
-static XrType stub_int  = { .kind = XR_KIND_INT,  .id = 1, .frozen = true };
-static XrType stub_void = { .kind = XR_KIND_NULL, .id = 2, .frozen = true };
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_void = {.kind = XR_KIND_NULL, .id = 2, .frozen = true};
 
 /* ========== Test 1: XiStage enum and names ========== */
 
@@ -49,7 +49,7 @@ static void test_stage_enum(void) {
 
     /* Out-of-range returns "?" */
     assert(strcmp(xi_stage_name(XI_STAGE_COUNT), "?") == 0);
-    assert(strcmp(xi_stage_name((XiStage)99), "?") == 0);
+    assert(strcmp(xi_stage_name((XiStage) 99), "?") == 0);
 
     printf("  PASS\n");
 }
@@ -97,8 +97,8 @@ static void test_stage_after_lowering(void) {
      * The full lowering path is tested by test_xi_pipeline. */
     printf("  (stage-after-lowering verified by test_xi_pipeline)\n");
     printf("  PASS\n");
-    (void)source;
-    (void)cfg;
+    (void) source;
+    (void) cfg;
 }
 
 /* ========== Test 4: XiPassDesc stage fields ========== */

@@ -43,9 +43,10 @@
  * matter; xr_vm_proto_write just appends to the dynarray. */
 static XrProto *make_proto_with_insts(int n_insts) {
     XrProto *p = xr_vm_proto_new();
-    if (!p) return NULL;
+    if (!p)
+        return NULL;
     for (int i = 0; i < n_insts; i++) {
-        xr_vm_proto_write(p, (XrInstruction)0, 1);
+        xr_vm_proto_write(p, (XrInstruction) 0, 1);
     }
     return p;
 }
@@ -79,7 +80,8 @@ TEST(proto_id_is_unique_and_monotonic) {
 /* ========== Lazy allocation ========== */
 
 TEST(ensure_field_lazy_alloc_is_idempotent) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(4);
     ASSERT_NOT_NULL(p);
 
@@ -96,7 +98,8 @@ TEST(ensure_field_lazy_alloc_is_idempotent) {
 }
 
 TEST(ensure_method_lazy_alloc_is_idempotent) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(3);
     ASSERT_NOT_NULL(p);
 
@@ -112,7 +115,8 @@ TEST(ensure_method_lazy_alloc_is_idempotent) {
 }
 
 TEST(ensure_builtin_lazy_alloc_is_idempotent) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(5);
     ASSERT_NOT_NULL(p);
 
@@ -125,8 +129,8 @@ TEST(ensure_builtin_lazy_alloc_is_idempotent) {
     /* All slots must start empty (slot==NULL is the sentinel). */
     for (int i = 0; i < t1->count; i++) {
         ASSERT(t1->caches[i].fn == NULL);
-        ASSERT_EQ_INT((int)t1->caches[i].hits, 0);
-        ASSERT_EQ_INT((int)t1->caches[i].misses, 0);
+        ASSERT_EQ_INT((int) t1->caches[i].hits, 0);
+        ASSERT_EQ_INT((int) t1->caches[i].misses, 0);
     }
 
     XrICBuiltinTable *t2 = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
@@ -139,7 +143,8 @@ TEST(ensure_builtin_lazy_alloc_is_idempotent) {
 /* ========== Read-side accessors ========== */
 
 TEST(get_returns_null_before_ensure) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(2);
 
     ASSERT(xr_vm_ctx_get_ic_fields(&ctx, p) == NULL);
@@ -150,7 +155,8 @@ TEST(get_returns_null_before_ensure) {
 }
 
 TEST(get_returns_table_after_ensure) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(2);
 
     XrICFieldTable *fe = xr_vm_ctx_ensure_ic_fields(&ctx, p);
@@ -170,29 +176,35 @@ TEST(capacity_grows_for_high_proto_id) {
     /* Burn some proto_ids so the next proto's id is well above the
      * default initial capacity (16). The IC subsystem must grow its
      * indexing arrays to accommodate the higher id. */
-    enum { BURN = 32 };
+    enum {
+        BURN = 32
+    };
     XrProto *burn[BURN];
-    for (int i = 0; i < BURN; i++) burn[i] = make_proto_with_insts(1);
+    for (int i = 0; i < BURN; i++)
+        burn[i] = make_proto_with_insts(1);
 
     XrProto *high = make_proto_with_insts(1);
     ASSERT_NOT_NULL(high);
-    ASSERT(high->proto_id >= BURN);  /* sanity: process-global counter advanced */
+    ASSERT(high->proto_id >= BURN); /* sanity: process-global counter advanced */
 
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrICFieldTable *t = xr_vm_ctx_ensure_ic_fields(&ctx, high);
     ASSERT_NOT_NULL(t);
     /* capacity must cover the high proto_id slot */
     ASSERT(ctx.ic_tables_capacity > high->proto_id);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    for (int i = 0; i < BURN; i++) xr_vm_proto_free(burn[i]);
+    for (int i = 0; i < BURN; i++)
+        xr_vm_proto_free(burn[i]);
     xr_vm_proto_free(high);
 }
 
 /* ========== Multi-proto isolation in one ctx ========== */
 
 TEST(multi_proto_isolation_within_ctx) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *a = make_proto_with_insts(2);
     XrProto *b = make_proto_with_insts(2);
 
@@ -207,7 +219,7 @@ TEST(multi_proto_isolation_within_ctx) {
     fa->caches[0].state = XR_IC_FIELD_MONO;
 
     ASSERT_EQ_INT(fb->caches[0].cached_symbol, -1);
-    ASSERT_EQ_INT((int)fb->caches[0].state, (int)XR_IC_FIELD_UNINIT);
+    ASSERT_EQ_INT((int) fb->caches[0].state, (int) XR_IC_FIELD_UNINIT);
 
     xr_vm_ctx_free_ic_tables(&ctx);
     xr_vm_proto_free(a);
@@ -228,30 +240,30 @@ TEST(builtin_cache_is_sticky_first_write_wins) {
     XrICBuiltin ic = {0};
 
     /* First write: empty -> filled. */
-    XrPrimitiveMethodFn fake_fn_a = (XrPrimitiveMethodFn)(uintptr_t)0xDEAD;
+    XrPrimitiveMethodFn fake_fn_a = (XrPrimitiveMethodFn) (uintptr_t) 0xDEAD;
     ic.fn = fake_fn_a;
-    ic.cached_tid = (int16_t)XR_TID_STRING;
+    ic.cached_tid = (int16_t) XR_TID_STRING;
 
     /* Subsequent miss against a different type must NOT overwrite. */
-    if (!ic.fn) { /* deliberately false; keep the same shape as the
-                     dispatcher to make the invariant obvious. */
+    if (!ic.fn) {     /* deliberately false; keep the same shape as the
+                         dispatcher to make the invariant obvious. */
         ic.fn = NULL; /* unreachable */
     }
     /* Mismatch path the dispatcher takes: increments misses, leaves
      * fn untouched. */
-    if (ic.fn && ic.cached_tid != (int16_t)XR_TID_INT) {
+    if (ic.fn && ic.cached_tid != (int16_t) XR_TID_INT) {
         ic.misses++;
     }
     ASSERT(ic.fn == fake_fn_a);
-    ASSERT_EQ_INT((int)ic.cached_tid, (int)XR_TID_STRING);
-    ASSERT_EQ_INT((int)ic.misses, 1);
+    ASSERT_EQ_INT((int) ic.cached_tid, (int) XR_TID_STRING);
+    ASSERT_EQ_INT((int) ic.misses, 1);
 
     /* Hits on the cached type bump hits, never replace the fn. */
-    if (ic.fn && ic.cached_tid == (int16_t)XR_TID_STRING) {
+    if (ic.fn && ic.cached_tid == (int16_t) XR_TID_STRING) {
         ic.hits++;
     }
     ASSERT(ic.fn == fake_fn_a);
-    ASSERT_EQ_INT((int)ic.hits, 1);
+    ASSERT_EQ_INT((int) ic.hits, 1);
 }
 
 TEST(builtin_table_alloc_grows_capacity) {
@@ -283,7 +295,8 @@ TEST(builtin_table_alloc_grows_capacity) {
 /* ========== Snapshot semantics ========== */
 
 TEST(snapshot_returns_null_before_ensure) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(2);
 
     ASSERT(xr_vm_ic_fields_snapshot(&ctx, p) == NULL);
@@ -293,7 +306,8 @@ TEST(snapshot_returns_null_before_ensure) {
 }
 
 TEST(snapshot_field_is_deep_copy) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(3);
 
     XrICFieldTable *live = xr_vm_ctx_ensure_ic_fields(&ctx, p);
@@ -311,7 +325,7 @@ TEST(snapshot_field_is_deep_copy) {
     ASSERT(snap->caches != live->caches);
     ASSERT_EQ_INT(snap->count, live->count);
     ASSERT_EQ_INT(snap->caches[0].cached_symbol, 42);
-    ASSERT_EQ_INT((int)snap->caches[0].state, (int)XR_IC_FIELD_MONO);
+    ASSERT_EQ_INT((int) snap->caches[0].state, (int) XR_IC_FIELD_MONO);
     ASSERT_EQ_INT(snap->caches[1].cached_symbol, 0x0BAD);
 
     /* Mutating the live table after snapshot must not bleed into the
@@ -319,7 +333,7 @@ TEST(snapshot_field_is_deep_copy) {
     live->caches[0].cached_symbol = 9999;
     live->caches[0].state = XR_IC_FIELD_MEGA;
     ASSERT_EQ_INT(snap->caches[0].cached_symbol, 42);
-    ASSERT_EQ_INT((int)snap->caches[0].state, (int)XR_IC_FIELD_MONO);
+    ASSERT_EQ_INT((int) snap->caches[0].state, (int) XR_IC_FIELD_MONO);
 
     /* Freeing the snapshot must not invalidate the live table. */
     xr_ic_field_table_free(snap);
@@ -330,7 +344,8 @@ TEST(snapshot_field_is_deep_copy) {
 }
 
 TEST(snapshot_method_deep_copies_mega_cache) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(2);
 
     XrICMethodTable *live = xr_vm_ctx_ensure_ic_methods(&ctx, p);
@@ -339,10 +354,10 @@ TEST(snapshot_method_deep_copies_mega_cache) {
     /* Attach a fake mega cache to slot 0. The IC code only inspects
      * keys/values pointers, never dereferences them, so synthetic
      * non-NULL sentinels are fine for the deep-copy test. */
-    XrMegaCache *mc = (XrMegaCache *)xr_calloc(1, sizeof(XrMegaCache));
+    XrMegaCache *mc = (XrMegaCache *) xr_calloc(1, sizeof(XrMegaCache));
     ASSERT_NOT_NULL(mc);
-    mc->keys[0] = (struct XrClass *)(uintptr_t)0xC1A55;
-    mc->values[1] = (struct XrMethod *)(uintptr_t)0xBEEF;
+    mc->keys[0] = (struct XrClass *) (uintptr_t) 0xC1A55;
+    mc->values[1] = (struct XrMethod *) (uintptr_t) 0xBEEF;
     live->caches[0].mega_cache = mc;
     live->caches[0].is_megamorphic = 1;
     live->caches[0].count = 1;
@@ -356,20 +371,17 @@ TEST(snapshot_method_deep_copies_mega_cache) {
 
     /* Per-slot scalar fields are copied. */
     ASSERT_EQ_INT(snap->caches[0].is_megamorphic, 1);
-    ASSERT_EQ_INT((int)snap->caches[0].total_count, 7);
+    ASSERT_EQ_INT((int) snap->caches[0].total_count, 7);
 
     /* mega_cache must be a separately-allocated copy. */
     ASSERT_NOT_NULL(snap->caches[0].mega_cache);
     ASSERT(snap->caches[0].mega_cache != live->caches[0].mega_cache);
-    ASSERT(snap->caches[0].mega_cache->keys[0] ==
-           (struct XrClass *)(uintptr_t)0xC1A55);
-    ASSERT(snap->caches[0].mega_cache->values[1] ==
-           (struct XrMethod *)(uintptr_t)0xBEEF);
+    ASSERT(snap->caches[0].mega_cache->keys[0] == (struct XrClass *) (uintptr_t) 0xC1A55);
+    ASSERT(snap->caches[0].mega_cache->values[1] == (struct XrMethod *) (uintptr_t) 0xBEEF);
 
     /* Mutate live's mega; snapshot's mega must stay put. */
-    live->caches[0].mega_cache->keys[0] = (struct XrClass *)(uintptr_t)0xDEAD;
-    ASSERT(snap->caches[0].mega_cache->keys[0] ==
-           (struct XrClass *)(uintptr_t)0xC1A55);
+    live->caches[0].mega_cache->keys[0] = (struct XrClass *) (uintptr_t) 0xDEAD;
+    ASSERT(snap->caches[0].mega_cache->keys[0] == (struct XrClass *) (uintptr_t) 0xC1A55);
 
     /* xr_ic_method_table_free walks every entry and frees its
      * mega_cache, so destroying the snapshot also reclaims the
@@ -390,35 +402,36 @@ TEST(snapshot_builtin_is_deep_copy) {
      * the JIT builder reads stable type feedback even when the live
      * VM continues mutating the cache during background compile.
      */
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *p = make_proto_with_insts(3);
 
     XrICBuiltinTable *live = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
     ASSERT_NOT_NULL(live);
 
     /* Seed two slots so we can detect both copies and isolation. */
-    XrPrimitiveMethodFn fake_fn = (XrPrimitiveMethodFn)(uintptr_t)0xCAFE;
-    live->caches[0].fn         = fake_fn;
+    XrPrimitiveMethodFn fake_fn = (XrPrimitiveMethodFn) (uintptr_t) 0xCAFE;
+    live->caches[0].fn = fake_fn;
     live->caches[0].cached_tid = 7;
-    live->caches[0].hits       = 42;
-    live->caches[1].fn         = fake_fn;
+    live->caches[0].hits = 42;
+    live->caches[1].fn = fake_fn;
     live->caches[1].cached_tid = 9;
-    live->caches[1].hits       = 1;
+    live->caches[1].hits = 1;
 
     XrICBuiltinTable *snap = xr_vm_ic_builtin_snapshot(&ctx, p);
     ASSERT_NOT_NULL(snap);
     ASSERT(snap != live);
     ASSERT(snap->caches != live->caches);
     ASSERT_EQ_INT(snap->count, live->count);
-    ASSERT_EQ_INT((int)snap->caches[0].cached_tid, 7);
-    ASSERT_EQ_INT((int)snap->caches[0].hits, 42);
-    ASSERT_EQ_INT((int)snap->caches[1].cached_tid, 9);
+    ASSERT_EQ_INT((int) snap->caches[0].cached_tid, 7);
+    ASSERT_EQ_INT((int) snap->caches[0].hits, 42);
+    ASSERT_EQ_INT((int) snap->caches[1].cached_tid, 9);
 
     /* Mutate the live table; snapshot must remain unchanged. */
     live->caches[0].cached_tid = -1;
-    live->caches[0].hits       = 0;
-    ASSERT_EQ_INT((int)snap->caches[0].cached_tid, 7);
-    ASSERT_EQ_INT((int)snap->caches[0].hits, 42);
+    live->caches[0].hits = 0;
+    ASSERT_EQ_INT((int) snap->caches[0].cached_tid, 7);
+    ASSERT_EQ_INT((int) snap->caches[0].hits, 42);
 
     xr_ic_builtin_table_free(snap);
     xr_vm_ctx_free_ic_tables(&ctx);
@@ -428,7 +441,8 @@ TEST(snapshot_builtin_is_deep_copy) {
 /* ========== Free / reuse ========== */
 
 TEST(free_ic_tables_resets_state_and_supports_reuse) {
-    XrVMContext ctx; ctx_zero(&ctx);
+    XrVMContext ctx;
+    ctx_zero(&ctx);
     XrProto *a = make_proto_with_insts(2);
     XrProto *b = make_proto_with_insts(5);
 
@@ -438,7 +452,7 @@ TEST(free_ic_tables_resets_state_and_supports_reuse) {
     ASSERT(ctx.ic_tables_capacity > 0);
 
     xr_vm_ctx_free_ic_tables(&ctx);
-    ASSERT_EQ_INT((int)ctx.ic_tables_capacity, 0);
+    ASSERT_EQ_INT((int) ctx.ic_tables_capacity, 0);
     ASSERT(ctx.ic_field_tables == NULL);
     ASSERT(ctx.ic_method_tables == NULL);
     ASSERT(ctx.ic_builtin_tables == NULL);
@@ -458,8 +472,10 @@ TEST(free_ic_tables_resets_state_and_supports_reuse) {
 /* ========== Multi-context isolation ========== */
 
 TEST(two_contexts_keep_ic_state_independent) {
-    XrVMContext ctx_a; ctx_zero(&ctx_a);
-    XrVMContext ctx_b; ctx_zero(&ctx_b);
+    XrVMContext ctx_a;
+    ctx_zero(&ctx_a);
+    XrVMContext ctx_b;
+    ctx_zero(&ctx_b);
     XrProto *p = make_proto_with_insts(2);
 
     XrICFieldTable *fa = xr_vm_ctx_ensure_ic_fields(&ctx_a, p);
@@ -473,7 +489,7 @@ TEST(two_contexts_keep_ic_state_independent) {
     fa->caches[0].cached_symbol = 1111;
     fa->caches[0].state = XR_IC_FIELD_MONO;
     ASSERT_EQ_INT(fb->caches[0].cached_symbol, -1);
-    ASSERT_EQ_INT((int)fb->caches[0].state, (int)XR_IC_FIELD_UNINIT);
+    ASSERT_EQ_INT((int) fb->caches[0].state, (int) XR_IC_FIELD_UNINIT);
 
     fb->caches[1].cached_symbol = 2222;
     ASSERT_EQ_INT(fa->caches[1].cached_symbol, -1);
@@ -486,37 +502,37 @@ TEST(two_contexts_keep_ic_state_independent) {
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("XrProto.proto_id contract");
-    RUN_TEST(proto_id_is_unique_and_monotonic);
+RUN_TEST_SUITE("XrProto.proto_id contract");
+RUN_TEST(proto_id_is_unique_and_monotonic);
 
-    RUN_TEST_SUITE("Lazy allocation");
-    RUN_TEST(ensure_field_lazy_alloc_is_idempotent);
-    RUN_TEST(ensure_method_lazy_alloc_is_idempotent);
-    RUN_TEST(ensure_builtin_lazy_alloc_is_idempotent);
+RUN_TEST_SUITE("Lazy allocation");
+RUN_TEST(ensure_field_lazy_alloc_is_idempotent);
+RUN_TEST(ensure_method_lazy_alloc_is_idempotent);
+RUN_TEST(ensure_builtin_lazy_alloc_is_idempotent);
 
-    RUN_TEST_SUITE("Read-side accessors");
-    RUN_TEST(get_returns_null_before_ensure);
-    RUN_TEST(get_returns_table_after_ensure);
+RUN_TEST_SUITE("Read-side accessors");
+RUN_TEST(get_returns_null_before_ensure);
+RUN_TEST(get_returns_table_after_ensure);
 
-    RUN_TEST_SUITE("Capacity growth");
-    RUN_TEST(capacity_grows_for_high_proto_id);
+RUN_TEST_SUITE("Capacity growth");
+RUN_TEST(capacity_grows_for_high_proto_id);
 
-    RUN_TEST_SUITE("Multi-proto isolation");
-    RUN_TEST(multi_proto_isolation_within_ctx);
+RUN_TEST_SUITE("Multi-proto isolation");
+RUN_TEST(multi_proto_isolation_within_ctx);
 
-    RUN_TEST_SUITE("Builtin IC sticky cache");
-    RUN_TEST(builtin_cache_is_sticky_first_write_wins);
-    RUN_TEST(builtin_table_alloc_grows_capacity);
+RUN_TEST_SUITE("Builtin IC sticky cache");
+RUN_TEST(builtin_cache_is_sticky_first_write_wins);
+RUN_TEST(builtin_table_alloc_grows_capacity);
 
-    RUN_TEST_SUITE("Snapshot semantics");
-    RUN_TEST(snapshot_returns_null_before_ensure);
-    RUN_TEST(snapshot_field_is_deep_copy);
-    RUN_TEST(snapshot_method_deep_copies_mega_cache);
-    RUN_TEST(snapshot_builtin_is_deep_copy);
+RUN_TEST_SUITE("Snapshot semantics");
+RUN_TEST(snapshot_returns_null_before_ensure);
+RUN_TEST(snapshot_field_is_deep_copy);
+RUN_TEST(snapshot_method_deep_copies_mega_cache);
+RUN_TEST(snapshot_builtin_is_deep_copy);
 
-    RUN_TEST_SUITE("Free and reuse");
-    RUN_TEST(free_ic_tables_resets_state_and_supports_reuse);
+RUN_TEST_SUITE("Free and reuse");
+RUN_TEST(free_ic_tables_resets_state_and_supports_reuse);
 
-    RUN_TEST_SUITE("Multi-context isolation");
-    RUN_TEST(two_contexts_keep_ic_state_independent);
+RUN_TEST_SUITE("Multi-context isolation");
+RUN_TEST(two_contexts_keep_ic_state_independent);
 TEST_MAIN_END()
