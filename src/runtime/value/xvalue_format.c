@@ -33,6 +33,7 @@
 #include "../object/xmap.h"
 #include "../object/xrange.h"
 #include "../object/xset.h"
+#include "../object/xtuple.h"
 #include "../object/xshape.h"
 #include "../object/xstring.h"
 #include "../object/xstringbuilder.h"
@@ -68,6 +69,25 @@ static void format_array(XrayIsolate *isolate, XrStrBuf *sb, XrArray *arr, int d
         xr_strbuf_append_cstr(sb, more, (size_t) n);
     }
     xr_strbuf_append_cstr(sb, "]", 1);
+}
+
+static void format_tuple(XrayIsolate *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
+    xr_strbuf_append_cstr(sb, "(", 1);
+    uint16_t n = tup->element_count;
+    uint16_t limit = (n > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : n;
+    for (uint16_t i = 0; i < limit; i++) {
+        if (i > 0)
+            xr_strbuf_append_cstr(sb, ", ", 2);
+        xr_value_to_strbuf(isolate, sb, tup->elements[i], depth + 1);
+    }
+    if (n > limit) {
+        char more[32];
+        int m = snprintf(more, sizeof(more), ", ...(%u more)", (unsigned) (n - limit));
+        xr_strbuf_append_cstr(sb, more, (size_t) m);
+    }
+    if (n == 1)
+        xr_strbuf_append_cstr(sb, ",", 1);
+    xr_strbuf_append_cstr(sb, ")", 1);
 }
 
 static void format_map(XrayIsolate *isolate, XrStrBuf *sb, XrMap *map, int depth) {
@@ -183,6 +203,9 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
     switch (type) {
         case XR_TARRAY:
             format_array(isolate, sb, (XrArray *) gc, depth);
+            break;
+        case XR_TTUPLE:
+            format_tuple(isolate, sb, (XrTuple *) gc, depth);
             break;
         case XR_TMAP:
             format_map(isolate, sb, (XrMap *) gc, depth);

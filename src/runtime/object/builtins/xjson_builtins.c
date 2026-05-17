@@ -30,6 +30,7 @@
 #include "xreflect_registry.h"
 #include "../xjson.h"
 #include "../xmap.h"
+#include "../xtuple.h"
 #include "../xarray.h"
 #include "../xstring.h"
 #include "../../coro/xcoroutine.h"
@@ -85,7 +86,7 @@ static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue self, XrValue
     return xr_value_from_array(values);
 }
 
-// Json.entries(obj) -> Array<Array<string, any>>
+// Json.entries(obj) -> Array<(string, Json)>
 static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValue *args,
                                       int nargs) {
     (void) self;
@@ -98,17 +99,23 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValu
 
     XrArray *entries = xr_array_new(xr_current_coro(isolate));
     XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
+    XrCoroutine *coro = xr_current_coro(isolate);
 
     XrShape *shape = xr_json_shape(isolate, json);
     for (uint16_t i = 0; i < shape->field_count; i++) {
-        XrArray *pair = xr_array_new(xr_current_coro(isolate));
-        SymbolId sym = shape->field_symbols[i];
-        const char *name = xr_symbol_get_name_in_table(symtab, sym);
-        if (name) {
-            xr_array_push(pair, xr_string_value(xr_string_intern(isolate, name, strlen(name), 0)));
+        /* Each entry is a (key, value) tuple: heterogeneous arity-2
+         * product that destructures cleanly in user code via
+         * `for ((k, v) in Json.entries(obj))`. */
+        XrTuple *pair = xr_tuple_new(coro, 2);
+        if (pair) {
+            SymbolId sym = shape->field_symbols[i];
+            const char *name = xr_symbol_get_name_in_table(symtab, sym);
+            XrValue key_v = name ? xr_string_value(xr_string_intern(isolate, name, strlen(name), 0))
+                                 : xr_string_value(xr_string_intern(isolate, "", 0, 0));
+            xr_tuple_set(pair, 0, key_v);
+            xr_tuple_set(pair, 1, xr_json_get_field_any(isolate, json, i));
         }
-        xr_array_push(pair, xr_json_get_field_any(isolate, json, i));
-        xr_array_push(entries, xr_value_from_array(pair));
+        xr_array_push(entries, xr_value_from_tuple(pair));
     }
 
     return xr_value_from_array(entries);

@@ -1762,6 +1762,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
             }
 
+            // Cache the inferred item type on the for-in node itself so the
+            // IR lowerer can recover heterogeneous element types (e.g. tuple
+            // elements in Array<(K,V)>) without re-running inference.
+            if (item_type)
+                xa_analyzer_set_node_type(ctx->analyzer, node, item_type);
+
             // Set value variable type (key-value mode)
             if (fi->is_keyvalue && fi->value_name) {
                 XaSymbol *val_sym = xa_scope_lookup(ctx->analyzer->current_scope, fi->value_name);
