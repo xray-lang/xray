@@ -320,6 +320,12 @@ XrValue xr_iterator_next(XrIterator *iter) {
             return xr_null();
         uint32_t idx = iter->scan_index++;
         XrValue elem = xr_array_get_element(arr, (int32_t) idx);
+        if (iter->mode == XR_ITER_MODE_VALUES) {
+            return elem;
+        }
+        if (iter->mode == XR_ITER_MODE_KEYS) {
+            return xr_int((int64_t) idx);
+        }
         XrTuple *pair = xr_tuple_new(iter->coro, 2);
         if (!pair)
             return xr_null();
@@ -333,6 +339,12 @@ XrValue xr_iterator_next(XrIterator *iter) {
         XrayIsolate *X = (XrayIsolate *) iter->context;
         uint32_t idx = iter->scan_index++;
         XrString *ch = xr_string_char_at_unicode(X, s, (size_t) idx);
+        if (iter->mode == XR_ITER_MODE_VALUES) {
+            return ch ? xr_string_value(ch) : xr_null();
+        }
+        if (iter->mode == XR_ITER_MODE_KEYS) {
+            return xr_int((int64_t) idx);
+        }
         XrTuple *pair = xr_tuple_new(iter->coro, 2);
         if (!pair)
             return xr_null();

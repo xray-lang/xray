@@ -26,5 +26,10 @@ class Array<T> {
     flat(depth?: int): Array<T>
     fill(value: T, start?: int, end?: int): Array<T>
     copyWithin(target: int, start: int, end?: int): Array<T>
+    // Iteration protocol — used by for-in lowering. Users can also
+    // call them directly; iterator()/next() yields elements, while
+    // entriesIterator()/next() yields (index, element) tuples.
+    iterator(): Iterator<T>
+    entriesIterator(): Iterator<(int, T)>
     entries(): Array<(int, T)>
 }

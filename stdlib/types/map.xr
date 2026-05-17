@@ -12,4 +12,9 @@ class Map<K, V> {
     values(): Array<V>
     entries(): Array<(K, V)>
     forEach(fn: fn(key: K, value: V))
+    // Iteration protocol — iterator() yields each key K (used by
+    // single-variable `for (k in m)`); entriesIterator() yields each
+    // (key, value) tuple (used by `for (k, v in m)`).
+    iterator(): Iterator<K>
+    entriesIterator(): Iterator<(K, V)>
 }
