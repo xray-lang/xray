@@ -25,6 +25,35 @@ jobs:
         ./scripts/check_frontend_arch.sh
 
   # ===========================================================================
+  # Reverse-invariant seed checks (codegen hardening foundation).
+  # Three lightweight grep-based gates:
+  #   E.1  no new silent fallback (default: break;) outside the
+  #        recorded baseline in tests/baseline_silent_fallback.txt
+  #   E.2  no legacy_helper / old_emit / XR_COMPAT / deprecated_call
+  #        wrappers anywhere in src/
+  #   E.3  build/generated/ is never tracked by git
+  # Plus an expiry gate on tests/known_failures.txt: every active
+  # suppression entry must carry ISSUE / ADDED <= 30 days / OWNER.
+  # See scripts/check_codegen_invariants.sh and
+  #     scripts/check_known_failures_freshness.sh for details.
+  # ===========================================================================
+  reverse-invariants:
+    runs-on: ubuntu-latest
+    name: Reverse-Invariant Seed Checks
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Codegen invariants (silent fallback / legacy wrappers / generated tree)
+      run: |
+        chmod +x ./scripts/check_codegen_invariants.sh
+        ./scripts/check_codegen_invariants.sh
+
+    - name: known_failures.txt freshness (<= 30 days)
+      run: |
+        chmod +x ./scripts/check_known_failures_freshness.sh
+        ./scripts/check_known_failures_freshness.sh
+
+  # ===========================================================================
   # Build & Test (multi-platform)
   # ===========================================================================
   build:
@@ -360,3 +389,135 @@ jobs:
           exit 1
         fi
         echo "Code format check passed"
+
+  # ===========================================================================
+  # JIT-force PR matrix
+  # ---------------------------------------------------------------------------
+  # Forces every eligible regression test through the JIT compilation
+  # path under a sanitizer-enabled build. This matrix exposes codegen
+  # / GC / coroutine corruption that the default lazy-JIT lane fails
+  # to surface (the May 2026 11-bug corruption family was only
+  # reproducible under --jit-force + ASan).
+  #
+  # Three host configurations land first:
+  #   - linux-asan-ubsan : ASan + UBSan + MALLOC_PERTURB_, the highest
+  #                       signal lane (covers UAF, OOB, signed UB,
+  #                       use-of-uninit on Linux glibc)
+  #   - macos-arm64-asan: MallocScribble + ASan, mirrors the Apple
+  #                       Silicon dev host; catches macOS-specific
+  #                       layout drift early
+  #   - windows-msvc-dbg: /MDd already provides 0xCD / 0xDD heap fill
+  #                       equivalent to MallocScribble; covers MSVC
+  #                       calling-convention bugs (RCX / R10 / R11)
+  #
+  # The remaining three configurations from the 082 plan (Linux MSan,
+  # macOS x64 ASan, Windows MSVC Release with Win11 coroutine cases)
+  # live in nightly.yml because they are either slower or more
+  # platform-specific.
+  #
+  # continue-on-error is set to true during the W1 baseline so the
+  # first full-matrix run produces complete sanitizer output for
+  # triage. It MUST flip to false at the 082 W3 checkpoint; the
+  # tightening is tracked in tests/known_failures.txt with a 30-day
+  # expiry gate, which fails CI on its own if the deadline slips.
+  # ===========================================================================
+  jit-force-pr:
+    needs: [arch-lint, reverse-invariants]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-asan-ubsan-jit
+            os: ubuntu-latest
+            short_name: linux-asan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_ASAN=ON
+              -DENABLE_UBSAN=ON
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+
+          - name: macos-arm64-asan-jit
+            os: macos-latest
+            short_name: macos-arm64-asan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_ASAN=ON
+              -DENABLE_UBSAN=ON
+
+          - name: windows-msvc-debug-jit
+            os: windows-2022
+            short_name: windows-msvc-debug
+            # MSVC /MDd already provides 0xCD / 0xDD heap fill; no
+            # explicit sanitizer flag is needed and MSVC ASan adds
+            # noise around CRT internals.
+            cmake_flags: -DCMAKE_BUILD_TYPE=Debug
+
+    runs-on: ${{ matrix.os }}
+    name: JIT-force PR (${{ matrix.short_name }})
+    # W1 baseline: the matrix is expected to surface latent codegen
+    # bugs as it ramps up. Tightening is tracked by
+    # tests/known_failures.txt with a 30-day expiry gate.
+    continue-on-error: true
+
+    env:
+      XRAY_JIT_FORCE: "1"
+      ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1"
+      UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang ninja-build
+          echo "MALLOC_PERTURB_=205" >> $GITHUB_ENV
+
+      - name: Enable MallocScribble (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "MallocScribble=1" >> $GITHUB_ENV
+          echo "MallocPreScribble=1" >> $GITHUB_ENV
+          echo "MallocGuardEdges=1" >> $GITHUB_ENV
+
+      - name: Install zlib (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install zlib:x64-windows-release
+          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
+
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        run: cmake -B build ${{ matrix.cmake_flags }}
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >-
+          cmake -B build ${{ matrix.cmake_flags }}
+          -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE"
+          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
+
+      - name: Build
+        run: cmake --build build --config Debug -j
+
+      - name: Run regression tests (--jit-force, Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x ./scripts/run_regression_tests.sh
+          ./scripts/run_regression_tests.sh
+        env:
+          XRAY_PATH: ./build/xray
+          XRAY_BUILD_DIR: ./build
+
+      - name: Run regression tests (--jit-force, Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          ./scripts/run_regression_tests.sh
+        env:
+          XRAY_PATH: ./build/Debug/xray.exe
+          XRAY_BUILD_DIR: ./build
