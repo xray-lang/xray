@@ -83,11 +83,13 @@ vmcase(OP_NEWARRAY) {
              * Caller populates via OP_INDEX_SET / OP_ARRAY_INIT afterward.
              * Pushing from registers would crash on non-numeric garbage. */
             array->length = b;
-        } else {
-            for (int j = 0; j < b; j++) {
-                xr_array_push(array, R(a + 1 + j));
-            }
         }
+        /* ANY arrays: b is capacity hint only. length stays 0.
+         * lower_array_literal emits OP_INDEX_SET arr[i]=v for i=0..n-1,
+         * which append-grows via the idx == length branch of OP_INDEX_SET.
+         * This matches the JIT path (xr_jit_index_set in xm_jit_runtime.c)
+         * and avoids reading uninitialized register slots that would only
+         * be immediately overwritten by the subsequent OP_INDEX_SET. */
     }
     R(a) = xr_value_from_array(array);
     if (storage_mode == 0)
@@ -1174,6 +1176,12 @@ vmcase(OP_INDEX_SET) {
             } else {
                 xr_array_set_element(arr, idx, val);
             }
+        } else if (idx == arr->length && arr->elem_type == XR_ELEM_ANY && !xr_array_is_slice(arr)) {
+            /* Append: matches JIT semantics. Used by lower_array_literal
+             * which emits OP_NEWARRAY (length=0) followed by OP_INDEX_SET
+             * arr[i]=v for i=0..n-1. Only valid for ANY arrays; typed
+             * and slice arrays use explicit OP_ARRAY_PUSH or grow. */
+            xr_array_push(arr, val);
         }
         vmbreak;
     }

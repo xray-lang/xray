@@ -51,10 +51,12 @@
 // xtype_scope stores `XrTypeRef *`; it never derefs. We use stack-
 // allocated dummies cast through an explicit pointer so the type
 // system stays happy.
-typedef struct DummyType { int marker; } DummyType;
+typedef struct DummyType {
+    int marker;
+} DummyType;
 
 static struct XrTypeRef *as_tref(DummyType *p) {
-    return (struct XrTypeRef *)p;
+    return (struct XrTypeRef *) p;
 }
 
 /* ====================================================================== */
@@ -65,7 +67,7 @@ TEST(define_then_lookup_returns_same_type) {
     XrTypeScope *scope = xr_type_scope_new(NULL);
     ASSERT_NOT_NULL(scope);
 
-    DummyType t = { 1 };
+    DummyType t = {1};
     XrTypeAlias *e = xr_type_scope_define(scope, "Foo", as_tref(&t));
     ASSERT_NOT_NULL(e);
     ASSERT_STR_EQ(e->name, "Foo");
@@ -85,8 +87,8 @@ TEST(duplicate_define_returns_null) {
     XrTypeScope *scope = xr_type_scope_new(NULL);
     ASSERT_NOT_NULL(scope);
 
-    DummyType t1 = { 1 }, t2 = { 2 };
-    XrTypeAlias *first  = xr_type_scope_define(scope, "T", as_tref(&t1));
+    DummyType t1 = {1}, t2 = {2};
+    XrTypeAlias *first = xr_type_scope_define(scope, "T", as_tref(&t1));
     ASSERT_NOT_NULL(first);
 
     // Duplicate in the SAME scope must fail -- the parser uses this
@@ -108,7 +110,7 @@ TEST(lookup_walks_to_parent_scope) {
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(inner);
 
-    DummyType t = { 42 };
+    DummyType t = {42};
     xr_type_scope_define(outer, "Foo", as_tref(&t));
 
     // Inner does not have Foo; chained lookup must find it on the
@@ -139,8 +141,8 @@ TEST(generic_param_shadow_outer_alias) {
     // outer alias must remain bound.
     XrTypeScope *outer = xr_type_scope_new(NULL);
 
-    DummyType outer_t = { 100 };
-    DummyType inner_t = { 200 };
+    DummyType outer_t = {100};
+    DummyType inner_t = {200};
 
     xr_type_scope_define(outer, "T", as_tref(&outer_t));
 
@@ -204,7 +206,7 @@ TEST(forward_declared_alias_can_be_patched) {
     ASSERT_NULL(e->type_ref);
 
     // Patch.
-    DummyType t = { 7 };
+    DummyType t = {7};
     e->type_ref = as_tref(&t);
 
     // Subsequent lookups see the patched value.
@@ -219,12 +221,12 @@ TEST(forward_declared_alias_can_be_patched) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("P-01 parser-owned type scope");
-    RUN_TEST(define_then_lookup_returns_same_type);
-    RUN_TEST(duplicate_define_returns_null);
-    RUN_TEST(lookup_walks_to_parent_scope);
-    RUN_TEST(generic_param_shadow_outer_alias);
-    RUN_TEST(lookup_unknown_is_null);
-    RUN_TEST(null_safe_read_api);
-    RUN_TEST(forward_declared_alias_can_be_patched);
+RUN_TEST_SUITE("P-01 parser-owned type scope");
+RUN_TEST(define_then_lookup_returns_same_type);
+RUN_TEST(duplicate_define_returns_null);
+RUN_TEST(lookup_walks_to_parent_scope);
+RUN_TEST(generic_param_shadow_outer_alias);
+RUN_TEST(lookup_unknown_is_null);
+RUN_TEST(null_safe_read_api);
+RUN_TEST(forward_declared_alias_can_be_patched);
 TEST_MAIN_END()

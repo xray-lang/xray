@@ -458,10 +458,10 @@ TEST(spec_handler_null_before_register) {
 // MSVC does not allow direct stdout assignment; use freopen + freopen.
 #ifdef _WIN32
 #define SUPPRESS_STDOUT_BEGIN() freopen("NUL", "w", stdout)
-#define SUPPRESS_STDOUT_END()   freopen("CON", "w", stdout)
+#define SUPPRESS_STDOUT_END() freopen("CON", "w", stdout)
 #else
 #define SUPPRESS_STDOUT_BEGIN() freopen("/dev/null", "w", stdout)
-#define SUPPRESS_STDOUT_END()   freopen("/dev/tty", "w", stdout)
+#define SUPPRESS_STDOUT_END() freopen("/dev/tty", "w", stdout)
 #endif
 
 TEST(help_print_usage_no_crash) {
@@ -498,57 +498,57 @@ TEST(help_print_version_no_crash) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Command Registry");
-    RUN_TEST(spec_get_commands_not_null);
-    RUN_TEST(spec_find_command_run);
-    RUN_TEST(spec_find_command_eval);
-    RUN_TEST(spec_find_command_repl);
-    RUN_TEST(spec_find_command_pkg);
-    RUN_TEST(spec_find_command_unknown);
-    RUN_TEST(spec_aliases_removed);
-    RUN_TEST(spec_option_count);
-    RUN_TEST(spec_option_count_empty);
+RUN_TEST_SUITE("Command Registry");
+RUN_TEST(spec_get_commands_not_null);
+RUN_TEST(spec_find_command_run);
+RUN_TEST(spec_find_command_eval);
+RUN_TEST(spec_find_command_repl);
+RUN_TEST(spec_find_command_pkg);
+RUN_TEST(spec_find_command_unknown);
+RUN_TEST(spec_aliases_removed);
+RUN_TEST(spec_option_count);
+RUN_TEST(spec_option_count_empty);
 
-    RUN_TEST_SUITE("Option Map Accessors");
-    RUN_TEST(optmap_not_present);
-    RUN_TEST(optmap_present_flag);
-    RUN_TEST(optmap_present_string);
-    RUN_TEST(optmap_present_int);
-    RUN_TEST(optmap_nonexistent_option);
+RUN_TEST_SUITE("Option Map Accessors");
+RUN_TEST(optmap_not_present);
+RUN_TEST(optmap_present_flag);
+RUN_TEST(optmap_present_string);
+RUN_TEST(optmap_present_int);
+RUN_TEST(optmap_nonexistent_option);
 
-    RUN_TEST_SUITE("Global Flag Parsing");
-    RUN_TEST(parse_global_no_args);
-    RUN_TEST(parse_global_help);
-    RUN_TEST(parse_global_version);
-    RUN_TEST(parse_global_version_short);
-    RUN_TEST(parse_global_no_color);
-    RUN_TEST(parse_global_color);
-    RUN_TEST(parse_global_command_not_consumed);
-    RUN_TEST(parse_global_verbose);
-    RUN_TEST(parse_global_quiet);
-    RUN_TEST(parse_global_quiet_short);
-    RUN_TEST(parse_global_json);
-    RUN_TEST(parse_global_multiple_flags);
+RUN_TEST_SUITE("Global Flag Parsing");
+RUN_TEST(parse_global_no_args);
+RUN_TEST(parse_global_help);
+RUN_TEST(parse_global_version);
+RUN_TEST(parse_global_version_short);
+RUN_TEST(parse_global_no_color);
+RUN_TEST(parse_global_color);
+RUN_TEST(parse_global_command_not_consumed);
+RUN_TEST(parse_global_verbose);
+RUN_TEST(parse_global_quiet);
+RUN_TEST(parse_global_quiet_short);
+RUN_TEST(parse_global_json);
+RUN_TEST(parse_global_multiple_flags);
 
-    RUN_TEST_SUITE("Handler Registration");
-    RUN_TEST(spec_handler_null_before_register);
+RUN_TEST_SUITE("Handler Registration");
+RUN_TEST(spec_handler_null_before_register);
 
-    RUN_TEST_SUITE("Command Parser");
-    RUN_TEST(parse_cmd_simple_flag);
-    RUN_TEST(parse_cmd_short_flag);
-    RUN_TEST(parse_cmd_long_option_with_value);
-    RUN_TEST(parse_cmd_long_option_eq_form);
-    RUN_TEST(parse_cmd_short_with_value);
-    RUN_TEST(parse_cmd_unknown_option);
-    RUN_TEST(parse_cmd_missing_value);
-    RUN_TEST(parse_cmd_no_positionals);
-    RUN_TEST(parse_cmd_passthrough);
-    RUN_TEST(parse_cmd_passthrough_rejected);
+RUN_TEST_SUITE("Command Parser");
+RUN_TEST(parse_cmd_simple_flag);
+RUN_TEST(parse_cmd_short_flag);
+RUN_TEST(parse_cmd_long_option_with_value);
+RUN_TEST(parse_cmd_long_option_eq_form);
+RUN_TEST(parse_cmd_short_with_value);
+RUN_TEST(parse_cmd_unknown_option);
+RUN_TEST(parse_cmd_missing_value);
+RUN_TEST(parse_cmd_no_positionals);
+RUN_TEST(parse_cmd_passthrough);
+RUN_TEST(parse_cmd_passthrough_rejected);
 
-    RUN_TEST_SUITE("Help Generation");
-    RUN_TEST(help_print_usage_no_crash);
-    RUN_TEST(help_print_command_help_no_crash);
-    RUN_TEST(help_print_subcommand_help_no_crash);
-    RUN_TEST(help_print_version_no_crash);
+RUN_TEST_SUITE("Help Generation");
+RUN_TEST(help_print_usage_no_crash);
+RUN_TEST(help_print_command_help_no_crash);
+RUN_TEST(help_print_subcommand_help_no_crash);
+RUN_TEST(help_print_version_no_crash);
 
 TEST_MAIN_END()

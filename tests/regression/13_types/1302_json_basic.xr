@@ -1,6 +1,25 @@
 // 0510_json_basic.xr
 // 作者：xingleixu@gmail.com
 // 测试：Json 对象基础功能
+//
+// REGRESSION: Bug #7 - x64 XM_CALL_DIRECT missing null / poison closure
+//             guard (commit 2feae1e).
+// FAIL_AT:    pre-2feae1e on x64 with --jit-force
+//             -> closure ptr loaded from call_args[0] was sometimes
+//                NULL (or poisoned with non-zero high 16 bits), but
+//                fast path went straight into
+//                `movzx rcx, byte [r11+8]; cmp rcx, 5` to check
+//                XR_TFUNCTION. The byte-load at NULL+0x8 faulted with
+//                ACCESS_VIOLATION before the type check ever ran.
+//             -> ARM64 backend already had the cbz + lsr/cbnz guards;
+//                x64 just skipped them.
+// PASS_AT:    2feae1e+ on x64 (mirrored test + Jcc-to-slow guards
+//             before the type byte-load) and on ARM64.
+// REQUIRES_JIT_FORCE
+// Triggering shape: nested `fn create(): Json { return {} }; create()`
+// in test_json_return_type below — the closure flows through a
+// non-call_args route on this site, leaving call_args[0] uninitialised.
+//
 // ===== 匿名对象（自动允许扩展）=====
 @test
 fn test_anonymous_object() {

@@ -45,11 +45,17 @@ static const char *arena_strdup(XiFunc *f, const char *s) {
     return copy;
 }
 
-/* Return the XrStructLayout for a struct instance type, or NULL. */
+/* Return the XrStructLayout for a struct instance type, or NULL.
+ *
+ * Order matters: kind narrows the union access before the is_value_type
+ * read, so non-instance types (Array, Map, ...) never observe the bool
+ * field even when type lowering hands us an unrelated XrType layout. */
 static XrStructLayout *struct_layout_of(struct XrType *t) {
-    if (!t || !t->is_value_type)
+    if (!t)
         return NULL;
     if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
+        return NULL;
+    if (!t->is_value_type)
         return NULL;
     if (!t->instance.class_ref)
         return NULL;

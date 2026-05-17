@@ -68,15 +68,15 @@ TEST(profiler_stats_peak) {
     XrProfileStats stats;
     xr_profile_stats_init(&stats);
 
-    xr_profile_stats_alloc(&stats, 1000);   // current=1000, peak=1000
-    xr_profile_stats_free(&stats, 600);      // current=400, peak=1000
-    xr_profile_stats_alloc(&stats, 300);     // current=700, peak=1000
-    xr_profile_stats_alloc(&stats, 500);     // current=1200, peak=1200
+    xr_profile_stats_alloc(&stats, 1000);  // current=1000, peak=1000
+    xr_profile_stats_free(&stats, 600);    // current=400, peak=1000
+    xr_profile_stats_alloc(&stats, 300);   // current=700, peak=1000
+    xr_profile_stats_alloc(&stats, 500);   // current=1200, peak=1200
 
     ASSERT_EQ_UINT(stats.current_bytes, 1200);
     ASSERT_EQ_UINT(stats.peak_bytes, 1200);
 
-    xr_profile_stats_free(&stats, 1200);     // current=0, peak=1200
+    xr_profile_stats_free(&stats, 1200);  // current=0, peak=1200
     ASSERT_EQ_UINT(stats.current_bytes, 0);
     ASSERT_EQ_UINT(stats.peak_bytes, 1200);  // peak preserved
 }
@@ -119,22 +119,22 @@ TEST(profiler_stats_free_underflow) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("MemProfiler - Init");
-    RUN_TEST(profiler_stats_init);
+RUN_TEST_SUITE("MemProfiler - Init");
+RUN_TEST(profiler_stats_init);
 
-    RUN_TEST_SUITE("MemProfiler - Alloc");
-    RUN_TEST(profiler_stats_alloc);
+RUN_TEST_SUITE("MemProfiler - Alloc");
+RUN_TEST(profiler_stats_alloc);
 
-    RUN_TEST_SUITE("MemProfiler - Free");
-    RUN_TEST(profiler_stats_free);
+RUN_TEST_SUITE("MemProfiler - Free");
+RUN_TEST(profiler_stats_free);
 
-    RUN_TEST_SUITE("MemProfiler - Peak");
-    RUN_TEST(profiler_stats_peak);
+RUN_TEST_SUITE("MemProfiler - Peak");
+RUN_TEST(profiler_stats_peak);
 
-    RUN_TEST_SUITE("MemProfiler - Cycles");
-    RUN_TEST(profiler_stats_cycles);
+RUN_TEST_SUITE("MemProfiler - Cycles");
+RUN_TEST(profiler_stats_cycles);
 
-    RUN_TEST_SUITE("MemProfiler - Edge Cases");
-    RUN_TEST(profiler_stats_free_underflow);
+RUN_TEST_SUITE("MemProfiler - Edge Cases");
+RUN_TEST(profiler_stats_free_underflow);
 
 TEST_MAIN_END()

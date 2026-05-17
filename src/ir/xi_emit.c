@@ -267,15 +267,22 @@ static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         case XR_KIND_FLOAT: {
             double fval;
             memcpy(&fval, &v->aux_int, sizeof(double));
-            int sv = (int) fval;
-            if ((double) sv == fval && sv >= LOADI_MIN && sv <= LOADI_MAX) {
-                emit_inst(ctx, CREATE_AsBx(OP_LOADF, dst, sv));
-            } else {
-                int ki = add_const_float(ctx, fval);
-                if (ctx->status != XI_EMIT_OK)
-                    return;
-                emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
+            /* C99 6.3.1.4: casting a double to int when the value falls
+             * outside the int range is UB. Pre-check with double-vs-double
+             * comparisons (NaN compares false in both directions, so it
+             * naturally falls through to the constant-pool branch) and
+             * only cast once we know the value fits the LOADI immediate. */
+            if (fval >= (double) LOADI_MIN && fval <= (double) LOADI_MAX) {
+                int sv = (int) fval;
+                if ((double) sv == fval) {
+                    emit_inst(ctx, CREATE_AsBx(OP_LOADF, dst, sv));
+                    break;
+                }
             }
+            int ki = add_const_float(ctx, fval);
+            if (ctx->status != XI_EMIT_OK)
+                return;
+            emit_inst(ctx, CREATE_ABx(OP_LOADK, dst, ki));
             break;
         }
         case XR_KIND_BOOL:

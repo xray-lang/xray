@@ -109,9 +109,9 @@ TEST(source_cache_line_length) {
     XrSourceCache *cache = xr_source_cache_new();
     xr_source_cache_add(cache, "test.xr", "hello\nworld!\nok");
 
-    ASSERT_EQ_INT(xr_source_cache_get_line_length(cache, "test.xr", 1), 5);   // "hello"
-    ASSERT_EQ_INT(xr_source_cache_get_line_length(cache, "test.xr", 2), 6);   // "world!"
-    ASSERT_EQ_INT(xr_source_cache_get_line_length(cache, "test.xr", 3), 2);   // "ok"
+    ASSERT_EQ_INT(xr_source_cache_get_line_length(cache, "test.xr", 1), 5);  // "hello"
+    ASSERT_EQ_INT(xr_source_cache_get_line_length(cache, "test.xr", 2), 6);  // "world!"
+    ASSERT_EQ_INT(xr_source_cache_get_line_length(cache, "test.xr", 3), 2);  // "ok"
 
     xr_source_cache_free(cache);
 }
@@ -182,26 +182,26 @@ TEST(source_cache_null_safety) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("SourceCache - Basic Operations");
-    RUN_TEST(source_cache_create_free);
-    RUN_TEST(source_cache_add_single);
-    RUN_TEST(source_cache_add_multiple);
-    RUN_TEST(source_cache_add_duplicate);
+RUN_TEST_SUITE("SourceCache - Basic Operations");
+RUN_TEST(source_cache_create_free);
+RUN_TEST(source_cache_add_single);
+RUN_TEST(source_cache_add_multiple);
+RUN_TEST(source_cache_add_duplicate);
 
-    RUN_TEST_SUITE("SourceCache - Line Retrieval");
-    RUN_TEST(source_cache_get_line);
-    RUN_TEST(source_cache_get_line_boundary);
-    RUN_TEST(source_cache_get_line_nonexistent_file);
+RUN_TEST_SUITE("SourceCache - Line Retrieval");
+RUN_TEST(source_cache_get_line);
+RUN_TEST(source_cache_get_line_boundary);
+RUN_TEST(source_cache_get_line_nonexistent_file);
 
-    RUN_TEST_SUITE("SourceCache - Line Length");
-    RUN_TEST(source_cache_line_length);
-    RUN_TEST(source_cache_line_length_boundary);
+RUN_TEST_SUITE("SourceCache - Line Length");
+RUN_TEST(source_cache_line_length);
+RUN_TEST(source_cache_line_length_boundary);
 
-    RUN_TEST_SUITE("SourceCache - Edge Cases");
-    RUN_TEST(source_cache_empty_lines);
-    RUN_TEST(source_cache_grow);
+RUN_TEST_SUITE("SourceCache - Edge Cases");
+RUN_TEST(source_cache_empty_lines);
+RUN_TEST(source_cache_grow);
 
-    RUN_TEST_SUITE("SourceCache - NULL Safety");
-    RUN_TEST(source_cache_null_safety);
+RUN_TEST_SUITE("SourceCache - NULL Safety");
+RUN_TEST(source_cache_null_safety);
 
 TEST_MAIN_END()

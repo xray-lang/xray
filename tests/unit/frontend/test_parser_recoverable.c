@@ -87,12 +87,11 @@ typedef struct DiagSink {
     int count;
 } DiagSink;
 
-static void diag_callback(void *user_data,
-                          int line, int column,
-                          int end_line, int end_column,
+static void diag_callback(void *user_data, int line, int column, int end_line, int end_column,
                           const char *message) {
-    DiagSink *sink = (DiagSink *)user_data;
-    if (sink->count >= DIAG_CAP) return;  // overflow -- assert in test
+    DiagSink *sink = (DiagSink *) user_data;
+    if (sink->count >= DIAG_CAP)
+        return;  // overflow -- assert in test
     DiagRecord *r = &sink->records[sink->count++];
     r->line = line;
     r->column = column;
@@ -101,7 +100,8 @@ static void diag_callback(void *user_data,
     r->message[0] = '\0';
     if (message) {
         size_t n = strlen(message);
-        if (n >= sizeof(r->message)) n = sizeof(r->message) - 1;
+        if (n >= sizeof(r->message))
+            n = sizeof(r->message) - 1;
         memcpy(r->message, message, n);
         r->message[n] = '\0';
     }
@@ -116,13 +116,10 @@ static void diag_callback(void *user_data,
 //
 // Returns the parsed AST. The arena is captured into *out_arena
 // so the caller can free it after inspection.
-static AstNode *parse_recoverable(const char *source,
-                                  Parser *out_parser,
-                                  DiagSink *sink,
-                                  int max_errors,
-                                  XrArena **out_arena) {
+static AstNode *parse_recoverable(const char *source, Parser *out_parser, DiagSink *sink,
+                                  int max_errors, XrArena **out_arena) {
     sink->count = 0;
-    XrArena *arena = (XrArena *)xr_malloc(sizeof(XrArena));
+    XrArena *arena = (XrArena *) xr_malloc(sizeof(XrArena));
     xr_arena_init(arena, XR_ARENA_SEGMENT_SIZE);
     *out_arena = arena;
 
@@ -134,14 +131,16 @@ static AstNode *parse_recoverable(const char *source,
 // Release the arena returned by parse_recoverable. AST nodes live
 // inside the arena, so this single call frees the entire AST.
 static void release_arena(XrArena *arena) {
-    if (!arena) return;
+    if (!arena)
+        return;
     xr_arena_destroy(arena);
     xr_free(arena);
 }
 
 // Count how many top-level statements made it into the AST.
 static int program_decl_count(AstNode *ast) {
-    if (!ast || ast->type != AST_PROGRAM) return -1;
+    if (!ast || ast->type != AST_PROGRAM)
+        return -1;
     return ast->as.program.count;
 }
 
@@ -157,11 +156,10 @@ TEST(clean_source_no_errors) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(
-        "let a = 1;\n"
-        "let b = 2;\n"
-        "fn f() { return a + b; }\n",
-        &parser, &sink, 0, &arena);
+    AstNode *ast = parse_recoverable("let a = 1;\n"
+                                     "let b = 2;\n"
+                                     "fn f() { return a + b; }\n",
+                                     &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_INT(parser.had_error, 0);
@@ -183,11 +181,10 @@ TEST(returns_partial_ast_on_error) {
     // Deliberately broken: `let x =` has no expression. The parser
     // must report it AND keep going for the next two decls.
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(
-        "let x =\n"
-        "let y = 2;\n"
-        "let z = 3;\n",
-        &parser, &sink, 0, &arena);
+    AstNode *ast = parse_recoverable("let x =\n"
+                                     "let y = 2;\n"
+                                     "let z = 3;\n",
+                                     &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_INT(ast->type, AST_PROGRAM);
@@ -208,11 +205,10 @@ TEST(resync_after_error_keeps_following_decls) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(
-        "let good_before = 1;\n"
-        "let *** = ;\n"          // pure garbage -- multiple syntax errors
-        "let good_after = 3;\n",
-        &parser, &sink, 0, &arena);
+    AstNode *ast = parse_recoverable("let good_before = 1;\n"
+                                     "let *** = ;\n"  // pure garbage -- multiple syntax errors
+                                     "let good_after = 3;\n",
+                                     &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
     ASSERT_TRUE(parser.had_error != 0);
@@ -236,11 +232,10 @@ TEST(multiple_errors_collected) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(
-        "let a = ;\n"   // error 1
-        "let b = ;\n"   // error 2
-        "let c = ;\n",  // error 3
-        &parser, &sink, 0, &arena);
+    AstNode *ast = parse_recoverable("let a = ;\n"   // error 1
+                                     "let b = ;\n"   // error 2
+                                     "let c = ;\n",  // error 3
+                                     &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
     ASSERT_TRUE(sink.count >= 3);
@@ -273,16 +268,15 @@ TEST(max_errors_caps_callback_count) {
     DiagSink sink;
     // 8 broken decls; cap at 3.
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(
-        "let a = ;\n"
-        "let b = ;\n"
-        "let c = ;\n"
-        "let d = ;\n"
-        "let e = ;\n"
-        "let f = ;\n"
-        "let g = ;\n"
-        "let h = ;\n",
-        &parser, &sink, 3, &arena);
+    AstNode *ast = parse_recoverable("let a = ;\n"
+                                     "let b = ;\n"
+                                     "let c = ;\n"
+                                     "let d = ;\n"
+                                     "let e = ;\n"
+                                     "let f = ;\n"
+                                     "let g = ;\n"
+                                     "let h = ;\n",
+                                     &parser, &sink, 3, &arena);
 
     ASSERT_NOT_NULL(ast);
     // Some implementations include a final "too many errors" note
@@ -303,12 +297,11 @@ TEST(broken_function_body_does_not_eat_following_decls) {
     Parser parser;
     DiagSink sink;
     XrArena *arena = NULL;
-    AstNode *ast = parse_recoverable(
-        "fn f() {\n"
-        "    let oops =\n"   // missing expression + missing `;`
-        "}\n"
-        "let after = 99;\n",
-        &parser, &sink, 0, &arena);
+    AstNode *ast = parse_recoverable("fn f() {\n"
+                                     "    let oops =\n"  // missing expression + missing `;`
+                                     "}\n"
+                                     "let after = 99;\n",
+                                     &parser, &sink, 0, &arena);
 
     ASSERT_NOT_NULL(ast);
     ASSERT_TRUE(parser.had_error != 0);
@@ -341,8 +334,7 @@ TEST(empty_and_whitespace_source_no_error) {
         Parser parser;
         DiagSink sink;
         XrArena *arena = NULL;
-        AstNode *ast = parse_recoverable("   \n\n\t  \n",
-                                         &parser, &sink, 0, &arena);
+        AstNode *ast = parse_recoverable("   \n\n\t  \n", &parser, &sink, 0, &arena);
         ASSERT_NOT_NULL(ast);
         ASSERT_EQ_INT(parser.had_error, 0);
         ASSERT_EQ_INT(sink.count, 0);
@@ -359,10 +351,9 @@ TEST(error_coordinates_in_source_bounds) {
     setup();
     Parser parser;
     DiagSink sink;
-    const char *src =
-        "let a = 1;\n"
-        "let b = ;\n"   // error here at line 2
-        "let c = 3;\n";
+    const char *src = "let a = 1;\n"
+                      "let b = ;\n"  // error here at line 2
+                      "let c = 3;\n";
     XrArena *arena = NULL;
     AstNode *ast = parse_recoverable(src, &parser, &sink, 0, &arena);
 
@@ -370,7 +361,9 @@ TEST(error_coordinates_in_source_bounds) {
     ASSERT_TRUE(sink.count >= 1);
     // Count newlines to find max line.
     int max_line = 1;
-    for (const char *p = src; *p; p++) if (*p == '\n') max_line++;
+    for (const char *p = src; *p; p++)
+        if (*p == '\n')
+            max_line++;
     for (int i = 0; i < sink.count; i++) {
         ASSERT_TRUE(sink.records[i].line >= 1);
         ASSERT_TRUE(sink.records[i].line <= max_line);
@@ -392,14 +385,14 @@ TEST(null_parser_returns_null_safely) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("xr_parse_recoverable contract");
-    RUN_TEST(clean_source_no_errors);
-    RUN_TEST(returns_partial_ast_on_error);
-    RUN_TEST(resync_after_error_keeps_following_decls);
-    RUN_TEST(multiple_errors_collected);
-    RUN_TEST(max_errors_caps_callback_count);
-    RUN_TEST(broken_function_body_does_not_eat_following_decls);
-    RUN_TEST(empty_and_whitespace_source_no_error);
-    RUN_TEST(error_coordinates_in_source_bounds);
-    RUN_TEST(null_parser_returns_null_safely);
+RUN_TEST_SUITE("xr_parse_recoverable contract");
+RUN_TEST(clean_source_no_errors);
+RUN_TEST(returns_partial_ast_on_error);
+RUN_TEST(resync_after_error_keeps_following_decls);
+RUN_TEST(multiple_errors_collected);
+RUN_TEST(max_errors_caps_callback_count);
+RUN_TEST(broken_function_body_does_not_eat_following_decls);
+RUN_TEST(empty_and_whitespace_source_no_error);
+RUN_TEST(error_coordinates_in_source_bounds);
+RUN_TEST(null_parser_returns_null_safely);
 TEST_MAIN_END()

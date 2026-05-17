@@ -49,7 +49,8 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     /* Create analyzer first — its type pool must be active during parsing
      * so the parser can create type annotations (function types, etc.). */
     XaAnalyzer *analyzer = xa_analyzer_new(g_iso);
-    if (!analyzer) return NULL;
+    if (!analyzer)
+        return NULL;
 
     AstNode *program = xr_parse(g_iso, source);
     if (!program) {
@@ -60,15 +61,13 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
 
     xa_analyzer_analyze(analyzer, "test.xr", program);
 
-    XiPipelineResult res = xi_pipeline_compile_program(
-        program, analyzer, g_iso, cfg);
+    XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, cfg);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
 
     if (res.status != XI_PIPE_OK) {
-        fprintf(stderr, "  PIPELINE FAILED: %s (%s)\n",
-                xi_pipe_status_str(res.status),
+        fprintf(stderr, "  PIPELINE FAILED: %s (%s)\n", xi_pipe_status_str(res.status),
                 res.error_msg ? res.error_msg : "no detail");
         xi_pipeline_result_free(&res);
         return NULL;
@@ -100,14 +99,14 @@ static int count_opcode(const XrProto *proto, OpCode op) {
     return n;
 }
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- " #name " ---\n"); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* ========== Constant & Arithmetic Tests ========== */
@@ -160,8 +159,7 @@ TEST(e2e_while_loop) {
     /* let i = 0
      * while i < 3 { i = i + 1 }
      * print(i) */
-    XrProto *p = compile_source(
-        "let i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
+    XrProto *p = compile_source("let i = 0\nwhile (i < 3) { i = i + 1 }\nprint(i)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP) && "while loop needs JMP");
     xr_vm_proto_free(p);
@@ -245,10 +243,10 @@ TEST(e2e_unary_neg) {
 /* ========== For Loop ========== */
 
 TEST(e2e_for_loop) {
-    XrProto *p = compile_source(
-        "let sum = 0\n"
-        "for (let i = 0; i < 5; i = i + 1) { sum = sum + i }\n"
-        "print(sum)", NULL);
+    XrProto *p = compile_source("let sum = 0\n"
+                                "for (let i = 0; i < 5; i = i + 1) { sum = sum + i }\n"
+                                "print(sum)",
+                                NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP) && "for loop needs backward JMP");
     assert(has_opcode(p, OP_PRINT));
@@ -259,9 +257,9 @@ TEST(e2e_for_loop) {
 
 TEST(e2e_function_decl) {
     /* Function declaration should emit CLOSURE opcode and have a child proto */
-    XrProto *p = compile_source(
-        "fn add(a: int, b: int): int { return a + b }\n"
-        "print(add(1, 2))", NULL);
+    XrProto *p = compile_source("fn add(a: int, b: int): int { return a + b }\n"
+                                "print(add(1, 2))",
+                                NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_CLOSURE) && "function decl needs CLOSURE");
     assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto for add()");
@@ -269,11 +267,11 @@ TEST(e2e_function_decl) {
 }
 
 TEST(e2e_recursive_func) {
-    XrProto *p = compile_source(
-        "fn fib(n: int): int {\n"
-        "  if (n <= 1) { return n }\n"
-        "  return fib(n - 1) + fib(n - 2)\n"
-        "}\nprint(fib(5))", NULL);
+    XrProto *p = compile_source("fn fib(n: int): int {\n"
+                                "  if (n <= 1) { return n }\n"
+                                "  return fib(n - 1) + fib(n - 2)\n"
+                                "}\nprint(fib(5))",
+                                NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_CLOSURE));
     /* Child proto should use CALLSELF for recursion */
@@ -284,9 +282,9 @@ TEST(e2e_recursive_func) {
 
 TEST(e2e_nested_call) {
     /* Tests the register clobber fix: nested calls to same function */
-    XrProto *p = compile_source(
-        "fn add(a: int, b: int): int { return a + b }\n"
-        "print(add(1, add(2, 3)))", NULL);
+    XrProto *p = compile_source("fn add(a: int, b: int): int { return a + b }\n"
+                                "print(add(1, add(2, 3)))",
+                                NULL);
     assert(p != NULL);
     /* Main proto should have 2 CALL instructions (not CALLSELF) */
     assert(count_opcode(p, OP_CALL) >= 2 && "nested calls need >= 2 CALLs");
@@ -298,8 +296,7 @@ TEST(e2e_nested_call) {
 TEST(e2e_const_prop_chain) {
     /* let a = 2; let b = a + 3; let c = b * 4; print(c)
      * After folding: a=2, b=5, c=20. No arithmetic ops. */
-    XrProto *p = compile_source(
-        "let a = 2\nlet b = a + 3\nlet c = b * 4\nprint(c)", NULL);
+    XrProto *p = compile_source("let a = 2\nlet b = a + 3\nlet c = b * 4\nprint(c)", NULL);
     assert(p != NULL);
     assert(!has_opcode(p, OP_ADD) && "chain should fold ADD away");
     assert(!has_opcode(p, OP_MUL) && "chain should fold MUL away");
@@ -313,8 +310,8 @@ TEST(e2e_dce_unused_var) {
      * them.  Test inside a function where locals are register-only.
      *   fn f(): int { let x = 42; let y = 99; return x }
      * y is unused → LOADI 99 should be eliminated from the child proto. */
-    XrProto *p = compile_source(
-        "fn f(): int { let x = 42\nlet y = 99\nreturn x }\nprint(f())", NULL);
+    XrProto *p =
+        compile_source("fn f(): int { let x = 42\nlet y = 99\nreturn x }\nprint(f())", NULL);
     assert(p != NULL);
     /* Child proto (f) should have only one LOADI (for x=42); y=99 is dead */
     int nch = DYNARRAY_COUNT(&p->protos);
@@ -328,8 +325,7 @@ TEST(e2e_dce_unused_var) {
 /* ========== Array Operations ========== */
 
 TEST(e2e_array_literal) {
-    XrProto *p = compile_source(
-        "let arr = [10, 20, 30]\nprint(arr[1])", NULL);
+    XrProto *p = compile_source("let arr = [10, 20, 30]\nprint(arr[1])", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWARRAY) && "array literal needs NEWARRAY");
     assert(has_opcode(p, OP_INDEX_GET) && "arr[1] needs INDEX_GET");
@@ -337,8 +333,7 @@ TEST(e2e_array_literal) {
 }
 
 TEST(e2e_array_set) {
-    XrProto *p = compile_source(
-        "let arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
+    XrProto *p = compile_source("let arr = [1, 2, 3]\narr[0] = 99\nprint(arr[0])", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_INDEX_SET) && "arr[0]=99 needs INDEX_SET");
     xr_vm_proto_free(p);
@@ -348,16 +343,15 @@ TEST(e2e_array_set) {
 
 TEST(e2e_bitwise_ops) {
     /* Variable-based bitwise ops should emit real instructions */
-    XrProto *p = compile_source(
-        "let a = 12\nlet b = 10\n"
-        "print(a & b)\nprint(a | b)\nprint(a ^ b)", NULL);
+    XrProto *p = compile_source("let a = 12\nlet b = 10\n"
+                                "print(a & b)\nprint(a | b)\nprint(a ^ b)",
+                                NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
 
 TEST(e2e_bitwise_shift) {
-    XrProto *p = compile_source(
-        "let x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
+    XrProto *p = compile_source("let x = 1\nprint(x << 4)\nprint(x >> 0)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -365,8 +359,7 @@ TEST(e2e_bitwise_shift) {
 /* ========== Compound Assignment ========== */
 
 TEST(e2e_compound_assign) {
-    XrProto *p = compile_source(
-        "let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
+    XrProto *p = compile_source("let x = 10\nx += 5\nx -= 3\nx *= 2\nprint(x)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));
     xr_vm_proto_free(p);
@@ -375,8 +368,7 @@ TEST(e2e_compound_assign) {
 /* ========== Increment / Decrement ========== */
 
 TEST(e2e_inc_dec) {
-    XrProto *p = compile_source(
-        "let x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
+    XrProto *p = compile_source("let x = 0\nx++\nx++\nx++\nx--\nprint(x)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -384,25 +376,25 @@ TEST(e2e_inc_dec) {
 /* ========== Break / Continue ========== */
 
 TEST(e2e_break) {
-    XrProto *p = compile_source(
-        "let i = 0\n"
-        "while (i < 100) {\n"
-        "  if (i == 5) { break }\n"
-        "  i = i + 1\n"
-        "}\nprint(i)", NULL);
+    XrProto *p = compile_source("let i = 0\n"
+                                "while (i < 100) {\n"
+                                "  if (i == 5) { break }\n"
+                                "  i = i + 1\n"
+                                "}\nprint(i)",
+                                NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_JMP));
     xr_vm_proto_free(p);
 }
 
 TEST(e2e_continue) {
-    XrProto *p = compile_source(
-        "let sum = 0\nlet i = 0\n"
-        "while (i < 10) {\n"
-        "  i = i + 1\n"
-        "  if (i % 2 == 0) { continue }\n"
-        "  sum = sum + i\n"
-        "}\nprint(sum)", NULL);
+    XrProto *p = compile_source("let sum = 0\nlet i = 0\n"
+                                "while (i < 10) {\n"
+                                "  i = i + 1\n"
+                                "  if (i % 2 == 0) { continue }\n"
+                                "  sum = sum + i\n"
+                                "}\nprint(sum)",
+                                NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -410,11 +402,11 @@ TEST(e2e_continue) {
 /* ========== Multi-branch If-Else ========== */
 
 TEST(e2e_if_else_chain) {
-    XrProto *p = compile_source(
-        "let x = 7\n"
-        "if (x > 10) { print(1) }\n"
-        "else if (x > 5) { print(2) }\n"
-        "else { print(3) }", NULL);
+    XrProto *p = compile_source("let x = 7\n"
+                                "if (x > 10) { print(1) }\n"
+                                "else if (x > 5) { print(2) }\n"
+                                "else { print(3) }",
+                                NULL);
     assert(p != NULL);
     /* Multiple branches means multiple conditional jumps */
     xr_vm_proto_free(p);
@@ -424,8 +416,7 @@ TEST(e2e_if_else_chain) {
 
 TEST(e2e_float_arith) {
     /* let x = 1.5 + 2.5 → folded to 4.0 */
-    XrProto *p = compile_source(
-        "let x = 1.5 + 2.5\nprint(x)", NULL);
+    XrProto *p = compile_source("let x = 1.5 + 2.5\nprint(x)", NULL);
     assert(p != NULL);
     assert(!has_opcode(p, OP_ADD) && "1.5+2.5 should be folded");
     xr_vm_proto_free(p);
@@ -434,8 +425,7 @@ TEST(e2e_float_arith) {
 /* ========== Ternary ========== */
 
 TEST(e2e_ternary) {
-    XrProto *p = compile_source(
-        "let x = 5\nlet r = x > 3 ? 1 : 0\nprint(r)", NULL);
+    XrProto *p = compile_source("let x = 5\nlet r = x > 3 ? 1 : 0\nprint(r)", NULL);
     assert(p != NULL);
     xr_vm_proto_free(p);
 }
@@ -444,10 +434,10 @@ TEST(e2e_ternary) {
 
 TEST(e2e_short_circuit) {
     /* Short-circuit AND/OR produce conditional jumps, not BAND/BOR */
-    XrProto *p = compile_source(
-        "let a = true\nlet b = false\n"
-        "if (a && b) { print(1) }\n"
-        "if (a || b) { print(2) }", NULL);
+    XrProto *p = compile_source("let a = true\nlet b = false\n"
+                                "if (a && b) { print(1) }\n"
+                                "if (a || b) { print(2) }",
+                                NULL);
     assert(p != NULL);
     /* Should NOT have BAND/BOR — these are logical ops with short-circuit */
     assert(!has_opcode(p, OP_BAND) && "&& should not emit BAND");
@@ -458,10 +448,10 @@ TEST(e2e_short_circuit) {
 /* ========== Multiple Functions ========== */
 
 TEST(e2e_multi_func) {
-    XrProto *p = compile_source(
-        "fn double(x: int): int { return x * 2 }\n"
-        "fn negate(x: int): int { return -x }\n"
-        "print(negate(double(3)))", NULL);
+    XrProto *p = compile_source("fn double(x: int): int { return x * 2 }\n"
+                                "fn negate(x: int): int { return -x }\n"
+                                "print(negate(double(3)))",
+                                NULL);
     assert(p != NULL);
     assert(PROTO_PROTO_COUNT(p) >= 2 && "should have 2 child protos");
     assert(count_opcode(p, OP_CLOSURE) >= 2 && "need 2 CLOSUREs");
@@ -471,22 +461,21 @@ TEST(e2e_multi_func) {
 /* ========== String Concatenation ========== */
 
 TEST(e2e_string_concat) {
-    XrProto *p = compile_source(
-        "let a = \"hello\"\nlet b = \" world\"\n"
-        "let c = a + b\nprint(c)", NULL);
+    XrProto *p = compile_source("let a = \"hello\"\nlet b = \" world\"\n"
+                                "let c = a + b\nprint(c)",
+                                NULL);
     assert(p != NULL);
     /* Xi pipeline uses STRBUF optimization for typed string concat,
      * or falls back to ADD when types are unknown. Accept either. */
-    assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_STRBUF_FINISH))
-           && "string concat uses ADD or STRBUF");
+    assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_STRBUF_FINISH)) &&
+           "string concat uses ADD or STRBUF");
     xr_vm_proto_free(p);
 }
 
 /* ========== Map Literal ========== */
 
 TEST(e2e_map_literal) {
-    XrProto *p = compile_source(
-        "let m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
+    XrProto *p = compile_source("let m = {\"a\": 1, \"b\": 2}\nprint(m)", NULL);
     assert(p != NULL);
     /* Map creation should emit NEWMAP or NEWJSON + field stores */
     int total = PROTO_CODE_COUNT(p);
@@ -497,8 +486,7 @@ TEST(e2e_map_literal) {
 /* ========== Template String ========== */
 
 TEST(e2e_template_string) {
-    XrProto *p = compile_source(
-        "let x = \"world\"\nlet s = \"hello ${x}\"\nprint(s)", NULL);
+    XrProto *p = compile_source("let x = \"world\"\nlet s = \"hello ${x}\"\nprint(s)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_STRBUF_NEW) && "template uses STRBUF pipeline");
     assert(has_opcode(p, OP_STRBUF_APPEND));
@@ -509,8 +497,7 @@ TEST(e2e_template_string) {
 /* ========== Nullish Coalesce ========== */
 
 TEST(e2e_nullish_coalesce) {
-    XrProto *p = compile_source(
-        "let a: int? = null\nlet b = a ?? 42\nprint(b)", NULL);
+    XrProto *p = compile_source("let a: int? = null\nlet b = a ?? 42\nprint(b)", NULL);
     assert(p != NULL);
     /* ?? lowers to ISNULL + conditional branch; verify enough instructions */
     int total = PROTO_CODE_COUNT(p);
@@ -521,13 +508,13 @@ TEST(e2e_nullish_coalesce) {
 /* ========== Match Expression ========== */
 
 TEST(e2e_match_expr) {
-    XrProto *p = compile_source(
-        "let x = 2\n"
-        "let r = match (x) {\n"
-        "  1 => 10,\n"
-        "  2 => 20,\n"
-        "  _ => 0\n"
-        "}\nprint(r)", NULL);
+    XrProto *p = compile_source("let x = 2\n"
+                                "let r = match (x) {\n"
+                                "  1 => 10,\n"
+                                "  2 => 20,\n"
+                                "  _ => 0\n"
+                                "}\nprint(r)",
+                                NULL);
     assert(p != NULL);
     /* Match lowers to comparisons + branches; verify enough instructions */
     int total = PROTO_CODE_COUNT(p);
@@ -538,8 +525,7 @@ TEST(e2e_match_expr) {
 /* ========== Try-Catch ========== */
 
 TEST(e2e_try_catch) {
-    XrProto *p = compile_source(
-        "try { print(1) } catch (e) { print(e) }", NULL);
+    XrProto *p = compile_source("try { print(1) } catch (e) { print(e) }", NULL);
     assert(p != NULL);
     /* Try-catch should emit SETUP_TRY + POP_TRY or similar */
     int total = PROTO_CODE_COUNT(p);
@@ -550,8 +536,7 @@ TEST(e2e_try_catch) {
 /* ========== Slice ========== */
 
 TEST(e2e_slice) {
-    XrProto *p = compile_source(
-        "let arr = [1, 2, 3, 4, 5]\nlet s = arr[1:3]\nprint(s)", NULL);
+    XrProto *p = compile_source("let arr = [1, 2, 3, 4, 5]\nlet s = arr[1:3]\nprint(s)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_SLICE) && "slice expression needs OP_SLICE");
     xr_vm_proto_free(p);
@@ -560,11 +545,11 @@ TEST(e2e_slice) {
 /* ========== Closure (nested function) ========== */
 
 TEST(e2e_closure) {
-    XrProto *p = compile_source(
-        "fn make(): fn(): int {\n"
-        "  fn inner(): int { return 42 }\n"
-        "  return inner\n"
-        "}\nlet f = make()\nprint(f())", NULL);
+    XrProto *p = compile_source("fn make(): fn(): int {\n"
+                                "  fn inner(): int { return 42 }\n"
+                                "  return inner\n"
+                                "}\nlet f = make()\nprint(f())",
+                                NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_CLOSURE) && "nested func needs OP_CLOSURE");
     assert(PROTO_PROTO_COUNT(p) >= 1 && "should have child proto");
@@ -574,8 +559,7 @@ TEST(e2e_closure) {
 /* ========== Type Conversion ========== */
 
 TEST(e2e_type_convert) {
-    XrProto *p = compile_source(
-        "let x = 42\nlet s = x as string\nprint(s)", NULL);
+    XrProto *p = compile_source("let x = 42\nlet s = x as string\nprint(s)", NULL);
     assert(p != NULL);
     /* XI_AS lowers to MOVE; just verify pipeline succeeds */
     int total = PROTO_CODE_COUNT(p);
@@ -586,8 +570,7 @@ TEST(e2e_type_convert) {
 /* ========== Range ========== */
 
 TEST(e2e_range) {
-    XrProto *p = compile_source(
-        "let r = 0..10\nprint(r)", NULL);
+    XrProto *p = compile_source("let r = 0..10\nprint(r)", NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_NEWRANGE) && "range expression needs OP_NEWRANGE");
     xr_vm_proto_free(p);
@@ -715,7 +698,6 @@ int main(void) {
 
     teardown();
 
-    printf("\n=== %d/%d Xi Pipeline tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Xi Pipeline tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

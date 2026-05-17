@@ -36,40 +36,43 @@ static int tests_run = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define TEST(name) \
-    do { \
-        tests_run++; \
-        printf("  [%02d] %-50s ", tests_run, name); \
-        fflush(stdout); \
-    } while(0)
+#define TEST(name)                                                                                 \
+    do {                                                                                           \
+        tests_run++;                                                                               \
+        printf("  [%02d] %-50s ", tests_run, name);                                                \
+        fflush(stdout);                                                                            \
+    } while (0)
 
-#define PASS() \
-    do { \
-        tests_passed++; \
-        printf("PASS\n"); \
-    } while(0)
+#define PASS()                                                                                     \
+    do {                                                                                           \
+        tests_passed++;                                                                            \
+        printf("PASS\n");                                                                          \
+    } while (0)
 
-#define FAIL(msg) \
-    do { \
-        tests_failed++; \
-        printf("FAIL: %s\n", msg); \
-    } while(0)
+#define FAIL(msg)                                                                                  \
+    do {                                                                                           \
+        tests_failed++;                                                                            \
+        printf("FAIL: %s\n", msg);                                                                 \
+    } while (0)
 
-#define ASSERT(cond, msg) \
-    do { \
-        if (!(cond)) { FAIL(msg); return; } \
-    } while(0)
+#define ASSERT(cond, msg)                                                                          \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            FAIL(msg);                                                                             \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 static uint64_t time_ns(void) {
 #ifdef _WIN32
     LARGE_INTEGER freq, counter;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&counter);
-    return (uint64_t)(counter.QuadPart * 1000000000ULL / freq.QuadPart);
+    return (uint64_t) (counter.QuadPart * 1000000000ULL / freq.QuadPart);
 #else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 #endif
 }
 
@@ -344,7 +347,6 @@ static void test_rebuild_after_fullgc(void) {
 
 /* ========== 3. Write Barrier Tests ========== */
 
-
 static void test_keepinvariant_guard(void) {
     TEST("barrier: keepinvariant only true in mark phases");
 
@@ -596,7 +598,8 @@ int main(void) {
 
     printf("\n========================================\n");
     printf("  Results: %d/%d passed", tests_passed, tests_run);
-    if (tests_failed > 0) printf(", %d FAILED", tests_failed);
+    if (tests_failed > 0)
+        printf(", %d FAILED", tests_failed);
     printf("\n========================================\n\n");
 
     return tests_failed == 0 ? 0 : 1;

@@ -1,0 +1,235 @@
+name: Nightly
+
+# Nightly runs cover slow / platform-specific configurations that
+# would inflate PR latency if gated synchronously:
+#   - jit-fuzz-30min          : random Xi programs vs interpreter
+#                               baseline, 30 minutes wall-clock
+#   - gc-stress               : repeated GC-heavy regressions
+#   - linux-msan-jit          : MemorySanitizer (track-origins=2)
+#                               under XRAY_JIT_FORCE
+#   - windows-msvc-release-jit: MSVC Release CRT with the four Win11
+#                               coroutine scenarios that exposed
+#                               STATUS_HEAP_CORRUPTION in May 2026
+#
+# All jobs are continue-on-error during the W1 baseline so the first
+# nightly run produces complete sanitizer / fuzz output for triage.
+# The tightening deadline is captured in tests/known_failures.txt
+# with a 30-day expiry gate (CI fails on its own if the deadline
+# slips).
+
+on:
+  schedule:
+    # 02:00 UTC daily == 10:00 Asia/Shanghai
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. JIT fuzz 30min on Linux ASan + JIT-force
+  # ---------------------------------------------------------------------------
+  jit-fuzz-30min:
+    runs-on: ubuntu-latest
+    name: JIT Fuzz 30min (Linux ASan)
+    timeout-minutes: 45
+    continue-on-error: true
+
+    env:
+      XRAY_JIT_FORCE: "1"
+      ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1"
+      UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+      MALLOC_PERTURB_: "205"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang ninja-build
+
+      - name: Configure
+        run: >-
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DENABLE_ASAN=ON
+          -DENABLE_UBSAN=ON
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run JIT fuzz for 30 minutes
+        env:
+          XRAY_BIN: ./build/xray
+          # FUZZ_DURATION_SEC defaults to 1800 inside the script,
+          # set here explicitly so the nightly budget is visible in
+          # the workflow file.
+          FUZZ_DURATION_SEC: "1800"
+        run: |
+          chmod +x ./scripts/jit_fuzz.sh ./scripts/run_fuzz_30min.sh
+          # run_fuzz_30min.sh enforces the wall-clock budget itself
+          # and returns:
+          #   0 - budget elapsed, no diff/crash captured
+          #   1 - at least one diff or crash captured
+          #   2 - infrastructure error (binary / inner script missing)
+          bash ./scripts/run_fuzz_30min.sh
+
+      - name: Upload failing fuzz cases
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jit-fuzz-failures-${{ github.run_id }}
+          path: tests/tmp/jit_fuzz/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 2. GC stress on Linux + macOS arm64
+  # ---------------------------------------------------------------------------
+  gc-stress:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            short_name: linux
+          - os: macos-latest
+            short_name: macos-arm64
+
+    runs-on: ${{ matrix.os }}
+    name: GC Stress (${{ matrix.short_name }})
+    timeout-minutes: 30
+    continue-on-error: true
+
+    env:
+      XRAY_JIT_FORCE: "1"
+      ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang ninja-build
+          echo "MALLOC_PERTURB_=205" >> $GITHUB_ENV
+
+      - name: Enable MallocScribble (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "MallocScribble=1" >> $GITHUB_ENV
+          echo "MallocPreScribble=1" >> $GITHUB_ENV
+          echo "MallocGuardEdges=1" >> $GITHUB_ENV
+
+      - name: Configure
+        run: >-
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DENABLE_ASAN=ON
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run GC-heavy regression tests 10 times
+        env:
+          XRAY_BIN: ./build/xray
+        # run_gc_stress.sh selects the same set as the previous inline
+        # loop: 1206 under --jit-force, 1205 / 1207 under --no-jit (the
+        # NOJIT_TESTS designation lives in tests/known_failures.txt).
+        # Failure tails for any crashed iteration land in
+        # tests/tmp/gc_stress_failures.log which the artifact upload
+        # below would pick up if added in a follow-up.
+        run: |
+          chmod +x ./scripts/run_gc_stress.sh
+          bash ./scripts/run_gc_stress.sh 10
+
+  # ---------------------------------------------------------------------------
+  # 3. Linux MSan + JIT-force
+  # ---------------------------------------------------------------------------
+  linux-msan-jit:
+    runs-on: ubuntu-latest
+    name: MSan + JIT-force (Linux Clang)
+    timeout-minutes: 60
+    continue-on-error: true
+
+    env:
+      XRAY_JIT_FORCE: "1"
+      # halt_on_error=0 + exit_code=86 lets every uninit read in a single
+      # test surface (instead of aborting on the first), and marks the
+      # test as failed without taking the whole runner down. Mirrors the
+      # PR matrix linux-msan slot in ci.yml.
+      MSAN_OPTIONS: "halt_on_error=0:print_stats=1:abort_on_error=0:exit_code=86"
+      # Dump per-test stdout/stderr (sanitizer trace) on failure so triage
+      # does not need a local MSan build. Mirrors PR matrix in ci.yml.
+      XRAY_TEST_DUMP_FAILED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang ninja-build
+
+      - name: Configure (MSan)
+        run: >-
+          cmake -B build
+          -DCMAKE_BUILD_TYPE=Debug
+          -DENABLE_MSAN=ON
+          -DCMAKE_C_COMPILER=clang
+          -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Run regression tests under MSan
+        run: |
+          chmod +x ./scripts/run_regression_tests.sh
+          ./scripts/run_regression_tests.sh
+        env:
+          XRAY_PATH: ./build/xray
+          XRAY_BUILD_DIR: ./build
+
+  # ---------------------------------------------------------------------------
+  # 4. Windows MSVC Release + Win11 coroutine 4 cases
+  # ---------------------------------------------------------------------------
+  windows-msvc-release-jit:
+    runs-on: windows-2022
+    name: MSVC Release + Win11 Coro (JIT-force)
+    timeout-minutes: 30
+    continue-on-error: true
+
+    env:
+      XRAY_JIT_FORCE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zlib
+        shell: pwsh
+        run: |
+          vcpkg install zlib:x64-windows-release
+          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
+
+      - name: Configure (Release)
+        run: >-
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE"
+          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Run Win11 coroutine 4 cases 5x
+        shell: bash
+        env:
+          XRAY_BIN: ./build/Release/xray.exe
+        # repro_win11_coro_burn.sh pins the same four cases that
+        # exposed STATUS_HEAP_CORRUPTION in May 2026 (1115 cancel,
+        # 1109 await_any, 1127 priority, 1128 yield) and writes
+        # failure tails to tests/tmp/win11_coro_failures.log.
+        run: |
+          bash ./scripts/repro_win11_coro_burn.sh 5

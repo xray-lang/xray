@@ -71,7 +71,7 @@ static void test_set_get(void) {
         .is_optional = true,
     };
     xa_selection_table_set(t, &n1, &sel2);
-    assert(xa_selection_table_size(t) == 1);  /* no new entry */
+    assert(xa_selection_table_size(t) == 1); /* no new entry */
     got = xa_selection_table_get(t, &n1);
     assert(got->kind == XA_SEL_METHOD);
     assert(got->is_optional == true);
@@ -88,7 +88,7 @@ static void test_clear(void) {
         AstNode n = make_node(i);
         XaSelection sel = {
             .kind = XA_SEL_FIELD,
-            .field_index = (int32_t)i,
+            .field_index = (int32_t) i,
         };
         xa_selection_table_set(t, &n, &sel);
     }
@@ -114,7 +114,7 @@ static void test_many_entries(void) {
         AstNode n = make_node(i);
         XaSelection sel = {
             .kind = (i % 2 == 0) ? XA_SEL_METHOD : XA_SEL_FIELD,
-            .field_index = (int32_t)i,
+            .field_index = (int32_t) i,
         };
         xa_selection_table_set(t, &n, &sel);
     }
@@ -125,7 +125,7 @@ static void test_many_entries(void) {
         AstNode n = make_node(i);
         const XaSelection *got = xa_selection_table_get(t, &n);
         assert(got != NULL);
-        assert(got->field_index == (int32_t)i);
+        assert(got->field_index == (int32_t) i);
     }
 
     xa_selection_table_free(t);
@@ -137,13 +137,13 @@ static void test_all_kinds(void) {
     XaSelectionTable *t = xa_selection_table_new();
 
     XaSelectionKind kinds[] = {
-        XA_SEL_FIELD, XA_SEL_METHOD, XA_SEL_INDEX,
+        XA_SEL_FIELD,         XA_SEL_METHOD,        XA_SEL_INDEX,
         XA_SEL_STATIC_MEMBER, XA_SEL_MODULE_EXPORT, XA_SEL_ENUM_MEMBER,
     };
-    int nkinds = (int)(sizeof(kinds) / sizeof(kinds[0]));
+    int nkinds = (int) (sizeof(kinds) / sizeof(kinds[0]));
 
     for (int i = 0; i < nkinds; i++) {
-        AstNode n = make_node((uint32_t)(1000 + i));
+        AstNode n = make_node((uint32_t) (1000 + i));
         XaSelection sel = {
             .kind = kinds[i],
             .field_index = -1,
@@ -153,7 +153,7 @@ static void test_all_kinds(void) {
     assert(xa_selection_table_size(t) == nkinds);
 
     for (int i = 0; i < nkinds; i++) {
-        AstNode n = make_node((uint32_t)(1000 + i));
+        AstNode n = make_node((uint32_t) (1000 + i));
         const XaSelection *got = xa_selection_table_get(t, &n);
         assert(got != NULL);
         assert(got->kind == kinds[i]);

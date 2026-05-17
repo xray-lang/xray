@@ -51,8 +51,7 @@ static void teardown(void) {
 
 // Build a fresh symbol with a fixed file path and add it to the analyzer's
 // global scope. Returns the symbol (still owned by the scope).
-static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name,
-                                    const char *file) {
+static XaSymbol *add_symbol_in_file(XaAnalyzer *a, const char *name, const char *file) {
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_FUNCTION);
     XaSymbolLinks *links = xa_analyzer_get_links(a, sym);
     if (links) {
@@ -78,7 +77,7 @@ TEST(dep_graph_free_no_leak) {
     XaSymbol *s1 = add_symbol_in_file(a, "f1", "a.xr");
     XaSymbol *s2 = add_symbol_in_file(a, "f2", "a.xr");
 
-    XaIncrementalCtx *incr = (XaIncrementalCtx *)a->incremental;
+    XaIncrementalCtx *incr = (XaIncrementalCtx *) a->incremental;
     ASSERT(incr != NULL);
     xa_dep_add(incr, s1->id, s2->id, XA_DEP_REFERENCE);
     xa_dep_add(incr, s2->id, s1->id, XA_DEP_REFERENCE);
@@ -109,7 +108,7 @@ TEST(remove_file_drops_dep_edges) {
     int file_count_before = a->file_count;
     ASSERT(file_count_before >= 2);
 
-    XaIncrementalCtx *incr = (XaIncrementalCtx *)a->incremental;
+    XaIncrementalCtx *incr = (XaIncrementalCtx *) a->incremental;
     ASSERT(incr != NULL);
     xa_dep_add(incr, a1->id, b1->id, XA_DEP_REFERENCE);
     xa_dep_add(incr, b2->id, a2->id, XA_DEP_CALL);
@@ -138,7 +137,7 @@ TEST(remove_file_unknown_path_is_noop) {
     ASSERT(a != NULL);
 
     int file_count_before = a->file_count;
-    XaIncrementalCtx *incr = (XaIncrementalCtx *)a->incremental;
+    XaIncrementalCtx *incr = (XaIncrementalCtx *) a->incremental;
     int edge_count_before = (incr && incr->deps) ? incr->deps->edge_count : 0;
 
     xa_analyzer_remove_file(a, "/path/does/not/exist.xr");
@@ -154,10 +153,10 @@ TEST(remove_file_unknown_path_is_noop) {
 /* ---------------------------------------------------------------------- */
 
 TEST_MAIN_BEGIN()
-    setup();
-    RUN_TEST_SUITE("xa_analyzer_remove_file");
-    RUN_TEST(dep_graph_free_no_leak);
-    RUN_TEST(remove_file_drops_dep_edges);
-    RUN_TEST(remove_file_unknown_path_is_noop);
-    teardown();
+setup();
+RUN_TEST_SUITE("xa_analyzer_remove_file");
+RUN_TEST(dep_graph_free_no_leak);
+RUN_TEST(remove_file_drops_dep_edges);
+RUN_TEST(remove_file_unknown_path_is_noop);
+teardown();
 TEST_MAIN_END()

@@ -260,6 +260,20 @@ static void x64_h_mul(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 }
 
 static void x64_h_div_mod(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
+    /* Divide-by-zero guard: x64 IDIV raises #DE on zero divisor, which the
+     * runtime sees as an uncaught structured exception.  Mirror ARM64's
+     * a64_h_div / a64_h_mod (PATCH_DEOPT_CBZ before sdiv) by testing the
+     * divisor up front and jumping to the deopt stub on zero so the VM
+     * re-executes the bytecode and raises a proper DivisionByZero. */
+    {
+        X64Reg rm_chk = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        x64_test_rr(&ctx->buf, rm_chk, rm_chk);
+        /* MOV-only writes inside emit_deopt_id preserve EFLAGS, so ZF
+         * from the test above carries through to the Jcc below. */
+        x64_emit_deopt_id(ctx, ins);
+        x64_emit_deopt_jcc(ctx, X64_CC_E);
+    }
+
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
     if (rn != X64_RAX)

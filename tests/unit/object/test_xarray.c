@@ -13,11 +13,11 @@
 #include "runtime/object/xarray.h"
 
 // Helper macros to match xvalue.h API
-#define xr_is_null(v)   XR_IS_NULL(v)
-#define xr_is_int(v)    XR_IS_INT(v)
-#define xr_is_float(v)  XR_IS_FLOAT(v)
-#define xr_is_bool(v)   XR_IS_BOOL(v)
-#define xr_as_int(v)    XR_TO_INT(v)
+#define xr_is_null(v) XR_IS_NULL(v)
+#define xr_is_int(v) XR_IS_INT(v)
+#define xr_is_float(v) XR_IS_FLOAT(v)
+#define xr_is_bool(v) XR_IS_BOOL(v)
+#define xr_as_int(v) XR_TO_INT(v)
 
 static XrayIsolate *X = NULL;
 static XrCoroutine *main_coro = NULL;
@@ -317,7 +317,7 @@ TEST(array_copy) {
     xr_array_push(arr, xr_int(1));
     xr_array_push(arr, xr_int(2));
     xr_array_push(arr, xr_int(3));
-    
+
     XrArray *copy = xr_array_copy(main_coro, arr);
     ASSERT_NOT_NULL(copy);
     ASSERT_NE(copy, arr);  // Different object
@@ -325,7 +325,7 @@ TEST(array_copy) {
     ASSERT_EQ_INT(xr_as_int(xr_array_get(copy, 0)), 1);
     ASSERT_EQ_INT(xr_as_int(xr_array_get(copy, 1)), 2);
     ASSERT_EQ_INT(xr_as_int(xr_array_get(copy, 2)), 3);
-    
+
     // Modify original, copy should not change
     xr_array_set(arr, 0, xr_int(100));
     ASSERT_EQ_INT(xr_as_int(xr_array_get(copy, 0)), 1);  // Unchanged
@@ -340,7 +340,7 @@ TEST(array_slice_basic) {
     for (int i = 0; i < 5; i++) {
         xr_array_push(arr, xr_int(i));
     }
-    
+
     // Slice [1:4] -> [1, 2, 3]
     XrArray *slice = xr_array_slice(main_coro, arr, 1, 4);
     ASSERT_NOT_NULL(slice);
@@ -358,7 +358,7 @@ TEST(array_slice_full) {
     for (int i = 0; i < 5; i++) {
         xr_array_push(arr, xr_int(i));
     }
-    
+
     // Full slice [0:5]
     XrArray *slice = xr_array_slice(main_coro, arr, 0, 5);
     ASSERT_EQ_INT(xr_array_size(slice), 5);
@@ -371,7 +371,7 @@ TEST(array_slice_empty) {
     for (int i = 0; i < 5; i++) {
         xr_array_push(arr, xr_int(i));
     }
-    
+
     // Empty slice [2:2]
     XrArray *slice = xr_array_slice(main_coro, arr, 2, 2);
     ASSERT_EQ_INT(xr_array_size(slice), 0);
@@ -387,7 +387,7 @@ TEST(array_mixed_types) {
     xr_array_push(arr, xr_float(3.14));
     xr_array_push(arr, xr_bool(true));
     xr_array_push(arr, xr_null());
-    
+
     ASSERT_EQ_INT(xr_array_size(arr), 4);
     ASSERT_TRUE(xr_is_int(xr_array_get(arr, 0)));
     ASSERT_TRUE(xr_is_float(xr_array_get(arr, 1)));
@@ -408,8 +408,8 @@ TEST(array_large_push) {
     ASSERT_EQ_INT(xr_array_size(arr), N);
     // Verify first, middle, last
     ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 0)), 0);
-    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, N/2)), N/2);
-    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, N-1)), N-1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, N / 2)), N / 2);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, N - 1)), N - 1);
     teardown();
 }
 
@@ -420,55 +420,55 @@ static void run_all_tests(void) {
     RUN_TEST(array_new_empty);
     RUN_TEST(array_with_capacity);
     RUN_TEST(array_from_values);
-    
+
     RUN_TEST_SUITE("Array Push/Pop");
     RUN_TEST(array_push_single);
     RUN_TEST(array_push_multiple);
     RUN_TEST(array_pop_single);
     RUN_TEST(array_pop_empty);
     RUN_TEST(array_push_pop_sequence);
-    
+
     RUN_TEST_SUITE("Array Unshift/Shift");
     RUN_TEST(array_unshift_single);
     RUN_TEST(array_unshift_multiple);
     RUN_TEST(array_shift_single);
     RUN_TEST(array_shift_empty);
-    
+
     RUN_TEST_SUITE("Array Get/Set");
     RUN_TEST(array_get_valid_index);
     RUN_TEST(array_get_invalid_index);
     RUN_TEST(array_set_valid_index);
-    
+
     RUN_TEST_SUITE("Array Query");
     RUN_TEST(array_index_of_found);
     RUN_TEST(array_index_of_not_found);
     RUN_TEST(array_has);
-    
+
     RUN_TEST_SUITE("Array Clear");
     RUN_TEST(array_clear);
-    
+
     RUN_TEST_SUITE("Array Reverse");
     RUN_TEST(array_reverse_even);
     RUN_TEST(array_reverse_odd);
     RUN_TEST(array_reverse_empty);
     RUN_TEST(array_reverse_single);
-    
+
     RUN_TEST_SUITE("Array Copy");
     RUN_TEST(array_copy);
-    
+
     RUN_TEST_SUITE("Array Slice");
     RUN_TEST(array_slice_basic);
     RUN_TEST(array_slice_full);
     RUN_TEST(array_slice_empty);
-    
+
     RUN_TEST_SUITE("Array Mixed Types");
     RUN_TEST(array_mixed_types);
-    
+
     RUN_TEST_SUITE("Array Stress");
     RUN_TEST(array_large_push);
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray Array Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray Array Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

@@ -41,7 +41,7 @@ static void make_tmp_tree(void) {
 #else
     snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xr_test_cli_fs_XXXXXX");
     char *r = mkdtemp(g_tmpdir);
-    (void)r;
+    (void) r;
 #endif
 
     /* Create structure:
@@ -61,32 +61,46 @@ static void make_tmp_tree(void) {
     char path[512];
 
     snprintf(path, sizeof(path), "%s/hello.xr", g_tmpdir);
-    FILE *f = fopen(path, "wb"); fprintf(f, "print(1)\n"); fclose(f);
+    FILE *f = fopen(path, "wb");
+    fprintf(f, "print(1)\n");
+    fclose(f);
 
     snprintf(path, sizeof(path), "%s/readme.txt", g_tmpdir);
-    f = fopen(path, "wb"); fprintf(f, "doc\n"); fclose(f);
+    f = fopen(path, "wb");
+    fprintf(f, "doc\n");
+    fclose(f);
 
     snprintf(path, sizeof(path), "%s/.hidden", g_tmpdir);
     test_mkdir(path);
     snprintf(path, sizeof(path), "%s/.hidden/secret.xr", g_tmpdir);
-    f = fopen(path, "wb"); fprintf(f, "hidden\n"); fclose(f);
+    f = fopen(path, "wb");
+    fprintf(f, "hidden\n");
+    fclose(f);
 
     snprintf(path, sizeof(path), "%s/sub", g_tmpdir);
     test_mkdir(path);
     snprintf(path, sizeof(path), "%s/sub/foo.xr", g_tmpdir);
-    f = fopen(path, "wb"); fprintf(f, "foo\n"); fclose(f);
+    f = fopen(path, "wb");
+    fprintf(f, "foo\n");
+    fclose(f);
     snprintf(path, sizeof(path), "%s/sub/bar.xr", g_tmpdir);
-    f = fopen(path, "wb"); fprintf(f, "bar\n"); fclose(f);
+    f = fopen(path, "wb");
+    fprintf(f, "bar\n");
+    fclose(f);
 
     snprintf(path, sizeof(path), "%s/node_modules", g_tmpdir);
     test_mkdir(path);
     snprintf(path, sizeof(path), "%s/node_modules/pkg.xr", g_tmpdir);
-    f = fopen(path, "wb"); fprintf(f, "pkg\n"); fclose(f);
+    f = fopen(path, "wb");
+    fprintf(f, "pkg\n");
+    fclose(f);
 
     snprintf(path, sizeof(path), "%s/build", g_tmpdir);
     test_mkdir(path);
     snprintf(path, sizeof(path), "%s/build/out.xr", g_tmpdir);
-    f = fopen(path, "wb"); fprintf(f, "out\n"); fclose(f);
+    f = fopen(path, "wb");
+    fprintf(f, "out\n");
+    fclose(f);
 }
 
 static void rm_rf(const char *dir) {
@@ -96,7 +110,7 @@ static void rm_rf(const char *dir) {
 #else
     snprintf(cmd, sizeof(cmd), "rm -rf %s", dir);
 #endif
-    (void)system(cmd);
+    (void) system(cmd);
 }
 
 /* ========== File I/O Tests ========== */
@@ -347,36 +361,36 @@ TEST(parse_port_invalid) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("File I/O");
-    RUN_TEST(read_file_success);
-    RUN_TEST(read_file_nonexistent);
-    RUN_TEST(write_file_and_read_back);
-    RUN_TEST(write_file_atomic_and_read_back);
+RUN_TEST_SUITE("File I/O");
+RUN_TEST(read_file_success);
+RUN_TEST(read_file_nonexistent);
+RUN_TEST(write_file_and_read_back);
+RUN_TEST(write_file_atomic_and_read_back);
 
-    RUN_TEST_SUITE("Path Queries");
-    RUN_TEST(file_exists_true);
-    RUN_TEST(file_exists_false);
-    RUN_TEST(is_directory_true);
-    RUN_TEST(is_directory_false_on_file);
-    RUN_TEST(is_xr_file_true);
-    RUN_TEST(is_xr_file_false);
+RUN_TEST_SUITE("Path Queries");
+RUN_TEST(file_exists_true);
+RUN_TEST(file_exists_false);
+RUN_TEST(is_directory_true);
+RUN_TEST(is_directory_false_on_file);
+RUN_TEST(is_xr_file_true);
+RUN_TEST(is_xr_file_false);
 
-    RUN_TEST_SUITE("File List");
-    RUN_TEST(filelist_init_empty);
-    RUN_TEST(filelist_add_and_count);
-    RUN_TEST(filelist_sort);
+RUN_TEST_SUITE("File List");
+RUN_TEST(filelist_init_empty);
+RUN_TEST(filelist_add_and_count);
+RUN_TEST(filelist_sort);
 
-    RUN_TEST_SUITE("Directory Traversal");
-    RUN_TEST(collect_single_file);
-    RUN_TEST(collect_directory_xr_only);
-    RUN_TEST(collect_skips_hidden);
-    RUN_TEST(collect_nonexistent_returns_error);
+RUN_TEST_SUITE("Directory Traversal");
+RUN_TEST(collect_single_file);
+RUN_TEST(collect_directory_xr_only);
+RUN_TEST(collect_skips_hidden);
+RUN_TEST(collect_nonexistent_returns_error);
 
-    RUN_TEST_SUITE("Safe Parsing");
-    RUN_TEST(parse_int_valid);
-    RUN_TEST(parse_int_invalid);
-    RUN_TEST(parse_int_null_rejected);
-    RUN_TEST(parse_port_valid);
-    RUN_TEST(parse_port_invalid);
+RUN_TEST_SUITE("Safe Parsing");
+RUN_TEST(parse_int_valid);
+RUN_TEST(parse_int_invalid);
+RUN_TEST(parse_int_null_rejected);
+RUN_TEST(parse_port_valid);
+RUN_TEST(parse_port_invalid);
 
 TEST_MAIN_END()

@@ -24,9 +24,12 @@
 static void crash_handler(int sig) {
     const char *msg = "\n!!! SIGNAL received: ";
     write(2, msg, strlen(msg));
-    if (sig == 11) write(2, "SIGSEGV\n", 8);
-    else if (sig == 10) write(2, "SIGBUS\n", 7);
-    else write(2, "OTHER\n", 6);
+    if (sig == 11)
+        write(2, "SIGSEGV\n", 8);
+    else if (sig == 10)
+        write(2, "SIGBUS\n", 7);
+    else
+        write(2, "OTHER\n", 6);
     _exit(128 + sig);
 }
 
@@ -53,12 +56,12 @@ static void test_basic_alloc(void) {
     // Allocate some memory
     void *p1 = xm_code_alloc(&alloc, 64, 16);
     assert(p1 != NULL);
-    assert(((uintptr_t)p1 & 15) == 0);  // 16-byte aligned
+    assert(((uintptr_t) p1 & 15) == 0);  // 16-byte aligned
 
     void *p2 = xm_code_alloc(&alloc, 128, 16);
     assert(p2 != NULL);
     assert(p2 != p1);
-    assert(((uintptr_t)p2 & 15) == 0);
+    assert(((uintptr_t) p2 & 15) == 0);
 
     // Check stats
     assert(xm_code_alloc_used(&alloc) == 64 + 128);
@@ -114,7 +117,7 @@ static void test_execute_code(void) {
 
     // Cast to function pointer and call
     typedef int (*IntFunc)(void);
-    IntFunc fn = (IntFunc)code;
+    IntFunc fn = (IntFunc) code;
     fprintf(stderr, "calling... ");
     int result = fn();
     fprintf(stderr, "result=%d ", result);
@@ -143,7 +146,7 @@ static void test_execute_add(void) {
     xm_code_flush_icache(code, sizeof(arm64_add));
 
     typedef int (*AddFunc)(int, int);
-    AddFunc fn = (AddFunc)code;
+    AddFunc fn = (AddFunc) code;
 
     fprintf(stderr, "calling... ");
     assert(fn(10, 32) == 42);
@@ -180,8 +183,8 @@ static void test_multiple_functions(void) {
     typedef int (*IntFunc)(void);
     typedef int (*AddFunc)(int, int);
 
-    assert(((IntFunc)code1)() == 42);
-    assert(((AddFunc)code2)(10, 20) == 30);
+    assert(((IntFunc) code1)() == 42);
+    assert(((AddFunc) code2)(10, 20) == 30);
 
     xm_code_alloc_destroy(&alloc);
     fprintf(stderr, "PASS\n");

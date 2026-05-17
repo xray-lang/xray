@@ -174,7 +174,7 @@ TEST(unicode_property_ranges_ascii) {
 /* ========== is_property Direct ========== */
 
 TEST(unicode_is_property_han) {
-    ASSERT_TRUE(xr_unicode_is_property(0x4E2D, XR_UP_Han));   // 中
+    ASSERT_TRUE(xr_unicode_is_property(0x4E2D, XR_UP_Han));  // 中
     ASSERT_FALSE(xr_unicode_is_property('A', XR_UP_Han));
 }
 
@@ -195,37 +195,37 @@ TEST(unicode_is_property_any) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Unicode - Property Lookup");
-    RUN_TEST(unicode_property_lookup_valid);
-    RUN_TEST(unicode_property_lookup_scripts);
-    RUN_TEST(unicode_property_lookup_invalid);
-    RUN_TEST(unicode_property_name);
+RUN_TEST_SUITE("Unicode - Property Lookup");
+RUN_TEST(unicode_property_lookup_valid);
+RUN_TEST(unicode_property_lookup_scripts);
+RUN_TEST(unicode_property_lookup_invalid);
+RUN_TEST(unicode_property_name);
 
-    RUN_TEST_SUITE("Unicode - ASCII Classification");
-    RUN_TEST(unicode_is_letter_ascii);
-    RUN_TEST(unicode_is_upper_ascii);
-    RUN_TEST(unicode_is_lower_ascii);
-    RUN_TEST(unicode_is_number_ascii);
-    RUN_TEST(unicode_is_alnum_ascii);
-    RUN_TEST(unicode_is_whitespace_ascii);
-    RUN_TEST(unicode_is_punct_ascii);
+RUN_TEST_SUITE("Unicode - ASCII Classification");
+RUN_TEST(unicode_is_letter_ascii);
+RUN_TEST(unicode_is_upper_ascii);
+RUN_TEST(unicode_is_lower_ascii);
+RUN_TEST(unicode_is_number_ascii);
+RUN_TEST(unicode_is_alnum_ascii);
+RUN_TEST(unicode_is_whitespace_ascii);
+RUN_TEST(unicode_is_punct_ascii);
 
-    RUN_TEST_SUITE("Unicode - Non-ASCII");
-    RUN_TEST(unicode_is_letter_cjk);
-    RUN_TEST(unicode_is_letter_cyrillic);
-    RUN_TEST(unicode_is_number_non_ascii);
+RUN_TEST_SUITE("Unicode - Non-ASCII");
+RUN_TEST(unicode_is_letter_cjk);
+RUN_TEST(unicode_is_letter_cyrillic);
+RUN_TEST(unicode_is_number_non_ascii);
 
-    RUN_TEST_SUITE("Unicode - Case Conversion");
-    RUN_TEST(unicode_toupper);
-    RUN_TEST(unicode_tolower);
+RUN_TEST_SUITE("Unicode - Case Conversion");
+RUN_TEST(unicode_toupper);
+RUN_TEST(unicode_tolower);
 
-    RUN_TEST_SUITE("Unicode - Property Ranges");
-    RUN_TEST(unicode_property_ranges_valid);
-    RUN_TEST(unicode_property_ranges_ascii);
+RUN_TEST_SUITE("Unicode - Property Ranges");
+RUN_TEST(unicode_property_ranges_valid);
+RUN_TEST(unicode_property_ranges_ascii);
 
-    RUN_TEST_SUITE("Unicode - is_property Direct");
-    RUN_TEST(unicode_is_property_han);
-    RUN_TEST(unicode_is_property_latin);
-    RUN_TEST(unicode_is_property_any);
+RUN_TEST_SUITE("Unicode - is_property Direct");
+RUN_TEST(unicode_is_property_han);
+RUN_TEST(unicode_is_property_latin);
+RUN_TEST(unicode_is_property_any);
 
 TEST_MAIN_END()

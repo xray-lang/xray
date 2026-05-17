@@ -185,9 +185,18 @@ static void sysmon_assist(XrRuntime *runtime) {
         if (st != M_PARKED && st != M_PARKING)
             continue;
 
-        // If this worker has a timer wheel with overdue ticks, wake it
+        // If this worker has a timer wheel with overdue ticks, wake it.
+        //
+        // Owner worker is parking/parked here, so it is not actively writing
+        // the timer wheel.  We read next_timeout_pos directly (single aligned
+        // 64-bit load, naturally atomic on x86-64/AArch64) instead of calling
+        // xr_check_next_timeout_time, which is owner-exclusive and asserts
+        // an invariant that may transiently appear violated across the
+        // owner's two non-atomic stores to next_timeout_pos and
+        // next_timeout_time.  A stale value here is benign: worst case the
+        // owner gets unparked one sysmon tick later.
         if (w->p.timer_wheel && now > w->p.last_timer_tick) {
-            int64_t next = xr_check_next_timeout_time(w->p.timer_wheel);
+            int64_t next = w->p.timer_wheel->next_timeout_pos;
             if (next <= now) {
                 worker_unpark(w);
             }

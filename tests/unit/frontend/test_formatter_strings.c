@@ -77,7 +77,8 @@ static void teardown(void) {
 // Returns NULL if the parser rejects the source (caller asserts).
 static char *parse_and_format(const char *source) {
     AstNode *ast = xr_parse_with_trivia(g_iso, source, "<test>");
-    if (!ast) return NULL;
+    if (!ast)
+        return NULL;
     char *out = xfmt_format_ast(ast, NULL, g_iso);
     xr_program_destroy(ast);
     return out;
@@ -94,8 +95,7 @@ static char *assert_round_trip(const char *src, const char *label) {
     }
     char *second = parse_and_format(first);
     if (!second) {
-        fprintf(stderr, "[%s] parse failed on first formatted output:\n%s\n",
-                label, first);
+        fprintf(stderr, "[%s] parse failed on first formatted output:\n%s\n", label, first);
         free(first);
         return NULL;
     }
@@ -118,7 +118,7 @@ static char *assert_round_trip(const char *src, const char *label) {
 // Used to drive parser through the regular-string production.
 static char *build_regular_let(const char *payload) {
     size_t len = strlen(payload);
-    char *buf = (char *)malloc(len + 32);
+    char *buf = (char *) malloc(len + 32);
     snprintf(buf, len + 32, "let s = \"%s\";\n", payload);
     return buf;
 }
@@ -126,7 +126,7 @@ static char *build_regular_let(const char *payload) {
 // Build `let s = r"<payload>";` for the raw-string production.
 static char *build_raw_let(const char *payload) {
     size_t len = strlen(payload);
-    char *buf = (char *)malloc(len + 32);
+    char *buf = (char *) malloc(len + 32);
     snprintf(buf, len + 32, "let s = r\"%s\";\n", payload);
     return buf;
 }
@@ -155,7 +155,7 @@ TEST(regular_string_round_trip_basic) {
         // Only escapes:
         "let s = \"\\n\\t\";\n",
     };
-    int n = (int)(sizeof(kSources) / sizeof(kSources[0]));
+    int n = (int) (sizeof(kSources) / sizeof(kSources[0]));
     for (int i = 0; i < n; i++) {
         char *out = assert_round_trip(kSources[i], "regular_basic");
         ASSERT_NOT_NULL(out);
@@ -174,13 +174,13 @@ TEST(raw_string_canonicalised_to_double_quoted) {
     // re-escaping when emitted as a regular string. The parser
     // accepts the raw form; the formatter must rewrite it.
     static const char *kRawPayloads[] = {
-        "abc",                  // plain ASCII -- trivial
-        "with \\n inside",      // literal `\n` (two chars), not a newline
-        "literal $ sign",       // raw `$` outside template
-        "trailing backslash \\",// odd-count backslash run
-        "mixed \\\\\\n test",   // multiple backslashes, no real newline
+        "abc",                    // plain ASCII -- trivial
+        "with \\n inside",        // literal `\n` (two chars), not a newline
+        "literal $ sign",         // raw `$` outside template
+        "trailing backslash \\",  // odd-count backslash run
+        "mixed \\\\\\n test",     // multiple backslashes, no real newline
     };
-    int n = (int)(sizeof(kRawPayloads) / sizeof(kRawPayloads[0]));
+    int n = (int) (sizeof(kRawPayloads) / sizeof(kRawPayloads[0]));
     for (int i = 0; i < n; i++) {
         char *src = build_raw_let(kRawPayloads[i]);
         char *out = assert_round_trip(src, "raw_canonical");
@@ -201,11 +201,11 @@ TEST(template_string_round_trip) {
     static const char *kSources[] = {
         "let n = \"x\";\nlet s = \"hello, ${n}!\";\n",
         "let a = 1; let b = 2;\nlet s = \"sum=${a + b}\";\n",
-        "let p = 0;\nlet s = \"$${p}\";\n",   // user wants literal `$`
+        "let p = 0;\nlet s = \"$${p}\";\n",  // user wants literal `$`
         "let n = \"x\";\nlet s = \"${n}-${n}-${n}\";\n",
         "let x = 1;\nlet s = \"start ${x} mid ${x + 1} end\";\n",
     };
-    int n = (int)(sizeof(kSources) / sizeof(kSources[0]));
+    int n = (int) (sizeof(kSources) / sizeof(kSources[0]));
     for (int i = 0; i < n; i++) {
         char *out = assert_round_trip(kSources[i], "template");
         ASSERT_NOT_NULL(out);
@@ -218,12 +218,11 @@ TEST(idempotence_after_two_passes) {
     // The most direct fixed-point witness: a single source going
     // through two format passes must yield identical bytes. This
     // is the canonical formulation of the round-trip contract.
-    const char *src =
-        "let a = \"plain\";\n"
-        "let b = \"with \\\"quote\\\" and \\\\ backslash\";\n"
-        "let c = r\"raw \\n stays literal\";\n"
-        "let n = \"x\";\n"
-        "let d = \"template ${n} done\";\n";
+    const char *src = "let a = \"plain\";\n"
+                      "let b = \"with \\\"quote\\\" and \\\\ backslash\";\n"
+                      "let c = r\"raw \\n stays literal\";\n"
+                      "let n = \"x\";\n"
+                      "let d = \"template ${n} done\";\n";
 
     char *first = parse_and_format(src);
     ASSERT_NOT_NULL(first);
@@ -264,19 +263,17 @@ TEST(idempotence_after_two_passes) {
 // a template interpolation marker even inside raw strings, so the
 // random_raw lane filters those out -- a raw payload containing
 // `${` without a matching `}` is a legitimate parse error.
-static const char kRandomAlphabet[] =
-    "abcdefghijklmnopqrstuvwxyz"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "0123456789"
-    " !#%&'()*+,-./:;<=>?@[]^_|}~"
-    "$$$$";  // weight $ higher to stress the template-escape path
+static const char kRandomAlphabet[] = "abcdefghijklmnopqrstuvwxyz"
+                                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                      "0123456789"
+                                      " !#%&'()*+,-./:;<=>?@[]^_|}~"
+                                      "$$$$";  // weight $ higher to stress the template-escape path
 
 #define RANDOM_PAYLOAD_MAX 32
-#define RANDOM_CASE_COUNT  64
+#define RANDOM_CASE_COUNT 64
 
 static void random_payload(unsigned int *state, char *out) {
-    int len = (int)((*state = (*state * 1103515245u + 12345u))
-                    % RANDOM_PAYLOAD_MAX);
+    int len = (int) ((*state = (*state * 1103515245u + 12345u)) % RANDOM_PAYLOAD_MAX);
     for (int i = 0; i < len; i++) {
         *state = *state * 1103515245u + 12345u;
         out[i] = kRandomAlphabet[(*state >> 8) % (sizeof(kRandomAlphabet) - 1)];
@@ -328,7 +325,8 @@ TEST(random_raw_string_canonicalisation) {
 
         // The raw-string lexer rejects a literal `"` in the payload
         // (it would close the string). Skip such payloads.
-        if (strchr(payload, '"')) continue;
+        if (strchr(payload, '"'))
+            continue;
 
         char *src = build_raw_let(payload);
         char *out = assert_round_trip(src, "random_raw");
@@ -350,13 +348,13 @@ TEST(random_raw_string_canonicalisation) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    setup();
-    RUN_TEST_SUITE("string / template round-trip");
-    RUN_TEST(regular_string_round_trip_basic);
-    RUN_TEST(raw_string_canonicalised_to_double_quoted);
-    RUN_TEST(template_string_round_trip);
-    RUN_TEST(idempotence_after_two_passes);
-    RUN_TEST(random_regular_string_round_trip);
-    RUN_TEST(random_raw_string_canonicalisation);
-    teardown();
+setup();
+RUN_TEST_SUITE("string / template round-trip");
+RUN_TEST(regular_string_round_trip_basic);
+RUN_TEST(raw_string_canonicalised_to_double_quoted);
+RUN_TEST(template_string_round_trip);
+RUN_TEST(idempotence_after_two_passes);
+RUN_TEST(random_regular_string_round_trip);
+RUN_TEST(random_raw_string_canonicalisation);
+teardown();
 TEST_MAIN_END()

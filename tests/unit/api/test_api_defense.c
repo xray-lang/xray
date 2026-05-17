@@ -43,18 +43,27 @@ TEST(api_isolate_params_init_null) {
 #endif
 
 TEST(api_isolate_dostring_null_isolate) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     int result = xray_isolate_dostring(NULL, "print(1)");
     ASSERT_EQ_INT(result, -1);
 }
 
 TEST(api_isolate_dostring_null_source) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     // Need a valid isolate to test NULL source
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
     XrayIsolate *iso = xray_isolate_new(&params);
-    if (!iso) { ASSERT_TRUE(1); return; }  // alloc failure
+    if (!iso) {
+        ASSERT_TRUE(1);
+        return;
+    }  // alloc failure
 
     int result = xray_isolate_dostring(iso, NULL);
     ASSERT_EQ_INT(result, -1);
@@ -63,17 +72,26 @@ TEST(api_isolate_dostring_null_source) {
 }
 
 TEST(api_isolate_dofile_null_isolate) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     int result = xray_isolate_dofile(NULL, "test.xr");
     ASSERT_EQ_INT(result, -1);
 }
 
 TEST(api_isolate_dofile_null_filename) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
     XrayIsolate *iso = xray_isolate_new(&params);
-    if (!iso) { ASSERT_TRUE(1); return; }
+    if (!iso) {
+        ASSERT_TRUE(1);
+        return;
+    }
 
     int result = xray_isolate_dofile(iso, NULL);
     ASSERT_EQ_INT(result, -1);
@@ -84,26 +102,38 @@ TEST(api_isolate_dofile_null_filename) {
 /* ========== Advanced API NULL Safety ========== */
 
 TEST(api_isolate_get_backend_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     int backend = xray_isolate_get_backend(NULL);
     ASSERT_EQ_INT(backend, 0);
 }
 
 TEST(api_isolate_set_userdata_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     // Should not crash
-    xray_isolate_set_userdata(NULL, (void*)0x1234);
+    xray_isolate_set_userdata(NULL, (void *) 0x1234);
     ASSERT_TRUE(1);
 }
 
 TEST(api_isolate_get_userdata_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     void *ud = xray_isolate_get_userdata(NULL);
     ASSERT_NULL(ud);
 }
 
 TEST(api_isolate_get_stats_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     size_t bytes = 999;
     int gc_count = 999;
     xray_isolate_get_stats(NULL, &bytes, &gc_count);
@@ -113,19 +143,28 @@ TEST(api_isolate_get_stats_null) {
 }
 
 TEST(api_isolate_collect_garbage_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     xray_isolate_collect_garbage(NULL);
     ASSERT_TRUE(1);
 }
 
 TEST(api_isolate_set_trace_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     xray_isolate_set_trace(NULL, true);
     ASSERT_TRUE(1);
 }
 
 TEST(api_isolate_set_dump_bytecode_null) {
-    if (SKIP_NULL_RETURN_TESTS) { ASSERT_TRUE(1); return; }
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
     xray_isolate_set_dump_bytecode(NULL, true);
     ASSERT_TRUE(1);
 }
@@ -148,7 +187,7 @@ TEST(api_isolate_userdata_roundtrip) {
     XrayIsolate *iso = xray_isolate_new(&params);
     ASSERT_NOT_NULL(iso);
 
-    void *data = (void*)0xDEADBEEF;
+    void *data = (void *) 0xDEADBEEF;
     xray_isolate_set_userdata(iso, data);
     void *got = xray_isolate_get_userdata(iso);
     ASSERT_EQ_PTR(got, data);
@@ -176,24 +215,24 @@ TEST(api_isolate_stats_valid) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("API Boundary Defense - NULL Safety");
-    RUN_TEST(api_isolate_delete_null);
-    RUN_TEST(api_isolate_params_init_null);
-    RUN_TEST(api_isolate_dostring_null_isolate);
-    RUN_TEST(api_isolate_dostring_null_source);
-    RUN_TEST(api_isolate_dofile_null_isolate);
-    RUN_TEST(api_isolate_dofile_null_filename);
-    RUN_TEST(api_isolate_get_backend_null);
-    RUN_TEST(api_isolate_set_userdata_null);
-    RUN_TEST(api_isolate_get_userdata_null);
-    RUN_TEST(api_isolate_get_stats_null);
-    RUN_TEST(api_isolate_collect_garbage_null);
-    RUN_TEST(api_isolate_set_trace_null);
-    RUN_TEST(api_isolate_set_dump_bytecode_null);
+RUN_TEST_SUITE("API Boundary Defense - NULL Safety");
+RUN_TEST(api_isolate_delete_null);
+RUN_TEST(api_isolate_params_init_null);
+RUN_TEST(api_isolate_dostring_null_isolate);
+RUN_TEST(api_isolate_dostring_null_source);
+RUN_TEST(api_isolate_dofile_null_isolate);
+RUN_TEST(api_isolate_dofile_null_filename);
+RUN_TEST(api_isolate_get_backend_null);
+RUN_TEST(api_isolate_set_userdata_null);
+RUN_TEST(api_isolate_get_userdata_null);
+RUN_TEST(api_isolate_get_stats_null);
+RUN_TEST(api_isolate_collect_garbage_null);
+RUN_TEST(api_isolate_set_trace_null);
+RUN_TEST(api_isolate_set_dump_bytecode_null);
 
-    RUN_TEST_SUITE("API Lifecycle - Valid Operations");
-    RUN_TEST(api_isolate_create_destroy);
-    RUN_TEST(api_isolate_userdata_roundtrip);
-    RUN_TEST(api_isolate_stats_valid);
+RUN_TEST_SUITE("API Lifecycle - Valid Operations");
+RUN_TEST(api_isolate_create_destroy);
+RUN_TEST(api_isolate_userdata_roundtrip);
+RUN_TEST(api_isolate_stats_valid);
 
 TEST_MAIN_END()

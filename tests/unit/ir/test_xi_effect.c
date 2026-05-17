@@ -17,23 +17,23 @@
 static int g_passed = 0;
 static int g_failed = 0;
 
-#define ASSERT_TRUE(cond, msg)                                  \
-    do {                                                        \
-        if (!(cond)) {                                          \
-            fprintf(stderr, "  FAIL: %s\n", msg);               \
-            g_failed++;                                         \
-        } else {                                                \
-            g_passed++;                                         \
-        }                                                       \
+#define ASSERT_TRUE(cond, msg)                                                                     \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL: %s\n", msg);                                                  \
+            g_failed++;                                                                            \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
 /* Every opcode must produce a valid flags byte (no crash). */
 static void test_all_opcodes_covered(void) {
     for (int op = 0; op < XI_OP_COUNT; op++) {
-        uint8_t eff = xi_op_default_effects((uint16_t)op);
+        uint8_t eff = xi_op_default_effects((uint16_t) op);
         /* flags must fit in uint8_t (always true, but sanity check) */
         ASSERT_TRUE(eff <= 0xFF, "effect overflow");
-        (void)eff;
+        (void) eff;
     }
 }
 
@@ -53,12 +53,9 @@ static void test_side_effect_ops(void) {
     uint8_t se = XI_FLAG_SIDE_EFFECT;
     ASSERT_TRUE((xi_op_default_effects(XI_STORE_FIELD) & se) != 0,
                 "STORE_FIELD must be side-effecting");
-    ASSERT_TRUE((xi_op_default_effects(XI_PRINT) & se) != 0,
-                "PRINT must be side-effecting");
-    ASSERT_TRUE((xi_op_default_effects(XI_THROW) & se) != 0,
-                "THROW must be side-effecting");
-    ASSERT_TRUE((xi_op_default_effects(XI_CALL) & se) != 0,
-                "CALL must be side-effecting");
+    ASSERT_TRUE((xi_op_default_effects(XI_PRINT) & se) != 0, "PRINT must be side-effecting");
+    ASSERT_TRUE((xi_op_default_effects(XI_THROW) & se) != 0, "THROW must be side-effecting");
+    ASSERT_TRUE((xi_op_default_effects(XI_CALL) & se) != 0, "CALL must be side-effecting");
 }
 
 /* Coroutine ops must have MAY_SUSPEND. */
@@ -69,12 +66,9 @@ static void test_suspend_ops(void) {
     ASSERT_TRUE(xi_op_may_suspend(XI_CHAN_RECV), "CHAN_RECV must may-suspend");
     ASSERT_TRUE(xi_op_may_suspend(XI_SCOPE_EXIT), "SCOPE_EXIT must may-suspend");
     /* Non-blocking variants should not may-suspend */
-    ASSERT_TRUE(!xi_op_may_suspend(XI_CHAN_TRY_SEND),
-                "CHAN_TRY_SEND should not may-suspend");
-    ASSERT_TRUE(!xi_op_may_suspend(XI_CHAN_TRY_RECV),
-                "CHAN_TRY_RECV should not may-suspend");
-    ASSERT_TRUE(!xi_op_may_suspend(XI_GO),
-                "GO should not may-suspend");
+    ASSERT_TRUE(!xi_op_may_suspend(XI_CHAN_TRY_SEND), "CHAN_TRY_SEND should not may-suspend");
+    ASSERT_TRUE(!xi_op_may_suspend(XI_CHAN_TRY_RECV), "CHAN_TRY_RECV should not may-suspend");
+    ASSERT_TRUE(!xi_op_may_suspend(XI_GO), "GO should not may-suspend");
 }
 
 /* Memory ops. */
@@ -95,7 +89,6 @@ int main(void) {
     test_suspend_ops();
     test_mem_ops();
 
-    printf("\n=== test_xi_effect: %d passed, %d failed ===\n",
-           g_passed, g_failed);
+    printf("\n=== test_xi_effect: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;
 }

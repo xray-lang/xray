@@ -507,7 +507,14 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
 
     for (int i = 0; i < fdecl->param_count; i++) {
         XrParamNode *p = fdecl->params[i];
-        struct XrType *ptype = p->type ? p->type : l.type_any;
+        /* p->type is XrTypeRef* (AST syntax), not XrType* — resolve it
+         * before handing to the IR layer.  Treating the ref directly as
+         * XrType* puts an unrelated struct layout into XiValue->type and
+         * downstream readers (struct_layout_of, JIT codegen, TFA) read
+         * garbage bytes for every field. */
+        struct XrType *ptype = p->type ? xr_tref_resolve(isolate, p->type) : l.type_any;
+        if (!ptype)
+            ptype = l.type_any;
 
         XiValue *param_val = xi_param(l.func, entry, (uint16_t) i, ptype);
         l.func->params[i] = param_val;
@@ -528,7 +535,9 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         if (!p->default_value)
             continue;
 
-        struct XrType *ptype = p->type ? p->type : l.type_any;
+        struct XrType *ptype = p->type ? xr_tref_resolve(isolate, p->type) : l.type_any;
+        if (!ptype)
+            ptype = l.type_any;
         int var_id = xi_lower_var_create(&l, p->symbol_id, p->name, ptype);
         XR_DCHECK(var_id >= 0, "default param var not found");
         XiValue *cur = xi_lower_braun_read(&l, var_id, l.cur_block);

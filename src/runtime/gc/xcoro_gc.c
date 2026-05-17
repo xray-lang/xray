@@ -584,6 +584,37 @@ static void gc_record_shared_ref(XrCoroGC *gc, XrGCHeader *obj) {
 void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
     if (!obj)
         return;
+    // DEFENSIVE-TEMP[082]: GCHeader sanity check at markobject entry.
+    //   Tracking row "markobject-validate" in tests/known_temp_workarounds.md.
+    //
+    // Why this exists today:
+    //   Conservative stack scanning (mark_coro_roots) reads XrValue slots
+    //   in vm_ctx.stack and treats any slot whose tag byte equals
+    //   XR_TAG_PTR as a live reference. JIT-compiled frames never write
+    //   vm_ctx.stack (the JIT keeps locals in registers / its own spill
+    //   slots), so the tag/heap_type/ptr triplet observed there can be
+    //   leftover bytes from an earlier collection. A stale tag=PTR with
+    //   a stale ptr that no longer addresses a live object would
+    //   otherwise reach reallymarkobject and overwrite the "marked"
+    //   byte at obj+9, corrupting whatever GCHeader.gc_next byte
+    //   happens to live at that address (the 1206 crash: 0x248 -> 0x448
+    //   from markobject(0x...278), where 0x278+9 == 0x281 is byte 1 of
+    //   an adjacent live MAP's gc_next).
+    //
+    // Why a genuine fix needs more than this guard:
+    //   The four cheap shape checks below reject random bytes but do
+    //   not eliminate the spurious read. A real fix delivers a
+    //   safepoint-driven precise stack map for the JIT and a uniform
+    //   cross-tier pointer-trust contract, after which the conservative
+    //   scan never observes a JIT-owned slot and this guard becomes
+    //   unreachable. This routine should then assert the same shape
+    //   instead of returning early.
+    if (((uintptr_t) obj & 7) != 0)
+        return;  // GCHeader is always 8-byte aligned
+    if (obj->type >= XGC_MAX_TYPES)
+        return;  // type id is a small enum
+    if (obj->objsize < sizeof(XrGCHeader) || (obj->objsize & 7) != 0)
+        return;  // objsize is header + payload, 8-byte aligned, >=16
     // Shared objects: track reference but don't mark (managed by refcount)
     if (XR_GC_IS_SHARED(obj)) {
         /* Defensive: every real shared object is allocated via
@@ -922,7 +953,19 @@ static void mark_coro_roots(XrCoroGC *gc) {
     if (coro->jit_ctx && coro->jit_ctx->call_closure)
         xr_coro_gc_markobject(gc, (XrGCHeader *) coro->jit_ctx->call_closure);
 
-    // Mark JIT GC stack map roots (compile-time bitmap)
+    // Mark JIT GC stack map roots (compile-time bitmap).  The frame layout
+    // (callee-saved offsets, SPILL_BASE=176, FP-chain offsets 160/168) and
+    // register-index meanings (x1-x15 caller-saved, x21-x27 callee-saved)
+    // below are ARM64-specific.  On x64 the JIT prologue uses PUSH r64 to
+    // save callee-saved GPs and SPILL_BASE is 88 (Win64) / 40 (SysV); reading
+    // these offsets as if they were ARM64 produces garbage pointers that get
+    // passed to xr_coro_gc_markobject, which then writes the "marked" byte
+    // (offset 9) of the garbage address — corrupting a nearby chain link's
+    // gc_next byte 1 and turning e.g. 0x248 into 0x448, which is exactly the
+    // chain corruption that crashes sweep_block in 1206_gc_enhanced under
+    // --jit-force.  A proper x64 GC stack map scanner is future work; for now
+    // we only run this block on AArch64.
+#if defined(__aarch64__) || defined(_M_ARM64)
     // Innermost frame: scan registers (from safepoint_saved_sp) + spill slots
     // Caller frames: scan spill slots only (PTR regs written back before calls)
     if (coro->jit_ctx && coro->jit_ctx->active_stack_map) {
@@ -1082,6 +1125,7 @@ static void mark_coro_roots(XrCoroGC *gc) {
             }
         }
     }
+#endif  // __aarch64__ || _M_ARM64
 
     // Mark external roots registered by C extensions
     for (XrCoroGCRootEntry *re = gc->root_callbacks; re; re = re->next) {
@@ -1141,6 +1185,32 @@ static void traverse_object(XrCoroGC *gc, XrGCHeader *obj) {
  */
 static int sweep_block(XrCoroGC *gc, XrImmixBlock *block) {
     XR_DCHECK(block != NULL, "sweep_block: NULL block");
+    // DEFENSIVE-TEMP[082]: Flush deferred alloc_marks at sweep entry.
+    //   Tracking row "sweep-flush" in tests/known_temp_workarounds.md.
+    //
+    // Why this exists today:
+    //   The JIT inline allocator bumps immix.cursor without marking the
+    //   occupied lines; xr_immix_flush_marks reconciles cursor and
+    //   alloc_marks in batch on the slow path. Several flush call sites
+    //   were originally scattered across allocation paths but the sweep
+    //   side of the pipeline was not one of them, so sweep_block could
+    //   read stale alloc_marks, rebuild them treating live lines as
+    //   free, and the next hole scan would allocate over still-live
+    //   objects chained into local_allgc — eventually crashing here at
+    //   curr->marked with garbage curr.
+    //
+    // Why a genuine fix needs more than this guard:
+    //   The deferred-marks contract has too many endpoints to cover by
+    //   inspection. A real fix replaces the deferred mechanism with an
+    //   eager BTS at allocation time (one store per allocation, no
+    //   reconciliation phase), at which point the flush call below
+    //   has no work to do and can be removed in lockstep with the
+    //   xr_immix_flush_marks API itself.
+    //
+    // Idempotent: flush_marks returns immediately once mark_cursor
+    // catches up to cursor, so calling per-block is cheap.
+    xr_immix_flush_marks(&gc->immix);
+
     // sweep_block called from: incremental SWEEP, entergen (PAUSE), fullgc (SWEEP),
     // youngcollection (PAUSE in GEN mode)
     // Fast path: no object in this block was marked AND no BLACK survivors exist.

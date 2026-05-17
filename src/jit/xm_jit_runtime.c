@@ -547,11 +547,35 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
         return XR_JIT_OK();
     }
 
-    // Reconstruct XrValue from raw payload
+    // DEFENSIVE-TEMP[082]: Backfill XrValue.heap_type at the JIT->VM boundary.
+    //   Tracking row "throw-heap-type" in tests/known_temp_workarounds.md.
+    //
+    // Why this exists today:
+    //   The XI_THROW argument is the unboxed payload of an arbitrary
+    //   value (string ptr, Exception ptr, even an int boxed as ptr).
+    //   JIT-internal XrValue uses a sparse descriptor where heap_type
+    //   may be 0 and is rebuilt on demand by jit_value_from_tag, while
+    //   the VM expects heap_type to always be complete. Without this
+    //   backfill xr_is_exception sees heap_type=0 for a real Exception,
+    //   the auto-wrap path fires spuriously, and the original value is
+    //   stored as userData with heap_type=0 — breaking every downstream
+    //   XR_IS_STRING / XR_IS_PTR-typed check on the caught value.
+    //
+    // Why a genuine fix needs more than this guard:
+    //   Every CALL_C boundary that hands an XrValue between JIT and VM
+    //   has the same hazard; backfilling at this single site is one
+    //   point on a long surface. A real fix unifies the descriptor
+    //   contract so JIT-internal values carry a complete heap_type by
+    //   construction, with DCHECK enforcement at every cross-tier call,
+    //   after which this rebuild becomes a redundant write the
+    //   compiler can elide.
     XrValue exception;
     exception.descriptor = 0;
     exception.tag = XR_TAG_PTR;
     exception.i = exception_raw;
+    if (exception_raw != 0 && (exception_raw & 0x7) == 0) {
+        exception.heap_type = (uint16_t) ((XrGCHeader *) exception.ptr)->type;
+    }
 
     // Auto-wrap non-exception values
     if (!xr_is_exception(exception)) {
@@ -727,11 +751,12 @@ XrJitResult xr_jit_index_set(XrCoroutine *coro, int64_t extra_arg) {
             if ((unsigned) idx < (unsigned) arr->length) {
                 xr_array_set_element(arr, idx, new_val);
             } else if (idx == arr->length) {
-                /* Append-style write: OP_NEWARRAY/OP_INDEX_SET emits arr[i]=v for
-                 * i = 0..n-1 right after creating the array.  In the bytecode
-                 * path OP_NEWARRAY pre-pushes the elements; the JIT lowering
-                 * does not, so length is 0 when the first INDEX_SET arrives.
-                 * Match push semantics for the next slot. */
+                /* Append-style write: lower_array_literal emits OP_NEWARRAY
+                 * (length=0, b is capacity hint only) followed by OP_INDEX_SET
+                 * arr[i]=v for i=0..n-1.  Both bytecode VM and JIT take the
+                 * idx == length branch and push.  Keeps the two backends in
+                 * sync — see OP_INDEX_SET array branch in
+                 * xvm_dispatch_collection.inc.c. */
                 xr_array_push(arr, new_val);
             }
         } else if (heap_type == XR_TMAP) {

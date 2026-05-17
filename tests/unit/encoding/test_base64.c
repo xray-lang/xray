@@ -16,17 +16,17 @@
 #include "base/xmalloc.h"
 
 // C-level API from stdlib (forward declare to avoid pulling in module deps)
-char* xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
-char* xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len);
-unsigned char* xr_base64_decode(const char *data, size_t len, size_t *out_len);
-unsigned char* xr_base64_decode_url(const char *data, size_t len, size_t *out_len);
+char *xr_base64_encode(const unsigned char *data, size_t len, size_t *out_len);
+char *xr_base64_encode_url(const unsigned char *data, size_t len, size_t *out_len);
+unsigned char *xr_base64_decode(const char *data, size_t len, size_t *out_len);
+unsigned char *xr_base64_decode_url(const char *data, size_t len, size_t *out_len);
 bool xr_base64_is_valid(const char *data, size_t len);
 
 /* ========== Standard Base64 Encode ========== */
 
 TEST(base64_encode_empty) {
     size_t out_len;
-    char *result = xr_base64_encode((const unsigned char*)"", 0, &out_len);
+    char *result = xr_base64_encode((const unsigned char *) "", 0, &out_len);
     ASSERT_NOT_NULL(result);
     ASSERT_EQ_UINT(out_len, 0);
     xr_free(result);
@@ -36,26 +36,26 @@ TEST(base64_encode_basic) {
     size_t out_len;
 
     // RFC 4648 test vectors
-    char *r1 = xr_base64_encode((const unsigned char*)"f", 1, &out_len);
+    char *r1 = xr_base64_encode((const unsigned char *) "f", 1, &out_len);
     ASSERT_STR_EQ(r1, "Zg==");
     xr_free(r1);
 
-    char *r2 = xr_base64_encode((const unsigned char*)"fo", 2, &out_len);
+    char *r2 = xr_base64_encode((const unsigned char *) "fo", 2, &out_len);
     ASSERT_STR_EQ(r2, "Zm8=");
     xr_free(r2);
 
-    char *r3 = xr_base64_encode((const unsigned char*)"foo", 3, &out_len);
+    char *r3 = xr_base64_encode((const unsigned char *) "foo", 3, &out_len);
     ASSERT_STR_EQ(r3, "Zm9v");
     xr_free(r3);
 
-    char *r4 = xr_base64_encode((const unsigned char*)"foobar", 6, &out_len);
+    char *r4 = xr_base64_encode((const unsigned char *) "foobar", 6, &out_len);
     ASSERT_STR_EQ(r4, "Zm9vYmFy");
     xr_free(r4);
 }
 
 TEST(base64_encode_hello) {
     size_t out_len;
-    char *result = xr_base64_encode((const unsigned char*)"Hello, World!", 13, &out_len);
+    char *result = xr_base64_encode((const unsigned char *) "Hello, World!", 13, &out_len);
     ASSERT_NOT_NULL(result);
     ASSERT_STR_EQ(result, "SGVsbG8sIFdvcmxkIQ==");
     xr_free(result);
@@ -109,7 +109,7 @@ TEST(base64_roundtrip) {
         size_t enc_len, dec_len;
         size_t in_len = strlen(inputs[i]);
 
-        char *encoded = xr_base64_encode((const unsigned char*)inputs[i], in_len, &enc_len);
+        char *encoded = xr_base64_encode((const unsigned char *) inputs[i], in_len, &enc_len);
         ASSERT_NOT_NULL(encoded);
 
         unsigned char *decoded = xr_base64_decode(encoded, enc_len, &dec_len);
@@ -171,7 +171,8 @@ TEST(base64_is_valid) {
 
 TEST(base64_binary_data) {
     unsigned char binary[256];
-    for (int i = 0; i < 256; i++) binary[i] = (unsigned char)i;
+    for (int i = 0; i < 256; i++)
+        binary[i] = (unsigned char) i;
 
     size_t enc_len, dec_len;
     char *encoded = xr_base64_encode(binary, 256, &enc_len);
@@ -190,27 +191,27 @@ TEST(base64_binary_data) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Base64 - Standard Encode");
-    RUN_TEST(base64_encode_empty);
-    RUN_TEST(base64_encode_basic);
-    RUN_TEST(base64_encode_hello);
+RUN_TEST_SUITE("Base64 - Standard Encode");
+RUN_TEST(base64_encode_empty);
+RUN_TEST(base64_encode_basic);
+RUN_TEST(base64_encode_hello);
 
-    RUN_TEST_SUITE("Base64 - Standard Decode");
-    RUN_TEST(base64_decode_empty);
-    RUN_TEST(base64_decode_basic);
-    RUN_TEST(base64_decode_hello);
+RUN_TEST_SUITE("Base64 - Standard Decode");
+RUN_TEST(base64_decode_empty);
+RUN_TEST(base64_decode_basic);
+RUN_TEST(base64_decode_hello);
 
-    RUN_TEST_SUITE("Base64 - Roundtrip");
-    RUN_TEST(base64_roundtrip);
+RUN_TEST_SUITE("Base64 - Roundtrip");
+RUN_TEST(base64_roundtrip);
 
-    RUN_TEST_SUITE("Base64 - URL-safe");
-    RUN_TEST(base64_url_encode);
-    RUN_TEST(base64_url_roundtrip);
+RUN_TEST_SUITE("Base64 - URL-safe");
+RUN_TEST(base64_url_encode);
+RUN_TEST(base64_url_roundtrip);
 
-    RUN_TEST_SUITE("Base64 - Validation");
-    RUN_TEST(base64_is_valid);
+RUN_TEST_SUITE("Base64 - Validation");
+RUN_TEST(base64_is_valid);
 
-    RUN_TEST_SUITE("Base64 - Binary Data");
-    RUN_TEST(base64_binary_data);
+RUN_TEST_SUITE("Base64 - Binary Data");
+RUN_TEST(base64_binary_data);
 
 TEST_MAIN_END()

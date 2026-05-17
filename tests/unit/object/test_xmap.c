@@ -190,7 +190,7 @@ TEST(map_many_entries) {
     for (int i = 0; i < N; i++) {
         xr_map_set(map, xr_int(i), xr_int(i * 10));
     }
-    ASSERT_EQ_INT(xr_map_size(map), (uint32_t)N);
+    ASSERT_EQ_INT(xr_map_size(map), (uint32_t) N);
 
     // Verify all entries
     for (int i = 0; i < N; i++) {

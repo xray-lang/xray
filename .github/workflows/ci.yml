@@ -25,6 +25,44 @@ jobs:
         ./scripts/check_frontend_arch.sh
 
   # ===========================================================================
+  # Reverse-invariant seed checks (codegen hardening foundation).
+  # Three lightweight grep-based gates:
+  #   E.1  no new silent fallback (default: break;) outside the
+  #        recorded baseline in tests/baseline_silent_fallback.txt
+  #   E.2  no legacy_helper / old_emit / XR_COMPAT / deprecated_call
+  #        wrappers anywhere in src/
+  #   E.3  build/generated/ is never tracked by git
+  # Plus an expiry gate on tests/known_failures.txt: every active
+  # suppression entry must carry ISSUE / ADDED <= 30 days / OWNER.
+  # See scripts/check_codegen_invariants.sh and
+  #     scripts/check_known_failures_freshness.sh for details.
+  # ===========================================================================
+  reverse-invariants:
+    runs-on: ubuntu-latest
+    name: Reverse-Invariant Seed Checks
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Codegen invariants (silent fallback / legacy wrappers / generated tree)
+      run: |
+        chmod +x ./scripts/check_codegen_invariants.sh
+        ./scripts/check_codegen_invariants.sh
+
+    - name: known_failures.txt freshness (<= 30 days)
+      run: |
+        chmod +x ./scripts/check_known_failures_freshness.sh
+        ./scripts/check_known_failures_freshness.sh
+
+    - name: DEFENSIVE-TEMP reconciliation (tag <-> docs table)
+      # Two-way reconciliation between every `DEFENSIVE-TEMP[NNN]` tag
+      # in src/ and the table in docs/known_temp_workarounds.md. A tag
+      # without a row, or a row without a tag, blocks merge — so removing
+      # a workaround forces same-commit removal of both artifacts.
+      run: |
+        chmod +x ./scripts/check_temp_workarounds.sh
+        ./scripts/check_temp_workarounds.sh
+
+  # ===========================================================================
   # Build & Test (multi-platform)
   # ===========================================================================
   build:
@@ -360,3 +398,219 @@ jobs:
           exit 1
         fi
         echo "Code format check passed"
+
+  # ===========================================================================
+  # JIT-force PR matrix
+  # ---------------------------------------------------------------------------
+  # Forces every eligible regression test through the JIT compilation
+  # path under a sanitizer-enabled build. This matrix exposes codegen
+  # / GC / coroutine corruption that the default lazy-JIT lane fails
+  # to surface (the May 2026 11-bug corruption family was only
+  # reproducible under --jit-force + ASan).
+  #
+  # Three host configurations land first:
+  #   - linux-asan-ubsan : ASan + UBSan + MALLOC_PERTURB_, the highest
+  #                       signal lane (covers UAF, OOB, signed UB,
+  #                       use-of-uninit on Linux glibc)
+  #   - macos-arm64-asan: MallocScribble + ASan, mirrors the Apple
+  #                       Silicon dev host; catches macOS-specific
+  #                       layout drift early
+  #   - windows-msvc-dbg: /MDd already provides 0xCD / 0xDD heap fill
+  #                       equivalent to MallocScribble; covers MSVC
+  #                       calling-convention bugs (RCX / R10 / R11)
+  #
+  # The remaining three configurations from the 082 plan (Linux MSan,
+  # macOS x64 ASan, Windows MSVC Release with Win11 coroutine cases)
+  # live in nightly.yml because they are either slower or more
+  # platform-specific.
+  #
+  # continue-on-error is set to true during the W1 baseline so the
+  # first full-matrix run produces complete sanitizer output for
+  # triage. It MUST flip to false at the 082 W3 checkpoint; the
+  # tightening is tracked in tests/known_failures.txt with a 30-day
+  # expiry gate, which fails CI on its own if the deadline slips.
+  # ===========================================================================
+  jit-force-pr:
+    needs: [arch-lint, reverse-invariants]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-asan-ubsan-jit
+            os: ubuntu-latest
+            short_name: linux-asan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_ASAN=ON
+              -DENABLE_UBSAN=ON
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+            build_config: Debug
+
+          - name: linux-msan-jit
+            # MemorySanitizer (Clang). Reads of uninitialised memory
+            # across heap / stack / register are the primary signal here.
+            # GitHub-hosted ubuntu runners do not ship an instrumented
+            # libc, so cross-library false positives are expected to
+            # appear until either an MSan-instrumented libc / libc++ is
+            # vendored or per-library blacklists are tightened. The
+            # job-level `continue-on-error: true` (W1 baseline) keeps
+            # this matrix slot informational while the real signal-to-
+            # noise ratio is measured.
+            os: ubuntu-latest
+            short_name: linux-msan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_MSAN=ON
+              -DCMAKE_C_COMPILER=clang
+              -DCMAKE_CXX_COMPILER=clang++
+            build_config: Debug
+
+          - name: macos-arm64-asan-jit
+            os: macos-latest
+            short_name: macos-arm64-asan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_ASAN=ON
+              -DENABLE_UBSAN=ON
+            build_config: Debug
+
+          - name: macos-x64-asan-jit
+            # macos-13 is the only currently-available Intel runner.
+            # The runner image is in deprecation but no x86_64-capable
+            # successor exists; once it disappears we either drop this
+            # slot or self-host. Until then it is the only signal we
+            # have for x86_64-specific JIT codegen bugs on macOS.
+            os: macos-13
+            short_name: macos-x64-asan
+            cmake_flags: >-
+              -DCMAKE_BUILD_TYPE=Debug
+              -DENABLE_ASAN=ON
+              -DENABLE_UBSAN=ON
+            build_config: Debug
+
+          - name: windows-msvc-debug-jit
+            os: windows-2022
+            short_name: windows-msvc-debug
+            # MSVC /MDd already provides 0xCD / 0xDD heap fill; no
+            # explicit sanitizer flag is needed and MSVC ASan adds
+            # noise around CRT internals.
+            cmake_flags: -DCMAKE_BUILD_TYPE=Debug
+            build_config: Debug
+
+          - name: windows-msvc-release-jit
+            os: windows-2022
+            short_name: windows-msvc-release
+            # Release build (/MD) drops the Debug-CRT heap fill that
+            # surfaced bug #5 (stale R11 read on XM_JMP_RET) on the
+            # windows-msvc-debug job. The pair forces optimisation- and
+            # heap-fill-sensitive regressions to fail on whichever
+            # matrix slot they manifest in, instead of the lucky one.
+            cmake_flags: -DCMAKE_BUILD_TYPE=Release
+            build_config: Release
+
+    runs-on: ${{ matrix.os }}
+    name: JIT-force PR (${{ matrix.short_name }})
+    # W1 baseline: the matrix is expected to surface latent codegen
+    # bugs as it ramps up. Tightening is tracked by
+    # tests/known_failures.txt with a 30-day expiry gate.
+    continue-on-error: true
+
+    env:
+      XRAY_JIT_FORCE: "1"
+      ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1"
+      UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
+      # MSan reports on this matrix are informational (continue-on-error
+      # at job level). halt_on_error=0 lets each test surface every
+      # uninit read instead of aborting on the first one, which gives
+      # a clearer picture of the false-positive surface from
+      # non-instrumented system libraries.
+      MSAN_OPTIONS: "halt_on_error=0:print_stats=1:abort_on_error=0:exit_code=86"
+      # Dump per-test stdout/stderr (incl. sanitizer reports) at the
+      # end of the regression run so the W2 triage no longer needs a
+      # local sanitizer build to read root causes.
+      XRAY_TEST_DUMP_FAILED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Clang (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang ninja-build
+          echo "MALLOC_PERTURB_=205" >> $GITHUB_ENV
+
+      - name: Enable MallocScribble (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "MallocScribble=1" >> $GITHUB_ENV
+          echo "MallocPreScribble=1" >> $GITHUB_ENV
+          echo "MallocGuardEdges=1" >> $GITHUB_ENV
+
+      - name: Install zlib (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install zlib:x64-windows-release
+          echo "CMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" >> $env:GITHUB_ENV
+          echo "VCPKG_TARGET_TRIPLET=x64-windows-release" >> $env:GITHUB_ENV
+
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        run: cmake -B build ${{ matrix.cmake_flags }}
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: >-
+          cmake -B build ${{ matrix.cmake_flags }}
+          -DCMAKE_TOOLCHAIN_FILE="$env:CMAKE_TOOLCHAIN_FILE"
+          -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET"
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_config }} -j
+
+      - name: Stage vcpkg runtime DLLs next to xray.exe (Windows)
+        # vcpkg's x64-windows-release triplet links against shared zlib;
+        # the Debug-config build directory does not auto-deploy those
+        # DLLs, so the regression runner used to fail every test with
+        # "error while loading shared libraries: z.dll". Copy the
+        # release-triplet DLLs alongside the binary before tests run.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "${{ github.workspace }}/build/${{ matrix.build_config }}"
+          $dll = "$env:VCPKG_INSTALLATION_ROOT/installed/x64-windows-release/bin"
+          if (Test-Path $dll) {
+            Copy-Item -Path "$dll/*.dll" -Destination $bin -Force
+            Get-ChildItem $bin -Filter '*.dll' | ForEach-Object { $_.Name }
+          } else {
+            Write-Host "vcpkg release bin dir not found: $dll"
+            Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT/installed" -Recurse -Filter '*.dll' | Select-Object FullName
+          }
+
+      - name: Run regression tests (--jit-force, Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x ./scripts/run_regression_tests.sh
+          ./scripts/run_regression_tests.sh
+        env:
+          XRAY_PATH: ./build/xray
+          XRAY_BUILD_DIR: ./build
+          # ASan + UBSan + JIT-force triples per-test runtime vs the
+          # plain interpreter (instrumented JIT compile + deopt paths
+          # cost the most), so the default 10s budget races coroutine
+          # / channel stress tests on the Linux runners. Bumping to
+          # 60s keeps slow-but-correct runs green; any test still
+          # exceeding this is a real hang and worth investigating.
+          XRAY_TEST_TIMEOUT: "60"
+
+      - name: Run regression tests (--jit-force, Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          ./scripts/run_regression_tests.sh
+        env:
+          XRAY_PATH: ./build/${{ matrix.build_config }}/xray.exe
+          XRAY_BUILD_DIR: ./build
+          XRAY_TEST_TIMEOUT: "60"

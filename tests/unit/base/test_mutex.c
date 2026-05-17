@@ -97,17 +97,17 @@ TEST(mutex_state_after_unlock) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Mutex - Basic Operations");
-    RUN_TEST(mutex_init);
-    RUN_TEST(mutex_lock_unlock);
-    RUN_TEST(mutex_lock_unlock_repeated);
+RUN_TEST_SUITE("Mutex - Basic Operations");
+RUN_TEST(mutex_init);
+RUN_TEST(mutex_lock_unlock);
+RUN_TEST(mutex_lock_unlock_repeated);
 
-    RUN_TEST_SUITE("Mutex - Trylock");
-    RUN_TEST(mutex_trylock_success);
-    RUN_TEST(mutex_trylock_fail);
+RUN_TEST_SUITE("Mutex - Trylock");
+RUN_TEST(mutex_trylock_success);
+RUN_TEST(mutex_trylock_fail);
 
-    RUN_TEST_SUITE("Mutex - State Transitions");
-    RUN_TEST(mutex_state_after_lock);
-    RUN_TEST(mutex_state_after_unlock);
+RUN_TEST_SUITE("Mutex - State Transitions");
+RUN_TEST(mutex_state_after_lock);
+RUN_TEST(mutex_state_after_unlock);
 
 TEST_MAIN_END()

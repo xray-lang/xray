@@ -20,20 +20,22 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 #define TEST(name) static void test_##name(void)
-#define RUN_TEST(name) do { \
-    printf("  Testing %s... ", #name); \
-    test_##name(); \
-    printf("PASS\n"); \
-    tests_passed++; \
-} while(0)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Testing %s... ", #name);                                                         \
+        test_##name();                                                                             \
+        printf("PASS\n");                                                                          \
+        tests_passed++;                                                                            \
+    } while (0)
 
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf("FAIL at line %d: %s\n", __LINE__, #cond); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
@@ -249,24 +251,21 @@ TEST(document_version) {
 
 // Build a minimal code_action params JSON with a single diagnostic whose
 // message matches the given text.
-static XrJsonValue *make_code_action_params(const char *uri, int line,
-                                             int start_col, int end_col,
-                                             const char *diag_message) {
+static XrJsonValue *make_code_action_params(const char *uri, int line, int start_col, int end_col,
+                                            const char *diag_message) {
     XrJsonValue *params = xjson_new_object();
 
     XrJsonValue *text_doc = xjson_new_object();
     xjson_object_set(text_doc, "uri", xjson_new_string(uri));
     xjson_object_set(params, "textDocument", text_doc);
 
-    xjson_object_set(params, "range",
-        xjson_make_range(line, start_col, line, end_col));
+    xjson_object_set(params, "range", xjson_make_range(line, start_col, line, end_col));
 
     XrJsonValue *context = xjson_new_object();
     XrJsonValue *diagnostics = xjson_new_array();
     XrJsonValue *diag = xjson_new_object();
     xjson_object_set(diag, "message", xjson_new_string(diag_message));
-    xjson_object_set(diag, "range",
-        xjson_make_range(line, start_col, line, end_col));
+    xjson_object_set(diag, "range", xjson_make_range(line, start_col, line, end_col));
     xjson_array_push(diagnostics, diag);
     xjson_object_set(context, "diagnostics", diagnostics);
     xjson_object_set(params, "context", context);
@@ -275,16 +274,19 @@ static XrJsonValue *make_code_action_params(const char *uri, int line,
 
 // Return true if any action in the array has a title containing all the
 // given substrings.
-static bool actions_contain_title_with(XrJsonValue *actions,
-                                       const char *s1, const char *s2) {
-    if (!actions) return false;
+static bool actions_contain_title_with(XrJsonValue *actions, const char *s1, const char *s2) {
+    if (!actions)
+        return false;
     int n = xjson_array_len(actions);
     for (int i = 0; i < n; i++) {
         XrJsonValue *a = xjson_array_get(actions, i);
         const char *title = xjson_get_string(a, "title");
-        if (!title) continue;
-        if (s1 && !strstr(title, s1)) continue;
-        if (s2 && !strstr(title, s2)) continue;
+        if (!title)
+            continue;
+        if (s1 && !strstr(title, s1))
+            continue;
+        if (s2 && !strstr(title, s2))
+            continue;
         return true;
     }
     return false;
@@ -298,11 +300,10 @@ TEST(code_action_go_capture_to_shared_const) {
     // Line 1:     let counter = 0
     // Line 2:     go fn() { print(counter) }()
     // Line 3: }
-    const char *content =
-        "fn t() {\n"
-        "    let counter = 0\n"
-        "    go fn() { print(counter) }()\n"
-        "}\n";
+    const char *content = "fn t() {\n"
+                          "    let counter = 0\n"
+                          "    go fn() { print(counter) }()\n"
+                          "}\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///t.xr", content, 1);
     ASSERT(doc != NULL);
 
@@ -330,18 +331,17 @@ TEST(code_action_move_to_shared_let) {
     // Line 1:     let data = [1, 2, 3]
     // Line 2:     go fn(d: Array<int>) { print(d.length) }(move data)
     // Line 3: }
-    const char *content =
-        "fn t() {\n"
-        "    let data = [1, 2, 3]\n"
-        "    go fn(d: Array<int>) { print(d.length) }(move data)\n"
-        "}\n";
+    const char *content = "fn t() {\n"
+                          "    let data = [1, 2, 3]\n"
+                          "    go fn(d: Array<int>) { print(d.length) }(move data)\n"
+                          "}\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///m.xr", content, 1);
     ASSERT(doc != NULL);
 
-    XrJsonValue *params = make_code_action_params(
-        "file:///m.xr", 2, 48, 52,
-        "'move' requires 'data' to be declared as 'shared let'\n"
-        "hint: change the declaration to 'shared let data = ...'");
+    XrJsonValue *params =
+        make_code_action_params("file:///m.xr", 2, 48, 52,
+                                "'move' requires 'data' to be declared as 'shared let'\n"
+                                "hint: change the declaration to 'shared let data = ...'");
 
     XrJsonValue *actions = xlsp_handle_code_action(server, params);
     ASSERT(actions != NULL);
@@ -360,16 +360,14 @@ TEST(code_action_quickfix_skips_when_decl_missing) {
     ASSERT(server != NULL);
 
     // Content deliberately does NOT contain `let counter`.
-    const char *content =
-        "fn t() {\n"
-        "    print(counter)\n"
-        "}\n";
+    const char *content = "fn t() {\n"
+                          "    print(counter)\n"
+                          "}\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///n.xr", content, 1);
     ASSERT(doc != NULL);
 
     XrJsonValue *params = make_code_action_params(
-        "file:///n.xr", 1, 10, 17,
-        "go closure cannot capture mutable variable 'counter'");
+        "file:///n.xr", 1, 10, 17, "go closure cannot capture mutable variable 'counter'");
 
     XrJsonValue *actions = xlsp_handle_code_action(server, params);
     ASSERT(actions != NULL);
@@ -388,7 +386,8 @@ TEST(code_action_quickfix_skips_when_decl_missing) {
 
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
-    (void)argc; (void)argv;
+    (void) argc;
+    (void) argv;
 
     printf("\n=== LSP Document Management Unit Tests ===\n\n");
 
@@ -413,8 +412,7 @@ int main(int argc, char **argv) {
     RUN_TEST(code_action_move_to_shared_let);
     RUN_TEST(code_action_quickfix_skips_when_decl_missing);
 
-    printf("\n=== Results: %d passed, %d failed ===\n\n",
-           tests_passed, tests_failed);
+    printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 
     return tests_failed > 0 ? 1 : 0;
 }

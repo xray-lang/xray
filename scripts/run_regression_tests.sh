@@ -45,7 +45,25 @@ elif [ -f "${PROJECT_ROOT}/build-release/xray" ]; then
 else
     BUILD_DIR="${PROJECT_ROOT}/build"
 fi
-XRAY_BIN="${BUILD_DIR}/xray"
+
+# Locate the actual binary. Layouts encountered in CI:
+#   Linux / macOS / mingw     : ${BUILD_DIR}/xray
+#   MSVC multi-config Debug   : ${BUILD_DIR}/Debug/xray.exe
+#   MSVC multi-config Release : ${BUILD_DIR}/Release/xray.exe
+# XRAY_PATH env wins if the caller already knows the path (e.g. CI).
+if [ -n "${XRAY_PATH:-}" ] && [ -f "${XRAY_PATH}" ]; then
+    XRAY_BIN="${XRAY_PATH}"
+elif [ -f "${BUILD_DIR}/xray" ]; then
+    XRAY_BIN="${BUILD_DIR}/xray"
+elif [ -f "${BUILD_DIR}/xray.exe" ]; then
+    XRAY_BIN="${BUILD_DIR}/xray.exe"
+elif [ -f "${BUILD_DIR}/Debug/xray.exe" ]; then
+    XRAY_BIN="${BUILD_DIR}/Debug/xray.exe"
+elif [ -f "${BUILD_DIR}/Release/xray.exe" ]; then
+    XRAY_BIN="${BUILD_DIR}/Release/xray.exe"
+else
+    XRAY_BIN="${BUILD_DIR}/xray"
+fi
 
 # Configuration
 TIMEOUT_SECS=${XRAY_TEST_TIMEOUT:-10}
@@ -124,23 +142,35 @@ run_one_test() {
     fi
 
     # Determine flags
+    # XRAY_JIT_FORCE=1 forces all eligible tests through the JIT path,
+    # mirroring the PR-gate sanitizer matrix that exposed the May 2026
+    # x64 codegen / GC corruption family. NOJIT_TESTS still wins
+    # because those scenarios deliberately exercise interpreter-only
+    # behaviour (stress / scope-race / GC-pressure).
     local jit_flag=""
     if is_in_list "${test_name}" "${NOJIT_TESTS}"; then
         jit_flag="--no-jit"
+    elif [ "${XRAY_JIT_FORCE:-0}" = "1" ]; then
+        jit_flag="--jit-force"
     fi
 
     # All regression tests use @test functions — run with 'xray test'
     local xray_cmd="test"
 
-    # Run with timeout
+    # Run with timeout. Always capture stdout+stderr through a real
+    # file rather than $(...). $(...) strips NUL bytes (common in JIT
+    # crash reports) and discards anything the child wrote between the
+    # last buffer flush and an abort, which is exactly when we most
+    # need the output for triage.
     local exit_code
     local output
+    local tmp_out="${RESULTS_DIR}/${test_name}.out"
     if [ -n "${TIMEOUT_CMD}" ]; then
-        output=$("${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" 2>&1)
+        "${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" \
+            > "${tmp_out}" 2>&1
         exit_code=$?
     else
-        # Shell-based timeout fallback — capture output to temp file
-        local tmp_out="${RESULTS_DIR}/${test_name}.out"
+        # Shell-based timeout fallback — kill the child after TIMEOUT_SECS
         "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" > "${tmp_out}" 2>&1 &
         local pid=$!
         ( sleep "${TIMEOUT_SECS}"; kill "$pid" 2>/dev/null ) &
@@ -152,9 +182,8 @@ run_one_test() {
         if [ $exit_code -eq 137 ] || [ $exit_code -eq 143 ]; then
             exit_code=124
         fi
-        output=$(cat "${tmp_out}" 2>/dev/null)
-        rm -f "${tmp_out}"
     fi
+    output=$(cat "${tmp_out}" 2>/dev/null)
 
     # Extract executed count from output (e.g., "7 passed")
     local exec_count=0
@@ -164,15 +193,26 @@ run_one_test() {
 
     if [ ${exit_code} -eq 0 ]; then
         echo "PASS:${exec_count}" > "${result_file}"
+        # Pass: drop the captured stdout so the dump phase only sees
+        # files belonging to actual failures.
+        rm -f "${tmp_out}"
     elif [ ${exit_code} -eq 124 ]; then
         echo "TIMEOUT:0" > "${result_file}"
+        # tmp_out already lives at ${RESULTS_DIR}/${test_name}.out,
+        # so XRAY_TEST_DUMP_FAILED=1 picks it up automatically.
+        if [ "${XRAY_TEST_DUMP_FAILED:-0}" != "1" ]; then
+            rm -f "${tmp_out}"
+        fi
     else
         echo "FAIL:${exec_count}" > "${result_file}"
+        if [ "${XRAY_TEST_DUMP_FAILED:-0}" != "1" ]; then
+            rm -f "${tmp_out}"
+        fi
     fi
 }
 export -f run_one_test is_in_list
 export XRAY_BIN TIMEOUT_SECS TIMEOUT_CMD RESULTS_DIR
-export SKIP_TESTS NOJIT_TESTS
+export SKIP_TESTS NOJIT_TESTS XRAY_TEST_DUMP_FAILED
 
 # 开始时间
 start_time=$(date +%s)
@@ -241,6 +281,25 @@ echo ""
 
 # 如果有失败的测试，列出它们
 if [ ${failed_tests} -gt 0 ]; then
+    # XRAY_TEST_DUMP_FAILED=1: dump per-test stdout/stderr (incl. sanitizer
+    # reports) before the summary. Useful for CI triage; off by default
+    # to keep local output clean.
+    if [ "${XRAY_TEST_DUMP_FAILED:-0}" = "1" ]; then
+        echo -e "${YELLOW}--- begin per-test failure output (XRAY_TEST_DUMP_FAILED=1) ---${NC}"
+        for test in "${failed_test_list[@]}"; do
+            # Strip trailing " (timeout)" annotation, if any.
+            name="${test% (timeout)}"
+            out_file="${RESULTS_DIR}/${name}.out"
+            if [ -f "${out_file}" ]; then
+                echo -e "${RED}>>> ${name} >>>${NC}"
+                cat "${out_file}"
+                echo -e "${RED}<<< ${name} <<<${NC}"
+                echo ""
+            fi
+        done
+        echo -e "${YELLOW}--- end per-test failure output ---${NC}"
+        echo ""
+    fi
     echo -e "${RED}失败的测试:${NC}"
     for test in "${failed_test_list[@]}"; do
         echo "  - ${test}"
