@@ -157,15 +157,20 @@ run_one_test() {
     # All regression tests use @test functions — run with 'xray test'
     local xray_cmd="test"
 
-    # Run with timeout
+    # Run with timeout. Always capture stdout+stderr through a real
+    # file rather than $(...). $(...) strips NUL bytes (common in JIT
+    # crash reports) and discards anything the child wrote between the
+    # last buffer flush and an abort, which is exactly when we most
+    # need the output for triage.
     local exit_code
     local output
+    local tmp_out="${RESULTS_DIR}/${test_name}.out"
     if [ -n "${TIMEOUT_CMD}" ]; then
-        output=$("${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" 2>&1)
+        "${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" \
+            > "${tmp_out}" 2>&1
         exit_code=$?
     else
-        # Shell-based timeout fallback — capture output to temp file
-        local tmp_out="${RESULTS_DIR}/${test_name}.out"
+        # Shell-based timeout fallback — kill the child after TIMEOUT_SECS
         "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" > "${tmp_out}" 2>&1 &
         local pid=$!
         ( sleep "${TIMEOUT_SECS}"; kill "$pid" 2>/dev/null ) &
@@ -177,9 +182,8 @@ run_one_test() {
         if [ $exit_code -eq 137 ] || [ $exit_code -eq 143 ]; then
             exit_code=124
         fi
-        output=$(cat "${tmp_out}" 2>/dev/null)
-        rm -f "${tmp_out}"
     fi
+    output=$(cat "${tmp_out}" 2>/dev/null)
 
     # Extract executed count from output (e.g., "7 passed")
     local exec_count=0
@@ -189,17 +193,20 @@ run_one_test() {
 
     if [ ${exit_code} -eq 0 ]; then
         echo "PASS:${exec_count}" > "${result_file}"
+        # Pass: drop the captured stdout so the dump phase only sees
+        # files belonging to actual failures.
+        rm -f "${tmp_out}"
     elif [ ${exit_code} -eq 124 ]; then
         echo "TIMEOUT:0" > "${result_file}"
-        # XRAY_TEST_DUMP_FAILED=1 preserves the captured output so CI
-        # can attach sanitizer reports to the failure summary.
-        if [ "${XRAY_TEST_DUMP_FAILED:-0}" = "1" ]; then
-            printf '%s\n' "${output}" > "${RESULTS_DIR}/${test_name}.out"
+        # tmp_out already lives at ${RESULTS_DIR}/${test_name}.out,
+        # so XRAY_TEST_DUMP_FAILED=1 picks it up automatically.
+        if [ "${XRAY_TEST_DUMP_FAILED:-0}" != "1" ]; then
+            rm -f "${tmp_out}"
         fi
     else
         echo "FAIL:${exec_count}" > "${result_file}"
-        if [ "${XRAY_TEST_DUMP_FAILED:-0}" = "1" ]; then
-            printf '%s\n' "${output}" > "${RESULTS_DIR}/${test_name}.out"
+        if [ "${XRAY_TEST_DUMP_FAILED:-0}" != "1" ]; then
+            rm -f "${tmp_out}"
         fi
     fi
 }
