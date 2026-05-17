@@ -526,6 +526,8 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.optional_chain.chain_type = node->as.optional_chain.chain_type;
             break;
         case AST_FORCE_UNWRAP:
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
             n->as.unary.operand = xr_ast_clone(node->as.unary.operand, map, mc);
             break;
 
@@ -1092,6 +1094,8 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
             collect_instantiation_sites(node->as.unary.operand, registry, collector);
             break;
         case AST_EXPR_STMT:
@@ -1326,6 +1330,8 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
             rewrite_call_sites(node->as.unary.operand, registry, collector);
             break;
         case AST_EXPR_STMT:

@@ -1,0 +1,105 @@
+/*
+** try? expression: fold thrown exception into null, type T -> T?
+** Covers the 4 scenarios from the original design doc.
+*/
+
+fn maybeFailInt(should_throw: bool): int {
+    if (should_throw) {
+        throw "intentional int failure"
+    }
+    return 42
+}
+
+fn maybeFailJson(should_throw: bool): Json {
+    if (should_throw) {
+        throw "intentional json failure"
+    }
+    return { id: 1, name: "Alice" }
+}
+
+fn parseConfig(): Json {
+    throw "config missing"
+}
+
+fn parseConfigOK(): Json {
+    return { database: { host: "prod.example.com", port: 5432 } }
+}
+
+@test
+fn test_try_optional_basic() {
+    print("1. try? on success returns value")
+    let a = try? maybeFailInt(false)
+    assert_eq(a, 42)
+    print("   PASS")
+
+    print("2. try? on failure returns null")
+    let b = try? maybeFailInt(true)
+    assert_eq(b, null)
+    print("   PASS")
+
+    print("3. try? + ?? with default value")
+    let c = try? maybeFailInt(true) ?? -1
+    assert_eq(c, -1)
+    print("   PASS")
+
+    print("4. try? + ?? when success keeps original")
+    let d = try? maybeFailInt(false) ?? -1
+    assert_eq(d, 42)
+    print("   PASS")
+}
+
+@test
+fn test_try_optional_chain() {
+    print("5. (try? f())?.field?.sub ?? default — nested chain on failure")
+    let host = (try? parseConfig())?.database?.host ?? "localhost"
+    assert_eq(host, "localhost")
+    print("   PASS")
+
+    print("6. (try? f())?.field?.sub ?? default — nested chain on success")
+    let host2 = (try? parseConfigOK())?.database?.host ?? "localhost"
+    assert_eq(host2, "prod.example.com")
+    print("   PASS")
+}
+
+@test
+fn test_try_optional_object_default() {
+    print("7. try? expr ?? object literal as fallback")
+    let cfg = try? parseConfig() ?? { port: 8080, host: "localhost" }
+    assert_eq(cfg.host, "localhost")
+    assert_eq(cfg.port, 8080)
+    print("   PASS")
+}
+
+fn findUser(id: int): Json? {
+    return try? maybeFailJson(id < 0)
+}
+
+@test
+fn test_try_optional_function_return() {
+    print("8. function with Json? return type using try? in body")
+    let u = findUser(1)
+    assert_ne(u, null)
+    assert_eq(u.name, "Alice")
+    print("   PASS")
+
+    let v = findUser(-1)
+    assert_eq(v, null)
+    print("   PASS")
+}
+
+@test
+fn test_try_optional_batch() {
+    print("9. batch try? + ?? for multiple independent fallible ops")
+    fn fetchName(): string { throw "no name" }
+    fn fetchAge(): int { return 27 }
+    fn fetchEmail(): string { throw "no email" }
+
+    let name  = try? fetchName()  ?? "unknown"
+    let age   = try? fetchAge()   ?? 0
+    let email = try? fetchEmail() ?? ""
+
+    assert_eq(name, "unknown")
+    assert_eq(age, 27)
+    assert_eq(email, "")
+    print("   PASS")
+}

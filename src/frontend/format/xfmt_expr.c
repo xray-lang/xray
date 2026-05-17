@@ -638,6 +638,16 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_char(ctx, '!');
             break;
 
+        // Try-modified expressions: try? expr / try! expr
+        case AST_TRY_OPTIONAL:
+            xfmt_write_str(ctx, "try? ");
+            xfmt_emit_expression(ctx, node->as.unary.operand);
+            break;
+        case AST_TRY_FORCE:
+            xfmt_write_str(ctx, "try! ");
+            xfmt_emit_expression(ctx, node->as.unary.operand);
+            break;
+
         // As expression: expr as Type / expr as Type?
         // The ? for safe cast is already part of the stored type ref.
         case AST_AS_EXPR:

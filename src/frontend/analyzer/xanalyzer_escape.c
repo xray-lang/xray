@@ -418,6 +418,8 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
+        case AST_TRY_OPTIONAL:
+        case AST_TRY_FORCE:
             ea_walk(ctx, node->as.unary.operand);
             break;
 

@@ -135,6 +135,7 @@ static ParseRule rules[] = {
     [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
     [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
+    [TK_TRY] = {xr_parse_try_expr, NULL, PREC_NONE},      // try? / try! expression
     [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},            // _ wildcard (pattern only)
 
     // Coroutine keywords
@@ -772,7 +773,17 @@ AstNode *xr_parse_statement(Parser *parser) {
 
     // Exception handling
     if (parser->current.type == TK_TRY) {
-        return xr_parse_try_statement(parser);
+        // Lookahead disambiguation: 'try { ... }' is a statement,
+        // but 'try? expr' / 'try! expr' are expressions (used as
+        // expression-statements via the fallthrough below).
+        Parser checkpoint = *parser;
+        xr_parser_advance(parser);
+        bool is_expr_form = (parser->current.type == TK_QUESTION || parser->current.type == TK_NOT);
+        *parser = checkpoint;
+        if (!is_expr_form) {
+            return xr_parse_try_statement(parser);
+        }
+        // fall through to xr_parse_expr_statement at the bottom
     }
     if (parser->current.type == TK_THROW) {
         return xr_parse_throw_statement(parser);

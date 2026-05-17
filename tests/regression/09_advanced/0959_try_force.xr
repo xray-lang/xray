@@ -1,0 +1,78 @@
+/*
+** try! expression: assert no throw; if expr throws, re-throw the original
+** exception unchanged (the surrounding catch can still handle it).
+*/
+
+fn maybeFailInt(should_throw: bool): int {
+    if (should_throw) {
+        throw "force-try violation"
+    }
+    return 42
+}
+
+fn maybeFailJson(should_throw: bool): Json {
+    if (should_throw) {
+        throw "deeper failure"
+    }
+    return { id: 99, name: "Bob" }
+}
+
+@test
+fn test_try_force_success_int() {
+    print("1. try! on success returns the operand value unchanged")
+    let a = try! maybeFailInt(false)
+    assert_eq(a, 42)
+    print("   PASS")
+}
+
+@test
+fn test_try_force_success_json() {
+    print("2. try! on success — composite type")
+    let obj = try! maybeFailJson(false)
+    assert_eq(obj.id, 99)
+    assert_eq(obj.name, "Bob")
+    print("   PASS")
+}
+
+@test
+fn test_try_force_throw_propagates() {
+    print("3. try! on throw re-throws original exception")
+    let saw_catch = false
+    try {
+        let x = try! maybeFailInt(true)
+        print("should not reach:", x)
+    } catch (e) {
+        saw_catch = true
+        assert_eq(e, "force-try violation")
+    }
+    assert_eq(saw_catch, true)
+    print("   PASS")
+}
+
+@test
+fn test_try_force_nested_throw() {
+    print("4. try! through nested call propagates the inner exception")
+    fn helper(): Json {
+        return try! maybeFailJson(true)
+    }
+    let saw_catch = false
+    try {
+        let result = helper()
+        print("should not reach:", result)
+    } catch (e) {
+        saw_catch = true
+        assert_eq(e, "deeper failure")
+    }
+    assert_eq(saw_catch, true)
+    print("   PASS")
+}
+
+@test
+fn test_try_force_keeps_value_type() {
+    print("5. try! preserves the non-nullable type (no widening)")
+    let v = try! maybeFailInt(false)
+    // v is int (non-nullable); we can pass it where int is expected.
+    let next = v + 1
+    assert_eq(next, 43)
+    print("   PASS")
+}

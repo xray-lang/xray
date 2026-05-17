@@ -1405,6 +1405,36 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
     return inner;
 }
 
+/* Try-modified expression: try? expr / try! expr.
+ *
+ *   try? expr  folds any thrown exception into null, so the static type
+ *              becomes T?.  Combine with ?? / ?. to build robust chains.
+ *   try! expr  asserts that expr does not throw; if it does, the program
+ *              panics at runtime.  The static type is unchanged from the
+ *              operand.
+ *
+ * The exception-control branch is purely runtime — neither form changes
+ * the value the expression carries on the normal path. */
+XrType *xa_visit_try_expr(XaInferContext *ctx, AstNode *node) {
+    if (!ctx || !node)
+        return xr_type_new_unknown(NULL);
+    XrType *inner = xa_visit_infer_expr(ctx, node->as.unary.operand);
+    if (!inner)
+        return xr_type_new_unknown(NULL);
+
+    if (node->type == AST_TRY_OPTIONAL) {
+        // try? widens the type to nullable.  If the operand was already
+        // nullable, make_nullable is a no-op (T? remains T?).
+        if (inner->is_nullable) {
+            return inner;
+        }
+        return xr_type_make_nullable(ctx->analyzer->isolate, inner);
+    }
+
+    // AST_TRY_FORCE: type is unchanged.  Runtime panic on throw.
+    return inner;
+}
+
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_function(NULL, NULL, 0, xr_type_new_unknown(NULL), false);
