@@ -1,0 +1,39 @@
+# Baseline list of silent fallback ("default: break;") violations.
+# Format: <relative-path>:<line>
+# Generated 2026-05-17 by scripts/check_codegen_invariants.sh --update-baseline
+# Total: 32
+# Owner: xingleixu
+# Removal plan: 076 main line S3/S5/S6 progressively reduces to 0.
+# Any *new* silent fallback outside this list is rejected by CI.
+src/jit/xm_codegen.c:1367
+src/jit/xm_codegen_mem.c:163
+src/jit/xm_codegen_x64.c:815
+src/jit/xm_codegen_x64_ins.c:461
+src/jit/xm_codegen_x64_ins.c:600
+src/jit/xm_codegen_x64_ins.c:700
+src/jit/xm_codegen_x64_ins.c:958
+src/jit/xm_codegen_x64_ins.c:1051
+src/jit/xm_codegen_x64_mem.c:314
+src/jit/xm_fold.c:149
+src/jit/xm_fold.c:187
+src/jit/xm_fold.c:205
+src/jit/xm_fold.c:316
+src/jit/xm_fold.c:336
+src/jit/xm_jit_runtime.c:1516
+src/jit/xm_jit_runtime.c:1547
+src/jit/xm_pass.c:196
+src/jit/xm_pass.c:1487
+src/jit/xm_pass_advanced.c:237
+src/jit/xm_pass_advanced.c:457
+src/jit/xm_pass_advanced.c:729
+src/jit/xm_pass_cfg.c:845
+src/jit/xm_pass_cfg.c:869
+src/jit/xm_pass_sccp.c:567
+src/jit/xm_pass_type.c:214
+src/jit/xm_pass_type.c:541
+src/jit/xm_pass_type.c:744
+src/jit/xm_pass_type.c:770
+src/jit/xm_pass_type.c:920
+src/jit/xm_pass_type.c:929
+src/jit/xm_pass_type.c:1380
+src/jit/xm_tfa.c:721

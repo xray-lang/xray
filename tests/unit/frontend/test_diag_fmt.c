@@ -56,7 +56,7 @@ TEST(diag_find_line_end_first_line) {
 TEST(diag_find_line_end_last_line) {
     const char *src = "hello\nworld";
     const char *end = xr_diag_find_line_end(src + 6);  // "world"
-    ASSERT_EQ_PTR(end, src + 11);  // points to '\0'
+    ASSERT_EQ_PTR(end, src + 11);                      // points to '\0'
 }
 
 TEST(diag_find_line_end_empty) {
@@ -99,7 +99,7 @@ TEST(diag_line_operations) {
     const char *line2_start = xr_diag_find_line_start(src, src + 16);
     const char *line2_end = xr_diag_find_line_end(line2_start);
 
-    int line_len = (int)(line2_end - line2_start);
+    int line_len = (int) (line2_end - line2_start);
     ASSERT_EQ_INT(line_len, 14);  // "    let x = 42"
 }
 
@@ -107,24 +107,24 @@ TEST(diag_line_operations) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("DiagFmt - Find Line Start");
-    RUN_TEST(diag_find_line_start_first_line);
-    RUN_TEST(diag_find_line_start_second_line);
-    RUN_TEST(diag_find_line_start_third_line);
-    RUN_TEST(diag_find_line_start_at_newline);
+RUN_TEST_SUITE("DiagFmt - Find Line Start");
+RUN_TEST(diag_find_line_start_first_line);
+RUN_TEST(diag_find_line_start_second_line);
+RUN_TEST(diag_find_line_start_third_line);
+RUN_TEST(diag_find_line_start_at_newline);
 
-    RUN_TEST_SUITE("DiagFmt - Find Line End");
-    RUN_TEST(diag_find_line_end_first_line);
-    RUN_TEST(diag_find_line_end_last_line);
-    RUN_TEST(diag_find_line_end_empty);
+RUN_TEST_SUITE("DiagFmt - Find Line End");
+RUN_TEST(diag_find_line_end_first_line);
+RUN_TEST(diag_find_line_end_last_line);
+RUN_TEST(diag_find_line_end_empty);
 
-    RUN_TEST_SUITE("DiagFmt - Num Digits");
-    RUN_TEST(diag_num_digits);
+RUN_TEST_SUITE("DiagFmt - Num Digits");
+RUN_TEST(diag_num_digits);
 
-    RUN_TEST_SUITE("DiagFmt - Level Enum");
-    RUN_TEST(diag_level_values);
+RUN_TEST_SUITE("DiagFmt - Level Enum");
+RUN_TEST(diag_level_values);
 
-    RUN_TEST_SUITE("DiagFmt - Line Operations");
-    RUN_TEST(diag_line_operations);
+RUN_TEST_SUITE("DiagFmt - Line Operations");
+RUN_TEST(diag_line_operations);
 
 TEST_MAIN_END()

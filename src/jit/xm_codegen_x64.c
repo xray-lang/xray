@@ -594,6 +594,47 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
         ctx->cur_ins_idx = i;
         x64_emit_xm_ins(ctx, &blk->ins[i]);
         x64_maybe_spill(ctx, blk->ins[i].dst);
+
+        /* Exception check after call-sites.  xr_jit_throw sets
+         * coro->jit_ctx->exception to the pending exception; the callee
+         * returns normally and the caller decides what to do.  Without
+         * this check, throws from nested JIT-compiled callees silently
+         * propagate as if no error occurred — the catch handler is never
+         * entered and the outer code sees stale state (e.g. catch var
+         * remains its initialiser).  ARM64 codegen emits the equivalent
+         * sequence; this is the missing x64 mirror. */
+        {
+            uint16_t op = blk->ins[i].op;
+            if (op == XM_CALL_C || op == XM_CALL_DIRECT || op == XM_CALL_SELF_DIRECT ||
+                op == XM_CALL_KNOWN_REG || op == XM_CALL_KNOWN || op == XM_CALL ||
+                op == XM_CALL_C_LEAF) {
+                if (blk->exception_handler) {
+                    /* In try block: load jit_ctx->exception, branch to
+                     * catch handler if non-zero. */
+                    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                               (int32_t) XM_JIT_EXCEPTION_OFFSET);
+                    x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+                    CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap,
+                                  "too many patches (exc handler)");
+                    X64BranchPatch *p = &ctx->patches[ctx->npatch];
+                    x64_emit8(&ctx->buf, 0x0F);
+                    x64_emit8(&ctx->buf, 0x85); /* JNE rel32 */
+                    p->emit_pos = ctx->buf.pos;
+                    p->target_blk = blk->exception_handler->id;
+                    p->type = X64_PATCH_JCC;
+                    p->cc = X64_CC_NE;
+                    ctx->npatch++;
+                    x64_emit32(&ctx->buf, 0);
+                } else if (blk->ins[i].flags & XM_FLAG_MAY_THROW) {
+                    /* No catch handler but may throw: deopt to VM so its
+                     * try-catch machinery unwinds through bytecode frames. */
+                    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
+                               (int32_t) XM_JIT_EXCEPTION_OFFSET);
+                    x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
+                    x64_emit_deopt_jcc(ctx, X64_CC_NE);
+                }
+            }
+        }
     }
 
     /* Emit terminator */
@@ -694,15 +735,23 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
              * RCX or RDX, which are clobbered by the tag writes below. */
             if (!xm_ref_is_none(blk->jmp.arg)) {
                 uint32_t ret_idx = XM_REF_INDEX(blk->jmp.arg);
-                bool is_fp =
-                    (ret_idx < ctx->func->nvreg && ctx->func->vregs[ret_idx].rep == XR_REP_F64);
+                bool is_fp = (xm_ref_is_vreg(blk->jmp.arg) && ret_idx < ctx->func->nvreg &&
+                              ctx->func->vregs[ret_idx].rep == XR_REP_F64);
 
-                /* Move payload to RAX before tag writes clobber RCX/RDX */
+                /* Move payload to RAX before tag writes clobber RCX/RDX.
+                 *
+                 * Use x64_get_operand (not x64_get_reg) so const refs
+                 * actually materialise into RAX.  x64_get_reg falls
+                 * straight through to SCRATCH_REG for non-vreg refs
+                 * without loading the constant, which produced
+                 * `mov rax, r11` where r11 still held the previous
+                 * call's tag — sending garbage like 0x3 / 0x5 to the
+                 * caller's PTR-decode path. */
                 if (is_fp) {
                     X64Xmm fsrc = x64_get_fp_reg(ctx, blk->jmp.arg);
                     x64_movq_gp_xmm(&ctx->buf, X64_RAX, fsrc);
                 } else {
-                    X64Reg ret_reg = x64_get_reg(ctx, blk->jmp.arg);
+                    X64Reg ret_reg = x64_get_operand(ctx, blk->jmp.arg, X64_RAX);
                     if (ret_reg != X64_RAX)
                         x64_mov_rr(&ctx->buf, X64_RAX, ret_reg);
                 }

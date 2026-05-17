@@ -1,0 +1,54 @@
+// REGRESSION: Bug #5 — x64 XM_JMP_RET materialised stale R11 for const returns.
+// FAIL_AT:   pre-ac99e0f with --jit-force on x64
+//            -> anonymous closure returning a constant (null / 0 / void)
+//               emits `mov rax, r11` without loading r11 first; caller
+//               decodes stale R11 (the last CALL's tag byte, typically
+//               0x3 / 0x5) as a heap pointer and dereferences NULL+0xB
+//               with SIGSEGV / ACCESS_VIOLATION
+// PASS_AT:   ac99e0f+ -> the const is materialised via x64_load_imm64,
+//            rax holds the correct payload, deref never happens
+// REQUIRES_JIT_FORCE
+//
+// Why anonymous closures specifically:
+//   `assert_throws(fn() { ... })` and similar higher-order forms hand
+//   the JIT a function with no proto return type info. The codegen
+//   path that picks a vreg or const for the return value falls into
+//   the const branch, which was the unguarded one.
+//
+// The shapes below are the three constant-return forms that the bug
+// reproducer notes called out specifically.
+
+@test
+fn test_anon_returning_const_int_via_assert_throws() {
+    // Body has a non-trivial side effect that throws; the constant
+    // return path (implicit void after divide-by-zero) is still the
+    // JIT codegen route through XM_JMP_RET.
+    let a: int = 42
+    let zero: int = 0
+    assert_throws(fn() { let r = a / zero })
+}
+
+@test
+fn test_anon_returning_nullable_int() {
+    // Anonymous closure literally returning `null`. The const path is
+    // exercised on every call.
+    let cb = fn(): int? { return null }
+    let r1 = cb()
+    let r2 = cb()
+    let r3 = cb()
+    assert(r1 == null, "first call returned non-null")
+    assert(r2 == null, "second call returned non-null")
+    assert(r3 == null, "third call returned non-null")
+}
+
+@test
+fn test_anon_returning_int_zero() {
+    // Bare const-int return. R11 carrying a stale tag byte from a
+    // prior CALL would surface here as a non-zero result.
+    let zero_cb = fn(): int { return 0 }
+    let sum = 0
+    for (let i = 0; i < 100; i++) {
+        sum = sum + zero_cb()
+    }
+    assert(sum == 0, "const-zero closure leaked stale bytes: sum=" + string(sum))
+}

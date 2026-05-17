@@ -59,15 +59,18 @@ static AnalysisResult analyze_source(const char *source) {
 }
 
 static void free_result(AnalysisResult *r) {
-    if (r->analyzer) xa_analyzer_free(r->analyzer);
-    if (r->program) xr_program_destroy(r->program);
+    if (r->analyzer)
+        xa_analyzer_free(r->analyzer);
+    if (r->program)
+        xr_program_destroy(r->program);
     r->analyzer = NULL;
     r->program = NULL;
 }
 
 /* Count total scopes in the tree rooted at 'scope' (including root). */
 static int count_scopes(XaScope *scope) {
-    if (!scope) return 0;
+    if (!scope)
+        return 0;
     int n = 1;
     for (int i = 0; i < scope->child_count; i++)
         n += count_scopes(scope->children[i]);
@@ -77,8 +80,10 @@ static int count_scopes(XaScope *scope) {
 /* Verify every scope in the tree has a valid parent pointer
  * (except root whose parent may be NULL). */
 static bool verify_parent_chain(XaScope *scope, XaScope *expected_parent) {
-    if (!scope) return true;
-    if (scope->parent != expected_parent) return false;
+    if (!scope)
+        return true;
+    if (scope->parent != expected_parent)
+        return false;
     for (int i = 0; i < scope->child_count; i++) {
         if (!verify_parent_chain(scope->children[i], scope))
             return false;
@@ -86,14 +91,14 @@ static bool verify_parent_chain(XaScope *scope, XaScope *expected_parent) {
     return true;
 }
 
-#define TEST(name) \
-    static void test_##name(void); \
-    static void run_##name(void) { \
-        printf("--- %s ---\n", #name); \
-        test_##name(); \
-        printf("  PASS\n"); \
-        tests_passed++; \
-    } \
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- %s ---\n", #name);                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
     static void test_##name(void)
 
 /* ========== Tests ========== */
@@ -116,12 +121,10 @@ TEST(global_scope_is_root) {
 }
 
 TEST(function_creates_child_scope) {
-    AnalysisResult r = analyze_source(
-        "fn foo(a: int): int {\n"
-        "    let b = a + 1\n"
-        "    return b\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("fn foo(a: int): int {\n"
+                                      "    let b = a + 1\n"
+                                      "    return b\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     assert(global->child_count >= 1 && "function must create a child scope");
 
@@ -145,12 +148,10 @@ TEST(function_creates_child_scope) {
 }
 
 TEST(block_creates_child_scope) {
-    AnalysisResult r = analyze_source(
-        "let x = 1\n"
-        "{\n"
-        "    let y = 2\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("let x = 1\n"
+                                      "{\n"
+                                      "    let y = 2\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     /* 'y' must NOT be in global scope (it's block-scoped) */
     XaSymbol *y_global = xa_scope_lookup_local(global, "y");
@@ -163,14 +164,12 @@ TEST(block_creates_child_scope) {
 }
 
 TEST(if_creates_scopes) {
-    AnalysisResult r = analyze_source(
-        "let x = 1\n"
-        "if (x > 0) {\n"
-        "    let a = 1\n"
-        "} else {\n"
-        "    let b = 2\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("let x = 1\n"
+                                      "if (x > 0) {\n"
+                                      "    let a = 1\n"
+                                      "} else {\n"
+                                      "    let b = 2\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     /* if/else blocks should create at least one child scope.
      * Note: the analyzer may hoist control-flow-body variables
@@ -183,16 +182,14 @@ TEST(if_creates_scopes) {
 
 TEST(while_in_function_creates_scope) {
     /* While loops inside functions must create child scopes. */
-    AnalysisResult r = analyze_source(
-        "fn loop_fn(): int {\n"
-        "    let i = 0\n"
-        "    while (i < 10) {\n"
-        "        let temp = i\n"
-        "        i += 1\n"
-        "    }\n"
-        "    return i\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("fn loop_fn(): int {\n"
+                                      "    let i = 0\n"
+                                      "    while (i < 10) {\n"
+                                      "        let temp = i\n"
+                                      "        i += 1\n"
+                                      "    }\n"
+                                      "    return i\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     /* Function scope always exists; while body may reuse it.
      * The invariant: parent chain is valid and function scope exists. */
@@ -202,16 +199,14 @@ TEST(while_in_function_creates_scope) {
 }
 
 TEST(nested_functions_nested_scopes) {
-    AnalysisResult r = analyze_source(
-        "fn outer(): int {\n"
-        "    let a = 1\n"
-        "    fn inner(): int {\n"
-        "        let b = 2\n"
-        "        return a + b\n"
-        "    }\n"
-        "    return inner()\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("fn outer(): int {\n"
+                                      "    let a = 1\n"
+                                      "    fn inner(): int {\n"
+                                      "        let b = 2\n"
+                                      "        return a + b\n"
+                                      "    }\n"
+                                      "    return inner()\n"
+                                      "}\n");
     /* Total scopes: global + outer + inner (+ possible block scopes) */
     int total = count_scopes(r.analyzer->global_scope);
     assert(total >= 3 && "nested functions need at least 3 scopes");
@@ -221,13 +216,11 @@ TEST(nested_functions_nested_scopes) {
 TEST(function_isolation) {
     /* The hard invariant: function-scoped variables must NOT
      * be visible outside their function boundary. */
-    AnalysisResult r = analyze_source(
-        "fn foo(): int {\n"
-        "    let secret = 42\n"
-        "    return secret\n"
-        "}\n"
-        "let result = foo()\n"
-    );
+    AnalysisResult r = analyze_source("fn foo(): int {\n"
+                                      "    let secret = 42\n"
+                                      "    return secret\n"
+                                      "}\n"
+                                      "let result = foo()\n");
     XaScope *global = r.analyzer->global_scope;
     /* 'secret' must NOT be in global scope */
     assert(xa_scope_lookup_local(global, "secret") == NULL &&
@@ -239,29 +232,25 @@ TEST(function_isolation) {
 }
 
 TEST(parent_chain_valid) {
-    AnalysisResult r = analyze_source(
-        "fn foo(x: int): int {\n"
-        "    if (x > 0) {\n"
-        "        let y = x\n"
-        "        return y\n"
-        "    }\n"
-        "    return 0\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("fn foo(x: int): int {\n"
+                                      "    if (x > 0) {\n"
+                                      "        let y = x\n"
+                                      "        return y\n"
+                                      "    }\n"
+                                      "    return 0\n"
+                                      "}\n");
     /* Every scope's parent pointer must form a consistent tree. */
     assert(verify_parent_chain(r.analyzer->global_scope, NULL));
     free_result(&r);
 }
 
 TEST(class_creates_class_scope) {
-    AnalysisResult r = analyze_source(
-        "class Foo {\n"
-        "    x: int\n"
-        "    init(val: int) {\n"
-        "        this.x = val\n"
-        "    }\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("class Foo {\n"
+                                      "    x: int\n"
+                                      "    init(val: int) {\n"
+                                      "        this.x = val\n"
+                                      "    }\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     bool found_class = false;
     for (int i = 0; i < global->child_count; i++) {
@@ -275,12 +264,10 @@ TEST(class_creates_class_scope) {
 }
 
 TEST(for_in_creates_scope) {
-    AnalysisResult r = analyze_source(
-        "const arr = [1, 2, 3]\n"
-        "for (item in arr) {\n"
-        "    let temp = item\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("const arr = [1, 2, 3]\n"
+                                      "for (item in arr) {\n"
+                                      "    let temp = item\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     /* for-in must create at least one child scope */
     assert(global->child_count >= 1 && "for-in body must create a child scope");
@@ -289,12 +276,10 @@ TEST(for_in_creates_scope) {
 }
 
 TEST(shadowing_correct_scope) {
-    AnalysisResult r = analyze_source(
-        "let x = 1\n"
-        "{\n"
-        "    let x = 2\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("let x = 1\n"
+                                      "{\n"
+                                      "    let x = 2\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
     /* Global scope 'x' should exist */
     XaSymbol *x_global = xa_scope_lookup_local(global, "x");
@@ -313,18 +298,16 @@ TEST(shadowing_correct_scope) {
 }
 
 TEST(complex_nesting_parent_chain) {
-    AnalysisResult r = analyze_source(
-        "fn foo(): int {\n"
-        "    let a = 1\n"
-        "    {\n"
-        "        let b = 2\n"
-        "        if (a > 0) {\n"
-        "            let c = 3\n"
-        "        }\n"
-        "    }\n"
-        "    return a\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("fn foo(): int {\n"
+                                      "    let a = 1\n"
+                                      "    {\n"
+                                      "        let b = 2\n"
+                                      "        if (a > 0) {\n"
+                                      "            let c = 3\n"
+                                      "        }\n"
+                                      "    }\n"
+                                      "    return a\n"
+                                      "}\n");
     assert(verify_parent_chain(r.analyzer->global_scope, NULL));
     int total = count_scopes(r.analyzer->global_scope);
     assert(total >= 4 && "function + block + if = at least 4 scopes");
@@ -335,7 +318,8 @@ TEST(complex_nesting_parent_chain) {
 
 /* Verify every scope has a unique identity (no aliasing). */
 static void collect_scope_ptrs(XaScope *scope, XaScope **arr, int *count, int max) {
-    if (!scope || *count >= max) return;
+    if (!scope || *count >= max)
+        return;
     arr[(*count)++] = scope;
     for (int i = 0; i < scope->child_count; i++)
         collect_scope_ptrs(scope->children[i], arr, count, max);
@@ -347,7 +331,8 @@ static bool scopes_unique(XaScope *root) {
     collect_scope_ptrs(root, ptrs, &n, 256);
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
-            if (ptrs[i] == ptrs[j]) return false;
+            if (ptrs[i] == ptrs[j])
+                return false;
         }
     }
     return true;
@@ -355,11 +340,15 @@ static bool scopes_unique(XaScope *root) {
 
 /* Verify no scope has negative child_count and all children are non-NULL. */
 static bool scopes_well_formed(XaScope *scope) {
-    if (!scope) return true;
-    if (scope->child_count < 0) return false;
+    if (!scope)
+        return true;
+    if (scope->child_count < 0)
+        return false;
     for (int i = 0; i < scope->child_count; i++) {
-        if (!scope->children[i]) return false;
-        if (!scopes_well_formed(scope->children[i])) return false;
+        if (!scope->children[i])
+            return false;
+        if (!scopes_well_formed(scope->children[i]))
+            return false;
     }
     return true;
 }
@@ -371,44 +360,39 @@ TEST(scope_consistency_after_analysis) {
      *   2. All scopes are unique (no aliasing)
      *   3. All scopes are well-formed
      *   4. Symbol isolation holds */
-    AnalysisResult r = analyze_source(
-        "let g = 1\n"
-        "fn outer(x: int): int {\n"
-        "    let a = x\n"
-        "    fn inner(y: int): int {\n"
-        "        return a + y\n"
-        "    }\n"
-        "    if (x > 0) {\n"
-        "        let b = 2\n"
-        "    }\n"
-        "    for (i in [1, 2, 3]) {\n"
-        "        let c = i\n"
-        "    }\n"
-        "    return inner(a)\n"
-        "}\n"
-        "class Foo {\n"
-        "    val: int\n"
-        "    constructor(v: int) {\n"
-        "        this.val = v\n"
-        "    }\n"
-        "    get(): int {\n"
-        "        return this.val\n"
-        "    }\n"
-        "}\n"
-    );
+    AnalysisResult r = analyze_source("let g = 1\n"
+                                      "fn outer(x: int): int {\n"
+                                      "    let a = x\n"
+                                      "    fn inner(y: int): int {\n"
+                                      "        return a + y\n"
+                                      "    }\n"
+                                      "    if (x > 0) {\n"
+                                      "        let b = 2\n"
+                                      "    }\n"
+                                      "    for (i in [1, 2, 3]) {\n"
+                                      "        let c = i\n"
+                                      "    }\n"
+                                      "    return inner(a)\n"
+                                      "}\n"
+                                      "class Foo {\n"
+                                      "    val: int\n"
+                                      "    constructor(v: int) {\n"
+                                      "        this.val = v\n"
+                                      "    }\n"
+                                      "    get(): int {\n"
+                                      "        return this.val\n"
+                                      "    }\n"
+                                      "}\n");
     XaScope *global = r.analyzer->global_scope;
 
     /* 1. Parent chain */
-    assert(verify_parent_chain(global, NULL) &&
-           "parent chain must be valid after full analysis");
+    assert(verify_parent_chain(global, NULL) && "parent chain must be valid after full analysis");
 
     /* 2. No scope aliasing */
-    assert(scopes_unique(global) &&
-           "all scopes must be distinct objects");
+    assert(scopes_unique(global) && "all scopes must be distinct objects");
 
     /* 3. Well-formed */
-    assert(scopes_well_formed(global) &&
-           "all scopes must have valid child arrays");
+    assert(scopes_well_formed(global) && "all scopes must have valid child arrays");
 
     /* 4. Sufficient depth — at least: global + outer + inner + class + methods */
     int total = count_scopes(global);
@@ -432,12 +416,11 @@ TEST(reanalysis_scope_stability) {
     /* Verify that analyzing the same code twice produces a consistent
      * scope tree (same count, valid parent chains).  This guards
      * against scope-creation side effects across analyses. */
-    const char *source =
-        "fn foo(x: int): int {\n"
-        "    let y = x + 1\n"
-        "    return y\n"
-        "}\n"
-        "let z = foo(1)\n";
+    const char *source = "fn foo(x: int): int {\n"
+                         "    let y = x + 1\n"
+                         "    return y\n"
+                         "}\n"
+                         "let z = foo(1)\n";
 
     AnalysisResult r1 = analyze_source(source);
     int count1 = count_scopes(r1.analyzer->global_scope);
@@ -449,8 +432,7 @@ TEST(reanalysis_scope_stability) {
     assert(verify_parent_chain(r2.analyzer->global_scope, NULL));
 
     printf("    scope count: run1=%d run2=%d\n", count1, count2);
-    assert(count1 == count2 &&
-           "repeated analysis must produce identical scope count");
+    assert(count1 == count2 && "repeated analysis must produce identical scope count");
     free_result(&r2);
 }
 
@@ -477,7 +459,6 @@ int main(void) {
 
     teardown();
 
-    printf("\n=== %d/%d Scope Tree tests passed ===\n",
-           tests_passed, tests_passed + tests_failed);
+    printf("\n=== %d/%d Scope Tree tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

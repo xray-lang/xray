@@ -35,19 +35,23 @@ static int tests_failed = 0;
 static void crash_handler(int sig) {
     const char *msg = "\n!!! SIGNAL received: ";
     write(2, msg, strlen(msg));
-    if (sig == 11) write(2, "SIGSEGV\n", 8);
-    else if (sig == 10) write(2, "SIGBUS\n", 7);
-    else write(2, "OTHER\n", 6);
+    if (sig == 11)
+        write(2, "SIGSEGV\n", 8);
+    else if (sig == 10)
+        write(2, "SIGBUS\n", 7);
+    else
+        write(2, "OTHER\n", 6);
     _exit(128 + sig);
 }
 
-#define CHECK(cond, msg) do { \
-    if (!(cond)) { \
-        fprintf(stderr, " FAIL: %s\n", msg); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define CHECK(cond, msg)                                                                           \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, " FAIL: %s\n", msg);                                                   \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 /*
  * Test 1: fn() -> int { return 42; }
@@ -71,11 +75,11 @@ static void test_return_constant(void) {
     XmCodegenResult result = xm_codegen_arm64(func, &alloc);
     CHECK(result.success, "codegen failed");
 
-    AotFn0 fn = (AotFn0)result.code;
+    AotFn0 fn = (AotFn0) result.code;
     int64_t ret = fn();
     CHECK(ret == 42, "expected 42");
 
-    fprintf(stderr, " OK (ret=%lld)\n", (long long)ret);
+    fprintf(stderr, " OK (ret=%lld)\n", (long long) ret);
     tests_passed++;
     xm_func_destroy(func);
     xm_code_alloc_destroy(&alloc);
@@ -106,7 +110,7 @@ static void test_add(void) {
     XmCodegenResult result = xm_codegen_arm64(func, &alloc);
     CHECK(result.success, "codegen failed");
 
-    AotFn2 fn = (AotFn2)result.code;
+    AotFn2 fn = (AotFn2) result.code;
     int64_t ret = fn(10, 32);
     CHECK(ret == 42, "expected 42");
 
@@ -144,12 +148,12 @@ static void test_mul_sub(void) {
     XmCodegenResult result = xm_codegen_arm64(func, &alloc);
     CHECK(result.success, "codegen failed");
 
-    AotFn2 fn = (AotFn2)result.code;
+    AotFn2 fn = (AotFn2) result.code;
     // 7 * 6 - 7 = 35
     int64_t ret = fn(7, 6);
     CHECK(ret == 35, "expected 35");
 
-    fprintf(stderr, " OK (ret=%lld)\n", (long long)ret);
+    fprintf(stderr, " OK (ret=%lld)\n", (long long) ret);
     tests_passed++;
     xm_func_destroy(func);
     xm_code_alloc_destroy(&alloc);
@@ -194,7 +198,7 @@ static void test_branch(void) {
     XmCodegenResult result = xm_codegen_arm64(func, &alloc);
     CHECK(result.success, "codegen failed");
 
-    AotFn1 fn = (AotFn1)result.code;
+    AotFn1 fn = (AotFn1) result.code;
 
     int64_t ret0 = fn(0);
     CHECK(ret0 == 0, "expected 0 for n=0");
@@ -205,8 +209,8 @@ static void test_branch(void) {
     int64_t ret5 = fn(5);
     CHECK(ret5 == 10, "expected 10 for n=5");
 
-    fprintf(stderr, " OK (0â†?lld, 1â†?lld, 5â†?lld)\n",
-            (long long)ret0, (long long)ret1, (long long)ret5);
+    fprintf(stderr, " OK (0â†?lld, 1â†?lld, 5â†?lld)\n", (long long) ret0, (long long) ret1,
+            (long long) ret5);
     tests_passed++;
     xm_func_destroy(func);
     xm_code_alloc_destroy(&alloc);
@@ -224,8 +228,7 @@ int main(void) {
     test_mul_sub();
     test_branch();
 
-    fprintf(stderr, "\n--- AOT Results: %d passed, %d failed ---\n\n",
-            tests_passed, tests_failed);
+    fprintf(stderr, "\n--- AOT Results: %d passed, %d failed ---\n\n", tests_passed, tests_failed);
 
     return tests_failed > 0 ? 1 : 0;
 }

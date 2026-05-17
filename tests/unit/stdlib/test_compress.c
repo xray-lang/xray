@@ -33,17 +33,17 @@ uint32_t xr_crc32_update(uint32_t crc, const uint8_t *data, size_t len);
 uint32_t xr_adler32(const uint8_t *data, size_t len);
 uint32_t xr_adler32_update(uint32_t adler, const uint8_t *data, size_t len);
 
-XrCompressError xr_deflate(const uint8_t *input, size_t in_len,
-                            uint8_t *output, size_t out_cap, size_t *out_len, int level);
-XrCompressError xr_inflate(const uint8_t *input, size_t in_len,
-                            uint8_t *output, size_t out_cap, size_t *out_len);
+XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                           size_t *out_len, int level);
+XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t *output, size_t out_cap,
+                           size_t *out_len);
 size_t xr_deflate_bound(size_t in_len);
 
-uint8_t* xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level);
-uint8_t* xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
+uint8_t *xr_gzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len, int level);
+uint8_t *xr_gunzip_alloc(const uint8_t *input, size_t in_len, size_t *out_len);
 bool xr_is_gzip(const uint8_t *data, size_t len);
 
-const char* xr_compress_error_str(XrCompressError err);
+const char *xr_compress_error_str(XrCompressError err);
 
 // Need xr_free for heap-allocated versions
 #include "base/xmalloc.h"
@@ -51,39 +51,39 @@ const char* xr_compress_error_str(XrCompressError err);
 /* ========== CRC32 ========== */
 
 TEST(compress_crc32_empty) {
-    uint32_t crc = xr_crc32((const uint8_t*)"", 0);
+    uint32_t crc = xr_crc32((const uint8_t *) "", 0);
     ASSERT_EQ_UINT(crc, 0x00000000);
 }
 
 TEST(compress_crc32_known) {
     // CRC32 of "123456789" is 0xCBF43926
-    uint32_t crc = xr_crc32((const uint8_t*)"123456789", 9);
+    uint32_t crc = xr_crc32((const uint8_t *) "123456789", 9);
     ASSERT_EQ_UINT(crc, 0xCBF43926);
 }
 
 TEST(compress_crc32_incremental) {
     // Incremental should match one-shot
-    uint32_t crc = xr_crc32_update(0, (const uint8_t*)"1234", 4);
-    crc = xr_crc32_update(crc, (const uint8_t*)"56789", 5);
+    uint32_t crc = xr_crc32_update(0, (const uint8_t *) "1234", 4);
+    crc = xr_crc32_update(crc, (const uint8_t *) "56789", 5);
     ASSERT_EQ_UINT(crc, 0xCBF43926);
 }
 
 /* ========== Adler32 ========== */
 
 TEST(compress_adler32_empty) {
-    uint32_t a = xr_adler32((const uint8_t*)"", 0);
+    uint32_t a = xr_adler32((const uint8_t *) "", 0);
     ASSERT_EQ_UINT(a, 1);  // Adler32 of empty is 1
 }
 
 TEST(compress_adler32_known) {
     // Adler32 of "Wikipedia" is 0x11E60398
-    uint32_t a = xr_adler32((const uint8_t*)"Wikipedia", 9);
+    uint32_t a = xr_adler32((const uint8_t *) "Wikipedia", 9);
     ASSERT_EQ_UINT(a, 0x11E60398);
 }
 
 TEST(compress_adler32_incremental) {
-    uint32_t a = xr_adler32_update(1, (const uint8_t*)"Wiki", 4);
-    a = xr_adler32_update(a, (const uint8_t*)"pedia", 5);
+    uint32_t a = xr_adler32_update(1, (const uint8_t *) "Wiki", 4);
+    a = xr_adler32_update(a, (const uint8_t *) "pedia", 5);
     ASSERT_EQ_UINT(a, 0x11E60398);
 }
 
@@ -94,17 +94,17 @@ TEST(compress_deflate_inflate_roundtrip) {
     size_t in_len = strlen(input);
 
     size_t bound = xr_deflate_bound(in_len);
-    uint8_t *compressed = (uint8_t*)xr_malloc(bound);
+    uint8_t *compressed = (uint8_t *) xr_malloc(bound);
     ASSERT_NOT_NULL(compressed);
 
     size_t comp_len;
-    XrCompressError err = xr_deflate((const uint8_t*)input, in_len,
-                                      compressed, bound, &comp_len, 6);
+    XrCompressError err =
+        xr_deflate((const uint8_t *) input, in_len, compressed, bound, &comp_len, 6);
     ASSERT_EQ_INT(err, XR_COMPRESS_OK);
     ASSERT_GT(comp_len, 0);
 
     // Decompress
-    uint8_t *decompressed = (uint8_t*)xr_malloc(in_len + 64);
+    uint8_t *decompressed = (uint8_t *) xr_malloc(in_len + 64);
     size_t decomp_len;
     err = xr_inflate(compressed, comp_len, decompressed, in_len + 64, &decomp_len);
     ASSERT_EQ_INT(err, XR_COMPRESS_OK);
@@ -122,7 +122,7 @@ TEST(compress_gzip_gunzip_roundtrip) {
     size_t in_len = strlen(input);
 
     size_t comp_len;
-    uint8_t *compressed = xr_gzip_alloc((const uint8_t*)input, in_len, &comp_len, 6);
+    uint8_t *compressed = xr_gzip_alloc((const uint8_t *) input, in_len, &comp_len, 6);
     ASSERT_NOT_NULL(compressed);
     ASSERT_GT(comp_len, 0);
 
@@ -168,25 +168,25 @@ TEST(compress_deflate_bound) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Compress - CRC32");
-    RUN_TEST(compress_crc32_empty);
-    RUN_TEST(compress_crc32_known);
-    RUN_TEST(compress_crc32_incremental);
+RUN_TEST_SUITE("Compress - CRC32");
+RUN_TEST(compress_crc32_empty);
+RUN_TEST(compress_crc32_known);
+RUN_TEST(compress_crc32_incremental);
 
-    RUN_TEST_SUITE("Compress - Adler32");
-    RUN_TEST(compress_adler32_empty);
-    RUN_TEST(compress_adler32_known);
-    RUN_TEST(compress_adler32_incremental);
+RUN_TEST_SUITE("Compress - Adler32");
+RUN_TEST(compress_adler32_empty);
+RUN_TEST(compress_adler32_known);
+RUN_TEST(compress_adler32_incremental);
 
-    RUN_TEST_SUITE("Compress - Deflate / Inflate");
-    RUN_TEST(compress_deflate_inflate_roundtrip);
+RUN_TEST_SUITE("Compress - Deflate / Inflate");
+RUN_TEST(compress_deflate_inflate_roundtrip);
 
-    RUN_TEST_SUITE("Compress - Gzip / Gunzip");
-    RUN_TEST(compress_gzip_gunzip_roundtrip);
-    RUN_TEST(compress_is_gzip_invalid);
+RUN_TEST_SUITE("Compress - Gzip / Gunzip");
+RUN_TEST(compress_gzip_gunzip_roundtrip);
+RUN_TEST(compress_is_gzip_invalid);
 
-    RUN_TEST_SUITE("Compress - Utilities");
-    RUN_TEST(compress_error_str);
-    RUN_TEST(compress_deflate_bound);
+RUN_TEST_SUITE("Compress - Utilities");
+RUN_TEST(compress_error_str);
+RUN_TEST(compress_deflate_bound);
 
 TEST_MAIN_END()

@@ -67,7 +67,7 @@ static void test_arena(void) {
     assert(p3 != NULL);
 
     // Zero-init
-    int *arr = (int *)xm_arena_calloc(&arena, 10, sizeof(int));
+    int *arr = (int *) xm_arena_calloc(&arena, 10, sizeof(int));
     assert(arr != NULL);
     for (int i = 0; i < 10; i++) {
         assert(arr[i] == 0);
@@ -117,7 +117,7 @@ static void test_constants(void) {
 
     // Float
     XmRef cf = xm_const_f64(func, 3.14);
-    (void)cf;
+    (void) cf;
     assert(func->nconst == 3);
     assert(func->consts[2].val.f64 == 3.14);
 

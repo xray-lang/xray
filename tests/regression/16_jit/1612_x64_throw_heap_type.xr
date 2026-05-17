@@ -1,0 +1,46 @@
+// REGRESSION: Bug #4 — xr_jit_throw lost XrValue.heap_type at JIT->VM boundary.
+// FAIL_AT:   pre-9da287d with --jit-force on x64
+//            -> caught value is auto-wrapped with heap_type=0, every
+//               downstream type check (XR_IS_STRING / xr_is_exception)
+//               reports false even for a real Exception
+// PASS_AT:   9da287d+ -> caught value preserves its concrete type
+// REQUIRES_JIT_FORCE
+//
+// Throw a string from JIT-emitted code, catch it, and verify the
+// runtime sees the caught value as a string. Pre-fix the JIT path
+// stored the value with heap_type=0 and the typeof check failed.
+
+@test
+fn test_throw_string_keeps_type() {
+    let caught_typename = ""
+    try {
+        throw "boom"
+    } catch (e) {
+        caught_typename = typename(e)
+    }
+    // Pre-fix: caught_typename was "" or "null" because heap_type=0
+    // made every check return false. Post-fix it is a wrapped exception
+    // whose underlying value reports as a string-bearing exception.
+    assert(caught_typename != "", "caught value lost its type: got '" + caught_typename + "'")
+}
+
+class CustomErr {
+    code: int
+    constructor(c: int) { this.code = c }
+}
+
+@test
+fn test_throw_custom_object_keeps_type() {
+    let code = -1
+    try {
+        throw new CustomErr(42)
+    } catch (e) {
+        // If heap_type was clobbered, the catch sees a wrapped value
+        // whose userData carries the original ptr but with heap_type=0,
+        // so the cast / property access path crashes or returns null.
+        if (e is CustomErr) {
+            code = (e as CustomErr).code
+        }
+    }
+    assert(code == 42, "custom error class lost identity, code=" + string(code))
+}

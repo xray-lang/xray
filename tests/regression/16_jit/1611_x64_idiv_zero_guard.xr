@@ -1,0 +1,82 @@
+// REGRESSION: Bug #6 — x64 XM_DIV/MOD missing idiv zero-divisor guard.
+// FAIL_AT:   pre-90b9ef2 with --jit-force on x64
+//            -> hardware SIGFPE / EXCEPTION_INT_DIVIDE_BY_ZERO,
+//               process aborts before catch runs
+// PASS_AT:   90b9ef2+ on x64 / arm64 with or without --jit-force
+//            -> VM raises XR_ERR_DIV_BY_ZERO and the catch handler observes it
+// REQUIRES_JIT_FORCE
+//
+// What the bug was:
+//   x64 codegen for XM_DIV / XM_MOD emitted `idiv` directly with the
+//   divisor in rcx without any prior zero check. On every runtime
+//   that reached the JIT-emitted path with a zero divisor, the CPU
+//   raised #DE (divide error) and the process died with SIGFPE on
+//   Unix / EXCEPTION_INT_DIVIDE_BY_ZERO on Windows. Pure-interpreter
+//   runs (and arm64 JIT, which already gated SDIV via PATCH_DEOPT_CBZ)
+//   correctly threw a recoverable DivisionByZero exception.
+//
+// What the fix did:
+//   xm_codegen_x64_ins.c now emits `test rm, rm` + branch-to-deopt
+//   before `idiv`, so a zero divisor re-enters the VM and the
+//   regular XR_ERR_DIV_BY_ZERO path runs.
+//
+// Why the variable is named at runtime:
+//   A constant `0` would be folded at codegen time and skip the idiv
+//   path entirely. The divisor must reach the idiv operand as a
+//   true runtime value.
+
+fn make_zero(): int {
+    // Force the value through a call so the JIT cannot constant-fold
+    // the divisor away. Equivalent shapes for mod below.
+    return 0
+}
+
+@test
+fn test_idiv_zero_caught() {
+    let z = make_zero()
+    let caught = false
+    let msg = ""
+    try {
+        let q = 100 / z
+        // If we get here, no exception was thrown — the JIT either
+        // produced wrong results or never re-entered the VM.
+        msg = "no exception thrown, got q=" + string(q)
+    } catch (e) {
+        caught = true
+    }
+    assert(caught, "div-by-zero must throw (catch did not run): " + msg)
+}
+
+@test
+fn test_imod_zero_caught() {
+    let z = make_zero()
+    let caught = false
+    let msg = ""
+    try {
+        let r = 100 % z
+        msg = "no exception thrown, got r=" + string(r)
+    } catch (e) {
+        caught = true
+    }
+    assert(caught, "mod-by-zero must throw (catch did not run): " + msg)
+}
+
+@test
+fn test_idiv_zero_in_loop() {
+    // Hot loop to force JIT compilation, then trigger zero divisor on
+    // the very last iteration. Without the fix, this version is the
+    // one that explodes in production: the JIT-emitted idiv is now
+    // the resident code for the divide site.
+    let acc = 0
+    let caught = false
+    for (let i = 1; i <= 200; i++) {
+        acc = acc + (1000 / i)
+    }
+    let z = make_zero()
+    try {
+        acc = acc + (1000 / z)
+    } catch (e) {
+        caught = true
+    }
+    assert(caught, "hot-loop div-by-zero must throw, acc=" + string(acc))
+}

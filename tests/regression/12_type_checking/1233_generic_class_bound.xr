@@ -2,6 +2,21 @@
 // Class upper-bound generics: <T: BaseClass> accepts BaseClass and any
 // of its subclasses, allowing the body to rely on the base API while
 // callers preserve their concrete subtype.
+//
+// REGRESSION: Bug #1 - uninitialised names[] in
+//             xa_set_function_type_params_from_ast (commit 1f39808).
+// FAIL_AT:    pre-1f39808 on MSVC Debug
+//             -> 0xCDCDCDCDCDCDCDCD pointer fed to strcmp via
+//                resolve_class_to_type_param, ACCESS_VIOLATION.
+//             -> on macOS / Linux usually silently passed because the
+//                xr_malloc'd garbage happened to be a readable string.
+// PASS_AT:    1f39808+ on all platforms with or without --jit-force
+//             -> generic signatures mixing constrained and
+//                unconstrained type params resolve cleanly.
+// Triggering shape:  fn pair<T: Animal, U>(...) below. The first pass
+// over `names[]` in xa_set_function_type_params_from_ast must complete
+// before any resolve_class_to_type_param call so the constraint
+// lookup never reads uninitialised slots.
 
 class Animal {
     name: string

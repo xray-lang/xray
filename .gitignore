@@ -9,6 +9,20 @@ build-*/
 build_*/
 cmake-build-*/
 
+# Generated codegen artifacts (from xisa generator).
+# Source of truth lives in src/jit/codegen/*.isa; generated files are
+# rebuilt every clean configure. They must never be committed to git.
+# See docs/tasks/076-codegen-master-spec.md §7 reverse-invariants #11.
+build/generated/
+
+# Local-only helper / scratch files. These typically embed absolute
+# paths from a contributor's machine (Desktop, vcvarsall, etc.) and
+# must never be shared via git.
+_build_*.bat
+_jit_*.bat
+_commit_msg.*
+*.tmp
+
 # ============================================================================
 # Build artifacts
 # ============================================================================
@@ -52,7 +66,9 @@ bin/
 # ============================================================================
 # Internal design
 # ============================================================================
-docs/
+# Note: docs/ is intentionally NOT ignored at the repo level so IDE / Cascade
+# tooling can read and edit it. If a user wants docs/ untracked in their local
+# checkout, add `docs/` to .git/info/exclude (already set up in this repo).
 
 # ============================================================================
 # Temporary test files

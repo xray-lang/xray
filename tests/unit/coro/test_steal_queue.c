@@ -17,14 +17,14 @@
 #include "coro/xsteal_queue.h"
 
 // Mock coroutine pointers (just unique addresses, never dereferenced)
-#define MOCK_CORO(n) ((struct XrCoroutine*)(uintptr_t)(0x1000 + (n)))
+#define MOCK_CORO(n) ((struct XrCoroutine *) (uintptr_t) (0x1000 + (n)))
 
 /* ========== Lifecycle ========== */
 
 TEST(steal_queue_init_destroy) {
     XrStealQueue q;
     ASSERT_TRUE(xr_steal_queue_init(&q, 0));  // default capacity
-    ASSERT_EQ_INT(q.capacity, 256);  // XR_STEAL_QUEUE_DEFAULT_SIZE
+    ASSERT_EQ_INT(q.capacity, 256);           // XR_STEAL_QUEUE_DEFAULT_SIZE
     ASSERT_TRUE(xr_steal_queue_empty(&q));
     ASSERT_EQ_INT(xr_steal_queue_size(&q), 0);
     xr_steal_queue_destroy(&q);
@@ -219,32 +219,32 @@ TEST(steal_queue_null_safety) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("StealQueue - Lifecycle");
-    RUN_TEST(steal_queue_init_destroy);
-    RUN_TEST(steal_queue_init_custom_capacity);
-    RUN_TEST(steal_queue_init_rounds_to_power_of_two);
-    RUN_TEST(steal_queue_init_null);
+RUN_TEST_SUITE("StealQueue - Lifecycle");
+RUN_TEST(steal_queue_init_destroy);
+RUN_TEST(steal_queue_init_custom_capacity);
+RUN_TEST(steal_queue_init_rounds_to_power_of_two);
+RUN_TEST(steal_queue_init_null);
 
-    RUN_TEST_SUITE("StealQueue - Push / Pop (LIFO)");
-    RUN_TEST(steal_queue_push_pop_single);
-    RUN_TEST(steal_queue_push_pop_lifo);
-    RUN_TEST(steal_queue_pop_empty);
+RUN_TEST_SUITE("StealQueue - Push / Pop (LIFO)");
+RUN_TEST(steal_queue_push_pop_single);
+RUN_TEST(steal_queue_push_pop_lifo);
+RUN_TEST(steal_queue_pop_empty);
 
-    RUN_TEST_SUITE("StealQueue - Steal (FIFO)");
-    RUN_TEST(steal_queue_steal_single);
-    RUN_TEST(steal_queue_steal_fifo);
-    RUN_TEST(steal_queue_steal_empty);
+RUN_TEST_SUITE("StealQueue - Steal (FIFO)");
+RUN_TEST(steal_queue_steal_single);
+RUN_TEST(steal_queue_steal_fifo);
+RUN_TEST(steal_queue_steal_empty);
 
-    RUN_TEST_SUITE("StealQueue - Mixed Operations");
-    RUN_TEST(steal_queue_mixed_ops);
+RUN_TEST_SUITE("StealQueue - Mixed Operations");
+RUN_TEST(steal_queue_mixed_ops);
 
-    RUN_TEST_SUITE("StealQueue - Capacity");
-    RUN_TEST(steal_queue_full);
+RUN_TEST_SUITE("StealQueue - Capacity");
+RUN_TEST(steal_queue_full);
 
-    RUN_TEST_SUITE("StealQueue - Snapshot");
-    RUN_TEST(steal_queue_snapshot);
+RUN_TEST_SUITE("StealQueue - Snapshot");
+RUN_TEST(steal_queue_snapshot);
 
-    RUN_TEST_SUITE("StealQueue - NULL Safety");
-    RUN_TEST(steal_queue_null_safety);
+RUN_TEST_SUITE("StealQueue - NULL Safety");
+RUN_TEST(steal_queue_null_safety);
 
 TEST_MAIN_END()

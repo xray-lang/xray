@@ -129,7 +129,7 @@ static void test_dead_vreg(void) {
     XmRef c99 = xm_const_i64(func, 99);
     XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c42);
     XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c99);
-    (void)v1;
+    (void) v1;
     xm_block_set_ret(entry, v0);
 
     XmDefUse du;
@@ -319,7 +319,8 @@ static void test_br_cond_use(void) {
     const XmUse *uses = xm_defuse_uses(&du, i0);
     int jmp_count = 0;
     for (uint32_t i = 0; i < 3; i++) {
-        if (uses[i].kind == XM_USE_JMP_ARG) jmp_count++;
+        if (uses[i].kind == XM_USE_JMP_ARG)
+            jmp_count++;
     }
     assert(jmp_count == 3); /* BR cond + 2 RETs */
 

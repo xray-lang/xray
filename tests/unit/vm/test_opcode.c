@@ -171,6 +171,6 @@ static void run_all_tests(void) {
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray Opcode Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray Opcode Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

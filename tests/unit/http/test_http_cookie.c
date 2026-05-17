@@ -30,10 +30,7 @@ TEST(cookie_parse_simple) {
 }
 
 TEST(cookie_parse_with_attributes) {
-    XrHttpCookie *c = xr_cookie_parse(
-        "token=xyz; Path=/api; Secure; HttpOnly",
-        "example.com", "/"
-    );
+    XrHttpCookie *c = xr_cookie_parse("token=xyz; Path=/api; Secure; HttpOnly", "example.com", "/");
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->name, "token");
     ASSERT_STR_EQ(c->value, "xyz");
@@ -45,10 +42,7 @@ TEST(cookie_parse_with_attributes) {
 }
 
 TEST(cookie_parse_with_domain) {
-    XrHttpCookie *c = xr_cookie_parse(
-        "id=42; Domain=.example.com; Path=/",
-        "www.example.com", "/"
-    );
+    XrHttpCookie *c = xr_cookie_parse("id=42; Domain=.example.com; Path=/", "www.example.com", "/");
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->name, "id");
     ASSERT_STR_EQ(c->value, "42");
@@ -56,34 +50,22 @@ TEST(cookie_parse_with_domain) {
 }
 
 TEST(cookie_parse_samesite) {
-    XrHttpCookie *c = xr_cookie_parse(
-        "pref=dark; SameSite=Strict",
-        "example.com", "/"
-    );
+    XrHttpCookie *c = xr_cookie_parse("pref=dark; SameSite=Strict", "example.com", "/");
     ASSERT_NOT_NULL(c);
     ASSERT_EQ_INT(c->same_site, XR_SAMESITE_STRICT);
     xr_cookie_free(c);
 
-    c = xr_cookie_parse(
-        "pref=light; SameSite=Lax",
-        "example.com", "/"
-    );
+    c = xr_cookie_parse("pref=light; SameSite=Lax", "example.com", "/");
     ASSERT_NOT_NULL(c);
     ASSERT_EQ_INT(c->same_site, XR_SAMESITE_LAX);
     xr_cookie_free(c);
 
     // SameSite=None requires Secure (RFC 6265bis §4.1.2.7 hardening).
     // Without Secure the cookie MUST be rejected.
-    c = xr_cookie_parse(
-        "pref=x; SameSite=None",
-        "example.com", "/"
-    );
+    c = xr_cookie_parse("pref=x; SameSite=None", "example.com", "/");
     ASSERT_NULL(c);
 
-    c = xr_cookie_parse(
-        "pref=x; SameSite=None; Secure",
-        "example.com", "/"
-    );
+    c = xr_cookie_parse("pref=x; SameSite=None; Secure", "example.com", "/");
     ASSERT_NOT_NULL(c);
     ASSERT_EQ_INT(c->same_site, XR_SAMESITE_NONE);
     ASSERT_TRUE(c->secure);
@@ -192,21 +174,21 @@ TEST(cookie_jar_clear) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("Cookie - Parse");
-    RUN_TEST(cookie_parse_simple);
-    RUN_TEST(cookie_parse_with_attributes);
-    RUN_TEST(cookie_parse_with_domain);
-    RUN_TEST(cookie_parse_samesite);
+RUN_TEST_SUITE("Cookie - Parse");
+RUN_TEST(cookie_parse_simple);
+RUN_TEST(cookie_parse_with_attributes);
+RUN_TEST(cookie_parse_with_domain);
+RUN_TEST(cookie_parse_samesite);
 
-    RUN_TEST_SUITE("Cookie - Serialize");
-    RUN_TEST(cookie_serialize);
+RUN_TEST_SUITE("Cookie - Serialize");
+RUN_TEST(cookie_serialize);
 
-    RUN_TEST_SUITE("Cookie Jar - Operations");
-    RUN_TEST(cookie_jar_new_free);
-    RUN_TEST(cookie_jar_add);
-    RUN_TEST(cookie_jar_add_multiple);
-    RUN_TEST(cookie_jar_replace_same_name);
-    RUN_TEST(cookie_jar_get_header);
-    RUN_TEST(cookie_jar_clear);
+RUN_TEST_SUITE("Cookie Jar - Operations");
+RUN_TEST(cookie_jar_new_free);
+RUN_TEST(cookie_jar_add);
+RUN_TEST(cookie_jar_add_multiple);
+RUN_TEST(cookie_jar_replace_same_name);
+RUN_TEST(cookie_jar_get_header);
+RUN_TEST(cookie_jar_clear);
 
 TEST_MAIN_END()

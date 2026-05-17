@@ -24,35 +24,47 @@
 
 /* Stubs for notification functions (implemented in xmcp_server.c, not linked
  * into this test binary). Tools may call these; they are no-ops here. */
-void xmcp_write_message(const char *json, size_t len) { (void)json; (void)len; }
+void xmcp_write_message(const char *json, size_t len) {
+    (void) json;
+    (void) len;
+}
 void xmcp_send_notification(XmcpServer *s, const char *m, XrJsonValue *p) {
-    (void)s; (void)m; (void)p;
+    (void) s;
+    (void) m;
+    (void) p;
 }
 void xmcp_send_log_notification(XmcpServer *s, const char *l, const char *m) {
-    (void)s; (void)l; (void)m;
+    (void) s;
+    (void) l;
+    (void) m;
 }
 void xmcp_send_progress_notification(XmcpServer *s, int64_t t, int p, int tot) {
-    (void)s; (void)t; (void)p; (void)tot;
+    (void) s;
+    (void) t;
+    (void) p;
+    (void) tot;
 }
 
 static int tests_passed = 0;
 static int tests_failed = 0;
 
 #define TEST(name) static void test_##name(void)
-#define RUN_TEST(name) do { \
-    printf("  Testing %s... ", #name); \
-    test_##name(); \
-    printf("PASS\n"); \
-    tests_passed++; \
-} while(0)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Testing %s... ", #name);                                                         \
+        test_##name();                                                                             \
+        printf("PASS\n");                                                                          \
+        tests_passed++;                                                                            \
+    } while (0)
 
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf("FAIL at line %d: %s\n", __LINE__, #cond); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
@@ -281,11 +293,9 @@ TEST(tools_list_tool_names) {
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
-    const char *expected[] = {
-        "xray_check", "xray_format", "xray_diagnostics",
-        "xray_run", "xray_syntax_lookup",
-        "xray_stdlib_search", "xray_definition"
-    };
+    const char *expected[] = {"xray_check",     "xray_format",        "xray_diagnostics",
+                              "xray_run",       "xray_syntax_lookup", "xray_stdlib_search",
+                              "xray_definition"};
 
     for (int i = 0; i < 7; i++) {
         XrJsonValue *tool = xjson_array_get(tools, i);
@@ -519,11 +529,8 @@ TEST(resources_list_uris) {
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *resources = xjson_get_array(result, "resources");
-    const char *expected[] = {
-        "xray://spec/cheatsheet",
-        "xray://spec/concurrency",
-        "xray://stdlib/modules"
-    };
+    const char *expected[] = {"xray://spec/cheatsheet", "xray://spec/concurrency",
+                              "xray://stdlib/modules"};
 
     for (int i = 0; i < 3; i++) {
         XrJsonValue *res = xjson_array_get(resources, i);
@@ -700,10 +707,8 @@ TEST(prompts_list_prompt_names) {
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
-    const char *expected[] = {
-        "code-review", "explain-error", "convert-to-xray",
-        "concurrency-pattern", "write-test"
-    };
+    const char *expected[] = {"code-review", "explain-error", "convert-to-xray",
+                              "concurrency-pattern", "write-test"};
 
     for (int i = 0; i < 5; i++) {
         XrJsonValue *p = xjson_array_get(prompts, i);
@@ -899,11 +904,7 @@ TEST(knowledge_get_stdlib_list) {
 TEST(method_entry_struct_size) {
     /* Verify the struct layout compiles correctly */
     XmcpMethodEntry entry = {
-        .method = "test/method",
-        .handler = NULL,
-        .is_notification = false,
-        .needs_init = true
-    };
+        .method = "test/method", .handler = NULL, .is_notification = false, .needs_init = true};
     ASSERT_STR_EQ(entry.method, "test/method");
     ASSERT(entry.handler == NULL);
     ASSERT(entry.is_notification == false);
@@ -998,7 +999,6 @@ int main(void) {
     /* Dispatch table */
     RUN_TEST(method_entry_struct_size);
 
-    printf("\n=== Results: %d passed, %d failed ===\n",
-           tests_passed, tests_failed);
+    printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
 }

@@ -351,9 +351,20 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->vm_ctx.stack_capacity = INITIAL_STACK_CAPACITY;
             coro->vm_ctx.frames = (XrBcCallFrame *) (block + stack_bytes);
             coro->vm_ctx.frame_capacity = INITIAL_FRAME_CAPACITY;
+            // Zero the entire VM stack. Conservative GC root scanning in
+            // mark_coro_roots walks every slot up to frame_end (which
+            // tracks proto->maxstacksize, not stack_top), so any slot a
+            // running frame has not yet stored into is still read by the
+            // collector. Without this memset those slots hold raw bytes
+            // from xr_malloc (or stale data popped off the per-worker
+            // slab free list), surfacing under MSan as use-of-
+            // uninitialized-value inside xr_coro_gc_markvalue.
+            memset(block, 0, stack_bytes);
         }
         if (!is_clean) {
-            // Fresh allocation: zero return slot. Recycled coros already done by recycle_local.
+            // Fresh allocation: stack already zeroed above (if block was
+            // freshly attached), so stack[0] = xr_null() is the natural
+            // value already. Recycled coros are zeroed by recycle_local.
             coro->vm_ctx.stack[0] = xr_null();
         }
     }
@@ -1479,9 +1490,17 @@ static inline void scope_lock_release(XrScopeContext *scope) {
 //
 // Returns true iff the child reported a non-null string error.
 static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeContext *scope) {
-    if (scope->mode == XR_SCOPE_WAIT || !coro->task)
+    /* coro->task is cleared by the scheduler when a sibling worker
+     * recycles the coroutine slot, and our caller's scope->child_lock
+     * does not pin that field. Loading the pointer once into a local
+     * is therefore necessary for correctness, not defensive: a second
+     * deref would re-read the field and UBSan flags the resulting NULL
+     * access on the LINKED-cancel race.
+     */
+    XrTask *task = coro->task;
+    if (scope->mode == XR_SCOPE_WAIT || !task)
         return false;
-    XrValue err = coro->task->error;
+    XrValue err = task->error;
     if (XR_IS_NULL(err) || !XR_IS_STRING(err))
         return false;
 

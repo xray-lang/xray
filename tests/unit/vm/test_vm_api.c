@@ -160,13 +160,12 @@ TEST(vm_deep_recursion_via_dostring) {
     /* 200 levels of recursion: well below stack overflow threshold but
      * deep enough to exercise xr_coro_grow_stack in run(). prepare_entry
      * must keep entry frame and grow frame array consistently. */
-    const char *src =
-        "fn dive(n: int): int {\n"
-        "  if (n <= 0) { return 0; }\n"
-        "  return dive(n - 1) + 1;\n"
-        "}\n"
-        "let r = dive(200);\n"
-        "if (r != 200) { throw \"wrong recursion result\"; }\n";
+    const char *src = "fn dive(n: int): int {\n"
+                      "  if (n <= 0) { return 0; }\n"
+                      "  return dive(n - 1) + 1;\n"
+                      "}\n"
+                      "let r = dive(200);\n"
+                      "if (r != 200) { throw \"wrong recursion result\"; }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -186,20 +185,19 @@ TEST(vm_large_maxstacksize_entry) {
     /* Many local variables push proto->maxstacksize past the 128-slot
      * default coroutine stack, forcing prepare_entry to grow before
      * the first instruction runs. */
-    const char *src =
-        "fn wide(): int {\n"
-        "  let a01 = 1; let a02 = 2; let a03 = 3; let a04 = 4;\n"
-        "  let a05 = 5; let a06 = 6; let a07 = 7; let a08 = 8;\n"
-        "  let a09 = 9; let a10 = 10; let a11 = 11; let a12 = 12;\n"
-        "  let a13 = 13; let a14 = 14; let a15 = 15; let a16 = 16;\n"
-        "  let a17 = 17; let a18 = 18; let a19 = 19; let a20 = 20;\n"
-        "  let a21 = 21; let a22 = 22; let a23 = 23; let a24 = 24;\n"
-        "  let a25 = 25; let a26 = 26; let a27 = 27; let a28 = 28;\n"
-        "  let a29 = 29; let a30 = 30; let a31 = 31; let a32 = 32;\n"
-        "  return a01 + a32;\n"
-        "}\n"
-        "let r = wide();\n"
-        "if (r != 33) { throw \"wide failed\"; }\n";
+    const char *src = "fn wide(): int {\n"
+                      "  let a01 = 1; let a02 = 2; let a03 = 3; let a04 = 4;\n"
+                      "  let a05 = 5; let a06 = 6; let a07 = 7; let a08 = 8;\n"
+                      "  let a09 = 9; let a10 = 10; let a11 = 11; let a12 = 12;\n"
+                      "  let a13 = 13; let a14 = 14; let a15 = 15; let a16 = 16;\n"
+                      "  let a17 = 17; let a18 = 18; let a19 = 19; let a20 = 20;\n"
+                      "  let a21 = 21; let a22 = 22; let a23 = 23; let a24 = 24;\n"
+                      "  let a25 = 25; let a26 = 26; let a27 = 27; let a28 = 28;\n"
+                      "  let a29 = 29; let a30 = 30; let a31 = 31; let a32 = 32;\n"
+                      "  return a01 + a32;\n"
+                      "}\n"
+                      "let r = wide();\n"
+                      "if (r != 33) { throw \"wide failed\"; }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -218,16 +216,15 @@ TEST(vm_vararg_entry) {
 
     /* Xray rest-param syntax: ...nums (no type annotation on rest param).
      * Exercises the vararg branch of xr_vm_call_closure. */
-    const char *src =
-        "fn sumAll(...nums): int {\n"
-        "  let total = 0\n"
-        "  for (let i = 0; i < nums.length; i = i + 1) {\n"
-        "    total = total + nums[i]\n"
-        "  }\n"
-        "  return total\n"
-        "}\n"
-        "let r = sumAll(1, 2, 3, 4, 5)\n"
-        "if (r != 15) { throw \"vararg failed\" }\n";
+    const char *src = "fn sumAll(...nums): int {\n"
+                      "  let total = 0\n"
+                      "  for (let i = 0; i < nums.length; i = i + 1) {\n"
+                      "    total = total + nums[i]\n"
+                      "  }\n"
+                      "  return total\n"
+                      "}\n"
+                      "let r = sumAll(1, 2, 3, 4, 5)\n"
+                      "if (r != 15) { throw \"vararg failed\" }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -238,22 +235,22 @@ TEST(vm_vararg_entry) {
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("xr_vm_current_ctx contract");
-    RUN_TEST(vm_current_ctx_returns_main_coro_ctx);
+RUN_TEST_SUITE("xr_vm_current_ctx contract");
+RUN_TEST(vm_current_ctx_returns_main_coro_ctx);
 
-    RUN_TEST_SUITE("xr_vm_prepare_entry contract");
-    RUN_TEST(vm_prepare_entry_within_capacity_is_noop);
-    RUN_TEST(vm_prepare_entry_grows_for_large_window);
-    RUN_TEST(vm_prepare_entry_zero_extra_succeeds);
+RUN_TEST_SUITE("xr_vm_prepare_entry contract");
+RUN_TEST(vm_prepare_entry_within_capacity_is_noop);
+RUN_TEST(vm_prepare_entry_grows_for_large_window);
+RUN_TEST(vm_prepare_entry_zero_extra_succeeds);
 
-    RUN_TEST_SUITE("Public entry NULL safety");
-    RUN_TEST(vm_call_closure_null_closure_returns_null);
+RUN_TEST_SUITE("Public entry NULL safety");
+RUN_TEST(vm_call_closure_null_closure_returns_null);
 #ifdef NDEBUG
-    RUN_TEST(vm_interpret_proto_null_proto_returns_error);
+RUN_TEST(vm_interpret_proto_null_proto_returns_error);
 #endif
 
-    RUN_TEST_SUITE("End-to-end entry path");
-    RUN_TEST(vm_deep_recursion_via_dostring);
-    RUN_TEST(vm_large_maxstacksize_entry);
-    RUN_TEST(vm_vararg_entry);
+RUN_TEST_SUITE("End-to-end entry path");
+RUN_TEST(vm_deep_recursion_via_dostring);
+RUN_TEST(vm_large_maxstacksize_entry);
+RUN_TEST(vm_vararg_entry);
 TEST_MAIN_END()

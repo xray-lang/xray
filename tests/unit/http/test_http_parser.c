@@ -56,16 +56,13 @@ TEST(http_parse_request_get) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_request_ex(data, len,
-                                        &method, &method_len,
-                                        &path, &path_len,
-                                        &minor_ver,
-                                        headers, &num_headers, 0);
+    int ret = xr_http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
+                                       &minor_ver, headers, &num_headers, 0);
     ASSERT_GT(ret, 0);
-    ASSERT_EQ_INT((int)method_len, 3);
+    ASSERT_EQ_INT((int) method_len, 3);
     ASSERT_EQ_INT(memcmp(method, "GET", 3), 0);
     ASSERT_EQ_INT(minor_ver, 1);
-    ASSERT_EQ_INT((int)num_headers, 2);
+    ASSERT_EQ_INT((int) num_headers, 2);
 }
 
 TEST(http_parse_request_post) {
@@ -83,15 +80,12 @@ TEST(http_parse_request_post) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_request_ex(data, len,
-                                        &method, &method_len,
-                                        &path, &path_len,
-                                        &minor_ver,
-                                        headers, &num_headers, 0);
+    int ret = xr_http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
+                                       &minor_ver, headers, &num_headers, 0);
     ASSERT_GT(ret, 0);
-    ASSERT_EQ_INT((int)method_len, 4);
+    ASSERT_EQ_INT((int) method_len, 4);
     ASSERT_EQ_INT(memcmp(method, "POST", 4), 0);
-    ASSERT_EQ_INT((int)num_headers, 3);
+    ASSERT_EQ_INT((int) num_headers, 3);
 }
 
 /* ========== Response Parsing ========== */
@@ -110,14 +104,12 @@ TEST(http_parse_response_200) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_response_ex(data, len,
-                                         &minor_ver, &status,
-                                         &msg, &msg_len,
-                                         headers, &num_headers, 0);
+    int ret = xr_http_parse_response_ex(data, len, &minor_ver, &status, &msg, &msg_len, headers,
+                                        &num_headers, 0);
     ASSERT_GT(ret, 0);
     ASSERT_EQ_INT(status, 200);
     ASSERT_EQ_INT(minor_ver, 1);
-    ASSERT_EQ_INT((int)num_headers, 2);
+    ASSERT_EQ_INT((int) num_headers, 2);
 }
 
 TEST(http_parse_response_404) {
@@ -132,10 +124,8 @@ TEST(http_parse_response_404) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_response_ex(data, len,
-                                         &minor_ver, &status,
-                                         &msg, &msg_len,
-                                         headers, &num_headers, 0);
+    int ret = xr_http_parse_response_ex(data, len, &minor_ver, &status, &msg, &msg_len, headers,
+                                        &num_headers, 0);
     ASSERT_GT(ret, 0);
     ASSERT_EQ_INT(status, 404);
 }
@@ -144,20 +134,20 @@ TEST(http_parse_response_404) {
 
 TEST(http_get_header) {
     XrHttpHeader headers[3];
-    headers[0] = (XrHttpHeader){"Host", 4, "example.com", 11};
-    headers[1] = (XrHttpHeader){"Content-Type", 12, "text/html", 9};
-    headers[2] = (XrHttpHeader){"Accept", 6, "*/*", 3};
+    headers[0] = (XrHttpHeader) {"Host", 4, "example.com", 11};
+    headers[1] = (XrHttpHeader) {"Content-Type", 12, "text/html", 9};
+    headers[2] = (XrHttpHeader) {"Accept", 6, "*/*", 3};
 
     size_t val_len = 0;
     const char *val = xr_http_get_header(headers, 3, "Content-Type", &val_len);
     ASSERT_NOT_NULL(val);
-    ASSERT_EQ_INT((int)val_len, 9);
+    ASSERT_EQ_INT((int) val_len, 9);
     ASSERT_EQ_INT(memcmp(val, "text/html", 9), 0);
 }
 
 TEST(http_get_header_not_found) {
     XrHttpHeader headers[1];
-    headers[0] = (XrHttpHeader){"Host", 4, "example.com", 11};
+    headers[0] = (XrHttpHeader) {"Host", 4, "example.com", 11};
 
     size_t val_len = 0;
     const char *val = xr_http_get_header(headers, 1, "X-Missing", &val_len);
@@ -200,15 +190,15 @@ TEST(http_request_init) {
     XrHttpRequest req;
     xr_http_request_init(&req);
     ASSERT_EQ_INT(req.method, XR_HTTP_METHOD_GET);
-    ASSERT_EQ_INT((int)req.content_length, -1);
-    ASSERT_EQ_INT((int)req.header_count, 0);
+    ASSERT_EQ_INT((int) req.content_length, -1);
+    ASSERT_EQ_INT((int) req.header_count, 0);
 }
 
 TEST(http_response_init) {
     XrHttpResponse resp;
     xr_http_response_init(&resp);
     ASSERT_EQ_INT(resp.status_code, 0);
-    ASSERT_EQ_INT((int)resp.content_length, -1);
+    ASSERT_EQ_INT((int) resp.content_length, -1);
 }
 
 /* ========== Incomplete Data ========== */
@@ -224,11 +214,8 @@ TEST(http_parse_request_incomplete) {
     XrHttpHeader headers[16];
     size_t num_headers = 16;
 
-    int ret = xr_http_parse_request_ex(data, len,
-                                        &method, &method_len,
-                                        &path, &path_len,
-                                        &minor_ver,
-                                        headers, &num_headers, 0);
+    int ret = xr_http_parse_request_ex(data, len, &method, &method_len, &path, &path_len,
+                                       &minor_ver, headers, &num_headers, 0);
     ASSERT_EQ_INT(ret, -2);  // Incomplete
 }
 
@@ -236,33 +223,33 @@ TEST(http_parse_request_incomplete) {
 
 TEST_MAIN_BEGIN()
 
-    RUN_TEST_SUITE("HTTP - Method Conversion");
-    RUN_TEST(http_method_from_string);
-    RUN_TEST(http_method_to_string);
+RUN_TEST_SUITE("HTTP - Method Conversion");
+RUN_TEST(http_method_from_string);
+RUN_TEST(http_method_to_string);
 
-    RUN_TEST_SUITE("HTTP - Request Parsing");
-    RUN_TEST(http_parse_request_get);
-    RUN_TEST(http_parse_request_post);
+RUN_TEST_SUITE("HTTP - Request Parsing");
+RUN_TEST(http_parse_request_get);
+RUN_TEST(http_parse_request_post);
 
-    RUN_TEST_SUITE("HTTP - Response Parsing");
-    RUN_TEST(http_parse_response_200);
-    RUN_TEST(http_parse_response_404);
+RUN_TEST_SUITE("HTTP - Response Parsing");
+RUN_TEST(http_parse_response_200);
+RUN_TEST(http_parse_response_404);
 
-    RUN_TEST_SUITE("HTTP - Header Lookup");
-    RUN_TEST(http_get_header);
-    RUN_TEST(http_get_header_not_found);
+RUN_TEST_SUITE("HTTP - Header Lookup");
+RUN_TEST(http_get_header);
+RUN_TEST(http_get_header_not_found);
 
-    RUN_TEST_SUITE("HTTP - Helpers");
-    RUN_TEST(http_find_header_end);
-    RUN_TEST(http_find_header_end_not_found);
-    RUN_TEST(http_parse_status_code_helper);
+RUN_TEST_SUITE("HTTP - Helpers");
+RUN_TEST(http_find_header_end);
+RUN_TEST(http_find_header_end_not_found);
+RUN_TEST(http_parse_status_code_helper);
 
-    RUN_TEST_SUITE("HTTP - Init/Reset");
-    RUN_TEST(http_parser_init_reset);
-    RUN_TEST(http_request_init);
-    RUN_TEST(http_response_init);
+RUN_TEST_SUITE("HTTP - Init/Reset");
+RUN_TEST(http_parser_init_reset);
+RUN_TEST(http_request_init);
+RUN_TEST(http_response_init);
 
-    RUN_TEST_SUITE("HTTP - Edge Cases");
-    RUN_TEST(http_parse_request_incomplete);
+RUN_TEST_SUITE("HTTP - Edge Cases");
+RUN_TEST(http_parse_request_incomplete);
 
 TEST_MAIN_END()

@@ -22,27 +22,28 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 #define TEST(name) static void test_##name(void)
-#define RUN_TEST(name) do { \
-    printf("  Testing %s... ", #name); \
-    test_##name(); \
-    printf("PASS\n"); \
-    tests_passed++; \
-} while(0)
+#define RUN_TEST(name)                                                                             \
+    do {                                                                                           \
+        printf("  Testing %s... ", #name);                                                         \
+        test_##name();                                                                             \
+        printf("PASS\n");                                                                          \
+        tests_passed++;                                                                            \
+    } while (0)
 
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf("FAIL at line %d: %s\n", __LINE__, #cond); \
-        tests_failed++; \
-        return; \
-    } \
-} while(0)
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
 
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_NE(a, b) ASSERT((a) != (b))
 
 // Helper: open a document and parse it
-static XrLspDocument *open_and_parse(XrLspServer *server, const char *uri,
-                                      const char *code) {
+static XrLspDocument *open_and_parse(XrLspServer *server, const char *uri, const char *code) {
     XrLspDocument *doc = xlsp_document_open(server, uri, code, 1);
     if (doc) {
         xlsp_parse_document(doc, server);
@@ -134,9 +135,8 @@ TEST(definition_local_variable) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code =
-        "let count = 0\n"
-        "print(count)\n";
+    const char *code = "let count = 0\n"
+                       "print(count)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -155,11 +155,10 @@ TEST(definition_function) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code =
-        "fn greet(name: string) {\n"
-        "    print(name)\n"
-        "}\n"
-        "greet(\"world\")\n";
+    const char *code = "fn greet(name: string) {\n"
+                       "    print(name)\n"
+                       "}\n"
+                       "greet(\"world\")\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -193,10 +192,9 @@ TEST(references_local_variable) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code =
-        "let x = 1\n"
-        "let y = x + 1\n"
-        "print(x)\n";
+    const char *code = "let x = 1\n"
+                       "let y = x + 1\n"
+                       "print(x)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -217,12 +215,11 @@ TEST(references_function_name) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code =
-        "fn add(a: int, b: int) -> int {\n"
-        "    return a + b\n"
-        "}\n"
-        "let result = add(1, 2)\n"
-        "print(add(3, 4))\n";
+    const char *code = "fn add(a: int, b: int) -> int {\n"
+                       "    return a + b\n"
+                       "}\n"
+                       "let result = add(1, 2)\n"
+                       "print(add(3, 4))\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -261,10 +258,9 @@ TEST(highlight_variable_occurrences) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code =
-        "let counter = 0\n"
-        "counter = counter + 1\n"
-        "print(counter)\n";
+    const char *code = "let counter = 0\n"
+                       "counter = counter + 1\n"
+                       "print(counter)\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -347,13 +343,12 @@ TEST(symbols_function_listed) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code =
-        "fn hello() {\n"
-        "    print(\"hello\")\n"
-        "}\n"
-        "fn world() {\n"
-        "    print(\"world\")\n"
-        "}\n";
+    const char *code = "fn hello() {\n"
+                       "    print(\"hello\")\n"
+                       "}\n"
+                       "fn world() {\n"
+                       "    print(\"world\")\n"
+                       "}\n";
     XrLspDocument *doc = open_and_parse(server, "file:///test.xr", code);
     ASSERT(doc != NULL);
 
@@ -400,7 +395,8 @@ TEST(symbols_null_safety) {
 
 int main(int argc, char **argv) {
     xr_test_suppress_dialogs();
-    (void)argc; (void)argv;
+    (void) argc;
+    (void) argv;
 
     printf("\n=== LSP Navigation Unit Tests ===\n\n");
 
@@ -434,8 +430,7 @@ int main(int argc, char **argv) {
     RUN_TEST(symbols_empty_document);
     RUN_TEST(symbols_null_safety);
 
-    printf("\n=== Results: %d passed, %d failed ===\n\n",
-           tests_passed, tests_failed);
+    printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);
 
     return tests_failed > 0 ? 1 : 0;
 }

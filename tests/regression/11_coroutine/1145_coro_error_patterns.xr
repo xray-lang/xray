@@ -1,6 +1,28 @@
 // Test coroutine error handling patterns
 // Covers: task.error, task.result, try-catch behavior, await all errors,
 //         await any, Coro.monitor error notification
+//
+// REGRESSION: Bug #9 - sysmon vs timer-wheel race
+//             (commit c976d0d).
+// FAIL_AT:    pre-c976d0d under --jit-force, ~1/10 runs
+//             -> sysmon_assist() called xr_check_next_timeout_time()
+//                from the sysmon thread, asserting the
+//                owner-exclusive invariant
+//                `next_timeout_time == next_timeout_pos`. Owner
+//                workers update those two fields in two separate
+//                non-atomic stores, and sysmon could observe the
+//                intermediate state when a worker reached M_PARKING,
+//                tripping the assertion.
+// PASS_AT:    c976d0d+ with --jit-force or --no-jit
+//             -> sysmon now reads tw->next_timeout_pos directly
+//                (naturally-aligned 64-bit load is atomic on
+//                x86-64 / AArch64); the owner-exclusive check
+//                stays for paths that genuinely need it.
+// REQUIRES_JIT_FORCE
+// Triggering shape: timer-driven coroutine error patterns combined
+// with sysmon-noticed M_PARKING transitions. Race is timing-
+// sensitive — `scripts/repro_jit_force_burn.sh` with N=30 is the
+// recommended way to reproduce the original ~1/10 failure rate.
 
 import time
 fn test_basic_error() {

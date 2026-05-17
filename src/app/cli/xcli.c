@@ -15,6 +15,7 @@
 
 #include "xcli_dispatch.h"
 #include <signal.h>
+#include <stdio.h>
 #include <string.h>
 #ifdef XR_OS_WINDOWS
 #include <io.h>
@@ -57,6 +58,17 @@ static void crash_handler(int sig) {
 #endif
 
 int main(int argc, char **argv) {
+    /* MSVC's CRT (and most libc implementations) fully buffer stdout when
+     * it is connected to a pipe — exactly the configuration the regression
+     * runner uses. If a JIT-compiled coroutine traps or aborts before the
+     * test framework can flush, every "0301 + 1 passed" line stays in the
+     * 4 KB user buffer and the dump that XRAY_TEST_DUMP_FAILED=1 prints
+     * on CI is empty. Disable buffering on the standard streams so a
+     * crashing process still hands its diagnostics to the parent shell.
+     * stderr is unbuffered by default in C but MSVC redirects to fully
+     * buffered behind a pipe; force _IONBF for both streams. */
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
 #ifdef XR_OS_WINDOWS
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
     _set_abort_behavior(0, _WRITE_ABORT_MSG);

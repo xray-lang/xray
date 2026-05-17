@@ -2,6 +2,31 @@
 // Multi-constraint generics: <T: A & B & C> intersection-style constraints.
 // All constraints in the intersection must be satisfied for a type to be a
 // valid type argument.
+//
+// REGRESSION: Bug #2 - dangling builtin-interface XrType* across
+//             isolates (commit 1f39808, second hunk).
+// FAIL_AT:    pre-1f39808 on MSVC Debug, second .xr file onwards
+//             -> builtin_interfaces[].type is a process-wide static
+//                cache holding XrType* allocated from the *current*
+//                isolate's type pool. The g_interfaces_initialized
+//                guard prevented re-initialisation in later isolates,
+//                so after the first isolate's pool was freed every
+//                subsequent isolate's constraint check read freed
+//                memory. MSVC Debug 0xDD fill made the corruption
+//                visible (`unknown` / `int?` printouts); macOS / Linux
+//                often left the freed arena memory readable long
+//                enough to silently succeed.
+// PASS_AT:    1f39808+ on all platforms
+//             -> xa_register_builtin_interfaces unconditionally
+//                rebuilds the cache in the caller's isolate, so the
+//                pointers always live in the current type pool.
+// Triggering shape: any .xr file using a builtin interface as a
+// generic constraint (Comparable / Hashable below). Because xray test
+// gives each .xr file its own isolate, this single file already
+// stresses the second-isolate path — the regression is only fully
+// covered when at least one earlier file has populated the cache
+// in the process (true for the entire regression suite under
+// `scripts/run_regression_tests.sh`).
 
 // ===== Single constraint (regression) =====
 @test

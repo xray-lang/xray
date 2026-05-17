@@ -89,7 +89,7 @@ XR_FUNC void jit_debug_dump(const char *name, const void *code, uint32_t size,
     uint32_t n_inst = size / 4;
     const uint32_t *insts = (const uint32_t *) code;
     a64_disasm_dump(stderr, insts, n_inst, 0);
-#elif defined(__x86_64__)
+#elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
     /* No x64 disassembler yet — dump raw hex bytes */
     const uint8_t *bytes = (const uint8_t *) code;
     for (uint32_t off = 0; off < size; off += 16) {
@@ -476,6 +476,36 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
         return;
     }
 
+    /* Skip the entire crash-handler install under AddressSanitizer.
+     *
+     * The historical implementation registers a process-wide
+     * sigaltstack pointing at a 64KB BSS buffer.  ASan's per-thread
+     * destructor (UnsetAlternateSignalStack) tries to munmap the
+     * stack returned by sigaltstack(2), and BSS is not an mmap
+     * region — munmap fails with EINVAL, which ASan promotes to
+     * "CHECK failed: unable to unmmap" and aborts the process.
+     *
+     * The net effect is that any coroutine-heavy --jit-force test
+     * deadlocks on thread teardown and the runner reports it as a
+     * timeout with a 64KB deallocate failure.  ASan already produces
+     * a far better signal/stack report than this handler, so the
+     * correct fix is to leave its handler in place when ASan is
+     * active.  Native (non-sanitizer) builds keep the JIT-aware
+     * crash handler.
+     */
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define XR_JIT_ASAN_BUILD 1
+#endif
+#endif
+#if !defined(XR_JIT_ASAN_BUILD) && defined(__SANITIZE_ADDRESS__)
+#define XR_JIT_ASAN_BUILD 1
+#endif
+#ifdef XR_JIT_ASAN_BUILD
+    xr_log_debug("jit", "crash handler skipped: ASan owns SIGSEGV/SIGBUS");
+    return;
+#else
+
 // Allocate alternate signal stack so handler works during stack overflow
 // Use fixed 64KB instead of SIGSTKSZ which is not a compile-time constant on glibc 2.34+
 #define JIT_ALT_STACK_SIZE (64 * 1024)
@@ -498,13 +528,133 @@ XR_FUNC void jit_debug_install_crash_handler(void) {
     sigaction(SIGBUS, &sa, &g_old_sigbus);
 
     xr_log_debug("jit", "crash handler installed (with alt stack)");
+#endif /* XR_JIT_ASAN_BUILD */
 }
 
 #else /* _WIN32 */
 
+#include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+
+/* Vectored exception handler for diagnosing JIT-related crashes on
+ * Windows.  We treat EXCEPTION_ACCESS_VIOLATION as fatal — print the
+ * faulting PC, the address read/written, and (if the PC sits in JIT
+ * code) the function name plus offset.  Always returns
+ * EXCEPTION_CONTINUE_SEARCH so the OS / debugger still gets the event. */
+static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
+    EXCEPTION_RECORD *rec = info->ExceptionRecord;
+    if (rec->ExceptionCode != EXCEPTION_ACCESS_VIOLATION &&
+        rec->ExceptionCode != EXCEPTION_STACK_OVERFLOW &&
+        rec->ExceptionCode != EXCEPTION_ILLEGAL_INSTRUCTION &&
+        rec->ExceptionCode != EXCEPTION_INT_DIVIDE_BY_ZERO)
+        return EXCEPTION_CONTINUE_SEARCH;
+
+    void *fault_pc = (void *) rec->ExceptionAddress;
+    const char *kind = "UNKNOWN";
+    switch (rec->ExceptionCode) {
+        case EXCEPTION_ACCESS_VIOLATION:
+            kind = "ACCESS_VIOLATION";
+            break;
+        case EXCEPTION_STACK_OVERFLOW:
+            kind = "STACK_OVERFLOW";
+            break;
+        case EXCEPTION_ILLEGAL_INSTRUCTION:
+            kind = "ILLEGAL_INSTRUCTION";
+            break;
+        case EXCEPTION_INT_DIVIDE_BY_ZERO:
+            kind = "INT_DIV_BY_ZERO";
+            break;
+    }
+
+    fprintf(stderr, "\n=== JIT CRASH: %s ===\n", kind);
+    fprintf(stderr, "  PC      = %p\n", fault_pc);
+    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2) {
+        const char *op = rec->ExceptionInformation[0] == 0   ? "read"
+                         : rec->ExceptionInformation[0] == 1 ? "write"
+                                                             : "exec";
+        fprintf(stderr, "  Fault   = %s @ %p\n", op, (void *) rec->ExceptionInformation[1]);
+    }
+#ifdef _M_X64
+    CONTEXT *ctx = info->ContextRecord;
+    fprintf(stderr, "  RAX=%016llx RBX=%016llx RCX=%016llx RDX=%016llx\n",
+            (unsigned long long) ctx->Rax, (unsigned long long) ctx->Rbx,
+            (unsigned long long) ctx->Rcx, (unsigned long long) ctx->Rdx);
+    fprintf(stderr, "  RSI=%016llx RDI=%016llx RBP=%016llx RSP=%016llx\n",
+            (unsigned long long) ctx->Rsi, (unsigned long long) ctx->Rdi,
+            (unsigned long long) ctx->Rbp, (unsigned long long) ctx->Rsp);
+    fprintf(stderr, "  R8 =%016llx R9 =%016llx R10=%016llx R11=%016llx\n",
+            (unsigned long long) ctx->R8, (unsigned long long) ctx->R9,
+            (unsigned long long) ctx->R10, (unsigned long long) ctx->R11);
+    fprintf(stderr, "  R12=%016llx R13=%016llx R14=%016llx R15=%016llx\n",
+            (unsigned long long) ctx->R12, (unsigned long long) ctx->R13,
+            (unsigned long long) ctx->R14, (unsigned long long) ctx->R15);
+#endif
+
+    /* Resolve module + symbol so the user sees a function name directly. */
+    {
+        HMODULE mod = NULL;
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCWSTR) fault_pc, &mod) &&
+            mod) {
+            wchar_t name[MAX_PATH] = {0};
+            GetModuleFileNameW(mod, name, MAX_PATH);
+            uintptr_t base = (uintptr_t) mod;
+            uintptr_t rva = (uintptr_t) fault_pc - base;
+            fprintf(stderr, "  module  = %ls  base=%p  RVA=0x%zx\n", name, (void *) base,
+                    (size_t) rva);
+        }
+        static int sym_inited = 0;
+        if (!sym_inited) {
+            SymSetOptions(SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME | SYMOPT_LOAD_LINES);
+            SymInitialize(GetCurrentProcess(), NULL, TRUE);
+            sym_inited = 1;
+        }
+        unsigned char sym_buf[sizeof(SYMBOL_INFO) + 512];
+        SYMBOL_INFO *sym = (SYMBOL_INFO *) sym_buf;
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = 512;
+        DWORD64 disp = 0;
+        if (SymFromAddr(GetCurrentProcess(), (DWORD64) (uintptr_t) fault_pc, &disp, sym)) {
+            fprintf(stderr, "  symbol  = %s+0x%llx\n", sym->Name, (unsigned long long) disp);
+            IMAGEHLP_LINE64 line = {sizeof(IMAGEHLP_LINE64)};
+            DWORD line_disp = 0;
+            if (SymGetLineFromAddr64(GetCurrentProcess(), (DWORD64) (uintptr_t) fault_pc,
+                                     &line_disp, &line)) {
+                fprintf(stderr, "  source  = %s:%u\n", line.FileName, (unsigned) line.LineNumber);
+            }
+        }
+    }
+
+    const JitCodeRegion *region = jit_debug_lookup(fault_pc);
+    if (region) {
+        size_t off = (size_t) ((uintptr_t) fault_pc - (uintptr_t) region->code);
+        fprintf(stderr, "  in JIT  = %s+0x%zx  (region %p, size %u, fast=+0x%x)\n",
+                region->name ? region->name : "?", off, region->code, region->code_size,
+                region->fast_entry_offset);
+        /* Print a short hex dump around the fault PC. */
+        size_t start = off >= 8 ? off - 8 : 0;
+        size_t end = off + 16 < region->code_size ? off + 16 : region->code_size;
+        fprintf(stderr, "  bytes   =");
+        for (size_t i = start; i < end; i++) {
+            fprintf(stderr, " %s%02x%s", i == off ? "[" : "", ((unsigned char *) region->code)[i],
+                    i == off ? "]" : "");
+        }
+        fprintf(stderr, "\n");
+    } else {
+        fprintf(stderr, "  in JIT  = (not in JIT code)\n");
+    }
+    fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 XR_FUNC void jit_debug_install_crash_handler(void) {
-    /* Windows: signal-based crash handler not available.
-     * TODO: implement via AddVectoredExceptionHandler. */
+    if (getenv("XRAY_NO_JIT_CRASH_HANDLER"))
+        return;
+    /* AddVectoredExceptionHandler with FirstHandler=1 runs before any
+     * SEH frame, which is what we want for diagnosing JIT bugs. */
+    AddVectoredExceptionHandler(1, jit_veh);
 }
 
 #endif /* _WIN32 */

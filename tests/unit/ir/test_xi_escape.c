@@ -21,23 +21,23 @@
 static int g_passed = 0;
 static int g_failed = 0;
 
-#define ASSERT_EQ(actual, expected, msg)                             \
-    do {                                                             \
-        if ((actual) != (expected)) {                                \
-            fprintf(stderr, "  FAIL: %s (got %d, expected %d)\n",   \
-                    msg, (int)(actual), (int)(expected));             \
-            g_failed++;                                              \
-        } else {                                                     \
-            g_passed++;                                              \
-        }                                                            \
+#define ASSERT_EQ(actual, expected, msg)                                                           \
+    do {                                                                                           \
+        if ((actual) != (expected)) {                                                              \
+            fprintf(stderr, "  FAIL: %s (got %d, expected %d)\n", msg, (int) (actual),             \
+                    (int) (expected));                                                             \
+            g_failed++;                                                                            \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
 /* ========== Shared Type Singletons ========== */
 
-static XrType t_int   = { .kind = XR_KIND_INT,     .id = 1, .frozen = true };
-static XrType t_array = { .kind = XR_KIND_ARRAY,   .id = 2, .frozen = true };
-static XrType t_str   = { .kind = XR_KIND_STRING,  .id = 3, .frozen = true };
-static XrType t_any   = { .kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true };
+static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
+static XrType t_str = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
+static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -125,10 +125,8 @@ static void test_store_field_escape(void) {
 
     xi_escape_analyze(f);
 
-    ASSERT_EQ(arr->escape, XI_ESC_HEAP,
-              "array stored to field should be HEAP_ESCAPE");
-    ASSERT_EQ(obj->escape, XI_ESC_HEAP,
-              "object receiving field store should be HEAP_ESCAPE");
+    ASSERT_EQ(arr->escape, XI_ESC_HEAP, "array stored to field should be HEAP_ESCAPE");
+    ASSERT_EQ(obj->escape, XI_ESC_HEAP, "object receiving field store should be HEAP_ESCAPE");
 
     xi_func_free(f);
 }
@@ -158,8 +156,7 @@ static void test_chan_send_escape(void) {
 
     xi_escape_analyze(f);
 
-    ASSERT_EQ(arr->escape, XI_ESC_GLOBAL,
-              "array sent through channel should be GLOBAL_ESCAPE");
+    ASSERT_EQ(arr->escape, XI_ESC_GLOBAL, "array sent through channel should be GLOBAL_ESCAPE");
 
     xi_func_free(f);
 }
@@ -187,8 +184,7 @@ static void test_set_shared_escape(void) {
 
     xi_escape_analyze(f);
 
-    ASSERT_EQ(arr->escape, XI_ESC_GLOBAL,
-              "array stored to shared should be GLOBAL_ESCAPE");
+    ASSERT_EQ(arr->escape, XI_ESC_GLOBAL, "array stored to shared should be GLOBAL_ESCAPE");
 
     xi_func_free(f);
 }
@@ -218,8 +214,7 @@ static void test_call_arg_escape(void) {
 
     xi_escape_analyze(f);
 
-    ASSERT_EQ(arr->escape, XI_ESC_HEAP,
-              "array passed to unknown callee should be HEAP_ESCAPE");
+    ASSERT_EQ(arr->escape, XI_ESC_HEAP, "array passed to unknown callee should be HEAP_ESCAPE");
 
     xi_func_free(f);
 }
@@ -243,12 +238,9 @@ static void test_heap_alloc_check(void) {
 /* ========== Test: lattice join ========== */
 
 static void test_lattice_join(void) {
-    ASSERT_EQ(xi_esc_join(XI_ESC_NONE, XI_ESC_NONE), XI_ESC_NONE,
-              "join(NONE, NONE) = NONE");
-    ASSERT_EQ(xi_esc_join(XI_ESC_NONE, XI_ESC_ARG), XI_ESC_ARG,
-              "join(NONE, ARG) = ARG");
-    ASSERT_EQ(xi_esc_join(XI_ESC_HEAP, XI_ESC_ARG), XI_ESC_HEAP,
-              "join(HEAP, ARG) = HEAP");
+    ASSERT_EQ(xi_esc_join(XI_ESC_NONE, XI_ESC_NONE), XI_ESC_NONE, "join(NONE, NONE) = NONE");
+    ASSERT_EQ(xi_esc_join(XI_ESC_NONE, XI_ESC_ARG), XI_ESC_ARG, "join(NONE, ARG) = ARG");
+    ASSERT_EQ(xi_esc_join(XI_ESC_HEAP, XI_ESC_ARG), XI_ESC_HEAP, "join(HEAP, ARG) = HEAP");
     ASSERT_EQ(xi_esc_join(XI_ESC_GLOBAL, XI_ESC_HEAP), XI_ESC_GLOBAL,
               "join(GLOBAL, HEAP) = GLOBAL");
 }
@@ -260,7 +252,8 @@ static int count_ops(const XiFunc *f, uint16_t op) {
     int count = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        if (!blk) continue;
+        if (!blk)
+            continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             if (blk->values[i] && blk->values[i]->op == op)
                 count++;
@@ -284,10 +277,8 @@ static void test_arc_no_escape_skipped(void) {
     xi_escape_analyze(f);
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 0,
-              "NO_ESCAPE array should have 0 retains");
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 0,
-              "NO_ESCAPE array should have 0 releases");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "NO_ESCAPE array should have 0 retains");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "NO_ESCAPE array should have 0 releases");
     xi_func_free(f);
 }
 
@@ -304,10 +295,8 @@ static void test_arc_return_gets_retain(void) {
     xi_escape_analyze(f);
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
-              "ARG_ESCAPE array should have 1 retain");
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 0,
-              "ARG_ESCAPE array returned: 0 release (caller owns)");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "ARG_ESCAPE array should have 1 retain");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "ARG_ESCAPE array returned: 0 release (caller owns)");
     xi_func_free(f);
 }
 
@@ -331,10 +320,8 @@ static void test_arc_heap_gets_retain_release(void) {
     xi_escape_analyze(f);
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
-              "HEAP_ESCAPE array should have 1 retain");
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 1,
-              "HEAP_ESCAPE array should have 1 release at exit");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "HEAP_ESCAPE array should have 1 retain");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 1, "HEAP_ESCAPE array should have 1 release at exit");
     xi_func_free(f);
 }
 
@@ -355,10 +342,8 @@ static void test_stack_alloc_local_array(void) {
     xi_escape_analyze(f);
     xi_stack_alloc_rewrite(f);
 
-    ASSERT_EQ(arr->op, XI_STACK_ALLOC,
-              "NO_ESCAPE array should become STACK_ALLOC");
-    ASSERT_EQ(arr->aux_int, XI_ARRAY_NEW,
-              "STACK_ALLOC should preserve original op in aux_int");
+    ASSERT_EQ(arr->op, XI_STACK_ALLOC, "NO_ESCAPE array should become STACK_ALLOC");
+    ASSERT_EQ(arr->aux_int, XI_ARRAY_NEW, "STACK_ALLOC should preserve original op in aux_int");
     xi_func_free(f);
 }
 
@@ -373,8 +358,7 @@ static void test_stack_alloc_escaping_stays(void) {
     xi_escape_analyze(f);
     xi_stack_alloc_rewrite(f);
 
-    ASSERT_EQ(arr->op, XI_ARRAY_NEW,
-              "ARG_ESCAPE array should stay as ARRAY_NEW");
+    ASSERT_EQ(arr->op, XI_ARRAY_NEW, "ARG_ESCAPE array should stay as ARRAY_NEW");
     xi_func_free(f);
 }
 
@@ -395,7 +379,6 @@ int main(void) {
     test_stack_alloc_local_array();
     test_stack_alloc_escaping_stays();
 
-    printf("\n=== test_xi_escape: %d passed, %d failed ===\n",
-           g_passed, g_failed);
+    printf("\n=== test_xi_escape: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;
 }

@@ -323,7 +323,7 @@ TEST(string_char_at) {
     XrString *c = xr_string_char_at(X, s, 0);
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->data, "h");
-    
+
     c = xr_string_char_at(X, s, 4);
     ASSERT_NOT_NULL(c);
     ASSERT_STR_EQ(c->data, "o");
@@ -380,7 +380,7 @@ TEST(string_utf8_length) {
     setup();
     // "你好" is 2 characters, 6 bytes in UTF-8
     XrString *s = xr_string_intern(X, "你好", 6, xr_string_hash("你好", 6));
-    ASSERT_EQ_UINT(s->length, 6);  // Byte length
+    ASSERT_EQ_UINT(s->length, 6);                 // Byte length
     ASSERT_EQ_UINT(xr_string_char_length(s), 2);  // Character length
     teardown();
 }
@@ -391,7 +391,7 @@ TEST(string_utf8_mixed) {
     const char *text = "hello世界";
     size_t len = strlen(text);
     XrString *s = xr_string_intern(X, text, len, xr_string_hash(text, len));
-    ASSERT_EQ_UINT(s->length, 11);  // Byte length
+    ASSERT_EQ_UINT(s->length, 11);                // Byte length
     ASSERT_EQ_UINT(xr_string_char_length(s), 7);  // Character length
     teardown();
 }
@@ -423,7 +423,7 @@ static void run_all_tests(void) {
     RUN_TEST(string_from_int_negative);
     RUN_TEST(string_from_int_zero);
     RUN_TEST(string_from_float);
-    
+
     RUN_TEST_SUITE("String Comparison");
     RUN_TEST(string_equal_same);
     RUN_TEST(string_equal_different);
@@ -431,12 +431,12 @@ static void run_all_tests(void) {
     RUN_TEST(string_compare_equal);
     RUN_TEST(string_compare_less);
     RUN_TEST(string_compare_greater);
-    
+
     RUN_TEST_SUITE("String Concatenation");
     RUN_TEST(string_concat_basic);
     RUN_TEST(string_concat_empty_left);
     RUN_TEST(string_concat_empty_right);
-    
+
     RUN_TEST_SUITE("String Methods");
     RUN_TEST(string_size);
     RUN_TEST(string_is_empty);
@@ -445,37 +445,37 @@ static void run_all_tests(void) {
     RUN_TEST(string_has);
     RUN_TEST(string_starts_with);
     RUN_TEST(string_ends_with);
-    
+
     RUN_TEST_SUITE("String Transformation");
     RUN_TEST(string_to_upper_case);
     RUN_TEST(string_to_lower_case);
     RUN_TEST(string_trim);
     RUN_TEST(string_trim_start);
     RUN_TEST(string_trim_end);
-    
+
     RUN_TEST_SUITE("Substring");
     RUN_TEST(string_substring);
     RUN_TEST(string_substring_middle);
     RUN_TEST(string_char_at);
-    
+
     RUN_TEST_SUITE("String Replace");
     RUN_TEST(string_replace);
     RUN_TEST(string_replace_all);
-    
+
     RUN_TEST_SUITE("String Repeat");
     RUN_TEST(string_repeat);
     RUN_TEST(string_repeat_zero);
-    
+
     RUN_TEST_SUITE("Unicode/UTF-8");
     RUN_TEST(string_utf8_length);
     RUN_TEST(string_utf8_mixed);
-    
+
     RUN_TEST_SUITE("String Hash");
     RUN_TEST(string_hash_consistency);
     RUN_TEST(string_hash_different);
 }
 
 TEST_MAIN_BEGIN()
-    printf("=== xray String Unit Tests ===\n");
-    run_all_tests();
+printf("=== xray String Unit Tests ===\n");
+run_all_tests();
 TEST_MAIN_END()

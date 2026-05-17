@@ -1,0 +1,264 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default Debug",
+      "description": "Plain Debug build with no sanitizers; default local dev preset.",
+      "binaryDir": "${sourceDir}/build",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release",
+      "description": "Plain Release build (no sanitizers).",
+      "binaryDir": "${sourceDir}/build-release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "asan-jit-debug",
+      "displayName": "ASan + UBSan (Debug, JIT-ready)",
+      "description": "Debug build with AddressSanitizer + UndefinedBehaviorSanitizer enabled. Runtime configuration (--jit-force, MALLOC_PERTURB_, ASAN_OPTIONS) is injected by CI scripts, not by CMake.",
+      "binaryDir": "${sourceDir}/build-asan",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_ASAN": "ON",
+        "ENABLE_UBSAN": "ON"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "ubsan-jit-debug",
+      "displayName": "UBSan (Debug, JIT-ready)",
+      "description": "Debug build with UndefinedBehaviorSanitizer only. Used in CI to isolate UB regressions without ASan overhead.",
+      "binaryDir": "${sourceDir}/build-ubsan",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_UBSAN": "ON"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "msan-jit-debug",
+      "displayName": "MSan (Debug, Clang/Linux only)",
+      "description": "Debug build with MemorySanitizer (track-origins=2). Detects reads of uninitialized memory. Clang-only; recommended on Linux where most system libraries can be re-instrumented. macOS host is rejected because Apple libc is not MSan-instrumented and produces noise.",
+      "binaryDir": "${sourceDir}/build-msan",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_MSAN": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "tsan-debug",
+      "displayName": "TSan (Debug)",
+      "description": "Debug build with ThreadSanitizer. Used to triage coroutine / sysmon / GC concurrency races.",
+      "binaryDir": "${sourceDir}/build-tsan",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_TSAN": "ON"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "displayName": "MSVC Debug (Windows)",
+      "description": "Windows MSVC Debug build. /MDd already provides 0xCD / 0xDD heap fill, equivalent to MallocScribble on macOS.",
+      "binaryDir": "${sourceDir}/build",
+      "generator": "Visual Studio 17 2022",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "msvc-release",
+      "displayName": "MSVC Release (Windows)",
+      "description": "Windows MSVC Release build. Used in CI to validate Win11 coroutine 4-case regression under release CRT.",
+      "binaryDir": "${sourceDir}/build-release",
+      "generator": "Visual Studio 17 2022",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "asan-jit-debug",
+      "configurePreset": "asan-jit-debug"
+    },
+    {
+      "name": "ubsan-jit-debug",
+      "configurePreset": "ubsan-jit-debug"
+    },
+    {
+      "name": "msan-jit-debug",
+      "configurePreset": "msan-jit-debug"
+    },
+    {
+      "name": "tsan-debug",
+      "configurePreset": "tsan-debug"
+    },
+    {
+      "name": "msvc-debug",
+      "configurePreset": "msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "msvc-release",
+      "configurePreset": "msvc-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 120
+      }
+    },
+    {
+      "name": "asan-jit-debug",
+      "configurePreset": "asan-jit-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 240
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+    {
+      "name": "ubsan-jit-debug",
+      "configurePreset": "ubsan-jit-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 240
+      },
+      "environment": {
+        "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
+      }
+    },
+    {
+      "name": "msan-jit-debug",
+      "configurePreset": "msan-jit-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 240
+      },
+      "environment": {
+        "MSAN_OPTIONS": "halt_on_error=1:print_stats=1:abort_on_error=1"
+      }
+    },
+    {
+      "name": "tsan-debug",
+      "configurePreset": "tsan-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 240
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1"
+      }
+    },
+    {
+      "name": "msvc-debug",
+      "configurePreset": "msvc-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 240
+      }
+    },
+    {
+      "name": "msvc-release",
+      "configurePreset": "msvc-release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "timeout": 240
+      }
+    }
+  ]
+}

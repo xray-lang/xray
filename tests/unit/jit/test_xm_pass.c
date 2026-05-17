@@ -49,7 +49,10 @@ static void test_copy_prop_chain(void) {
     /* After copy_prop, the ADD's args should both be v0 (the root) */
     XmIns *add_ins = NULL;
     for (uint32_t i = 0; i < entry->nins; i++) {
-        if (entry->ins[i].op == XM_ADD) { add_ins = &entry->ins[i]; break; }
+        if (entry->ins[i].op == XM_ADD) {
+            add_ins = &entry->ins[i];
+            break;
+        }
     }
     assert(add_ins != NULL);
     assert(add_ins->args[0] == v0);
@@ -331,7 +334,7 @@ static void test_phi_simp_nontrivial(void) {
 
     XmPhi *phi = xm_add_phi(func, merge, XR_REP_I64);
     xm_phi_set_arg(phi, 0, v0);
-    xm_phi_set_arg(phi, 1, v1);  /* different from v0! */
+    xm_phi_set_arg(phi, 1, v1); /* different from v0! */
 
     xm_block_set_ret(merge, phi->dst);
 
@@ -522,7 +525,10 @@ static void test_gvn_normalize_commutative(void) {
     /* v3's instruction should be MOV v2 (CSE'd) */
     XmIns *v3_ins = NULL;
     for (uint32_t i = 0; i < b1->nins; i++) {
-        if (b1->ins[i].dst == v3) { v3_ins = &b1->ins[i]; break; }
+        if (b1->ins[i].dst == v3) {
+            v3_ins = &b1->ins[i];
+            break;
+        }
     }
     assert(v3_ins != NULL);
     assert(v3_ins->op == XM_MOV);
@@ -571,7 +577,10 @@ static void test_gvn_no_normalize_sub(void) {
     /* v3 should still be SUB (not CSE'd) */
     XmIns *v3_ins = NULL;
     for (uint32_t i = 0; i < b1->nins; i++) {
-        if (b1->ins[i].dst == v3) { v3_ins = &b1->ins[i]; break; }
+        if (b1->ins[i].dst == v3) {
+            v3_ins = &b1->ins[i];
+            break;
+        }
     }
     assert(v3_ins != NULL);
     assert(v3_ins->op == XM_SUB);
@@ -597,7 +606,7 @@ static void test_s2l_basic_forward(void) {
     XmFunc *func = xm_func_new("s2l_basic");
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    XmRef cptr = xm_const_ptr(func, (void*)0xDEAD);
+    XmRef cptr = xm_const_ptr(func, (void *) 0xDEAD);
     XmRef c42 = xm_const_i64(func, 42);
     XmRef c16 = xm_const_i64(func, 16);
     XmRef v0 = xm_emit_unary(func, entry, XM_CONST_PTR, XR_REP_PTR, cptr);
@@ -615,7 +624,10 @@ static void test_s2l_basic_forward(void) {
     /* v2 should now be MOV v1 (forwarded from store) */
     XmIns *v2_ins = NULL;
     for (uint32_t i = 0; i < entry->nins; i++) {
-        if (entry->ins[i].dst == v2) { v2_ins = &entry->ins[i]; break; }
+        if (entry->ins[i].dst == v2) {
+            v2_ins = &entry->ins[i];
+            break;
+        }
     }
     assert(v2_ins != NULL);
     assert(v2_ins->op == XM_MOV);
@@ -637,7 +649,7 @@ static void test_s2l_different_offset(void) {
     XmFunc *func = xm_func_new("s2l_diff");
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    XmRef cptr = xm_const_ptr(func, (void*)0xDEAD);
+    XmRef cptr = xm_const_ptr(func, (void *) 0xDEAD);
     XmRef c42 = xm_const_i64(func, 42);
     XmRef c16 = xm_const_i64(func, 16);
     XmRef c24 = xm_const_i64(func, 24);
@@ -653,7 +665,10 @@ static void test_s2l_different_offset(void) {
     /* v2 should still be LOAD_FIELD (no forwarding) */
     XmIns *v2_ins = NULL;
     for (uint32_t i = 0; i < entry->nins; i++) {
-        if (entry->ins[i].dst == v2) { v2_ins = &entry->ins[i]; break; }
+        if (entry->ins[i].dst == v2) {
+            v2_ins = &entry->ins[i];
+            break;
+        }
     }
     assert(v2_ins != NULL);
     assert(v2_ins->op == XM_LOAD_FIELD);
@@ -675,7 +690,7 @@ static void test_s2l_kill_by_call(void) {
     XmFunc *func = xm_func_new("s2l_call");
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    XmRef cptr = xm_const_ptr(func, (void*)0xDEAD);
+    XmRef cptr = xm_const_ptr(func, (void *) 0xDEAD);
     XmRef c42 = xm_const_i64(func, 42);
     XmRef c16 = xm_const_i64(func, 16);
     XmRef v0 = xm_emit_unary(func, entry, XM_CONST_PTR, XR_REP_PTR, cptr);
@@ -694,7 +709,10 @@ static void test_s2l_kill_by_call(void) {
     /* v2 should still be LOAD_FIELD (call killed the tracked store) */
     XmIns *v2_ins = NULL;
     for (uint32_t i = 0; i < entry->nins; i++) {
-        if (entry->ins[i].dst == v2) { v2_ins = &entry->ins[i]; break; }
+        if (entry->ins[i].dst == v2) {
+            v2_ins = &entry->ins[i];
+            break;
+        }
     }
     assert(v2_ins != NULL);
     assert(v2_ins->op == XM_LOAD_FIELD);
@@ -718,7 +736,7 @@ static void test_dse_consecutive_stores(void) {
     XmFunc *func = xm_func_new("dse_basic");
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    XmRef cptr = xm_const_ptr(func, (void*)0xDEAD);
+    XmRef cptr = xm_const_ptr(func, (void *) 0xDEAD);
     XmRef c42 = xm_const_i64(func, 42);
     XmRef c99 = xm_const_i64(func, 99);
     XmRef c16 = xm_const_i64(func, 16);
@@ -769,7 +787,7 @@ static void test_dse_store_load_store(void) {
     XmFunc *func = xm_func_new("dse_sls");
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    XmRef cptr = xm_const_ptr(func, (void*)0xDEAD);
+    XmRef cptr = xm_const_ptr(func, (void *) 0xDEAD);
     XmRef c42 = xm_const_i64(func, 42);
     XmRef c99 = xm_const_i64(func, 99);
     XmRef c16 = xm_const_i64(func, 16);
@@ -818,16 +836,16 @@ static void test_licm_basic_hoist(void) {
     fprintf(stderr, "  test_licm_basic_hoist...");
 
     XmFunc *func = xm_func_new("licm_basic");
-    XmBlock *entry  = xm_func_add_block(func, "entry");   // bi=0
+    XmBlock *entry = xm_func_add_block(func, "entry");    // bi=0
     XmBlock *header = xm_func_add_block(func, "header");  // bi=1
-    XmBlock *body   = xm_func_add_block(func, "body");    // bi=2
+    XmBlock *body = xm_func_add_block(func, "body");      // bi=2
     XmBlock *exit_b = xm_func_add_block(func, "exit");    // bi=3
 
     XmRef c10 = xm_const_i64(func, 10);
     XmRef c20 = xm_const_i64(func, 20);
-    XmRef c1  = xm_const_i64(func, 1);
-    XmRef v0  = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c10);
-    XmRef v1  = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c20);
+    XmRef c1 = xm_const_i64(func, 1);
+    XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c10);
+    XmRef v1 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c20);
     xm_block_set_jmp(entry, header);
     xm_block_add_pred(header, entry, func->arena);
 
@@ -839,7 +857,7 @@ static void test_licm_basic_hoist(void) {
 
     /* body: v2 = ADD v0, v1 (invariant); JMP header (back-edge) */
     XmRef v2 = xm_emit(func, body, XM_ADD, XR_REP_I64, v0, v1);
-    (void)v2;
+    (void) v2;
     xm_block_set_jmp(body, header);
     xm_block_add_pred(header, body, func->arena);  // back-edge pred
 
@@ -859,8 +877,7 @@ static void test_licm_basic_hoist(void) {
     /* Verify the hoisted instruction is ADD with correct operands */
     bool found_add = false;
     for (uint32_t i = 0; i < entry->nins; i++) {
-        if (entry->ins[i].op == XM_ADD &&
-            entry->ins[i].args[0] == v0 &&
+        if (entry->ins[i].op == XM_ADD && entry->ins[i].args[0] == v0 &&
             entry->ins[i].args[1] == v1) {
             found_add = true;
             break;
@@ -886,12 +903,12 @@ static void test_licm_loop_depth(void) {
     fprintf(stderr, "  test_licm_loop_depth...");
 
     XmFunc *func = xm_func_new("licm_depth");
-    XmBlock *entry      = xm_func_add_block(func, "entry");       // 0
-    XmBlock *outer_hdr  = xm_func_add_block(func, "outer_hdr");   // 1
-    XmBlock *inner_hdr  = xm_func_add_block(func, "inner_hdr");   // 2
+    XmBlock *entry = xm_func_add_block(func, "entry");            // 0
+    XmBlock *outer_hdr = xm_func_add_block(func, "outer_hdr");    // 1
+    XmBlock *inner_hdr = xm_func_add_block(func, "inner_hdr");    // 2
     XmBlock *inner_body = xm_func_add_block(func, "inner_body");  // 3
     XmBlock *outer_body = xm_func_add_block(func, "outer_body");  // 4
-    XmBlock *exit_b     = xm_func_add_block(func, "exit");        // 5
+    XmBlock *exit_b = xm_func_add_block(func, "exit");            // 5
 
     XmRef c1 = xm_const_i64(func, 1);
     XmRef v0 = xm_emit_unary(func, entry, XM_CONST_I64, XR_REP_I64, c1);
@@ -914,13 +931,13 @@ static void test_licm_loop_depth(void) {
 
     /* inner_body â†?inner_hdr (inner back-edge) */
     XmRef vc3 = xm_emit_unary(func, inner_body, XM_CONST_I64, XR_REP_I64, c1);
-    (void)vc3;
+    (void) vc3;
     xm_block_set_jmp(inner_body, inner_hdr);
     xm_block_add_pred(inner_hdr, inner_body, func->arena);
 
     /* outer_body â†?outer_hdr (outer back-edge) */
     XmRef vc4 = xm_emit_unary(func, outer_body, XM_CONST_I64, XR_REP_I64, c1);
-    (void)vc4;
+    (void) vc4;
     xm_block_set_jmp(outer_body, outer_hdr);
     xm_block_add_pred(outer_hdr, outer_body, func->arena);
 
@@ -961,10 +978,10 @@ static void test_ifconv_diamond(void) {
     fprintf(stderr, "  test_ifconv_diamond...");
 
     XmFunc *func = xm_func_new("ifconv");
-    XmBlock *entry  = xm_func_add_block(func, "entry");  // 0
-    XmBlock *thenb  = xm_func_add_block(func, "then");   // 1
-    XmBlock *elseb  = xm_func_add_block(func, "else");   // 2
-    XmBlock *merge  = xm_func_add_block(func, "merge");  // 3
+    XmBlock *entry = xm_func_add_block(func, "entry");  // 0
+    XmBlock *thenb = xm_func_add_block(func, "then");   // 1
+    XmBlock *elseb = xm_func_add_block(func, "else");   // 2
+    XmBlock *merge = xm_func_add_block(func, "merge");  // 3
 
     /* entry: BR(cond) â†?then, else */
     XmRef c1 = xm_const_i64(func, 1);
@@ -987,8 +1004,8 @@ static void test_ifconv_diamond(void) {
 
     /* merge: PHI(v_then from then, v_else from else); RET */
     XmPhi *phi = xm_add_phi(func, merge, XR_REP_I64);
-    xm_phi_set_arg(phi, 0, v_then);   // pred[0] = then
-    xm_phi_set_arg(phi, 1, v_else);   // pred[1] = else
+    xm_phi_set_arg(phi, 0, v_then);  // pred[0] = then
+    xm_phi_set_arg(phi, 1, v_else);  // pred[1] = else
     xm_block_set_ret(merge, phi->dst);
 
     assert(merge->phis != NULL);
@@ -1008,7 +1025,8 @@ static void test_ifconv_diamond(void) {
     bool found_sel_cond = false;
     bool found_sel = false;
     for (uint32_t i = 0; i < entry->nins; i++) {
-        if (entry->ins[i].op == XM_SELECT_COND) found_sel_cond = true;
+        if (entry->ins[i].op == XM_SELECT_COND)
+            found_sel_cond = true;
         if (entry->ins[i].op == XM_SELECT) {
             found_sel = true;
             assert(entry->ins[i].args[0] == v_then);

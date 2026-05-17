@@ -176,6 +176,24 @@ if(ENABLE_TSAN)
     add_link_options(-fsanitize=thread)
 endif()
 
+# MemorySanitizer configuration (Clang only, Linux only)
+# Detects reads of uninitialized memory across heap / stack / register.
+# Required by Clang; GCC has no MSan. Best effort on macOS.
+option(ENABLE_MSAN "Enable MemorySanitizer (Clang only)" OFF)
+if(ENABLE_MSAN)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "ENABLE_MSAN requires Clang (current: ${CMAKE_C_COMPILER_ID})")
+    endif()
+    message(STATUS "MemorySanitizer enabled (track-origins=2)")
+    add_compile_options(
+        -fsanitize=memory
+        -fsanitize-memory-track-origins=2
+        -fno-omit-frame-pointer
+        -fno-optimize-sibling-calls
+    )
+    add_link_options(-fsanitize=memory)
+endif()
+
 # Code Coverage configuration (gcov/lcov)
 option(ENABLE_COVERAGE "Enable code coverage reporting" OFF)
 if(ENABLE_COVERAGE)
@@ -716,6 +734,7 @@ message(STATUS "  Sanitizers:")
 message(STATUS "    ASan:  ${ENABLE_ASAN}")
 message(STATUS "    UBSan: ${ENABLE_UBSAN}")
 message(STATUS "    TSan:  ${ENABLE_TSAN}")
+message(STATUS "    MSan:  ${ENABLE_MSAN}")
 message(STATUS "    Combined: ${ENABLE_SANITIZERS}")
 message(STATUS "========================================")
 

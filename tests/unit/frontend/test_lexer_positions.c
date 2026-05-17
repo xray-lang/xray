@@ -46,7 +46,8 @@ static Token scan_nth(const char *source, int n) {
     Token t;
     for (int i = 0; i <= n; i++) {
         t = xr_scanner_scan(&s);
-        if (t.type == TK_EOF && i < n) return t;
+        if (t.type == TK_EOF && i < n)
+            return t;
     }
     return t;
 }
@@ -75,7 +76,7 @@ TEST(single_line_token_position) {
 TEST(token_on_second_line) {
     Scanner s;
     xr_scanner_init(&s, "let\nx");
-    (void)xr_scanner_scan(&s);  // consume `let`
+    (void) xr_scanner_scan(&s);  // consume `let`
     Token b = xr_scanner_scan(&s);
 
     ASSERT_EQ_INT(b.type, TK_NAME);
@@ -178,13 +179,13 @@ TEST(carriage_return_does_not_double_count_lines) {
 /* ====================================================================== */
 
 TEST_MAIN_BEGIN()
-    RUN_TEST_SUITE("L-02 multi-line token positions");
-    RUN_TEST(single_line_token_position);
-    RUN_TEST(token_on_second_line);
-    RUN_TEST(multiline_string_reports_start_position);
-    RUN_TEST(token_after_multiline_string_uses_correct_line);
-    RUN_TEST(token_after_multiline_block_comment);
-    RUN_TEST(template_string_reports_start_position);
-    RUN_TEST(tab_indented_token_column_is_byte_offset);
-    RUN_TEST(carriage_return_does_not_double_count_lines);
+RUN_TEST_SUITE("L-02 multi-line token positions");
+RUN_TEST(single_line_token_position);
+RUN_TEST(token_on_second_line);
+RUN_TEST(multiline_string_reports_start_position);
+RUN_TEST(token_after_multiline_string_uses_correct_line);
+RUN_TEST(token_after_multiline_block_comment);
+RUN_TEST(template_string_reports_start_position);
+RUN_TEST(tab_indented_token_column_is_byte_offset);
+RUN_TEST(carriage_return_does_not_double_count_lines);
 TEST_MAIN_END()
