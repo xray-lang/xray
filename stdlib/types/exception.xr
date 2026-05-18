@@ -4,5 +4,7 @@
 class Exception {
     message: string
     stack: string
+    cause: Exception?
+    constructor(message: string = "", cause: Exception? = null)
     toString() -> string
 }

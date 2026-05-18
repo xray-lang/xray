@@ -70,6 +70,7 @@ extern void xr_datetime_register_native_type(XrayIsolate *isolate);
 extern void xr_regex_register_native_type(XrayIsolate *isolate);
 extern void xr_netconn_register_native_type(XrayIsolate *isolate);
 extern void xr_netlistener_register_native_type(XrayIsolate *isolate);
+extern void xr_exception_register_native_type(XrayIsolate *isolate);
 
 void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     if (!isolate)
@@ -84,6 +85,7 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     xr_regex_register_native_type(isolate);
     xr_netconn_register_native_type(isolate);
     xr_netlistener_register_native_type(isolate);
+    xr_exception_register_native_type(isolate);
 }
 
 /* ========== Module loader ========== */

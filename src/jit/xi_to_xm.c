@@ -670,8 +670,8 @@ generic_call:
          * Known name-based builtins deopt to VM. Numeric-ID builtins
          * (bid > 0) are INVOKE_BUILTIN opcodes and also deopt. */
         if (bn != NULL) {
-            static const char *known[] = {"dump",          "copy",  "chr", "print",
-                                          "StringBuilder", "Bytes", NULL};
+            static const char *known[] = {"dump",  "copy",          "chr",       "print",
+                                          "Bytes", "StringBuilder", "Exception", NULL};
             bool found = false;
             for (int k = 0; known[k]; k++) {
                 if (strcmp(bn, known[k]) == 0) {
