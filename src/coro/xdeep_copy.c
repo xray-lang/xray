@@ -355,8 +355,27 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     xr_copy_context_record(ctx, inst, result);
     ctx->objects_copied++;
 
-    // Fast path: flat-copyable struct — memcpy all fields at once
-    if ((cls->flags & XR_CLASS_FLAT_COPYABLE) && field_count > 0) {
+    // Copy fields (dynamic-layout uses in-object + overflow two-tier)
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = cls->in_object_capacity;
+        uint16_t inobj = (field_count < cap - 1) ? field_count : cap - 1;
+        for (uint32_t i = 0; i < inobj; i++) {
+            new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
+        }
+        if (field_count > cap - 1) {
+            XrValue *src_overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (src_overflow) {
+                uint16_t overflow_count = field_count - (cap - 1);
+                // Allocate overflow for new instance
+                xr_instance_set_dynamic_field(ctx->X, new_inst, cap - 1, xr_null());
+                for (uint16_t i = 0; i < overflow_count; i++) {
+                    XrValue copied = xr_deep_copy_with_ctx(ctx, src_overflow[i]);
+                    xr_instance_set_dynamic_field(ctx->X, new_inst, (cap - 1) + i, copied);
+                }
+            }
+        }
+    } else if ((cls->flags & XR_CLASS_FLAT_COPYABLE) && field_count > 0) {
+        // Fast path: flat-copyable struct — memcpy all fields at once
         memcpy(new_inst->fields, inst->fields, sizeof(XrValue) * field_count);
     } else {
         for (uint32_t i = 0; i < field_count; i++) {
@@ -691,8 +710,26 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
     XR_GC_SET_STORAGE(&new_inst->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_inst->gc, 1);
     uint32_t field_count = xr_class_instance_field_count(cls);
-    for (uint32_t i = 0; i < field_count; i++)
-        new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = cls->in_object_capacity;
+        uint16_t inobj = (field_count < cap - 1) ? field_count : cap - 1;
+        for (uint32_t i = 0; i < inobj; i++)
+            new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
+        if (field_count > cap - 1) {
+            XrValue *src_overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (src_overflow) {
+                uint16_t overflow_count = field_count - (cap - 1);
+                xr_instance_set_dynamic_field(X, new_inst, cap - 1, xr_null());
+                for (uint16_t i = 0; i < overflow_count; i++) {
+                    XrValue shared_val = xr_to_shared(X, src_overflow[i]);
+                    xr_instance_set_dynamic_field(X, new_inst, (cap - 1) + i, shared_val);
+                }
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < field_count; i++)
+            new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
+    }
 
     // Handle native body to_shared
     XrNativeBodyDesc *desc = cls->native_body;
