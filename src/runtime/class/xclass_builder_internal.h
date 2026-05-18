@@ -113,6 +113,9 @@ struct XrClassBuilder {
     uint8_t mono_type_argc;   /* Number of concrete type arg names */
     const char *
         *mono_type_arg_names; /* Concrete type display names (caller-owned until finalize copies) */
+
+    // Native body descriptor (pointer-copied to finalized XrClass)
+    XrNativeBodyDesc *native_body;
 };
 
 #endif  // XCLASS_BUILDER_INTERNAL_H

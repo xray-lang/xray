@@ -410,6 +410,18 @@ void xr_class_builder_set_flags(XrClassBuilder *builder, uint32_t flags) {
     }
 }
 
+/* ========== Native Body ========== */
+
+void xr_class_builder_set_native_body(XrClassBuilder *builder, XrNativeBodyDesc *desc) {
+    XR_DCHECK(builder != NULL, "set_native_body: NULL builder");
+    XR_DCHECK(desc != NULL, "set_native_body: NULL desc");
+    XR_DCHECK(desc->body_size > 0, "set_native_body: body_size must be > 0");
+    // Subclasses inherit parent's native_body; they must not set their own.
+    XR_DCHECK(builder->super == NULL || builder->super->native_body == NULL,
+              "set_native_body: subclass cannot override parent native body");
+    builder->native_body = desc;
+}
+
 /* ========== Monomorphized Generics ========== */
 
 void xr_class_builder_set_display_name(XrClassBuilder *builder, const char *display_name) {

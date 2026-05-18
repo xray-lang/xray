@@ -74,6 +74,12 @@ XR_FUNC void xr_class_builder_set_generic_origin(XrClassBuilder *builder, XrClas
 XR_FUNC void xr_class_builder_set_mono_type_arg_names(XrClassBuilder *builder,
                                                       const char **type_arg_names, uint8_t argc);
 
+// Attach a native body descriptor. The descriptor is pointer-copied to the
+// finalized XrClass (caller must keep it alive for the class lifetime —
+// typically a static const). Subclasses inherit the parent's native_body
+// automatically; calling this on a subclass builder is an error.
+XR_FUNC void xr_class_builder_set_native_body(XrClassBuilder *builder, XrNativeBodyDesc *desc);
+
 // Finalize: compute offsets, generate vtable, freeze class, destroy builder
 XR_FUNC XrClass *xr_class_builder_finalize(XrClassBuilder *builder);
 

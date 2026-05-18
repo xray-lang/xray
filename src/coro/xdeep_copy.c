@@ -358,11 +358,24 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     // Fast path: flat-copyable struct — memcpy all fields at once
     if ((cls->flags & XR_CLASS_FLAT_COPYABLE) && field_count > 0) {
         memcpy(new_inst->fields, inst->fields, sizeof(XrValue) * field_count);
-        return result;
+    } else {
+        for (uint32_t i = 0; i < field_count; i++) {
+            new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
+        }
     }
 
-    for (uint32_t i = 0; i < field_count; i++) {
-        new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
+    // Deep-copy native body if present
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        if (desc->copy_policy == XR_NATIVE_BODY_COPY_FORBID) {
+            // Cannot deep-copy types like Channel, Task — return null
+            return XR_NULL_VAL;
+        }
+        if (desc->deep_copy) {
+            if (!desc->deep_copy(ctx, inst, new_inst)) {
+                return XR_NULL_VAL;
+            }
+        }
     }
     return result;
 }
@@ -680,6 +693,19 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
     uint32_t field_count = xr_class_instance_field_count(cls);
     for (uint32_t i = 0; i < field_count; i++)
         new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
+
+    // Handle native body to_shared
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        if (desc->copy_policy == XR_NATIVE_BODY_COPY_FORBID) {
+            return XR_NULL_VAL;
+        }
+        if (desc->to_shared) {
+            if (!desc->to_shared(X, inst, new_inst)) {
+                return XR_NULL_VAL;
+            }
+        }
+    }
     return XR_FROM_PTR(new_inst);
 }
 
