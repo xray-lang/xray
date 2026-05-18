@@ -65,6 +65,11 @@ void xr_core_init(XrayIsolate *X) {
     X->core->setClass = xr_isolate_get_native_type_class(X, XR_TSET);
     xr_json_register_native_type(X);
 
+    // Dynamic-layout root class for Json: open hidden-class chain, 8 in-object
+    // slots (7 logical + 1 overflow pointer reservation). All Json objects
+    // start at this class and transition as fields are added.
+    X->core->jsonRootClass = xr_class_new_dynamic_root(X, "Json", 8, false);
+
     xr_int_register_native_type(X);
     X->core->intClass = xr_isolate_get_native_type_class(X, XR_TINT);
     xr_float_register_native_type(X);

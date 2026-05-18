@@ -55,6 +55,13 @@ typedef struct XrayCoreClasses {
     // Json utility (static methods only)
     XrClass *jsonClass;
 
+    // Dynamic-layout root classes for Json objects.
+    // jsonRootClass: open Json (transitions create child classes on field add)
+    // jsonRootSealedClass: prototype for sealed Json types — each sealed
+    //   compile-time Json<{...}> derives its own sealed class via transitions
+    //   from this root and toggling XR_CLASS_DYNAMIC_SEALED.
+    XrClass *jsonRootClass;
+
     // Exception (populated when stdlib/types/exception.xr is loaded)
     XrClass *exceptionClass;
 
