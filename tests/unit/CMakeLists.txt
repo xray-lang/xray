@@ -44,6 +44,7 @@ add_xray_unit_test(test_immix_gc gc/test_immix_gc.c)
 add_xray_unit_test(test_utf8 object/test_utf8.c)
 
 add_xray_unit_test(test_xarray object/test_xarray.c)
+add_xray_unit_test(test_dynamic_class object/test_dynamic_class.c)
 add_xray_unit_test(test_xstring object/test_xstring.c)
 add_xray_unit_test(test_xmap object/test_xmap.c)
 add_xray_unit_test(test_xset object/test_xset.c)

@@ -444,6 +444,11 @@ XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int s
             return t->target;
     }
 
+    // Sealed dynamic class rejects new field additions
+    if (klass->flags & XR_CLASS_DYNAMIC_SEALED) {
+        return NULL;
+    }
+
     // Create child class: inherits all parent fields + one new field
     uint16_t parent_fc = klass->field_count;
     uint16_t child_fc = parent_fc + 1;
@@ -480,27 +485,26 @@ XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int s
     child->field_count = child_fc;
     child->own_field_count = klass->own_field_count + 1;
 
-    // Rebuild field symbol-to-index map
+    // field_symbol_to_index is direct-indexed by symbol id, so capacity
+    // must cover (max_symbol + 1). Grow when the new field's symbol
+    // exceeds the parent's capacity.
     int new_cap = klass->field_map_capacity;
-    if (new_cap == 0)
-        new_cap = 16;
-    while (child_fc * 2 > new_cap)
-        new_cap *= 2;
+    if (symbol + 1 > new_cap)
+        new_cap = symbol + 1;
     child->field_symbol_to_index = (int *) xr_malloc(sizeof(int) * new_cap);
     if (!child->field_symbol_to_index) {
         xr_free(child->fields);
         xr_free(child);
         return NULL;
     }
-    memset(child->field_symbol_to_index, -1, sizeof(int) * new_cap);
+    for (int i = 0; i < new_cap; i++)
+        child->field_symbol_to_index[i] = -1;
     child->field_map_capacity = new_cap;
 
     for (uint16_t i = 0; i < child_fc; i++) {
-        int sym = child->fields[i].symbol;
-        int slot = sym & (new_cap - 1);
-        while (child->field_symbol_to_index[slot] != -1)
-            slot = (slot + 1) & (new_cap - 1);
-        child->field_symbol_to_index[slot] = i;
+        int s = child->fields[i].symbol;
+        if (s >= 0 && s < new_cap)
+            child->field_symbol_to_index[s] = i;
     }
 
     // Register transition on parent
