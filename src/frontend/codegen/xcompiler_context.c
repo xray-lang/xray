@@ -10,7 +10,6 @@
 
 #include "xcompiler_context.h"
 #include "../../base/xchecks.h"
-#include "../../runtime/object/xshape_cache.h"
 #include "../../runtime/xisolate_internal.h"
 #include "../../base/xmalloc.h"
 #include "../xdiag_fmt.h"
@@ -66,8 +65,6 @@ static XrCompilerContext *xr_compiler_context_new_impl(XrayIsolate *X, XaAnalyze
     ctx->enum_type_names = NULL;
     ctx->enum_type_count = 0;
     ctx->enum_type_capacity = 0;
-
-    ctx->shape_cache = xr_shape_cache_new();
 
     xr_arena_init(&ctx->arena, 0);
 
@@ -126,10 +123,6 @@ void xr_compiler_context_free(XrCompilerContext *ctx) {
             }
         }
         xr_free(ctx->enum_type_names);
-    }
-
-    if (ctx->shape_cache) {
-        xr_shape_cache_free(ctx->shape_cache);
     }
 
     xr_arena_destroy(&ctx->arena);

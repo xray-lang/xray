@@ -34,7 +34,6 @@
 #include "../object/xrange.h"
 #include "../object/xset.h"
 #include "../object/xtuple.h"
-#include "../object/xshape.h"
 #include "../object/xstring.h"
 #include "../object/xstringbuilder.h"
 #include "../symbol/xsymbol_table.h"

@@ -368,9 +368,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TCOROPOOL:
                 snprintf(buf, sizeof(buf), "<coro pool> @%p", (void *) hdr);
                 break;
-            case XR_TSHAPE:
-                snprintf(buf, sizeof(buf), "<shape> @%p", (void *) hdr);
-                break;
             default:
                 snprintf(buf, sizeof(buf), "<object:%d> @%p", hdr->type, (void *) hdr);
                 break;

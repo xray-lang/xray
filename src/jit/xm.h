@@ -68,7 +68,7 @@
  *   INVARIANT 8 (Type metadata): Compile-time type lives on the
  *   defining instruction (ins->ctype), not on XmVReg. XmVReg
  *   carries auxiliary metadata (heap_type, xrtype, callee_proto,
- *   shape_hint, layout, struct_idx) set by the builder.
+ *   layout, struct_idx) set by the builder.
  *   Passes that substitute vreg references must propagate auxiliary
  *   metadata from source to target when the target has less precise
  *   info. type_prop refines ins->ctype via worklist iteration.
@@ -506,7 +506,6 @@ typedef struct {
     XrType *xrtype;       // precise static type (NULL = unknown)
     // Compiler hints for optimization
     struct XrProto *callee_proto;   // known callee proto (from OP_CLOSURE/GETSHARED)
-    struct XrShape *shape_hint;     // known Json shape (from OP_NEWJSON / type feedback)
     struct XrStructLayout *layout;  // struct field layout (from OP_NEW_STRUCT / params)
     uint8_t array_etype;            // native array element type (0xFF = not a fixed array)
     uint16_t array_ecount;          // native array element count

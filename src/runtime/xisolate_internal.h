@@ -134,14 +134,6 @@ struct XrayIsolate {
     // Native type mapping table
     XrClass *native_type_classes[XR_NATIVE_TYPE_MAX];  // GC type ID -> XrClass mapping
 
-    // Per-isolate shape registry (hidden classes)
-    struct XrShape **shape_entries;
-    uint16_t shape_count;
-    uint16_t shape_capacity;
-
-    // Per-isolate root shape cache (for json creation)
-    struct XrShape *root_shape_cache[32];
-
     // Per-isolate active type pool (replaces XR_THREAD_LOCAL g_current_pool)
     struct XrTypePool *current_type_pool;
 
@@ -209,11 +201,11 @@ struct XrayIsolate {
 
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
-    // values that reference per-isolate symbol IDs (e.g. the XrShape
-    // built once by io.stat() and the interned error-map keys shared by
-    // json/yaml/toml/xml/csv parsers). Kept as `void *` here so stdlib
-    // types don't leak into the core header; cast via the accessor
-    // functions in `stdlib/stdlib_cache.h`.
+    // values that reference per-isolate symbol IDs (e.g. the dynamic-
+    // layout XrClass built once by io.stat() and the interned error-map
+    // keys shared by json/yaml/toml/xml/csv parsers). Kept as `void *`
+    // here so stdlib types don't leak into the core header; cast via
+    // the accessor functions in `stdlib/stdlib_cache.h`.
     void *stdlib_cache;  // XrStdlibCache* (stdlib/stdlib_cache.h), lazily allocated
 
     /* ========== Prelude type marker registry ==========

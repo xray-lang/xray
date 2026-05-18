@@ -17,7 +17,7 @@
 #include "../common.h"
 #include "../stdlib_cache.h"
 #include "../../src/runtime/object/xjson.h"
-#include "../../src/runtime/object/xshape.h"
+#include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/object/xarray.h"
@@ -498,12 +498,11 @@ static XrValue io_isSymlink(XrayIsolate *X, XrValue *args, int argc) {
 #endif
 }
 
-// Compact Shape for stat result (Level 0: all primitives, GC skips entirely).
-//
-// SymbolIds are allocated per-isolate, so the shape must live on the
-// isolate's stdlib cache rather than on process-global state. Building it
-// lazily means the cost is paid exactly once per isolate and the shape is
-// reused by every subsequent io.stat() call in that isolate.
+// Dynamic-layout class for stat() result. SymbolIds are allocated
+// per-isolate, so the class must live on the isolate's stdlib cache
+// rather than on process-global state. Building it lazily means the
+// cost is paid exactly once per isolate and the class is reused by
+// every subsequent io.stat() call in that isolate.
 enum {
     STAT_SIZE_IDX = 0,
     STAT_MODE_IDX,
@@ -523,15 +522,15 @@ static XrClass *io_get_stat_class(XrayIsolate *X) {
     XrStdlibCache *cache = xr_stdlib_cache_get(X);
     if (!cache)
         return NULL;
-    if (cache->io_stat_shape)
-        return (XrClass *) cache->io_stat_shape;
+    if (cache->io_stat_class)
+        return cache->io_stat_class;
 
     static const char *const names[] = {"size", "mode", "mtime",  "atime", "ctime",
                                         "uid",  "gid",  "isFile", "isDir", "isSymlink"};
     XrClass *cls = xr_class_build_json_chain(X, names, 10, false);
     if (!cls)
         return NULL;
-    cache->io_stat_shape = (XrShape *) cls;  // stdlib cache slot reused
+    cache->io_stat_class = cls;
     return cls;
 }
 
@@ -1001,9 +1000,9 @@ XR_FUNC XrModule *xr_load_module_io(XrayIsolate *isolate) {
     if (!mod)
         return NULL;
 
-    // The stat() result shape is now built lazily per-isolate from
-    // io_get_stat_shape() on first call, so no explicit pre-init is needed
-    // at module-load time.
+    // The stat() result class is built lazily per-isolate from
+    // io_get_stat_class() on first call, so no explicit pre-init is
+    // needed at module-load time.
 
     // File read/write
     XRS_EXPORT(mod, isolate, "readFile", io_readFile);

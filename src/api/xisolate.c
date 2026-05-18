@@ -36,7 +36,6 @@
 #include "../coro/xcoroutine.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xisolate_api.h"
-#include "../runtime/object/xshape.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
 #include "../../stdlib/stdlib_cache.h"
@@ -104,9 +103,6 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
         goto fail_after_vm;
 #endif
 
-    // --- Core: shape registry (hidden classes) ---
-    xr_shape_registry_init(isolate);
-
     // --- Optional: heavy subsystems via callback ---
     // init_extra is set by xray_isolate_full.c constructor (auto-registered).
     // For XR_INIT_RUNTIME mode, init_extra stays NULL → no heavy deps linked.
@@ -168,8 +164,6 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     }
 
     xr_vm_cleanup(isolate);
-
-    xr_shape_registry_destroy(isolate);
 
     // The globals table stores XrValue entries that reference fixedgc
     // bodies (enum types and the like). Drop the table BEFORE

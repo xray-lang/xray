@@ -48,7 +48,6 @@
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xshape.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xclass.h"
@@ -122,53 +121,6 @@ XR_FUNC void xm_jit_install_to_proto(XrProto *proto, const XmInstallData *data) 
 
     /* Step 4: publish — readers check jit_entry to decide whether JIT is ready */
     proto->jit_entry = data->code;
-}
-
-/* ========== Dominant Shape Discovery ========== */
-
-// Scan all protos in the module tree for OP_NEWJSON instructions.
-// If all NEWJSON use the same non-dictionary shape, return it.
-// Returns NULL if no NEWJSON found, or shapes are ambiguous.
-static struct XrShape *find_dominant_shape(XrProto *root) {
-    if (!root)
-        return NULL;
-
-    struct XrShape *found = NULL;
-    bool ambiguous = false;
-
-    // BFS over proto tree
-    XrProto *stack[256];
-    int sp = 0;
-    stack[sp++] = root;
-
-    while (sp > 0 && !ambiguous) {
-        XrProto *p = stack[--sp];
-        int code_len = p->code.count;
-        for (int i = 0; i < code_len && !ambiguous; i++) {
-            XrInstruction inst = PROTO_CODE(p, i);
-            if (GET_OPCODE(inst) == OP_NEWJSON) {
-                int bx = GETARG_B(inst);
-                XrValue shape_val = PROTO_CONST_FAST(p, bx);
-                struct XrShape *shape = (struct XrShape *) (intptr_t) XR_TO_INT(shape_val);
-                if (!shape)
-                    continue;
-                if (!found) {
-                    found = shape;
-                } else if (found != shape) {
-                    ambiguous = true;
-                }
-            }
-        }
-        // Push children
-        uint32_t nchild = PROTO_PROTO_COUNT(p);
-        for (uint32_t c = 0; c < nchild && sp < 256; c++) {
-            XrProto *child = PROTO_PROTO(p, c);
-            if (child)
-                stack[sp++] = child;
-        }
-    }
-
-    return ambiguous ? NULL : found;
 }
 
 /* ========== JIT State Management ========== */
@@ -422,20 +374,6 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
             xr_free(tmp);
         }
 
-        /* shape_hint: only bother passing it when the proto has a PTR
-         * parameter that could actually benefit. */
-        if (jit->dominant_shape) {
-            for (int i = 0; i < proto->numparams; i++) {
-                uint8_t gc = XR_SLOT_ANY;
-                if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
-                    gc = xr_type_to_slot_type(proto->param_types[i]);
-                if (gc == XR_SLOT_PTR) {
-                    task.shape_hint = (struct XrShape *) jit->dominant_shape;
-                    break;
-                }
-            }
-        }
-
         /* Inline-cache snapshots: must be captured on the main thread
          * (the bg worker has no live ctx). The worker thread reads them
          * read-only and frees them after compilation. */
@@ -478,25 +416,6 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         }
     }
 
-    // Discover dominant shape from module (once, after TFA or on first compile)
-    if (!jit->dominant_shape) {
-        // Walk up to module root via TFA summaries, or scan from this proto
-        // For now: scan from the proto being compiled (covers its children)
-        // and also scan TFA-registered protos if available
-        if (jit->tfa && jit->tfa->n_analyzed_roots > 0) {
-            for (uint32_t i = 0; i < jit->tfa->nsummary && !jit->dominant_shape; i++) {
-                struct XrShape *s = find_dominant_shape(jit->tfa->summaries[i].proto);
-                if (s)
-                    jit->dominant_shape = s;
-            }
-        }
-        if (!jit->dominant_shape) {
-            struct XrShape *s = find_dominant_shape(proto);
-            if (s)
-                jit->dominant_shape = s;
-        }
-    }
-
     // Check eligibility
     if (!is_jit_eligible(proto, jit->verbose))
         return false;
@@ -532,20 +451,6 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     XrProto **shared_protos = jit_build_shared_protos(proto, &nshared);
 
     // Build Xm from bytecode
-    // Use shape-guided build if dominant shape is known and proto has PTR params
-    // Conservative mode: skip shape speculation to avoid guard deopts
-    struct XrShape *shape_hint = NULL;
-    if (jit->dominant_shape && !conservative) {
-        for (int i = 0; i < proto->numparams; i++) {
-            uint8_t gc = XR_SLOT_ANY;
-            if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
-                gc = xr_type_to_slot_type(proto->param_types[i]);
-            if (gc == XR_SLOT_PTR) {
-                shape_hint = (struct XrShape *) jit->dominant_shape;
-                break;
-            }
-        }
-    }
     // Conservative mode: temporarily suppress type feedback to avoid
     // speculation on type-unstable functions
     struct XmTypeFeedback *saved_feedback = NULL;

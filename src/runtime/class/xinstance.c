@@ -540,7 +540,8 @@ XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int s
     return child;
 }
 
-XrClass *xr_class_build_json_chain(XrayIsolate *X, const char **names, int count, bool sealed) {
+XrClass *xr_class_build_json_chain(XrayIsolate *X, const char *const *names, int count,
+                                   bool sealed) {
     XR_DCHECK(X != NULL, "build_json_chain: NULL isolate");
     XR_DCHECK(X->core != NULL && X->core->jsonRootClass != NULL,
               "build_json_chain: jsonRootClass not initialized");

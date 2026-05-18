@@ -26,7 +26,6 @@
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xshape.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/object/xset.h"
 #include "../runtime/object/xstringbuilder.h"
@@ -589,7 +588,7 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
 
 /* ========== Generic Index Operations ========== */
 
-// Called from JIT via CALL_C for OP_GETPROP (shape-miss or non-Json fallback).
+// Called from JIT via CALL_C for OP_GETPROP fallback path.
 // jit_call_args[0] = obj raw (ptr), extra_arg = global SymbolId
 XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
     XrValue obj;

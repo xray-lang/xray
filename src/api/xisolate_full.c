@@ -164,8 +164,8 @@ static int isolate_init_full(XrayIsolate *isolate) {
 
 static void isolate_cleanup_full(XrayIsolate *isolate) {
     // Stdlib per-isolate cache. Must be freed before the module registry so
-    // any XrShape it holds is released while the owning isolate state is
-    // still intact.
+    // any dynamic-layout class it holds is released while the owning
+    // isolate state is still intact.
     xr_stdlib_cache_free(isolate);
 
     if (isolate->source_cache) {

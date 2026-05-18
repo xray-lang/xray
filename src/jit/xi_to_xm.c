@@ -222,20 +222,6 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
 
 /* ========== IC Query Helpers ========== */
 
-/* Look up field IC for a given bytecode instruction offset.
- * Returns the IC entry if monomorphic Json shape is cached, NULL otherwise. */
-static const XrICField *ic_field_lookup(const LowerCtx *ctx, int bc_pc) {
-    if (!ctx->ic || !ctx->ic->ic_fields || bc_pc < 0)
-        return NULL;
-    XrICField *ic = xr_ic_field_table_get(ctx->ic->ic_fields, bc_pc);
-    if (!ic)
-        return NULL;
-    /* Only speculate on monomorphic Json shape access */
-    if (ic->json_shape_id == 0)
-        return NULL;
-    return ic;
-}
-
 /* Look up method IC for a given bytecode instruction offset.
  * Returns the IC entry if monomorphic (single klass), NULL otherwise. */
 static const XrICMethod *ic_method_lookup(const LowerCtx *ctx, int bc_pc) {
@@ -1071,32 +1057,11 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return get_ref(ctx, v->args[0]);
         }
 
-        /* Field access — with optional shape-guard speculation from IC */
+        /* Field access — class-based dynamic-layout dispatch handles the
+         * fast path in the VM; JIT bails to OP_GETPROP for property reads. */
         case XI_LOAD_FIELD: {
             XR_DCHECK(v->nargs >= 1, "load_field: need obj arg");
             XmRef obj = get_ref(ctx, v->args[0]);
-
-            /* IC speculation: if field IC has monomorphic Json shape,
-             * emit GUARD_SHAPE + direct LOAD_FIELD at known offset. */
-            int bc_pc = slot_map_bc_pc(ctx, v->id);
-            const XrICField *fic = ic_field_lookup(ctx, bc_pc);
-            if (fic) {
-                uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
-                if (did != 0xFFFF) {
-                    XmRef shape_id = xm_const_i64(ctx->xm_func, (int64_t) fic->json_shape_id);
-                    XmRef deopt_ref = xm_const_i64(ctx->xm_func, (int64_t) did);
-                    xm_emit(ctx->xm_func, blk, XM_GUARD_SHAPE, XR_REP_I64, obj, shape_id);
-                    blk->ins[blk->nins - 1].dst = deopt_ref;
-                    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-
-                    /* Direct field load at known offset */
-                    int64_t byte_off =
-                        XM_JSON_FIELDS_OFFSET + (int64_t) fic->json_field_idx * XM_XRVALUE_SIZE;
-                    XmRef off = xm_const_i64(ctx->xm_func, byte_off);
-                    return xm_emit(ctx->xm_func, blk, XM_LOAD_FIELD, XR_REP_I64, obj, off);
-                }
-                /* deopt overflow: fall through to generic path */
-            }
 
             /* Property-based access (v->aux = name) on a non-Json receiver
              * (or no IC info available) cannot lower to a direct field load:
@@ -1487,8 +1452,7 @@ static void lower_terminator(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
 /* Return true if opcode is a guard that carries a deopt_id in its dst field. */
 static bool is_guard_op(uint16_t op) {
     return op == XM_GUARD_TAG || op == XM_GUARD_BOUNDS || op == XM_GUARD_NONNULL ||
-           op == XM_GUARD_CLASS || op == XM_GUARD_KLASS || op == XM_GUARD_SHAPE ||
-           op == XM_TAG_CHECK || op == XM_DEOPT;
+           op == XM_GUARD_CLASS || op == XM_GUARD_KLASS || op == XM_TAG_CHECK || op == XM_DEOPT;
 }
 
 /* Extract deopt_id from a guard instruction's dst const ref.
