@@ -35,6 +35,16 @@ typedef struct XrFmtConfig {
     int space_after_comma;             // Space after comma
     int space_in_parentheses;          // Space inside parentheses
     int brace_same_line;               // Opening brace on same line
+
+    // ---- Opt-in column alignment (off by default to keep diffs clean) ----
+    int align_match_arms;         // Column-align `->` of match arms
+    int align_enum_values;        // Column-align `=` of enum members
+    int align_struct_fields;      // Column-align `:` of class/struct/iface fields
+    int align_trailing_comments;  // Column-align `//` of consecutive trailing line comments
+
+    // ---- Long-line wrapping (off by default; turn on to enforce max_line_length) ----
+    int wrap_long_lines;           // Break literals/calls that exceed max_line_length
+    int multiline_trailing_comma;  // When wrapping to multi-line, emit trailing `,`
 } XrFmtConfig;
 
 // Default configuration

@@ -331,6 +331,344 @@ TEST(arrow_return_type_emitted) {
 }
 
 /* ====================================================================== */
+/* Match arm alignment (opt-in)                                            */
+/* ====================================================================== */
+
+static char *format_with_config(const char *source, XrFmtConfig *cfg) {
+    AstNode *ast = xr_parse_with_trivia(g_iso, source, "<test>");
+    if (!ast)
+        return NULL;
+    char *out = xfmt_format_ast(ast, cfg, g_iso);
+    xr_program_destroy(ast);
+    return out;
+}
+
+TEST(match_arms_default_single_space) {
+    setup();
+    const char *src = "fn f(n: int) -> string {\n"
+                      "    return match (n) {\n"
+                      "        0 -> \"zero\",\n"
+                      "        n if (n < 0) -> \"negative\",\n"
+                      "        n if (n > 100) -> \"big\",\n"
+                      "        _ -> \"small positive\"\n"
+                      "    }\n"
+                      "}\n";
+    /* NULL config -> default; align_match_arms is off by default. */
+    char *out = format_with_config(src, NULL);
+    ASSERT_NOT_NULL(out);
+    /* Every arm must use exactly a single space before `->`, never padded. */
+    ASSERT_TRUE(contains(out, "0 -> \"zero\""));
+    ASSERT_TRUE(contains(out, "n if (n < 0) -> \"negative\""));
+    ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
+    ASSERT_TRUE(contains(out, "_ -> \"small positive\""));
+    ASSERT_FALSE(contains(out, "0  ->"));
+    ASSERT_FALSE(contains(out, "_  ->"));
+    free(out);
+    teardown();
+}
+
+TEST(match_arms_aligned_when_enabled) {
+    setup();
+    const char *src = "fn f(n: int) -> string {\n"
+                      "    return match (n) {\n"
+                      "        0 -> \"zero\",\n"
+                      "        n if (n < 0) -> \"negative\",\n"
+                      "        n if (n > 100) -> \"big\",\n"
+                      "        _ -> \"small positive\"\n"
+                      "    }\n"
+                      "}\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_match_arms = 1;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Widest head is `n if (n > 100)` (14 chars). All other arms must be
+     * padded with spaces so that their `->` lands at the same column. */
+    ASSERT_TRUE(contains(out, "0              -> \"zero\""));
+    ASSERT_TRUE(contains(out, "n if (n < 0)   -> \"negative\""));
+    ASSERT_TRUE(contains(out, "n if (n > 100) -> \"big\""));
+    ASSERT_TRUE(contains(out, "_              -> \"small positive\""));
+    free(out);
+    teardown();
+}
+
+TEST(match_arms_aligned_idempotent) {
+    setup();
+    const char *src = "fn f(n: int) -> string {\n"
+                      "    return match (n) {\n"
+                      "        0 -> \"zero\",\n"
+                      "        n if (n < 0) -> \"negative\",\n"
+                      "        _ -> \"other\"\n"
+                      "    }\n"
+                      "}\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_match_arms = 1;
+    char *fmt1 = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(fmt1);
+    /* fmt(fmt(src)) == fmt(src) — alignment must not drift on re-format. */
+    AstNode *ast2 = xr_parse_with_trivia(g_iso, fmt1, "<test>");
+    ASSERT_NOT_NULL(ast2);
+    char *fmt2 = xfmt_format_ast(ast2, &cfg, g_iso);
+    xr_program_destroy(ast2);
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
+TEST(match_single_arm_no_padding) {
+    setup();
+    /* A match with exactly one arm should not introduce any padding even
+     * with alignment turned on — there is nothing to align against. */
+    const char *src = "fn f(n: int) -> string {\n"
+                      "    return match (n) {\n"
+                      "        _ -> \"only\"\n"
+                      "    }\n"
+                      "}\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_match_arms = 1;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(contains(out, "_ -> \"only\""));
+    ASSERT_FALSE(contains(out, "_  ->"));
+    free(out);
+    teardown();
+}
+
+/* ====================================================================== */
+/* Enum member alignment (opt-in)                                          */
+/* ====================================================================== */
+
+TEST(enum_values_aligned_when_enabled) {
+    setup();
+    const char *src = "enum Color {\n"
+                      "    Red = 1,\n"
+                      "    Green = 2,\n"
+                      "    Blue = 3,\n"
+                      "    Transparent = 4\n"
+                      "}\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_enum_values = 1;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Widest name is `Transparent` (11 chars). All other members are padded. */
+    ASSERT_TRUE(contains(out, "Red         = 1"));
+    ASSERT_TRUE(contains(out, "Green       = 2"));
+    ASSERT_TRUE(contains(out, "Blue        = 3"));
+    ASSERT_TRUE(contains(out, "Transparent = 4"));
+    free(out);
+    teardown();
+}
+
+TEST(enum_values_default_single_space) {
+    setup();
+    const char *src = "enum E {\n"
+                      "    A = 1,\n"
+                      "    Bbb = 2\n"
+                      "}\n";
+    char *out = format_with_config(src, NULL);
+    ASSERT_NOT_NULL(out);
+    /* Default: no alignment — single space. */
+    ASSERT_TRUE(contains(out, "A = 1"));
+    ASSERT_TRUE(contains(out, "Bbb = 2"));
+    ASSERT_FALSE(contains(out, "A   ="));
+    free(out);
+    teardown();
+}
+
+/* ====================================================================== */
+/* Class field alignment (opt-in)                                          */
+/* ====================================================================== */
+
+TEST(class_fields_aligned_when_enabled) {
+    setup();
+    const char *src = "class User {\n"
+                      "    name: string\n"
+                      "    age: int\n"
+                      "    email: string\n"
+                      "}\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_struct_fields = 1;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Widest name is `email` (5 chars). `name`(4) and `age`(3) are padded. */
+    ASSERT_TRUE(contains(out, "name : string"));
+    ASSERT_TRUE(contains(out, "age  : int"));
+    ASSERT_TRUE(contains(out, "email: string"));
+    free(out);
+    teardown();
+}
+
+TEST(class_fields_default_single_space) {
+    setup();
+    const char *src = "class C {\n"
+                      "    a: int\n"
+                      "    bbbb: string\n"
+                      "}\n";
+    char *out = format_with_config(src, NULL);
+    ASSERT_NOT_NULL(out);
+    ASSERT_TRUE(contains(out, "a: int"));
+    ASSERT_TRUE(contains(out, "bbbb: string"));
+    ASSERT_FALSE(contains(out, "a   :"));
+    free(out);
+    teardown();
+}
+
+/* ====================================================================== */
+/* Long-line wrapping (opt-in)                                             */
+/* ====================================================================== */
+
+TEST(array_literal_wraps_when_too_long) {
+    setup();
+    /* Force a short line length so wrapping is unambiguous. */
+    const char *src =
+        "let items = [\"alpha\", \"beta\", \"gamma\", \"delta\", \"epsilon\", \"zeta\"]\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.wrap_long_lines = 1;
+    cfg.max_line_length = 40;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Multi-line: each element on its own line with trailing comma. */
+    ASSERT_TRUE(contains(out, "\"alpha\",\n"));
+    ASSERT_TRUE(contains(out, "\"zeta\",\n"));
+    free(out);
+    teardown();
+}
+
+TEST(array_literal_inline_when_short) {
+    setup();
+    const char *src = "let items = [1, 2, 3]\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.wrap_long_lines = 1;
+    cfg.max_line_length = 100;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Stays single-line: well below 100 columns. */
+    ASSERT_TRUE(contains(out, "[1, 2, 3]"));
+    ASSERT_FALSE(contains(out, "1,\n"));
+    free(out);
+    teardown();
+}
+
+TEST(call_args_wrap_when_too_long) {
+    setup();
+    const char *src = "fn main() { foo(\"alpha\", \"beta\", \"gamma\", \"delta\", \"epsilon\") }\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.wrap_long_lines = 1;
+    cfg.max_line_length = 40;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Function call args broken across lines. */
+    ASSERT_TRUE(contains(out, "foo(\n"));
+    ASSERT_TRUE(contains(out, "\"alpha\",\n"));
+    free(out);
+    teardown();
+}
+
+TEST(no_trailing_comma_when_disabled) {
+    setup();
+    const char *src = "let items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.wrap_long_lines = 1;
+    cfg.max_line_length = 30;
+    cfg.multiline_trailing_comma = 0;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Last element should NOT carry a trailing `,` when disabled. */
+    ASSERT_TRUE(contains(out, "10\n"));
+    ASSERT_FALSE(contains(out, "10,\n"));
+    free(out);
+    teardown();
+}
+
+TEST(wrap_long_lines_default_off) {
+    setup();
+    /* Even with an absurdly long single line, default config must NOT wrap.
+     * This guards against silent corpus-wide reformat. */
+    const char *src =
+        "let x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]\n";
+    char *out = format_with_config(src, NULL);
+    ASSERT_NOT_NULL(out);
+    ASSERT_FALSE(contains(out, "\n    1,"));
+    free(out);
+    teardown();
+}
+
+/* ====================================================================== */
+/* Trailing comment alignment (opt-in)                                     */
+/* ====================================================================== */
+
+TEST(trailing_comments_aligned_when_enabled) {
+    setup();
+    const char *src = "let radius = 5  // sphere radius\n"
+                      "let mass = 100  // kg\n"
+                      "let temp = 273  // Kelvin\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_trailing_comments = 1;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* Widest code is `let mass = 100` and `let temp = 273` (14 chars). All
+     * lines pad to col 16 (target = max + 2). */
+    ASSERT_TRUE(contains(out, "let radius = 5  // sphere radius"));
+    ASSERT_TRUE(contains(out, "let mass = 100  // kg"));
+    ASSERT_TRUE(contains(out, "let temp = 273  // Kelvin"));
+    free(out);
+    teardown();
+}
+
+TEST(trailing_comments_default_unchanged) {
+    setup();
+    const char *src = "let x = 1  // first\n"
+                      "let yyyy = 22  // second\n";
+    char *out = format_with_config(src, NULL);
+    ASSERT_NOT_NULL(out);
+    /* Default: each comment two spaces after its own code, NOT aligned. */
+    ASSERT_TRUE(contains(out, "let x = 1  // first"));
+    ASSERT_TRUE(contains(out, "let yyyy = 22  // second"));
+    /* Specifically: NO over-padding on the short line. */
+    ASSERT_FALSE(contains(out, "let x = 1      // first"));
+    free(out);
+    teardown();
+}
+
+TEST(trailing_comments_idempotent) {
+    setup();
+    const char *src = "let a = 1  // a\n"
+                      "let bb = 22  // b\n"
+                      "let ccc = 333  // c\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_trailing_comments = 1;
+    char *fmt1 = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(fmt1);
+    AstNode *ast2 = xr_parse_with_trivia(g_iso, fmt1, "<test>");
+    ASSERT_NOT_NULL(ast2);
+    char *fmt2 = xfmt_format_ast(ast2, &cfg, g_iso);
+    xr_program_destroy(ast2);
+    ASSERT_NOT_NULL(fmt2);
+    ASSERT_STR_EQ(fmt1, fmt2);
+    free(fmt1);
+    free(fmt2);
+    teardown();
+}
+
+TEST(trailing_comments_string_safe) {
+    setup();
+    /* `//` inside a string literal must NOT be treated as a trailing comment. */
+    const char *src = "let url = \"https://example.com\"  // homepage\n"
+                      "let path = \"/abc\"  // root\n";
+    XrFmtConfig cfg = xfmt_default_config;
+    cfg.align_trailing_comments = 1;
+    char *out = format_with_config(src, &cfg);
+    ASSERT_NOT_NULL(out);
+    /* The `//` inside the URL string must remain inside the string. */
+    ASSERT_TRUE(contains(out, "\"https://example.com\""));
+    ASSERT_TRUE(contains(out, "// homepage"));
+    ASSERT_TRUE(contains(out, "// root"));
+    free(out);
+    teardown();
+}
+
+/* ====================================================================== */
 /* Driver                                                                  */
 /* ====================================================================== */
 
@@ -349,4 +687,26 @@ RUN_TEST(unicode_string_roundtrip);
 RUN_TEST(empty_string_roundtrip);
 
 RUN_TEST(arrow_return_type_emitted);
+
+RUN_TEST(match_arms_default_single_space);
+RUN_TEST(match_arms_aligned_when_enabled);
+RUN_TEST(match_arms_aligned_idempotent);
+RUN_TEST(match_single_arm_no_padding);
+
+RUN_TEST(enum_values_aligned_when_enabled);
+RUN_TEST(enum_values_default_single_space);
+
+RUN_TEST(class_fields_aligned_when_enabled);
+RUN_TEST(class_fields_default_single_space);
+
+RUN_TEST(array_literal_wraps_when_too_long);
+RUN_TEST(array_literal_inline_when_short);
+RUN_TEST(call_args_wrap_when_too_long);
+RUN_TEST(no_trailing_comma_when_disabled);
+RUN_TEST(wrap_long_lines_default_off);
+
+RUN_TEST(trailing_comments_aligned_when_enabled);
+RUN_TEST(trailing_comments_default_unchanged);
+RUN_TEST(trailing_comments_idempotent);
+RUN_TEST(trailing_comments_string_safe);
 TEST_MAIN_END()

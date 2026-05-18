@@ -45,6 +45,27 @@ XR_FUNC void xfmt_write_newline(XrFmtContext *ctx);
 XR_FUNC void xfmt_write_space(XrFmtContext *ctx);
 
 // ---------------------------------------------------------------------------
+// Snapshot / rollback (for long-line wrapping: try single-line emit, fall
+// back to multi-line when it overflows or contains a newline).
+// ---------------------------------------------------------------------------
+
+typedef struct XfmtSnapshot {
+    size_t length;
+    int column;
+    int line_start;
+    int indent_level;
+    int in_template_expr;
+} XfmtSnapshot;
+
+XR_FUNC void xfmt_snapshot(XrFmtContext *ctx, XfmtSnapshot *snap);
+XR_FUNC void xfmt_rollback(XrFmtContext *ctx, const XfmtSnapshot *snap);
+
+// Returns true if the region written since `snap` contains no newline AND
+// the current column is within max_line_length. Use to decide whether the
+// just-emitted single-line attempt fits, or must rollback to multi-line.
+XR_FUNC bool xfmt_fits_on_line(XrFmtContext *ctx, const XfmtSnapshot *snap);
+
+// ---------------------------------------------------------------------------
 // Trivia (defined in xfmt_trivia.c)
 // ---------------------------------------------------------------------------
 

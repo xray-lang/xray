@@ -230,6 +230,29 @@ void xlsp_handle_ws_apply_configuration(XrLspServer *server, XrJsonValue *settin
         if (xjson_get(format, "insertSpaces")) {
             server->config.format_insert_spaces = xjson_get_bool(format, "insertSpaces");
         }
+        if (xjson_get(format, "alignMatchArms")) {
+            server->config.format_align_match_arms = xjson_get_bool(format, "alignMatchArms");
+        }
+        if (xjson_get(format, "maxLineLength")) {
+            server->config.format_max_line_length = (int) xjson_get_int(format, "maxLineLength");
+        }
+        if (xjson_get(format, "alignEnumValues")) {
+            server->config.format_align_enum_values = xjson_get_bool(format, "alignEnumValues");
+        }
+        if (xjson_get(format, "alignStructFields")) {
+            server->config.format_align_struct_fields = xjson_get_bool(format, "alignStructFields");
+        }
+        if (xjson_get(format, "alignTrailingComments")) {
+            server->config.format_align_trailing_comments =
+                xjson_get_bool(format, "alignTrailingComments");
+        }
+        if (xjson_get(format, "wrapLongLines")) {
+            server->config.format_wrap_long_lines = xjson_get_bool(format, "wrapLongLines");
+        }
+        if (xjson_get(format, "multilineTrailingComma")) {
+            server->config.format_multiline_trailing_comma =
+                xjson_get_bool(format, "multilineTrailingComma");
+        }
     }
 
     // Inlay hints settings

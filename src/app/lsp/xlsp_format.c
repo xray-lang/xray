@@ -46,8 +46,16 @@ XrJsonValue *xlsp_analyze_format(XrLspDocument *doc) {
     // Format AST using server-configured tab size / spaces
     XrFmtConfig config = xfmt_default_config;
     if (doc->server) {
-        config.indent_size = doc->server->config.format_tab_size;
-        config.use_tabs = doc->server->config.format_insert_spaces ? 0 : 1;
+        XlspConfig *sc = &doc->server->config;
+        config.indent_size = sc->format_tab_size;
+        config.max_line_length = sc->format_max_line_length;
+        config.use_tabs = sc->format_insert_spaces ? 0 : 1;
+        config.align_match_arms = sc->format_align_match_arms ? 1 : 0;
+        config.align_enum_values = sc->format_align_enum_values ? 1 : 0;
+        config.align_struct_fields = sc->format_align_struct_fields ? 1 : 0;
+        config.align_trailing_comments = sc->format_align_trailing_comments ? 1 : 0;
+        config.wrap_long_lines = sc->format_wrap_long_lines ? 1 : 0;
+        config.multiline_trailing_comma = sc->format_multiline_trailing_comma ? 1 : 0;
     }
     char *formatted = xfmt_format_ast(ast, &config, X);
 

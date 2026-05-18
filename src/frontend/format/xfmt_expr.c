@@ -16,6 +16,7 @@
 
 #include "xfmt_internal.h"
 #include "xfmt_literal.h"
+#include "../../base/xmalloc.h"
 #include <string.h>
 
 // ----------------------------------------------------------------------------
@@ -95,12 +96,42 @@ static void fmt_call(XrFmtContext *ctx, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
     xfmt_emit_expression(ctx, call->callee);
     xfmt_emit_generic_args(ctx, call->type_args, call->type_arg_count);
+
+    bool wrap = ctx->config && ctx->config->wrap_long_lines && call->arg_count > 0;
+    XfmtSnapshot snap;
+    if (wrap)
+        xfmt_snapshot(ctx, &snap);
+
+    // Try single-line: foo(a, b, c)
     xfmt_write_char(ctx, '(');
     for (int i = 0; i < call->arg_count; i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_emit_expression(ctx, call->arguments[i]);
     }
+    xfmt_write_char(ctx, ')');
+
+    if (!wrap || xfmt_fits_on_line(ctx, &snap))
+        return;
+
+    // Multi-line:
+    //   foo(
+    //       a,
+    //       b,
+    //   )
+    xfmt_rollback(ctx, &snap);
+    xfmt_write_char(ctx, '(');
+    xfmt_write_newline(ctx);
+    ctx->indent_level++;
+    for (int i = 0; i < call->arg_count; i++) {
+        xfmt_write_indent(ctx);
+        xfmt_emit_expression(ctx, call->arguments[i]);
+        if (ctx->config->multiline_trailing_comma || i < call->arg_count - 1)
+            xfmt_write_char(ctx, ',');
+        xfmt_write_newline(ctx);
+    }
+    ctx->indent_level--;
+    xfmt_write_indent(ctx);
     xfmt_write_char(ctx, ')');
 }
 
@@ -114,12 +145,36 @@ static void fmt_new_expr(XrFmtContext *ctx, AstNode *node) {
     }
     xfmt_write_str(ctx, new_expr->class_name);
     xfmt_emit_generic_args(ctx, new_expr->type_args, new_expr->type_arg_count);
+
+    bool wrap = ctx->config && ctx->config->wrap_long_lines && new_expr->arg_count > 0;
+    XfmtSnapshot snap;
+    if (wrap)
+        xfmt_snapshot(ctx, &snap);
+
     xfmt_write_char(ctx, '(');
     for (int i = 0; i < new_expr->arg_count; i++) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_emit_expression(ctx, new_expr->arguments[i]);
     }
+    xfmt_write_char(ctx, ')');
+
+    if (!wrap || xfmt_fits_on_line(ctx, &snap))
+        return;
+
+    xfmt_rollback(ctx, &snap);
+    xfmt_write_char(ctx, '(');
+    xfmt_write_newline(ctx);
+    ctx->indent_level++;
+    for (int i = 0; i < new_expr->arg_count; i++) {
+        xfmt_write_indent(ctx);
+        xfmt_emit_expression(ctx, new_expr->arguments[i]);
+        if (ctx->config->multiline_trailing_comma || i < new_expr->arg_count - 1)
+            xfmt_write_char(ctx, ',');
+        xfmt_write_newline(ctx);
+    }
+    ctx->indent_level--;
+    xfmt_write_indent(ctx);
     xfmt_write_char(ctx, ')');
 }
 
@@ -131,6 +186,30 @@ static void fmt_template_string(XrFmtContext *ctx, AstNode *node) {
     xfmt_emit_template_string(ctx, node, xfmt_emit_expression);
 }
 
+// Emit `pattern (if (guard))?` for one match arm. Returns the number of
+// characters written after the indent prefix on the current line, or -1
+// if a newline was emitted (multi-line pattern -> cannot column-align).
+static int fmt_match_arm_head(XrFmtContext *ctx, MatchArmNode *ma) {
+    size_t saved_len = ctx->length;
+    int indent_chars =
+        ctx->config->use_tabs ? ctx->indent_level : ctx->indent_level * ctx->config->indent_size;
+
+    xfmt_write_indent(ctx);
+    xfmt_emit_expression(ctx, ma->pattern);
+    if (ma->guard) {
+        xfmt_write_str(ctx, " if (");
+        xfmt_emit_expression(ctx, ma->guard);
+        xfmt_write_char(ctx, ')');
+    }
+
+    for (size_t k = saved_len; k < ctx->length; k++) {
+        if (ctx->output[k] == '\n')
+            return -1;
+    }
+    int width = (int) (ctx->length - saved_len) - indent_chars;
+    return width < 0 ? 0 : width;
+}
+
 static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "match (");
@@ -139,16 +218,50 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
     ctx->indent_level++;
 
-    for (int i = 0; i < node->as.match_expr.arm_count; i++) {
-        AstNode *arm = node->as.match_expr.arms[i];
-        MatchArmNode *ma = &arm->as.match_arm;
+    int arm_count = node->as.match_expr.arm_count;
+    AstNode **arms = node->as.match_expr.arms;
 
-        xfmt_write_indent(ctx);
-        xfmt_emit_expression(ctx, ma->pattern);
-        if (ma->guard) {
-            xfmt_write_str(ctx, " if (");
-            xfmt_emit_expression(ctx, ma->guard);
-            xfmt_write_char(ctx, ')');
+    // Pass 1: when alignment is enabled and there is more than one arm,
+    // dry-run each arm's `pattern (guard)?` head into the output buffer,
+    // measure its on-line width, then truncate the buffer back. Patterns
+    // that emit a newline (e.g. attached leading comments, multi-line
+    // destructure) report width=-1 and are not aligned individually.
+    int *widths = NULL;
+    int max_width = 0;
+    bool align = ctx->config && ctx->config->align_match_arms && arm_count > 1;
+    if (align) {
+        widths = (int *) xr_malloc(sizeof(int) * (size_t) arm_count);
+        for (int i = 0; i < arm_count; i++) {
+            MatchArmNode *ma = &arms[i]->as.match_arm;
+            size_t saved_len = ctx->length;
+            int saved_col = ctx->column;
+            int saved_line_start = ctx->line_start;
+
+            int w = fmt_match_arm_head(ctx, ma);
+            widths[i] = w;
+            if (w > max_width)
+                max_width = w;
+
+            // Rollback. Trivia data is AST-attached and re-emitting it
+            // in pass 2 is deterministic, so this dry-run is idempotent.
+            ctx->length = saved_len;
+            ctx->output[ctx->length] = '\0';
+            ctx->column = saved_col;
+            ctx->line_start = saved_line_start;
+        }
+    }
+
+    // Pass 2: real emission. Pad each arm's head to max_width before
+    // writing " -> body".
+    for (int i = 0; i < arm_count; i++) {
+        MatchArmNode *ma = &arms[i]->as.match_arm;
+
+        int w = fmt_match_arm_head(ctx, ma);
+
+        if (align && widths && widths[i] >= 0 && w >= 0) {
+            int pad = max_width - w;
+            for (int j = 0; j < pad; j++)
+                xfmt_write_char(ctx, ' ');
         }
         xfmt_write_str(ctx, " -> ");
 
@@ -159,6 +272,9 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
         }
         xfmt_write_newline(ctx);
     }
+
+    if (widths)
+        xr_free(widths);
 
     ctx->indent_level--;
     xfmt_write_indent(ctx);
@@ -262,6 +378,10 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             } else {
                 xfmt_write_str(ctx, "super");
             }
+            bool sc_wrap = ctx->config && ctx->config->wrap_long_lines && sc->arg_count > 0;
+            XfmtSnapshot sc_snap;
+            if (sc_wrap)
+                xfmt_snapshot(ctx, &sc_snap);
             xfmt_write_char(ctx, '(');
             for (int i = 0; i < sc->arg_count; i++) {
                 if (i > 0)
@@ -269,20 +389,56 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_emit_expression(ctx, sc->arguments[i]);
             }
             xfmt_write_char(ctx, ')');
+            if (sc_wrap && !xfmt_fits_on_line(ctx, &sc_snap)) {
+                xfmt_rollback(ctx, &sc_snap);
+                xfmt_write_char(ctx, '(');
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
+                for (int i = 0; i < sc->arg_count; i++) {
+                    xfmt_write_indent(ctx);
+                    xfmt_emit_expression(ctx, sc->arguments[i]);
+                    if (ctx->config->multiline_trailing_comma || i < sc->arg_count - 1)
+                        xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
+                }
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, ')');
+            }
             break;
         }
 
         // Array literal
         case AST_ARRAY_LITERAL: {
             xfmt_write_indent(ctx);
-            xfmt_write_char(ctx, '[');
             ArrayLiteralNode *arr = &node->as.array_literal;
+            bool arr_wrap = ctx->config && ctx->config->wrap_long_lines && arr->count > 0;
+            XfmtSnapshot arr_snap;
+            if (arr_wrap)
+                xfmt_snapshot(ctx, &arr_snap);
+            xfmt_write_char(ctx, '[');
             for (int i = 0; i < arr->count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, arr->elements[i]);
             }
             xfmt_write_char(ctx, ']');
+            if (arr_wrap && !xfmt_fits_on_line(ctx, &arr_snap)) {
+                xfmt_rollback(ctx, &arr_snap);
+                xfmt_write_char(ctx, '[');
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
+                for (int i = 0; i < arr->count; i++) {
+                    xfmt_write_indent(ctx);
+                    xfmt_emit_expression(ctx, arr->elements[i]);
+                    if (ctx->config->multiline_trailing_comma || i < arr->count - 1)
+                        xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
+                }
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, ']');
+            }
             break;
         }
 
@@ -291,8 +447,12 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         // `(x)` is a grouping, not a 1-tuple.
         case AST_TUPLE_LITERAL: {
             xfmt_write_indent(ctx);
-            xfmt_write_char(ctx, '(');
             TupleLiteralNode *tup = &node->as.tuple_literal;
+            bool tup_wrap = ctx->config && ctx->config->wrap_long_lines && tup->count > 0;
+            XfmtSnapshot tup_snap;
+            if (tup_wrap)
+                xfmt_snapshot(ctx, &tup_snap);
+            xfmt_write_char(ctx, '(');
             for (int i = 0; i < tup->count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
@@ -301,6 +461,24 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             if (tup->count == 1)
                 xfmt_write_char(ctx, ',');
             xfmt_write_char(ctx, ')');
+            if (tup_wrap && !xfmt_fits_on_line(ctx, &tup_snap)) {
+                xfmt_rollback(ctx, &tup_snap);
+                xfmt_write_char(ctx, '(');
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
+                for (int i = 0; i < tup->count; i++) {
+                    xfmt_write_indent(ctx);
+                    xfmt_emit_expression(ctx, tup->elements[i]);
+                    // Tuples always need a trailing comma in multi-line form;
+                    // the arity-1 form requires it for parser disambiguation
+                    // and the rest follows the same rule for consistency.
+                    xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
+                }
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, ')');
+            }
             break;
         }
 
@@ -310,11 +488,34 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             ObjectLiteralNode *obj = &node->as.object_literal;
             if (obj->count == 0) {
                 xfmt_write_str(ctx, "{}");
-            } else {
-                xfmt_write_str(ctx, "{ ");
+                break;
+            }
+            bool obj_wrap = ctx->config && ctx->config->wrap_long_lines;
+            XfmtSnapshot obj_snap;
+            if (obj_wrap)
+                xfmt_snapshot(ctx, &obj_snap);
+            xfmt_write_str(ctx, "{ ");
+            for (int i = 0; i < obj->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                if (obj->computed && obj->computed[i]) {
+                    xfmt_write_char(ctx, '[');
+                    xfmt_emit_expression(ctx, obj->keys[i]);
+                    xfmt_write_char(ctx, ']');
+                } else {
+                    xfmt_emit_expression(ctx, obj->keys[i]);
+                }
+                xfmt_write_str(ctx, ": ");
+                xfmt_emit_expression(ctx, obj->values[i]);
+            }
+            xfmt_write_str(ctx, " }");
+            if (obj_wrap && !xfmt_fits_on_line(ctx, &obj_snap)) {
+                xfmt_rollback(ctx, &obj_snap);
+                xfmt_write_char(ctx, '{');
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
                 for (int i = 0; i < obj->count; i++) {
-                    if (i > 0)
-                        xfmt_write_str(ctx, ", ");
+                    xfmt_write_indent(ctx);
                     if (obj->computed && obj->computed[i]) {
                         xfmt_write_char(ctx, '[');
                         xfmt_emit_expression(ctx, obj->keys[i]);
@@ -324,8 +525,13 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                     }
                     xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, obj->values[i]);
+                    if (ctx->config->multiline_trailing_comma || i < obj->count - 1)
+                        xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
                 }
-                xfmt_write_str(ctx, " }");
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, '}');
             }
             break;
         }
@@ -338,16 +544,38 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             MapLiteralNode *map = &node->as.map_literal;
             if (map->count == 0) {
                 xfmt_write_str(ctx, "#{}");
-            } else {
-                xfmt_write_str(ctx, "#{ ");
+                break;
+            }
+            bool map_wrap = ctx->config && ctx->config->wrap_long_lines;
+            XfmtSnapshot map_snap;
+            if (map_wrap)
+                xfmt_snapshot(ctx, &map_snap);
+            xfmt_write_str(ctx, "#{ ");
+            for (int i = 0; i < map->count; i++) {
+                if (i > 0)
+                    xfmt_write_str(ctx, ", ");
+                xfmt_emit_expression(ctx, map->keys[i]);
+                xfmt_write_str(ctx, ": ");
+                xfmt_emit_expression(ctx, map->values[i]);
+            }
+            xfmt_write_str(ctx, " }");
+            if (map_wrap && !xfmt_fits_on_line(ctx, &map_snap)) {
+                xfmt_rollback(ctx, &map_snap);
+                xfmt_write_str(ctx, "#{");
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
                 for (int i = 0; i < map->count; i++) {
-                    if (i > 0)
-                        xfmt_write_str(ctx, ", ");
+                    xfmt_write_indent(ctx);
                     xfmt_emit_expression(ctx, map->keys[i]);
                     xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, map->values[i]);
+                    if (ctx->config->multiline_trailing_comma || i < map->count - 1)
+                        xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
                 }
-                xfmt_write_str(ctx, " }");
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, '}');
             }
             break;
         }
@@ -355,14 +583,34 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         // Set literal
         case AST_SET_LITERAL: {
             xfmt_write_indent(ctx);
-            xfmt_write_str(ctx, "#[");
             SetLiteralNode *set = &node->as.set_literal;
+            bool set_wrap = ctx->config && ctx->config->wrap_long_lines && set->count > 0;
+            XfmtSnapshot set_snap;
+            if (set_wrap)
+                xfmt_snapshot(ctx, &set_snap);
+            xfmt_write_str(ctx, "#[");
             for (int i = 0; i < set->count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
                 xfmt_emit_expression(ctx, set->elements[i]);
             }
             xfmt_write_char(ctx, ']');
+            if (set_wrap && !xfmt_fits_on_line(ctx, &set_snap)) {
+                xfmt_rollback(ctx, &set_snap);
+                xfmt_write_str(ctx, "#[");
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
+                for (int i = 0; i < set->count; i++) {
+                    xfmt_write_indent(ctx);
+                    xfmt_emit_expression(ctx, set->elements[i]);
+                    if (ctx->config->multiline_trailing_comma || i < set->count - 1)
+                        xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
+                }
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, ']');
+            }
             break;
         }
 
@@ -663,6 +911,10 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             StructLiteralNode *sl = &node->as.struct_literal;
             xfmt_write_str(ctx, sl->struct_name);
             xfmt_emit_generic_args(ctx, sl->type_args, sl->type_arg_count);
+            bool sl_wrap = ctx->config && ctx->config->wrap_long_lines && sl->field_count > 0;
+            XfmtSnapshot sl_snap;
+            if (sl_wrap)
+                xfmt_snapshot(ctx, &sl_snap);
             xfmt_write_char(ctx, '{');
             for (int i = 0; i < sl->field_count; i++) {
                 if (i > 0)
@@ -672,6 +924,24 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 xfmt_emit_expression(ctx, sl->field_values[i]);
             }
             xfmt_write_char(ctx, '}');
+            if (sl_wrap && !xfmt_fits_on_line(ctx, &sl_snap)) {
+                xfmt_rollback(ctx, &sl_snap);
+                xfmt_write_char(ctx, '{');
+                xfmt_write_newline(ctx);
+                ctx->indent_level++;
+                for (int i = 0; i < sl->field_count; i++) {
+                    xfmt_write_indent(ctx);
+                    xfmt_write_str(ctx, sl->field_names[i]);
+                    xfmt_write_str(ctx, ": ");
+                    xfmt_emit_expression(ctx, sl->field_values[i]);
+                    if (ctx->config->multiline_trailing_comma || i < sl->field_count - 1)
+                        xfmt_write_char(ctx, ',');
+                    xfmt_write_newline(ctx);
+                }
+                ctx->indent_level--;
+                xfmt_write_indent(ctx);
+                xfmt_write_char(ctx, '}');
+            }
             break;
         }
 

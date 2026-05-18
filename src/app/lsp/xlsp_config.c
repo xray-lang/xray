@@ -218,6 +218,27 @@ bool xlsp_config_load_from_toml(XlspConfig *config, const char *root_path) {
     v = xtoml_get(lsp, "format_insert_spaces");
     if (v && xtoml_is_bool(v))
         config->format_insert_spaces = v->as.boolean;
+    v = xtoml_get(lsp, "format_align_match_arms");
+    if (v && xtoml_is_bool(v))
+        config->format_align_match_arms = v->as.boolean;
+    v = xtoml_get(lsp, "format_max_line_length");
+    if (v && xtoml_is_integer(v))
+        config->format_max_line_length = (int) v->as.integer;
+    v = xtoml_get(lsp, "format_align_enum_values");
+    if (v && xtoml_is_bool(v))
+        config->format_align_enum_values = v->as.boolean;
+    v = xtoml_get(lsp, "format_align_struct_fields");
+    if (v && xtoml_is_bool(v))
+        config->format_align_struct_fields = v->as.boolean;
+    v = xtoml_get(lsp, "format_align_trailing_comments");
+    if (v && xtoml_is_bool(v))
+        config->format_align_trailing_comments = v->as.boolean;
+    v = xtoml_get(lsp, "format_wrap_long_lines");
+    if (v && xtoml_is_bool(v))
+        config->format_wrap_long_lines = v->as.boolean;
+    v = xtoml_get(lsp, "format_multiline_trailing_comma");
+    if (v && xtoml_is_bool(v))
+        config->format_multiline_trailing_comma = v->as.boolean;
 
     // Inlay hints
     v = xtoml_get(lsp, "inlay_hints_type_annotations");
