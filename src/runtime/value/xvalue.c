@@ -344,25 +344,19 @@ static bool xr_json_equals_deep(XrValue a, XrValue b) {
         return false;
 
     // Compare field count and content
-    XrayIsolate *X = xray_isolate_current();
-    XrShape *sa = xr_json_shape(X, ja);
-    XrShape *sb = xr_json_shape(X, jb);
-    if (sa->field_count != sb->field_count)
+    XrClass *ca = ja->klass;
+    XrClass *cb = jb->klass;
+    if (!ca || !cb || ca->field_count != cb->field_count)
         return false;
 
-    for (int i = 0; i < sa->field_count; i++) {
-        SymbolId sym_a = sa->field_symbols[i];
-        int idx_b = -1;
-        for (int j = 0; j < sb->field_count; j++) {
-            if (sb->field_symbols[j] == sym_a) {
-                idx_b = j;
-                break;
-            }
-        }
+    for (int i = 0; i < ca->field_count; i++) {
+        int sym_a = ca->fields[i].symbol;
+        int idx_b = xr_class_lookup_field(cb, sym_a);
         if (idx_b < 0)
             return false;
-
-        if (!xr_value_deep_eq(ja->fields[i], jb->fields[idx_b])) {
+        XrValue va = xr_instance_get_dynamic_field(ja, (uint16_t) i);
+        XrValue vb = xr_instance_get_dynamic_field(jb, (uint16_t) idx_b);
+        if (!xr_value_deep_eq(va, vb)) {
             return false;
         }
     }

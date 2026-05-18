@@ -124,7 +124,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
 }
 
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
-XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *json,
+XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
                                       struct XrayIsolate *isolate) {
     XR_DCHECK(coro != NULL, "iterator_new_from_json: NULL coro");
     XR_DCHECK(json != NULL, "iterator_new_from_json: NULL json");
@@ -139,8 +139,7 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *j
     iter->coro = coro;
     iter->context = (void *) isolate;
 
-    XrShape *shape = xr_json_shape(isolate, json);
-    iter->total_count = shape ? shape->field_count : 0;
+    iter->total_count = json && json->klass ? json->klass->field_count : 0;
     iter->mode = XR_ITER_MODE_PAIRS;
 
     return iter;
@@ -149,7 +148,7 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *j
 // Same source as xr_iterator_new_from_json, but next() yields each key
 // (a string) instead of a (key, value) tuple. Used by single-variable
 // `for (k in jsonObj)`.
-XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrJson *json,
+XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, XrJson *json,
                                        struct XrayIsolate *isolate) {
     XrIterator *iter = xr_iterator_new_from_json(coro, json, isolate);
     if (iter)
@@ -279,27 +278,23 @@ XrValue xr_iterator_next(XrIterator *iter) {
     } else if (iter->type == XR_ITERATOR_JSON) {
         // Json iterator: returns [string_key, value] array
         XrJson *json = iter->source.json;
-        if (!json)
+        if (!json || !json->klass)
             return xr_null();
         XrayIsolate *X = (XrayIsolate *) iter->context;
-        XrSymbolTable *st = X ? (XrSymbolTable *) xr_isolate_get_symbol_table(X) : NULL;
 
         {
-            XrShape *shape = xr_json_shape(X, json);
-            if (!shape || iter->scan_index >= shape->field_count)
+            XrClass *cls = json->klass;
+            if (iter->scan_index >= cls->field_count)
                 return xr_null();
 
             uint32_t idx = iter->scan_index++;
-            SymbolId sym = shape->field_symbols[idx];
-            XrValue value = xr_json_get_field_any(X, json, idx);
+            const char *name = cls->fields[idx].name;
+            XrValue value = xr_instance_get_dynamic_field(json, (uint16_t) idx);
 
-            // Convert SymbolId to string
+            // Field name comes from the class descriptor directly
             XrValue key_str = xr_null();
-            if (st) {
-                const char *name = xr_symbol_get_name_in_table(st, sym);
-                if (name) {
-                    key_str = xr_string_value(xr_string_intern(X, name, strlen(name), 0));
-                }
+            if (name) {
+                key_str = xr_string_value(xr_string_intern(X, name, strlen(name), 0));
             }
             if (iter->mode == XR_ITER_MODE_KEYS) {
                 return key_str;

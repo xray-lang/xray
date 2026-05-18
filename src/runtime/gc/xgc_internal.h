@@ -142,7 +142,6 @@ XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_traverse_array(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj);

@@ -90,8 +90,7 @@ static XrValue dom_to_xrvalue(XrayIsolate *X, XrJsonValue *v) {
         }
 
         case XR_JSON_OBJECT: {
-            uint16_t cap = v->as.object.count > 4 ? (uint16_t) v->as.object.count : 4;
-            XrJson *json = xr_json_new(xr_current_coro(X), cap);
+            XrJson *json = xr_json_new(xr_current_coro(X));
             if (!json)
                 return xr_null();
             for (int idx = 0; idx < v->as.object.count; idx++) {
@@ -320,7 +319,7 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
 static void stringify_json(JsonWriter *w, XrJson *json) {
     writer_char(w, '{');
 
-    if (!json || !xr_json_shape(w->isolate, json)) {
+    if (!json || !json->klass) {
         writer_char(w, '}');
         return;
     }
@@ -328,17 +327,13 @@ static void stringify_json(JsonWriter *w, XrJson *json) {
     w->depth++;
     size_t output_count = 0;
 
-    XrShape *shape = xr_json_shape(w->isolate, json);
-    XrSymbolTable *symtab = (XrSymbolTable *) w->isolate->symbol_table;
-
-    for (uint16_t i = 0; i < shape->field_count; i++) {
+    XrClass *cls = json->klass;
+    for (uint16_t i = 0; i < cls->field_count; i++) {
         if (output_count > 0)
             writer_char(w, ',');
         writer_newline(w);
 
-        // Get field name
-        SymbolId sym = shape->field_symbols[i];
-        const char *name = xr_symbol_get_name_in_table(symtab, sym);
+        const char *name = cls->fields[i].name;
         if (name) {
             stringify_string(w, name, strlen(name));
         } else {
@@ -350,7 +345,7 @@ static void stringify_json(JsonWriter *w, XrJson *json) {
         writer_char(w, ':');
         if (w->indent > 0)
             writer_char(w, ' ');
-        stringify_value(w, xr_json_get_field_any(w->isolate, json, i));
+        stringify_value(w, xr_instance_get_dynamic_field(json, i));
         output_count++;
     }
 
@@ -807,7 +802,7 @@ XrValue xr_json_fn_is_valid(XrayIsolate *X, XrValue self, XrValue *args, int arg
 // Returns Json: {value: parsed result, error: error message or null}
 XrValue xr_json_fn_try_parse(XrayIsolate *X, XrValue self, XrValue *args, int argc) {
     (void) self;
-    XrJson *result = xr_json_new(xr_current_coro(X), 4);
+    XrJson *result = xr_json_new(xr_current_coro(X));
 
     if (argc < 1 || !XR_IS_STRING(args[0])) {
         xr_json_set_by_key(

@@ -10,6 +10,8 @@
 
 #include "xinstance.h"
 #include "../xisolate_api.h"
+#include "../xisolate_internal.h"
+#include "xclass_system.h"
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
 #include "xclass.h"
@@ -82,14 +84,21 @@ void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
 
     inst->klass = cls;
 
-    uint32_t field_count = xr_class_instance_field_count(cls);
+    // Dynamic-layout: zero all reserved in-object slots (capacity, not just
+    // current field_count) so subsequent transitions can write in-bounds.
+    uint32_t slot_count;
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        slot_count = cls->in_object_capacity;
+    } else {
+        slot_count = xr_class_instance_field_count(cls);
+    }
 
-    if (cls->field_default_values) {
-        for (uint32_t i = 0; i < field_count; i++) {
+    if (cls->field_default_values && !(cls->flags & XR_CLASS_DYNAMIC_LAYOUT)) {
+        for (uint32_t i = 0; i < slot_count; i++) {
             inst->fields[i] = cls->field_default_values[i];
         }
     } else {
-        for (uint32_t i = 0; i < field_count; i++) {
+        for (uint32_t i = 0; i < slot_count; i++) {
             inst->fields[i] = xr_null();
         }
     }
@@ -97,8 +106,16 @@ void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
 
 size_t xr_instance_size(XrClass *cls) {
     XR_DCHECK(cls != NULL, "instance_size: NULL cls");
-    uint32_t field_count = xr_class_instance_field_count(cls);
-    size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    // Dynamic-layout instances reserve in_object_capacity slots so transitions
+    // that grow field_count don't require reallocating the instance. The last
+    // slot doubles as the overflow pointer when field_count > capacity - 1.
+    uint32_t slot_count;
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        slot_count = cls->in_object_capacity;
+    } else {
+        slot_count = xr_class_instance_field_count(cls);
+    }
+    size_t size = sizeof(XrInstance) + sizeof(XrValue) * slot_count;
     XrNativeBodyDesc *desc = cls->native_body;
     if (desc) {
         size_t align = desc->body_align ? (size_t) desc->body_align : sizeof(void *);
@@ -521,4 +538,29 @@ XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int s
     klass->transitions = trans;
 
     return child;
+}
+
+XrClass *xr_class_build_json_chain(XrayIsolate *X, const char **names, int count, bool sealed) {
+    XR_DCHECK(X != NULL, "build_json_chain: NULL isolate");
+    XR_DCHECK(X->core != NULL && X->core->jsonRootClass != NULL,
+              "build_json_chain: jsonRootClass not initialized");
+
+    XrClass *cur = X->core->jsonRootClass;
+    if (count > 0 && names != NULL) {
+        XrSymbolTable *st = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
+        XR_DCHECK(st != NULL, "build_json_chain: NULL symbol table");
+        for (int i = 0; i < count; i++) {
+            int sym = (int) xr_symbol_register_in_table(st, names[i]);
+            const char *interned = xr_symbol_get_name_in_table(st, sym);
+            XrClass *next =
+                xr_class_transition_get_or_create(X, cur, sym, interned ? interned : names[i]);
+            if (!next)
+                return NULL;
+            cur = next;
+        }
+    }
+    if (sealed) {
+        cur->flags |= XR_CLASS_DYNAMIC_SEALED;
+    }
+    return cur;
 }

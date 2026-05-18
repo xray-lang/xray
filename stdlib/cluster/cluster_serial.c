@@ -247,18 +247,17 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                     buf_put_u8(buf, XR_STAG_JSON);
 
                     {
-                        XrShape *shape = xr_json_shape(X, json);
-                        uint16_t count = shape->field_count;
+                        XrClass *cls = json->klass;
+                        uint16_t count = cls ? cls->field_count : 0;
                         buf_put_varint(buf, (uint64_t) count);
                         for (uint16_t i = 0; i < count; i++) {
-                            SymbolId sym = shape->field_symbols[i];
-                            const char *fname = xr_symbol_get_name_in_table(X->symbol_table, sym);
+                            const char *fname = cls->fields[i].name;
                             if (!fname)
                                 fname = "";
                             size_t flen = strlen(fname);
                             buf_put_varint(buf, (uint64_t) flen);
                             buf_put_bytes(buf, fname, flen);
-                            XrValue fval = xr_json_get_field_any(X, json, i);
+                            XrValue fval = xr_instance_get_dynamic_field(json, i);
                             if (encode_value(X, fval, buf, depth + 1) != 0)
                                 return -1;
                         }
@@ -564,7 +563,7 @@ static int decode_value(XrSerialReader *r, XrValue *out) {
             uint32_t count;
             if (reader_varint32(r, &count) != 0)
                 return -1;
-            XrJson *json = xr_json_new(NULL, (uint16_t) (count < 65535 ? count : 32));
+            XrJson *json = xr_json_new(NULL);
             if (!json)
                 return -1;
             r->depth++;

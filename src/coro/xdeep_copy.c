@@ -399,64 +399,8 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     return result;
 }
 
-XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
-    XrJson *json = (XrJson *) obj;
-    if (!json || !ctx->dst_gc)
-        return XR_NULL_VAL;
-    XrValue cached = xr_copy_context_lookup(ctx, json);
-    if (!XR_IS_NULL(cached))
-        return cached;
-
-    XrShape *shape = xr_json_shape(ctx->X, json);
-    int field_count = shape->field_count;
-
-    size_t size = xr_json_size(shape->in_object_capacity);
-    XrJson *new_json = (XrJson *) copy_ctx_alloc(ctx, size, XR_TJSON);
-    if (!new_json)
-        return XR_NULL_VAL;
-    xr_json_init_inplace(new_json, shape);
-
-    XrValue result = XR_FROM_PTR(new_json);
-    xr_copy_context_record(ctx, json, result);
-    ctx->objects_copied++;
-
-    // Fast path: compact value-layout (no GC pointers, no overflow) → memcpy fields
-    if (shape->is_value_layout && !json->overflow) {
-        uint16_t n =
-            (field_count < shape->in_object_capacity) ? field_count : shape->in_object_capacity;
-        memcpy(new_json->fields, json->fields, n * sizeof(XrValue));
-        return result;
-    }
-
-    // Copy in-object fields
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t n = (field_count < in_obj) ? field_count : in_obj;
-    for (int i = 0; i < n; i++) {
-        new_json->fields[i] = xr_deep_copy_with_ctx(ctx, json->fields[i]);
-    }
-    // Copy overflow fields
-    if (field_count > in_obj && json->overflow) {
-        uint16_t ov_count = field_count - in_obj;
-        XrJsonOverflow *src_ov = json->overflow;
-        size_t ov_size = sizeof(XrJsonOverflow) + src_ov->capacity * sizeof(XrValue);
-        XrJsonOverflow *dst_ov = (XrJsonOverflow *) xr_malloc(ov_size);
-        if (dst_ov) {
-            dst_ov->capacity = src_ov->capacity;
-            dst_ov->length = src_ov->length;
-            XR_DCHECK(dst_ov->length <= dst_ov->capacity,
-                      "deep_copy_json: overflow length > capacity");
-            dst_ov->_pad = 0;
-            for (uint16_t i = 0; i < ov_count && i < src_ov->length; i++) {
-                dst_ov->values[i] = xr_deep_copy_with_ctx(ctx, src_ov->values[i]);
-            }
-            for (uint16_t i = ov_count; i < dst_ov->capacity; i++) {
-                dst_ov->values[i] = xr_null();
-            }
-            new_json->overflow = dst_ov;
-        }
-    }
-    return result;
-}
+// xr_deep_copy_json_with_ctx removed: Json values flow through
+// xr_deep_copy_instance_with_ctx via the unified g_type_ops dispatch.
 
 // DateTime has no child GC references, shallow copy of the payload
 // suffices. Exposed so g_type_ops can dispatch to it directly.
@@ -746,49 +690,8 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
     return XR_FROM_PTR(new_inst);
 }
 
-XrValue xr_to_shared_json(struct XrayIsolate *X, XrGCHeader *obj) {
-    XrJson *json = (XrJson *) obj;
-    if (!json || !xr_isolate_get_sys_heap(X))
-        return XR_NULL_VAL;
-    XrShape *shape = xr_json_shape(X, json);
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t field_count = shape->field_count;
-    size_t size = xr_json_size(in_obj);
-    XrJson *new_json =
-        (XrJson *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), size, XR_TJSON);
-    if (!new_json)
-        return XR_NULL_VAL;
-    xr_json_init_inplace(new_json, shape);
-    XR_GC_SET_STORAGE(&new_json->gc, XR_GC_STORAGE_SHARED);
-    xr_shared_set_refc(&new_json->gc, 1);
-    // Copy in-object fields
-    uint16_t n = (field_count < in_obj) ? field_count : in_obj;
-    for (uint16_t i = 0; i < n; i++) {
-        new_json->fields[i] = xr_to_shared(X, json->fields[i]);
-    }
-    // Copy overflow fields
-    if (field_count > in_obj && json->overflow) {
-        uint16_t ov_count = field_count - in_obj;
-        XrJsonOverflow *src_ov = json->overflow;
-        size_t ov_size = sizeof(XrJsonOverflow) + src_ov->capacity * sizeof(XrValue);
-        XrJsonOverflow *dst_ov = (XrJsonOverflow *) xr_malloc(ov_size);
-        if (dst_ov) {
-            dst_ov->capacity = src_ov->capacity;
-            dst_ov->length = src_ov->length;
-            XR_DCHECK(dst_ov->length <= dst_ov->capacity,
-                      "to_shared_json: overflow length > capacity");
-            dst_ov->_pad = 0;
-            for (uint16_t i = 0; i < ov_count && i < src_ov->length; i++) {
-                dst_ov->values[i] = xr_to_shared(X, src_ov->values[i]);
-            }
-            for (uint16_t i = ov_count; i < dst_ov->capacity; i++) {
-                dst_ov->values[i] = xr_null();
-            }
-            new_json->overflow = dst_ov;
-        }
-    }
-    return XR_FROM_PTR(new_json);
-}
+// xr_to_shared_json removed: Json values flow through xr_to_shared_instance
+// via the unified g_type_ops dispatch.
 
 XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, XrGCHeader *obj) {
     XrStringBuilder *sb = (XrStringBuilder *) obj;

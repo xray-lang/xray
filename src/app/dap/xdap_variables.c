@@ -212,16 +212,13 @@ static int get_json_children(XrayIsolate *isolate, XrJson *json, XdapVarInfo **o
 
     XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
 
-    XrShape *shape = xr_json_shape(isolate, json);
+    XrClass *cls = json->klass;
     for (int i = 0; i < count; i++) {
-        XrValue val = xr_json_get_field_any(isolate, json, i);
+        XrValue val = xr_instance_get_dynamic_field(json, (uint16_t) i);
 
         const char *field_name = NULL;
-        if (shape && shape->field_symbols && i < shape->field_count) {
-            SymbolId sym = shape->field_symbols[i];
-            if (xr_isolate_get_symbol_table(isolate)) {
-                field_name = xr_symbol_get_name_in_table(xr_isolate_get_symbol_table(isolate), sym);
-            }
+        if (cls && i < cls->field_count) {
+            field_name = cls->fields[i].name;
         }
 
         vars[i].name = xr_strdup(field_name ? field_name : "<field>");

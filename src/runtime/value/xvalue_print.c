@@ -220,40 +220,26 @@ static void dump_json(XrJson *json, DumpContext *ctx) {
         return;
     }
 
-    XrayIsolate *X = xray_isolate_current();
-    XrShape *shape = xr_json_shape(X, json);
-    if (!shape) {
-        printf("}");
-        return;
-    }
-
-    // Fields stored in fields[] array
-    XrSymbolTable *table = X ? (XrSymbolTable *) xr_isolate_get_symbol_table(X) : NULL;
-
-    if (shape->field_count == 0) {
+    XrClass *cls = json->klass;
+    if (!cls || cls->field_count == 0) {
         printf("}");
         return;
     }
 
     ctx->depth++;
-    for (uint16_t i = 0; i < shape->field_count; i++) {
+    for (uint16_t i = 0; i < cls->field_count; i++) {
         if (i > 0)
             printf(",");
         dump_newline(ctx);
 
-        // Field name
-        const char *name = NULL;
-        if (table && shape->field_symbols) {
-            name = xr_symbol_get_name_in_table(table, shape->field_symbols[i]);
-        }
+        const char *name = cls->fields[i].name;
         if (name) {
             printf("%s: ", name);
         } else {
             printf("field%d: ", i);
         }
 
-        // Field value
-        XrValue fval = xr_json_get_field_any(X, json, i);
+        XrValue fval = xr_instance_get_dynamic_field(json, i);
         dump_value_internal(fval, ctx);
     }
     ctx->depth--;

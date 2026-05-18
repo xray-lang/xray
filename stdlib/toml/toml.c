@@ -297,15 +297,13 @@ static void write_value(TomlWriter *w, XrValue val) {
     } else if (xr_value_is_json(val)) {
         // XrJson -> inline table form {k1 = v1, k2 = v2, ...}
         XrJson *json = xr_value_to_json(val);
-        XrShape *shape = xr_json_shape(w->isolate, json);
-        XrSymbolTable *symtab = (XrSymbolTable *) w->isolate->symbol_table;
+        XrClass *cls = json->klass;
         tw_char(w, '{');
         w->depth++;
-        if (shape) {
+        if (cls) {
             bool first = true;
-            for (uint16_t i = 0; i < shape->field_count; i++) {
-                SymbolId sym = shape->field_symbols[i];
-                const char *name = xr_symbol_get_name_in_table(symtab, sym);
+            for (uint16_t i = 0; i < cls->field_count; i++) {
+                const char *name = cls->fields[i].name;
                 if (!name)
                     continue;
                 if (!first)
@@ -323,7 +321,7 @@ static void write_value(TomlWriter *w, XrValue val) {
                     tw_char(w, '"');
                 }
                 tw_str(w, " = ");
-                write_value(w, xr_json_get_field_any(w->isolate, json, i));
+                write_value(w, xr_instance_get_dynamic_field(json, i));
             }
         }
         w->depth--;

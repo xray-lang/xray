@@ -450,33 +450,32 @@ static void emit_json(YamlEmitter *e, XrJson *json, int level, bool flow_mode) {
         use_flow = true;
     }
 
-    XrShape *shape = xr_json_shape(e->isolate, json);
+    XrClass *cls = json->klass;
+    (void) symtab;
     if (use_flow) {
         emit_char(e, '{');
-        for (uint16_t i = 0; i < shape->field_count; i++) {
+        for (uint16_t i = 0; cls && i < cls->field_count; i++) {
             if (i > 0)
                 emit_str(e, ", ");
-            SymbolId sym = shape->field_symbols[i];
-            const char *name = xr_symbol_get_name_in_table(symtab, sym);
+            const char *name = cls->fields[i].name;
             if (name)
                 emit_key_string(e, name, strlen(name));
             emit_str(e, ": ");
-            XrValue v = xr_json_get_field_any(e->isolate, json, i);
+            XrValue v = xr_instance_get_dynamic_field(json, i);
             emit_value(e, v, level, true);
         }
         emit_char(e, '}');
     } else {
-        for (uint16_t i = 0; i < shape->field_count; i++) {
+        for (uint16_t i = 0; cls && i < cls->field_count; i++) {
             if (i > 0) {
                 emit_char(e, '\n');
                 emit_indent(e, level);
             }
-            SymbolId sym = shape->field_symbols[i];
-            const char *name = xr_symbol_get_name_in_table(symtab, sym);
+            const char *name = cls->fields[i].name;
             if (name)
                 emit_key_string(e, name, strlen(name));
             emit_str(e, ": ");
-            XrValue v = xr_json_get_field_any(e->isolate, json, i);
+            XrValue v = xr_instance_get_dynamic_field(json, i);
             if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || xr_value_is_json(v)) {
                 emit_char(e, '\n');
                 emit_indent(e, level + 1);

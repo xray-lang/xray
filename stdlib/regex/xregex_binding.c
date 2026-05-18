@@ -92,7 +92,7 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
     if (gc)
         gc->gc_disabled++;
 
-    XrJson *result = xr_json_new(coro, 4);
+    XrJson *result = xr_json_new(coro);
 
     // start
     int start_offset = match->groups[0].start ? (int) (match->groups[0].start - text) : 0;

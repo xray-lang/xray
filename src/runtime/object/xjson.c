@@ -5,12 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjson.c - Structured data object implementation
+ * xjson.c - Json object backed by dynamic-layout XrInstance
  *
- * KEY CONCEPT:
- *   - Properties stored inline at object tail
- *   - Shape pointer swap on new field (zero-copy)
- *   - No dictionary mode: Json is a pure data carrier
+ * Json values are XrInstance with classes in the dynamic-layout chain
+ * rooted at core->jsonRootClass. The actual field storage, transitions,
+ * overflow, and GC traversal all live in xinstance.c / xclass.c.
  */
 
 #include "xjson.h"
@@ -18,292 +17,124 @@
 #include "../gc/xgc.h"
 #include "../gc/xalloc_unified.h"
 #include "../../base/xmalloc.h"
+#include "../class/xinstance.h"
+#include "../coro/xcoroutine.h"
 #include "../xisolate_api.h"
+#include "../xisolate_internal.h"
 #include "../symbol/xsymbol_table.h"
 #include <string.h>
 #include <stdio.h>
 
-// Get isolate's symbol table
 static inline XrSymbolTable *get_symbol_table(XrayIsolate *isolate) {
     return (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
 }
 
-/* ========== Internal Functions ========== */
-
-// Calculate Json object size
-static inline size_t json_size(uint16_t capacity) {
-    return sizeof(XrJson) + capacity * sizeof(XrValue);
+static inline XrClass *json_root_class(XrayIsolate *X) {
+    XR_DCHECK(X && X->core && X->core->jsonRootClass, "json: root class not initialized");
+    return X->core->jsonRootClass;
 }
 
-/* ========== Root Shape Cache ========== */
+/* ========== Creation API ========== */
 
-// Root shapes cached per-isolate by capacity. Shape transitions branch from
-// these roots, so identical field sequences converge to the same transition
-// chain and avoid shape registry exhaustion.
-#define ROOT_SHAPE_CACHE_SIZE 32
-
-#include "../xisolate_internal.h"
-
-static XrShape *get_or_create_root_shape(XrayIsolate *X, uint16_t capacity) {
-    XR_DCHECK(X != NULL, "get_or_create_root_shape: NULL isolate");
-    if (capacity < ROOT_SHAPE_CACHE_SIZE && X->root_shape_cache[capacity]) {
-        return X->root_shape_cache[capacity];
-    }
-    XrShape *shape = xr_shape_new(X, capacity);
-    if (shape && capacity < ROOT_SHAPE_CACHE_SIZE) {
-        X->root_shape_cache[capacity] = shape;
-    }
-    return shape;
-}
-
-/* ========== Creation API Implementation ========== */
-
-// Create empty Json object (Fast mode)
-XrJson *xr_json_new(struct XrCoroutine *coro, uint16_t capacity) {
+XrJson *xr_json_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "json_new: NULL coro");
-    if (capacity == 0) {
-        capacity = SHAPE_DEFAULT_CAPACITY;
-    }
-
-    // Get or create cached root shape for this capacity
     XrayIsolate *X = xr_coro_get_isolate(coro);
-    XrShape *shape = get_or_create_root_shape(X, capacity);
-    if (!shape)
-        return NULL;
+    XrClass *cls = json_root_class(X);
+    return xr_json_new_with_class(coro, cls);
+}
 
-    // Allocate Json on coroutine heap
-    size_t size = json_size(capacity);
+XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
+    XR_DCHECK(coro != NULL, "json_new_with_class: NULL coro");
+    XR_DCHECK(cls != NULL, "json_new_with_class: NULL class");
+    XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_new_with_class: not dynamic-layout");
+    XrayIsolate *X = xr_coro_get_isolate(coro);
+
+    // Allocate as XR_TJSON tag so xr_value_is_json keeps working during
+    // the migration. Field layout and traversal otherwise match instances.
+    size_t size = xr_instance_size(cls);
     XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TJSON);
     if (!json)
         return NULL;
-
-    xr_json_set_shape(json, shape);
-    json->overflow = NULL;
-
-    // Initialize all fields to null
-    // XR_NULL_VAL is all-zeros (tag=0, ptr=NULL, _pad=0), so memset is equivalent
-    memset(json->fields, 0, capacity * sizeof(XrValue));
-
+    xr_gc_header_init_type(&json->gc, XR_TJSON);
+    json->klass = cls;
+    uint16_t cap = cls->in_object_capacity;
+    for (uint16_t i = 0; i < cap; i++)
+        json->fields[i] = xr_null();
+    (void) X;
     return json;
 }
 
-// Create Json object with specified Shape
-XrJson *xr_json_new_with_shape(struct XrCoroutine *coro, XrShape *shape) {
-    XR_DCHECK(coro != NULL, "json_new_with_shape: NULL coro");
-    if (!shape)
-        return NULL;
-
-    int field_count = shape->in_object_capacity;
-
-    // Allocate Json on coroutine heap — lazy coro_gc creation
-    size_t size = json_size(field_count);
-    XrCoroGC *gc = xr_coro_ensure_gc(coro);
-    if (!gc)
-        return NULL;
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TJSON, size);
-    if (!obj)
-        return NULL;
-    XrJson *json = (XrJson *) obj;
-
-    xr_json_set_shape(json, shape);
-    json->overflow = NULL;
-
-    // Initialize all fields to null
-    // XR_NULL_VAL is all-zeros (tag=0, ptr=NULL, _pad=0), so memset is equivalent
-    memset(json->fields, 0, field_count * sizeof(XrValue));
-
-    return json;
-}
-
-// Create Json object with specified Shape, skip field initialization.
-// Caller MUST set all fields before any GC can run.
-XrJson *xr_json_new_with_shape_noinit(struct XrCoroutine *coro, XrShape *shape) {
-    if (!shape)
-        return NULL;
-
-    int field_count = shape->in_object_capacity;
-
-    size_t size = json_size(field_count);
-    XrCoroGC *gc2 = xr_coro_ensure_gc(coro);
-    if (!gc2)
-        return NULL;
-    XrGCHeader *obj = xr_coro_gc_newobj(gc2, XR_TJSON, size);
-    if (!obj)
-        return NULL;
-    XrJson *json = (XrJson *) obj;
-
-    xr_json_set_shape(json, shape);
-    json->overflow = NULL;
-    return json;
-}
-
-// Initialize Json in-place on pre-allocated memory (for shared Json)
-void xr_json_init_inplace(XrJson *json, XrShape *shape) {
-    if (!json || !shape)
+void xr_json_init_inplace(XrJson *json, XrClass *cls) {
+    if (!json || !cls)
         return;
-
-    xr_json_set_shape(json, shape);
-    json->overflow = NULL;
-
-    // Initialize all fields to null
-    // XR_NULL_VAL is all-zeros, so memset is equivalent
-    int field_count = shape->in_object_capacity;
-    memset(json->fields, 0, field_count * sizeof(XrValue));
+    XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_init_inplace: not dynamic-layout");
+    json->klass = cls;
+    uint16_t cap = cls->in_object_capacity;
+    for (uint16_t i = 0; i < cap; i++)
+        json->fields[i] = xr_null();
 }
 
-// Get Json object size (for system heap allocation)
-size_t xr_json_size(int field_count) {
-    return json_size(field_count);
+size_t xr_json_size(XrClass *cls) {
+    return xr_instance_size(cls);
 }
 
-/* ========== Field Access API Implementation ========== */
+/* ========== Field Access API ========== */
 
-// Get field by Symbol — O(1) via Shape index lookup
 XrValue xr_json_get(XrayIsolate *X, XrJson *json, SymbolId symbol) {
-    if (!json)
+    (void) X;
+    if (!json || !json->klass)
         return xr_null();
-
-    XrShape *shape = xr_json_shape(X, json);
-    int idx = xr_shape_field_index(shape, symbol);
+    int idx = xr_class_lookup_field(json->klass, (int) symbol);
     if (idx < 0)
         return xr_null();
-
-    // In-object fast path
-    if (idx < shape->in_object_capacity) {
-        XR_DCHECK(idx >= 0, "json_get: negative field index");
-        return json->fields[idx];
-    }
-    // Overflow path
-    XrJsonOverflow *ov = json->overflow;
-    if (!ov)
-        return xr_null();
-    uint16_t ov_idx = (uint16_t) (idx - shape->in_object_capacity);
-    if (ov_idx >= ov->length)
-        return xr_null();
-    XR_DCHECK(ov_idx < ov->capacity, "json_get: overflow index out of capacity");
-    return ov->values[ov_idx];
+    return xr_instance_get_dynamic_field(json, (uint16_t) idx);
 }
 
-// Allocate or grow overflow array. Initial capacity 8, doubles on grow.
-static XrJsonOverflow *overflow_grow(XrJsonOverflow *old, uint16_t min_cap) {
-    XR_DCHECK(min_cap > 0, "overflow_grow: zero min_cap");
-    uint16_t old_cap = old ? old->capacity : 0;
-    uint16_t new_cap = old ? old->capacity * 2 : 8;
-    if (new_cap < min_cap)
-        new_cap = min_cap;
-    size_t old_bytes = old ? (sizeof(XrJsonOverflow) + old_cap * sizeof(XrValue)) : 0;
-    size_t new_bytes = sizeof(XrJsonOverflow) + new_cap * sizeof(XrValue);
-    XrJsonOverflow *ov = (XrJsonOverflow *) xr_realloc(old, new_bytes);
-    if (!ov)
-        return old;
-    if (!old) {
-        ov->length = 0;
-    }
-    // Zero-init new slots
-    for (uint16_t i = ov->length; i < new_cap; i++) {
-        ov->values[i] = xr_null();
-    }
-    ov->capacity = new_cap;
-    // Tell the per-coro GC about the buffer growth. xr_realloc may
-    // either expand in place or move; either way the delta between
-    // new_bytes and old_bytes is the new external footprint.
-    xr_gc_add_external(xr_current_coro_gc(), (int64_t) new_bytes - (int64_t) old_bytes);
-    return ov;
-}
-
-// Set field by Symbol.  Returns true on success, false if field addition
-// was rejected (sealed shape or max field limit reached).
 bool xr_json_set(XrayIsolate *X, XrJson *json, SymbolId symbol, XrValue value) {
     XR_DCHECK(X != NULL, "json_set: NULL isolate");
-    if (!json)
+    if (!json || !json->klass)
         return false;
-
-    XrShape *shape = xr_json_shape(X, json);
-
-    // Check if field already exists — update always succeeds
-    int idx = xr_shape_field_index(shape, symbol);
-    if (idx >= 0) {
-        if (idx < shape->in_object_capacity) {
-            json->fields[idx] = value;
-        } else {
-            XrJsonOverflow *ov = json->overflow;
-            if (ov) {
-                uint16_t ov_idx = (uint16_t) (idx - shape->in_object_capacity);
-                if (ov_idx < ov->capacity) {
-                    ov->values[ov_idx] = value;
-                }
-            }
-        }
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
-        return true;
+    int idx = xr_class_lookup_field(json->klass, (int) symbol);
+    if (idx < 0) {
+        // Field doesn't exist: try transition (returns NULL for sealed/OOM)
+        XrSymbolTable *st = get_symbol_table(X);
+        const char *fname = xr_symbol_get_name_in_table(st, symbol);
+        XrClass *next =
+            xr_class_transition_get_or_create(X, json->klass, (int) symbol, fname ? fname : "?");
+        if (!next)
+            return false;
+        json->klass = next;
+        idx = xr_class_lookup_field(next, (int) symbol);
+        XR_DCHECK(idx >= 0, "json_set: transition produced no field");
     }
-
-    // Field doesn't exist: try Shape transition (returns NULL for sealed/full)
-    XrShape *new_shape = xr_shape_transition(X, shape, symbol);
-    if (!new_shape) {
+    if (!xr_instance_set_dynamic_field(X, json, (uint16_t) idx, value))
         return false;
-    }
-
-    // Zero-copy transition: swap shape_id and store value
-    xr_json_set_shape(json, new_shape);
-    int new_idx = new_shape->field_count - 1;
-    if (new_idx < shape->in_object_capacity) {
-        json->fields[new_idx] = value;
-    } else {
-        // Overflow: allocate/grow overflow array
-        uint16_t ov_idx = (uint16_t) (new_idx - shape->in_object_capacity);
-        XrJsonOverflow *ov = json->overflow;
-        if (!ov || ov_idx >= ov->capacity) {
-            ov = overflow_grow(ov, ov_idx + 1);
-            json->overflow = ov;
-        }
-        if (ov) {
-            ov->values[ov_idx] = value;
-            if (ov_idx >= ov->length) {
-                ov->length = ov_idx + 1;
-            }
-        }
-    }
     XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
     return true;
 }
 
-// Get field by string key
 XrValue xr_json_get_by_key(XrayIsolate *X, XrJson *json, const char *key) {
     XR_DCHECK(X != NULL, "json_get_by_key: NULL isolate");
     if (!json || !key)
         return xr_null();
-
-    // Intern key as Symbol
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
-
     return xr_json_get(X, json, symbol);
 }
 
-// Set field by string key.  Returns true on success.
 bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue value) {
     XR_DCHECK(X != NULL, "json_set_by_key: NULL isolate");
     if (!json || !key)
         return false;
-
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
-
     return xr_json_set(X, json, symbol, value);
 }
 
-/* ========== GC Related Implementation ========== */
+/* ========== GC ========== */
 
-// Destructor: release overflow malloc memory when Json is collected
+// Destructor delegated to the instance path (frees overflow buffer).
+// Registered in g_type_ops[XR_TJSON] below via routing in xgc.c.
 void xr_gc_destroy_json(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    XrJson *json = (XrJson *) obj;
-    if (json && json->overflow) {
-        size_t bytes = sizeof(XrJsonOverflow) + (size_t) json->overflow->capacity * sizeof(XrValue);
-        xr_free(json->overflow);
-        json->overflow = NULL;
-        // Balance overflow_grow's add_external so totalbytes returns
-        // to the correct value when the json is reclaimed.
-        xr_gc_sub_external(owning_gc, (int64_t) bytes);
-    }
+    xr_gc_destroy_instance(obj, owning_gc);
 }

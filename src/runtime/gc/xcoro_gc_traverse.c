@@ -139,39 +139,6 @@ void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj) {
     }
 }
 
-/* ========== Json Traversal ========== */
-
-void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj)
-        return;
-    struct XrJson *json = (struct XrJson *) obj;
-
-    XrayIsolate *X = gc->owner ? xr_coro_get_isolate(gc->owner) : NULL;
-    XrShape *shape = xr_json_shape(X, json);
-    if (!shape)
-        return;
-
-    // Mark in-object fields
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t total = shape->field_count;
-    XR_DCHECK(in_obj <= 64, "gc_traverse_json: in_object_capacity too large");
-    uint16_t n = (total < in_obj) ? total : in_obj;
-    for (uint16_t i = 0; i < n; i++) {
-        xr_coro_gc_markvalue(gc, json->fields[i]);
-    }
-
-    // Mark overflow fields
-    XrJsonOverflow *ov = json->overflow;
-    if (ov && total > in_obj) {
-        uint16_t ov_count = total - in_obj;
-        if (ov_count > ov->length)
-            ov_count = ov->length;
-        for (uint16_t i = 0; i < ov_count; i++) {
-            xr_coro_gc_markvalue(gc, ov->values[i]);
-        }
-    }
-}
-
 /* ========== Closure Traversal ========== */
 
 void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj) {

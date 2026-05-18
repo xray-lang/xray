@@ -1303,7 +1303,7 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
         }
 
         // Create result Json: { data: string, addr: { host, port } }
-        XrJson *json = xr_json_new(xr_current_coro(X), 4);
+        XrJson *json = xr_json_new(xr_current_coro(X));
         if (!json) {
             xr_free(state);
             *result = XR_NULL_VAL;
@@ -1312,7 +1312,7 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
         xr_json_set_by_key(X, json, "data",
                            xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
 
-        XrJson *addr_json = xr_json_new(xr_current_coro(X), 4);
+        XrJson *addr_json = xr_json_new(xr_current_coro(X));
         if (addr_json) {
             xr_json_set_by_key(X, addr_json, "host",
                                xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
