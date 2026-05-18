@@ -181,7 +181,14 @@ typedef struct XlspConfig {
 
     // Formatting settings
     int format_tab_size;
+    int format_max_line_length;
     bool format_insert_spaces;
+    bool format_align_match_arms;
+    bool format_align_enum_values;
+    bool format_align_struct_fields;
+    bool format_align_trailing_comments;
+    bool format_wrap_long_lines;
+    bool format_multiline_trailing_comma;
 
     // Inlay hints settings
     bool inlay_hints_type_annotations;

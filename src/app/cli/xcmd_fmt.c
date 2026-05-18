@@ -31,14 +31,28 @@
 
 // Format configuration
 typedef struct {
-    int indent_size;       // Indent spaces (default 4)
-    int use_tabs;          // Use tabs instead of spaces
-    int max_line_length;   // Max line length hint (default 100)
-    int trailing_newline;  // Ensure trailing newline at EOF
+    int indent_size;               // Indent spaces (default 4)
+    int use_tabs;                  // Use tabs instead of spaces
+    int max_line_length;           // Max line length hint (default 100)
+    int trailing_newline;          // Ensure trailing newline at EOF
+    int align_match_arms;          // Column-align `->` of match arms
+    int align_enum_values;         // Column-align `=` of enum members
+    int align_struct_fields;       // Column-align `:` of class/struct fields
+    int align_trailing_comments;   // Column-align `//` of trailing line comments
+    int wrap_long_lines;           // Break literals/calls exceeding max_line_length
+    int multiline_trailing_comma;  // Emit `,` after last element when wrapped
 } FmtConfig;
 
-static FmtConfig default_config = {
-    .indent_size = 4, .use_tabs = 0, .max_line_length = 100, .trailing_newline = 1};
+static FmtConfig default_config = {.indent_size = 4,
+                                   .use_tabs = 0,
+                                   .max_line_length = 100,
+                                   .trailing_newline = 1,
+                                   .align_match_arms = 0,
+                                   .align_enum_values = 0,
+                                   .align_struct_fields = 0,
+                                   .align_trailing_comments = 0,
+                                   .wrap_long_lines = 0,
+                                   .multiline_trailing_comma = 1};
 
 // Format source code using AST
 static char *format_source(XrayIsolate *X, const char *source, const char *path,
@@ -60,7 +74,13 @@ static char *format_source(XrayIsolate *X, const char *source, const char *path,
                                .space_around_operators = 1,
                                .space_after_comma = 1,
                                .space_in_parentheses = 0,
-                               .brace_same_line = 1};
+                               .brace_same_line = 1,
+                               .align_match_arms = config->align_match_arms,
+                               .align_enum_values = config->align_enum_values,
+                               .align_struct_fields = config->align_struct_fields,
+                               .align_trailing_comments = config->align_trailing_comments,
+                               .wrap_long_lines = config->wrap_long_lines,
+                               .multiline_trailing_comma = config->multiline_trailing_comma};
 
     // Format AST to string
     return xfmt_format_ast(ast, &xfmt_config, X);
@@ -165,6 +185,32 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv) {
             return XR_CLI_EXIT_USAGE;
         }
         config.indent_size = indent;
+    }
+    int line_length = xr_cli_opt_int(&inv->options, "line-length", 0);
+    if (line_length > 0) {
+        if (line_length < 40 || line_length > 400) {
+            xr_cli_error("fmt", "invalid line length %d (expected 40-400)", line_length);
+            return XR_CLI_EXIT_USAGE;
+        }
+        config.max_line_length = line_length;
+    }
+    if (xr_cli_opt_bool(&inv->options, "align-match")) {
+        config.align_match_arms = 1;
+    }
+    if (xr_cli_opt_bool(&inv->options, "align-enum")) {
+        config.align_enum_values = 1;
+    }
+    if (xr_cli_opt_bool(&inv->options, "align-fields")) {
+        config.align_struct_fields = 1;
+    }
+    if (xr_cli_opt_bool(&inv->options, "align-comments")) {
+        config.align_trailing_comments = 1;
+    }
+    if (xr_cli_opt_bool(&inv->options, "wrap")) {
+        config.wrap_long_lines = 1;
+    }
+    if (xr_cli_opt_bool(&inv->options, "no-trailing-comma")) {
+        config.multiline_trailing_comma = 0;
     }
 
     /* Create isolate for parsing */

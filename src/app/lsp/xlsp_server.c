@@ -374,7 +374,14 @@ XrLspServer *xlsp_server_new(void) {
     server->config.diagnostics_enabled = true;
     server->config.completion_max_items = 100;
     server->config.format_tab_size = 4;
+    server->config.format_max_line_length = 100;
     server->config.format_insert_spaces = true;
+    server->config.format_align_match_arms = false;
+    server->config.format_align_enum_values = false;
+    server->config.format_align_struct_fields = false;
+    server->config.format_align_trailing_comments = false;
+    server->config.format_wrap_long_lines = false;
+    server->config.format_multiline_trailing_comma = true;
     server->config.inlay_hints_type_annotations = true;
     server->config.inlay_hints_parameter_names = true;
 

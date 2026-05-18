@@ -117,6 +117,27 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
     ctx->indent_level++;
 
+    // When alignment is enabled, compute the widest `(private )?(static )?name`
+    // prefix across fields that carry a `: type` annotation; the `:` of every
+    // such field then lands at the same column. Fields without a type are
+    // not aligned (no `:` to align), so they don't participate.
+    int max_field_prefix = 0;
+    bool align_fields = ctx->config && ctx->config->align_struct_fields && cls->field_count > 1;
+    if (align_fields) {
+        for (int i = 0; i < cls->field_count; i++) {
+            FieldDeclNode *f = &cls->fields[i]->as.field_decl;
+            if (!f->field_type)
+                continue;
+            int w = (int) strlen(f->name);
+            if (f->is_private)
+                w += 8;  // "private "
+            if (f->is_static)
+                w += 7;  // "static "
+            if (w > max_field_prefix)
+                max_field_prefix = w;
+        }
+    }
+
     // Fields
     for (int i = 0; i < cls->field_count; i++) {
         AstNode *field = cls->fields[i];
@@ -129,6 +150,16 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "static ");
         xfmt_write_str(ctx, f->name);
         if (f->field_type) {
+            if (align_fields) {
+                int prefix = (int) strlen(f->name);
+                if (f->is_private)
+                    prefix += 8;
+                if (f->is_static)
+                    prefix += 7;
+                int pad = max_field_prefix - prefix;
+                for (int j = 0; j < pad; j++)
+                    xfmt_write_char(ctx, ' ');
+            }
             xfmt_write_str(ctx, ": ");
             xfmt_emit_type(ctx, f->field_type);
         }
@@ -353,6 +384,23 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
     ctx->indent_level++;
 
+    // Same alignment rule as class fields: pad `(const )?name` so that every
+    // `:` of a typed property lines up. Properties without a type are skipped.
+    int max_prop_prefix = 0;
+    bool align_props = ctx->config && ctx->config->align_struct_fields && iface->property_count > 1;
+    if (align_props) {
+        for (int i = 0; i < iface->property_count; i++) {
+            InterfacePropertyNode *p = &iface->properties[i]->as.interface_property;
+            if (!p->prop_type)
+                continue;
+            int w = (int) strlen(p->name);
+            if (p->is_readonly)
+                w += 6;  // "const "
+            if (w > max_prop_prefix)
+                max_prop_prefix = w;
+        }
+    }
+
     // Properties first, then methods — matches the canonical order class bodies
     // emit (fields before methods) and keeps parsed-order semantics stable.
     for (int i = 0; i < iface->property_count; i++) {
@@ -363,6 +411,14 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "const ");
         xfmt_write_str(ctx, p->name);
         if (p->prop_type) {
+            if (align_props) {
+                int prefix = (int) strlen(p->name);
+                if (p->is_readonly)
+                    prefix += 6;
+                int pad = max_prop_prefix - prefix;
+                for (int j = 0; j < pad; j++)
+                    xfmt_write_char(ctx, ' ');
+            }
             xfmt_write_str(ctx, ": ");
             xfmt_emit_type(ctx, p->prop_type);
         }
@@ -413,6 +469,22 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_newline(ctx);
     ctx->indent_level++;
 
+    // When alignment is enabled, compute the widest member name among
+    // entries that carry an explicit `= value`. Members without a value
+    // are not aligned (no `=` to align), so they don't participate.
+    int max_name_width = 0;
+    bool align = ctx->config && ctx->config->align_enum_values && en->member_count > 1;
+    if (align) {
+        for (int i = 0; i < en->member_count; i++) {
+            EnumMemberNode *m = &en->members[i]->as.enum_member;
+            if (m->value) {
+                int w = (int) strlen(m->name);
+                if (w > max_name_width)
+                    max_name_width = w;
+            }
+        }
+    }
+
     for (int i = 0; i < en->member_count; i++) {
         AstNode *member = en->members[i];
         EnumMemberNode *m = &member->as.enum_member;
@@ -420,6 +492,11 @@ void xfmt_emit_enum_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_indent(ctx);
         xfmt_write_str(ctx, m->name);
         if (m->value) {
+            if (align) {
+                int pad = max_name_width - (int) strlen(m->name);
+                for (int j = 0; j < pad; j++)
+                    xfmt_write_char(ctx, ' ');
+            }
             xfmt_write_str(ctx, " = ");
             xfmt_emit_expression(ctx, m->value);
         }

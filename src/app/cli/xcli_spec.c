@@ -58,6 +58,18 @@ static const XrCliOptionSpec fmt_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Show all processed files"},
     {"tabs", 't', XR_CLI_VALUE_NONE, false, false, NULL, "Use tab indent"},
     {"indent", 'i', XR_CLI_VALUE_INT, false, false, "N", "Indent spaces (default 4)"},
+    {"line-length", 'L', XR_CLI_VALUE_INT, false, false, "N",
+     "Max line length hint when wrapping (default 100)"},
+    {"align-match", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Column-align `->` of match arms"},
+    {"align-enum", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Column-align `=` of enum members"},
+    {"align-fields", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Column-align `:` of class/struct/interface fields"},
+    {"align-comments", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Column-align `//` of consecutive trailing line comments"},
+    {"wrap", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Wrap long literals/calls exceeding --line-length"},
+    {"no-trailing-comma", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Omit trailing `,` when wrapping to multi-line (default: keep)"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec compile_options[] = {
