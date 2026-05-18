@@ -656,6 +656,19 @@ XR_NOINLINE int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
                       super_class->name);
     }
 
+    // PRIMITIVE parent constructor: call directly with the subclass instance.
+    // Subclass layout is compatible — parent fields occupy indices 0..N-1,
+    // subclass fields follow at N+. The PRIMITIVE ctor writes parent fields
+    // in-place and does not need to know about subclass fields.
+    if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
+        int arg_base = is_ctor_call ? 1 : (a + 2);
+        XrValue result = method->as.primitive(isolate, this_val, &base[arg_base], nargs);
+        if (!XR_IS_NULL(result)) {
+            base[a] = result;
+        }
+        return VM_COLD_BREAK;
+    }
+
     if (method->type != XMETHOD_CLOSURE || method->as.closure == NULL) {
         VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD, "superclass method '%s' has invalid type",
                       method_name);

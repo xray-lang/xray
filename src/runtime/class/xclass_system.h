@@ -55,10 +55,20 @@ typedef struct XrayCoreClasses {
     // Json utility (static methods only)
     XrClass *jsonClass;
 
+    // Exception (populated when stdlib/types/exception.xr is loaded)
+    XrClass *exceptionClass;
+
     // Utility
     XrClass *stringBuilderClass;
     XrClass *processClass;
 } XrayCoreClasses;
+
+/* Exception field indices — must match stdlib/types/exception.xr layout */
+#define EXCEPTION_FIELD_MESSAGE 0
+#define EXCEPTION_FIELD_STACK 1
+#define EXCEPTION_FIELD_CAUSE 2
+#define EXCEPTION_FIELD_CODE 3
+#define EXCEPTION_FIELD_DATA 4
 
 /* ========== Lifecycle ========== */
 
