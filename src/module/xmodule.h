@@ -41,7 +41,7 @@ typedef enum {
 **
 ** Design:
 ** - SymbolId-indexed flat export table for O(1) property access
-** - Sparse array maps SymbolId range to dense index (same pattern as XrShape)
+** - Sparse array maps SymbolId range to dense index
 ** - No XrMap/XrHashMap overhead, direct array indexing in VM hot path
 */
 

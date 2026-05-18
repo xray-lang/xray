@@ -71,7 +71,6 @@
 #define TYPE_NAME_STRUCT "struct"
 #define TYPE_NAME_JSON "Json"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
-#define TYPE_NAME_SHAPE "shape"
 #define TYPE_NAME_UNKNOWN "unknown"
 #define TYPE_NAME_BIGINT "BigInt"
 #define TYPE_NAME_CLOSURE "closure"

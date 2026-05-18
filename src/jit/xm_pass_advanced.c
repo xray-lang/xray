@@ -86,7 +86,6 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
                 caller->vregs[vi].heap_type = callee->vregs[i].heap_type;
                 caller->vregs[vi].xrtype = callee->vregs[i].xrtype;
                 caller->vregs[vi].callee_proto = callee->vregs[i].callee_proto;
-                caller->vregs[vi].shape_hint = callee->vregs[i].shape_hint;
                 caller->vregs[vi].layout = callee->vregs[i].layout;
                 caller->vregs[vi].struct_idx = callee->vregs[i].struct_idx;
             }
@@ -1005,9 +1004,9 @@ static void ea_mark_escapes(XmFunc *func, EaAlloc *allocs, uint32_t nalloc) {
                     continue;
 
                 /* Whitelisted non-escaping uses: obj slot of
-                 * LOAD_FIELD / STORE_FIELD / GUARD_SHAPE / BARRIER_FWD. */
+                 * LOAD_FIELD / STORE_FIELD / BARRIER_FWD. */
                 if (a == 0 && (ins->op == XM_LOAD_FIELD || ins->op == XM_STORE_FIELD ||
-                               ins->op == XM_GUARD_SHAPE || ins->op == XM_BARRIER_FWD))
+                               ins->op == XM_BARRIER_FWD))
                     continue;
                 allocs[j].escapes = true;
             }
@@ -1114,15 +1113,8 @@ static bool ea_scalar_replace(XmFunc *func, const EaAlloc *a) {
             }
         }
 
-        /* Object identity is gone, so the guard and the write barrier
-         * are both vacuous on the materialised scalar form. */
-        if (ins->op == XM_GUARD_SHAPE && xm_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
-            ins->op = XM_NOP;
-            ins->dst = XM_NONE;
-            ins->args[0] = XM_NONE;
-            ins->args[1] = XM_NONE;
-            ins->flags = 0;
-        }
+        /* Object identity is gone, so the write barrier is vacuous on
+         * the materialised scalar form. */
         if (ins->op == XM_BARRIER_FWD && xm_ref_is_vreg(ins->args[0]) && ins->args[0] == aref) {
             ins->op = XM_NOP;
             ins->dst = XM_NONE;
@@ -1665,9 +1657,8 @@ XmPassChange xm_pass_elim_guards(XmFunc *func) {
         for (uint32_t i = 0; i < blk->nins; i++) {
             XmIns *ins = &blk->ins[i];
 
-            if (ins->op != XM_GUARD_TAG && ins->op != XM_GUARD_SHAPE &&
-                ins->op != XM_GUARD_NONNULL && ins->op != XM_GUARD_CLASS &&
-                ins->op != XM_GUARD_KLASS)
+            if (ins->op != XM_GUARD_TAG && ins->op != XM_GUARD_NONNULL &&
+                ins->op != XM_GUARD_CLASS && ins->op != XM_GUARD_KLASS)
                 continue;
 
             /* Type-aware guard elimination: if type_prop already proved

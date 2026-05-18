@@ -23,7 +23,6 @@
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
-#include "../../src/runtime/object/xshape_cache.h"
 
 #include "../../src/module/xmodule.h"
 #include "../../src/coro/xyieldable.h"

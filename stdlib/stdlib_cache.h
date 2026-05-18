@@ -9,23 +9,23 @@
  *
  * KEY CONCEPT:
  *   Several stdlib bindings need to memoise values that are cheap to build
- *   but only valid inside a single XrayIsolate (e.g. XrShape instances that
- *   reference symbol IDs drawn from the isolate's symbol table). Storing the
- *   cache on XrayIsolate itself would leak stdlib types into the core
- *   header; instead we attach an opaque pointer to the isolate and keep the
- *   concrete fields private to stdlib.
+ *   but only valid inside a single XrayIsolate (e.g. dynamic-layout XrClass
+ *   instances that reference symbol IDs drawn from the isolate's symbol
+ *   table). Storing the cache on XrayIsolate itself would leak stdlib types
+ *   into the core header; instead we attach an opaque pointer to the
+ *   isolate and keep the concrete fields private to stdlib.
  *
  * WHY THIS DESIGN:
- *   Previously, io.c used a single process-global `shape_stat_result`
- *   static which silently broke in multi-isolate embeddings (SymbolIds are
- *   per-isolate, so the shape built for isolate A could not be used by
- *   isolate B without crashing). Per-isolate caching moves ownership to the
- *   isolate lifecycle and eliminates the cross-isolate aliasing hazard.
+ *   Previously, io.c used a single process-global static which silently
+ *   broke in multi-isolate embeddings (SymbolIds are per-isolate, so the
+ *   class built for isolate A could not be used by isolate B without
+ *   crashing). Per-isolate caching moves ownership to the isolate
+ *   lifecycle and eliminates the cross-isolate aliasing hazard.
  *
  * USAGE:
  *     XrStdlibCache *c = xr_stdlib_cache_get(isolate);
- *     if (!c->io_stat_shape) {
- *         c->io_stat_shape = build_stat_shape(isolate);
+ *     if (!c->io_stat_class) {
+ *         c->io_stat_class = build_stat_class(isolate);
  *     }
  *
  *   Cache is created lazily on first access and released by
@@ -41,7 +41,7 @@
 #include "../src/base/xdefs.h"
 #include "../src/runtime/value/xvalue.h"
 
-struct XrShape;
+struct XrClass;
 struct XrString;
 
 // XML node-shape keys interned once per isolate and reused on every
@@ -87,10 +87,10 @@ typedef struct XrStdlibErrKeys {
 } XrStdlibErrKeys;
 
 typedef struct XrStdlibCache {
-    // io module: shape for stat() return value. Built on first call to
-    // io.stat() within this isolate. Holds symbol IDs that are only valid
-    // for the owning isolate.
-    struct XrShape *io_stat_shape;
+    // io module: dynamic-layout class for stat() return value. Built on
+    // first call to io.stat() within this isolate. Holds symbol IDs that
+    // are only valid for the owning isolate.
+    struct XrClass *io_stat_class;
 
     // xml module: per-isolate interned key / type-name cache.
     XrStdlibXmlKeys xml_keys;

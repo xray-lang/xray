@@ -165,8 +165,6 @@ typedef enum {
     XM_GUARD_KLASS,    // klass pointer guard: deopt if inst->klass != expected
                        // args[0]=instance_ptr, args[1]=const_ptr(expected_klass)
     XM_GUARD_NONNULL,  // non-null guard (deopt on null)
-    XM_GUARD_SHAPE,    // shape guard: deopt if obj's shape_id != expected
-                       // args[0]=obj_ptr, args[1]=const(expected_shape_id)
 
     // --- Coroutine suspend/resume ---
     XM_SUSPEND,  // JIT await suspend: save regs, call await_block, return SUSPEND_MARKER

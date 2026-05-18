@@ -65,7 +65,6 @@ typedef struct XrCoroutine XrCoroutine;
 typedef struct XrChannel XrChannel;
 // XrJson is now an alias for XrInstance (defined in runtime/class/xinstance.h);
 // no separate struct forward declaration needed.
-typedef struct XrShape XrShape;
 typedef struct XrBigInt XrBigInt;
 typedef struct XrIterator XrIterator;
 typedef struct XrException XrException;
