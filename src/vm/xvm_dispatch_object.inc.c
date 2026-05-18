@@ -749,6 +749,11 @@ vmcase(OP_SETPROP) {
             }
             XrSymbolTable *_st_sd = (XrSymbolTable *) isolate->symbol_table;
             const char *fname = xr_symbol_get_name_in_table(_st_sd, prop_symbol);
+            // Sealed dynamic objects reject new fields with a clear error
+            if (inst->klass->flags & XR_CLASS_DYNAMIC_SEALED) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add field '%s' to sealed object",
+                                 fname ? fname : "?");
+            }
             XrClass *next = xr_class_transition_get_or_create(isolate, inst->klass, prop_symbol,
                                                               fname ? fname : "?");
             if (!next) {
