@@ -101,7 +101,7 @@ static void format_map(XrayIsolate *isolate, XrStrBuf *sb, XrMap *map, int depth
                 if (count > 0)
                     xr_strbuf_append_cstr(sb, ", ", 2);
                 xr_value_to_strbuf(isolate, sb, node->key, depth + 1);
-                xr_strbuf_append_cstr(sb, " => ", 4);
+                xr_strbuf_append_cstr(sb, ": ", 2);
                 xr_value_to_strbuf(isolate, sb, node->value, depth + 1);
                 count++;
             }

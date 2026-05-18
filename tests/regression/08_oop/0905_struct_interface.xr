@@ -2,32 +2,32 @@
 // Expected: struct methods fulfill interface contract, polymorphic dispatch works
 
 interface Shape {
-    area(): float
-    name(): string
+    area() -> float
+    name() -> string
 }
 struct Circle implements Shape {
     radius: float
 
-    area(): float {
+    area() -> float {
         return 3.14159 * this.radius * this.radius
     }
 
-    name(): string {
+    name() -> string {
         return "Circle"
     }
 }
 struct Square implements Shape {
     side: float
 
-    area(): float {
+    area() -> float {
         return this.side * this.side
     }
 
-    name(): string {
+    name() -> string {
         return "Square"
     }
 }
-fn describe(shape: Shape): string {
+fn describe(shape: Shape) -> string {
     return "${shape.name()}: area=${shape.area()}"
 }
 

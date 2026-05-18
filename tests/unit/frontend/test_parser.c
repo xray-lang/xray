@@ -248,7 +248,7 @@ TEST(parser_for_stmt) {
 
 TEST(parser_function_decl) {
     setup();
-    AstNode *stmt = parse_first("fn add(a: int, b: int): int {\n  return a + b\n}");
+    AstNode *stmt = parse_first("fn add(a: int, b: int) -> int {\n  return a + b\n}");
     ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
     ASSERT_STR_EQ(stmt->as.function_decl.name, "add");
     ASSERT_EQ_INT(stmt->as.function_decl.param_count, 2);
@@ -267,7 +267,7 @@ TEST(parser_function_no_params) {
 
 TEST(parser_return_stmt) {
     setup();
-    AstNode *program = parse_ok("fn f(): int {\n  return 42\n}");
+    AstNode *program = parse_ok("fn f() -> int {\n  return 42\n}");
     AstNode *fn = first_stmt(program);
     ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
     // body is a block
@@ -453,9 +453,9 @@ TEST(parser_grouping_still_works) {
 
 TEST(parser_arrow_fn_not_tuple) {
     setup();
-    /* `(a, b) => a + b` must still parse as a function expression,
-     * not as a 2-tuple of variable references followed by `=>`. */
-    AstNode *stmt = parse_first("let f = (a, b) => a + b");
+    /* `(a, b) -> a + b` must still parse as a function expression,
+     * not as a 2-tuple of variable references followed by `->`. */
+    AstNode *stmt = parse_first("let f = (a, b) -> a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     teardown();
@@ -517,7 +517,7 @@ TEST(parser_tuple_destructure_fn_param) {
      * `let (x, y) = __param0` at the head of the function body and
      * nulls out param->pattern. Verify the pattern landed on the body
      * with the right shape. */
-    AstNode *stmt = parse_first("fn f((x, y): (int, int)): int { return x + y }");
+    AstNode *stmt = parse_first("fn f((x, y): (int, int)) -> int { return x + y }");
     ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
     ASSERT_EQ_INT(stmt->as.function_decl.param_count, 1);
     AstNode *body = stmt->as.function_decl.body;

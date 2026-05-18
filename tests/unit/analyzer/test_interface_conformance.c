@@ -100,12 +100,12 @@ static int count_diagnostics(const char *source, int code, int *total_out) {
 
 static void test_class_implements_all_methods_no_error(void) {
     const char *src = "interface Stringable2 {\n"
-                      "    toLabel(): string\n"
+                      "    toLabel() -> string\n"
                       "}\n"
                       "class Item implements Stringable2 {\n"
                       "    name: string\n"
                       "    constructor(n: string) { this.name = n }\n"
-                      "    toLabel(): string { return this.name }\n"
+                      "    toLabel() -> string { return this.name }\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
@@ -114,13 +114,13 @@ static void test_class_implements_all_methods_no_error(void) {
 
 static void test_class_missing_method_reports_error(void) {
     const char *src = "interface Greeter {\n"
-                      "    greet(): string\n"
-                      "    name(): string\n"
+                      "    greet() -> string\n"
+                      "    name() -> string\n"
                       "}\n"
                       "class Bot implements Greeter {\n"
                       "    label: string\n"
                       "    constructor(l: string) { this.label = l }\n"
-                      "    greet(): string { return this.label }\n"
+                      "    greet() -> string { return this.label }\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
@@ -174,10 +174,10 @@ static void test_unknown_interface_is_not_audited(void) {
 // ============================================================================
 
 static void test_iterable_int_satisfied_by_array_int(void) {
-    const char *src = "fn consume<T: Iterable<int>>(xs: T): int {\n"
+    const char *src = "fn consume<T: Iterable<int>>(xs: T) -> int {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main(): int {\n"
+                      "fn main() -> int {\n"
                       "    let xs: Array<int> = [1, 2, 3]\n"
                       "    return consume<Array<int>>(xs)\n"
                       "}\n";
@@ -187,10 +187,10 @@ static void test_iterable_int_satisfied_by_array_int(void) {
 }
 
 static void test_iterable_int_rejects_array_string(void) {
-    const char *src = "fn consume<T: Iterable<int>>(xs: T): int {\n"
+    const char *src = "fn consume<T: Iterable<int>>(xs: T) -> int {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main(): int {\n"
+                      "fn main() -> int {\n"
                       "    let xs: Array<string> = [\"a\"]\n"
                       "    return consume<Array<string>>(xs)\n"
                       "}\n";
@@ -202,10 +202,10 @@ static void test_iterable_int_rejects_array_string(void) {
 static void test_indexable_string_int_rejects_array_int(void) {
     // Indexable<string, int> requires a Map-like keyed container; Array<int>
     // is indexed by int, not string.
-    const char *src = "fn consume<T: Indexable<string, int>>(xs: T): int {\n"
+    const char *src = "fn consume<T: Indexable<string, int>>(xs: T) -> int {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main(): int {\n"
+                      "fn main() -> int {\n"
                       "    let xs: Array<int> = [1, 2]\n"
                       "    return consume<Array<int>>(xs)\n"
                       "}\n";
@@ -215,10 +215,10 @@ static void test_indexable_string_int_rejects_array_int(void) {
 }
 
 static void test_indexable_int_int_accepts_array_int(void) {
-    const char *src = "fn consume<T: Indexable<int, int>>(xs: T): int {\n"
+    const char *src = "fn consume<T: Indexable<int, int>>(xs: T) -> int {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main(): int {\n"
+                      "fn main() -> int {\n"
                       "    let xs: Array<int> = [1, 2]\n"
                       "    return consume<Array<int>>(xs)\n"
                       "}\n";

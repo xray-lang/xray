@@ -36,7 +36,7 @@ let value = maybe ?? 0
 print("value = ${value}")
 
 // === Multiple assignment ===
-fn divmod(a: int, b: int): (int, int) {
+fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 let (quotient, remainder) = divmod(17, 5)

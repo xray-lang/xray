@@ -5,7 +5,7 @@ struct Point {
     x: float
     y: float
 }
-fn move_point(p: Point, dx: float, dy: float): Point {
+fn move_point(p: Point, dx: float, dy: float) -> Point {
     p.x = p.x + dx
     p.y = p.y + dy
     return p
@@ -14,16 +14,16 @@ struct Vec2 {
     x: float
     y: float
 
-    scale(factor: float): Vec2 {
+    scale(factor: float) -> Vec2 {
         return Vec2{x: this.x * factor, y: this.y * factor}
     }
 }
-fn double_and_offset(v: Vec2): Vec2 {
+fn double_and_offset(v: Vec2) -> Vec2 {
     v.x = v.x * 2.0
     v.y = v.y * 2.0
     return v
 }
-fn make_point(x: float, y: float): Point {
+fn make_point(x: float, y: float) -> Point {
     return Point{x: x, y: y}
 }
 

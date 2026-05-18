@@ -1,16 +1,16 @@
 // Test generic function type inference
 // Basic identity function
 
-fn identity<T>(x: T): T {
+fn identity<T>(x: T) -> T {
     return x
 }
-fn first<T>(arr: Array<T>): T? {
+fn first<T>(arr: Array<T>) -> T? {
     if (arr.length > 0) {
         return arr[0]
     }
     return null
 }
-fn pair<T, U>(a: T, b: U): (T, U) {
+fn pair<T, U>(a: T, b: U) -> (T, U) {
     return (a, b)
 }
 

@@ -4,32 +4,32 @@
 class Array<T> {
     length: int
     push(value: T)
-    pop(): T?
-    shift(): T?
+    pop() -> T?
+    shift() -> T?
     unshift(value: T)
-    slice(start?: int, end?: int): Array<T>
-    splice(start: int, deleteCount?: int, ...items: T): Array<T>
-    concat(...arrays: Array<T>): Array<T>
-    indexOf(value: T): int
-    includes(value: T): bool
-    join(separator?: string): string
-    reverse(): Array<T>
-    sort(compareFn?: fn(a: T, b: T): int): Array<T>
-    map(fn: fn(item: T, index: int): U): Array<U>
-    filter(fn: fn(item: T, index: int): bool): Array<T>
-    reduce(fn: fn(acc: U, item: T): U, initial: U): U
-    forEach(fn: fn(item: T, index: int))
-    find(fn: fn(item: T): bool): T?
-    findIndex(fn: fn(item: T): bool): int
-    every(fn: fn(item: T): bool): bool
-    some(fn: fn(item: T): bool): bool
-    flat(depth?: int): Array<T>
-    fill(value: T, start?: int, end?: int): Array<T>
-    copyWithin(target: int, start: int, end?: int): Array<T>
+    slice(start?: int, end?: int) -> Array<T>
+    splice(start: int, deleteCount?: int, ...items: T) -> Array<T>
+    concat(...arrays: Array<T>) -> Array<T>
+    indexOf(value: T) -> int
+    includes(value: T) -> bool
+    join(separator?: string) -> string
+    reverse() -> Array<T>
+    sort(compareFn?: (a: T, b: T) -> int) -> Array<T>
+    map(fn: (item: T, index: int) -> U) -> Array<U>
+    filter(fn: (item: T, index: int) -> bool) -> Array<T>
+    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U
+    forEach(fn: (item: T, index: int) -> ())
+    find(fn: (item: T) -> bool) -> T?
+    findIndex(fn: (item: T) -> bool) -> int
+    every(fn: (item: T) -> bool) -> bool
+    some(fn: (item: T) -> bool) -> bool
+    flat(depth?: int) -> Array<T>
+    fill(value: T, start?: int, end?: int) -> Array<T>
+    copyWithin(target: int, start: int, end?: int) -> Array<T>
     // Iteration protocol — used by for-in lowering. Users can also
     // call them directly; iterator()/next() yields elements, while
     // entriesIterator()/next() yields (index, element) tuples.
-    iterator(): Iterator<T>
-    entriesIterator(): Iterator<(int, T)>
-    entries(): Array<(int, T)>
+    iterator() -> Iterator<T>
+    entriesIterator() -> Iterator<(int, T)>
+    entries() -> Array<(int, T)>
 }

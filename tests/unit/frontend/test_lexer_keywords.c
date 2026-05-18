@@ -11,7 +11,7 @@
  *   The lexer's keyword recognition was rewritten in Phase 1 from a
  *   270-line hand-written switch nest to an X-macro single-source-of-
  *   truth table (xkeywords.def). The hand-written version had a real
- *   bug (L-01): TK_IF's match path returned TK_IF without checking
+ *   bug (L-01) -> TK_IF's match path returned TK_IF without checking
  *   length, so identifiers like `iffy` / `ifElse` were mis-classified
  *   as TK_IF.
  *
@@ -167,7 +167,7 @@ TEST(every_keyword_recognised) {
 //
 // This is the canonical regression set for the bug L-01 ("TK_IF
 // returned without length guard"). The list intentionally covers:
-//   - 2-char keywords (if/in/fn/go/is/as): these were the most
+//   - 2-char keywords (if/in/fn/go/is/as) -> these were the most
 //     vulnerable in the old switch nest.
 //   - longer keywords (`letter`, `interface_thing`) to cover the
 //     X-macro binary search's longer paths.

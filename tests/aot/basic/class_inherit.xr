@@ -3,7 +3,7 @@ class Shape {
     constructor(kind: int) {
         this.kind = kind
     }
-    area(): int {
+    area() -> int {
         return 0
     }
 }
@@ -16,7 +16,7 @@ class Rect extends Shape {
         this.w = w
         this.h = h
     }
-    area(): int {
+    area() -> int {
         return this.w * this.h
     }
 }

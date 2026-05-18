@@ -5,23 +5,23 @@
 // EXPECTED: -5
 // Test: Float arithmetic operations in JIT-compiled function
 
-fn fadd(a: float, b: float) : float {
+fn fadd(a: float, b: float) -> float {
     return a + b
 }
 
-fn fsub(a: float, b: float) : float {
+fn fsub(a: float, b: float) -> float {
     return a - b
 }
 
-fn fmul(a: float, b: float) : float {
+fn fmul(a: float, b: float) -> float {
     return a * b
 }
 
-fn fdiv(a: float, b: float) : float {
+fn fdiv(a: float, b: float) -> float {
     return a / b
 }
 
-fn fneg(a: float) : float {
+fn fneg(a: float) -> float {
     return -a
 }
 

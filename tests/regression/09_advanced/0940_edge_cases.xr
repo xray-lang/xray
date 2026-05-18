@@ -30,7 +30,7 @@ fn test_empty_array_operations() {
     assert_eq(arr.length, 0)
 
     // 对空数组的 map/filter
-    let mapped = arr.map((x) => x * 2)
+    let mapped = arr.map((x) -> x * 2)
     assert_eq(mapped.length, 0)
 }
 
@@ -49,7 +49,7 @@ fn test_single_element_array() {
     let arr = [42]
     assert_eq(arr.length, 1)
     assert_eq(arr[0], 42)
-    let doubled = arr.map((x) => x * 2)
+    let doubled = arr.map((x) -> x * 2)
     assert_eq(doubled[0], 84)
 }
 
@@ -57,7 +57,7 @@ fn test_single_element_array() {
 
 @test
 fn test_recursion_base_case() {
-    fn factorial(n: int): int {
+    fn factorial(n: int) -> int {
         if (n <= 1) { return 1 }
         return n * factorial(n - 1)
     }
@@ -144,7 +144,7 @@ fn test_deep_nesting() {
 @test
 fn test_closure_capture() {
     let x = 10
-    let f = () => x
+    let f = () -> x
     assert_eq(f(), 10)
 
     // 修改外部变量后闭包应该看到新值

@@ -12,12 +12,12 @@ class Point {
         this.y = y
     }
 
-    distance(): float {
+    distance() -> float {
         let sum = this.x * this.x + this.y * this.y
         return math.sqrt(float(sum))
     }
 
-    toString(): string {
+    toString() -> string {
         return "Point(" + string(this.x) + ", " + string(this.y) + ")"
     }
 }
@@ -59,7 +59,7 @@ class Animal {
         this.name = name
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " makes a sound"
     }
 }
@@ -72,11 +72,11 @@ class Dog extends Animal {
         this.breed = breed
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " barks"
     }
 
-    fetch(): string {
+    fetch() -> string {
         return this.name + " fetches the ball"
     }
 }
@@ -118,7 +118,7 @@ class Counter {
         Counter.count = Counter.count + 1
     }
 
-    static getCount(): int {
+    static getCount() -> int {
         return Counter.count
     }
 }
@@ -149,7 +149,7 @@ class Box {
         this.value = value
     }
 
-    get(): int {
+    get() -> int {
         return this.value
     }
 
@@ -204,7 +204,7 @@ class Rectangle {
         this.height = h
     }
 
-    area(): int {
+    area() -> int {
         return this.width * this.height
     }
 }
@@ -216,7 +216,7 @@ class Circle {
         this.radius = r
     }
 
-    area(): float {
+    area() -> float {
         return 3.14159 * this.radius * this.radius
     }
 }

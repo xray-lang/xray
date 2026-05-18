@@ -26,23 +26,23 @@ class Vector2D {
         this.y = y
     }
     
-    operator+(other: Vector2D): Vector2D {
+    operator+(other: Vector2D) -> Vector2D {
         return new Vector2D(this.x + other.x, this.y + other.y)
     }
     
-    operator-(other: Vector2D): Vector2D {
+    operator-(other: Vector2D) -> Vector2D {
         return new Vector2D(this.x - other.x, this.y - other.y)
     }
     
-    operator*(scalar: float): Vector2D {
+    operator*(scalar: float) -> Vector2D {
         return new Vector2D(this.x * scalar, this.y * scalar)
     }
     
-    operator/(scalar: float): Vector2D {
+    operator/(scalar: float) -> Vector2D {
         return new Vector2D(this.x / scalar, this.y / scalar)
     }
     
-    operator==(other: Vector2D): bool {
+    operator==(other: Vector2D) -> bool {
         return this.x == other.x && this.y == other.y
     }
 }
@@ -121,19 +121,19 @@ class Money {
         this.amount = amount
     }
     
-    operator<(other: Money): bool {
+    operator<(other: Money) -> bool {
         return this.amount < other.amount
     }
     
-    operator<=(other: Money): bool {
+    operator<=(other: Money) -> bool {
         return this.amount <= other.amount
     }
     
-    operator>(other: Money): bool {
+    operator>(other: Money) -> bool {
         return this.amount > other.amount
     }
     
-    operator>=(other: Money): bool {
+    operator>=(other: Money) -> bool {
         return this.amount >= other.amount
     }
 }
@@ -163,15 +163,15 @@ class BitSet {
         this.value = v
     }
     
-    operator &(other: BitSet): BitSet {
+    operator &(other: BitSet) -> BitSet {
         return new BitSet(this.value & other.value)
     }
     
-    operator |(other: BitSet): BitSet {
+    operator |(other: BitSet) -> BitSet {
         return new BitSet(this.value | other.value)
     }
     
-    operator ^(other: BitSet): BitSet {
+    operator ^(other: BitSet) -> BitSet {
         return new BitSet(this.value ^ other.value)
     }
 }
@@ -215,7 +215,7 @@ class Matrix {
         this.data = [0, 0, 0, 0]
     }
     
-    operator[](index: int): int {
+    operator[](index: int) -> int {
         return this.data[index]
     }
     
@@ -257,7 +257,7 @@ class Vector3D extends Vector2D {
     }
     
     // 重写加法运算符
-    operator+(other: Vector3D): Vector3D {
+    operator+(other: Vector3D) -> Vector3D {
         return new Vector3D(this.x + other.x, this.y + other.y, this.z + other.z)
     }
 }
@@ -286,7 +286,7 @@ class Point {
         this.y = y
     }
     
-    add(other: Point): Point {
+    add(other: Point) -> Point {
         return new Point(this.x + other.x, this.y + other.y)
     }
 }
@@ -409,7 +409,7 @@ class ModVector {
         this.y = y
     }
     
-    operator%(other: ModVector): ModVector {
+    operator%(other: ModVector) -> ModVector {
         return new ModVector(this.x % other.x, this.y % other.y)
     }
 }

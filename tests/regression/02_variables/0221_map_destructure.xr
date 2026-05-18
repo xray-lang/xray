@@ -4,7 +4,7 @@
 
 @test
 fn test_map_destructure() {
-    let data = {"name" => "Alice", "age" => 30, "city" => "Beijing"}
+    let data = #{"name": "Alice", "age": 30, "city": "Beijing"}
     let n = data["name"]
     let a = data["age"]
     assert_eq(n, "Alice")
@@ -13,7 +13,7 @@ fn test_map_destructure() {
     let c = data["city"]
     assert_eq(c, "Beijing")
 
-    let person = {"first" => "John", "last" => "Doe", "id" => 123}
+    let person = #{"first": "John", "last": "Doe", "id": 123}
     let firstName = person["first"]
     let lastName = person["last"]
     let userId = person["id"]

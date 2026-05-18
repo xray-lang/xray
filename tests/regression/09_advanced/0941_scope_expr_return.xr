@@ -3,11 +3,11 @@
 // Bug: xi_lower_scope_block returned NULL instead of the exit value,
 // so `let errors = supervisor scope { ... }` got null instead of Array.
 
-fn child_ok(): int {
+fn child_ok() -> int {
     return 42
 }
 
-fn child_fail(msg: string): int {
+fn child_fail(msg: string) -> int {
     throw msg
     return 0
 }

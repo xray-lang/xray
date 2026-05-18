@@ -3,7 +3,7 @@
 // EXPECTED: done
 // Test: Try-catch exception handling in JIT
 
-fn may_throw(x: int) : int {
+fn may_throw(x: int) -> int {
     if (x < 0) {
         throw "negative"
     }

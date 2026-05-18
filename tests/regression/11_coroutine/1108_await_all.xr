@@ -1,6 +1,6 @@
 // 测试 await all - 等待所有协程完成
 
-fn compute(n: int): int {
+fn compute(n: int) -> int {
     return n * n
 }
 

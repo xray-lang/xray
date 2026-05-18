@@ -188,7 +188,7 @@ static void crash_handler(int sig) {
 }
 
 /*
- * Test 1: fn() -> int { return 42; }
+ * Test 1:() -> int { return 42; }
  * Xm:
  *   @entry:
  *     v0 =i64 const.i64 #42
@@ -226,7 +226,7 @@ static void test_return_constant(void) {
 }
 
 /*
- * Test 2: fn(a: int, b: int) -> int { return a + b; }
+ * Test 2:(a: int, b: int) -> int { return a + b; }
  * Xm:
  *   @entry:
  *     v2 =i64 add v0, v1
@@ -263,7 +263,7 @@ static void test_add_two_params(void) {
 }
 
 /*
- * Test 3: fn(a: int, b: int) -> int { return a - b; }
+ * Test 3:(a: int, b: int) -> int { return a - b; }
  */
 static void test_sub(void) {
     fprintf(stderr, "  test_sub...");
@@ -291,7 +291,7 @@ static void test_sub(void) {
 }
 
 /*
- * Test 4: fn(a: int, b: int) -> int { return a * b; }
+ * Test 4:(a: int, b: int) -> int { return a * b; }
  */
 static void test_mul(void) {
     fprintf(stderr, "  test_mul...");
@@ -320,7 +320,7 @@ static void test_mul(void) {
 }
 
 /*
- * Test 5: fn(a: int, b: int) -> int { return a + b + 10; }
+ * Test 5:(a: int, b: int) -> int { return a + b + 10; }
  * Tests multi-instruction sequence with constant
  */
 static void test_add_with_const(void) {
@@ -356,7 +356,7 @@ static void test_add_with_const(void) {
 }
 
 /*
- * Test 6: fn(a: int, b: int) -> int { return (a < b) ? 1 : 0; }
+ * Test 6:(a: int, b: int) -> int { return (a < b) ? 1 : 0; }
  * Tests comparison
  */
 static void test_compare(void) {
@@ -387,7 +387,7 @@ static void test_compare(void) {
 }
 
 /*
- * Test 7: fn(a: int) -> int { return -a; }
+ * Test 7:(a: int) -> int { return -a; }
  */
 static void test_negate(void) {
     fprintf(stderr, "  test_negate...");
@@ -415,7 +415,7 @@ static void test_negate(void) {
 }
 
 /*
- * Test 8: fn(a: int, b: int) -> int { return a & b; }
+ * Test 8:(a: int, b: int) -> int { return a & b; }
  * Bitwise operations
  */
 static void test_bitwise(void) {
@@ -444,7 +444,7 @@ static void test_bitwise(void) {
 }
 
 /*
- * Test 9: fn(a: int, b: int) -> int { if (a > b) return a; else return b; }
+ * Test 9:(a: int, b: int) -> int { if (a > b) return a; else return b; }
  * Tests multi-block if/else with branch patching
  *
  * Xm:
@@ -487,7 +487,7 @@ static void test_if_else_max(void) {
 }
 
 /*
- * Test 10: fn(a: int) -> int { if (a < 0) return -a; else return a; }
+ * Test 10:(a: int) -> int { if (a < 0) return -a; else return a; }
  * Tests if/else where then branch does computation
  */
 static void test_if_else_abs(void) {
@@ -529,7 +529,7 @@ static void test_if_else_abs(void) {
 }
 
 /*
- * Test 11: fn(a: int, b: int) -> int { return a % b; }
+ * Test 11:(a: int, b: int) -> int { return a % b; }
  * Tests MOD (SDIV + MSUB)
  */
 static void test_mod(void) {
@@ -561,7 +561,7 @@ static void test_mod(void) {
 }
 
 /*
- * Test 12: fn(n: int) -> int { sum=0; i=1; while(i<=n) { sum+=i; i+=1; } return sum; }
+ * Test 12:(n: int) -> int { sum=0; i=1; while(i<=n) { sum+=i; i+=1; } return sum; }
  * Tests loop with Phi nodes and backward branch
  *
  * Xm:
@@ -666,7 +666,7 @@ static void test_loop_sum(void) {
 }
 
 /*
- * Test 13: fn(a: int, b: int) -> int { if (a > b) return a - b; else return b - a; }
+ * Test 13:(a: int, b: int) -> int { if (a > b) return a - b; else return b - a; }
  * Tests non-trivial if/else with different computations in each branch
  */
 static void test_if_else_diff(void) {
@@ -1682,7 +1682,7 @@ static void test_deopt_guard(void) {
 
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    // guard_nonnull(p0): deopt if p0 == 0
+    // guard_nonnull(p0) -> deopt if p0 == 0
     xm_emit_unary(func, entry, XM_GUARD_NONNULL, XR_REP_VOID, p0);
 
     // return p0 + 1
@@ -2390,7 +2390,7 @@ static void test_osr_entry_pressure(void) {
     xm_block_add_pred(loop, entry, func->arena);
     xm_block_add_pred(loop, body, func->arena);  // back-edge, declared early
 
-    // @loop (header): phi nodes
+    // @loop (header) -> phi nodes
     loop->is_loop_header = true;
     XmPhi *phi_count = xm_add_phi(func, loop, XR_REP_I64);
     XmPhi *phi_sum = xm_add_phi(func, loop, XR_REP_I64);

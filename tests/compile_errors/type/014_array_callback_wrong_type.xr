@@ -9,7 +9,7 @@ let xs = [1, 2, 3]
 
 let bad1 = xs.map(0)
 let bad2 = xs.filter(0)
-let bad3 = xs.reduce(0, fn(acc: int, v: int): int { return acc + v })
+let bad3 = xs.reduce(0,(acc: int, v: int) -> int { return acc + v })
 let bad4 = xs.find(0)
 let bad5 = xs.every(0)
 let bad6 = xs.some(0)

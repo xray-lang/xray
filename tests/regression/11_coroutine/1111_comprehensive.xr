@@ -1,7 +1,7 @@
 // 协程系统综合示例
 
 // 生产者-消费者模式
-fn producer(ch: Channel<int>, id: int, count: int): int {
+fn producer(ch: Channel<int>, id: int, count: int) -> int {
     let i = 0
     while (i < count) {
         ch.trySend(id * 100 + i)
@@ -10,7 +10,7 @@ fn producer(ch: Channel<int>, id: int, count: int): int {
     return id
 }
 
-fn consumer(ch: Channel<int>, expected: int): int {
+fn consumer(ch: Channel<int>, expected: int) -> int {
     let received = 0
     let i = 0
     while (i < expected) {
@@ -64,9 +64,9 @@ fn test_select() {
     ch1.trySend(100)
 
     select {
-        msg from ch1 => { print(msg) }
-        msg from ch2 => { print(msg) }
-        _ => { print("default") }
+        msg from ch1 -> { print(msg) }
+        msg from ch2 -> { print(msg) }
+        _ -> { print("default") }
     }
 }
 

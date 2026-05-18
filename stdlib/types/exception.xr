@@ -4,5 +4,5 @@
 class Exception {
     message: string
     stack: string
-    toString(): string
+    toString() -> string
 }

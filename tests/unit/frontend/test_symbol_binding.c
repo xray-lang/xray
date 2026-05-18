@@ -455,7 +455,7 @@ TEST(nested_scope) {
 }
 
 TEST(function_params) {
-    assert(check_bindings("fn add(a: int, b: int): int {\n"
+    assert(check_bindings("fn add(a: int, b: int) -> int {\n"
                           "    return a + b\n"
                           "}\n"
                           "print(add(1, 2))\n",
@@ -464,7 +464,7 @@ TEST(function_params) {
 
 TEST(closure_capture) {
     assert(check_bindings("let x = 10\n"
-                          "fn foo(): int {\n"
+                          "fn foo() -> int {\n"
                           "    return x + 1\n"
                           "}\n"
                           "print(foo())\n",
@@ -473,9 +473,9 @@ TEST(closure_capture) {
 
 TEST(nested_closure) {
     assert(check_bindings("let outer = 1\n"
-                          "fn foo(): int {\n"
+                          "fn foo() -> int {\n"
                           "    let mid = 2\n"
-                          "    fn bar(): int {\n"
+                          "    fn bar() -> int {\n"
                           "        return outer + mid\n"
                           "    }\n"
                           "    return bar()\n"
@@ -536,8 +536,8 @@ TEST(template_string_binding) {
 }
 
 TEST(multiple_functions) {
-    assert(check_bindings("fn a(): int { return 1 }\n"
-                          "fn b(): int { return a() + 1 }\n"
+    assert(check_bindings("fn a() -> int { return 1 }\n"
+                          "fn b() -> int { return a() + 1 }\n"
                           "print(b())\n",
                           "multiple_functions"));
 }
@@ -548,7 +548,7 @@ TEST(class_method_this) {
                           "    init(val: int) {\n"
                           "        this.x = val\n"
                           "    }\n"
-                          "    get(): int {\n"
+                          "    get() -> int {\n"
                           "        return this.x\n"
                           "    }\n"
                           "}\n",

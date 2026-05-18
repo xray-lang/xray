@@ -7,27 +7,27 @@
 // EXPECTED: 3
 // Test: Integer arithmetic operations in JIT-compiled function
 
-fn calc(a: int, b: int) : int {
+fn calc(a: int, b: int) -> int {
     return a + b
 }
 
-fn sub(a: int, b: int) : int {
+fn sub(a: int, b: int) -> int {
     return a - b
 }
 
-fn mul(a: int, b: int) : int {
+fn mul(a: int, b: int) -> int {
     return a * b
 }
 
-fn div(a: int, b: int) : int {
+fn div(a: int, b: int) -> int {
     return a / b
 }
 
-fn mod(a: int, b: int) : int {
+fn mod(a: int, b: int) -> int {
     return a % b
 }
 
-fn neg(a: int) : int {
+fn neg(a: int) -> int {
     return -a
 }
 

@@ -6,19 +6,19 @@
 // EXPECTED: true
 // Test: Boundary values - INT64 extremes, zero, boolean edge cases
 
-fn identity_int(x: int) : int {
+fn identity_int(x: int) -> int {
     return x
 }
 
-fn is_zero(x: int) : bool {
+fn is_zero(x: int) -> bool {
     return x == 0
 }
 
-fn is_negative(x: int) : bool {
+fn is_negative(x: int) -> bool {
     return x < 0
 }
 
-fn negate(x: int) : int {
+fn negate(x: int) -> int {
     return -x
 }
 

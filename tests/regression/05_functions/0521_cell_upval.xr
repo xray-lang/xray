@@ -7,9 +7,9 @@
 
 @test
 fn test_cell_counter_basic() {
-    fn make(): fn(): int {
+    fn make() ->() -> int {
         let n = 0
-        fn inc(): int {
+        fn inc() -> int {
             n++
             return n
         }
@@ -25,10 +25,10 @@ fn test_cell_counter_basic() {
 
 @test
 fn test_two_cells() {
-    fn make(): fn(bool): int {
+    fn make() ->(bool) -> int {
         let a = 0
         let b = 100
-        fn step(use_a: bool): int {
+        fn step(use_a: bool) -> int {
             if (use_a) {
                 a++
                 return a
@@ -50,10 +50,10 @@ fn test_two_cells() {
 
 @test
 fn test_transitive_capture() {
-    fn outer(): fn(): int {
+    fn outer() ->() -> int {
         let x = 10
-        fn middle(): fn(): int {
-            fn inner(): int {
+        fn middle() ->() -> int {
+            fn inner() -> int {
                 x += 5
                 return x
             }
@@ -70,9 +70,9 @@ fn test_transitive_capture() {
 
 @test
 fn test_const_capture() {
-    fn make(base: int): fn(int): int {
+    fn make(base: int) ->(int) -> int {
         const FACTOR = 3
-        fn calc(x: int): int {
+        fn calc(x: int) -> int {
             return base + x * FACTOR
         }
         return calc
@@ -89,7 +89,7 @@ fn test_cell_shared_by_closures() {
     let count = 0
     fn inc() { count++ }
     fn dec() { count-- }
-    fn get(): int { return count }
+    fn get() -> int { return count }
 
     inc()
     inc()
@@ -103,9 +103,9 @@ fn test_cell_shared_by_closures() {
 
 @test
 fn test_cell_hot_loop() {
-    fn make(): fn(int): int {
+    fn make() ->(int) -> int {
         let total = 0
-        fn add(n: int): int {
+        fn add(n: int) -> int {
             total += n
             return total
         }
@@ -123,9 +123,9 @@ fn test_cell_hot_loop() {
 
 @test
 fn test_cell_string_value() {
-    fn make(): fn(string): string {
+    fn make() ->(string) -> string {
         let result = ""
-        fn append(s: string): string {
+        fn append(s: string) -> string {
             result = result + s
             return result
         }
@@ -139,9 +139,9 @@ fn test_cell_string_value() {
 
 @test
 fn test_cell_float_value() {
-    fn make(): fn(float): float {
+    fn make() ->(float) -> float {
         let total = 0.0
-        fn add(x: float): float {
+        fn add(x: float) -> float {
             total += x
             return total
         }
@@ -156,15 +156,15 @@ fn test_cell_float_value() {
 
 @test
 fn test_many_instances() {
-    fn make(): fn(): int {
+    fn make() ->() -> int {
         let n = 0
-        fn inc(): int {
+        fn inc() -> int {
             n++
             return n
         }
         return inc
     }
-    let counters: Array<fn(): int> = []
+    let counters: Array<() -> int> = []
     for (let i = 0; i < 10; i++) {
         counters.push(make())
     }

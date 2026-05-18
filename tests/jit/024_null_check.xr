@@ -3,11 +3,11 @@
 // EXPECTED: 0
 // Test: Null checking (ISNULL, ISNULL_SET) in JIT
 
-fn is_null(x: int?) : bool {
+fn is_null(x: int?) -> bool {
     return x == null
 }
 
-fn safe_get(x: int?) : int {
+fn safe_get(x: int?) -> int {
     if (x == null) { return 0 }
     return x
 }

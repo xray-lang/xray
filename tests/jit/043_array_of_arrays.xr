@@ -3,7 +3,7 @@
 // EXPECTED: 15
 // Test: Nested array access in JIT
 
-fn matrix_sum(mat: Array<Array<int>>) : int {
+fn matrix_sum(mat: Array<Array<int>>) -> int {
     let sum = 0
     let i = 0
     while (i < mat.length) {

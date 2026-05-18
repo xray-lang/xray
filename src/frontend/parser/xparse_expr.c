@@ -382,39 +382,33 @@ AstNode *xr_parse_grouping(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_grouping: NULL parser");
     int line = parser->previous.line;
 
-    // Case 1: () => expr or (): type => expr (no params arrow function)
+    // Case 1: `() -> expr` no-param arrow function, or `()` unit literal.
+    // Arrow closures cannot declare an explicit return type (task 082) — use
+    // `fn() -> T { ... }` or annotate the binding (`let f: () -> T = ...`).
     if (xr_parser_check(parser, TK_RPAREN)) {
         xr_parser_advance(parser);
-        // Optional return type annotation: (): int =>
-        XrType *return_type = NULL;
         if (xr_parser_check(parser, TK_COLON)) {
-            xr_parser_advance(parser);
-            return_type = xr_parse_type_annotation(parser);
+            xr_parser_error(parser, "arrow closures cannot declare an explicit return type; "
+                                    "use `fn() -> T { ... }` or annotate the binding");
+            return NULL;
         }
         if (xr_parser_match(parser, TK_ARROW)) {
-            AstNode *fn = xr_parse_arrow_function_body(parser, NULL, 0, line);
-            if (fn && return_type)
-                fn->as.function_expr.return_type = return_type;
-            return fn;
-        }
-        if (return_type) {
-            xr_parser_error(parser, "expected '=>' after return type annotation");
-            return NULL;
+            return xr_parse_arrow_function_body(parser, NULL, 0, line);
         }
         /* `()` is the unit literal — the unique value of the unit type
          * `()`. Constant-folded to a singleton at lower time. */
         return xr_ast_tuple_literal(parser->X, NULL, 0, line);
     }
 
-    // Case 2: arrow-function head — `(...) =>` or `(...): T =>`.
+    // Case 2: arrow-function head — `(...) -> body`.
     //
     // To disambiguate from a tuple / grouping expression without committing
     // to a single parse, scan ahead through balanced parens for the matching
-    // `)` and peek at the next token. `=>` or `:` immediately after the
-    // closing `)` is unambiguously an arrow head (no other expression-
-    // context syntax has either token in that position), so we only enter
-    // the arrow path on a positive match. Anything else falls through to
-    // the general expression-list parse below.
+    // `)` and peek at the next token. `->` immediately after the closing
+    // `)` is unambiguously an arrow head (no other expression-context syntax
+    // produces `-> ...` there), so we only enter the arrow path on a positive
+    // match. Anything else falls through to the general expression-list parse
+    // below. Arrow closures cannot declare an explicit return type (task 082).
     bool is_arrow_head = false;
     {
         Scanner saved_scan = parser->scanner;
@@ -435,7 +429,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
         }
         if (xr_parser_check(parser, TK_RPAREN))
             xr_parser_advance(parser);
-        is_arrow_head = xr_parser_check(parser, TK_ARROW) || xr_parser_check(parser, TK_COLON);
+        is_arrow_head = xr_parser_check(parser, TK_ARROW);
         parser->scanner = saved_scan;
         parser->current = saved_tok;
     }
@@ -471,23 +465,20 @@ AstNode *xr_parse_grouping(Parser *parser) {
         }
 
         if (!xr_parser_match(parser, TK_RPAREN)) {
-            xr_parser_error(parser, "expected ')' or '=>'");
+            xr_parser_error(parser, "expected ')' or '->'");
             return NULL;
         }
 
-        XrType *return_type = NULL;
         if (xr_parser_check(parser, TK_COLON)) {
-            xr_parser_advance(parser);
-            return_type = xr_parse_type_annotation(parser);
-        }
-        if (!xr_parser_match(parser, TK_ARROW)) {
-            xr_parser_error(parser, "expected '=>' after parameter list");
+            xr_parser_error(parser, "arrow closures cannot declare an explicit return type; "
+                                    "use `fn(p: T) -> R { ... }` or annotate the binding");
             return NULL;
         }
-        AstNode *fn = xr_parse_arrow_function_body(parser, params, param_count, line);
-        if (fn && return_type)
-            fn->as.function_expr.return_type = return_type;
-        return fn;
+        if (!xr_parser_match(parser, TK_ARROW)) {
+            xr_parser_error(parser, "expected '->' after parameter list");
+            return NULL;
+        }
+        return xr_parse_arrow_function_body(parser, params, param_count, line);
     }
 
     // Case 3: parenthesised expression list — tuple if any comma appears
@@ -640,19 +631,17 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
 
-    // Parse optional return type annotation
+    // Parse optional return type annotation: `fn(...) -> T { ... }`.
+    // The unified arrow `->` is the only legal separator (task 082).
     XrTypeRef *return_type = NULL;
-    if (xr_parser_match(parser, TK_COLON)) {
+    if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
-    } else if (xr_parser_check(parser, TK_MINUS)) {
-        // Detect common mistake: fn() -> Type (should be fn(): Type)
-        xr_parser_advance(parser);  // consume '-'
-        if (xr_parser_match(parser, TK_GT)) {
-            xr_parser_error(parser, "use ':' instead of '->' for return type annotation, "
-                                    "e.g. fn(): int");
-            parser->panic_mode = 0;
-            return_type = xr_parse_type_annotation(parser);
-        }
+    } else if (xr_parser_check(parser, TK_COLON)) {
+        xr_parser_advance(parser);  // consume ':'
+        xr_parser_error(parser, "use '->' instead of ':' for function return type, "
+                                "e.g. fn(p: T) -> R");
+        parser->panic_mode = 0;
+        return_type = xr_parse_type_annotation(parser);
     }
 
     // Parse function body (must be block)

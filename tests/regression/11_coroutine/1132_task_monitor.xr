@@ -1,9 +1,9 @@
 // Test task.monitor() API — completion notification via Channel
 
-fn compute(): int {
+fn compute() -> int {
     return 42
 }
-fn failing(): int {
+fn failing() -> int {
     throw "monitor test error"
     return 0
 }

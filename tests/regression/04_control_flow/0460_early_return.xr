@@ -6,7 +6,7 @@
 
 @test
 fn test_early_return() {
-    fn findPositive(arr: Array<int>): int {
+    fn findPositive(arr: Array<int>) -> int {
         for (x in arr) {
             if (x > 0) {
                 return x
@@ -21,7 +21,7 @@ fn test_early_return() {
 
 @test
 fn test_guard_clause() {
-    fn divide(a: int, b: int): int? {
+    fn divide(a: int, b: int) -> int? {
         if (b == 0) {
             return null
         }
@@ -36,7 +36,7 @@ fn test_guard_clause() {
 
 @test
 fn test_multiple_guards() {
-    fn classify(n: int): string {
+    fn classify(n: int) -> string {
         if (n < 0) { return "negative" }
         if (n == 0) { return "zero" }
         if (n < 10) { return "small" }
@@ -55,7 +55,7 @@ fn test_multiple_guards() {
 
 @test
 fn test_nested_return() {
-    fn findPair(arr: Array<int>, target: int): Array<int>? {
+    fn findPair(arr: Array<int>, target: int) -> Array<int>? {
         for (i in 0..arr.length) {
             for (j in (i+1)..arr.length) {
                 if (arr[i] + arr[j] == target) {
@@ -76,7 +76,7 @@ fn test_nested_return() {
 
 @test
 fn test_recursive_return() {
-    fn binarySearch(arr: Array<int>, target: int, low: int, high: int): int {
+    fn binarySearch(arr: Array<int>, target: int, low: int, high: int) -> int {
         if (low > high) {
             return -1
         }

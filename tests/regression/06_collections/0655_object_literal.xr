@@ -76,7 +76,7 @@ fn test_mixed_types() {
 // ===== 对象作为函数参数 =====
 @test
 fn test_object_as_param() {
-    fn getX(p: Json): int {
+    fn getX(p: Json) -> int {
         return p.x
     }
     let point = { "x": 42, "y": 0 }
@@ -86,7 +86,7 @@ fn test_object_as_param() {
 // ===== 对象作为返回值 =====
 @test
 fn test_object_as_return() {
-    fn makePoint(x: int, y: int): Json {
+    fn makePoint(x: int, y: int) -> Json {
         return { "x": x, "y": y }
     }
     let p = makePoint(3, 4)

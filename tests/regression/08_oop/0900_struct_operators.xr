@@ -5,15 +5,15 @@ struct Vec2 {
     x: float
     y: float
 
-    operator +(other: Vec2): Vec2 {
+    operator +(other: Vec2) -> Vec2 {
         return Vec2{x: this.x + other.x, y: this.y + other.y}
     }
 
-    operator -(other: Vec2): Vec2 {
+    operator -(other: Vec2) -> Vec2 {
         return Vec2{x: this.x - other.x, y: this.y - other.y}
     }
 
-    operator ==(other: Vec2): bool {
+    operator ==(other: Vec2) -> bool {
         return this.x === other.x && this.y === other.y
     }
 }

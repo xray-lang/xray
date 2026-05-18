@@ -66,7 +66,7 @@ fn test_json_type_annotation() {
 
 @test
 fn test_json_return_type() {
-    fn createConfig(): Json {
+    fn createConfig() -> Json {
         return { "debug": true }
     }
     let c = createConfig()

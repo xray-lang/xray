@@ -4,18 +4,18 @@
 // 测试 yield 让出执行权功能（类似 Go 的 runtime.Gosched）
 // 所有断言基于返回值，不依赖多协程 print 交织顺序
 
-fn task_with_yield(): string {
+fn task_with_yield() -> string {
     yield
     yield
     return "yielded"
 }
 
-fn worker(id: int): int {
+fn worker(id: int) -> int {
     yield
     return id * 10
 }
 
-fn loop_yield(n: int): int {
+fn loop_yield(n: int) -> int {
     let sum = 0
     for (let i = 0; i < n; i++) {
         sum = sum + i
@@ -26,7 +26,7 @@ fn loop_yield(n: int): int {
     return sum
 }
 
-fn intensive_yield(count: int): int {
+fn intensive_yield(count: int) -> int {
     let sum = 0
     for (let i = 0; i < count; i++) {
         sum = sum + i

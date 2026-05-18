@@ -7,7 +7,7 @@
 // primary 窗口和 secondary 窗口，并额外验证方法解析顺序。
 
 class L0 {
-    tag(): string { return "L0" }
+    tag() -> string { return "L0" }
 }
 class L1 extends L0 {}
 class L2 extends L1 {}
@@ -18,7 +18,7 @@ class L6 extends L5 {}
 class L7 extends L6 {}
 class L8 extends L7 {}              // first level that only the secondary hash can resolve
 class L9 extends L8 {
-    tag(): string { return "L9" }
+    tag() -> string { return "L9" }
 }
 class L10 extends L9 {}
 class L11 extends L10 {}

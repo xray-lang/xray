@@ -4,11 +4,11 @@
 class Set<T> {
     length: int
     add(value: T)
-    has(value: T): bool
-    delete(value: T): bool
+    has(value: T) -> bool
+    delete(value: T) -> bool
     clear()
-    values(): Array<T>
-    forEach(fn: fn(value: T))
+    values() -> Array<T>
+    forEach(fn: (value: T) -> ())
     // Iteration protocol — yields each element T (used by for-in).
-    iterator(): Iterator<T>
+    iterator() -> Iterator<T>
 }

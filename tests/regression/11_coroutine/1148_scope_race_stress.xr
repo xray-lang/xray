@@ -36,7 +36,7 @@ const SUCCEEDING_PER_SCOPE = 50
 // Each child does a bit of arithmetic before throwing so several
 // children overlap in flight on different workers — this widens the
 // race window for the wake_waiter scope-side bookkeeping.
-fn make_failing(id: int): int {
+fn make_failing(id: int) -> int {
     let x = 0
     for (let k = 0; k < 50; k++) {
         x = x + k
@@ -45,7 +45,7 @@ fn make_failing(id: int): int {
     return x
 }
 
-fn make_ok(id: int): int {
+fn make_ok(id: int) -> int {
     let x = 0
     for (let k = 0; k < 50; k++) {
         x = x + k

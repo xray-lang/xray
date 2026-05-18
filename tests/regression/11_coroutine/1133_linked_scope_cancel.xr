@@ -1,14 +1,14 @@
 // Test linked scope sibling cancellation: when one child fails,
 // all other children are cancelled and scope throws first error.
 
-fn failing(): int {
+fn failing() -> int {
     throw "child error"
     return 0
 }
-fn ok(): int {
+fn ok() -> int {
     return 42
 }
-fn slow_ok(): int {
+fn slow_ok() -> int {
     let x = 0
     for (let i = 0; i < 100; i++) {
         x = x + 1

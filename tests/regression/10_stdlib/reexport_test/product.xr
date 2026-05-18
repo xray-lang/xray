@@ -2,10 +2,10 @@
 // 作者：xingleixu@gmail.com
 // 测试模块：产品模块
 
-export fn getProduct(): string {
+export fn getProduct() -> string {
     return "iPhone"
 }
 
-export fn getPrice(): int {
+export fn getPrice() -> int {
     return 999
 }

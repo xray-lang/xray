@@ -2,7 +2,7 @@
 // EXPECTED: hello constant
 // Test: Constant loading (LOADK, LOADI, LOADF, LOADTRUE, LOADFALSE, LOADNULL)
 
-fn use_constants() : int {
+fn use_constants() -> int {
     let a = 314
     let b = 3.14
     let c = true
@@ -15,7 +15,7 @@ fn use_constants() : int {
     return 0
 }
 
-fn get_str() : string {
+fn get_str() -> string {
     return "hello constant"
 }
 

@@ -1,7 +1,7 @@
 // EXPECTED: 12345678910
 // Test: String concatenation in loop (STRBUF_NEW, STRBUF_APPEND, STRBUF_FINISH)
 
-fn build_str(n: int) : string {
+fn build_str(n: int) -> string {
     let s = ""
     let i = 1
     while (i <= n) {

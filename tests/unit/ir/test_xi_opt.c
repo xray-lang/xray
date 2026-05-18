@@ -49,7 +49,7 @@ static XiFunc *make_func(const char *name, XrType *ret_type) {
 /* ========== Constant Folding Tests ========== */
 
 TEST(const_fold_int_add) {
-    /* 3 + 4 => 7 */
+    /* 3 + 4 -> 7 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -67,7 +67,7 @@ TEST(const_fold_int_add) {
 }
 
 TEST(const_fold_int_sub) {
-    /* 10 - 3 => 7 */
+    /* 10 - 3 -> 7 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -82,7 +82,7 @@ TEST(const_fold_int_sub) {
 }
 
 TEST(const_fold_int_mul) {
-    /* 5 * 6 => 30 */
+    /* 5 * 6 -> 30 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -97,7 +97,7 @@ TEST(const_fold_int_mul) {
 }
 
 TEST(const_fold_int_div) {
-    /* 20 / 4 => 5 */
+    /* 20 / 4 -> 5 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -112,7 +112,7 @@ TEST(const_fold_int_div) {
 }
 
 TEST(const_fold_div_by_zero) {
-    /* 10 / 0 => NOT folded (undefined behavior) */
+    /* 10 / 0 -> NOT folded (undefined behavior) */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -127,7 +127,7 @@ TEST(const_fold_div_by_zero) {
 }
 
 TEST(const_fold_int_compare) {
-    /* 3 < 5 => true (1) */
+    /* 3 < 5 -> true (1) */
     XiFunc *f = make_func("test", &stub_bool);
     XiBlock *blk = f->entry;
 
@@ -142,7 +142,7 @@ TEST(const_fold_int_compare) {
 }
 
 TEST(const_fold_neg) {
-    /* -(42) => -42 */
+    /* -(42) -> -42 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -156,7 +156,7 @@ TEST(const_fold_neg) {
 }
 
 TEST(const_fold_not) {
-    /* !true => false */
+    /* !true -> false */
     XiFunc *f = make_func("test", &stub_bool);
     XiBlock *blk = f->entry;
 
@@ -170,7 +170,7 @@ TEST(const_fold_not) {
 }
 
 TEST(const_fold_float_add) {
-    /* 1.5 + 2.5 => 4.0 */
+    /* 1.5 + 2.5 -> 4.0 */
     XiFunc *f = make_func("test", &stub_float);
     XiBlock *blk = f->entry;
 
@@ -188,7 +188,7 @@ TEST(const_fold_float_add) {
 }
 
 TEST(const_fold_chain) {
-    /* (2 + 3) * 4 => 5 * 4 => 20 after two passes */
+    /* (2 + 3) * 4 -> 5 * 4 -> 20 after two passes */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -224,7 +224,7 @@ TEST(const_fold_no_fold_variable) {
 }
 
 TEST(const_fold_int_mod) {
-    /* 17 % 5 => 2 */
+    /* 17 % 5 -> 2 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -239,7 +239,7 @@ TEST(const_fold_int_mod) {
 }
 
 TEST(const_fold_mod_by_zero) {
-    /* 10 % 0 => NOT folded */
+    /* 10 % 0 -> NOT folded */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -254,7 +254,7 @@ TEST(const_fold_mod_by_zero) {
 }
 
 TEST(const_fold_bnot) {
-    /* ~0 => -1 */
+    /* ~0 -> -1 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -268,7 +268,7 @@ TEST(const_fold_bnot) {
 }
 
 TEST(const_fold_float_sub) {
-    /* 5.0 - 1.5 => 3.5 */
+    /* 5.0 - 1.5 -> 3.5 */
     XiFunc *f = make_func("test", &stub_float);
     XiBlock *blk = f->entry;
 
@@ -286,7 +286,7 @@ TEST(const_fold_float_sub) {
 }
 
 TEST(const_fold_float_compare) {
-    /* 2.0 < 3.0 => true */
+    /* 2.0 < 3.0 -> true */
     XiFunc *f = make_func("test", &stub_bool);
     XiBlock *blk = f->entry;
 
@@ -301,7 +301,7 @@ TEST(const_fold_float_compare) {
 }
 
 TEST(const_fold_int_eq) {
-    /* 7 == 7 => true */
+    /* 7 == 7 -> true */
     XiFunc *f = make_func("test", &stub_bool);
     XiBlock *blk = f->entry;
 
@@ -316,7 +316,7 @@ TEST(const_fold_int_eq) {
 }
 
 TEST(const_fold_int_ne) {
-    /* 3 != 5 => true */
+    /* 3 != 5 -> true */
     XiFunc *f = make_func("test", &stub_bool);
     XiBlock *blk = f->entry;
 
@@ -331,7 +331,7 @@ TEST(const_fold_int_ne) {
 }
 
 TEST(const_fold_bitwise_ops) {
-    /* 0xFF & 0x0F => 0x0F; 0xA0 | 0x05 => 0xA5; 6 ^ 3 => 5 */
+    /* 0xFF & 0x0F -> 0x0F; 0xA0 | 0x05 -> 0xA5; 6 ^ 3 -> 5 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -356,7 +356,7 @@ TEST(const_fold_bitwise_ops) {
 }
 
 TEST(const_fold_shift) {
-    /* 1 << 4 => 16; 32 >> 2 => 8 */
+    /* 1 << 4 -> 16; 32 >> 2 -> 8 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -378,7 +378,7 @@ TEST(const_fold_shift) {
 /* ========== Copy Propagation Tests ========== */
 
 TEST(copy_prop_basic) {
-    /* x = COPY(a); y = x + 1 => y = a + 1 */
+    /* x = COPY(a); y = x + 1 -> y = a + 1 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -395,7 +395,7 @@ TEST(copy_prop_basic) {
 }
 
 TEST(copy_prop_chain) {
-    /* a -> COPY -> COPY -> use => use(a) */
+    /* a -> COPY -> COPY -> use -> use(a) */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -462,7 +462,7 @@ TEST(dce_keeps_side_effects) {
 }
 
 TEST(dce_cascading) {
-    /* a = 1; b = a + 2; (b unused) => both removed */
+    /* a = 1; b = a + 2; (b unused) -> both removed */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -483,7 +483,7 @@ TEST(dce_cascading) {
 /* ========== Phi Simplification Tests ========== */
 
 TEST(phi_simplify_trivial) {
-    /* phi(a, a) => a */
+    /* phi(a, a) -> a */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *entry = f->entry;
 
@@ -546,7 +546,7 @@ TEST(opt_run_combined) {
 /* ========== Strength Reduction Tests ========== */
 
 TEST(strength_add_zero) {
-    /* x + 0 => x (copy) */
+    /* x + 0 -> x (copy) */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -563,7 +563,7 @@ TEST(strength_add_zero) {
 }
 
 TEST(strength_zero_add) {
-    /* 0 + x => x */
+    /* 0 + x -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -578,7 +578,7 @@ TEST(strength_zero_add) {
 }
 
 TEST(strength_mul_zero) {
-    /* x * 0 => 0 */
+    /* x * 0 -> 0 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -593,7 +593,7 @@ TEST(strength_mul_zero) {
 }
 
 TEST(strength_mul_one) {
-    /* x * 1 => x */
+    /* x * 1 -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -608,7 +608,7 @@ TEST(strength_mul_one) {
 }
 
 TEST(strength_sub_self) {
-    /* x - x => 0 */
+    /* x - x -> 0 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -622,7 +622,7 @@ TEST(strength_sub_self) {
 }
 
 TEST(strength_xor_self) {
-    /* x ^ x => 0 */
+    /* x ^ x -> 0 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -636,7 +636,7 @@ TEST(strength_xor_self) {
 }
 
 TEST(strength_and_zero) {
-    /* x & 0 => 0 */
+    /* x & 0 -> 0 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -651,7 +651,7 @@ TEST(strength_and_zero) {
 }
 
 TEST(strength_div_one) {
-    /* x / 1 => x */
+    /* x / 1 -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -666,7 +666,7 @@ TEST(strength_div_one) {
 }
 
 TEST(strength_shl_zero) {
-    /* x << 0 => x */
+    /* x << 0 -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -681,7 +681,7 @@ TEST(strength_shl_zero) {
 }
 
 TEST(strength_one_mul) {
-    /* 1 * x => x */
+    /* 1 * x -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -696,7 +696,7 @@ TEST(strength_one_mul) {
 }
 
 TEST(strength_zero_mul_lhs) {
-    /* 0 * x => 0 */
+    /* 0 * x -> 0 */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -711,7 +711,7 @@ TEST(strength_zero_mul_lhs) {
 }
 
 TEST(strength_and_self) {
-    /* x & x => x */
+    /* x & x -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -725,7 +725,7 @@ TEST(strength_and_self) {
 }
 
 TEST(strength_or_self) {
-    /* x | x => x */
+    /* x | x -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -739,7 +739,7 @@ TEST(strength_or_self) {
 }
 
 TEST(strength_or_zero_lhs) {
-    /* 0 | x => x */
+    /* 0 | x -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -754,7 +754,7 @@ TEST(strength_or_zero_lhs) {
 }
 
 TEST(strength_shr_zero) {
-    /* x >> 0 => x */
+    /* x >> 0 -> x */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -1087,7 +1087,7 @@ TEST(tuple_new_eliminated_after_full_projection) {
 /* ========== BOX/UNBOX Peephole Tests ========== */
 
 TEST(box_elim_unbox_of_box) {
-    /* UNBOX(BOX(x)) => COPY(x) */
+    /* UNBOX(BOX(x)) -> COPY(x) */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -1106,7 +1106,7 @@ TEST(box_elim_unbox_of_box) {
 }
 
 TEST(box_elim_box_of_unbox) {
-    /* BOX(UNBOX(x)) => COPY(x) */
+    /* BOX(UNBOX(x)) -> COPY(x) */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 

@@ -2,7 +2,7 @@
 
 // Array element type propagation
 
-fn getFirst<T>(arr: Array<T>): T? {
+fn getFirst<T>(arr: Array<T>) -> T? {
     if (arr.length > 0) {
         return arr[0]
     }
@@ -13,7 +13,7 @@ fn swap<T>(arr: Array<T>, i: int, j: int) {
     arr[i] = arr[j]
     arr[j] = temp
 }
-fn contains<T>(arr: Array<T>, target: T): bool {
+fn contains<T>(arr: Array<T>, target: T) -> bool {
     for (item in arr) {
         if (item == target) {
             return true

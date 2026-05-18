@@ -2,21 +2,21 @@
 // Match is compiled to standard control flow (if/else chains),
 // so AOT handles it via existing branch codegen.
 
-fn describe(x: int): string {
+fn describe(x: int) -> string {
     return match (x) {
-        1 => "one"
-        2 => "two"
-        3 => "three"
-        _ => "other"
+        1 -> "one"
+        2 -> "two"
+        3 -> "three"
+        _ -> "other"
     }
 }
 
-fn grade(score: int): string {
+fn grade(score: int) -> string {
     return match (score) {
-        90..100 => "A"
-        80..89  => "B"
-        70..79  => "C"
-        _       => "F"
+        90..100 -> "A"
+        80..89  -> "B"
+        70..79  -> "C"
+        _       -> "F"
     }
 }
 

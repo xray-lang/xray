@@ -1,10 +1,10 @@
 // Test standalone linked go error propagation (outside scope)
 
-fn failing(): int {
+fn failing() -> int {
     throw "linked child error"
     return 0
 }
-fn slow_work(): int {
+fn slow_work() -> int {
     let x = 0
     for (let i = 0; i < 1000; i++) {
         x = x + 1

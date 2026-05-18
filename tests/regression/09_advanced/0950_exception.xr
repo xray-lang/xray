@@ -27,15 +27,15 @@ fn d4() { throw "deep" }
 fn d3() { d4() }
 fn d2() { d3() }
 fn d1() { d2() }
-fn r12(): string {
+fn r12() -> string {
     try { return "ret" } finally { }
     return "no"
 }
-fn r13(): string {
+fn r13() -> string {
     try { throw "x" } catch (e) { return "caught" }
     return "no"
 }
-fn f17(): int {
+fn f17() -> int {
     let x = 1
     try { x = 2; return x } finally { x = 3 }
 }

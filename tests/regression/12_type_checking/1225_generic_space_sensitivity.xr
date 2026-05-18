@@ -2,24 +2,24 @@
 // Rule: foo<T>() is generic call, foo < T is comparison
 // Generic function definition
 
-fn identity<T>(x: T): T {
+fn identity<T>(x: T) -> T {
     return x
 }
-fn compare(a: int, b: int): bool {
+fn compare(a: int, b: int) -> bool {
     return a < b
 }
-fn getFirstComparison(): bool {
+fn getFirstComparison() -> bool {
     let x = 5
     let y = 10
     // With space, this is a comparison, not generic syntax
     return x < y
 }
-fn getSecondComparison(): bool {
+fn getSecondComparison() -> bool {
     let z = 3
     let x = 5
     return z < x
 }
-fn bothTrue(a: bool, b: bool): bool {
+fn bothTrue(a: bool, b: bool) -> bool {
     return a && b
 }
 class Box<T> {
@@ -29,12 +29,12 @@ class Box<T> {
         this.value = value
     }
 
-    get(): T {
+    get() -> T {
         return this.value
     }
 }
 class Utils {
-    wrap<T>(item: T): Array<T> {
+    wrap<T>(item: T) -> Array<T> {
         return [item]
     }
 }

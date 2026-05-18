@@ -1,7 +1,7 @@
 // EXPECTED: 42
 // Test: Map get with null guard and default value (tests null comparison in JIT)
 
-fn get_or_default(m: Json, key: string, default_val: int) : int {
+fn get_or_default(m: Json, key: string, default_val: int) -> int {
     let v = m[key]
     if (v == null) {
         return default_val
@@ -9,7 +9,7 @@ fn get_or_default(m: Json, key: string, default_val: int) : int {
     return v
 }
 
-fn test() : int {
+fn test() -> int {
     let m = {}
     m["x"] = 42
     let a = get_or_default(m, "x", 0)

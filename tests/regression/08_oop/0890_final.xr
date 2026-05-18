@@ -12,7 +12,7 @@ final class Config {
         this.value = value
     }
 
-    getName(): string {
+    getName() -> string {
         return this.name
     }
 }
@@ -28,18 +28,18 @@ fn test_final_class_basic() {
 // ===== Final method =====
 
 class Base {
-    final greet(): string {
+    final greet() -> string {
         return "hello from Base"
     }
 
-    normal(): string {
+    normal() -> string {
         return "normal from Base"
     }
 }
 
 class Child extends Base {
     // Can override non-final method
-    normal(): string {
+    normal() -> string {
         return "normal from Child"
     }
 }
@@ -64,7 +64,7 @@ class Animal {
         this.name = name
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " makes a sound"
     }
 }
@@ -74,7 +74,7 @@ final class Cat extends Animal {
         super(name)
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " meows"
     }
 }
@@ -89,11 +89,11 @@ fn test_final_class_with_parent() {
 // ===== Final method with static =====
 
 class MathUtil {
-    static final pi(): float {
+    static final pi() -> float {
         return 3.14159
     }
 
-    static compute(x: float): float {
+    static compute(x: float) -> float {
         return x * 2.0
     }
 }
@@ -126,11 +126,11 @@ fn test_final_field() {
 class Service {
     private final secret: string = "key123"
     
-    final getSecret(): string {
+    final getSecret() -> string {
         return this.secret
     }
 
-    normal(): string {
+    normal() -> string {
         return "service"
     }
 }

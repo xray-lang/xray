@@ -11,16 +11,16 @@ class Point {
         this.y = y
     }
 
-    sum() : int {
+    sum() -> int {
         return this.x + this.y
     }
 
-    scale(factor: int) : int {
+    scale(factor: int) -> int {
         return (this.x + this.y) * factor
     }
 }
 
-fn make_and_sum(a: int, b: int) : int {
+fn make_and_sum(a: int, b: int) -> int {
     let p = new Point(a, b)
     return p.sum()
 }

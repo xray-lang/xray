@@ -151,7 +151,7 @@ static void test_emit_and_execute(void) {
     XmCodeAlloc alloc;
     xm_code_alloc_init(&alloc);
 
-    // Generate: fn() -> int { return 42; }
+    // Generate:() -> int { return 42; }
     // MOVZ X0, #42
     // RET
     void *code = xm_code_alloc(&alloc, 64, 16);
@@ -182,7 +182,7 @@ static void test_emit_add_function(void) {
     XmCodeAlloc alloc;
     xm_code_alloc_init(&alloc);
 
-    // Generate: fn(a: int, b: int) -> int { return a + b; }
+    // Generate:(a: int, b: int) -> int { return a + b; }
     // ADD X0, X0, X1
     // RET
     void *code = xm_code_alloc(&alloc, 64, 16);
@@ -214,7 +214,7 @@ static void test_emit_factorial_like(void) {
     XmCodeAlloc alloc;
     xm_code_alloc_init(&alloc);
 
-    // Generate: fn(n: int) -> int { result=1; while(n>0) { result*=n; n--; } return result; }
+    // Generate:(n: int) -> int { result=1; while(n>0) { result*=n; n--; } return result; }
     //
     //   MOVZ X1, #1          ; result = 1
     // loop:

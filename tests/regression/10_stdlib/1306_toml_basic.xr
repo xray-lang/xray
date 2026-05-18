@@ -57,7 +57,7 @@ fn test_parse_number_formats() {
 
 @test
 fn test_stringify() {
-    let config = {"name" => "xray", "version" => 1}
+    let config = #{"name": "xray", "version": 1}
     let result = toml.stringify(config)
     assert(result != null)
     assert(result.length > 0)

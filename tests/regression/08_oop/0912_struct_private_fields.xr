@@ -9,7 +9,7 @@ struct Account {
         this._balance = this._balance + amount
     }
 
-    withdraw(amount: float): bool {
+    withdraw(amount: float) -> bool {
         if (amount > this._balance) {
             return false
         }
@@ -17,7 +17,7 @@ struct Account {
         return true
     }
 
-    balance(): float {
+    balance() -> float {
         return this._balance
     }
 }
@@ -28,11 +28,11 @@ struct Counter {
         this._count = this._count + 1
     }
 
-    count(): int {
+    count() -> int {
         return this._count
     }
 
-    static zero(): Counter {
+    static zero() -> Counter {
         return Counter{}
     }
 }

@@ -60,7 +60,7 @@ fn test_parse_quoted_strings() {
 
 @test
 fn test_stringify() {
-    let config = {"name" => "xray", "version" => 1}
+    let config = #{"name": "xray", "version": 1}
     let result = yaml.stringify(config)
     assert(result != null)
     assert(result.length > 0)

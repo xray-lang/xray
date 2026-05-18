@@ -13,7 +13,7 @@ class Point {
         this.y = y
     }
 
-    toString(): string {
+    toString() -> string {
         return "(${this.x}, ${this.y})"
     }
 }
@@ -48,7 +48,7 @@ class Counter {
         this.count = this.count - 1
     }
 
-    getValue(): int {
+    getValue() -> int {
         return this.count
     }
 }
@@ -90,12 +90,12 @@ class Builder {
         this.value = ""
     }
 
-    append(s: string): Builder {
+    append(s: string) -> Builder {
         this.value += s
         return this
     }
 
-    build(): string {
+    build() -> string {
         return this.value
     }
 }
@@ -157,11 +157,11 @@ fn test_field_write() {
 // ===== 多参数方法 =====
 
 class Calculator {
-    add(a: int, b: int): int {
+    add(a: int, b: int) -> int {
         return a + b
     }
 
-    multiply(a: int, b: int, c: int): int {
+    multiply(a: int, b: int, c: int) -> int {
         return a * b * c
     }
 }

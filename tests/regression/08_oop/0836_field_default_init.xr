@@ -15,7 +15,7 @@ class Simple {
 class Complex {
     _map = #{}
     _arr: Array<int> = []
-    _config: Map<string, int> = {"debug" => 0, "port" => 8080}
+    _config: Map<string, int> = #{"debug": 0, "port": 8080}
 
     constructor() {
         // 字段已自动初始化
@@ -26,15 +26,15 @@ class Complex {
         this._arr.push(value)
     }
 
-    getMapSize(): int {
+    getMapSize() -> int {
         return this._map.keys().length
     }
 
-    getArrSize(): int {
+    getArrSize() -> int {
         return this._arr.length
     }
 
-    getPort(): int {
+    getPort() -> int {
         return this._config["port"]
     }
 }
@@ -47,11 +47,11 @@ class Override {
         this._count = count
     }
 
-    getName(): string {
+    getName() -> string {
         return this._name
     }
 
-    getCount(): int {
+    getCount() -> int {
         return this._count
     }
 }
@@ -64,7 +64,7 @@ class Counter {
         this._items.push(item)
     }
 
-    count(): int {
+    count() -> int {
         return this._items.length
     }
 }

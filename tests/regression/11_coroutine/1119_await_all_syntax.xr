@@ -4,13 +4,13 @@
 ** 作者：xingleixu@gmail.com
 */
 
-fn task1(): int {
+fn task1() -> int {
     return 10
 }
-fn task2(): int {
+fn task2() -> int {
     return 20
 }
-fn task3(): int {
+fn task3() -> int {
     return 30
 }
 

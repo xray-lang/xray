@@ -50,7 +50,7 @@ fn test_copy_nested_array() {
 
 @test
 fn test_copy_map_independent() {
-    let m = {"a" => 1, "b" => 2}
+    let m = #{"a": 1, "b": 2}
     let n = copy(m)
     m["c"] = 3
     assert_eq(n.length, 2)

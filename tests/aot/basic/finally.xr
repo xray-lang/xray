@@ -1,4 +1,4 @@
-fn test_normal(): int {
+fn test_normal() -> int {
     let result = 0
     try {
         result = 10
@@ -10,7 +10,7 @@ fn test_normal(): int {
     return result
 }
 
-fn test_exception(): int {
+fn test_exception() -> int {
     let result = 0
     try {
         throw "error"
@@ -23,7 +23,7 @@ fn test_exception(): int {
     return result
 }
 
-fn test_finally_only(): int {
+fn test_finally_only() -> int {
     let result = 0
     try {
         result = 42

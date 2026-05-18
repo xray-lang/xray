@@ -1,6 +1,6 @@
 // 006_return_type_mismatch.xr
 // Expected: Compile error - return type mismatch
 // Error should mention: return type, expected
-fn getNumber(): int {
+fn getNumber() -> int {
     return "not a number"
 }

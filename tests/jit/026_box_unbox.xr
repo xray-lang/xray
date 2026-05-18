@@ -2,12 +2,12 @@
 // EXPECTED: 3.14
 // Test: Box/Unbox operations (BOX_I64, BOX_F64, UNBOX_I64, UNBOX_F64)
 
-fn pass_through_int(x: int) : int {
+fn pass_through_int(x: int) -> int {
     let arr = [x]
     return arr[0]
 }
 
-fn pass_through_float(x: float) : float {
+fn pass_through_float(x: float) -> float {
     let arr = [x]
     return arr[0]
 }

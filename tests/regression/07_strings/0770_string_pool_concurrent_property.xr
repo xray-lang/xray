@@ -21,7 +21,7 @@ fn test_property_concurrent_intern_safety() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发执行字符串驻留，不应发生崩溃或数据损坏
     
-    fn intern_task(id: int): bool {
+    fn intern_task(id: int) -> bool {
         // 创建多个字符串，触发驻留
         let s1 = "intern_" + string(id) + "_a"
         let s2 = "intern_" + string(id) + "_b"
@@ -55,7 +55,7 @@ fn test_property_concurrent_global_pool_readonly() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发访问全局池中的字面量，应该返回相同的字符串
     
-    fn global_access_task(id: int): bool {
+    fn global_access_task(id: int) -> bool {
         // 访问全局池中的字面量
         let s = "shared_literal_value"
         // 验证与编译期字面量相等
@@ -82,7 +82,7 @@ fn test_property_concurrent_local_pool_isolation() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程，每个协程的本地池应该独立，互不影响
     
-    fn local_pool_task(id: int): bool {
+    fn local_pool_task(id: int) -> bool {
         // 创建本地字符串（运行期驻留到本地池）
         let local1 = "local_" + string(id) + "_first"
         let local2 = "local_" + string(id) + "_second"
@@ -114,7 +114,7 @@ fn test_property_concurrent_long_string_no_intern() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发创建长字符串（>64字节），不应驻留，不应崩溃
     
-    fn long_string_task(id: int): bool {
+    fn long_string_task(id: int) -> bool {
         // 创建超过64字节的长字符串（不驻留）
         let long = "this_is_a_very_long_string_that_exceeds_64_bytes_" + string(id) + "_end_of_string_data"
         
@@ -148,7 +148,7 @@ fn test_property_concurrent_mixed_operations() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程混合执行各种字符串操作，不应发生崩溃或数据损坏
     
-    fn mixed_task(id: int): bool {
+    fn mixed_task(id: int) -> bool {
         // 混合操作：驻留、拼接、比较
         let s1 = "prefix_" + string(id)
         let s2 = "_suffix"
@@ -184,7 +184,7 @@ fn test_property_concurrent_string_compare() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发执行字符串比较，结果应该正确
     
-    fn compare_task(id: int): bool {
+    fn compare_task(id: int) -> bool {
         // 创建相同内容的字符串
         let a = "compare_" + string(id)
         let b = "compare_" + string(id)
@@ -219,7 +219,7 @@ fn test_property_concurrent_intern_consistency() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程多次创建相同内容的字符串，驻留字符串应该相等
     
-    fn consistency_task(id: int): bool {
+    fn consistency_task(id: int) -> bool {
         // 多次创建相同内容的字符串
         let s1 = "consistent_value"
         let s2 = "consistent_value"
@@ -249,7 +249,7 @@ fn test_property_concurrent_stress_200() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于 200 个协程并发执行字符串操作，不应发生崩溃
     
-    fn stress_task(id: int): bool {
+    fn stress_task(id: int) -> bool {
         // 创建多个字符串
         let s1 = "stress_" + string(id) + "_first"
         let s2 = "stress_" + string(id) + "_second"

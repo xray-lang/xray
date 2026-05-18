@@ -4,7 +4,7 @@
 // and that OSR with mixed-type accumulation works correctly.
 
 // ===== Interpreter creates object, JIT reads fields =====
-fn make_tree(depth: int): Json {
+fn make_tree(depth: int) -> Json {
     if (depth <= 0) {
         return { "left": null, "right": null, "val": 1 }
     }
@@ -15,7 +15,7 @@ fn make_tree(depth: int): Json {
     }
 }
 
-fn checksum(node: Json): float {
+fn checksum(node: Json) -> float {
     if (node == null) { return 0 }
     return node.val + checksum(node.left) + checksum(node.right)
 }

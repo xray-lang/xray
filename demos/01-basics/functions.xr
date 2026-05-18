@@ -4,33 +4,33 @@
 // Run: xray demos/01-basics/functions.xr
 
 // === Named functions ===
-fn add(a: int, b: int): int {
+fn add(a: int, b: int) -> int {
     return a + b
 }
 print("3 + 4 = ${add(3, 4)}")
 
 // === Default parameters ===
-fn greet(name: string, greeting: string = "Hello"): string {
+fn greet(name: string, greeting: string = "Hello") -> string {
     return "${greeting}, ${name}!"
 }
 print(greet("Alice"))
 print(greet("Bob", "Hi"))
 
 // === Multiple return values ===
-fn divmod(a: int, b: int): (int, int) {
+fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 let (q, r) = divmod(17, 5)
 print("17 / 5 = ${q} remainder ${r}")
 
 // === Arrow functions (must have type annotations) ===
-let double = (x: int): int => x * 2
-let square = (x: int): int => x * x
+let double = fn(x: int) -> int { return x * 2 }
+let square = fn(x: int) -> int { return x * x }
 print("double(5) = ${double(5)}")
 print("square(6) = ${square(6)}")
 
 // Arrow function with body
-let clamp = (x: int, lo: int, hi: int): int => {
+let clamp = fn(x: int, lo: int, hi: int) -> int {
     if (x < lo) { return lo }
     if (x > hi) { return hi }
     return x
@@ -38,13 +38,13 @@ let clamp = (x: int, lo: int, hi: int): int => {
 print("clamp(15, 0, 10) = ${clamp(15, 0, 10)}")
 
 // === Higher-order functions ===
-fn apply(f: fn(int): int, x: int): int {
+fn apply(f: (int) -> int, x: int) -> int {
     return f(x)
 }
 print("apply(square, 7) = ${apply(square, 7)}")
 
 // === Rest parameters (no type annotation on rest param) ===
-fn sum(...nums): int {
+fn sum(...nums) -> int {
     let total = 0
     for (let i = 0; i < nums.length; i++) {
         total = total + nums[i]
@@ -54,7 +54,7 @@ fn sum(...nums): int {
 print("sum(1,2,3,4,5) = ${sum(1, 2, 3, 4, 5)}")
 
 // === Recursion ===
-fn factorial(n: int): int {
+fn factorial(n: int) -> int {
     if (n <= 1) { return 1 }
     return n * factorial(n - 1)
 }
@@ -63,7 +63,7 @@ print("10! = ${factorial(10)}")
 // === Function hoisting (fn declarations can be used before definition) ===
 print("fib(10) = ${fib(10)}")
 
-fn fib(n: int): int {
+fn fib(n: int) -> int {
     if (n <= 1) { return n }
     return fib(n - 1) + fib(n - 2)
 }

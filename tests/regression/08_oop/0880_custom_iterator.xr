@@ -13,11 +13,11 @@ class CustomRangeIter {
         this.end = end
     }
     
-    hasNext(): bool {
+    hasNext() -> bool {
         return this.current < this.end
     }
     
-    next(): int {
+    next() -> int {
         let val = this.current
         this.current = this.current + 1
         return val
@@ -33,7 +33,7 @@ class CustomRange {
         this.end = end
     }
     
-    iterator(): CustomRangeIter {
+    iterator() -> CustomRangeIter {
         return CustomRangeIter(this.start, this.end)
     }
 }
@@ -78,7 +78,7 @@ class StepIterator {
         this.step = step
     }
     
-    hasNext(): bool {
+    hasNext() -> bool {
         if (this.step > 0) {
             return this.current < this.end
         } else {
@@ -86,7 +86,7 @@ class StepIterator {
         }
     }
     
-    next(): int {
+    next() -> int {
         let val = this.current
         this.current = this.current + this.step
         return val
@@ -104,7 +104,7 @@ class StepRange {
         this.step = step
     }
     
-    iterator(): StepIterator {
+    iterator() -> StepIterator {
         return StepIterator(this.start, this.end, this.step)
     }
 }
@@ -152,11 +152,11 @@ class FibIterator {
         this.max = max
     }
     
-    hasNext(): bool {
+    hasNext() -> bool {
         return this.count < this.max
     }
     
-    next(): int {
+    next() -> int {
         let val = this.a
         let tmp = this.a + this.b
         this.a = this.b
@@ -173,7 +173,7 @@ class Fibonacci {
         this.max = n
     }
     
-    iterator(): FibIterator {
+    iterator() -> FibIterator {
         return FibIterator(this.max)
     }
 }
@@ -206,11 +206,11 @@ class CharIterator {
         this.index = 0
     }
     
-    hasNext(): bool {
+    hasNext() -> bool {
         return this.index < this.str.length
     }
     
-    next(): string {
+    next() -> string {
         let ch = this.str[this.index]
         this.index = this.index + 1
         return ch
@@ -224,7 +224,7 @@ class Chars {
         this.str = s
     }
     
-    iterator(): CharIterator {
+    iterator() -> CharIterator {
         return CharIterator(this.str)
     }
 }

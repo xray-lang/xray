@@ -1,8 +1,8 @@
-fn locked(x: int): int {
+fn locked(x: int) -> int {
     return x
 }
 
-fn replacement(x: int): int {
+fn replacement(x: int) -> int {
     return x + 1
 }
 

@@ -89,7 +89,7 @@ fn test_field_type_change() {
 // ===== 对象作为参数 =====
 @test
 fn test_object_as_parameter() {
-    fn getField(obj: Json, key: string): string | int {
+    fn getField(obj: Json, key: string) -> string | int {
         return obj[key]
     }
     let data = { "name": "test", "value": 42 }

@@ -4,11 +4,11 @@
 // EXPECTED: 10
 // Test: Short-circuit evaluation (TESTSET) and logical operators in JIT
 
-fn or_test(a: int | string | null, b: int | string | null) : int | string | null {
+fn or_test(a: int | string | null, b: int | string | null) -> int | string | null {
     return a || b
 }
 
-fn and_test(a: int | string | bool, b: int | string | bool) : int | string | bool {
+fn and_test(a: int | string | bool, b: int | string | bool) -> int | string | bool {
     return a && b
 }
 

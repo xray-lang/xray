@@ -22,7 +22,7 @@ fn test_reified_generics() {
     let arr = [1, 2, 3]
     assert_eq(Reflect.elementType(arr), "any")
 
-    let map = {"a" => 1, "b" => 2}
+    let map = #{"a": 1, "b": 2}
     assert_eq(Reflect.keyType(map), "any")
     assert_eq(Reflect.valueType(map), "any")
 
@@ -64,7 +64,7 @@ fn test_reified_generics() {
     assert_eq(Reflect.typeOf(arr), "Array")
 
     // Map typeOf
-    let typed_map: Map<string, int> = {"x" => 1}
+    let typed_map: Map<string, int> = #{"x": 1}
     assert_eq(Reflect.typeOf(typed_map), "Map<string, int>")
     assert_eq(Reflect.typeOf(map), "Map")
 

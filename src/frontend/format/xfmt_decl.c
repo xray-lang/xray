@@ -76,7 +76,7 @@ void xfmt_emit_function_decl(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_char(ctx, ')');
 
     if (fn->return_type) {
-        xfmt_write_str(ctx, ": ");
+        xfmt_write_str(ctx, " -> ");
         xfmt_emit_type(ctx, fn->return_type);
     }
 
@@ -309,7 +309,7 @@ void xfmt_emit_class_decl(XrFmtContext *ctx, AstNode *node) {
         xfmt_write_char(ctx, ')');
 
         if (m->return_type) {
-            xfmt_write_str(ctx, ": ");
+            xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
         }
 
@@ -387,7 +387,7 @@ void xfmt_emit_interface_decl(XrFmtContext *ctx, AstNode *node) {
         }
         xfmt_write_char(ctx, ')');
         if (m->return_type) {
-            xfmt_write_str(ctx, ": ");
+            xfmt_write_str(ctx, " -> ");
             xfmt_emit_type(ctx, m->return_type);
         }
         xfmt_write_newline(ctx);

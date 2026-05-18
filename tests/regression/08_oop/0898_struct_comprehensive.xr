@@ -5,10 +5,10 @@ struct Point {
     x: float
     y: float
 }
-fn make_point(x: float, y: float): Point {
+fn make_point(x: float, y: float) -> Point {
     return Point{x: x, y: y}
 }
-fn origin(): Point {
+fn origin() -> Point {
     return Point{x: 0.0, y: 0.0}
 }
 struct Rect {
@@ -17,7 +17,7 @@ struct Rect {
     w: float
     h: float
 
-    area(): float {
+    area() -> float {
         return this.w * this.h
     }
 }

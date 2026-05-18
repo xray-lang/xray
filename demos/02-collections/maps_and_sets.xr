@@ -4,7 +4,7 @@
 // Run: xray demos/02-collections/maps_and_sets.xr
 
 // === Map (key => value syntax) ===
-let scores = {"alice" => 95, "bob" => 87, "charlie" => 92}
+let scores = #{"alice": 95, "bob": 87, "charlie": 92}
 print("scores: ${scores}")
 
 // Access and mutation
@@ -22,7 +22,7 @@ print("keys: ${scores.keys()}")
 print("values: ${scores.values()}")
 
 // Iterate
-scores.forEach((key: string, val: int) => {
+scores.forEach((key: string, val: int) -> {
     print("  ${key} => ${val}")
 })
 

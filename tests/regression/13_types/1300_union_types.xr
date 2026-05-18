@@ -5,20 +5,20 @@
 
 // Test 1: basic union type variable
 
-fn to_string_value(v: int | string): string {
+fn to_string_value(v: int | string) -> string {
     if (typeof(v) == Type.int) {
         return "int"
     } else {
         return "str"
     }
 }
-fn parse_value(s: string): int | string {
+fn parse_value(s: string) -> int | string {
     if (s == "42") {
         return 42
     }
     return s
 }
-fn classify(v: int | string | bool): string {
+fn classify(v: int | string | bool) -> string {
     if (typeof(v) == Type.int) {
         return "number"
     } else if (typeof(v) == Type.string) {
@@ -30,12 +30,12 @@ fn classify(v: int | string | bool): string {
 class Dog {
     name: string
     constructor(name) { this.name = name }
-    speak(): string { return "woof" }
+    speak() -> string { return "woof" }
 }
 class Cat {
     name: string
     constructor(name) { this.name = name }
-    speak(): string { return "meow" }
+    speak() -> string { return "meow" }
 }
 
 @test

@@ -17,11 +17,11 @@ class Counter {
         this.n = n
     }
 
-    add(x: int): int {
+    add(x: int) -> int {
         return this.n + x
     }
 }
-fn hot_sum(c: Counter, iters: int): int {
+fn hot_sum(c: Counter, iters: int) -> int {
     let s = 0
     for (let i = 0; i < iters; i++) {
         // Same call site, same class → monomorphic IC.

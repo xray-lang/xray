@@ -3,33 +3,33 @@
 @native
 class string {
     length: int
-    charAt(index: int): string
-    charCodeAt(index: int): int
-    concat(...strings: string): string
-    includes(search: string): bool
-    indexOf(search: string, start?: int): int
-    lastIndexOf(search: string): int
-    slice(start: int, end?: int): string
-    substring(start: int, end?: int): string
-    substr(start: int, length?: int): string
-    toLowerCase(): string
-    toUpperCase(): string
-    trim(): string
-    trimStart(): string
-    trimEnd(): string
-    split(separator: string, limit?: int): Array<string>
-    replace(search: string, replacement: string): string
-    replaceAll(search: string, replacement: string): string
-    repeat(count: int): string
-    startsWith(search: string): bool
-    endsWith(search: string): bool
-    padStart(length: int, pad?: string): string
-    padEnd(length: int, pad?: string): string
-    match(pattern: string): Array<string>?
+    charAt(index: int) -> string
+    charCodeAt(index: int) -> int
+    concat(...strings: string) -> string
+    includes(search: string) -> bool
+    indexOf(search: string, start?: int) -> int
+    lastIndexOf(search: string) -> int
+    slice(start: int, end?: int) -> string
+    substring(start: int, end?: int) -> string
+    substr(start: int, length?: int) -> string
+    toLowerCase() -> string
+    toUpperCase() -> string
+    trim() -> string
+    trimStart() -> string
+    trimEnd() -> string
+    split(separator: string, limit?: int) -> Array<string>
+    replace(search: string, replacement: string) -> string
+    replaceAll(search: string, replacement: string) -> string
+    repeat(count: int) -> string
+    startsWith(search: string) -> bool
+    endsWith(search: string) -> bool
+    padStart(length: int, pad?: string) -> string
+    padEnd(length: int, pad?: string) -> string
+    match(pattern: string) -> Array<string>?
     // Iteration protocol — iterator() yields each character, while
     // entriesIterator() yields (charIndex, character) tuples. Both
     // are used by for-in lowering and may be called directly.
-    iterator(): Iterator<string>
-    entriesIterator(): Iterator<(int, string)>
-    entries(): Array<(int, string)>
+    iterator() -> Iterator<string>
+    entriesIterator() -> Iterator<(int, string)>
+    entries() -> Array<(int, string)>
 }

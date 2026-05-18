@@ -69,7 +69,7 @@ fn test_try_catch_in_coro() {
     print("t.error:", t.error)
 }
 fn test_manual_error_check() {
-    fn risky_task(n: int): int {
+    fn risky_task(n: int) -> int {
         if (n == 0) {
             throw "cannot process zero"
         }

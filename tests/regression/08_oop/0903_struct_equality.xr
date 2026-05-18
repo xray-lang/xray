@@ -9,7 +9,7 @@ struct Vec2 {
     x: float
     y: float
 
-    operator ==(other: Vec2): bool {
+    operator ==(other: Vec2) -> bool {
         return this.x === other.x && this.y === other.y
     }
 }

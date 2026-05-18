@@ -1,14 +1,14 @@
 // Test supervisor scope errors[] collection
 
-fn failing1(): int {
+fn failing1() -> int {
     throw "error1"
     return 0
 }
-fn failing2(): int {
+fn failing2() -> int {
     throw "error2"
     return 0
 }
-fn ok(): int {
+fn ok() -> int {
     return 42
 }
 fn test_errors_collected() {

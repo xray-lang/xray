@@ -16,13 +16,13 @@
 fn greet(name: string = "World") {
     print("Hello, " + name)
 }
-fn add(a: int, b: int = 10, c: int = 100): int {
+fn add(a: int, b: int = 10, c: int = 100) -> int {
     return a + b + c
 }
-fn createPoint(x: int = 0, y: int = 0): Json {
+fn createPoint(x: int = 0, y: int = 0) -> Json {
     return { x: x, y: y }
 }
-fn formatName(first: string, last: string = "Unknown"): string {
+fn formatName(first: string, last: string = "Unknown") -> string {
     return first + " " + last
 }
 

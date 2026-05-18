@@ -8,19 +8,19 @@ export class Rect {
         this.h = h
     }
 
-    area(): int {
+    area() -> int {
         return this.w * this.h
     }
 
-    perimeter(): int {
+    perimeter() -> int {
         return 2 * (this.w + this.h)
     }
 }
 
-export fn add(a: int, b: int): int {
+export fn add(a: int, b: int) -> int {
     return a + b
 }
 
-export fn mul(a: int, b: int): int {
+export fn mul(a: int, b: int) -> int {
     return a * b
 }

@@ -8,19 +8,19 @@ class Vec2 {
         this.y = y
     }
 
-    length_sq(): float {
+    length_sq() -> float {
         return this.x * this.x + this.y * this.y
     }
 
-    dot(other: Vec2): float {
+    dot(other: Vec2) -> float {
         return this.x * other.x + this.y * other.y
     }
 
-    scale(factor: float): Vec2 {
+    scale(factor: float) -> Vec2 {
         return Vec2(this.x * factor, this.y * factor)
     }
 
-    add(other: Vec2): Vec2 {
+    add(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
 }

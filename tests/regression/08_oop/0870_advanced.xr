@@ -11,10 +11,10 @@ class Shape {
         this.name = name
     }
 
-    describe(): string {        return "Shape: " + this.name
+    describe() -> string {        return "Shape: " + this.name
     }
 
-    area(): int {        return 0
+    area() -> int {        return 0
     }
 }
 
@@ -28,11 +28,11 @@ class Rectangle extends Shape {
         this.height = h
     }
 
-    describe(): string {        // 调用父类方法并扩展
+    describe() -> string {        // 调用父类方法并扩展
         return super.describe() + " (${this.width}x${this.height})"
     }
 
-    area(): int {        return this.width * this.height
+    area() -> int {        return this.width * this.height
     }
 }
 
@@ -52,10 +52,10 @@ class A {
         this.value = v
     }
 
-    getValue(): int {        return this.value
+    getValue() -> int {        return this.value
     }
 
-    describe(): string {        return "A:${this.value}"
+    describe() -> string {        return "A:${this.value}"
     }
 }
 
@@ -67,10 +67,10 @@ class B extends A {
         this.extra = e
     }
 
-    getValue(): int {        return super.getValue() + this.extra
+    getValue() -> int {        return super.getValue() + this.extra
     }
 
-    describe(): string {        return super.describe() + ",B:${this.extra}"
+    describe() -> string {        return super.describe() + ",B:${this.extra}"
     }
 }
 
@@ -82,10 +82,10 @@ class C extends B {
         this.more = m
     }
 
-    getValue(): int {        return super.getValue() + this.more
+    getValue() -> int {        return super.getValue() + this.more
     }
 
-    describe(): string {        return super.describe() + ",C:${this.more}"
+    describe() -> string {        return super.describe() + ",C:${this.more}"
     }
 }
 
@@ -108,9 +108,9 @@ class Logger {
         this.prefix = prefix
     }
 
-    log(msg: string): string {        return this.prefix + ": " + msg    }
+    log(msg: string) -> string {        return this.prefix + ": " + msg    }
 
-    warn(msg: string): string {        return "[WARN] " + this.log(msg)    }
+    warn(msg: string) -> string {        return "[WARN] " + this.log(msg)    }
 }
 
 class FileLogger extends Logger {
@@ -121,7 +121,7 @@ class FileLogger extends Logger {
         this.file = file
     }
 
-    log(msg: string): string {        return super.log(msg) + " -> " + this.file    }
+    log(msg: string) -> string {        return super.log(msg) + " -> " + this.file    }
 
     // warn 继承自父类，但会调用子类的 log
 }
@@ -142,7 +142,7 @@ class Processor {
         this.factor = f
     }
 
-    process(x: int): int {        return x * this.factor    }
+    process(x: int) -> int {        return x * this.factor    }
 }
 
 @test
@@ -165,11 +165,11 @@ class Calculator {
         this.base = base
     }
 
-    add(x: int): int {        return this.base + x    }
+    add(x: int) -> int {        return this.base + x    }
 
-    addTwice(x: int): int {        return this.add(x) + this.add(x)    }
+    addTwice(x: int) -> int {        return this.add(x) + this.add(x)    }
 
-    addChain(a: int, b: int, c: int): int {        return this.add(a) + this.add(b) + this.add(c) - this.base * 2    }
+    addChain(a: int, b: int, c: int) -> int {        return this.add(a) + this.add(b) + this.add(c) - this.base * 2    }
 }
 
 @test
@@ -191,7 +191,7 @@ class Initializer {
         this.processed = this.transform(input)
     }
 
-    transform(s: string): string {        return "[" + s + "]"    }
+    transform(s: string) -> string {        return "[" + s + "]"    }
 }
 
 @test
@@ -232,11 +232,11 @@ class Box {
         this.value = v
     }
 
-    add(other: Box): Box {
+    add(other: Box) -> Box {
         return new Box(this.value + other.value)
     }
 
-    equals(other: Box): bool {
+    equals(other: Box) -> bool {
         return this.value == other.value
     }
 }

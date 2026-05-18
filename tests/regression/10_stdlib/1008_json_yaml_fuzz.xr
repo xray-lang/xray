@@ -186,7 +186,7 @@ fn test_yaml_fuzz_nested_flow() {
 
 @test
 fn test_yaml_roundtrip_basic() {
-    let original = {"name" => "test", "version" => 1, "debug" => false}
+    let original = #{"name": "test", "version": 1, "debug": false}
     let s = yaml.stringify(original)
     let parsed = yaml.parse(s)
     assert_eq(parsed["name"], "test")

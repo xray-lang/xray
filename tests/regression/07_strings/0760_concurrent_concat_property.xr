@@ -20,7 +20,7 @@ fn test_property_concurrent_concat_short() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发执行短字符串拼接，结果应独立且正确
     
-    fn concat_task(id: int): string {
+    fn concat_task(id: int) -> string {
         // 短字符串拼接（总长度 < 64）
         let a = "prefix_" + string(id)
         let b = "_suffix"
@@ -48,7 +48,7 @@ fn test_property_concurrent_concat_long() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程并发执行长字符串拼接，结果应独立且正确
     
-    fn concat_task(id: int): string {
+    fn concat_task(id: int) -> string {
         // 长字符串拼接（总长度 >= 64）
         let a = "x".repeat(40)
         let b = "_id" + string(id) + "_"
@@ -79,7 +79,7 @@ fn test_property_concurrent_concat_mixed() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：对于任意 N 个协程混合执行短/长字符串拼接，结果应独立且正确
     
-    fn concat_task(id: int): string {
+    fn concat_task(id: int) -> string {
         if (id % 2 == 0) {
             // 短字符串
             return "short_" + string(id) + "_end"
@@ -115,7 +115,7 @@ fn test_property_concurrent_concat_isolation() {
     
     let chars = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
     
-    fn isolation_task(id: int, char: string): string {
+    fn isolation_task(id: int, char: string) -> string {
         // 使用唯一字符构建字符串
         let prefix = char.repeat(30)
         let middle = "_" + string(id) + "_"
@@ -152,7 +152,7 @@ fn test_property_concurrent_concat_threshold_boundary() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：在阈值边界附近的并发拼接应该正确
     
-    fn boundary_task(id: int): Array<int> {
+    fn boundary_task(id: int) -> Array<int> {
         // 根据 id 选择不同长度，跨越 64 字节阈值
         let len = 30 + (id % 10)  // 30-39
         let a = "a".repeat(len)
@@ -184,7 +184,7 @@ fn test_property_concurrent_concat_correctness() {
     // **Validates: Requirements 1.1, 5.1**
     // 属性：并发拼接的结果应该与串行拼接的结果一致
     
-    fn concat_task(id: int): string {
+    fn concat_task(id: int) -> string {
         let a = "hello_" + string(id)
         let b = "_world"
         return a + b

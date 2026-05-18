@@ -14,7 +14,7 @@ fn test_ws_apis_exist() {
 
 @test
 fn test_ws_url_format() {
-    fn isWsUrl(url: string): bool {
+    fn isWsUrl(url: string) -> bool {
         return url.indexOf("ws://") == 0 || url.indexOf("wss://") == 0
     }
     assert(isWsUrl("ws://example.com/socket"))

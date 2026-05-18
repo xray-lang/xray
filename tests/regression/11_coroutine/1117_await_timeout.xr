@@ -5,7 +5,7 @@
 
 // 快速完成的任务
 
-fn fast_task(): int {
+fn fast_task() -> int {
     return 42
 }
 

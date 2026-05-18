@@ -7,20 +7,20 @@ class Counter {
     constructor(init: int) {
         this.value = init
     }
-    get(): int {
+    get() -> int {
         return this.value
     }
-    increment(): int {
+    increment() -> int {
         this.value = this.value + 1
         return this.value
     }
 }
 
-fn use_counter(c: Counter): int {
+fn use_counter(c: Counter) -> int {
     return c.get()
 }
 
-fn bump_counter(c: Counter): int {
+fn bump_counter(c: Counter) -> int {
     return c.increment()
 }
 

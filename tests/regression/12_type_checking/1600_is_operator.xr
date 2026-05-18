@@ -9,7 +9,7 @@ fn test_is_operator() {
     let d = true
     let e = null
     let arr = [1, 2, 3]
-    let map = { "a" => 1 }
+    let map = #{"a": 1}
     // Test basic types
     print(a is int)
     // true

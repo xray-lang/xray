@@ -52,12 +52,12 @@ TEST(unwind_records_full_call_chain) {
 
     /* deep() -> level3() -> level2() -> level1() -> top-level
      * (5 frames active when throw fires). */
-    const char *src = "fn deep(): () {\n"
+    const char *src = "fn deep() -> () {\n"
                       "    throw \"boom\"\n"
                       "}\n"
-                      "fn level3(): () { deep() }\n"
-                      "fn level2(): () { level3() }\n"
-                      "fn level1(): () { level2() }\n"
+                      "fn level3() -> () { deep() }\n"
+                      "fn level2() -> () { level3() }\n"
+                      "fn level1() -> () { level2() }\n"
                       "level1()\n";
 
     int rc = xray_isolate_dostring(iso, src);
@@ -87,7 +87,7 @@ TEST(runtime_error_records_trace) {
      * by zero on big-int. The VM's BigInt division returns
      * XR_NOTFOUND on /0 and the dispatcher throws
      * XR_ERR_DIV_BY_ZERO via the runtime-error macro. */
-    const char *src = "fn divider(a: int, b: int): int { return a / b }\n"
+    const char *src = "fn divider(a: int, b: int) -> int { return a / b }\n"
                       "let r = divider(10, 0)\n";
 
     int rc = xray_isolate_dostring(iso, src);
@@ -154,9 +154,9 @@ TEST(caught_exception_trace_survives_catch) {
     /* Throw four frames deep, then immediately re-throw from the
      * catch handler so the test C code can inspect the trace on
      * the second (uncaught) flight. */
-    const char *src = "fn deep(): () { throw \"deep\" }\n"
-                      "fn level2(): () { deep() }\n"
-                      "fn level1(): () { level2() }\n"
+    const char *src = "fn deep() -> () { throw \"deep\" }\n"
+                      "fn level2() -> () { deep() }\n"
+                      "fn level1() -> () { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";
 
     int rc = xray_isolate_dostring(iso, src);

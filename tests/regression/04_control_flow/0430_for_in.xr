@@ -86,7 +86,7 @@ fn test_for_in_range_one() {
 
 @test
 fn test_for_in_map() {
-    let m = {"a" => 1, "b" => 2, "c" => 3}
+    let m = #{"a": 1, "b": 2, "c": 3}
     let sum = 0
     for (k, v in m) {
         sum += v
@@ -96,7 +96,7 @@ fn test_for_in_map() {
 
 @test
 fn test_for_in_map_keys() {
-    let m = {"x" => 10, "y" => 20}
+    let m = #{"x": 10, "y": 20}
     let keys: Array<string> = []
     for (k, v in m) {
         keys.push(k)
@@ -118,7 +118,7 @@ fn test_for_in_empty_map() {
 
 @test
 fn test_for_in_map_single_var_yields_key() {
-    let m: Map<string, int> = #{"a" => 1, "b" => 2, "c" => 3}
+    let m: Map<string, int> = #{"a": 1, "b": 2, "c": 3}
     let acc = ""
     for (k in m) {
         acc += k
@@ -165,7 +165,7 @@ fn test_iterator_string_manual() {
 
 @test
 fn test_iterator_map_manual_yields_keys() {
-    let m: Map<string, int> = #{"a" => 1, "b" => 2}
+    let m: Map<string, int> = #{"a": 1, "b": 2}
     let it = m.iterator()
     let acc = ""
     while (it.hasNext()) {

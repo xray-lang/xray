@@ -10,7 +10,7 @@ enum Color {
     Blue = 3
 }
 
-fn get_val(c: Color) : int {
+fn get_val(c: Color) -> int {
     return int(c)
 }
 

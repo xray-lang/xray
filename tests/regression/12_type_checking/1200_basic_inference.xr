@@ -63,7 +63,7 @@ fn test_array_nested() {
 // ===== Map Inference =====
 @test
 fn test_map_basic() {
-    let m = { "a" => 1, "b" => 2 }
+    let m = #{"a": 1, "b": 2}
     assert_eq(typeof(m), Type.Map)
     assert_eq(m.get("a"), 1)
 }

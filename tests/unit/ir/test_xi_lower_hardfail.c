@@ -108,7 +108,7 @@ TEST(unresolved_variable_in_expression) {
 
 TEST(unresolved_variable_in_function) {
     /* Undeclared variable inside a function body. */
-    XiFunc *f = try_lower("fn foo(): int {\n"
+    XiFunc *f = try_lower("fn foo() -> int {\n"
                           "    return missing_z\n"
                           "}\n");
     assert(f == NULL && "lowerer must reject unresolved variable in function");

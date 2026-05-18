@@ -3,12 +3,12 @@
 // EXPECTED: 1
 // Test: Recursive function calls in JIT
 
-fn factorial(n: int) : int {
+fn factorial(n: int) -> int {
     if (n <= 1) { return 1 }
     return n * factorial(n - 1)
 }
 
-fn fib(n: int) : int {
+fn fib(n: int) -> int {
     if (n <= 1) { return n }
     return fib(n - 1) + fib(n - 2)
 }

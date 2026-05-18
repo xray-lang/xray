@@ -286,7 +286,7 @@ TEST(repl_cross_input_function_call) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "fn inc(n: int): int { return n + 1 }\n");
+    XrProto *p1 = xr_repl_compile(iso, "fn inc(n: int) -> int { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
@@ -322,7 +322,7 @@ TEST(repl_cross_input_function_reads_shared) {
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "fn getx(): int { return x }\n");
+    XrProto *p2 = xr_repl_compile(iso, "fn getx() -> int { return x }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -355,7 +355,7 @@ TEST(repl_cross_input_function_mutates_shared) {
     xr_execute(iso, p1);
 
     XrProto *p2 =
-        xr_repl_compile(iso, "fn bump(): int { counter = counter + 1; return counter }\n");
+        xr_repl_compile(iso, "fn bump() -> int { counter = counter + 1; return counter }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -424,11 +424,11 @@ TEST(repl_function_calls_function_cross_input) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    XrProto *p1 = xr_repl_compile(iso, "fn b(): int { return 100 }\n");
+    XrProto *p1 = xr_repl_compile(iso, "fn b() -> int { return 100 }\n");
     ASSERT_NOT_NULL(p1);
     xr_execute(iso, p1);
 
-    XrProto *p2 = xr_repl_compile(iso, "fn a(): int { return b() + 1 }\n");
+    XrProto *p2 = xr_repl_compile(iso, "fn a() -> int { return b() + 1 }\n");
     ASSERT_NOT_NULL(p2);
     xr_execute(iso, p2);
 
@@ -454,7 +454,7 @@ TEST(repl_function_recursive_self_reference) {
     XrayIsolate *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    const char *src = "fn fact(n: int): int {\n"
+    const char *src = "fn fact(n: int) -> int {\n"
                       "  if (n <= 1) { return 1 }\n"
                       "  return n * fact(n - 1)\n"
                       "}\n";

@@ -4,19 +4,19 @@
 // EXPECTED: false
 // Test: Type conversion (TOINT, TOFLOAT, TOBOOL)
 
-fn to_int(x: float) : int {
+fn to_int(x: float) -> int {
     return int(x)
 }
 
-fn to_float(x: int) : float {
+fn to_float(x: int) -> float {
     return float(x)
 }
 
-fn to_bool_true(x: int) : bool {
+fn to_bool_true(x: int) -> bool {
     return bool(x)
 }
 
-fn to_bool_false(x: int) : bool {
+fn to_bool_false(x: int) -> bool {
     return bool(x)
 }
 

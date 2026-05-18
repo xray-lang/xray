@@ -1,7 +1,7 @@
 // EXPECTED: 0
 // Test: GC pressure in JIT - allocate many objects in hot loop
 
-fn alloc_heavy(n: int) : int {
+fn alloc_heavy(n: int) -> int {
     let wrong = 0
     let i = 0
     while (i < n) {

@@ -9,9 +9,9 @@ fn test_deferred() {
     print("start")
     
     // 简单测试：每个协程返回独立的值
-    fn get_one(): int { return 1 }
-    fn get_two(): int { return 2 }
-    fn get_three(): int { return 3 }
+    fn get_one() -> int { return 1 }
+    fn get_two() -> int { return 2 }
+    fn get_three() -> int { return 3 }
     
     // go 创建协程
     let t1 = go get_one()

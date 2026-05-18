@@ -11,11 +11,11 @@ struct Vec2 {
     x: float
     y: float
 
-    magnitude_sq(): float {
+    magnitude_sq() -> float {
         return this.x * this.x + this.y * this.y
     }
 
-    add(other: Vec2): Vec2 {
+    add(other: Vec2) -> Vec2 {
         let result = new Vec2()
         result.x = this.x + other.x
         result.y = this.y + other.y
@@ -34,12 +34,12 @@ struct Rect {
     width: float
     height: float
 
-    area(): float {
+    area() -> float {
         return this.width * this.height
     }
 }
 struct MathHelper {
-    static pi(): float {
+    static pi() -> float {
         return 3.14159
     }
 }

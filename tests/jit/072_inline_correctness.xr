@@ -3,20 +3,20 @@
 // EXPECTED: 10
 // Test: Small functions that should be inlined by JIT optimizer
 
-fn square(x: int) : int {
+fn square(x: int) -> int {
     return x * x
 }
 
-fn double(x: int) : int {
+fn double(x: int) -> int {
     return x + x
 }
 
-fn abs_val(x: int) : int {
+fn abs_val(x: int) -> int {
     if (x < 0) { return -x }
     return x
 }
 
-fn combined(a: int, b: int) : int {
+fn combined(a: int, b: int) -> int {
     return square(a) + double(b)
 }
 

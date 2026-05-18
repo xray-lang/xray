@@ -336,7 +336,7 @@ static void test_lea(void) {
 
 /* ========== Branch ========== */
 
-/* JMP rel32(0):  E9 00 00 00 00 */
+/* JMP rel32(0) -> E9 00 00 00 00 */
 static void test_jmp_rel32(void) {
     reset();
     x64_jmp_rel32(&g_buf, 0);
@@ -344,7 +344,7 @@ static void test_jmp_rel32(void) {
     check_bytes("jmp_rel32", exp, sizeof(exp));
 }
 
-/* JMP rel8(0x10):  EB 10 */
+/* JMP rel8(0x10) -> EB 10 */
 static void test_jmp_rel8(void) {
     reset();
     x64_jmp_rel8(&g_buf, 0x10);
@@ -368,7 +368,7 @@ static void test_jg_rel32(void) {
     check_bytes("jg_rel32", exp, sizeof(exp));
 }
 
-/* CALL rel32(0):  E8 00 00 00 00 */
+/* CALL rel32(0) -> E8 00 00 00 00 */
 static void test_call_rel32(void) {
     reset();
     x64_call_rel32(&g_buf, 0);

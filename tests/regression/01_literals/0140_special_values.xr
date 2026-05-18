@@ -61,7 +61,7 @@ fn test_null_in_array() {
 
 @test
 fn test_null_in_map() {
-    let m = { "key" => null }
+    let m = #{"key": null}
     assert_eq(m.get("key"), null)
     assert_eq(m.has("key"), true)
 }

@@ -2,7 +2,7 @@
 // EXPECTED: hello world
 // Test: Deopt scenario - function called with different types triggers deopt
 
-fn add_generic(a: int | string, b: int | string) : int | string {
+fn add_generic(a: int | string, b: int | string) -> int | string {
     return a + b
 }
 

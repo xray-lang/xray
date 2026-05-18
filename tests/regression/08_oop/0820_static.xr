@@ -11,7 +11,7 @@ class Counter {
         Counter.count = Counter.count + 1
     }
     
-    static getCount(): int {
+    static getCount() -> int {
         return Counter.count
     }
 }
@@ -56,11 +56,11 @@ class Point {
         this.y = y
     }
     
-    static origin(): Point {
+    static origin() -> Point {
         return new Point(0, 0)
     }
     
-    static fromPolar(r: float, theta: float): Point {
+    static fromPolar(r: float, theta: float) -> Point {
         // 简化：只返回近似值
         return new Point(r, 0)
     }
@@ -105,11 +105,11 @@ fn test_mixed_static_instance() {
 // ===== 静态方法调用静态方法 =====
 
 class Calculator {
-    static add(a: int, b: int): int {
+    static add(a: int, b: int) -> int {
         return a + b
     }
     
-    static addThree(a: int, b: int, c: int): int {
+    static addThree(a: int, b: int, c: int) -> int {
         return Calculator.add(Calculator.add(a, b), c)
     }
 }

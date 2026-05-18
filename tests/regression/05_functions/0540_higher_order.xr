@@ -6,12 +6,12 @@
 
 @test
 fn test_function_as_param() {
-    fn apply(f: fn(int): int, x: int): int {
+    fn apply(f: (int) -> int, x: int) -> int {
         return f(x)
     }
     
-    fn double(x: int): int { return x * 2 }
-    fn square(x: int): int { return x * x }
+    fn double(x: int) -> int { return x * 2 }
+    fn square(x: int) -> int { return x * x }
     
     assert_eq(apply(double, 5), 10)
     assert_eq(apply(square, 5), 25)
@@ -19,12 +19,12 @@ fn test_function_as_param() {
 
 @test
 fn test_binary_function_param() {
-    fn combine(f: fn(int, int): int, a: int, b: int): int {
+    fn combine(f: (int, int) -> int, a: int, b: int) -> int {
         return f(a, b)
     }
     
-    fn add(x: int, y: int): int { return x + y }
-    fn mul(x: int, y: int): int { return x * y }
+    fn add(x: int, y: int) -> int { return x + y }
+    fn mul(x: int, y: int) -> int { return x * y }
     
     assert_eq(combine(add, 3, 5), 8)
     assert_eq(combine(mul, 3, 5), 15)
@@ -34,8 +34,8 @@ fn test_binary_function_param() {
 
 @test
 fn test_function_factory() {
-    fn createGreeter(greeting: string): fn(string): string {
-        fn greet(name: string): string {
+    fn createGreeter(greeting: string) ->(string) -> string {
+        fn greet(name: string) -> string {
             return greeting + ", " + name + "!"
         }
         return greet
@@ -52,15 +52,15 @@ fn test_function_factory() {
 
 @test
 fn test_compose() {
-    fn compose(f: fn(int): int, g: fn(int): int): fn(int): int {
-        fn composed(x: int): int {
+    fn compose(f: (int) -> int, g: (int) -> int) ->(int) -> int {
+        fn composed(x: int) -> int {
             return f(g(x))
         }
         return composed
     }
     
-    fn double(x: int): int { return x * 2 }
-    fn addOne(x: int): int { return x + 1 }
+    fn double(x: int) -> int { return x * 2 }
+    fn addOne(x: int) -> int { return x + 1 }
     
     let doubleThenAdd = compose(addOne, double)
     let addThenDouble = compose(double, addOne)
@@ -73,12 +73,12 @@ fn test_compose() {
 
 @test
 fn test_partial() {
-    fn add(a: int, b: int): int {
+    fn add(a: int, b: int) -> int {
         return a + b
     }
     
-    fn partial(f: fn(int, int): int, x: int): fn(int): int {
-        fn applied(y: int): int {
+    fn partial(f: (int, int) -> int, x: int) ->(int) -> int {
+        fn applied(y: int) -> int {
             return f(x, y)
         }
         return applied
@@ -95,7 +95,7 @@ fn test_partial() {
 fn test_callback() {
     let received = 0
     
-    fn processAsync(callback: fn(int)) {
+    fn processAsync(callback: (int) -> ()) {
         let result = 42
         callback(result)
     }
@@ -112,7 +112,7 @@ fn test_callback() {
 
 @test
 fn test_custom_map() {
-    fn myMap(arr: Array<int>, transform: fn(int): int): Array<int> {
+    fn myMap(arr: Array<int>, transform: (int) -> int) -> Array<int> {
         let result: Array<int> = []
         for (x in arr) {
             result.push(transform(x))
@@ -120,7 +120,7 @@ fn test_custom_map() {
         return result
     }
     
-    fn double(x: int): int { return x * 2 }
+    fn double(x: int) -> int { return x * 2 }
     
     let arr = [1, 2, 3]
     let doubled = myMap(arr, double)
@@ -132,7 +132,7 @@ fn test_custom_map() {
 
 @test
 fn test_custom_filter() {
-    fn myFilter(arr: Array<int>, predicate: fn(int): bool): Array<int> {
+    fn myFilter(arr: Array<int>, predicate: (int) -> bool) -> Array<int> {
         let result: Array<int> = []
         for (x in arr) {
             if (predicate(x)) {
@@ -142,7 +142,7 @@ fn test_custom_filter() {
         return result
     }
     
-    fn isEven(x: int): bool { return x % 2 == 0 }
+    fn isEven(x: int) -> bool { return x % 2 == 0 }
     
     let arr = [1, 2, 3, 4, 5, 6]
     let evens = myFilter(arr, isEven)
@@ -153,7 +153,7 @@ fn test_custom_filter() {
 
 @test
 fn test_custom_reduce() {
-    fn myReduce(arr: Array<int>, reducer: fn(int, int): int, initial: int): int {
+    fn myReduce(arr: Array<int>, reducer: (int, int) -> int, initial: int) -> int {
         let acc = initial
         for (x in arr) {
             acc = reducer(acc, x)
@@ -161,8 +161,8 @@ fn test_custom_reduce() {
         return acc
     }
     
-    fn addFn(a: int, b: int): int { return a + b }
-    fn mulFn(a: int, b: int): int { return a * b }
+    fn addFn(a: int, b: int) -> int { return a + b }
+    fn mulFn(a: int, b: int) -> int { return a * b }
     
     let arr = [1, 2, 3, 4]
     assert_eq(myReduce(arr, addFn, 0), 10)
@@ -173,9 +173,9 @@ fn test_custom_reduce() {
 
 @test
 fn test_pipe() {
-    fn double(x: int): int { return x * 2 }
-    fn addTen(x: int): int { return x + 10 }
-    fn square(x: int): int { return x * x }
+    fn double(x: int) -> int { return x * 2 }
+    fn addTen(x: int) -> int { return x + 10 }
+    fn square(x: int) -> int { return x * x }
     
     // 手动管道
     let x = 5
@@ -189,7 +189,7 @@ fn test_pipe() {
 
 @test
 fn test_identity_function() {
-    fn identity<T>(x: T): T { return x }
+    fn identity<T>(x: T) -> T { return x }
     
     assert_eq(identity(42), 42)
     assert_eq(identity("hello"), "hello")
@@ -198,8 +198,8 @@ fn test_identity_function() {
 
 @test
 fn test_constant_function() {
-    fn makeConstant(value: int): fn(): int {
-        fn constant(): int {
+    fn makeConstant(value: int) ->() -> int {
+        fn constant() -> int {
             return value
         }
         return constant

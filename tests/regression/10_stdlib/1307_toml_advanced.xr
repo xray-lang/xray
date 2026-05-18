@@ -102,7 +102,7 @@ fn test_negative_numbers() {
 
 @test
 fn test_float_decimal_point() {
-    let config = {"value" => 1.0}
+    let config = #{"value": 1.0}
     let result = toml.stringify(config)
     // Float must have decimal point in TOML
     assert(result.length > 0)
@@ -114,7 +114,7 @@ fn test_float_decimal_point() {
 
 @test
 fn test_stringify_roundtrip() {
-    let original = {"name" => "xray", "version" => 2, "enabled" => true}
+    let original = #{"name": "xray", "version": 2, "enabled": true}
     let toml_str = toml.stringify(original)
     let parsed = toml.parse(toml_str) ?? {}
     assert_eq(parsed["name"], "xray")

@@ -3,8 +3,8 @@
 @native
 class Channel<T> {
     send(value: T)
-    recv(): T
-    trySend(value: T): bool
+    recv() -> T
+    trySend(value: T) -> bool
     tryRecv(): (T, bool)
     close()
     closed: bool

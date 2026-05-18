@@ -2,7 +2,7 @@
 // EXPECTED: 832040
 // Test: Fibonacci via loop (heavy arithmetic + loop + variable swap)
 
-fn fib_loop(n: int) : int {
+fn fib_loop(n: int) -> int {
     if (n <= 1) { return n }
     let a = 0
     let b = 1

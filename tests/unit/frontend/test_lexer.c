@@ -241,7 +241,7 @@ TEST(lexer_identifiers) {
 /* ========== Special Token Tests ========== */
 
 TEST(lexer_special_tokens) {
-    assert_token(scan_single("=>"), TK_ARROW, "=>");
+    assert_token(scan_single("->"), TK_ARROW, "->");
     assert_token(scan_single("?."), TK_QUESTION_DOT, "?.");
     assert_token(scan_single("??"), TK_NULLISH_COALESCE, "??");
     assert_token(scan_single(".."), TK_RANGE, "..");  // TK_RANGE is used for ".."

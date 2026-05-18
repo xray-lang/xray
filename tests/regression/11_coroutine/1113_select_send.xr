@@ -6,20 +6,20 @@ fn test_select_send() {
     
     // 发送分支：val to ch => ...
     select {
-        100 to ch => { print("sent 100") }
-        _ => { print("send failed") }
+        100 to ch -> { print("sent 100") }
+        _ -> { print("send failed") }
     }
     
     // 再发送一个
     select {
-        200 to ch => { print("sent 200") }
-        _ => { print("send failed") }
+        200 to ch -> { print("sent 200") }
+        _ -> { print("send failed") }
     }
     
     // 缓冲满了，发送失败
     select {
-        300 to ch => { print("sent 300") }
-        _ => { print("buffer full") }
+        300 to ch -> { print("sent 300") }
+        _ -> { print("buffer full") }
     }
     
     // 接收并验证（使用多值返回）

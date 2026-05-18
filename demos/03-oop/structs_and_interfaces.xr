@@ -8,15 +8,15 @@ struct Vec2 {
     x: float
     y: float
 
-    length(): float {
+    length() -> float {
         return (this.x * this.x + this.y * this.y).sqrt()
     }
 
-    add(other: Vec2): Vec2 {
+    add(other: Vec2) -> Vec2 {
         return Vec2{x: this.x + other.x, y: this.y + other.y}
     }
 
-    toString(): string {
+    toString() -> string {
         return "(${this.x}, ${this.y})"
     }
 }
@@ -30,23 +30,23 @@ print("a + b = ${c.toString()}")
 
 // === Interface ===
 interface Shape {
-    area(): float
-    describe(): string
+    area() -> float
+    describe() -> string
 }
 
 class Circle implements Shape {
     radius: float
     constructor(r: float) { this.radius = r }
-    area(): float { return 3.14159 * this.radius * this.radius }
-    describe(): string { return "Circle(r=${this.radius})" }
+    area() -> float { return 3.14159 * this.radius * this.radius }
+    describe() -> string { return "Circle(r=${this.radius})" }
 }
 
 class Rect implements Shape {
     width: float
     height: float
     constructor(w: float, h: float) { this.width = w; this.height = h }
-    area(): float { return this.width * this.height }
-    describe(): string { return "Rect(${this.width}x${this.height})" }
+    area() -> float { return this.width * this.height }
+    describe() -> string { return "Rect(${this.width}x${this.height})" }
 }
 
 let shapes = [new Circle(5.0), new Rect(3.0, 4.0)]
@@ -75,12 +75,12 @@ enum HttpStatus {
 print("NotFound = ${HttpStatus.NotFound.value}")
 
 // Match with enum
-fn statusMessage(s: HttpStatus): string {
+fn statusMessage(s: HttpStatus) -> string {
     return match (s) {
-        HttpStatus.OK => "Success",
-        HttpStatus.NotFound => "Not Found",
-        HttpStatus.ServerError => "Internal Error",
-        _ => "Unknown"
+        HttpStatus.OK -> "Success",
+        HttpStatus.NotFound -> "Not Found",
+        HttpStatus.ServerError -> "Internal Error",
+        _ -> "Unknown"
     }
 }
 print(statusMessage(HttpStatus.NotFound))

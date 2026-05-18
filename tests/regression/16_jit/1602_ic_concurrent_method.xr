@@ -15,11 +15,11 @@ class Adder {
         this.base = b
     }
 
-    apply(x: int): int {
+    apply(x: int) -> int {
         return this.base + x * 2
     }
 }
-fn worker(a: Adder, iters: int): int {
+fn worker(a: Adder, iters: int) -> int {
     let s = 0
     for (let i = 0; i < iters; i++) {
         // Mono call site, same class across all coros.
@@ -27,7 +27,7 @@ fn worker(a: Adder, iters: int): int {
     }
     return s
 }
-fn expected(base: int, iters: int): int {
+fn expected(base: int, iters: int) -> int {
     return base * iters + iters * (iters - 1)
 }
 

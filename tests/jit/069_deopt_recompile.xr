@@ -4,7 +4,7 @@
 // EXPECTED: 30
 // Test: Multiple deopt cycles - function compiled, deopt'd, re-compiled
 
-fn flexible(a: int | float | string, b: int | float | string) : int | float | string {
+fn flexible(a: int | float | string, b: int | float | string) -> int | float | string {
     return a + b
 }
 

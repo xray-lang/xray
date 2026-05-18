@@ -9,7 +9,7 @@ struct Rect {
     origin: Point
     size: Point
 
-    area(): float {
+    area() -> float {
         return this.size.x * this.size.y
     }
 }

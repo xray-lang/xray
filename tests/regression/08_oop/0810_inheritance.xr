@@ -12,7 +12,7 @@ class Animal {
         this.name = name
     }
 
-    speak(): string {        return this.name + " makes a sound"
+    speak() -> string {        return this.name + " makes a sound"
     }
 }
 
@@ -21,7 +21,7 @@ class Dog extends Animal {
         super(name)
     }
 
-    speak(): string {        return this.name + " barks"
+    speak() -> string {        return this.name + " barks"
     }
 }
 
@@ -39,7 +39,7 @@ class Cat extends Animal {
         super(name)
     }
 
-    speak(): string {        return this.name + " meows"
+    speak() -> string {        return this.name + " meows"
     }
 }
 
@@ -58,10 +58,10 @@ class Vehicle {
         this.brand = brand
     }
 
-    info(): string {        return this.brand
+    info() -> string {        return this.brand
     }
 
-    drive(): string {        return "test"
+    drive() -> string {        return "test"
     }
 
 
@@ -76,7 +76,7 @@ class Car extends Vehicle {
         this.model = model
     }
 
-    info(): string {        return this.brand + " " + this.model
+    info() -> string {        return this.brand + " " + this.model
     }
 }
 
@@ -109,7 +109,7 @@ class Base {
         this.value = v
     }
 
-    getValue(): int {        return this.value
+    getValue() -> int {        return this.value
     }
 }
 
@@ -121,7 +121,7 @@ class Derived extends Base {
         this.extra = e
     }
 
-    getSum(): int {        return this.value + this.extra
+    getSum() -> int {        return this.value + this.extra
     }
 }
 
@@ -145,7 +145,7 @@ class Person {
         this.age = age
     }
 
-    info(): string {        return "${this.name}, ${this.age}"
+    info() -> string {        return "${this.name}, ${this.age}"
     }
 }
 
@@ -157,7 +157,7 @@ class Student extends Person {
         this.grade = grade
     }
 
-    info(): string {        // super.method() 未实现，使用组合方式
+    info() -> string {        // super.method() 未实现，使用组合方式
         return "${this.name}, ${this.age}, grade ${this.grade}"
     }
 }
@@ -185,10 +185,10 @@ class Bird extends Animal {
         super(name)
     }
 
-    speak(): string {        return "Bird: " + this.name + " chirps"
+    speak() -> string {        return "Bird: " + this.name + " chirps"
     }
 
-    parentSpeak(): string {        return super.speak()
+    parentSpeak() -> string {        return super.speak()
     }
 }
 

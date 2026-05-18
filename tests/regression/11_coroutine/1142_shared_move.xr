@@ -21,11 +21,11 @@ fn test_shared_const() {
     print(config)
 
     // Multiple coroutines read the same shared const (zero-copy)
-    let t1 = go fn(c: Json): int {
+    let t1 = go fn(c: Json) -> int {
         return c.value
     }(config)
 
-    let t2 = go fn(c: Json): int {
+    let t2 = go fn(c: Json) -> int {
         return c.value * 2
     }(config)
 
@@ -44,7 +44,7 @@ fn test_move_go() {
     shared let data = { count: 10 }
 
     // 'move data' transfers ownership to child coroutine (zero-copy)
-    let task = go fn(d: Json): int {
+    let task = go fn(d: Json) -> int {
         print("child got:", d.count)
         return d.count + 1
     }(move data)
@@ -108,7 +108,7 @@ fn test_move_pipeline() {
     // msg is no longer usable here (moved in go call above)
 
     // Stage 2: receive and process
-    let t2 = go fn(c: Channel<Json>): int {
+    let t2 = go fn(c: Channel<Json>) -> int {
         let d = c.recv()
         d.step = d.step + 1
         print("stage2:", d.step)

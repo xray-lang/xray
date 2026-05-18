@@ -19,9 +19,9 @@ go sendDelayed(ch2, "from ch2", 100)
 
 // Wait for first available message
 select {
-    msg from ch1 => { print("select got: ${msg}") }
-    msg from ch2 => { print("select got: ${msg}") }
-    after 500 => { print("timeout!") }
+    msg from ch1 -> { print("select got: ${msg}") }
+    msg from ch2 -> { print("select got: ${msg}") }
+    after 500 -> { print("timeout!") }
 }
 
 ch1.close()

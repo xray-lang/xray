@@ -218,7 +218,7 @@ TEST(doc_comment_before_function) {
     setup();
     const char *src = "/// This is a doc comment\n"
                       "/// with two lines\n"
-                      "fn foo(): int {\n"
+                      "fn foo() -> int {\n"
                       "    return 42\n"
                       "}\n";
     char *out = parse_and_format(src, "<test>");
@@ -317,14 +317,15 @@ TEST(empty_string_roundtrip) {
 /* E6-4: No deprecated syntax                                              */
 /* ====================================================================== */
 
-TEST(no_arrow_return_type_emitted) {
+TEST(arrow_return_type_emitted) {
     setup();
-    /* The formatter must never emit `->` for return types. */
-    const char *src = "fn foo(): int { return 1 }\n";
+    /* The formatter must emit `-> T` for return types and must not fall
+     * back to the legacy `: T` form. */
+    const char *src = "fn foo() -> int { return 1 }\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
-    ASSERT_FALSE(contains(out, "->"));
-    ASSERT_TRUE(contains(out, "): int"));
+    ASSERT_TRUE(contains(out, "-> int"));
+    ASSERT_FALSE(contains(out, "): int"));
     free(out);
     teardown();
 }
@@ -347,5 +348,5 @@ RUN_TEST(template_string_roundtrip);
 RUN_TEST(unicode_string_roundtrip);
 RUN_TEST(empty_string_roundtrip);
 
-RUN_TEST(no_arrow_return_type_emitted);
+RUN_TEST(arrow_return_type_emitted);
 TEST_MAIN_END()

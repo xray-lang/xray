@@ -1,11 +1,11 @@
 // 测试 task.result 属性
 // 作者：xingleixu@gmail.com
 
-fn blocked(ch: Channel<int>): int {
+fn blocked(ch: Channel<int>) -> int {
     return ch.recv()
 }
 
-fn compute(x: int): int {
+fn compute(x: int) -> int {
     return x * 2
 }
 

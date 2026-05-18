@@ -3,7 +3,7 @@
 // EXPECTED: 5
 // Test: Typed array operations in JIT (TARRAY_GET/SET/PUSH)
 
-fn sum_typed(arr: Array<int>) : int {
+fn sum_typed(arr: Array<int>) -> int {
     let sum = 0
     let i = 0
     while (i < arr.length) {
@@ -13,7 +13,7 @@ fn sum_typed(arr: Array<int>) : int {
     return sum
 }
 
-fn fill_array(n: int) : Array<int> {
+fn fill_array(n: int) -> Array<int> {
     let arr: Array<int> = []
     let i = 0
     while (i < n) {

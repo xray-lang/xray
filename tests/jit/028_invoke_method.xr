@@ -3,15 +3,15 @@
 // EXPECTED: 5
 // Test: Method invocation (INVOKE, INVOKE_BUILTIN, INVOKE_DIRECT)
 
-fn arr_len(arr: Array<int>) : int {
+fn arr_len(arr: Array<int>) -> int {
     return arr.length
 }
 
-fn str_upper(s: string) : string {
+fn str_upper(s: string) -> string {
     return s.toUpperCase()
 }
 
-fn arr_push_and_len(n: int) : int {
+fn arr_push_and_len(n: int) -> int {
     let arr: Array<int> = []
     let i = 0
     while (i < n) {

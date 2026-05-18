@@ -259,7 +259,7 @@ fn test_loop_concat_crossing_threshold() {
 @test
 fn test_concurrent_short_concat() {
     // 多协程并发短字符串拼接
-    fn short_concat_task(id: int): string {
+    fn short_concat_task(id: int) -> string {
         let a = "task" + string(id)
         let b = "_done"
         return a + b
@@ -281,7 +281,7 @@ fn test_concurrent_short_concat() {
 @test
 fn test_concurrent_long_concat() {
     // 多协程并发长字符串拼接
-    fn long_concat_task(id: int): string {
+    fn long_concat_task(id: int) -> string {
         let a = "x".repeat(50)
         let b = "_id" + string(id) + "_" + "y".repeat(50)
         return a + b
@@ -306,7 +306,7 @@ fn test_concurrent_long_concat() {
 @test
 fn test_concurrent_mixed_concat() {
     // 多协程混合短长字符串拼接
-    fn mixed_concat_task(id: int): string {
+    fn mixed_concat_task(id: int) -> string {
         // 偶数 id 使用短字符串，奇数 id 使用长字符串
         if (id % 2 == 0) {
             return "short_" + string(id)

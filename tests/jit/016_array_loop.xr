@@ -2,7 +2,7 @@
 // EXPECTED: 120
 // Test: Array iteration and manipulation in JIT loop
 
-fn sum_array(arr: Array<int>) : int {
+fn sum_array(arr: Array<int>) -> int {
     let s = 0
     let i = 0
     while (i < arr.length) {
@@ -12,7 +12,7 @@ fn sum_array(arr: Array<int>) : int {
     return s
 }
 
-fn product_array(arr: Array<int>) : int {
+fn product_array(arr: Array<int>) -> int {
     let p = 1
     let i = 0
     while (i < arr.length) {

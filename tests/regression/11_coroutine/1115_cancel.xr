@@ -1,12 +1,12 @@
 // 测试 task.cancel() 功能
 // 作者：xingleixu@gmail.com
 
-fn blocked_task(ch: Channel<int>): int {
+fn blocked_task(ch: Channel<int>) -> int {
     let v = ch.recv()
     return v
 }
 
-fn quick_task(x: int): int {
+fn quick_task(x: int) -> int {
     return x * 2
 }
 

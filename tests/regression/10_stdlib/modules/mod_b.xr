@@ -13,12 +13,12 @@ let _internal = "B"
 const _VERSION = "2.0"
 
 /* 私有函数（与 mod_a 同名）*/
-fn _helper(): string {
+fn _helper() -> string {
     return _internal + "-helper"
 }
 
 /* 导出函数 */
-fn publicFn(): string {
+fn publicFn() -> string {
     return _helper() + "-" + _VERSION
 }
 

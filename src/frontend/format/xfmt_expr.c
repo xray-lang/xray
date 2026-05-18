@@ -150,7 +150,7 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
             xfmt_emit_expression(ctx, ma->guard);
             xfmt_write_char(ctx, ')');
         }
-        xfmt_write_str(ctx, " => ");
+        xfmt_write_str(ctx, " -> ");
 
         if (ma->body->type == AST_BLOCK) {
             xfmt_emit_block(ctx, ma->body);
@@ -330,19 +330,21 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             break;
         }
 
-        // Map literal
+        // Map literal — always emit with `#{ ... }` prefix and `: ` separator
+        // so Json and Map are visually consistent while remaining
+        // unambiguous through the leading `#` (task 082).
         case AST_MAP_LITERAL: {
             xfmt_write_indent(ctx);
             MapLiteralNode *map = &node->as.map_literal;
             if (map->count == 0) {
                 xfmt_write_str(ctx, "#{}");
             } else {
-                xfmt_write_str(ctx, "{ ");
+                xfmt_write_str(ctx, "#{ ");
                 for (int i = 0; i < map->count; i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_emit_expression(ctx, map->keys[i]);
-                    xfmt_write_str(ctx, " => ");
+                    xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, map->values[i]);
                 }
                 xfmt_write_str(ctx, " }");
@@ -513,7 +515,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             }
             xfmt_write_char(ctx, ')');
             if (fn->return_type) {
-                xfmt_write_str(ctx, ": ");
+                xfmt_write_str(ctx, " -> ");
                 xfmt_emit_type(ctx, fn->return_type);
             }
             xfmt_write_space(ctx);

@@ -2,5 +2,5 @@
 
 @native
 class bool {
-    toString(): string
+    toString() -> string
 }

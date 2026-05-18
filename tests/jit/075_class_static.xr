@@ -10,7 +10,7 @@ class Counter {
         Counter.count = Counter.count + 1
     }
 
-    static getCount() : int {
+    static getCount() -> int {
         return Counter.count
     }
 

@@ -103,7 +103,7 @@ fn test_union_variable() {
 
 @test
 fn test_union_function_param() {
-    fn process(x: int | string): string {
+    fn process(x: int | string) -> string {
         if (x is int) {
             return "int"
         }

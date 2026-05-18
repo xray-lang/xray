@@ -4,19 +4,19 @@
 // EXPECTED: 27
 // Test: Immediate operand arithmetic (ADDI, SUBI, MULI)
 
-fn add5(x: int) : int {
+fn add5(x: int) -> int {
     return x + 5
 }
 
-fn sub5(x: int) : int {
+fn sub5(x: int) -> int {
     return x - 5
 }
 
-fn mul2(x: int) : int {
+fn mul2(x: int) -> int {
     return x * 2
 }
 
-fn compound(x: int) : int {
+fn compound(x: int) -> int {
     return (x + 3) * 2 - 1 + (x / 5)
 }
 

@@ -2,16 +2,16 @@
 
 @native
 class int {
-    abs(): int
-    toString(): string
-    toBigInt(): BigInt
-    toFloat(): float
-    toHex(): string
-    max(other: int): int
-    min(other: int): int
-    floor(): int
-    ceil(): int
-    round(): int
-    sqrt(): float
-    pow(exp: float): float
+    abs() -> int
+    toString() -> string
+    toBigInt() -> BigInt
+    toFloat() -> float
+    toHex() -> string
+    max(other: int) -> int
+    min(other: int) -> int
+    floor() -> int
+    ceil() -> int
+    round() -> int
+    sqrt() -> float
+    pow(exp: float) -> float
 }

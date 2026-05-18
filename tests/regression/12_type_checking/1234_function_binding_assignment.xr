@@ -1,25 +1,25 @@
-fn id<T>(x: T): T {
+fn id<T>(x: T) -> T {
     return x
 }
 
-fn same<U>(x: U): U {
+fn same<U>(x: U) -> U {
     return x
 }
 
-fn bounded<T: Comparable & Hashable>(x: T): T {
+fn bounded<T: Comparable & Hashable>(x: T) -> T {
     return x
 }
 
-fn bounded_same<U: Comparable & Hashable>(x: U): U {
+fn bounded_same<U: Comparable & Hashable>(x: U) -> U {
     return x
 }
 
 @test
 fn test_let_function_expression_reassignment_exact_signature() {
-    let f = fn(x: int): int {
+    let f = fn(x: int) -> int {
         return x + 1
     }
-    f = fn(y: int): int {
+    f = fn(y: int) -> int {
         return y * 2
     }
     assert_eq(f(5), 10)
@@ -27,10 +27,10 @@ fn test_let_function_expression_reassignment_exact_signature() {
 
 @test
 fn test_let_generic_function_expression_reassignment_shape_equal() {
-    let f = fn<T>(x: T): T {
+    let f = fn<T>(x: T) -> T {
         return x
     }
-    f = fn<U>(x: U): U {
+    f = fn<U>(x: U) -> U {
         return x
     }
     assert_eq(true, true)

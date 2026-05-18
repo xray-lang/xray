@@ -54,7 +54,7 @@ static void crash_handler(int sig) {
     } while (0)
 
 /*
- * Test 1: fn() -> int { return 42; }
+ * Test 1:() -> int { return 42; }
  */
 static void test_return_constant(void) {
     fprintf(stderr, "  test_aot_return_constant...");
@@ -86,7 +86,7 @@ static void test_return_constant(void) {
 }
 
 /*
- * Test 2: fn(a: int, b: int) -> int { return a + b; }
+ * Test 2:(a: int, b: int) -> int { return a + b; }
  */
 static void test_add(void) {
     fprintf(stderr, "  test_aot_add...");
@@ -124,7 +124,7 @@ static void test_add(void) {
 }
 
 /*
- * Test 3: fn(a: int, b: int) -> int { return a * b - a; }
+ * Test 3:(a: int, b: int) -> int { return a * b - a; }
  */
 static void test_mul_sub(void) {
     fprintf(stderr, "  test_aot_mul_sub...");
@@ -160,7 +160,7 @@ static void test_mul_sub(void) {
 }
 
 /*
- * Test 4: fn(n: int) -> int { if (n <= 1) return n; return n * 2; }
+ * Test 4:(n: int) -> int { if (n <= 1) return n; return n * 2; }
  * Tests conditional branch.
  */
 static void test_branch(void) {

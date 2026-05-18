@@ -10,12 +10,12 @@ struct Rect {
     size: Vec2
 }
 
-fn move_value(v: Vec2): Vec2 {
+fn move_value(v: Vec2) -> Vec2 {
     v.x = v.x + 10.0
     v.y = v.y + 20.0
     return v
 }
-fn length_sq(v: in Vec2): float {
+fn length_sq(v: in Vec2) -> float {
     return v.x * v.x + v.y * v.y
 }
 fn translate(v: ref Vec2, dx: float, dy: float) {
@@ -30,7 +30,7 @@ fn scale(v: ref Vec2, factor: float) {
     v.x = v.x * factor
     v.y = v.y * factor
 }
-fn dot(a: in Vec2, b: in Vec2): float {
+fn dot(a: in Vec2, b: in Vec2) -> float {
     return a.x * b.x + a.y * b.y
 }
 fn normalize(v: ref Vec2) {

@@ -1,7 +1,7 @@
 // Coro.dump() 和 Coro.stalled() 测试
 // 作者：xingleixu@gmail.com
 
-fn worker(c: Channel<int>): string {
+fn worker(c: Channel<int>) -> string {
     c.send(42)
     return "done"
 }

@@ -3,7 +3,7 @@
 // EXPECTED: 42
 // Test: Map operations (NEWMAP, MAP_GET, MAP_SET, MAP_GETK)
 
-fn map_ops() : int {
+fn map_ops() -> int {
     let m = {}
     m["a"] = 1
     m["b"] = 2
@@ -11,7 +11,7 @@ fn map_ops() : int {
     return m["a"]
 }
 
-fn map_count() : int {
+fn map_count() -> int {
     let m = {}
     m["x"] = 10
     m["y"] = 20
@@ -23,7 +23,7 @@ fn map_count() : int {
     return count
 }
 
-fn map_update() : int {
+fn map_update() -> int {
     let m = {}
     m["key"] = 10
     m["key"] = 42

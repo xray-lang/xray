@@ -2,7 +2,7 @@
 export const MAX_SIZE = 1024
 export const VERSION = 1
 
-export fn clamp(x: int, lo: int, hi: int): int {
+export fn clamp(x: int, lo: int, hi: int) -> int {
     if (x < lo) {
         return lo
     }

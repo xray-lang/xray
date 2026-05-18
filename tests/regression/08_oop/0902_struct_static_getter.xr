@@ -7,20 +7,20 @@ struct Color {
     b: int
 
     // Computed property
-    hex(): string {
+    hex() -> string {
         return "rgb(${this.r},${this.g},${this.b})"
     }
 
     // Static factory methods
-    static red(): Color {
+    static red() -> Color {
         return Color{r: 255, g: 0, b: 0}
     }
 
-    static green(): Color {
+    static green() -> Color {
         return Color{r: 0, g: 255, b: 0}
     }
 
-    static blue(): Color {
+    static blue() -> Color {
         return Color{r: 0, g: 0, b: 255}
     }
 }

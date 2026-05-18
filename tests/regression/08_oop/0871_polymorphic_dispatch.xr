@@ -9,11 +9,11 @@ class Animal {
         this.name = name
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " says ..."
     }
 
-    legs(): int {
+    legs() -> int {
         return 0
     }
 }
@@ -23,11 +23,11 @@ class Dog extends Animal {
         super(name)
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " says woof"
     }
 
-    legs(): int {
+    legs() -> int {
         return 4
     }
 }
@@ -37,11 +37,11 @@ class Cat extends Animal {
         super(name)
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " says meow"
     }
 
-    legs(): int {
+    legs() -> int {
         return 4
     }
 }
@@ -51,11 +51,11 @@ class Bird extends Animal {
         super(name)
     }
 
-    speak(): string {
+    speak() -> string {
         return this.name + " says tweet"
     }
 
-    legs(): int {
+    legs() -> int {
         return 2
     }
 }
