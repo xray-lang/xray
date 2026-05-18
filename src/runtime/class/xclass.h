@@ -349,6 +349,12 @@ XR_FUNC XrMethod *xr_class_lookup_method(XrClass *cls, int symbol);
 XR_FUNC XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
 XR_FUNC void xr_class_mark_abstract(XrClass *cls);
 
+// Create a dynamic-layout root class: zero declared fields, ready to accept
+// hidden-class transitions via xr_class_transition_get_or_create. If sealed
+// is true, transitions are rejected (used for sealed Json types).
+XR_FUNC XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity,
+                                           bool sealed);
+
 // Get class for any value (instance, class, or primitive)
 XR_FUNC XrClass *xr_value_get_class(XrayIsolate *X, XrValue value);
 
