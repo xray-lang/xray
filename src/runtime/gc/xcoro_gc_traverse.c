@@ -191,14 +191,22 @@ void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj) {
     if (!gc || !obj)
         return;
     struct XrInstance *inst = (struct XrInstance *) obj;
-
-    // Note: XrClass is usually in system heap, skip marking
+    struct XrClass *klass = inst->klass;
+    if (!klass)
+        return;
 
     // Mark all instance fields
-    if (inst->klass && inst->klass->field_count > 0) {
-        for (uint16_t i = 0; i < inst->klass->field_count; i++) {
-            xr_coro_gc_markvalue(gc, inst->fields[i]);
-        }
+    uint16_t field_count = xr_class_instance_field_count(klass);
+    for (uint16_t i = 0; i < field_count; i++) {
+        xr_coro_gc_markvalue(gc, inst->fields[i]);
+    }
+
+    // Traverse native body if present (e.g. Array buffer, Map hash table)
+    XrNativeBodyDesc *desc = klass->native_body;
+    if (desc && desc->traverse) {
+        void *body = xr_instance_native_body(inst);
+        XR_DCHECK(body != NULL, "traverse: native body NULL but desc present");
+        desc->traverse(gc, body);
     }
 }
 

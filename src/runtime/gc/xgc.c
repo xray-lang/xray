@@ -60,8 +60,8 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
                  xr_to_shared_set},
     [XR_TJSON] = {xr_gc_destroy_json, xr_coro_gc_traverse_json, xr_deep_copy_json_with_ctx,
                   xr_to_shared_json},
-    [XR_TINSTANCE] = {NULL, xr_gc_traverse_instance, xr_deep_copy_instance_with_ctx,
-                      xr_to_shared_instance},
+    [XR_TINSTANCE] = {xr_gc_destroy_instance, xr_gc_traverse_instance,
+                      xr_deep_copy_instance_with_ctx, xr_to_shared_instance},
     [XR_TFUNCTION] = {NULL, xr_gc_traverse_closure, xr_deep_copy_closure_with_ctx,
                       xr_to_shared_closure},
 

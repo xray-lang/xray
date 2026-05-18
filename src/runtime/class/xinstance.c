@@ -33,7 +33,7 @@ XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
     uint32_t field_count = xr_class_instance_field_count(cls);
     const char *class_name = cls->name ? cls->name : "<unnamed>";
 
-    size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    size_t size = xr_instance_size(cls);
     // Instances are regular GC objects on the running coroutine's heap:
     // xcoro_gc_traverse handles XR_TINSTANCE field walking and the type
     // is in HAS_REFS_BITMAP. Falling back to isolate fixedgc keeps the
@@ -65,6 +65,14 @@ XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
         }
     }
 
+    // Initialize native body if present
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc && desc->init) {
+        void *body = xr_instance_native_body(inst);
+        XR_DCHECK(body != NULL, "native body pointer must not be NULL");
+        desc->init(inst, body);
+    }
+
     return inst;
 }
 
@@ -90,12 +98,35 @@ void xr_instance_init_inplace(XrInstance *inst, XrClass *cls) {
 size_t xr_instance_size(XrClass *cls) {
     XR_DCHECK(cls != NULL, "instance_size: NULL cls");
     uint32_t field_count = xr_class_instance_field_count(cls);
-    return sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        size_t align = desc->body_align ? (size_t) desc->body_align : sizeof(void *);
+        size = (size + align - 1) & ~(align - 1);
+        size += desc->body_size;
+    }
+    return size;
 }
 
 void xr_instance_free(XrInstance *inst) {
     (void) inst;
     // Fields managed by GC, flexible array released with object
+}
+
+void xr_gc_destroy_instance(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
+    (void) owning_gc;
+    if (!obj)
+        return;
+    XrInstance *inst = (XrInstance *) obj;
+    XrClass *klass = inst->klass;
+    if (!klass)
+        return;
+    XrNativeBodyDesc *desc = klass->native_body;
+    if (desc && desc->destroy) {
+        void *body = xr_instance_native_body(inst);
+        XR_DCHECK(body != NULL, "destroy: native body NULL but desc present");
+        desc->destroy(body);
+    }
 }
 
 XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
@@ -104,7 +135,7 @@ XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     XR_DCHECK(cls != NULL, "instance_clone: NULL klass");
 
     uint32_t field_count = xr_class_instance_field_count(cls);
-    size_t size = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    size_t size = xr_instance_size(cls);
     // Same owner choice as xr_instance_new: clone lands on the running
     // coroutine's heap, with isolate fixedgc as bootstrap fallback.
     XrInstance *dst = NULL;
@@ -120,6 +151,14 @@ XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
     xr_gc_header_init_type(&dst->gc, XR_TINSTANCE);
     dst->klass = cls;
     memcpy(dst->fields, src->fields, sizeof(XrValue) * field_count);
+
+    // Shallow-copy native body bytes (caller is responsible for deep semantics)
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        void *src_body = xr_instance_native_body(src);
+        void *dst_body = xr_instance_native_body(dst);
+        memcpy(dst_body, src_body, desc->body_size);
+    }
     return dst;
 }
 

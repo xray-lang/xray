@@ -107,4 +107,27 @@ static inline void xr_instance_set_field_fast(XrInstance *inst, int index, XrVal
     inst->fields[index] = value;
 }
 
+/* ========== Native Body Access ========== */
+
+// Byte offset from instance start to native body region.
+// Returns the offset past the flexible array member fields[].
+static inline size_t xr_instance_body_offset(XrClass *cls) {
+    uint32_t field_count = xr_class_instance_field_count(cls);
+    size_t raw = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc && desc->body_align > 0) {
+        size_t align = (size_t) desc->body_align;
+        raw = (raw + align - 1) & ~(align - 1);
+    }
+    return raw;
+}
+
+// Returns pointer to the native body region, or NULL if class has none.
+static inline void *xr_instance_native_body(XrInstance *inst) {
+    XrClass *klass = inst->klass;
+    if (!klass->native_body)
+        return NULL;
+    return (uint8_t *) inst + xr_instance_body_offset(klass);
+}
+
 #endif  // XINSTANCE_H
