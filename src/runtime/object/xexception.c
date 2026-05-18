@@ -17,6 +17,7 @@
 #include "../xisolate_api.h"
 #include "../gc/xgc.h"
 #include "../../base/xmalloc.h"
+#include "xnative_type.h"
 #include "xstring.h"
 #include "xarray.h"
 #include <stdio.h>
@@ -53,6 +54,7 @@ static XrException *xr_exception_alloc(XrayIsolate *X) {
     exc->line = 0;
     exc->column = 0;
     exc->stackTrace = NULL;
+    exc->cause = NULL;
     exc->userData = xr_null();
 
     return exc;
@@ -193,6 +195,164 @@ void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcN
 
     XrString *frameString = xr_string_intern(X, frameStr, strlen(frameStr), 0);
     xr_array_push(exc->stackTrace, xr_string_value(frameString));
+}
+
+/* ========== User-facing Constructor & Field Accessors ==========
+ *
+ * Wired into the prelude `Exception` XrClass by
+ * xr_exception_register_native_type below. The constructor primitive
+ * intentionally allocates a fresh XrException and discards the
+ * pre-allocated XrInstance the VM hands in as `self`: XrException has
+ * its own GC type (XR_TEXCEPTION) and traversal layout, and the
+ * constructor return value replaces base[a] on the dispatch path.
+ */
+
+// constructor(message: string = "", cause: Exception? = null)
+//
+// Exposed via xexception.h so the VM `OP_NEWEXCEPTION` dispatch path
+// can invoke the same body as the registered native static method.
+XR_FUNC XrValue xr_exception_user_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                            int argc) {
+    XR_DCHECK(isolate != NULL, "exception_construct: NULL isolate");
+    (void) self;
+
+    const char *message_chars = "";
+    size_t message_len = 0;
+    if (argc >= 1 && XR_IS_STRING(args[0])) {
+        XrString *s = (XrString *) XR_TO_PTR(args[0]);
+        message_chars = s->data;
+        message_len = (size_t) s->length;
+    }
+
+    XrException *exc = xr_exception_alloc(isolate);
+    if (!exc)
+        return xr_null();
+
+    exc->code = XR_ERR_RUNTIME;
+    exc->message = xr_string_intern(isolate, message_chars, message_len, 0);
+    exc->stackTrace = xr_array_new(xr_current_coro(isolate));
+
+    if (argc >= 2 && XR_IS_EXCEPTION(args[1])) {
+        exc->cause = XR_AS_EXCEPTION(args[1]);
+    }
+
+    return XR_EXCEPTION_VAL(exc);
+}
+
+// Field getter helpers. Each returns null when the receiver is not an
+// exception, mirroring how XR_IS_EXCEPTION-guarded paths fail soft on
+// the rest of this file.
+static XrValue xr_exception_getter_message(XrayIsolate *iso, XrValue self, XrValue *args,
+                                           int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    if (!XR_IS_EXCEPTION(self))
+        return xr_null();
+    XrException *exc = XR_AS_EXCEPTION(self);
+    if (!exc->message)
+        return xr_null();
+    return XR_FROM_PTR(exc->message);
+}
+
+static XrValue xr_exception_getter_stack(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    if (!XR_IS_EXCEPTION(self))
+        return xr_null();
+    XrException *exc = XR_AS_EXCEPTION(self);
+    /* Stack-trace formatting deferred until xvm_capture_stack lands;
+     * an empty string keeps `e.stack` typed as string and lets
+     * subclassing code that interpolates the field work today. */
+    if (!exc->stackTrace || exc->stackTrace->length == 0) {
+        XrString *empty = xr_string_intern(iso, "", 0, 0);
+        return empty ? XR_FROM_PTR(empty) : xr_null();
+    }
+
+    /* Concatenate frames as "frame1\nframe2\n..." */
+    size_t total = 0;
+    for (int i = 0; i < exc->stackTrace->length; i++) {
+        XrValue frame = ((XrValue *) exc->stackTrace->data)[i];
+        if (XR_IS_STRING(frame))
+            total += (size_t) ((XrString *) XR_TO_PTR(frame))->length + 1;
+    }
+    char *buf = (char *) xr_malloc(total + 1);
+    if (!buf)
+        return xr_null();
+    size_t off = 0;
+    for (int i = 0; i < exc->stackTrace->length; i++) {
+        XrValue frame = ((XrValue *) exc->stackTrace->data)[i];
+        if (!XR_IS_STRING(frame))
+            continue;
+        XrString *s = (XrString *) XR_TO_PTR(frame);
+        memcpy(buf + off, s->data, (size_t) s->length);
+        off += (size_t) s->length;
+        buf[off++] = '\n';
+    }
+    buf[off] = '\0';
+    XrString *result = xr_string_intern(iso, buf, off, 0);
+    xr_free(buf);
+    return result ? XR_FROM_PTR(result) : xr_null();
+}
+
+static XrValue xr_exception_getter_cause(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    (void) args;
+    (void) argc;
+    if (!XR_IS_EXCEPTION(self))
+        return xr_null();
+    XrException *exc = XR_AS_EXCEPTION(self);
+    if (!exc->cause)
+        return xr_null();
+    return XR_EXCEPTION_VAL(exc->cause);
+}
+
+// toString() -> string : "<class>: <message>"
+static XrValue xr_exception_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args,
+                                             int argc) {
+    (void) args;
+    (void) argc;
+    if (!XR_IS_EXCEPTION(self))
+        return xr_null();
+    XrException *exc = XR_AS_EXCEPTION(self);
+    const char *msg = (exc->message ? exc->message->data : "");
+    char buffer[1024];
+    int n = snprintf(buffer, sizeof(buffer), "Exception: %s", msg);
+    if (n < 0)
+        n = 0;
+    if ((size_t) n >= sizeof(buffer))
+        n = (int) sizeof(buffer) - 1;
+    XrString *result = xr_string_intern(iso, buffer, (size_t) n, 0);
+    return result ? XR_FROM_PTR(result) : xr_null();
+}
+
+/* ========== Native Class Registration ========== */
+
+void xr_exception_register_native_type(XrayIsolate *isolate) {
+    static const XrNativeMethod exception_methods[] = {
+        {"toString", xr_exception_method_to_string, 0},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeMethod exception_getters[] = {
+        {"message", xr_exception_getter_message, 1},
+        {"stack", xr_exception_getter_stack, 1},
+        {"cause", xr_exception_getter_cause, 1},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeMethod exception_statics[] = {
+        /* Variadic arity (-1) so frontend may dispatch with 0/1/2 args
+         * and the constructor body validates each one explicitly. */
+        {"constructor", xr_exception_user_construct, -1},
+        {NULL, NULL, 0},
+    };
+    static const XrNativeTypeInfo exception_info = {
+        .name = "Exception",
+        .gc_type = XR_TEXCEPTION,
+        .methods = (XrNativeMethod *) exception_methods,
+        .getters = (XrNativeMethod *) exception_getters,
+        .static_methods = (XrNativeMethod *) exception_statics,
+    };
+    xr_register_native_type(isolate, &exception_info);
 }
 
 /* ========== Exception Output ========== */

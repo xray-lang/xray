@@ -1725,6 +1725,27 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
+        /* new Exception() / new Exception(message) / new Exception(message, cause)
+         * Routed via XI_CALL_BUILTIN("Exception") -> OP_NEWEXCEPTION at emit time.
+         * The dedicated opcode is required because XrException is its own GC
+         * type (XR_TEXCEPTION) — the generic XrInstance constructor pipeline
+         * would allocate and discard the wrong struct layout. */
+        if (strcmp(cname, "Exception") == 0 && ne->arg_count <= 2) {
+            int n = (int) ne->arg_count;
+            XiValue *arg_vals[2];
+            for (int i = 0; i < n; i++)
+                arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
+            XiValue *v =
+                xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, (uint16_t) n);
+            if (!v)
+                return NULL;
+            for (int i = 0; i < n; i++)
+                v->args[i] = arg_vals[i];
+            v->aux = (void *) "Exception";
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
         /* new Bytes() / new Bytes(n) / new Bytes(n, fill) */
         if (strcmp(cname, "Bytes") == 0 && ne->arg_count <= 2) {
             int n = (int) ne->arg_count;

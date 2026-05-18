@@ -1,0 +1,95 @@
+// REGRESSION: Phase 1a of error-handling redesign (task 081)
+// Exception is now a user-instantiable prelude class with the
+// shape `class Exception { message; stack; cause; constructor(...);
+// toString() }`. The new opcode OP_NEWEXCEPTION wires
+// `new Exception(message, cause)` to the native constructor without
+// going through the generic XrInstance pipeline (XrException is its
+// own GC type).
+//
+// FAIL_AT: pre-OP_NEWEXCEPTION builds — `new Exception("hi")` raised
+//          "method 'constructor' called on unsupported type" because
+//          prelude SIMPLE types had no path through the
+//          analyzer/lowerer to produce a class value at runtime.
+// PASS_AT: OP_NEWEXCEPTION + xnative_type_defs.inc regenerated with
+//          the cause field + xa_builtin_parse_full_signature accepts
+//          both `): T` and `) -> T` return separators.
+
+@test
+fn test_exception_basic_construct() {
+    let e = new Exception("hi")
+    assert_eq(e.message, "hi")
+}
+
+@test
+fn test_exception_no_args() {
+    // Both message and cause default to their zero values.
+    let e = new Exception()
+    assert_eq(e.message, "")
+    assert_eq(e.cause, null)
+}
+
+@test
+fn test_exception_cause_chain() {
+    let inner = new Exception("inner")
+    let outer = new Exception("outer", inner)
+    assert_eq(outer.message, "outer")
+    assert_eq(outer.cause.message, "inner")
+}
+
+@test
+fn test_exception_to_string() {
+    let e = new Exception("boom")
+    assert_eq(e.toString(), "Exception: boom")
+}
+
+@test
+fn test_exception_stack_default() {
+    // Stack starts empty; xvm_capture_stack lands in a later phase but
+    // the field must already be reachable so `e.stack` is always typed
+    // as string.
+    let e = new Exception("hi")
+    assert_eq(e.stack, "")
+}
+
+@test
+fn test_exception_throw_and_catch() {
+    let caught_msg = ""
+    try {
+        throw new Exception("oops")
+    } catch (err) {
+        caught_msg = err.message
+    }
+    assert_eq(caught_msg, "oops")
+}
+
+@test
+fn test_exception_throw_with_cause() {
+    let primary = new Exception("primary")
+    let captured: Exception? = null
+    try {
+        throw new Exception("wrapped", primary)
+    } catch (err) {
+        captured = err
+    }
+    assert_eq(captured.message, "wrapped")
+    assert_eq(captured.cause.message, "primary")
+}
+
+@test
+fn test_exception_type_annotation() {
+    // Exception is reachable as a type annotation via the prelude
+    // SIMPLE entry — the analyzer must accept `: Exception` in let,
+    // parameter and return positions.
+    let e: Exception = new Exception("annotated")
+    assert_eq(e.message, "annotated")
+}
+
+fn make_failure(msg: string) -> Exception {
+    return new Exception(msg)
+}
+
+@test
+fn test_exception_function_return() {
+    let e = make_failure("via fn")
+    assert_eq(e.message, "via fn")
+}

@@ -34,6 +34,13 @@ struct XrException {
     // Stack trace
     XrArray *stackTrace;  // call stack array (GC managed)
 
+    // Causal chain (the exception that caused this one to be thrown).
+    // NULL when this exception is the root cause. Surfaced to user code
+    // via the `cause` field on the prelude Exception class so wrapping
+    // patterns like `throw new ConfigError("bad", cause: ioErr)` keep
+    // the original failure reachable through `e.cause`.
+    XrException *cause;
+
     // User data
     XrValue userData;  // custom data attached by user
 };
@@ -67,6 +74,32 @@ XR_FUNC void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const cha
 /* ========== Output ========== */
 
 XR_FUNC void xr_exception_print(XrayIsolate *X, XrValue exception);
+
+/* ========== Native Class Registration ==========
+ *
+ * Registers the user-facing `Exception` XrClass on the isolate so that
+ * user code can write `new Exception("msg")` or `new Exception("msg",
+ * cause)` and subclass it via `class HttpError extends Exception`.
+ *
+ * Called from xr_prelude_register_all_native_types during isolate init.
+ * Idempotent: the registry skips re-registration of the same gc_type.
+ */
+XR_FUNC void xr_exception_register_native_type(XrayIsolate *isolate);
+
+/* User-facing constructor primitive.
+ *
+ * Signature mirrors the prelude declaration:
+ *   constructor(message: string = "", cause: Exception? = null)
+ *
+ * Allocates a fresh XrException, populates message + cause, and returns
+ * the wrapped XrValue. Called both via the registered native static
+ * method dispatch and directly from the OP_NEWEXCEPTION fast path so
+ * `new Exception("msg")` works without going through the generic
+ * "instantiate XrInstance + invoke constructor" pipeline (XrException
+ * has a separate GC type, not a generic instance).
+ */
+XR_FUNC XrValue xr_exception_user_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
+                                            int argc);
 
 /* ========== Type Check Macros ========== */
 
