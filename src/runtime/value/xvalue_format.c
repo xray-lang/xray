@@ -137,18 +137,22 @@ static void format_set(XrayIsolate *isolate, XrStrBuf *sb, XrSet *set, int depth
 
 static void format_json(XrayIsolate *isolate, XrStrBuf *sb, XrJson *json, int depth) {
     xr_strbuf_append_cstr(sb, "{", 1);
-    XrSymbolTable *st = (XrSymbolTable *) isolate->symbol_table;
-    XrShape *shape = xr_json_shape(isolate, json);
-    for (int i = 0; i < shape->field_count && i < XR_FORMAT_MAX_ELEMENTS; i++) {
+    XrClass *cls = json->klass;
+    if (!cls) {
+        xr_strbuf_append_cstr(sb, "}", 1);
+        return;
+    }
+    for (int i = 0; i < cls->field_count && i < XR_FORMAT_MAX_ELEMENTS; i++) {
         if (i > 0)
             xr_strbuf_append_cstr(sb, ", ", 2);
-        const char *fname = xr_symbol_get_name_in_table(st, shape->field_symbols[i]);
+        const char *fname = cls->fields[i].name;
         if (fname)
             xr_strbuf_append_cstr(sb, fname, strlen(fname));
         else
             xr_strbuf_append_cstr(sb, "?", 1);
         xr_strbuf_append_cstr(sb, ": ", 2);
-        xr_value_to_strbuf(isolate, sb, xr_json_get_field_any(isolate, json, i), depth + 1);
+        xr_value_to_strbuf(isolate, sb, xr_instance_get_dynamic_field(json, (uint16_t) i),
+                           depth + 1);
     }
     xr_strbuf_append_cstr(sb, "}", 1);
 }

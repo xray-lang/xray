@@ -22,7 +22,7 @@
 
 struct XrMap;
 struct XrSet;
-struct XrJson;
+struct XrInstance;
 struct XrArray;
 struct XrString;
 
@@ -69,7 +69,7 @@ typedef struct XrIterator {
     union {
         struct XrMap *map;        // Map iterator
         struct XrSet *set;        // Set iterator
-        struct XrJson *json;      // Json iterator
+        struct XrInstance *json;  // Json iterator (XrJson is alias for XrInstance)
         struct XrArray *array;    // Array iterator
         struct XrString *string;  // String iterator
     } source;                     // source object (union, selected by type)
@@ -94,11 +94,11 @@ XR_FUNC XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct Xr
 
 // Create iterator from Json (lazy, converts SymbolId keys to strings).
 // Default mode is PAIRS — yields (string_key, value) tuples.
-XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrJson *json,
+XR_FUNC XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, struct XrInstance *json,
                                               struct XrayIsolate *isolate);
 
 // Same source, KEYS mode — yields each key string.
-XR_FUNC XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrJson *json,
+XR_FUNC XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, struct XrInstance *json,
                                                struct XrayIsolate *isolate);
 
 // Create iterator from Array (lazy, yields [index, element] pairs)

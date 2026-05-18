@@ -547,7 +547,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         ctx->handler = (XrClosure *) user_data;
         XrCoroutine *coro = xr_current_coro(X);
 
-        XrJson *req = xr_json_new(coro, 8);
+        XrJson *req = xr_json_new(coro);
         if (!req) {
             return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
                                          (XrContinuation) http_conn_cleanup, result);
@@ -564,7 +564,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
             xr_json_set_by_key(X, req, "path", make_cstring_val(X, pbuf));
         }
 
-        XrJson *hdrs = xr_json_new(coro, 16);
+        XrJson *hdrs = xr_json_new(coro);
         ctx->content_length = -1;
         bool is_chunked = false;
         for (size_t i = 0; i < num_headers; i++) {
@@ -645,7 +645,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         }
 
         if (params.count > 0) {
-            XrJson *params_obj = xr_json_new(coro, 4);
+            XrJson *params_obj = xr_json_new(coro);
             for (int i = 0; i < params.count && i < XR_ROUTER_MAX_PARAMS; i++) {
                 if (params.params[i].key && params.params[i].value) {
                     char kb[64];
@@ -1188,7 +1188,7 @@ XrValue xr_http_server_stats(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx)
         return xr_null();
 
-    XrJson *j = xr_json_new(xr_current_coro(X), 4);
+    XrJson *j = xr_json_new(xr_current_coro(X));
     xr_json_set_by_key(X, j, "currentConns", XR_FROM_INT(atomic_load(&ctx->current_conns)));
     xr_json_set_by_key(X, j, "totalRequests",
                        XR_FROM_INT((int64_t) atomic_load(&ctx->total_requests)));

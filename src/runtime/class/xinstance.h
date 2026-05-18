@@ -152,4 +152,11 @@ XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrayIsolate *X,
                                                           struct XrClass *klass, int symbol,
                                                           const char *field_name);
 
+// Build a dynamic-layout class chain starting from the Json root class with
+// the given field names in order. If sealed is true, marks the leaf class
+// as XR_CLASS_DYNAMIC_SEALED so further transitions are rejected.
+// Returns the leaf class (or NULL on OOM).
+XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrayIsolate *X, const char **names,
+                                                  int count, bool sealed);
+
 #endif  // XINSTANCE_H

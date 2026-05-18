@@ -128,7 +128,7 @@ static int64_t get_json_int(XrayIsolate *X, XrJson *json, const char *key, int64
 // Convert HTTP result to xray Json
 static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
     // Create response object (dictionary mode for flexible field names)
-    XrJson *json = xr_json_new(xr_current_coro(X), 8);
+    XrJson *json = xr_json_new(xr_current_coro(X));
 
     // status
     xr_json_set_by_key(X, json, "status", xr_int(result->status_code));
@@ -139,7 +139,7 @@ static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
     }
 
     // headers - Shape transition for flexible header names
-    XrJson *headers_json = xr_json_new(xr_current_coro(X), 16);
+    XrJson *headers_json = xr_json_new(xr_current_coro(X));
     for (int i = 0; i < result->header_count; i++) {
         XrHttpHeader *h = &result->headers[i];
         // Header name needs null-termination
@@ -401,12 +401,10 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         config.header_count = custom_header_count;
     } else if (xr_value_is_json(headers_val)) {
         XrJson *headers_json = xr_value_to_json(headers_val);
-        XrShape *shape = xr_json_shape(X, headers_json);
+        XrClass *cls = headers_json->klass;
 
-        if (shape && shape->field_count > 0) {
-            // Fast mode: iterate Shape fields
-            XrSymbolTable *symtab = (XrSymbolTable *) X->symbol_table;
-            custom_header_count = shape->field_count;
+        if (cls && cls->field_count > 0) {
+            custom_header_count = cls->field_count;
             custom_headers = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * custom_header_count);
             if (!custom_headers) {
                 URL_COPY_END();
@@ -414,12 +412,10 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
             }
 
             int idx = 0;
-            for (uint16_t i = 0; i < shape->field_count; i++) {
-                SymbolId sym = shape->field_symbols[i];
-                XrValue val = xr_json_get_field_any(X, headers_json, i);
+            for (uint16_t i = 0; i < cls->field_count; i++) {
+                XrValue val = xr_instance_get_dynamic_field(headers_json, i);
 
-                // Get field name from Symbol table
-                const char *field_name = xr_symbol_get_name_in_table(symtab, sym);
+                const char *field_name = cls->fields[i].name;
                 if (field_name && XR_IS_STRING(val)) {
                     XrString *v = XR_TO_STRING(val);
                     custom_headers[idx].name = field_name;
@@ -477,11 +473,11 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
         *sr = result;
         ctx->streams[slot] = sr;
 
-        XrJson *json = xr_json_new(xr_current_coro(X), 8);
+        XrJson *json = xr_json_new(xr_current_coro(X));
         xr_json_set_by_key(X, json, "status", xr_int(sr->status_code));
         if (sr->status_text)
             xr_json_set_by_key(X, json, "statusText", xrs_string_value_c(X, sr->status_text));
-        XrJson *hdrs = xr_json_new(xr_current_coro(X), 16);
+        XrJson *hdrs = xr_json_new(xr_current_coro(X));
         for (int i = 0; i < sr->header_count; i++) {
             char buf[128];
             size_t kl = sr->headers[i].name_len;
@@ -1164,7 +1160,7 @@ static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
         xr_free(path_copy);
 
     // Build return result
-    XrJson *json = xr_json_new(xr_current_coro(X), 8);
+    XrJson *json = xr_json_new(xr_current_coro(X));
     xr_json_set_by_key(X, json, "status", xr_int(result.status_code));
     xr_json_set_by_key(X, json, "downloaded", xr_int((int64_t) result.downloaded));
     xr_json_set_by_key(X, json, "total", xr_int((int64_t) result.total_size));
@@ -1321,7 +1317,7 @@ static XrValue http_form_data_post(XrayIsolate *X, XrValue *args, int argc) {
     ctx->form_data = NULL;
 
     // Build return result
-    XrJson *json = xr_json_new(xr_current_coro(X), 4);
+    XrJson *json = xr_json_new(xr_current_coro(X));
     xr_json_set_by_key(X, json, "status", xr_int(result.status_code));
     if (result.body && result.body_len > 0) {
         xr_json_set_by_key(X, json, "body", xrs_string_value_n(X, result.body, result.body_len));

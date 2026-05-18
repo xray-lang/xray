@@ -12,8 +12,8 @@
 #include "xjson.h"
 #include "xarray.h"
 #include "xiterator.h"
-#include "xshape.h"
 #include "xstring.h"
+#include "../class/xinstance.h"
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"
@@ -62,14 +62,12 @@ static XrValue xr_json_method_keys(XrayIsolate *iso, XrValue self, XrValue *args
     XR_DCHECK(result != NULL, "json.keys: array alloc failed");
 
     XrJson *json = json_self(self);
-    XrShape *shape = xr_json_shape(iso, json);
-    if (!shape)
+    XrClass *cls = json->klass;
+    if (!cls)
         return xr_value_from_array(result);
 
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(iso);
-    for (uint16_t i = 0; i < shape->field_count; i++) {
-        SymbolId sym = shape->field_symbols[i];
-        const char *name = xr_symbol_get_name_in_table(symtab, sym);
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        const char *name = cls->fields[i].name;
         if (name) {
             XrString *s = xr_string_intern(iso, name, strlen(name), 0);
             xr_array_push(result, xr_string_value(s));
@@ -87,12 +85,12 @@ static XrValue xr_json_method_values(XrayIsolate *iso, XrValue self, XrValue *ar
     XR_DCHECK(result != NULL, "json.values: array alloc failed");
 
     XrJson *json = json_self(self);
-    XrShape *shape = xr_json_shape(iso, json);
-    if (!shape)
+    XrClass *cls = json->klass;
+    if (!cls)
         return xr_value_from_array(result);
 
-    for (uint16_t i = 0; i < shape->field_count; i++) {
-        xr_array_push(result, xr_json_get_field_any(iso, json, i));
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        xr_array_push(result, xr_instance_get_dynamic_field(json, i));
     }
     return xr_value_from_array(result);
 }

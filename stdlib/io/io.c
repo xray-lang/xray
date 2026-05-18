@@ -517,30 +517,22 @@ enum {
     STAT_ISSYMLINK_IDX
 };
 
-// Lazily construct the stat() result shape for the given isolate and stash
-// it in the per-isolate stdlib cache. Returns NULL on shape-allocation OOM.
-static XrShape *io_get_stat_shape(XrayIsolate *X) {
+// Lazily construct the stat() result class chain for the given isolate
+// and stash it in the per-isolate stdlib cache. Returns NULL on OOM.
+static XrClass *io_get_stat_class(XrayIsolate *X) {
     XrStdlibCache *cache = xr_stdlib_cache_get(X);
     if (!cache)
         return NULL;
     if (cache->io_stat_shape)
-        return cache->io_stat_shape;
+        return (XrClass *) cache->io_stat_shape;
 
     static const char *const names[] = {"size", "mode", "mtime",  "atime", "ctime",
                                         "uid",  "gid",  "isFile", "isDir", "isSymlink"};
-    XrShape *shape = xr_shape_new(X, 10);
-    if (!shape)
+    XrClass *cls = xr_class_build_json_chain(X, names, 10, false);
+    if (!cls)
         return NULL;
-    XrSymbolTable *table = (XrSymbolTable *) xr_isolate_get_symbol_table(X);
-    XR_DCHECK(table != NULL, "io_get_stat_shape: symbol table must exist");
-    for (int i = 0; i < 10; i++) {
-        SymbolId sym = xr_symbol_register_in_table(table, names[i]);
-        shape = xr_shape_transition(X, shape, sym);
-        if (!shape)
-            return NULL;
-    }
-    cache->io_stat_shape = shape;
-    return shape;
+    cache->io_stat_shape = (XrShape *) cls;  // stdlib cache slot reused
+    return cls;
 }
 
 // stat(path) - Get file stat info
@@ -567,30 +559,30 @@ static XrValue io_stat(XrayIsolate *X, XrValue *args, int argc) {
 
     extern XrValue xr_json_value(XrJson * json);
 
-    XrShape *shape = io_get_stat_shape(X);
-    if (!shape)
+    XrClass *stat_cls = io_get_stat_class(X);
+    if (!stat_cls)
         return xr_null();
-    XrJson *obj = xr_json_new_with_shape(xr_current_coro(X), shape);
+    XrJson *obj = xr_json_new_with_class(xr_current_coro(X), stat_cls);
     if (!obj)
         return xr_null();
 
-    obj->fields[STAT_SIZE_IDX] = xr_int((int64_t) st.st_size);
-    obj->fields[STAT_MODE_IDX] = xr_int((int64_t) (st.st_mode & 0777));
-    obj->fields[STAT_MTIME_IDX] = xr_int((int64_t) st.st_mtime);
-    obj->fields[STAT_ATIME_IDX] = xr_int((int64_t) st.st_atime);
-    obj->fields[STAT_CTIME_IDX] = xr_int((int64_t) st.st_ctime);
+    xr_instance_set_dynamic_field(X, obj, STAT_SIZE_IDX, xr_int((int64_t) st.st_size));
+    xr_instance_set_dynamic_field(X, obj, STAT_MODE_IDX, xr_int((int64_t) (st.st_mode & 0777)));
+    xr_instance_set_dynamic_field(X, obj, STAT_MTIME_IDX, xr_int((int64_t) st.st_mtime));
+    xr_instance_set_dynamic_field(X, obj, STAT_ATIME_IDX, xr_int((int64_t) st.st_atime));
+    xr_instance_set_dynamic_field(X, obj, STAT_CTIME_IDX, xr_int((int64_t) st.st_ctime));
 #ifdef XR_OS_WINDOWS
-    obj->fields[STAT_UID_IDX] = xr_int(0);
-    obj->fields[STAT_GID_IDX] = xr_int(0);
-    obj->fields[STAT_ISFILE_IDX] = xr_bool((st.st_mode & _S_IFREG) != 0);
-    obj->fields[STAT_ISDIR_IDX] = xr_bool((st.st_mode & _S_IFDIR) != 0);
+    xr_instance_set_dynamic_field(X, obj, STAT_UID_IDX, xr_int(0));
+    xr_instance_set_dynamic_field(X, obj, STAT_GID_IDX, xr_int(0));
+    xr_instance_set_dynamic_field(X, obj, STAT_ISFILE_IDX, xr_bool((st.st_mode & _S_IFREG) != 0));
+    xr_instance_set_dynamic_field(X, obj, STAT_ISDIR_IDX, xr_bool((st.st_mode & _S_IFDIR) != 0));
 #else
-    obj->fields[STAT_UID_IDX] = xr_int((int64_t) st.st_uid);
-    obj->fields[STAT_GID_IDX] = xr_int((int64_t) st.st_gid);
-    obj->fields[STAT_ISFILE_IDX] = xr_bool(S_ISREG(st.st_mode));
-    obj->fields[STAT_ISDIR_IDX] = xr_bool(S_ISDIR(st.st_mode));
+    xr_instance_set_dynamic_field(X, obj, STAT_UID_IDX, xr_int((int64_t) st.st_uid));
+    xr_instance_set_dynamic_field(X, obj, STAT_GID_IDX, xr_int((int64_t) st.st_gid));
+    xr_instance_set_dynamic_field(X, obj, STAT_ISFILE_IDX, xr_bool(S_ISREG(st.st_mode)));
+    xr_instance_set_dynamic_field(X, obj, STAT_ISDIR_IDX, xr_bool(S_ISDIR(st.st_mode)));
 #endif
-    obj->fields[STAT_ISSYMLINK_IDX] = xr_bool(is_symlink);
+    xr_instance_set_dynamic_field(X, obj, STAT_ISSYMLINK_IDX, xr_bool(is_symlink));
 
     return xr_json_value(obj);
 }

@@ -48,16 +48,13 @@ static XrValue xr_json_static_keys(XrayIsolate *isolate, XrValue self, XrValue *
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrArray *keys = xr_array_new(xr_current_coro(isolate));
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
-
-    XrShape *shape = xr_json_shape(isolate, json);
-    for (uint16_t i = 0; i < shape->field_count; i++) {
-        SymbolId sym = shape->field_symbols[i];
-        const char *name = xr_symbol_get_name_in_table(symtab, sym);
+    XrClass *cls = json->klass;
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        const char *name = cls->fields[i].name;
         if (name) {
             xr_array_push(keys, xr_string_value(xr_string_intern(isolate, name, strlen(name), 0)));
         }
@@ -73,14 +70,13 @@ static XrValue xr_json_static_values(XrayIsolate *isolate, XrValue self, XrValue
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrArray *values = xr_array_new(xr_current_coro(isolate));
-
-    XrShape *shape = xr_json_shape(isolate, json);
-    for (uint16_t i = 0; i < shape->field_count; i++) {
-        xr_array_push(values, xr_json_get_field_any(isolate, json, i));
+    XrClass *cls = json->klass;
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        xr_array_push(values, xr_instance_get_dynamic_field(json, i));
     }
 
     return xr_value_from_array(values);
@@ -94,26 +90,23 @@ static XrValue xr_json_static_entries(XrayIsolate *isolate, XrValue self, XrValu
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return xr_value_from_array(xr_array_new(xr_current_coro(isolate)));
 
     XrArray *entries = xr_array_new(xr_current_coro(isolate));
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     XrCoroutine *coro = xr_current_coro(isolate);
-
-    XrShape *shape = xr_json_shape(isolate, json);
-    for (uint16_t i = 0; i < shape->field_count; i++) {
+    XrClass *cls = json->klass;
+    for (uint16_t i = 0; i < cls->field_count; i++) {
         /* Each entry is a (key, value) tuple: heterogeneous arity-2
          * product that destructures cleanly in user code via
          * `for ((k, v) in Json.entries(obj))`. */
         XrTuple *pair = xr_tuple_new(coro, 2);
         if (pair) {
-            SymbolId sym = shape->field_symbols[i];
-            const char *name = xr_symbol_get_name_in_table(symtab, sym);
+            const char *name = cls->fields[i].name;
             XrValue key_v = name ? xr_string_value(xr_string_intern(isolate, name, strlen(name), 0))
                                  : xr_string_value(xr_string_intern(isolate, "", 0, 0));
             xr_tuple_set(pair, 0, key_v);
-            xr_tuple_set(pair, 1, xr_json_get_field_any(isolate, json, i));
+            xr_tuple_set(pair, 1, xr_instance_get_dynamic_field(json, i));
         }
         xr_array_push(entries, xr_value_from_tuple(pair));
     }
@@ -128,7 +121,7 @@ static XrValue xr_json_static_has(XrayIsolate *isolate, XrValue self, XrValue *a
         return xr_bool(false);
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return xr_bool(false);
     if (!XR_IS_STRING(args[1]))
         return xr_bool(false);
@@ -151,7 +144,7 @@ static XrValue xr_json_static_get(XrayIsolate *isolate, XrValue self, XrValue *a
         return (nargs >= 3) ? args[2] : xr_null();
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return (nargs >= 3) ? args[2] : xr_null();
     if (!XR_IS_STRING(args[1]))
         return (nargs >= 3) ? args[2] : xr_null();
@@ -174,7 +167,7 @@ static XrValue xr_json_static_size(XrayIsolate *isolate, XrValue self, XrValue *
         return xr_int(0);
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return xr_int(0);
 
     return xr_int((xr_Integer) xr_json_field_count(isolate, json));
@@ -188,7 +181,7 @@ static XrValue xr_json_static_isEmpty(XrayIsolate *isolate, XrValue self, XrValu
         return xr_bool(true);
 
     XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !xr_json_shape(isolate, json))
+    if (!json || !json->klass)
         return xr_bool(true);
 
     return xr_bool(xr_json_field_count(isolate, json) == 0);
