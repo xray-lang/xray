@@ -130,4 +130,26 @@ static inline void *xr_instance_native_body(XrInstance *inst) {
     return (uint8_t *) inst + xr_instance_body_offset(klass);
 }
 
+/* ========== Dynamic Layout Field Access ========== */
+
+// Default in-object field capacity for dynamic-layout classes.
+// The last slot (index = capacity - 1) is reserved as overflow pointer
+// when logical field count exceeds capacity - 1.
+#define XR_DYNAMIC_INOBJECT_DEFAULT 8
+
+// Read a logical field from a dynamic-layout instance.
+// Handles both in-object and overflow cases transparently.
+XR_FUNC XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index);
+
+// Write a logical field on a dynamic-layout instance.
+// Returns false if overflow allocation fails.
+XR_FUNC bool xr_instance_set_dynamic_field(struct XrayIsolate *X, XrInstance *inst, uint16_t index,
+                                           XrValue value);
+
+// Look up or create a class transition for the given field symbol.
+// Returns the target class (with field_count = current + 1), or NULL on OOM.
+XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrayIsolate *X,
+                                                          struct XrClass *klass, int symbol,
+                                                          const char *field_name);
+
 #endif  // XINSTANCE_H

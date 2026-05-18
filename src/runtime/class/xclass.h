@@ -92,6 +92,16 @@ typedef struct XrFieldDescriptor {
 // All method flags defined in xmethod.h (XMETHOD_FLAG_*)
 #include "xmethod.h"
 
+/* ========== Dynamic Layout Transition ========== */
+
+// Each transition records: "adding field `symbol` to class `from` yields
+// class `to`". Transitions form a singly-linked list per class.
+typedef struct XrClassTransition {
+    int symbol;                      // Field symbol that triggers this transition
+    struct XrClass *target;          // Resulting child class after adding the field
+    struct XrClassTransition *next;  // Next transition in the linked list
+} XrClassTransition;
+
 /* ========== ITable Entry (opaque) ========== */
 
 // Full layout lives in xclass_internal.h; external consumers only
@@ -184,6 +194,14 @@ struct XrClass {
 
     /* === Flags === */
     uint16_t flags;
+
+    /* === Dynamic Layout (hidden class transitions) === */
+    // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style
+    // hidden classes: adding a field creates a child class (transition).
+    struct XrClassTransition *transitions;  // Linked list of transitions
+    struct XrClass *transition_parent;      // Parent class in transition chain
+    int transition_symbol;                  // Symbol that caused transition from parent
+    uint16_t in_object_capacity;            // Max inline field slots (default 8)
 
     /* === Struct Layout (VALUE_TYPE only) === */
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct
