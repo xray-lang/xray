@@ -123,17 +123,18 @@ def unmask_skip_zones(masked: str, originals: list[str]) -> str:
 
 
 # --- Step 1: Map literal rewrite ---
-# Match either `{ <entries with => > }` or `#{ <entries with => > }` and rewrite
-# to `#{ <entries with : > }`. To avoid clobbering match/select arms which also
-# live inside `{ ... }`, we only touch braces whose body has a `=>` AND the
-# first non-whitespace token after `{` looks like a Map key (string / number /
-# bare identifier-then-`=>` form). This is heuristic; manual review is required
-# for ambiguous cases.
+# Match `{ "string" => v, ... }` or `#{ "string" => v, ... }` and rewrite
+# to `#{ "string": v, ... }`. We deliberately restrict keys to **string
+# literals** so the rule cannot accidentally match `match` arms (where
+# the LHS is typically an integer literal or an identifier pattern such
+# as `Color.Red`). Map literals using identifier or numeric keys without
+# the leading `#` prefix are uncommon in practice and rely on manual
+# review during migration.
 MAP_LITERAL_PATTERN = re.compile(
     r"(?P<prefix>#?)\{\s*"
-    r"(?P<body>(?:\"[^\"]*\"|'[^']*'|[A-Za-z_][A-Za-z0-9_]*|\d+)"
+    r"(?P<body>(?:\"[^\"]*\"|'[^']*')"
     r"\s*=>\s*[^{}\n]*?(?:,\s*"
-    r"(?:\"[^\"]*\"|'[^']*'|[A-Za-z_][A-Za-z0-9_]*|\d+)"
+    r"(?:\"[^\"]*\"|'[^']*')"
     r"\s*=>\s*[^{}\n]*?)*)\s*\}"
 )
 
