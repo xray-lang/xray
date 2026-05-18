@@ -56,7 +56,7 @@ fn test_data_transformation() {
 
 @test
 fn test_dynamic_form() {
-    fn createFormData<T>(fields: Array<string>, values: Array<T>): Json {
+    fn createFormData<T>(fields: Array<string>, values: Array<T>) -> Json {
         let form = {}
         for (i in 0..fields.length) {
             form[fields[i]] = values[i]
@@ -107,7 +107,7 @@ fn test_api_response() {
 
 @test
 fn test_object_factory() {
-    fn createEntity(type_name: string, id: int): Json {
+    fn createEntity(type_name: string, id: int) -> Json {
         let prefix = type_name + "_"
         return {
             [prefix + "id"]: id,

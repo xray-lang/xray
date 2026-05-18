@@ -6,11 +6,11 @@
 
 // 会抛出错误的任务
 
-fn error_task(): int {
+fn error_task() -> int {
     let x: int = 1 / 0  // 除零错误
     return x
 }
-fn normal_task(): int {
+fn normal_task() -> int {
     return 42
 }
 

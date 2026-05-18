@@ -45,7 +45,7 @@ fn test_typename_array() {
 
 @test
 fn test_typename_map() {
-    let m = {"a" => 1}
+    let m = #{"a": 1}
     assert_eq(typename(m), "Map")
 }
 

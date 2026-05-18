@@ -12,12 +12,12 @@ let _internal = "A"
 const _VERSION = "1.0"
 
 /* 私有函数 */
-fn _helper(): string {
+fn _helper() -> string {
     return _internal + "-helper"
 }
 
 /* 导出函数 */
-fn publicFn(): string {
+fn publicFn() -> string {
     return _helper() + "-" + _VERSION
 }
 

@@ -2,12 +2,12 @@
 
 @native
 class BigInt {
-    abs(): BigInt
-    toString(): string
-    sign(): int
-    isZero(): bool
-    isNegative(): bool
-    isPositive(): bool
-    toInt(): int?
-    toFloat(): float
+    abs() -> BigInt
+    toString() -> string
+    sign() -> int
+    isZero() -> bool
+    isNegative() -> bool
+    isPositive() -> bool
+    toInt() -> int?
+    toFloat() -> float
 }

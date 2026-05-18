@@ -8,7 +8,7 @@
 ** 3. 匿名协程正常执行
 */
 
-fn worker(id: int): int {
+fn worker(id: int) -> int {
     return id * 10
 }
 

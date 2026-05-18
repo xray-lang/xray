@@ -7,14 +7,14 @@ struct Point {
     x: float
     y: float
 }
-fn distance(pt: Point): float {
+fn distance(pt: Point) -> float {
     return pt.x * pt.x + pt.y * pt.y
 }
 struct Vec2 {
     x: float
     y: float
 
-    mag_sq(): float {
+    mag_sq() -> float {
         return this.x * this.x + this.y * this.y
     }
 }
@@ -24,7 +24,7 @@ struct Rect {
     w: float
     h: float
 
-    area(): float {
+    area() -> float {
         return this.w * this.h
     }
 }

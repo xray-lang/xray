@@ -4,15 +4,15 @@
 // EXPECTED: null
 // Test: Print and toString for various types in JIT
 
-fn identity_int(x: int) : int {
+fn identity_int(x: int) -> int {
     return x
 }
 
-fn identity_float(x: float) : float {
+fn identity_float(x: float) -> float {
     return x
 }
 
-fn identity_bool(x: bool) : bool {
+fn identity_bool(x: bool) -> bool {
     return x
 }
 

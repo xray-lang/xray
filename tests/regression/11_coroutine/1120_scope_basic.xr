@@ -7,17 +7,17 @@
 ** 注意：协程函数通过参数传递数据，避免闭包捕获非线程安全变量
 */
 
-fn task1(arr: Array<string>): int {
+fn task1(arr: Array<string>) -> int {
     arr.push("task1 start")
     arr.push("task1 end")
     return 1
 }
-fn task2(arr: Array<string>): int {
+fn task2(arr: Array<string>) -> int {
     arr.push("task2 start")
     arr.push("task2 end")
     return 2
 }
-fn task3(arr: Array<string>): int {
+fn task3(arr: Array<string>) -> int {
     arr.push("task3 start")
     arr.push("task3 end")
     return 3

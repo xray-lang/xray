@@ -2,7 +2,7 @@
 // 测试 Channel 参数传递、go/await、defer
 
 // 生产者：向 Channel 发送数据（使用类型注解）
-fn producer(ch: Channel<int>): string {
+fn producer(ch: Channel<int>) -> string {
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
@@ -10,7 +10,7 @@ fn producer(ch: Channel<int>): string {
 }
 
 // 消费者：从 Channel 接收数据（使用多值返回）
-fn consumer(ch: Channel<int>): int {
+fn consumer(ch: Channel<int>) -> int {
     let sum = 0
     let (v1, ok1) = ch.tryRecv()
     let (v2, ok2) = ch.tryRecv()

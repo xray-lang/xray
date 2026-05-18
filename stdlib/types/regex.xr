@@ -2,9 +2,9 @@
 
 @native
 class Regex {
-    test(text: string): bool
-    find(text: string): string?
-    findAll(text: string): Array<string>
-    replace(text: string, replacement: string): string
-    split(text: string): Array<string>
+    test(text: string) -> bool
+    find(text: string) -> string?
+    findAll(text: string) -> Array<string>
+    replace(text: string, replacement: string) -> string
+    split(text: string) -> Array<string>
 }

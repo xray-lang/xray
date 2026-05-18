@@ -84,7 +84,7 @@ fn test_optional_chain_method() {
 // ===== Function with Nullable Parameters =====
 @test
 fn test_nullable_param() {
-    fn greet(name: string?): string {
+    fn greet(name: string?) -> string {
         if (name == null) {
             return "Hello, Guest"
         }
@@ -96,7 +96,7 @@ fn test_nullable_param() {
 
 @test
 fn test_nullable_return() {
-    fn findIndex(arr: Array<int>, target: int): int? {
+    fn findIndex(arr: Array<int>, target: int) -> int? {
         for (let i = 0; i < arr.length; i++) {
             if (arr[i] == target) {
                 return i
@@ -175,7 +175,7 @@ fn test_array_nullable_elements() {
 
 @test
 fn test_map_nullable_values() {
-    let m = { "a" => 1, "b" => null }
+    let m = #{"a": 1, "b": null}
     assert_eq(m.get("a"), 1)
     assert_eq(m.get("b"), null)
     assert_eq(m.get("c"), null)

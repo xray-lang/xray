@@ -197,32 +197,21 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return result;
     }
 
-    /* Function type: fn(T1, T2): R */
+    /* Legacy `fn(T1, T2): R` form — removed by task 082. Function types are
+     * now written `(T1, T2) -> R` (no `fn` prefix). Emit a clear migration
+     * hint and recover by parsing the rest as a function type. */
     if (xr_parser_check(parser, TK_FN)) {
-        Scanner saved = parser->scanner;
-        Token saved_current = parser->current;
-        xr_parser_advance(parser);
-        if (xr_parser_check(parser, TK_LPAREN)) {
-            xr_parser_advance(parser);
-            XrTypeRef *params[16];
-            int count = 0;
-            while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
-                if (count > 0)
-                    xr_parser_match(parser, TK_COMMA);
-                if (count < 16)
-                    params[count++] = xr_parse_type_annotation(parser);
-            }
-            xr_parser_consume(parser, TK_RPAREN, "expected ')'");
-            XrTypeRef *ret = xr_tref_unit(parser->X);
-            if (xr_parser_match(parser, TK_COLON))
-                ret = xr_parse_type_annotation(parser);
-            return xr_tref_function(parser->X, params, count, ret);
-        }
-        parser->scanner = saved;
-        parser->current = saved_current;
+        xr_parser_error(parser,
+                        "function types are written `(T1, T2) -> R` (drop the `fn` prefix); "
+                        "see task 082");
+        xr_parser_advance(parser);  // consume 'fn' so caller can keep parsing
+        /* fall through to the `(...)` path below */
     }
 
-    /* Tuple type: (T1, T2) */
+    /* Tuple or function type: `(T1, T2)` is a tuple unless followed by `->`,
+     * in which case it becomes a function type `(T1, T2) -> R`. The two share
+     * a leading `(` and the same internal type-list grammar, so we collect
+     * the list once and branch on the trailing `->` (task 082). */
     if (xr_parser_match(parser, TK_LPAREN)) {
         XrTypeRef *elems[16];
         int count = 0;
@@ -233,6 +222,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 elems[count++] = xr_parse_type_annotation(parser);
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
+        if (xr_parser_match(parser, TK_ARROW)) {
+            XrTypeRef *ret = xr_parse_type_annotation(parser);
+            return xr_tref_function(parser->X, elems, count, ret);
+        }
         return xr_tref_tuple(parser->X, elems, count);
     }
 

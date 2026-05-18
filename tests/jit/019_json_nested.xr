@@ -2,7 +2,7 @@
 // EXPECTED: 3
 // Test: Nested Json objects and recursive traversal in JIT
 
-fn make_tree(depth: int) : Json {
+fn make_tree(depth: int) -> Json {
     if (depth <= 0) {
         return { "left": null, "right": null, "val": 1 }
     }
@@ -13,7 +13,7 @@ fn make_tree(depth: int) : Json {
     }
 }
 
-fn tree_sum(node: Json) : int {
+fn tree_sum(node: Json) -> int {
     if (node == null) { return 0 }
     let v = node.val
     if (node.left == null) { return v }

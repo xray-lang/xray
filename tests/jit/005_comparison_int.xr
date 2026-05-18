@@ -7,19 +7,19 @@
 // EXPECTED: true
 // Test: Integer comparison operators in JIT
 
-fn lt(a: int, b: int) : bool {
+fn lt(a: int, b: int) -> bool {
     return a < b
 }
 
-fn le(a: int, b: int) : bool {
+fn le(a: int, b: int) -> bool {
     return a <= b
 }
 
-fn eq(a: int, b: int) : bool {
+fn eq(a: int, b: int) -> bool {
     return a == b
 }
 
-fn ne(a: int, b: int) : bool {
+fn ne(a: int, b: int) -> bool {
     return a != b
 }
 

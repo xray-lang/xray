@@ -16,14 +16,14 @@ assert_eq(typeof(null), Type.null)
 // 测试容器类型
 let arr = [1, 2, 3]
 assert_eq(typeof(arr), Type.Array)
-let map = { "a" => 1 }
+let map = #{"a": 1}
 assert_eq(typeof(map), Type.Map)
 let s = #[1, 2, 3]
 assert_eq(typeof(s), Type.Set)
 
 // 测试函数类型
 @test
-fn test_fn(): int {
+fn test_fn() -> int {
     return 42
 }
 

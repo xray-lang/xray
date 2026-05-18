@@ -4,7 +4,7 @@
 // EXPECTED: bool
 // Test: Typeof operations in JIT
 
-fn type_name(x: int | float | string | bool) : string {
+fn type_name(x: int | float | string | bool) -> string {
     return typename(x)
 }
 

@@ -8,11 +8,11 @@ class Pair {
     }
 }
 
-fn make_pair(x: int): Pair {
+fn make_pair(x: int) -> Pair {
     return Pair(x, x * 2)
 }
 
-fn sum_pair(p: Pair): int {
+fn sum_pair(p: Pair) -> int {
     return p.a + p.b
 }
 

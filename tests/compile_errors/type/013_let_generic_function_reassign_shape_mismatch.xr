@@ -1,8 +1,8 @@
-fn id<T>(x: T): T {
+fn id<T>(x: T) -> T {
     return x
 }
 
-fn to_string<U>(x: U): string {
+fn to_string<U>(x: U) -> string {
     return string(x)
 }
 

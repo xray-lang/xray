@@ -3,10 +3,10 @@
 ** 作者：xingleixu@gmail.com
 */
 
-fn success(): int {
+fn success() -> int {
     return 42
 }
-fn failing(): int {
+fn failing() -> int {
     throw "error"
     return 0
 }

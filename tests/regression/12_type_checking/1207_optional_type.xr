@@ -3,7 +3,7 @@
 // All types can be nullable (int?, string?, etc.)
 // Test 1: Variable with optional type
 
-fn findIndex(arr: Array<int>, val: int): int? {
+fn findIndex(arr: Array<int>, val: int) -> int? {
     for (let i = 0; i < arr.length; i++) {
         if (arr[i] == val) {
             return i
@@ -11,7 +11,7 @@ fn findIndex(arr: Array<int>, val: int): int? {
     }
     return null
 }
-fn greet(name: string?): string {
+fn greet(name: string?) -> string {
     if (name == null) {
         return "Hello, stranger!"
     }

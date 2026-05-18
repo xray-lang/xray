@@ -1,7 +1,7 @@
 // EXPECTED: 10000
 // Test: GC safepoints in JIT loops - ensure GC can run during hot loops
 
-fn count_with_alloc(n: int) : int {
+fn count_with_alloc(n: int) -> int {
     let count = 0
     let i = 0
     while (i < n) {

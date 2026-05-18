@@ -92,7 +92,7 @@ static void setup_params(XiFunc *f, uint16_t n, XiValue **pvs) {
         f->params[i] = pvs[i];
 }
 
-/* ========== Test: fn(a, b) -> a + b ========== */
+/* ========== Test:(a, b) -> a + b ========== */
 TEST(add_i64) {
     XiFunc *f = xi_func_new("add", &stub_int);
     XiBlock *entry = xi_block_new(f);
@@ -129,7 +129,7 @@ TEST(add_i64) {
     xi_func_free(f);
 }
 
-/* ========== Test: fn(a, b) -> a - b ========== */
+/* ========== Test:(a, b) -> a - b ========== */
 TEST(sub_i64) {
     XiFunc *f = xi_func_new("sub", &stub_int);
     XiBlock *entry = xi_block_new(f);
@@ -162,7 +162,7 @@ TEST(sub_i64) {
     xi_func_free(f);
 }
 
-/* ========== Test: fn(a, b) -> a * b ========== */
+/* ========== Test:(a, b) -> a * b ========== */
 TEST(mul_i64) {
     XiFunc *f = xi_func_new("mul", &stub_int);
     XiBlock *entry = xi_block_new(f);
@@ -195,7 +195,7 @@ TEST(mul_i64) {
     xi_func_free(f);
 }
 
-/* ========== Test: fn(a, b) -> return const 99 ========== */
+/* ========== Test:(a, b) -> return const 99 ========== */
 TEST(const_return) {
     XiFunc *f = xi_func_new("const99", &stub_int);
     XiBlock *entry = xi_block_new(f);

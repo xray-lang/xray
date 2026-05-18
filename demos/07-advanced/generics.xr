@@ -11,13 +11,13 @@ class Box<T> {
         this.value = v
     }
 
-    get(): T { return this.value }
+    get() -> T { return this.value }
 
-    map(f: fn(T): T): Box<T> {
+    map(f: (T) -> T) -> Box<T> {
         return new Box(f(this.value))
     }
 
-    toString(): string {
+    toString() -> string {
         return "Box(${this.value})"
     }
 }
@@ -28,7 +28,7 @@ print("intBox: ${intBox.toString()}, get: ${intBox.get()}")
 print("strBox: ${strBox.toString()}, get: ${strBox.get()}")
 
 // map transforms the value inside the box
-let doubled = intBox.map((x: int): int => x * 2)
+let doubled = intBox.map(fn(x: int) -> int { return x * 2 })
 print("doubled: ${doubled.toString()}")
 
 // === Generic pair ===
@@ -41,7 +41,7 @@ class Pair<A, B> {
         this.second = b
     }
 
-    toString(): string {
+    toString() -> string {
         return "(${this.first}, ${this.second})"
     }
 }
@@ -58,18 +58,18 @@ class Stack<T> {
 
     push(item: T) { this.items.push(item) }
 
-    pop(): T? {
+    pop() -> T? {
         if (this.items.length == 0) { return null }
         return this.items.pop()
     }
 
-    peek(): T? {
+    peek() -> T? {
         if (this.items.length == 0) { return null }
         return this.items[this.items.length - 1]
     }
 
-    size(): int { return this.items.length }
-    isEmpty(): bool { return this.items.length == 0 }
+    size() -> int { return this.items.length }
+    isEmpty() -> bool { return this.items.length == 0 }
 }
 
 let stack = new Stack<int>()
@@ -82,7 +82,7 @@ print("pop: ${stack.pop()}")
 print("size: ${stack.size()}")
 
 // === Nullable types ===
-fn safeDivide(a: float, b: float): float? {
+fn safeDivide(a: float, b: float) -> float? {
     if (b == 0.0) { return null }
     return a / b
 }

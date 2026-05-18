@@ -3,7 +3,7 @@
 // EXPECTED: negative
 // Test: If/else control flow in JIT
 
-fn classify(x: int) : int {
+fn classify(x: int) -> int {
     if (x > 0) {
         return 1
     } else if (x == 0) {

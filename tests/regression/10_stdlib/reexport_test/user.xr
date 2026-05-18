@@ -2,11 +2,11 @@
 // 作者：xingleixu@gmail.com
 // 测试模块：用户模块
 
-export fn getUser(): string {
+export fn getUser() -> string {
     return "Alice"
 }
 
-export fn getUserAge(): int {
+export fn getUserAge() -> int {
     return 25
 }
 

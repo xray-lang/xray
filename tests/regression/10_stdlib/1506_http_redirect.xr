@@ -2,9 +2,9 @@
 
 import http
 
-fn isRedirect(s: int): bool { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308 }
-fn isPermanent(s: int): bool { return s == 301 || s == 308 }
-fn isTemporary(s: int): bool { return s == 302 || s == 303 || s == 307 }
+fn isRedirect(s: int) -> bool { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308 }
+fn isPermanent(s: int) -> bool { return s == 301 || s == 308 }
+fn isTemporary(s: int) -> bool { return s == 302 || s == 303 || s == 307 }
 
 @test
 fn test_redirect_codes() {
@@ -28,13 +28,13 @@ fn test_permanent_vs_temporary() {
 
 @test
 fn test_location_header() {
-    let resp = { status: 302, headers: { "Location" => "https://example.com/new" } }
+    let resp = { status: 302, headers: #{"Location": "https://example.com/new"} }
     assert_eq(resp.headers.get("Location"), "https://example.com/new")
 }
 
 @test
 fn test_resolve_redirect() {
-    fn resolve(base: string, loc: string): string {
+    fn resolve(base: string, loc: string) -> string {
         if (loc.indexOf("http://") == 0 || loc.indexOf("https://") == 0) { return loc }
         return base + loc
     }

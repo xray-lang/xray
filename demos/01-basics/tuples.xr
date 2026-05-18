@@ -27,7 +27,7 @@ print(nested.0.1)                      // 20
 print(nested.1)                        // label
 
 // === Multi-return functions ===
-fn divmod(a: int, b: int): (int, int) {
+fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 let (q, r) = divmod(17, 5)
@@ -50,13 +50,13 @@ for ((k, v) in pairs) {
 }
 
 // === Match with tuple patterns ===
-fn classify(p: (int, int)): string {
+fn classify(p: (int, int)) -> string {
     return match (p) {
-        (0, 0) => "origin"
-        (0, _) => "y-axis"
-        (_, 0) => "x-axis"
-        (x, y) if (x == y) => "diagonal"
-        _ => "general"
+        (0, 0) -> "origin"
+        (0, _) -> "y-axis"
+        (_, 0) -> "x-axis"
+        (x, y) if (x == y) -> "diagonal"
+        _ -> "general"
     }
 }
 print(classify((0, 0)))
@@ -66,17 +66,17 @@ print(classify((5, 5)))
 print(classify((2, 9)))
 
 // === Nested match patterns ===
-fn fst_first(t: ((int, int), int)): int {
+fn fst_first(t: ((int, int), int)) -> int {
     return match (t) {
-        ((0, _), _) => -1
-        ((a, _), _) => a
+        ((0, _), _) -> -1
+        ((a, _), _) -> a
     }
 }
 print(fst_first(((42, 99), 7)))
 print(fst_first(((0, 9), 7)))
 
 // === Spread in function calls ===
-fn dist(x1: int, y1: int, x2: int, y2: int): int {
+fn dist(x1: int, y1: int, x2: int, y2: int) -> int {
     let dx = x2 - x1
     let dy = y2 - y1
     return dx * dx + dy * dy
@@ -92,10 +92,10 @@ let all = (...head, ...tail)
 print("concat.0 = ${all.0}, concat.4 = ${all.4}")
 
 // === User generic over tuples ===
-fn first<A, B>(t: (A, B)): A {
+fn first<A, B>(t: (A, B)) -> A {
     return t.0
 }
-fn pair_of<A, B>(a: A, b: B): (A, B) {
+fn pair_of<A, B>(a: A, b: B) -> (A, B) {
     return (a, b)
 }
 print(first(pair_of(7, "answer")))

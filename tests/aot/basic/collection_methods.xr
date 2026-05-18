@@ -60,7 +60,7 @@ print(rev[1])             // 2
 print(rev[2])             // 1
 
 // --- Map methods ---
-let m = { "a" => 1, "b" => 2, "c" => 3 }
+let m = #{"a": 1, "b": 2, "c": 3}
 let keys = m.keys()
 print(keys.length)        // 3
 

@@ -37,7 +37,7 @@ fn test_string_pool_survival() {
 fn test_nested_string_key_survival() {
     let data: Array<Json> = []
     for (let i = 0; i < 200; i++) {
-        let m = {"val" => i * 3, "name" => "field_" + string(i)}
+        let m = #{"val": i * 3, "name": "field_" + string(i)}
         data.push(m)
     }
 
@@ -60,7 +60,7 @@ fn test_nested_string_key_survival() {
 // Exercises: traverse_closure + upvalue marking
 @test
 fn test_closure_upvalue_gc() {
-    let closures: Array<fn(): string> = []
+    let closures: Array<() -> string> = []
     for (let i = 0; i < 100; i++) {
         let captured = "captured_" + string(i)
         let arr = [i, i * 2]
@@ -73,7 +73,7 @@ fn test_closure_upvalue_gc() {
 
     // Create garbage to push GC
     for (let j = 0; j < 300; j++) {
-        let tmp = {"garbage" => j}
+        let tmp = #{"garbage": j}
     }
 
     gc.collect()
@@ -92,7 +92,7 @@ fn test_rapid_alloc_collect() {
     for (let cycle = 0; cycle < 20; cycle++) {
         let batch: Array<Json> = []
         for (let i = 0; i < 50; i++) {
-            batch.push({"c" => cycle, "i" => i, "s" => "v" + string(cycle) + "_" + string(i)})
+            batch.push(#{"c": cycle, "i": i, "s": "v" + string(cycle) + "_" + string(i)})
         }
         gc.collect()
         // Keep last batch alive
@@ -122,8 +122,8 @@ fn test_mixed_container_gc() {
 
     for (let i = 0; i < 100; i++) {
         arr.push([i, "a" + string(i)])
-        map["k" + string(i)] = {"nested" => i}
-        data.push({"arr" => arr[i], "map_key" => "k" + string(i)})
+        map["k" + string(i)] = #{"nested": i}
+        data.push(#{"arr": arr[i], "map_key": "k" + string(i)})
     }
 
     gc.collect()
@@ -152,7 +152,7 @@ fn test_generational_cross_reference() {
     // Create long-lived container
     let long_lived: Array<Json> = []
     for (let i = 0; i < 50; i++) {
-        long_lived.push({"id" => i, "children" => []})
+        long_lived.push(#{"id": i, "children": []})
     }
 
     gc.collect()
@@ -165,7 +165,7 @@ fn test_generational_cross_reference() {
 
         // Create garbage between rounds
         for (let j = 0; j < 100; j++) {
-            let tmp = {"temp" => j}
+            let tmp = #{"temp": j}
         }
 
         gc.collect()

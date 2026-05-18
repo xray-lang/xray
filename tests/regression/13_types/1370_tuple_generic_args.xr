@@ -44,15 +44,15 @@ fn test_for_in_array_tuple() {
 }
 
 // ===== User generic fn: (A, B) param + return =====
-fn first<A, B>(t: (A, B)): A {
+fn first<A, B>(t: (A, B)) -> A {
     return t.0
 }
 
-fn second<A, B>(t: (A, B)): B {
+fn second<A, B>(t: (A, B)) -> B {
     return t.1
 }
 
-fn pair<A, B>(a: A, b: B): (A, B) {
+fn pair<A, B>(a: A, b: B) -> (A, B) {
     return (a, b)
 }
 

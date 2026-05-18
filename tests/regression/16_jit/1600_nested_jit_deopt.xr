@@ -5,13 +5,13 @@
 // Bug (P0.1): callee's deopt_id leaked to outer function's CBNZ check,
 // causing outer function to deopt with wrong deopt_id -> wrong recovery.
 
-fn polymorphic_callee(x: int | string): int {
+fn polymorphic_callee(x: int | string) -> int {
     if (typeof(x) == Type.string) {
         return x.length
     }
     return x + 1
 }
-fn outer_caller(): int {
+fn outer_caller() -> int {
     let sum = 0
     for (let i = 0; i < 5; i++) {
         sum = sum + polymorphic_callee(i)

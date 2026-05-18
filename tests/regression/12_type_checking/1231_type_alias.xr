@@ -27,16 +27,16 @@ fn test_struct_alias() {
 
 // ===== Function type alias =====
 
-type Mapper = fn(int): int
-type Predicate = fn(int): bool
+type Mapper = (int) -> int
+type Predicate = (int) -> bool
 
 @test
 fn test_fn_type_alias() {
-    fn apply(x: int, f: Mapper): int {
+    fn apply(x: int, f: Mapper) -> int {
         return f(x)
     }
     
-    let result = apply(5, (n) => n * 2)
+    let result = apply(5, (n) -> n * 2)
     assert_eq(result, 10)
 }
 
@@ -65,22 +65,22 @@ fn test_optional_alias() {
 
 // ===== Nested type alias =====
 
-type Callback = fn(int): int
+type Callback = (int) -> int
 
 @test
 fn test_nested_alias() {
-    fn applyTwice(x: int, f: Callback): int {
+    fn applyTwice(x: int, f: Callback) -> int {
         return f(f(x))
     }
     
-    assert_eq(applyTwice(3, (n) => n * 2), 12)
+    assert_eq(applyTwice(3, (n) -> n * 2), 12)
 }
 
 // ===== Type alias in return type =====
 
 @test
 fn test_alias_in_return() {
-    fn getAge(): Age {
+    fn getAge() -> Age {
         return 30
     }
     assert_eq(getAge(), 30)
@@ -88,7 +88,7 @@ fn test_alias_in_return() {
 
 // ===== Type alias with void function =====
 
-type Action = fn(int)
+type Action = (int) -> ()
 
 @test
 fn test_void_fn_alias() {
@@ -100,7 +100,7 @@ fn test_void_fn_alias() {
         }
     }
     
-    forEach([1, 2, 3], (x) => {
+    forEach([1, 2, 3], (x) -> {
         sum = sum + x
     })
     assert_eq(sum, 6)

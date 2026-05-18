@@ -266,7 +266,7 @@ TEST(idempotence_after_two_passes) {
 static const char kRandomAlphabet[] = "abcdefghijklmnopqrstuvwxyz"
                                       "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                       "0123456789"
-                                      " !#%&'()*+,-./:;<=>?@[]^_|}~"
+                                      " !#%&'()*+,-./:;<->?@[]^_|}~"
                                       "$$$$";  // weight $ higher to stress the template-escape path
 
 #define RANDOM_PAYLOAD_MAX 32

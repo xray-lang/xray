@@ -10,24 +10,24 @@ fn test_select() {
     
     // select 从多个 channel 中接收
     select {
-        msg from ch1 => { print(msg) }
-        msg from ch2 => { print(msg) }
-        _ => { print("no data") }
+        msg from ch1 -> { print(msg) }
+        msg from ch2 -> { print(msg) }
+        _ -> { print("no data") }
     }
     
     // ch2 有数据时
     ch2.trySend(200)
     select {
-        msg from ch1 => { print(msg) }
-        msg from ch2 => { print(msg) }
-        _ => { print("no data") }
+        msg from ch1 -> { print(msg) }
+        msg from ch2 -> { print(msg) }
+        _ -> { print("no data") }
     }
     
     // 都没有数据时（走 default）
     select {
-        msg from ch1 => { print(msg) }
-        msg from ch2 => { print(msg) }
-        _ => { print("no data") }
+        msg from ch1 -> { print(msg) }
+        msg from ch2 -> { print(msg) }
+        _ -> { print("no data") }
     }
 }
 

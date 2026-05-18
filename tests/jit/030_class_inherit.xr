@@ -3,7 +3,7 @@
 // Test: Class inheritance and method override in JIT
 
 class Shape {
-    area() : float {
+    area() -> float {
         return 0.0
     }
 }
@@ -15,7 +15,7 @@ class Circle extends Shape {
         this.r = r
     }
 
-    area() : float {
+    area() -> float {
         return 3.14 * this.r * this.r
     }
 }
@@ -29,12 +29,12 @@ class Rect extends Shape {
         this.h = h
     }
 
-    area() : int {
+    area() -> int {
         return this.w * this.h
     }
 }
 
-fn calc_area(shape: Shape) : float {
+fn calc_area(shape: Shape) -> float {
     return shape.area()
 }
 

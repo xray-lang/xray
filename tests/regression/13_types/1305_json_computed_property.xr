@@ -63,7 +63,7 @@ fn test_complex_expression_key() {
 // ===== Computed property in function =====
 @test
 fn test_computed_in_function() {
-    fn makeObj(key: string, value: int): Json {
+    fn makeObj(key: string, value: int) -> Json {
         return { [key]: value }
     }
     let obj1 = makeObj("a", 1)

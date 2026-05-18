@@ -2,7 +2,7 @@
 // EXPECTED: 1
 // Test: Self-recursive call (CALL_SELF optimization) in JIT
 
-fn fact(n: int) : int {
+fn fact(n: int) -> int {
     if (n <= 1) { return 1 }
     return n * fact(n - 1)
 }

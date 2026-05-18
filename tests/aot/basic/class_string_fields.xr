@@ -7,7 +7,7 @@ class Animal {
     constructor(name: string) {
         this.name = name
     }
-    speak(): string {
+    speak() -> string {
         return "Animal: " + this.name
     }
 }
@@ -18,10 +18,10 @@ class Dog extends Animal {
         super(name)
         this.breed = breed
     }
-    speak(): string {
+    speak() -> string {
         return "Dog: " + this.name + " (" + this.breed + ")"
     }
-    parent_speak(): string {
+    parent_speak() -> string {
         return super.speak()
     }
 }
@@ -46,7 +46,7 @@ class Person {
         this.name = name
         this.age = age
     }
-    greet(): string {
+    greet() -> string {
         return this.name + " is " + this.age
     }
 }

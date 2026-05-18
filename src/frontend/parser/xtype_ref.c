@@ -212,7 +212,8 @@ XR_FUNC XrTypeRef *xr_tref_type_param(struct XrayIsolate *X, const char *name) {
 /* ========== String Conversion ========================================
  *
  * Produces human-readable type strings like "int", "Array<string>",
- * "fn(int): bool", etc.  Arena-allocated — no free needed.
+ * "(int) -> bool", etc.  Arena-allocated — no free needed.
+ * Function types follow the unified arrow form (no leading `fn`).
  * ===================================================================== */
 
 /* Max buffer for xr_tref_to_string scratch — handles deeply nested
@@ -302,14 +303,14 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             break;
 
         case XR_TREF_FUNCTION: {
-            tref_append(buf, pos, cap, "fn(");
+            tref_append(buf, pos, cap, "(");
             int nparam = t->nchildren > 0 ? t->nchildren - 1 : 0;
             for (int i = 0; i < nparam; i++) {
                 if (i > 0)
                     tref_append(buf, pos, cap, ", ");
                 tref_to_str_impl(t->children[i], buf, pos, cap);
             }
-            tref_append(buf, pos, cap, "): ");
+            tref_append(buf, pos, cap, ") -> ");
             if (t->nchildren > 0)
                 tref_to_str_impl(t->children[t->nchildren - 1], buf, pos, cap);
             else

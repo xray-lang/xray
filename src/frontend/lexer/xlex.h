@@ -184,7 +184,7 @@ typedef enum {
     TK_QUESTION,          // ? (optional type)
     TK_QUESTION_DOT,      // ?. (optional chaining)
     TK_PIPE,              // | (union type)
-    TK_ARROW,             // => (arrow function)
+    TK_ARROW,             // -> (unified arrow: fn return, fn type, closure body, match/select arm)
     TK_DOT_DOT_DOT,       // ... (rest/spread operator)
     TK_RANGE,             // .. (range operator)
     TK_NULLISH_COALESCE,  // ?? (nullish coalescing operator)

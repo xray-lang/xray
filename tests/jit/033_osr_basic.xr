@@ -1,7 +1,7 @@
 // EXPECTED: 500500
 // Test: OSR (On-Stack Replacement) basic - hot loop triggers JIT mid-execution
 
-fn main_loop() : int {
+fn main_loop() -> int {
     let sum = 0
     let i = 1
     while (i <= 1000) {

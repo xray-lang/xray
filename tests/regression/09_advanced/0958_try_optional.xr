@@ -3,25 +3,25 @@
 ** Covers the 4 scenarios from the original design doc.
 */
 
-fn maybeFailInt(should_throw: bool): int {
+fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
         throw "intentional int failure"
     }
     return 42
 }
 
-fn maybeFailJson(should_throw: bool): Json {
+fn maybeFailJson(should_throw: bool) -> Json {
     if (should_throw) {
         throw "intentional json failure"
     }
     return { id: 1, name: "Alice" }
 }
 
-fn parseConfig(): Json {
+fn parseConfig() -> Json {
     throw "config missing"
 }
 
-fn parseConfigOK(): Json {
+fn parseConfigOK() -> Json {
     return { database: { host: "prod.example.com", port: 5432 } }
 }
 
@@ -70,7 +70,7 @@ fn test_try_optional_object_default() {
     print("   PASS")
 }
 
-fn findUser(id: int): Json? {
+fn findUser(id: int) -> Json? {
     return try? maybeFailJson(id < 0)
 }
 
@@ -90,9 +90,9 @@ fn test_try_optional_function_return() {
 @test
 fn test_try_optional_batch() {
     print("9. batch try? + ?? for multiple independent fallible ops")
-    fn fetchName(): string { throw "no name" }
-    fn fetchAge(): int { return 27 }
-    fn fetchEmail(): string { throw "no email" }
+    fn fetchName() -> string { throw "no name" }
+    fn fetchAge() -> int { return 27 }
+    fn fetchEmail() -> string { throw "no email" }
 
     let name  = try? fetchName()  ?? "unknown"
     let age   = try? fetchAge()   ?? 0

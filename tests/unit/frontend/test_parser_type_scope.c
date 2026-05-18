@@ -195,7 +195,7 @@ TEST(null_safe_read_api) {
 
 TEST(forward_declared_alias_can_be_patched) {
     // The parser uses NULL-typed entries as a forward-decl guard
-    // (e.g. `type A = A` self-reference detection): it defines
+    // (e.g. `type A = A` self-reference detection) -> it defines
     // `A` with type=NULL, parses the RHS, then patches the type.
     // The contract is that the entry pointer is stable across
     // the parse so the patch is visible to later lookups.

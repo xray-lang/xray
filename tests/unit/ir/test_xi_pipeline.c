@@ -257,7 +257,7 @@ TEST(e2e_for_loop) {
 
 TEST(e2e_function_decl) {
     /* Function declaration should emit CLOSURE opcode and have a child proto */
-    XrProto *p = compile_source("fn add(a: int, b: int): int { return a + b }\n"
+    XrProto *p = compile_source("fn add(a: int, b: int) -> int { return a + b }\n"
                                 "print(add(1, 2))",
                                 NULL);
     assert(p != NULL);
@@ -267,7 +267,7 @@ TEST(e2e_function_decl) {
 }
 
 TEST(e2e_recursive_func) {
-    XrProto *p = compile_source("fn fib(n: int): int {\n"
+    XrProto *p = compile_source("fn fib(n: int) -> int {\n"
                                 "  if (n <= 1) { return n }\n"
                                 "  return fib(n - 1) + fib(n - 2)\n"
                                 "}\nprint(fib(5))",
@@ -282,7 +282,7 @@ TEST(e2e_recursive_func) {
 
 TEST(e2e_nested_call) {
     /* Tests the register clobber fix: nested calls to same function */
-    XrProto *p = compile_source("fn add(a: int, b: int): int { return a + b }\n"
+    XrProto *p = compile_source("fn add(a: int, b: int) -> int { return a + b }\n"
                                 "print(add(1, add(2, 3)))",
                                 NULL);
     assert(p != NULL);
@@ -308,10 +308,10 @@ TEST(e2e_const_prop_chain) {
 TEST(e2e_dce_unused_var) {
     /* Top-level vars are stored via SETSHARED (side effect) so DCE keeps
      * them.  Test inside a function where locals are register-only.
-     *   fn f(): int { let x = 42; let y = 99; return x }
+     *   fn f() -> int { let x = 42; let y = 99; return x }
      * y is unused → LOADI 99 should be eliminated from the child proto. */
     XrProto *p =
-        compile_source("fn f(): int { let x = 42\nlet y = 99\nreturn x }\nprint(f())", NULL);
+        compile_source("fn f() -> int { let x = 42\nlet y = 99\nreturn x }\nprint(f())", NULL);
     assert(p != NULL);
     /* Child proto (f) should have only one LOADI (for x=42); y=99 is dead */
     int nch = DYNARRAY_COUNT(&p->protos);
@@ -448,8 +448,8 @@ TEST(e2e_short_circuit) {
 /* ========== Multiple Functions ========== */
 
 TEST(e2e_multi_func) {
-    XrProto *p = compile_source("fn double(x: int): int { return x * 2 }\n"
-                                "fn negate(x: int): int { return -x }\n"
+    XrProto *p = compile_source("fn double(x: int) -> int { return x * 2 }\n"
+                                "fn negate(x: int) -> int { return -x }\n"
                                 "print(negate(double(3)))",
                                 NULL);
     assert(p != NULL);
@@ -510,9 +510,9 @@ TEST(e2e_nullish_coalesce) {
 TEST(e2e_match_expr) {
     XrProto *p = compile_source("let x = 2\n"
                                 "let r = match (x) {\n"
-                                "  1 => 10,\n"
-                                "  2 => 20,\n"
-                                "  _ => 0\n"
+                                "  1 -> 10,\n"
+                                "  2 -> 20,\n"
+                                "  _ -> 0\n"
                                 "}\nprint(r)",
                                 NULL);
     assert(p != NULL);
@@ -545,8 +545,8 @@ TEST(e2e_slice) {
 /* ========== Closure (nested function) ========== */
 
 TEST(e2e_closure) {
-    XrProto *p = compile_source("fn make(): fn(): int {\n"
-                                "  fn inner(): int { return 42 }\n"
+    XrProto *p = compile_source("fn make() ->() -> int {\n"
+                                "  fn inner() -> int { return 42 }\n"
                                 "  return inner\n"
                                 "}\nlet f = make()\nprint(f())",
                                 NULL);

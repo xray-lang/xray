@@ -158,7 +158,7 @@ static void fmt_select_stmt(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, " from ");
             xfmt_emit_expression(ctx, sc->channel);
         }
-        xfmt_write_str(ctx, " => ");
+        xfmt_write_str(ctx, " -> ");
 
         if (sc->body->type == AST_BLOCK) {
             xfmt_emit_block(ctx, sc->body);

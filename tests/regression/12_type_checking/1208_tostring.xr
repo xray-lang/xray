@@ -2,7 +2,7 @@
 
 // === 1. Basic types toString ===
 
-fn myFunc(): int { return 1 }
+fn myFunc() -> int { return 1 }
 class Dog {
     name: string
     constructor(name) { this.name = name }
@@ -11,7 +11,7 @@ class Point {
     x: int = 0
     y: int = 0
     constructor(x, y) { this.x = x; this.y = y }
-    toString(): string { return "(" + string(this.x) + ", " + string(this.y) + ")" }
+    toString() -> string { return "(" + string(this.x) + ", " + string(this.y) + ")" }
 }
 enum Color { Red, Green, Blue }
 
@@ -46,9 +46,9 @@ fn test_tostring() {
     assert_eq(string(nested), "[[1, 2], [3, 4]]")
 
     // === 5. Map toString ===
-    let m = {"a" => 1}
+    let m = #{"a": 1}
     let ms = string(m)
-    assert(ms.indexOf("=>") >= 0)
+    assert(ms.indexOf("\"a\": 1") >= 0)
 
     // === 6. Set toString ===
     let st = #[1, 2, 3]

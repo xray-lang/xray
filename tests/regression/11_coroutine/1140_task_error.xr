@@ -1,12 +1,12 @@
 // Test task.error property
 // Author: xingleixu@gmail.com
 
-fn bad(): int {
+fn bad() -> int {
     let x = 1 / 0
     return x
 }
 
-fn good(): int {
+fn good() -> int {
     return 42
 }
 

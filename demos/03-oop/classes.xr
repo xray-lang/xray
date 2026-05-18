@@ -13,11 +13,11 @@ class Animal {
         this.sound = sound
     }
 
-    speak(): string {
+    speak() -> string {
         return "${this.name} says ${this.sound}!"
     }
 
-    toString(): string {
+    toString() -> string {
         return "Animal(${this.name})"
     }
 }
@@ -34,11 +34,11 @@ class Dog extends Animal {
         this.breed = breed
     }
 
-    override speak(): string {
+    override speak() -> string {
         return "${this.name} (${this.breed}) says woof!"
     }
 
-    fetch(item: string): string {
+    fetch(item: string) -> string {
         return "${this.name} fetches the ${item}"
     }
 }
@@ -54,9 +54,9 @@ class Counter {
     constructor() { this.count = 0 }
 
     increment() { this.count = this.count + 1 }
-    getCount(): int { return this.count }
+    getCount() -> int { return this.count }
 
-    static create(): Counter {
+    static create() -> Counter {
         return new Counter()
     }
 }

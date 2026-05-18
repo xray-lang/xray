@@ -1,19 +1,19 @@
 // AOT basic test: control flow
-fn abs_val(x: int): int {
+fn abs_val(x: int) -> int {
     if (x < 0) {
         return -x
     }
     return x
 }
 
-fn max_of(a: int, b: int): int {
+fn max_of(a: int, b: int) -> int {
     if (a > b) {
         return a
     }
     return b
 }
 
-fn sum_to(n: int): int {
+fn sum_to(n: int) -> int {
     let total = 0
     let i = 1
     while (i <= n) {

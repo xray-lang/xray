@@ -224,10 +224,8 @@ fn test_parse_basic() {
 
 @test
 fn test_format_basic() {
-    let obj = {
-        "dir" => "/home/user",
-        "base" => "file.txt"
-    }
+    let obj = #{"dir": "/home/user",
+        "base": "file.txt"}
     let result = path.format(obj)
     assert_eq(result, "/home/user/file.txt")
 }

@@ -10,8 +10,8 @@
 // ===== 单类型参数泛型接口 =====
 
 interface Container<T> {
-    get(index: int): T
-    size(): int
+    get(index: int) -> T
+    size() -> int
 }
 
 class IntBox implements Container<int> {
@@ -21,11 +21,11 @@ class IntBox implements Container<int> {
         this.value = v
     }
 
-    get(index: int): int {
+    get(index: int) -> int {
         return this.value
     }
 
-    size(): int {
+    size() -> int {
         return 1
     }
 }
@@ -40,12 +40,12 @@ fn test_implements_with_type_args() {
 // ===== 多类型参数泛型接口 + 带类型实参的 extends =====
 
 interface Pair<K, V> {
-    key(): K
-    value(): V
+    key() -> K
+    value() -> V
 }
 
 interface KVDescriptor<K, V> extends Pair<K, V> {
-    describe(): string
+    describe() -> string
 }
 
 class StringIntEntry implements KVDescriptor<string, int> {
@@ -57,15 +57,15 @@ class StringIntEntry implements KVDescriptor<string, int> {
         this.v = v
     }
 
-    key(): string {
+    key() -> string {
         return this.k
     }
 
-    value(): int {
+    value() -> int {
         return this.v
     }
 
-    describe(): string {
+    describe() -> string {
         return this.k
     }
 }
@@ -138,7 +138,7 @@ fn test_interface_const_property() {
 
 interface SizedCollection<T> {
     length: int
-    first(): T
+    first() -> T
 }
 
 @test
@@ -149,12 +149,12 @@ fn test_generic_interface_with_property_declares() {
 // ===== 受约束的泛型类型参数 =====
 
 interface Numeric {
-    toFloat(): float
+    toFloat() -> float
 }
 
 interface Stats<T: Numeric> {
-    mean(): float
-    sum(): T
+    mean() -> float
+    sum() -> T
 }
 
 @test

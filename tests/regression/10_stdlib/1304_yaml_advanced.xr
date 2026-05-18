@@ -245,7 +245,7 @@ fn test_stringify_json_roundtrip() {
 
 @test
 fn test_stringify_map() {
-    let m = {"key1" => "val1", "key2" => 42}
+    let m = #{"key1": "val1", "key2": 42}
     let result = yaml.stringify(m)
     assert(result != null)
     assert(result.length > 0)

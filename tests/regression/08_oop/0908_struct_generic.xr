@@ -5,7 +5,7 @@ struct Pair<A, B> {
     first: A
     second: B
 
-    toString(): string {
+    toString() -> string {
         return "(${this.first}, ${this.second})"
     }
 }
@@ -13,7 +13,7 @@ struct Wrapper<T> {
     value: T
     label: string
 
-    describe(): string {
+    describe() -> string {
         return "${this.label}: ${this.value}"
     }
 }

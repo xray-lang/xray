@@ -10,7 +10,7 @@ fn test_call_before_definition() {
     assert_eq(result, 30)
 }
 
-fn add(a: int, b: int): int {
+fn add(a: int, b: int) -> int {
     return a + b
 }
 
@@ -24,19 +24,19 @@ fn test_mutual_recursion() {
     assert_eq(isOdd(4), false)
 }
 
-fn isEven(n: int): bool {
+fn isEven(n: int) -> bool {
     if (n == 0) { return true }
     return isOdd(n - 1)
 }
 
-fn isOdd(n: int): bool {
+fn isOdd(n: int) -> bool {
     if (n == 0) { return false }
     return isEven(n - 1)
 }
 
 // ===== Function references class defined after it =====
 
-fn createDog(name: string): Dog {
+fn createDog(name: string) -> Dog {
     return new Dog(name)
 }
 
@@ -56,12 +56,12 @@ fn test_fn_before_class() {
 // ===== Class method calls function defined after it =====
 
 class Formatter {
-    format(s: string): string {
+    format(s: string) -> string {
         return addBrackets(s)
     }
 }
 
-fn addBrackets(s: string): string {
+fn addBrackets(s: string) -> string {
     return "[" + s + "]"
 }
 
@@ -73,7 +73,7 @@ fn test_class_method_uses_later_fn() {
 
 // ===== Definition before call still works =====
 
-fn multiply(x: int, y: int): int {
+fn multiply(x: int, y: int) -> int {
     return x * y
 }
 
@@ -86,7 +86,7 @@ fn test_definition_before_call() {
 
 let factor = 10
 
-fn scaled(x: int): int {
+fn scaled(x: int) -> int {
     return x * factor
 }
 
@@ -102,7 +102,7 @@ fn test_block_call_before_definition() {
     let r = greetBlock("world")
     assert_eq(r, "hello world")
     
-    fn greetBlock(name: string): string {
+    fn greetBlock(name: string) -> string {
         return "hello " + name
     }
 }
@@ -113,7 +113,7 @@ fn test_block_closure_capture_with_hoisting() {
     let result = getDoubled()
     assert_eq(result, 20)
     
-    fn getDoubled(): int {
+    fn getDoubled() -> int {
         return x * 2
     }
 }
@@ -123,12 +123,12 @@ fn test_block_mutual_recursion() {
     assert_eq(blockEven(4), true)
     assert_eq(blockEven(3), false)
     
-    fn blockEven(n: int): bool {
+    fn blockEven(n: int) -> bool {
         if (n == 0) { return true }
         return blockOdd(n - 1)
     }
     
-    fn blockOdd(n: int): bool {
+    fn blockOdd(n: int) -> bool {
         if (n == 0) { return false }
         return blockEven(n - 1)
     }

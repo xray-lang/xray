@@ -1,11 +1,11 @@
 // 测试 go/await 表达式
 // 第一阶段：同步执行版本
 
-fn add(a: int, b: int): int {
+fn add(a: int, b: int) -> int {
     return a + b
 }
 
-fn multiply(x: int, y: int): int {
+fn multiply(x: int, y: int) -> int {
     return x * y
 }
 

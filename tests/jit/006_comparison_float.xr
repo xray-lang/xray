@@ -4,15 +4,15 @@
 // EXPECTED: false
 // Test: Float comparison operators in JIT
 
-fn flt(a: float, b: float) : bool {
+fn flt(a: float, b: float) -> bool {
     return a < b
 }
 
-fn fle(a: float, b: float) : bool {
+fn fle(a: float, b: float) -> bool {
     return a <= b
 }
 
-fn feq(a: float, b: float) : bool {
+fn feq(a: float, b: float) -> bool {
     return a == b
 }
 

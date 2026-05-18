@@ -5,11 +5,11 @@ class EnumValue {
     name: string
     value: Json
     ordinal: int
-    toString(): string
+    toString() -> string
 }
 
 @native
 class EnumType {
     memberCount: int
-    getMember(index: int): EnumValue
+    getMember(index: int) -> EnumValue
 }

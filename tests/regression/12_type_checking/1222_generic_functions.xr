@@ -2,31 +2,31 @@
 // Expected: prints "ok"
 // Basic identity function
 
-fn identity<T>(x: T): T {
+fn identity<T>(x: T) -> T {
     return x
 }
-fn makePair<A, B>(a: A, b: B): (A, B) {
+fn makePair<A, B>(a: A, b: B) -> (A, B) {
     return (a, b)
 }
-fn first<T>(arr: Array<T>): T? {
+fn first<T>(arr: Array<T>) -> T? {
     if (arr.length > 0) {
         return arr[0]
     }
     return null
 }
-fn last<T>(arr: Array<T>): T? {
+fn last<T>(arr: Array<T>) -> T? {
     if (arr.length > 0) {
         return arr[arr.length - 1]
     }
     return null
 }
-fn apply<T, R>(x: T, f: fn(T): R): R {
+fn apply<T, R>(x: T, f: (T) -> R) -> R {
     return f(x)
 }
-fn wrap<T>(x: T): Array<T> {
+fn wrap<T>(x: T) -> Array<T> {
     return [x]
 }
-fn double<T>(x: T): T {
+fn double<T>(x: T) -> T {
     return x
 }
 

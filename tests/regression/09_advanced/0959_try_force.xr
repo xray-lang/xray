@@ -3,14 +3,14 @@
 ** exception unchanged (the surrounding catch can still handle it).
 */
 
-fn maybeFailInt(should_throw: bool): int {
+fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
         throw "force-try violation"
     }
     return 42
 }
 
-fn maybeFailJson(should_throw: bool): Json {
+fn maybeFailJson(should_throw: bool) -> Json {
     if (should_throw) {
         throw "deeper failure"
     }
@@ -52,7 +52,7 @@ fn test_try_force_throw_propagates() {
 @test
 fn test_try_force_nested_throw() {
     print("4. try! through nested call propagates the inner exception")
-    fn helper(): Json {
+    fn helper() -> Json {
         return try! maybeFailJson(true)
     }
     let saw_catch = false

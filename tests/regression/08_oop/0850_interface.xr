@@ -18,7 +18,7 @@ class Circle implements Drawable {
     draw() {        // 实现接口方法
     }
 
-    getRadius(): float {        return this.radius
+    getRadius() -> float {        return this.radius
     }
 }
 
@@ -31,8 +31,8 @@ fn test_interface_implementation() {
 // ===== 多方法接口 =====
 
 interface Shape {
-    area(): float
-    perimeter(): float
+    area() -> float
+    perimeter() -> float
 }
 
 class Rectangle implements Shape {
@@ -44,10 +44,10 @@ class Rectangle implements Shape {
         this.height = h
     }
 
-    area(): float {        return this.width * this.height
+    area() -> float {        return this.width * this.height
     }
 
-    perimeter(): float {        return 2 * (this.width + this.height)
+    perimeter() -> float {        return 2 * (this.width + this.height)
     }
 }
 
@@ -67,10 +67,10 @@ class Square implements Shape {
         this.side = s
     }
 
-    area(): float {        return this.side * this.side
+    area() -> float {        return this.side * this.side
     }
 
-    perimeter(): float {        return 4 * this.side
+    perimeter() -> float {        return 4 * this.side
     }
 }
 
@@ -86,7 +86,7 @@ fn test_multiple_implementations() {
 // ===== 接口与普通方法混合 =====
 
 interface Printable {
-    toString(): string
+    toString() -> string
 }
 
 class Person implements Printable {
@@ -98,10 +98,10 @@ class Person implements Printable {
         this.age = age
     }
 
-    toString(): string {        return this.name + " (" + this.age + ")"
+    toString() -> string {        return this.name + " (" + this.age + ")"
     }
 
-    greet(): string {        return "Hello, " + this.name
+    greet() -> string {        return "Hello, " + this.name
     }
 }
 

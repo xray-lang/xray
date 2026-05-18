@@ -2,7 +2,7 @@
 // Test: Register pressure function to exercise spill/reload codegen
 // Many live variables simultaneously, all used in final return
 
-fn pressure(a: int, b: int) : int {
+fn pressure(a: int, b: int) -> int {
     let v0 = a + 1
     let v1 = b + 2
     let v2 = v0 + v1

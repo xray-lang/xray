@@ -68,7 +68,7 @@ fn test_expression_init() {
 
 @test
 fn test_function_call_init() {
-    fn getValue(): int {
+    fn getValue() -> int {
         return 42
     }
     let x = getValue()

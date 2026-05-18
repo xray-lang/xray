@@ -243,7 +243,7 @@ fn test_concurrent_threshold_boundary() {
     // **Validates: Requirements 2.1, 2.2**
     // 多协程并发测试阈值边界
     
-    fn concat_task(len_a: int, len_b: int): int {
+    fn concat_task(len_a: int, len_b: int) -> int {
         let a = "a".repeat(len_a)
         let b = "b".repeat(len_b)
         let result = a + b

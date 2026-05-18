@@ -376,21 +376,20 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
 
-    // Parse optional return type annotation
+    // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
+    // The unified arrow `->` is the only legal separator (see task 082).
     XrTypeRef *return_type = NULL;
-    if (xr_parser_match(parser, TK_COLON)) {
+    if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
-    } else if (xr_parser_check(parser, TK_MINUS)) {
-        // Detect common mistake: fn foo() -> Type (should be fn foo(): Type)
-        // Skip past '->' and parse the type so the rest of the function parses OK
-        xr_parser_advance(parser);  // consume '-'
-        if (xr_parser_match(parser, TK_GT)) {
-            xr_parser_error(parser, "use ':' instead of '->' for return type annotation, "
-                                    "e.g. fn foo(): int");
-            // Reset panic mode so parsing can continue normally
-            parser->panic_mode = 0;
-            return_type = xr_parse_type_annotation(parser);
-        }
+    } else if (xr_parser_check(parser, TK_COLON)) {
+        // Legacy syntax `fn foo(): T` is no longer accepted. Emit a clear
+        // migration hint and recover by parsing the type so the rest of
+        // the function still parses.
+        xr_parser_advance(parser);  // consume ':'
+        xr_parser_error(parser, "use '->' instead of ':' for function return type, "
+                                "e.g. fn foo() -> int");
+        parser->panic_mode = 0;
+        return_type = xr_parse_type_annotation(parser);
     }
 
     // Parse function body (must be block)
@@ -655,18 +654,13 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             key = xr_ast_literal_string(parser->X, key_str, line);
             is_computed = false;
         }
-        // Numeric literal as key (Map only)
+        // Numeric literal as key: only Map allows this, and Map literals must
+        // use the `#{ ... }` prefix form (see task 082).
         else if (xr_parser_check(parser, TK_LITERAL_INT) ||
                  xr_parser_check(parser, TK_LITERAL_FLOAT)) {
-            // Numeric keys only allowed for Map
-            if (separator_determined && !is_map) {
-                xr_parser_error(
-                    parser,
-                    "Json object does not support numeric keys, use {key => value} syntax for Map");
-                return xr_ast_literal_null(parser->X, line);
-            }
-            key = xr_parse_expression(parser);
-            is_computed = false;
+            xr_parser_error(
+                parser, "Json object does not support numeric keys; use `#{ key: value }` for Map");
+            return xr_ast_literal_null(parser->X, line);
         }
         // Identifier or keyword as key (allow keywords like 'type', 'int', etc.)
         else if (xr_parser_check(parser, TK_NAME) ||
@@ -698,34 +692,25 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         keys[count] = key;
         computed[count] = is_computed;
 
-        // Check separator: `:` or `=>`
-        if (xr_parser_match(parser, TK_ARROW)) {
-            // => separator -> Map
-            if (separator_determined && !is_map) {
-                xr_parser_error(parser, "cannot mix ':' and '=>' separators in same literal");
-                return xr_ast_literal_null(parser->X, line);
-            }
-            is_map = true;
+        // `{ ... }` is always a Json/Object literal in xray (task 082).
+        // The only legal key-value separator is `:`. Map literals must use
+        // the `#{ k: v }` prefix form. The unified arrow `->` is reserved
+        // for function / branch arrows and is rejected here with a hint.
+        if (xr_parser_match(parser, TK_COLON)) {
             separator_determined = true;
-        } else if (xr_parser_match(parser, TK_COLON)) {
-            // : separator -> Json
-            if (separator_determined && is_map) {
-                xr_parser_error(parser, "cannot mix ':' and '=>' separators in same literal");
-                return xr_ast_literal_null(parser->X, line);
-            }
-            separator_determined = true;
+        } else if (xr_parser_check(parser, TK_ARROW)) {
+            xr_parser_error(
+                parser,
+                "`->` is not a valid separator in Json literal; use `#{ key: value }` for Map");
+            return xr_ast_literal_null(parser->X, line);
         } else if (shorthand_name &&
                    (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
-            if (separator_determined && is_map) {
-                xr_parser_error(parser, "cannot mix shorthand object fields with Map literal");
-                return xr_ast_literal_null(parser->X, line);
-            }
             separator_determined = true;
             values[count] = xr_ast_variable(parser->X, shorthand_name, line);
             count++;
             continue;
         } else {
-            xr_parser_error(parser, "expected ':' or '=>' after key");
+            xr_parser_error(parser, "expected ':' after key in Json literal");
             return xr_ast_literal_null(parser->X, line);
         }
 
@@ -738,15 +723,12 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     // Expect closing brace
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
 
-    AstNode *result;
-    if (is_map) {
-        // Create Map literal
-        result = xr_ast_map_literal(parser->X, keys, values, count, line);
-    } else {
-        // Create Json object literal
-        result = xr_ast_object_literal(parser->X, keys, values, has_computed ? computed : NULL,
-                                       count, line);
-    }
+    // `{ ... }` always produces a Json/Object literal under task 082;
+    // the legacy `is_map` branch is unreachable but the local is kept to
+    // minimise diff churn against historical compiles.
+    (void) is_map;
+    AstNode *result =
+        xr_ast_object_literal(parser->X, keys, values, has_computed ? computed : NULL, count, line);
 
     // Free temporary array
 
@@ -794,8 +776,10 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         // Parse key expression
         keys[count] = xr_parse_expression(parser);
 
-        // Expect '=>'
-        xr_parser_consume(parser, TK_ARROW, "expected '=>' after Map key in #{...}");
+        // Expect ':' as the key-value separator inside `#{ ... }` Map literal.
+        // (Old `=>` separator was removed; the `#` prefix already disambiguates
+        // a Map from a Json/Object literal — see task 082.)
+        xr_parser_consume(parser, TK_COLON, "expected ':' after Map key in #{...}");
 
         // Parse value expression
         values[count] = xr_parse_expression(parser);

@@ -46,13 +46,13 @@ for (let i = 0; i < 10; i++) {
 }
 
 // === match expression ===
-fn describe(x: int): string {
+fn describe(x: int) -> string {
     return match (x) {
-        0 => "zero",
-        1 => "one",
-        2, 3 => "two or three",
-        4..10 => "four to ten",
-        _ => "something else"
+        0 -> "zero",
+        1 -> "one",
+        2, 3 -> "two or three",
+        4..10 -> "four to ten",
+        _ -> "something else"
     }
 }
 print(describe(0))
@@ -61,12 +61,12 @@ print(describe(7))
 print(describe(42))
 
 // === match with guard ===
-fn classify(n: int): string {
+fn classify(n: int) -> string {
     return match (n) {
-        0 => "zero",
-        n if (n < 0) => "negative",
-        n if (n > 100) => "big",
-        _ => "small positive"
+        0 -> "zero",
+        n if (n < 0) -> "negative",
+        n if (n > 100) -> "big",
+        _ -> "small positive"
     }
 }
 print(classify(-5))
@@ -74,7 +74,7 @@ print(classify(50))
 print(classify(200))
 
 // === try / catch / finally ===
-fn safeDivide(a: int, b: int): int {
+fn safeDivide(a: int, b: int) -> int {
     if (b == 0) { throw "division by zero" }
     return a / b
 }

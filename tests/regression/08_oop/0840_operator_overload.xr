@@ -13,19 +13,19 @@ class Vector2 {
         this.y = y
     }
     
-    operator+(other: Vector2): Vector2 {
+    operator+(other: Vector2) -> Vector2 {
         return new Vector2(this.x + other.x, this.y + other.y)
     }
     
-    operator-(other: Vector2): Vector2 {
+    operator-(other: Vector2) -> Vector2 {
         return new Vector2(this.x - other.x, this.y - other.y)
     }
     
-    operator*(scalar: float): Vector2 {
+    operator*(scalar: float) -> Vector2 {
         return new Vector2(this.x * scalar, this.y * scalar)
     }
     
-    operator==(other: Vector2): bool {
+    operator==(other: Vector2) -> bool {
         return this.x == other.x && this.y == other.y
     }
 }
@@ -74,7 +74,7 @@ class Matrix {
         this.data = [0, 0, 0, 0]
     }
     
-    operator[](index: int): int {
+    operator[](index: int) -> int {
         return this.data[index]
     }
     
@@ -110,19 +110,19 @@ class Money {
         this.amount = amount
     }
     
-    operator<(other: Money): bool {
+    operator<(other: Money) -> bool {
         return this.amount < other.amount
     }
     
-    operator<=(other: Money): bool {
+    operator<=(other: Money) -> bool {
         return this.amount <= other.amount
     }
     
-    operator>(other: Money): bool {
+    operator>(other: Money) -> bool {
         return this.amount > other.amount
     }
     
-    operator>=(other: Money): bool {
+    operator>=(other: Money) -> bool {
         return this.amount >= other.amount
     }
 }

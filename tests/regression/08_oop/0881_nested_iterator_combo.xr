@@ -12,8 +12,8 @@ class CustomRangeIter {
         this.val = start
         this.max = end
     }
-    hasNext(): bool { return this.val < this.max }
-    next(): int {
+    hasNext() -> bool { return this.val < this.max }
+    next() -> int {
         let v = this.val
         this.val = this.val + 1
         return v
@@ -24,7 +24,7 @@ class CustomRange {
     start: int
     end: int
     constructor(s: int, e: int) { this.start = s; this.end = e }
-    iterator(): CustomRangeIter { return CustomRangeIter(this.start, this.end) }
+    iterator() -> CustomRangeIter { return CustomRangeIter(this.start, this.end) }
 }
 
 // ===== Triple nested for-in =====
@@ -51,7 +51,7 @@ fn test_triple_nested_for_in() {
 class Accumulator {
     total: int
     constructor() { this.total = 0 }
-    add(n: int) { this.total = this.total + n }    get(): int { return this.total }
+    add(n: int) { this.total = this.total + n }    get() -> int { return this.total }
 }
 
 @test
@@ -111,11 +111,11 @@ class StepIter {
     max: int
     step: int
     constructor(s: int, e: int, st: int) { this.val = s; this.max = e; this.step = st }
-    hasNext(): bool {
+    hasNext() -> bool {
         if (this.step > 0) { return this.val < this.max }
         return this.val > this.max
     }
-    next(): int {
+    next() -> int {
         let v = this.val
         this.val = this.val + this.step
         return v
@@ -127,7 +127,7 @@ class StepRange {
     e: int
     st: int
     constructor(s: int, e: int, st: int) { this.s = s; this.e = e; this.st = st }
-    iterator(): StepIter { return StepIter(this.s, this.e, this.st) }
+    iterator() -> StepIter { return StepIter(this.s, this.e, this.st) }
 }
 
 @test
@@ -196,7 +196,7 @@ fn test_iterable_reuse() {
 
 // ===== Nested for-in with early return from function =====
 
-fn find_pair(target: int): string {
+fn find_pair(target: int) -> string {
     for (i in CustomRange(1, 10)) {
         for (j in CustomRange(1, 10)) {
             if (i * j == target) {
@@ -237,7 +237,7 @@ class FlattenIter {
         this.outerIdx = 0
         this.innerIdx = 0
     }
-    hasNext(): bool {
+    hasNext() -> bool {
         while (this.outerIdx < this.outer.length) {
             if (this.innerIdx < this.outer[this.outerIdx].length) {
                 return true
@@ -247,7 +247,7 @@ class FlattenIter {
         }
         return false
     }
-    next(): int {
+    next() -> int {
         let val = this.outer[this.outerIdx][this.innerIdx]
         this.innerIdx = this.innerIdx + 1
         return val
@@ -257,7 +257,7 @@ class FlattenIter {
 class FlattenIterable {
     data: Array<Array<int>>
     constructor(d: Array<Array<int>>) { this.data = d }
-    iterator(): FlattenIter { return FlattenIter(this.data) }
+    iterator() -> FlattenIter { return FlattenIter(this.data) }
 }
 
 @test
@@ -305,8 +305,8 @@ class FilteredRangeIter {
             this.val = this.val + 1
         }
     }
-    hasNext(): bool { return this.val < this.max }
-    next(): int {
+    hasNext() -> bool { return this.val < this.max }
+    next() -> int {
         let v = this.val
         this.val = this.val + 1
         while (this.val < this.max && this.val % this.divisor != 0) {
@@ -321,7 +321,7 @@ class FilteredRange {
     e: int
     d: int
     constructor(s: int, e: int, d: int) { this.s = s; this.e = e; this.d = d }
-    iterator(): FilteredRangeIter { return FilteredRangeIter(this.s, this.e, this.d) }
+    iterator() -> FilteredRangeIter { return FilteredRangeIter(this.s, this.e, this.d) }
 }
 
 @test
@@ -383,7 +383,7 @@ fn test_iterator_then_findIndex() {
 
 // ===== Recursive function with iterator =====
 
-fn collect_custom_range_recursive(depth: int, max_depth: int): Array<string> {
+fn collect_custom_range_recursive(depth: int, max_depth: int) -> Array<string> {
     let results: Array<string> = []
     if (depth >= max_depth) {
         results.push("leaf:${depth}")

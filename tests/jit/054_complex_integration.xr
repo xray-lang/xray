@@ -1,7 +1,7 @@
 // EXPECTED: 0
 // Test: Complex integration - mix of arrays, Json, loops, function calls, closures
 
-fn make_points(n: int) : Array<Json> {
+fn make_points(n: int) -> Array<Json> {
     let arr: Array<Json> = []
     let i = 0
     while (i < n) {
@@ -11,7 +11,7 @@ fn make_points(n: int) : Array<Json> {
     return arr
 }
 
-fn total_distance(points: Array<Json>) : int {
+fn total_distance(points: Array<Json>) -> int {
     let sum = 0
     let i = 0
     while (i < points.length) {
@@ -21,7 +21,7 @@ fn total_distance(points: Array<Json>) : int {
     return sum
 }
 
-fn verify(n: int) : int {
+fn verify(n: int) -> int {
     let pts = make_points(n)
     let dist = total_distance(pts)
     // sum(i, i=0..n-1) + sum(2*i, i=0..n-1) = 3 * n*(n-1)/2

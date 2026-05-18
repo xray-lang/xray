@@ -1,8 +1,8 @@
-fn int_fn(x: int): int {
+fn int_fn(x: int) -> int {
     return x
 }
 
-fn string_fn(x: int): string {
+fn string_fn(x: int) -> string {
     return string(x)
 }
 

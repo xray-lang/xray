@@ -4,7 +4,7 @@
 // ===== 函数调用展开：所有参数 =====
 @test
 fn test_call_spread_all_args() {
-    fn dist(x1: int, y1: int, x2: int, y2: int): int {
+    fn dist(x1: int, y1: int, x2: int, y2: int) -> int {
         let dx = x2 - x1
         let dy = y2 - y1
         return dx * dx + dy * dy
@@ -17,7 +17,7 @@ fn test_call_spread_all_args() {
 // ===== 函数调用展开：混合 spread 与显式参数 =====
 @test
 fn test_call_spread_mixed() {
-    fn add4(a: int, b: int, c: int, d: int): int {
+    fn add4(a: int, b: int, c: int, d: int) -> int {
         return a + b + c + d
     }
     let p1 = (1, 2)
@@ -58,7 +58,7 @@ fn test_tuple_concat_mixed() {
 // ===== 异构类型：spread 保留每个槽位的精确类型 =====
 @test
 fn test_spread_heterogeneous() {
-    fn describe(n: int, s: string, b: bool): string {
+    fn describe(n: int, s: string, b: bool) -> string {
         return string(n) + "/" + s + "/" + string(b)
     }
     let t = (42, "answer", true)

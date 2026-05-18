@@ -293,7 +293,7 @@ TEST(cgen_string_literal) {
 
 TEST(cgen_function_call) {
     /* Function definition and call */
-    const char *src = "fn add(a: int, b: int): int { return a + b }\n"
+    const char *src = "fn add(a: int, b: int) -> int { return a + b }\n"
                       "let r = add(3, 4)\n"
                       "print(r)\n";
 
@@ -318,7 +318,7 @@ TEST(cgen_function_call) {
 
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
-    const char *src = "fn fact(n: int): int {\n"
+    const char *src = "fn fact(n: int) -> int {\n"
                       "    if (n <= 1) { return 1 }\n"
                       "    return n * fact(n - 1)\n"
                       "}\n"

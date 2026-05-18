@@ -25,7 +25,7 @@
 //   path entirely. The divisor must reach the idiv operand as a
 //   true runtime value.
 
-fn make_zero(): int {
+fn make_zero() -> int {
     // Force the value through a call so the JIT cannot constant-fold
     // the divisor away. Equivalent shapes for mod below.
     return 0

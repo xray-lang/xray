@@ -3,7 +3,7 @@
 // EXPECTED: 1000
 // Test: Nested loops in JIT (OSR + loop variable interaction)
 
-fn nested_count(n: int) : int {
+fn nested_count(n: int) -> int {
     let count = 0
     let i = 0
     while (i < n) {

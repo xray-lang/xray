@@ -26,7 +26,7 @@ fn test_tuple_destructure() {
     assert_eq(b, "hello")
 }
 
-fn make_pair(): (int, string) {
+fn make_pair() -> (int, string) {
     return (7, "ok")
 }
 

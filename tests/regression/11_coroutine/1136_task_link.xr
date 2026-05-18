@@ -2,11 +2,11 @@
 
 import time
 
-fn failing(): int {
+fn failing() -> int {
     throw "link error"
     return 0
 }
-fn slow_work(): int {
+fn slow_work() -> int {
     // Park on a cooperative cancel point. The peer task throws almost
     // immediately, and the resulting xr_task_cancel_tree must be able to
     // unblock us so that `await` observes a cancelled (null) result.
@@ -16,7 +16,7 @@ fn slow_work(): int {
     time.sleep(50)
     return 1
 }
-fn ok(): int {
+fn ok() -> int {
     return 42
 }
 fn test_link_cancel() {

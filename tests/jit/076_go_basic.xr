@@ -2,7 +2,7 @@
 // EXPECTED: go_result=42
 // Test: OP_GO coroutine launch in JIT-compiled function
 
-fn worker(n: int): int {
+fn worker(n: int) -> int {
     return n * 2
 }
 

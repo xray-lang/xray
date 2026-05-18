@@ -3,19 +3,19 @@
 // EXPECTED: 10
 // Test: Compound assignment operators (+=, -=, *=)
 
-fn compound_ops(x: int) : int {
+fn compound_ops(x: int) -> int {
     let a = x
     a += 5
     return a
 }
 
-fn compound_mul(x: int) : int {
+fn compound_mul(x: int) -> int {
     let a = x
     a *= 5
     return a
 }
 
-fn compound_sub(x: int) : int {
+fn compound_sub(x: int) -> int {
     let a = x
     a -= 5
     return a

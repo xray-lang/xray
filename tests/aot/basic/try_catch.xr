@@ -1,5 +1,5 @@
 // AOT basic test: try/catch exception handling (same-function)
-fn safe_double(x: int): int {
+fn safe_double(x: int) -> int {
     try {
         if (x < 0) {
             throw "negative"

@@ -1,7 +1,7 @@
 // EXPECTED: 210
 // Test: Register pressure - many live variables to trigger spill/reload
 
-fn many_vars(x: int) : int {
+fn many_vars(x: int) -> int {
     let a = x + 1
     let b = x + 2
     let c = x + 3

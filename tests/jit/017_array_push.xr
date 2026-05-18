@@ -2,7 +2,7 @@
 // EXPECTED: 15
 // Test: Array push and dynamic growth in JIT
 
-fn build_array(n: int) : int {
+fn build_array(n: int) -> int {
     let arr: Array<int> = []
     let i = 0
     while (i < n) {
@@ -12,7 +12,7 @@ fn build_array(n: int) : int {
     return arr.length
 }
 
-fn build_and_sum(n: int) : int {
+fn build_and_sum(n: int) -> int {
     let arr: Array<int> = []
     let i = 0
     while (i < n) {

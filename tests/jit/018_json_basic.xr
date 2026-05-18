@@ -3,15 +3,15 @@
 // EXPECTED: 42
 // Test: Json object creation and field access in JIT
 
-fn make_point(x: int, y: int) : Json {
+fn make_point(x: int, y: int) -> Json {
     return { "x": x, "y": y }
 }
 
-fn get_x(p: Json) : int {
+fn get_x(p: Json) -> int {
     return p.x
 }
 
-fn set_and_get(p: Json, val: int) : int {
+fn set_and_get(p: Json, val: int) -> int {
     p.x = val
     return p.x
 }

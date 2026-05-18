@@ -21,7 +21,7 @@ fn test_and_with_expressions() {
 @test
 fn test_and_short_circuit() {
     let called = false
-    fn sideEffect(): bool {
+    fn sideEffect() -> bool {
         called = true
         return true
     }
@@ -58,7 +58,7 @@ fn test_or_with_expressions() {
 @test
 fn test_or_short_circuit() {
     let called = false
-    fn sideEffect(): bool {
+    fn sideEffect() -> bool {
         called = true
         return true
     }

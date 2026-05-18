@@ -3,11 +3,11 @@
 // EXPECTED: 0
 // Test: Null coalescing operator (??) and ISNULL_SET in JIT
 
-fn coalesce(a: int | string | null, default_val: int | string) : int | string {
+fn coalesce(a: int | string | null, default_val: int | string) -> int | string {
     return a ?? default_val
 }
 
-fn safe_get(obj: Json, key: string, default_val: int) : int {
+fn safe_get(obj: Json, key: string, default_val: int) -> int {
     let v = obj[key]
     return v ?? default_val
 }

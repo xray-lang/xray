@@ -203,7 +203,7 @@ fn test_nested_closure_capture() {
 fn test_filter_with_external_predicate() {
     let threshold = 5
     let arr = [1, 3, 5, 7, 9]
-    fn isAboveThreshold(x: int): bool {
+    fn isAboveThreshold(x: int) -> bool {
         return x > threshold
     }
     let result = arr.filter(isAboveThreshold)
@@ -284,18 +284,18 @@ fn test_find_with_complex_predicate() {
 // ===== Function Composition with Higher-Order Functions =====
 @test
 fn test_compose_transformations() {
-    fn double(arr: Array<int>): Array<int> {
-        return arr.map(fn(x: int): int {
+    fn double(arr: Array<int>) -> Array<int> {
+        return arr.map(fn(x: int) -> int {
             return x * 2
         })
     }
-    fn addOne(arr: Array<int>): Array<int> {
-        return arr.map(fn(x: int): int {
+    fn addOne(arr: Array<int>) -> Array<int> {
+        return arr.map(fn(x: int) -> int {
             return x + 1
         })
     }
-    fn square(arr: Array<int>): Array<int> {
-        return arr.map(fn(x: int): int {
+    fn square(arr: Array<int>) -> Array<int> {
+        return arr.map(fn(x: int) -> int {
             return x * x
         })
     }

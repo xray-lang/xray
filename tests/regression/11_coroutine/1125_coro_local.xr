@@ -20,7 +20,7 @@ fn test_coro_local() {
 
     // 测试 2：协程内本地存储
     print("test2: coroutine local storage")
-    let task1 = go(name: "worker-1") fn(): int {
+    let task1 = go(name: "worker-1") fn() -> int {
         Coro.setLocal("id", 1)
         Coro.setLocal("name", "worker-one")
         return Coro.getLocal("id")
@@ -32,12 +32,12 @@ fn test_coro_local() {
     // 测试 3：协程之间数据隔离
     print("test3: isolation between coroutines")
 
-    let task2 = go(name: "worker-A") fn(): string {
+    let task2 = go(name: "worker-A") fn() -> string {
         Coro.setLocal("value", "A")
         return Coro.getLocal("value")
     }()
 
-    let task3 = go(name: "worker-B") fn(): string {
+    let task3 = go(name: "worker-B") fn() -> string {
         Coro.setLocal("value", "B")
         return Coro.getLocal("value")
     }()

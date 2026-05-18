@@ -963,10 +963,10 @@ static void test_licm_loop_depth(void) {
 /*
  * Test: Diamond pattern is converted to SELECT.
  *
- * CFG: entry(0): BR(cond) â†?then(1), else(2)
- *       then(1):  v_then = CONST_I64(10); JMP merge(3)
- *       else(2):  v_else = CONST_I64(20); JMP merge(3)
- *       merge(3): v_phi = PHI(v_then, v_else); RET v_phi
+ * CFG: entry(0) -> BR(cond) â†?then(1), else(2)
+ *       then(1) -> v_then = CONST_I64(10); JMP merge(3)
+ *       else(2) -> v_else = CONST_I64(20); JMP merge(3)
+ *       merge(3) -> v_phi = PHI(v_then, v_else); RET v_phi
  *
  * After if-conversion:
  *   entry: [original] + [then ins] + [else ins]

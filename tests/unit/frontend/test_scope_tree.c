@@ -121,7 +121,7 @@ TEST(global_scope_is_root) {
 }
 
 TEST(function_creates_child_scope) {
-    AnalysisResult r = analyze_source("fn foo(a: int): int {\n"
+    AnalysisResult r = analyze_source("fn foo(a: int) -> int {\n"
                                       "    let b = a + 1\n"
                                       "    return b\n"
                                       "}\n");
@@ -182,7 +182,7 @@ TEST(if_creates_scopes) {
 
 TEST(while_in_function_creates_scope) {
     /* While loops inside functions must create child scopes. */
-    AnalysisResult r = analyze_source("fn loop_fn(): int {\n"
+    AnalysisResult r = analyze_source("fn loop_fn() -> int {\n"
                                       "    let i = 0\n"
                                       "    while (i < 10) {\n"
                                       "        let temp = i\n"
@@ -199,9 +199,9 @@ TEST(while_in_function_creates_scope) {
 }
 
 TEST(nested_functions_nested_scopes) {
-    AnalysisResult r = analyze_source("fn outer(): int {\n"
+    AnalysisResult r = analyze_source("fn outer() -> int {\n"
                                       "    let a = 1\n"
-                                      "    fn inner(): int {\n"
+                                      "    fn inner() -> int {\n"
                                       "        let b = 2\n"
                                       "        return a + b\n"
                                       "    }\n"
@@ -216,7 +216,7 @@ TEST(nested_functions_nested_scopes) {
 TEST(function_isolation) {
     /* The hard invariant: function-scoped variables must NOT
      * be visible outside their function boundary. */
-    AnalysisResult r = analyze_source("fn foo(): int {\n"
+    AnalysisResult r = analyze_source("fn foo() -> int {\n"
                                       "    let secret = 42\n"
                                       "    return secret\n"
                                       "}\n"
@@ -232,7 +232,7 @@ TEST(function_isolation) {
 }
 
 TEST(parent_chain_valid) {
-    AnalysisResult r = analyze_source("fn foo(x: int): int {\n"
+    AnalysisResult r = analyze_source("fn foo(x: int) -> int {\n"
                                       "    if (x > 0) {\n"
                                       "        let y = x\n"
                                       "        return y\n"
@@ -298,7 +298,7 @@ TEST(shadowing_correct_scope) {
 }
 
 TEST(complex_nesting_parent_chain) {
-    AnalysisResult r = analyze_source("fn foo(): int {\n"
+    AnalysisResult r = analyze_source("fn foo() -> int {\n"
                                       "    let a = 1\n"
                                       "    {\n"
                                       "        let b = 2\n"
@@ -361,9 +361,9 @@ TEST(scope_consistency_after_analysis) {
      *   3. All scopes are well-formed
      *   4. Symbol isolation holds */
     AnalysisResult r = analyze_source("let g = 1\n"
-                                      "fn outer(x: int): int {\n"
+                                      "fn outer(x: int) -> int {\n"
                                       "    let a = x\n"
-                                      "    fn inner(y: int): int {\n"
+                                      "    fn inner(y: int) -> int {\n"
                                       "        return a + y\n"
                                       "    }\n"
                                       "    if (x > 0) {\n"
@@ -379,7 +379,7 @@ TEST(scope_consistency_after_analysis) {
                                       "    constructor(v: int) {\n"
                                       "        this.val = v\n"
                                       "    }\n"
-                                      "    get(): int {\n"
+                                      "    get() -> int {\n"
                                       "        return this.val\n"
                                       "    }\n"
                                       "}\n");
@@ -416,7 +416,7 @@ TEST(reanalysis_scope_stability) {
     /* Verify that analyzing the same code twice produces a consistent
      * scope tree (same count, valid parent chains).  This guards
      * against scope-creation side effects across analyses. */
-    const char *source = "fn foo(x: int): int {\n"
+    const char *source = "fn foo(x: int) -> int {\n"
                          "    let y = x + 1\n"
                          "    return y\n"
                          "}\n"

@@ -139,7 +139,7 @@ fn test_store_in_loop() {
 // ===== Store function result to field =====
 @test
 fn test_store_function_result() {
-    fn compute(x: int): int {
+    fn compute(x: int) -> int {
         return x * x + 1
     }
     let obj = { "result": 0 }

@@ -12,13 +12,11 @@ fn test_nested_object_survival() {
     gc.disable()
     let containers: Array<Json> = []
     for (let i = 0; i < 200; i++) {
-        let inner_map = {"key" => "value_" + string(i), "idx" => i}
+        let inner_map = #{"key": "value_" + string(i), "idx": i}
         let inner_arr = [i, i * 2, i * 3]
-        containers.push({
-            "map" => inner_map,
-            "arr" => inner_arr,
-            "name" => "container_" + string(i)
-        })
+        containers.push(#{"map": inner_map,
+            "arr": inner_arr,
+            "name": "container_" + string(i)})
     }
 
     // Force GC to run
@@ -41,14 +39,14 @@ fn test_alloc_interleaved_with_gc() {
     gc.disable()
     let phase1: Array<Json> = []
     for (let i = 0; i < 100; i++) {
-        phase1.push({"id" => i, "data" => "phase1_" + string(i)})
+        phase1.push(#{"id": i, "data": "phase1_" + string(i)})
     }
 
     gc.collect()
 
     let phase2: Array<Json> = []
     for (let i = 0; i < 100; i++) {
-        phase2.push({"id" => i + 100, "data" => "phase2_" + string(i)})
+        phase2.push(#{"id": i + 100, "data": "phase2_" + string(i)})
     }
 
     gc.collect()
@@ -122,7 +120,7 @@ fn test_multiple_gc_cycles() {
     for (let cycle = 0; cycle < 10; cycle++) {
         let data: Array<Json> = []
         for (let i = 0; i < 100; i++) {
-            data.push({"cycle" => cycle, "idx" => i})
+            data.push(#{"cycle": cycle, "idx": i})
         }
         gc.collect()
         // Verify last batch

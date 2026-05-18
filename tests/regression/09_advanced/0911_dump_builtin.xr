@@ -59,7 +59,7 @@ fn test_dump_map() {
     // of the map. Even though stdout cannot be asserted, the codegen bug
     // also corrupted the register holding the map. This case verifies the
     // map is intact after dump().
-    let scores = {"alice" => 95, "bob" => 87, "charlie" => 92}
+    let scores = #{"alice": 95, "bob": 87, "charlie": 92}
     dump(scores)
     assert_eq(scores["alice"], 95)
     assert_eq(scores["bob"], 87)
@@ -76,7 +76,7 @@ fn test_dump_set() {
 
 @test
 fn test_dump_with_indent() {
-    let data = {"name" => "alice", "score" => 95}
+    let data = #{"name": "alice", "score": 95}
     dump(data, 2)
     dump(data, 4)
     dump(data, 0)
@@ -90,7 +90,7 @@ fn test_dump_with_indent() {
 fn test_dump_inside_function() {
     // Regression for: dump() inside a function body must not interfere
     // with the function's return register or local variables.
-    fn helper(v: int): int {
+    fn helper(v: int) -> int {
         let doubled = v * 2
         dump(doubled)
         return doubled + 1

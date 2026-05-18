@@ -7,11 +7,11 @@
 **         每个任务含多次 yield，让调度器按优先级反复择优
 */
 
-fn compute(n: int): int {
+fn compute(n: int) -> int {
     return n * n
 }
 
-fn work_and_report(label: string, ch: Channel<string>): string {
+fn work_and_report(label: string, ch: Channel<string>) -> string {
     let sum = 0
     for (let i = 0; i < 200; i++) {
         sum = sum + i

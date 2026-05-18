@@ -6,7 +6,7 @@
 
 @test
 fn test_factorial() {
-    fn factorial(n: int): int {
+    fn factorial(n: int) -> int {
         if (n <= 1) { return 1 }
         return n * factorial(n - 1)
     }
@@ -21,7 +21,7 @@ fn test_factorial() {
 
 @test
 fn test_fibonacci() {
-    fn fib(n: int): int {
+    fn fib(n: int) -> int {
         if (n <= 1) { return n }
         return fib(n - 1) + fib(n - 2)
     }
@@ -37,7 +37,7 @@ fn test_fibonacci() {
 
 @test
 fn test_sum_to() {
-    fn sumTo(n: int): int {
+    fn sumTo(n: int) -> int {
         if (n <= 0) { return 0 }
         return n + sumTo(n - 1)
     }
@@ -52,7 +52,7 @@ fn test_sum_to() {
 
 @test
 fn test_gcd() {
-    fn gcd(a: int, b: int): int {
+    fn gcd(a: int, b: int) -> int {
         if (b == 0) { return a }
         return gcd(b, a % b)
     }
@@ -67,7 +67,7 @@ fn test_gcd() {
 
 @test
 fn test_power() {
-    fn power(base: int, exp: int): int {
+    fn power(base: int, exp: int) -> int {
         if (exp == 0) { return 1 }
         return base * power(base, exp - 1)
     }
@@ -82,7 +82,7 @@ fn test_power() {
 
 @test
 fn test_array_sum() {
-    fn arraySum(arr: Array<int>, i: int): int {
+    fn arraySum(arr: Array<int>, i: int) -> int {
         if (i >= arr.length) { return 0 }
         return arr[i] + arraySum(arr, i + 1)
     }
@@ -111,7 +111,7 @@ fn test_count_down() {
 
 @test
 fn test_binary_search() {
-    fn binarySearch(arr: Array<int>, target: int, low: int, high: int): int {
+    fn binarySearch(arr: Array<int>, target: int, low: int, high: int) -> int {
         if (low > high) { return -1 }
         let mid = (low + high) / 2
         if (arr[mid] == target) { return mid }
@@ -132,12 +132,12 @@ fn test_binary_search() {
 
 @test
 fn test_mutual_recursion() {
-    fn isEven(n: int): bool {
+    fn isEven(n: int) -> bool {
         if (n == 0) { return true }
         return isOdd(n - 1)
     }
     
-    fn isOdd(n: int): bool {
+    fn isOdd(n: int) -> bool {
         if (n == 0) { return false }
         return isEven(n - 1)
     }
@@ -153,7 +153,7 @@ fn test_mutual_recursion() {
 
 @test
 fn test_deep_recursion() {
-    fn recurse(n: int): int {
+    fn recurse(n: int) -> int {
         if (n <= 0) { return 0 }
         return 1 + recurse(n - 1)
     }

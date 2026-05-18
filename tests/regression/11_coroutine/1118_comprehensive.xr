@@ -2,7 +2,7 @@
 // 作者：xingleixu@gmail.com
 // 展示：go, await, task.cancel(), task.done, task.cancelled, task.result, defer, Channel, select
 
-fn blocked(ch: Channel<int>): int {
+fn blocked(ch: Channel<int>) -> int {
     return ch.recv()
 }
 
@@ -41,7 +41,7 @@ fn test_main() {
     // === 5. defer 清理 ===
     print("=== defer ===")
     fn cleanup() { print("cleanup!") }
-    fn with_defer(): int {
+    fn with_defer() -> int {
         defer cleanup()
         print("working...")
         return 42

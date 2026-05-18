@@ -7,10 +7,8 @@ fn test_request_options_object() {
     let options = {
         url: "http://127.0.0.1:19998/test",
         method: "POST",
-        headers: {
-            "Content-Type" => "application/json",
-            "X-Custom-Header" => "test-value"
-        },
+        headers: #{"Content-Type": "application/json",
+            "X-Custom-Header": "test-value"},
         body: '{"key": "value"}',
         timeout: 5000
     }

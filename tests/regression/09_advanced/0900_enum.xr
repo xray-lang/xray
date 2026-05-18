@@ -27,11 +27,11 @@ enum Day {
     Saturday,
     Sunday
 }
-fn getColorCode(c: Color): string {
+fn getColorCode(c: Color) -> string {
     return match (c) {
-        Color.Red => "#FF0000",
-        Color.Green => "#00FF00",
-        Color.Blue => "#0000FF"
+        Color.Red -> "#FF0000",
+        Color.Green -> "#00FF00",
+        Color.Blue -> "#0000FF"
     }
 }
 
@@ -143,17 +143,17 @@ fn test_enum() {
 
     let color = Color.Green
     let name = match (color) {
-        Color.Red => "red",
-        Color.Green => "green",
-        Color.Blue => "blue"
+        Color.Red -> "red",
+        Color.Green -> "green",
+        Color.Blue -> "blue"
     }
     assert_eq(name, "green")
 
     let status = HttpStatus.NotFound
     let message = match (status) {
-        HttpStatus.OK => "Success",
-        HttpStatus.NotFound => "Not Found",
-        HttpStatus.ServerError => "Server Error"
+        HttpStatus.OK -> "Success",
+        HttpStatus.NotFound -> "Not Found",
+        HttpStatus.ServerError -> "Server Error"
     }
     assert_eq(message, "Not Found")
 

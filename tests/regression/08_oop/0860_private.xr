@@ -14,14 +14,14 @@ class Account {
     deposit(amount: int) {        this.balance = this.balance + amount
     }
 
-    withdraw(amount: int): bool {        if (amount <= this.balance) {
+    withdraw(amount: int) -> bool {        if (amount <= this.balance) {
             this.balance = this.balance - amount
             return true
         }
         return false
     }
 
-    getBalance(): int {        return this.balance
+    getBalance() -> int {        return this.balance
     }
 }
 
@@ -59,10 +59,10 @@ class User {
         this.password = password
     }
 
-    checkPassword(pwd: string): bool {        return this.password == pwd
+    checkPassword(pwd: string) -> bool {        return this.password == pwd
     }
 
-    getEmail(): string {        return this.email
+    getEmail() -> string {        return this.email
     }
 }
 
@@ -83,7 +83,7 @@ class BankAccount {
         this.balance = initial
     }
 
-    getBalance(): int {        return this.balance
+    getBalance() -> int {        return this.balance
     }
 
     addAmount(amount: int) {        this.balance = this.balance + amount

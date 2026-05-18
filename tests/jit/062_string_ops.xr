@@ -4,19 +4,19 @@
 // EXPECTED: 5
 // Test: String operations in JIT (SUBSTRING/STR_REPEAT/CHR)
 
-fn test_substring(s: string, start: int, end: int) : string {
+fn test_substring(s: string, start: int, end: int) -> string {
     return s.substring(start, end)
 }
 
-fn test_repeat(s: string, n: int) : string {
+fn test_repeat(s: string, n: int) -> string {
     return s.repeat(n)
 }
 
-fn test_chr(code: int) : string {
+fn test_chr(code: int) -> string {
     return chr(code)
 }
 
-fn test_length(s: string) : int {
+fn test_length(s: string) -> int {
     return s.length
 }
 

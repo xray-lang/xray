@@ -390,7 +390,7 @@ TEST(narrow_by_typeof) {
     ASSERT(nullable_int != NULL);
     ASSERT(nullable_int->is_nullable);
 
-    // typeof x === "int" on nullable int => int
+    // typeof x === "int" on nullable int -> int
     XrType *narrowed = xa_narrow_by_typeof(nullable_int, "int", true);
     ASSERT(XR_TYPE_IS_INT(narrowed));
 
@@ -402,7 +402,7 @@ TEST(narrow_by_typeof) {
     XrType *narrowed_int = xa_narrow_by_typeof(t_int, "int", true);
     ASSERT(XR_TYPE_IS_INT(narrowed_int));
 
-    // typeof x !== "int" on int => never (no other type remaining)
+    // typeof x !== "int" on int -> never (no other type remaining)
     XrType *excluded_int = xa_narrow_by_typeof(t_int, "int", false);
     ASSERT(XR_TYPE_IS_NEVER(excluded_int));
 
@@ -423,13 +423,13 @@ TEST(narrow_by_null) {
     ASSERT(nullable_int != NULL);
     ASSERT(nullable_int->is_nullable || (nullable_int->kind == XR_KIND_NULL));
 
-    // x == null && true => null (filter to only null)
+    // x == null && true -> null (filter to only null)
     XrType *is_null = xa_narrow_by_null_check(nullable_int, true, true);
     // When narrowing nullable to null, we get the null type
     ASSERT(is_null != NULL);
     ASSERT(XR_TYPE_IS_NULL(is_null) || XR_TYPE_IS_NEVER(is_null));
 
-    // x != null && true => int (non-null part)
+    // x != null && true -> int (non-null part)
     XrType *not_null = xa_narrow_by_null_check(nullable_int, false, true);
     ASSERT(not_null != NULL);
     // For nullable int, non-null part should be int
@@ -455,7 +455,7 @@ TEST(type_class_instance) {
 }
 
 TEST(type_function_complex) {
-    // fn(int, string): Array<int>
+    // (int, string) -> Array<int>
     XrType *param1 = xr_type_new_int(NULL);
     XrType *param2 = xr_type_new_string(NULL);
     XrType *ret = xr_type_new_array(g_isolate, xr_type_new_int(NULL));
@@ -549,7 +549,7 @@ TEST(infer_return_type_collection) {
     // Non-nullable unions degrade to 'any', so the result should be 'any'.
     XrType *ret = xa_infer_compute_return_type(ctx);
     ASSERT(ret != NULL);
-    // int | string => union type
+    // int | string -> union type
     ASSERT(XR_TYPE_IS_UNION(ret));
 
     xa_infer_context_free(ctx);
@@ -575,7 +575,7 @@ TEST(infer_no_return_type) {
     XaAnalyzer *a = xa_analyzer_new(g_isolate);
     XaInferContext *ctx = xa_infer_context_new(a);
 
-    // No return types added => unit (0-arity tuple)
+    // No return types added -> unit (0-arity tuple)
     XrType *ret = xa_infer_compute_return_type(ctx);
     ASSERT(XR_TYPE_IS_UNIT(ret));
 
@@ -614,7 +614,7 @@ TEST(compile_type_containers) {
 }
 
 TEST(compile_type_function) {
-    // fn(int, string): bool using new API
+    // (int, string) -> bool using new API
     XrType *param_types[] = {xr_type_new_int(NULL), xr_type_new_string(NULL)};
     XrType *fn =
         xr_type_new_function(g_analyzer->isolate, param_types, 2, xr_type_new_bool(NULL), false);
@@ -633,7 +633,7 @@ TEST(compile_type_class) {
 }
 
 TEST(compile_type_optional) {
-    // int? => nullable type (unified representation)
+    // int? -> nullable type (unified representation)
     XrType *opt = xr_type_new_optional(g_isolate, xr_type_new_int(NULL));
     ASSERT(opt->is_nullable);
     ASSERT(XR_TYPE_IS_INT(opt));

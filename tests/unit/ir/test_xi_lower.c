@@ -423,7 +423,7 @@ TEST(nullish_coalesce) {
 }
 
 TEST(map_literal) {
-    XiFunc *f = lower_source("let m = {\"a\" => 1, \"b\" => 2}\n"
+    XiFunc *f = lower_source("let m = {\"a\" -> 1, \"b\" -> 2}\n"
                              "print(m)\n");
     assert(f != NULL);
     int found_map_new = 0;
@@ -438,9 +438,9 @@ TEST(map_literal) {
 TEST(match_expr) {
     XiFunc *f = lower_source("let x = 2\n"
                              "let y = match (x) {\n"
-                             "    1 => 10,\n"
-                             "    2 => 20,\n"
-                             "    _ => 0\n"
+                             "    1 -> 10,\n"
+                             "    2 -> 20,\n"
+                             "    _ -> 0\n"
                              "}\n"
                              "print(y)\n");
     assert(f != NULL);
@@ -516,7 +516,7 @@ TEST(object_literal) {
 }
 
 TEST(nested_function) {
-    XiFunc *f = lower_source("fn add(a: int, b: int): int {\n"
+    XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
                              "    return a + b\n"
                              "}\n"
                              "let r = add(1, 2)\n"
@@ -544,7 +544,7 @@ TEST(nested_function) {
 }
 
 TEST(function_expr) {
-    XiFunc *f = lower_source("let double = fn(x: int): int { return x * 2 }\n"
+    XiFunc *f = lower_source("let double = fn(x: int) -> int { return x * 2 }\n"
                              "let r = double(5)\n"
                              "print(r)\n");
     assert(f != NULL);
@@ -556,8 +556,8 @@ TEST(function_expr) {
 }
 
 TEST(multiple_functions) {
-    XiFunc *f = lower_source("fn foo(): int { return 1 }\n"
-                             "fn bar(): int { return 2 }\n"
+    XiFunc *f = lower_source("fn foo() -> int { return 1 }\n"
+                             "fn bar() -> int { return 2 }\n"
                              "print(foo() + bar())\n");
     assert(f != NULL);
     assert(f->nchildren == 2);
@@ -579,7 +579,7 @@ TEST(template_string) {
 }
 
 TEST(go_await) {
-    XiFunc *f = lower_source("fn work(): int { return 42 }\n"
+    XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
                              "let t = go work()\n"
                              "let r = await t\n"
                              "print(r)\n");

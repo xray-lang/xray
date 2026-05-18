@@ -47,7 +47,7 @@ fn test_multicore_context_isolation() {
     // 在多个协程中并发执行字符串拼接
     // 每个协程应该使用自己 Worker 的 vm_ctx.tmp_strbuf
     
-    fn concat_task(id: int): string {
+    fn concat_task(id: int) -> string {
         // 每个协程执行独立的字符串拼接
         let prefix = "task_" + string(id) + "_"
         let result = prefix + "data"
@@ -74,7 +74,7 @@ fn test_multicore_concurrent_long_concat() {
     // 多个协程并发执行长字符串拼接
     // 验证 Worker 间的缓冲区隔离
     
-    fn long_concat_task(id: int): string {
+    fn long_concat_task(id: int) -> string {
         let base = "x".repeat(50)
         let result = base + "_" + string(id) + "_" + base
         return result
@@ -106,7 +106,7 @@ fn test_context_switch_correctness() {
     
     let main_result = "main_" + "start"
     
-    fn coro_task(): string {
+    fn coro_task() -> string {
         return "coro_" + "result"
     }
     
@@ -125,11 +125,11 @@ fn test_context_switch_correctness() {
 fn test_nested_coro_context() {
     // 测试嵌套协程的上下文选择
     
-    fn inner_task(x: string): string {
+    fn inner_task(x: string) -> string {
         return "inner_" + string(x)
     }
     
-    fn outer_task(x: string, inner_fn: fn(string): string): string {
+    fn outer_task(x: string, inner_fn: (string) -> string) -> string {
         let prefix = "outer_" + string(x) + "_"
         let t = go inner_fn(x)
         let inner_result = await t
@@ -148,7 +148,7 @@ fn test_nested_coro_context() {
 fn test_property_concurrent_concat_correctness() {
     // 属性：对于任意数量的并发协程，每个协程的字符串拼接结果应该独立且正确
     
-    fn random_concat_task(seed: int): string {
+    fn random_concat_task(seed: int) -> string {
         // 使用 seed 生成确定性的拼接序列
         let result = ""
         let count = (seed % 10) + 1
@@ -187,7 +187,7 @@ fn test_property_concurrent_concat_correctness() {
 fn test_property_buffer_reuse_safety() {
     // 属性：缓冲区重用不应该导致数据污染
     
-    fn sequential_concat_task(id: int): Array<string> {
+    fn sequential_concat_task(id: int) -> Array<string> {
         // 执行多次拼接，每次都应该得到正确结果
         let results: Array<string> = []
         for (let i = 0; i < 5; i++) {

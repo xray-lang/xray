@@ -2,7 +2,7 @@
 // EXPECTED: 1000000
 // Test: OSR with nested loops - both inner and outer loop may trigger JIT
 
-fn nested_sum() : int {
+fn nested_sum() -> int {
     let total = 0
     let i = 0
     while (i < 1000) {

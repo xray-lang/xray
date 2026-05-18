@@ -3,15 +3,15 @@
 // EXPECTED: true
 // Test: Mixed int/float/bool operations in JIT
 
-fn int_to_float_calc(a: int, b: int) : float {
+fn int_to_float_calc(a: int, b: int) -> float {
     return float(a) / float(b)
 }
 
-fn float_to_int(x: float) : int {
+fn float_to_int(x: float) -> int {
     return int(x)
 }
 
-fn compare_mixed(a: int, b: float) : bool {
+fn compare_mixed(a: int, b: float) -> bool {
     return float(a) > b
 }
 

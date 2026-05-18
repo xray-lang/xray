@@ -1,15 +1,15 @@
 // Test: Coro.whereis and Coro.monitor for named coroutine lifecycle monitoring
 
 import time
-fn worker1(): int {
+fn worker1() -> int {
     time.sleep(50)
     return 42
 }
-fn worker2(): string {
+fn worker2() -> string {
     time.sleep(30)
     return "done"
 }
-fn worker3(): int {
+fn worker3() -> int {
     return 100
 }
 

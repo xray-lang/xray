@@ -1,6 +1,6 @@
 // Test linked go as expressions and task.monitor() API
 
-fn ok(): int {
+fn ok() -> int {
     return 42
 }
 fn test_linked_go_basic() {

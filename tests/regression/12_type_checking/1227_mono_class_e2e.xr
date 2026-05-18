@@ -10,7 +10,7 @@ class Box<T> {
     constructor(v: T) {
         this.value = v
     }
-    get(): T {
+    get() -> T {
         return this.value
     }
 }

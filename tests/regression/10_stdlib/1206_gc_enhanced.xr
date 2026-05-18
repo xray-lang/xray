@@ -60,7 +60,7 @@ fn test_gc_disable_prevents_gc() {
     // Allocate a bunch of objects
     let arr: Array<Json> = []
     for (let i = 0; i < 500; i++) {
-        arr.push({"idx" => i, "data" => "item_" + string(i)})
+        arr.push(#{"idx": i, "data": "item_" + string(i)})
     }
     // GC should not have run while disabled
     let after_count = gc.gccount()
@@ -143,7 +143,7 @@ fn test_gc_countb_decreases_after_collect() {
     fn make_garbage() {
         let temp: Array<Json> = []
         for (let i = 0; i < 200; i++) {
-            temp.push({"garbage" => i})
+            temp.push(#{"garbage": i})
         }
     }
     make_garbage()
@@ -161,7 +161,7 @@ fn test_gc_objects_tracks_alloc() {
     let before = gc.objects()
     let arr: Array<Json> = []
     for (let i = 0; i < 10; i++) {
-        arr.push({"k" => i})
+        arr.push(#{"k": i})
     }
     let after = gc.objects()
     assert(after > before)

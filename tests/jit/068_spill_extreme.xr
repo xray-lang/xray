@@ -2,7 +2,7 @@
 // Test: Extreme register pressure — 25+ simultaneously live variables
 // Forces register spilling with all variables used in final expression
 
-fn extreme(a: int, b: int) : int {
+fn extreme(a: int, b: int) -> int {
     let v0  = a + 1
     let v1  = b + 2
     let v2  = a + 3

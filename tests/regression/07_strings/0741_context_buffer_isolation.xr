@@ -18,7 +18,7 @@ fn test_concurrent_concat_isolation() {
     // 多个协程同时执行字符串拼接
     // 每个协程的结果应该独立，不受其他协程影响
     
-    fn concat_task(id: int): string {
+    fn concat_task(id: int) -> string {
         // 执行多次拼接，构建唯一标识字符串
         let result = "worker_" + string(id)
         result = result + "_part1"
@@ -49,7 +49,7 @@ fn test_long_string_isolation() {
     // 测试长字符串拼接（使用 XrStrBuf 路径）的隔离性
     // 长字符串更容易暴露缓冲区共享问题
     
-    fn long_concat_task(id: int): string {
+    fn long_concat_task(id: int) -> string {
         // 构建长字符串，超过短字符串阈值 (64 字节)
         let base = "x".repeat(40)
         let result = base + "_id" + string(id) + "_" + base
@@ -83,7 +83,7 @@ fn test_interleaved_concat_isolation() {
     // 测试交替执行拼接时的隔离性
     // 模拟高并发场景下的缓冲区竞争
     
-    fn interleaved_task(id: int): Array<string> {
+    fn interleaved_task(id: int) -> Array<string> {
         let results: Array<string> = []
         for (let i = 0; i < 10; i++) {
             // 每次迭代都执行拼接
@@ -119,7 +119,7 @@ fn test_buffer_content_no_leak() {
     // 验证一个协程的缓冲区内容不会泄漏到另一个协程
     // 使用唯一标记来检测泄漏
     
-    fn marker_task(marker: string): string {
+    fn marker_task(marker: string) -> string {
         // 使用唯一标记构建字符串
         let result = "<<" + marker + ">>"
         result = result + "[[" + marker + "]]"
@@ -165,7 +165,7 @@ fn test_main_thread_coro_isolation() {
     // 主线程执行拼接
     let main_result = "main_" + "thread_" + "result"
     
-    fn coro_task(): string {
+    fn coro_task() -> string {
         // 协程执行拼接
         return "coro_" + "thread_" + "result"
     }
@@ -193,7 +193,7 @@ fn test_high_concurrency_isolation() {
     // 高并发场景下的隔离性测试
     // 大量协程同时执行字符串拼接
     
-    fn stress_task(id: int): string {
+    fn stress_task(id: int) -> string {
         let result = ""
         for (let i = 0; i < 20; i++) {
             result = result + "s" + string(id) + "i" + string(i) + "_"
@@ -234,7 +234,7 @@ fn test_mixed_length_isolation() {
     // 测试混合长短字符串拼接的隔离性
     // 一些协程使用短字符串路径，一些使用长字符串路径
     
-    fn mixed_task(id: int): string {
+    fn mixed_task(id: int) -> string {
         if (id % 2 == 0) {
             // 短字符串路径
             return "short_" + string(id)
@@ -271,7 +271,7 @@ fn test_property_random_isolation() {
     // 属性：对于任意数量的并发协程执行任意字符串拼接，
     // 每个协程的结果应该只包含该协程产生的内容
     
-    fn random_concat(seed: int): string {
+    fn random_concat(seed: int) -> string {
         // 使用 seed 生成确定性的拼接序列
         // 使用唯一分隔符避免子串匹配问题
         let result = "[seed" + string(seed) + "]_"

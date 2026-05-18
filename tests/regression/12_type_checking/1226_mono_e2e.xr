@@ -5,16 +5,16 @@
 
 // === Basic identity monomorphization ===
 
-fn id<T>(x: T): T {
+fn id<T>(x: T) -> T {
     return x
 }
-fn pair<A, B>(a: A, b: B): (A, B) {
+fn pair<A, B>(a: A, b: B) -> (A, B) {
     return (a, b)
 }
-fn add_one<T>(x: T): T {
+fn add_one<T>(x: T) -> T {
     return x + 1
 }
-fn wrap<T>(x: T): Array<T> {
+fn wrap<T>(x: T) -> Array<T> {
     return [x]
 }
 

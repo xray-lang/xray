@@ -2,7 +2,7 @@
 // EXPECTED: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 // Test: StringBuilder operations in JIT (STRBUF_NEW/APPEND/FINISH)
 
-fn build_str(a: string, b: string, c: string) : string {
+fn build_str(a: string, b: string, c: string) -> string {
     let sb = new StringBuilder()
     sb.append(a)
     sb.append(" ")
@@ -12,7 +12,7 @@ fn build_str(a: string, b: string, c: string) : string {
     return sb.toString()
 }
 
-fn repeat_char(ch: string, n: int) : string {
+fn repeat_char(ch: string, n: int) -> string {
     let sb = new StringBuilder()
     let i = 0
     while (i < n) {

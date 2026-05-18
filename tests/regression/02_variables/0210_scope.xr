@@ -62,7 +62,7 @@ fn test_shadow_with_different_type() {
 @test
 fn test_function_scope() {
     let x = 100
-    fn inner(): int {
+    fn inner() -> int {
         let x = 200
         return x
     }
@@ -73,7 +73,7 @@ fn test_function_scope() {
 @test
 fn test_closure_captures_outer() {
     let x = 10
-    fn inner(): int {
+    fn inner() -> int {
         return x
     }
     assert_eq(inner(), 10)

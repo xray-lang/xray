@@ -8,7 +8,7 @@ class Point {
         this.y = y
     }
 
-    sum(): int {
+    sum() -> int {
         return this.x + this.y
     }
 }

@@ -620,7 +620,7 @@ TEST(array_literal) {
 }
 
 TEST(map_literal) {
-    return assert_all_typed("let m = {\"a\" => 1, \"b\" => 2}\n"
+    return assert_all_typed("let m = #{\"a\": 1, \"b\": 2}\n"
                             "print(m)\n",
                             "map_literal");
 }
@@ -645,7 +645,7 @@ TEST(template_string) {
 }
 
 TEST(function_decl_and_call) {
-    return assert_all_typed("fn add(a: int, b: int): int {\n"
+    return assert_all_typed("fn add(a: int, b: int) -> int {\n"
                             "    return a + b\n"
                             "}\n"
                             "let r = add(1, 2)\n"
@@ -654,7 +654,7 @@ TEST(function_decl_and_call) {
 }
 
 TEST(function_expr) {
-    return assert_all_typed("let double = (x: int): int => x * 2\n"
+    return assert_all_typed("let double = fn(x: int) -> int { return x * 2\n }"
                             "print(double(5))\n",
                             "function_expr");
 }
@@ -702,7 +702,7 @@ TEST(class_basic) {
                             "    constructor(n: string) {\n"
                             "        this.name = n\n"
                             "    }\n"
-                            "    bark(): string {\n"
+                            "    bark() -> string {\n"
                             "        return \"woof\"\n"
                             "    }\n"
                             "}\n"
@@ -724,9 +724,9 @@ TEST(enum_basic) {
 TEST(match_expr) {
     return assert_all_typed("let x = 2\n"
                             "let result = match (x) {\n"
-                            "    1 => \"one\"\n"
-                            "    2 => \"two\"\n"
-                            "    _ => \"other\"\n"
+                            "    1 -> \"one\"\n"
+                            "    2 -> \"two\"\n"
+                            "    _ -> \"other\"\n"
                             "}\n"
                             "print(result)\n",
                             "match_expr");
@@ -797,8 +797,8 @@ TEST(nested_expressions) {
 }
 
 TEST(closure_capture) {
-    return assert_all_typed("fn make_adder(n: int): int {\n"
-                            "    let inner = (x: int): int => x + n\n"
+    return assert_all_typed("fn make_adder(n: int) -> int {\n"
+                            "    let inner = fn(x: int) -> int { return x + n\n }"
                             "    return inner(10)\n"
                             "}\n"
                             "let r = make_adder(5)\n"

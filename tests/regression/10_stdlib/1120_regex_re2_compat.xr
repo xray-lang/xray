@@ -12,7 +12,7 @@ import regex
 // 辅助函数
 // ============================================================================
 
-fn match_ok(pattern: string, text: string): bool {
+fn match_ok(pattern: string, text: string) -> bool {
     let re = regex.compile(pattern)
     if (re == null) {
         return false
@@ -20,7 +20,7 @@ fn match_ok(pattern: string, text: string): bool {
     return regex.find(re, text) != null
 }
 
-fn match_eq(pattern: string, text: string, expected: string): bool {
+fn match_eq(pattern: string, text: string, expected: string) -> bool {
     let re = regex.compile(pattern)
     if (re == null) {
         return false

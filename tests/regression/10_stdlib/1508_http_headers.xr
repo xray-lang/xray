@@ -4,12 +4,10 @@ import http
 
 @test
 fn test_request_headers() {
-    let h = {
-        "Content-Type" => "application/json",
-        "Accept" => "*/*",
-        "User-Agent" => "xray-http/1.0",
-        "Authorization" => "Bearer token123"
-    }
+    let h = #{"Content-Type": "application/json",
+        "Accept": "*/*",
+        "User-Agent": "xray-http/1.0",
+        "Authorization": "Bearer token123"}
     assert_eq(h.get("Content-Type"), "application/json")
     assert_eq(h.get("Accept"), "*/*")
     assert_eq(h.get("Authorization"), "Bearer token123")
@@ -17,11 +15,9 @@ fn test_request_headers() {
 
 @test
 fn test_common_headers() {
-    let h = {
-        "Content-Type" => "text/html; charset=utf-8",
-        "Cache-Control" => "no-cache",
-        "Connection" => "keep-alive"
-    }
+    let h = #{"Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive"}
     assert(h.get("Content-Type").indexOf("text/html") >= 0)
     assert_eq(h.get("Cache-Control"), "no-cache")
 }

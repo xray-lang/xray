@@ -1,7 +1,7 @@
 // EXPECTED: 5050
 // Test: Map operations in loop (MAP_SET, MAP_GET, MAP_INCREMENT)
 
-fn build_map(n: int) : int {
+fn build_map(n: int) -> int {
     let m = {}
     let i = 1
     while (i <= n) {

@@ -13,20 +13,20 @@ class Container<T> {
         this.items.push(item)
     }
 
-    wrap(item: T): Array<T> {
+    wrap(item: T) -> Array<T> {
         return [item]
     }
 
-    pair(a: T, b: T): (T, T) {
+    pair(a: T, b: T) -> (T, T) {
         return (a, b)
     }
 }
 class Util {
-    static identity<T>(x: T): T {
+    static identity<T>(x: T) -> T {
         return x
     }
 
-    static swap<A, B>(pair: Array<int>): Array<int> {
+    static swap<A, B>(pair: Array<int>) -> Array<int> {
         return [pair[1], pair[0]]
     }
 }
@@ -37,11 +37,11 @@ class Box<T> {
         this.value = v
     }
 
-    get(): T {
+    get() -> T {
         return this.value
     }
 
-    transform<U>(f: fn(T): U): U {
+    transform<U>(f: (T) -> U) -> U {
         return f(this.value)
     }
 }

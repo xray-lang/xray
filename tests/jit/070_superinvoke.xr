@@ -4,17 +4,17 @@
 // Test: Super method invocation in JIT (SUPERINVOKE)
 
 class Animal {
-    speak() : string {
+    speak() -> string {
         return "Animal speaks"
     }
 }
 
 class Dog extends Animal {
-    speak() : string {
+    speak() -> string {
         return "Dog barks"
     }
 
-    parent_speak() : string {
+    parent_speak() -> string {
         return super.speak()
     }
 }

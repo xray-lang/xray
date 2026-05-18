@@ -150,7 +150,7 @@ fn test_deeply_nested_optional() {
 @test
 fn test_short_circuit() {
     let count = 0
-    fn increment(): null {
+    fn increment() -> null {
         count++
         return null
     }

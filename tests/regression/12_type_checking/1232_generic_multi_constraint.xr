@@ -31,7 +31,7 @@
 // ===== Single constraint (regression) =====
 @test
 fn test_single_constraint_int() {
-    fn first<T: Comparable>(a: T, b: T): T {
+    fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
     assert_eq(first(1, 2), 1)
@@ -39,7 +39,7 @@ fn test_single_constraint_int() {
 
 @test
 fn test_single_constraint_string() {
-    fn first<T: Comparable>(a: T, b: T): T {
+    fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
     assert_eq(first("alpha", "beta"), "alpha")
@@ -48,7 +48,7 @@ fn test_single_constraint_string() {
 // ===== Two constraints =====
 @test
 fn test_two_constraints_int() {
-    fn passThrough<T: Comparable & Hashable>(x: T): T {
+    fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
     assert_eq(passThrough(42), 42)
@@ -56,7 +56,7 @@ fn test_two_constraints_int() {
 
 @test
 fn test_two_constraints_string() {
-    fn passThrough<T: Comparable & Hashable>(x: T): T {
+    fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
     assert_eq(passThrough("hello"), "hello")
@@ -64,7 +64,7 @@ fn test_two_constraints_string() {
 
 @test
 fn test_two_constraints_float() {
-    fn passThrough<T: Comparable & Hashable>(x: T): T {
+    fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
     let f = passThrough(3.14)
@@ -74,7 +74,7 @@ fn test_two_constraints_float() {
 // ===== Three constraints =====
 @test
 fn test_three_constraints() {
-    fn passThrough<T: Comparable & Hashable & Stringable>(x: T): T {
+    fn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {
         return x
     }
     assert_eq(passThrough(7), 7)
@@ -84,7 +84,7 @@ fn test_three_constraints() {
 // ===== Mixed constraints across multiple type parameters =====
 @test
 fn test_mixed_param_constraints() {
-    fn pickValue<K: Hashable, V>(k: K, v: V): V {
+    fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
         return v
     }
     assert_eq(pickValue(1, "one"), "one")
@@ -94,10 +94,10 @@ fn test_mixed_param_constraints() {
 // ===== No constraint still works =====
 @test
 fn test_unconstrained_after_constrained() {
-    fn id<T>(x: T): T {
+    fn id<T>(x: T) -> T {
         return x
     }
-    fn ord<T: Comparable>(x: T): T {
+    fn ord<T: Comparable>(x: T) -> T {
         return x
     }
     assert_eq(id(ord(5)), 5)
@@ -106,7 +106,7 @@ fn test_unconstrained_after_constrained() {
 // ===== Explicit type arguments =====
 @test
 fn test_explicit_type_args_multi_constraint() {
-    fn passThrough<T: Comparable & Hashable>(x: T): T {
+    fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
     assert_eq(passThrough<int>(11), 11)

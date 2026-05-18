@@ -45,29 +45,29 @@ print("reversed: ${unsorted}")
 // === Functional methods ===
 let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-let evens = data.filter((x: int): bool => x % 2 == 0)
+let evens = data.filter(fn(x: int) -> bool { return x % 2 == 0 })
 print("evens: ${evens}")
 
-let doubled = data.map((x: int): int => x * 2)
+let doubled = data.map(fn(x: int) -> int { return x * 2 })
 print("doubled: ${doubled}")
 
-let total = data.reduce((acc: int, x: int): int => acc + x, 0)
+let total = data.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
 print("sum: ${total}")
 
 // Chaining
 let result = data
-    .filter((x: int): bool => x % 2 == 0)
-    .map((x: int): int => x * x)
+    .filter(fn(x: int) -> bool { return x % 2 == 0 })
+    .map(fn(x: int) -> int { return x * x })
 print("even squares: ${result}")
 
 // === find / every / some ===
-let found = data.find((x: int): bool => x > 5)
+let found = data.find(fn(x: int) -> bool { return x > 5 })
 print("first > 5: ${found}")
 
-let allPositive = data.every((x: int): bool => x > 0)
+let allPositive = data.every(fn(x: int) -> bool { return x > 0 })
 print("all positive: ${allPositive}")
 
-let hasLarge = data.some((x: int): bool => x > 8)
+let hasLarge = data.some(fn(x: int) -> bool { return x > 8 })
 print("has > 8: ${hasLarge}")
 
 // === fill ===

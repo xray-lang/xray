@@ -2,11 +2,11 @@
 // EXPECTED: 20
 // Test: Functions returning different types (int, float, bool, ptr)
 
-fn ret_int() : int { return 10 }
-fn ret_float() : float { return 3.14 }
-fn ret_bool() : bool { return true }
+fn ret_int() -> int { return 10 }
+fn ret_float() -> float { return 3.14 }
+fn ret_bool() -> bool { return true }
 
-fn dispatch(which: int) : int {
+fn dispatch(which: int) -> int {
     if (which == 0) { return ret_int() }
     if (which == 1) { return int(ret_float()) }
     return 0

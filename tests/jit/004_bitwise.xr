@@ -6,27 +6,27 @@
 // EXPECTED: 2
 // Test: Bitwise operations (BAND, BOR, BXOR, BNOT, SHL, SHR)
 
-fn bitops(a: int, b: int) : int {
+fn bitops(a: int, b: int) -> int {
     return a & b
 }
 
-fn bitor_fn(a: int, b: int) : int {
+fn bitor_fn(a: int, b: int) -> int {
     return a | b
 }
 
-fn bitxor(a: int, b: int) : int {
+fn bitxor(a: int, b: int) -> int {
     return a ^ b
 }
 
-fn bitnot(a: int) : int {
+fn bitnot(a: int) -> int {
     return ~a
 }
 
-fn shl(a: int, b: int) : int {
+fn shl(a: int, b: int) -> int {
     return a << b
 }
 
-fn shr(a: int, b: int) : int {
+fn shr(a: int, b: int) -> int {
     return a >> b
 }
 
