@@ -9,7 +9,7 @@
 import http
 
 fn dashboard(req: Json): Json {
-    let [users, orders] = await.all [
+    let [users, orders] = await all [
         go loadUsers(),
         go loadOrders()
     ]
@@ -20,7 +20,7 @@ http.route("GET", "/dashboard", dashboard)
 http.listen(8080)
 ```
 
-A concurrent HTTP handler. `await.all` runs both `go` tasks in parallel,
+A concurrent HTTP handler. `await all` runs both `go` tasks in parallel,
 and the compiler **statically guarantees** there are no data races.
 
 ---
@@ -132,7 +132,7 @@ We're at v0.5.x. We don't pretend it's 1.0.
 | --- | --- |
 | VM, GC, scheduler, ARM64 JIT | ✅ Stable |
 | AOT (single + multi-module, classes, exceptions, generics) | ✅ Stable |
-| HTTP / HTTP2 / WebSocket / TLS / regex / json / crypto | ✅ Stable |
+| HTTP / HTTP2 / WebSocket / TLS / regex / crypto | ✅ Stable |
 | LSP, VSCode extension | ✅ Stable |
 | x86_64 JIT | 🚧 Beta |
 | AOT coroutines / full stdlib coverage | 🚧 Beta |
@@ -149,7 +149,7 @@ Built in ~8,000 lines of C with 280+ regression tests passing on every commit.
 **Toolchain** — `xray run` · `test` · `fmt` · `build` · `check` · `repl` · `lsp` · `dap` · `init` · `pkg` · `eval` · `compile`.
 One binary, zero runtime dependencies.
 
-**Standard library** — `http` · `http2` · `ws` · `net` · `json` · `csv` · `toml` · `xml` · `yaml` · `crypto` · `base64` · `compress` · `regex` · `io` · `os` · `path` · `time` · `datetime` · `math` · `gc` · `log` · `cluster`.
+**Standard library** — `http` · `ws` · `net` · `csv` · `toml` · `xml` · `yaml` · `crypto` · `base64` · `compress` · `regex` · `io` · `os` · `path` · `time` · `datetime` · `math` · `gc` · `log` · `cluster` · `url` · `encoding`. (`Json` is a first-class prelude type, no `import` needed.)
 
 **Platforms** — macOS, Linux, Windows · arm64, x86_64.
 

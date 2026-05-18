@@ -9,7 +9,7 @@
 import http
 
 fn dashboard(req: Json): Json {
-    let [users, orders] = await.all [
+    let [users, orders] = await all [
         go loadUsers(),
         go loadOrders()
     ]
@@ -20,7 +20,7 @@ http.route("GET", "/dashboard", dashboard)
 http.listen(8080)
 ```
 
-一段并发的 HTTP handler。`await.all` 同时跑两个 `go`，
+一段并发的 HTTP handler。`await all` 同时跑两个 `go`，
 **编译器静态保证**没有数据竞争。
 
 ---
@@ -132,7 +132,7 @@ let ch = Channel(1)                   // ✗ Channel 必须是 const
 | --- | --- |
 | VM、GC、调度器、ARM64 JIT | ✅ Stable |
 | AOT（单 / 多模块、类、异常、泛型） | ✅ Stable |
-| HTTP / HTTP2 / WebSocket / TLS / regex / json / crypto | ✅ Stable |
+| HTTP / HTTP2 / WebSocket / TLS / regex / crypto | ✅ Stable |
 | LSP、VSCode 插件 | ✅ Stable |
 | x86_64 JIT | 🚧 Beta |
 | AOT 协程 / stdlib 全覆盖 | 🚧 Beta |
@@ -149,7 +149,7 @@ let ch = Channel(1)                   // ✗ Channel 必须是 const
 **工具链** —— `xray run` · `test` · `fmt` · `build` · `check` · `repl` · `lsp` · `dap` · `init` · `pkg` · `eval` · `compile`。
 一个 binary，零运行时依赖。
 
-**标准库** —— `http` · `http2` · `ws` · `net` · `json` · `csv` · `toml` · `xml` · `yaml` · `crypto` · `base64` · `compress` · `regex` · `io` · `os` · `path` · `time` · `datetime` · `math` · `gc` · `log` · `cluster`。
+**标准库** —— `http` · `ws` · `net` · `csv` · `toml` · `xml` · `yaml` · `crypto` · `base64` · `compress` · `regex` · `io` · `os` · `path` · `time` · `datetime` · `math` · `gc` · `log` · `cluster` · `url` · `encoding`。（`Json` 是一等公民类型（prelude），无需 `import`。）
 
 **平台** —— macOS · Linux · Windows × arm64 / x86_64。
 

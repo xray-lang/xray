@@ -37,7 +37,7 @@
 | `15_slice_scope.xr` | 切片表达式 (`arr[1:3]`)、scope 块 |
 | `16_attributes.xr` | 函数属性/装饰器 (`@test`) |
 | `17_type_check.xr` | is 类型检查表达式 (`x is int`) |
-| `18_coroutine_advanced.xr` | yield、cancelled()、await.any、协程取消 |
+| `18_coroutine_advanced.xr` | yield、cancelled()、`await any`、协程取消 |
 | `19_generics.xr` | 泛型函数、泛型类、泛型 Channel |
 | `20_abstract.xr` | 抽象类、抽象方法 |
 
