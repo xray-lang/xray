@@ -563,6 +563,18 @@ vmcase(OP_GETPROP) {
 getprop_instance:;
     XrInstance *inst = xr_value_to_instance(obj);
 
+    // Dynamic-layout fast path: hidden-class instance, lookup may miss
+    // (returns null), no getter dispatch, no method fallback.
+    if (inst->klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        int field_index_d = xr_class_lookup_field(inst->klass, prop_symbol);
+        if (field_index_d >= 0) {
+            R(a) = xr_instance_get_dynamic_field(inst, (uint16_t) field_index_d);
+        } else {
+            R(a) = xr_null();
+        }
+        vmbreak;
+    }
+
     // Cold path: getter method lookup
     {
         int _cr =
@@ -724,6 +736,35 @@ vmcase(OP_SETPROP) {
     }
 
     XrInstance *inst = xr_value_to_instance(obj);
+
+    // Dynamic-layout fast path: hidden-class instance, missing field creates
+    // a class transition. Shared objects cannot create new transitions.
+    if (inst->klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        int field_index_d = xr_class_lookup_field(inst->klass, prop_symbol);
+        if (field_index_d < 0) {
+            // Adding a new field: forbid on shared objects
+            if (XR_GC_GET_STORAGE(&inst->gc) == XR_GC_STORAGE_SHARED) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                                 "cannot add field to shared dynamic object");
+            }
+            XrSymbolTable *_st_sd = (XrSymbolTable *) isolate->symbol_table;
+            const char *fname = xr_symbol_get_name_in_table(_st_sd, prop_symbol);
+            XrClass *next = xr_class_transition_get_or_create(isolate, inst->klass, prop_symbol,
+                                                              fname ? fname : "?");
+            if (!next) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                 "OP_SETPROP: dynamic transition allocation failed");
+            }
+            inst->klass = next;
+            field_index_d = xr_class_lookup_field(next, prop_symbol);
+            XR_DCHECK(field_index_d >= 0, "transition: new field not registered");
+        }
+        if (!xr_instance_set_dynamic_field(isolate, inst, (uint16_t) field_index_d, value)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_SETPROP: dynamic overflow alloc failed");
+        }
+        VM_BARRIER_VAL(inst, value);
+        vmbreak;
+    }
 
     // Cold path: setter method lookup
     {
