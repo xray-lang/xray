@@ -121,6 +121,20 @@ void xr_gc_destroy_instance(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrClass *klass = inst->klass;
     if (!klass)
         return;
+
+    // Free overflow buffer for dynamic-layout instances
+    if (klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = klass->in_object_capacity;
+        if (cap > 0 && xr_class_instance_field_count(klass) > cap - 1) {
+            XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (overflow) {
+                int64_t *raw = ((int64_t *) overflow) - 1;
+                xr_free(raw);
+            }
+        }
+    }
+
+    // Call native body destructor
     XrNativeBodyDesc *desc = klass->native_body;
     if (desc && desc->destroy) {
         void *body = xr_instance_native_body(inst);
@@ -338,4 +352,169 @@ bool xr_instance_is_a(XrInstance *inst, XrClass *cls) {
     if (!inst || !cls)
         return false;
     return xr_class_instanceof(xr_instance_get_class(inst), cls);
+}
+
+/* ========== Dynamic Layout Field Access ========== */
+
+XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index) {
+    XR_DCHECK(inst != NULL, "get_dynamic_field: NULL inst");
+    XrClass *klass = inst->klass;
+    XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "get_dynamic_field: not dynamic");
+    uint16_t cap = klass->in_object_capacity;
+    XR_DCHECK(cap > 0, "get_dynamic_field: zero capacity");
+
+    if (index < cap - 1) {
+        return inst->fields[index];
+    }
+    // Overflow: fields[cap-1] holds raw pointer to heap array
+    XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
+    if (!overflow)
+        return xr_null();
+    uint16_t overflow_idx = index - (cap - 1);
+    return overflow[overflow_idx];
+}
+
+bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t index,
+                                   XrValue value) {
+    XR_DCHECK(inst != NULL, "set_dynamic_field: NULL inst");
+    XR_DCHECK(X != NULL, "set_dynamic_field: NULL isolate");
+    XrClass *klass = inst->klass;
+    XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "set_dynamic_field: not dynamic");
+    uint16_t cap = klass->in_object_capacity;
+    XR_DCHECK(cap > 0, "set_dynamic_field: zero capacity");
+
+    if (index < cap - 1) {
+        inst->fields[index] = value;
+        return true;
+    }
+
+    // Overflow region
+    uint16_t overflow_idx = index - (cap - 1);
+    XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
+
+    // Determine current overflow capacity (stored as length in slot if exists)
+    uint16_t overflow_cap = 0;
+    if (overflow) {
+        // Capacity tag stored at overflow[-1] as raw int
+        overflow_cap = (uint16_t) ((int64_t *) overflow)[-1];
+    }
+
+    if (overflow_idx >= overflow_cap) {
+        // Grow: double or start at 8
+        uint16_t new_cap = overflow_cap == 0 ? 8 : overflow_cap * 2;
+        while (new_cap <= overflow_idx)
+            new_cap *= 2;
+        // Layout: [capacity_tag][values...]
+        size_t alloc_size = sizeof(int64_t) + sizeof(XrValue) * new_cap;
+        int64_t *raw = (int64_t *) xr_malloc(alloc_size);
+        if (!raw)
+            return false;
+        raw[0] = (int64_t) new_cap;
+        XrValue *new_overflow = (XrValue *) (raw + 1);
+        // Copy old data
+        for (uint16_t i = 0; i < overflow_cap; i++)
+            new_overflow[i] = overflow[i];
+        // Zero-init new slots
+        for (uint16_t i = overflow_cap; i < new_cap; i++)
+            new_overflow[i] = xr_null();
+        // Free old
+        if (overflow) {
+            int64_t *old_raw = ((int64_t *) overflow) - 1;
+            xr_free(old_raw);
+        }
+        overflow = new_overflow;
+        inst->fields[cap - 1].ptr = (void *) overflow;
+    }
+
+    overflow[overflow_idx] = value;
+    return true;
+}
+
+/* ========== Class Transition ========== */
+
+XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int symbol,
+                                           const char *field_name) {
+    XR_DCHECK(X != NULL, "transition: NULL isolate");
+    XR_DCHECK(klass != NULL, "transition: NULL klass");
+    XR_DCHECK(klass->flags & XR_CLASS_DYNAMIC_LAYOUT, "transition: not dynamic");
+
+    // Search existing transitions
+    for (XrClassTransition *t = klass->transitions; t; t = t->next) {
+        if (t->symbol == symbol)
+            return t->target;
+    }
+
+    // Create child class: inherits all parent fields + one new field
+    uint16_t parent_fc = klass->field_count;
+    uint16_t child_fc = parent_fc + 1;
+
+    XrClass *child = (XrClass *) xr_calloc(1, sizeof(XrClass));
+    if (!child)
+        return NULL;
+
+    // Copy key fields from parent
+    child->name = klass->name;
+    child->super = klass->super;
+    child->flags = klass->flags;
+    child->in_object_capacity = klass->in_object_capacity;
+    child->transition_parent = klass;
+    child->transition_symbol = symbol;
+    child->transitions = NULL;
+
+    // Build field descriptor array: parent fields + new field
+    child->fields = (XrFieldDescriptor *) xr_malloc(sizeof(XrFieldDescriptor) * child_fc);
+    if (!child->fields) {
+        xr_free(child);
+        return NULL;
+    }
+    if (parent_fc > 0 && klass->fields) {
+        memcpy(child->fields, klass->fields, sizeof(XrFieldDescriptor) * parent_fc);
+    }
+    // New field descriptor
+    XrFieldDescriptor *new_fd = &child->fields[parent_fc];
+    memset(new_fd, 0, sizeof(XrFieldDescriptor));
+    new_fd->name = field_name;
+    new_fd->symbol = symbol;
+    new_fd->offset = parent_fc;
+
+    child->field_count = child_fc;
+    child->own_field_count = klass->own_field_count + 1;
+
+    // Rebuild field symbol-to-index map
+    int new_cap = klass->field_map_capacity;
+    if (new_cap == 0)
+        new_cap = 16;
+    while (child_fc * 2 > new_cap)
+        new_cap *= 2;
+    child->field_symbol_to_index = (int *) xr_malloc(sizeof(int) * new_cap);
+    if (!child->field_symbol_to_index) {
+        xr_free(child->fields);
+        xr_free(child);
+        return NULL;
+    }
+    memset(child->field_symbol_to_index, -1, sizeof(int) * new_cap);
+    child->field_map_capacity = new_cap;
+
+    for (uint16_t i = 0; i < child_fc; i++) {
+        int sym = child->fields[i].symbol;
+        int slot = sym & (new_cap - 1);
+        while (child->field_symbol_to_index[slot] != -1)
+            slot = (slot + 1) & (new_cap - 1);
+        child->field_symbol_to_index[slot] = i;
+    }
+
+    // Register transition on parent
+    XrClassTransition *trans = (XrClassTransition *) xr_malloc(sizeof(XrClassTransition));
+    if (!trans) {
+        xr_free(child->field_symbol_to_index);
+        xr_free(child->fields);
+        xr_free(child);
+        return NULL;
+    }
+    trans->symbol = symbol;
+    trans->target = child;
+    trans->next = klass->transitions;
+    klass->transitions = trans;
+
+    return child;
 }

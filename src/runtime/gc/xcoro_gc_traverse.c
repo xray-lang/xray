@@ -195,10 +195,29 @@ void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj) {
     if (!klass)
         return;
 
-    // Mark all instance fields
+    // Mark all instance fields (dynamic-layout uses in-object + overflow)
     uint16_t field_count = xr_class_instance_field_count(klass);
-    for (uint16_t i = 0; i < field_count; i++) {
-        xr_coro_gc_markvalue(gc, inst->fields[i]);
+    if (klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = klass->in_object_capacity;
+        // In-object fields (up to cap-1; slot cap-1 is overflow pointer)
+        uint16_t inobj = (field_count < cap - 1) ? field_count : cap - 1;
+        for (uint16_t i = 0; i < inobj; i++) {
+            xr_coro_gc_markvalue(gc, inst->fields[i]);
+        }
+        // Overflow fields
+        if (field_count > cap - 1) {
+            XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (overflow) {
+                uint16_t overflow_count = field_count - (cap - 1);
+                for (uint16_t i = 0; i < overflow_count; i++) {
+                    xr_coro_gc_markvalue(gc, overflow[i]);
+                }
+            }
+        }
+    } else {
+        for (uint16_t i = 0; i < field_count; i++) {
+            xr_coro_gc_markvalue(gc, inst->fields[i]);
+        }
     }
 
     // Traverse native body if present (e.g. Array buffer, Map hash table)
