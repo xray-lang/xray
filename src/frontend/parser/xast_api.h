@@ -220,12 +220,17 @@ XR_FUNC AstNode *xr_ast_super_call(XrayIsolate *X, const char *method_name, AstN
 XR_FUNC AstNode *xr_ast_member_set(XrayIsolate *X, AstNode *object, const char *member,
                                    AstNode *value, int line);
 
-// Create enum declaration node
+// Create enum declaration node (ADT enum with optional generics, methods, interfaces)
 XR_FUNC AstNode *xr_ast_enum_decl(XrayIsolate *X, const char *name, const char *type_hint,
-                                  AstNode **members, int member_count, int line);
+                                  AstNode **members, int member_count, AstNode **methods,
+                                  int method_count, XrGenericParam **type_params,
+                                  int type_param_count, XrTypeRef **interfaces, int interface_count,
+                                  int line);
 
-// Create enum member node
-XR_FUNC AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value, int line);
+// Create enum member node (ADT variant with optional payload)
+XR_FUNC AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value,
+                                    char **payload_names, XrTypeRef **payload_types,
+                                    int payload_count, int line);
 
 // Create enum access node
 XR_FUNC AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name, const char *member_name,
