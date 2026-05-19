@@ -1,0 +1,17 @@
+// Strict equality must distinguish int from float
+// 1 === 1.0 should be false (different types, no coercion)
+
+// Same type comparisons
+print(1 === 1)          // expect: true
+print(1.0 === 1.0)      // expect: true
+print("a" === "a")      // expect: true
+print(true === true)    // expect: true
+print(null === null)    // expect: true
+
+// Cross-type: int vs float must be false
+print(1 === 1.0)        // expect: false
+print(0 === 0.0)        // expect: false
+
+// Strict inequality
+print(1 !== 1.0)        // expect: true
+print(1 !== 1)          // expect: false

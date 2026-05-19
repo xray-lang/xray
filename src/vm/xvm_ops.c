@@ -568,6 +568,41 @@ bool vm_values_equal(XrValue a, XrValue b) {
     return false;
 }
 
+// Strict equality comparison (for === operator)
+// No implicit type coercion: 1 === 1.0 is false, int !== float.
+bool vm_values_strict_equal(XrValue a, XrValue b) {
+    // NaN is never equal to itself (IEEE 754)
+    if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b))
+        return XR_TO_FLOAT(a) == XR_TO_FLOAT(b);
+    if (xr_value_same(a, b))
+        return true;
+
+    if (XR_IS_INT(a) && XR_IS_INT(b))
+        return XR_TO_INT(a) == XR_TO_INT(b);
+    // No cross-type numeric comparison for strict equality
+    if (XR_IS_BOOL(a) && XR_IS_BOOL(b))
+        return XR_TO_BOOL(a) == XR_TO_BOOL(b);
+    if (XR_IS_NULL(a) && XR_IS_NULL(b))
+        return true;
+    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
+        uint32_t la = xr_value_str_len(&a);
+        uint32_t lb = xr_value_str_len(&b);
+        if (la != lb)
+            return false;
+        return memcmp(xr_value_str_data(&a), xr_value_str_data(&b), la) == 0;
+    }
+
+    // BigInt strict: only BigInt === BigInt
+    if (XR_IS_BIGINT(a) && XR_IS_BIGINT(b)) {
+        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(a), (XrBigInt *) XR_TO_PTR(b)) == 0;
+    }
+
+    if (XR_IS_PTR(a) && XR_IS_PTR(b))
+        return XR_TO_PTR(a) == XR_TO_PTR(b);
+
+    return false;
+}
+
 // Numeric less than
 bool vm_numeric_less(XrValue left, XrValue right) {
     // BigInt comparisons

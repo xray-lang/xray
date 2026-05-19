@@ -352,6 +352,7 @@ static inline bool vm_is_bigint_mixed(XrValue left, XrValue right) {
 
 // Comparison operations
 XR_FUNC bool vm_values_equal(XrValue a, XrValue b);
+XR_FUNC bool vm_values_strict_equal(XrValue a, XrValue b);
 XR_FUNC bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b);
 XR_FUNC bool vm_numeric_less(XrValue left, XrValue right);
 XR_FUNC bool vm_numeric_less_equal(XrValue left, XrValue right);
