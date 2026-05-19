@@ -72,8 +72,6 @@ const char *xr_opcode_field_kind_name(XrOpFieldKind kind) {
             return "PROTO_IDX";
         case XR_OPF_GLOBAL_IDX:
             return "GLOBAL_IDX";
-        case XR_OPF_BUILTIN_IDX:
-            return "BUILTIN_IDX";
         case XR_OPF_JUMP:
             return "JUMP";
         case XR_OPF_SUB_OPCODE:

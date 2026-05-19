@@ -93,9 +93,9 @@ vmcase(OP_CATCH) {
             handler->exception = xr_null();
             // Also clear the ctx-wide pending-exception
             // slot. Subsequent dispatch hot paths (notably
-            // OP_INVOKE / OP_INVOKE_BUILTIN) treat a
-            // non-null current_exception as "the most
-            // recently called builtin threw"; leaving the
+            // OP_INVOKE) treat a non-null current_exception
+            // as "the most recently called builtin threw";
+            // leaving the
             // caught value in place would cause the next
             // builtin call to spuriously unwind.
             VM_SET_EXCEPTION(xr_null());
