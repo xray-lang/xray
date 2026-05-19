@@ -123,6 +123,5 @@ XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_set(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_instance(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, struct XrGCHeader *obj);
 
 #endif  // XDEEP_COPY_H

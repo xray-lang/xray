@@ -683,27 +683,6 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
     return XR_FROM_PTR(new_inst);
 }
 
-// xr_to_shared_json removed: Json values flow through xr_to_shared_instance
-// via the unified g_type_ops dispatch.
-
-XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, XrGCHeader *obj) {
-    XrStringBuilder *sb = (XrStringBuilder *) obj;
-    if (!sb || !xr_isolate_get_sys_heap(X))
-        return XR_NULL_VAL;
-    XrStringBuilder *new_sb = (XrStringBuilder *) xr_sysheap_alloc_shared(
-        xr_isolate_get_sys_heap(X), sizeof(XrStringBuilder), XR_TSTRINGBUILDER);
-    if (!new_sb)
-        return XR_NULL_VAL;
-    xr_stringbuilder_init_inplace(new_sb);
-    XR_GC_SET_STORAGE(&new_sb->gc, XR_GC_STORAGE_SHARED);
-    xr_shared_set_refc(&new_sb->gc, 1);
-    // Copy buffer contents
-    if (sb->buffer && sb->buffer->length > 0) {
-        xr_strbuf_append_cstr(new_sb->buffer, sb->buffer->data, sb->buffer->length);
-    }
-    return XR_FROM_PTR(new_sb);
-}
-
 XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
     XrClosure *closure = (XrClosure *) obj;
     if (!closure || !xr_isolate_get_sys_heap(X))

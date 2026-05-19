@@ -301,8 +301,24 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                 break;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) hdr;
-                const char *class_name = xr_class_display_name(inst->klass);
-                snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
+                if (inst->klass && (inst->klass->flags & XR_CLASS_STRINGBUILDER)) {
+                    XrStringBuilder *sb = (XrStringBuilder *) hdr;
+                    size_t len = xr_stringbuilder_length(sb);
+                    if (len <= 50) {
+                        XrString *s = xr_stringbuilder_to_string(sb);
+                        if (s) {
+                            snprintf(buf, sizeof(buf), "StringBuilder(%zu) \"%.*s\"", len,
+                                     (int) len, XR_STRING_CHARS(s));
+                        } else {
+                            snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
+                        }
+                    } else {
+                        snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
+                    }
+                } else {
+                    const char *class_name = xr_class_display_name(inst->klass);
+                    snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
+                }
                 break;
             }
             case XR_TCLASS: {
@@ -320,22 +336,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TREGEX:
                 snprintf(buf, sizeof(buf), "<regex> @%p", (void *) hdr);
                 break;
-            case XR_TSTRINGBUILDER: {
-                XrStringBuilder *sb = (XrStringBuilder *) hdr;
-                size_t len = xr_stringbuilder_length(sb);
-                if (len <= 50) {
-                    XrString *s = xr_stringbuilder_to_string(sb);
-                    if (s) {
-                        snprintf(buf, sizeof(buf), "StringBuilder(%zu) \"%.*s\"", len, (int) len,
-                                 XR_STRING_CHARS(s));
-                    } else {
-                        snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
-                    }
-                } else {
-                    snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
-                }
-                break;
-            }
             case XR_TMODULE: {
                 XrModule *mod = (XrModule *) hdr;
                 snprintf(buf, sizeof(buf), "<module %s>", mod->name ? mod->name : "?");

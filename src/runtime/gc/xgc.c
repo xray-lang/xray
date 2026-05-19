@@ -63,10 +63,6 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TFUNCTION] = {NULL, xr_gc_traverse_closure, xr_deep_copy_closure_with_ctx,
                       xr_to_shared_closure},
 
-    // StringBuilder — has destroy hook for its internal buffer; only
-    // shareable (no current need to deep-copy across coro).
-    [XR_TSTRINGBUILDER] = {xr_gc_destroy_stringbuilder, NULL, NULL, xr_to_shared_stringbuilder},
-
     // Channels — already shared at construction; pass-through across coro.
     [XR_TCHANNEL] = {xr_gc_destroy_channel, NULL, NULL, NULL},
 

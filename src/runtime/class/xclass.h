@@ -246,6 +246,7 @@ struct XrClass {
 #define XR_CLASS_DYNAMIC_SEALED (1 << 12)   // Dynamic-layout class rejects new field transitions
 #define XR_CLASS_TUPLE (1 << 13)            // Tuple of fixed arity: fields[i] == element i
 #define XR_CLASS_JSON (1 << 14)             // Json dynamic-layout object
+#define XR_CLASS_STRINGBUILDER (1 << 15)    // StringBuilder native-body instance
 
 /* ========== Operator Overload Flags ========== */
 
