@@ -420,6 +420,30 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
     }
 }
 
+XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line) {
+    if (!ctx || !ctx->analyzer || !symbol)
+        return;
+    XaScope *scope = ctx->analyzer->current_scope;
+    if (!scope)
+        return;
+    XaSymbol *existing = symbol->name ? xa_scope_lookup_local(scope, symbol->name) : NULL;
+    if (existing) {
+        bool same_source_symbol = existing->kind == symbol->kind &&
+                                  existing->location.line == symbol->location.line &&
+                                  existing->location.column == symbol->location.column;
+        if (!same_source_symbol) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope", symbol->name);
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = line > 0 ? line : (int) symbol->location.line,
+                              .column = (int) symbol->location.column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_COMPILE_VARIABLE_REDEFINED, msg, &loc);
+        }
+    }
+    xa_scope_add_symbol(scope, symbol);
+}
+
 /* ============================================================================
  * Pass 1: Symbol Collection
  * ============================================================================
@@ -428,10 +452,6 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
  * ========================================================================== */
 
 // xa_visit_collect_function_decl_only / xa_visit_collect_function_body
-// are defined in xanalyzer_visitor_decl.c and declared in
-// xanalyzer_visitor_internal.h.
-
-// Helper: collect statements with function hoisting (two-phase).
 // Cross-TU: also called from xa_visit_collect_function_body() in
 // xanalyzer_visitor_decl.c for nested function bodies.
 void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts, int count) {
@@ -519,7 +539,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         XaSymbol *sym = xa_symbol_new(var_name, XA_SYM_MODULE);
         if (sym) {
             sym->location.line = node->line;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+            xa_visit_add_symbol_checked(ctx, sym, 0);
             import->symbol_id = sym->id;
 
             XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -540,7 +560,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             XaSymbol *sym = xa_symbol_new(local_name, XA_SYM_IMPORT);
             if (sym) {
                 sym->location.line = node->line;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 member->symbol_id = sym->id;
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -589,7 +609,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
                 sym->location.line = node->line;
                 sym->is_const = true;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 edecl->symbol_id = sym->id;
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
@@ -714,7 +734,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
                 sym->alias_type = resolved;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {
@@ -732,7 +752,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(fi->item_name, XA_SYM_VARIABLE);
                 sym->location.line = node->line;
                 sym->is_const = true;  // for-in loop variable is immutable
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 fi->item_symbol_id = sym->id;
                 XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (item_links)
@@ -742,7 +762,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *vsym = xa_symbol_new(fi->value_name, XA_SYM_VARIABLE);
                 vsym->location.line = node->line;
                 vsym->is_const = true;  // for-in loop variable is immutable
-                xa_scope_add_symbol(ctx->analyzer->current_scope, vsym);
+                xa_visit_add_symbol_checked(ctx, vsym, 0);
                 fi->value_symbol_id = vsym->id;
                 XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, vsym);
                 if (val_links)
@@ -794,7 +814,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (tc->catch_var) {
                     XaSymbol *err_sym = xa_symbol_new(tc->catch_var, XA_SYM_VARIABLE);
                     err_sym->location.line = tc->catch_var_line;
-                    xa_scope_add_symbol(ctx->analyzer->current_scope, err_sym);
+                    err_sym->location.column = tc->catch_var_column;
+                    xa_visit_add_symbol_checked(ctx, err_sym, 0);
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
                         err_links->type =
@@ -825,7 +846,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
                 XaSymbol *sym = xa_symbol_new(sc->var_name, XA_SYM_VARIABLE);
                 sym->location.line = node->line;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 sc->var_symbol_id = sym->id;
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links)
@@ -874,7 +895,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                 xa_symbol_new(elem->as.identifier.name, XA_SYM_VARIABLE);
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
-                            xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                            xa_visit_add_symbol_checked(ctx, sym, 0);
                             elem->as.identifier.symbol_id = sym->id;
                         }
                     }
@@ -885,7 +906,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                             XaSymbol *sym = xa_symbol_new(vp->as.identifier.name, XA_SYM_VARIABLE);
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
-                            xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                            xa_visit_add_symbol_checked(ctx, sym, 0);
                             vp->as.identifier.symbol_id = sym->id;
                         }
                     }

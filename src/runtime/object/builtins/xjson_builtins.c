@@ -201,7 +201,7 @@ static XrValue xr_json_builtin_stringify(XrayIsolate *X, XrValue self, XrValue *
 
     XrJsonStringifyResult r = xr_json_stringify_core(X, args[0], indent);
     if (r.has_error) {
-        XrValue exc = xr_exception_newf(X, XR_ERR_TYPE, "Json.stringify: %s", r.error_msg);
+        XrValue exc = xr_exception_newf(X, XR_ERR_JSON_INVALID, "Json.stringify: %s", r.error_msg);
         xr_vm_unwind_with_trace(X, exc);
         return xr_null();
     }

@@ -16,6 +16,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../base/xchecks.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -321,6 +322,40 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
 
 /* ========== Match Expression ========== */
 
+static void lower_match_no_match_throw(XiLower *l, int line) {
+    if (!l || !l->cur_block)
+        return;
+
+    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
+    if (!cls)
+        return;
+    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
+    cls->aux = (void *) "Exception";
+
+    XiValue *msg =
+        xi_const_str(l->func, l->cur_block, "E0440: non-exhaustive match", l->type_string);
+    XiValue *exc = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, exception_type, 2);
+    if (!exc)
+        return;
+    exc->args[0] = cls;
+    exc->args[1] = msg;
+    exc->aux = (void *) "constructor";
+    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    exc->line = (uint32_t) line;
+
+    XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
+    if (!thr)
+        return;
+    thr->args[0] = exc;
+    thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    thr->line = (uint32_t) line;
+    l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+    l->cur_block->control = exc;
+    l->cur_block = NULL;
+}
+
 XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     MatchExprNode *m = &node->as.match_expr;
     XiValue *subject = xi_lower_expr(l, m->expr);
@@ -371,9 +406,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             }
         }
 
-        bool is_last = (i == max_arms - 1);
-
-        if (is_last || !test) {
+        if (!test) {
             XiValue *val = xi_lower_expr(l, arm->body);
             if (l->cur_block) {
                 if (exit_count < 32) {
@@ -383,6 +416,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
                 }
                 xi_block_set_jump(l->cur_block, merge);
             }
+            l->cur_block = NULL;
+            break;
         } else {
             XiBlock *body_blk = xi_block_new(l->func);
             XiBlock *next_blk = xi_block_new(l->func);
@@ -406,12 +441,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     }
 
     if (l->cur_block && l->cur_block != merge) {
-        if (exit_count < 32) {
-            body_exits[exit_count] = l->cur_block;
-            body_vals[exit_count] = xi_const_null(l->func, l->cur_block, l->type_null);
-            exit_count++;
-        }
-        xi_block_set_jump(l->cur_block, merge);
+        lower_match_no_match_throw(l, node->line);
     }
 
     xi_lower_braun_seal(l, merge);

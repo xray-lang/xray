@@ -193,3 +193,19 @@ fn test_match_all_guards_fail() {
     }
     assert_eq(result, "middle")
 }
+
+@test
+fn test_match_no_branch_throws() {
+    let caught = false
+    try {
+        let result = match (99) {
+            1 -> "one"
+            2 -> "two"
+        }
+        assert_eq(result, "unreachable")
+    } catch (e) {
+        caught = true
+        assert(e.message.contains("E0440"))
+    }
+    assert_eq(caught, true)
+}

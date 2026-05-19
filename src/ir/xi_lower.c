@@ -1079,12 +1079,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     else
         prescan_shared_vars(&l, stmts, count, next_shared_start);
 
-    /* Lower function declarations first (hoisting) so they are bound in
-     * their shared slots before any top-level executable code runs.
-     * Matches the analyzer's Pass 1 hoisting and supports forward
-     * references from top-level statements (e.g. `print(fib(5))`
-     * before `fn fib(...)`).  Also hoist functions wrapped in
-     * AST_EXPORT_STMT so `export fn` decls participate equally. */
+    /* Lower top-level declaration values before executable code so forward
+     * references see initialized bindings, not shared-slot null values. */
     for (int i = 0; i < count; i++) {
         if (!l.cur_block)
             break;
@@ -1092,7 +1088,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
         if (!s)
             continue;
         AstNode *decl = (s->type == AST_EXPORT_STMT) ? s->as.export_stmt.declaration : s;
-        if (decl && decl->type == AST_FUNCTION_DECL) {
+        if (decl && (decl->type == AST_FUNCTION_DECL || decl->type == AST_CLASS_DECL ||
+                     decl->type == AST_STRUCT_DECL || decl->type == AST_ENUM_DECL)) {
             xi_lower_stmt(&l, decl);
         }
     }
@@ -1105,7 +1102,8 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
         if (!s)
             continue;
         AstNode *decl = (s->type == AST_EXPORT_STMT) ? s->as.export_stmt.declaration : s;
-        if (decl && decl->type == AST_FUNCTION_DECL)
+        if (decl && (decl->type == AST_FUNCTION_DECL || decl->type == AST_CLASS_DECL ||
+                     decl->type == AST_STRUCT_DECL || decl->type == AST_ENUM_DECL))
             continue; /* already hoisted above */
         xi_lower_stmt(&l, s);
     }

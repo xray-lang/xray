@@ -45,6 +45,7 @@ XR_FUNC void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *n
 XR_FUNC void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node);
 XR_FUNC void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts,
                                                        int count);
+XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line);
 XR_FUNC XrType *resolve_class_to_type_param(XrayIsolate *X, XrType *type, const char **tp_names,
                                             int tp_count);
 XR_FUNC void xa_set_function_type_params_from_ast(XaInferContext *ctx, XrType *fn_type,
