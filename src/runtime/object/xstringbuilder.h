@@ -17,14 +17,18 @@
 #include "../gc/xgc_header.h"
 #include "../value/xvalue.h"
 #include "../xstrbuf.h"
+#include "../class/xinstance.h"
 
 // Forward declarations via xforward_decl.h
 struct XrCoroutine;
 
 // XrStringBuilder - mutable string builder
+// Layout-compatible with XrInstance + native body (0 fields, 8-byte body).
+// GC tag is XR_TINSTANCE; class carries XR_CLASS_STRINGBUILDER flag.
 typedef struct XrStringBuilder {
-    XrGCHeader gc;     // GC header (must be first)
-    XrStrBuf *buffer;  // String buffer
+    XrGCHeader gc;          // GC header (type = XR_TINSTANCE)
+    struct XrClass *klass;  // Points to stringBuilderClass
+    XrStrBuf *buffer;       // Native body: string buffer (at instance body offset)
 } XrStringBuilder;
 
 /* ========== Creation and Destruction ========== */
@@ -71,5 +75,10 @@ XR_FUNC bool xr_is_stringbuilder(XrValue v);
 
 // Convert to StringBuilder pointer
 XR_FUNC XrStringBuilder *xr_to_stringbuilder(XrValue v);
+
+/* ========== Native Body Descriptor ========== */
+
+struct XrNativeBodyDesc;
+XR_FUNC struct XrNativeBodyDesc *xr_stringbuilder_native_body_desc(void);
 
 #endif  // XSTRINGBUILDER_H

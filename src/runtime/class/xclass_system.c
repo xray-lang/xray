@@ -95,8 +95,7 @@ void xr_core_init(XrayIsolate *X) {
     X->core->enumClass = xr_class_new(X, CLASS_NAME_ENUM, X->core->objectClass);
     xr_class_mark_abstract(X->core->enumClass);
 
-    xr_stringbuilder_register_native_type(X);
-    X->core->stringBuilderClass = xr_isolate_get_native_type_class(X, XR_TSTRINGBUILDER);
+    xr_stringbuilder_register_class(X);
 
     // Process class with fields
     {

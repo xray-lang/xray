@@ -151,7 +151,6 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TERROR] = XR_TID_EXCEPTION,
     [XR_TMODULE] = XR_TID_MODULE,
     [XR_TITERATOR] = XR_TID_ITERATOR,
-    [XR_TSTRINGBUILDER] = XR_TID_STRINGBUILDER,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
     [XR_TBIGINT] = XR_TID_BIGINT,
@@ -172,8 +171,12 @@ XrTypeId xr_value_typeid(XrValue v) {
             // XR_TID_JSON so typeof() stays consistent after GC tag removal.
             if (tid == XR_TID_INSTANCE) {
                 XrInstance *inst = (XrInstance *) v.ptr;
-                if (inst->klass && (inst->klass->flags & XR_CLASS_JSON))
-                    return XR_TID_JSON;
+                if (inst->klass) {
+                    if (inst->klass->flags & XR_CLASS_JSON)
+                        return XR_TID_JSON;
+                    if (inst->klass->flags & XR_CLASS_STRINGBUILDER)
+                        return XR_TID_STRINGBUILDER;
+                }
             }
             return tid;
         }

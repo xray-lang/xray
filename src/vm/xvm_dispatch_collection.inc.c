@@ -298,8 +298,9 @@ vmcase(OP_NEWSTRINGBUILDER) {
     if (storage_mode != 0 && isolate->sys_heap) {
         // shared: allocate on system heap
         sb = (XrStringBuilder *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrStringBuilder),
-                                                         XR_TSTRINGBUILDER);
+                                                         XR_TINSTANCE);
         if (sb) {
+            sb->klass = isolate->core->stringBuilderClass;
             xr_stringbuilder_init_inplace(sb);
             XR_GC_SET_STORAGE(&sb->gc, storage_mode);
             if (storage_mode == XR_GC_STORAGE_SHARED) {

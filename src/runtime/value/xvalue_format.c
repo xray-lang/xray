@@ -286,6 +286,21 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, buf, (size_t) n);
                 else
                     xr_strbuf_append_cstr(sb, "<DateTime>", 10);
+            } else if (cls && (cls->flags & XR_CLASS_STRINGBUILDER)) {
+                XrStringBuilder *sbuilder = (XrStringBuilder *) gc;
+                XrString *content = xr_stringbuilder_to_string(sbuilder);
+                if (content && content->length > 0) {
+                    xr_strbuf_append_cstr(sb, "StringBuilder(\"", 15);
+                    if (content->length <= 64) {
+                        xr_strbuf_append_str(sb, content);
+                    } else {
+                        xr_strbuf_append_cstr(sb, content->data, 64);
+                        xr_strbuf_append_cstr(sb, "...", 3);
+                    }
+                    xr_strbuf_append_cstr(sb, "\")", 2);
+                } else {
+                    xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
+                }
             } else if (cls && cls->name) {
                 xr_strbuf_append_cstr(sb, cls->name, strlen(cls->name));
                 xr_strbuf_append_cstr(sb, "{...}", 5);
@@ -356,23 +371,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TITERATOR:
             xr_strbuf_append_cstr(sb, "<iterator>", 10);
             break;
-        case XR_TSTRINGBUILDER: {
-            XrStringBuilder *sbuilder = (XrStringBuilder *) gc;
-            XrString *content = xr_stringbuilder_to_string(sbuilder);
-            if (content && content->length > 0) {
-                xr_strbuf_append_cstr(sb, "StringBuilder(\"", 15);
-                if (content->length <= 64) {
-                    xr_strbuf_append_str(sb, content);
-                } else {
-                    xr_strbuf_append_cstr(sb, content->data, 64);
-                    xr_strbuf_append_cstr(sb, "...", 3);
-                }
-                xr_strbuf_append_cstr(sb, "\")", 2);
-            } else {
-                xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
-            }
-            break;
-        }
         case XR_TCOROPOOL:
             xr_strbuf_append_cstr(sb, "<CoroPool>", 10);
             break;
