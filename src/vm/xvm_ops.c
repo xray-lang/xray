@@ -438,7 +438,8 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
         // Enum value/type instances are singletons keyed by identity:
         // they share one class with zero fields, so field-by-field
         // comparison would incorrectly conflate distinct members.
-        if (ia->klass && (ia->klass->flags & (XR_CLASS_ENUM_VALUE | XR_CLASS_ENUM_TYPE)))
+        if (ia->klass && (ia->klass->builtin_kind == XR_BK_ENUM_VALUE ||
+                          ia->klass->builtin_kind == XR_BK_ENUM_TYPE))
             return ia == ib;
         int fc = ia->klass->field_count;
         for (int i = 0; i < fc; i++) {

@@ -173,6 +173,30 @@ invoke_dispatch:;
         }
     }
 
+    /* ── Enum type: variant access or ADT construction ──
+     * Handles Result.Ok(42) when lowered as OP_INVOKE with receiver=EnumType. */
+    if (XR_IS_ENUM_TYPE(receiver)) {
+        XrEnumType *etype = XR_TO_ENUM_TYPE(receiver);
+        XrEnumValue *eval = xr_enum_get_member_by_symbol(etype, method_symbol);
+        if (eval) {
+            if (etype->is_adt && etype->payload_counts &&
+                etype->payload_counts[eval->member_index] > 0 && nargs > 0) {
+                XrInstance *inst =
+                    xr_enum_adt_construct(isolate, etype, eval->member_index, &R(a + 2), nargs);
+                if (!inst) {
+                    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
+                                     etype->name, eval->member_name);
+                }
+                R(a) = XR_FROM_PTR(inst);
+            } else {
+                /* Simple enum member access or zero-payload ADT variant */
+                R(a) = XR_FROM_PTR(eval);
+            }
+            vmbreak;
+        }
+        /* Fall through to class-based dispatch for enum methods (toString etc.) */
+    }
+
     /* ── Class constructor / static method (creates instance) ── */
     if (xr_value_is_class(receiver)) {
         xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
@@ -229,7 +253,7 @@ invoke_dispatch:;
 
         /* Enum special routing (enum values/types use hardcoded methods
          * that access native body fields directly) */
-        if (klass->flags & (XR_CLASS_ENUM_VALUE | XR_CLASS_ENUM_TYPE)) {
+        if (klass->builtin_kind == XR_BK_ENUM_VALUE || klass->builtin_kind == XR_BK_ENUM_TYPE) {
             int _cr = vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
             if (_cr == VM_COLD_BREAK)
                 vmbreak;

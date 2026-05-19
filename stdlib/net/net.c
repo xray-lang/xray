@@ -256,20 +256,20 @@ static XR_THREAD_LOCAL XrNetAddr g_udp_recv_addr;
 
 /*
  * Handle type checks. Validates GC type is XR_TINSTANCE and the
- * class carries the expected flag.
+ * class has the expected builtin_kind.
  */
 static inline bool is_conn_handle(XrValue v) {
     if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
         return false;
     XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_NETCONN);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_NETCONN;
 }
 
 static inline bool is_listener_handle(XrValue v) {
     if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
         return false;
     XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_NETLISTENER);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_NETLISTENER;
 }
 
 static inline XrNetConn *unwrap_conn(XrValue v) {
@@ -1531,7 +1531,8 @@ void xr_netconn_register_class(XrayIsolate *isolate) {
 
     XrClass *cls = xr_class_builder_finalize(b);
     XR_CHECK(cls != NULL, "netconn_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_NETCONN;
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_NETCONN;
     core->netConnClass = cls;
 }
 
@@ -1552,7 +1553,8 @@ void xr_netlistener_register_class(XrayIsolate *isolate) {
 
     XrClass *cls = xr_class_builder_finalize(b);
     XR_CHECK(cls != NULL, "netlistener_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_NETLISTENER;
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_NETLISTENER;
     core->netListenerClass = cls;
 }
 

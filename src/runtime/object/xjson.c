@@ -50,7 +50,7 @@ XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
     XrayIsolate *X = xr_coro_get_isolate(coro);
 
     // Json objects are XR_TINSTANCE with a dynamic-layout class carrying
-    // XR_CLASS_JSON; xr_value_is_json checks the class flag.
+    // builtin_kind == XR_BK_JSON; xr_value_is_json checks this field.
     size_t size = xr_instance_size(cls);
     XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TINSTANCE);
     if (!json)

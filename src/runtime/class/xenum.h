@@ -20,7 +20,7 @@
 
 // Singleton enum member (e.g., Status.Success)
 // Layout-compatible with XrInstance + native body (0 fields).
-// GC tag is XR_TINSTANCE; class carries XR_CLASS_ENUM_VALUE flag.
+// GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_VALUE.
 typedef struct XrEnumValue {
     XrGCHeader gc;
     struct XrClass *klass;  // Points to enumValueClass
@@ -34,7 +34,7 @@ typedef struct XrEnumValue {
 
 // Enum type metadata (immutable at runtime)
 // Layout-compatible with XrInstance + native body (0 fields).
-// GC tag is XR_TINSTANCE; class carries XR_CLASS_ENUM_TYPE flag.
+// GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_TYPE.
 typedef struct XrEnumType {
     XrGCHeader gc;
     struct XrClass *klass;  // Points to enumTypeClass

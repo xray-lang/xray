@@ -110,7 +110,7 @@ deep_compare: {
     }
     if (XR_GC_GET_TYPE(gc_a) == XR_TINSTANCE) {
         XrInstance *ia = (XrInstance *) gc_a;
-        if (ia->klass && (ia->klass->flags & XR_CLASS_JSON))
+        if (ia->klass && ia->klass->builtin_kind == XR_BK_JSON)
             return xr_json_equals_deep(a, b);
     }
     if (XR_GC_GET_TYPE(gc_a) == XR_TARRAY) {
@@ -129,28 +129,28 @@ bool xr_value_is_enum_type(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_ENUM_TYPE);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE;
 }
 
 bool xr_value_is_enum_value(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_ENUM_VALUE);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_VALUE;
 }
 
 bool xr_value_is_iterator(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_ITERATOR);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR;
 }
 
 bool xr_value_is_bigint(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_BIGINT);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_BIGINT;
 }
 
 /* ========== Unified Type ID ========== */
@@ -193,29 +193,33 @@ XrTypeId xr_value_typeid(XrValue v) {
         uint8_t gctype = XR_GC_GET_TYPE((XrGCHeader *) v.ptr);
         if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0])) {
             XrTypeId tid = gctype_to_typeid[gctype];
-            // Refine XR_TINSTANCE: Json dynamic-layout instances report
-            // XR_TID_JSON so typeof() stays consistent after GC tag removal.
+            // Refine XR_TINSTANCE via builtin_kind (single switch instead
+            // of a chain of flag bit-tests).
             if (tid == XR_TID_INSTANCE) {
                 XrInstance *inst = (XrInstance *) v.ptr;
                 if (inst->klass) {
-                    if (inst->klass->flags & XR_CLASS_JSON)
-                        return XR_TID_JSON;
-                    if (inst->klass->flags & XR_CLASS_STRINGBUILDER)
-                        return XR_TID_STRINGBUILDER;
-                    if (inst->klass->flags & XR_CLASS_ENUM_VALUE)
-                        return XR_TID_ENUM_VALUE;
-                    if (inst->klass->flags & XR_CLASS_ENUM_TYPE)
-                        return XR_TID_ENUM_TYPE;
-                    if (inst->klass->flags & XR_CLASS_ITERATOR)
-                        return XR_TID_ITERATOR;
-                    if (inst->klass->flags & XR_CLASS_REGEX)
-                        return XR_TID_REGEX;
-                    if (inst->klass->flags & XR_CLASS_NETCONN)
-                        return XR_TID_NETCONN;
-                    if (inst->klass->flags & XR_CLASS_NETLISTENER)
-                        return XR_TID_NETLISTENER;
-                    if (inst->klass->flags & XR_CLASS_BIGINT)
-                        return XR_TID_BIGINT;
+                    switch (inst->klass->builtin_kind) {
+                        case XR_BK_JSON:
+                            return XR_TID_JSON;
+                        case XR_BK_STRINGBUILDER:
+                            return XR_TID_STRINGBUILDER;
+                        case XR_BK_ENUM_VALUE:
+                            return XR_TID_ENUM_VALUE;
+                        case XR_BK_ENUM_TYPE:
+                            return XR_TID_ENUM_TYPE;
+                        case XR_BK_ITERATOR:
+                            return XR_TID_ITERATOR;
+                        case XR_BK_REGEX:
+                            return XR_TID_REGEX;
+                        case XR_BK_NETCONN:
+                            return XR_TID_NETCONN;
+                        case XR_BK_NETLISTENER:
+                            return XR_TID_NETLISTENER;
+                        case XR_BK_BIGINT:
+                            return XR_TID_BIGINT;
+                        default:
+                            break;
+                    }
                 }
             }
             return tid;

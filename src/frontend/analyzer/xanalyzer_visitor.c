@@ -1127,6 +1127,12 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_MOVE_EXPR:
             result = xa_visit_move_expr(ctx, node);
             break;
+        case AST_CATCH_EXPR:
+            /* Visit body for symbol resolution */
+            if (node->as.catch_expr.body)
+                xa_visit_infer_expr(ctx, node->as.catch_expr.body);
+            result = xr_type_new_named_instance(ctx->analyzer->isolate, "Result");
+            break;
         case AST_SUPER_CALL: {
             /* Visit all arguments to resolve symbol_ids. */
             for (int si = 0; si < node->as.super_call.arg_count; si++) {

@@ -1216,6 +1216,7 @@ void xr_register_datetime_class(XrayIsolate *isolate) {
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "register_datetime_class: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_DATETIME;
 
     core->dateTimeClass = cls;
     g_datetime_body_offset = xr_instance_body_offset(cls);

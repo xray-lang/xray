@@ -141,6 +141,7 @@ struct AstNode {
         ScopeBlockNode scope_block;
         CancelledExprNode cancelled_expr;
         MoveExprNode move_expr;
+        CatchExprNode catch_expr;
         ProgramNode program;
     } as;
 };

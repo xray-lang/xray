@@ -229,4 +229,10 @@ typedef struct CancelledExprNode {
     int placeholder;
 } CancelledExprNode;
 
+// catch! { body } expression — evaluates body, returns Result.Ok(value)
+// on success and Result.Err(exception) on throw.
+typedef struct CatchExprNode {
+    AstNode *body;  // block to execute
+} CatchExprNode;
+
 #endif  // XAST_NODES_STMT_H

@@ -316,6 +316,7 @@ void xr_register_exception_class(XrayIsolate *X) {
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "register_exception_class: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN;
+    cls->builtin_kind = XR_BK_EXCEPTION;
 
     /* Sanity-check that builder layout matches the indices the entire VM
      * relies on. If finalize ever reorders fields these asserts trip

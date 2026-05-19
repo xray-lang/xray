@@ -84,13 +84,13 @@ static inline XrValue xr_json_value(XrJson *json) {
     return XR_FROM_PTR(json);
 }
 
-// A Json is any instance whose class carries XR_CLASS_JSON — this covers
-// the root class and all hidden-class transitions derived from it.
+// A Json is any instance whose class has builtin_kind == XR_BK_JSON — this
+// covers the root class and all hidden-class transitions derived from it.
 static inline bool xr_value_is_json(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_JSON);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
 }
 
 static inline XrJson *xr_value_to_json(XrValue v) {

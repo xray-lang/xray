@@ -185,6 +185,7 @@ void xr_register_range_class(XrayIsolate *X) {
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "register_range_class: finalize failed");
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_RANGE;
 
     core->rangeClass = cls;
 }

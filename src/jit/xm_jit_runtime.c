@@ -827,7 +827,7 @@ XrJitResult xr_jit_map_get(XrCoroutine *coro, int64_t extra_arg) {
             result = xr_null();
     } else if (hdr->type == XR_TINSTANCE && XR_IS_PTR(key)) {
         XrInstance *inst = (XrInstance *) obj;
-        if (inst->klass && (inst->klass->flags & XR_CLASS_JSON)) {
+        if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
             XrString *key_str = (XrString *) key.ptr;
             result = xr_json_get_by_key(coro->isolate, (XrJson *) obj, key_str->data);
         }
@@ -852,7 +852,7 @@ XrJitResult xr_jit_map_set(XrCoroutine *coro, int64_t extra_arg) {
         xr_map_set(map, key, val);
     } else if (hdr->type == XR_TINSTANCE && XR_IS_PTR(key)) {
         XrInstance *inst = (XrInstance *) obj;
-        if (inst->klass && (inst->klass->flags & XR_CLASS_JSON)) {
+        if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
             XrString *key_str = (XrString *) key.ptr;
             if (!xr_json_set_by_key(coro->isolate, (XrJson *) obj, key_str->data, val)) {
                 return (XrJitResult) {XM_DEOPT_MARKER, 0};

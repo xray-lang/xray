@@ -217,7 +217,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
             XrInstance *inst = xr_value_to_instance(val);
             XrClass *cls = xr_instance_get_class(inst);
             /* BigInt: decimal string representation */
-            if (cls && (cls->flags & XR_CLASS_BIGINT)) {
+            if (cls && cls->builtin_kind == XR_BK_BIGINT) {
                 char *s = xr_bigint_to_string((XrBigInt *) gc);
                 if (s) {
                     xr_strbuf_append_cstr(sb, s, strlen(s));
@@ -228,7 +228,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 break;
             }
             /* EnumValue: "EnumName.MemberName" */
-            if (cls && (cls->flags & XR_CLASS_ENUM_VALUE)) {
+            if (cls && cls->builtin_kind == XR_BK_ENUM_VALUE) {
                 XrEnumValue *ev = (XrEnumValue *) gc;
                 if (ev->enum_name && ev->member_name) {
                     xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
@@ -240,7 +240,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 break;
             }
             /* EnumType: "enum Name" */
-            if (cls && (cls->flags & XR_CLASS_ENUM_TYPE)) {
+            if (cls && cls->builtin_kind == XR_BK_ENUM_TYPE) {
                 XrEnumType *et = (XrEnumType *) gc;
                 xr_strbuf_append_cstr(sb, "enum ", 5);
                 if (et->name)
@@ -248,12 +248,12 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 break;
             }
             /* Json: recursive key-value format. */
-            if (cls && (cls->flags & XR_CLASS_JSON)) {
+            if (cls && cls->builtin_kind == XR_BK_JSON) {
                 format_json(isolate, sb, (XrJson *) gc, depth);
                 break;
             }
             /* Tuple: parenthesised form, matches the literal syntax. */
-            if (cls && (cls->flags & XR_CLASS_TUPLE)) {
+            if (cls && cls->builtin_kind == XR_BK_TUPLE) {
                 format_tuple(isolate, sb, (XrTuple *) inst, depth);
                 break;
             }
@@ -289,7 +289,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, buf, (size_t) n);
                 else
                     xr_strbuf_append_cstr(sb, "<DateTime>", 10);
-            } else if (cls && (cls->flags & XR_CLASS_REGEX)) {
+            } else if (cls && cls->builtin_kind == XR_BK_REGEX) {
                 struct XrRegex *re = xr_value_to_regex(val);
                 const char *pat = re ? xr_regex_pattern(re) : NULL;
                 if (pat) {
@@ -299,9 +299,9 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 } else {
                     xr_strbuf_append_cstr(sb, "<Regex>", 7);
                 }
-            } else if (cls && (cls->flags & XR_CLASS_ITERATOR)) {
+            } else if (cls && cls->builtin_kind == XR_BK_ITERATOR) {
                 xr_strbuf_append_cstr(sb, "<iterator>", 10);
-            } else if (cls && (cls->flags & XR_CLASS_STRINGBUILDER)) {
+            } else if (cls && cls->builtin_kind == XR_BK_STRINGBUILDER) {
                 XrStringBuilder *sbuilder = (XrStringBuilder *) gc;
                 XrString *content = xr_stringbuilder_to_string(sbuilder);
                 if (content && content->length > 0) {
@@ -316,7 +316,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 } else {
                     xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
                 }
-            } else if (cls && (cls->flags & XR_CLASS_ADT_ENUM)) {
+            } else if (cls && cls->builtin_kind == XR_BK_ADT_ENUM) {
                 /* ADT enum instance: fields[0]=XrEnumValue*, fields[1..N]=payload.
                  * Format as "EnumName.Variant(p1, p2, ...)" */
                 XrValue tag_val = inst->fields[0];

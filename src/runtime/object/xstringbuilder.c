@@ -141,7 +141,7 @@ bool xr_is_stringbuilder(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_STRINGBUILDER);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER;
 }
 
 XrStringBuilder *xr_to_stringbuilder(XrValue v) {

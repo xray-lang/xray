@@ -460,6 +460,7 @@ void xr_iterator_register_class(XrayIsolate *X) {
 
     XrClass *cls = xr_class_builder_finalize(b);
     XR_CHECK(cls != NULL, "iterator_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_ITERATOR;
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_ITERATOR;
     core->iteratorClass = cls;
 }

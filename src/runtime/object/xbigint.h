@@ -15,7 +15,7 @@
  *   ┌─────────────────────┐
  *   │ XrGCHeader (16B)    │ GC header (type = XR_TINSTANCE)
  *   ├─────────────────────┤
- *   │ klass (8B)          │ XrClass* with XR_CLASS_BIGINT flag
+ *   │ klass (8B)          │ XrClass* with builtin_kind == XR_BK_BIGINT
  *   ├─────────────────────┤
  *   │ sign (1B)           │ sign: 1 or -1
  *   │ padding (3B)        │ alignment padding
@@ -45,7 +45,7 @@ struct XrCoroutine;
 // Sign: 1 = positive/zero, -1 = negative
 typedef struct XrBigInt {
     XrGCHeader gc;          // GC header (must be first)
-    struct XrClass *klass;  // unified class (XR_CLASS_BIGINT flag)
+    struct XrClass *klass;  // unified class (builtin_kind == XR_BK_BIGINT)
     int8_t sign;            // sign: 1 or -1
     uint8_t _pad1[3];       // alignment padding
     uint32_t len;           // current limb count

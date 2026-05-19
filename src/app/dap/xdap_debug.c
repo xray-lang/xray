@@ -301,7 +301,7 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                 break;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) hdr;
-                if (inst->klass && (inst->klass->flags & XR_CLASS_STRINGBUILDER)) {
+                if (inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER) {
                     XrStringBuilder *sb = (XrStringBuilder *) hdr;
                     size_t len = xr_stringbuilder_length(sb);
                     if (len <= 50) {
@@ -315,11 +315,11 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                     } else {
                         snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
                     }
-                } else if (inst->klass && (inst->klass->flags & XR_CLASS_ENUM_TYPE)) {
+                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
                     snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
-                } else if (inst->klass && (inst->klass->flags & XR_CLASS_ENUM_VALUE)) {
+                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
                     snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
-                } else if (inst->klass && (inst->klass->flags & XR_CLASS_ITERATOR)) {
+                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR) {
                     snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
                 } else {
                     const char *class_name = xr_class_display_name(inst->klass);

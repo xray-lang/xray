@@ -207,6 +207,7 @@ typedef enum {
     AST_YIELD_STMT,      // yield - give up execution
     AST_CANCELLED_EXPR,  // cancelled() check
     AST_MOVE_EXPR,       // move var - explicit ownership transfer
+    AST_CATCH_EXPR,      // catch! { body } — wraps body in Result.Ok/Err
 
     // Program node
     AST_PROGRAM  // Root node

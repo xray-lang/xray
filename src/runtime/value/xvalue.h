@@ -155,7 +155,7 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_CLASS(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCLASS)
 #define XR_IS_INSTANCE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TINSTANCE)
 #define XR_IS_BOUND_METHOD(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBOUND_METHOD)
-// Enum checks require class flag inspection; implemented in xvalue.c.
+// Enum checks use builtin_kind; implemented in xvalue.c.
 XR_FUNC bool xr_value_is_enum_type(XrValue v);
 XR_FUNC bool xr_value_is_enum_value(XrValue v);
 #define XR_IS_ENUM_TYPE(v) xr_value_is_enum_type(v)
@@ -167,17 +167,16 @@ XR_FUNC bool xr_value_is_enum_value(XrValue v);
 /* Range is no longer a dedicated GC type; use xr_value_is_range(iso, v)
  * from xrange.h which walks the class super-chain. */
 #define XR_IS_MODULE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMODULE)
-/* Iterator is no longer a dedicated GC type; check the class flag.
+/* Iterator is no longer a dedicated GC type; check builtin_kind.
  * Implementation in xvalue.c keeps the XrInstance layout out of this
  * header (consumers don't need to include xclass.h / xinstance.h). */
 XR_FUNC bool xr_value_is_iterator(XrValue v);
 #define XR_IS_ITERATOR(v) xr_value_is_iterator(v)
-/* BigInt is no longer a dedicated GC type; check the XR_CLASS_BIGINT
- * flag on the instance's class. */
+/* BigInt is no longer a dedicated GC type; check builtin_kind. */
 XR_FUNC bool xr_value_is_bigint(XrValue v);
 #define XR_IS_BIGINT(v) xr_value_is_bigint(v)
 /* Json is no longer a dedicated GC type; use xr_value_is_json(v)
- * from xjson.h which checks the XR_CLASS_JSON flag on the instance's class. */
+ * from xjson.h which checks builtin_kind on the instance's class. */
 #define XR_IS_STRUCT_REF(v) ((v).tag == XR_TAG_STRUCT_REF)
 /* DateTime is no longer a dedicated GC type; use xr_value_is_datetime(iso, v)
  * from datetime.h which walks the class super-chain. */
@@ -186,8 +185,8 @@ XR_FUNC bool xr_value_is_bigint(XrValue v);
  * XR_IS_EXCEPTION macro and XR_TEXCEPTION enumerator are gone. */
 #define XR_IS_ERROR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TERROR)
 /* Tuple is no longer a dedicated GC type; use xr_value_is_tuple(v)
- * from xtuple.h which checks the XR_CLASS_TUPLE flag on the instance's
- * class. Callers that have already established is_tuple may cast the
+ * from xtuple.h which checks builtin_kind on the instance's class.
+ * Callers that have already established is_tuple may cast the
  * instance pointer directly. */
 
 /* ========== Struct Ref ========== */
