@@ -953,7 +953,7 @@ AstNode *xr_parse_return_statement(Parser *parser) {
     // Comma after the return expression is the obsolete multi-value
     // form. Redirect users to the tuple equivalent.
     if (xr_parser_check(parser, TK_COMMA)) {
-        xr_parser_error(parser, "multi-value return is not supported; "
+        xr_parser_error(parser, "[E0801] multi-value return is not supported; "
                                 "use a tuple: `return (a, b)`");
         return NULL;
     }
