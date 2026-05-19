@@ -240,8 +240,11 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                     return 0;
                 }
 
-                case XR_TJSON: {
-                    // Direct binary encoding: [count 4B] [key_len 2B, key, value] ...
+                case XR_TINSTANCE: {
+                    // Json dynamic-layout instances carry XR_CLASS_JSON
+                    XrInstance *_cinst = (XrInstance *) value.ptr;
+                    if (!_cinst->klass || !(_cinst->klass->flags & XR_CLASS_JSON))
+                        return -1;  // non-Json instances are not serializable
                     XrJson *json = (XrJson *) value.ptr;
                     buf_put_u8(buf, XR_STAG_JSON);
 

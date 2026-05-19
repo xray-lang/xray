@@ -26,7 +26,7 @@ extern "C" {
 #endif
 
 struct XrayIsolate;
-XR_FUNC void xr_json_register_native_type(struct XrayIsolate *isolate);
+XR_FUNC void xr_json_register_instance_methods(struct XrayIsolate *isolate);
 
 #ifdef __cplusplus
 }

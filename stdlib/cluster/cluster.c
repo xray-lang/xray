@@ -891,7 +891,7 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
 // call — cluster_start_ex copies them into OpenSSL contexts before it
 // returns, so no lifetime surprise.
 static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0]))
+    if (argc < 1 || !xr_value_is_json(args[0]))
         return xr_null();
 
     XrJson *config = (XrJson *) XR_TO_PTR(args[0]);
@@ -915,7 +915,7 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
     const XrClusterTlsOptions *tls_ptr = NULL;
 
     XrValue v_tls = xr_json_get_by_key(X, config, "tls");
-    if (XR_IS_JSON(v_tls)) {
+    if (xr_value_is_json(v_tls)) {
         XrJson *tls_cfg = (XrJson *) XR_TO_PTR(v_tls);
 
         XrValue v_enabled = xr_json_get_by_key(X, tls_cfg, "enabled");
@@ -1065,7 +1065,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     const char *from_name;
     XrValue result;
 
-    if (argc >= 2 && XR_IS_JSON(args[0])) {
+    if (argc >= 2 && xr_value_is_json(args[0])) {
         // Simplified form: cluster.reply(req, result)
         XrJson *req = (XrJson *) XR_TO_PTR(args[0]);
         result = args[1];

@@ -498,7 +498,7 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     }
 
     // Get connection
-    if (!XR_IS_JSON(args[0])) {
+    if (!xr_value_is_json(args[0])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
@@ -709,7 +709,7 @@ static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *r
  *   args[1]: timeout in milliseconds (optional, -1 = infinite)
  */
 static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         *result = xr_null();
         return XR_CFUNC_ERROR;
     }
@@ -848,7 +848,7 @@ static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, void *cont
  * Returns null on close/error/timeout.
  */
 static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
@@ -919,7 +919,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx)
         return xr_bool(false);
 
-    if (!XR_IS_JSON(args[0]))
+    if (!xr_value_is_json(args[0]))
         return xr_bool(false);
 
     XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
@@ -980,7 +980,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
  * Send ping frame.
  */
 static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_bool(false);
     }
 
@@ -1007,7 +1007,7 @@ static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
  * Get connection state: "connecting", "open", "closing", "closed"
  */
 static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         return xrs_string_value_c(X, "closed");
     }
 
@@ -1045,7 +1045,7 @@ static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
  * Check if connection is open.
  */
 static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_bool(false);
     }
 

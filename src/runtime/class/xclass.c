@@ -158,7 +158,7 @@ XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t ca
     if (!cls)
         return NULL;
     cls->name = name;
-    cls->flags = XR_CLASS_DYNAMIC_LAYOUT | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
+    cls->flags = XR_CLASS_DYNAMIC_LAYOUT | XR_CLASS_JSON | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
     cls->in_object_capacity = capacity;
     cls->field_count = 0;
     cls->own_field_count = 0;

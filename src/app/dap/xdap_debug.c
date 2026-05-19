@@ -282,7 +282,7 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
     } else if (XR_IS_SET(val)) {
         void *ptr = XR_TO_PTR(val);
         snprintf(buf, sizeof(buf), "Set{...} @%p", ptr);
-    } else if (XR_IS_JSON(val)) {
+    } else if (xr_value_is_json(val)) {
         XrJson *json = xr_value_to_json(val);
         int count = xr_json_field_count(isolate, json);
         snprintf(buf, sizeof(buf), "Object(%d) @%p", count, (void *) json);
@@ -320,9 +320,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TREGEX:
                 snprintf(buf, sizeof(buf), "<regex> @%p", (void *) hdr);
                 break;
-            case XR_TDATETIME:
-                snprintf(buf, sizeof(buf), "<datetime> @%p", (void *) hdr);
-                break;
             case XR_TSTRINGBUILDER: {
                 XrStringBuilder *sb = (XrStringBuilder *) hdr;
                 size_t len = xr_stringbuilder_length(sb);
@@ -350,9 +347,7 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TERROR:
                 snprintf(buf, sizeof(buf), "<error> @%p", (void *) hdr);
                 break;
-            case XR_TEXCEPTION:
-                snprintf(buf, sizeof(buf), "<exception> @%p", (void *) hdr);
-                break;
+            /* Exception uses XR_TINSTANCE — handled in the instance path */
             case XR_TENUM_TYPE:
                 snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
                 break;

@@ -52,8 +52,13 @@ typedef struct XrayCoreClasses {
     // Enum
     XrClass *enumClass;
 
-    // Json utility (static methods only)
+    // Json utility (static methods only: Json.parse, Json.stringify, etc.)
     XrClass *jsonClass;
+
+    // Json instance methods (iterator, toString, keys, values, has, etc.).
+    // Wired as jsonRootClass->super so dynamic-layout instances find these
+    // methods via normal class-chain lookup.
+    XrClass *jsonInstanceMethodClass;
 
     // Dynamic-layout root classes for Json objects.
     // jsonRootClass: open Json (transitions create child classes on field add)
@@ -65,10 +70,29 @@ typedef struct XrayCoreClasses {
     // Exception (populated when stdlib/types/exception.xr is loaded)
     XrClass *exceptionClass;
 
+    // Native-body migrated types
+    XrClass *rangeClass;
+    XrClass *dateTimeClass;
+    XrClass *loggerClass;
+
+    // Tuples: one XrClass per arity (lazy-built on first use). Each class
+    // declares N untyped fields whose slot is tuple element i. Arities
+    // above XR_TUPLE_CLASS_PREALLOC fall back to a slower lookup map.
+    XrClass *tupleClassesSmall[32];
+
     // Utility
     XrClass *stringBuilderClass;
     XrClass *processClass;
 } XrayCoreClasses;
+
+#define XR_TUPLE_CLASS_PREALLOC 32
+
+/* Return the cached tuple class for `arity`, creating it on demand.
+ * Returns NULL on allocation failure. Arities up to
+ * XR_TUPLE_CLASS_PREALLOC-1 hit the inline cache slot directly; larger
+ * arities allocate a fresh class each call (cold path, never measured
+ * to matter in practice). */
+XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity);
 
 /* Exception field indices — must match stdlib/types/exception.xr layout */
 #define EXCEPTION_FIELD_MESSAGE 0

@@ -58,17 +58,10 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
                  xr_to_shared_map},
     [XR_TSET] = {xr_gc_destroy_set, xr_gc_traverse_set, xr_deep_copy_set_with_ctx,
                  xr_to_shared_set},
-    // Json is structurally XrInstance with a dynamic-layout class; route
-    // every lifecycle op through the unified instance handlers.
-    [XR_TJSON] = {xr_gc_destroy_instance, xr_gc_traverse_instance, xr_deep_copy_instance_with_ctx,
-                  xr_to_shared_instance},
     [XR_TINSTANCE] = {xr_gc_destroy_instance, xr_gc_traverse_instance,
                       xr_deep_copy_instance_with_ctx, xr_to_shared_instance},
     [XR_TFUNCTION] = {NULL, xr_gc_traverse_closure, xr_deep_copy_closure_with_ctx,
                       xr_to_shared_closure},
-
-    // Datetime — leaf payload, but shareable / cloneable (memcpy body).
-    [XR_TDATETIME] = {NULL, NULL, xr_deep_copy_datetime_with_ctx, xr_to_shared_datetime},
 
     // StringBuilder — has destroy hook for its internal buffer; only
     // shareable (no current need to deep-copy across coro).
@@ -82,13 +75,11 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     // dispatchers return the raw value, matching the pre-table default).
     [XR_TCOROUTINE] = {xr_gc_destroy_coroutine, NULL, NULL, NULL},
     [XR_TREGEX] = {regex_object_destroy, NULL, NULL, NULL},
-    [XR_TLOGGER] = {xr_gc_destroy_logger, NULL, NULL, NULL},
     [XR_TTASK] = {xr_gc_destroy_task, xr_gc_traverse_task, NULL, NULL},
     [XR_TITERATOR] = {NULL, xr_gc_traverse_iterator, NULL, NULL},
     [XR_TCELL] = {NULL, xr_gc_traverse_cell, NULL, NULL},
     [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
     [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},
-    [XR_TEXCEPTION] = {NULL, xr_gc_traverse_exception, NULL, NULL},
     [XR_TERROR] = {NULL, xr_gc_traverse_error, NULL, NULL},
     [XR_TENUM_TYPE] = {xr_gc_destroy_enum_type, NULL, NULL, NULL},
     [XR_TENUM_VALUE] = {xr_gc_destroy_enum_value, NULL, NULL, NULL},
@@ -100,12 +91,7 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TNETCONN] = {xr_gc_destroy_net_conn, NULL, NULL, NULL},
     [XR_TNETLISTENER] = {xr_gc_destroy_net_listener, NULL, NULL, NULL},
 
-    // Tuple — single Immix block (header + flexible XrValue array). No
-    // side resources, so no destroy hook; traverse scans elements as
-    // potential GC roots.
-    [XR_TTUPLE] = {NULL, xr_gc_traverse_tuple, NULL, NULL},
-
-    // XR_TRANGE / XR_TBLOB / XR_TSTRING are pure leaves with no
+    // XR_TBLOB / XR_TSTRING are pure leaves with no
     // capabilities; their slots are zero-initialised by default.
 };
 

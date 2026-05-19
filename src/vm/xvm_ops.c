@@ -21,6 +21,7 @@
 #include "../module/xmodule.h"
 #include "../runtime/object/xstringbuilder.h"
 #include "../runtime/object/xrange.h"
+#include "../runtime/object/xjson.h"
 #include <stdlib.h>
 #include <time.h>
 
@@ -468,7 +469,7 @@ bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b) {
             return false;
         return memcmp(xr_value_str_data(&a), xr_value_str_data(&b), la) == 0;
     }
-    if (XR_IS_JSON(a) && XR_IS_JSON(b))
+    if (xr_value_is_json(a) && xr_value_is_json(b))
         return xr_value_deep_eq(a, b);
 
     // BigInt equality

@@ -402,16 +402,9 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
 // xr_deep_copy_json_with_ctx removed: Json values flow through
 // xr_deep_copy_instance_with_ctx via the unified g_type_ops dispatch.
 
-// DateTime has no child GC references, shallow copy of the payload
-// suffices. Exposed so g_type_ops can dispatch to it directly.
-XrValue xr_deep_copy_datetime_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
-    XrGCHeader *copy = (XrGCHeader *) copy_ctx_alloc(ctx, obj->objsize, XR_TDATETIME);
-    if (!copy)
-        return XR_NULL_VAL;
-    memcpy((char *) copy + sizeof(XrGCHeader), (char *) obj + sizeof(XrGCHeader),
-           obj->objsize - sizeof(XrGCHeader));
-    return XR_FROM_PTR(copy);
-}
+// DateTime is now an XrInstance with native body — deep copy flows
+// through xr_deep_copy_instance_with_ctx via the unified g_type_ops
+// dispatch.
 
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
@@ -724,21 +717,6 @@ XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
     XR_GC_SET_STORAGE(&new_cl->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_cl->gc, 1);
     return XR_FROM_PTR(new_cl);
-}
-
-XrValue xr_to_shared_datetime(struct XrayIsolate *X, XrGCHeader *obj) {
-    if (!obj || !xr_isolate_get_sys_heap(X))
-        return XR_NULL_VAL;
-    XrGCHeader *new_dt = (XrGCHeader *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X),
-                                                                obj->objsize, XR_TDATETIME);
-    if (!new_dt)
-        return XR_NULL_VAL;
-    // DateTime has no GC child references, memcpy the payload
-    memcpy((char *) new_dt + sizeof(XrGCHeader), (char *) obj + sizeof(XrGCHeader),
-           obj->objsize - sizeof(XrGCHeader));
-    XR_GC_SET_STORAGE(new_dt, XR_GC_STORAGE_SHARED);
-    xr_shared_set_refc(new_dt, 1);
-    return XR_FROM_PTR(new_dt);
 }
 
 XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
