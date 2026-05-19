@@ -2491,13 +2491,13 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
     return phi ? &phi->value : null_val;
 }
 
-/* expr! — force unwrap nullable; runtime null-check then pass-through */
+/* expr! — force unwrap nullable; runtime null-check then pass-through.
+ * Throws Exception(E0413, "Attempted to unwrap a null value") on null. */
 static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     XiValue *val = xi_lower_expr(l, node->as.unary.operand);
     if (!val)
         return NULL;
     struct XrType *result_type = xi_lower_node_type(l, node);
-    /* Emit a null-check that throws on null, otherwise returns val */
     XiValue *chk = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
     if (!chk)
         return val;
@@ -2509,16 +2509,41 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, throw_blk);
     xi_lower_braun_seal(l, ok_blk);
 
-    /* Throw path */
+    /* Throw path: construct Exception(E0413) and throw */
     l->cur_block = throw_blk;
-    XiValue *msg =
-        xi_const_str(l->func, l->cur_block, "force unwrap of null value", l->type_string);
+    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
+    if (!cls) {
+        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+        l->cur_block = ok_blk;
+        return val;
+    }
+    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
+    cls->aux = (void *) "Exception";
+
+    XiValue *msg = xi_const_str(l->func, l->cur_block, "E0413: Attempted to unwrap a null value",
+                                l->type_string);
+    XiValue *exc = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, exception_type, 2);
+    if (!exc) {
+        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+        l->cur_block = ok_blk;
+        return val;
+    }
+    exc->args[0] = cls;
+    exc->args[1] = msg;
+    exc->aux = (void *) "constructor";
+    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    exc->line = (uint32_t) node->line;
+
     XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
     if (thr) {
-        thr->args[0] = msg;
+        thr->args[0] = exc;
         thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        thr->line = (uint32_t) node->line;
     }
     l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+    l->cur_block->control = exc;
 
     /* Ok path */
     l->cur_block = ok_blk;

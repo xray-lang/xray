@@ -249,8 +249,20 @@ static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrV
         inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
     }
 
-    // code: int = 0 (only the C runtime sets non-zero codes)
-    inst->fields[EXCEPTION_FIELD_CODE] = xr_int(0);
+    // code: int — auto-detect from "E0xxx: ..." message prefix, else 0.
+    int code = 0;
+    if (msg_str && msg_str->length >= 5 && msg_str->data[0] == 'E' && msg_str->data[1] == '0') {
+        char buf[8];
+        int n = 0;
+        for (int i = 1; i < (int) msg_str->length && i < 6 && msg_str->data[i] >= '0' &&
+                        msg_str->data[i] <= '9';
+             i++)
+            buf[n++] = msg_str->data[i];
+        buf[n] = '\0';
+        if (n >= 3)
+            code = atoi(buf);
+    }
+    inst->fields[EXCEPTION_FIELD_CODE] = xr_int(code);
 
     // data: Json? = null (used by xr_exception_from_value to wrap thrown values)
     inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
