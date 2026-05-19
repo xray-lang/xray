@@ -1,17 +1,31 @@
 // Typed variables without initializer get zero values
 
-let a: int
-print(a)       // expect: 0
+@test
+fn test_int_zero_value() {
+    let a: int
+    assert_eq(a, 0)
+}
 
-let b: float
-print(b)       // expect: 0
+@test
+fn test_float_zero_value() {
+    let b: float
+    assert_eq(b, 0.0)
+}
 
-let c: bool
-print(c)       // expect: false
+@test
+fn test_bool_zero_value() {
+    let c: bool
+    assert_eq(c, false)
+}
 
-let d: string
-print(d == "")  // expect: true
+@test
+fn test_string_zero_value() {
+    let d: string
+    assert_eq(d, "")
+}
 
-// Nullable types default to null
-let e: int?
-print(e)       // expect: null
+@test
+fn test_nullable_defaults_to_null() {
+    let e: int?
+    assert_eq(e, null)
+}

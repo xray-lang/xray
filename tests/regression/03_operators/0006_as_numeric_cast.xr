@@ -1,19 +1,27 @@
 // as operator for numeric type conversion (truncation, widening)
 
-// float as int → truncation toward zero
-print(3.14 as int)    // expect: 3
-print(3.99 as int)    // expect: 3
-print(-2.7 as int)    // expect: -2
-print(0.0 as int)     // expect: 0
+@test
+fn test_float_as_int_truncation() {
+    assert_eq(3.14 as int, 3)
+    assert_eq(3.99 as int, 3)
+    assert_eq(-2.7 as int, -2)
+    assert_eq(0.0 as int, 0)
+}
 
-// int as float → widening
-print(42 as float)    // expect: 42
-print(0 as float)     // expect: 0
+@test
+fn test_int_as_float() {
+    assert_eq(42 as float, 42.0)
+    assert_eq(0 as float, 0.0)
+}
 
-// as string
-print(123 as string)  // expect: 123
-print(3.14 as string) // expect: 3.14
+@test
+fn test_as_string() {
+    assert_eq(123 as string, "123")
+    assert_eq(3.14 as string, "3.14")
+}
 
-// as bool
-print(1 as bool)      // expect: true
-print(0 as bool)      // expect: false
+@test
+fn test_as_bool() {
+    assert_eq(1 as bool, true)
+    assert_eq(0 as bool, false)
+}
