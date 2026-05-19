@@ -373,7 +373,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                             snprintf(msg, sizeof(msg), "Non-exhaustive match: missing '%s.%s'",
                                      enum_name, member_name);
                             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                                       XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE, msg,
+                                                       &loc);
                         }
                     }
 
@@ -453,7 +454,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                                          "Non-exhaustive match: missing '%s' for type '%s'",
                                          missing, xr_type_to_string(var_type));
                                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                                           XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE, msg,
+                                                           &loc);
                             }
                         }
                     }
