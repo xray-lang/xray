@@ -72,7 +72,7 @@ static void format_array(XrayIsolate *isolate, XrStrBuf *sb, XrArray *arr, int d
 
 static void format_tuple(XrayIsolate *isolate, XrStrBuf *sb, XrTuple *tup, int depth) {
     xr_strbuf_append_cstr(sb, "(", 1);
-    uint16_t n = tup->element_count;
+    uint16_t n = xr_tuple_arity(tup);
     uint16_t limit = (n > XR_FORMAT_MAX_ELEMENTS) ? XR_FORMAT_MAX_ELEMENTS : n;
     for (uint16_t i = 0; i < limit; i++) {
         if (i > 0)
@@ -207,17 +207,11 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TARRAY:
             format_array(isolate, sb, (XrArray *) gc, depth);
             break;
-        case XR_TTUPLE:
-            format_tuple(isolate, sb, (XrTuple *) gc, depth);
-            break;
         case XR_TMAP:
             format_map(isolate, sb, (XrMap *) gc, depth);
             break;
         case XR_TSET:
             format_set(isolate, sb, (XrSet *) gc, depth);
-            break;
-        case XR_TJSON:
-            format_json(isolate, sb, (XrJson *) gc, depth);
             break;
         case XR_TBIGINT: {
             char *s = xr_bigint_to_string((XrBigInt *) gc);
@@ -226,16 +220,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 xr_free(s);
             } else {
                 xr_strbuf_append_cstr(sb, "<BigInt>", 8);
-            }
-            break;
-        }
-        case XR_TDATETIME: {
-            char buf[64];
-            int n = xr_datetime_format((void *) gc, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
-            if (n > 0) {
-                xr_strbuf_append_cstr(sb, buf, (size_t) n);
-            } else {
-                xr_strbuf_append_cstr(sb, "<DateTime>", 10);
             }
             break;
         }
@@ -260,7 +244,49 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TINSTANCE: {
             XrInstance *inst = xr_value_to_instance(val);
             XrClass *cls = xr_instance_get_class(inst);
-            if (cls && cls->name) {
+            /* Json: recursive key-value format. */
+            if (cls && (cls->flags & XR_CLASS_JSON)) {
+                format_json(isolate, sb, (XrJson *) gc, depth);
+                break;
+            }
+            /* Tuple: parenthesised form, matches the literal syntax. */
+            if (cls && (cls->flags & XR_CLASS_TUPLE)) {
+                format_tuple(isolate, sb, (XrTuple *) inst, depth);
+                break;
+            }
+            /* Exception: keep the legacy "Error: <message>" form so
+             * `string(e)` and string concatenation behave identically
+             * to the pre-unified-class implementation. */
+            if (xr_value_is_exception(isolate, val)) {
+                const char *msg = xr_exception_get_message(isolate, val);
+                if (msg) {
+                    xr_strbuf_append_cstr(sb, "Error: ", 7);
+                    xr_strbuf_append_cstr(sb, msg, strlen(msg));
+                } else {
+                    xr_strbuf_append_cstr(sb, "<exception>", 11);
+                }
+                break;
+            }
+            /* Range keeps its compact "start..end" / "start..end:step"
+             * print format; users still expect the original notation. */
+            if (xr_value_is_range(isolate, val)) {
+                XrRange *rng = (XrRange *) xr_instance_native_body(inst);
+                char buf[80];
+                int n =
+                    (rng->step == 1)
+                        ? snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64, rng->start, rng->end)
+                        : snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64 ":%" PRId64,
+                                   rng->start, rng->end, rng->step);
+                xr_strbuf_append_cstr(sb, buf, (size_t) n);
+            } else if (xr_value_is_datetime(isolate, val)) {
+                void *dt = xr_instance_native_body(inst);
+                char buf[64];
+                int n = xr_datetime_format(dt, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
+                if (n > 0)
+                    xr_strbuf_append_cstr(sb, buf, (size_t) n);
+                else
+                    xr_strbuf_append_cstr(sb, "<DateTime>", 10);
+            } else if (cls && cls->name) {
                 xr_strbuf_append_cstr(sb, cls->name, strlen(cls->name));
                 xr_strbuf_append_cstr(sb, "{...}", 5);
             } else {
@@ -324,16 +350,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                 xr_strbuf_append_cstr(sb, mod->name, strlen(mod->name));
             break;
         }
-        case XR_TEXCEPTION: {
-            XrException *exc = (XrException *) gc;
-            if (exc->message) {
-                xr_strbuf_append_cstr(sb, "Error: ", 7);
-                xr_strbuf_append_str(sb, exc->message);
-            } else {
-                xr_strbuf_append_cstr(sb, "<exception>", 11);
-            }
-            break;
-        }
         case XR_TERROR:
             xr_strbuf_append_cstr(sb, "<error>", 7);
             break;
@@ -370,14 +386,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
             } else {
                 xr_strbuf_append_cstr(sb, "<Regex>", 7);
             }
-            break;
-        }
-        case XR_TRANGE: {
-            XrRange *rng = (XrRange *) gc;
-            char buf[80];
-            int n = snprintf(buf, sizeof(buf), "%" PRId64 "..%" PRId64, (int64_t) rng->start,
-                             (int64_t) rng->end);
-            xr_strbuf_append_cstr(sb, buf, (size_t) n);
             break;
         }
         case XR_TBOUND_METHOD: {

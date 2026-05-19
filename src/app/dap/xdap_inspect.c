@@ -164,7 +164,7 @@ XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro, int fr
                 ref_type = XDAP_REF_ARRAY;
             else if (XR_IS_MAP(val))
                 ref_type = XDAP_REF_MAP;
-            else if (XR_IS_JSON(val))
+            else if (xr_value_is_json(val))
                 ref_type = XDAP_REF_OBJECT;
             else if (XR_IS_PTR(val) && XR_HEAP_TYPE(val) == XR_TINSTANCE) {
                 ref_type = XDAP_REF_INSTANCE;

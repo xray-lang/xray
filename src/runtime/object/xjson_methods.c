@@ -169,31 +169,33 @@ static XrValue xr_json_method_is_object(XrayIsolate *iso, XrValue self, XrValue 
 
 /* ========== XrClass Registration ========== */
 
-#include "xnative_type.h"
+#include "../class/xclass_builder.h"
 
-void xr_json_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod json_methods[] = {
-        {"iterator", xr_json_method_iterator, 0},
-        {"entriesIterator", xr_json_method_entries_iterator, 0},
-        {"toString", xr_json_method_to_string, 0},
-        {"keys", xr_json_method_keys, 0},
-        {"values", xr_json_method_values, 0},
-        {"has", xr_json_method_has, 1},
-        {"isNull", xr_json_method_is_null, 0},
-        {"isInt", xr_json_method_is_int, 0},
-        {"isFloat", xr_json_method_is_float, 0},
-        {"isString", xr_json_method_is_string, 0},
-        {"isBool", xr_json_method_is_bool, 0},
-        {"isArray", xr_json_method_is_array, 0},
-        {"isObject", xr_json_method_is_object, 0},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeTypeInfo json_info = {
-        .name = "Json",
-        .gc_type = XR_TJSON,
-        .methods = json_methods,
-        .getters = NULL,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &json_info);
+void xr_json_register_instance_methods(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "json_register_instance_methods: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL, "json_register_instance_methods: no core classes");
+
+    // Build a plain XrClass carrying Json instance methods. The class is
+    // wired as jsonRootClass->super so dynamic-layout Json instances find
+    // these methods via the normal class-chain lookup.
+    XrClassBuilder *b = xr_class_builder_new(isolate, "Json", core->objectClass);
+    if (!b)
+        return;
+    xr_class_builder_add_method(b, "iterator", xr_json_method_iterator, 0, 0);
+    xr_class_builder_add_method(b, "entriesIterator", xr_json_method_entries_iterator, 0, 0);
+    xr_class_builder_add_method(b, "toString", xr_json_method_to_string, 0, 0);
+    xr_class_builder_add_method(b, "keys", xr_json_method_keys, 0, 0);
+    xr_class_builder_add_method(b, "values", xr_json_method_values, 0, 0);
+    xr_class_builder_add_method(b, "has", xr_json_method_has, 1, 0);
+    xr_class_builder_add_method(b, "isNull", xr_json_method_is_null, 0, 0);
+    xr_class_builder_add_method(b, "isInt", xr_json_method_is_int, 0, 0);
+    xr_class_builder_add_method(b, "isFloat", xr_json_method_is_float, 0, 0);
+    xr_class_builder_add_method(b, "isString", xr_json_method_is_string, 0, 0);
+    xr_class_builder_add_method(b, "isBool", xr_json_method_is_bool, 0, 0);
+    xr_class_builder_add_method(b, "isArray", xr_json_method_is_array, 0, 0);
+    xr_class_builder_add_method(b, "isObject", xr_json_method_is_object, 0, 0);
+    XrClass *cls = xr_class_builder_finalize(b);
+    cls->flags |= XR_CLASS_BUILTIN;
+    core->jsonInstanceMethodClass = cls;
 }

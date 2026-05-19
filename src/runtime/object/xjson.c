@@ -49,13 +49,13 @@ XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
     XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_new_with_class: not dynamic-layout");
     XrayIsolate *X = xr_coro_get_isolate(coro);
 
-    // Allocate as XR_TJSON tag so xr_value_is_json keeps working during
-    // the migration. Field layout and traversal otherwise match instances.
+    // Json objects are XR_TINSTANCE with a dynamic-layout class carrying
+    // XR_CLASS_JSON; xr_value_is_json checks the class flag.
     size_t size = xr_instance_size(cls);
-    XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TJSON);
+    XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TINSTANCE);
     if (!json)
         return NULL;
-    xr_gc_header_init_type(&json->gc, XR_TJSON);
+    xr_gc_header_init_type(&json->gc, XR_TINSTANCE);
     json->klass = cls;
     uint16_t cap = cls->in_object_capacity;
     for (uint16_t i = 0; i < cap; i++)
@@ -129,12 +129,4 @@ bool xr_json_set_by_key(XrayIsolate *X, XrJson *json, const char *key, XrValue v
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
     return xr_json_set(X, json, symbol, value);
-}
-
-/* ========== GC ========== */
-
-// Destructor delegated to the instance path (frees overflow buffer).
-// Registered in g_type_ops[XR_TJSON] below via routing in xgc.c.
-void xr_gc_destroy_json(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    xr_gc_destroy_instance(obj, owning_gc);
 }

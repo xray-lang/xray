@@ -22,6 +22,7 @@
 #include "../value/xvalue.h"
 #include "xstringbuilder_builtins.h"
 #include "../value/xtype_names.h"
+#include "../object/xexception.h"
 
 /* Forward declarations: register functions live in *_methods.c files.
  * We call them here to unify core->xxxClass with native_type_classes[]. */
@@ -33,7 +34,7 @@ extern void xr_int_register_native_type(XrayIsolate *);
 extern void xr_float_register_native_type(XrayIsolate *);
 extern void xr_bool_register_native_type(XrayIsolate *);
 extern void xr_bigint_register_native_type(XrayIsolate *);
-extern void xr_json_register_native_type(XrayIsolate *);
+extern void xr_json_register_instance_methods(XrayIsolate *);
 #include <stdio.h>
 #include <string.h>
 
@@ -63,12 +64,17 @@ void xr_core_init(XrayIsolate *X) {
     X->core->mapClass = xr_isolate_get_native_type_class(X, XR_TMAP);
     xr_set_register_native_type(X);
     X->core->setClass = xr_isolate_get_native_type_class(X, XR_TSET);
-    xr_json_register_native_type(X);
+    // Json instance methods: build a plain XrClass with instance methods
+    // (iterator, toString, keys, values, has, etc.). The class is wired as
+    // jsonRootClass->super so dynamic-layout instances find these methods
+    // via normal class-chain lookup.
+    xr_json_register_instance_methods(X);
 
     // Dynamic-layout root class for Json: open hidden-class chain, 8 in-object
     // slots (7 logical + 1 overflow pointer reservation). All Json objects
     // start at this class and transition as fields are added.
     X->core->jsonRootClass = xr_class_new_dynamic_root(X, "Json", 8, false);
+    X->core->jsonRootClass->super = X->core->jsonInstanceMethodClass;
 
     xr_int_register_native_type(X);
     X->core->intClass = xr_isolate_get_native_type_class(X, XR_TINT);
@@ -100,6 +106,12 @@ void xr_core_init(XrayIsolate *X) {
         xr_class_builder_add_field(builder, "dir", 0);
         X->core->processClass = xr_class_builder_finalize(builder);
     }
+
+    // Exception class with 5 fields + primitive constructor + toString.
+    // Registered here (not in stdlib prelude) because VM throw paths
+    // need a valid core->exceptionClass before any user code runs;
+    // bootstrap errors (OOM, type mismatch on early init) must succeed.
+    xr_register_exception_class(X);
 
     // All classes above were created through xr_class_new / a builder,
     // and xr_class_builder_finalize already registers every finished

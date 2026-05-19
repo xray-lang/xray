@@ -33,6 +33,7 @@
 #include "../base/xlog.h"
 #include "xsched_trace.h"
 #include "xjit_hooks.h"
+#include "../runtime/object/xexception.h"
 
 // ========== Forward Declarations ==========
 
@@ -626,15 +627,19 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         coro->result = xr_null();
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
         XrValue exc = coro_ctx->current_exception;
-        if (XR_IS_EXCEPTION(exc)) {
-            XrException *e = XR_AS_EXCEPTION(exc);
-            if (!XR_IS_NULL(e->userData) && XR_IS_STRING(e->userData)) {
-                coro->error = e->userData;
-            } else if (e->message) {
-                coro->error = xr_string_value(e->message);
+        if (xr_value_is_exception(isolate, exc)) {
+            XrValue data = xr_exception_get_data(isolate, exc);
+            if (!XR_IS_NULL(data) && XR_IS_STRING(data)) {
+                coro->error = data;
             } else {
-                XrString *s = xr_string_intern(isolate, "unknown error", 13, 0);
-                coro->error = xr_string_value(s);
+                const char *msg = xr_exception_get_message(isolate, exc);
+                if (msg && msg[0] != '\0') {
+                    XrString *s = xr_string_intern(isolate, msg, strlen(msg), 0);
+                    coro->error = xr_string_value(s);
+                } else {
+                    XrString *s = xr_string_intern(isolate, "unknown error", 13, 0);
+                    coro->error = xr_string_value(s);
+                }
             }
         } else {
             XrString *s = xr_string_intern(isolate, "coroutine error", 15, 0);

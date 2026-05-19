@@ -108,7 +108,7 @@ bool xr_debug_value_is_expandable(XrayIsolate *isolate, XrValue value) {
         return true;
     if (XR_IS_MAP(value))
         return true;
-    if (XR_IS_JSON(value))
+    if (xr_value_is_json(value))
         return true;
     if (XR_IS_PTR(value)) {
         XrGCHeader *hdr = XR_TO_PTR(value);
@@ -123,7 +123,7 @@ XdapVarRefType xr_debug_get_ref_type(XrValue value) {
         return XDAP_REF_ARRAY;
     if (XR_IS_MAP(value))
         return XDAP_REF_MAP;
-    if (XR_IS_JSON(value))
+    if (xr_value_is_json(value))
         return XDAP_REF_OBJECT;
     if (XR_IS_PTR(value)) {
         XrGCHeader *hdr = XR_TO_PTR(value);
@@ -342,8 +342,10 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **ou
         case XDAP_REF_OBJECT:
             if (XR_IS_PTR(ref->value)) {
                 XrGCHeader *hdr = XR_TO_PTR(ref->value);
-                if (hdr->type == XR_TJSON) {
-                    return get_json_children(isolate, (XrJson *) hdr, out_vars);
+                if (hdr->type == XR_TINSTANCE) {
+                    XrInstance *_inst = (XrInstance *) hdr;
+                    if (_inst->klass && (_inst->klass->flags & XR_CLASS_JSON))
+                        return get_json_children(isolate, (XrJson *) hdr, out_vars);
                 }
             }
             break;

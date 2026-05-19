@@ -134,9 +134,8 @@ static void dump_array(XrArray *arr, DumpContext *ctx) {
 // print round-trip preserves the arity distinction from a scalar.
 static void dump_tuple(XrTuple *tup, DumpContext *ctx) {
     XR_DCHECK(tup != NULL, "dump_tuple: NULL tuple");
-    XR_DCHECK(XR_GC_GET_TYPE(&tup->gc) == XR_TTUPLE, "dump_tuple: object is not a tuple");
     printf("(");
-    uint16_t n = tup->element_count;
+    uint16_t n = xr_tuple_arity(tup);
     if (n == 0) {
         printf(")");
         return;
@@ -305,29 +304,33 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
             case XR_TARRAY:
                 dump_array((XrArray *) gc, ctx);
                 return;
-            case XR_TTUPLE:
-                dump_tuple((XrTuple *) gc, ctx);
-                return;
             case XR_TMAP:
                 dump_map((XrMap *) gc, ctx);
                 return;
             case XR_TSET:
                 dump_set((XrSet *) gc, ctx);
                 return;
-            case XR_TJSON:
-                dump_json(xr_value_to_json(value), ctx);
-                return;
-            case XR_TINSTANCE:
-                dump_instance((XrInstance *) gc, ctx);
-                return;
-            case XR_TDATETIME: {
-                char buf[64];
-                int n =
-                    xr_datetime_format((void *) gc, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
-                if (n > 0) {
-                    printf("%s", buf);
+            case XR_TINSTANCE: {
+                XrInstance *inst = (XrInstance *) gc;
+                if (inst->klass && (inst->klass->flags & XR_CLASS_JSON)) {
+                    dump_json((XrJson *) gc, ctx);
+                    return;
+                }
+                if (inst->klass && (inst->klass->flags & XR_CLASS_TUPLE)) {
+                    dump_tuple((XrTuple *) gc, ctx);
+                    return;
+                }
+                XrayIsolate *X = xray_isolate_current();
+                if (X && xr_value_is_datetime(X, value)) {
+                    void *dt = xr_instance_native_body(inst);
+                    char buf[64];
+                    int n = xr_datetime_format(dt, XR_DATETIME_DEFAULT_FORMAT, buf, sizeof(buf));
+                    if (n > 0)
+                        printf("%s", buf);
+                    else
+                        printf("<DateTime>");
                 } else {
-                    printf("<DateTime>");
+                    dump_instance(inst, ctx);
                 }
                 return;
             }

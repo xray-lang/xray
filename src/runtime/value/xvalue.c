@@ -107,8 +107,10 @@ deep_compare: {
             return false;
         return memcmp(str_a->data, str_b->data, str_a->length) == 0;
     }
-    if (XR_GC_GET_TYPE(gc_a) == XR_TJSON) {
-        return xr_json_equals_deep(a, b);
+    if (XR_GC_GET_TYPE(gc_a) == XR_TINSTANCE) {
+        XrInstance *ia = (XrInstance *) gc_a;
+        if (ia->klass && (ia->klass->flags & XR_CLASS_JSON))
+            return xr_json_equals_deep(a, b);
     }
     if (XR_GC_GET_TYPE(gc_a) == XR_TARRAY) {
         return xr_array_equals_deep(a, b);
@@ -147,19 +149,14 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TENUM_TYPE] = XR_TID_ENUM_TYPE,
     [XR_TENUM_VALUE] = XR_TID_ENUM_VALUE,
     [XR_TERROR] = XR_TID_EXCEPTION,
-    [XR_TEXCEPTION] = XR_TID_EXCEPTION,
     [XR_TMODULE] = XR_TID_MODULE,
     [XR_TITERATOR] = XR_TID_ITERATOR,
     [XR_TSTRINGBUILDER] = XR_TID_STRINGBUILDER,
-    [XR_TJSON] = XR_TID_JSON,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
     [XR_TBIGINT] = XR_TID_BIGINT,
     [XR_TCOROPOOL] = XR_TID_NULL,
-    [XR_TDATETIME] = XR_TID_DATETIME,
     [XR_TREGEX] = XR_TID_REGEX,
-    [XR_TLOGGER] = XR_TID_NULL,
-    [XR_TRANGE] = XR_TID_RANGE,
     [XR_TTASK] = XR_TID_TASK,
 };
 
@@ -169,8 +166,17 @@ XrTypeId xr_value_typeid(XrValue v) {
         return tag_to_typeid[v.tag];
     if (v.tag == XR_TAG_PTR && v.ptr) {
         uint8_t gctype = XR_GC_GET_TYPE((XrGCHeader *) v.ptr);
-        if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0]))
-            return gctype_to_typeid[gctype];
+        if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0])) {
+            XrTypeId tid = gctype_to_typeid[gctype];
+            // Refine XR_TINSTANCE: Json dynamic-layout instances report
+            // XR_TID_JSON so typeof() stays consistent after GC tag removal.
+            if (tid == XR_TID_INSTANCE) {
+                XrInstance *inst = (XrInstance *) v.ptr;
+                if (inst->klass && (inst->klass->flags & XR_CLASS_JSON))
+                    return XR_TID_JSON;
+            }
+            return tid;
+        }
     }
     return XR_TID_NULL;
 }
@@ -307,7 +313,15 @@ XrValue xr_string_value(XrString *str) {
 DEFINE_VALUE_OPS_WITH_MACRO(array, XR_IS_ARRAY, XrArray)
 DEFINE_VALUE_OPS_WITH_MACRO(map, XR_IS_MAP, struct XrMap)
 DEFINE_VALUE_OPS_WITH_MACRO(set, XR_IS_SET, struct XrSet)
-DEFINE_VALUE_OPS_WITH_MACRO(tuple, XR_IS_TUPLE, struct XrTuple)
+/* Tuple ops: xr_value_is_tuple lives in xtuple.c (it has to inspect the
+ * instance's class flags, not the GC tag). Hand-roll the from/to side
+ * here so the public ABI matches every other XrValue helper pair. */
+XrValue xr_value_from_tuple(struct XrTuple *obj) {
+    return XR_FROM_PTR(obj);
+}
+struct XrTuple *xr_value_to_tuple(XrValue v) {
+    return xr_value_is_tuple(v) ? (struct XrTuple *) XR_TO_PTR(v) : NULL;
+}
 DEFINE_VALUE_OPS_WITH_MACRO(module, XR_IS_MODULE, struct XrModule)
 
 /* ========== OOP Value Operations ========== */
@@ -324,14 +338,8 @@ DEFINE_VALUE_OPS_WITH_TYPE(coro, XR_TCOROUTINE, struct XrCoroutine)
 /* ========== Task Value Operations ========== */
 DEFINE_VALUE_OPS_WITH_TYPE(task, XR_TTASK, struct XrTask)
 
-/* ========== DateTime Value Operations ========== */
-bool xr_value_is_datetime(XrValue v) {
-    return XR_IS_PTR(v) && (v).heap_type == XR_TDATETIME;
-}
-
-void *xr_value_to_datetime(XrValue v) {
-    return xr_value_is_datetime(v) ? XR_TO_PTR(v) : NULL;
-}
+/* DateTime value ops are defined in stdlib/datetime/datetime.c with
+ * the unified-class signature `(XrayIsolate *X, XrValue v)`. */
 
 /* ========== Deep Value Comparison ========== */
 static bool xr_json_equals_deep(XrValue a, XrValue b) {

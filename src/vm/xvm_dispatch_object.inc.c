@@ -270,7 +270,7 @@ vmcase(OP_NEWJSON) {
     if (storage_mode != 0 && isolate->sys_heap) {
         // shared: allocate on system heap
         size_t size = xr_json_size(cls);
-        json = (XrJson *) xr_sysheap_alloc_shared(isolate->sys_heap, size, XR_TJSON);
+        json = (XrJson *) xr_sysheap_alloc_shared(isolate->sys_heap, size, XR_TINSTANCE);
         if (json) {
             xr_json_init_inplace(json, cls);
             XR_GC_SET_STORAGE(&json->gc, storage_mode);
@@ -491,10 +491,8 @@ vmcase(OP_GETPROP) {
     if (xr_value_is_instance(obj))
         goto getprop_instance;
 
-    // Json fast path with Shape IC
-    // Json (XR_TJSON) values are dynamic-layout instances; route them
-    // through the unified instance path below — same dispatch as user
-    // classes, no separate shape IC needed.
+    // Json values are dynamic-layout instances carrying XR_CLASS_JSON;
+    // route them through the unified instance path below.
     if (xr_value_is_json(obj))
         goto getprop_instance;
 
@@ -516,8 +514,7 @@ vmcase(OP_GETPROP) {
     }
 
 getprop_instance:;
-    // XrJson (XR_TJSON) shares XrInstance layout, but xr_value_to_instance
-    // only matches XR_TINSTANCE heap_type. Use direct cast for both.
+    // XrJson shares XrInstance layout; direct cast works.
     XrInstance *inst = (XrInstance *) XR_TO_PTR(obj);
 
     // Dynamic-layout fast path: hidden-class instance, lookup may miss
@@ -629,8 +626,8 @@ vmcase(OP_SETPROP) {
     int prop_symbol = PROTO_SYMBOL(cl->proto, b);  // Dereference local index → global symbol
     XrValue value = R(c);
 
-    // Json (XR_TJSON) values are dynamic-layout instances; the cold-path
-    // type dispatch returns VM_COLD_CONTINUE for them and the regular
+    // Json values are dynamic-layout instances; the cold-path type
+    // dispatch returns VM_COLD_CONTINUE for them and the regular
     // instance path below (with its DYNAMIC_LAYOUT branch) handles all
     // semantics — including transitions on field add and sealed errors.
 
@@ -651,7 +648,7 @@ vmcase(OP_SETPROP) {
         // VM_COLD_CONTINUE: fall through to instance path
     }
 
-    // XrJson (XR_TJSON) shares XrInstance layout — direct cast needed
+    // XrJson shares XrInstance layout — direct cast works
     XrInstance *inst_s = (XrInstance *) XR_TO_PTR(obj);
 
     // Dynamic-layout fast path: hidden-class instance, missing field creates

@@ -230,7 +230,7 @@ void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj) {
     // XrSymbolTable* — neither is GC-managed. No further marking needed.
 }
 
-/* ========== Cell / Bound Method / Module / Exception / Error / Task ==========
+/* ========== Cell / Bound Method / Module / Error / Task ==========
  *
  * These traverse one or two well-known references off the object body.
  * They are split out as plain functions so g_type_ops can dispatch
@@ -256,19 +256,6 @@ void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj) {
             xr_coro_gc_markvalue(gc, mod->export_values[i]);
         }
     }
-}
-
-void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj) {
-    XrException *exc = (XrException *) obj;
-    if (exc->message)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->message);
-    if (exc->file)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->file);
-    if (exc->stackTrace)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->stackTrace);
-    if (exc->cause)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->cause);
-    xr_coro_gc_markvalue(gc, exc->userData);
 }
 
 void xr_gc_traverse_error(XrCoroGC *gc, XrGCHeader *obj) {

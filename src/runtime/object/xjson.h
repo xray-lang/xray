@@ -84,11 +84,13 @@ static inline XrValue xr_json_value(XrJson *json) {
     return XR_FROM_PTR(json);
 }
 
-// A Json is any instance whose class is in the json transition chain.
-// Until the type-tag migration completes we still mark Json allocations
-// with XR_TJSON so this remains a single tag comparison.
+// A Json is any instance whose class carries XR_CLASS_JSON — this covers
+// the root class and all hidden-class transitions derived from it.
 static inline bool xr_value_is_json(XrValue v) {
-    return XR_IS_PTR(v) && XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(v)) == XR_TJSON;
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_JSON);
 }
 
 static inline XrJson *xr_value_to_json(XrValue v) {
