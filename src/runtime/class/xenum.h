@@ -60,6 +60,15 @@ typedef struct XrEnumType {
     int64_t min_int_value;   // tier 1: offset for direct index
     int *value_to_index;     // tier 2: sparse array [val - min_int_value] → member index
     int value_map_range;     // tier 2: array size (max - min + 1), 0 if not used
+
+    /* ADT enum metadata.  When is_adt is true, members carry variant tags
+     * (0..N-1) instead of user-defined backing values.  Each variant may
+     * have payload fields; payload_counts[i] gives the number of fields
+     * for member i.  max_payload is the largest count (determines instance
+     * field layout: field[0]=tag, field[1..max_payload]=payload). */
+    bool is_adt;
+    int max_payload;      // max(payload_counts[0..member_count-1])
+    int *payload_counts;  // per-variant payload field count; NULL for simple enums
 } XrEnumType;
 
 /* ========== Creation ========== */

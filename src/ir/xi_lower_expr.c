@@ -2750,27 +2750,41 @@ static XrValue enum_eval_const(XiLower *l, AstNode *expr) {
 }
 
 /* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
- * shared variable so enum member access can find it. */
+ * shared variable so enum member access can find it.
+ * Handles both simple enums (backing values) and ADT enums (tag + payload). */
 XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     EnumDeclNode *ed = &node->as.enum_decl;
     XR_DCHECK(ed->name != NULL, "enum name must not be NULL");
     XR_DCHECK(l->isolate != NULL, "isolate required for enum creation");
 
     int n = ed->member_count;
-    char **names = (char **) xr_malloc(sizeof(char *) * n);
-    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * n);
+    char **names = (char **) xr_malloc(sizeof(char *) * (size_t) n);
+    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) n);
     if (!names || !values) {
         xr_free(names);
         xr_free(values);
         return;
     }
 
+    /* Detect ADT enum: any variant with payload_count > 0 */
+    bool is_adt = false;
+    for (int i = 0; i < n; i++) {
+        EnumMemberNode *m = &ed->members[i]->as.enum_member;
+        if (m->payload_count > 0) {
+            is_adt = true;
+            break;
+        }
+    }
+
+    int detected_base = XR_TINT;
     int64_t auto_val = 0;
-    int detected_base = XR_TINT;  // default for auto-increment enums
     for (int i = 0; i < n; i++) {
         EnumMemberNode *m = &ed->members[i]->as.enum_member;
         names[i] = strdup(m->name);
-        if (m->value) {
+        if (is_adt) {
+            /* ADT enum: all variants get tag index as backing value */
+            values[i] = xr_int(i);
+        } else if (m->value) {
             values[i] = enum_eval_const(l, m->value);
             if (XR_IS_INT(values[i])) {
                 auto_val = XR_TO_INT(values[i]) + 1;
@@ -2789,6 +2803,22 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
 
     XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, detected_base, names, values, n);
     /* names/values ownership transferred to xr_enum_type_new */
+
+    /* Set ADT metadata on the created enum type */
+    if (et && is_adt) {
+        et->is_adt = true;
+        et->payload_counts = (int *) xr_calloc((size_t) n, sizeof(int));
+        int max_pc = 0;
+        if (et->payload_counts) {
+            for (int i = 0; i < n; i++) {
+                int pc = ed->members[i]->as.enum_member.payload_count;
+                et->payload_counts[i] = pc;
+                if (pc > max_pc)
+                    max_pc = pc;
+            }
+        }
+        et->max_payload = max_pc;
+    }
 
     /* Store as XI_CONST with type_any (emitter handles via LOADK) */
     XiValue *cv = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
