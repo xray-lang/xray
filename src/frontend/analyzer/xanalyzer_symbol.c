@@ -82,6 +82,16 @@ static void links_release_dynamic(XaSymbolLinks *links) {
     }
     if (links->type_param_constraint_counts)
         xr_free(links->type_param_constraint_counts);
+    // ADT enum payload metadata
+    if (links->enum_payload_types) {
+        for (int i = 0; i < links->enum_member_count; i++) {
+            if (links->enum_payload_types[i])
+                xr_free(links->enum_payload_types[i]);
+        }
+        xr_free(links->enum_payload_types);
+    }
+    if (links->enum_payload_counts)
+        xr_free(links->enum_payload_counts);
     XaRefLocation *ref = links->references;
     while (ref) {
         XaRefLocation *next = ref->next;
