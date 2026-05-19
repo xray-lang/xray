@@ -24,7 +24,7 @@ struct XrCoroutine;
 
 // XrStringBuilder - mutable string builder
 // Layout-compatible with XrInstance + native body (0 fields, 8-byte body).
-// GC tag is XR_TINSTANCE; class carries XR_CLASS_STRINGBUILDER flag.
+// GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_STRINGBUILDER.
 typedef struct XrStringBuilder {
     XrGCHeader gc;          // GC header (type = XR_TINSTANCE)
     struct XrClass *klass;  // Points to stringBuilderClass

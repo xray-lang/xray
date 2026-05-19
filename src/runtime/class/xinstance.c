@@ -478,6 +478,7 @@ XrClass *xr_class_transition_get_or_create(XrayIsolate *X, XrClass *klass, int s
     child->name = klass->name;
     child->super = klass->super;
     child->flags = klass->flags;
+    child->builtin_kind = klass->builtin_kind;
     child->in_object_capacity = klass->in_object_capacity;
     child->transition_parent = klass;
     child->transition_symbol = symbol;

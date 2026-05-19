@@ -137,8 +137,8 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
  * Regex Object Wrapper (XrInstance + native body)
  *
  * The native body stores a single XrRegex* pointer.  The class is
- * registered as regexClass with XR_CLASS_REGEX flag so type checks
- * and formatting use fast flag tests, no dedicated GC tag needed.
+ * registered as regexClass with builtin_kind == XR_BK_REGEX so type
+ * checks and formatting use a single field test, no dedicated GC tag needed.
  * ======================================================================== */
 
 /* Native body layout: stored after XrInstance fields[] */
@@ -151,12 +151,12 @@ static inline RegexBody *regex_body(XrInstance *inst) {
     return (RegexBody *) xr_instance_native_body(inst);
 }
 
-/* Check whether v is a Regex instance (class flag test) */
+/* Check whether v is a Regex instance (builtin_kind test) */
 static inline bool is_regex_instance(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->flags & XR_CLASS_REGEX);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_REGEX;
 }
 
 /* Create a Regex XrInstance wrapping a compiled XrRegex */
@@ -625,7 +625,8 @@ void xr_regex_register_class(XrayIsolate *isolate) {
 
     XrClass *cls = xr_class_builder_finalize(b);
     XR_CHECK(cls != NULL, "regex_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_REGEX;
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_REGEX;
     core->regexClass = cls;
 }
 

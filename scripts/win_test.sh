@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # Thin wrapper kept for backwards compatibility.
 #
-# All Windows / Parallels VM testing must go through win_pd_test.sh
-# (which uses prlctl exec instead of SSH). See:
-#   .windsurf/rules/windows-testing.md
-#   docs/rules/dev-workflow.md (Windows section)
+# All Windows / Parallels VM testing must go through win_pd_test.sh,
+# which uses prlctl exec instead of SSH.
 #
 # Behaviour preserved:
 #   - When called without args: full sync + build + ctest cycle.

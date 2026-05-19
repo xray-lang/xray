@@ -617,20 +617,20 @@ XR_FUNC XiFunc *xi_lower_func(AstNode *func_node, struct XaAnalyzer *analyzer,
  * statement.  Returns the statement (unwrapped from export if needed)
  * and sets *out_exported.  Returns NULL for non-declaration statements. */
 static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_name,
-                                     uint32_t *out_sid, struct XrType **out_type, bool *out_const,
-                                     bool *out_exported) {
+                                     uint32_t *out_sid, struct XrType **out_type,
+                                     bool *out_is_const, bool *out_is_exported) {
     *out_name = NULL;
     *out_sid = 0;
     *out_type = l->type_any;
-    *out_const = false;
-    *out_exported = false;
+    *out_is_const = false;
+    *out_is_exported = false;
 
     if (!s)
         return NULL;
 
     if (s->type == AST_EXPORT_STMT && s->as.export_stmt.declaration) {
         s = s->as.export_stmt.declaration;
-        *out_exported = true;
+        *out_is_exported = true;
     }
 
     switch (s->type) {
@@ -648,7 +648,7 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
             *out_sid = s->as.struct_decl.symbol_id;
             break;
         case AST_CONST_DECL:
-            *out_const = true;
+            *out_is_const = true;
             /* fall through */
         case AST_VAR_DECL:
             *out_name = s->as.var_decl.name;
@@ -663,6 +663,10 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
             break;
     }
     return s;
+}
+
+static bool prescan_is_user_owned_decl(AstNode *s) {
+    return s && s->line > 0;
 }
 
 /*
@@ -718,7 +722,7 @@ static void prescan_top_level_names(XiLower *l, AstNode **stmts, int count, uint
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
                   "prescan_top_level_names: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_slot;
-        if (next_slot < 512) {
+        if (prescan_is_user_owned_decl(s) && next_slot < 512) {
             owned_name_flags[next_slot] = name;
             owned_const_flags[next_slot] = is_const ? 1u : 0u;
         }
@@ -831,7 +835,7 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
                   "prescan_shared_vars: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
-        if (next_shared < 512) {
+        if (prescan_is_user_owned_decl(s) && next_shared < 512) {
             owned_name_flags[next_shared] = name;
             owned_const_flags[next_shared] = is_const ? 1u : 0u;
         }

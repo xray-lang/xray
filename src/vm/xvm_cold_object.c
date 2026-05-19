@@ -404,7 +404,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         }
 
         // Iterator: handled by standard instance method dispatch
-        // (iteratorClass has XR_CLASS_ITERATOR flag and registers
+        // (iteratorClass has builtin_kind == XR_BK_ITERATOR and registers
         //  hasNext/next/toString via XrClassBuilder).
     }
 

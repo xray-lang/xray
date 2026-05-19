@@ -511,6 +511,10 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             }
             break;
 
+        case AST_CATCH_EXPR:
+            ea_walk(ctx, node->as.catch_expr.body);
+            break;
+
         case AST_MATCH_ARM:
             ea_walk(ctx, node->as.match_arm.pattern);
             ea_walk(ctx, node->as.match_arm.guard);

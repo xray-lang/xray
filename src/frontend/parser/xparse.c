@@ -136,6 +136,7 @@ static ParseRule rules[] = {
     [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
     [TK_TRY] = {xr_parse_try_expr, NULL, PREC_NONE},      // try? / try! expression
+    [TK_CATCH] = {xr_parse_catch_expr, NULL, PREC_NONE},  // catch! { body } expression
     [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},            // _ wildcard (pattern only)
 
     // Coroutine keywords

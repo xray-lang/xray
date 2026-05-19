@@ -394,6 +394,12 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
             if (!desc->deep_copy(ctx, inst, new_inst)) {
                 return XR_NULL_VAL;
             }
+        } else if (desc->copy_policy == XR_NATIVE_BODY_COPY_DEEP) {
+            void *src_body = xr_instance_native_body(inst);
+            void *dst_body = xr_instance_native_body(new_inst);
+            XR_DCHECK(src_body != NULL, "deep_copy_instance: NULL source native body");
+            XR_DCHECK(dst_body != NULL, "deep_copy_instance: NULL destination native body");
+            memcpy(dst_body, src_body, desc->body_size);
         }
     }
     return result;
@@ -678,6 +684,12 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
             if (!desc->to_shared(X, inst, new_inst)) {
                 return XR_NULL_VAL;
             }
+        } else if (desc->copy_policy == XR_NATIVE_BODY_COPY_DEEP) {
+            void *src_body = xr_instance_native_body(inst);
+            void *dst_body = xr_instance_native_body(new_inst);
+            XR_DCHECK(src_body != NULL, "to_shared_instance: NULL source native body");
+            XR_DCHECK(dst_body != NULL, "to_shared_instance: NULL destination native body");
+            memcpy(dst_body, src_body, desc->body_size);
         }
     }
     return XR_FROM_PTR(new_inst);

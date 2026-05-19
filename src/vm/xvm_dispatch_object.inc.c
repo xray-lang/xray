@@ -492,7 +492,7 @@ vmcase(OP_GETPROP) {
     if (xr_value_is_instance(obj) && !XR_IS_ENUM_TYPE(obj) && !XR_IS_ENUM_VALUE(obj))
         goto getprop_instance;
 
-    // Json values are dynamic-layout instances carrying XR_CLASS_JSON;
+    // Json values are dynamic-layout instances (builtin_kind == XR_BK_JSON);
     // route them through the unified instance path below.
     if (xr_value_is_json(obj))
         goto getprop_instance;

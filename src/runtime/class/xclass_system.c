@@ -100,13 +100,15 @@ void xr_core_init(XrayIsolate *X) {
         XrClassBuilder *b = xr_class_builder_new(X, "EnumValue", X->core->enumClass);
         xr_class_builder_set_native_body(b, xr_enum_value_native_body_desc());
         X->core->enumValueClass = xr_class_builder_finalize(b);
-        X->core->enumValueClass->flags |= XR_CLASS_BUILTIN | XR_CLASS_ENUM_VALUE;
+        X->core->enumValueClass->flags |= XR_CLASS_BUILTIN;
+        X->core->enumValueClass->builtin_kind = XR_BK_ENUM_VALUE;
     }
     {
         XrClassBuilder *b = xr_class_builder_new(X, "EnumType", X->core->objectClass);
         xr_class_builder_set_native_body(b, xr_enum_type_native_body_desc());
         X->core->enumTypeClass = xr_class_builder_finalize(b);
-        X->core->enumTypeClass->flags |= XR_CLASS_BUILTIN | XR_CLASS_ENUM_TYPE;
+        X->core->enumTypeClass->flags |= XR_CLASS_BUILTIN;
+        X->core->enumTypeClass->builtin_kind = XR_BK_ENUM_TYPE;
     }
 
     xr_stringbuilder_register_class(X);

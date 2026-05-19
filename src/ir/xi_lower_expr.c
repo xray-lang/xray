@@ -2822,11 +2822,12 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
 
         /* Set field_count on the enum class so xr_instance_new allocates
          * space for variant tag (field[0]) + payload (field[1..max_payload]).
-         * Mark with XR_CLASS_ADT_ENUM so the formatter can detect it. */
+         * Set builtin_kind = XR_BK_ADT_ENUM so the formatter can detect it. */
         if (et->enum_class && max_pc > 0) {
             et->enum_class->field_count = (uint16_t) (1 + max_pc);
             et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
-            et->enum_class->flags |= XR_CLASS_ADT_ENUM;
+            // ADT enum identity is now tracked via builtin_kind
+            et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
         }
     }
 
@@ -2906,6 +2907,139 @@ static XiValue *lower_move_expr(XiLower *l, AstNode *node) {
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
+}
+
+/* Helper: emit XI_CALL_METHOD(receiver, method_name, arg) → OP_INVOKE.
+ * Used by catch! lowering to call Result.Ok(v) / Result.Err(e). */
+static XiValue *emit_method_call_1(XiLower *l, XiValue *recv, const char *method, XiValue *arg,
+                                   uint32_t line) {
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_any, 2);
+    if (!v)
+        return NULL;
+    v->args[0] = recv;
+    v->args[1] = arg;
+    v->aux = (void *) arena_strdup(l->func, method);
+    v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    v->line = line;
+    return v;
+}
+
+/* Lower catch! { body } expression.
+ * Desugars into:
+ *   try { body → Result.Ok(last_value) }
+ *   catch (e) { Result.Err(e) }
+ * Returns the Result value via Braun SSA merge of both paths. */
+static XiValue *lower_catch_expr(XiLower *l, AstNode *node) {
+    CatchExprNode *ce = &node->as.catch_expr;
+    AstNode *body = ce->body;
+    XR_DCHECK(body != NULL, "catch! body must not be NULL");
+    uint32_t line = (uint32_t) node->line;
+
+    /* Synthetic Braun variable to carry the Result across try/catch paths */
+    int catch_res_var = xi_lower_var_create(l, 0, "__catch_result", l->type_any);
+
+    XiBlock *try_blk = xi_block_new(l->func);
+    XiBlock *catch_blk = xi_block_new(l->func);
+    XiBlock *merge = xi_block_new(l->func);
+
+    /* Emit XI_TRY — registers catch_blk as the exception handler */
+    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
+    if (try_op) {
+        try_op->aux = (void *) catch_blk;
+        try_op->aux_int = -1; /* no finally */
+        try_op->flags |= XI_FLAG_SIDE_EFFECT;
+        try_op->line = line;
+    }
+
+    xi_block_set_jump(l->cur_block, try_blk);
+    xi_lower_braun_seal(l, try_blk);
+
+    /* === Try body === */
+    l->cur_block = try_blk;
+    l->dead_after_throw = false;
+    l->try_depth++;
+
+    /* Lower all body statements; last expression-stmt provides the value */
+    XiValue *body_val = NULL;
+    if (body->type == AST_BLOCK) {
+        BlockNode *blk = &body->as.block;
+        for (int i = 0; i < blk->count; i++) {
+            AstNode *stmt = blk->statements[i];
+            if (!stmt || !l->cur_block)
+                continue;
+            if (i == blk->count - 1 && stmt->type == AST_EXPR_STMT) {
+                body_val = xi_lower_expr(l, stmt->as.expr_stmt);
+            } else {
+                xi_lower_stmt(l, stmt);
+            }
+        }
+    } else {
+        body_val = xi_lower_expr(l, body);
+    }
+    if (!body_val && l->cur_block)
+        body_val = xi_const_null(l->func, l->cur_block, l->type_null);
+
+    l->try_depth--;
+
+    /* Resolve the prelude Result enum variable.
+     * xi_lower_var_find does name-based fallback regardless of symbol_id,
+     * so it finds the variable created by xi_lower_enum_decl. */
+    int result_var_id = xi_lower_var_find(l, 0, "Result");
+    XR_DCHECK(result_var_id >= 0, "prelude Result enum must be available");
+
+    /* Wrap success value: Result.Ok(body_val) */
+    if (l->cur_block && body_val) {
+        XiValue *rt = xi_lower_braun_read(l, result_var_id, l->cur_block);
+        XiValue *ok = emit_method_call_1(l, rt, "Ok", body_val, line);
+        if (ok)
+            xi_lower_braun_write(l, catch_res_var, l->cur_block, ok);
+    }
+
+    XiBlock *try_exit_blk = l->cur_block;
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, merge);
+
+    /* === Catch body === */
+    XiBlock *catch_pred = try_exit_blk ? try_exit_blk : try_blk;
+    xi_block_add_pred(catch_blk, catch_pred);
+    xi_lower_braun_seal(l, catch_blk);
+    l->cur_block = catch_blk;
+    l->dead_after_throw = false;
+
+    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
+    if (catch_op) {
+        catch_op->flags |= XI_FLAG_SIDE_EFFECT;
+        catch_op->line = line;
+    }
+
+    /* Wrap exception: Result.Err(exception) */
+    if (l->cur_block && catch_op) {
+        XiValue *rt = xi_lower_braun_read(l, result_var_id, l->cur_block);
+        XiValue *err = emit_method_call_1(l, rt, "Err", catch_op, line);
+        if (err)
+            xi_lower_braun_write(l, catch_res_var, l->cur_block, err);
+    }
+
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, merge);
+
+    /* === Merge block === */
+    xi_lower_braun_seal(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    l->dead_after_throw = false;
+
+    if (!l->cur_block)
+        return xi_const_null(l->func, try_blk, l->type_null);
+
+    XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+    if (end_op) {
+        end_op->flags |= XI_FLAG_SIDE_EFFECT;
+        end_op->line = line;
+    }
+
+    /* Braun SSA read at merge point automatically inserts PHI */
+    return xi_lower_braun_read(l, catch_res_var, l->cur_block);
 }
 
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
@@ -3186,6 +3320,9 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         /* Expression statement wrapper: unwrap */
         case AST_EXPR_STMT:
             return xi_lower_expr(l, node->as.expr_stmt);
+
+        case AST_CATCH_EXPR:
+            return lower_catch_expr(l, node);
 
         default:
             /* Every analyzer-accepted AST node must be lowerable.

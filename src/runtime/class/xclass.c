@@ -158,7 +158,8 @@ XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t ca
     if (!cls)
         return NULL;
     cls->name = name;
-    cls->flags = XR_CLASS_DYNAMIC_LAYOUT | XR_CLASS_JSON | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
+    cls->flags = XR_CLASS_DYNAMIC_LAYOUT | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
+    cls->builtin_kind = XR_BK_JSON;
     cls->in_object_capacity = capacity;
     cls->field_count = 0;
     cls->own_field_count = 0;
@@ -281,7 +282,7 @@ XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
         XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
         if (inst->klass) {
             /* Enum value: resolve by name to get the per-enum class. */
-            if (inst->klass->flags & XR_CLASS_ENUM_VALUE) {
+            if (inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
                 XrEnumValue *ev = (XrEnumValue *) inst;
                 if (ev->enum_name) {
                     XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
@@ -292,7 +293,7 @@ XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
                 return core ? core->enumClass : NULL;
             }
             /* Enum type: each enum type carries its own class. */
-            if (inst->klass->flags & XR_CLASS_ENUM_TYPE) {
+            if (inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
                 XrEnumType *et = (XrEnumType *) inst;
                 return et->enum_class;
             }

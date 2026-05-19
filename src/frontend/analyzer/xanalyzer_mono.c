@@ -578,6 +578,9 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.match_arm.guard = xr_ast_clone(node->as.match_arm.guard, map, mc);
             n->as.match_arm.body = xr_ast_clone(node->as.match_arm.body, map, mc);
             break;
+        case AST_CATCH_EXPR:
+            n->as.catch_expr.body = xr_ast_clone(node->as.catch_expr.body, map, mc);
+            break;
 
         // === Pattern nodes ===
         case AST_PATTERN_LITERAL:
@@ -1196,6 +1199,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             collect_instantiation_sites(node->as.match_arm.guard, registry, collector);
             collect_instantiation_sites(node->as.match_arm.body, registry, collector);
             break;
+        case AST_CATCH_EXPR:
+            collect_instantiation_sites(node->as.catch_expr.body, registry, collector);
+            break;
         case AST_IS_EXPR:
             collect_instantiation_sites(node->as.is_expr.expr, registry, collector);
             break;
@@ -1397,6 +1403,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_MATCH_ARM:
             rewrite_call_sites(node->as.match_arm.guard, registry, collector);
             rewrite_call_sites(node->as.match_arm.body, registry, collector);
+            break;
+        case AST_CATCH_EXPR:
+            rewrite_call_sites(node->as.catch_expr.body, registry, collector);
             break;
         case AST_GO_EXPR:
             rewrite_call_sites(node->as.go_expr.expr, registry, collector);

@@ -52,7 +52,8 @@ static XrClass *build_tuple_class(XrayIsolate *X, uint16_t arity) {
 
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "build_tuple_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_TUPLE | XR_CLASS_FINAL;
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_FINAL;
+    cls->builtin_kind = XR_BK_TUPLE;
     return cls;
 }
 
@@ -142,7 +143,7 @@ bool xr_value_is_tuple(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass != NULL && (inst->klass->flags & XR_CLASS_TUPLE) != 0;
+    return inst->klass != NULL && inst->klass->builtin_kind == XR_BK_TUPLE;
 }
 
 /* ========== Structural Equality ========== */

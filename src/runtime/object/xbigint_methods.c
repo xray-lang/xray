@@ -38,6 +38,7 @@ void xr_bigint_register_class(XrayIsolate *isolate) {
 
     XrClass *cls = xr_class_builder_finalize(b);
     XR_CHECK(cls != NULL, "bigint_register_class: finalize failed");
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_BIGINT;
+    cls->flags |= XR_CLASS_BUILTIN;
+    cls->builtin_kind = XR_BK_BIGINT;
     core->bigintClass = cls;
 }

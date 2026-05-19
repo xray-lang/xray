@@ -108,6 +108,30 @@ typedef struct XrClassTransition {
 // need to know XrClass carries a `XrItableEntry *itable` pointer.
 typedef struct XrItableEntry XrItableEntry;
 
+/* ========== Builtin Kind ========== */
+
+/* Compact nominal-identity discriminator for builtin instance types.
+ * User-defined classes have XR_BK_NONE; the runtime checks this single
+ * uint8_t instead of a chain of flag bit-tests. */
+typedef enum {
+    XR_BK_NONE = 0,
+    XR_BK_JSON,
+    XR_BK_STRINGBUILDER,
+    XR_BK_ENUM_VALUE,
+    XR_BK_ENUM_TYPE,
+    XR_BK_ITERATOR,
+    XR_BK_REGEX,
+    XR_BK_NETCONN,
+    XR_BK_NETLISTENER,
+    XR_BK_BIGINT,
+    XR_BK_TUPLE,
+    XR_BK_ADT_ENUM,
+    XR_BK_RANGE,
+    XR_BK_DATETIME,
+    XR_BK_EXCEPTION,
+    XR_BK_MAX
+} XrBuiltinKind;
+
 /* ========== Class Object ========== */
 
 /*
@@ -193,8 +217,12 @@ struct XrClass {
     uint8_t abstract_method_count;
 
     /* === Flags === */
-    // uint32_t because XR_CLASS_ENUM_VALUE/TYPE occupy bits 16/17.
     uint32_t flags;
+
+    /* === Builtin Kind === */
+    // Nominal identity for builtin instance sub-types (XR_BK_*).
+    // XR_BK_NONE for ordinary user classes.
+    uint8_t builtin_kind;
 
     /* === Dynamic Layout (hidden class transitions) === */
     // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style
@@ -245,17 +273,6 @@ struct XrClass {
 #define XR_CLASS_DYNAMIC_LAYOUT (1 << 10)   // Dynamic field layout (Json object / object literal)
 #define XR_CLASS_HAS_NATIVE_BODY (1 << 11)  // Has XrNativeBodyDesc (Array, Map, etc.)
 #define XR_CLASS_DYNAMIC_SEALED (1 << 12)   // Dynamic-layout class rejects new field transitions
-#define XR_CLASS_TUPLE (1 << 13)            // Tuple of fixed arity: fields[i] == element i
-#define XR_CLASS_JSON (1 << 14)             // Json dynamic-layout object
-#define XR_CLASS_STRINGBUILDER (1 << 15)    // StringBuilder native-body instance
-#define XR_CLASS_ENUM_VALUE (1 << 16)       // Singleton enum member (XrEnumValue body)
-#define XR_CLASS_ENUM_TYPE (1 << 17)        // Enum type metadata (XrEnumType body)
-#define XR_CLASS_ITERATOR (1 << 18)         // for-in lazy iterator (XrIterator body)
-#define XR_CLASS_REGEX (1 << 19)            // compiled regex object (XrRegex* body)
-#define XR_CLASS_NETCONN (1 << 20)          // TCP/UDP/TLS connection handle
-#define XR_CLASS_NETLISTENER (1 << 21)      // TCP listener handle
-#define XR_CLASS_BIGINT (1 << 22)           // arbitrary-precision integer (XrBigInt body)
-#define XR_CLASS_ADT_ENUM (1 << 23)         // ADT enum instance (fields[0]=XrEnumValue*)
 
 /* ========== Operator Overload Flags ========== */
 

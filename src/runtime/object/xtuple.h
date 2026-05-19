@@ -40,7 +40,7 @@ struct XrayIsolate;
  * same bytes:
  *
  *   gc header  (16)
- *   klass *    (8)      <- always a tuple class (klass->flags & XR_CLASS_TUPLE)
+ *   klass *    (8)      <- always a tuple class (klass->builtin_kind == XR_BK_TUPLE)
  *   elements[] (16*arity)
  *
  * Arity is read from klass->field_count, never stored separately.
@@ -94,7 +94,7 @@ XR_FUNC void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value);
 
 /* ========== Type Check ========== */
 
-/* True iff `v` is an XrInstance whose class has XR_CLASS_TUPLE set.
+/* True iff `v` is an XrInstance whose class has builtin_kind == XR_BK_TUPLE.
  * This replaces the legacy XR_IS_TUPLE macro that depended on a
  * dedicated XR_TTUPLE GC tag. */
 XR_FUNC bool xr_value_is_tuple(XrValue v);

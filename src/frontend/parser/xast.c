@@ -2093,3 +2093,10 @@ AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column) {
     node->as.move_expr.expr = expr;
     return node;
 }
+
+// Create catch! expression node
+AstNode *xr_ast_catch_expr(XrayIsolate *X, AstNode *body, int line) {
+    AstNode *node = alloc_node(X, AST_CATCH_EXPR, line);
+    node->as.catch_expr.body = body;
+    return node;
+}

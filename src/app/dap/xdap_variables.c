@@ -344,7 +344,7 @@ int xr_debug_get_var_children(XrayIsolate *isolate, int ref_id, XdapVarInfo **ou
                 XrGCHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
                     XrInstance *_inst = (XrInstance *) hdr;
-                    if (_inst->klass && (_inst->klass->flags & XR_CLASS_JSON))
+                    if (_inst->klass && _inst->klass->builtin_kind == XR_BK_JSON)
                         return get_json_children(isolate, (XrJson *) hdr, out_vars);
                 }
             }

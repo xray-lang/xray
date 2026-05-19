@@ -140,6 +140,7 @@ void xr_stringbuilder_register_class(XrayIsolate *X) {
     XrClass *cls = xr_class_builder_finalize(b);
     if (!cls)
         return;
-    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_STRINGBUILDER;
+    cls->flags |= XR_CLASS_BUILTIN;
+    cls->builtin_kind = XR_BK_STRINGBUILDER;
     core->stringBuilderClass = cls;
 }
