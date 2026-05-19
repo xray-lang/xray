@@ -800,10 +800,28 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 xa_visit_collect(ctx, node->as.while_stmt.body);
             break;
         case AST_IF_STMT:
-            if (node->as.if_stmt.then_branch)
+            /* Each branch is its own block scope in Pass 2 (via
+             * xa_visit_block_stmt). Pass 1 must mirror that so symbols
+             * declared in then-branch don't collide with same-named
+             * symbols in else-branch. */
+            if (node->as.if_stmt.then_branch) {
+                bool is_block = node->as.if_stmt.then_branch->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.if_stmt.then_branch);
                 xa_visit_collect(ctx, node->as.if_stmt.then_branch);
-            if (node->as.if_stmt.else_branch)
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
+            if (node->as.if_stmt.else_branch) {
+                bool is_block = node->as.if_stmt.else_branch->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.if_stmt.else_branch);
                 xa_visit_collect(ctx, node->as.if_stmt.else_branch);
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
             break;
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
