@@ -49,12 +49,11 @@ vmcase(OP_ENUM_NAME) {
         R(a) = xr_null();
         vmbreak;
     }
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(enum_val);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE) {
+    if (!XR_IS_ENUM_VALUE(enum_val)) {
         R(a) = xr_null();
         vmbreak;
     }
-    XrEnumValue *ev = (XrEnumValue *) gc;
+    XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(enum_val);
     size_t len = strlen(ev->member_name);
     uint32_t hash = xr_string_hash(ev->member_name, len);
     XrString *name_str = xr_string_intern(isolate, ev->member_name, len, hash);

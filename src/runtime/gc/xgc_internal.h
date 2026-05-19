@@ -126,8 +126,6 @@ XR_FUNC void xr_gc_destroy_coroutine(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void regex_object_destroy(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_instance(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_net_conn(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, XrCoroGC *owning_gc);
 

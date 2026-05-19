@@ -435,6 +435,11 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
         XrInstance *ib = xr_value_to_instance(b);
         if (ia->klass != ib->klass)
             return false;
+        // Enum value/type instances are singletons keyed by identity:
+        // they share one class with zero fields, so field-by-field
+        // comparison would incorrectly conflate distinct members.
+        if (ia->klass && (ia->klass->flags & (XR_CLASS_ENUM_VALUE | XR_CLASS_ENUM_TYPE)))
+            return ia == ib;
         int fc = ia->klass->field_count;
         for (int i = 0; i < fc; i++) {
             if (!deep_compare(ctx, ia->fields[i], ib->fields[i]))

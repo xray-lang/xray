@@ -279,25 +279,25 @@ XrClass *xr_value_get_class(XrayIsolate *X, XrValue value) {
     /* Instance: class pointer stored in the object header. */
     if (type == XR_TINSTANCE) {
         XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
-        return inst->klass;
-    }
-
-    /* Enum value: resolve by name, fall back to the abstract Enum class. */
-    if (type == XR_TENUM_VALUE) {
-        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(value);
-        if (ev->enum_name) {
-            XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
-            if (cls)
-                return cls;
+        if (inst->klass) {
+            /* Enum value: resolve by name to get the per-enum class. */
+            if (inst->klass->flags & XR_CLASS_ENUM_VALUE) {
+                XrEnumValue *ev = (XrEnumValue *) inst;
+                if (ev->enum_name) {
+                    XrClass *cls = xr_class_lookup_by_name(X, ev->enum_name);
+                    if (cls)
+                        return cls;
+                }
+                XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+                return core ? core->enumClass : NULL;
+            }
+            /* Enum type: each enum type carries its own class. */
+            if (inst->klass->flags & XR_CLASS_ENUM_TYPE) {
+                XrEnumType *et = (XrEnumType *) inst;
+                return et->enum_class;
+            }
         }
-        XrayCoreClasses *core = xr_isolate_get_core_classes(X);
-        return core ? core->enumClass : NULL;
-    }
-
-    /* Enum type: each enum type carries its own class. */
-    if (type == XR_TENUM_TYPE) {
-        XrEnumType *et = (XrEnumType *) XR_TO_PTR(value);
-        return et->enum_class;
+        return inst->klass;
     }
 
     /* All other types: single lookup in native_type_classes[].

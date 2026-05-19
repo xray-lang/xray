@@ -64,8 +64,8 @@ op_call_entry:;
     if (XR_IS_PTR(func_val)) {
         XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(func_val);
 
-        // Use dedicated enum type tag
-        if (XR_GC_GET_TYPE(gc) == XR_TENUM_TYPE && nargs == 1) {
+        // Check enum type via class flag
+        if (XR_IS_ENUM_TYPE(func_val) && nargs == 1) {
             // Enum conversion: Status(200)
             XrValue value = R(a + 1);  // First argument
             XrEnumValue *result = xr_enum_from_value((XrEnumType *) gc, value);

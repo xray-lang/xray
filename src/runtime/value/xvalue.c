@@ -22,7 +22,8 @@
 #include "../object/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../gc/xgc.h"
-#include "../class/xclass.h"  // XR_IS_CLASS_LITE
+#include "../class/xclass.h"  // XR_IS_CLASS_LITE, XR_CLASS_ENUM_*
+#include "../class/xinstance.h"
 #include "xtype_names.h"
 #include <stdlib.h>
 #include <string.h>
@@ -122,6 +123,22 @@ deep_compare: {
 }
 }
 
+/* ========== Enum Type Checks ========== */
+
+bool xr_value_is_enum_type(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_ENUM_TYPE);
+}
+
+bool xr_value_is_enum_value(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_ENUM_VALUE);
+}
+
 /* ========== Unified Type ID ========== */
 
 // XrValueTag → XrTypeId lookup table
@@ -146,8 +163,6 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TCLASS] = XR_TID_FUNCTION,
     [XR_TINSTANCE] = XR_TID_INSTANCE,
     [XR_TBOUND_METHOD] = XR_TID_BOUND_METHOD,
-    [XR_TENUM_TYPE] = XR_TID_ENUM_TYPE,
-    [XR_TENUM_VALUE] = XR_TID_ENUM_VALUE,
     [XR_TERROR] = XR_TID_EXCEPTION,
     [XR_TMODULE] = XR_TID_MODULE,
     [XR_TITERATOR] = XR_TID_ITERATOR,
@@ -176,6 +191,10 @@ XrTypeId xr_value_typeid(XrValue v) {
                         return XR_TID_JSON;
                     if (inst->klass->flags & XR_CLASS_STRINGBUILDER)
                         return XR_TID_STRINGBUILDER;
+                    if (inst->klass->flags & XR_CLASS_ENUM_VALUE)
+                        return XR_TID_ENUM_VALUE;
+                    if (inst->klass->flags & XR_CLASS_ENUM_TYPE)
+                        return XR_TID_ENUM_TYPE;
                 }
             }
             return tid;

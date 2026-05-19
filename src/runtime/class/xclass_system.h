@@ -51,6 +51,8 @@ typedef struct XrayCoreClasses {
 
     // Enum
     XrClass *enumClass;
+    XrClass *enumValueClass;  // Internal class for XrEnumValue instances
+    XrClass *enumTypeClass;   // Internal class for XrEnumType instances
 
     // Json utility (static methods only: Json.parse, Json.stringify, etc.)
     XrClass *jsonClass;

@@ -223,27 +223,29 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
             }
             break;
         }
-        case XR_TENUM_VALUE: {
-            XrEnumValue *ev = (XrEnumValue *) gc;
-            if (ev->enum_name && ev->member_name) {
-                xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
-                xr_strbuf_append_cstr(sb, ".", 1);
-                xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
-            } else {
-                xr_strbuf_append_cstr(sb, "<enum>", 6);
-            }
-            break;
-        }
-        case XR_TENUM_TYPE: {
-            XrEnumType *et = (XrEnumType *) gc;
-            xr_strbuf_append_cstr(sb, "enum ", 5);
-            if (et->name)
-                xr_strbuf_append_cstr(sb, et->name, strlen(et->name));
-            break;
-        }
         case XR_TINSTANCE: {
             XrInstance *inst = xr_value_to_instance(val);
             XrClass *cls = xr_instance_get_class(inst);
+            /* EnumValue: "EnumName.MemberName" */
+            if (cls && (cls->flags & XR_CLASS_ENUM_VALUE)) {
+                XrEnumValue *ev = (XrEnumValue *) gc;
+                if (ev->enum_name && ev->member_name) {
+                    xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
+                    xr_strbuf_append_cstr(sb, ".", 1);
+                    xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
+                } else {
+                    xr_strbuf_append_cstr(sb, "<enum>", 6);
+                }
+                break;
+            }
+            /* EnumType: "enum Name" */
+            if (cls && (cls->flags & XR_CLASS_ENUM_TYPE)) {
+                XrEnumType *et = (XrEnumType *) gc;
+                xr_strbuf_append_cstr(sb, "enum ", 5);
+                if (et->name)
+                    xr_strbuf_append_cstr(sb, et->name, strlen(et->name));
+                break;
+            }
             /* Json: recursive key-value format. */
             if (cls && (cls->flags & XR_CLASS_JSON)) {
                 format_json(isolate, sb, (XrJson *) gc, depth);

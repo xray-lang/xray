@@ -403,10 +403,9 @@ XR_NOINLINE int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int metho
                                XrValue *base, int a, XrBcCallFrame *frame, XrInstruction *pc) {
     if (!XR_IS_PTR(receiver))
         return VM_COLD_CONTINUE;
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
 
-    if (XR_GC_GET_TYPE(gc) == XR_TENUM_VALUE) {
-        XrEnumValue *enum_val = (XrEnumValue *) gc;
+    if (XR_IS_ENUM_VALUE(receiver)) {
+        XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(receiver);
 
         if (nargs == 0 && method_symbol == SYMBOL_NAME) {
             size_t len = strlen(enum_val->member_name);
@@ -439,8 +438,8 @@ XR_NOINLINE int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int metho
         return VM_COLD_CONTINUE;
     }
 
-    if (XR_GC_GET_TYPE(gc) == XR_TENUM_TYPE) {
-        XrEnumType *enum_type = (XrEnumType *) gc;
+    if (XR_IS_ENUM_TYPE(receiver)) {
+        XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(receiver);
 
         if (nargs == 1 && method_symbol == SYMBOL_GET_MEMBER) {
             XrValue index_val = base[a + 2];
