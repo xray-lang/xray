@@ -469,13 +469,13 @@ XR_NOINLINE int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int metho
  * or VM_COLD_ERROR on error.
  */
 XR_NOINLINE int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
-                                int method_symbol, const char *method_name_chars, int nargs,
-                                XrValue *base, int a, XrBcCallFrame *frame, XrInstruction *pc,
-                                int is_tail) {
+                                int method_symbol, int nargs, XrValue *base, int a,
+                                XrBcCallFrame *frame, XrInstruction *pc, int is_tail) {
     XR_DCHECK(isolate != NULL, "vm_invoke_class: NULL isolate");
     XR_DCHECK(base != NULL, "vm_invoke_class: NULL base");
-    XR_DCHECK(method_name_chars != NULL, "vm_invoke_class: NULL method_name");
     XrClass *cls = xr_value_to_class(receiver);
+    XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+    const char *method_name_chars = xr_symbol_get_name_in_table(_st, method_symbol);
 
     if (strcmp(method_name_chars, XR_KEYWORD_CONSTRUCTOR) == 0) {
         if (!xr_class_can_instantiate(cls)) {

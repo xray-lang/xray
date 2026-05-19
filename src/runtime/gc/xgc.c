@@ -72,7 +72,6 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TCOROUTINE] = {xr_gc_destroy_coroutine, NULL, NULL, NULL},
     [XR_TREGEX] = {regex_object_destroy, NULL, NULL, NULL},
     [XR_TTASK] = {xr_gc_destroy_task, xr_gc_traverse_task, NULL, NULL},
-    [XR_TITERATOR] = {NULL, xr_gc_traverse_iterator, NULL, NULL},
     [XR_TCELL] = {NULL, xr_gc_traverse_cell, NULL, NULL},
     [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
     [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},

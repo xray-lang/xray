@@ -319,6 +319,8 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                     snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
                 } else if (inst->klass && (inst->klass->flags & XR_CLASS_ENUM_VALUE)) {
                     snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
+                } else if (inst->klass && (inst->klass->flags & XR_CLASS_ITERATOR)) {
+                    snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
                 } else {
                     const char *class_name = xr_class_display_name(inst->klass);
                     snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
@@ -345,9 +347,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                 snprintf(buf, sizeof(buf), "<module %s>", mod->name ? mod->name : "?");
                 break;
             }
-            case XR_TITERATOR:
-                snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
-                break;
             case XR_TERROR:
                 snprintf(buf, sizeof(buf), "<error> @%p", (void *) hdr);
                 break;

@@ -196,39 +196,9 @@ void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj) {
     }
 }
 
-/* ========== Iterator Traversal ========== */
-
-void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj)
-        return;
-    struct XrIterator *iter = (struct XrIterator *) obj;
-
-    // Mark the source container (map/set/json) by type
-    switch (iter->type) {
-        case XR_ITERATOR_MAP:
-            if (iter->source.map)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.map);
-            break;
-        case XR_ITERATOR_SET:
-            if (iter->source.set)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.set);
-            break;
-        case XR_ITERATOR_JSON:
-            if (iter->source.json)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.json);
-            break;
-        case XR_ITERATOR_ARRAY:
-            if (iter->source.array)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.array);
-            break;
-        case XR_ITERATOR_STRING:
-            if (iter->source.string)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.string);
-            break;
-    }
-    // coro is a raw runtime pointer, not a GC object; context is XrayIsolate* or
-    // XrSymbolTable* — neither is GC-managed. No further marking needed.
-}
+/* Iterator traversal moved to xiterator.c — iterators are XR_TINSTANCE
+ * objects whose native body descriptor's traverse hook walks the source
+ * container reference. */
 
 /* ========== Cell / Bound Method / Module / Error / Task ==========
  *

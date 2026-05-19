@@ -403,21 +403,9 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             return VM_COLD_BREAK;
         }
 
-        // Iterator property access
-        if (XR_GC_GET_TYPE(gc) == XR_TITERATOR) {
-            if (prop_symbol == SYMBOL_HASNEXT) {
-                XrBoundMethod *bm =
-                    xr_bound_method_new(isolate, obj, xr_iterator_get_handler(SYMBOL_HASNEXT));
-                base[a] = xr_value_from_bound_method(bm);
-            } else if (prop_symbol == SYMBOL_NEXT) {
-                XrBoundMethod *bm =
-                    xr_bound_method_new(isolate, obj, xr_iterator_get_handler(SYMBOL_NEXT));
-                base[a] = xr_value_from_bound_method(bm);
-            } else {
-                base[a] = xr_null();
-            }
-            return VM_COLD_BREAK;
-        }
+        // Iterator: handled by standard instance method dispatch
+        // (iteratorClass has XR_CLASS_ITERATOR flag and registers
+        //  hasNext/next/toString via XrClassBuilder).
     }
 
     // Map property access
