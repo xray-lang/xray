@@ -412,6 +412,19 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
 
     ReturnStmtNode *ret = &node->as.return_stmt;
 
+    /* Top-level return is illegal — must be inside a function body. */
+    {
+        XaScope *s = ctx->analyzer->current_scope;
+        while (s && s->kind != XA_SCOPE_FUNCTION)
+            s = s->parent;
+        if (!s) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_CMP_INVALID_RETURN,
+                                       "'return' outside of a function body", &loc);
+            return;
+        }
+    }
+
     XrType *return_type = xr_type_new_unit(NULL);
 
     if (ret->value_count == 0) {
