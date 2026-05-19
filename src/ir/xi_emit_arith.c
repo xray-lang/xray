@@ -419,6 +419,25 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
 
+    /* Primitive numeric/string/bool casts: emit conversion opcode.
+     * These handle cross-type conversion (float as int → truncate). */
+    if (tid == 8 /* XR_TID_INT */) {
+        emit_inst(ctx, CREATE_ABC(OP_TOINT, dst, src, 0));
+        return;
+    }
+    if (tid == 11 /* XR_TID_FLOAT */) {
+        emit_inst(ctx, CREATE_ABC(OP_TOFLOAT, dst, src, 0));
+        return;
+    }
+    if (tid == 12 /* XR_TID_STRING */) {
+        emit_inst(ctx, CREATE_ABC(OP_TOSTRING, dst, src, 0));
+        return;
+    }
+    if (tid == 1 /* XR_TID_BOOL */) {
+        emit_inst(ctx, CREATE_ABC(OP_TOBOOL, dst, src, 0));
+        return;
+    }
+
     if (dst != src)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 

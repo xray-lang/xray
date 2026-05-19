@@ -1,0 +1,19 @@
+// as operator for numeric type conversion (truncation, widening)
+
+// float as int → truncation toward zero
+print(3.14 as int)    // expect: 3
+print(3.99 as int)    // expect: 3
+print(-2.7 as int)    // expect: -2
+print(0.0 as int)     // expect: 0
+
+// int as float → widening
+print(42 as float)    // expect: 42
+print(0 as float)     // expect: 0
+
+// as string
+print(123 as string)  // expect: 123
+print(3.14 as string) // expect: 3.14
+
+// as bool
+print(1 as bool)      // expect: true
+print(0 as bool)      // expect: false
