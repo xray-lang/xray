@@ -70,6 +70,9 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
     enum_type->min_int_value = 0;
     enum_type->value_to_index = NULL;
     enum_type->value_map_range = 0;
+    enum_type->is_adt = false;
+    enum_type->max_payload = 0;
+    enum_type->payload_counts = NULL;
 
     enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
 
@@ -277,6 +280,10 @@ void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc) {
     if (enum_type->value_to_index) {
         xr_free(enum_type->value_to_index);
         enum_type->value_to_index = NULL;
+    }
+    if (enum_type->payload_counts) {
+        xr_free(enum_type->payload_counts);
+        enum_type->payload_counts = NULL;
     }
     // enum_type->name is interned; not owned.
 }
