@@ -52,7 +52,7 @@ fn test_syscall_handoff() {
     if (fast_done == FAST_COUNT && slow_done) {
         print("handoff test passed")
     } else {
-        throw "handoff test failed"
+        throw new Exception("handoff test failed")
     }
 }
 

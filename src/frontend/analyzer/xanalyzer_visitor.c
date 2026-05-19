@@ -17,6 +17,7 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
+#include "../../runtime/value/xtype_internal.h"
 
 // Forward declarations now in xanalyzer_visitor_internal.h
 
@@ -1633,7 +1634,27 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_THROW_STMT:
             if (node->as.throw_stmt.expression) {
-                xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
+                XrType *thrown = xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
+                /* Strict throw: only Exception or a subclass is allowed.
+                 * Skip the check when the inferred type is unknown
+                 * (parser/type errors elsewhere already surface). */
+                if (thrown && !XR_TYPE_IS_UNKNOWN(thrown)) {
+                    XrType *exc = xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                    bool ok = exc && (xr_type_is_named_class(thrown, "Exception") ||
+                                      xr_type_is_subclass_of(thrown, exc));
+                    if (!ok) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "throw expression must be an Exception or a subclass; "
+                                 "got '%s'. Wrap the value with `new Exception(...)` or a "
+                                 "user-defined Exception subclass.",
+                                 xr_type_to_string(thrown));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_THROW_NON_EXCEPTION, msg, &loc);
+                    }
+                }
             }
             // Mark flow as unreachable after throw
             if (ctx->flow) {

@@ -8,7 +8,7 @@ fn child_ok() -> int {
 }
 
 fn child_fail(msg: string) -> int {
-    throw msg
+    throw new Exception(msg)
     return 0
 }
 

@@ -5,121 +5,127 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xexception.c - Exception object implementation
+ * xexception.c - Exception runtime API on top of XrInstance
  *
- * KEY CONCEPT:
- *   GC-managed exception with error code, message, stack trace.
+ * Exception is a regular class registered into core->exceptionClass
+ * (built by xr_register_exception_class below; called from
+ * xr_core_init). All field access here is direct indexing into
+ * XrInstance.fields[] using the EXCEPTION_FIELD_* indices fixed in
+ * xclass_system.h.
  */
 
 #include "xexception.h"
 #include "../../base/xchecks.h"
 #include "../xerror_impl.h"
 #include "../xisolate_api.h"
-#include "../gc/xgc.h"
 #include "../../base/xmalloc.h"
-#include "xnative_type.h"
 #include "xstring.h"
 #include "xarray.h"
+#include "../class/xclass.h"
+#include "../class/xclass_builder.h"
+#include "../class/xclass_system.h"
+#include "../class/xinstance.h"
+#include "../value/xtype_names.h"
+#include "../../coro/xcoroutine.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 
-/* ========== Exception Creation ========== */
+/* ========== Local helpers ========== */
 
-// Allocate exception object (internal).
-//
-// Exceptions are regular GC-managed objects: xcoro_gc_traverse handles
-// XR_TEXCEPTION children (message/file/stackTrace) and the type is in
-// HAS_REFS_BITMAP, so they participate in mark/sweep on the throwing
-// coroutine's heap. Falling back to isolate fixedgc only matters during
-// very early bootstrap before main_coro exists; that path is hit only
-// when xray_isolate_init has to surface an error before scheduling
-// becomes available.
-static XrException *xr_exception_alloc(XrayIsolate *X) {
-    XrException *exc = NULL;
-    XrCoroutine *coro = xr_current_coro(X);
-    if (coro) {
-        exc = (XrException *) xr_alloc(coro, sizeof(XrException), XR_TEXCEPTION);
-    } else {
-        exc = (XrException *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrException), XR_TEXCEPTION);
-    }
-    if (!exc)
+static XrInstance *exception_instance(XrayIsolate *X, XrValue v) {
+    if (!xr_value_is_exception(X, v))
         return NULL;
-
-    xr_gc_header_init_type(&exc->gc, XR_TEXCEPTION);
-
-    exc->code = 0;
-    exc->message = NULL;
-    exc->file = NULL;
-    exc->line = 0;
-    exc->column = 0;
-    exc->stackTrace = NULL;
-    exc->cause = NULL;
-    exc->userData = xr_null();
-
-    return exc;
+    return (XrInstance *) XR_TO_PTR(v);
 }
 
-// Create exception object
+static XrClass *exception_class(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "exception: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "exception: core not initialised");
+    XR_DCHECK(core->exceptionClass != NULL,
+              "exception: core->exceptionClass not registered (core_init incomplete)");
+    return core->exceptionClass;
+}
+
+/* ========== Type Check ========== */
+
+bool xr_value_is_exception(XrayIsolate *X, XrValue v) {
+    XR_DCHECK(X != NULL, "xr_value_is_exception: NULL isolate");
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    if (!core || !core->exceptionClass)
+        return false;
+    return xr_class_instanceof(inst->klass, core->exceptionClass);
+}
+
+/* ========== Construction ========== */
+
 XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message) {
     XR_DCHECK(X != NULL, "exception_new: NULL isolate");
-    XrException *exc = xr_exception_alloc(X);
-    if (!exc) {
+    XrClass *cls = exception_class(X);
+    XrInstance *inst = xr_instance_new(X, cls);
+    if (!inst)
         return xr_null();
+
+    XrString *msg = NULL;
+    if (message) {
+        msg = xr_string_intern(X, message, strlen(message), 0);
     }
+    inst->fields[EXCEPTION_FIELD_MESSAGE] = msg ? XR_FROM_PTR(msg) : xr_null();
 
-    exc->code = code;
-    exc->message = xr_string_intern(X, message, strlen(message), 0);
+    XrArray *stack = xr_array_new(xr_current_coro(X));
+    inst->fields[EXCEPTION_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
-    // Create empty stack trace array
-    exc->stackTrace = xr_array_new(xr_current_coro(X));
+    inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
+    inst->fields[EXCEPTION_FIELD_CODE] = xr_int((int64_t) code);
+    inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
 
-    return XR_EXCEPTION_VAL(exc);
+    return xr_value_from_instance(inst);
 }
 
-// Create exception with formatted message
 XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...) {
+    XR_DCHECK(X != NULL, "exception_newf: NULL isolate");
+    XR_DCHECK(fmt != NULL, "exception_newf: NULL fmt");
     char buffer[512];
     va_list args;
-
     va_start(args, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
-
     return xr_exception_new(X, code, buffer);
 }
 
-// Create exception from XrError
 XrValue xr_exception_from_error(XrayIsolate *X, XrError *error) {
     XR_DCHECK(X != NULL, "exception_from_error: NULL isolate");
     if (!error) {
         return xr_exception_new(X, XR_ERR_UNKNOWN, "Unknown error");
     }
 
-    XrException *exc = xr_exception_alloc(X);
-    if (!exc) {
+    XrClass *cls = exception_class(X);
+    XrInstance *inst = xr_instance_new(X, cls);
+    if (!inst)
         return xr_null();
-    }
 
-    exc->code = error->code;
-    exc->message = error->message;  // Direct reference, both GC managed
-    exc->line = error->line;
-    exc->column = error->column;
+    inst->fields[EXCEPTION_FIELD_MESSAGE] =
+        error->message ? XR_FROM_PTR(error->message) : xr_null();
 
-    exc->stackTrace = xr_array_new(xr_current_coro(X));
+    XrArray *stack = xr_array_new(xr_current_coro(X));
+    inst->fields[EXCEPTION_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
 
-    return XR_EXCEPTION_VAL(exc);
+    inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
+    inst->fields[EXCEPTION_FIELD_CODE] = xr_int((int64_t) error->code);
+    inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
+
+    return xr_value_from_instance(inst);
 }
 
-// Create exception from any value (auto-wrap)
 XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
     XR_DCHECK(X != NULL, "exception_from_value: NULL isolate");
-    // Already an exception, return directly
-    if (XR_IS_EXCEPTION(value)) {
+    if (xr_value_is_exception(X, value))
         return value;
-    }
 
-    // If error object, convert
     if (XR_IS_PTR(value)) {
         XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(value);
         if (XR_GC_GET_TYPE(gc) == XR_TERROR) {
@@ -127,263 +133,233 @@ XrValue xr_exception_from_value(XrayIsolate *X, XrValue value) {
         }
     }
 
-    // Other values: wrap and save original to userData
     XrValue exc = xr_exception_new(X, XR_ERR_RUNTIME, "Value thrown as exception");
-
-    // Save original value for catch to retrieve
-    if (XR_IS_EXCEPTION(exc)) {
-        XrException *ex = XR_AS_EXCEPTION(exc);
-        ex->userData = value;
+    XrInstance *inst = exception_instance(X, exc);
+    if (inst) {
+        inst->fields[EXCEPTION_FIELD_DATA] = value;
     }
-
     return exc;
 }
 
-/* ========== Exception Info ========== */
+/* ========== Field Accessors ========== */
 
-// Get exception error code
-XrErrorCode xr_exception_get_code(XrValue exception) {
-    if (!XR_IS_EXCEPTION(exception)) {
+XrErrorCode xr_exception_get_code(XrayIsolate *X, XrValue exception) {
+    XrInstance *inst = exception_instance(X, exception);
+    if (!inst)
         return XR_ERR_UNKNOWN;
-    }
-    XrException *exc = XR_AS_EXCEPTION(exception);
-    return exc->code;
+    XrValue v = inst->fields[EXCEPTION_FIELD_CODE];
+    return XR_IS_INT(v) ? (XrErrorCode) XR_TO_INT(v) : XR_ERR_UNKNOWN;
 }
 
-// Get exception message
-const char *xr_exception_get_message(XrValue exception) {
-    if (!XR_IS_EXCEPTION(exception)) {
+const char *xr_exception_get_message(XrayIsolate *X, XrValue exception) {
+    XrInstance *inst = exception_instance(X, exception);
+    if (!inst)
         return "Not an exception";
-    }
-    XrException *exc = XR_AS_EXCEPTION(exception);
-    if (!exc->message) {
+    XrValue v = inst->fields[EXCEPTION_FIELD_MESSAGE];
+    if (!XR_IS_STRING(v))
         return "";
-    }
-    return exc->message->data;
+    XrString *s = (XrString *) XR_TO_PTR(v);
+    return s->data;
 }
 
-// Get exception stack trace
-XrValue xr_exception_get_stacktrace(XrayIsolate *iso, XrValue exception) {
-    if (!XR_IS_EXCEPTION(exception)) {
+XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception) {
+    XrInstance *inst = exception_instance(X, exception);
+    if (!inst)
         return xr_null();
-    }
-    XrException *exc = XR_AS_EXCEPTION(exception);
-    if (!exc->stackTrace) {
-        exc->stackTrace = xr_array_new(xr_current_coro(iso));
-    }
-    return xr_value_from_array(exc->stackTrace);
+    XrValue v = inst->fields[EXCEPTION_FIELD_STACK];
+    if (XR_IS_ARRAY(v))
+        return v;
+    // Lazily create the stack array if it was nulled out (defensive).
+    XrArray *stack = xr_array_new(xr_current_coro(X));
+    if (!stack)
+        return xr_null();
+    XrValue av = xr_value_from_array(stack);
+    inst->fields[EXCEPTION_FIELD_STACK] = av;
+    return av;
 }
 
-/* ========== Stack Trace Operations ========== */
+XrValue xr_exception_get_data(XrayIsolate *X, XrValue exception) {
+    XrInstance *inst = exception_instance(X, exception);
+    if (!inst)
+        return xr_null();
+    return inst->fields[EXCEPTION_FIELD_DATA];
+}
 
-// Add stack frame to exception
+/* ========== Stack Trace ========== */
+
 void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName, int line) {
-    XR_DCHECK(X != NULL, "exception_add_frame: NULL isolate");
     XR_DCHECK(funcName != NULL, "exception_add_frame: NULL funcName");
-    if (!XR_IS_EXCEPTION(exception)) {
+    XrInstance *inst = exception_instance(X, exception);
+    if (!inst)
         return;
+
+    XrValue stack_val = inst->fields[EXCEPTION_FIELD_STACK];
+    XrArray *stack;
+    if (XR_IS_ARRAY(stack_val)) {
+        stack = (XrArray *) XR_TO_PTR(stack_val);
+    } else {
+        stack = xr_array_new(xr_current_coro(X));
+        if (!stack)
+            return;
+        inst->fields[EXCEPTION_FIELD_STACK] = xr_value_from_array(stack);
     }
 
-    XrException *exc = XR_AS_EXCEPTION(exception);
-    if (!exc->stackTrace) {
-        exc->stackTrace = xr_array_new(xr_current_coro(X));
-    }
-
-    // Create stack frame string: "at funcName (line X)"
     char frameStr[256];
     snprintf(frameStr, sizeof(frameStr), "at %s (line %d)", funcName, line);
-
     XrString *frameString = xr_string_intern(X, frameStr, strlen(frameStr), 0);
-    xr_array_push(exc->stackTrace, xr_string_value(frameString));
+    if (frameString) {
+        xr_array_push(stack, xr_string_value(frameString));
+    }
 }
 
-/* ========== User-facing Constructor & Field Accessors ==========
+/* ========== Primitive Class Methods ==========
  *
- * Wired into the prelude `Exception` XrClass by
- * xr_exception_register_native_type below. The constructor primitive
- * intentionally allocates a fresh XrException and discards the
- * pre-allocated XrInstance the VM hands in as `self`: XrException has
- * its own GC type (XR_TEXCEPTION) and traversal layout, and the
- * constructor return value replaces base[a] on the dispatch path.
+ * These run from vm_invoke_class / vm_superinvoke as XMETHOD_PRIMITIVE
+ * entries on core->exceptionClass. They receive the pre-allocated
+ * XrInstance via `self` (either Exception or a subclass — Exception
+ * fields occupy indices 0..4 regardless), write parent fields by index,
+ * and return the same value back so the caller's base[a] points at it.
  */
 
-// constructor(message: string = "", cause: Exception? = null)
-//
-// Exposed via xexception.h so the VM `OP_NEWEXCEPTION` dispatch path
-// can invoke the same body as the registered native static method.
-XR_FUNC XrValue xr_exception_user_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
-                                            int argc) {
-    XR_DCHECK(isolate != NULL, "exception_construct: NULL isolate");
-    (void) self;
+static XrValue exception_primitive_constructor(XrayIsolate *X, XrValue self, XrValue *args,
+                                               int argc) {
+    XR_DCHECK(X != NULL, "Exception.ctor: NULL isolate");
+    if (!XR_IS_INSTANCE(self))
+        return xr_null();
 
-    const char *message_chars = "";
-    size_t message_len = 0;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(self);
+
+    // message: string = ""
+    XrString *msg_str = NULL;
     if (argc >= 1 && XR_IS_STRING(args[0])) {
-        XrString *s = (XrString *) XR_TO_PTR(args[0]);
-        message_chars = s->data;
-        message_len = (size_t) s->length;
+        msg_str = (XrString *) XR_TO_PTR(args[0]);
+    } else {
+        msg_str = xr_string_intern(X, "", 0, 0);
+    }
+    inst->fields[EXCEPTION_FIELD_MESSAGE] = msg_str ? XR_FROM_PTR(msg_str) : xr_null();
+
+    // stack: Array<string> — fresh empty array per instance
+    XrArray *stack = xr_array_new(xr_current_coro(X));
+    inst->fields[EXCEPTION_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
+
+    // cause: Exception? = null
+    if (argc >= 2 && xr_value_is_exception(X, args[1])) {
+        inst->fields[EXCEPTION_FIELD_CAUSE] = args[1];
+    } else {
+        inst->fields[EXCEPTION_FIELD_CAUSE] = xr_null();
     }
 
-    XrException *exc = xr_exception_alloc(isolate);
-    if (!exc)
-        return xr_null();
+    // code: int = 0 (only the C runtime sets non-zero codes)
+    inst->fields[EXCEPTION_FIELD_CODE] = xr_int(0);
 
-    exc->code = XR_ERR_RUNTIME;
-    exc->message = xr_string_intern(isolate, message_chars, message_len, 0);
-    exc->stackTrace = xr_array_new(xr_current_coro(isolate));
+    // data: Json? = null (used by xr_exception_from_value to wrap thrown values)
+    inst->fields[EXCEPTION_FIELD_DATA] = xr_null();
 
-    if (argc >= 2 && XR_IS_EXCEPTION(args[1])) {
-        exc->cause = XR_AS_EXCEPTION(args[1]);
-    }
-
-    return XR_EXCEPTION_VAL(exc);
+    return self;
 }
 
-// Field getter helpers. Each returns null when the receiver is not an
-// exception, mirroring how XR_IS_EXCEPTION-guarded paths fail soft on
-// the rest of this file.
-static XrValue xr_exception_getter_message(XrayIsolate *iso, XrValue self, XrValue *args,
-                                           int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    if (!XR_IS_EXCEPTION(self))
-        return xr_null();
-    XrException *exc = XR_AS_EXCEPTION(self);
-    if (!exc->message)
-        return xr_null();
-    return XR_FROM_PTR(exc->message);
-}
-
-static XrValue xr_exception_getter_stack(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    if (!XR_IS_EXCEPTION(self))
-        return xr_null();
-    XrException *exc = XR_AS_EXCEPTION(self);
-    /* Stack-trace formatting deferred until xvm_capture_stack lands;
-     * an empty string keeps `e.stack` typed as string and lets
-     * subclassing code that interpolates the field work today. */
-    if (!exc->stackTrace || exc->stackTrace->length == 0) {
-        XrString *empty = xr_string_intern(iso, "", 0, 0);
-        return empty ? XR_FROM_PTR(empty) : xr_null();
-    }
-
-    /* Concatenate frames as "frame1\nframe2\n..." */
-    size_t total = 0;
-    for (int i = 0; i < exc->stackTrace->length; i++) {
-        XrValue frame = ((XrValue *) exc->stackTrace->data)[i];
-        if (XR_IS_STRING(frame))
-            total += (size_t) ((XrString *) XR_TO_PTR(frame))->length + 1;
-    }
-    char *buf = (char *) xr_malloc(total + 1);
-    if (!buf)
-        return xr_null();
-    size_t off = 0;
-    for (int i = 0; i < exc->stackTrace->length; i++) {
-        XrValue frame = ((XrValue *) exc->stackTrace->data)[i];
-        if (!XR_IS_STRING(frame))
-            continue;
-        XrString *s = (XrString *) XR_TO_PTR(frame);
-        memcpy(buf + off, s->data, (size_t) s->length);
-        off += (size_t) s->length;
-        buf[off++] = '\n';
-    }
-    buf[off] = '\0';
-    XrString *result = xr_string_intern(iso, buf, off, 0);
-    xr_free(buf);
-    return result ? XR_FROM_PTR(result) : xr_null();
-}
-
-static XrValue xr_exception_getter_cause(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    if (!XR_IS_EXCEPTION(self))
-        return xr_null();
-    XrException *exc = XR_AS_EXCEPTION(self);
-    if (!exc->cause)
-        return xr_null();
-    return XR_EXCEPTION_VAL(exc->cause);
-}
-
-// toString() -> string : "<class>: <message>"
-static XrValue xr_exception_method_to_string(XrayIsolate *iso, XrValue self, XrValue *args,
+static XrValue exception_primitive_to_string(XrayIsolate *X, XrValue self, XrValue *args,
                                              int argc) {
     (void) args;
     (void) argc;
-    if (!XR_IS_EXCEPTION(self))
+    if (!XR_IS_INSTANCE(self))
         return xr_null();
-    XrException *exc = XR_AS_EXCEPTION(self);
-    const char *msg = (exc->message ? exc->message->data : "");
+
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(self);
+    const char *class_name = inst->klass && inst->klass->name ? inst->klass->name : "Exception";
+    const char *message = "";
+    XrValue msg_val = inst->fields[EXCEPTION_FIELD_MESSAGE];
+    if (XR_IS_STRING(msg_val)) {
+        message = ((XrString *) XR_TO_PTR(msg_val))->data;
+    }
+
     char buffer[1024];
-    int n = snprintf(buffer, sizeof(buffer), "Exception: %s", msg);
+    int n = snprintf(buffer, sizeof(buffer), "%s: %s", class_name, message);
     if (n < 0)
         n = 0;
     if ((size_t) n >= sizeof(buffer))
         n = (int) sizeof(buffer) - 1;
-    XrString *result = xr_string_intern(iso, buffer, (size_t) n, 0);
+    XrString *result = xr_string_intern(X, buffer, (size_t) n, 0);
     return result ? XR_FROM_PTR(result) : xr_null();
 }
 
-/* ========== Native Class Registration ========== */
+/* ========== Class Registration ==========
+ *
+ * Called from xr_core_init after Object is ready. Builds the Exception
+ * class with 5 fields and 2 primitive methods, then asserts that field
+ * indices match the EXCEPTION_FIELD_* constants — any drift between
+ * builder ordering and the constants would silently corrupt every throw.
+ */
 
-void xr_exception_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod exception_methods[] = {
-        {"toString", xr_exception_method_to_string, 0},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeMethod exception_getters[] = {
-        {"message", xr_exception_getter_message, 1},
-        {"stack", xr_exception_getter_stack, 1},
-        {"cause", xr_exception_getter_cause, 1},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeMethod exception_statics[] = {
-        /* Variadic arity (-1) so frontend may dispatch with 0/1/2 args
-         * and the constructor body validates each one explicitly. */
-        {"constructor", xr_exception_user_construct, -1},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeTypeInfo exception_info = {
-        .name = "Exception",
-        .gc_type = XR_TEXCEPTION,
-        .methods = (XrNativeMethod *) exception_methods,
-        .getters = (XrNativeMethod *) exception_getters,
-        .static_methods = (XrNativeMethod *) exception_statics,
-    };
-    xr_register_native_type(isolate, &exception_info);
+void xr_register_exception_class(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "register_exception_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "register_exception_class: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "register_exception_class: Object not registered yet");
+    XR_DCHECK(core->exceptionClass == NULL, "register_exception_class: already registered");
+
+    XrClassBuilder *builder = xr_class_builder_new(X, TYPE_NAME_EXCEPTION, core->objectClass);
+    XR_CHECK(builder != NULL, "register_exception_class: builder alloc failed");
+
+    /* Field order MUST match EXCEPTION_FIELD_* in xclass_system.h. */
+    xr_class_builder_add_field(builder, "message", 0);
+    xr_class_builder_add_field(builder, "stack", 0);
+    xr_class_builder_add_field(builder, "cause", 0);
+    xr_class_builder_add_field(builder, "code", 0);
+    xr_class_builder_add_field(builder, "data", 0);
+
+    xr_class_builder_add_method(builder, XR_KEYWORD_CONSTRUCTOR, exception_primitive_constructor,
+                                /* param_count */ -1, XMETHOD_FLAG_CONSTRUCTOR);
+    xr_class_builder_add_method(builder, "toString", exception_primitive_to_string,
+                                /* param_count */ 0, 0);
+
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "register_exception_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN;
+
+    /* Sanity-check that builder layout matches the indices the entire VM
+     * relies on. If finalize ever reorders fields these asserts trip
+     * immediately at init, not at the first throw. */
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "message") == EXCEPTION_FIELD_MESSAGE,
+              "Exception field 'message' index drift");
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "stack") == EXCEPTION_FIELD_STACK,
+              "Exception field 'stack' index drift");
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "cause") == EXCEPTION_FIELD_CAUSE,
+              "Exception field 'cause' index drift");
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "code") == EXCEPTION_FIELD_CODE,
+              "Exception field 'code' index drift");
+    XR_DCHECK(xr_class_lookup_field_by_name(X, cls, "data") == EXCEPTION_FIELD_DATA,
+              "Exception field 'data' index drift");
+
+    core->exceptionClass = cls;
 }
 
-/* ========== Exception Output ========== */
+/* ========== Output ========== */
 
-// Print exception info
 void xr_exception_print(XrayIsolate *X, XrValue exception) {
-    (void) X;
-    if (!XR_IS_EXCEPTION(exception)) {
+    XrInstance *inst = exception_instance(X, exception);
+    if (!inst) {
         fprintf(stderr, "Error: Not an exception object\n");
         return;
     }
 
-    XrException *exc = XR_AS_EXCEPTION(exception);
+    XrErrorCode code = xr_exception_get_code(X, exception);
+    const char *message = xr_exception_get_message(X, exception);
+    fprintf(stderr, "\033[1;31mUncaught %s [%d]:\033[0m %s\n",
+            inst->klass && inst->klass->name ? inst->klass->name : "Exception", (int) code,
+            message ? message : "");
 
-    // Print error code and message
-    fprintf(stderr, "\033[1;31mUncaught Exception [%d]:\033[0m %s\n", exc->code,
-            exc->message ? exc->message->data : "");
-
-    // Print location info
-    if (exc->file) {
-        fprintf(stderr, "  at %s:%d:%d\n", exc->file->data, exc->line, exc->column);
-    }
-
-    // Print stack trace
-    if (exc->stackTrace && exc->stackTrace->length > 0) {
-        fprintf(stderr, "\nStack trace:\n");
-        for (int i = 0; i < exc->stackTrace->length; i++) {
-            XrValue frame = ((XrValue *) exc->stackTrace->data)[i];
-            if (XR_IS_STRING(frame)) {
-                XrString *str = (XrString *) XR_TO_PTR(frame);
-                fprintf(stderr, "  %s\n", str->data);
+    XrValue stack_val = inst->fields[EXCEPTION_FIELD_STACK];
+    if (XR_IS_ARRAY(stack_val)) {
+        XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
+        if (stack->length > 0) {
+            fprintf(stderr, "\nStack trace:\n");
+            for (int i = 0; i < stack->length; i++) {
+                XrValue frame = ((XrValue *) stack->data)[i];
+                if (XR_IS_STRING(frame)) {
+                    XrString *str = (XrString *) XR_TO_PTR(frame);
+                    fprintf(stderr, "  %s\n", str->data);
+                }
             }
         }
     }

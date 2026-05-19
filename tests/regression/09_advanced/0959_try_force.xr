@@ -5,14 +5,14 @@
 
 fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
-        throw "force-try violation"
+        throw new Exception("force-try violation")
     }
     return 42
 }
 
 fn maybeFailJson(should_throw: bool) -> Json {
     if (should_throw) {
-        throw "deeper failure"
+        throw new Exception("deeper failure")
     }
     return { id: 99, name: "Bob" }
 }
@@ -43,7 +43,7 @@ fn test_try_force_throw_propagates() {
         print("should not reach:", x)
     } catch (e) {
         saw_catch = true
-        assert_eq(e, "force-try violation")
+        assert_eq(e.message, "force-try violation")
     }
     assert_eq(saw_catch, true)
     print("   PASS")
@@ -61,7 +61,7 @@ fn test_try_force_nested_throw() {
         print("should not reach:", result)
     } catch (e) {
         saw_catch = true
-        assert_eq(e, "deeper failure")
+        assert_eq(e.message, "deeper failure")
     }
     assert_eq(saw_catch, true)
     print("   PASS")

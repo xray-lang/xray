@@ -63,12 +63,28 @@ typedef struct XrLogger {
     struct XrLogger *parent;
 } XrLogger;
 
-/* ========== Logger Reference (GC-managed wrapper) ========== */
+/* ========== Logger Native Body ==========
+ *
+ * Logger uses the unified-class model: each logger value is an
+ * XrInstance whose native body holds a pointer to the actual
+ * heap-allocated XrLogger struct. The body is owned by the
+ * instance — destroy frees the underlying logger plus its sub-
+ * allocations (json_ctx / text_ctx). The XrLogger heap structure
+ * is unchanged; only the GC wrapper is collapsed into a body.
+ */
 
-typedef struct XrLoggerRef {
-    XrGCHeader gc;     // type = XR_TLOGGER
-    XrLogger *logger;  // Points to actual XrLogger (heap-allocated, shared)
-} XrLoggerRef;
+typedef struct XrLoggerBody {
+    XrLogger *logger;  // Heap-allocated, owned by this instance.
+} XrLoggerBody;
+
+/* ========== Type Check ========== */
+
+XR_FUNC bool xr_value_is_logger(struct XrayIsolate *X, XrValue v);
+XR_FUNC XrLogger *xr_value_get_logger(struct XrayIsolate *X, XrValue v);
+
+/* ========== Class Registration ========== */
+
+XR_FUNC void xr_register_logger_class(struct XrayIsolate *X);
 
 /* ========== Module Loader ========== */
 

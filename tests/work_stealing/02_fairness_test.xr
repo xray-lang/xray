@@ -89,6 +89,6 @@ for (let i = 0; i < CORO_COUNT; i++) {
 if (all_executed) {
     print("✓ 所有协程都获得了执行机会")
 } else {
-    throw "有协程未执行"
+    throw new Exception("有协程未执行")
 }
 print("========== 测试2 完成 ==========")

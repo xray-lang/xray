@@ -67,7 +67,6 @@ typedef struct XrChannel XrChannel;
 // no separate struct forward declaration needed.
 typedef struct XrBigInt XrBigInt;
 typedef struct XrIterator XrIterator;
-typedef struct XrException XrException;
 typedef struct XrStringBuilder XrStringBuilder;
 typedef struct XrCFunction XrCFunction;
 typedef struct XrBoundMethod XrBoundMethod;

@@ -14,16 +14,19 @@
 // Triggering shape: deeply nested fn that throw, with try-catch at
 // outer scope (test_basic_*, test_finally_*, test_rethrow_* below).
 /*
-** 异常处理测试用例
-** 作者：xingleixu@gmail.com
+** Exception handling regression suite.
+** Author: xingleixu@gmail.com
+**
+** Strict-throw contract: every `throw` must produce an Exception (or
+** subclass). Catch handlers always receive an Exception value; tests
+** compare e.message for the user-visible string.
 */
 
-// 1. 基本 try-catch
-
-fn thr7() { throw "from_fn" }
+// 1. Helper functions used by multiple tests
+fn thr7() { throw new Exception("from_fn") }
 let f8 = false
-fn fn8() { try { throw "x" } finally { f8 = true } }
-fn d4() { throw "deep" }
+fn fn8() { try { throw new Exception("x") } finally { f8 = true } }
+fn d4() { throw new Exception("deep") }
 fn d3() { d4() }
 fn d2() { d3() }
 fn d1() { d2() }
@@ -32,7 +35,7 @@ fn r12() -> string {
     return "no"
 }
 fn r13() -> string {
-    try { throw "x" } catch (e) { return "caught" }
+    try { throw new Exception("x") } catch (e) { return "caught" }
     return "no"
 }
 fn f17() -> int {
@@ -43,7 +46,7 @@ fn f17() -> int {
 @test
 fn test_exception() {
     print("1. try-catch")
-    try { throw "e1" } catch (e) { assert_eq(e, "e1") }
+    try { throw new Exception("e1") } catch (e) { assert_eq(e.message, "e1") }
     print("   PASS")
 
     // 2. try-finally
@@ -57,12 +60,12 @@ fn test_exception() {
     print("3. try-catch-finally")
     let c3 = false
     let f3 = false
-    try { throw "e3" } catch (e) { c3 = true } finally { f3 = true }
+    try { throw new Exception("e3") } catch (e) { c3 = true } finally { f3 = true }
     assert_eq(c3, true)
     assert_eq(f3, true)
     print("   PASS")
 
-    // 4. finally 执行顺序
+    // 4. finally execution order
     print("4. finally order")
     let a4: Array<string> = []
     try { a4.push("try") } finally { a4.push("finally") }
@@ -73,11 +76,11 @@ fn test_exception() {
     assert_eq(a4[2], "after")
     print("   PASS")
 
-    // 5. 嵌套 finally 传播
+    // 5. nested finally propagation
     print("5. nested finally propagation")
     let a5: Array<string> = []
     try {
-        try { a5.push("try"); throw "x" } finally { a5.push("finally") }
+        try { a5.push("try"); throw new Exception("x") } finally { a5.push("finally") }
     } catch (e) { a5.push("catch") }
     assert_eq(a5.length, 3)
     assert_eq(a5[0], "try")
@@ -85,72 +88,70 @@ fn test_exception() {
     assert_eq(a5[2], "catch")
     print("   PASS")
 
-    // 6. 嵌套 catch + re-throw
+    // 6. nested catch + re-throw
     print("6. nested catch re-throw")
     let i6 = false
     let o6 = false
     try {
-        try { throw "inner" } catch (e) { i6 = true; throw "outer" }
-    } catch (e) { o6 = true; assert_eq(e, "outer") }
+        try { throw new Exception("inner") } catch (e) { i6 = true; throw new Exception("outer") }
+    } catch (e) { o6 = true; assert_eq(e.message, "outer") }
     assert_eq(i6, true)
     assert_eq(o6, true)
     print("   PASS")
 
-    // 7. 跨函数传播
+    // 7. cross-function propagation
     print("7. cross function")
     let c7: Exception? = null
     try { thr7() } catch (e) { c7 = e }
-    assert_eq(c7, "from_fn")
+    assert_eq(c7.message, "from_fn")
     print("   PASS")
 
-    // 8. 函数内 finally
+    // 8. finally in function
     print("8. finally in function")
     f8 = false
     try { fn8() } catch (e) { }
     assert_eq(f8, true)
     print("   PASS")
 
-    // 9. throw 不同类型
-    print("9. throw types")
-    try { throw "str" } catch (e) { assert_eq(e, "str") }
-    try { throw 42 } catch (e) { assert_eq(e, 42) }
-    try { throw [1, 2] } catch (e) { assert_eq(e.length, 2) }
-    try { throw {a: 1} } catch (e) { assert_eq(e["a"], 1) }
+    // 9. Exception with constructed messages
+    print("9. exception messages")
+    try { throw new Exception("str") } catch (e) { assert_eq(e.message, "str") }
+    try { throw new Exception("ans=" + string(42)) } catch (e) { assert_eq(e.message, "ans=42") }
     print("   PASS")
 
-    // 10. 深层调用栈
+    // 10. deep call stack
     print("10. deep call stack")
     let c10: Exception? = null
     try { d1() } catch (e) { c10 = e }
-    assert_eq(c10, "deep")
+    assert_eq(c10.message, "deep")
     print("   PASS")
 
-    // 11. re-throw 累加
+    // 11. rethrow with derived message
     print("11. re-throw chain")
     let n11 = 0
     try {
         try {
-            try { throw "a" } catch (e) { n11 = n11 + 1; throw e + "b" }
-        } catch (e) { n11 = n11 + 1; throw e + "c" }
-    } catch (e) { n11 = n11 + 1; assert_eq(e, "abc") }
+            try { throw new Exception("a") } catch (e) { n11 = n11 + 1; throw new Exception(e.message + "b") }
+        } catch (e) { n11 = n11 + 1; throw new Exception(e.message + "c") }
+    } catch (e) { n11 = n11 + 1; assert_eq(e.message, "abc") }
     assert_eq(n11, 3)
     print("   PASS")
 
-    // 12. try 中 return
+    // 12. return inside try
     print("12. return in try")
     assert_eq(r12(), "ret")
     print("   PASS")
 
-    // 13. catch 中 return
+    // 13. return inside catch
     print("13. return in catch")
     assert_eq(r13(), "caught")
     print("   PASS")
 
-    // 14. 顺序 try-catch
+    // 14. sequential try-catch
     print("14. sequential try-catch")
     let s14: Array<string> = []
-    try { s14.push("a"); throw "x" } catch (e) { s14.push("b") }
-    try { s14.push("c"); throw "y" } catch (e) { s14.push("d") }
+    try { s14.push("a"); throw new Exception("x") } catch (e) { s14.push("b") }
+    try { s14.push("c"); throw new Exception("y") } catch (e) { s14.push("d") }
     assert_eq(s14.length, 4)
     assert_eq(s14[0], "a")
     assert_eq(s14[1], "b")
@@ -158,37 +159,37 @@ fn test_exception() {
     assert_eq(s14[3], "d")
     print("   PASS")
 
-    // 15. 只有 finally（无 catch）
+    // 15. only finally (no catch)
     print("15. only finally")
     let f15 = false
     try {
-        try { throw "e" } finally { f15 = true }
+        try { throw new Exception("e") } finally { f15 = true }
     } catch (e) { }
     assert_eq(f15, true)
     print("   PASS")
 
-    // 16. try-catch-finally 组合后嵌套 throw（bug 回归测试）
+    // 16. try-catch-finally then nested throw (regression)
     print("16. tcf + nested throw (regression)")
     let c16 = false
     let f16 = false
-    try { throw "e" } catch (e) { c16 = true } finally { f16 = true }
+    try { throw new Exception("e") } catch (e) { c16 = true } finally { f16 = true }
     assert_eq(c16, true)
     assert_eq(f16, true)
     let i16 = false
     let o16 = false
     try {
-        try { throw "i" } catch (e) { i16 = true; throw "o" }
+        try { throw new Exception("i") } catch (e) { i16 = true; throw new Exception("o") }
     } catch (e) { o16 = true }
     assert_eq(i16, true)
     assert_eq(o16, true)
     print("   PASS")
 
-    // 17. finally 中修改变量
+    // 17. mutate variable in finally
     print("17. modify in finally")
     assert_eq(f17(), 2)
     print("   PASS")
 
-    // 18. 多层嵌套 try
+    // 18. multi-level nesting
     print("18. multi-level nesting")
     let a18: Array<string> = []
     try {
@@ -197,7 +198,7 @@ fn test_exception() {
             a18.push("t2")
             try {
                 a18.push("t3")
-                throw "e"
+                throw new Exception("e")
             } catch (e) { a18.push("c3") }
         } finally { a18.push("f2") }
     } finally { a18.push("f1") }
@@ -209,16 +210,16 @@ fn test_exception() {
     let a19: Array<string> = []
     try {
         try {
-            throw "orig"
+            throw new Exception("orig")
         } catch (e) {
             a19.push("catch")
-            throw "rethrown"
+            throw new Exception("rethrown")
         } finally {
             a19.push("finally")
         }
     } catch (e) {
         a19.push("outer")
-        assert_eq(e, "rethrown")
+        assert_eq(e.message, "rethrown")
     }
     assert_eq(a19.length, 3)
     assert_eq(a19[0], "catch")
@@ -231,14 +232,14 @@ fn test_exception() {
     let a20: Array<string> = []
     try {
         try {
-            throw "a"
+            throw new Exception("a")
         } catch (e) {
             a20.push("inner-catch")
-            throw "b"
+            throw new Exception("b")
         }
     } catch (e) {
         a20.push("outer-catch")
-        assert_eq(e, "b")
+        assert_eq(e.message, "b")
     }
     assert_eq(a20.length, 2)
     assert_eq(a20[0], "inner-catch")
@@ -250,14 +251,14 @@ fn test_exception() {
     let a21: Array<string> = []
     try {
         try {
-            throw "orig"
+            throw new Exception("orig")
         } finally {
             a21.push("finally")
-            throw "from-finally"
+            throw new Exception("from-finally")
         }
     } catch (e) {
         a21.push("outer")
-        assert_eq(e, "from-finally")
+        assert_eq(e.message, "from-finally")
     }
     assert_eq(a21.length, 2)
     assert_eq(a21[0], "finally")
@@ -270,16 +271,16 @@ fn test_exception() {
     try {
         try {
             try {
-                throw "deep"
+                throw new Exception("deep")
             } catch (e) {
                 a22.push("c1")
-                throw "mid"
+                throw new Exception("mid")
             } finally {
                 a22.push("f1")
             }
         } catch (e) {
             a22.push("c2")
-            assert_eq(e, "mid")
+            assert_eq(e.message, "mid")
         } finally {
             a22.push("f2")
         }
@@ -294,4 +295,3 @@ fn test_exception() {
     assert_eq(a22.length, 5)
     print("   PASS")
 }
-

@@ -2,7 +2,7 @@
 // all other children are cancelled and scope throws first error.
 
 fn failing() -> int {
-    throw "child error"
+    throw new Exception("child error")
     return 0
 }
 fn ok() -> int {

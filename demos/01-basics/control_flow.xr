@@ -75,7 +75,7 @@ print(classify(200))
 
 // === try / catch / finally ===
 fn safeDivide(a: int, b: int) -> int {
-    if (b == 0) { throw "division by zero" }
+    if (b == 0) { throw new Exception("division by zero") }
     return a / b
 }
 

@@ -44,11 +44,12 @@ fn test_exception_to_string() {
 
 @test
 fn test_exception_stack_default() {
-    // Stack starts empty; xvm_capture_stack lands in a later phase but
-    // the field must already be reachable so `e.stack` is always typed
-    // as string.
+    // The Exception constructor initialises `stack` to a fresh empty
+    // XrArray; xvm_capture_stack later fills it on the unwind path.
+    // Newly constructed but never-thrown exceptions therefore have an
+    // empty stack array, not null and not "".
     let e = new Exception("hi")
-    assert_eq(e.stack, "")
+    assert_eq(e.stack.length, 0)
 }
 
 @test

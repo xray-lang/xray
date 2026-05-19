@@ -1,4 +1,4 @@
 // DAP test fixture: exception breakpoint test
 let x = 1
-throw "test error"
+throw new Exception("test error")
 print("should not reach here")

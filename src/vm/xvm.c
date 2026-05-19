@@ -195,8 +195,9 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
             XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;                             \
             if (_eh && _eh->on_exception) {                                                        \
                 bool _unc = (VM_HANDLER_COUNT == 0);                                               \
-                const char *_msg =                                                                 \
-                    XR_IS_EXCEPTION(_exc) ? xr_exception_get_message(_exc) : "<exception>";        \
+                const char *_msg = xr_value_is_exception(isolate, _exc)                            \
+                                       ? xr_exception_get_message(isolate, _exc)                   \
+                                       : "<exception>";                                            \
                 if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {               \
                     VM_SET_EXCEPTION(_exc);                                                        \
                     ci->pc = pc - 1;                                                               \

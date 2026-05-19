@@ -14,7 +14,7 @@
 fn test_throw_string_keeps_type() {
     let caught_typename = ""
     try {
-        throw "boom"
+        throw new Exception("boom")
     } catch (e) {
         caught_typename = typename(e)
     }
@@ -24,9 +24,12 @@ fn test_throw_string_keeps_type() {
     assert(caught_typename != "", "caught value lost its type: got '" + caught_typename + "'")
 }
 
-class CustomErr {
+class CustomErr extends Exception {
     code: int
-    constructor(c: int) { this.code = c }
+    constructor(c: int) {
+        super("custom")
+        this.code = c
+    }
 }
 
 @test

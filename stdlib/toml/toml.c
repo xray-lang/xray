@@ -282,10 +282,11 @@ static void write_value(TomlWriter *w, XrValue val) {
             }
             tw_str(w, buf);
         }
-    } else if (XR_IS_DATETIME(val)) {
+    } else if (xr_value_is_datetime(w->isolate, val)) {
         // Emit as TOML offset / local date-time in RFC 3339 format.
         char buf[64];
-        int n = xr_datetime_to_iso_string(XR_TO_DATETIME(val), buf, sizeof(buf));
+        int n = xr_datetime_to_iso_string(xr_value_get_datetime_body(w->isolate, val), buf,
+                                          sizeof(buf));
         if (n > 0)
             tw_append(w, buf, (size_t) n);
         else

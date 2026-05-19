@@ -23,6 +23,10 @@
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/gc/xalloc_unified.h"
 #include "../../src/runtime/object/xnative_type.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xclass_builder.h"
+#include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/class/xinstance.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
@@ -843,23 +847,40 @@ static XrValue xr_log_is_enabled(XrayIsolate *isolate, XrValue *args, int nargs)
 
 /* ========== Child Logger Implementation ========== */
 
+static XrClass *logger_class(XrayIsolate *X) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL && core->loggerClass != NULL,
+              "logger: core->loggerClass not registered");
+    return core->loggerClass;
+}
+
+bool xr_value_is_logger(XrayIsolate *X, XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return xr_class_instanceof(inst->klass, logger_class(X));
+}
+
+XrLogger *xr_value_get_logger(XrayIsolate *X, XrValue v) {
+    if (!xr_value_is_logger(X, v))
+        return NULL;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    XrLoggerBody *body = (XrLoggerBody *) xr_instance_native_body(inst);
+    return body ? body->logger : NULL;
+}
+
 static XrValue wrap_logger(XrayIsolate *X, XrLogger *logger) {
-    XrCoroutine *coro = xr_current_coro(X);
-    XrLoggerRef *ref = (XrLoggerRef *) xr_alloc(coro, sizeof(XrLoggerRef), XR_TLOGGER);
-    if (!ref)
+    XrInstance *inst = xr_instance_new(X, logger_class(X));
+    if (!inst)
         return xr_null();
-    ref->logger = logger;
-    return XR_FROM_PTR(ref);
+    XrLoggerBody *body = (XrLoggerBody *) xr_instance_native_body(inst);
+    XR_DCHECK(body != NULL, "wrap_logger: native body NULL");
+    body->logger = logger;
+    return XR_FROM_PTR(inst);
 }
 
 static XrLogger *unwrap_logger(XrayIsolate *X, XrValue v) {
-    (void) X;
-    if (!XR_IS_PTR(v))
-        return NULL;
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(v);
-    if (XR_GC_GET_TYPE(gc) != XR_TLOGGER)
-        return NULL;
-    return ((XrLoggerRef *) gc)->logger;
+    return xr_value_get_logger(X, v);
 }
 
 // Create child logger
@@ -1047,20 +1068,43 @@ static void log_state_destroy(void *opaque) {
     xr_free(ls);
 }
 
-/* ========== GC Destroy ========== */
+/* ========== Native Body Lifecycle ==========
+ *
+ * Logger uses XrInstance + native body. The body is a single
+ * pointer to the heap-allocated XrLogger struct. init zeros it
+ * (so a half-built instance is safe to traverse / destroy);
+ * destroy frees the underlying logger and its sub-allocations.
+ * deep_copy / to_shared are forbidden because each child logger
+ * inherits a parent pointer and copying the struct would yield
+ * two owners for the same json_ctx / text_ctx allocations.
+ */
 
-// Declared (with XR_FUNC) in src/runtime/gc/xgc_internal.h.
-// Called by GC when XrLoggerRef is collected.
-void xr_gc_destroy_logger(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    XrLoggerRef *ref = (XrLoggerRef *) obj;
-    if (ref->logger) {
-        xr_free(ref->logger->json_ctx);
-        xr_free(ref->logger->text_ctx);
-        xr_free(ref->logger);
-        ref->logger = NULL;
+static void logger_body_init(XrInstance *inst, void *body_ptr) {
+    (void) inst;
+    XrLoggerBody *body = (XrLoggerBody *) body_ptr;
+    body->logger = NULL;
+}
+
+static void logger_body_destroy(void *body_ptr) {
+    XrLoggerBody *body = (XrLoggerBody *) body_ptr;
+    if (body->logger) {
+        xr_free(body->logger->json_ctx);
+        xr_free(body->logger->text_ctx);
+        xr_free(body->logger);
+        body->logger = NULL;
     }
 }
+
+static XrNativeBodyDesc g_logger_body_desc = {
+    .body_size = sizeof(XrLoggerBody),
+    .body_align = _Alignof(XrLoggerBody),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = logger_body_init,
+    .destroy = logger_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
 
 /* ========== Module Loader ========== */
 
@@ -1086,23 +1130,33 @@ XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool)", "Enable
 XR_DEFINE_BUILTIN(xr_log_flush, "flush", "()", "Flush log buffer")
 XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: unknown): Logger", "Create child logger")
 
-/* Logger native-type registration is invoked unconditionally during
- * isolate init by xr_prelude_register_all_native_types, so the XrClass
- * is available even when user code never `import log`. */
-void xr_logger_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod logger_methods[] = {{"debug", xr_logger_debug, -1},
-                                                    {"info", xr_logger_info, -1},
-                                                    {"warn", xr_logger_warn, -1},
-                                                    {"error", xr_logger_error, -1},
-                                                    {"fatal", xr_logger_fatal, -1},
-                                                    {"child", xr_logger_child, -1},
-                                                    {NULL, NULL, 0}};
-    static const XrNativeTypeInfo logger_type_info = {.name = "Logger",
-                                                      .gc_type = XR_TLOGGER,
-                                                      .methods = logger_methods,
-                                                      .getters = NULL,
-                                                      .static_methods = NULL};
-    xr_register_native_type(isolate, &logger_type_info);
+/* Class registration is invoked unconditionally during isolate init by
+ * xr_prelude_register_all_native_types, so core->loggerClass is
+ * available even when user code never `import log`. */
+void xr_register_logger_class(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "register_logger_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "register_logger_class: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "register_logger_class: Object not registered");
+    XR_DCHECK(core->loggerClass == NULL, "register_logger_class: already registered");
+
+    XrClassBuilder *builder = xr_class_builder_new(X, "Logger", core->objectClass);
+    XR_CHECK(builder != NULL, "register_logger_class: builder alloc failed");
+
+    xr_class_builder_set_native_body(builder, &g_logger_body_desc);
+
+    xr_class_builder_add_method(builder, "debug", xr_logger_debug, -1, 0);
+    xr_class_builder_add_method(builder, "info", xr_logger_info, -1, 0);
+    xr_class_builder_add_method(builder, "warn", xr_logger_warn, -1, 0);
+    xr_class_builder_add_method(builder, "error", xr_logger_error, -1, 0);
+    xr_class_builder_add_method(builder, "fatal", xr_logger_fatal, -1, 0);
+    xr_class_builder_add_method(builder, "child", xr_logger_child, -1, 0);
+
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "register_logger_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+
+    core->loggerClass = cls;
 }
 
 XR_FUNC XrModule *xr_load_module_log(XrayIsolate *isolate) {

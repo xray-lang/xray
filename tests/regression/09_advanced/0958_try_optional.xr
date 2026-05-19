@@ -5,20 +5,20 @@
 
 fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
-        throw "intentional int failure"
+        throw new Exception("intentional int failure")
     }
     return 42
 }
 
 fn maybeFailJson(should_throw: bool) -> Json {
     if (should_throw) {
-        throw "intentional json failure"
+        throw new Exception("intentional json failure")
     }
     return { id: 1, name: "Alice" }
 }
 
 fn parseConfig() -> Json {
-    throw "config missing"
+    throw new Exception("config missing")
 }
 
 fn parseConfigOK() -> Json {
@@ -90,9 +90,9 @@ fn test_try_optional_function_return() {
 @test
 fn test_try_optional_batch() {
     print("9. batch try? + ?? for multiple independent fallible ops")
-    fn fetchName() -> string { throw "no name" }
+    fn fetchName() -> string { throw new Exception("no name") }
     fn fetchAge() -> int { return 27 }
-    fn fetchEmail() -> string { throw "no email" }
+    fn fetchEmail() -> string { throw new Exception("no email") }
 
     let name  = try? fetchName()  ?? "unknown"
     let age   = try? fetchAge()   ?? 0

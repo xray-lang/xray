@@ -5,10 +5,20 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xexception.h - Exception object for try-catch-finally
+ * xexception.h - Exception API on top of the unified XrInstance class
  *
  * KEY CONCEPT:
- *   GC-managed exception with error code, message, stack trace.
+ *   Exception is a regular Xray class registered into core->exceptionClass
+ *   by xr_register_exception_class (xclass_system.c). It has no dedicated
+ *   GC type, no dedicated struct, and no dedicated bytecode opcode.
+ *   Subclasses participate in throw/catch via the standard super-class
+ *   chain — xr_value_is_exception walks XrClass->primary_supers.
+ *
+ * MEMORY:
+ *   Allocation goes through xr_instance_new(X, core->exceptionClass).
+ *   Each field lives at the index baked into EXCEPTION_FIELD_* (declared
+ *   in xclass_system.h). The C runtime writes those indices directly;
+ *   user code accesses them through the standard property pipeline.
  */
 
 #ifndef XEXCEPTION_H
@@ -19,55 +29,50 @@
 #include "xarray.h"
 #include "../xerror.h"
 
-typedef struct XrException XrException;
+/* ========== Type Check ==========
+ *
+ * Walks XrInstance->klass through xr_class_instanceof against
+ * core->exceptionClass. Returns false for non-instances and for
+ * instances whose class chain doesn't reach Exception.
+ */
+XR_FUNC bool xr_value_is_exception(XrayIsolate *X, XrValue v);
 
-struct XrException {
-    XrGCHeader gc;
-    XrErrorCode code;   // error code
-    XrString *message;  // error message
+/* ========== Exception Construction ========== */
 
-    // Source location
-    XrString *file;  // filename (GC managed)
-    int line;        // line number
-    int column;      // column number
-
-    // Stack trace
-    XrArray *stackTrace;  // call stack array (GC managed)
-
-    // Causal chain (the exception that caused this one to be thrown).
-    // NULL when this exception is the root cause. Surfaced to user code
-    // via the `cause` field on the prelude Exception class so wrapping
-    // patterns like `throw new ConfigError("bad", cause: ioErr)` keep
-    // the original failure reachable through `e.cause`.
-    XrException *cause;
-
-    // User data
-    XrValue userData;  // custom data attached by user
-};
-
-/* ========== Exception API ========== */
-
-// Create exception with code and message
+// Allocate a fresh Exception instance with code + message; stack starts
+// as an empty Array<string>, cause = null, data = null. Used by VM error
+// paths (OOM, type mismatch, etc.) that must succeed without re-entering
+// closure dispatch.
 XR_FUNC XrValue xr_exception_new(XrayIsolate *X, XrErrorCode code, const char *message);
 
-// Create exception with formatted message
+// Same but accepts a printf-style format.
 XR_FUNC XrValue xr_exception_newf(XrayIsolate *X, XrErrorCode code, const char *fmt, ...);
 
-// Create exception from XrError
+// Build an Exception from an XrError. message is moved; the original
+// XrError is not freed (caller's lifetime).
 XR_FUNC XrValue xr_exception_from_error(XrayIsolate *X, XrError *error);
 
-// Create exception from any value (auto-wrap)
+// If `value` is already an Exception (or subclass), returns it. If it's
+// an XrError, lifts it. Otherwise wraps `value` in a new Exception with
+// data field set to the original value so catch handlers can recover it.
 XR_FUNC XrValue xr_exception_from_value(XrayIsolate *X, XrValue value);
 
-/* ========== Exception Info ========== */
+/* ========== Exception Field Accessors ==========
+ *
+ * Each helper expects an Exception (or subclass) value; non-exceptions
+ * return a benign default. C consumers prefer these over direct field
+ * indexing because they keep the index constants encapsulated.
+ */
 
-XR_FUNC XrErrorCode xr_exception_get_code(XrValue exception);
-XR_FUNC const char *xr_exception_get_message(XrValue exception);
-XR_FUNC XrValue xr_exception_get_stacktrace(XrayIsolate *iso, XrValue exception);
+XR_FUNC XrErrorCode xr_exception_get_code(XrayIsolate *X, XrValue exception);
+XR_FUNC const char *xr_exception_get_message(XrayIsolate *X, XrValue exception);
+XR_FUNC XrValue xr_exception_get_stacktrace(XrayIsolate *X, XrValue exception);
+XR_FUNC XrValue xr_exception_get_data(XrayIsolate *X, XrValue exception);
 
 /* ========== Stack Trace ========== */
 
-// Add stack frame to exception
+// Append "at <funcName> (line <line>)" to the exception's stack array.
+// Lazily creates the stack array if it's null.
 XR_FUNC void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const char *funcName,
                                     int line);
 
@@ -75,44 +80,10 @@ XR_FUNC void xr_exception_add_frame(XrayIsolate *X, XrValue exception, const cha
 
 XR_FUNC void xr_exception_print(XrayIsolate *X, XrValue exception);
 
-/* ========== Native Class Registration ==========
- *
- * Registers the user-facing `Exception` XrClass on the isolate so that
- * user code can write `new Exception("msg")` or `new Exception("msg",
- * cause)` and subclass it via `class HttpError extends Exception`.
- *
- * Called from xr_prelude_register_all_native_types during isolate init.
- * Idempotent: the registry skips re-registration of the same gc_type.
- */
-XR_FUNC void xr_exception_register_native_type(XrayIsolate *isolate);
+/* ========== Class Registration ========== */
 
-/* User-facing constructor primitive.
- *
- * Signature mirrors the prelude declaration:
- *   constructor(message: string = "", cause: Exception? = null)
- *
- * Allocates a fresh XrException, populates message + cause, and returns
- * the wrapped XrValue. Called both via the registered native static
- * method dispatch and directly from the OP_NEWEXCEPTION fast path so
- * `new Exception("msg")` works without going through the generic
- * "instantiate XrInstance + invoke constructor" pipeline (XrException
- * has a separate GC type, not a generic instance).
- */
-XR_FUNC XrValue xr_exception_user_construct(XrayIsolate *isolate, XrValue self, XrValue *args,
-                                            int argc);
-
-/* ========== Type Check Macros ========== */
-
-// XR_IS_EXCEPTION is defined in xvalue.h (single source of truth)
-
-#define XR_AS_EXCEPTION(v) ((XrException *) XR_TO_PTR(v))
-
-#define XR_EXCEPTION_VAL(e) XR_FROM_PTR(e)
-
-/* ========== Convenience Macros ========== */
-
-#define xr_is_exception(v) XR_IS_EXCEPTION(v)
-#define xr_as_exception(v) XR_AS_EXCEPTION(v)
-#define xr_exception_val(e) XR_EXCEPTION_VAL(e)
+// Build the Exception XrClass and store it in core->exceptionClass.
+// Must be called from xr_core_init after Object is registered.
+XR_FUNC void xr_register_exception_class(XrayIsolate *X);
 
 #endif  // XEXCEPTION_H

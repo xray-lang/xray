@@ -52,12 +52,15 @@ XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
         for (int i = 0; i < klass->field_count; i++)
             cache->field_wrappers[i] = xr_null();
 
+        XrClass *fieldClass =
+            xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->fieldClass : NULL;
         for (int i = 0; i < klass->field_count; i++) {
             FieldWrapper *wrapper = (FieldWrapper *) xr_gc_alloc(
                 xr_isolate_get_gc(X), sizeof(FieldWrapper), XR_TINSTANCE);
             if (!wrapper)
                 goto fail;
             xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
+            wrapper->klass = fieldClass;
             wrapper->metadata.owner = klass;
             wrapper->metadata.field_index = i;
 
@@ -74,12 +77,15 @@ XrReflectCache *xr_reflect_cache_create(XrayIsolate *X, XrClass *klass) {
         for (int i = 0; i < klass->method_count; i++)
             cache->method_wrappers[i] = xr_null();
 
+        XrClass *methodClass =
+            xr_isolate_get_core_classes(X) ? xr_isolate_get_core_classes(X)->methodClass : NULL;
         for (int i = 0; i < klass->method_count; i++) {
             MethodWrapper *wrapper = (MethodWrapper *) xr_gc_alloc(
                 xr_isolate_get_gc(X), sizeof(MethodWrapper), XR_TINSTANCE);
             if (!wrapper)
                 goto fail;
             xr_gc_header_init_type(&wrapper->gc, XR_TINSTANCE);
+            wrapper->klass = methodClass;
             wrapper->metadata.owner = klass;
             wrapper->metadata.method_index = i;
 

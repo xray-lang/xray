@@ -394,10 +394,17 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             const char *name;
             int index;
         } builtin_classes[] = {
-            {"Reflect", XR_GLOBAL_VAR_REFLECT}, {"Array", XR_GLOBAL_VAR_ARRAY},
-            {"Set", XR_GLOBAL_VAR_SET},         {"Map", XR_GLOBAL_VAR_MAP},
-            {"String", XR_GLOBAL_VAR_STRING},   {"Json", XR_GLOBAL_VAR_JSON},
-            {"Bytes", XR_GLOBAL_VAR_BYTES},     {"Process", XR_GLOBAL_VAR_PROCESS},
+            {"Reflect", XR_GLOBAL_VAR_REFLECT},
+            {"Array", XR_GLOBAL_VAR_ARRAY},
+            {"Set", XR_GLOBAL_VAR_SET},
+            {"Map", XR_GLOBAL_VAR_MAP},
+            {"String", XR_GLOBAL_VAR_STRING},
+            {"Json", XR_GLOBAL_VAR_JSON},
+            {"Bytes", XR_GLOBAL_VAR_BYTES},
+            {"Process", XR_GLOBAL_VAR_PROCESS},
+            {"Exception", XR_GLOBAL_VAR_EXCEPTION},
+            {"Range", XR_GLOBAL_VAR_RANGE},
+            {"DateTime", XR_GLOBAL_VAR_DATETIME},
         };
         for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
             if (strcmp(name, builtin_classes[i].name) == 0) {
@@ -1725,27 +1732,9 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        /* new Exception() / new Exception(message) / new Exception(message, cause)
-         * Routed via XI_CALL_BUILTIN("Exception") -> OP_NEWEXCEPTION at emit time.
-         * The dedicated opcode is required because XrException is its own GC
-         * type (XR_TEXCEPTION) — the generic XrInstance constructor pipeline
-         * would allocate and discard the wrong struct layout. */
-        if (strcmp(cname, "Exception") == 0 && ne->arg_count <= 2) {
-            int n = (int) ne->arg_count;
-            XiValue *arg_vals[2];
-            for (int i = 0; i < n; i++)
-                arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
-            XiValue *v =
-                xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, (uint16_t) n);
-            if (!v)
-                return NULL;
-            for (int i = 0; i < n; i++)
-                v->args[i] = arg_vals[i];
-            v->aux = (void *) "Exception";
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
+        /* Exception: no special handling needed — it is a regular class with a
+         * primitive constructor registered in core->exceptionClass. Falls through
+         * to the generic class-instantiation path below. */
         /* new Bytes() / new Bytes(n) / new Bytes(n, fill) */
         if (strcmp(cname, "Bytes") == 0 && ne->arg_count <= 2) {
             int n = (int) ne->arg_count;
@@ -1827,6 +1816,32 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL, l->type_any, 0);
             if (cls)
                 cls->aux_int = upval_idx;
+        }
+    }
+    /* Built-in unified-class names (Exception, Range, DateTime, etc.)
+     * are populated into the VM builtins array by the prelude module
+     * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via
+     * XI_GET_BUILTIN before falling back to null. */
+    if (!cls && cname) {
+        static const struct {
+            const char *name;
+            int index;
+        } builtin_class_globals[] = {
+            {"Exception", XR_GLOBAL_VAR_EXCEPTION},
+            {"Range", XR_GLOBAL_VAR_RANGE},
+            {"DateTime", XR_GLOBAL_VAR_DATETIME},
+        };
+        for (size_t bi = 0; bi < sizeof(builtin_class_globals) / sizeof(builtin_class_globals[0]);
+             bi++) {
+            if (strcmp(cname, builtin_class_globals[bi].name) == 0) {
+                struct XrType *cls_type = xr_type_new_class(NULL, cname);
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
+                if (cls) {
+                    cls->aux_int = builtin_class_globals[bi].index;
+                    cls->aux = (void *) builtin_class_globals[bi].name;
+                }
+                break;
+            }
         }
     }
     if (!cls) {

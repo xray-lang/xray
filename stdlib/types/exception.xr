@@ -1,10 +1,18 @@
-// Built-in Exception type — implementation in src/runtime/object/xexception.c
+// Built-in Exception class.
+//
+// Field layout matches xclass_system.h EXCEPTION_FIELD_* indices and the
+// XrClass built by xr_register_exception_class in xclass_system.c. The
+// constructor and toString bodies are PRIMITIVE on the C side; this
+// declaration exists for analyzer / LSP awareness so user code can write
+// `class HttpError extends Exception { ... }` and reference fields by
+// name from any module.
 
-@native
 class Exception {
     message: string
-    stack: string
+    stack: Array<string>
     cause: Exception?
+    code: int
+    data: Json?
     constructor(message: string = "", cause: Exception? = null)
     toString() -> string
 }

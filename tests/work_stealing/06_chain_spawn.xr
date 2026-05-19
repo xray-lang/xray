@@ -71,6 +71,6 @@ if (result.sum > 0) {
 } else {
     print("
 ✗ 测试失败")
-    throw "链式创建测试失败"
+    throw new Exception("链式创建测试失败")
 }
 print("========== 测试6 完成 ==========")
