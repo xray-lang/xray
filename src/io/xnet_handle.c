@@ -16,6 +16,8 @@
 #include "../coro/xworker.h"
 #include "../os/os_net.h"
 #include "../runtime/gc/xgc.h"
+#include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_system.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xisolate_internal.h"
 
@@ -25,7 +27,7 @@
 
 /* ========== Allocation helpers ========== */
 
-static void *alloc_handle(struct XrayIsolate *X, size_t size, XrObjType type) {
+static void *alloc_handle(struct XrayIsolate *X, size_t size) {
     XR_DCHECK(X != NULL, "net_handle: alloc requires isolate");
     /*
      * Allocate on the calling coroutine's heap when available, mirror
@@ -36,9 +38,9 @@ static void *alloc_handle(struct XrayIsolate *X, size_t size, XrObjType type) {
     struct XrCoroutine *coro = xr_current_coro(X);
     void *obj = NULL;
     if (coro) {
-        obj = xr_alloc(coro, size, (uint8_t) type);
+        obj = xr_alloc(coro, size, (uint8_t) XR_TINSTANCE);
     } else {
-        obj = xr_gc_alloc(xr_isolate_get_gc(X), size, (uint8_t) type);
+        obj = xr_gc_alloc(xr_isolate_get_gc(X), size, (uint8_t) XR_TINSTANCE);
     }
     return obj;
 }
@@ -46,9 +48,11 @@ static void *alloc_handle(struct XrayIsolate *X, size_t size, XrObjType type) {
 /* ========== Constructors ========== */
 
 XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind) {
-    XrNetConn *c = (XrNetConn *) alloc_handle(X, sizeof(XrNetConn), XR_TNETCONN);
+    XrNetConn *c = (XrNetConn *) alloc_handle(X, sizeof(XrNetConn));
     if (!c)
         return NULL;
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    c->klass = core ? core->netConnClass : NULL;
     c->fd = fd;
     c->kind = (uint8_t) kind;
     c->closed = false;
@@ -58,9 +62,11 @@ XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind) {
 }
 
 XrNetListener *xr_net_listener_new(struct XrayIsolate *X, int fd, int port) {
-    XrNetListener *l = (XrNetListener *) alloc_handle(X, sizeof(XrNetListener), XR_TNETLISTENER);
+    XrNetListener *l = (XrNetListener *) alloc_handle(X, sizeof(XrNetListener));
     if (!l)
         return NULL;
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    l->klass = core ? core->netListenerClass : NULL;
     l->fd = fd;
     l->port = port;
     l->closed = false;
@@ -153,16 +159,51 @@ void xr_net_listener_close(XrNetListener *l) {
     l->closed = true;
 }
 
-/* ========== GC destroy hooks ========== */
+/* ========== Native body destroy hooks ==========
+ *
+ * Called by xr_gc_destroy_instance via XrNativeBodyDesc.destroy.
+ * The body pointer points to the first field after klass (i.e. fd),
+ * so we recover the enclosing struct by subtracting the body offset.
+ */
 
-void xr_gc_destroy_net_conn(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    XrNetConn *c = (XrNetConn *) obj;
+static void netconn_body_destroy(void *body) {
+    XrNetConn *c = (XrNetConn *) ((char *) body - offsetof(XrNetConn, fd));
     xr_net_conn_close(c);
 }
 
-void xr_gc_destroy_net_listener(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    XrNetListener *l = (XrNetListener *) obj;
+static void netlistener_body_destroy(void *body) {
+    XrNetListener *l = (XrNetListener *) ((char *) body - offsetof(XrNetListener, fd));
     xr_net_listener_close(l);
+}
+
+/* ========== Native body descriptors ========== */
+
+static XrNativeBodyDesc g_netconn_body_desc = {
+    .body_size = sizeof(XrNetConn) - offsetof(XrNetConn, fd),
+    .body_align = _Alignof(void *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = NULL,
+    .destroy = netconn_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+static XrNativeBodyDesc g_netlistener_body_desc = {
+    .body_size = sizeof(XrNetListener) - offsetof(XrNetListener, fd),
+    .body_align = _Alignof(void *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = NULL,
+    .destroy = netlistener_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+XrNativeBodyDesc *xr_netconn_body_desc(void) {
+    return &g_netconn_body_desc;
+}
+
+XrNativeBodyDesc *xr_netlistener_body_desc(void) {
+    return &g_netlistener_body_desc;
 }

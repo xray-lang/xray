@@ -172,7 +172,10 @@ XR_FUNC bool xr_value_is_enum_value(XrValue v);
  * header (consumers don't need to include xclass.h / xinstance.h). */
 XR_FUNC bool xr_value_is_iterator(XrValue v);
 #define XR_IS_ITERATOR(v) xr_value_is_iterator(v)
-#define XR_IS_BIGINT(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBIGINT)
+/* BigInt is no longer a dedicated GC type; check the XR_CLASS_BIGINT
+ * flag on the instance's class. */
+XR_FUNC bool xr_value_is_bigint(XrValue v);
+#define XR_IS_BIGINT(v) xr_value_is_bigint(v)
 /* Json is no longer a dedicated GC type; use xr_value_is_json(v)
  * from xjson.h which checks the XR_CLASS_JSON flag on the instance's class. */
 #define XR_IS_STRUCT_REF(v) ((v).tag == XR_TAG_STRUCT_REF)

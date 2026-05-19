@@ -145,6 +145,15 @@ static void collect_matched_enum_members(AstNode *pattern, const char ***names, 
     } else if (pattern->type == AST_PATTERN_LITERAL && pattern->as.pattern_literal.value) {
         // Unwrap: AST_PATTERN_LITERAL wrapping AST_MEMBER_ACCESS or AST_ENUM_ACCESS
         collect_matched_enum_members(pattern->as.pattern_literal.value, names, count, cap);
+    } else if (pattern->type == AST_PATTERN_ADT) {
+        /* ADT variant pattern: extract member name from variant node */
+        AstNode *variant = pattern->as.pattern_adt.variant;
+        if (variant) {
+            if (variant->type == AST_ENUM_ACCESS)
+                add_enum_member(variant->as.enum_access.member_name, names, count, cap);
+            else if (variant->type == AST_MEMBER_ACCESS)
+                add_enum_member(variant->as.member_access.name, names, count, cap);
+        }
     } else if (pattern->type == AST_PATTERN_MULTI) {
         PatternMultiNode *multi = &pattern->as.pattern_multi;
         for (int i = 0; i < multi->count; i++) {
@@ -168,6 +177,13 @@ static bool pattern_has_binding(AstNode *pattern) {
         PatternTupleNode *tp = &pattern->as.pattern_tuple;
         for (int i = 0; i < tp->count; i++) {
             if (pattern_has_binding(tp->patterns[i]))
+                return true;
+        }
+    }
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *ap = &pattern->as.pattern_adt;
+        for (int i = 0; i < ap->count; i++) {
+            if (pattern_has_binding(ap->patterns[i]))
                 return true;
         }
     }
@@ -208,6 +224,17 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             if (slot_type && XR_TYPE_IS_TUPLE(slot_type))
                 elem_type = xr_type_tuple_get(slot_type, i);
             register_pattern_bindings(ctx, sub, elem_type);
+        }
+    }
+
+    /* ADT variant destructure: payload bindings get unknown type for now */
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *ap = &pattern->as.pattern_adt;
+        for (int i = 0; i < ap->count; i++) {
+            AstNode *sub = ap->patterns[i];
+            if (!sub)
+                continue;
+            register_pattern_bindings(ctx, sub, NULL);
         }
     }
 }

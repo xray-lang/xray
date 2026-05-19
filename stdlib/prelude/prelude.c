@@ -67,9 +67,9 @@ extern void xr_iterator_register_class(XrayIsolate *isolate);
 extern void xr_register_range_class(XrayIsolate *isolate);
 extern void xr_register_logger_class(XrayIsolate *isolate);
 extern void xr_register_datetime_class(XrayIsolate *isolate);
-extern void xr_regex_register_native_type(XrayIsolate *isolate);
-extern void xr_netconn_register_native_type(XrayIsolate *isolate);
-extern void xr_netlistener_register_native_type(XrayIsolate *isolate);
+extern void xr_regex_register_class(XrayIsolate *isolate);
+extern void xr_netconn_register_class(XrayIsolate *isolate);
+extern void xr_netlistener_register_class(XrayIsolate *isolate);
 
 #include "../../src/base/xglobal_indices.h"
 #include "../../src/runtime/class/xclass_system.h"
@@ -100,9 +100,9 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     xr_register_range_class(isolate);
     xr_register_datetime_class(isolate);
     xr_register_logger_class(isolate);
-    xr_regex_register_native_type(isolate);
-    xr_netconn_register_native_type(isolate);
-    xr_netlistener_register_native_type(isolate);
+    xr_regex_register_class(isolate);
+    xr_netconn_register_class(isolate);
+    xr_netlistener_register_class(isolate);
 
     /* Bind unified-class XrClass values into VM builtins so the
      * IR lowerer's builtin_classes table can resolve them. */

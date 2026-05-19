@@ -80,6 +80,24 @@ op_call_entry:;
             }
         }
 
+        // ADT enum variant construction: Result.Ok(42)
+        // XrEnumValue with ADT parent → construct instance with tag + payload
+        if (XR_IS_ENUM_VALUE(func_val)) {
+            XrEnumValue *eval = (XrEnumValue *) gc;
+            XrEnumType *etype = eval->parent_type;
+            if (etype && etype->is_adt && etype->payload_counts &&
+                etype->payload_counts[eval->member_index] > 0) {
+                XrInstance *inst =
+                    xr_enum_adt_construct(isolate, etype, eval->member_index, &R(a + 1), nargs);
+                if (!inst) {
+                    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
+                                     etype->name, eval->member_name);
+                }
+                R(a) = XR_FROM_PTR(inst);
+                vmbreak;
+            }
+        }
+
         // Class call: Array() or User() -> invoke constructor
         if (XR_GC_GET_TYPE(gc) == XR_TCLASS) {
             XrClass *klass = (XrClass *) gc;

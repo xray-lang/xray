@@ -47,10 +47,9 @@ XR_FUNC const char *xr_regex_pattern(const struct XrRegex *re);
 // Extract XrRegex* from an XrValue
 XR_FUNC struct XrRegex *xr_value_to_regex(XrValue v);
 
-// Register the Regex XrClass. Called from xr_prelude_register_all_native_types
-// during isolate init; the standalone forward declaration here is kept so
-// the runtime VM can call it without pulling in stdlib/regex headers.
-XR_FUNC void xr_regex_register_native_type(struct XrayIsolate *isolate);
+// Register the Regex XrClass with native body descriptor. Called from
+// xr_prelude_register_all_native_types during isolate init.
+XR_FUNC void xr_regex_register_class(struct XrayIsolate *isolate);
 
 /*
  * Compile a regex literal (the OP_REGEX_COMPILE bytecode helper).

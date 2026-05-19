@@ -1236,6 +1236,16 @@ AstNode *xr_ast_pattern_tuple(XrayIsolate *X, AstNode **patterns, int count, int
     return node;
 }
 
+// Create ADT variant destructure pattern node
+AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns, int count,
+                            int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_ADT, line);
+    node->as.pattern_adt.variant = variant;
+    node->as.pattern_adt.patterns = patterns;
+    node->as.pattern_adt.count = count;
+    return node;
+}
+
 // Destroy a program AST and its owning arena.
 // Releases every AST node, array, and string allocated during parsing in O(1).
 // For program nodes from xr_parse_recoverable (LSP), the caller owns the

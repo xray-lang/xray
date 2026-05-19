@@ -251,6 +251,11 @@ struct XrClass {
 #define XR_CLASS_ENUM_VALUE (1 << 16)       // Singleton enum member (XrEnumValue body)
 #define XR_CLASS_ENUM_TYPE (1 << 17)        // Enum type metadata (XrEnumType body)
 #define XR_CLASS_ITERATOR (1 << 18)         // for-in lazy iterator (XrIterator body)
+#define XR_CLASS_REGEX (1 << 19)            // compiled regex object (XrRegex* body)
+#define XR_CLASS_NETCONN (1 << 20)          // TCP/UDP/TLS connection handle
+#define XR_CLASS_NETLISTENER (1 << 21)      // TCP listener handle
+#define XR_CLASS_BIGINT (1 << 22)           // arbitrary-precision integer (XrBigInt body)
+#define XR_CLASS_ADT_ENUM (1 << 23)         // ADT enum instance (fields[0]=XrEnumValue*)
 
 /* ========== Operator Overload Flags ========== */
 

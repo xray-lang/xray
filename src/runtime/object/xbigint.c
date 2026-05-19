@@ -43,11 +43,10 @@ static XrBigInt *bigint_alloc(struct XrCoroutine *coro, uint32_t cap) {
     if (cap == 0)
         cap = 1;
     size_t size = sizeof(XrBigInt) + cap * sizeof(uint32_t);
-    XrBigInt *b = (XrBigInt *) xr_alloc(coro, size, XR_TBIGINT);
+    XrBigInt *b = (XrBigInt *) xr_alloc(coro, size, XR_TINSTANCE);
     if (b) {
         XrayCoreClasses *core = xr_isolate_get_core_classes(xr_coro_get_isolate(coro));
-        (void) core;
-        xr_gc_header_init_type(&b->gc, XR_TBIGINT);
+        b->klass = core ? core->bigintClass : NULL;
         b->sign = 1;
         b->len = 0;
         b->cap = cap;
@@ -61,9 +60,9 @@ static XrBigInt *bigint_alloc_on_gc(struct XrGC *gc, uint32_t cap) {
     if (cap == 0)
         cap = 1;
     size_t size = sizeof(XrBigInt) + cap * sizeof(uint32_t);
-    XrBigInt *b = (XrBigInt *) xr_gc_alloc(gc, size, XR_TBIGINT);
+    XrBigInt *b = (XrBigInt *) xr_gc_alloc(gc, size, XR_TINSTANCE);
     if (b) {
-        xr_gc_header_init_type(&b->gc, XR_TBIGINT);
+        b->klass = NULL;  // no isolate in compile-time path
         b->sign = 1;
         b->len = 0;
         b->cap = cap;

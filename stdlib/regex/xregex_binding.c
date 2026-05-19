@@ -25,7 +25,11 @@
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
+#include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xclass_builder.h"
+#include "../../src/runtime/class/xclass_system.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/coro/xcoroutine.h"
@@ -130,60 +134,54 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
 }
 
 /* ========================================================================
- * Regex Object Wrapper (using GC-managed XrRegexObject)
+ * Regex Object Wrapper (XrInstance + native body)
+ *
+ * The native body stores a single XrRegex* pointer.  The class is
+ * registered as regexClass with XR_CLASS_REGEX flag so type checks
+ * and formatting use fast flag tests, no dedicated GC tag needed.
  * ======================================================================== */
 
-#include "../../src/runtime/gc/xgc.h"
+/* Native body layout: stored after XrInstance fields[] */
+typedef struct {
+    XrRegex *regex;
+} RegexBody;
 
-/*
- * XrRegexObject - GC-managed regex object
- *
- * Contains GC header and pointer to underlying XrRegex
- */
-typedef struct XrRegexObject {
-    XrGCHeader gc;   // GC header
-    XrRegex *regex;  // underlying regex (compiled program)
-} XrRegexObject;
-
-// Type check macros
-#define XR_IS_REGEX_OBJ(v)                                                                         \
-    (XR_IS_PTR(v) && XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(v)) == XR_TREGEX)
-
-#define XR_TO_REGEX_OBJ(v) ((XrRegexObject *) XR_TO_PTR(v))
-
-// GC destructor for regex objects
-void regex_object_destroy(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    XrRegexObject *regex_obj = (XrRegexObject *) obj;
-    if (regex_obj->regex) {
-        xr_regex_free(regex_obj->regex);
-        regex_obj->regex = NULL;
-    }
+/* Retrieve native body from an XrInstance known to be a Regex */
+static inline RegexBody *regex_body(XrInstance *inst) {
+    return (RegexBody *) xr_instance_native_body(inst);
 }
 
-// Create GC-managed regex object
-static XrRegexObject *regex_object_new(XrayIsolate *isolate, XrRegex *re) {
-    XrRegexObject *obj =
-        (XrRegexObject *) xr_gc_alloc(&isolate->gc, sizeof(XrRegexObject), XR_TREGEX);
-    obj->regex = re;
-    return obj;
+/* Check whether v is a Regex instance (class flag test) */
+static inline bool is_regex_instance(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_REGEX);
 }
 
-// Wrap XrRegex as XrValue (GC-managed)
+/* Create a Regex XrInstance wrapping a compiled XrRegex */
 static XrValue wrap_regex(XrayIsolate *isolate, XrRegex *re) {
-    XrRegexObject *obj = regex_object_new(isolate, re);
-    return XR_FROM_PTR(obj);
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core && core->regexClass, "wrap_regex: regexClass not registered");
+    XrCoroutine *coro = xr_current_coro(isolate);
+    XrInstance *inst = xr_instance_new(coro, core->regexClass);
+    if (!inst)
+        return xr_null();
+    RegexBody *body = regex_body(inst);
+    body->regex = re;
+    return XR_FROM_PTR(inst);
 }
 
-// Get XrRegex pointer from XrValue
+/* Unwrap XrRegex* from an XrValue */
 static XrRegex *unwrap_regex(XrayIsolate *isolate, XrValue v) {
     (void) isolate;
-    if (!XR_IS_REGEX_OBJ(v))
+    if (!is_regex_instance(v))
         return NULL;
-    return XR_TO_REGEX_OBJ(v)->regex;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return regex_body(inst)->regex;
 }
 
-// Public API: wrap XrRegex as XrValue
+/* Public API: wrap XrRegex as XrValue */
 XrValue xr_regex_wrap(XrayIsolate *isolate, XrRegex *re) {
     return wrap_regex(isolate, re);
 }
@@ -222,16 +220,17 @@ XrValue xr_regex_compile_literal(XrayIsolate *isolate, XrValue pattern_val, XrVa
     return re ? wrap_regex(isolate, re) : xr_null();
 }
 
-// Public API: check if value is Regex object
+/* Public API: check if value is Regex object */
 bool xr_value_is_regex(XrValue v) {
-    return XR_IS_REGEX_OBJ(v);
+    return is_regex_instance(v);
 }
 
-// Public API: get Regex pointer
+/* Public API: get Regex pointer from value */
 XrRegex *xr_value_to_regex(XrValue v) {
-    if (!XR_IS_REGEX_OBJ(v))
+    if (!is_regex_instance(v))
         return NULL;
-    return XR_TO_REGEX_OBJ(v)->regex;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return regex_body(inst)->regex;
 }
 
 /* ========================================================================
@@ -522,8 +521,6 @@ static XrValue regex_is_valid(XrayIsolate *isolate, XrValue *args, int argc) {
  * Support re.test(text) syntax
  * ======================================================================== */
 
-#include "../../src/runtime/object/xnative_type.h"
-
 // re.pattern getter
 static XrValue re_method_pattern(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
@@ -568,41 +565,68 @@ static XrValue re_m_split(XrayIsolate *X, XrValue self, XrValue *a, int n) {
     return regex_split(X, tmp, n + 1);
 }
 
-static XrNativeMethod regex_methods[] = {{"test", re_m_test, 1},
-                                         {"find", re_m_find, 2},
-                                         {"findAll", re_m_find_all, 2},
-                                         {"replace", re_m_replace, 2},
-                                         {"replaceAll", re_m_replace_all, 2},
-                                         {"split", re_m_split, 2},
-                                         {NULL, NULL, 0}};
+/* ========================================================================
+ * Native Body Lifecycle
+ * ======================================================================== */
 
-// Regex property getters
-static XrNativeMethod regex_getters[] = {{"pattern", re_method_pattern, 1}, {NULL, NULL, 0}};
+static void regex_body_destroy(void *body) {
+    RegexBody *rb = (RegexBody *) body;
+    if (rb->regex) {
+        xr_regex_free(rb->regex);
+        rb->regex = NULL;
+    }
+}
+
+static XrNativeBodyDesc g_regex_body_desc = {
+    .body_size = sizeof(RegexBody),
+    .body_align = _Alignof(void *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = NULL,
+    .destroy = regex_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
 
 /* ========================================================================
- * Native Type Registration
- * ========================================================================
+ * Class Registration
  *
- * Registers the Regex XrClass so regex literals (`/foo/`) and
- * `regex.compile(...)` results dispatch object methods through
- * native_type_classes[XR_TREGEX]. Invoked unconditionally during
- * isolate init by xr_prelude_register_all_native_types.
- *
- * xr_register_native_type is idempotent (returns the existing class on
- * a second call for the same gc_type), so older xisolate_full.c / load
- * paths that explicitly poke this function still work — they just turn
- * into no-ops once prelude has already registered the class.
- */
+ * Builds the Regex XrClass with native body descriptor and installs
+ * instance methods (test, find, etc.) so OP_INVOKE resolves them
+ * through the unified XrClass dispatch.
+ * ======================================================================== */
 
-void xr_regex_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeTypeInfo regex_info = {
-        .name = "regex",
-        .gc_type = XR_TREGEX,
-        .methods = regex_methods,
-        .getters = regex_getters,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &regex_info);
+static XrValue re_m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xr_string_value(xr_value_to_string(iso, self));
+}
+
+void xr_regex_register_class(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "regex_register_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL, "regex_register_class: core not initialised");
+    XR_DCHECK(core->regexClass == NULL, "regex_register_class: already registered");
+
+    XrClassBuilder *b = xr_class_builder_new(isolate, "Regex", core->objectClass);
+    XR_CHECK(b != NULL, "regex_register_class: builder alloc failed");
+
+    xr_class_builder_set_native_body(b, &g_regex_body_desc);
+
+    /* Instance methods */
+    xr_class_builder_add_method(b, "test", re_m_test, 0, 1);
+    xr_class_builder_add_method(b, "find", re_m_find, 0, 2);
+    xr_class_builder_add_method(b, "findAll", re_m_find_all, 0, 2);
+    xr_class_builder_add_method(b, "replace", re_m_replace, 0, 2);
+    xr_class_builder_add_method(b, "replaceAll", re_m_replace_all, 0, 2);
+    xr_class_builder_add_method(b, "split", re_m_split, 0, 2);
+    xr_class_builder_add_method(b, "pattern", re_method_pattern, 0, 0);
+    xr_class_builder_add_method(b, "toString", re_m_to_string, 0, 0);
+
+    XrClass *cls = xr_class_builder_finalize(b);
+    XR_CHECK(cls != NULL, "regex_register_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_REGEX;
+    core->regexClass = cls;
 }
 
 /* ========================================================================

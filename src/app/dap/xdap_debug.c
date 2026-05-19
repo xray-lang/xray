@@ -339,9 +339,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TCHANNEL:
                 snprintf(buf, sizeof(buf), "<channel> @%p", (void *) hdr);
                 break;
-            case XR_TREGEX:
-                snprintf(buf, sizeof(buf), "<regex> @%p", (void *) hdr);
-                break;
             case XR_TMODULE: {
                 XrModule *mod = (XrModule *) hdr;
                 snprintf(buf, sizeof(buf), "<module %s>", mod->name ? mod->name : "?");
@@ -353,9 +350,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             /* Exception uses XR_TINSTANCE — handled in the instance path */
             case XR_TBOUND_METHOD:
                 snprintf(buf, sizeof(buf), "<bound method> @%p", (void *) hdr);
-                break;
-            case XR_TBIGINT:
-                snprintf(buf, sizeof(buf), "<bigint> @%p", (void *) hdr);
                 break;
             case XR_TCOROPOOL:
                 snprintf(buf, sizeof(buf), "<coro pool> @%p", (void *) hdr);

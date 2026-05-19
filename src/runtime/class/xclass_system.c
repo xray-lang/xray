@@ -34,7 +34,7 @@ extern void xr_string_register_native_type(XrayIsolate *);
 extern void xr_int_register_native_type(XrayIsolate *);
 extern void xr_float_register_native_type(XrayIsolate *);
 extern void xr_bool_register_native_type(XrayIsolate *);
-extern void xr_bigint_register_native_type(XrayIsolate *);
+extern void xr_bigint_register_class(XrayIsolate *);
 extern void xr_json_register_instance_methods(XrayIsolate *);
 #include <stdio.h>
 #include <string.h>
@@ -85,8 +85,7 @@ void xr_core_init(XrayIsolate *X) {
     X->core->boolClass = xr_isolate_get_native_type_class(X, XR_TBOOL);
     X->core->nullClass = xr_class_new(X, TYPE_NAME_NULL, X->core->objectClass);
     xr_isolate_set_native_type_class(X, XR_TNULL, X->core->nullClass);
-    xr_bigint_register_native_type(X);
-    X->core->bigintClass = xr_isolate_get_native_type_class(X, XR_TBIGINT);
+    xr_bigint_register_class(X);
 
     X->core->functionClass = xr_class_new(X, TYPE_NAME_FUNCTION, X->core->objectClass);
     X->core->closureClass = xr_class_new(X, TYPE_NAME_CLOSURE, X->core->functionClass);

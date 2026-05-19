@@ -29,6 +29,7 @@ typedef struct XrEnumValue {
     const char *member_name;
     XrValue raw_value;
     uint32_t member_index;
+    struct XrEnumType *parent_type;  // Back-pointer for ADT variant construction
 } XrEnumValue;
 
 // Enum type metadata (immutable at runtime)
@@ -84,6 +85,16 @@ XR_FUNC XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name,
 XR_FUNC XrEnumValue *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol);
 XR_FUNC XrEnumValue *xr_enum_from_value(XrEnumType *enum_type, XrValue value);
 XR_FUNC const char *xr_enum_value_name(XrEnumValue *enum_val);
+
+/* ========== ADT Variant Construction ========== */
+
+/* Construct an ADT variant instance.  The result is an XrInstance with:
+ *   field[0] = tag (int, the variant's member_index)
+ *   field[1..payload_count] = payload values copied from args[]
+ * Returns NULL on allocation failure or if the enum is not ADT. */
+struct XrInstance;
+XR_FUNC struct XrInstance *xr_enum_adt_construct(struct XrayIsolate *X, XrEnumType *enum_type,
+                                                 uint32_t member_index, XrValue *args, int nargs);
 
 /* ========== Symbol Mapping ========== */
 

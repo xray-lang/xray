@@ -456,6 +456,30 @@ XR_NOINLINE int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int metho
             }
             return VM_COLD_BREAK;
         }
+
+        /* ADT variant construction via OP_INVOKE: Shape.Circle(5.0)
+         * Resolve method_symbol to member index, check payload, construct. */
+        if (enum_type->is_adt) {
+            XrEnumValue *eval = xr_enum_get_member_by_symbol(enum_type, method_symbol);
+            if (eval) {
+                int midx = (int) eval->member_index;
+                int expected_pc = enum_type->payload_counts[midx];
+                if (expected_pc > 0) {
+                    XrInstance *inst = xr_enum_adt_construct(isolate, enum_type, eval->member_index,
+                                                             &base[a + 2], nargs);
+                    if (!inst) {
+                        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
+                                      "failed to construct ADT variant '%s.%s'", enum_type->name,
+                                      eval->member_name);
+                    }
+                    base[a] = XR_FROM_PTR(inst);
+                    return VM_COLD_BREAK;
+                }
+                /* Zero-payload variant: return the singleton XrEnumValue */
+                base[a] = XR_FROM_PTR(eval);
+                return VM_COLD_BREAK;
+            }
+        }
     }
 
     return VM_COLD_CONTINUE;

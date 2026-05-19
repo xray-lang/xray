@@ -213,19 +213,20 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TSET:
             format_set(isolate, sb, (XrSet *) gc, depth);
             break;
-        case XR_TBIGINT: {
-            char *s = xr_bigint_to_string((XrBigInt *) gc);
-            if (s) {
-                xr_strbuf_append_cstr(sb, s, strlen(s));
-                xr_free(s);
-            } else {
-                xr_strbuf_append_cstr(sb, "<BigInt>", 8);
-            }
-            break;
-        }
         case XR_TINSTANCE: {
             XrInstance *inst = xr_value_to_instance(val);
             XrClass *cls = xr_instance_get_class(inst);
+            /* BigInt: decimal string representation */
+            if (cls && (cls->flags & XR_CLASS_BIGINT)) {
+                char *s = xr_bigint_to_string((XrBigInt *) gc);
+                if (s) {
+                    xr_strbuf_append_cstr(sb, s, strlen(s));
+                    xr_free(s);
+                } else {
+                    xr_strbuf_append_cstr(sb, "<BigInt>", 8);
+                }
+                break;
+            }
             /* EnumValue: "EnumName.MemberName" */
             if (cls && (cls->flags & XR_CLASS_ENUM_VALUE)) {
                 XrEnumValue *ev = (XrEnumValue *) gc;
@@ -288,6 +289,16 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, buf, (size_t) n);
                 else
                     xr_strbuf_append_cstr(sb, "<DateTime>", 10);
+            } else if (cls && (cls->flags & XR_CLASS_REGEX)) {
+                struct XrRegex *re = xr_value_to_regex(val);
+                const char *pat = re ? xr_regex_pattern(re) : NULL;
+                if (pat) {
+                    xr_strbuf_append_cstr(sb, "/", 1);
+                    xr_strbuf_append_cstr(sb, pat, strlen(pat));
+                    xr_strbuf_append_cstr(sb, "/", 1);
+                } else {
+                    xr_strbuf_append_cstr(sb, "<Regex>", 7);
+                }
             } else if (cls && (cls->flags & XR_CLASS_ITERATOR)) {
                 xr_strbuf_append_cstr(sb, "<iterator>", 10);
             } else if (cls && (cls->flags & XR_CLASS_STRINGBUILDER)) {
@@ -304,6 +315,36 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, "\")", 2);
                 } else {
                     xr_strbuf_append_cstr(sb, "StringBuilder()", 14);
+                }
+            } else if (cls && (cls->flags & XR_CLASS_ADT_ENUM)) {
+                /* ADT enum instance: fields[0]=XrEnumValue*, fields[1..N]=payload.
+                 * Format as "EnumName.Variant(p1, p2, ...)" */
+                XrValue tag_val = inst->fields[0];
+                if (XR_IS_PTR(tag_val) && XR_IS_ENUM_VALUE(tag_val)) {
+                    XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(tag_val);
+                    if (ev->enum_name)
+                        xr_strbuf_append_cstr(sb, ev->enum_name, strlen(ev->enum_name));
+                    xr_strbuf_append_cstr(sb, ".", 1);
+                    if (ev->member_name)
+                        xr_strbuf_append_cstr(sb, ev->member_name, strlen(ev->member_name));
+                    /* Append payload if any */
+                    XrEnumType *etype = ev->parent_type;
+                    int pc = (etype && etype->payload_counts)
+                                 ? etype->payload_counts[ev->member_index]
+                                 : 0;
+                    if (pc > 0) {
+                        xr_strbuf_append_cstr(sb, "(", 1);
+                        for (int fi = 0; fi < pc; fi++) {
+                            if (fi > 0)
+                                xr_strbuf_append_cstr(sb, ", ", 2);
+                            xr_value_to_strbuf(isolate, sb, inst->fields[1 + fi], depth + 1);
+                        }
+                        xr_strbuf_append_cstr(sb, ")", 1);
+                    }
+                } else {
+                    xr_strbuf_append_cstr(sb, cls->name ? cls->name : "<adt>",
+                                          cls->name ? strlen(cls->name) : 5);
+                    xr_strbuf_append_cstr(sb, "{...}", 5);
                 }
             } else if (cls && cls->name) {
                 xr_strbuf_append_cstr(sb, cls->name, strlen(cls->name));
@@ -375,18 +416,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TCOROPOOL:
             xr_strbuf_append_cstr(sb, "<CoroPool>", 10);
             break;
-        case XR_TREGEX: {
-            struct XrRegex *re = xr_value_to_regex(val);
-            const char *pat = re ? xr_regex_pattern(re) : NULL;
-            if (pat) {
-                xr_strbuf_append_cstr(sb, "/", 1);
-                xr_strbuf_append_cstr(sb, pat, strlen(pat));
-                xr_strbuf_append_cstr(sb, "/", 1);
-            } else {
-                xr_strbuf_append_cstr(sb, "<Regex>", 7);
-            }
-            break;
-        }
         case XR_TBOUND_METHOD: {
             XrBoundMethod *bm = (XrBoundMethod *) gc;
             xr_strbuf_append_cstr(sb, "<bound_method", 13);

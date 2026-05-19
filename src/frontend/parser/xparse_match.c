@@ -101,6 +101,34 @@ static AstNode *parse_pattern_single(Parser *parser) {
         return xr_ast_pattern_range(parser->X, first, end, line);
     }
 
+    /* ADT variant destructure: Shape.Circle(r, ...)
+     * The Pratt parser already consumed `Shape.Circle(r)` as AST_CALL
+     * whose callee is AST_MEMBER_ACCESS. Unwrap into AST_PATTERN_ADT
+     * with the callee as variant and call args as sub-patterns. */
+    if (first->type == AST_CALL_EXPR) {
+        AstNode *callee = first->as.call_expr.callee;
+        if (callee && (callee->type == AST_MEMBER_ACCESS || callee->type == AST_ENUM_ACCESS)) {
+            int argc = first->as.call_expr.arg_count;
+            AstNode **sub_pats = NULL;
+            if (argc > 0) {
+                sub_pats =
+                    (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) argc);
+                for (int i = 0; i < argc; i++) {
+                    AstNode *arg = first->as.call_expr.arguments[i];
+                    /* Wrap each arg as a pattern node:
+                     * variable → binding, wildcard stays, literal → literal */
+                    if (arg->type == AST_VARIABLE && strcmp(arg->as.variable.name, "_") == 0)
+                        sub_pats[i] = xr_ast_pattern_wildcard(parser->X, arg->line);
+                    else if (arg->type == AST_VARIABLE)
+                        sub_pats[i] = xr_ast_pattern_literal(parser->X, arg, arg->line);
+                    else
+                        sub_pats[i] = xr_ast_pattern_literal(parser->X, arg, arg->line);
+                }
+            }
+            return xr_ast_pattern_adt(parser->X, callee, sub_pats, argc, line);
+        }
+    }
+
     return xr_ast_pattern_literal(parser->X, first, line);
 }
 
