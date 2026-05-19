@@ -249,12 +249,17 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         /* cancelled() */
         emit_inst(ctx, CREATE_ABC(OP_CANCELLED, dst, 0, 0));
     } else if (builtin_id > 0 && builtin_id < 256 && v->nargs > 0) {
-        /* Generic: INVOKE_BUILTIN A=base, B=builtin_idx, C=nargs */
+        /* Generic builtin method call: route through unified OP_INVOKE.
+         * Encoding (A=base, B=proto-local symbol idx, C=nargs) matches
+         * OP_INVOKE; the runtime dispatch in xvm_dispatch_invoke.inc.c
+         * resolves the receiver class via native_type_classes[] and
+         * calls the XMETHOD_PRIMITIVE method, identical to the legacy
+         * OP_INVOKE_BUILTIN path but reusing the unified XrICMethod
+         * inline cache instead of a parallel XrICBuiltin table. */
         uint8_t base = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx,
-                  CREATE_ABC(OP_INVOKE_BUILTIN, base, (uint8_t) builtin_id, (uint8_t) v->nargs));
+        emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t) builtin_id, (uint8_t) v->nargs));
         if (dst != base)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
     } else {
