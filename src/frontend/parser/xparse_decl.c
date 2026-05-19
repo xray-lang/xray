@@ -263,6 +263,11 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 XrParamNode *rest_param =
                     xr_param_node_new(parser->X, temp_name, rest_token.line, rest_token.column);
                 rest_param->is_rest = true;
+
+                /* Optional element type annotation: ...args: int */
+                if (xr_parser_match(parser, TK_COLON)) {
+                    rest_param->type = xr_parse_type_annotation(parser);
+                }
                 params[param_count++] = rest_param;
 
                 if (xr_parser_check(parser, TK_COMMA)) {
