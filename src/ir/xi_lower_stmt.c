@@ -334,7 +334,7 @@ static void lower_match_no_match_throw(XiLower *l, int line) {
     cls->aux = (void *) "Exception";
 
     XiValue *msg =
-        xi_const_str(l->func, l->cur_block, "E0440: non-exhaustive match", l->type_string);
+        xi_const_str(l->func, l->cur_block, "E0442: non-exhaustive match", l->type_string);
     XiValue *exc = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, exception_type, 2);
     if (!exc)
         return;

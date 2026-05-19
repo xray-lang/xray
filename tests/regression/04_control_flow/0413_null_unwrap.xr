@@ -1,0 +1,15 @@
+// Null force unwrap (!) throws Exception with code 413
+
+let x: int? = null
+
+try {
+    let v = x!
+    print("should not reach here")
+} catch(e) {
+    print(e.code)     // expect: 413
+    print(e.message)  // expect: E0413: Attempted to unwrap a null value
+}
+
+// Non-null unwrap succeeds
+let y: int? = 42
+print(y!)  // expect: 42
