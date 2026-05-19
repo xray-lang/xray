@@ -1634,10 +1634,127 @@ fail:
 
 /* ========== Enum Declaration Parsing ========== */
 
-// Parse enum declaration
+/* Build a type ref from an already-consumed TK_NAME token.
+ * Handles generic type args (Name<T, U>) and type scope resolution. */
+static XrTypeRef *build_type_from_consumed_name(Parser *parser, Token *name_tok) {
+    char temp_name[256];
+    int name_len = name_tok->length < 255 ? name_tok->length : 255;
+    memcpy(temp_name, name_tok->start, (size_t) name_len);
+    temp_name[name_len] = '\0';
+
+    XrTypeRef *result = NULL;
+    if (xr_parser_match(parser, TK_LT)) {
+        /* Generic: Name<T1, T2, ...> */
+        XrTypeRef *type_args[16];
+        int type_arg_count = 0;
+        do {
+            if (type_arg_count < 16)
+                type_args[type_arg_count++] = xr_parse_type_annotation(parser);
+        } while (xr_parser_match(parser, TK_COMMA));
+        xr_parser_consume(parser, TK_GT, "expected '>' in generic type");
+        result = xr_tref_generic(parser->X, temp_name, type_args, type_arg_count);
+    } else if (parser->type_scope) {
+        XrTypeRef *alias = xr_type_scope_resolve(parser->type_scope, temp_name);
+        result = alias ? alias : xr_tref_named(parser->X, temp_name);
+    } else {
+        result = xr_tref_named(parser->X, temp_name);
+    }
+
+    /* Handle trailing '?' for optional */
+    if (result && xr_parser_match(parser, TK_QUESTION)) {
+        result = xr_tref_optional(parser->X, result);
+    }
+    return result;
+}
+
+/* Parse ADT variant payload: '(' FieldList ')'.
+ * FieldList ::= Field (',' Field)*
+ * Field     ::= (Name ':')? Type
+ *
+ * Strategy: consume the leading TK_NAME; if ':' follows, it was a field
+ * name; otherwise it was the start of a type and we build the type ref
+ * from the consumed name. This avoids lexer-position rewind issues. */
+static void parse_enum_variant_payload(Parser *parser, char ***out_names, XrTypeRef ***out_types,
+                                       int *out_count) {
+    XR_DCHECK(parser != NULL, "parse_variant_payload: NULL parser");
+
+    char **names = NULL;
+    XrTypeRef **types = NULL;
+    int count = 0;
+    int name_capacity = 0;
+
+    do {
+        if (xr_parser_check(parser, TK_RPAREN))
+            break;
+
+        char *field_name = NULL;
+        XrTypeRef *field_type = NULL;
+
+        if (xr_parser_check(parser, TK_NAME)) {
+            /* Consume the name and decide based on what follows. */
+            Token name_tok = parser->current;
+            xr_parser_advance(parser);
+
+            if (xr_parser_match(parser, TK_COLON)) {
+                /* Named field: 'name: Type' */
+                field_name = token_to_string(parser, &name_tok);
+                field_type = xr_parse_type_annotation(parser);
+            } else {
+                /* Positional: the consumed name was the type itself. */
+                field_type = build_type_from_consumed_name(parser, &name_tok);
+            }
+        } else {
+            /* Keyword type (int, string, etc.) — parse normally. */
+            field_type = xr_parse_type_annotation(parser);
+        }
+
+        if (!field_type) {
+            xr_parser_error(parser, "expected type in variant payload");
+            break;
+        }
+
+        /* Grow name and type arrays in lockstep. */
+        XR_PARSE_PUSH(parser, names, count, name_capacity, field_name);
+        {
+            XrTypeRef **new_types = (XrTypeRef **) ast_alloc_array(
+                parser->X, sizeof(XrTypeRef *), (size_t) (count > 4 ? count * 2 : 8));
+            if (types) {
+                for (int i = 0; i < count - 1; i++)
+                    new_types[i] = types[i];
+            }
+            new_types[count - 1] = field_type;
+            types = new_types;
+        }
+    } while (xr_parser_match(parser, TK_COMMA));
+
+    *out_names = names;
+    *out_types = types;
+    *out_count = count;
+}
+
+/* Parse one enum method: 'fn' Name '(' params ')' ReturnType? Block.
+ * Enum methods require 'fn' keyword (unlike class methods). */
+static AstNode *parse_enum_method(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_enum_method: NULL parser");
+
+    /* 'fn' already consumed by caller */
+    xr_parser_consume(parser, TK_NAME, "expected method name after 'fn'");
+    char *name = token_to_string(parser, &parser->previous);
+    int name_line = parser->previous.line;
+    int name_col = parser->previous.column;
+
+    return xr_parse_method_declaration(parser, name, name_line, name_col,
+                                       /* is_private */ false,
+                                       /* is_static */ false,
+                                       /* is_abstract */ false);
+}
+
+// Parse enum declaration (simple or ADT)
 // Syntax:
-//   enum Status : int { Success = 200, Error = 500 }
 //   enum Color { Red, Green, Blue }
+//   enum Status : int { Success = 200, Error = 500 }
+//   enum Result<T, E> { Ok(T), Err(E)  fn isOk() -> bool { ... } }
+//   enum Shape implements Printable { Circle(float), Rect(float, float) }
 AstNode *xr_parse_enum_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_enum_declaration: NULL parser");
     int line = parser->previous.line;
@@ -1649,10 +1766,52 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     char *enum_name = token_to_string(parser, &parser->previous);
     int name_column = parser->previous.column;
 
-    // Parse type hint (optional): int, string, float, bool
+    // Parse optional generic type parameters <T, E: Constraint>
+    XrGenericParam **type_params = NULL;
+    int type_param_count = 0;
+    int type_param_capacity = 0;
+
+    if (xr_parser_match(parser, TK_LT)) {
+        do {
+            xr_parser_consume(parser, TK_NAME, "expected type parameter name");
+            char *param_name = token_to_string(parser, &parser->previous);
+
+            XrTypeRef **constraints = NULL;
+            int constraint_count = 0;
+            if (xr_parser_match(parser, TK_COLON)) {
+                constraints = xr_parse_constraint_list(parser, &constraint_count);
+            }
+
+            XrGenericParam *gp = (XrGenericParam *) ast_alloc(parser->X, sizeof(XrGenericParam));
+            gp->name = param_name;
+            gp->constraints = constraints;
+            gp->constraint_count = constraint_count;
+            XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
+
+        } while (xr_parser_match(parser, TK_COMMA));
+
+        xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
+    }
+
+    // Register generic type params in type_scope for payload type parsing.
+    XrTypeScope *saved_scope = parser->type_scope;
+    if (type_param_count > 0) {
+        XrTypeScope *generic_scope = xr_type_scope_new(parser->type_scope);
+        for (int i = 0; i < type_param_count; i++) {
+            XrTypeRef *tp = xr_tref_type_param(parser->X, type_params[i]->name);
+            xr_type_scope_define(generic_scope, type_params[i]->name, tp);
+        }
+        parser->type_scope = generic_scope;
+    }
+
+    // Parse type hint (optional, simple enums only): ': int'
+    // Mutually exclusive with generic type params.
     char *type_hint = NULL;
     if (xr_parser_match(parser, TK_COLON)) {
-        // Support type keywords (uppercase) and plain identifiers (lowercase)
+        if (type_param_count > 0) {
+            xr_parser_error(parser,
+                            "ADT enum with type parameters cannot have a backing type hint");
+        }
         if (xr_parser_match(parser, TK_INT)) {
             type_hint = ast_strdup(parser->X, TYPE_NAME_INT);
         } else if (xr_parser_match(parser, TK_STRING)) {
@@ -1662,7 +1821,6 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
         } else if (xr_parser_match(parser, TK_BOOL)) {
             type_hint = ast_strdup(parser->X, TYPE_NAME_BOOL);
         } else if (xr_parser_match(parser, TK_NAME)) {
-            // Support lowercase type names
             Token t = parser->previous;
             if (t.length == 3 && memcmp(t.start, "int", 3) == 0) {
                 type_hint = ast_strdup(parser->X, TYPE_NAME_INT);
@@ -1677,25 +1835,42 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             }
         } else {
             xr_parser_error(parser, "enum type must be int, string, float or bool");
-            type_hint = NULL;
         }
+    }
+
+    // Parse optional 'implements' clause
+    XrTypeRef **interfaces = NULL;
+    int interface_count = 0;
+    int interface_capacity = 0;
+
+    if (xr_parser_match(parser, TK_IMPLEMENTS)) {
+        do {
+            XrTypeRef *iface_ref = xr_parse_type_annotation(parser);
+            if (!iface_ref)
+                break;
+            XR_PARSE_PUSH(parser, interfaces, interface_count, interface_capacity, iface_ref);
+        } while (xr_parser_match(parser, TK_COMMA));
     }
 
     // Parse enum body
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start enum body");
 
-    // Collect enum members
+    // Collect variants and methods
     AstNode **members = NULL;
     int member_count = 0;
     int member_capacity = 0;
 
-    // At least one member required
+    AstNode **methods = NULL;
+    int method_count = 0;
+    int method_capacity = 0;
+
     if (xr_parser_check(parser, TK_RBRACE)) {
-        xr_parser_error(parser, "enum requires at least one member");
+        xr_parser_error(parser, "enum requires at least one variant");
     }
 
-    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
-        // Error recovery to avoid infinite loop
+    /* Variant phase: parse comma-separated variants until we hit 'fn' or '}'. */
+    while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF) &&
+           !xr_parser_check(parser, TK_FN)) {
         if (parser->panic_mode) {
             xr_parser_synchronize(parser);
             if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
@@ -1703,31 +1878,35 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             continue;
         }
 
-        // Skip unknown tokens
         if (!xr_parser_check(parser, TK_NAME)) {
-            xr_parser_error_expected_name(parser, "expected enum member name");
+            xr_parser_error_expected_name(parser, "expected enum variant name");
             xr_parser_advance(parser);
             continue;
         }
 
-        // Parse member name
-        xr_parser_consume(parser, TK_NAME, "expected enum member name");
+        xr_parser_consume(parser, TK_NAME, "expected enum variant name");
         char *member_name = token_to_string(parser, &parser->previous);
         int member_line = parser->previous.line;
         int member_col = parser->previous.column;
         int member_name_len = parser->previous.length;
 
-        // Parse member value (optional)
+        /* ADT payload: Variant '(' fields ')' */
+        char **payload_names = NULL;
+        XrTypeRef **payload_types = NULL;
+        int payload_count = 0;
         AstNode *member_value = NULL;
-        if (xr_parser_match(parser, TK_ASSIGN)) {
-            // Parse constant expression
+
+        if (xr_parser_match(parser, TK_LPAREN)) {
+            /* ADT variant with payload */
+            parse_enum_variant_payload(parser, &payload_names, &payload_types, &payload_count);
+            xr_parser_consume(parser, TK_RPAREN, "expected ')' after variant payload");
+        } else if (xr_parser_match(parser, TK_ASSIGN)) {
+            /* Simple enum with backing value: Name = expr */
             member_value = xr_parse_expression(parser);
         }
 
-        // Create enum member node (xr_ast_enum_member deep-copies member_name).
-        // Source span: identifier only (cheap and always valid; extends to the
-        // value expression when present).
-        AstNode *member = xr_ast_enum_member(parser->X, member_name, member_value, member_line);
+        AstNode *member = xr_ast_enum_member(parser->X, member_name, member_value, payload_names,
+                                             payload_types, payload_count, member_line);
         member->column = member_col;
         if (member_value && member_value->end_line > 0) {
             member->end_line = member_value->end_line;
@@ -1739,16 +1918,31 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
 
         XR_PARSE_PUSH(parser, members, member_count, member_capacity, member);
 
-        // Comma separator (optional, can be omitted after last member)
-        if (!xr_parser_check(parser, TK_RBRACE)) {
+        /* Comma after variant: required between variants, optional before
+         * '}' or 'fn'. */
+        if (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_FN)) {
             if (!xr_parser_match(parser, TK_COMMA)) {
-                xr_parser_error(parser, "expected ',' to separate enum members");
+                xr_parser_error(parser, "expected ',' between enum variants");
                 break;
             }
-            // Allow trailing comma
-            if (xr_parser_check(parser, TK_RBRACE)) {
+            /* Allow trailing comma before '}' or 'fn' */
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_FN))
                 break;
-            }
+        }
+    }
+
+    /* Method phase: parse 'fn' methods until '}'. */
+    while (xr_parser_match(parser, TK_FN)) {
+        if (parser->panic_mode) {
+            xr_parser_synchronize(parser);
+            if (xr_parser_check(parser, TK_RBRACE) || xr_parser_check(parser, TK_EOF))
+                break;
+            continue;
+        }
+
+        AstNode *method = parse_enum_method(parser);
+        if (method) {
+            XR_PARSE_PUSH(parser, methods, method_count, method_capacity, method);
         }
     }
 
@@ -1756,9 +1950,14 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
     int enum_end_line = parser->previous.line;
     int enum_end_column = parser->previous.column + 1;
 
-    // Create enum declaration AST node (xr_ast_enum_decl deep-copies both
-    // enum_name and type_hint, and copies the members array contents).
-    AstNode *node = xr_ast_enum_decl(parser->X, enum_name, type_hint, members, member_count, line);
+    // Restore type_scope after parsing enum body
+    if (type_param_count > 0) {
+        parser->type_scope = saved_scope;
+    }
+
+    AstNode *node = xr_ast_enum_decl(parser->X, enum_name, type_hint, members, member_count,
+                                     methods, method_count, type_params, type_param_count,
+                                     interfaces, interface_count, line);
     node->column = name_column;
     node->end_line = enum_end_line;
     node->end_column = enum_end_column;

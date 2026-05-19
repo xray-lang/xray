@@ -196,14 +196,24 @@ typedef struct TypeAliasNode {
 
 typedef struct EnumMemberNode {
     char *name;
-    AstNode *value;
+    AstNode *value; /* backing value (= 200) for simple enums */
+    /* ADT variant payload fields (positional or named) */
+    char **payload_names;      /* field names; NULL entry = positional */
+    XrTypeRef **payload_types; /* type annotations per field */
+    int payload_count;         /* 0 = no payload (simple variant) */
 } EnumMemberNode;
 
 typedef struct EnumDeclNode {
     char *name;
-    char *type_hint;
-    AstNode **members;
+    char *type_hint;   /* base type hint for simple enums (: int) */
+    AstNode **members; /* AST_ENUM_MEMBER variants */
     int member_count;
+    AstNode **methods; /* AST_METHOD_DECL nodes inside enum body */
+    int method_count;
+    XrGenericParam **type_params; /* <T, E> generic type parameters */
+    int type_param_count;
+    XrTypeRef **interfaces; /* implements Foo, Bar */
+    int interface_count;
     uint32_t symbol_id; /* Analyzer-assigned unique ID */
 } EnumDeclNode;
 
