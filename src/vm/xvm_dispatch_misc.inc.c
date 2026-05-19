@@ -10,7 +10,7 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, frame, ci, base, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_HANDLER_COUNT,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_HANDLER_COUNT,
  * VM_FRAME_COUNT, VM_CURRENT_CORO, TRACE_EXECUTION, checkGC,
  * startfunc label, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
@@ -377,5 +377,5 @@ vmcase(OP_SLEEP) {
 
 vmcase(OP_SELECT_BLOCK) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_select_block(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_select_block(isolate, vm_ctx, i, base, ci, pc));
 }

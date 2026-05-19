@@ -30,7 +30,7 @@ vmcase(OP_TARRAY_GET) {
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(b));
     int32_t idx = (int32_t) R(c).i;
-    if (unlikely(idx < 0 || idx >= arr->length)) {
+    if (XR_UNLIKELY(idx < 0 || idx >= arr->length)) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          idx, arr->length);
     }
@@ -44,7 +44,7 @@ vmcase(OP_TARRAY_GETC) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(b));
-    if (unlikely(c < 0 || c >= arr->length)) {
+    if (XR_UNLIKELY(c < 0 || c >= arr->length)) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          c, arr->length);
     }
@@ -59,7 +59,7 @@ vmcase(OP_TARRAY_SET) {
     int c = GETARG_C(i);
     XrArray *arr = XR_TO_ARRAY(R(a));
     int32_t idx = (int32_t) R(b).i;
-    if (unlikely(idx < 0 || idx >= arr->length)) {
+    if (XR_UNLIKELY(idx < 0 || idx >= arr->length)) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "typed array index %d out of bounds [0, %d)",
                          idx, arr->length);
     }
@@ -75,7 +75,7 @@ vmcase(OP_TARRAY_PUSH) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrArray *arr = XR_TO_ARRAY(R(a));
-    if (unlikely(xr_array_is_slice(arr))) {
+    if (XR_UNLIKELY(xr_array_is_slice(arr))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "cannot push to array slice");
     }
     if (arr->length >= arr->capacity) {

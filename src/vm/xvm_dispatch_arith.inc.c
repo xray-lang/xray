@@ -365,7 +365,7 @@ vmcase(OP_DIV) {
     // BigInt division (auto-promote, with zero check)
     if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
         R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_div);
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
         vmbreak;
@@ -408,7 +408,7 @@ vmcase(OP_DIVK) {
     // BigInt / constant mixed
     if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
         R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_div);
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
         vmbreak;
@@ -458,7 +458,7 @@ vmcase(OP_MOD) {
     // BigInt modulo (auto-promote, with zero check)
     if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
         R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_mod);
-        if (unlikely(XR_IS_NOTFOUND(R(a)))) {
+        if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
             VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
         }
         vmbreak;

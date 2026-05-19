@@ -11,7 +11,7 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_FRAMES, VM_FRAME_COUNT,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_BARRIER_*, VM_STACK*, VM_CURRENT_CORO,
  * checkGC, startfunc label, ...) provided by the surrounding
  * scope. CMake excludes *.inc.c from the VM_SRC glob.
@@ -484,11 +484,11 @@ vmcase(OP_GETPROP) {
             }
             vmbreak;
         }
-        // Field not found: might be a method, fall through to cold path
+        // Field not found: might be a method, fall through to type dispatch
     }
 
     // Fast path: Instance is the most common target, skip if-else chain.
-    // Enum types/values use the cold dispatch path for member resolution.
+    // Enum types/values use the type dispatch for member resolution.
     if (xr_value_is_instance(obj) && !XR_IS_ENUM_TYPE(obj) && !XR_IS_ENUM_VALUE(obj))
         goto getprop_instance;
 
@@ -497,21 +497,21 @@ vmcase(OP_GETPROP) {
     if (xr_value_is_json(obj))
         goto getprop_instance;
 
-    // Cold path: all non-instance, non-json type dispatch
+    // Dispatch: all non-instance, non-json type dispatch
     {
         savepc();
-        int _cr =
+        XrDispatchAction _cr =
             vm_getprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, base, a, b, frame, pc);
-        if (_cr == VM_COLD_BREAK)
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: fall through to instance path
+        // XR_DISP_FALLTHROUGH: fall through to instance path
     }
 
 getprop_instance:;
@@ -530,20 +530,20 @@ getprop_instance:;
         vmbreak;
     }
 
-    // Cold path: getter method lookup
+    // Dispatch: getter method lookup
     {
-        int _cr =
+        XrDispatchAction _cr =
             vm_getprop_instance_getter(isolate, vm_ctx, inst, obj, prop_symbol, base, a, frame, pc);
-        if (_cr == VM_COLD_BREAK)
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: no getter, fall through to field access
+        // XR_DISP_FALLTHROUGH: no getter, fall through to field access
     }
 
     // No getter: access as regular field
@@ -627,26 +627,26 @@ vmcase(OP_SETPROP) {
     int prop_symbol = PROTO_SYMBOL(cl->proto, b);  // Dereference local index → global symbol
     XrValue value = R(c);
 
-    // Json values are dynamic-layout instances; the cold-path type
-    // dispatch returns VM_COLD_CONTINUE for them and the regular
+    // Json values are dynamic-layout instances; the per-type
+    // dispatch returns XR_DISP_FALLTHROUGH for them and the regular
     // instance path below (with its DYNAMIC_LAYOUT branch) handles all
     // semantics — including transitions on field add and sealed errors.
 
-    // Cold path: non-instance type dispatch (Map/Module/Class/null)
+    // Dispatch: non-instance type dispatch (Map/Module/Class/null)
     {
         savepc();
-        int _cr =
+        XrDispatchAction _cr =
             vm_setprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, value, base, a, frame, pc);
-        if (_cr == VM_COLD_BREAK)
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: fall through to instance path
+        // XR_DISP_FALLTHROUGH: fall through to instance path
     }
 
     // XrJson shares XrInstance layout — direct cast works
@@ -686,18 +686,18 @@ vmcase(OP_SETPROP) {
         vmbreak;
     }
 
-    // Cold path: setter method lookup
+    // Dispatch: setter method lookup
     {
-        int _cr = vm_setprop_instance_setter(isolate, vm_ctx, inst_s, obj, prop_symbol, value, base,
-                                             c, frame, pc);
-        if (_cr == VM_COLD_STARTFUNC)
+        XrDispatchAction _cr = vm_setprop_instance_setter(isolate, vm_ctx, inst_s, obj, prop_symbol,
+                                                          value, base, c, frame, pc);
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: no setter, fall through to field access
+        // XR_DISP_FALLTHROUGH: no setter, fall through to field access
     }
 
     // No setter: assign as regular field
