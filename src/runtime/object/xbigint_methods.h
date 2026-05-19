@@ -130,7 +130,7 @@ static inline XrValue xr_bigint_to_float_method(XrayIsolate *iso, XrValue self, 
 }
 
 struct XrayIsolate;
-XR_FUNC void xr_bigint_register_native_type(struct XrayIsolate *isolate);
+XR_FUNC void xr_bigint_register_class(struct XrayIsolate *isolate);
 
 #ifdef __cplusplus
 }

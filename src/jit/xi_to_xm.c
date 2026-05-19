@@ -654,7 +654,7 @@ generic_call:
         int bid = (int) v->aux_int;
         /* Hard fail: reject unknown builtins at JIT lowering time.
          * Known name-based builtins deopt to VM. Numeric-ID builtins
-         * (bid > 0) are INVOKE_BUILTIN opcodes and also deopt. */
+         * (bid > 0) route through OP_INVOKE and also deopt. */
         if (bn != NULL) {
             static const char *known[] = {"dump",  "copy",          "chr",       "print",
                                           "Bytes", "StringBuilder", "Exception", NULL};

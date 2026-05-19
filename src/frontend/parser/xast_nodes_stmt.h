@@ -156,6 +156,16 @@ typedef struct PatternTupleNode {
     int count;
 } PatternTupleNode;
 
+/* ADT variant destructure: `Shape.Circle(r)` / `Result.Ok(v)`.
+ * variant is the AST_MEMBER_ACCESS / AST_ENUM_ACCESS node for the
+ * variant name; sub-patterns are AST_PATTERN_* nodes for each payload
+ * slot (bindings, wildcards, or literals). */
+typedef struct PatternAdtNode {
+    AstNode *variant;    // e.g. AST_MEMBER_ACCESS(Shape, Circle)
+    AstNode **patterns;  // payload sub-patterns
+    int count;           // number of payload slots
+} PatternAdtNode;
+
 /* ========== Coroutine / Concurrency ==========
  *
  * Supports:

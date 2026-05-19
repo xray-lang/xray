@@ -51,6 +51,7 @@ typedef enum {
 
 typedef struct XrNetConn {
     XrGCHeader gc_header;
+    struct XrClass *klass;       /* unified class (XR_CLASS_NETCONN flag)           */
     int fd;                      /* -1 once closed                                 */
     uint8_t kind;                /* XrNetConnKind                                  */
     bool closed;                 /* idempotency guard for close                     */
@@ -62,8 +63,9 @@ typedef struct XrNetConn {
 
 typedef struct XrNetListener {
     XrGCHeader gc_header;
-    int fd;   /* -1 once closed                                 */
-    int port; /* listening port                                  */
+    struct XrClass *klass; /* unified class (XR_CLASS_NETLISTENER flag)       */
+    int fd;                /* -1 once closed                                 */
+    int port;              /* listening port                                  */
     bool closed;
     struct XrayIsolate *isolate;
 } XrNetListener;
@@ -109,14 +111,15 @@ XR_FUNC void xr_net_conn_set_tls(XrNetConn *c, void *tls_state);
 XR_FUNC void xr_net_conn_close(XrNetConn *c);
 XR_FUNC void xr_net_listener_close(XrNetListener *l);
 
-/* ========== GC destroy hooks ==========
+/* ========== Native body descriptors ==========
  *
- * Wired into the GC type table in src/runtime/gc/xgc.c. Mirrors what
- * xr_net_conn_close / xr_net_listener_close do, so finalisation never
- * leaks an fd if the script forgets to close.
+ * Wired into the XrClass via XrNativeBodyDesc. The destroy hook
+ * mirrors xr_net_conn_close / xr_net_listener_close, so GC sweep
+ * never leaks an fd if the script forgets to close.
  */
-XR_FUNC void xr_gc_destroy_net_conn(XrGCHeader *obj, struct XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, struct XrCoroGC *owning_gc);
+struct XrNativeBodyDesc;
+XR_FUNC struct XrNativeBodyDesc *xr_netconn_body_desc(void);
+XR_FUNC struct XrNativeBodyDesc *xr_netlistener_body_desc(void);
 
 #ifdef __cplusplus
 }

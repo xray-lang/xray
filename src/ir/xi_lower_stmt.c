@@ -241,6 +241,24 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             return result ? result : xi_const_bool(l->func, l->cur_block, true, l->type_bool);
         }
 
+        case AST_PATTERN_ADT: {
+            /* ADT variant destructure: compare tag field against variant.
+             * subject.fields[0] is XrEnumValue* stored at construction.
+             * Lower the variant expression (e.g. Shape.Circle) and check
+             * equality with the tag. */
+            PatternAdtNode *ap = &pattern->as.pattern_adt;
+            XiValue *tag = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_any, 1);
+            if (!tag)
+                return NULL;
+            tag->args[0] = subject;
+            tag->aux_int = 0; /* field[0] = variant tag */
+
+            XiValue *variant_val = xi_lower_expr(l, ap->variant);
+            if (!variant_val)
+                return NULL;
+            return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
+        }
+
         default:
             return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
     }
@@ -280,6 +298,23 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             get->args[0] = subject;
             get->aux_int = i;
             lower_pattern_bindings(l, get, sub);
+        }
+    }
+
+    /* ADT variant destructure: bind payload fields.
+     * Payload slots are at fields[1], fields[2], ... */
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *ap = &pattern->as.pattern_adt;
+        for (int i = 0; i < ap->count; i++) {
+            AstNode *sub = ap->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_any, 1);
+            if (!field)
+                continue;
+            field->args[0] = subject;
+            field->aux_int = 1 + i; /* payload starts at field[1] */
+            lower_pattern_bindings(l, field, sub);
         }
     }
 }

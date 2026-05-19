@@ -123,11 +123,9 @@ XR_FUNC void xr_gc_destroy_map(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_set(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_channel(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_coroutine(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void regex_object_destroy(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_instance(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_net_conn(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, XrCoroGC *owning_gc);
+// NetConn / NetListener destroy handled by native body descriptors.
 
 // Traverse functions (non-static, referenced by g_type_ops).
 // Each marks the type's GC-traced children via xr_coro_gc_markvalue /

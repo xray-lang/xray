@@ -146,6 +146,13 @@ bool xr_value_is_iterator(XrValue v) {
     return inst->klass && (inst->klass->flags & XR_CLASS_ITERATOR);
 }
 
+bool xr_value_is_bigint(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_BIGINT);
+}
+
 /* ========== Unified Type ID ========== */
 
 // XrValueTag → XrTypeId lookup table
@@ -174,9 +181,7 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TMODULE] = XR_TID_MODULE,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
-    [XR_TBIGINT] = XR_TID_BIGINT,
     [XR_TCOROPOOL] = XR_TID_NULL,
-    [XR_TREGEX] = XR_TID_REGEX,
     [XR_TTASK] = XR_TID_TASK,
 };
 
@@ -203,6 +208,14 @@ XrTypeId xr_value_typeid(XrValue v) {
                         return XR_TID_ENUM_TYPE;
                     if (inst->klass->flags & XR_CLASS_ITERATOR)
                         return XR_TID_ITERATOR;
+                    if (inst->klass->flags & XR_CLASS_REGEX)
+                        return XR_TID_REGEX;
+                    if (inst->klass->flags & XR_CLASS_NETCONN)
+                        return XR_TID_NETCONN;
+                    if (inst->klass->flags & XR_CLASS_NETLISTENER)
+                        return XR_TID_NETLISTENER;
+                    if (inst->klass->flags & XR_CLASS_BIGINT)
+                        return XR_TID_BIGINT;
                 }
             }
             return tid;
@@ -246,6 +259,8 @@ XR_DATA const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_COROUTINE] = TYPE_NAME_COROUTINE,
     [XR_TID_RANGE] = TYPE_NAME_RANGE,
     [XR_TID_TASK] = TYPE_NAME_TASK,
+    [XR_TID_NETCONN] = TYPE_NAME_NETCONN,
+    [XR_TID_NETLISTENER] = TYPE_NAME_NETLISTENER,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {

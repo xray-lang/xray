@@ -16,6 +16,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../gc/xgc_internal.h"
 #include "xclass.h"
+#include "xinstance.h"
 #include "xreflect_registry.h"
 #include "xclass_system.h"
 #include <string.h>
@@ -41,6 +42,7 @@ XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name, const char
     enum_val->member_name = xr_symbol_intern(X, member_name);
     enum_val->raw_value = raw_value;
     enum_val->member_index = index;
+    enum_val->parent_type = NULL;  // Set by xr_enum_type_new after member creation
 
     return enum_val;
 }
@@ -82,6 +84,8 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
         enum_type->members[i].value = member_values[i];
         enum_type->members[i].instance =
             xr_enum_value_new(X, name, member_names[i], member_values[i], i);
+        if (enum_type->members[i].instance)
+            enum_type->members[i].instance->parent_type = enum_type;
     }
 
     // Initialize symbol mapping for O(1) lookup
@@ -246,6 +250,45 @@ const char *xr_enum_value_name(XrEnumValue *enum_val) {
 }
 
 /* ========== Destroy Hooks ========== */
+
+/* ========== ADT Variant Construction ========== */
+
+XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
+                                          uint32_t member_index, XrValue *args, int nargs) {
+    XR_DCHECK(X != NULL, "adt_construct: NULL isolate");
+    XR_DCHECK(enum_type != NULL, "adt_construct: NULL enum_type");
+    XR_DCHECK(enum_type->is_adt, "adt_construct: enum is not ADT");
+    XR_DCHECK(member_index < enum_type->member_count, "adt_construct: member_index out of bounds");
+
+    int expected_payload = enum_type->payload_counts[member_index];
+    int actual_payload = nargs < expected_payload ? nargs : expected_payload;
+
+    /* Instance layout: field[0] = tag (int), field[1..N] = payload.
+     * Total fields = 1 + max_payload (uniform across all variants for
+     * consistent field_count on the shared class). */
+    XrClass *klass = enum_type->enum_class;
+    XR_DCHECK(klass != NULL, "adt_construct: NULL enum_class");
+
+    XrInstance *inst = xr_instance_new(X, klass);
+    if (!inst)
+        return NULL;
+
+    /* field[0] = XrEnumValue* for the variant (carries name, tag, parent) */
+    XrEnumValue *variant = enum_type->members[member_index].instance;
+    XR_DCHECK(variant != NULL, "adt_construct: NULL variant instance");
+    inst->fields[0] = XR_FROM_PTR(variant);
+
+    /* field[1..payload_count] = args */
+    for (int i = 0; i < actual_payload; i++) {
+        inst->fields[1 + i] = args[i];
+    }
+    /* Zero remaining payload slots (when variant has fewer than max_payload) */
+    for (int i = actual_payload; i < enum_type->max_payload; i++) {
+        inst->fields[1 + i] = xr_null();
+    }
+
+    return inst;
+}
 
 /* Release malloc-backed side resources owned by the enum value.
  * The body itself lives on the isolate fixedgc list and is freed by

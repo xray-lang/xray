@@ -79,14 +79,10 @@ typedef enum {
     XR_TMODULE,
     XR_TCOROUTINE,
     XR_TCHANNEL,
-    XR_TBIGINT,
     XR_TCOROPOOL,
-    XR_TREGEX,
-    XR_TBLOB,         // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCELL,         // Single-slot mutable capture cell (32B)
-    XR_TTASK,         // Lightweight GC-managed coroutine handle (Task/Executor separation)
-    XR_TNETCONN,      // Typed TCP / UDP / TLS connection handle (src/io/xnet_handle.h)
-    XR_TNETLISTENER,  // Typed TCP listener handle (src/io/xnet_handle.h)
+    XR_TBLOB,  // Raw byte buffer on Immix heap (no traverse/destroy)
+    XR_TCELL,  // Single-slot mutable capture cell (32B)
+    XR_TTASK,  // Lightweight GC-managed coroutine handle (Task/Executor separation)
 } XrObjType;
 
 /* ========== Unified GC Header (16 bytes) ========== */
@@ -156,15 +152,11 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_MODULE,
                                   TYPE_NAME_COROUTINE,
                                   TYPE_NAME_CHANNEL,
-                                  TYPE_NAME_BIGINT,
                                   TYPE_NAME_COROPOOL,
-                                  TYPE_NAME_REGEX,
                                   "blob",
                                   "cell",
-                                  TYPE_NAME_TASK,
-                                  "NetConn",
-                                  "NetListener"};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TNETLISTENER + 1,
+                                  TYPE_NAME_TASK};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TTASK + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];

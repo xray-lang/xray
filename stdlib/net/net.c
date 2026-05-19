@@ -18,7 +18,10 @@
 #include "tls.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"
-#include "../../src/runtime/object/xnative_type.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xclass_builder.h"
+#include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
@@ -252,15 +255,21 @@ static XR_THREAD_LOCAL XrNetAddr g_udp_recv_addr;
 // ========== Typed Handle Helpers ==========
 
 /*
- * Handle type checks. heap_type is cached on the XrValue so these are
- * single-load comparisons; no shape lookup, no symbol table query.
+ * Handle type checks. Validates GC type is XR_TINSTANCE and the
+ * class carries the expected flag.
  */
 static inline bool is_conn_handle(XrValue v) {
-    return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TNETCONN;
+    if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
+        return false;
+    XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_NETCONN);
 }
 
 static inline bool is_listener_handle(XrValue v) {
-    return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TNETLISTENER;
+    if (!XR_IS_PTR(v) || XR_HEAP_TYPE(v) != XR_TINSTANCE)
+        return false;
+    XrInstance *inst = (XrInstance *) XR_VALUE_GCPTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_NETLISTENER);
 }
 
 static inline XrNetConn *unwrap_conn(XrValue v) {
@@ -1501,44 +1510,50 @@ static XrValue listener_method_is_closed(XrayIsolate *X, XrValue self, XrValue *
     return xr_bool(!l || l->closed);
 }
 
-/* NetConn and NetListener native-type registrations are invoked
+/* NetConn and NetListener class registrations are invoked
  * unconditionally during isolate init by
  * xr_prelude_register_all_native_types, so the XrClasses are available
  * even when user code never `import net`. */
-void xr_netconn_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod conn_methods[] = {
-        {"fd", conn_method_fd, 1},
-        {"close", conn_method_close, 1},
-        {"isClosed", conn_method_is_closed, 1},
-        {"isTLS", conn_method_is_tls, 1},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeTypeInfo conn_info = {
-        .name = "NetConn",
-        .gc_type = XR_TNETCONN,
-        .methods = conn_methods,
-        .getters = NULL,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &conn_info);
+void xr_netconn_register_class(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "netconn_register_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL, "netconn_register_class: NULL core");
+
+    XrClassBuilder *b = xr_class_builder_new(isolate, "NetConn", NULL);
+    XR_CHECK(b != NULL, "netconn_register_class: builder alloc failed");
+
+    xr_class_builder_set_native_body(b, xr_netconn_body_desc());
+
+    xr_class_builder_add_method(b, "fd", conn_method_fd, 0, 0);
+    xr_class_builder_add_method(b, "close", conn_method_close, 0, 0);
+    xr_class_builder_add_method(b, "isClosed", conn_method_is_closed, 0, 0);
+    xr_class_builder_add_method(b, "isTLS", conn_method_is_tls, 0, 0);
+
+    XrClass *cls = xr_class_builder_finalize(b);
+    XR_CHECK(cls != NULL, "netconn_register_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_NETCONN;
+    core->netConnClass = cls;
 }
 
-void xr_netlistener_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod listener_methods[] = {
-        {"fd", listener_method_fd, 1},
-        {"port", listener_method_port, 1},
-        {"close", listener_method_close, 1},
-        {"isClosed", listener_method_is_closed, 1},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeTypeInfo listener_info = {
-        .name = "NetListener",
-        .gc_type = XR_TNETLISTENER,
-        .methods = listener_methods,
-        .getters = NULL,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &listener_info);
+void xr_netlistener_register_class(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "netlistener_register_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL, "netlistener_register_class: NULL core");
+
+    XrClassBuilder *b = xr_class_builder_new(isolate, "NetListener", NULL);
+    XR_CHECK(b != NULL, "netlistener_register_class: builder alloc failed");
+
+    xr_class_builder_set_native_body(b, xr_netlistener_body_desc());
+
+    xr_class_builder_add_method(b, "fd", listener_method_fd, 0, 0);
+    xr_class_builder_add_method(b, "port", listener_method_port, 0, 0);
+    xr_class_builder_add_method(b, "close", listener_method_close, 0, 0);
+    xr_class_builder_add_method(b, "isClosed", listener_method_is_closed, 0, 0);
+
+    XrClass *cls = xr_class_builder_finalize(b);
+    XR_CHECK(cls != NULL, "netlistener_register_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_NETLISTENER;
+    core->netListenerClass = cls;
 }
 
 XrModule *xr_load_module_net(XrayIsolate *isolate) {

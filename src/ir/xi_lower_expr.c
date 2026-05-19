@@ -24,6 +24,7 @@
 #include "../frontend/lexer/xlex.h"
 
 #include "../runtime/class/xenum.h"
+#include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -2818,6 +2819,15 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             }
         }
         et->max_payload = max_pc;
+
+        /* Set field_count on the enum class so xr_instance_new allocates
+         * space for variant tag (field[0]) + payload (field[1..max_payload]).
+         * Mark with XR_CLASS_ADT_ENUM so the formatter can detect it. */
+        if (et->enum_class && max_pc > 0) {
+            et->enum_class->field_count = (uint16_t) (1 + max_pc);
+            et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
+            et->enum_class->flags |= XR_CLASS_ADT_ENUM;
+        }
     }
 
     /* Store as XI_CONST with type_any (emitter handles via LOADK) */

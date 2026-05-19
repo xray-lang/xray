@@ -714,7 +714,7 @@ startfunc:
 #include "xvm_dispatch_object.inc.c"
 
 /* OOP method invocation family (INVOKE / INVOKE_TAIL /
- * SUPERINVOKE / INVOKE_DIRECT / INVOKE_BUILTIN) --
+ * SUPERINVOKE / INVOKE_DIRECT) --
  * see xvm_dispatch_invoke.inc.c. */
 #include "xvm_dispatch_invoke.inc.c"
 

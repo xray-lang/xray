@@ -70,19 +70,14 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     // are deliberately not transferable across coroutines (the
     // dispatchers return the raw value, matching the pre-table default).
     [XR_TCOROUTINE] = {xr_gc_destroy_coroutine, NULL, NULL, NULL},
-    [XR_TREGEX] = {regex_object_destroy, NULL, NULL, NULL},
     [XR_TTASK] = {xr_gc_destroy_task, xr_gc_traverse_task, NULL, NULL},
     [XR_TCELL] = {NULL, xr_gc_traverse_cell, NULL, NULL},
     [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
     [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},
     [XR_TERROR] = {NULL, xr_gc_traverse_error, NULL, NULL},
 
-    // Network handles. No GC children to traverse (fd is an int, the
-    // optional TLS pointer is opaque non-GC memory). Destroy hook
-    // closes the fd through netpoll so a forgotten close from the
-    // script side cannot leak the kernel resource.
-    [XR_TNETCONN] = {xr_gc_destroy_net_conn, NULL, NULL, NULL},
-    [XR_TNETLISTENER] = {xr_gc_destroy_net_listener, NULL, NULL, NULL},
+    // NetConn / NetListener are now XR_TINSTANCE with native body
+    // descriptors — destroy is handled by xr_gc_destroy_instance.
 
     // XR_TBLOB / XR_TSTRING are pure leaves with no
     // capabilities; their slots are zero-initialised by default.

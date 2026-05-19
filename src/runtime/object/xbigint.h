@@ -13,13 +13,15 @@
  *
  * MEMORY LAYOUT:
  *   ┌─────────────────────┐
- *   │ XrGCHeader (16B)    │ GC header
+ *   │ XrGCHeader (16B)    │ GC header (type = XR_TINSTANCE)
+ *   ├─────────────────────┤
+ *   │ klass (8B)          │ XrClass* with XR_CLASS_BIGINT flag
  *   ├─────────────────────┤
  *   │ sign (1B)           │ sign: 1 or -1
  *   │ padding (3B)        │ alignment padding
  *   │ len (4B)            │ current limb count
  *   │ cap (4B)            │ allocated limb capacity
- *   │ padding (4B)        │ align to 32 bytes
+ *   │ padding (4B)        │ alignment padding
  *   ├─────────────────────┤
  *   │ limbs[]             │ flexible array, little-endian
  *   └─────────────────────┘
@@ -42,13 +44,14 @@ struct XrCoroutine;
 // Base 2^32 storage, ~10x more efficient than base 10
 // Sign: 1 = positive/zero, -1 = negative
 typedef struct XrBigInt {
-    XrGCHeader gc;     // GC header (must be first)
-    int8_t sign;       // sign: 1 or -1
-    uint8_t _pad1[3];  // alignment padding
-    uint32_t len;      // current limb count
-    uint32_t cap;      // allocated limb capacity
-    uint32_t _pad2;    // align to 32 bytes
-    uint32_t limbs[];  // flexible array, little-endian
+    XrGCHeader gc;          // GC header (must be first)
+    struct XrClass *klass;  // unified class (XR_CLASS_BIGINT flag)
+    int8_t sign;            // sign: 1 or -1
+    uint8_t _pad1[3];       // alignment padding
+    uint32_t len;           // current limb count
+    uint32_t cap;           // allocated limb capacity
+    uint32_t _pad2;         // align to 32 bytes
+    uint32_t limbs[];       // flexible array, little-endian
 } XrBigInt;
 
 struct XrGC;

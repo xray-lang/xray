@@ -13,7 +13,6 @@
 #include "../class/xenum.h"
 #include "../class/xclass.h"
 #include "../gc/xgc.h"
-#include "../object/xiterator.h"
 #include "../object/xnative_type.h"
 #include "../symbol/xsymbol_table.h"
 #include "../value/xtype_names.h"
@@ -114,34 +113,6 @@ MethodHandler xr_string_get_handler(XrayIsolate *isolate, int symbol) {
         return h;
     if (symbol == SYMBOL_ITERATOR)
         return bound_method_stub;
-    return NULL;
-}
-
-/* Iterator methods touch receiver state (cursor advance), so they
- * stay outside the unified per-type table — wrap them directly. */
-static XrValue iterator_hasnext_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
-                                        int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    XrIterator *iter = xr_value_to_iterator(receiver);
-    return xr_bool(xr_iterator_has_next(iter));
-}
-
-static XrValue iterator_next_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
-                                     int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    XrIterator *iter = xr_value_to_iterator(receiver);
-    return xr_iterator_next(iter);
-}
-
-MethodHandler xr_iterator_get_handler(int symbol) {
-    if (symbol == SYMBOL_HASNEXT)
-        return iterator_hasnext_handler;
-    if (symbol == SYMBOL_NEXT)
-        return iterator_next_handler;
     return NULL;
 }
 

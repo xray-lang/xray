@@ -127,6 +127,7 @@ struct AstNode {
         PatternWildcardNode pattern_wildcard;
         PatternMultiNode pattern_multi;
         PatternTupleNode pattern_tuple;
+        PatternAdtNode pattern_adt;
         TernaryNode ternary;
         OptionalChainNode optional_chain;
         RangeNode range;

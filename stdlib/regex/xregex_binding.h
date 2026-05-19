@@ -75,7 +75,7 @@ struct XrModule;
 XR_FUNC struct XrModule *xr_load_module_regex(XrayIsolate *isolate);
 
 /*
- * Wrap XrRegex as XrValue (GC-managed XrRegexObject)
+ * Wrap XrRegex as XrValue (XrInstance with native body)
  * @param X  Isolate context
  * @param re Regex object pointer
  * @return Wrapped XrValue
@@ -83,11 +83,12 @@ XR_FUNC struct XrModule *xr_load_module_regex(XrayIsolate *isolate);
 XR_FUNC XrValue xr_regex_wrap(XrayIsolate *X, XrRegex *re);
 
 /*
- * Register the Regex XrClass so regex literals and regex.compile(...)
- * results can dispatch instance methods. Called unconditionally from
- * xr_prelude_register_all_native_types during isolate init.
+ * Register the Regex XrClass with native body descriptor so regex
+ * literals and regex.compile(...) results dispatch instance methods.
+ * Called unconditionally from xr_prelude_register_all_native_types
+ * during isolate init.
  */
-void xr_regex_register_native_type(XrayIsolate *isolate);
+XR_FUNC void xr_regex_register_class(XrayIsolate *isolate);
 
 // Check if value is a Regex object
 XR_FUNC bool xr_value_is_regex(XrValue v);
