@@ -5,13 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_cold_object.c - Cold-path implementations for property access
- *                     and module invoke
+ * xvm_props.c - Dispatch helpers for property access and module invoke
  *
- * Holds the noinline bodies for OP_GETPROP / OP_SETPROP type
- * dispatchers, instance getter / setter fallbacks, and
- * vm_invoke_module. Function declarations live in
- * xvm_cold_paths.h.
+ * Implements per-type dispatch for OP_GETPROP / OP_SETPROP,
+ * instance getter / setter fallbacks, and vm_invoke_module.
+ * Declarations live in xvm_dispatch_helpers.h.
  *
  * Owns:
  *   - vm_setprop_type_dispatch    (per-type SETPROP fallback)
@@ -21,7 +19,7 @@
  *   - vm_invoke_module            (module member invocation)
  */
 
-#include "xvm_cold_paths.h"
+#include "xvm_dispatch_helpers.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -43,25 +41,26 @@
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
 
-/* ========== Cold Path: OP_SETPROP Type Dispatch ========== */
+/* ========== Dispatch: OP_SETPROP Type Dispatch ========== */
 
 /*
  * Handles property set for non-instance types (Map error, Module, Class static, Json).
- * Returns VM_COLD_BREAK on success, VM_COLD_CONTINUE for instance, VM_COLD_ERROR on error.
+ * Returns XR_DISP_NEXT on success, XR_DISP_FALLTHROUGH for instance, XR_DISP_RAISE on error.
  */
-XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue obj,
-                                         int prop_symbol, XrValue value, XrValue *base, int a,
-                                         XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                  XrValue obj, int prop_symbol, XrValue value,
+                                                  XrValue *base, int a, XrBcCallFrame *frame,
+                                                  XrInstruction *pc) {
     (void) base;
     (void) a;
     // Map dot assignment: forbidden
     if (XR_IS_MAP(obj)) {
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                      "Map does not support dot syntax assignment '%s', use map[\"%s\"] = value or "
-                      "map.set(\"%s\", value)",
-                      name ? name : "?", name ? name : "?", name ? name : "?");
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                 "Map does not support dot syntax assignment '%s', use map[\"%s\"] = value or "
+                 "map.set(\"%s\", value)",
+                 name ? name : "?", name ? name : "?", name ? name : "?");
     }
 
     // Module export variable assignment
@@ -71,20 +70,20 @@ XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             if (xr_module_is_const_sym(module, prop_symbol)) {
                 XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
                 const char *_name = xr_symbol_get_name_in_table(_st, prop_symbol);
-                VM_COLD_THROW(frame, pc, XR_ERR_CMP_CONST_ASSIGN,
-                              "cannot modify module constant '%s.%s'",
-                              module->name ? module->name : "?", _name ? _name : "?");
+                VM_THROW(frame, pc, XR_ERR_CMP_CONST_ASSIGN,
+                         "cannot modify module constant '%s.%s'", module->name ? module->name : "?",
+                         _name ? _name : "?");
             }
             xr_module_set_sym(module, prop_symbol, value);
             XrCoroutine *_bc = vm_ctx->current_coro;
             if (_bc && _bc->coro_gc)
                 XR_GC_BARRIER_VAL(_bc->coro_gc, module, value);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
         const char *_name = xr_symbol_get_name_in_table(_st, prop_symbol);
-        VM_COLD_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module '%s' has no export variable '%s'",
-                      module && module->name ? module->name : "?", _name ? _name : "?");
+        VM_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module '%s' has no export variable '%s'",
+                 module && module->name ? module->name : "?", _name ? _name : "?");
     }
 
     // Static field assignment
@@ -94,56 +93,53 @@ XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         if (field_index < 0) {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                          "static field '%s' not found in class '%s'", pname ? pname : "?",
-                          cls->name);
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                     "static field '%s' not found in class '%s'", pname ? pname : "?", cls->name);
         }
         const XrFieldDescriptor *field = xr_class_get_field(cls, field_index);
         if (!field) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                          "internal error: field descriptor not found");
+            VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "internal error: field descriptor not found");
         }
         if (!(field->flags & XR_FIELD_STATIC)) {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "field '%s' is not a static field",
-                          pname ? pname : "?");
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "field '%s' is not a static field",
+                     pname ? pname : "?");
         }
         if (field->flags & XR_FIELD_FINAL) {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(frame, pc, XR_ERR_CMP_CONST_ASSIGN,
-                          "cannot modify const static field '%s'", pname ? pname : "?");
+            VM_THROW(frame, pc, XR_ERR_CMP_CONST_ASSIGN, "cannot modify const static field '%s'",
+                     pname ? pname : "?");
         }
         int static_field_idx = field->static_slot;
         if (static_field_idx < 0 || static_field_idx >= cls->static_field_count) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                          "internal error: static field index out of bounds");
+            VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                     "internal error: static field index out of bounds");
         }
         cls->static_field_values[static_field_idx] = value;
         XrCoroutine *_bc = vm_ctx->current_coro;
         if (_bc && _bc->coro_gc)
             XR_GC_BARRIER_VAL(_bc->coro_gc, cls, value);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Json property set
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
         if (!xr_json_set(isolate, json, prop_symbol, value)) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                          "cannot add property to sealed Json object");
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                     "cannot add property to sealed Json object");
         }
         XrCoroutine *_bc = vm_ctx->current_coro;
         if (_bc && _bc->coro_gc)
             xr_coro_gc_barrierback(_bc->coro_gc, XR_OBJ2GC(json));
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Null type error
     if (XR_IS_NULL(obj)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_NULL_PROPERTY,
-                      "null type does not support property access");
+        VM_THROW(frame, pc, XR_ERR_NULL_PROPERTY, "null type does not support property access");
     }
 
     // Struct ref: stored field write or setter method
@@ -193,7 +189,7 @@ XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 default:
                     break;
             }
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         // Try setter method: set:<prop_name>
@@ -209,7 +205,7 @@ XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 XrClosure *closure = setter->as.closure;
                 XrProto *proto = closure->proto;
                 if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-                    VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+                    VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
                 }
                 // Place this + value on stack above caller's registers
                 int setter_base =
@@ -224,38 +220,38 @@ XR_NOINLINE int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 new_frame->closure = closure;
                 new_frame->pc = PROTO_CODE_BASE(proto);
                 new_frame->base_offset = setter_base;
-                return VM_COLD_STARTFUNC;
+                return XR_DISP_RESTART;
             }
         }
 
         // No field and no setter found
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                      "struct '%s' has no writable field or setter for this property", scls->name);
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                 "struct '%s' has no writable field or setter for this property", scls->name);
     }
 
     // Non-instance type error
     if (!xr_value_is_instance(obj)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                      "only instance, Map, Json and class can set properties");
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                 "only instance, Map, Json and class can set properties");
     }
 
-    return VM_COLD_CONTINUE;  // Instance: handled by caller
+    return XR_DISP_FALLTHROUGH;  // Instance: handled by caller
 }
 
-/* ========== Cold Path: OP_SETPROP Instance Setter ========== */
+/* ========== Dispatch: OP_SETPROP Instance Setter ========== */
 
-XR_NOINLINE int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                           XrInstance *inst, XrValue obj, int prop_symbol,
-                                           XrValue value, XrValue *base, int c,
-                                           XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                    XrInstance *inst, XrValue obj, int prop_symbol,
+                                                    XrValue value, XrValue *base, int c,
+                                                    XrBcCallFrame *frame, XrInstruction *pc) {
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
-        return VM_COLD_CONTINUE;
+        return XR_DISP_FALLTHROUGH;
 
     size_t prop_name_len = strlen(prop_name);
     if (prop_name_len + 5 > XR_MAX_METHOD_NAME_LEN) {
-        VM_COLD_THROW(frame, pc, XR_ERR_OVERFLOW, "property name too long");
+        VM_THROW(frame, pc, XR_ERR_OVERFLOW, "property name too long");
     }
 
     char setter_name[XR_MAX_METHOD_NAME_LEN];
@@ -268,17 +264,17 @@ XR_NOINLINE int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm
     }
 
     if (!setter)
-        return VM_COLD_CONTINUE;
+        return XR_DISP_FALLTHROUGH;
 
     XrClosure *closure = setter->as.closure;
     XrProto *proto = closure->proto;
 
     if (proto->numparams != 2) {
-        VM_COLD_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "setter should have one parameter");
+        VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "setter should have one parameter");
     }
 
     if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-        VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
     }
 
     /* Place setter frame above caller's maxstacksize to avoid
@@ -297,18 +293,19 @@ XR_NOINLINE int vm_setprop_instance_setter(XrayIsolate *isolate, XrVMContext *vm
     new_frame->pc = PROTO_CODE_BASE(proto);
     new_frame->base_offset = safe_base;
 
-    return VM_COLD_STARTFUNC;
+    return XR_DISP_RESTART;
 }
-/* ========== Cold Path: OP_GETPROP Type Dispatch ========== */
+/* ========== Dispatch: OP_GETPROP Type Dispatch ========== */
 
 /*
- * Handles property access for all non-instance types (cold path).
- * Returns VM_COLD_BREAK if property was resolved, VM_COLD_CONTINUE for instance,
- * or VM_COLD_ERROR/VM_COLD_STARTFUNC for error/getter paths.
+ * Handles property access for all non-instance types .
+ * Returns XR_DISP_NEXT if property was resolved, XR_DISP_FALLTHROUGH for instance,
+ * or XR_DISP_RAISE/XR_DISP_RESTART for error/getter paths.
  */
-XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue obj,
-                                         int prop_symbol, XrValue *base, int a, int b,
-                                         XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                  XrValue obj, int prop_symbol, XrValue *base,
+                                                  int a, int b, XrBcCallFrame *frame,
+                                                  XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_getprop_type_dispatch: NULL isolate");
     XR_DCHECK(base != NULL, "vm_getprop_type_dispatch: NULL base");
     // Task properties: task.done, task.cancelled, task.result, task.error
@@ -326,7 +323,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             base[a] = xr_null();
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Legacy coroutine properties (fallback for old callers)
@@ -345,7 +342,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             base[a] = xr_null();
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Channel properties: ch.length, ch.capacity, ch.isClosed
@@ -360,7 +357,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             base[a] = xr_null();
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Enum property access
@@ -373,13 +370,13 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 size_t len = strlen(enum_val->member_name);
                 XrString *str = xr_string_intern(isolate, enum_val->member_name, len, 0);
                 base[a] = xr_string_value(str);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             } else if (prop_symbol == SYMBOL_VALUE) {
                 base[a] = enum_val->raw_value;
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             } else if (prop_symbol == SYMBOL_ORDINAL) {
                 base[a] = xr_int(enum_val->member_index);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             // Other enum properties: fall through to instance path
         }
@@ -388,19 +385,19 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             XrEnumType *enum_type = (XrEnumType *) gc;
             if (prop_symbol == SYMBOL_MEMBER_COUNT) {
                 base[a] = xr_int(enum_type->member_count);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             } else if (prop_symbol == SYMBOL_GET_MEMBER) {
                 XrBoundMethod *bm = xr_bound_method_new(isolate, obj, xr_enum_get_member_handler);
                 base[a] = xr_value_from_bound_method(bm);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrEnumValue *found = xr_enum_get_member_by_symbol(enum_type, prop_symbol);
             if (found) {
                 base[a] = XR_FROM_PTR(found);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             base[a] = xr_null();
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         // Iterator: handled by standard instance method dispatch
@@ -416,13 +413,13 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else if (prop_symbol == SYMBOL_IS_EMPTY) {
             base[a] = xr_bool(xr_map_is_empty(map));
         } else if (prop_symbol == SYMBOL_KEYS) {
-            XrArray *keys = xr_map_keys(COLD_CORO(vm_ctx), map);
+            XrArray *keys = xr_map_keys(vm_get_coro(vm_ctx), map);
             base[a] = keys ? xr_value_from_array(keys) : xr_null();
         } else if (prop_symbol == SYMBOL_VALUES) {
-            XrArray *values = xr_map_values(COLD_CORO(vm_ctx), map);
+            XrArray *values = xr_map_values(vm_get_coro(vm_ctx), map);
             base[a] = values ? xr_value_from_array(values) : xr_null();
         } else if (prop_symbol == SYMBOL_ENTRIES) {
-            XrArray *entries = xr_map_entries(COLD_CORO(vm_ctx), map);
+            XrArray *entries = xr_map_entries(vm_get_coro(vm_ctx), map);
             base[a] = entries ? xr_value_from_array(entries) : xr_null();
         } else if (prop_symbol == SYMBOL_HAS) {
             XrBoundMethod *bm =
@@ -443,12 +440,12 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(
+            VM_THROW(
                 frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                 "Map does not support dot syntax for key '%s', use map[\"%s\"] or map.get(\"%s\")",
                 name ? name : "?", name ? name : "?", name ? name : "?");
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Set property access
@@ -505,7 +502,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             base[a] = xr_null();
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // String property access
@@ -516,11 +513,11 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             const char *d = xr_value_str_data(&obj);
             uint32_t bl = xr_value_str_len(&obj);
             base[a] = xr_int((xr_Integer) xr_utf8_strlen(d, bl));
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (prop_symbol == SYMBOL_BYTE_LENGTH) {
             base[a] = xr_int((xr_Integer) xr_value_str_len(&obj));
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         // Slow path: promote SSO to heap for bound method creation
         XrString *str = xr_value_to_string(isolate, obj);
@@ -596,10 +593,10 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "string has no property '%s'",
-                          name ? name : "?");
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "string has no property '%s'",
+                     name ? name : "?");
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Tuple property access: digit-only names map to xr_tuple_get;
@@ -612,7 +609,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_symbol == SYMBOL_LENGTH) {
             base[a] = xr_int((xr_Integer) arity);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (name && name[0]) {
             bool digits_only = true;
@@ -627,16 +624,15 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                 if (idx >= 0 && idx < (long) arity) {
                     base[a] = xr_tuple_get(tup, (uint16_t) idx);
                 } else {
-                    VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                                  "tuple field index %ld out of range (arity %u)", idx,
-                                  (unsigned) arity);
+                    VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                             "tuple field index %ld out of range (arity %u)", idx,
+                             (unsigned) arity);
                 }
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
         }
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                      "tuple has no named field '%s'; use .N (zero-based) instead",
-                      name ? name : "?");
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                 "tuple has no named field '%s'; use .N (zero-based) instead", name ? name : "?");
     }
 
     // Array property access
@@ -647,21 +643,21 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else if (prop_symbol == SYMBOL_IS_EMPTY) {
             base[a] = xr_bool(array->length == 0);
         } else if (prop_symbol == SYMBOL_KEYS) {
-            XrArray *keys = xr_array_with_capacity(COLD_CORO(vm_ctx), array->length);
+            XrArray *keys = xr_array_with_capacity(vm_get_coro(vm_ctx), array->length);
             for (int idx = 0; idx < array->length; idx++) {
                 xr_array_push(keys, xr_int(idx));
             }
             base[a] = xr_value_from_array(keys);
         } else if (prop_symbol == SYMBOL_VALUES) {
-            XrArray *values = xr_array_with_capacity(COLD_CORO(vm_ctx), array->length);
+            XrArray *values = xr_array_with_capacity(vm_get_coro(vm_ctx), array->length);
             for (int idx = 0; idx < array->length; idx++) {
                 xr_array_push(values, ((XrValue *) array->data)[idx]);
             }
             base[a] = xr_value_from_array(values);
         } else if (prop_symbol == SYMBOL_ENTRIES) {
-            XrArray *entries = xr_array_with_capacity(COLD_CORO(vm_ctx), array->length);
+            XrArray *entries = xr_array_with_capacity(vm_get_coro(vm_ctx), array->length);
             for (int idx = 0; idx < array->length; idx++) {
-                XrArray *pair = xr_array_with_capacity(COLD_CORO(vm_ctx), 2);
+                XrArray *pair = xr_array_with_capacity(vm_get_coro(vm_ctx), 2);
                 xr_array_push(pair, xr_int(idx));
                 xr_array_push(pair, ((XrValue *) array->data)[idx]);
                 xr_array_push(entries, xr_value_from_array(pair));
@@ -710,7 +706,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         } else {
             base[a] = xr_null();
         }
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Class object static field access
@@ -720,52 +716,50 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
         if (field_index < 0) {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                          "static field '%s' not found in class '%s'", pname ? pname : "?",
-                          cls->name);
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                     "static field '%s' not found in class '%s'", pname ? pname : "?", cls->name);
         }
         const XrFieldDescriptor *field = xr_class_get_field(cls, field_index);
         if (!field) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                          "internal error: field descriptor not found");
+            VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "internal error: field descriptor not found");
         }
         if (!(field->flags & XR_FIELD_STATIC)) {
             XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
             const char *pname = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "field '%s' is not a static field",
-                          pname ? pname : "?");
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY, "field '%s' is not a static field",
+                     pname ? pname : "?");
         }
         int static_field_idx = field->static_slot;
         if (static_field_idx < 0 || static_field_idx >= cls->static_field_count) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                          "internal error: static field index out of bounds");
+            VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                     "internal error: static field index out of bounds");
         }
         base[a] = cls->static_field_values[static_field_idx];
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Module export property access
     if (xr_value_is_module(obj)) {
         XrModule *module = xr_value_to_module(obj);
         base[a] = xr_module_get_sym(module, prop_symbol);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Json property access
     if (xr_value_is_json(obj)) {
         XrJson *json = xr_value_to_json(obj);
         base[a] = xr_json_get(isolate, json, prop_symbol);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Channel property access error
     if (xr_value_is_channel(obj)) {
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
         const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                      "Channel has no '.%s' property, available methods: send(), recv(), "
-                      "trySend(), tryRecv(), close(), isClosed()",
-                      name ? name : "?");
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                 "Channel has no '.%s' property, available methods: send(), recv(), "
+                 "trySend(), tryRecv(), close(), isClosed()",
+                 name ? name : "?");
     }
 
     // Struct ref: getter/method lookup when field not found in layout
@@ -784,13 +778,13 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             if (getter) {
                 if (getter->type == XMETHOD_PRIMITIVE) {
                     base[a] = getter->as.primitive(isolate, obj, NULL, 0);
-                    return VM_COLD_BREAK;
+                    return XR_DISP_NEXT;
                 }
                 if (getter->as.closure) {
                     XrClosure *closure = getter->as.closure;
                     XrProto *proto = closure->proto;
                     if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-                        VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+                        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
                     }
                     base[a + 1] = obj;  // this = struct_ref
                     frame->pc = pc;
@@ -801,12 +795,12 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                     new_frame->closure = closure;
                     new_frame->pc = PROTO_CODE_BASE(proto);
                     new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
-                    return VM_COLD_STARTFUNC;
+                    return XR_DISP_RESTART;
                 }
             }
         }
         base[a] = xr_null();
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Non-instance type error
@@ -831,32 +825,32 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
 
         const char *var_name = xr_vm_get_local_name(proto, b, current_pc);
         if (var_name) {
-            VM_COLD_THROW(frame, pc, error_code,
-                          "variable '%s' has type '%s', does not support property access '.%s'",
-                          var_name, type_name ? type_name : "unknown", pname ? pname : "?");
+            VM_THROW(frame, pc, error_code,
+                     "variable '%s' has type '%s', does not support property access '.%s'",
+                     var_name, type_name ? type_name : "unknown", pname ? pname : "?");
         } else {
-            VM_COLD_THROW(frame, pc, error_code, "type '%s' does not support property access '.%s'",
-                          type_name ? type_name : "unknown", pname ? pname : "?");
+            VM_THROW(frame, pc, error_code, "type '%s' does not support property access '.%s'",
+                     type_name ? type_name : "unknown", pname ? pname : "?");
         }
     }
 
-    return VM_COLD_CONTINUE;  // Instance: handled by caller inline
+    return XR_DISP_FALLTHROUGH;  // Instance: handled by caller inline
 }
 
-/* ========== Cold Path: OP_GETPROP Instance Getter ========== */
+/* ========== Dispatch: OP_GETPROP Instance Getter ========== */
 
-XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx,
-                                           XrInstance *inst, XrValue obj, int prop_symbol,
-                                           XrValue *base, int a, XrBcCallFrame *frame,
-                                           XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                                    XrInstance *inst, XrValue obj, int prop_symbol,
+                                                    XrValue *base, int a, XrBcCallFrame *frame,
+                                                    XrInstruction *pc) {
     XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
     const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
     if (!prop_name)
-        return VM_COLD_CONTINUE;
+        return XR_DISP_FALLTHROUGH;
 
     size_t prop_name_len = strlen(prop_name);
     if (prop_name_len + 5 > 256) {
-        VM_COLD_THROW(frame, pc, XR_ERR_OVERFLOW, "property name too long");
+        VM_THROW(frame, pc, XR_ERR_OVERFLOW, "property name too long");
     }
 
     char getter_name[256];
@@ -869,12 +863,12 @@ XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm
     }
 
     if (!getter)
-        return VM_COLD_CONTINUE;
+        return XR_DISP_FALLTHROUGH;
 
     // PRIMITIVE type getter
     if (getter->type == XMETHOD_PRIMITIVE) {
         base[a] = getter->as.primitive(isolate, obj, NULL, 0);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Closure getter: set up call frame
@@ -882,11 +876,11 @@ XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm
     XrProto *proto = closure->proto;
 
     if (proto->numparams != 1) {
-        VM_COLD_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "getter should have no parameters");
+        VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "getter should have no parameters");
     }
 
     if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-        VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
     }
 
     /* Place getter frame above caller's maxstacksize to avoid
@@ -907,24 +901,25 @@ XR_NOINLINE int vm_getprop_instance_getter(XrayIsolate *isolate, XrVMContext *vm
     new_frame->result_offset = (int) ((base + a) - vm_ctx->stack);
     new_frame->call_status = XR_CALL_KEEP_FUNC;
 
-    return VM_COLD_STARTFUNC;
+    return XR_DISP_RESTART;
 }
 
-/* ========== Cold Path: OP_INVOKE Module Methods ========== */
+/* ========== Dispatch: OP_INVOKE Module Methods ========== */
 
-XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
-                                 int method_symbol, int nargs, XrValue *base, int a,
-                                 XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                          XrValue receiver, int method_symbol, int nargs,
+                                          XrValue *base, int a, XrBcCallFrame *frame,
+                                          XrInstruction *pc) {
     XrModule *module = xr_value_to_module(receiver);
     if (!module || module->export_count == 0)
-        return VM_COLD_CONTINUE;
+        return XR_DISP_FALLTHROUGH;
 
     XrValue fn_val = xr_module_get_sym(module, method_symbol);
     if (XR_IS_NULL(fn_val)) {
         XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
         const char *_name = xr_symbol_get_name_in_table(_st, method_symbol);
-        VM_COLD_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module '%s' has no export '%s'",
-                      module->name ? module->name : "?", _name ? _name : "?");
+        VM_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module '%s' has no export '%s'",
+                 module->name ? module->name : "?", _name ? _name : "?");
     }
 
     if (xr_value_is_cfunction(fn_val)) {
@@ -940,23 +935,23 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
             switch (status) {
                 case XR_CFUNC_DONE:
                     base[a] = result;
-                    return VM_COLD_BREAK;
+                    return XR_DISP_NEXT;
                 case XR_CFUNC_BLOCKED:
                     frame->pc = pc;
-                    return VM_COLD_BLOCKED;
+                    return XR_DISP_BLOCKED;
                 case XR_CFUNC_YIELD:
                     frame->pc = pc;
-                    return VM_COLD_YIELD;
+                    return XR_DISP_YIELD;
                 case XR_CFUNC_CALL_CLOSURE:
                     // Closure frame pushed, return to VM main loop
-                    return VM_COLD_STARTFUNC;
+                    return XR_DISP_RESTART;
                 case XR_CFUNC_ERROR:
-                    return VM_COLD_FATAL;
+                    return XR_DISP_FATAL;
             }
         } else {
             XrValue result = cfunc->as.func(isolate, &base[a + 2], nargs);
             base[a] = result;
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
     } else if (xr_value_is_closure(fn_val)) {
         XrClosure *closure = xr_value_to_closure(fn_val);
@@ -964,7 +959,7 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
         frame->pc = pc;  // savepc
 
         if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-            VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
         }
 
         // Argument shift: from R[a+2..] to R[a+1..]
@@ -980,7 +975,7 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
         new_frame->pc = PROTO_CODE_BASE(closure->proto);
         new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
 
-        return VM_COLD_STARTFUNC;
+        return XR_DISP_RESTART;
     } else if (xr_value_is_class(fn_val)) {
         XrClass *klass = xr_value_to_class(fn_val);
 
@@ -1013,8 +1008,8 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
         }
 
         if (!instance) {
-            VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_CALL, "failed to create instance: '%s'",
-                          xr_class_display_name(klass));
+            VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL, "failed to create instance: '%s'",
+                     xr_class_display_name(klass));
         }
         XrValue inst_val = XR_FROM_PTR(instance);
 
@@ -1024,7 +1019,7 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
             frame->pc = pc;  // savepc
 
             if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-                VM_COLD_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+                VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
             }
 
             base[a + 1] = inst_val;  // this
@@ -1037,17 +1032,17 @@ XR_NOINLINE int vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_ctx, XrVa
             new_frame->pc = PROTO_CODE_BASE(closure->proto);
             new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
 
-            return VM_COLD_STARTFUNC;
+            return XR_DISP_RESTART;
         }
 
         // No constructor, return instance directly
         base[a] = inst_val;
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     } else {
         XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
         const char *_name = xr_symbol_get_name_in_table(_st, method_symbol);
-        VM_COLD_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module export '%s' is not callable",
-                      _name ? _name : "?");
+        VM_THROW(frame, pc, XR_ERR_MOD_NO_EXPORT, "module export '%s' is not callable",
+                 _name ? _name : "?");
     }
-    return VM_COLD_BREAK;  // unreachable
+    return XR_DISP_NEXT;  // unreachable
 }

@@ -10,7 +10,7 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_FRAMES, VM_FRAME_COUNT,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_BARRIER_*, VM_STACK*, VM_CURRENT_CORO,
  * checkGC, startfunc label, ...) provided by the surrounding
  * scope. CMake excludes *.inc.c from the VM_SRC glob.
@@ -46,7 +46,7 @@ invoke_dispatch:;
 /* Surface any pending exception from a builtin handler. */
 #define VM_BUILTIN_INVOKE_CHECK_EXC()                                                              \
     do {                                                                                           \
-        if (unlikely(!XR_IS_NULL(VM_EXCEPTION))) {                                                 \
+        if (XR_UNLIKELY(!XR_IS_NULL(VM_EXCEPTION))) {                                              \
             if (!xr_vm_is_catch_reachable(isolate))                                                \
                 return XR_VM_RUNTIME_ERROR;                                                        \
             goto startfunc;                                                                        \
@@ -121,11 +121,12 @@ invoke_dispatch:;
             }
         }
 
-        /* Cold path: other channel methods (tryRecv, close, etc.) */
-        int _cr = vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
-        if (_cr == VM_COLD_BREAK)
+        /* Dispatch: other channel methods (tryRecv, close, etc.) */
+        XrDispatchAction _cr =
+            vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_BLOCKED)
+        if (_cr == XR_DISP_BLOCKED)
             return XR_VM_BLOCKED;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
@@ -134,8 +135,9 @@ invoke_dispatch:;
 
     /* ── Task handle methods (can block/yield) ── */
     if (xr_value_is_task(receiver)) {
-        int _cr = vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == VM_COLD_BREAK)
+        XrDispatchAction _cr =
+            vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
@@ -144,8 +146,9 @@ invoke_dispatch:;
 
     /* ── Coroutine handle methods ── */
     if (xr_value_is_coro(receiver)) {
-        int _cr = vm_invoke_coro_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == VM_COLD_BREAK)
+        XrDispatchAction _cr =
+            vm_invoke_coro_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
@@ -154,19 +157,19 @@ invoke_dispatch:;
 
     /* ── Module export dispatch (different semantics: export lookup) ── */
     if (xr_value_is_module(receiver)) {
-        int _cr =
+        XrDispatchAction _cr =
             vm_invoke_module(isolate, vm_ctx, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == VM_COLD_BREAK)
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_BLOCKED)
+        if (_cr == XR_DISP_BLOCKED)
             return XR_VM_BLOCKED;
-        if (_cr == VM_COLD_YIELD)
+        if (_cr == XR_DISP_YIELD)
             return XR_VM_YIELD;
-        if (_cr == VM_COLD_FATAL)
+        if (_cr == XR_DISP_FATAL)
             return XR_VM_RUNTIME_ERROR;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
@@ -200,11 +203,11 @@ invoke_dispatch:;
     /* ── Class constructor / static method (creates instance) ── */
     if (xr_value_is_class(receiver)) {
         xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
-        int _cr = vm_invoke_class(isolate, vm_ctx, receiver, method_symbol, nargs, base, a, ci, pc,
-                                  invoke_is_tail);
-        if (_cr == VM_COLD_BREAK)
+        XrDispatchAction _cr = vm_invoke_class(isolate, vm_ctx, receiver, method_symbol, nargs,
+                                               base, a, ci, pc, invoke_is_tail);
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
@@ -254,15 +257,16 @@ invoke_dispatch:;
         /* Enum special routing (enum values/types use hardcoded methods
          * that access native body fields directly) */
         if (klass->builtin_kind == XR_BK_ENUM_VALUE || klass->builtin_kind == XR_BK_ENUM_TYPE) {
-            int _cr = vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-            if (_cr == VM_COLD_BREAK)
+            XrDispatchAction _cr =
+                vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+            if (_cr == XR_DISP_NEXT)
                 vmbreak;
-            if (_cr == VM_COLD_ERROR) {
+            if (_cr == XR_DISP_RAISE) {
                 if (!xr_vm_is_catch_reachable(isolate))
                     return XR_VM_RUNTIME_ERROR;
                 goto startfunc;
             }
-            /* VM_COLD_CONTINUE: enum has no match, fall through to class lookup */
+            /* XR_DISP_FALLTHROUGH: enum has no match, fall through to class lookup */
         }
 
         /* IC lookup — unified for all types */
@@ -348,8 +352,8 @@ vmcase(OP_INVOKE_TAIL) {
 vmcase(OP_SUPERINVOKE) {
     TRACE_EXECUTION();
     savepc();
-    int _cr = vm_superinvoke(isolate, vm_ctx, i, base, ci, pc);
-    if (_cr == VM_COLD_STARTFUNC)
+    XrDispatchAction _cr = vm_superinvoke(isolate, vm_ctx, i, base, ci, pc);
+    if (_cr == XR_DISP_RESTART)
         goto startfunc;
     if (!xr_vm_is_catch_reachable(isolate))
         return XR_VM_RUNTIME_ERROR;

@@ -5,22 +5,21 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_cold_coro.c - Cold-path implementations for coroutine ops
+ * xvm_coro_ops.c - Dispatch helpers for coroutine operations
  *
- * Holds the noinline bodies for the coroutine control plane and
- * the go / spawn / await family. Function declarations live in
- * xvm_cold_paths.h.
+ * Implements the coroutine control plane and the go / await
+ * family. Declarations live in xvm_dispatch_helpers.h.
  *
  * Owns:
  *   - vm_collect_all_coros / vm_coro_ctrl
- *   - vm_cold_get_coro (helper)
+ *   - vm_get_coro (helper)
  *   - vm_go
  *   - vm_await_recycle_coro / vm_task_consume_result /
  *     vm_await_read_result (helpers)
  *   - vm_await / vm_await_timeout / vm_await_all / vm_await_any
  */
 
-#include "xvm_cold_paths.h"
+#include "xvm_dispatch_helpers.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../os/os_time.h"
@@ -44,7 +43,7 @@
 
 /* ========== Helper: Collect all coroutines from all workers ========== */
 
-// VmCoroEntry and VM_CORO_COLLECT_MAX defined in xvm_cold_paths.h
+// VmCoroEntry and VM_CORO_COLLECT_MAX defined in xvm_dispatch_helpers.h
 
 // Collect coroutines from all workers into a flat array for diagnostic sub-ops.
 // Returns the number of entries written. Best-effort snapshot (not atomic).
@@ -106,10 +105,10 @@ int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
     return count;
 }
 
-/* ========== Cold Path: OP_CORO_CTRL Sub-operations ========== */
+/* ========== Dispatch: OP_CORO_CTRL Sub-operations ========== */
 
-XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                             XrValue *base) {
+XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base) {
     XR_DCHECK(isolate != NULL, "vm_coro_ctrl: NULL isolate");
     XR_DCHECK(base != NULL, "vm_coro_ctrl: NULL base");
     int coro_sub = GETARG_C(instr);
@@ -121,7 +120,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
             if (!runtime) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
 
             int blocked_count = 0, ready_count = 0;
@@ -139,14 +138,14 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             }
 
             int total_alive = ready_count + blocked_count + active_count;
-            XrMap *result = xr_map_new(COLD_CORO(vm_ctx));
+            XrMap *result = xr_map_new(vm_get_coro(vm_ctx));
             xr_map_set(result, VM_INTERN_KEY("active"), xr_int(active_count));
             xr_map_set(result, VM_INTERN_KEY("blocked"), xr_int(blocked_count));
             xr_map_set(result, VM_INTERN_KEY("ready"), xr_int(ready_count));
             xr_map_set(result, VM_INTERN_KEY("total"), xr_int(total_alive));
             xr_map_set(result, VM_INTERN_KEY("created"), xr_int((int) total_created));
             base[a] = xr_value_from_map(result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_LIST: {
@@ -173,7 +172,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
             int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
 
-            XrArray *result = xr_array_new(COLD_CORO(vm_ctx));
+            XrArray *result = xr_array_new(vm_get_coro(vm_ctx));
             int count = 0;
 
             for (int i = 0; i < total && count < limit; i++) {
@@ -187,7 +186,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                 if (state_filter == 2 && !is_blocked)
                     continue;
 
-                XrMap *info = xr_map_new(COLD_CORO(vm_ctx));
+                XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
                 xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
                 xr_map_set(info, VM_INTERN_KEY("name"),
                            coro->name ? xr_string_value(xr_string_intern(isolate, coro->name,
@@ -209,18 +208,18 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
             xr_free(entries);
             base[a] = xr_value_from_array(result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_INFO: {
             XrValue coro_val = base[b];
             if (!xr_value_is_coro(coro_val)) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
 
             XrCoroutine *coro = xr_value_to_coro(coro_val);
-            XrMap *info = xr_map_new(COLD_CORO(vm_ctx));
+            XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
             uint32_t flags = xr_coro_flags_load(coro);
 
             xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
@@ -258,7 +257,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                 xr_map_set(info, VM_INTERN_KEY("locals"), xr_value_from_map(coro_locals));
             } else {
                 xr_map_set(info, VM_INTERN_KEY("locals"),
-                           xr_value_from_map(xr_map_new(COLD_CORO(vm_ctx))));
+                           xr_value_from_map(xr_map_new(vm_get_coro(vm_ctx))));
             }
 
             xr_map_set(info, VM_INTERN_KEY("waitCount"), xr_int(atomic_load(&coro->wait_count)));
@@ -274,7 +273,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             }
 
             base[a] = xr_value_from_map(info);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_DUMP: {
@@ -330,30 +329,30 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
             printf("└──────┴────────────────┴─────────┴─────────────────┴─────────────────────┘\n");
             xr_free(entries);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_STALLED: {
             (void) b;
             XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (!sched) {
-                base[a] = xr_value_from_array(xr_array_new(COLD_CORO(vm_ctx)));
-                return VM_COLD_BREAK;
+                base[a] = xr_value_from_array(xr_array_new(vm_get_coro(vm_ctx)));
+                return XR_DISP_NEXT;
             }
-            XrArray *result = xr_array_new(COLD_CORO(vm_ctx));
+            XrArray *result = xr_array_new(vm_get_coro(vm_ctx));
             base[a] = xr_value_from_array(result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_DEADLOCKS: {
             XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (!sched) {
-                base[a] = xr_value_from_array(xr_array_new(COLD_CORO(vm_ctx)));
-                return VM_COLD_BREAK;
+                base[a] = xr_value_from_array(xr_array_new(vm_get_coro(vm_ctx)));
+                return XR_DISP_NEXT;
             }
-            XrArray *result = xr_array_new(COLD_CORO(vm_ctx));
+            XrArray *result = xr_array_new(vm_get_coro(vm_ctx));
             base[a] = xr_value_from_array(result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_TOP: {
@@ -409,11 +408,11 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                 }
             }
 
-            XrArray *result = xr_array_new(COLD_CORO(vm_ctx));
+            XrArray *result = xr_array_new(vm_get_coro(vm_ctx));
             int result_count = (top_n < count) ? top_n : count;
             for (int j = 0; j < result_count; j++) {
                 XrCoroutine *coro = entries[j].coro;
-                XrMap *info = xr_map_new(COLD_CORO(vm_ctx));
+                XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
                 xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
                 xr_map_set(info, VM_INTERN_KEY("name"),
                            coro->name ? xr_string_value(xr_string_intern(isolate, coro->name,
@@ -438,7 +437,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
             xr_free(entries);
             base[a] = xr_value_from_array(result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_GROUP_BY: {
@@ -456,7 +455,7 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
             int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
 
-            XrMap *result = xr_map_new(COLD_CORO(vm_ctx));
+            XrMap *result = xr_map_new(vm_get_coro(vm_ctx));
 
             for (int i = 0; i < total; i++) {
                 XrCoroutine *coro = entries[i].coro;
@@ -484,94 +483,94 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
             xr_free(entries);
             base[a] = xr_value_from_map(result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_WHEREIS: {
             XrValue name_val = base[b];
             if (!XR_IS_STRING(name_val)) {
                 base[a] = xr_bool(false);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             const char *name_cstr = xr_value_str_data(&name_val);
             XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (!sched || !sched->coro_registry) {
                 base[a] = xr_bool(false);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrCoroutine *found = xr_coro_registry_whereis(sched->coro_registry, name_cstr);
             base[a] = xr_bool(found != NULL);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_MONITOR: {
             XrValue name_val = base[b];
             if (!XR_IS_STRING(name_val)) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             const char *name_cstr = xr_value_str_data(&name_val);
             XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (!sched || !sched->coro_registry) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrChannel *ch = xr_coro_monitor(isolate, sched->coro_registry, name_cstr);
             base[a] = ch ? xr_value_from_channel(ch) : xr_null();
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_DEMONITOR: {
             XrValue name_val = base[b];
             if (!XR_IS_STRING(name_val)) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             const char *name_cstr = xr_value_str_data(&name_val);
             XrValue ch_val = base[a + 1];
             if (!xr_value_is_channel(ch_val)) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrChannel *ch = xr_value_to_channel(ch_val);
             XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (!sched || !sched->coro_registry) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrCoroutine *coro = xr_coro_registry_whereis(sched->coro_registry, name_cstr);
             if (coro) {
                 xr_coro_demonitor(sched->coro_registry, coro, ch);
             }
             base[a] = xr_null();
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_KILL: {
             XrValue name_val = base[b];
             if (!XR_IS_STRING(name_val)) {
                 base[a] = xr_bool(false);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             const char *name_cstr = xr_value_str_data(&name_val);
             XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
             if (!sched || !sched->coro_registry) {
                 base[a] = xr_bool(false);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrCoroutine *target = xr_coro_registry_whereis(sched->coro_registry, name_cstr);
             if (!target || xr_coro_flags_has(target, XR_CORO_FLG_DONE)) {
                 base[a] = xr_bool(false);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             xr_coro_flags_set(target, XR_CORO_FLG_CANCEL_REQUESTED);
             xr_coro_request_yield(target);
             base[a] = xr_bool(true);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         case CORO_CTRL_SELF: {
-            XrCoroutine *current = COLD_CORO(vm_ctx);
+            XrCoroutine *current = vm_get_coro(vm_ctx);
             if (current && current->name) {
                 size_t len = strlen(current->name);
                 XrString *s = xr_string_intern(isolate, current->name, len, 0);
@@ -579,21 +578,21 @@ XR_NOINLINE int vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             } else {
                 base[a] = xr_null();
             }
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         default:
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
     }
 }
-/* ========== Cold Path: Coroutine Operations ========== */
+/* ========== Dispatch: Coroutine Operations ========== */
 
-// vm_cold_get_coro lives in xvm_cold_paths.h so the cold-call /
-// cold-object / cold-chan TUs can call it without an owning .c
+// vm_get_coro lives in xvm_dispatch_helpers.h so the invoke /
+// props / chan-ops TUs can call it without an owning .c
 // file having to re-export it.
 
-XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr, XrValue *base,
-                      XrBcCallFrame *frame) {
+XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                               XrValue *base, XrBcCallFrame *frame) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c_raw = GETARG_C(instr);
@@ -604,19 +603,18 @@ XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction i
 
     XrValue fn_val = base[b];
     if (!xr_value_is_closure(fn_val)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "go: expected closure");
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "go: expected closure");
     }
 
     struct XrClosure *closure = xr_value_to_closure(fn_val);
     XrProto *proto = closure->proto;
 
     if (!proto->is_coro_safe) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                      "go: closure captures non-thread-safe variables");
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "go: closure captures non-thread-safe variables");
     }
     if (c != proto->numparams) {
-        VM_COLD_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
-                      "go: argument count mismatch (expected %d, got %d)", proto->numparams, c);
+        VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
+                 "go: argument count mismatch (expected %d, got %d)", proto->numparams, c);
     }
 
     // Fast path: skip debug info computation, parse NOP annotations inline
@@ -648,7 +646,7 @@ XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction i
     // Defer source_file/source_line to lazy access (coro->spawn_file/spawn_line)
     XrCoroutine *coro = xr_coro_create(isolate, closure, args, c, coro_name, NULL, 0);
     if (!coro) {
-        VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
     }
 
     if (coro_priority != 1) {
@@ -658,15 +656,15 @@ XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction i
     }
     XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
     if (!runtime) {
-        VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: Runtime not initialized");
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: Runtime not initialized");
     }
 
-    XrCoroutine *parent = vm_cold_get_coro(vm_ctx);
+    XrCoroutine *parent = vm_get_coro(vm_ctx);
 
     // Allocate GC-managed Task handle on executor's heap
     XrTask *task = xr_task_create(parent, coro);
     if (!task) {
-        VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create task");
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create task");
     }
 
     // Store link_mode on task for runtime association
@@ -717,11 +715,11 @@ XR_NOINLINE int vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction i
     // coro_init_common already sets XR_CORO_FLG_READY — no redundant atomic OR needed
     if (!parent) {
         xr_runtime_spawn(runtime, coro);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     parent->pending_spawn = coro;
-    return VM_COLD_GO_CHILD;
+    return XR_DISP_GO_CHILD;
 }
 
 #define AWAIT_TIMEOUT_SPINS 100000000
@@ -773,8 +771,8 @@ static inline XrValue vm_await_read_result(XrayIsolate *isolate, XrCoroutine *co
     return v;
 }
 
-XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                         XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
+                                  XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int discard_result = GETARG_C(instr);
@@ -786,21 +784,21 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
         XrTask *task = xr_value_to_task(task_val);
 
         // Fast path: task already completed — works for re-await too
-        XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+        XrCoroutine *current = vm_get_coro(vm_ctx);
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
         if (tstate == XR_TASK_COMPLETED) {
             base[a] = vm_task_consume_result(isolate, task, current, discard_result);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
             base[a] = xr_null();
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         // Slow path: task still active, need to suspend
         XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
         if (!rt) {
-            VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: runtime not initialized");
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: runtime not initialized");
         }
 
         // CAS on task->await_state (await coordination lives on the task)
@@ -820,7 +818,7 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
                     old_flags, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
                 atomic_store_explicit(&current->flags, new_flags, memory_order_release);
                 frame->pc = pc - 1;
-                return VM_COLD_BLOCKED;
+                return XR_DISP_BLOCKED;
             }
 
             if (expected == XR_AWAIT_WAITING) {
@@ -830,7 +828,7 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
                     old_flags2, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
                 atomic_store_explicit(&current->flags, new_flags2, memory_order_release);
                 frame->pc = pc - 1;
-                return VM_COLD_BLOCKED;
+                return XR_DISP_BLOCKED;
             }
 
             // RESOLVED: result already cached in task by executor_complete
@@ -839,7 +837,7 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
                                   memory_order_relaxed);
             base[a] = vm_task_consume_result(isolate, task, current, discard_result);
             atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         // Main thread: spin wait
@@ -849,12 +847,12 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
             if (++total_spins > AWAIT_TIMEOUT_SPINS) {
                 fprintf(stderr, "[xray] warn: await: task wait timeout\n");
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             if (!atomic_load(&rt->running)) {
                 fprintf(stderr, "[xray] warn: await: runtime stopped\n");
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             if (++spin_count > 1000) {
                 spin_count = 0;
@@ -867,14 +865,15 @@ XR_NOINLINE int vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstructio
             }
         }
         base[a] = vm_task_consume_result(isolate, task, NULL, discard_result);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
-    VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
+    VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
 }
 
-XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                                 XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                          XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -888,7 +887,7 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
     else if (XR_IS_FLOAT(timeout_val))
         timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
 
-    XrCoroutine *caller = vm_cold_get_coro(vm_ctx);
+    XrCoroutine *caller = vm_get_coro(vm_ctx);
 
     // Task path
     if (xr_value_is_task(await_val)) {
@@ -896,11 +895,11 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
         if (tstate == XR_TASK_COMPLETED) {
             base[a] = vm_task_consume_result(isolate, task, caller, 0);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
             base[a] = xr_null();
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         // Woken from timeout
@@ -908,7 +907,7 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
             xr_coro_resume_store(caller, XR_RESUME_OK);
             task->waiter = NULL;
             base[a] = xr_null();
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         // Woken from normal completion (read task->await_state)
@@ -923,14 +922,14 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
                     xr_twheel_cancel_timer(worker->p.timer_wheel, &caller->ext->timer);
                 atomic_store_explicit(&caller->ext->timer_active, false, memory_order_relaxed);
             }
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
         frame->pc = pc;
         vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
 
-        XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+        XrCoroutine *current = vm_get_coro(vm_ctx);
         if (current && rt) {
             atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
             atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, current,
@@ -947,7 +946,7 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
             atomic_store(&current->flags, new_flags);
 
             frame->pc = pc - 1;
-            return VM_COLD_BLOCKED;
+            return XR_DISP_BLOCKED;
         }
 
         // Main thread: synchronous wait
@@ -957,7 +956,7 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
             int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
             if (elapsed_ms >= timeout_ms) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             XrWorker *w = xr_current_worker();
             if (w && w->p.timer_wheel) {
@@ -970,20 +969,21 @@ XR_NOINLINE int vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIn
             }
         }
         base[a] = vm_task_consume_result(isolate, task, NULL, 0);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
-    VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
+    VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await: expected task");
 }
 
-XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                             XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                      XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
 
     XrValue arr_val = base[b];
     if (!xr_value_is_array(arr_val)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await all: expected array");
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "await all: expected array");
     }
 
     XrArray *tasks = xr_value_to_array(arr_val);
@@ -1006,7 +1006,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
     }
 
     if (all_done) {
-        XrArray *results = xr_array_with_capacity(COLD_CORO(vm_ctx), count);
+        XrArray *results = xr_array_with_capacity(vm_get_coro(vm_ctx), count);
         results->length = count;
         XrValue *rdata = (XrValue *) results->data;
         for (int j = 0; j < count; j++) {
@@ -1018,7 +1018,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             rdata[j] = vm_task_consume_result(isolate, xr_value_to_task(cv), caller, 0);
         }
         base[a] = xr_value_from_array(results);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     frame->pc = pc - 1;
@@ -1026,7 +1026,7 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
     XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
     if (!rt) {
-        VM_COLD_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all: runtime not initialized");
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all: runtime not initialized");
     }
 
     if (caller) {
@@ -1052,13 +1052,13 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
         int remaining = atomic_fetch_sub(&caller->wait_count, 1) - 1;
         if (remaining == 0) {
-            return VM_COLD_STARTFUNC;
+            return XR_DISP_RESTART;
         }
 
         uint32_t old_flags = xr_coro_flags_load(caller);
         atomic_store(&caller->flags, xr_coro_set_wait_reason_flags(
                                          old_flags, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT));
-        return VM_COLD_BLOCKED;
+        return XR_DISP_BLOCKED;
     }
 
     // Main thread: spin wait
@@ -1087,26 +1087,27 @@ XR_NOINLINE int vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
             xr_thread_yield();
         }
     }
-    return VM_COLD_STARTFUNC;
+    return XR_DISP_RESTART;
 
 #undef ELEM_IS_TASK
 }
 
-XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                             XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                      XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int mode = GETARG_C(instr);
 
     XrValue arr_val = base[b];
     if (!xr_value_is_array(arr_val)) {
-        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
-                      mode == 0 ? "await any: expected array" : "await anySuccess: expected array");
+        VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                 mode == 0 ? "await any: expected array" : "await anySuccess: expected array");
     }
 
     XrArray *tasks = xr_value_to_array(arr_val);
     int count = xr_array_size(tasks);
-    XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+    XrCoroutine *current = vm_get_coro(vm_ctx);
 
     // Fast path: check if any already done
     int done_count = 0;
@@ -1120,14 +1121,14 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                 done_count++;
             if (mode == 0 || !XR_IS_STRING(t->error)) {
                 base[a] = vm_task_consume_result(isolate, t, current, 0);
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
         }
     }
 
     if (mode == 1 && done_count == count) {
         base[a] = xr_null();
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     // Slow path: wait
@@ -1162,13 +1163,13 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
 
         int remaining = atomic_fetch_sub(&current->wait_count, 1) - 1;
         if (atomic_load(&current->any_done) || (mode == 1 && remaining == 0)) {
-            return VM_COLD_STARTFUNC;
+            return XR_DISP_RESTART;
         }
 
         uint32_t old_flags = xr_coro_flags_load(current);
         atomic_store(&current->flags, xr_coro_set_wait_reason_flags(
                                           old_flags, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT));
-        return VM_COLD_BLOCKED;
+        return XR_DISP_BLOCKED;
     } else {
         // Main thread: poll wait
         int spin = 0;
@@ -1184,13 +1185,13 @@ XR_NOINLINE int vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstru
                         done_count++;
                     if (mode == 0 || !XR_IS_STRING(t->error)) {
                         base[a] = vm_task_consume_result(isolate, t, NULL, 0);
-                        return VM_COLD_BREAK;
+                        return XR_DISP_NEXT;
                     }
                 }
             }
             if (mode == 1 && done_count == count) {
                 base[a] = xr_null();
-                return VM_COLD_BREAK;
+                return XR_DISP_NEXT;
             }
             if (++spin > 1000) {
                 spin = 0;

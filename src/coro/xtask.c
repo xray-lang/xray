@@ -23,7 +23,7 @@
  *   - xtask.h: struct definition + inline helpers
  *   - xcoroutine.h: executor (XrCoroutine)
  *   - xworker.c: calls xr_task_complete on executor finish
- *   - xvm_cold_paths.c: vm_await reads task->state/result
+ *   - xvm_coro_ops.c: vm_await reads task->state/result
  */
 
 #include "xtask.h"
@@ -426,7 +426,7 @@ void xr_task_add_completion(XrTask *task, XrCompletionNode *node) {
         return;
 
     /* Treiber stack push: CAS the head pointer until we succeed. The
-     * caller (typically xvm_cold_call task.monitor()) already checked
+     * caller (typically xvm_invoke task.monitor()) already checked
      * xr_task_is_done() and decided to register a listener, but the
      * executor on another worker may transition the task to a terminal
      * state and run xr_task_fire_completion at any point during this

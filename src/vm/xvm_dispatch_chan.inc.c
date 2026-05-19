@@ -10,13 +10,13 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, frame, ci, base, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_CURRENT_CORO,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_CURRENT_CORO,
  * TRACE_EXECUTION, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
  * Owns the OP_CHAN_* family plus the OP_SELECT_* placeholder
- * stubs. The two timeout variants delegate straight to cold-path
- * helpers (vm_chan_send_timeout / vm_chan_recv_timeout).
+ * stubs. The two timeout variants delegate to dispatch helpers
+ * in xvm_chan_ops.c (vm_chan_send_timeout / vm_chan_recv_timeout).
  */
 
 vmcase(OP_CHAN_NEW) {
@@ -247,12 +247,12 @@ vmcase(OP_CHAN_TRY_RECV) {
 
 vmcase(OP_CHAN_SEND_TIMEOUT) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_chan_send_timeout(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_chan_send_timeout(isolate, vm_ctx, i, base, ci, pc));
 }
 
 vmcase(OP_CHAN_RECV_TIMEOUT) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_chan_recv_timeout(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_chan_recv_timeout(isolate, vm_ctx, i, base, ci, pc));
 }
 
 vmcase(OP_CHAN_CLOSE) {

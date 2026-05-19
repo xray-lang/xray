@@ -33,7 +33,7 @@
  * RELATED MODULES:
  *   - xcoroutine.h: Executor (pool-allocated execution context),
  *                    XrScopeContext (orthogonal scope policy)
- *   - xvm_cold_paths.c: vm_await reads task->state/result
+ *   - xvm_coro_ops.c: vm_await reads task->state/result
  *   - xworker.c: executor_complete writes task->result, recycles executor
  *   - linked go / monitored go syntax
  */
