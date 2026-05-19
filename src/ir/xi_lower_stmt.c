@@ -1388,7 +1388,19 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         if (!init_val)
             return;
     } else {
-        init_val = xi_const_null(l->func, l->cur_block, l->type_null);
+        /* Zero-value initialization for typed variables without initializer.
+         * Nullable types (T?) default to null. Non-nullable primitives:
+         * int→0, float→0.0, bool→false, string→"", otherwise null. */
+        if (type && !type->is_nullable && type->kind == XR_KIND_INT)
+            init_val = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        else if (type && !type->is_nullable && type->kind == XR_KIND_FLOAT)
+            init_val = xi_const_float(l->func, l->cur_block, 0.0, l->type_float);
+        else if (type && !type->is_nullable && type->kind == XR_KIND_BOOL)
+            init_val = xi_const_bool(l->func, l->cur_block, false, l->type_bool);
+        else if (type && !type->is_nullable && type->kind == XR_KIND_STRING)
+            init_val = xi_const_str(l->func, l->cur_block, "", l->type_string);
+        else
+            init_val = xi_const_null(l->func, l->cur_block, l->type_null);
     }
 
     /* Propagate reified generic elem_tid when there is an explicit type
