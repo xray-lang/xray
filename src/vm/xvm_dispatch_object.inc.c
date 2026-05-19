@@ -36,7 +36,7 @@
  *     - OP_GETPROP / OP_SETPROP / OP_GETSUPER (placeholder)
  *
  * Method-invocation opcodes (OP_INVOKE / OP_INVOKE_TAIL /
- * OP_SUPERINVOKE / OP_INVOKE_DIRECT / OP_INVOKE_BUILTIN) live in
+ * OP_SUPERINVOKE / OP_INVOKE_DIRECT) live in
  * xvm_dispatch_invoke.inc.c so this file stays under the per-file
  * size gate.
  */

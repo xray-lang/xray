@@ -106,17 +106,6 @@ TEST(instruction_max_constants) {
     ASSERT_EQ_INT(MAXARG_sJ, 8388607);
 }
 
-/* ========== Builtin Type Hint Tests ========== */
-
-TEST(builtin_type_hints) {
-    ASSERT_EQ_INT(BUILTIN_TYPE_MAP, 0);
-    ASSERT_EQ_INT(BUILTIN_TYPE_ARRAY, 1);
-    ASSERT_EQ_INT(BUILTIN_TYPE_STRING, 2);
-    ASSERT_EQ_INT(BUILTIN_TYPE_SET, 3);
-    ASSERT_EQ_INT(BUILTIN_TYPE_INT, 4);
-    ASSERT_EQ_INT(BUILTIN_TYPE_FLOAT, 5);
-}
-
 /* ========== Opcode Category Tests ========== */
 
 TEST(opcode_load_range) {
@@ -160,9 +149,6 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Instruction Constants");
     RUN_TEST(instruction_size_constants);
     RUN_TEST(instruction_max_constants);
-
-    RUN_TEST_SUITE("Builtin Type Hints");
-    RUN_TEST(builtin_type_hints);
 
     RUN_TEST_SUITE("Opcode Ordering");
     RUN_TEST(opcode_load_range);
