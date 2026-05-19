@@ -1,7 +1,7 @@
 // Test linked scope: child error propagates to parent as exception
 
 fn failing_worker() -> int {
-    throw "child error from linked scope"
+    throw new Exception("child error from linked scope")
     return 0
 }
 fn ok_worker() -> int {

@@ -25,10 +25,15 @@
 #include "../../src/runtime/value/xvalue.h"
 #include <time.h>
 
-/* ========== DateTime Structure ========== */
+/* ========== DateTime Native Body ==========
+ *
+ * DateTime is a regular Xray class registered into core->dateTimeClass.
+ * Each DateTime value is an XrInstance whose native body holds these
+ * fields. Use xr_value_is_datetime / xr_value_get_datetime_body to
+ * convert between XrValue and the body pointer.
+ */
 
 typedef struct XrDateTime {
-    XrGCHeader gc;
     int64_t timestamp;     // Unix timestamp (seconds)
     int32_t milliseconds;  // Millisecond part (0-999)
     int16_t tz_offset;     // Timezone offset (minutes)
@@ -92,12 +97,21 @@ XR_FUNC void xr_datetime_to_tm(XrDateTime *dt, struct tm *tm);
 
 /* ========== XrValue Conversion ========== */
 
-static inline XrValue xr_datetime_value(XrDateTime *dt) {
-    return XR_FROM_PTR(dt);
-}
+// Returns true iff v is an instance of DateTime (or a subclass).
+XR_FUNC bool xr_value_is_datetime(XrayIsolate *X, XrValue v);
 
-#define XR_IS_DATETIME(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TDATETIME)
-#define XR_TO_DATETIME(v) ((XrDateTime *) XR_TO_PTR(v))
+// Returns the native body pointer; NULL if v is not a DateTime.
+XR_FUNC XrDateTime *xr_value_get_datetime_body(XrayIsolate *X, XrValue v);
+
+// Wraps the body pointer back into a tagged XrValue (instance handle).
+// body must originate from a DateTime instance.
+XR_FUNC XrValue xr_datetime_value(XrDateTime *body);
+
+/* ========== Class Registration ========== */
+
+// Build the DateTime XrClass (with native body) and store it in
+// core->dateTimeClass. Called from the prelude's native-type hook.
+XR_FUNC void xr_register_datetime_class(XrayIsolate *isolate);
 
 /* ========== Module Loading ========== */
 

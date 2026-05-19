@@ -4,7 +4,7 @@ fn compute() -> int {
     return 42
 }
 fn failing() -> int {
-    throw "monitor test error"
+    throw new Exception("monitor test error")
     return 0
 }
 fn test_monitor_success() {

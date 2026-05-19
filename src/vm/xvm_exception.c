@@ -62,7 +62,7 @@
  * mainstream runtime (Python, Java, JavaScript).
  */
 static void record_full_trace(XrayIsolate *isolate, XrValue exception) {
-    if (!xr_is_exception(exception))
+    if (!xr_value_is_exception(isolate, exception))
         return;
 
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
@@ -76,9 +76,11 @@ static void record_full_trace(XrayIsolate *isolate, XrValue exception) {
      * recording by checking the existing trace length: any non-zero
      * trace means a previous unwind already populated it for the
      * outer frames, and rerecording would duplicate the entries. */
-    XrException *exc = XR_AS_EXCEPTION(exception);
-    if (exc->stackTrace && exc->stackTrace->length > 0) {
-        return;
+    XrValue stack_val = xr_exception_get_stacktrace(isolate, exception);
+    if (XR_IS_ARRAY(stack_val)) {
+        XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
+        if (stack->length > 0)
+            return;
     }
 
     for (int fi = top - 1; fi >= 0; fi--) {

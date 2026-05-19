@@ -45,7 +45,7 @@ fn test_basic_error() {
 fn test_try_catch_cannot_catch() {
     try {
         let t = go {
-            throw "something went wrong"
+            throw new Exception("something went wrong")
         }
         let r = await t
         print("await returned:", r)
@@ -71,7 +71,7 @@ fn test_try_catch_in_coro() {
 fn test_manual_error_check() {
     fn risky_task(n: int) -> int {
         if (n == 0) {
-            throw "cannot process zero"
+            throw new Exception("cannot process zero")
         }
         return 100 / n
     }
@@ -88,7 +88,7 @@ fn test_manual_error_check() {
 fn test_await_all_with_errors() {
     let tasks = [
         go { return "ok-1" },
-        go { throw "fail-2" },
+        go { throw new Exception("fail-2") },
         go { return "ok-3" }
     ]
 
@@ -113,7 +113,7 @@ fn test_await_any() {
 fn test_monitor_error() {
     let t = go(name: "err-worker") {
         time.sleep(10)
-        throw "worker crashed"
+        throw new Exception("worker crashed")
     }
 
     let ch = Coro.monitor("err-worker")

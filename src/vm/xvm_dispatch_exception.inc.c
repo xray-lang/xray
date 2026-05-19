@@ -76,11 +76,11 @@ vmcase(OP_CATCH) {
         if (!XR_IS_NULL(handler->exception)) {
             XrValue exc = handler->exception;
 
-            // If wrapped exception, return original value (userData)
-            if (XR_IS_EXCEPTION(exc)) {
-                XrException *ex = XR_AS_EXCEPTION(exc);
-                if (!XR_IS_NULL(ex->userData)) {
-                    R(a) = ex->userData;
+            // If wrapped exception, return original value (data field)
+            if (xr_value_is_exception(isolate, exc)) {
+                XrValue data = xr_exception_get_data(isolate, exc);
+                if (!XR_IS_NULL(data)) {
+                    R(a) = data;
                 } else {
                     R(a) = exc;
                 }
@@ -152,8 +152,12 @@ vmcase(OP_THROW) {
     int a = GETARG_A(i);
     XrValue exception = R(a);
 
-    // If not an exception object, wrap automatically
-    if (!xr_is_exception(exception)) {
+    /* Strict throw is enforced by the analyzer
+     * (XR_ERR_ANALYZE_THROW_NON_EXCEPTION) so source-level `throw <e>`
+     * always produces an Exception. The defensive wrap below only
+     * fires when bytecode loads bypass the analyzer (e.g. cached
+     * bytecode emitted before the policy or embedding API hooks). */
+    if (!xr_value_is_exception(isolate, exception)) {
         exception = xr_exception_from_value(isolate, exception);
     }
 
@@ -166,8 +170,9 @@ vmcase(OP_THROW) {
         XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;
         if (_eh && _eh->on_exception) {
             bool _unc = (VM_HANDLER_COUNT == 0);
-            const char *_msg =
-                XR_IS_EXCEPTION(exception) ? xr_exception_get_message(exception) : "<exception>";
+            const char *_msg = xr_value_is_exception(isolate, exception)
+                                   ? xr_exception_get_message(isolate, exception)
+                                   : "<exception>";
             if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {
                 VM_SET_EXCEPTION(exception);
                 ci->pc = pc - 1;

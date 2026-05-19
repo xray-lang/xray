@@ -13,7 +13,7 @@ fn test_normal() -> int {
 fn test_exception() -> int {
     let result = 0
     try {
-        throw "error"
+        throw new Exception("error")
         result = 10
     } catch (e) {
         result = -1

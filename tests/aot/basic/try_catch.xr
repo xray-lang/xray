@@ -2,7 +2,7 @@
 fn safe_double(x: int) -> int {
     try {
         if (x < 0) {
-            throw "negative"
+            throw new Exception("negative")
         }
         return x * 2
     } catch (e) {

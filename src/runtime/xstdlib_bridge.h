@@ -34,6 +34,11 @@ struct XrChannel;
 // Format a DateTime object. Uses void* to avoid stdlib/datetime dependency.
 XR_FUNC int xr_datetime_format(void *dt, const char *pattern, char *buf, size_t buf_size);
 
+// Returns true iff v is a DateTime instance. Implemented in
+// stdlib/datetime/datetime.c; declared here so the VM and the runtime
+// formatter can probe without including stdlib headers.
+XR_FUNC bool xr_value_is_datetime(struct XrayIsolate *X, XrValue v);
+
 /* ========== Regex Bridge ========== */
 
 // Get pattern string from regex object

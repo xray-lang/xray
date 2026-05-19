@@ -1708,6 +1708,15 @@ bool xr_type_is_subclass_of(XrType *type, XrType *target) {
         if (info->name && class_names_match(info->name, target_name)) {
             return true;
         }
+        // Prelude built-in classes (Exception, Range, ...) have no
+        // user-side XrClassInfo to link in, so info->base stays NULL
+        // even when `extends Exception` is declared. Check the deferred
+        // base_name string before walking up: if it matches the target
+        // name, the user's `extends X` clause put X in the chain even
+        // though no class_info exists for the built-in.
+        if (info->base_name && class_names_match(info->base_name, target_name)) {
+            return true;
+        }
         info = info->base;
     }
     return false;

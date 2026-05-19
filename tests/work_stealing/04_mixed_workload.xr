@@ -71,7 +71,7 @@ if (cpu_completed == CPU_COROS && io_completed == IO_COROS) {
 } else {
     print("
 ✗ 测试失败")
-    throw "混合负载测试失败"
+    throw new Exception("混合负载测试失败")
 }
 /* 性能分析：总时间应该接近 IO 等待时间，而不是 CPU + IO */
 let expected_sequential = (CPU_COROS * 10) + (IO_COROS * IO_SLEEP_MS)
