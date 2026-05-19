@@ -226,6 +226,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             XrTypeRef *ret = xr_parse_type_annotation(parser);
             return xr_tref_function(parser->X, elems, count, ret);
         }
+        // `()` with no trailing `->` is the unit type, not an empty tuple.
+        if (count == 0)
+            return xr_tref_unit(parser->X);
         return xr_tref_tuple(parser->X, elems, count);
     }
 
