@@ -203,7 +203,7 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
         if (pval && pval->type == AST_VARIABLE) {
             XaSymbol *bind_sym = xa_symbol_new(pval->as.variable.name, XA_SYM_VARIABLE);
             bind_sym->location.line = pval->line;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, bind_sym);
+            xa_visit_add_symbol_checked(ctx, bind_sym, 0);
             XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
             if (bind_links) {
                 bind_links->type = slot_type ? slot_type : xr_type_new_unknown(NULL);

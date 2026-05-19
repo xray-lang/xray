@@ -5,24 +5,28 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xerror_codes.h - Error codes (E01xx=Lexer, E02xx=Syntax, E03xx=Compile, E04xx=Runtime,
- * E05xx=Module)
+ * xerror_codes.h - Single source of truth for all Exxxx error codes
  *
  * KEY CONCEPT:
- *   Centralized error code definitions with auto-generated hints.
- *   Codes follow Exxxx format for easy search and documentation.
+ *   Every user-visible error code is defined here as a plain #define.
+ *   XrErrorCode is typedef'd to int in xerror.h.
+ *   Codes follow Exxxx format: E01xx Lexer, E02xx Syntax, E03xx Compile/Analysis,
+ *   E04xx Runtime, E05xx Module, E06xx IO, E08xx Removed-syntax, E09xx Internal.
  */
 
 #ifndef XERROR_CODES_H
 #define XERROR_CODES_H
 
-// Lexer errors (E01xx)
+/* ---- Success ---- */
+#define XR_OK 0
+
+/* ---- Lexer errors (E01xx) ---- */
 #define XR_ERR_LEX_INVALID_CHAR 101
 #define XR_ERR_LEX_UNTERMINATED_STR 102
 #define XR_ERR_LEX_INVALID_NUMBER 103
 #define XR_ERR_LEX_INVALID_ESCAPE 104
 
-// Syntax errors (E02xx)
+/* ---- Syntax errors (E02xx) ---- */
 #define XR_ERR_SYN_UNEXPECTED_TOKEN 201
 #define XR_ERR_SYN_EXPECTED_EXPR 202
 #define XR_ERR_SYN_EXPECTED_STMT 203
@@ -31,7 +35,7 @@
 #define XR_ERR_SYN_UNCLOSED_BRACKET 206
 #define XR_ERR_SYN_INVALID_ASSIGN 207
 
-// Compile errors (E03xx)
+/* ---- Compile errors (E03xx, 301-319) ---- */
 #define XR_ERR_CMP_UNDEFINED_VAR 301
 #define XR_ERR_CMP_REDEFINED_VAR 302
 #define XR_ERR_CMP_CONST_ASSIGN 303
@@ -40,8 +44,42 @@
 #define XR_ERR_CMP_INVALID_RETURN 306
 #define XR_ERR_CMP_TOO_MANY_PARAMS 307
 #define XR_ERR_CMP_TOO_MANY_LOCALS 308
+#define XR_ERR_CMP_TOO_MANY_CONSTANTS 309
+#define XR_ERR_CMP_TOO_MANY_UPVALUES 310
+#define XR_ERR_CMP_JUMP_TOO_LARGE 311
 
-// Runtime errors (E04xx)
+/* ---- Compile-time type errors (E03xx, 320-329) ---- */
+#define XR_ERR_TYPE_NOT_CALLABLE 321
+#define XR_ERR_TYPE_NOT_INDEXABLE 322
+#define XR_ERR_TYPE_NOT_ITERABLE 323
+#define XR_ERR_TYPE_INVALID_OPERAND 324
+
+/* ---- Static analysis errors (E03xx, 350-399) ---- */
+#define XR_ERR_ANALYZE 350
+#define XR_ERR_ANALYZE_UNDEFINED_VAR 351
+#define XR_ERR_ANALYZE_TYPE_MISMATCH 352
+#define XR_ERR_ANALYZE_CONST_ASSIGN 353
+#define XR_ERR_ANALYZE_NOT_CALLABLE 354
+#define XR_ERR_ANALYZE_WRONG_ARG_COUNT 355
+#define XR_ERR_ANALYZE_ARG_TYPE 356
+#define XR_ERR_ANALYZE_GENERIC_COUNT 357
+#define XR_ERR_ANALYZE_GENERIC_CONSTRAINT 358
+#define XR_ERR_ANALYZE_SUPER_FIRST 359
+#define XR_ERR_ANALYZE_SUPER_THIS 360
+#define XR_ERR_ANALYZE_SUPER_REQUIRED 361
+#define XR_ERR_ANALYZE_SUPER_INVALID 362
+#define XR_ERR_ANALYZE_CLOSURE_CAPTURE 363
+#define XR_ERR_ANALYZE_AWAIT_TYPE 364
+#define XR_ERR_ANALYZE_MISSING_TYPE 365
+#define XR_ERR_ANALYZE_ENUM_MIXED_TYPE 366
+#define XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED 367
+#define XR_ERR_ANALYZE_TUPLE_FIELD_NAME 368
+#define XR_ERR_ANALYZE_TUPLE_FIELD_RANGE 369
+#define XR_ERR_ANALYZE_THROW_NON_EXCEPTION 370
+#define XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE 371
+#define XR_ERR_ANALYZE_USED_BEFORE_ASSIGN 372
+
+/* ---- Runtime type errors (E04xx, 401-406) ---- */
 #define XR_ERR_TYPE_NO_PROPERTY 401
 #define XR_ERR_TYPE_NO_INDEX 402
 #define XR_ERR_TYPE_NO_CALL 403
@@ -49,37 +87,106 @@
 #define XR_ERR_TYPE_NO_METHOD 405
 #define XR_ERR_TYPE_NO_OPERATOR 406
 
+/* ---- Runtime null errors (E04xx, 410-413) ---- */
 #define XR_ERR_NULL_PROPERTY 410
 #define XR_ERR_NULL_INDEX 411
 #define XR_ERR_NULL_CALL 412
+#define XR_ERR_NULL_UNWRAP 413
 
+/* ---- Runtime arithmetic errors (E04xx, 420-422) ---- */
 #define XR_ERR_DIV_BY_ZERO 420
 #define XR_ERR_MOD_BY_ZERO 421
 #define XR_ERR_OVERFLOW 422
 
+/* ---- Runtime index/key errors (E04xx, 430-431) ---- */
 #define XR_ERR_INDEX_OUT_OF_BOUNDS 430
 #define XR_ERR_KEY_NOT_FOUND 431
 
+/* ---- Runtime system errors (E04xx, 440-442) ---- */
 #define XR_ERR_STACK_OVERFLOW 440
 #define XR_ERR_OUT_OF_MEMORY 441
+#define XR_ERR_MATCH_FAILURE 442
 
+/* ---- Runtime argument errors (E04xx, 450-451) ---- */
 #define XR_ERR_WRONG_ARG_COUNT 450
 #define XR_ERR_INVALID_ARG_TYPE 451
 
+/* ---- Runtime coroutine errors (E04xx, 460-461) ---- */
 #define XR_ERR_CORO_DEAD 460
 #define XR_ERR_CORO_CANCELLED 461
 
-// Module errors (E05xx)
+/* ---- Runtime stdlib errors (E04xx, 470-479) ---- */
+#define XR_ERR_JSON_PARSE 470
+#define XR_ERR_JSON_INVALID 471
+#define XR_ERR_REGEX_COMPILE 475
+#define XR_ERR_REGEX_PATTERN 476
+
+/* ---- Module errors (E05xx) ---- */
 #define XR_ERR_MOD_NOT_FOUND 501
 #define XR_ERR_MOD_LOAD_FAILED 502
 #define XR_ERR_MOD_NO_EXPORT 503
 #define XR_ERR_MOD_CIRCULAR 504
 
-// Removed-syntax errors (E08xx): legacy forms that the parser explicitly
-// rejects with a help/note suggesting the modern replacement.
-#define XR_ERR_SYN_RETURN_MULTI_REMOVED 801  // return a, b => return (a, b)
-#define XR_ERR_SYN_LET_MULTI_REMOVED 802     // let x, y = => let (x, y) =
-#define XR_ERR_SYN_FOR_FLAT_REMOVED 803      // for (k, v in m) => for ((k, v) in m)
-#define XR_ERR_SYN_VOID_REMOVED 804          // void => ()
+/* ---- IO errors (E06xx) ---- */
+#define XR_ERR_IO_FILE_NOT_FOUND 601
+#define XR_ERR_IO_READ_FAILED 602
+#define XR_ERR_IO_WRITE_FAILED 603
+#define XR_ERR_IO_PERMISSION_DENIED 604
+
+/* ---- Coroutine-specific errors (E07xx) ---- */
+#define XR_ERR_CORO_DEADLOCK 701
+#define XR_ERR_CORO_CHANNEL_CLOSED 702
+#define XR_ERR_CORO_LIMIT_EXCEEDED 703
+
+/* ---- Removed-syntax errors (E08xx) ---- */
+#define XR_ERR_SYN_RETURN_MULTI_REMOVED 801
+#define XR_ERR_SYN_LET_MULTI_REMOVED 802
+#define XR_ERR_SYN_FOR_FLAT_REMOVED 803
+#define XR_ERR_SYN_VOID_REMOVED 804
+
+/* ---- Internal errors (E09xx) ---- */
+#define XR_ERR_INTERNAL 900
+#define XR_ERR_NOT_IMPLEMENTED 901
+#define XR_ERR_UNKNOWN 999
+
+/* ---- Backward-compatible aliases for old enum names ---- */
+#define XR_ERR_LEXER_INVALID_CHAR XR_ERR_LEX_INVALID_CHAR
+#define XR_ERR_LEXER_UNTERMINATED_STRING XR_ERR_LEX_UNTERMINATED_STR
+#define XR_ERR_LEXER_INVALID_NUMBER XR_ERR_LEX_INVALID_NUMBER
+
+#define XR_ERR_SYNTAX_UNEXPECTED_TOKEN XR_ERR_SYN_UNEXPECTED_TOKEN
+#define XR_ERR_SYNTAX_EXPECT_EXPRESSION XR_ERR_SYN_EXPECTED_EXPR
+#define XR_ERR_SYNTAX_EXPECT_SEMICOLON XR_ERR_SYN_EXPECTED_STMT
+#define XR_ERR_SYNTAX_EXPECT_RPAREN XR_ERR_SYN_UNCLOSED_PAREN
+#define XR_ERR_SYNTAX_EXPECT_RBRACE XR_ERR_SYN_UNCLOSED_BRACE
+#define XR_ERR_SYNTAX_EXPECT_RBRACKET XR_ERR_SYN_UNCLOSED_BRACKET
+#define XR_ERR_SYNTAX_INVALID_ASSIGNMENT XR_ERR_SYN_INVALID_ASSIGN
+
+#define XR_ERR_COMPILE_VARIABLE_REDEFINED XR_ERR_CMP_REDEFINED_VAR
+#define XR_ERR_COMPILE_UNDEFINED_VARIABLE XR_ERR_CMP_UNDEFINED_VAR
+#define XR_ERR_COMPILE_TOO_MANY_LOCALS XR_ERR_CMP_TOO_MANY_LOCALS
+#define XR_ERR_COMPILE_TOO_MANY_CONSTANTS XR_ERR_CMP_TOO_MANY_CONSTANTS
+#define XR_ERR_COMPILE_TOO_MANY_UPVALUES XR_ERR_CMP_TOO_MANY_UPVALUES
+#define XR_ERR_COMPILE_JUMP_TOO_LARGE XR_ERR_CMP_JUMP_TOO_LARGE
+
+#define XR_ERR_RUNTIME 400
+
+#define XR_ERR_MEMORY_ALLOCATION_FAILED XR_ERR_OUT_OF_MEMORY
+#define XR_ERR_MEMORY_OUT_OF_MEMORY XR_ERR_OUT_OF_MEMORY
+
+#define XR_ERR_MODULE_NOT_FOUND XR_ERR_MOD_NOT_FOUND
+#define XR_ERR_MODULE_LOAD_FAILED XR_ERR_MOD_LOAD_FAILED
+#define XR_ERR_MODULE_CIRCULAR_IMPORT XR_ERR_MOD_CIRCULAR
+#define XR_ERR_MODULE_EXPORT_NOT_FOUND XR_ERR_MOD_NO_EXPORT
+
+#define XR_ERR_COROUTINE_DEADLOCK XR_ERR_CORO_DEADLOCK
+#define XR_ERR_COROUTINE_CANCELLED XR_ERR_CORO_CANCELLED
+#define XR_ERR_COROUTINE_CHANNEL_CLOSED XR_ERR_CORO_CHANNEL_CLOSED
+#define XR_ERR_COROUTINE_LIMIT_EXCEEDED XR_ERR_CORO_LIMIT_EXCEEDED
+
+#define XR_ERR_JSON_PARSE_FAILED XR_ERR_JSON_PARSE
+#define XR_ERR_JSON_INVALID_VALUE XR_ERR_JSON_INVALID
+#define XR_ERR_REGEX_COMPILE_FAILED XR_ERR_REGEX_COMPILE
+#define XR_ERR_REGEX_INVALID_PATTERN XR_ERR_REGEX_PATTERN
 
 #endif  // XERROR_CODES_H
