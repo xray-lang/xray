@@ -112,6 +112,41 @@ typedef struct {
     const char *state;
 } VmCoroEntry;
 
+/* ========== Class Resolution for OP_INVOKE ========== */
+
+/* Resolve the receiver's XrClass for method dispatch.
+ * Returns NULL for types that need special handling (module, null). */
+static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiver) {
+    if (XR_IS_INT(receiver))
+        return isolate->native_type_classes[XR_TINT];
+    if (XR_IS_FLOAT(receiver))
+        return isolate->native_type_classes[XR_TFLOAT];
+    if (XR_IS_BOOL(receiver))
+        return isolate->native_type_classes[XR_TBOOL];
+    if (XR_IS_STRUCT_REF(receiver)) {
+        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(receiver);
+        return *(XrClass **) sptr;
+    }
+    if (!XR_IS_PTR(receiver))
+        return NULL;
+
+    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
+    XrObjType type = XR_GC_GET_TYPE(gc);
+
+    if (type == XR_TINSTANCE) {
+        XrInstance *inst = (XrInstance *) gc;
+        return inst->klass;
+    }
+    if (type == XR_TCLASS)
+        return (XrClass *) gc;
+
+    /* All native types (string, array, map, set, json, bigint, etc.) */
+    if ((int) type < XR_NATIVE_TYPE_MAX)
+        return isolate->native_type_classes[type];
+
+    return NULL;
+}
+
 /* ========== Cold Path Function Declarations ========== */
 
 XR_FUNC int vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
@@ -126,9 +161,8 @@ XR_FUNC int vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver, int me
 XR_FUNC int vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int method_symbol, int nargs,
                            XrValue *base, int a, XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC int vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue receiver,
-                            int method_symbol, const char *method_name_chars, int nargs,
-                            XrValue *base, int a, XrBcCallFrame *frame, XrInstruction *pc,
-                            int is_tail);
+                            int method_symbol, int nargs, XrValue *base, int a,
+                            XrBcCallFrame *frame, XrInstruction *pc, int is_tail);
 XR_FUNC int vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                            XrValue *base, XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC int vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx, XrValue obj,

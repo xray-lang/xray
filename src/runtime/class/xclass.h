@@ -250,6 +250,7 @@ struct XrClass {
 #define XR_CLASS_STRINGBUILDER (1 << 15)    // StringBuilder native-body instance
 #define XR_CLASS_ENUM_VALUE (1 << 16)       // Singleton enum member (XrEnumValue body)
 #define XR_CLASS_ENUM_TYPE (1 << 17)        // Enum type metadata (XrEnumType body)
+#define XR_CLASS_ITERATOR (1 << 18)         // for-in lazy iterator (XrIterator body)
 
 /* ========== Operator Overload Flags ========== */
 

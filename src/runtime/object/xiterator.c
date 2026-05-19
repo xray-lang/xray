@@ -24,29 +24,38 @@
 #include "../../base/xmalloc.h"
 #include "../gc/xgc_header.h"
 #include "../gc/xgc.h"
+#include "../gc/xalloc_unified.h"
+#include "../class/xclass.h"
+#include "../class/xclass_builder.h"
+#include "../class/xclass_system.h"
+#include "../class/xinstance.h"
 #include <stdlib.h>
 #include <string.h>
+
+/* Internal helper: allocate iterator instance with klass set. */
+static XrIterator *iterator_alloc(struct XrCoroutine *coro) {
+    XrayIsolate *X = xr_coro_get_isolate(coro);
+    XrClass *cls = xr_isolate_get_core_classes(X)->iteratorClass;
+    XR_DCHECK(cls != NULL, "iterator_alloc: iteratorClass not registered");
+    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TINSTANCE);
+    if (!iter)
+        return NULL;
+    iter->klass = cls;
+    return iter;
+}
 
 // Create iterator from Map (lazy, no pre-generation). Default mode = PAIRS:
 // next() yields (k, v) tuples. Used by entriesIterator and `for (k, v in m)`.
 XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map_param) {
     XR_DCHECK(coro != NULL, "iterator_new_from_map: NULL coro");
     XR_DCHECK(map_param != NULL, "iterator_new_from_map: NULL map");
-    // Allocate Iterator on coroutine heap
-    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
-
-    if (!iter) {
+    XrIterator *iter = iterator_alloc(coro);
+    if (!iter)
         return NULL;
-    }
 
-    // Initialize GC header
-    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
-
-    // Lazy mode: reference Map directly
     iter->source.map = (XrMap *) map_param;
     iter->scan_index = 0;
     iter->coro = coro;
-
     iter->type = XR_ITERATOR_MAP;
     iter->mode = XR_ITER_MODE_PAIRS;
     return iter;
@@ -65,23 +74,15 @@ XrIterator *xr_iterator_keys_from_map(struct XrCoroutine *coro, struct XrMap *ma
 XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set_param) {
     XR_DCHECK(coro != NULL, "iterator_new_from_set: NULL coro");
     XR_DCHECK(set_param != NULL, "iterator_new_from_set: NULL set");
-    // Allocate Iterator on coroutine heap
-    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
-
-    if (!iter) {
+    XrIterator *iter = iterator_alloc(coro);
+    if (!iter)
         return NULL;
-    }
 
-    // Initialize GC header
-    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
-
-    // Lazy mode: reference Set directly
     iter->type = XR_ITERATOR_SET;
     iter->source.set = set_param;
     iter->scan_index = 0;
     iter->coro = coro;
     iter->mode = XR_ITER_MODE_VALUES;  // Set has no separate key projection.
-
     return iter;
 }
 
@@ -89,10 +90,9 @@ XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set
 XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
     XR_DCHECK(coro != NULL, "iterator_new_from_array: NULL coro");
     XR_DCHECK(arr != NULL, "iterator_new_from_array: NULL array");
-    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
+    XrIterator *iter = iterator_alloc(coro);
     if (!iter)
         return NULL;
-    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
     iter->type = XR_ITERATOR_ARRAY;
     iter->source.array = arr;
     iter->scan_index = 0;
@@ -109,10 +109,9 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
                                         struct XrayIsolate *isolate) {
     XR_DCHECK(coro != NULL, "iterator_new_from_string: NULL coro");
     XR_DCHECK(s != NULL, "iterator_new_from_string: NULL string");
-    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
+    XrIterator *iter = iterator_alloc(coro);
     if (!iter)
         return NULL;
-    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
     iter->type = XR_ITERATOR_STRING;
     iter->source.string = s;
     iter->scan_index = 0;
@@ -128,11 +127,10 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
                                       struct XrayIsolate *isolate) {
     XR_DCHECK(coro != NULL, "iterator_new_from_json: NULL coro");
     XR_DCHECK(json != NULL, "iterator_new_from_json: NULL json");
-    XrIterator *iter = (XrIterator *) xr_alloc(coro, sizeof(XrIterator), XR_TITERATOR);
+    XrIterator *iter = iterator_alloc(coro);
     if (!iter)
         return NULL;
 
-    xr_gc_header_init_type(&iter->gc, XR_TITERATOR);
     iter->type = XR_ITERATOR_JSON;
     iter->source.json = json;
     iter->scan_index = 0;
@@ -368,10 +366,58 @@ XrIterator *xr_value_to_iterator(XrValue value) {
     return (XrIterator *) XR_TO_PTR(value);
 }
 
-/* ========== Native Type Registration ========== */
+/* ========== Native Body Lifecycle ========== */
 
-#include "xnative_type.h"
-#include "xstring.h"
+#include "../gc/xcoro_gc.h"
+
+/* Native body traverse: marks the source container so it survives GC
+ * for the lifetime of the iterator. coro / context are non-GC. */
+static void iterator_body_traverse(struct XrCoroGC *gc, void *body) {
+    /* body points to the iterator's `type` field; we recover the enclosing
+     * XrIterator by subtracting the offset that xinstance.c uses. The body
+     * layout starts right after `klass`, so casting back is safe. */
+    XrIterator *iter = (XrIterator *) ((char *) body - offsetof(XrIterator, type));
+    switch (iter->type) {
+        case XR_ITERATOR_MAP:
+            if (iter->source.map)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.map);
+            break;
+        case XR_ITERATOR_SET:
+            if (iter->source.set)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.set);
+            break;
+        case XR_ITERATOR_JSON:
+            if (iter->source.json)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.json);
+            break;
+        case XR_ITERATOR_ARRAY:
+            if (iter->source.array)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.array);
+            break;
+        case XR_ITERATOR_STRING:
+            if (iter->source.string)
+                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.string);
+            break;
+    }
+}
+
+static XrNativeBodyDesc g_iterator_body_desc = {
+    .body_size = sizeof(XrIterator) - offsetof(XrIterator, type),
+    .body_align = _Alignof(void *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .init = NULL,
+    .destroy = NULL,
+    .traverse = iterator_body_traverse,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+XrNativeBodyDesc *xr_iterator_native_body_desc(void) {
+    return &g_iterator_body_desc;
+}
+
+/* ========== Class Registration ========== */
+
 #include "../value/xvalue_format.h"
 
 static XrValue m_iter_has_next(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
@@ -398,19 +444,22 @@ static XrValue m_iter_to_string(XrayIsolate *iso, XrValue self, XrValue *args, i
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
-void xr_iterator_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod iter_methods[] = {
-        {"hasNext", m_iter_has_next, 0},
-        {"next", m_iter_next, 0},
-        {"toString", m_iter_to_string, 0},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeTypeInfo iter_info = {
-        .name = "Iterator",
-        .gc_type = XR_TITERATOR,
-        .methods = iter_methods,
-        .getters = NULL,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &iter_info);
+void xr_iterator_register_class(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "iterator_register_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "iterator_register_class: core not initialised");
+    XR_DCHECK(core->iteratorClass == NULL, "iterator_register_class: already registered");
+
+    XrClassBuilder *b = xr_class_builder_new(X, "Iterator", core->objectClass);
+    XR_CHECK(b != NULL, "iterator_register_class: builder alloc failed");
+
+    xr_class_builder_set_native_body(b, xr_iterator_native_body_desc());
+    xr_class_builder_add_method(b, "hasNext", m_iter_has_next, 0, 0);
+    xr_class_builder_add_method(b, "next", m_iter_next, 0, 0);
+    xr_class_builder_add_method(b, "toString", m_iter_to_string, 0, 0);
+
+    XrClass *cls = xr_class_builder_finalize(b);
+    XR_CHECK(cls != NULL, "iterator_register_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY | XR_CLASS_ITERATOR;
+    core->iteratorClass = cls;
 }

@@ -167,7 +167,11 @@ XR_FUNC bool xr_value_is_enum_value(XrValue v);
 /* Range is no longer a dedicated GC type; use xr_value_is_range(iso, v)
  * from xrange.h which walks the class super-chain. */
 #define XR_IS_MODULE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMODULE)
-#define XR_IS_ITERATOR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TITERATOR)
+/* Iterator is no longer a dedicated GC type; check the class flag.
+ * Implementation in xvalue.c keeps the XrInstance layout out of this
+ * header (consumers don't need to include xclass.h / xinstance.h). */
+XR_FUNC bool xr_value_is_iterator(XrValue v);
+#define XR_IS_ITERATOR(v) xr_value_is_iterator(v)
 #define XR_IS_BIGINT(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBIGINT)
 /* Json is no longer a dedicated GC type; use xr_value_is_json(v)
  * from xjson.h which checks the XR_CLASS_JSON flag on the instance's class. */

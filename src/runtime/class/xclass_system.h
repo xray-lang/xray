@@ -76,6 +76,7 @@ typedef struct XrayCoreClasses {
     XrClass *rangeClass;
     XrClass *dateTimeClass;
     XrClass *loggerClass;
+    XrClass *iteratorClass;
 
     // Tuples: one XrClass per arity (lazy-built on first use). Each class
     // declares N untyped fields whose slot is tuple element i. Arities

@@ -288,6 +288,8 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
                     xr_strbuf_append_cstr(sb, buf, (size_t) n);
                 else
                     xr_strbuf_append_cstr(sb, "<DateTime>", 10);
+            } else if (cls && (cls->flags & XR_CLASS_ITERATOR)) {
+                xr_strbuf_append_cstr(sb, "<iterator>", 10);
             } else if (cls && (cls->flags & XR_CLASS_STRINGBUILDER)) {
                 XrStringBuilder *sbuilder = (XrStringBuilder *) gc;
                 XrString *content = xr_stringbuilder_to_string(sbuilder);
@@ -369,9 +371,6 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         }
         case XR_TERROR:
             xr_strbuf_append_cstr(sb, "<error>", 7);
-            break;
-        case XR_TITERATOR:
-            xr_strbuf_append_cstr(sb, "<iterator>", 10);
             break;
         case XR_TCOROPOOL:
             xr_strbuf_append_cstr(sb, "<CoroPool>", 10);

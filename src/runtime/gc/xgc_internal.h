@@ -139,7 +139,6 @@ XR_FUNC void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_cell(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_bound_method(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj);

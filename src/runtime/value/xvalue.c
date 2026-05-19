@@ -139,6 +139,13 @@ bool xr_value_is_enum_value(XrValue v) {
     return inst->klass && (inst->klass->flags & XR_CLASS_ENUM_VALUE);
 }
 
+bool xr_value_is_iterator(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && (inst->klass->flags & XR_CLASS_ITERATOR);
+}
+
 /* ========== Unified Type ID ========== */
 
 // XrValueTag → XrTypeId lookup table
@@ -165,7 +172,6 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TBOUND_METHOD] = XR_TID_BOUND_METHOD,
     [XR_TERROR] = XR_TID_EXCEPTION,
     [XR_TMODULE] = XR_TID_MODULE,
-    [XR_TITERATOR] = XR_TID_ITERATOR,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
     [XR_TBIGINT] = XR_TID_BIGINT,
@@ -195,6 +201,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                         return XR_TID_ENUM_VALUE;
                     if (inst->klass->flags & XR_CLASS_ENUM_TYPE)
                         return XR_TID_ENUM_TYPE;
+                    if (inst->klass->flags & XR_CLASS_ITERATOR)
+                        return XR_TID_ITERATOR;
                 }
             }
             return tid;

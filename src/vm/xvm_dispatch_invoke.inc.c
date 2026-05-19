@@ -17,58 +17,33 @@
  *
  * Owns:
  *   OOP method invocation:
- *     - OP_INVOKE              (unified calling convention with method IC)
+ *     - OP_INVOKE              (unified XrClass + IC dispatch)
  *     - OP_INVOKE_TAIL         (tail-call form of OP_INVOKE)
  *     - OP_SUPERINVOKE         (super-class method dispatch)
  *     - OP_INVOKE_DIRECT       (resolved class method, no IC needed)
  *
- * Split out of xvm_dispatch_object.inc.c when the merged file crossed
- * the 1500-line per-file gate; OP_INVOKE alone is ~700 lines because
- * it inlines the full mono / poly / mega IC promotion ladder plus
- * fall-through to the slow class-lookup path.
+ * All types that carry an XrClass (value types, native types,
+ * instances, structs) go through one unified IC-cached lookup.
+ * Only channel/task/coro/module/class-constructor require dedicated
+ * paths due to VM control flow (blocking IO, frame push, yield).
  */
 
 vmcase(OP_INVOKE) {
-    /* Unified calling convention (eliminates argument shifting!)
-     *
-     * Register layout:
-     *   R[A]   = return value position
-     *   R[A+1] = this (receiver)
-     *   R[A+2] = arg1
-     *   R[A+3] = arg2
-     *   ...
-     *
-     * Instruction format: OP_INVOKE A B C
-     *   A = base register
-     *   B = method symbol
-     *   C = argument count (excluding this)
-     *
-     * OP_INVOKE_TAIL shares this dispatch via invoke_dispatch label.
-     * invoke_is_tail=1 causes closure methods to reuse current frame.
-     */
+    /* Unified calling convention:
+     *   R[A]   = return slot
+     *   R[A+1] = receiver (this)
+     *   R[A+2..A+1+C] = arguments
+     * OP_INVOKE_TAIL shares this dispatch via invoke_dispatch label. */
     TRACE_EXECUTION();
     invoke_is_tail = 0;
 invoke_dispatch:;
 
-    /* Reductions check intentionally absent here: only OP_JMP checks.
-    ** GC safepoint handled at startfunc label. */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int nargs = GETARG_C(i);
-
-    /* Persist pc once for every dispatch path. Builtin
-     * handlers that throw a contract exception (e.g.
-     * WeakMap.set / WeakSet.add receiver-type guards)
-     * call xr_vm_throw_exception, which reads frame->pc
-     * to compute the throw line and rewrites it to the
-     * matching catch handler. */
     savepc();
 
-/* After a builtin handler returns, surface any
- * pending exception thrown from inside it. The throw
- * already redirected frame->pc, so we just refresh
- * dispatch locals via startfunc (or fall out to the
- * embedder when no handler is on the stack). */
+/* Surface any pending exception from a builtin handler. */
 #define VM_BUILTIN_INVOKE_CHECK_EXC()                                                              \
     do {                                                                                           \
         if (unlikely(!XR_IS_NULL(VM_EXCEPTION))) {                                                 \
@@ -78,45 +53,13 @@ invoke_dispatch:;
         }                                                                                          \
     } while (0)
 
-    // Declared here (before all invoke_* labels) so jumps past
-    // the assignment below still observe a deterministic NULL.
-    const char *method_name_chars = NULL;
-
-    // receiver at R[a+1] (new calling convention)
     XrValue receiver = R(a + 1);
-
-    // Dereference local index → global symbol via per-function symbol table
     int method_symbol = PROTO_SYMBOL(cl->proto, b);
-    // Method inline optimization (fast path)
-    // Property access .length is the standard way to get collection size
 
-    // Cold path: task handle methods (works even after executor detach)
-    if (xr_value_is_task(receiver)) {
-        savepc();
-        int _cr = vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == VM_COLD_BREAK)
-            vmbreak;
-        if (!xr_vm_is_catch_reachable(isolate))
-            return XR_VM_RUNTIME_ERROR;
-        goto startfunc;
-    }
-
-    // Cold path: legacy coroutine handle methods
-    if (xr_value_is_coro(receiver)) {
-        savepc();
-        int _cr = vm_invoke_coro_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == VM_COLD_BREAK)
-            vmbreak;
-        if (!xr_vm_is_catch_reachable(isolate))
-            return XR_VM_RUNTIME_ERROR;
-        goto startfunc;
-    }
-
-    // Channel methods: inline send/recv hot path, cold path for rest
+    /* ── Channel hot path: send/recv MUST be inlined (blocking IO) ── */
     if (xr_value_is_channel(receiver)) {
         XrChannel *ch = xr_value_to_channel(receiver);
 
-        // Hot path: ch.send(value) - inline blocking send
         if (nargs == 1 && method_symbol == SYMBOL_SEND) {
             XrCoroutine *_cur = (XrCoroutine *) VM_CURRENT_CORO;
             if (_cur && xr_coro_resume_load(_cur) == XR_RESUME_CHANNEL) {
@@ -125,8 +68,6 @@ invoke_dispatch:;
                 vmbreak;
             }
             XrValue _sv = vm_chan_copy_send(isolate, R(a + 2));
-            // Pre-save frame state before channel call.  If send blocks, channel func sets BLOCKED
-            // under lock — coro must already have saved state.
             if (_cur)
                 _cur->send_value = _sv;
             savepc();
@@ -142,10 +83,8 @@ invoke_dispatch:;
             } else {
                 frame->call_status &= ~XR_CALL_YIELDED;
             }
-            // Closed or error: fall through to cold path
         }
 
-        // Hot path: ch.recv() - inline blocking recv
         if (nargs == 0 && method_symbol == SYMBOL_RECV) {
             XrCoroutine *_cur = (XrCoroutine *) VM_CURRENT_CORO;
             if (_cur) {
@@ -160,12 +99,8 @@ invoke_dispatch:;
                     _cur->wait_channel = NULL;
                 }
             }
-            // Set recv_slot BEFORE xr_channel_recv: once coro enters
-            // recvq, a sender on another worker may immediately dequeue
-            // and write to recv_slot.  Setting it after return races.
             if (_cur)
                 _cur->recv_slot = &R(a);
-            // Pre-save frame state — see send path.
             savepc();
             frame->pc = pc - 1;
             frame->call_status |= XR_CALL_YIELDED;
@@ -184,11 +119,9 @@ invoke_dispatch:;
             } else {
                 frame->call_status &= ~XR_CALL_YIELDED;
             }
-            // Error: fall through to cold path
         }
 
-        // Cold path: other channel methods
-        savepc();
+        /* Cold path: other channel methods (tryRecv, close, etc.) */
         int _cr = vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
         if (_cr == VM_COLD_BREAK)
             vmbreak;
@@ -199,156 +132,28 @@ invoke_dispatch:;
         goto startfunc;
     }
 
-    if (nargs == 0 && method_symbol == SYMBOL_IS_EMPTY) {
-        // isEmpty() method inline: directly check count == 0
-        if (XR_IS_ARRAY(receiver)) {
-            XrArray *arr = XR_TO_ARRAY(receiver);
-            R(a) = xr_bool(arr->length == 0);
-            vmbreak;  // Skip method call!
-        } else if (XR_IS_STRING(receiver)) {
-            R(a) = xr_bool(xr_value_str_len(&receiver) == 0);
-            vmbreak;  // Skip method call!
-        } else if (XR_IS_MAP(receiver)) {
-            XrMap *map = XR_TO_MAP(receiver);
-            R(a) = xr_bool(map->count == 0);
-            vmbreak;  // Skip method call!
-        } else if (XR_IS_SET(receiver)) {
-            XrSet *set = XR_TO_SET(receiver);
-            R(a) = xr_bool(set->count == 0);
-            vmbreak;  // Skip method call!
-        }
-    }
-
-    /* === Type-based dispatch === */
-
-    /* Struct ref: value-type constructor/method call.
-     * struct_ref layout: [XrClass* 8B][fields...] in struct_area */
-    if (XR_IS_STRUCT_REF(receiver)) {
-        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(receiver);
-        XrClass *scls = *(XrClass **) sptr;
-        XrMethod *method = xr_class_lookup_method(scls, method_symbol);
-
-        if (method == NULL || method->type == XMETHOD_NONE) {
-            XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
-            const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "struct '%s' has no method '%s'", scls->name,
-                             _mn ? _mn : "?");
-        }
-        if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
-            R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
+    /* ── Task handle methods (can block/yield) ── */
+    if (xr_value_is_task(receiver)) {
+        int _cr = vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+        if (_cr == VM_COLD_BREAK)
             vmbreak;
-        }
-        if (method->type == XMETHOD_CLOSURE && method->as.closure != NULL) {
-            XrClosure *closure = method->as.closure;
-            XrProto *proto = closure->proto;
-            if (nargs + 1 != proto->numparams) {
-                VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "constructor expects %d arguments, got %d",
-                                 proto->numparams - 1, nargs);
-            }
-            if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
-                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
-            }
-            // this (struct_ref) already in R[a+1]
-            savepc();
-            int _fidx = VM_FRAME_COUNT;
-            VM_INC_FRAME_COUNT;
-            XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-            new_frame->closure = closure;
-            new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
-            goto startfunc;
-        }
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "struct method has invalid type");
-    }
-
-    /* Resolve XrObjType for the receiver. Value types (int/float/bool)
-     * use the enum directly; heap objects read the GC header type.
-     * This is the single resolution point for all type-based dispatch. */
-    XrObjType _obj_type;
-    if (XR_IS_INT(receiver))
-        _obj_type = XR_TINT;
-    else if (XR_IS_FLOAT(receiver))
-        _obj_type = XR_TFLOAT;
-    else if (XR_IS_BOOL(receiver))
-        _obj_type = XR_TBOOL;
-    else if (XR_IS_PTR(receiver))
-        _obj_type = XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(receiver));
-    else if (XR_IS_NULL(receiver)) {
-        /* null only supports toString(); anything else is a type error */
-        if (method_symbol == SYMBOL_TOSTRING) {
-            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
-            vmbreak;
-        }
-        goto invoke_type_error;
-    } else
-        goto invoke_type_error;
-
-    /* Route types that need special VM control flow (can push frames,
-     * block, yield, or have closure methods). Everything else goes
-     * through the unified native dispatch below. */
-    switch (_obj_type) {
-        case XR_TINSTANCE: {
-            XrInstance *_inst = (XrInstance *) XR_TO_PTR(receiver);
-            if (_inst->klass && (_inst->klass->flags & (XR_CLASS_ENUM_VALUE | XR_CLASS_ENUM_TYPE)))
-                goto invoke_enum;
-            goto invoke_class_or_instance;
-        }
-        case XR_TCLASS:
-            goto invoke_class_or_instance;
-        case XR_TMODULE:
-            goto invoke_module;
-        default:
-            break;
-    }
-
-    /* === Unified native type dispatch via native_type_classes[] ===
-     *
-     * All types registered through xr_register_native_type() are
-     * dispatched here: value types (int, float, bool), collections
-     * (Array, Map, Set, String, Json), stdlib extensions (DateTime,
-     * Regex, Logger, Net), and internal types (Iterator, Range,
-     * StringBuilder, BigInt). One code path replaces
-     * the former per-type invoke_* blocks. */
-    {
-        XrClass *_cls =
-            ((int) _obj_type < XR_NATIVE_TYPE_MAX) ? isolate->native_type_classes[_obj_type] : NULL;
-        if (_cls) {
-            XrMethod *_m = xr_class_lookup_method(_cls, method_symbol);
-            if (likely(_m && _m->type == XMETHOD_PRIMITIVE && _m->as.primitive)) {
-                R(a) = _m->as.primitive(isolate, receiver, &R(a + 2), nargs);
-                VM_BUILTIN_INVOKE_CHECK_EXC();
-                vmbreak;
-            }
-        }
-        /* toString fallback for any type */
-        if (method_symbol == SYMBOL_TOSTRING) {
-            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
-            vmbreak;
-        }
-        XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
-        const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "type '%s' has no method '%s'",
-                         xr_typeid_name(xr_value_typeid(receiver)), _mn ? _mn : "?");
-    }
-
-// Cold path: enum methods
-invoke_enum: {
-    savepc();
-    int _cr = vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-    if (_cr == VM_COLD_BREAK)
-        vmbreak;
-    if (_cr == VM_COLD_ERROR) {
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
     }
-    // VM_COLD_CONTINUE: fall through to class/instance path
-}
 
-// Cold path: module export function call
-invoke_module:
+    /* ── Coroutine handle methods ── */
+    if (xr_value_is_coro(receiver)) {
+        int _cr = vm_invoke_coro_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+        if (_cr == VM_COLD_BREAK)
+            vmbreak;
+        if (!xr_vm_is_catch_reachable(isolate))
+            return XR_VM_RUNTIME_ERROR;
+        goto startfunc;
+    }
+
+    /* ── Module export dispatch (different semantics: export lookup) ── */
     if (xr_value_is_module(receiver)) {
-        savepc();
         int _cr =
             vm_invoke_module(isolate, vm_ctx, receiver, method_symbol, nargs, base, a, ci, pc);
         if (_cr == VM_COLD_BREAK)
@@ -368,29 +173,11 @@ invoke_module:
         }
     }
 
-// Class/Instance method call path.
-// method_name_chars is declared at the top of invoke_dispatch
-// so every `goto invoke_*` sibling label observes NULL.
-invoke_class_or_instance:;
-    if (xr_value_is_class(receiver) || xr_value_is_instance(receiver)) {
-        // Get method name only when needed
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
-        method_name_chars = xr_symbol_get_name_in_table(sym_table, method_symbol);
-        if (method_name_chars == NULL) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "invalid method symbol: %d", method_symbol);
-        }
-    }
-
-    // Lazily ensure the per-ctx method IC table for this proto.
-    XrICMethodTable *ic_method_table = xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
-    if (!ic_method_table) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_INVOKE: failed to allocate IC table");
-    }
-
-    // Cold path: class constructor / static method
+    /* ── Class constructor / static method (creates instance) ── */
     if (xr_value_is_class(receiver)) {
-        int _cr = vm_invoke_class(isolate, vm_ctx, receiver, method_symbol, method_name_chars,
-                                  nargs, base, a, ci, pc, invoke_is_tail);
+        xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
+        int _cr = vm_invoke_class(isolate, vm_ctx, receiver, method_symbol, nargs, base, a, ci, pc,
+                                  invoke_is_tail);
         if (_cr == VM_COLD_BREAK)
             vmbreak;
         if (_cr == VM_COLD_STARTFUNC)
@@ -398,97 +185,130 @@ invoke_class_or_instance:;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
-    } else {
-        // Instance method call
-        if (!xr_value_is_instance(receiver)) {
-            // Universal toString fallback for any remaining type
-            if (method_symbol == SYMBOL_TOSTRING) {
+    }
+
+    /* ── isEmpty() micro-inline (avoids function call for hot check) ── */
+    if (nargs == 0 && method_symbol == SYMBOL_IS_EMPTY) {
+        if (XR_IS_ARRAY(receiver)) {
+            R(a) = xr_bool(XR_TO_ARRAY(receiver)->length == 0);
+            vmbreak;
+        } else if (XR_IS_STRING(receiver)) {
+            R(a) = xr_bool(xr_value_str_len(&receiver) == 0);
+            vmbreak;
+        } else if (XR_IS_MAP(receiver)) {
+            R(a) = xr_bool(XR_TO_MAP(receiver)->count == 0);
+            vmbreak;
+        } else if (XR_IS_SET(receiver)) {
+            R(a) = xr_bool(XR_TO_SET(receiver)->count == 0);
+            vmbreak;
+        }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════
+     * UNIFIED CLASS-BASED DISPATCH
+     *
+     * All remaining types: value types (int/float/bool), collections
+     * (string/array/map/set), native types (json/bigint/datetime/regex/
+     * iterator/range/stringbuilder), instances, struct refs, and enum
+     * values/types. Single code path with polymorphic inline cache.
+     * ══════════════════════════════════════════════════════════════════ */
+    {
+        XrClass *klass = invoke_resolve_class(isolate, receiver);
+
+        /* Null: only toString is valid */
+        if (!klass) {
+            if (XR_IS_NULL(receiver) && method_symbol == SYMBOL_TOSTRING) {
                 R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
                 vmbreak;
             }
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' called on non-instance",
-                             method_name_chars);
+            XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+            const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' called on unsupported type",
+                             _mn ? _mn : "?");
         }
-        XrInstance *inst = xr_value_to_instance(receiver);
 
-        // Find method via polymorphic inline cache
+        /* Enum special routing (enum values/types use hardcoded methods
+         * that access native body fields directly) */
+        if (klass->flags & (XR_CLASS_ENUM_VALUE | XR_CLASS_ENUM_TYPE)) {
+            int _cr = vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+            if (_cr == VM_COLD_BREAK)
+                vmbreak;
+            if (_cr == VM_COLD_ERROR) {
+                if (!xr_vm_is_catch_reachable(isolate))
+                    return XR_VM_RUNTIME_ERROR;
+                goto startfunc;
+            }
+            /* VM_COLD_CONTINUE: enum has no match, fall through to class lookup */
+        }
+
+        /* IC lookup — unified for all types */
+        XrICMethodTable *ic_table = xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
+        if (!ic_table) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_INVOKE: IC table allocation failed");
+        }
         size_t cache_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
         XR_VM_IC_ASSERT_INDEX(cache_index, frame->closure->proto);
-        XrICMethod *cache = xr_ic_method_table_get(ic_method_table, cache_index);
+        XrICMethod *cache = xr_ic_method_table_get(ic_table, cache_index);
         if (cache) {
             XR_VM_IC_METHOD_BIND(cache, (int) cache_index);
         }
 
-        XrMethod *method = NULL;
-        if (cache) {
-            method = xr_ic_method_lookup(cache, inst->klass, method_symbol);
-        } else {
-            method = xr_class_lookup_method(inst->klass, method_symbol);
-        }
+        XrMethod *method = cache ? xr_ic_method_lookup(cache, klass, method_symbol)
+                                 : xr_class_lookup_method(klass, method_symbol);
 
-        if (method == NULL || method->type == XMETHOD_NONE) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' not found", method_name_chars);
-        }
-
-        // Support PRIMITIVE type instance methods (reflection API)
-        // Args from R[a+1] (this at a+1)
-        if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
-            R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
+        /* Primitive method (C function): all native type methods land here */
+        if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+            R(a) = method->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_BUILTIN_INVOKE_CHECK_EXC();
             vmbreak;
         }
 
-        if (method->type != XMETHOD_CLOSURE || method->as.closure == NULL) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' has invalid type",
-                             method_name_chars);
-        }
+        /* Closure method: user-defined instance methods */
+        if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
+            XrClosure *closure = method->as.closure;
+            XrProto *proto = closure->proto;
 
-        // Reuse method closure directly
-        XrClosure *closure = method->as.closure;
-        XrProto *proto = closure->proto;
+            if (nargs + 1 != proto->numparams) {
+                XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+                const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
+                VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT,
+                                 "method '%s' expects %d arguments but got %d", _mn ? _mn : "?",
+                                 proto->numparams - 1, nargs);
+            }
 
-        // Check argument count
-        if (nargs + 1 != proto->numparams) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' expects %d arguments but got %d",
-                             method_name_chars, proto->numparams - 1, nargs);
-        }
+            if (invoke_is_tail) {
+                memmove(base, &R(a + 1), sizeof(XrValue) * (nargs + 1));
+                ci->closure = closure;
+                ci->pc = PROTO_CODE_BASE(proto);
+                VM_SET_STACK_TOP(base + proto->maxstacksize);
+                goto startfunc;
+            }
 
-        if (invoke_is_tail) {
-            // Tail call: reuse current stack frame
-            memmove(base, &R(a + 1), sizeof(XrValue) * (nargs + 1));
-            ci->closure = closure;
-            ci->pc = PROTO_CODE_BASE(proto);
-            VM_SET_STACK_TOP(base + proto->maxstacksize);
+            if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
+                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
+            }
+
+            int _fidx = VM_FRAME_COUNT;
+            VM_INC_FRAME_COUNT;
+            XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
+            new_frame->closure = closure;
+            new_frame->pc = PROTO_CODE_BASE(proto);
+            new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
             goto startfunc;
         }
 
-        // Check stack space
-        if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
-            VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
+        /* toString fallback: works for any type even without a registered method */
+        if (method_symbol == SYMBOL_TOSTRING) {
+            R(a) = xr_string_value(xr_value_to_string(isolate, receiver));
+            vmbreak;
         }
 
-        // Unified calling convention: this already in R[a+1], args in R[a+2]..., no shift needed!
-
-        // Save current frame pc
-        savepc();
-
-        // Create new call frame
-        int _fidx = VM_FRAME_COUNT;
-        VM_INC_FRAME_COUNT;
-        XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-        new_frame->closure = closure;
-        new_frame->pc = PROTO_CODE_BASE(proto);
-        new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
-
-        // Jump to new function
-        goto startfunc;
+        /* Method not found */
+        XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
+        const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' not found on type '%s'",
+                         _mn ? _mn : "?", xr_typeid_name(xr_value_typeid(receiver)));
     }
-
-invoke_type_error: {
-    XrSymbolTable *_st = (XrSymbolTable *) isolate->symbol_table;
-    const char *_mn = xr_symbol_get_name_in_table(_st, method_symbol);
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "method '%s' called on unsupported type",
-                     _mn ? _mn : "?");
-}
     vmbreak;
 }
 

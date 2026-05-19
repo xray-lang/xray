@@ -8,7 +8,18 @@
  * xiterator.h - Iterator for for-in loops
  *
  * KEY CONCEPT:
- *   Supports Map/Set iteration with key-value pairs.
+ *   Supports Map/Set/Json/Array/String iteration with key-value pairs.
+ *
+ * MEMORY LAYOUT (unified class model):
+ *   XrInstance header + 0 fields + native body:
+ *     XrGCHeader gc          (16B, type = XR_TINSTANCE)
+ *     XrClass *klass         (8B,  iteratorClass)
+ *     XrIteratorType type    (4B)  ─┐
+ *     mode/pad               (4B)   │ native body (40B)
+ *     source union           (8B)   │ — traversed by iterator_body_traverse
+ *     scan_index/total_count (8B)   │
+ *     coro pointer           (8B)   │
+ *     context pointer        (8B)  ─┘
  */
 
 #ifndef XITERATOR_H
@@ -47,6 +58,8 @@ typedef enum {
 
 /* ========== Iterator Structure ========== */
 
+struct XrClass;
+
 /*
  * XrIterator - Lazy iterator for Map/Set/Json/Array/String
  *
@@ -55,13 +68,14 @@ typedef enum {
  * compiler always invokes `coll.entriesIterator()` and pulls pairs one by
  * one with hasNext()/next().
  *
- * Advantages:
- * - Memory: only Iterator object (~32 bytes) + single temp [k,v] array (24 bytes)
- * - Performance: avoids pre-generating all entries array
- * - Early exit: if loop breaks, unvisited elements are never created
+ * Layout matches XrInstance (gc + klass + 0 fields) plus a 40-byte native
+ * body holding the iteration state. The runtime instance pointer IS the
+ * XrIterator pointer; native_body offset lands directly on `type`.
  */
 typedef struct XrIterator {
-    XrGCHeader gc;        // GC header
+    XrGCHeader gc;          // GC header (type = XR_TINSTANCE)
+    struct XrClass *klass;  // Points to iteratorClass
+    // === Native body (40 bytes, traversed by iterator_body_traverse) ===
     XrIteratorType type;  // iterator kind
     uint8_t mode;         // XrIteratorMode (pairs / keys / values projection)
     uint8_t _pad0;
@@ -124,8 +138,12 @@ static inline bool xr_is_iterator(XrValue value) {
     return XR_IS_ITERATOR(value);
 }
 
-/* Register Iterator as a native type for unified dispatch. */
+/* Register Iterator core class with native body descriptor. */
 struct XrayIsolate;
-XR_FUNC void xr_iterator_register_native_type(struct XrayIsolate *isolate);
+XR_FUNC void xr_iterator_register_class(struct XrayIsolate *isolate);
+
+/* Native body descriptor (shared singleton). */
+struct XrNativeBodyDesc;
+XR_FUNC struct XrNativeBodyDesc *xr_iterator_native_body_desc(void);
 
 #endif  // XITERATOR_H
