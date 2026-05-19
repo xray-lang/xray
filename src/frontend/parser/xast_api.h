@@ -332,6 +332,10 @@ XR_FUNC AstNode *xr_ast_pattern_tuple(XrayIsolate *X, AstNode **patterns, int co
 XR_FUNC AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns, int count,
                                     int line);
 
+// Create type pattern node: `is T` or `is T name`
+XR_FUNC AstNode *xr_ast_pattern_type(XrayIsolate *X, XrTypeRef *type, const char *binding_name,
+                                     int line);
+
 // Create type alias node
 XR_FUNC AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
                                    XrTypeRef **field_types, bool *field_optional, int field_count,

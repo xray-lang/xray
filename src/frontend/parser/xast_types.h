@@ -186,6 +186,7 @@ typedef enum {
     AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
     AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
     AST_PATTERN_ADT,       // Shape.Circle(r) — ADT variant destructure
+    AST_PATTERN_TYPE,      // is T  /  is T name — runtime type check with optional binding
 
     // Spread element: `...expr` inside tuple literal or call argument list.
     // Statically expanded — the source must be a tuple of known arity.

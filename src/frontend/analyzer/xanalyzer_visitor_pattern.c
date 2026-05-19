@@ -21,6 +21,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
 // Forward declaration (defined below in narrowing section)
@@ -187,6 +188,9 @@ static bool pattern_has_binding(AstNode *pattern) {
                 return true;
         }
     }
+    if (pattern->type == AST_PATTERN_TYPE) {
+        return pattern->as.pattern_type.binding_name != NULL;
+    }
     return false;
 }
 
@@ -235,6 +239,22 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             if (!sub)
                 continue;
             register_pattern_bindings(ctx, sub, NULL);
+        }
+    }
+
+    /* Type pattern: `is T name` introduces a narrowed binding of type T. */
+    if (pattern->type == AST_PATTERN_TYPE) {
+        PatternTypeNode *tp = &pattern->as.pattern_type;
+        if (tp->binding_name) {
+            XaSymbol *bind_sym = xa_symbol_new(tp->binding_name, XA_SYM_VARIABLE);
+            bind_sym->location.line = pattern->line;
+            xa_visit_add_symbol_checked(ctx, bind_sym, 0);
+            XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
+            if (bind_links) {
+                bind_links->type = xr_tref_resolve_in_analyzer(ctx->analyzer, tp->type);
+                bind_links->is_definitely_assigned = true;
+            }
+            tp->symbol_id = bind_sym->id;
         }
     }
 }
