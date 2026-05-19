@@ -640,7 +640,7 @@ XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
     }
 
     // Enum value properties
-    if (heap_type == XR_TENUM_VALUE) {
+    if (XR_IS_ENUM_VALUE(obj)) {
         XrEnumValue *ev = (XrEnumValue *) obj.ptr;
         if (sym == SYMBOL_VALUE)
             return XR_JIT_RESULT(ev->raw_value);

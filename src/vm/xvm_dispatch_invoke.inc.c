@@ -288,14 +288,16 @@ invoke_dispatch:;
      * block, yield, or have closure methods). Everything else goes
      * through the unified native dispatch below. */
     switch (_obj_type) {
-        case XR_TINSTANCE:
+        case XR_TINSTANCE: {
+            XrInstance *_inst = (XrInstance *) XR_TO_PTR(receiver);
+            if (_inst->klass && (_inst->klass->flags & (XR_CLASS_ENUM_VALUE | XR_CLASS_ENUM_TYPE)))
+                goto invoke_enum;
+            goto invoke_class_or_instance;
+        }
         case XR_TCLASS:
             goto invoke_class_or_instance;
         case XR_TMODULE:
             goto invoke_module;
-        case XR_TENUM_VALUE:
-        case XR_TENUM_TYPE:
-            goto invoke_enum;
         default:
             break;
     }

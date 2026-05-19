@@ -193,7 +193,8 @@ struct XrClass {
     uint8_t abstract_method_count;
 
     /* === Flags === */
-    uint16_t flags;
+    // uint32_t because XR_CLASS_ENUM_VALUE/TYPE occupy bits 16/17.
+    uint32_t flags;
 
     /* === Dynamic Layout (hidden class transitions) === */
     // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style
@@ -247,6 +248,8 @@ struct XrClass {
 #define XR_CLASS_TUPLE (1 << 13)            // Tuple of fixed arity: fields[i] == element i
 #define XR_CLASS_JSON (1 << 14)             // Json dynamic-layout object
 #define XR_CLASS_STRINGBUILDER (1 << 15)    // StringBuilder native-body instance
+#define XR_CLASS_ENUM_VALUE (1 << 16)       // Singleton enum member (XrEnumValue body)
+#define XR_CLASS_ENUM_TYPE (1 << 17)        // Enum type metadata (XrEnumType body)
 
 /* ========== Operator Overload Flags ========== */
 

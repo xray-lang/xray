@@ -367,7 +367,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
     if (XR_IS_PTR(obj)) {
         XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(obj);
 
-        if (XR_GC_GET_TYPE(gc) == XR_TENUM_VALUE) {
+        if (XR_IS_ENUM_VALUE(obj)) {
             XrEnumValue *enum_val = (XrEnumValue *) gc;
             if (prop_symbol == SYMBOL_NAME) {
                 size_t len = strlen(enum_val->member_name);
@@ -384,7 +384,7 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
             // Other enum properties: fall through to instance path
         }
 
-        if (XR_GC_GET_TYPE(gc) == XR_TENUM_TYPE) {
+        if (XR_IS_ENUM_TYPE(obj)) {
             XrEnumType *enum_type = (XrEnumType *) gc;
             if (prop_symbol == SYMBOL_MEMBER_COUNT) {
                 base[a] = xr_int(enum_type->member_count);

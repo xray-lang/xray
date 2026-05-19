@@ -155,8 +155,11 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_CLASS(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCLASS)
 #define XR_IS_INSTANCE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TINSTANCE)
 #define XR_IS_BOUND_METHOD(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBOUND_METHOD)
-#define XR_IS_ENUM_TYPE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TENUM_TYPE)
-#define XR_IS_ENUM_VALUE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TENUM_VALUE)
+// Enum checks require class flag inspection; implemented in xvalue.c.
+XR_FUNC bool xr_value_is_enum_type(XrValue v);
+XR_FUNC bool xr_value_is_enum_value(XrValue v);
+#define XR_IS_ENUM_TYPE(v) xr_value_is_enum_type(v)
+#define XR_IS_ENUM_VALUE(v) xr_value_is_enum_value(v)
 #define XR_IS_COROUTINE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCOROUTINE)
 #define XR_IS_TASK(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TTASK)
 #define XR_IS_CHANNEL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCHANNEL)

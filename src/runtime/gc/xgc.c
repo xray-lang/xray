@@ -77,8 +77,6 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
     [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},
     [XR_TERROR] = {NULL, xr_gc_traverse_error, NULL, NULL},
-    [XR_TENUM_TYPE] = {xr_gc_destroy_enum_type, NULL, NULL, NULL},
-    [XR_TENUM_VALUE] = {xr_gc_destroy_enum_value, NULL, NULL, NULL},
 
     // Network handles. No GC children to traverse (fd is an int, the
     // optional TLS pointer is opaque non-GC memory). Destroy hook

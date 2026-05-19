@@ -315,6 +315,10 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                     } else {
                         snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
                     }
+                } else if (inst->klass && (inst->klass->flags & XR_CLASS_ENUM_TYPE)) {
+                    snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
+                } else if (inst->klass && (inst->klass->flags & XR_CLASS_ENUM_VALUE)) {
+                    snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
                 } else {
                     const char *class_name = xr_class_display_name(inst->klass);
                     snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
@@ -348,12 +352,6 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                 snprintf(buf, sizeof(buf), "<error> @%p", (void *) hdr);
                 break;
             /* Exception uses XR_TINSTANCE — handled in the instance path */
-            case XR_TENUM_TYPE:
-                snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
-                break;
-            case XR_TENUM_VALUE:
-                snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
-                break;
             case XR_TBOUND_METHOD:
                 snprintf(buf, sizeof(buf), "<bound method> @%p", (void *) hdr);
                 break;

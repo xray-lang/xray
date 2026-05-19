@@ -487,8 +487,9 @@ vmcase(OP_GETPROP) {
         // Field not found: might be a method, fall through to cold path
     }
 
-    // Fast path: Instance is the most common target, skip if-else chain
-    if (xr_value_is_instance(obj))
+    // Fast path: Instance is the most common target, skip if-else chain.
+    // Enum types/values use the cold dispatch path for member resolution.
+    if (xr_value_is_instance(obj) && !XR_IS_ENUM_TYPE(obj) && !XR_IS_ENUM_VALUE(obj))
         goto getprop_instance;
 
     // Json values are dynamic-layout instances carrying XR_CLASS_JSON;

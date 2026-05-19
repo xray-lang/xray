@@ -19,8 +19,11 @@
 #include <stdint.h>
 
 // Singleton enum member (e.g., Status.Success)
+// Layout-compatible with XrInstance + native body (0 fields).
+// GC tag is XR_TINSTANCE; class carries XR_CLASS_ENUM_VALUE flag.
 typedef struct XrEnumValue {
     XrGCHeader gc;
+    struct XrClass *klass;  // Points to enumValueClass
     // Both names are interned in the isolate's symbol table; not owned.
     const char *enum_name;
     const char *member_name;
@@ -29,9 +32,12 @@ typedef struct XrEnumValue {
 } XrEnumValue;
 
 // Enum type metadata (immutable at runtime)
+// Layout-compatible with XrInstance + native body (0 fields).
+// GC tag is XR_TINSTANCE; class carries XR_CLASS_ENUM_TYPE flag.
 typedef struct XrEnumType {
     XrGCHeader gc;
-    const char *name;  // Interned in symbol table; not owned.
+    struct XrClass *klass;  // Points to enumTypeClass
+    const char *name;       // Interned in symbol table; not owned.
     int base_type;
     uint32_t member_count;
     struct XrClass *enum_class;
@@ -90,5 +96,11 @@ XR_FUNC void xr_gc_destroy_enum_value(struct XrGCHeader *obj, struct XrCoroGC *o
 
 #define XR_TO_ENUM_TYPE(v) ((XrEnumType *) XR_TO_PTR(v))
 #define XR_TO_ENUM_VALUE(v) ((XrEnumValue *) XR_TO_PTR(v))
+
+/* ========== Native Body Descriptors ========== */
+
+struct XrNativeBodyDesc;
+XR_FUNC struct XrNativeBodyDesc *xr_enum_value_native_body_desc(void);
+XR_FUNC struct XrNativeBodyDesc *xr_enum_type_native_body_desc(void);
 
 #endif  // XENUM_H

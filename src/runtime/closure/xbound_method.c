@@ -153,11 +153,10 @@ XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrVal
     if (!XR_IS_PTR(receiver))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE)
+    if (!XR_IS_ENUM_TYPE(receiver))
         return xr_null();
 
-    XrEnumType *enum_type = (XrEnumType *) gc;
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(receiver);
     int index = XR_TO_INT(args[0]);
     if (index < 0 || index >= (int) enum_type->member_count) {
         return xr_null();
