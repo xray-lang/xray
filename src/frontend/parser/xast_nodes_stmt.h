@@ -166,6 +166,16 @@ typedef struct PatternAdtNode {
     int count;           // number of payload slots
 } PatternAdtNode;
 
+/* Type pattern: `is T` or `is T name`.
+ * type is the static type to test against; binding_name is the optional
+ * narrowed binding (NULL when absent). symbol_id is assigned by the
+ * analyzer when binding_name is non-NULL. */
+typedef struct PatternTypeNode {
+    XrTypeRef *type;
+    const char *binding_name;
+    uint32_t symbol_id;
+} PatternTypeNode;
+
 /* ========== Coroutine / Concurrency ==========
  *
  * Supports:

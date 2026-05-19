@@ -602,6 +602,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.pattern_tuple.patterns = clone_node_array(node->as.pattern_tuple.patterns,
                                                             node->as.pattern_tuple.count, map, mc);
             break;
+        case AST_PATTERN_TYPE:
+            n->as.pattern_type.type = node->as.pattern_type.type;
+            n->as.pattern_type.binding_name = clone_str(node->as.pattern_type.binding_name);
+            n->as.pattern_type.symbol_id = node->as.pattern_type.symbol_id;
+            break;
 
         // === Coroutine nodes ===
         case AST_GO_EXPR:

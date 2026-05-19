@@ -260,6 +260,14 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
         }
 
+        case AST_PATTERN_TYPE: {
+            /* `is T [name]`: runtime type test against T. The binding (if
+             * present) is captured in lower_pattern_bindings once the
+             * test succeeds. */
+            PatternTypeNode *tp = &pattern->as.pattern_type;
+            return xi_lower_is_test(l, subject, tp->type, pattern->line);
+        }
+
         default:
             return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
     }
@@ -316,6 +324,18 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             field->args[0] = subject;
             field->aux_int = 1 + i; /* payload starts at field[1] */
             lower_pattern_bindings(l, field, sub);
+        }
+    }
+
+    /* Type pattern: bind the narrowed name (if any) to the subject. The
+     * subject's static type is the union; the binding sees only the
+     * matching arm and is typed as T by the analyzer. */
+    if (pattern->type == AST_PATTERN_TYPE) {
+        PatternTypeNode *tp = &pattern->as.pattern_type;
+        if (tp->binding_name) {
+            int var_id = xi_lower_var_create(l, tp->symbol_id, tp->binding_name,
+                                             subject->type ? subject->type : l->type_any);
+            xi_lower_braun_write(l, var_id, l->cur_block, subject);
         }
     }
 }

@@ -2030,9 +2030,9 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
     return set_val;
 }
 
-static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
-    IsExprNode *is = &node->as.is_expr;
-    XiValue *val = xi_lower_expr(l, is->expr);
+/* Emit an XI_IS test against the given XrTypeRef for an existing value.
+ * Used both by `expr is T` and by `is T` patterns in match arms. */
+XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int line) {
     if (!val)
         return NULL;
 
@@ -2041,7 +2041,6 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
      *   - Primitive types → XI_CONST with XrTypeId
      *   - Named types (classes) → scope-resolved class value */
     XiValue *type_val = NULL;
-    XrTypeRef *tref = is->type;
     if (tref) {
         int tid = -1;
         switch (tref->kind) {
@@ -2138,9 +2137,17 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
     v->args[0] = val;
     if (type_val)
         v->args[1] = type_val;
-    v->aux = (void *) is->type;
-    v->line = (uint32_t) node->line;
+    v->aux = (void *) tref;
+    v->line = (uint32_t) line;
     return v;
+}
+
+static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
+    IsExprNode *is = &node->as.is_expr;
+    XiValue *val = xi_lower_expr(l, is->expr);
+    if (!val)
+        return NULL;
+    return xi_lower_is_test(l, val, is->type, node->line);
 }
 
 static XiValue *lower_as_expr(XiLower *l, AstNode *node) {

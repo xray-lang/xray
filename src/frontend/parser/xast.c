@@ -1246,6 +1246,15 @@ AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns
     return node;
 }
 
+// Create type pattern node: `is T` or `is T name`
+AstNode *xr_ast_pattern_type(XrayIsolate *X, XrTypeRef *type, const char *binding_name, int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_TYPE, line);
+    node->as.pattern_type.type = type;
+    node->as.pattern_type.binding_name = binding_name;
+    node->as.pattern_type.symbol_id = 0;
+    return node;
+}
+
 // Destroy a program AST and its owning arena.
 // Releases every AST node, array, and string allocated during parsing in O(1).
 // For program nodes from xr_parse_recoverable (LSP), the caller owns the
@@ -1424,6 +1433,12 @@ const char *xr_ast_typename(AstNodeType type) {
             return "PatternWildcard";
         case AST_PATTERN_MULTI:
             return "PatternMulti";
+        case AST_PATTERN_TUPLE:
+            return "PatternTuple";
+        case AST_PATTERN_ADT:
+            return "PatternAdt";
+        case AST_PATTERN_TYPE:
+            return "PatternType";
         case AST_TYPE_ALIAS:
             return "TypeAlias";
         case AST_PROGRAM:

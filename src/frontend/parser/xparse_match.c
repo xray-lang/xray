@@ -86,6 +86,30 @@ static AstNode *parse_pattern_single(Parser *parser) {
         return parse_tuple_pattern(parser);
     }
 
+    /* Type pattern: `is T` or `is T name`.
+     * Must be detected before generic expression parsing so the `is`
+     * keyword is interpreted as a pattern prefix rather than an
+     * (illegal) binary operator. */
+    if (xr_parser_match(parser, TK_IS)) {
+        XrTypeRef *type = xr_parse_type_annotation(parser);
+        if (!type) {
+            xr_parser_error(parser, "expected type after 'is'");
+            return NULL;
+        }
+        const char *binding_name = NULL;
+        if (xr_parser_check(parser, TK_NAME)) {
+            Token name_tok = parser->current;
+            xr_parser_advance(parser);
+            char *buf = (char *) ast_alloc(parser->X, (size_t) name_tok.length + 1);
+            if (!buf)
+                return NULL;
+            memcpy(buf, name_tok.start, name_tok.length);
+            buf[name_tok.length] = '\0';
+            binding_name = buf;
+        }
+        return xr_ast_pattern_type(parser->X, type, binding_name, line);
+    }
+
     AstNode *first = xr_parse_precedence(parser, PREC_CALL);
     if (!first) {
         xr_parser_error(parser, "expected pattern");
