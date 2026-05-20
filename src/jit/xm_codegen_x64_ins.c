@@ -260,11 +260,15 @@ static void x64_h_mul(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 }
 
 static void x64_h_div_mod(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    /* Divide-by-zero guard: x64 IDIV raises #DE on zero divisor, which the
-     * runtime sees as an uncaught structured exception.  Mirror ARM64's
-     * a64_h_div / a64_h_mod (PATCH_DEOPT_CBZ before sdiv) by testing the
-     * divisor up front and jumping to the deopt stub on zero so the VM
-     * re-executes the bytecode and raises a proper DivisionByZero. */
+    /* x64 IDIV raises #DE on two inputs that ARM64 SDIV handles silently:
+     *   - divisor == 0
+     *   - INT64_MIN / -1 (quotient overflows int64)
+     * Both must be detected up front. Zero divisor deopts to the VM, which
+     * raises DivisionByZero. INT64_MIN/-1 is handled inline with wrap
+     * semantics matching xi_opt fold and ARM64 SDIV:
+     *   INT64_MIN / -1 = INT64_MIN (via NEG, which wraps the same way)
+     *   INT64_MIN % -1 = 0 */
+    const bool is_div = (ins->op == XM_DIV);
     {
         X64Reg rm_chk = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
         x64_test_rr(&ctx->buf, rm_chk, rm_chk);
@@ -282,11 +286,38 @@ static void x64_h_div_mod(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, rm);
         rm = X64_SCRATCH_REG;
     }
+
+    /* Compare divisor against -1 and skip the IDIV when it matches.
+     * The wrap path produces the same result IDIV would if x64 did not
+     * trap: -rn for DIV (NEG wraps INT64_MIN to itself), 0 for MOD. */
+    x64_cmp_ri(&ctx->buf, rm, -1);
+    x64_emit8(&ctx->buf, 0x0F);
+    x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
+    uint32_t jne_normal_d = ctx->buf.pos;
+    x64_emit32(&ctx->buf, 0); /* patched to .normal */
+
+    /* Wrap path: rm == -1 */
+    if (is_div) {
+        x64_neg_r(&ctx->buf, X64_RAX);
+        if (rd != X64_RAX)
+            x64_mov_rr(&ctx->buf, rd, X64_RAX);
+    } else {
+        x64_xor_rr(&ctx->buf, rd, rd);
+    }
+    x64_emit8(&ctx->buf, 0xE9);
+    uint32_t jmp_done_d = ctx->buf.pos;
+    x64_emit32(&ctx->buf, 0); /* patched to .done */
+
+    /* .normal: standard IDIV. */
+    x64_patch_rel32(&ctx->buf, jne_normal_d, ctx->buf.pos);
     x64_cqo(&ctx->buf);
     x64_idiv_r(&ctx->buf, rm);
-    X64Reg result_reg = (ins->op == XM_DIV) ? X64_RAX : X64_RDX;
+    X64Reg result_reg = is_div ? X64_RAX : X64_RDX;
     if (rd != result_reg)
         x64_mov_rr(&ctx->buf, rd, result_reg);
+
+    /* .done */
+    x64_patch_rel32(&ctx->buf, jmp_done_d, ctx->buf.pos);
 }
 
 static void x64_h_neg(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {

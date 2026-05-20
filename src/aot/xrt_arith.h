@@ -12,7 +12,8 @@
 #define XRT_ARITH_H
 
 #include "xrt_value.h"
-#include "xrt_arc.h"  // xrt_str_concat used by xrt_add
+#include "xrt_arc.h"        // xrt_str_concat used by xrt_add
+#include "xrt_exception.h"  // xrt_throw_exc for div/mod by zero
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
@@ -61,23 +62,46 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
     return XR_FROM_FLOAT(fa * fb);
 }
 
+/* Integer div/mod with zero-check + wrap.
+ * Single source of truth for every AOT integer divide path (typed scalar
+ * codegen in xi_cgen and the tagged xrt_div / xrt_mod below).
+ *   b == 0          → throw (matches VM E0301 / E0302)
+ *   INT64_MIN / -1  → INT64_MIN (unsigned negate; matches xi_opt fold)
+ *   INT64_MIN % -1  → 0 */
+static inline int64_t xrt_int_div(int64_t a, int64_t b) {
+    if (b == 0)
+        xrt_throw_exc(xr_box_str("E0301: division by zero"));
+    if (b == -1)
+        return (int64_t) (-(uint64_t) a);
+    return a / b;
+}
+static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
+    if (b == 0)
+        xrt_throw_exc(xr_box_str("E0302: modulo by zero"));
+    if (b == -1)
+        return 0;
+    return a % b;
+}
+
 static inline XrValue xrt_div(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return b.i ? XR_FROM_INT(a.i / b.i) : XR_FROM_INT(0);
+        return XR_FROM_INT(xrt_int_div(a.i, b.i));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
+    if (fb == 0.0)
+        xrt_throw_exc(xr_box_str("E0301: division by zero"));
     return XR_FROM_FLOAT(fa / fb);
 }
 
 static inline XrValue xrt_mod(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return b.i ? XR_FROM_INT(a.i % b.i) : XR_FROM_INT(0);
-    return XR_FROM_INT(0);
+        return XR_FROM_INT(xrt_int_mod(a.i, b.i));
+    xrt_throw_exc(xr_box_str("E0010: modulo requires integer types"));
 }
 
 static inline XrValue xrt_neg(XrValue a) {
     if (a.tag == XR_TAG_I64)
-        return XR_FROM_INT(-a.i);
+        return XR_FROM_INT((int64_t) (-(uint64_t) a.i));
     if (a.tag == XR_TAG_F64)
         return XR_FROM_FLOAT(-a.f);
     return XR_FROM_INT(0);

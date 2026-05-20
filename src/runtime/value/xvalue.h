@@ -352,6 +352,24 @@ static inline XrValue xr_float(xr_Number n) {
     return XR_FROM_FLOAT(n);
 }
 
+/* Integer wrap helpers shared by VM and JIT runtime.
+ * INT64_MIN / -1 and INT64_MIN % -1 are signed-overflow UB in C; both
+ * crash IDIV on x86-64. Define them as wrap on every backend so VM,
+ * JIT (ARM64 SDIV / x64 inline branch), AOT and xi_opt fold agree:
+ *   INT64_MIN / -1 = INT64_MIN  (unsigned negate is well-defined)
+ *   INT64_MIN % -1 = 0
+ * Caller must have rejected divisor == 0 before calling these. */
+static inline xr_Integer xr_int_div_wrap(xr_Integer a, xr_Integer b) {
+    if (b == -1)
+        return (xr_Integer) (-(uint64_t) a);
+    return a / b;
+}
+static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
+    if (b == -1)
+        return 0;
+    return a % b;
+}
+
 /* ========== Type Query ========== */
 
 XR_FUNC XrTypeId xr_value_typeid(XrValue v);
