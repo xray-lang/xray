@@ -463,6 +463,16 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
+        /* Implicit int→float promotion on assignment to a float variable */
+        struct XrType *var_type = l->vars[var_id].type;
+        if (var_type && XR_TYPE_IS_FLOAT(var_type) && val->type && XR_TYPE_IS_INT(val->type)) {
+            XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
+            if (conv) {
+                conv->args[0] = val;
+                conv->line = (uint32_t) node->line;
+                val = conv;
+            }
+        }
         /* When assigning from a different variable (e.g. x = i), insert
          * an explicit copy so the target gets its own SSA value.  Without
          * this, braun_write stores the source variable's value directly,
