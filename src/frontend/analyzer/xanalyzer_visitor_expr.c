@@ -1470,6 +1470,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     XrType **param_types = NULL;
     if (fn->param_count > 0) {
         param_types = xr_malloc(sizeof(XrType *) * fn->param_count);
+        if (!param_types)
+            return xr_type_new_unknown(NULL);
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *p = fn->params[i];
             // Check for explicit type annotation first

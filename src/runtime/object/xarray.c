@@ -81,6 +81,8 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
             // Fallback: no coro_gc available, use malloc
             arr->data = xr_malloc(data_bytes);
         }
+        if (!arr->data)
+            arr->capacity = 0;
     }
 
     return arr;
@@ -107,6 +109,8 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     // Allocate data (no GC accounting for system heap arrays)
     if (capacity > 0) {
         arr->data = xr_malloc((size_t) esz * capacity);
+        if (!arr->data)
+            arr->capacity = 0;
     }
 }
 

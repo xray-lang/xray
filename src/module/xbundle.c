@@ -134,6 +134,11 @@ static void bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *
     XrBundleEntry *entry = &bundle->entries[bundle->count++];
     entry->path = xr_strdup(path);
     entry->bc = xr_malloc(bc_size);
+    if (!entry->bc) {
+        bundle->count--;
+        xr_free(entry->path);
+        return;
+    }
     memcpy((void *) entry->bc, bc, bc_size);
     entry->bc_size = bc_size;
 }

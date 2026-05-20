@@ -527,7 +527,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Ensure inferred_param_types array is allocated
         if (!fn_links->inferred_param_types && fn_links->param_count > 0) {
             fn_links->inferred_param_types = xr_calloc(fn_links->param_count, sizeof(XrType *));
-            fn_links->inferred_param_count = fn_links->param_count;
+            if (fn_links->inferred_param_types)
+                fn_links->inferred_param_count = fn_links->param_count;
         }
         for (int i = 0; i < arg_count && i < fn_links->inferred_param_count; i++) {
             // Only propagate for unannotated params (declared_type is NULL or unknown)

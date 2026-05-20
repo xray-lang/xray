@@ -361,6 +361,10 @@ XaFlowCache *xa_flow_cache_new(void) {
     cache->capacity = 64;
     cache->ids = xr_calloc(cache->capacity, sizeof(uint32_t));
     cache->types = xr_calloc(cache->capacity, sizeof(XrType *));
+    if (!cache->ids || !cache->types) {
+        xa_flow_cache_free(cache);
+        return NULL;
+    }
     return cache;
 }
 
@@ -408,6 +412,12 @@ static void flow_cache_rehash(XaFlowCache *cache) {
     cache->capacity = old_cap * 2;
     cache->ids = xr_calloc(cache->capacity, sizeof(uint32_t));
     cache->types = xr_calloc(cache->capacity, sizeof(XrType *));
+    if (!cache->ids || !cache->types) {
+        cache->ids = old_ids;
+        cache->types = old_types;
+        cache->capacity = old_cap;
+        return;
+    }
     cache->count = 0;
 
     uint32_t mask = (uint32_t) (cache->capacity - 1);

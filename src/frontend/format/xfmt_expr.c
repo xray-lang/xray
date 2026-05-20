@@ -231,6 +231,10 @@ static void fmt_match_expr(XrFmtContext *ctx, AstNode *node) {
     bool align = ctx->config && ctx->config->align_match_arms && arm_count > 1;
     if (align) {
         widths = (int *) xr_malloc(sizeof(int) * (size_t) arm_count);
+        if (!widths)
+            align = false;
+    }
+    if (align) {
         for (int i = 0; i < arm_count; i++) {
             MatchArmNode *ma = &arms[i]->as.match_arm;
             size_t saved_len = ctx->length;

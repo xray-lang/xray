@@ -25,7 +25,7 @@
 static void lit_ensure(XrFmtContext *ctx, size_t additional) {
     if (ctx->length + additional >= ctx->capacity) {
         ctx->capacity = (ctx->capacity + additional) * 2;
-        ctx->output = (char *) xr_realloc(ctx->output, ctx->capacity);
+        XR_REALLOC_OR_ABORT(ctx->output, ctx->capacity, "fmt_literal buffer grow");
     }
 }
 

@@ -146,6 +146,8 @@ static void collect_hints(XrJsonValue *hints, AstNode *node, AstNode *root, XrLs
                         param_count = fn->param_count;
                         if (param_count > 0) {
                             temp_names = xr_malloc(sizeof(const char *) * param_count);
+                            if (!temp_names)
+                                break;
                             for (int j = 0; j < param_count; j++) {
                                 temp_names[j] = fn->params[j] ? fn->params[j]->name : NULL;
                             }

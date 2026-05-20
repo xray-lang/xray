@@ -485,6 +485,10 @@ XaIncrementalCtx *xa_incremental_new(void) {
 
     ctx->dirty_capacity = 32;
     ctx->dirty_symbols = xr_malloc(sizeof(uint32_t) * ctx->dirty_capacity);
+    if (!ctx->dirty_symbols) {
+        xa_incremental_free(ctx);
+        return NULL;
+    }
 
     return ctx;
 }

@@ -77,6 +77,10 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
     enum_type->payload_counts = NULL;
 
     enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
+    if (!enum_type->members) {
+        xr_free(enum_type);
+        return NULL;
+    }
 
     for (int i = 0; i < count; i++) {
         enum_type->members[i].name = xr_symbol_intern(X, member_names[i]);
@@ -124,6 +128,10 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
                 int r = (int) range;
                 enum_type->value_map_range = r;
                 enum_type->value_to_index = (int *) xr_malloc(sizeof(int) * r);
+                if (!enum_type->value_to_index) {
+                    enum_type->value_map_range = 0;
+                    return enum_type;
+                }
                 for (int i = 0; i < r; i++) {
                     enum_type->value_to_index[i] = -1;
                 }
@@ -164,6 +172,10 @@ void xr_enum_type_init_symbols(XrEnumType *enum_type, void *isolate) {
     int capacity = max_symbol + 1;
     enum_type->symbol_map_capacity = capacity;
     enum_type->symbol_to_index = (int *) xr_malloc(sizeof(int) * capacity);
+    if (!enum_type->symbol_to_index) {
+        enum_type->symbol_map_capacity = 0;
+        return;
+    }
     for (int i = 0; i < capacity; i++) {
         enum_type->symbol_to_index[i] = -1;
     }

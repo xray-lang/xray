@@ -318,6 +318,8 @@ void xr_module_build_export_index(XrModule *module) {
     module->min_symbol = min_sym;
     module->max_symbol = max_sym;
     module->symbol_to_index = (int16_t *) xr_malloc(range * sizeof(int16_t));
+    if (!module->symbol_to_index)
+        return;
     memset(module->symbol_to_index, 0xFF, range * sizeof(int16_t));  // -1 (0xFFFF)
 
     for (uint16_t i = 0; i < module->export_count; i++) {
