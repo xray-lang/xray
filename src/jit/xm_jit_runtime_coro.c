@@ -882,7 +882,7 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
         XrValue r;
         r.descriptor = 0;
         r.tag = XR_TAG_I64;
-        r.i = b % c;
+        r.i = xr_int_mod_wrap(b, c);
         return XR_JIT_RESULT(r);
     }
     double nb = 0, nc = 0;
