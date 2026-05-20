@@ -92,14 +92,21 @@ typedef struct ContinueStmtNode {
 
 /* ========== Exception Handling ========== */
 
+// A single catch clause: catch (e) or catch (e: HttpError)
+typedef struct XrCatchClause {
+    char *var_name;
+    int var_line;     // Line of catch variable (1-indexed)
+    int var_column;   // Column of catch variable (1-indexed)
+    XrTypeRef *type;  // Type filter annotation (NULL = catch-all Exception)
+    AstNode *body;
+    uint32_t symbol_id;  // Analyzer-assigned unique ID; 0 = unresolved
+} XrCatchClause;
+
 typedef struct TryCatchNode {
     AstNode *try_body;
-    char *catch_var;
-    int catch_var_line;    // Line of catch variable (1-indexed)
-    int catch_var_column;  // Column of catch variable (1-indexed)
-    AstNode *catch_body;
+    XrCatchClause **catch_clauses;  // Array of catch clauses (top-down order)
+    int catch_count;                // Number of catch clauses (0 = try-finally only)
     AstNode *finally_body;
-    uint32_t catch_symbol_id; /* symbol ID for catch variable; 0 = unresolved */
 } TryCatchNode;
 
 typedef struct ThrowStmtNode {

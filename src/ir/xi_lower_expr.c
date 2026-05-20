@@ -2071,7 +2071,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             else if (strcmp(tref->name, "Set") == 0)
                 tid = 15; /* XR_TID_SET */
         }
-        /* Bare container names without generic args (Array, Map, etc.) */
+        /* Bare container names without generic args and prelude types */
         if (tid < 0 && tref->kind == XR_TREF_NAMED && tref->name) {
             if (strcmp(tref->name, "Array") == 0)
                 tid = 14;
@@ -2081,6 +2081,8 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                 tid = 15;
             else if (strcmp(tref->name, "Json") == 0)
                 tid = 18;
+            else if (strcmp(tref->name, "Exception") == 0)
+                tid = 24; /* XR_TID_EXCEPTION */
         }
         if (tid >= 0) {
             type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);

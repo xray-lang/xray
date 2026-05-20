@@ -340,7 +340,11 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
 
         case AST_TRY_CATCH:
             visit_node(ctx, node->as.try_catch.try_body, current_dir);
-            visit_node(ctx, node->as.try_catch.catch_body, current_dir);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    visit_node(ctx, cc->body, current_dir);
+            }
             visit_node(ctx, node->as.try_catch.finally_body, current_dir);
             break;
 
