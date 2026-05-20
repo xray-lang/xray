@@ -936,6 +936,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->class_info = info;
     links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
+    links->type->instance.class_ref = info;
     if (node->type == AST_STRUCT_DECL) {
         links->type->is_value_type = true;
     }
