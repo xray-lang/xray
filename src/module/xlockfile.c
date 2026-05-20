@@ -480,28 +480,17 @@ bool xr_lockfile_checksum_file(const char *filepath, char *out_checksum) {
     if (!filepath || !out_checksum)
         return false;
 
-    // Read file content
-    FILE *f = fopen(filepath, "rb");
-    if (!f)
+    // Read file content via the checked helper so ftell errors and
+    // short reads cannot poison the SHA256 input length.
+    size_t read_bytes = 0;
+    char *data = xr_file_read_all(filepath, "rb", &read_bytes);
+    if (!data)
         return false;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    uint8_t *data = (uint8_t *) xr_malloc(size);
-    if (!data) {
-        fclose(f);
-        return false;
-    }
-
-    size_t read_bytes = fread(data, 1, size, f);
-    fclose(f);
 
     // Calculate SHA256
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
     uint8_t digest[32];
-    xr_sha256(data, read_bytes, digest);
+    xr_sha256((const uint8_t *) data, read_bytes, digest);
     xr_free(data);
 
     // Convert to hex string

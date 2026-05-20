@@ -352,18 +352,9 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
     }
 
     // Read file
-    FILE *f = fopen(file_path, "r");
-    if (!f)
+    char *content = xr_file_read_all(file_path, "r", NULL);
+    if (!content)
         return NULL;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = xr_malloc(size + 1);
-    size_t read_size = fread(content, 1, size, f);
-    content[read_size] = '\0';
-    fclose(f);
 
     // Parse exports
     XlspExportedSymbol *head = NULL;
