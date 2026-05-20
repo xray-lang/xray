@@ -919,26 +919,18 @@ bool xr_compile_to_file(XrayIsolate *X, const char *source_file, const char *out
 int xr_run_bytecode_file(XrayIsolate *X, const char *bytecode_file) {
     XR_DCHECK(X != NULL, "run_bytecode_file: NULL isolate");
     XR_DCHECK(bytecode_file != NULL, "run_bytecode_file: NULL bytecode_file");
-    FILE *f = fopen(bytecode_file, "rb");
-    if (!f) {
-        xr_log_warning("bytecode", "cannot open: %s", bytecode_file);
-        return -1;
-    }
 
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    uint8_t *data = xr_malloc(size);
+    /* xr_file_read_all checks ftell, allocates with xr_malloc, and reports
+     * the number of bytes that fread actually delivered, closing the door
+     * on the previous unchecked-ftell + unchecked-fread pattern. */
+    size_t size = 0;
+    char *data = xr_file_read_all(bytecode_file, "rb", &size);
     if (!data) {
-        fclose(f);
+        xr_log_warning("bytecode", "cannot open or read: %s", bytecode_file);
         return -1;
     }
 
-    fread(data, 1, size, f);
-    fclose(f);
-
-    int result = xr_eval_bytecode(X, data, size);
+    int result = xr_eval_bytecode(X, (uint8_t *) data, size);
     xr_free(data);
     return result;
 }
