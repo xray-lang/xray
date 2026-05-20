@@ -1239,6 +1239,25 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                 return false;
             }
         }
+        // Sealed Json: extra fields not declared on target are rejected.
+        // This enforces exact-shape semantics for `type T = {...}` aliases.
+        if (target->object.is_sealed) {
+            for (int j = 0; j < source->object.field_count; j++) {
+                if (!source->object.field_names || !source->object.field_names[j])
+                    continue;
+                bool exists_on_target = false;
+                for (int i = 0; i < target->object.field_count; i++) {
+                    if (target->object.field_names && target->object.field_names[i] &&
+                        strcmp(source->object.field_names[j], target->object.field_names[i]) == 0) {
+                        exists_on_target = true;
+                        break;
+                    }
+                }
+                if (!exists_on_target) {
+                    return false;
+                }
+            }
+        }
         return true;
     }
 
