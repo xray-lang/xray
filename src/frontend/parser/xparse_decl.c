@@ -481,6 +481,30 @@ AstNode *xr_parse_call_argument(Parser *parser) {
     if (xr_parser_match(parser, TK_UNDERSCORE)) {
         return xr_ast_variable(parser->X, "_", line);
     }
+    /* Bare lambda: `name -> expr` as a call argument. Unambiguous here
+     * because call arguments are delimited by '(' and ')'. The analyzer
+     * infers the parameter type from the callee's parameter signature. */
+    if (xr_parser_check(parser, TK_NAME)) {
+        Scanner saved_scan = parser->scanner;
+        Token saved_cur = parser->current;
+        Token saved_prev = parser->previous;
+        xr_parser_advance(parser);
+        if (xr_parser_check(parser, TK_ARROW)) {
+            Token name_tok = parser->previous;
+            char *pname = (char *) ast_alloc(parser->X, (size_t) name_tok.length + 1);
+            memcpy(pname, name_tok.start, name_tok.length);
+            pname[name_tok.length] = '\0';
+            xr_parser_advance(parser); /* consume '->' */
+            XrParamNode **params =
+                (XrParamNode **) ast_alloc_array(parser->X, sizeof(XrParamNode *), 1);
+            params[0] = xr_param_node_new(parser->X, pname, name_tok.line, name_tok.column);
+            return xr_parse_arrow_function_body(parser, params, 1, name_tok.line);
+        }
+        /* Not a bare lambda — restore and fall through to normal parsing. */
+        parser->scanner = saved_scan;
+        parser->current = saved_cur;
+        parser->previous = saved_prev;
+    }
     return xr_parse_expression(parser);
 }
 

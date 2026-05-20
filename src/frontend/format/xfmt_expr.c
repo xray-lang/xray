@@ -750,28 +750,86 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_str(ctx, "--");
             break;
 
-        // Function expression
+        // Function expression — emit arrow syntax when possible:
+        //   x -> expr            (bare lambda: 1 untyped param, expression body)
+        //   (x) -> expr          (1 untyped param, expression body)
+        //   (x: int) -> expr     (typed param, expression body)
+        //   (x) -> { ... }       (untyped, block body)
+        //   fn(x: int) -> T { }  (return type or generic params present)
         case AST_FUNCTION_EXPR: {
             FunctionDeclNode *fn = &node->as.function_expr;
-            xfmt_write_str(ctx, "fn");
-            xfmt_emit_generic_params(ctx, fn->type_params, fn->type_param_count);
-            xfmt_write_char(ctx, '(');
-            for (int i = 0; i < fn->param_count; i++) {
-                if (i > 0)
-                    xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, fn->params[i]->name);
-                if (fn->params[i]->type) {
-                    xfmt_write_str(ctx, ": ");
-                    xfmt_emit_type(ctx, fn->params[i]->type);
+
+            /* Detect single-expression arrow body: block with exactly one
+             * AST_RETURN_STMT containing one value expression. */
+            bool is_expr_body = false;
+            AstNode *arrow_expr = NULL;
+            if (fn->body && fn->body->type == AST_BLOCK && fn->body->as.block.count == 1) {
+                AstNode *sole = fn->body->as.block.statements[0];
+                if (sole && sole->type == AST_RETURN_STMT &&
+                    sole->as.return_stmt.value_count == 1) {
+                    is_expr_body = true;
+                    arrow_expr = sole->as.return_stmt.values[0];
                 }
             }
-            xfmt_write_char(ctx, ')');
-            if (fn->return_type) {
-                xfmt_write_str(ctx, " -> ");
-                xfmt_emit_type(ctx, fn->return_type);
+
+            bool has_typed_param = false;
+            for (int i = 0; i < fn->param_count; i++) {
+                if (fn->params[i] && fn->params[i]->type) {
+                    has_typed_param = true;
+                    break;
+                }
             }
-            xfmt_write_space(ctx);
-            xfmt_emit_block(ctx, fn->body);
+
+            /* Use fn(...) form when return type or generic params are present,
+             * or when body is a multi-statement block (not single-expression). */
+            bool use_fn_form = fn->return_type || fn->type_param_count > 0 ||
+                               (!is_expr_body && (has_typed_param || fn->param_count == 0));
+
+            if (use_fn_form) {
+                xfmt_write_str(ctx, "fn");
+                xfmt_emit_generic_params(ctx, fn->type_params, fn->type_param_count);
+                xfmt_write_char(ctx, '(');
+                for (int i = 0; i < fn->param_count; i++) {
+                    if (i > 0)
+                        xfmt_write_str(ctx, ", ");
+                    xfmt_write_str(ctx, fn->params[i]->name);
+                    if (fn->params[i]->type) {
+                        xfmt_write_str(ctx, ": ");
+                        xfmt_emit_type(ctx, fn->params[i]->type);
+                    }
+                }
+                xfmt_write_char(ctx, ')');
+                if (fn->return_type) {
+                    xfmt_write_str(ctx, " -> ");
+                    xfmt_emit_type(ctx, fn->return_type);
+                }
+                xfmt_write_space(ctx);
+                xfmt_emit_block(ctx, fn->body);
+            } else {
+                /* Arrow form: emit params then -> body. */
+                bool bare = (fn->param_count == 1 && !has_typed_param);
+                if (bare) {
+                    xfmt_write_str(ctx, fn->params[0]->name);
+                } else {
+                    xfmt_write_char(ctx, '(');
+                    for (int i = 0; i < fn->param_count; i++) {
+                        if (i > 0)
+                            xfmt_write_str(ctx, ", ");
+                        xfmt_write_str(ctx, fn->params[i]->name);
+                        if (fn->params[i]->type) {
+                            xfmt_write_str(ctx, ": ");
+                            xfmt_emit_type(ctx, fn->params[i]->type);
+                        }
+                    }
+                    xfmt_write_char(ctx, ')');
+                }
+                xfmt_write_str(ctx, " -> ");
+                if (is_expr_body) {
+                    xfmt_emit_expression(ctx, arrow_expr);
+                } else {
+                    xfmt_emit_block(ctx, fn->body);
+                }
+            }
             break;
         }
 
