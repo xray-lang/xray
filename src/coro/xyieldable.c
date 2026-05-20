@@ -272,7 +272,9 @@ XrCFuncResult xr_yield_call_closure(XrayIsolate *X, XrClosure *closure, XrValue 
     XR_DCHECK(on_complete != NULL, "yield_call_closure: NULL continuation");
 
     XrCoroutine *coro = get_current_coro(X);
-    XR_DCHECK(coro != NULL, "yield_call_closure: no current coroutine");
+    /* No current coroutine is a real misuse, but the C API surface
+     * already returns XR_CFUNC_ERROR for caller-side errors, so prefer
+     * the runtime path over an unconditional abort. */
     if (!coro)
         return XR_CFUNC_ERROR;
 
