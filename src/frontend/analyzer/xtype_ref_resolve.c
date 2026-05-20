@@ -33,10 +33,11 @@ static XrType *resolve_named(XrayIsolate *X, const char *name) {
 
     /* Built-in interfaces (Comparable, Hashable, Stringable, Equatable, ...).
      * These must be resolved as XR_KIND_INTERFACE so generic-constraint checks
-     * can match by interface name rather than treating them as plain classes. */
-    XrType *iface = xa_get_builtin_interface_by_name(name);
-    if (iface)
-        return iface;
+     * can match by interface name rather than treating them as plain classes.
+     * Create a fresh XrType via the current isolate instead of reading a
+     * global cache — multiple isolates would race on shared mutable state. */
+    if (xa_is_builtin_interface_name(name))
+        return xr_type_new_interface(X, name);
 
     /* Prelude lookup (Array, Map, Set, Channel, Json, Bytes, ...) */
     const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
@@ -111,10 +112,9 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
         }
     }
 
-    /* Built-in interface with type args: e.g. Iterable<int>. The bare-name
-     * lookup hands us the interface singleton; pair it with the resolved
-     * arguments so xr_type_satisfies_constraint can compare them. */
-    if (xa_get_builtin_interface_by_name(name)) {
+    /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
+     * generic interface type via the current isolate. */
+    if (xa_is_builtin_interface_name(name)) {
         return xr_type_new_generic_interface(X, name, args_copy, nargs);
     }
 
