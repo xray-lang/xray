@@ -466,6 +466,10 @@ fail:
 // Parse one call argument, optionally a spread `...expr`. The spread
 // source must be a tuple value; the analyzer expands its static arity
 // into individual positional arguments.
+//
+// A bare `_` argument is accepted as a wildcard placeholder so that
+// ADT pattern parsing (`R.Err(_)`) can later detect it; in normal call
+// position the analyzer rejects it.
 AstNode *xr_parse_call_argument(Parser *parser) {
     int line = parser->current.line;
     if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
@@ -473,6 +477,9 @@ AstNode *xr_parse_call_argument(Parser *parser) {
         if (!inner)
             return NULL;
         return xr_ast_spread_expr(parser->X, inner, line);
+    }
+    if (xr_parser_match(parser, TK_UNDERSCORE)) {
+        return xr_ast_variable(parser->X, "_", line);
     }
     return xr_parse_expression(parser);
 }

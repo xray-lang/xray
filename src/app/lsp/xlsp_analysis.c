@@ -11,6 +11,7 @@
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_cache.h"
+#include "../../base/xfileio.h"
 #include "../../base/xjson.h"
 #include "xlsp_workspace.h"
 #include "xlsp_utils.h"
@@ -258,25 +259,11 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         }
 
         // Document not open - read from disk
-        FILE *f = fopen(full_path, "r");
-        if (!f) {
+        char *content = xr_file_read_all(full_path, "r", NULL);
+        if (!content) {
             lsp_log("import: cannot open %s", full_path);
             continue;
         }
-
-        fseek(f, 0, SEEK_END);
-        long size = ftell(f);
-        fseek(f, 0, SEEK_SET);
-
-        char *content = xr_malloc(size + 1);
-        if (!content) {
-            fclose(f);
-            continue;
-        }
-
-        size_t read_size = fread(content, 1, size, f);
-        content[read_size] = '\0';
-        fclose(f);
 
         lsp_log("import: indexing from disk %s", full_path);
 
