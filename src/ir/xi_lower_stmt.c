@@ -1499,6 +1499,16 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         init_val = xi_lower_expr(l, node->as.var_decl.initializer);
         if (!init_val)
             return;
+        /* Implicit int→float promotion: when the variable is declared as
+         * float but the initializer evaluates to int, insert XI_CONVERT. */
+        if (type && XR_TYPE_IS_FLOAT(type) && init_val->type && XR_TYPE_IS_INT(init_val->type)) {
+            XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
+            if (conv) {
+                conv->args[0] = init_val;
+                conv->line = (uint32_t) node->line;
+                init_val = conv;
+            }
+        }
     } else {
         /* Zero-value initialization for typed variables without initializer.
          * Nullable types (T?) default to null. Non-nullable primitives:

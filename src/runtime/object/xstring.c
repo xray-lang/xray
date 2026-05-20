@@ -574,11 +574,19 @@ XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
 }
 
 // Create string from float
+// Guarantees a decimal point so 0.0 prints as "0.0", not "0".
 XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n) {
     XR_DCHECK(iso != NULL, "string_from_float: NULL isolate");
     char buffer[64];
-    snprintf(buffer, sizeof(buffer), "%.15g", n);
-    return xr_string_intern(iso, buffer, strlen(buffer), 0);
+    int len = snprintf(buffer, sizeof(buffer), "%.15g", n);
+    if (!strchr(buffer, '.') && !strchr(buffer, 'e') && !strchr(buffer, 'E') &&
+        len + 2 < (int) sizeof(buffer)) {
+        buffer[len] = '.';
+        buffer[len + 1] = '0';
+        buffer[len + 2] = '\0';
+        len += 2;
+    }
+    return xr_string_intern(iso, buffer, (size_t) len, 0);
 }
 
 /* ========== String Comparison ========== */
