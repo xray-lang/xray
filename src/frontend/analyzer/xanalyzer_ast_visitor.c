@@ -200,7 +200,11 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
 
         case AST_TRY_CATCH:
             visit_node(node->as.try_catch.try_body, v);
-            visit_node(node->as.try_catch.catch_body, v);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    visit_node(cc->body, v);
+            }
             visit_node(node->as.try_catch.finally_body, v);
             break;
 

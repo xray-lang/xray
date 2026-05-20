@@ -341,29 +341,34 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
             // Search in try body
             find_symbol_definition(tc->try_body, ctx);
 
-            // Check catch variable with precise position matching
-            if (tc->catch_var && strcmp(tc->catch_var, ctx->target_name) == 0 &&
-                is_cursor_on_identifier(ctx, tc->catch_var_line, tc->catch_var_column,
-                                        (int) strlen(tc->catch_var))) {
-                // The catch variable is defined in the catch block scope
-                XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, tc->catch_body);
-                if (catch_scope) {
-                    ctx->def_scope = catch_scope;
-                    ctx->is_global = false;
-                    ctx->found_def = true;
-                    return;
+            // Check each catch clause
+            for (int ci = 0; ci < tc->catch_count; ci++) {
+                XrCatchClause *cc = tc->catch_clauses[ci];
+                if (!cc)
+                    continue;
+
+                // Check catch variable with precise position matching
+                if (cc->var_name && strcmp(cc->var_name, ctx->target_name) == 0 &&
+                    is_cursor_on_identifier(ctx, cc->var_line, cc->var_column,
+                                            (int) strlen(cc->var_name))) {
+                    XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, cc->body);
+                    if (catch_scope) {
+                        ctx->def_scope = catch_scope;
+                        ctx->is_global = false;
+                        ctx->found_def = true;
+                        return;
+                    }
                 }
-            }
 
-            // Search in catch body
-            if (tc->catch_body) {
-                XaScope *saved_scope = ctx->current_scope;
-                XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, tc->catch_body);
-                if (catch_scope)
-                    ctx->current_scope = catch_scope;
-
-                find_symbol_definition(tc->catch_body, ctx);
-                ctx->current_scope = saved_scope;
+                // Search in catch body
+                if (cc->body) {
+                    XaScope *saved_scope = ctx->current_scope;
+                    XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, cc->body);
+                    if (catch_scope)
+                        ctx->current_scope = catch_scope;
+                    find_symbol_definition(cc->body, ctx);
+                    ctx->current_scope = saved_scope;
+                }
             }
 
             // Search in finally body
@@ -702,23 +707,26 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
             // Process try body
             collect_rename_locations(tc->try_body, ctx);
 
-            // Process catch body with its own scope
-            if (tc->catch_body) {
+            // Process each catch clause
+            for (int ci = 0; ci < tc->catch_count; ci++) {
+                XrCatchClause *cc = tc->catch_clauses[ci];
+                if (!cc || !cc->body)
+                    continue;
+
                 XaScope *saved_scope = ctx->current_scope;
-                XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, tc->catch_body);
-                if (catch_scope) {
+                XaScope *catch_scope = find_child_scope_xa(ctx->current_scope, cc->body);
+                if (catch_scope)
                     ctx->current_scope = catch_scope;
-                }
 
-                // Rename catch variable if it matches (now with precise position info)
-                if (tc->catch_var && strcmp(tc->catch_var, ctx->target_name) == 0 &&
+                // Rename catch variable if it matches
+                if (cc->var_name && strcmp(cc->var_name, ctx->target_name) == 0 &&
                     should_rename(ctx)) {
-                    int var_line = tc->catch_var_line > 0 ? tc->catch_var_line : node->line;
-                    int var_col = tc->catch_var_column > 0 ? tc->catch_var_column : 1;
-                    add_rename_edit(ctx, var_line, var_col, (int) strlen(tc->catch_var));
+                    int var_line = cc->var_line > 0 ? cc->var_line : node->line;
+                    int var_col = cc->var_column > 0 ? cc->var_column : 1;
+                    add_rename_edit(ctx, var_line, var_col, (int) strlen(cc->var_name));
                 }
 
-                collect_rename_locations(tc->catch_body, ctx);
+                collect_rename_locations(cc->body, ctx);
                 ctx->current_scope = saved_scope;
             }
 

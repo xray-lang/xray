@@ -232,7 +232,11 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
 
         case AST_TRY_CATCH:
             check_node(ctx, node->as.try_catch.try_body);
-            check_node(ctx, node->as.try_catch.catch_body);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    check_node(ctx, cc->body);
+            }
             check_node(ctx, node->as.try_catch.finally_body);
             break;
 

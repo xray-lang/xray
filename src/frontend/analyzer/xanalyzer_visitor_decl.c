@@ -104,7 +104,11 @@ static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***t
             break;
         case AST_TRY_CATCH:
             collect_return_types(ctx, node->as.try_catch.try_body, types, count, cap);
-            collect_return_types(ctx, node->as.try_catch.catch_body, types, count, cap);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    collect_return_types(ctx, cc->body, types, count, cap);
+            }
             // finally return is NOT collected: a return inside finally overrides the
             // try/catch return value entirely, so it must not be unioned with them.
             break;

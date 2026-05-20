@@ -398,9 +398,16 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
             return xa_body_has_return_expr(node->as.for_stmt.body);
         case AST_FOR_IN_STMT:
             return xa_body_has_return_expr(node->as.for_in_stmt.body);
-        case AST_TRY_CATCH:
-            return xa_body_has_return_expr(node->as.try_catch.try_body) ||
-                   xa_body_has_return_expr(node->as.try_catch.catch_body);
+        case AST_TRY_CATCH: {
+            if (xa_body_has_return_expr(node->as.try_catch.try_body))
+                return true;
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc && xa_body_has_return_expr(cc->body))
+                    return true;
+            }
+            return false;
+        }
         case AST_MATCH_EXPR: {
             MatchExprNode *m = &node->as.match_expr;
             for (int i = 0; i < m->arm_count; i++) {
@@ -827,21 +834,30 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             TryCatchNode *tc = &node->as.try_catch;
             if (tc->try_body)
                 xa_visit_collect(ctx, tc->try_body);
-            if (tc->catch_body) {
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
-                if (tc->catch_var) {
-                    XaSymbol *err_sym = xa_symbol_new(tc->catch_var, XA_SYM_VARIABLE);
-                    err_sym->location.line = tc->catch_var_line;
-                    err_sym->location.column = tc->catch_var_column;
+            for (int ci = 0; ci < tc->catch_count; ci++) {
+                XrCatchClause *cc = tc->catch_clauses[ci];
+                if (!cc || !cc->body)
+                    continue;
+                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
+                if (cc->var_name) {
+                    XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
+                    err_sym->location.line = cc->var_line;
+                    err_sym->location.column = cc->var_column;
                     xa_visit_add_symbol_checked(ctx, err_sym, 0);
+                    cc->symbol_id = err_sym->id;
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
-                        err_links->type =
-                            xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                        // Use the type annotation if present, else default Exception
+                        if (cc->type) {
+                            err_links->type = xr_tref_resolve(ctx->analyzer->isolate, cc->type);
+                        } else {
+                            err_links->type =
+                                xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                        }
                         err_links->is_definitely_assigned = true;
                     }
                 }
-                xa_visit_collect(ctx, tc->catch_body);
+                xa_visit_collect(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
             }
             if (tc->finally_body)
@@ -1697,22 +1713,28 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             TryCatchNode *tc = &node->as.try_catch;
             if (tc->try_body)
                 xa_visit_infer_stmt(ctx, tc->try_body);
-            if (tc->catch_body) {
-                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
-                // Register catch variable as Exception type
-                if (tc->catch_var) {
-                    XaSymbol *err_sym = xa_symbol_new(tc->catch_var, XA_SYM_VARIABLE);
-                    err_sym->location.line = tc->catch_var_line;
-                    err_sym->location.column = tc->catch_var_column;
+            for (int ci = 0; ci < tc->catch_count; ci++) {
+                XrCatchClause *cc = tc->catch_clauses[ci];
+                if (!cc || !cc->body)
+                    continue;
+                xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, cc->body);
+                if (cc->var_name) {
+                    XaSymbol *err_sym = xa_symbol_new(cc->var_name, XA_SYM_VARIABLE);
+                    err_sym->location.line = cc->var_line;
+                    err_sym->location.column = cc->var_column;
                     xa_scope_add_symbol(ctx->analyzer->current_scope, err_sym);
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
-                        err_links->type =
-                            xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                        if (cc->type) {
+                            err_links->type = xr_tref_resolve(ctx->analyzer->isolate, cc->type);
+                        } else {
+                            err_links->type =
+                                xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                        }
                         err_links->is_definitely_assigned = true;
                     }
                 }
-                xa_visit_infer_stmt(ctx, tc->catch_body);
+                xa_visit_infer_stmt(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
             }
             if (tc->finally_body)

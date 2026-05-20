@@ -373,10 +373,13 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
         case AST_TRY_CATCH:
             ea_walk(ctx, node->as.try_catch.try_body);
-            if (node->as.try_catch.catch_body) {
-                ea_push_scope(ctx);
-                ea_walk(ctx, node->as.try_catch.catch_body);
-                ea_pop_scope(ctx);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc && cc->body) {
+                    ea_push_scope(ctx);
+                    ea_walk(ctx, cc->body);
+                    ea_pop_scope(ctx);
+                }
             }
             ea_walk(ctx, node->as.try_catch.finally_body);
             break;

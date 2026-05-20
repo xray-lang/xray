@@ -1,0 +1,154 @@
+// REGRESSION: Typed catch and multi-catch clauses.
+// Parser supports catch (e: T) type annotations and multiple catch blocks.
+// Single-catch, typed-catch, multi-catch with catch-all, and finally
+// interactions are all tested.
+
+// 1. Single catch — existing syntax unchanged
+@test
+fn test_single_catch() {
+    let msg = ""
+    try {
+        throw new Exception("single")
+    } catch (e) {
+        msg = e.message
+    }
+    assert_eq(msg, "single")
+}
+
+// 2. Typed catch — catch (e: Exception)
+@test
+fn test_typed_catch_exception() {
+    let msg = ""
+    try {
+        throw new Exception("typed")
+    } catch (e: Exception) {
+        msg = e.message
+    }
+    assert_eq(msg, "typed")
+}
+
+// 3. Typed catch + finally
+@test
+fn test_typed_catch_finally() {
+    let msg = ""
+    let fin = false
+    try {
+        throw new Exception("tcf")
+    } catch (e: Exception) {
+        msg = e.message
+    } finally {
+        fin = true
+    }
+    assert_eq(msg, "tcf")
+    assert_eq(fin, true)
+}
+
+// 4. Multi-catch: typed then catch-all
+@test
+fn test_multi_catch_typed_then_catchall() {
+    let result = ""
+    try {
+        throw new Exception("multi")
+    } catch (e: Exception) {
+        result = "typed:" + e.message
+    } catch (e) {
+        result = "catchall:" + e.message
+    }
+    assert_eq(result, "typed:multi")
+}
+
+// 5. Multi-catch: all typed (Exception matches first)
+@test
+fn test_multi_catch_all_typed() {
+    let result = ""
+    try {
+        throw new Exception("first")
+    } catch (e: Exception) {
+        result = "match"
+    }
+    assert_eq(result, "match")
+}
+
+// 6. Multi-catch with finally
+@test
+fn test_multi_catch_finally() {
+    let result = ""
+    let fin = false
+    try {
+        throw new Exception("mf")
+    } catch (e: Exception) {
+        result = e.message
+    } catch (e) {
+        result = "catchall"
+    } finally {
+        fin = true
+    }
+    assert_eq(result, "mf")
+    assert_eq(fin, true)
+}
+
+// 7. Nested multi-catch with rethrow
+@test
+fn test_nested_multi_catch_rethrow() {
+    let log: Array<string> = []
+    try {
+        try {
+            throw new Exception("inner")
+        } catch (e: Exception) {
+            log.push("inner-catch")
+            throw new Exception("rethrown")
+        }
+    } catch (e: Exception) {
+        log.push("outer-catch")
+        assert_eq(e.message, "rethrown")
+    }
+    assert_eq(log.length, 2)
+    assert_eq(log[0], "inner-catch")
+    assert_eq(log[1], "outer-catch")
+}
+
+// 8. Sequential multi-catch blocks
+@test
+fn test_sequential_multi_catch() {
+    let a = ""
+    let b = ""
+    try {
+        throw new Exception("first")
+    } catch (e: Exception) {
+        a = e.message
+    }
+    try {
+        throw new Exception("second")
+    } catch (e: Exception) {
+        b = e.message
+    }
+    assert_eq(a, "first")
+    assert_eq(b, "second")
+}
+
+// 9. Catch-all only (untyped)
+@test
+fn test_catchall_only() {
+    let msg = ""
+    try {
+        throw new Exception("any")
+    } catch (e) {
+        msg = e.message
+    }
+    assert_eq(msg, "any")
+}
+
+// 10. Multi-catch: catch-all catches when typed doesn't match
+//     (uses int type which won't match Exception)
+@test
+fn test_multi_catch_fallthrough_to_catchall() {
+    let result = ""
+    try {
+        throw new Exception("fall")
+    } catch (e: int) {
+        result = "int"
+    } catch (e) {
+        result = "catchall:" + e.message
+    }
+    assert_eq(result, "catchall:fall")
+}

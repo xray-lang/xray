@@ -1066,6 +1066,8 @@ static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
 
 /* try-catch or try-catch-finally: the catch block has proper CFG
  * predecessors, so Braun SSA variable resolution works normally.
+ * For multi-catch, the first catch clause is the entry point; additional
+ * typed clauses desugar to is-T checks with conditional branches.
  * For try-catch-finally, a separate finally block is used (reachable from
  * both try-body and catch-body normal exits). */
 static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
@@ -1114,16 +1116,107 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
     XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
     if (catch_op) {
         catch_op->flags |= XI_FLAG_SIDE_EFFECT;
-        catch_op->line =
-            tc->catch_var_line > 0 ? (uint32_t) tc->catch_var_line : (uint32_t) node->line;
+        catch_op->line = (tc->catch_count > 0 && tc->catch_clauses[0]->var_line > 0)
+                             ? (uint32_t) tc->catch_clauses[0]->var_line
+                             : (uint32_t) node->line;
     }
 
-    if (tc->catch_var && catch_op) {
-        int var_id = xi_lower_var_create(l, tc->catch_symbol_id, tc->catch_var, l->type_any);
-        xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+    /* Single catch: simple lowering.  Multi-catch: chain of is-T tests.
+     * Runtime semantics: try each clause in order; first match wins.
+     * A clause without a type annotation is the catch-all (must be last). */
+    XR_DCHECK(tc->catch_count > 0, "lower_try_catch_impl: no catch clauses");
+
+    if (tc->catch_count == 1) {
+        /* Single clause — simple case, no type dispatch needed */
+        XrCatchClause *cc = tc->catch_clauses[0];
+        if (cc->var_name && catch_op) {
+            int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+            xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+        }
+        xi_lower_stmt(l, cc->body);
+    } else {
+        /* Multi-catch: emit if-else chain with is-T checks.
+         * Each typed clause: if (e is T) { body } else { next }
+         * Untyped (catch-all): just body. */
+        for (int ci = 0; ci < tc->catch_count; ci++) {
+            XrCatchClause *cc = tc->catch_clauses[ci];
+            if (!cc)
+                continue;
+
+            bool is_last = (ci == tc->catch_count - 1);
+            bool has_type = (cc->type != NULL);
+
+            if (has_type && !is_last) {
+                /* Typed clause: branch on is-T test */
+                XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
+                XiBlock *match_blk = xi_block_new(l->func);
+                XiBlock *next_blk = xi_block_new(l->func);
+
+                xi_block_set_if(l->cur_block, is_val, match_blk, next_blk);
+
+                /* Match body */
+                xi_lower_braun_seal(l, match_blk);
+                l->cur_block = match_blk;
+                if (cc->var_name && catch_op) {
+                    int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+                    xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+                }
+                xi_lower_stmt(l, cc->body);
+                if (l->cur_block)
+                    xi_block_set_jump(l->cur_block, normal_target);
+
+                /* Continue to next clause */
+                xi_lower_braun_seal(l, next_blk);
+                l->cur_block = next_blk;
+            } else {
+                /* Last clause or untyped catch-all: unconditional */
+                if (has_type) {
+                    /* Last clause with type: still do the is-T check,
+                     * rethrow if not matched */
+                    XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
+                    XiBlock *match_blk = xi_block_new(l->func);
+                    XiBlock *rethrow_blk = xi_block_new(l->func);
+
+                    xi_block_set_if(l->cur_block, is_val, match_blk, rethrow_blk);
+
+                    /* Match body */
+                    xi_lower_braun_seal(l, match_blk);
+                    l->cur_block = match_blk;
+                    if (cc->var_name && catch_op) {
+                        int var_id =
+                            xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+                        xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+                    }
+                    xi_lower_stmt(l, cc->body);
+                    if (l->cur_block)
+                        xi_block_set_jump(l->cur_block, normal_target);
+
+                    /* Rethrow path: no match for any clause */
+                    xi_lower_braun_seal(l, rethrow_blk);
+                    l->cur_block = rethrow_blk;
+                    XiValue *rethrow =
+                        xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
+                    if (rethrow) {
+                        rethrow->args[0] = catch_op;
+                        rethrow->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+                        rethrow->line = (uint32_t) node->line;
+                    }
+                    l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+                    l->cur_block->control = catch_op;
+                    l->cur_block = NULL;
+                } else {
+                    /* Untyped catch-all: just assign and lower body */
+                    if (cc->var_name && catch_op) {
+                        int var_id =
+                            xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+                        xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+                    }
+                    xi_lower_stmt(l, cc->body);
+                }
+            }
+        }
     }
 
-    xi_lower_stmt(l, tc->catch_body);
     if (l->cur_block)
         xi_block_set_jump(l->cur_block, normal_target);
 
@@ -1160,9 +1253,8 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
 
 XR_FUNC void xi_lower_try_catch(XiLower *l, AstNode *node) {
     TryCatchNode *tc = &node->as.try_catch;
-    bool has_catch = (tc->catch_body != NULL || tc->catch_var != NULL);
 
-    if (!has_catch && tc->finally_body) {
+    if (tc->catch_count == 0 && tc->finally_body) {
         lower_try_finally(l, tc, node);
     } else {
         lower_try_catch_impl(l, tc, node);
