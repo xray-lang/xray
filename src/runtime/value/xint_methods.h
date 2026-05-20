@@ -46,13 +46,18 @@ static inline XrValue xr_int_to_string_method(XrayIsolate *iso, XrValue self, Xr
     return xr_string_value(str);
 }
 
-/* int.abs() -> int. Pure, no GC. */
+/* int.abs() -> int. Pure, no GC.
+ * INT64_MIN.abs() wraps to INT64_MIN: (-INT64_MIN) is signed-overflow UB,
+ * so route the negate through unsigned to match wrap-on-overflow semantics
+ * elsewhere in the language (see OP_UNM). */
 static inline XrValue xr_int_abs_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     xr_Integer v = XR_TO_INT(self);
-    return xr_int(v < 0 ? -v : v);
+    if (v >= 0)
+        return xr_int(v);
+    return xr_int((xr_Integer) (-(uint64_t) v));
 }
 
 /* int.toBigInt() -> BigInt. Allocates. */

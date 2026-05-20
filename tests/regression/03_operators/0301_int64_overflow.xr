@@ -256,3 +256,24 @@ fn test_div_normal_with_neg_one_divisor() {
     let big: int = 9223372036854775807
     assert_eq(big / -1, -9223372036854775807)
 }
+
+// ===== int.abs() boundary =====
+//
+// (-INT64_MIN) is signed-overflow UB. abs() must wrap, returning
+// INT64_MIN itself instead of letting the compiler emit a NEG that
+// triggers SIGFPE in some build configurations.
+
+@test
+fn test_abs_min_wraps() {
+    let min: int = -9223372036854775807 - 1
+    assert_eq(min.abs(), -9223372036854775807 - 1)
+}
+
+@test
+fn test_abs_normal() {
+    assert_eq((-42).abs(), 42)
+    assert_eq((42).abs(), 42)
+    assert_eq((0).abs(), 0)
+    let max: int = 9223372036854775807
+    assert_eq(max.abs(), 9223372036854775807)
+}
