@@ -1152,6 +1152,40 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         return v;
     }
 
+    /* print(...) / println(...) in expression context (e.g. match arm body).
+     * Statement-level print is handled by AST_PRINT_STMT → lower_print(),
+     * but expression-level calls (AST_CALL_EXPR on variable "print") arrive
+     * here.  Emit XI_PRINT instructions with the same encoding. */
+    if (strcmp(fname, "print") == 0 || strcmp(fname, "println") == 0) {
+        int n = (int) call->arg_count;
+        XiValue *arg_vals[16];
+        int capped = n > 16 ? 16 : n;
+        for (int i = 0; i < capped; i++)
+            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
+        for (int i = 0; i < capped; i++) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
+            if (!v)
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+            v->args[0] = arg_vals[i];
+            int add_space = (i > 0) ? 1 : 0;
+            int newline = (i == capped - 1) ? 1 : 0;
+            v->aux_int = add_space | (newline << 1);
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) line;
+        }
+        if (capped == 0) {
+            /* print() with no args → emit newline */
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
+            if (!v)
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+            v->args[0] = xi_const_null(l->func, l->cur_block, l->type_null);
+            v->aux_int = (1 << 1) | (1 << 4); /* newline + skip_null */
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) line;
+        }
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+
     /* Type conversion builtins: string(x), int(x), float(x), bool(x).
      * Each emits XI_CONVERT with the target type set on the value. */
     if (call->arg_count == 1) {
