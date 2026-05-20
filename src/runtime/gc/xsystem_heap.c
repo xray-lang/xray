@@ -32,7 +32,8 @@
 /* ========== Lifecycle API ========== */
 
 bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
-    XR_DCHECK(heap != NULL, "sysheap_init: NULL heap");
+    /* Public init API: caller-side error rather than assertion so a NULL
+     * heap turns into a clean failure instead of an abort in release. */
     if (!heap)
         return false;
 

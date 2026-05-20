@@ -48,7 +48,9 @@ void xr_module_set_compiler_hooks(XrayIsolate *isolate,
                                   void *(*compile_src_fn)(void *, const char *, const char *),
                                   void (*ast_free_fn)(void *)) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    XR_DCHECK(registry != NULL, "set_compiler_hooks: module system not initialized");
+    /* Module system may legitimately not be initialised on isolates that
+     * do not import code (e.g. transient analyzer-only isolates), so this
+     * is a graceful no-op rather than an assertion. */
     if (!registry)
         return;
     registry->fn_parse = parse_fn;

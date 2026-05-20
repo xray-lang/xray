@@ -127,8 +127,8 @@ XrClassBuilder *xr_class_builder_new(XrayIsolate *isolate, const char *name, XrC
     builder->abstract_method_capacity = INITIAL_ABSTRACT_METHOD_CAPACITY;
     builder->abstract_methods = (int *) xr_calloc(builder->abstract_method_capacity, sizeof(int));
 
-    if (!builder->fields || !builder->methods || !builder->static_fields || !builder->interfaces ||
-        !builder->abstract_methods) {
+    if (!builder->fields || !builder->methods || !builder->static_fields ||
+        !builder->static_methods || !builder->interfaces || !builder->abstract_methods) {
         xr_class_builder_destroy(builder);
         return NULL;
     }
