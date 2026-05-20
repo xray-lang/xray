@@ -49,8 +49,8 @@ void xm_defuse_build(XmDefUse *du, XmFunc *func) {
         return;
 
     du->nvreg = nv;
-    du->count = xr_calloc(nv, sizeof(uint32_t));
-    du->offset = xr_calloc(nv, sizeof(uint32_t));
+    XR_CALLOC_OR_ABORT(du->count, nv, sizeof(uint32_t), "defuse count");
+    XR_CALLOC_OR_ABORT(du->offset, nv, sizeof(uint32_t), "defuse offset");
 
     // ---- Pass 1: count uses per vreg ----
     uint32_t total = 0;
@@ -106,7 +106,7 @@ void xm_defuse_build(XmDefUse *du, XmFunc *func) {
         return;
     }
 
-    du->uses = xr_calloc(total, sizeof(XmUse));
+    XR_CALLOC_OR_ABORT(du->uses, total, sizeof(XmUse), "defuse uses");
 
     // Reset counts to zero — Pass 2 will re-count as write cursors
     memset(du->count, 0, nv * sizeof(uint32_t));

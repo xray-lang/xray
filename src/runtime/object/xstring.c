@@ -49,14 +49,14 @@ void xr_global_pool_init(XrGlobalStringPool *pool) {
     pool->count = 0;
     pool->permanent_count = 0;
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
+    if (!pool->entries)
+        return;
 
     // Initialize rwlock
     xr_rwlock_init(&pool->lock);
 
     // Initialize to NULL
-    for (size_t i = 0; i < pool->capacity; i++) {
-        pool->entries[i] = NULL;
-    }
+    memset(pool->entries, 0, sizeof(XrString *) * pool->capacity);
 }
 
 // Free global string pool
@@ -95,11 +95,15 @@ static void global_pool_grow(XrGlobalStringPool *pool) {
     pool->capacity = old_capacity * 2;
     pool->mask = pool->capacity - 1;
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
+    if (!pool->entries) {
+        pool->entries = old_entries;
+        pool->capacity = old_capacity;
+        pool->mask = old_capacity - 1;
+        return;
+    }
 
     // Initialize to NULL
-    for (size_t i = 0; i < pool->capacity; i++) {
-        pool->entries[i] = NULL;
-    }
+    memset(pool->entries, 0, sizeof(XrString *) * pool->capacity);
 
     // Rehash all strings
     size_t saved_count = pool->count;
@@ -327,8 +331,14 @@ size_t xr_global_pool_sweep(XrGlobalStringPool *pool) {
         pool->capacity = new_cap;
         pool->mask = new_cap - 1;
         pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * new_cap);
-        for (size_t i = 0; i < new_cap; i++)
-            pool->entries[i] = NULL;
+        if (!pool->entries) {
+            pool->entries = old;
+            pool->capacity = old_cap;
+            pool->mask = old_cap - 1;
+            xr_rwlock_wrunlock(&pool->lock);
+            return evicted;
+        }
+        memset(pool->entries, 0, sizeof(XrString *) * new_cap);
 
         size_t new_count = 0;
         size_t mask = pool->mask;
@@ -362,11 +372,11 @@ void xr_string_pool_init_internal(XrStringPool *pool) {
     pool->count = 0;
     pool->threshold = (size_t) (pool->capacity * STRING_POOL_LOAD_FACTOR);
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
+    if (!pool->entries)
+        return;
 
     // Initialize to NULL
-    for (size_t i = 0; i < pool->capacity; i++) {
-        pool->entries[i] = NULL;
-    }
+    memset(pool->entries, 0, sizeof(XrString *) * pool->capacity);
 }
 
 // Free string pool (Isolate internal use)

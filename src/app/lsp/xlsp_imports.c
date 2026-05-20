@@ -384,6 +384,8 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
                 Token name_tok = xr_scanner_scan(&scanner);
                 if (name_tok.type == TK_NAME) {
                     sym = xr_calloc(1, sizeof(XlspExportedSymbol));
+                    if (!sym)
+                        continue;
                     sym->name = strndup(name_tok.start, name_tok.length);
                     sym->kind = 12;  // Function
                     sym->line = name_tok.line;
@@ -433,6 +435,8 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
                 Token name_tok = xr_scanner_scan(&scanner);
                 if (name_tok.type == TK_NAME) {
                     sym = xr_calloc(1, sizeof(XlspExportedSymbol));
+                    if (!sym)
+                        continue;
                     sym->name = strndup(name_tok.start, name_tok.length);
                     sym->kind = 14;  // Constant
                     sym->line = name_tok.line;
@@ -443,6 +447,8 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
                 Token name_tok = xr_scanner_scan(&scanner);
                 if (name_tok.type == TK_NAME) {
                     sym = xr_calloc(1, sizeof(XlspExportedSymbol));
+                    if (!sym)
+                        continue;
                     sym->name = strndup(name_tok.start, name_tok.length);
                     sym->kind = 5;  // Class
                     sym->line = name_tok.line;

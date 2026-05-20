@@ -399,7 +399,7 @@ static void append_to_buffer(ReplState *state, const char *line) {
     // Ensure capacity
     if (state->buffer_len + len + 2 >= state->buffer_size) {
         state->buffer_size *= 2;
-        state->buffer = (char *) xr_realloc(state->buffer, state->buffer_size);
+        XR_REALLOC_OR_ABORT(state->buffer, state->buffer_size, "repl buffer grow");
     }
 
     // Append
@@ -654,13 +654,13 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
 
     /* Initialize buffer */
     state.buffer_size = REPL_BUFFER_SIZE;
-    state.buffer = (char *) xr_malloc(state.buffer_size);
+    XR_MALLOC_OR_ABORT(state.buffer, state.buffer_size, "repl buffer init");
     state.buffer[0] = '\0';
     state.buffer_len = 0;
 
     // Initialize proto tracking
     state.proto_capacity = REPL_PROTO_INITIAL_CAP;
-    state.protos = (XrProto **) xr_malloc(state.proto_capacity * sizeof(XrProto *));
+    XR_MALLOC_OR_ABORT(state.protos, state.proto_capacity * sizeof(XrProto *), "repl protos init");
     state.proto_count = 0;
 
     // Setup SIGINT handler

@@ -40,6 +40,7 @@
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
+#include "../runtime/object/xexception.h"
 
 /* ========== Dispatch: OP_SETPROP Type Dispatch ========== */
 
@@ -319,7 +320,22 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_RESULT) {
             base[a] = (tstate == XR_TASK_COMPLETED) ? task->result : xr_null();
         } else if (prop_symbol == SYMBOL_ERROR) {
-            base[a] = (tstate == XR_TASK_FAILED) ? task->error : xr_null();
+            if (tstate == XR_TASK_FAILED && !XR_IS_NULL(task->error)) {
+                XrValue err = task->error;
+                if (xr_value_is_exception(isolate, err)) {
+                    const char *m = xr_exception_get_message(isolate, err);
+                    if (m) {
+                        XrString *s = xr_string_intern(isolate, m, strlen(m), 0);
+                        base[a] = xr_string_value(s);
+                    } else {
+                        base[a] = xr_null();
+                    }
+                } else {
+                    base[a] = err;
+                }
+            } else {
+                base[a] = xr_null();
+            }
         } else {
             base[a] = xr_null();
         }

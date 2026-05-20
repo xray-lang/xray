@@ -222,6 +222,30 @@ static inline void xr_mem_dump_stats(void) {
         }                                                                                          \
     } while (0)
 
+/*
+ * XR_MALLOC_OR_ABORT / XR_CALLOC_OR_ABORT — analogues of
+ * XR_REALLOC_OR_ABORT for fresh allocations in compiler / JIT
+ * infrastructure where a proper error propagation path would
+ * require a larger refactor and OOM is effectively unrecoverable.
+ */
+#define XR_MALLOC_OR_ABORT(ptr_lvalue, size, msg)                                                  \
+    do {                                                                                           \
+        (ptr_lvalue) = xr_malloc(size);                                                            \
+        if (!(ptr_lvalue)) {                                                                       \
+            fprintf(stderr, "[FATAL] %s:%d: xr_malloc OOM: %s\n", __FILE__, __LINE__, (msg));      \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+#define XR_CALLOC_OR_ABORT(ptr_lvalue, count, elem_size, msg)                                      \
+    do {                                                                                           \
+        (ptr_lvalue) = xr_calloc((count), (elem_size));                                            \
+        if (!(ptr_lvalue)) {                                                                       \
+            fprintf(stderr, "[FATAL] %s:%d: xr_calloc OOM: %s\n", __FILE__, __LINE__, (msg));      \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
 #define XR_ALLOCATE(type) ((type *) xr_malloc(sizeof(type)))
 
 #define XR_ALLOCATE_FLEX(type, array_type, count)                                                  \

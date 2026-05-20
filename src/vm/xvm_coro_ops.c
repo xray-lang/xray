@@ -1119,7 +1119,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
         if (xr_task_is_done(t)) {
             if (mode == 1)
                 done_count++;
-            if (mode == 0 || !XR_IS_STRING(t->error)) {
+            if (mode == 0 || XR_IS_NULL(t->error)) {
                 base[a] = vm_task_consume_result(isolate, t, current, 0);
                 return XR_DISP_NEXT;
             }
@@ -1151,7 +1151,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
                                                           NULL, memory_order_acq_rel);
                 if (w == current) {
-                    if (mode == 0 || !XR_IS_STRING(t->error)) {
+                    if (mode == 0 || XR_IS_NULL(t->error)) {
                         bool expected = false;
                         if (atomic_compare_exchange_strong(&current->any_done, &expected, true))
                             current->result = t->result;
@@ -1183,7 +1183,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 if (xr_task_is_done(t)) {
                     if (mode == 1)
                         done_count++;
-                    if (mode == 0 || !XR_IS_STRING(t->error)) {
+                    if (mode == 0 || XR_IS_NULL(t->error)) {
                         base[a] = vm_task_consume_result(isolate, t, NULL, 0);
                         return XR_DISP_NEXT;
                     }

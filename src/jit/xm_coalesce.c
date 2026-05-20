@@ -35,8 +35,8 @@ typedef struct {
 static void uf_init(UnionFind *uf, uint32_t n) {
     XR_DCHECK(uf != NULL, "uf_init: NULL uf");
     uf->n = n;
-    uf->parent = xr_malloc(n * sizeof(uint32_t));
-    uf->rank = xr_calloc(n, sizeof(uint32_t));
+    XR_MALLOC_OR_ABORT(uf->parent, n * sizeof(uint32_t), "coalesce uf parent");
+    XR_CALLOC_OR_ABORT(uf->rank, n, sizeof(uint32_t), "coalesce uf rank");
     for (uint32_t i = 0; i < n; i++)
         uf->parent[i] = i;
 }
@@ -114,7 +114,7 @@ static void cm_init(ConflictMatrix *cm, uint32_t nvreg) {
     // Upper triangle: nvreg * (nvreg-1) / 2 bits, rounded up
     uint64_t nbits = (uint64_t) nvreg * nvreg;
     cm->nwords = (uint32_t) ((nbits + 63) / 64);
-    cm->bits = xr_calloc(cm->nwords, sizeof(uint64_t));
+    XR_CALLOC_OR_ABORT(cm->bits, cm->nwords, sizeof(uint64_t), "coalesce conflict matrix");
 }
 
 static void cm_free(ConflictMatrix *cm) {

@@ -623,24 +623,19 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         XR_DBG_CORO("run_on_worker: coro id=%d completed, result tag=%u", coro->id,
                     coro_ctx->stack[0].tag);
     } else {
-        // Error: capture actual exception message from vm_ctx.
+        // Error: capture actual exception value from vm_ctx so the
+        // original Exception object survives the hand-off into
+        // task->error / scope->first_error. Earlier code reduced this
+        // to a bare message string, but linked-scope rethrow then
+        // re-wrapped the string via xr_exception_from_value, putting
+        // the original string into Exception.data — and OP_CATCH
+        // unwraps data back into the catch register, so user code saw
+        // a plain string instead of the Exception (F026).
         coro->result = xr_null();
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
         XrValue exc = coro_ctx->current_exception;
         if (xr_value_is_exception(isolate, exc)) {
-            XrValue data = xr_exception_get_data(isolate, exc);
-            if (!XR_IS_NULL(data) && XR_IS_STRING(data)) {
-                coro->error = data;
-            } else {
-                const char *msg = xr_exception_get_message(isolate, exc);
-                if (msg && msg[0] != '\0') {
-                    XrString *s = xr_string_intern(isolate, msg, strlen(msg), 0);
-                    coro->error = xr_string_value(s);
-                } else {
-                    XrString *s = xr_string_intern(isolate, "unknown error", 13, 0);
-                    coro->error = xr_string_value(s);
-                }
-            }
+            coro->error = exc;
         } else {
             XrString *s = xr_string_intern(isolate, "coroutine error", 15, 0);
             coro->error = xr_string_value(s);

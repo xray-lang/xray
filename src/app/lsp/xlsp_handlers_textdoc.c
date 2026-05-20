@@ -540,7 +540,13 @@ static void ref_table_increment(RefCountTable *t, const char *name, size_t len) 
         }
     }
     RefCountEntry *e = xr_malloc(sizeof(RefCountEntry));
+    if (!e)
+        return;
     e->name = xr_malloc(len + 1);
+    if (!e->name) {
+        xr_free(e);
+        return;
+    }
     memcpy(e->name, name, len);
     e->name[len] = '\0';
     e->count = 1;

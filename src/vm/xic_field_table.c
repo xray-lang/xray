@@ -16,10 +16,16 @@
 XrICFieldTable *xr_ic_field_table_new(int initial_capacity) {
     XR_DCHECK(initial_capacity >= 0, "ic_field_table_new: negative capacity");
     XrICFieldTable *table = (XrICFieldTable *) xr_malloc(sizeof(XrICFieldTable));
+    if (!table)
+        return NULL;
 
     table->capacity = initial_capacity > 0 ? initial_capacity : 4;
     table->count = 0;
     table->caches = (XrICField *) xr_malloc(sizeof(XrICField) * table->capacity);
+    if (!table->caches) {
+        xr_free(table);
+        return NULL;
+    }
 
     for (int i = 0; i < table->capacity; i++) {
         xr_ic_field_init(&table->caches[i]);

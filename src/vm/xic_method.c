@@ -40,6 +40,10 @@ XrICMethodTable *xr_ic_method_table_new(int initial_capacity) {
     table->capacity = initial_capacity > 0 ? initial_capacity : 4;
     table->count = 0;
     table->caches = (XrICMethod *) xr_malloc(sizeof(XrICMethod) * table->capacity);
+    if (!table->caches) {
+        xr_free(table);
+        return NULL;
+    }
 
     for (int i = 0; i < table->capacity; i++) {
         ic_method_init(&table->caches[i]);

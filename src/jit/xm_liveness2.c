@@ -185,7 +185,7 @@ void xm_live_compute(XmLive *live, XmFunc *func) {
 
     live->nblk = func->nblk;
     live->nvreg = func->nvreg;
-    live->blocks = xr_calloc(func->nblk, sizeof(XmBlockLive));
+    XR_CALLOC_OR_ABORT(live->blocks, func->nblk, sizeof(XmBlockLive), "liveness blocks");
 
     // Initialize bitsets for each block
     for (uint32_t bi = 0; bi < func->nblk; bi++) {

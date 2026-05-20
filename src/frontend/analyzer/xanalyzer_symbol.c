@@ -475,6 +475,17 @@ void xa_symbol_links_set_type_params(XaSymbolLinks *links, const char **names,
     links->type_param_names = xr_malloc(sizeof(const char *) * count);
     links->type_param_constraints = xr_malloc(sizeof(XrType **) * count);
     links->type_param_constraint_counts = xr_malloc(sizeof(int) * count);
+    if (!links->type_param_names || !links->type_param_constraints ||
+        !links->type_param_constraint_counts) {
+        xr_free(links->type_param_names);
+        xr_free(links->type_param_constraints);
+        xr_free(links->type_param_constraint_counts);
+        links->type_param_names = NULL;
+        links->type_param_constraints = NULL;
+        links->type_param_constraint_counts = NULL;
+        links->type_param_count = 0;
+        return;
+    }
 
     for (int i = 0; i < count; i++) {
         links->type_param_names[i] = names[i] ? xr_strdup(names[i]) : NULL;

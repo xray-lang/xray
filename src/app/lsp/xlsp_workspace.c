@@ -97,6 +97,8 @@ void xlsp_workspace_index_task_execute(void *data) {
     // Find all .xr files using server's ignore configuration
     int capacity = 64;
     task_data->files = xr_malloc(capacity * sizeof(char *));
+    if (!task_data->files)
+        return;
     task_data->file_count = 0;
 
     if (task_data->server) {

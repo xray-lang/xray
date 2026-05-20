@@ -127,6 +127,10 @@ XrTestSuite *xr_test_discover(XrProto *proto, const char *suite_name) {
     if (suite->test_count > 0) {
         size_t size = suite->test_count * sizeof(XrTestResult);
         suite->results = (XrTestResult *) xr_malloc(size);
+        if (!suite->results) {
+            suite->test_count = 0;
+            return suite;
+        }
         memset(suite->results, 0, size);
     }
 

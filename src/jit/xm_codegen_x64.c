@@ -865,7 +865,8 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     ctx.func = func;
     ctx.alloc = alloc;
     ctx.patches_cap = X64_INIT_PATCHES;
-    ctx.patches = (X64BranchPatch *) xr_malloc(X64_INIT_PATCHES * sizeof(X64BranchPatch));
+    XR_MALLOC_OR_ABORT(ctx.patches, X64_INIT_PATCHES * sizeof(X64BranchPatch),
+                       "x64 codegen patches init");
 
     /* Establish bail-out point: any CODEGEN_CHECK failure longjmps here */
     if (setjmp(ctx.bail_jmp) != 0) {
@@ -885,7 +886,8 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
 
     /* Gap-move override array */
     if (ctx.xra && ctx.xra->nvreg > 0) {
-        ctx.vreg_override = (int8_t *) xr_malloc(ctx.xra->nvreg * sizeof(int8_t));
+        XR_MALLOC_OR_ABORT(ctx.vreg_override, ctx.xra->nvreg * sizeof(int8_t),
+                           "x64 codegen vreg_override init");
         memset(ctx.vreg_override, -128, ctx.xra->nvreg);
     }
 
@@ -895,7 +897,8 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
         if (func->blocks[i]->id > max_blk_id)
             max_blk_id = func->blocks[i]->id;
     }
-    ctx.block_offsets = (uint32_t *) xr_calloc(max_blk_id + 1, sizeof(uint32_t));
+    XR_CALLOC_OR_ABORT(ctx.block_offsets, max_blk_id + 1, sizeof(uint32_t),
+                       "x64 codegen block_offsets init");
     ctx.nblock_offsets = max_blk_id + 1;
 
     /* Allocate code buffer: x86-64 instructions are variable-length.

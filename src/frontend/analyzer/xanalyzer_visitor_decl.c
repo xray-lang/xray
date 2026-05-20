@@ -782,6 +782,8 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         XrType **param_types = NULL;
         if (im->param_count > 0) {
             param_types = xr_malloc(sizeof(XrType *) * im->param_count);
+            if (!param_types)
+                continue;
             for (int j = 0; j < im->param_count; j++) {
                 param_types[j] =
                     im->param_types && im->param_types[j]
@@ -939,12 +941,16 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     // arguments structurally instead of falling back to bare-name matches.
     if (cls->interface_count > 0 && cls->interfaces) {
         info->interface_types = xr_malloc(sizeof(XrType *) * cls->interface_count);
+        if (!info->interface_types)
+            goto skip_interfaces;
         info->interface_count = cls->interface_count;
         for (int i = 0; i < cls->interface_count; i++) {
             info->interface_types[i] =
                 xr_tref_resolve_in_analyzer(ctx->analyzer, cls->interfaces[i]);
         }
     }
+
+skip_interfaces:
 
     // Store generic type parameters and intersection-style constraint lists.
     if (cls->type_param_count > 0 && cls->type_params) {
@@ -1224,7 +1230,13 @@ skip_layout:
             if (md->param_count > 0) {
                 param_types = xr_malloc(sizeof(XrType *) * md->param_count);
                 param_names = xr_malloc(sizeof(char *) * md->param_count);
-                for (int j = 0; j < md->param_count; j++) {
+                if (!param_types || !param_names) {
+                    xr_free(param_types);
+                    xr_free(param_names);
+                    param_types = NULL;
+                    param_names = NULL;
+                }
+                for (int j = 0; param_types && j < md->param_count; j++) {
                     param_types[j] =
                         (md->param_types && md->param_types[j])
                             ? xr_tref_resolve(ctx->analyzer->isolate, md->param_types[j])
