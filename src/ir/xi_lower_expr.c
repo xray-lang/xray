@@ -1439,6 +1439,44 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     int n = lower_call_args_expand_spread(l, call, arg_vals, 32, pmodes, pcount);
     if (n < 0)
         return NULL;
+
+    /* Implicit int→float promotion: when a parameter is declared as float
+     * but the argument is int, insert XI_CONVERT to coerce at the call site.
+     * For generic functions with explicit type args (e.g. identity<float>(0)),
+     * resolve TYPE_PARAM to the actual type arg before comparing. */
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION && callee_type->function.param_types) {
+        int pc = callee_type->function.param_count;
+        for (int i = 0; i < n && i < pc; i++) {
+            struct XrType *pt = callee_type->function.param_types[i];
+            if (!pt || !arg_vals[i] || !arg_vals[i]->type)
+                continue;
+            /* Resolve TYPE_PARAM to actual type via explicit call type args */
+            if (pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
+                callee_type->function.type_param_names) {
+                const char *tp_name = pt->type_param.name;
+                for (int ti = 0; ti < callee_type->function.type_param_count; ti++) {
+                    if (callee_type->function.type_param_names[ti] && tp_name &&
+                        strcmp(callee_type->function.type_param_names[ti], tp_name) == 0 &&
+                        ti < call->type_arg_count && call->type_args[ti]) {
+                        pt = xr_tref_resolve(l->isolate, call->type_args[ti]);
+                        break;
+                    }
+                }
+            }
+            if (!pt)
+                continue;
+            /* int → float coercion */
+            if (XR_TYPE_IS_FLOAT(pt) && XR_TYPE_IS_INT(arg_vals[i]->type)) {
+                XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
+                if (conv) {
+                    conv->args[0] = arg_vals[i];
+                    conv->line = (uint32_t) node->line;
+                    arg_vals[i] = conv;
+                }
+            }
+        }
+    }
+
     uint16_t nargs = (uint16_t) (n + 1); /* callee + args */
 
     /* Detect self-call: callee resolves to the self-reference variable.
