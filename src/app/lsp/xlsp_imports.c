@@ -10,6 +10,7 @@
 
 #include "xlsp_imports.h"
 #include "xlsp_stdlib.h"
+#include "../../base/xfileio.h"
 #include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../base/xhash.h"
