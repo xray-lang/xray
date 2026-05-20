@@ -299,78 +299,81 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
     if (!type)
         return false;
 
-    // Check built-in interface constraints by name
+    // Check built-in interface constraints by name.
+    // For each builtin interface, check if the type is a known builtin
+    // satisfier first; if not, fall through to user-class implements check.
     if (constraint->kind == XR_KIND_INTERFACE) {
         const char *iface_name = constraint->instance.class_name;
         int targs = constraint->instance.type_arg_count;
         XrType **args = constraint->instance.type_args;
         if (iface_name) {
             if (strcmp(iface_name, "Iterable") == 0) {
-                if (!xr_kind_is_builtin_iterable(type->kind))
-                    return false;
-                if (targs >= 1 && args && args[0]) {
-                    XrType *elem = iterable_element_of(type);
-                    return type_arg_match(args[0], elem);
+                if (xr_kind_is_builtin_iterable(type->kind)) {
+                    if (targs >= 1 && args && args[0]) {
+                        XrType *elem = iterable_element_of(type);
+                        return type_arg_match(args[0], elem);
+                    }
+                    return true;
                 }
-                return true;
-            }
-            if (strcmp(iface_name, "Comparable") == 0) {
+                // Not a builtin iterable — fall through to user-class check
+            } else if (strcmp(iface_name, "Comparable") == 0) {
                 XrTypeKind k = type->kind;
-                return k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING;
-            }
-            if (strcmp(iface_name, "Hashable") == 0) {
-                return xr_kind_is_primitive(type->kind);
-            }
-            if (strcmp(iface_name, "Stringable") == 0) {
+                if (k == XR_KIND_INT || k == XR_KIND_FLOAT || k == XR_KIND_STRING)
+                    return true;
+                // Not a builtin comparable — fall through to user-class check
+            } else if (strcmp(iface_name, "Hashable") == 0) {
+                if (xr_kind_is_primitive(type->kind))
+                    return true;
+                // Not a builtin hashable — fall through to user-class check
+            } else if (strcmp(iface_name, "Stringable") == 0) {
                 return true;  // All types are Stringable
-            }
-            if (strcmp(iface_name, "Iterator") == 0) {
-                return false;  // No built-in type directly implements Iterator
-            }
-            if (strcmp(iface_name, "Indexable") == 0) {
-                XrTypeKind k = type->kind;
-                if (k != XR_KIND_ARRAY && k != XR_KIND_STRING && k != XR_KIND_MAP)
-                    return false;
-                if (targs >= 1 && args) {
-                    XrType *kt = NULL;
-                    XrType *vt = NULL;
-                    indexable_kv_of(type, &kt, &vt);
-                    // For Array/string the key is implicit int; align expectation.
-                    if (!kt && (k == XR_KIND_ARRAY || k == XR_KIND_STRING))
-                        kt = xr_type_new_int(NULL);
-                    if (args[0] && !type_arg_match(args[0], kt))
-                        return false;
-                    if (targs >= 2 && args[1] && !type_arg_match(args[1], vt))
-                        return false;
-                }
-                return true;
-            }
-            if (strcmp(iface_name, "Equatable") == 0) {
+            } else if (strcmp(iface_name, "Equatable") == 0) {
                 return true;  // All types support == and !=
-            }
-            if (strcmp(iface_name, "Lengthable") == 0) {
+            } else if (strcmp(iface_name, "Iterator") == 0) {
+                // No built-in type directly implements Iterator
+                // Fall through to user-class check
+            } else if (strcmp(iface_name, "Indexable") == 0) {
                 XrTypeKind k = type->kind;
-                return k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP ||
-                       k == XR_KIND_SET;
-            }
-            if (strcmp(iface_name, "Callable") == 0) {
-                return type->kind == XR_KIND_FUNCTION || type->kind == XR_KIND_CLASS;
-            }
-            if (strcmp(iface_name, "Closeable") == 0) {
-                // Closeable: Channel, File, or user types with close() method
+                if (k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP) {
+                    if (targs >= 1 && args) {
+                        XrType *kt = NULL;
+                        XrType *vt = NULL;
+                        indexable_kv_of(type, &kt, &vt);
+                        if (!kt && (k == XR_KIND_ARRAY || k == XR_KIND_STRING))
+                            kt = xr_type_new_int(NULL);
+                        if (args[0] && !type_arg_match(args[0], kt))
+                            goto check_user_implements;
+                        if (targs >= 2 && args[1] && !type_arg_match(args[1], vt))
+                            goto check_user_implements;
+                    }
+                    return true;
+                }
+                // Not a builtin indexable — fall through to user-class check
+            } else if (strcmp(iface_name, "Lengthable") == 0) {
+                XrTypeKind k = type->kind;
+                if (k == XR_KIND_ARRAY || k == XR_KIND_STRING || k == XR_KIND_MAP ||
+                    k == XR_KIND_SET)
+                    return true;
+                // Not a builtin lengthable — fall through to user-class check
+            } else if (strcmp(iface_name, "Callable") == 0) {
+                if (type->kind == XR_KIND_FUNCTION || type->kind == XR_KIND_CLASS)
+                    return true;
+                // Not a builtin callable — fall through to user-class check
+            } else if (strcmp(iface_name, "Closeable") == 0) {
+                if (type->kind == XR_KIND_CHANNEL)
+                    return true;
                 if (type->kind == XR_KIND_INSTANCE) {
                     const char *name = type->instance.class_name;
-                    if (name && (strcmp(name, "Channel") == 0 || strcmp(name, "File") == 0)) {
+                    if (name && (strcmp(name, "Channel") == 0 || strcmp(name, "File") == 0))
                         return true;
-                    }
                 }
-                // User types checked via method lookup below
+                // Not a builtin closeable — fall through to user-class check
             }
         }
 
-        // User-defined interfaces (or built-ins with type args matched against
-        // user classes) — defer to xr_type_assignable, which now compares
-        // resolved interface_types[] entries including their type arguments.
+    check_user_implements:
+        // User-defined classes with explicit 'implements' — defer to
+        // xr_type_assignable which walks interface_types[] on the class.
         if (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) {
             return xr_type_assignable(constraint, type);
         }

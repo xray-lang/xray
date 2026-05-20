@@ -168,6 +168,9 @@ const char *xr_type_to_string(XrType *type) {
     if (type->kind == XR_KIND_TYPE_PARAM) {
         return type->type_param.name ? type->type_param.name : "T";
     }
+    if (type->kind == XR_KIND_INTERFACE) {
+        return type->instance.class_name ? type->instance.class_name : "Interface";
+    }
     if (xr_type_is_named_class(type, "Regex"))
         return "Regex";
     if (xr_type_is_named_class(type, "BigInt"))
