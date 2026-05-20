@@ -571,7 +571,8 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     // information. Json self-contains null, so `null` and the
     // analyzer's `unknown` placeholder are deliberately accepted —
     // forcing a manual `Json?` annotation would be redundant noise.
-    if (target->kind == XR_KIND_JSON) {
+    // Exception: sealed Json targets require exact shape — no coercion bypass.
+    if (target->kind == XR_KIND_JSON && !target->object.is_sealed) {
         switch (source->kind) {
             case XR_KIND_INSTANCE:
             case XR_KIND_ARRAY:
@@ -597,7 +598,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
         return false;
     if (xr_kind_is_primitive(target->kind))
         return true;
-    if (target->kind == XR_KIND_JSON)
+    if (target->kind == XR_KIND_JSON && !target->object.is_sealed)
         return true;
     if (target->kind == XR_KIND_ARRAY)
         return true;
