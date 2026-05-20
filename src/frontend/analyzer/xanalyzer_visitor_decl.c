@@ -836,7 +836,7 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             continue;
 
         // Built-in interfaces have no XrClassInfo* attached; skip them.
-        if (xa_get_builtin_interface_by_name(iface_name))
+        if (xa_is_builtin_interface_name(iface_name))
             continue;
 
         XaSymbol *iface_sym = xa_scope_lookup(ctx->analyzer->current_scope, iface_name);

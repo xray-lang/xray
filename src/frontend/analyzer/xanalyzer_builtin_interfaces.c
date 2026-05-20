@@ -377,16 +377,16 @@ static XaInterfaceMethod closeable_methods[] = {
 // ============================================================================
 
 static XaInterfaceDefinition builtin_interfaces[XA_IFACE_COUNT] = {
-    [XA_IFACE_ITERABLE] = {"Iterable", iterable_methods, 1, NULL},
-    [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 2, NULL},
-    [XA_IFACE_COMPARABLE] = {"Comparable", comparable_methods, 1, NULL},
-    [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 1, NULL},
-    [XA_IFACE_STRINGABLE] = {"Stringable", stringable_methods, 1, NULL},
-    [XA_IFACE_INDEXABLE] = {"Indexable", indexable_methods, 2, NULL},
-    [XA_IFACE_EQUATABLE] = {"Equatable", equatable_methods, 1, NULL},
-    [XA_IFACE_LENGTHABLE] = {"Lengthable", lengthable_methods, 1, NULL},
-    [XA_IFACE_CALLABLE] = {"Callable", callable_methods, 1, NULL},
-    [XA_IFACE_CLOSEABLE] = {"Closeable", closeable_methods, 1, NULL},
+    [XA_IFACE_ITERABLE] = {"Iterable", iterable_methods, 1},
+    [XA_IFACE_ITERATOR] = {"Iterator", iterator_methods, 2},
+    [XA_IFACE_COMPARABLE] = {"Comparable", comparable_methods, 1},
+    [XA_IFACE_HASHABLE] = {"Hashable", hashable_methods, 1},
+    [XA_IFACE_STRINGABLE] = {"Stringable", stringable_methods, 1},
+    [XA_IFACE_INDEXABLE] = {"Indexable", indexable_methods, 2},
+    [XA_IFACE_EQUATABLE] = {"Equatable", equatable_methods, 1},
+    [XA_IFACE_LENGTHABLE] = {"Lengthable", lengthable_methods, 1},
+    [XA_IFACE_CALLABLE] = {"Callable", callable_methods, 1},
+    [XA_IFACE_CLOSEABLE] = {"Closeable", closeable_methods, 1},
 };
 
 // ============================================================================
@@ -465,58 +465,14 @@ static bool is_json_type(XrType *type) {
 // Public API Implementation
 // ============================================================================
 
-static bool g_interfaces_initialized = false;
-
-static void xa_builtin_interfaces_init(XrayIsolate *X) {
-    if (g_interfaces_initialized)
-        return;
-
-    // Create interface types
-    for (int i = 0; i < XA_IFACE_COUNT; i++) {
-        XaInterfaceDefinition *def = &builtin_interfaces[i];
-        def->type = xr_type_new_interface(X, def->name);
-
-        // Set up method signatures based on interface
-        // (Simplified: actual method types would need proper setup)
-    }
-
-    // Set specific return types
-    // Comparable.compareTo returns int
-    comparable_methods[0].return_type = xr_type_new_int(NULL);
-
-    // Hashable.hashCode returns int
-    hashable_methods[0].return_type = xr_type_new_int(NULL);
-
-    // Stringable.toString returns string
-    stringable_methods[0].return_type = xr_type_new_string(NULL);
-
-    // Iterator.hasNext returns bool
-    iterator_methods[1].return_type = xr_type_new_bool(NULL);
-
-    g_interfaces_initialized = true;
-}
-
-void xa_builtin_interfaces_cleanup(void) {
-    // Types are managed by the type pool, no explicit cleanup needed
-    g_interfaces_initialized = false;
-}
-
-XrType *xa_get_builtin_interface(XaBuiltinInterface iface) {
-    XR_DCHECK(iface >= 0, "xa_get_builtin_interface: invalid iface");
-    if (iface < 0 || iface >= XA_IFACE_COUNT)
-        return NULL;
-    return builtin_interfaces[iface].type;
-}
-
-XrType *xa_get_builtin_interface_by_name(const char *name) {
+bool xa_is_builtin_interface_name(const char *name) {
     if (!name)
-        return NULL;
+        return false;
     for (int i = 0; i < XA_IFACE_COUNT; i++) {
-        if (strcmp(builtin_interfaces[i].name, name) == 0) {
-            return builtin_interfaces[i].type;
-        }
+        if (strcmp(builtin_interfaces[i].name, name) == 0)
+            return true;
     }
-    return NULL;
+    return false;
 }
 
 bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
@@ -584,18 +540,21 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
 void xa_register_builtin_interfaces(XrayIsolate *X, XaScope *global_scope) {
     if (!global_scope)
         return;
-    // Interface XrType*s live in the isolate's type pool, so the global static
-    // cache must be rebuilt for every fresh isolate (e.g. each test file gets
-    // its own isolate via xr_cli_isolate_create()). Without this reset, the
-    // cached pointers would dangle after the first isolate's pool is freed.
-    g_interfaces_initialized = false;
-    xa_builtin_interfaces_init(X);
 
-    // Register each interface as a type alias in global scope
+    // Create per-isolate interface types and register as scope aliases.
+    // Each isolate gets its own XrType* instances so no global mutable
+    // state is shared between concurrent isolates.
     for (int i = 0; i < XA_IFACE_COUNT; i++) {
         XaInterfaceDefinition *def = &builtin_interfaces[i];
-        if (def->name && def->type) {
-            xa_scope_define_type_alias(global_scope, def->name, def->type);
+        if (def->name) {
+            XrType *iface_type = xr_type_new_interface(X, def->name);
+            xa_scope_define_type_alias(global_scope, def->name, iface_type);
         }
     }
+
+    // Set specific return types (stateless singletons, safe to set repeatedly)
+    comparable_methods[0].return_type = xr_type_new_int(NULL);
+    hashable_methods[0].return_type = xr_type_new_int(NULL);
+    stringable_methods[0].return_type = xr_type_new_string(NULL);
+    iterator_methods[1].return_type = xr_type_new_bool(NULL);
 }
