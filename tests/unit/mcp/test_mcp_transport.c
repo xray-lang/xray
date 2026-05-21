@@ -96,10 +96,12 @@ TEST(read_single_lf_message) {
     XmcpStdioTransport transport;
     ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 1024));
     char *message = NULL;
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_OK);
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
     ASSERT_STR_EQ(message, "{\"jsonrpc\":\"2.0\"}");
+    ASSERT(message_len == strlen("{\"jsonrpc\":\"2.0\"}"));
     xr_free(message);
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_EOF);
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_EOF);
 
     xmcp_stdio_destroy(&transport);
     test_close(fds[0]);
@@ -115,8 +117,31 @@ TEST(read_crlf_message) {
     XmcpStdioTransport transport;
     ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 1024));
     char *message = NULL;
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_OK);
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
     ASSERT_STR_EQ(message, "{\"method\":\"ping\"}");
+    xr_free(message);
+
+    xmcp_stdio_destroy(&transport);
+    test_close(fds[0]);
+}
+
+TEST(read_embedded_nul_preserves_length) {
+    int fds[2];
+    ASSERT(test_pipe(fds) == 0);
+    static const char input[] = "{\"id\":1}\0tail\n";
+    static const char expected[] = "{\"id\":1}\0tail";
+    ASSERT(write_all(fds[1], input, sizeof(input) - 1));
+    test_close(fds[1]);
+
+    XmcpStdioTransport transport;
+    ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 1024));
+    char *message = NULL;
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
+    ASSERT(message_len == sizeof(expected) - 1);
+    ASSERT(memcmp(message, expected, message_len) == 0);
+    ASSERT(strlen(message) < message_len);
     xr_free(message);
 
     xmcp_stdio_destroy(&transport);
@@ -133,10 +158,11 @@ TEST(read_multiple_messages) {
     XmcpStdioTransport transport;
     ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 1024));
     char *message = NULL;
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_OK);
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
     ASSERT_STR_EQ(message, "{\"id\":1}");
     xr_free(message);
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_OK);
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
     ASSERT_STR_EQ(message, "{\"id\":2}");
     xr_free(message);
 
@@ -154,10 +180,11 @@ TEST(content_length_is_plain_line) {
     XmcpStdioTransport transport;
     ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 1024));
     char *message = NULL;
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_OK);
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
     ASSERT_STR_EQ(message, "Content-Length: 2");
     xr_free(message);
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_OK);
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
     ASSERT_STR_EQ(message, "");
     xr_free(message);
 
@@ -175,7 +202,9 @@ TEST(reject_too_large_line) {
     XmcpStdioTransport transport;
     ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 3));
     char *message = NULL;
-    ASSERT(xmcp_stdio_read_message(&transport, &message) == XMCP_STDIO_READ_TOO_LARGE);
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) ==
+           XMCP_STDIO_READ_TOO_LARGE);
     ASSERT(message == NULL);
 
     xmcp_stdio_destroy(&transport);
@@ -236,6 +265,7 @@ int main(void) {
 
     RUN_TEST(read_single_lf_message);
     RUN_TEST(read_crlf_message);
+    RUN_TEST(read_embedded_nul_preserves_length);
     RUN_TEST(read_multiple_messages);
     RUN_TEST(content_length_is_plain_line);
     RUN_TEST(reject_too_large_line);

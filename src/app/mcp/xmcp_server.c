@@ -423,7 +423,8 @@ int xmcp_server_run(XmcpServer *s) {
 
     while (!s->shutdown) {
         char *body = NULL;
-        XmcpStdioReadStatus status = xmcp_stdio_read_message(&s->transport, &body);
+        size_t body_len = 0;
+        XmcpStdioReadStatus status = xmcp_stdio_read_message(&s->transport, &body, &body_len);
         if (status == XMCP_STDIO_READ_EOF) {
             mcp_log(s, 2, "stdin closed, shutting down");
             break;
@@ -438,7 +439,7 @@ int xmcp_server_run(XmcpServer *s) {
             break;
         }
 
-        XrJsonValue *msg = xjson_parse(body, strlen(body));
+        XrJsonValue *msg = xjson_parse(body, body_len);
         xr_free(body);
 
         if (!msg) {

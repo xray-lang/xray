@@ -42,7 +42,7 @@ XR_FUNC bool xmcp_stdio_init(XmcpStdioTransport *transport, int read_fd, int wri
                              size_t max_line);
 XR_FUNC void xmcp_stdio_destroy(XmcpStdioTransport *transport);
 XR_FUNC XmcpStdioReadStatus xmcp_stdio_read_message(XmcpStdioTransport *transport,
-                                                    char **out_message);
+                                                    char **out_message, size_t *out_len);
 XR_FUNC bool xmcp_stdio_write_message(XmcpStdioTransport *transport, const char *json, size_t len);
 
 #endif  // XMCP_TRANSPORT_STDIO_H
