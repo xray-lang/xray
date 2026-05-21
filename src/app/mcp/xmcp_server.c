@@ -220,8 +220,7 @@ static XrJsonValue *handle_ping(XmcpServer *s, XrJsonValue *params) {
 }
 
 static XrJsonValue *handle_tools_list(XmcpServer *s, XrJsonValue *params) {
-    (void) s;
-    return xmcp_handle_tools_list(params);
+    return xmcp_handle_tools_list(s, params);
 }
 
 static XrJsonValue *handle_tools_call(XmcpServer *s, XrJsonValue *params) {
