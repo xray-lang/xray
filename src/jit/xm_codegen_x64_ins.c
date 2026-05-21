@@ -1199,8 +1199,16 @@ static void x64_h_rt_collection(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_emit32(&ctx->buf, 0);
     ctx->has_call_c = true;
 
-    if (xm_ref_is_vreg(ins->dst) && rd != X64_RAX)
-        x64_mov_rr(&ctx->buf, rd, X64_RAX);
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t dvi = XM_REF_INDEX(ins->dst);
+        if (rd != X64_RAX)
+            x64_mov_rr(&ctx->buf, rd, X64_RAX);
+        if (dvi < ctx->func->nvreg && dvi < XR_JIT_MAX_VREG_TAGS) {
+            int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) dvi;
+            x64_mov_ri32(&ctx->buf, X64_SCRATCH_REG, XR_TAG_PTR);
+            x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_SCRATCH_REG);
+        }
+    }
 }
 
 /* ========== Runtime array push ========== */
