@@ -564,7 +564,47 @@ TEST(tools_call_format_schema_has_optional_params) {
     ASSERT_NOT_NULL(xjson_get_object(props, "indentSize"));
     ASSERT_NOT_NULL(xjson_get_object(props, "useTabs"));
 
+    XrJsonValue *output_schema = xjson_get_object(fmt_tool, "outputSchema");
+    ASSERT_NOT_NULL(output_schema);
+    XrJsonValue *output_props = xjson_get_object(output_schema, "properties");
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "formattedCode"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "changed"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "indentSize"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "useTabs"));
+
     xjson_free(result);
+}
+
+TEST(tools_call_format_returns_structured_content) {
+    XmcpServer server = test_server();
+    XrayIsolateParams iso_params;
+    xray_isolate_params_init(&iso_params);
+    server.isolate = xray_isolate_new(&iso_params);
+    ASSERT_NOT_NULL(server.isolate);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let x=1\n");
+    XJSON_SET_INT(args, "indentSize", 2);
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT_NOT_NULL(xjson_get_string(structured, "formattedCode"));
+    ASSERT(xjson_get_bool(structured, "changed") == true);
+    ASSERT_EQ(xjson_get_int_or(structured, "indentSize", 0), 2);
+    ASSERT(xjson_get_bool(structured, "useTabs") == false);
+    XrJsonValue *content = xjson_get_array(result, "content");
+    XrJsonValue *item = xjson_array_get(content, 0);
+    ASSERT_STR_EQ(xjson_get_string(item, "text"), xjson_get_string(structured, "formattedCode"));
+
+    xjson_free(params);
+    xjson_free(result);
+    xray_isolate_delete(server.isolate);
 }
 
 /* =========================================================================
@@ -1191,6 +1231,7 @@ int main(void) {
     /* Format tool */
     RUN_TEST(tools_call_format_missing_code);
     RUN_TEST(tools_call_format_schema_has_optional_params);
+    RUN_TEST(tools_call_format_returns_structured_content);
 
     /* Diagnostics tool */
     RUN_TEST(tools_call_analyze_missing_code);
