@@ -51,6 +51,9 @@ XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params) {
     (void) params;
     XR_DCHECK(server != NULL, "xmcp_handle_initialize: NULL server");
 
+    if (server->lifecycle_state == XMCP_LIFECYCLE_CREATED)
+        server->lifecycle_state = XMCP_LIFECYCLE_INITIALIZE_SENT;
+
     XrJsonValue *result = xjson_new_object();
 
     /* Protocol version */

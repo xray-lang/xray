@@ -385,8 +385,21 @@ endif()
 # ============================================================================
 
 if(XR_BUILD_MCP)
+    add_executable(test_mcp_transport
+        mcp/test_mcp_transport.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_transport_stdio.c
+    )
+    target_include_directories(test_mcp_transport PRIVATE
+        ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/src/app/mcp
+        ${CMAKE_SOURCE_DIR}/src/base
+    )
+    target_link_libraries(test_mcp_transport PRIVATE xray_core)
+    add_test(NAME test_mcp_transport COMMAND test_mcp_transport)
+
     add_executable(test_mcp_protocol
         mcp/test_mcp_protocol.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_jsonrpc.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_protocol.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
