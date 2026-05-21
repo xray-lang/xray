@@ -24,14 +24,19 @@
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
 typedef struct XmcpServer XmcpServer;
+typedef struct XmcpRpcError XmcpRpcError;
 
 /* Handle "tools/list" request. Accepts params for pagination (cursor). */
-XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params);
+XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params,
+                                            XmcpRpcError *error);
 
 XR_FUNC size_t xmcp_tools_count(void);
 XR_FUNC const XmcpToolDef *xmcp_tools_table(void);
 
-/* Handle "tools/call" request. */
-XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params);
+/* Handle "tools/call" request. Populates `error` for protocol-level failures
+ * (missing/unknown tool name, malformed arguments, schema validation errors).
+ * Returns a tool result for handler-level failures. */
+XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params,
+                                            XmcpRpcError *error);
 
 #endif  // XMCP_TOOLS_H

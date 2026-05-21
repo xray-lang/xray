@@ -17,6 +17,7 @@
  */
 
 #include "xmcp_resources.h"
+#include "xmcp_protocol.h"
 #include "xmcp_server.h"
 #include "xmcp_knowledge.h"
 #include "../../base/xjson.h"
@@ -164,8 +165,9 @@ static char *read_stdlib_resource(XmcpServer *server, const char *module, int mo
  * resources/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
+XrJsonValue *xmcp_handle_resources_list(XmcpServer *server, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_resources_list: NULL server");
+    (void) error;
 
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *resources = xjson_new_array();
@@ -188,8 +190,9 @@ XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
  * resources/templates/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server) {
+XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_resource_templates_list: NULL server");
+    (void) error;
 
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *templates = xjson_new_array();
@@ -213,14 +216,23 @@ XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server) {
  * resources/read handler (static + template URIs)
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params) {
-    XR_DCHECK(params != NULL, "xmcp_handle_resources_read: NULL params");
+XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
+                                        XmcpRpcError *error) {
+    XR_DCHECK(server != NULL, "xmcp_handle_resources_read: NULL server");
+    XR_DCHECK(error != NULL, "xmcp_handle_resources_read: NULL error");
+
+    if (!params || !xjson_is_object(params)) {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message),
+                 "resources/read: params must be an object");
+        return NULL;
+    }
 
     const char *uri = xjson_get_string(params, "uri");
-    if (!uri) {
-        XrJsonValue *r = xjson_new_object();
-        xjson_object_set(r, "contents", xjson_new_array());
-        return r;
+    if (!uri || uri[0] == '\0') {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "resources/read: 'uri' is required");
+        return NULL;
     }
 
     const char *text = NULL;
@@ -252,19 +264,21 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params)
         }
     }
 
-    /* Build result */
-    XrJsonValue *result = xjson_new_object();
-    XrJsonValue *contents = xjson_new_array();
-
     const char *final_text = text ? text : dyn_text;
-    if (final_text) {
-        XrJsonValue *item = xjson_new_object();
-        XJSON_SET_STRING(item, "uri", uri);
-        XJSON_SET_STRING(item, "mimeType", mime);
-        xjson_object_set(item, "text", xjson_new_string(final_text));
-        xjson_array_push(contents, item);
+    if (!final_text) {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "resources/read: unknown uri '%s'", uri);
+        xr_free(dyn_text);
+        return NULL;
     }
 
+    XrJsonValue *result = xjson_new_object();
+    XrJsonValue *contents = xjson_new_array();
+    XrJsonValue *item = xjson_new_object();
+    XJSON_SET_STRING(item, "uri", uri);
+    XJSON_SET_STRING(item, "mimeType", mime);
+    xjson_object_set(item, "text", xjson_new_string(final_text));
+    xjson_array_push(contents, item);
     xjson_object_set(result, "contents", contents);
     xr_free(dyn_text);
     return result;

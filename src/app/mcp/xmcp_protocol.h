@@ -44,9 +44,22 @@ typedef struct XmcpServer XmcpServer;
 
 /* ---- Method dispatch table ---------------------------------------------- */
 
-/* Handler signature: returns result JSON on success, NULL to signal error.
- * For notifications (no id), the return value is ignored. */
-typedef XrJsonValue *(*XmcpMethodHandler)(XmcpServer *server, XrJsonValue *params);
+/* JSON-RPC error carrier. Populated by a method handler to signal a protocol
+ * error (parse / invalid request / invalid params / internal). Dispatch turns
+ * a populated error into a JSON-RPC error response and discards any handler
+ * result. `code == 0` means no protocol error and the handler result (which
+ * may be a tool result with `isError=true`) is sent normally. */
+typedef struct XmcpRpcError {
+    int code;
+    char message[256];
+} XmcpRpcError;
+
+/* Handler signature: returns a result JSON value on success. May populate
+ * `error` to signal a JSON-RPC error; in that case the return value (if any)
+ * is freed by dispatch. For notifications, both the result and error are
+ * ignored once dispatch has logged them. */
+typedef XrJsonValue *(*XmcpMethodHandler)(XmcpServer *server, XrJsonValue *params,
+                                          XmcpRpcError *error);
 
 typedef struct XmcpMethodEntry {
     const char *method;        /* JSON-RPC method name */
@@ -58,7 +71,8 @@ typedef struct XmcpMethodEntry {
 /* ---- Lifecycle handlers ------------------------------------------------- */
 
 /* Handle "initialize" request. Returns the result JSON object. */
-XR_FUNC XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params);
+XR_FUNC XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params,
+                                            XmcpRpcError *error);
 
 /* ---- Notification sending ----------------------------------------------- */
 

@@ -26,18 +26,21 @@
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
 typedef struct XmcpServer XmcpServer;
+typedef struct XmcpRpcError XmcpRpcError;
 
 /* Handle "resources/list" request. */
-XR_FUNC XrJsonValue *xmcp_handle_resources_list(XmcpServer *server);
+XR_FUNC XrJsonValue *xmcp_handle_resources_list(XmcpServer *server, XmcpRpcError *error);
 
 XR_FUNC size_t xmcp_resources_count(void);
 XR_FUNC const XmcpResourceDef *xmcp_resources_table(void);
 
-/* Handle "resources/read" request. */
-XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params);
+/* Handle "resources/read" request. Populates `error` for missing/unknown URIs;
+ * returns the resource contents on success. */
+XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
+                                                XmcpRpcError *error);
 
 /* Handle "resources/templates/list" request. */
-XR_FUNC XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server);
+XR_FUNC XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server, XmcpRpcError *error);
 
 XR_FUNC size_t xmcp_resource_templates_count(void);
 XR_FUNC const XmcpResourceTemplateDef *xmcp_resource_templates_table(void);

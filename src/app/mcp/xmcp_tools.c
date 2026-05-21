@@ -15,8 +15,8 @@
  */
 
 #include "xmcp_tools.h"
-#include "xmcp_server.h"
 #include "xmcp_protocol.h"
+#include "xmcp_server.h"
 #include "xmcp_knowledge.h"
 #include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
@@ -180,13 +180,17 @@ static bool xmcp_value_matches_schema_type(XrJsonValue *value, const char *type)
     return false;
 }
 
-static XrJsonValue *xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *arguments) {
+/* Validate `arguments` against `tool->build_schema()`. Populates `error` with
+ * `XMCP_ERR_INVALID_PARAMS` on failure. Returns true when arguments pass. */
+static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *arguments,
+                                         XmcpRpcError *error) {
     XR_DCHECK(tool != NULL, "xmcp_validate_tool_arguments: NULL tool");
     XR_DCHECK(arguments != NULL, "xmcp_validate_tool_arguments: NULL arguments");
+    XR_DCHECK(error != NULL, "xmcp_validate_tool_arguments: NULL error");
 
     XrJsonValue *schema = tool->build_schema ? tool->build_schema() : NULL;
     if (!schema)
-        return NULL;
+        return true;
 
     XrJsonValue *required = xjson_get_array(schema, "required");
     for (int i = 0; i < xjson_array_len(required); i++) {
@@ -196,10 +200,11 @@ static XrJsonValue *xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJson
         const char *name = item->as.string;
         XrJsonValue *value = xjson_get(arguments, name);
         if (!value || xjson_is_null(value)) {
-            char msg[256];
-            snprintf(msg, sizeof(msg), "Error: missing required parameter '%s'", name);
+            error->code = XMCP_ERR_INVALID_PARAMS;
+            snprintf(error->message, sizeof(error->message),
+                     "missing required parameter '%s' for tool '%s'", name, tool->name);
             xjson_free(schema);
-            return xmcp_make_error_result(msg);
+            return false;
         }
     }
 
@@ -213,17 +218,17 @@ static XrJsonValue *xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJson
             const char *type = xjson_get_string(member->value, "type");
             if (!type || xmcp_value_matches_schema_type(value, type))
                 continue;
-            char msg[256];
-            snprintf(msg, sizeof(msg),
-                     "Error: invalid type for parameter '%s': expected %s, got %s", member->key,
-                     type, xmcp_json_type_name(value));
+            error->code = XMCP_ERR_INVALID_PARAMS;
+            snprintf(error->message, sizeof(error->message),
+                     "invalid type for parameter '%s' of tool '%s': expected %s, got %s",
+                     member->key, tool->name, type, xmcp_json_type_name(value));
             xjson_free(schema);
-            return xmcp_make_error_result(msg);
+            return false;
         }
     }
 
     xjson_free(schema);
-    return NULL;
+    return true;
 }
 
 /* Build a simple schema: { type:"object", properties:{<name>:{type,desc},...}, required:[...] } */
@@ -509,8 +514,10 @@ static XrJsonValue *xmcp_tool_to_json(const XmcpToolDef *tool) {
     return t;
 }
 
-XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params) {
+XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params,
+                                            XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_tools_list: NULL server");
+    (void) error;
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *tools = xjson_new_array();
 
@@ -904,18 +911,37 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, const XmcpCallConte
  * tools/call dispatch (table-driven)
  * -------------------------------------------------------------------------- */
 
-XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
+XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params,
+                                            XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_tools_call: NULL server");
+    XR_DCHECK(error != NULL, "xmcp_handle_tools_call: NULL error");
+
+    if (!params || !xjson_is_object(params)) {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "tools/call: params must be an object");
+        return NULL;
+    }
 
     const char *name = xjson_get_string(params, "name");
-    if (!name)
-        return xmcp_make_error_result("Error: tool 'name' is required");
+    if (!name || name[0] == '\0') {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "tools/call: 'name' is required");
+        return NULL;
+    }
 
     const XmcpToolDef *tool = xmcp_registry_find_tool(&server->registry, name);
     if (!tool) {
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Unknown tool: %s", name);
-        return xmcp_make_error_result(msg);
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "tools/call: unknown tool '%s'", name);
+        return NULL;
+    }
+
+    XrJsonValue *arguments_value = xjson_get(params, "arguments");
+    if (arguments_value && !xjson_is_object(arguments_value)) {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message),
+                 "tools/call: 'arguments' must be an object");
+        return NULL;
     }
 
     /* Build per-call context. progress_token comes from params._meta if present. */
@@ -924,28 +950,24 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
     if (meta)
         ctx.progress_token = xjson_get_int_or(meta, "progressToken", -1);
 
-    XrJsonValue *arguments_value = xjson_get(params, "arguments");
-    if (arguments_value && !xjson_is_object(arguments_value))
-        return xmcp_make_error_result("Error: tool 'arguments' must be an object");
-
-    XrJsonValue *arguments = xjson_get_object(params, "arguments");
     XrJsonValue *empty_args = NULL;
+    XrJsonValue *arguments = arguments_value;
     if (!arguments) {
         empty_args = xjson_new_object();
         arguments = empty_args;
     }
 
-    XrJsonValue *validation_error = xmcp_validate_tool_arguments(tool, arguments);
-    if (validation_error) {
+    if (!xmcp_validate_tool_arguments(tool, arguments, error)) {
         if (empty_args)
             xjson_free(empty_args);
-        return validation_error;
+        return NULL;
     }
 
     XrJsonValue *result = tool->handler(server, &ctx, arguments);
-
     if (!result) {
-        result = xmcp_make_error_result("Error: tool failed");
+        error->code = XMCP_ERR_INTERNAL;
+        snprintf(error->message, sizeof(error->message), "tools/call: handler '%s' returned NULL",
+                 name);
     }
 
     if (empty_args)

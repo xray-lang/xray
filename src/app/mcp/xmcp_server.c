@@ -204,8 +204,9 @@ void xmcp_send_progress_notification(XmcpServer *server, int64_t progress_token,
  * Method handlers (thin wrappers matching XmcpMethodHandler signature)
  * -------------------------------------------------------------------------- */
 
-static XrJsonValue *handle_initialized(XmcpServer *s, XrJsonValue *params) {
+static XrJsonValue *handle_initialized(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
     (void) params;
+    (void) error;
     if (s->lifecycle_state == XMCP_LIFECYCLE_INITIALIZE_SENT) {
         s->lifecycle_state = XMCP_LIFECYCLE_READY;
         mcp_log(s, 2, "client initialized");
@@ -213,41 +214,53 @@ static XrJsonValue *handle_initialized(XmcpServer *s, XrJsonValue *params) {
     return NULL; /* notification, no response */
 }
 
-static XrJsonValue *handle_ping(XmcpServer *s, XrJsonValue *params) {
+static XrJsonValue *handle_cancelled(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
+    (void) params;
+    (void) error;
+    /* Sequential dispatch: cancellation cannot preempt an in-flight request, so
+     * this notification is a no-op. Logged at debug level so operators can see
+     * that the message was observed but intentionally ignored. */
+    mcp_log(s, 3, "notifications/cancelled: no-op (sequential dispatch)");
+    return NULL;
+}
+
+static XrJsonValue *handle_ping(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
     (void) s;
     (void) params;
+    (void) error;
     return xjson_new_object();
 }
 
-static XrJsonValue *handle_tools_list(XmcpServer *s, XrJsonValue *params) {
-    return xmcp_handle_tools_list(s, params);
+static XrJsonValue *handle_tools_list(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
+    return xmcp_handle_tools_list(s, params, error);
 }
 
-static XrJsonValue *handle_tools_call(XmcpServer *s, XrJsonValue *params) {
-    return xmcp_handle_tools_call(s, params);
+static XrJsonValue *handle_tools_call(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
+    return xmcp_handle_tools_call(s, params, error);
 }
 
-static XrJsonValue *handle_resources_list(XmcpServer *s, XrJsonValue *params) {
+static XrJsonValue *handle_resources_list(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
     (void) params;
-    return xmcp_handle_resources_list(s);
+    return xmcp_handle_resources_list(s, error);
 }
 
-static XrJsonValue *handle_resources_read(XmcpServer *s, XrJsonValue *params) {
-    return xmcp_handle_resources_read(s, params);
+static XrJsonValue *handle_resources_read(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
+    return xmcp_handle_resources_read(s, params, error);
 }
 
-static XrJsonValue *handle_resource_templates_list(XmcpServer *s, XrJsonValue *params) {
+static XrJsonValue *handle_resource_templates_list(XmcpServer *s, XrJsonValue *params,
+                                                   XmcpRpcError *error) {
     (void) params;
-    return xmcp_handle_resource_templates_list(s);
+    return xmcp_handle_resource_templates_list(s, error);
 }
 
-static XrJsonValue *handle_prompts_list(XmcpServer *s, XrJsonValue *params) {
+static XrJsonValue *handle_prompts_list(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
     (void) params;
-    return xmcp_handle_prompts_list(s);
+    return xmcp_handle_prompts_list(s, error);
 }
 
-static XrJsonValue *handle_prompts_get(XmcpServer *s, XrJsonValue *params) {
-    return xmcp_handle_prompts_get(s, params);
+static XrJsonValue *handle_prompts_get(XmcpServer *s, XrJsonValue *params, XmcpRpcError *error) {
+    return xmcp_handle_prompts_get(s, params, error);
 }
 
 /* --------------------------------------------------------------------------
@@ -258,7 +271,7 @@ static const XmcpMethodEntry METHOD_TABLE[] = {
     /* method                       handler                notification  needs_init */
     {"initialize", xmcp_handle_initialize, false, false},
     {"notifications/initialized", handle_initialized, true, false},
-    {"notifications/cancelled", NULL, true, false},
+    {"notifications/cancelled", handle_cancelled, true, false},
     {"ping", handle_ping, false, false},
     {"tools/list", handle_tools_list, false, true},
     {"tools/call", handle_tools_call, false, true},
@@ -331,14 +344,23 @@ static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
         return;
     }
 
-    /* Ignored notification (e.g. notifications/cancelled with NULL handler) */
-    if (!entry->handler) {
-        mcp_log(s, 3, "ignored notification: %s", method);
+    /* Call handler */
+    XmcpRpcError method_err = {.code = 0};
+    XrJsonValue *result = entry->handler(s, params, &method_err);
+
+    if (method_err.code != 0) {
+        /* Protocol-level failure: emit JSON-RPC error for requests, swallow for
+         * notifications so misbehaving clients cannot derail the server. */
+        if (!entry->is_notification && id) {
+            mcp_send_error(s, id, method_err.code, method_err.message);
+        } else {
+            mcp_log(s, 1, "notification %s produced rpc error %d: %s", method, method_err.code,
+                    method_err.message);
+        }
+        if (result)
+            xjson_free(result);
         return;
     }
-
-    /* Call handler */
-    XrJsonValue *result = entry->handler(s, params);
 
     /* Send response for requests (not notifications) */
     if (!entry->is_notification && id) {
