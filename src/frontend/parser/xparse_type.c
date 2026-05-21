@@ -222,6 +222,11 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
      * trailing `->`. */
     if (xr_parser_match(parser, TK_LPAREN)) {
         if (xr_parser_match(parser, TK_RPAREN)) {
+            // `() -> R` is a zero-arity function type; bare `()` is unit.
+            if (xr_parser_match(parser, TK_ARROW)) {
+                XrTypeRef *ret = xr_parse_type_annotation(parser);
+                return xr_tref_function(parser->X, NULL, 0, ret);
+            }
             return xr_tref_unit(parser->X);
         }
         XrTypeRef *elems[16];
