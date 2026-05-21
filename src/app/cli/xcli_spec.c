@@ -118,6 +118,7 @@ static const XrCliOptionSpec mcp_options[] = {
     {"log-level", 'l', XR_CLI_VALUE_STRING, false, false, "LEVEL",
      "Log level: error,warn,info,debug"},
     {"log-file", 'f', XR_CLI_VALUE_STRING, false, false, "PATH", "Log to file"},
+    {"enable-runner", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Enable xray_run tool"},
     XR_CLI_OPT_END};
 #endif
 

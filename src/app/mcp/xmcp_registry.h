@@ -18,6 +18,14 @@
 typedef struct XrJsonValue XrJsonValue;
 typedef struct XmcpServer XmcpServer;
 
+#define XMCP_REGISTRY_MAX_TOOLS 16
+
+typedef enum XmcpToolset {
+    XMCP_TOOLSET_CORE = 0,
+    XMCP_TOOLSET_KNOWLEDGE,
+    XMCP_TOOLSET_RUNNER
+} XmcpToolset;
+
 typedef XrJsonValue *(*XmcpToolHandler)(XmcpServer *server, XrJsonValue *args);
 typedef XrJsonValue *(*XmcpSchemaBuilder)(void);
 
@@ -25,6 +33,7 @@ typedef struct XmcpToolDef {
     const char *name;
     const char *title;
     const char *description;
+    XmcpToolset toolset;
     XmcpSchemaBuilder build_schema;
     XmcpSchemaBuilder build_output_schema;
     XmcpToolHandler handler;
@@ -61,8 +70,12 @@ typedef struct XmcpPromptDef {
     XmcpPromptArgDef args[XMCP_PROMPT_ARG_MAX];
 } XmcpPromptDef;
 
+typedef struct XmcpRegistryOptions {
+    bool enable_runner;
+} XmcpRegistryOptions;
+
 typedef struct XmcpRegistry {
-    const XmcpToolDef *tools;
+    const XmcpToolDef *tools[XMCP_REGISTRY_MAX_TOOLS];
     const XmcpResourceDef *resources;
     const XmcpResourceTemplateDef *resource_templates;
     const XmcpPromptDef *prompts;
@@ -72,7 +85,8 @@ typedef struct XmcpRegistry {
     size_t prompt_count;
 } XmcpRegistry;
 
-XR_FUNC void xmcp_registry_init(XmcpRegistry *registry);
+XR_FUNC void xmcp_registry_options_default(XmcpRegistryOptions *options);
+XR_FUNC void xmcp_registry_init(XmcpRegistry *registry, const XmcpRegistryOptions *options);
 XR_FUNC const XmcpToolDef *xmcp_registry_find_tool(const XmcpRegistry *registry, const char *name);
 XR_FUNC const XmcpToolDef *xmcp_registry_tool_at(const XmcpRegistry *registry, size_t index);
 XR_FUNC const XmcpResourceDef *xmcp_registry_resource_at(const XmcpRegistry *registry,
