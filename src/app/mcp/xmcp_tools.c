@@ -44,19 +44,6 @@
  * Tool registration table type
  * -------------------------------------------------------------------------- */
 
-typedef XrJsonValue *(*XmcpToolHandler)(XmcpServer *server, XrJsonValue *args);
-typedef XrJsonValue *(*XmcpSchemaBuilder)(void);
-
-typedef struct {
-    const char *name;
-    const char *title;
-    const char *description;
-    XmcpSchemaBuilder build_schema;
-    XmcpToolHandler handler;
-    bool read_only;
-    bool open_world;
-} XmcpToolDef;
-
 /* Forward declarations for handlers and schema builders */
 static XrJsonValue *tool_xray_check(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *tool_xray_format(XmcpServer *s, XrJsonValue *a);
@@ -287,7 +274,28 @@ XR_FUNC size_t xmcp_tools_count(void) {
     return count;
 }
 
-XrJsonValue *xmcp_handle_tools_list(XrJsonValue *params) {
+XR_FUNC const XmcpToolDef *xmcp_tools_table(void) {
+    return TOOL_TABLE;
+}
+
+static XrJsonValue *xmcp_tool_to_json(const XmcpToolDef *tool) {
+    XR_DCHECK(tool != NULL, "xmcp_tool_to_json: NULL tool");
+    XrJsonValue *t = xjson_new_object();
+    XJSON_SET_STRING(t, "name", tool->name);
+    XJSON_SET_STRING(t, "description", tool->description);
+    xjson_object_set(t, "inputSchema", tool->build_schema());
+
+    XrJsonValue *ann = xjson_new_object();
+    XJSON_SET_STRING(ann, "title", tool->title);
+    XJSON_SET_BOOL(ann, "readOnlyHint", tool->read_only);
+    XJSON_SET_BOOL(ann, "destructiveHint", false);
+    XJSON_SET_BOOL(ann, "openWorldHint", tool->open_world);
+    xjson_object_set(t, "annotations", ann);
+    return t;
+}
+
+XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params) {
+    XR_DCHECK(server != NULL, "xmcp_handle_tools_list: NULL server");
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *tools = xjson_new_array();
 
@@ -295,26 +303,13 @@ XrJsonValue *xmcp_handle_tools_list(XrJsonValue *params) {
     const char *cursor = params ? xjson_get_string(params, "cursor") : NULL;
     int count = 0;
 
-    for (int i = 0; TOOL_TABLE[i].name != NULL; i++) {
-        const XmcpToolDef *td = &TOOL_TABLE[i];
-
+    for (size_t i = 0; i < server->registry.tool_count; i++) {
+        const XmcpToolDef *td = xmcp_registry_tool_at(&server->registry, i);
         /* Skip entries at or before cursor position */
         if (cursor && strcmp(td->name, cursor) <= 0)
             continue;
 
-        XrJsonValue *t = xjson_new_object();
-        XJSON_SET_STRING(t, "name", td->name);
-        XJSON_SET_STRING(t, "description", td->description);
-        xjson_object_set(t, "inputSchema", td->build_schema());
-
-        XrJsonValue *ann = xjson_new_object();
-        XJSON_SET_STRING(ann, "title", td->title);
-        XJSON_SET_BOOL(ann, "readOnlyHint", td->read_only);
-        XJSON_SET_BOOL(ann, "destructiveHint", false);
-        XJSON_SET_BOOL(ann, "openWorldHint", td->open_world);
-        xjson_object_set(t, "annotations", ann);
-
-        xjson_array_push(tools, t);
+        xjson_array_push(tools, xmcp_tool_to_json(td));
         count++;
         if (count >= XMCP_PAGE_SIZE) {
             /* Set nextCursor to the last emitted tool name */
@@ -690,14 +685,8 @@ XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params) {
         arguments = empty_args;
     }
 
-    /* Table-driven dispatch */
-    XrJsonValue *result = NULL;
-    for (int i = 0; TOOL_TABLE[i].name != NULL; i++) {
-        if (strcmp(name, TOOL_TABLE[i].name) == 0) {
-            result = TOOL_TABLE[i].handler(server, arguments);
-            break;
-        }
-    }
+    const XmcpToolDef *tool = xmcp_registry_find_tool(&server->registry, name);
+    XrJsonValue *result = tool ? tool->handler(server, arguments) : NULL;
 
     if (!result) {
         char msg[256];

@@ -74,12 +74,19 @@ static XrJsonValue *parse_json(const char *json) {
 static XmcpRegistry test_registry(size_t tools, size_t resources, size_t templates,
                                   size_t prompts) {
     XmcpRegistry registry = {
+        .tools = xmcp_tools_table(),
         .tool_count = tools,
         .resource_count = resources,
         .resource_template_count = templates,
         .prompt_count = prompts,
     };
     return registry;
+}
+
+static XmcpServer test_server(void) {
+    XmcpServer server = {0};
+    xmcp_registry_init(&server.registry);
+    return server;
 }
 
 /* =========================================================================
@@ -365,6 +372,7 @@ TEST(registry_init_counts_features) {
     XmcpRegistry registry;
     xmcp_registry_init(&registry);
 
+    ASSERT_NOT_NULL(registry.tools);
     ASSERT_EQ(registry.tool_count, 7);
     ASSERT_EQ(registry.resource_count, 3);
     ASSERT_EQ(registry.resource_template_count, 2);
@@ -374,12 +382,24 @@ TEST(registry_init_counts_features) {
     ASSERT(xmcp_registry_has_prompts(&registry));
 }
 
+TEST(registry_finds_tools_by_name) {
+    XmcpServer server = test_server();
+
+    const XmcpToolDef *format = xmcp_registry_find_tool(&server.registry, "xray_format");
+    ASSERT_NOT_NULL(format);
+    ASSERT_STR_EQ(format->name, "xray_format");
+    ASSERT_NOT_NULL(format->handler);
+    ASSERT(format == xmcp_registry_tool_at(&server.registry, 1));
+    ASSERT(xmcp_registry_find_tool(&server.registry, "missing_tool") == NULL);
+}
+
 /* =========================================================================
  * Tools: tools/list
  * ========================================================================= */
 
 TEST(tools_list_returns_seven_tools) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -390,7 +410,8 @@ TEST(tools_list_returns_seven_tools) {
 }
 
 TEST(tools_list_has_required_fields) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -405,7 +426,8 @@ TEST(tools_list_has_required_fields) {
 }
 
 TEST(tools_list_has_annotations) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -426,7 +448,8 @@ TEST(tools_list_has_annotations) {
 }
 
 TEST(tools_list_tool_names) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -447,7 +470,7 @@ TEST(tools_list_tool_names) {
  * ========================================================================= */
 
 TEST(tools_call_unknown_tool) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "nonexistent_tool");
 
@@ -462,7 +485,7 @@ TEST(tools_call_unknown_tool) {
 }
 
 TEST(tools_call_missing_name) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
 
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
@@ -478,7 +501,7 @@ TEST(tools_call_missing_name) {
  * ========================================================================= */
 
 TEST(tools_call_format_missing_code) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_format");
     XrJsonValue *args = xjson_new_object();
@@ -493,7 +516,8 @@ TEST(tools_call_format_missing_code) {
 }
 
 TEST(tools_call_format_schema_has_optional_params) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -519,7 +543,7 @@ TEST(tools_call_format_schema_has_optional_params) {
  * ========================================================================= */
 
 TEST(tools_call_diagnostics_missing_code) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_diagnostics");
     XrJsonValue *args = xjson_new_object();
@@ -534,7 +558,8 @@ TEST(tools_call_diagnostics_missing_code) {
 }
 
 TEST(tools_call_diagnostics_schema) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_diagnostics is at index 2 */
     XrJsonValue *diag_tool = xjson_array_get(tools, 2);
@@ -553,7 +578,7 @@ TEST(tools_call_diagnostics_schema) {
  * ========================================================================= */
 
 TEST(tools_call_run_missing_code) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
@@ -568,7 +593,8 @@ TEST(tools_call_run_missing_code) {
 }
 
 TEST(tools_call_run_has_open_world_hint) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_run is at index 3 */
     XrJsonValue *run_tool = xjson_array_get(tools, 3);
@@ -586,7 +612,7 @@ TEST(tools_call_run_has_open_world_hint) {
  * ========================================================================= */
 
 TEST(tools_call_definition_missing_symbol) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_definition");
     XrJsonValue *args = xjson_new_object();
@@ -601,7 +627,8 @@ TEST(tools_call_definition_missing_symbol) {
 }
 
 TEST(tools_call_definition_schema) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     /* xray_definition is at index 6 */
     XrJsonValue *def_tool = xjson_array_get(tools, 6);
@@ -620,7 +647,8 @@ TEST(tools_call_definition_schema) {
  * ========================================================================= */
 
 TEST(tools_list_pagination_no_cursor) {
-    XrJsonValue *result = xmcp_handle_tools_list(NULL);
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     ASSERT_EQ(xjson_array_len(tools), 7);
     /* No nextCursor when all items fit */
@@ -633,7 +661,7 @@ TEST(tools_list_pagination_no_cursor) {
  * ========================================================================= */
 
 TEST(resources_list_returns_three) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
@@ -645,7 +673,7 @@ TEST(resources_list_returns_three) {
 }
 
 TEST(resources_list_has_required_fields) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
@@ -661,7 +689,7 @@ TEST(resources_list_has_required_fields) {
 }
 
 TEST(resources_list_uris) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
@@ -682,7 +710,7 @@ TEST(resources_list_uris) {
  * ========================================================================= */
 
 TEST(resources_read_cheatsheet) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "uri", "xray://spec/cheatsheet");
 
@@ -702,7 +730,7 @@ TEST(resources_read_cheatsheet) {
 }
 
 TEST(resources_read_unknown_uri) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "uri", "xray://nonexistent");
 
@@ -722,7 +750,7 @@ TEST(resources_read_unknown_uri) {
  * ========================================================================= */
 
 TEST(resource_templates_list_returns_two) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
@@ -734,7 +762,7 @@ TEST(resource_templates_list_returns_two) {
 }
 
 TEST(resource_templates_have_required_fields) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
@@ -751,7 +779,7 @@ TEST(resource_templates_have_required_fields) {
 }
 
 TEST(resource_templates_uris) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
@@ -767,7 +795,7 @@ TEST(resource_templates_uris) {
 
 TEST(resources_read_topic_template) {
     /* Need knowledge base for template resources */
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     server.knowledge = xmcp_knowledge_new();
     xmcp_knowledge_load(server.knowledge);
 
@@ -790,7 +818,7 @@ TEST(resources_read_topic_template) {
 }
 
 TEST(resources_read_stdlib_template) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     server.knowledge = xmcp_knowledge_new();
     xmcp_knowledge_load(server.knowledge);
 
@@ -877,7 +905,7 @@ TEST(prompts_list_has_arguments) {
  * ========================================================================= */
 
 TEST(prompts_get_code_review) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "code-review");
 
@@ -901,7 +929,7 @@ TEST(prompts_get_code_review) {
 }
 
 TEST(prompts_get_unknown_prompt) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "nonexistent-prompt");
 
@@ -918,7 +946,7 @@ TEST(prompts_get_unknown_prompt) {
 }
 
 TEST(prompts_get_missing_name) {
-    XmcpServer server = {0};
+    XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
 
     XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
@@ -1084,6 +1112,7 @@ int main(void) {
     RUN_TEST(initialize_capabilities_without_prompts);
     RUN_TEST(initialize_capabilities_minimal);
     RUN_TEST(registry_init_counts_features);
+    RUN_TEST(registry_finds_tools_by_name);
 
     /* Tools */
     RUN_TEST(tools_list_returns_seven_tools);

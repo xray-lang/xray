@@ -13,13 +13,36 @@
 #include "xmcp_resources.h"
 #include "xmcp_prompts.h"
 #include "../../base/xchecks.h"
+#include <string.h>
 
 XR_FUNC void xmcp_registry_init(XmcpRegistry *registry) {
     XR_DCHECK(registry != NULL, "xmcp_registry_init: NULL registry");
+    registry->tools = xmcp_tools_table();
     registry->tool_count = xmcp_tools_count();
     registry->resource_count = xmcp_resources_count();
     registry->resource_template_count = xmcp_resource_templates_count();
     registry->prompt_count = xmcp_prompts_count();
+}
+
+XR_FUNC const XmcpToolDef *xmcp_registry_tool_at(const XmcpRegistry *registry, size_t index) {
+    XR_DCHECK(registry != NULL, "xmcp_registry_tool_at: NULL registry");
+    XR_DCHECK(registry->tools != NULL, "xmcp_registry_tool_at: NULL tools");
+    XR_DCHECK(index < registry->tool_count, "xmcp_registry_tool_at: index out of range");
+    return &registry->tools[index];
+}
+
+XR_FUNC const XmcpToolDef *xmcp_registry_find_tool(const XmcpRegistry *registry, const char *name) {
+    XR_DCHECK(registry != NULL, "xmcp_registry_find_tool: NULL registry");
+    XR_DCHECK(name != NULL, "xmcp_registry_find_tool: NULL name");
+
+    if (!registry->tools || registry->tool_count == 0)
+        return NULL;
+    for (size_t i = 0; i < registry->tool_count; i++) {
+        const XmcpToolDef *tool = &registry->tools[i];
+        if (tool->name && strcmp(tool->name, name) == 0)
+            return tool;
+    }
+    return NULL;
 }
 
 XR_FUNC bool xmcp_registry_has_tools(const XmcpRegistry *registry) {
