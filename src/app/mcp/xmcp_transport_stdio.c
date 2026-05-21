@@ -93,10 +93,12 @@ XR_FUNC void xmcp_stdio_destroy(XmcpStdioTransport *transport) {
 }
 
 XR_FUNC XmcpStdioReadStatus xmcp_stdio_read_message(XmcpStdioTransport *transport,
-                                                    char **out_message) {
+                                                    char **out_message, size_t *out_len) {
     XR_DCHECK(transport != NULL, "xmcp_stdio_read_message: NULL transport");
     XR_DCHECK(out_message != NULL, "xmcp_stdio_read_message: NULL out_message");
+    XR_DCHECK(out_len != NULL, "xmcp_stdio_read_message: NULL out_len");
     *out_message = NULL;
+    *out_len = 0;
 
     for (;;) {
         void *newline = memchr(transport->read_buf, '\n', transport->read_len);
@@ -111,6 +113,7 @@ XR_FUNC XmcpStdioReadStatus xmcp_stdio_read_message(XmcpStdioTransport *transpor
             if (!line)
                 return XMCP_STDIO_READ_ERROR;
             *out_message = line;
+            *out_len = line_len;
             return XMCP_STDIO_READ_OK;
         }
 
