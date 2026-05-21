@@ -107,4 +107,56 @@ static inline void xr_instance_set_field_fast(XrInstance *inst, int index, XrVal
     inst->fields[index] = value;
 }
 
+/* ========== Native Body Access ========== */
+
+// Byte offset from instance start to native body region.
+// Returns the offset past the flexible array member fields[].
+static inline size_t xr_instance_body_offset(XrClass *cls) {
+    uint32_t field_count = xr_class_instance_field_count(cls);
+    size_t raw = sizeof(XrInstance) + sizeof(XrValue) * field_count;
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc && desc->body_align > 0) {
+        size_t align = (size_t) desc->body_align;
+        raw = (raw + align - 1) & ~(align - 1);
+    }
+    return raw;
+}
+
+// Returns pointer to the native body region, or NULL if class has none.
+static inline void *xr_instance_native_body(XrInstance *inst) {
+    XrClass *klass = inst->klass;
+    if (!klass->native_body)
+        return NULL;
+    return (uint8_t *) inst + xr_instance_body_offset(klass);
+}
+
+/* ========== Dynamic Layout Field Access ========== */
+
+// Default in-object field capacity for dynamic-layout classes.
+// The last slot (index = capacity - 1) is reserved as overflow pointer
+// when logical field count exceeds capacity - 1.
+#define XR_DYNAMIC_INOBJECT_DEFAULT 8
+
+// Read a logical field from a dynamic-layout instance.
+// Handles both in-object and overflow cases transparently.
+XR_FUNC XrValue xr_instance_get_dynamic_field(XrInstance *inst, uint16_t index);
+
+// Write a logical field on a dynamic-layout instance.
+// Returns false if overflow allocation fails.
+XR_FUNC bool xr_instance_set_dynamic_field(struct XrayIsolate *X, XrInstance *inst, uint16_t index,
+                                           XrValue value);
+
+// Look up or create a class transition for the given field symbol.
+// Returns the target class (with field_count = current + 1), or NULL on OOM.
+XR_FUNC struct XrClass *xr_class_transition_get_or_create(struct XrayIsolate *X,
+                                                          struct XrClass *klass, int symbol,
+                                                          const char *field_name);
+
+// Build a dynamic-layout class chain starting from the Json root class with
+// the given field names in order. If sealed is true, marks the leaf class
+// as XR_CLASS_DYNAMIC_SEALED so further transitions are rejected.
+// Returns the leaf class (or NULL on OOM).
+XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrayIsolate *X, const char *const *names,
+                                                  int count, bool sealed);
+
 #endif  // XINSTANCE_H

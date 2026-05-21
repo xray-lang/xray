@@ -42,18 +42,15 @@ typedef struct XrICFieldEntry {
 
 /* ========== Inline Cache ========== */
 
-// Each OP_GETPROP/OP_SETPROP instruction has an associated IC
+// Each OP_GETPROP/OP_SETPROP instruction has an associated IC.
+// Both Json and class instances share the class-based IC: Json uses its
+// dynamic-layout class chain, regular classes use their fixed layout class.
 typedef struct XrICField {
     XrICFieldState state;
     uint8_t entry_count;
     int cached_symbol;          // For cache validity check
     XrICFieldEntry entries[4];  // Max 4 types cached
     uint32_t miss_count;
-
-    // Json Shape IC: caches (shape_id, field_index) for monomorphic Json access.
-    // Same OP_GETPROP either hits Json or Instance path, never both simultaneously.
-    uint16_t json_shape_id;   // Cached shape id (0 = uninit)
-    uint16_t json_field_idx;  // Cached field index within fields[]
 #ifndef NDEBUG
     int debug_instruction_offset;  // Expected instruction offset for cache validation
 #endif
@@ -66,8 +63,6 @@ static inline void xr_ic_field_init(XrICField *ic) {
     ic->entry_count = 0;
     ic->cached_symbol = -1;
     ic->miss_count = 0;
-    ic->json_shape_id = 0;
-    ic->json_field_idx = 0;
 #ifndef NDEBUG
     ic->debug_instruction_offset = -1;
 #endif
@@ -104,25 +99,6 @@ static inline bool xr_ic_field_lookup_poly(XrICField *ic, XrClass *cls, int symb
         }
     }
     return false;
-}
-
-// Json Shape IC: monomorphic lookup by shape_id
-// Returns true on hit with field index in *out_idx
-static inline bool xr_ic_json_lookup(XrICField *ic, uint16_t shape_id, int symbol,
-                                     uint16_t *out_idx) {
-    if (ic->json_shape_id == shape_id && ic->cached_symbol == symbol && shape_id != 0) {
-        *out_idx = ic->json_field_idx;
-        return true;
-    }
-    return false;
-}
-
-// Json Shape IC: update cache after miss
-static inline void xr_ic_json_update(XrICField *ic, uint16_t shape_id, uint16_t field_idx,
-                                     int symbol) {
-    ic->json_shape_id = shape_id;
-    ic->json_field_idx = field_idx;
-    ic->cached_symbol = symbol;
 }
 
 // Update IC with new type info (Class/Instance)

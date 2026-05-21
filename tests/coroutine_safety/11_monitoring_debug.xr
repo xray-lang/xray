@@ -105,7 +105,7 @@ fn test_batch_status_query() {
 // 测试5：协程错误捕获
 fn test_coro_error_capture() {
     fn failing_task() {
-        throw "Something went wrong!"
+        throw new Exception("Something went wrong!")
     }
     fn safe_task() {
         return "success"

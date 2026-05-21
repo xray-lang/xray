@@ -4,7 +4,7 @@
 
 fn validate(x: int) {
     if (x < 0) {
-        throw "bad value"
+        throw new Exception("bad value")
     }
 }
 

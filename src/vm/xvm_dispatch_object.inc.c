@@ -11,7 +11,7 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_FRAMES, VM_FRAME_COUNT,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_BARRIER_*, VM_STACK*, VM_CURRENT_CORO,
  * checkGC, startfunc label, ...) provided by the surrounding
  * scope. CMake excludes *.inc.c from the VM_SRC glob.
@@ -36,7 +36,7 @@
  *     - OP_GETPROP / OP_SETPROP / OP_GETSUPER (placeholder)
  *
  * Method-invocation opcodes (OP_INVOKE / OP_INVOKE_TAIL /
- * OP_SUPERINVOKE / OP_INVOKE_DIRECT / OP_INVOKE_BUILTIN) live in
+ * OP_SUPERINVOKE / OP_INVOKE_DIRECT) live in
  * xvm_dispatch_invoke.inc.c so this file stays under the per-file
  * size gate.
  */
@@ -263,18 +263,16 @@ vmcase(OP_NEWJSON) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int storage_mode = GETARG_C(i);
-    XrValue shape_val = k[b];
-    // Shape stored as integer pointer (not GC managed)
-    XrShape *shape = (XrShape *) (intptr_t) XR_TO_INT(shape_val);
-
+    XrValue cls_val = k[b];
+    // Class stored as integer pointer (not GC managed; lives with isolate)
+    XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     XrJson *json;
     if (storage_mode != 0 && isolate->sys_heap) {
         // shared: allocate on system heap
-        int field_count = shape->in_object_capacity;
-        size_t size = xr_json_size(field_count);
-        json = (XrJson *) xr_sysheap_alloc_shared(isolate->sys_heap, size, XR_TJSON);
+        size_t size = xr_json_size(cls);
+        json = (XrJson *) xr_sysheap_alloc_shared(isolate->sys_heap, size, XR_TINSTANCE);
         if (json) {
-            xr_json_init_inplace(json, shape);
+            xr_json_init_inplace(json, cls);
             XR_GC_SET_STORAGE(&json->gc, storage_mode);
             if (storage_mode == XR_GC_STORAGE_SHARED) {
                 xr_shared_set_refc(&json->gc, 1);
@@ -282,7 +280,7 @@ vmcase(OP_NEWJSON) {
         }
     } else {
         // normal: allocate on coroutine heap
-        json = xr_json_new_with_shape(VM_CURRENT_CORO, shape);
+        json = xr_json_new_with_class(VM_CURRENT_CORO, cls);
     }
 
     R(a) = xr_json_value(json);
@@ -297,7 +295,7 @@ vmcase(OP_JSON_GET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrJson *json = xr_value_to_json(R(b));
-    R(a) = xr_json_get_field(json, (uint16_t) c);
+    R(a) = xr_instance_get_dynamic_field(json, (uint16_t) c);
     vmbreak;
 }
 
@@ -308,7 +306,7 @@ vmcase(OP_JSON_SET) {
     int c = GETARG_C(i);
     XrJson *json = xr_value_to_json(R(a));
     XrValue val = R(c);
-    xr_json_set_field(json, (uint16_t) b, val);
+    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
     VM_BARRIER_VAL(json, val);
     vmbreak;
 }
@@ -344,7 +342,7 @@ vmcase(OP_JSON_INIT) {
     int c = GETARG_C(i);
     XrJson *json = xr_value_to_json(R(a));
     XrValue val = R(c);
-    xr_json_set_field(json, (uint16_t) b, val);
+    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
     VM_BARRIER_VAL(json, val);
     vmbreak;
 }
@@ -355,7 +353,7 @@ vmcase(OP_JSON_INIT_I) {
     int b = GETARG_B(i);   // Field index
     int c = GETARG_sC(i);  // Signed immediate value
     XrJson *json = xr_value_to_json(R(a));
-    xr_json_set_field(json, (uint16_t) b, xr_int(c));
+    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, xr_int(c));
     vmbreak;
 }
 
@@ -364,7 +362,7 @@ vmcase(OP_JSON_INIT_N) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);  // Field index
     XrJson *json = xr_value_to_json(R(a));
-    xr_json_set_field(json, (uint16_t) b, xr_null());
+    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, xr_null());
     vmbreak;
 }
 
@@ -372,22 +370,16 @@ vmcase(OP_JSON_DECODE) {
     /* OP_JSON_DECODE: typed JSON deserialization
     ** A = destination register (result: sealed Json or null)
     ** B = data register (string to parse)
-    ** C = Shape constant index (pre-built from compile-time field names)
-    **
-    ** Semantics:
-    **   1. Parse R[B] as JSON string → temporary raw Json
-    **   2. For each field in Shape: lookup by name in parsed data
-    **   3. If all required fields exist → construct sealed Json with O(1) fields
-    **   4. If any field missing → result = null
+    ** C = Class constant index (pre-built from compile-time field names)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
 
     XrValue data = R(b);
-    XrValue shape_val = k[c];
-    XrShape *shape = (XrShape *) (intptr_t) XR_TO_INT(shape_val);
-    XR_DCHECK(shape != NULL, "OP_JSON_DECODE: null shape");
+    XrValue cls_val = k[c];
+    XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
+    XR_DCHECK(cls != NULL, "OP_JSON_DECODE: null class");
 
     /* Accept string (parse first) or Json object (validate directly) */
     XrJson *src = NULL;
@@ -405,30 +397,28 @@ vmcase(OP_JSON_DECODE) {
         R(a) = xr_null();
         vmbreak;
     }
-    uint16_t field_count = shape->field_count;
+    uint16_t field_count = cls->field_count;
 
-    XrJson *result = xr_json_new_with_shape(VM_CURRENT_CORO, shape);
+    XrJson *result = xr_json_new_with_class(VM_CURRENT_CORO, cls);
     if (!result) {
         R(a) = xr_null();
         vmbreak;
     }
 
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
     bool valid = true;
     for (uint16_t fi = 0; fi < field_count; fi++) {
-        SymbolId sym = shape->field_symbols[fi];
-        const char *fname = xr_symbol_get_name_in_table(symtab, sym);
+        const char *fname = cls->fields[fi].name;
+        int sym = cls->fields[fi].symbol;
         if (!fname) {
             valid = false;
             break;
         }
-
         XrValue field_val = xr_json_get_by_key(isolate, src, fname);
         if (XR_IS_NULL(field_val) && !xr_json_has_field(isolate, src, sym)) {
             valid = false;
             break;
         }
-        xr_json_set_field(result, fi, field_val);
+        xr_instance_set_dynamic_field(isolate, result, fi, field_val);
     }
 
     R(a) = valid ? xr_json_value(result) : xr_null();
@@ -494,89 +484,66 @@ vmcase(OP_GETPROP) {
             }
             vmbreak;
         }
-        // Field not found: might be a method, fall through to cold path
+        // Field not found: might be a method, fall through to type dispatch
     }
 
-    // Fast path: Instance is the most common target, skip if-else chain
-    if (xr_value_is_instance(obj))
+    // Fast path: Instance is the most common target, skip if-else chain.
+    // Enum types/values use the type dispatch for member resolution.
+    if (xr_value_is_instance(obj) && !XR_IS_ENUM_TYPE(obj) && !XR_IS_ENUM_VALUE(obj))
         goto getprop_instance;
 
-    // Json fast path with Shape IC
-    if (xr_value_is_json(obj)) {
-        XrJson *json = xr_value_to_json(obj);
-        uint16_t shape_id = xr_gc_get_shape_id(&json->gc);
+    // Json values are dynamic-layout instances (builtin_kind == XR_BK_JSON);
+    // route them through the unified instance path below.
+    if (xr_value_is_json(obj))
+        goto getprop_instance;
 
-        // Lazily ensure the per-ctx IC table for this proto.
-        XrICFieldTable *ic_table_j = xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
-        if (!ic_table_j) {
-            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_GETPROP: failed to allocate IC table");
-        }
-        size_t jic_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
-        XrICField *jic = xr_ic_field_table_get(ic_table_j, (int) jic_index);
-
-        // IC hit: shape_id + symbol match → direct field access (in-object only)
-        uint16_t jic_idx;
-        if (jic && xr_ic_json_lookup(jic, shape_id, prop_symbol, &jic_idx)) {
-            R(a) = json->fields[jic_idx];
-            vmbreak;
-        }
-
-        // IC miss: full shape lookup
-        XrShape *shape = xr_shape_get_by_id(isolate, shape_id);
-        if (shape && shape->symbol_to_index && prop_symbol >= (int) shape->min_symbol &&
-            prop_symbol <= (int) shape->max_symbol) {
-            int idx = shape->symbol_to_index[prop_symbol - shape->min_symbol];
-            if (idx >= 0) {
-                if (idx < shape->in_object_capacity) {
-                    R(a) = json->fields[idx];
-                    // Update IC for next hit (in-object fields only)
-                    if (jic)
-                        xr_ic_json_update(jic, shape_id, (uint16_t) idx, prop_symbol);
-                    vmbreak;
-                }
-                // Overflow field: fall through to slow path
-            }
-        }
-
-        // Slow path: overflow field or field not found
-        R(a) = xr_json_get(isolate, json, prop_symbol);
-        vmbreak;
-    }
-
-    // Cold path: all non-instance, non-json type dispatch
+    // Dispatch: all non-instance, non-json type dispatch
     {
         savepc();
-        int _cr =
+        XrDispatchAction _cr =
             vm_getprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, base, a, b, frame, pc);
-        if (_cr == VM_COLD_BREAK)
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: fall through to instance path
+        // XR_DISP_FALLTHROUGH: fall through to instance path
     }
 
 getprop_instance:;
-    XrInstance *inst = xr_value_to_instance(obj);
+    // XrJson shares XrInstance layout; direct cast works.
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(obj);
 
-    // Cold path: getter method lookup
+    // Dynamic-layout fast path: hidden-class instance, lookup may miss
+    // (returns null), no getter dispatch, no method fallback.
+    if (inst->klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        int field_index_d = xr_class_lookup_field(inst->klass, prop_symbol);
+        if (field_index_d >= 0) {
+            R(a) = xr_instance_get_dynamic_field(inst, (uint16_t) field_index_d);
+        } else {
+            R(a) = xr_null();
+        }
+        vmbreak;
+    }
+
+    // Dispatch: getter method lookup
     {
-        int _cr =
+        XrDispatchAction _cr =
             vm_getprop_instance_getter(isolate, vm_ctx, inst, obj, prop_symbol, base, a, frame, pc);
-        if (_cr == VM_COLD_BREAK)
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: no getter, fall through to field access
+        // XR_DISP_FALLTHROUGH: no getter, fall through to field access
     }
 
     // No getter: access as regular field
@@ -660,87 +627,81 @@ vmcase(OP_SETPROP) {
     int prop_symbol = PROTO_SYMBOL(cl->proto, b);  // Dereference local index → global symbol
     XrValue value = R(c);
 
-    // Json fast path with Shape IC (set existing field)
-    if (xr_value_is_json(obj)) {
-        XrJson *json = xr_value_to_json(obj);
-        uint16_t shape_id = xr_gc_get_shape_id(&json->gc);
+    // Json values are dynamic-layout instances; the per-type
+    // dispatch returns XR_DISP_FALLTHROUGH for them and the regular
+    // instance path below (with its DYNAMIC_LAYOUT branch) handles all
+    // semantics — including transitions on field add and sealed errors.
 
-        // Lazily ensure the per-ctx IC table for this proto.
-        XrICFieldTable *ic_table_sj = xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
-        if (!ic_table_sj) {
-            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_SETPROP: failed to allocate IC table");
-        }
-        size_t jic_index = pc - PROTO_CODE_BASE(frame->closure->proto) - 1;
-        XrICField *jic = xr_ic_field_table_get(ic_table_sj, (int) jic_index);
-
-        // IC hit: shape_id + symbol match → direct field write (in-object only)
-        uint16_t jic_idx;
-        if (jic && xr_ic_json_lookup(jic, shape_id, prop_symbol, &jic_idx)) {
-            json->fields[jic_idx] = value;
-            XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
+    // Dispatch: non-instance type dispatch (Map/Module/Class/null)
+    {
+        savepc();
+        XrDispatchAction _cr =
+            vm_setprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, value, base, a, frame, pc);
+        if (_cr == XR_DISP_NEXT)
             vmbreak;
+        if (_cr == XR_DISP_RESTART)
+            goto startfunc;
+        if (_cr == XR_DISP_RAISE) {
+            if (!xr_vm_is_catch_reachable(isolate))
+                return XR_VM_RUNTIME_ERROR;
+            goto startfunc;
         }
+        // XR_DISP_FALLTHROUGH: fall through to instance path
+    }
 
-        // IC miss: try inline fast path for existing in-object field
-        XrShape *shape = xr_shape_get_by_id(isolate, shape_id);
-        if (shape && shape->symbol_to_index && prop_symbol >= (int) shape->min_symbol &&
-            prop_symbol <= (int) shape->max_symbol) {
-            int idx = shape->symbol_to_index[prop_symbol - shape->min_symbol];
-            if (idx >= 0) {
-                if (idx < shape->in_object_capacity) {
-                    json->fields[idx] = value;
-                    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
-                    if (jic)
-                        xr_ic_json_update(jic, shape_id, (uint16_t) idx, prop_symbol);
-                    vmbreak;
-                }
-                // Overflow field: fall through to slow path
+    // XrJson shares XrInstance layout — direct cast works
+    XrInstance *inst_s = (XrInstance *) XR_TO_PTR(obj);
+
+    // Dynamic-layout fast path: hidden-class instance, missing field creates
+    // a class transition. Shared objects cannot create new transitions.
+    if (inst_s->klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        int field_index_d = xr_class_lookup_field(inst_s->klass, prop_symbol);
+        if (field_index_d < 0) {
+            // Adding a new field: forbid on shared objects
+            if (XR_GC_GET_STORAGE(&inst_s->gc) == XR_GC_STORAGE_SHARED) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                                 "cannot add field to shared dynamic object");
             }
+            XrSymbolTable *_st_sd = (XrSymbolTable *) isolate->symbol_table;
+            const char *fname = xr_symbol_get_name_in_table(_st_sd, prop_symbol);
+            // Sealed dynamic objects reject new fields with a clear error
+            if (inst_s->klass->flags & XR_CLASS_DYNAMIC_SEALED) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add field '%s' to sealed object",
+                                 fname ? fname : "?");
+            }
+            XrClass *next = xr_class_transition_get_or_create(isolate, inst_s->klass, prop_symbol,
+                                                              fname ? fname : "?");
+            if (!next) {
+                VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                 "OP_SETPROP: dynamic transition allocation failed");
+            }
+            inst_s->klass = next;
+            field_index_d = xr_class_lookup_field(next, prop_symbol);
+            XR_DCHECK(field_index_d >= 0, "transition: new field not registered");
         }
-
-        // Slow path: overflow field, new field addition
-        if (!xr_json_set(isolate, json, prop_symbol, value)) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
+        if (!xr_instance_set_dynamic_field(isolate, inst_s, (uint16_t) field_index_d, value)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "OP_SETPROP: dynamic overflow alloc failed");
         }
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), json);
+        VM_BARRIER_VAL(inst_s, value);
         vmbreak;
     }
 
-    // Cold path: non-instance type dispatch (Map/Module/Class/null)
+    // Dispatch: setter method lookup
     {
-        savepc();
-        int _cr =
-            vm_setprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, value, base, a, frame, pc);
-        if (_cr == VM_COLD_BREAK)
-            vmbreak;
-        if (_cr == VM_COLD_STARTFUNC)
+        XrDispatchAction _cr = vm_setprop_instance_setter(isolate, vm_ctx, inst_s, obj, prop_symbol,
+                                                          value, base, c, frame, pc);
+        if (_cr == XR_DISP_RESTART)
             goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
+        if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
             goto startfunc;
         }
-        // VM_COLD_CONTINUE: fall through to instance path
-    }
-
-    XrInstance *inst = xr_value_to_instance(obj);
-
-    // Cold path: setter method lookup
-    {
-        int _cr = vm_setprop_instance_setter(isolate, vm_ctx, inst, obj, prop_symbol, value, base,
-                                             c, frame, pc);
-        if (_cr == VM_COLD_STARTFUNC)
-            goto startfunc;
-        if (_cr == VM_COLD_ERROR) {
-            if (!xr_vm_is_catch_reachable(isolate))
-                return XR_VM_RUNTIME_ERROR;
-            goto startfunc;
-        }
-        // VM_COLD_CONTINUE: no setter, fall through to field access
+        // XR_DISP_FALLTHROUGH: no setter, fall through to field access
     }
 
     // No setter: assign as regular field
-    XrClass *inst_class = inst->klass;
+    XrClass *inst_class = inst_s->klass;
 
     // Field access Inline Cache optimization (per-ctx)
     XrICFieldTable *ic_table_s = xr_vm_ctx_ensure_ic_fields(vm_ctx, frame->closure->proto);
@@ -759,15 +720,15 @@ vmcase(OP_SETPROP) {
 
     // Fast path 1: Monomorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_mono(cache, inst_class, prop_symbol, &field_index)) {
-        inst->fields[field_index] = value;
-        VM_BARRIER_VAL(inst, value);
+        inst_s->fields[field_index] = value;
+        VM_BARRIER_VAL(inst_s, value);
         vmbreak;
     }
 
     // Fast path 2: Polymorphic IC hit (verify symbol match)
     if (cache && xr_ic_field_lookup_poly(cache, inst_class, prop_symbol, &field_index)) {
-        inst->fields[field_index] = value;
-        VM_BARRIER_VAL(inst, value);
+        inst_s->fields[field_index] = value;
+        VM_BARRIER_VAL(inst_s, value);
         vmbreak;
     }
 
@@ -775,8 +736,8 @@ vmcase(OP_SETPROP) {
     field_index = xr_class_lookup_field(inst_class, prop_symbol);
 
     if (field_index >= 0) {
-        inst->fields[field_index] = value;
-        VM_BARRIER_VAL(inst, value);
+        inst_s->fields[field_index] = value;
+        VM_BARRIER_VAL(inst_s, value);
 
         // Update IC cache (pass symbol)
         if (cache) {

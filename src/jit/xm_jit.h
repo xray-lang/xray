@@ -43,11 +43,9 @@ typedef struct XmJitState {
     int threshold;                // call count threshold for Tier 1
     int compiled_count;
     bool enabled;
-    TfaState *tfa;  // lazily allocated TFA state (NULL until first use)
-    void
-        *dominant_shape;  // XrShape* — most common NEWJSON shape in module (NULL if none/ambiguous)
-    bool verbose;         // diagnostic logging (auto-enabled by --jit-force)
-    bool stats_enabled;   // --jit-stats: print compilation statistics on exit
+    TfaState *tfa;             // lazily allocated TFA state (NULL until first use)
+    bool verbose;              // diagnostic logging (auto-enabled by --jit-force)
+    bool stats_enabled;        // --jit-stats: print compilation statistics on exit
     XmCompileQueue *bg_queue;  // background compilation queue (NULL if sync mode)
 
     // Code cache eviction: track compiled protos for LRU reclaim

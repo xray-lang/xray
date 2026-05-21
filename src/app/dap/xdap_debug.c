@@ -282,7 +282,7 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
     } else if (XR_IS_SET(val)) {
         void *ptr = XR_TO_PTR(val);
         snprintf(buf, sizeof(buf), "Set{...} @%p", ptr);
-    } else if (XR_IS_JSON(val)) {
+    } else if (xr_value_is_json(val)) {
         XrJson *json = xr_value_to_json(val);
         int count = xr_json_field_count(isolate, json);
         snprintf(buf, sizeof(buf), "Object(%d) @%p", count, (void *) json);
@@ -301,8 +301,30 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
                 break;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) hdr;
-                const char *class_name = xr_class_display_name(inst->klass);
-                snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
+                if (inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER) {
+                    XrStringBuilder *sb = (XrStringBuilder *) hdr;
+                    size_t len = xr_stringbuilder_length(sb);
+                    if (len <= 50) {
+                        XrString *s = xr_stringbuilder_to_string(sb);
+                        if (s) {
+                            snprintf(buf, sizeof(buf), "StringBuilder(%zu) \"%.*s\"", len,
+                                     (int) len, XR_STRING_CHARS(s));
+                        } else {
+                            snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
+                        }
+                    } else {
+                        snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
+                    }
+                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
+                    snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
+                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
+                    snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
+                } else if (inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR) {
+                    snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
+                } else {
+                    const char *class_name = xr_class_display_name(inst->klass);
+                    snprintf(buf, sizeof(buf), "%s {...} @%p", class_name, (void *) hdr);
+                }
                 break;
             }
             case XR_TCLASS: {
@@ -317,59 +339,20 @@ char *xr_value_to_debug_string(XrayIsolate *isolate, XrValue val) {
             case XR_TCHANNEL:
                 snprintf(buf, sizeof(buf), "<channel> @%p", (void *) hdr);
                 break;
-            case XR_TREGEX:
-                snprintf(buf, sizeof(buf), "<regex> @%p", (void *) hdr);
-                break;
-            case XR_TDATETIME:
-                snprintf(buf, sizeof(buf), "<datetime> @%p", (void *) hdr);
-                break;
-            case XR_TSTRINGBUILDER: {
-                XrStringBuilder *sb = (XrStringBuilder *) hdr;
-                size_t len = xr_stringbuilder_length(sb);
-                if (len <= 50) {
-                    XrString *s = xr_stringbuilder_to_string(sb);
-                    if (s) {
-                        snprintf(buf, sizeof(buf), "StringBuilder(%zu) \"%.*s\"", len, (int) len,
-                                 XR_STRING_CHARS(s));
-                    } else {
-                        snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
-                    }
-                } else {
-                    snprintf(buf, sizeof(buf), "StringBuilder(%zu)", len);
-                }
-                break;
-            }
             case XR_TMODULE: {
                 XrModule *mod = (XrModule *) hdr;
                 snprintf(buf, sizeof(buf), "<module %s>", mod->name ? mod->name : "?");
                 break;
             }
-            case XR_TITERATOR:
-                snprintf(buf, sizeof(buf), "<iterator> @%p", (void *) hdr);
-                break;
             case XR_TERROR:
                 snprintf(buf, sizeof(buf), "<error> @%p", (void *) hdr);
                 break;
-            case XR_TEXCEPTION:
-                snprintf(buf, sizeof(buf), "<exception> @%p", (void *) hdr);
-                break;
-            case XR_TENUM_TYPE:
-                snprintf(buf, sizeof(buf), "<enum type> @%p", (void *) hdr);
-                break;
-            case XR_TENUM_VALUE:
-                snprintf(buf, sizeof(buf), "<enum value> @%p", (void *) hdr);
-                break;
+            /* Exception uses XR_TINSTANCE — handled in the instance path */
             case XR_TBOUND_METHOD:
                 snprintf(buf, sizeof(buf), "<bound method> @%p", (void *) hdr);
                 break;
-            case XR_TBIGINT:
-                snprintf(buf, sizeof(buf), "<bigint> @%p", (void *) hdr);
-                break;
             case XR_TCOROPOOL:
                 snprintf(buf, sizeof(buf), "<coro pool> @%p", (void *) hdr);
-                break;
-            case XR_TSHAPE:
-                snprintf(buf, sizeof(buf), "<shape> @%p", (void *) hdr);
                 break;
             default:
                 snprintf(buf, sizeof(buf), "<object:%d> @%p", hdr->type, (void *) hdr);

@@ -20,13 +20,64 @@
 #include "../analyzer/xanalyzer_mono.h"
 #include "../analyzer/xanalyzer_escape.h"
 #include "../xdiag_fmt.h"
+#include "../parser/xast_api.h"
+#include "../parser/xast_types.h"
+#include "../parser/xparse_internal.h"
+#include "../../runtime/xisolate_api.h"
 #include <stdio.h>
+#include <string.h>
+
+/* Inject the built-in `enum Result { Ok(value), Err(error) }` into
+ * the program AST so the analyzer sees it as a user-declared type.
+ * Called once before analysis; idempotent (skips if already present). */
+static void inject_prelude_result_enum(XrayIsolate *X, AstNode *program) {
+    XR_DCHECK(X != NULL, "inject_prelude_result_enum: NULL isolate");
+    XR_DCHECK(program != NULL && program->type == AST_PROGRAM,
+              "inject_prelude_result_enum: bad program");
+
+    /* Guard: skip if Result is already declared by user source */
+    for (int i = 0; i < program->as.program.count; i++) {
+        AstNode *s = program->as.program.statements[i];
+        if (s && s->type == AST_ENUM_DECL && s->as.enum_decl.name &&
+            strcmp(s->as.enum_decl.name, "Result") == 0)
+            return;
+    }
+
+    /* Ok(value) variant — single payload */
+    AstNode *ok_member = xr_ast_enum_member(X, "Ok", NULL, NULL, NULL, 1, 0);
+    /* Err(error) variant — single payload */
+    AstNode *err_member = xr_ast_enum_member(X, "Err", NULL, NULL, NULL, 1, 0);
+
+    AstNode **members = (AstNode **) ast_alloc_array(X, sizeof(AstNode *), 2);
+    members[0] = ok_member;
+    members[1] = err_member;
+
+    AstNode *decl = xr_ast_enum_decl(X, "Result", NULL, members, 2, NULL, 0, NULL, 0, NULL, 0, 0);
+
+    /* Prepend: the enum must execute before user code so its runtime
+     * type object exists by the time user expressions reference it. */
+    xr_ast_program_add(X, program, NULL); /* grow capacity */
+    int n = program->as.program.count - 1;
+    for (int i = n; i > 0; i--)
+        program->as.program.statements[i] = program->as.program.statements[i - 1];
+    program->as.program.statements[0] = decl;
+}
 
 /* Compile AST to bytecode via Xi IR pipeline.
  * Returns XrProto on success, NULL on failure. */
 XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     XR_DCHECK(ctx != NULL, "xr_compile: NULL context");
     XR_DCHECK(ast != NULL, "xr_compile: NULL ast");
+
+    /* Inject prelude types into the AST before analysis.
+     * Must activate the parse arena so synthetic AST nodes land there. */
+    {
+        struct XrArena *saved_arena = xr_isolate_get_current_arena(ctx->X);
+        if (ast->type == AST_PROGRAM && ast->as.program.arena)
+            xr_isolate_set_current_arena(ctx->X, ast->as.program.arena);
+        inject_prelude_result_enum(ctx->X, ast);
+        xr_isolate_set_current_arena(ctx->X, saved_arena);
+    }
 
     /* Save initial global variable offset (for module compilation) */
     int initial_global_offset = ctx->global_var_count;
@@ -134,9 +185,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     {
         XiPipelineConfig pipe_cfg = xi_pipeline_default_config();
         /* REPL mode: top-level bindings go through XrGlobalDict
-         * (name-keyed) instead of the slot-indexed shared array.  This
-         * is the single switch that activates the Phase 2 globals
-         * lowering for the live REPL. */
+         * (name-keyed) instead of the slot-indexed shared array. */
         pipe_cfg.repl_mode = ctx->repl_mode;
         XiPipelineResult pipe_res =
             xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);

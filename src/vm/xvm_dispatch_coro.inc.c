@@ -9,29 +9,29 @@
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
- * pc, frame, ci, base, R, vmcase, vmbreak, VM_DISPATCH_COLD,
+ * pc, frame, ci, base, R, vmcase, vmbreak, VM_DISPATCH,
  * VM_RUNTIME_ERROR, VM_CURRENT_CORO, TRACE_EXECUTION, ...)
  * provided by the surrounding scope. CMake excludes *.inc.c
  * from the VM_SRC glob.
  *
  * Owns the spawn / await / yield family plus the coroutine
  * thread-affinity, coroutine-local, and priority opcodes that
- * sit alongside them. Heavy variants delegate to cold-path
- * helpers (vm_go / vm_await / vm_await_timeout / ...).
+ * sit alongside them. Heavy variants delegate to dispatch
+ * helpers in xvm_coro_ops.c (vm_go / vm_await / ...).
  */
 
 vmcase(OP_GO) {
     TRACE_EXECUTION();
     ci->pc = pc;
-    int _sc_cr = vm_go(isolate, vm_ctx, i, base, ci);
+    XrDispatchAction _sc_cr = vm_go(isolate, vm_ctx, i, base, ci);
     pc = ci->pc;
-    VM_DISPATCH_COLD(_sc_cr);
+    VM_DISPATCH(_sc_cr);
 }
 
 vmcase(OP_AWAIT) {
     TRACE_EXECUTION();
     /* Inline fast path: task completed with immediate value.
-     * Avoids noinline cold path call and defers executor recycle
+     * Avoids out-of-line dispatch path call and defers executor recycle
      * to next pool_get — matching channel recv hot path perf. */
     {
         int _aw_a = GETARG_A(i);
@@ -60,22 +60,22 @@ vmcase(OP_AWAIT) {
             }
         }
     }
-    VM_DISPATCH_COLD(vm_await(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_await(isolate, vm_ctx, i, base, ci, pc));
 }
 
 vmcase(OP_AWAIT_TIMEOUT) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_await_timeout(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_await_timeout(isolate, vm_ctx, i, base, ci, pc));
 }
 
 vmcase(OP_AWAIT_ALL) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_await_all(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_await_all(isolate, vm_ctx, i, base, ci, pc));
 }
 
 vmcase(OP_AWAIT_ANY) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_await_any(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_await_any(isolate, vm_ctx, i, base, ci, pc));
 }
 
 vmcase(OP_YIELD) {
@@ -228,7 +228,7 @@ vmcase(OP_SET_PRIORITY) {
 }
 
 vmcase(OP_CORO_CTRL) {
-    // Cold path: all coro monitoring/diagnostics sub-operations
+    // Dispatch: all coro monitoring/diagnostics sub-operations
     vm_coro_ctrl(isolate, vm_ctx, i, base);
     vmbreak;
 }

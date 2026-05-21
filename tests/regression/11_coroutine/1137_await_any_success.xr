@@ -7,7 +7,7 @@ fn success() -> int {
     return 42
 }
 fn failing() -> int {
-    throw "error"
+    throw new Exception("error")
     return 0
 }
 

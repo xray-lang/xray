@@ -578,6 +578,9 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.match_arm.guard = xr_ast_clone(node->as.match_arm.guard, map, mc);
             n->as.match_arm.body = xr_ast_clone(node->as.match_arm.body, map, mc);
             break;
+        case AST_CATCH_EXPR:
+            n->as.catch_expr.body = xr_ast_clone(node->as.catch_expr.body, map, mc);
+            break;
 
         // === Pattern nodes ===
         case AST_PATTERN_LITERAL:
@@ -598,6 +601,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.pattern_tuple.count = node->as.pattern_tuple.count;
             n->as.pattern_tuple.patterns = clone_node_array(node->as.pattern_tuple.patterns,
                                                             node->as.pattern_tuple.count, map, mc);
+            break;
+        case AST_PATTERN_TYPE:
+            n->as.pattern_type.type = node->as.pattern_type.type;
+            n->as.pattern_type.binding_name = clone_str(node->as.pattern_type.binding_name);
+            n->as.pattern_type.symbol_id = node->as.pattern_type.symbol_id;
             break;
 
         // === Coroutine nodes ===
@@ -1196,6 +1204,9 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             collect_instantiation_sites(node->as.match_arm.guard, registry, collector);
             collect_instantiation_sites(node->as.match_arm.body, registry, collector);
             break;
+        case AST_CATCH_EXPR:
+            collect_instantiation_sites(node->as.catch_expr.body, registry, collector);
+            break;
         case AST_IS_EXPR:
             collect_instantiation_sites(node->as.is_expr.expr, registry, collector);
             break;
@@ -1397,6 +1408,9 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_MATCH_ARM:
             rewrite_call_sites(node->as.match_arm.guard, registry, collector);
             rewrite_call_sites(node->as.match_arm.body, registry, collector);
+            break;
+        case AST_CATCH_EXPR:
+            rewrite_call_sites(node->as.catch_expr.body, registry, collector);
             break;
         case AST_GO_EXPR:
             rewrite_call_sites(node->as.go_expr.expr, registry, collector);

@@ -229,6 +229,10 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             }
             break;
 
+        case AST_CATCH_EXPR:
+            visit_node(node->as.catch_expr.body, v);
+            break;
+
         default:
             break;
     }

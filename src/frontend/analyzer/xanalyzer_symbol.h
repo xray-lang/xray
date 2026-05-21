@@ -121,7 +121,10 @@ struct XaSymbolLinks {
     // For enum symbols (XA_SYM_ENUM)
     const char **enum_member_names;  // Enum member names (for exhaustiveness checking)
     int enum_member_count;
-    XrType *enum_value_type;  // Backing type of enum values (int, string, or union)
+    XrType *enum_value_type;       // Backing type of enum values (int, string, or union)
+    bool is_adt_enum;              // true if any variant has payload (ADT enum vs simple enum)
+    int *enum_payload_counts;      // Per-variant payload field count (0 = no payload)
+    XrType ***enum_payload_types;  // Per-variant payload type arrays (NULL = no payload)
 
     // For module symbols (XA_SYM_MODULE)
     const char *module_name;  // Actual module name (may differ from variable name due to alias)

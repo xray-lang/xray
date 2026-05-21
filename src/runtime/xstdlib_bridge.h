@@ -34,6 +34,11 @@ struct XrChannel;
 // Format a DateTime object. Uses void* to avoid stdlib/datetime dependency.
 XR_FUNC int xr_datetime_format(void *dt, const char *pattern, char *buf, size_t buf_size);
 
+// Returns true iff v is a DateTime instance. Implemented in
+// stdlib/datetime/datetime.c; declared here so the VM and the runtime
+// formatter can probe without including stdlib headers.
+XR_FUNC bool xr_value_is_datetime(struct XrayIsolate *X, XrValue v);
+
 /* ========== Regex Bridge ========== */
 
 // Get pattern string from regex object
@@ -42,10 +47,9 @@ XR_FUNC const char *xr_regex_pattern(const struct XrRegex *re);
 // Extract XrRegex* from an XrValue
 XR_FUNC struct XrRegex *xr_value_to_regex(XrValue v);
 
-// Register the Regex XrClass. Called from xr_prelude_register_all_native_types
-// during isolate init; the standalone forward declaration here is kept so
-// the runtime VM can call it without pulling in stdlib/regex headers.
-XR_FUNC void xr_regex_register_native_type(struct XrayIsolate *isolate);
+// Register the Regex XrClass with native body descriptor. Called from
+// xr_prelude_register_all_native_types during isolate init.
+XR_FUNC void xr_regex_register_class(struct XrayIsolate *isolate);
 
 /*
  * Compile a regex literal (the OP_REGEX_COMPILE bytecode helper).

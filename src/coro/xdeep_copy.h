@@ -116,17 +116,12 @@ XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct Xr
 XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_json_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_deep_copy_closure_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_deep_copy_datetime_with_ctx(struct XrCopyContext *ctx, struct XrGCHeader *obj);
 
 XR_FUNC XrValue xr_to_shared_array(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_map(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_set(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_instance(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_json(struct XrayIsolate *X, struct XrGCHeader *obj);
 XR_FUNC XrValue xr_to_shared_closure(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, struct XrGCHeader *obj);
-XR_FUNC XrValue xr_to_shared_datetime(struct XrayIsolate *X, struct XrGCHeader *obj);
 
 #endif  // XDEEP_COPY_H

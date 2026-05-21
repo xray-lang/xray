@@ -19,6 +19,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
+#include "../runtime/class/xclass_system.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
@@ -311,6 +312,9 @@ static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
                     emit_error(ctx, XI_EMIT_ERR_INTERNAL);
                     return;
                 }
+                XrayCoreClasses *core = xr_isolate_get_core_classes(ctx->isolate);
+                if (core)
+                    bi->klass = core->bigintClass;
                 XrValue xv = XR_FROM_PTR(bi);
                 int ki = xr_vm_proto_add_constant(ctx->proto, xv);
                 if (ki > MAXARG_Bx) {

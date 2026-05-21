@@ -32,6 +32,42 @@ typedef struct XrClass XrClass;
 typedef struct XrInstance XrInstance;
 typedef struct XrArena XrArena;
 typedef struct XrReflectCache XrReflectCache;
+typedef struct XrCoroGC XrCoroGC;
+typedef struct XrCopyContext XrCopyContext;
+
+/* ========== Native Body Descriptor ========== */
+
+/*
+ * Classes that wrap complex native state (e.g. Array buffer, Map hash
+ * table, Regex NFA) attach a XrNativeBodyDesc to the XrClass. The
+ * body occupies the bytes immediately after fields[] in XrInstance.
+ * Classes without native state leave native_body == NULL.
+ */
+
+typedef enum XrNativeBodyCopyPolicy {
+    XR_NATIVE_BODY_COPY_DEEP,    // deep_copy clones internal state
+    XR_NATIVE_BODY_COPY_SHARED,  // to_shared freezes / COWs internal state
+    XR_NATIVE_BODY_COPY_FORBID,  // cross-coro send / to_shared must fail
+} XrNativeBodyCopyPolicy;
+
+typedef struct XrNativeBodyDesc {
+    uint32_t body_size;   // Byte size of native body (after fields[])
+    uint16_t body_align;  // Alignment of body start; 0 = pointer alignment
+    XrNativeBodyCopyPolicy copy_policy;
+    void (*init)(XrInstance *inst, void *body);
+    void (*destroy)(void *body);
+    void (*traverse)(XrCoroGC *gc, void *body);
+    bool (*deep_copy)(XrCopyContext *ctx, XrInstance *src, XrInstance *dst);
+    bool (*to_shared)(XrayIsolate *X, XrInstance *src, XrInstance *dst);
+} XrNativeBodyDesc;
+
+/* ========== Field Access Kind ========== */
+
+typedef enum XrFieldAccessKind {
+    XR_FIELD_ACCESS_VALUE,          // Direct: inst->fields[index]
+    XR_FIELD_ACCESS_NATIVE_GETTER,  // Calls a registered getter function
+    XR_FIELD_ACCESS_DYNAMIC,        // Dynamic layout: in-object or overflow
+} XrFieldAccessKind;
 
 /* ========== Field Descriptor ========== */
 
@@ -56,11 +92,45 @@ typedef struct XrFieldDescriptor {
 // All method flags defined in xmethod.h (XMETHOD_FLAG_*)
 #include "xmethod.h"
 
+/* ========== Dynamic Layout Transition ========== */
+
+// Each transition records: "adding field `symbol` to class `from` yields
+// class `to`". Transitions form a singly-linked list per class.
+typedef struct XrClassTransition {
+    int symbol;                      // Field symbol that triggers this transition
+    struct XrClass *target;          // Resulting child class after adding the field
+    struct XrClassTransition *next;  // Next transition in the linked list
+} XrClassTransition;
+
 /* ========== ITable Entry (opaque) ========== */
 
 // Full layout lives in xclass_internal.h; external consumers only
 // need to know XrClass carries a `XrItableEntry *itable` pointer.
 typedef struct XrItableEntry XrItableEntry;
+
+/* ========== Builtin Kind ========== */
+
+/* Compact nominal-identity discriminator for builtin instance types.
+ * User-defined classes have XR_BK_NONE; the runtime checks this single
+ * uint8_t instead of a chain of flag bit-tests. */
+typedef enum {
+    XR_BK_NONE = 0,
+    XR_BK_JSON,
+    XR_BK_STRINGBUILDER,
+    XR_BK_ENUM_VALUE,
+    XR_BK_ENUM_TYPE,
+    XR_BK_ITERATOR,
+    XR_BK_REGEX,
+    XR_BK_NETCONN,
+    XR_BK_NETLISTENER,
+    XR_BK_BIGINT,
+    XR_BK_TUPLE,
+    XR_BK_ADT_ENUM,
+    XR_BK_RANGE,
+    XR_BK_DATETIME,
+    XR_BK_EXCEPTION,
+    XR_BK_MAX
+} XrBuiltinKind;
 
 /* ========== Class Object ========== */
 
@@ -147,7 +217,20 @@ struct XrClass {
     uint8_t abstract_method_count;
 
     /* === Flags === */
-    uint16_t flags;
+    uint32_t flags;
+
+    /* === Builtin Kind === */
+    // Nominal identity for builtin instance sub-types (XR_BK_*).
+    // XR_BK_NONE for ordinary user classes.
+    uint8_t builtin_kind;
+
+    /* === Dynamic Layout (hidden class transitions) === */
+    // Used only when flags & XR_CLASS_DYNAMIC_LAYOUT. Implements V8-style
+    // hidden classes: adding a field creates a child class (transition).
+    struct XrClassTransition *transitions;  // Linked list of transitions
+    struct XrClass *transition_parent;      // Parent class in transition chain
+    int transition_symbol;                  // Symbol that caused transition from parent
+    uint16_t in_object_capacity;            // Max inline field slots (default 8)
 
     /* === Struct Layout (VALUE_TYPE only) === */
     struct XrStructLayout *struct_layout;  // NULL for class, set for struct
@@ -159,6 +242,12 @@ struct XrClass {
     uint8_t mono_type_argc; /* 0 if not monomorphized */
     const char *
         *mono_type_arg_names; /* Concrete type display names (heap array), NULL if argc == 0 */
+
+    /* === Native Body === */
+    // Non-NULL when this class owns native C state stored after fields[]
+    // in each XrInstance. Subclasses inherit (pointer copy) but cannot
+    // override. Set via xr_class_builder_set_native_body().
+    XrNativeBodyDesc *native_body;
 
     /* === Reflection Cache === */
     // Eagerly built by xr_class_builder_finalize; guaranteed non-NULL
@@ -181,6 +270,9 @@ struct XrClass {
 #define XR_CLASS_HAS_SUBCLASSES (1 << 7)    // At least one subclass exists (CHA devirtualization)
 #define XR_CLASS_GENERIC_SKELETON (1 << 8)  // Uninstantiable generic template (e.g. Box)
 #define XR_CLASS_MONOMORPHIZED (1 << 9)     // Generated by monomorphization (e.g. Box$i64)
+#define XR_CLASS_DYNAMIC_LAYOUT (1 << 10)   // Dynamic field layout (Json object / object literal)
+#define XR_CLASS_HAS_NATIVE_BODY (1 << 11)  // Has XrNativeBodyDesc (Array, Map, etc.)
+#define XR_CLASS_DYNAMIC_SEALED (1 << 12)   // Dynamic-layout class rejects new field transitions
 
 /* ========== Operator Overload Flags ========== */
 
@@ -285,6 +377,12 @@ XR_FUNC XrMethod *xr_class_lookup_method(XrClass *cls, int symbol);
 // need to be installed.
 XR_FUNC XrClass *xr_class_new(XrayIsolate *X, const char *name, XrClass *super);
 XR_FUNC void xr_class_mark_abstract(XrClass *cls);
+
+// Create a dynamic-layout root class: zero declared fields, ready to accept
+// hidden-class transitions via xr_class_transition_get_or_create. If sealed
+// is true, transitions are rejected (used for sealed Json types).
+XR_FUNC XrClass *xr_class_new_dynamic_root(XrayIsolate *X, const char *name, uint16_t capacity,
+                                           bool sealed);
 
 // Get class for any value (instance, class, or primitive)
 XR_FUNC XrClass *xr_value_get_class(XrayIsolate *X, XrValue value);

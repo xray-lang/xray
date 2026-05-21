@@ -21,6 +21,7 @@
 #include "../module/xmodule.h"
 #include "../runtime/object/xstringbuilder.h"
 #include "../runtime/object/xrange.h"
+#include "../runtime/object/xjson.h"
 #include <stdlib.h>
 #include <time.h>
 
@@ -434,6 +435,12 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
         XrInstance *ib = xr_value_to_instance(b);
         if (ia->klass != ib->klass)
             return false;
+        // Enum value/type instances are singletons keyed by identity:
+        // they share one class with zero fields, so field-by-field
+        // comparison would incorrectly conflate distinct members.
+        if (ia->klass && (ia->klass->builtin_kind == XR_BK_ENUM_VALUE ||
+                          ia->klass->builtin_kind == XR_BK_ENUM_TYPE))
+            return ia == ib;
         int fc = ia->klass->field_count;
         for (int i = 0; i < fc; i++) {
             if (!deep_compare(ctx, ia->fields[i], ib->fields[i]))
@@ -468,7 +475,7 @@ bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b) {
             return false;
         return memcmp(xr_value_str_data(&a), xr_value_str_data(&b), la) == 0;
     }
-    if (XR_IS_JSON(a) && XR_IS_JSON(b))
+    if (xr_value_is_json(a) && xr_value_is_json(b))
         return xr_value_deep_eq(a, b);
 
     // BigInt equality
@@ -553,6 +560,41 @@ bool vm_values_equal(XrValue a, XrValue b) {
     }
     if (XR_IS_INT(a) && XR_IS_BIGINT(b)) {
         return xr_bigint_cmp_int((XrBigInt *) XR_TO_PTR(b), XR_TO_INT(a)) == 0;
+    }
+
+    if (XR_IS_PTR(a) && XR_IS_PTR(b))
+        return XR_TO_PTR(a) == XR_TO_PTR(b);
+
+    return false;
+}
+
+// Strict equality comparison (for === operator)
+// No implicit type coercion: 1 === 1.0 is false, int !== float.
+bool vm_values_strict_equal(XrValue a, XrValue b) {
+    // NaN is never equal to itself (IEEE 754)
+    if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b))
+        return XR_TO_FLOAT(a) == XR_TO_FLOAT(b);
+    if (xr_value_same(a, b))
+        return true;
+
+    if (XR_IS_INT(a) && XR_IS_INT(b))
+        return XR_TO_INT(a) == XR_TO_INT(b);
+    // No cross-type numeric comparison for strict equality
+    if (XR_IS_BOOL(a) && XR_IS_BOOL(b))
+        return XR_TO_BOOL(a) == XR_TO_BOOL(b);
+    if (XR_IS_NULL(a) && XR_IS_NULL(b))
+        return true;
+    if (XR_IS_STRING(a) && XR_IS_STRING(b)) {
+        uint32_t la = xr_value_str_len(&a);
+        uint32_t lb = xr_value_str_len(&b);
+        if (la != lb)
+            return false;
+        return memcmp(xr_value_str_data(&a), xr_value_str_data(&b), la) == 0;
+    }
+
+    // BigInt strict: only BigInt === BigInt
+    if (XR_IS_BIGINT(a) && XR_IS_BIGINT(b)) {
+        return xr_bigint_cmp((XrBigInt *) XR_TO_PTR(a), (XrBigInt *) XR_TO_PTR(b)) == 0;
     }
 
     if (XR_IS_PTR(a) && XR_IS_PTR(b))

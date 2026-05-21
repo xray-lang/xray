@@ -119,17 +119,6 @@ _Static_assert(NUM_OPCODES <= 256, "Opcode count exceeds 8-bit encoding limit (m
 #define JSON_INIT_IMM 1   // C = signed immediate int (use GETARG_sC)
 #define JSON_INIT_NULL 2  // C ignored, value = null
 
-/* ========== OP_INVOKE_BUILTIN Type Hints ========== */
-
-typedef enum {
-    BUILTIN_TYPE_MAP = 0,
-    BUILTIN_TYPE_ARRAY = 1,
-    BUILTIN_TYPE_STRING = 2,
-    BUILTIN_TYPE_SET = 3,
-    BUILTIN_TYPE_INT = 4,
-    BUILTIN_TYPE_FLOAT = 5,
-} BuiltinTypeHint;
-
 /* ========== Instruction Encode/Decode Macros ========== */
 #define GET_OPCODE(i) ((OpCode) ((i) & 0xFFu))
 

@@ -156,6 +156,26 @@ typedef struct PatternTupleNode {
     int count;
 } PatternTupleNode;
 
+/* ADT variant destructure: `Shape.Circle(r)` / `Result.Ok(v)`.
+ * variant is the AST_MEMBER_ACCESS / AST_ENUM_ACCESS node for the
+ * variant name; sub-patterns are AST_PATTERN_* nodes for each payload
+ * slot (bindings, wildcards, or literals). */
+typedef struct PatternAdtNode {
+    AstNode *variant;    // e.g. AST_MEMBER_ACCESS(Shape, Circle)
+    AstNode **patterns;  // payload sub-patterns
+    int count;           // number of payload slots
+} PatternAdtNode;
+
+/* Type pattern: `is T` or `is T name`.
+ * type is the static type to test against; binding_name is the optional
+ * narrowed binding (NULL when absent). symbol_id is assigned by the
+ * analyzer when binding_name is non-NULL. */
+typedef struct PatternTypeNode {
+    XrTypeRef *type;
+    const char *binding_name;
+    uint32_t symbol_id;
+} PatternTypeNode;
+
 /* ========== Coroutine / Concurrency ==========
  *
  * Supports:
@@ -218,5 +238,11 @@ typedef struct MoveExprNode {
 typedef struct CancelledExprNode {
     int placeholder;
 } CancelledExprNode;
+
+// catch! { body } expression — evaluates body, returns Result.Ok(value)
+// on success and Result.Err(exception) on throw.
+typedef struct CatchExprNode {
+    AstNode *body;  // block to execute
+} CatchExprNode;
 
 #endif  // XAST_NODES_STMT_H

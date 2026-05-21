@@ -39,8 +39,6 @@
 #include <string.h>
 #include <stdatomic.h>
 
-extern void *xr_isolate_get_symbol_table(void *isolate);
-
 /* ========== External Declarations ========== */
 
 extern XrValue xr_string_value(XrString *str);
@@ -166,9 +164,9 @@ typedef struct XrWsContext {
     SymbolId sym_url;
     SymbolId sym_is_svr;
 
-    // Per-isolate cached Shapes (immutable after init, no sync needed)
-    XrShape *shape_recv_ok;   // fields: [data, binary]
-    XrShape *shape_recv_err;  // fields: [error]
+    // Class transitions (xr_class_build_json_chain) replace the previous
+    // explicit shape cache; the runtime memoises identical field
+    // sequences automatically.
 
     // Server state
     int listen_fd;  // Listen socket fd (-1 if not listening)
@@ -187,19 +185,6 @@ static void ws_ctx_init_cache(XrayIsolate *X, XrWsContext *ctx) {
     ctx->sym_state = xr_symbol_register_in_table(table, "state");
     ctx->sym_url = xr_symbol_register_in_table(table, "url");
     ctx->sym_is_svr = xr_symbol_register_in_table(table, "_isServer");
-
-    // P5: Build Shape transition chains for recv result
-    XrShape *base = xr_shape_new(X, 4);
-    if (base) {
-        XrShape *s1 = xr_shape_transition(X, base, ctx->sym_data);
-        if (s1) {
-            ctx->shape_recv_ok = xr_shape_transition(X, s1, ctx->sym_binary);
-        }
-    }
-    XrShape *err_base = xr_shape_new(X, 4);
-    if (err_base) {
-        ctx->shape_recv_err = xr_shape_transition(X, err_base, ctx->sym_error);
-    }
 }
 
 // Get or create per-isolate WebSocket context
@@ -398,7 +383,7 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
     XrWebSocket *ws = xr_ws_new(&config);
     xr_free(url_copy);
 
-    XrJson *result = xr_json_new(xr_current_coro(X), 4);
+    XrJson *result = xr_json_new(xr_current_coro(X));
 
     if (!ws) {
         xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
@@ -513,7 +498,7 @@ static XrCFuncResult ws_send_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     }
 
     // Get connection
-    if (!XR_IS_JSON(args[0])) {
+    if (!xr_value_is_json(args[0])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
@@ -617,25 +602,18 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
     XrCoroutine *coro = xr_current_coro(X);
 
     if (!msg) {
-        // P5: Error result with pre-cached Shape (fast-mode, 1 field)
-        XrJson *result = (ctx && ctx->shape_recv_err)
-                             ? xr_json_new_with_shape(coro, ctx->shape_recv_err)
-                             : xr_json_new(coro, 4);
+        // Error result; class transition cache reuses the same hidden class
+        // for repeated allocations, no manual shape cache needed.
+        XrJson *result = xr_json_new(coro);
         if (!result)
             return xr_null();
-
         const char *err_msg =
             (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) ? "Connection closed" : "Receive failed";
-        if (ctx && ctx->shape_recv_err)
-            xr_json_set_field(result, 0, xrs_string_value_c(X, err_msg));
-        else
-            xr_json_set(X, result, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, err_msg));
+        xr_json_set(X, result, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, err_msg));
         return xr_json_value(result);
     }
 
-    // P5: Success result with pre-cached Shape (fast-mode, 2 fields: data, binary)
-    XrJson *result = (ctx && ctx->shape_recv_ok) ? xr_json_new_with_shape(coro, ctx->shape_recv_ok)
-                                                 : xr_json_new(coro, 4);
+    XrJson *result = xr_json_new(coro);
     if (!result) {
         xr_ws_message_free(msg);
         return xr_null();
@@ -653,13 +631,8 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
         data_val = bytes_arr ? xr_value_from_array(bytes_arr) : xr_null();
     }
 
-    if (ctx && ctx->shape_recv_ok) {
-        xr_json_set_field(result, 0, data_val);                // fields[0] = data
-        xr_json_set_field(result, 1, xr_bool(!msg->is_text));  // fields[1] = binary
-    } else {
-        xr_json_set(X, result, ctx ? ctx->sym_data : 0, data_val);
-        xr_json_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(!msg->is_text));
-    }
+    xr_json_set(X, result, ctx ? ctx->sym_data : 0, data_val);
+    xr_json_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(!msg->is_text));
     xr_ws_message_free(msg);
 
     return xr_json_value(result);
@@ -674,7 +647,7 @@ static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, void *cont_ctx
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         XrWsContext *ctx = get_ws_context(X);
-        XrJson *res = xr_json_new(xr_current_coro(X), 4);
+        XrJson *res = xr_json_new(xr_current_coro(X));
         xr_json_set(X, res, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, "Timeout"));
         *result = xr_json_value(res);
         xr_free(state);
@@ -736,7 +709,7 @@ static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *r
  *   args[1]: timeout in milliseconds (optional, -1 = infinite)
  */
 static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         *result = xr_null();
         return XR_CFUNC_ERROR;
     }
@@ -751,7 +724,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
-        XrJson *res = xr_json_new(xr_current_coro(X), 4);
+        XrJson *res = xr_json_new(xr_current_coro(X));
         xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Invalid connection object"));
         *result = xr_json_value(res);
         return XR_CFUNC_DONE;
@@ -761,7 +734,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     XrWebSocket *ws = get_ws_from_ctx(ctx, id);
 
     if (!ws) {
-        XrJson *res = xr_json_new(xr_current_coro(X), 4);
+        XrJson *res = xr_json_new(xr_current_coro(X));
         xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Connection not found"));
         *result = xr_json_value(res);
         return XR_CFUNC_DONE;
@@ -806,7 +779,7 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     // Slow path: no data available, allocate state and yield to kqueue
     WsRecvState *state = (WsRecvState *) xr_malloc(sizeof(WsRecvState));
     if (!state) {
-        XrJson *res = xr_json_new(xr_current_coro(X), 4);
+        XrJson *res = xr_json_new(xr_current_coro(X));
         xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Out of memory"));
         *result = xr_json_value(res);
         return XR_CFUNC_ERROR;
@@ -875,7 +848,7 @@ static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, void *cont
  * Returns null on close/error/timeout.
  */
 static XrCFuncResult ws_recvdata(XrayIsolate *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
@@ -946,7 +919,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
     if (!ctx)
         return xr_bool(false);
 
-    if (!XR_IS_JSON(args[0]))
+    if (!xr_value_is_json(args[0]))
         return xr_bool(false);
 
     XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
@@ -1007,7 +980,7 @@ static XrValue ws_close(XrayIsolate *X, XrValue *args, int argc) {
  * Send ping frame.
  */
 static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_bool(false);
     }
 
@@ -1034,7 +1007,7 @@ static XrValue ws_ping(XrayIsolate *X, XrValue *args, int argc) {
  * Get connection state: "connecting", "open", "closing", "closed"
  */
 static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         return xrs_string_value_c(X, "closed");
     }
 
@@ -1072,7 +1045,7 @@ static XrValue ws_state(XrayIsolate *X, XrValue *args, int argc) {
  * Check if connection is open.
  */
 static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0])) {
+    if (argc < 1 || !xr_value_is_json(args[0])) {
         return xr_bool(false);
     }
 
@@ -1109,7 +1082,7 @@ static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws) {
 
     int id = store_ws(X, ws);
 
-    XrJson *result = xr_json_new(xr_current_coro(X), 4);
+    XrJson *result = xr_json_new(xr_current_coro(X));
     xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
     xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
     xr_json_set(X, result, ctx->sym_is_svr, xr_bool(true));

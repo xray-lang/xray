@@ -202,20 +202,20 @@ vmcase(OP_CMP_NE) {
 }
 
 vmcase(OP_CMP_EQ_STRICT) {
-    // OP_CMP_EQ_STRICT: strict equality comparison
+    // OP_CMP_EQ_STRICT: strict equality — no cross-type numeric coercion
     int dest = GETARG_A(i);
     int left = GETARG_B(i);
     int right = GETARG_C(i);
-    R(dest) = xr_bool(vm_values_equal(R(left), R(right)));
+    R(dest) = xr_bool(vm_values_strict_equal(R(left), R(right)));
     vmbreak;
 }
 
 vmcase(OP_CMP_NE_STRICT) {
-    // OP_CMP_NE_STRICT: strict inequality comparison
+    // OP_CMP_NE_STRICT: strict inequality — no cross-type numeric coercion
     int dest = GETARG_A(i);
     int left = GETARG_B(i);
     int right = GETARG_C(i);
-    R(dest) = xr_bool(!vm_values_equal(R(left), R(right)));
+    R(dest) = xr_bool(!vm_values_strict_equal(R(left), R(right)));
     vmbreak;
 }
 

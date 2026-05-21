@@ -5,10 +5,6 @@
 # win_pd_test.sh (prlctl exec, with timeouts + stale-process
 # cleanup). This wrapper triggers a sync + build only, no tests.
 #
-# See:
-#   .windsurf/rules/windows-testing.md
-#   docs/rules/dev-workflow.md (Windows section)
-#
 # Environment variables that win_build.sh used to honour are still
 # read by win_pd_test.sh (XRAY_WIN_BUILD_TYPE, XRAY_WIN_CMAKE_EXTRA,
 # XRAY_WIN_BUILD, XRAY_WIN_SRC, etc.).

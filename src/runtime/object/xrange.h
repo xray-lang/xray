@@ -11,31 +11,32 @@
  *   Range represents a lazy integer sequence [start, end] with step.
  *   No elements are materialized until iteration or toArray().
  *
- * MEMORY LAYOUT:
+ * MEMORY LAYOUT (unified class model):
+ *   XrInstance header + 0 fields + native body:
  *   ┌─────────────────────┐
- *   │ XrGCHeader (16B)    │
+ *   │ XrInstance base     │
  *   ├─────────────────────┤
  *   │ start   (8B)        │ inclusive start
  *   │ end     (8B)        │ inclusive end
  *   │ step    (8B)        │ step (default 1, negative for reverse)
  *   └─────────────────────┘
- *   Total: 40 bytes (no GC-traced children)
+ *   Native body: 24 bytes (no GC-traced children, no destroy)
  */
 
 #ifndef XRANGE_H
 #define XRANGE_H
 
-#include "../gc/xgc_header.h"
 #include "../value/xvalue.h"
 #include <stdint.h>
 #include <stdbool.h>
 
 struct XrCoroutine;
+struct XrayIsolate;
+struct XrInstance;
 
-/* ========== Range Structure ========== */
+/* ========== Range Native Body ========== */
 
 typedef struct XrRange {
-    XrGCHeader gc;
     int64_t start;
     int64_t end;
     int64_t step;
@@ -44,11 +45,19 @@ typedef struct XrRange {
 /* ========== Creation ========== */
 
 // Create Range [start, end] with step=1
-XR_FUNC XrRange *xr_range_new(struct XrCoroutine *coro, int64_t start, int64_t end);
+XR_FUNC XrValue xr_range_new(struct XrayIsolate *X, int64_t start, int64_t end);
 
 // Create Range [start, end] with explicit step
-XR_FUNC XrRange *xr_range_new_with_step(struct XrCoroutine *coro, int64_t start, int64_t end,
-                                        int64_t step);
+XR_FUNC XrValue xr_range_new_with_step(struct XrayIsolate *X, int64_t start, int64_t end,
+                                       int64_t step);
+
+/* ========== Type Check ========== */
+
+// Check if value is a Range instance (instanceof core->rangeClass)
+XR_FUNC bool xr_value_is_range(struct XrayIsolate *X, XrValue v);
+
+// Extract native body pointer from a Range value (NULL if not range)
+XR_FUNC XrRange *xr_value_get_range_body(struct XrayIsolate *X, XrValue v);
 
 /* ========== Properties ========== */
 
@@ -78,13 +87,12 @@ static inline bool xr_range_contains(XrRange *r, int64_t value) {
     }
 }
 
-/* ========== XrValue Conversion ========== */
-
-static inline XrValue xr_value_from_range(XrRange *r) {
-    return XR_FROM_PTR(r);
-}
+/* ========== XrValue Conversion (legacy compatibility — will be removed) ========== */
 
 static inline XrRange *xr_value_to_range(XrValue v) {
+    /* After migration the ptr IS an XrInstance; callers that still use
+     * this helper get the instance pointer, not the body. They must be
+     * migrated to xr_value_get_range_body(). */
     return (XrRange *) XR_TO_PTR(v);
 }
 
@@ -93,8 +101,7 @@ static inline XrRange *xr_value_to_range(XrValue v) {
 // Materialize range into an Array (caller must handle large ranges)
 XR_FUNC XrValue xr_range_to_array(struct XrCoroutine *coro, XrRange *r);
 
-/* Register Range as a native type for unified dispatch. */
-struct XrayIsolate;
-XR_FUNC void xr_range_register_native_type(struct XrayIsolate *isolate);
+/* Register Range class into core->rangeClass with native body. */
+XR_FUNC void xr_register_range_class(struct XrayIsolate *X);
 
 #endif  // XRANGE_H

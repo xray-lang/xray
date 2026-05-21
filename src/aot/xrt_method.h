@@ -24,8 +24,8 @@
  *
  *   The remaining shared invariant is the SYMBOL ID number space:
  *   every XRT_SYM_X below must equal the matching SYMBOL_X in
- *   src/runtime/symbol/xsymbol_table.h, otherwise OP_INVOKE_BUILTIN
- *   in the VM and the equivalent xrt_method_N call in AOT-generated C
+ *   src/runtime/symbol/xsymbol_table.h, otherwise OP_INVOKE in the
+ *   VM and the equivalent xrt_method_N call in AOT-generated C
  *   would route the same method name to different slots. The runtime-
  *   only translation unit src/aot/xrt_symbol_check.c links into
  *   xray_core (never into AOT output) and pairs every XRT_SYM_X with

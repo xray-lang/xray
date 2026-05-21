@@ -22,7 +22,8 @@
 #include "../object/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../gc/xgc.h"
-#include "../class/xclass.h"  // XR_IS_CLASS_LITE
+#include "../class/xclass.h"  // XR_IS_CLASS_LITE, XR_CLASS_ENUM_*
+#include "../class/xinstance.h"
 #include "xtype_names.h"
 #include <stdlib.h>
 #include <string.h>
@@ -107,8 +108,10 @@ deep_compare: {
             return false;
         return memcmp(str_a->data, str_b->data, str_a->length) == 0;
     }
-    if (XR_GC_GET_TYPE(gc_a) == XR_TJSON) {
-        return xr_json_equals_deep(a, b);
+    if (XR_GC_GET_TYPE(gc_a) == XR_TINSTANCE) {
+        XrInstance *ia = (XrInstance *) gc_a;
+        if (ia->klass && ia->klass->builtin_kind == XR_BK_JSON)
+            return xr_json_equals_deep(a, b);
     }
     if (XR_GC_GET_TYPE(gc_a) == XR_TARRAY) {
         return xr_array_equals_deep(a, b);
@@ -118,6 +121,36 @@ deep_compare: {
     }
     return gc_a == gc_b;
 }
+}
+
+/* ========== Enum Type Checks ========== */
+
+bool xr_value_is_enum_type(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE;
+}
+
+bool xr_value_is_enum_value(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_VALUE;
+}
+
+bool xr_value_is_iterator(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_ITERATOR;
+}
+
+bool xr_value_is_bigint(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_BIGINT;
 }
 
 /* ========== Unified Type ID ========== */
@@ -144,23 +177,11 @@ static const XrTypeId gctype_to_typeid[XR_TTASK + 1] = {
     [XR_TCLASS] = XR_TID_FUNCTION,
     [XR_TINSTANCE] = XR_TID_INSTANCE,
     [XR_TBOUND_METHOD] = XR_TID_BOUND_METHOD,
-    [XR_TENUM_TYPE] = XR_TID_ENUM_TYPE,
-    [XR_TENUM_VALUE] = XR_TID_ENUM_VALUE,
     [XR_TERROR] = XR_TID_EXCEPTION,
-    [XR_TEXCEPTION] = XR_TID_EXCEPTION,
     [XR_TMODULE] = XR_TID_MODULE,
-    [XR_TITERATOR] = XR_TID_ITERATOR,
-    [XR_TSTRINGBUILDER] = XR_TID_STRINGBUILDER,
-    [XR_TJSON] = XR_TID_JSON,
-    [XR_TSHAPE] = XR_TID_NULL,
     [XR_TCOROUTINE] = XR_TID_COROUTINE,
     [XR_TCHANNEL] = XR_TID_CHANNEL,
-    [XR_TBIGINT] = XR_TID_BIGINT,
     [XR_TCOROPOOL] = XR_TID_NULL,
-    [XR_TDATETIME] = XR_TID_DATETIME,
-    [XR_TREGEX] = XR_TID_REGEX,
-    [XR_TLOGGER] = XR_TID_NULL,
-    [XR_TRANGE] = XR_TID_RANGE,
     [XR_TTASK] = XR_TID_TASK,
 };
 
@@ -170,8 +191,39 @@ XrTypeId xr_value_typeid(XrValue v) {
         return tag_to_typeid[v.tag];
     if (v.tag == XR_TAG_PTR && v.ptr) {
         uint8_t gctype = XR_GC_GET_TYPE((XrGCHeader *) v.ptr);
-        if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0]))
-            return gctype_to_typeid[gctype];
+        if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0])) {
+            XrTypeId tid = gctype_to_typeid[gctype];
+            // Refine XR_TINSTANCE via builtin_kind (single switch instead
+            // of a chain of flag bit-tests).
+            if (tid == XR_TID_INSTANCE) {
+                XrInstance *inst = (XrInstance *) v.ptr;
+                if (inst->klass) {
+                    switch (inst->klass->builtin_kind) {
+                        case XR_BK_JSON:
+                            return XR_TID_JSON;
+                        case XR_BK_STRINGBUILDER:
+                            return XR_TID_STRINGBUILDER;
+                        case XR_BK_ENUM_VALUE:
+                            return XR_TID_ENUM_VALUE;
+                        case XR_BK_ENUM_TYPE:
+                            return XR_TID_ENUM_TYPE;
+                        case XR_BK_ITERATOR:
+                            return XR_TID_ITERATOR;
+                        case XR_BK_REGEX:
+                            return XR_TID_REGEX;
+                        case XR_BK_NETCONN:
+                            return XR_TID_NETCONN;
+                        case XR_BK_NETLISTENER:
+                            return XR_TID_NETLISTENER;
+                        case XR_BK_BIGINT:
+                            return XR_TID_BIGINT;
+                        default:
+                            break;
+                    }
+                }
+            }
+            return tid;
+        }
     }
     return XR_TID_NULL;
 }
@@ -211,6 +263,8 @@ XR_DATA const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_COROUTINE] = TYPE_NAME_COROUTINE,
     [XR_TID_RANGE] = TYPE_NAME_RANGE,
     [XR_TID_TASK] = TYPE_NAME_TASK,
+    [XR_TID_NETCONN] = TYPE_NAME_NETCONN,
+    [XR_TID_NETLISTENER] = TYPE_NAME_NETLISTENER,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {
@@ -308,7 +362,15 @@ XrValue xr_string_value(XrString *str) {
 DEFINE_VALUE_OPS_WITH_MACRO(array, XR_IS_ARRAY, XrArray)
 DEFINE_VALUE_OPS_WITH_MACRO(map, XR_IS_MAP, struct XrMap)
 DEFINE_VALUE_OPS_WITH_MACRO(set, XR_IS_SET, struct XrSet)
-DEFINE_VALUE_OPS_WITH_MACRO(tuple, XR_IS_TUPLE, struct XrTuple)
+/* Tuple ops: xr_value_is_tuple lives in xtuple.c (it has to inspect the
+ * instance's class flags, not the GC tag). Hand-roll the from/to side
+ * here so the public ABI matches every other XrValue helper pair. */
+XrValue xr_value_from_tuple(struct XrTuple *obj) {
+    return XR_FROM_PTR(obj);
+}
+struct XrTuple *xr_value_to_tuple(XrValue v) {
+    return xr_value_is_tuple(v) ? (struct XrTuple *) XR_TO_PTR(v) : NULL;
+}
 DEFINE_VALUE_OPS_WITH_MACRO(module, XR_IS_MODULE, struct XrModule)
 
 /* ========== OOP Value Operations ========== */
@@ -325,14 +387,8 @@ DEFINE_VALUE_OPS_WITH_TYPE(coro, XR_TCOROUTINE, struct XrCoroutine)
 /* ========== Task Value Operations ========== */
 DEFINE_VALUE_OPS_WITH_TYPE(task, XR_TTASK, struct XrTask)
 
-/* ========== DateTime Value Operations ========== */
-bool xr_value_is_datetime(XrValue v) {
-    return XR_IS_PTR(v) && (v).heap_type == XR_TDATETIME;
-}
-
-void *xr_value_to_datetime(XrValue v) {
-    return xr_value_is_datetime(v) ? XR_TO_PTR(v) : NULL;
-}
+/* DateTime value ops are defined in stdlib/datetime/datetime.c with
+ * the unified-class signature `(XrayIsolate *X, XrValue v)`. */
 
 /* ========== Deep Value Comparison ========== */
 static bool xr_json_equals_deep(XrValue a, XrValue b) {
@@ -344,25 +400,19 @@ static bool xr_json_equals_deep(XrValue a, XrValue b) {
         return false;
 
     // Compare field count and content
-    XrayIsolate *X = xray_isolate_current();
-    XrShape *sa = xr_json_shape(X, ja);
-    XrShape *sb = xr_json_shape(X, jb);
-    if (sa->field_count != sb->field_count)
+    XrClass *ca = ja->klass;
+    XrClass *cb = jb->klass;
+    if (!ca || !cb || ca->field_count != cb->field_count)
         return false;
 
-    for (int i = 0; i < sa->field_count; i++) {
-        SymbolId sym_a = sa->field_symbols[i];
-        int idx_b = -1;
-        for (int j = 0; j < sb->field_count; j++) {
-            if (sb->field_symbols[j] == sym_a) {
-                idx_b = j;
-                break;
-            }
-        }
+    for (int i = 0; i < ca->field_count; i++) {
+        int sym_a = ca->fields[i].symbol;
+        int idx_b = xr_class_lookup_field(cb, sym_a);
         if (idx_b < 0)
             return false;
-
-        if (!xr_value_deep_eq(ja->fields[i], jb->fields[idx_b])) {
+        XrValue va = xr_instance_get_dynamic_field(ja, (uint16_t) i);
+        XrValue vb = xr_instance_get_dynamic_field(jb, (uint16_t) idx_b);
+        if (!xr_value_deep_eq(va, vb)) {
             return false;
         }
     }

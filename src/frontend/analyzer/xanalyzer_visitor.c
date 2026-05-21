@@ -17,6 +17,7 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
+#include "../../runtime/value/xtype_internal.h"
 
 // Forward declarations now in xanalyzer_visitor_internal.h
 
@@ -419,6 +420,30 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
     }
 }
 
+XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, int line) {
+    if (!ctx || !ctx->analyzer || !symbol)
+        return;
+    XaScope *scope = ctx->analyzer->current_scope;
+    if (!scope)
+        return;
+    XaSymbol *existing = symbol->name ? xa_scope_lookup_local(scope, symbol->name) : NULL;
+    if (existing) {
+        bool same_source_symbol = existing->kind == symbol->kind &&
+                                  existing->location.line == symbol->location.line &&
+                                  existing->location.column == symbol->location.column;
+        if (!same_source_symbol) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope", symbol->name);
+            XrLocation loc = {.file = ctx->file_path,
+                              .line = line > 0 ? line : (int) symbol->location.line,
+                              .column = (int) symbol->location.column};
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_COMPILE_VARIABLE_REDEFINED, msg, &loc);
+        }
+    }
+    xa_scope_add_symbol(scope, symbol);
+}
+
 /* ============================================================================
  * Pass 1: Symbol Collection
  * ============================================================================
@@ -427,10 +452,6 @@ XR_FUNC bool xa_body_has_return_expr(AstNode *node) {
  * ========================================================================== */
 
 // xa_visit_collect_function_decl_only / xa_visit_collect_function_body
-// are defined in xanalyzer_visitor_decl.c and declared in
-// xanalyzer_visitor_internal.h.
-
-// Helper: collect statements with function hoisting (two-phase).
 // Cross-TU: also called from xa_visit_collect_function_body() in
 // xanalyzer_visitor_decl.c for nested function bodies.
 void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **stmts, int count) {
@@ -518,7 +539,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         XaSymbol *sym = xa_symbol_new(var_name, XA_SYM_MODULE);
         if (sym) {
             sym->location.line = node->line;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+            xa_visit_add_symbol_checked(ctx, sym, 0);
             import->symbol_id = sym->id;
 
             XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -539,7 +560,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             XaSymbol *sym = xa_symbol_new(local_name, XA_SYM_IMPORT);
             if (sym) {
                 sym->location.line = node->line;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 member->symbol_id = sym->id;
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -588,67 +609,109 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
                 sym->location.line = node->line;
                 sym->is_const = true;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 edecl->symbol_id = sym->id;
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
 
-                // Store enum member names for exhaustiveness checking and
-                // infer the backing value type from member initializers.
-                // All members must share the same value type (int, float,
-                // string, or bool); mixed types are a compile error.
+                // Detect ADT enum: any variant with payload_count > 0
+                bool is_adt = false;
+                for (int m = 0; m < edecl->member_count && !is_adt; m++) {
+                    AstNode *mem = edecl->members[m];
+                    if (mem && mem->type == AST_ENUM_MEMBER &&
+                        mem->as.enum_member.payload_count > 0) {
+                        is_adt = true;
+                    }
+                }
+                links->is_adt_enum = is_adt;
+
+                // Store enum member names for exhaustiveness checking
                 if (edecl->member_count > 0) {
                     links->enum_member_names =
-                        xr_malloc(sizeof(const char *) * edecl->member_count);
+                        xr_malloc(sizeof(const char *) * (size_t) edecl->member_count);
                     links->enum_member_count = 0;
-                    // Track which literal types appear: bit 0=int, 1=float,
-                    // 2=string, 3=bool
-                    unsigned seen_types = 0;
-                    for (int m = 0; m < edecl->member_count; m++) {
-                        AstNode *mem = edecl->members[m];
-                        if (mem && mem->type == AST_ENUM_MEMBER && mem->as.enum_member.name) {
-                            links->enum_member_names[links->enum_member_count++] =
-                                mem->as.enum_member.name;
-                            AstNode *val = mem->as.enum_member.value;
-                            if (!val) {
-                                seen_types |= 1;  // auto-increment → int
-                            } else if (val->type == AST_LITERAL_INT) {
-                                seen_types |= 1;
-                            } else if (val->type == AST_LITERAL_FLOAT) {
-                                seen_types |= 2;
-                            } else if (val->type == AST_LITERAL_STRING) {
-                                seen_types |= 4;
-                            } else if (val->type == AST_LITERAL_TRUE ||
-                                       val->type == AST_LITERAL_FALSE) {
-                                seen_types |= 8;
-                            } else {
-                                seen_types |= 1;  // unknown literal → treat as int
+
+                    if (is_adt) {
+                        // ADT enum: store per-variant payload counts and types
+                        links->enum_payload_counts =
+                            xr_calloc((size_t) edecl->member_count, sizeof(int));
+                        links->enum_payload_types =
+                            xr_calloc((size_t) edecl->member_count, sizeof(XrType **));
+                        for (int m = 0; m < edecl->member_count; m++) {
+                            AstNode *mem = edecl->members[m];
+                            if (!mem || mem->type != AST_ENUM_MEMBER || !mem->as.enum_member.name)
+                                continue;
+                            int idx = links->enum_member_count;
+                            links->enum_member_names[idx] = mem->as.enum_member.name;
+                            int pc = mem->as.enum_member.payload_count;
+                            links->enum_payload_counts[idx] = pc;
+                            if (pc > 0 && mem->as.enum_member.payload_types) {
+                                XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
+                                for (int p = 0; p < pc; p++) {
+                                    XrTypeRef *tref = mem->as.enum_member.payload_types[p];
+                                    ptypes[p] = tref ? xr_tref_resolve(ctx->analyzer->isolate, tref)
+                                                     : xr_type_new_unknown(NULL);
+                                }
+                                links->enum_payload_types[idx] = ptypes;
+                            }
+                            links->enum_member_count++;
+                        }
+                        links->enum_value_type = xr_type_new_int(NULL);
+                    } else {
+                        // Simple enum: infer backing value type from member initializers.
+                        // All members must share the same value type.
+                        unsigned seen_types = 0;
+                        for (int m = 0; m < edecl->member_count; m++) {
+                            AstNode *mem = edecl->members[m];
+                            if (mem && mem->type == AST_ENUM_MEMBER && mem->as.enum_member.name) {
+                                links->enum_member_names[links->enum_member_count++] =
+                                    mem->as.enum_member.name;
+                                AstNode *val = mem->as.enum_member.value;
+                                if (!val) {
+                                    seen_types |= 1;  // auto-increment → int
+                                } else if (val->type == AST_LITERAL_INT) {
+                                    seen_types |= 1;
+                                } else if (val->type == AST_LITERAL_FLOAT) {
+                                    seen_types |= 2;
+                                } else if (val->type == AST_LITERAL_STRING) {
+                                    seen_types |= 4;
+                                } else if (val->type == AST_LITERAL_TRUE ||
+                                           val->type == AST_LITERAL_FALSE) {
+                                    seen_types |= 8;
+                                } else {
+                                    seen_types |= 1;
+                                }
                             }
                         }
+                        if (seen_types == 0)
+                            seen_types = 1;
+                        bool mixed = (seen_types & (seen_types - 1)) != 0;
+                        if (mixed) {
+                            XrLocation loc = {
+                                .file = ctx->file_path, .line = node->line, .column = node->column};
+                            xa_analyzer_add_diagnostic(
+                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ENUM_MIXED_TYPE,
+                                "Enum members must all have the same value type "
+                                "(int, float, string, or bool)",
+                                &loc);
+                            links->enum_value_type = xr_type_new_int(NULL);
+                        } else if (seen_types & 4) {
+                            links->enum_value_type = xr_type_new_string(NULL);
+                        } else if (seen_types & 2) {
+                            links->enum_value_type = xr_type_new_float(NULL);
+                        } else if (seen_types & 8) {
+                            links->enum_value_type = xr_type_new_bool(NULL);
+                        } else {
+                            links->enum_value_type = xr_type_new_int(NULL);
+                        }
                     }
-                    // Default to int when no members have explicit values
-                    if (seen_types == 0)
-                        seen_types = 1;
-                    // Check for mixed types: seen_types must be a power of 2
-                    bool mixed = (seen_types & (seen_types - 1)) != 0;
-                    if (mixed) {
-                        XrLocation loc = {
-                            .file = ctx->file_path, .line = node->line, .column = node->column};
-                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                   XR_ERR_ANALYZE_ENUM_MIXED_TYPE,
-                                                   "Enum members must all have the same value type "
-                                                   "(int, float, string, or bool)",
-                                                   &loc);
-                        links->enum_value_type = xr_type_new_int(NULL);
-                    } else if (seen_types & 4) {
-                        links->enum_value_type = xr_type_new_string(NULL);
-                    } else if (seen_types & 2) {
-                        links->enum_value_type = xr_type_new_float(NULL);
-                    } else if (seen_types & 8) {
-                        links->enum_value_type = xr_type_new_bool(NULL);
-                    } else {
-                        links->enum_value_type = xr_type_new_int(NULL);
+                }
+
+                // Visit enum methods (analyzed like class instance methods)
+                for (int m = 0; m < edecl->method_count; m++) {
+                    if (edecl->methods[m]) {
+                        xa_visit_collect(ctx, edecl->methods[m]);
                     }
                 }
             }
@@ -671,7 +734,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_set_node_type(ctx->analyzer, node, resolved);
                 }
                 sym->alias_type = resolved;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {
@@ -689,7 +752,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *sym = xa_symbol_new(fi->item_name, XA_SYM_VARIABLE);
                 sym->location.line = node->line;
                 sym->is_const = true;  // for-in loop variable is immutable
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 fi->item_symbol_id = sym->id;
                 XaSymbolLinks *item_links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (item_links)
@@ -699,7 +762,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbol *vsym = xa_symbol_new(fi->value_name, XA_SYM_VARIABLE);
                 vsym->location.line = node->line;
                 vsym->is_const = true;  // for-in loop variable is immutable
-                xa_scope_add_symbol(ctx->analyzer->current_scope, vsym);
+                xa_visit_add_symbol_checked(ctx, vsym, 0);
                 fi->value_symbol_id = vsym->id;
                 XaSymbolLinks *val_links = xa_analyzer_get_links(ctx->analyzer, vsym);
                 if (val_links)
@@ -737,10 +800,28 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 xa_visit_collect(ctx, node->as.while_stmt.body);
             break;
         case AST_IF_STMT:
-            if (node->as.if_stmt.then_branch)
+            /* Each branch is its own block scope in Pass 2 (via
+             * xa_visit_block_stmt). Pass 1 must mirror that so symbols
+             * declared in then-branch don't collide with same-named
+             * symbols in else-branch. */
+            if (node->as.if_stmt.then_branch) {
+                bool is_block = node->as.if_stmt.then_branch->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.if_stmt.then_branch);
                 xa_visit_collect(ctx, node->as.if_stmt.then_branch);
-            if (node->as.if_stmt.else_branch)
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
+            if (node->as.if_stmt.else_branch) {
+                bool is_block = node->as.if_stmt.else_branch->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.if_stmt.else_branch);
                 xa_visit_collect(ctx, node->as.if_stmt.else_branch);
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
             break;
         case AST_TRY_CATCH: {
             TryCatchNode *tc = &node->as.try_catch;
@@ -751,7 +832,8 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 if (tc->catch_var) {
                     XaSymbol *err_sym = xa_symbol_new(tc->catch_var, XA_SYM_VARIABLE);
                     err_sym->location.line = tc->catch_var_line;
-                    xa_scope_add_symbol(ctx->analyzer->current_scope, err_sym);
+                    err_sym->location.column = tc->catch_var_column;
+                    xa_visit_add_symbol_checked(ctx, err_sym, 0);
                     XaSymbolLinks *err_links = xa_analyzer_get_links(ctx->analyzer, err_sym);
                     if (err_links) {
                         err_links->type =
@@ -782,7 +864,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
                 XaSymbol *sym = xa_symbol_new(sc->var_name, XA_SYM_VARIABLE);
                 sym->location.line = node->line;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                xa_visit_add_symbol_checked(ctx, sym, 0);
                 sc->var_symbol_id = sym->id;
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links)
@@ -831,7 +913,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                 xa_symbol_new(elem->as.identifier.name, XA_SYM_VARIABLE);
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
-                            xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                            xa_visit_add_symbol_checked(ctx, sym, 0);
                             elem->as.identifier.symbol_id = sym->id;
                         }
                     }
@@ -842,7 +924,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                             XaSymbol *sym = xa_symbol_new(vp->as.identifier.name, XA_SYM_VARIABLE);
                             sym->is_const = dd->is_const;
                             sym->location.line = node->line;
-                            xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+                            xa_visit_add_symbol_checked(ctx, sym, 0);
                             vp->as.identifier.symbol_id = sym->id;
                         }
                     }
@@ -1083,6 +1165,12 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_MOVE_EXPR:
             result = xa_visit_move_expr(ctx, node);
+            break;
+        case AST_CATCH_EXPR:
+            /* Visit body for symbol resolution */
+            if (node->as.catch_expr.body)
+                xa_visit_infer_expr(ctx, node->as.catch_expr.body);
+            result = xr_type_new_named_instance(ctx->analyzer->isolate, "Result");
             break;
         case AST_SUPER_CALL: {
             /* Visit all arguments to resolve symbol_ids. */
@@ -1633,7 +1721,27 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_THROW_STMT:
             if (node->as.throw_stmt.expression) {
-                xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
+                XrType *thrown = xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
+                /* Strict throw: only Exception or a subclass is allowed.
+                 * Skip the check when the inferred type is unknown
+                 * (parser/type errors elsewhere already surface). */
+                if (thrown && !XR_TYPE_IS_UNKNOWN(thrown)) {
+                    XrType *exc = xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                    bool ok = exc && (xr_type_is_named_class(thrown, "Exception") ||
+                                      xr_type_is_subclass_of(thrown, exc));
+                    if (!ok) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                 "throw expression must be an Exception or a subclass; "
+                                 "got '%s'. Wrap the value with `new Exception(...)` or a "
+                                 "user-defined Exception subclass.",
+                                 xr_type_to_string(thrown));
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_THROW_NON_EXCEPTION, msg, &loc);
+                    }
+                }
             }
             // Mark flow as unreachable after throw
             if (ctx->flow) {

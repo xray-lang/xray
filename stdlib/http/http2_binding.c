@@ -76,7 +76,7 @@ static int64_t json_get_int(XrayIsolate *X, XrJson *json, const char *key, int64
 
 // Convert HTTP/2 response to Json
 static XrValue h2_response_to_json(XrayIsolate *X, XrH2Response *resp) {
-    XrJson *json = xr_json_new(xr_current_coro(X), 4);
+    XrJson *json = xr_json_new(xr_current_coro(X));
 
     // status
     xr_json_set_by_key(X, json, "status", xr_int(resp->status));

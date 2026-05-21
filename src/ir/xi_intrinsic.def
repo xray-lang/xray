@@ -71,7 +71,7 @@ XI_INTRINSIC(RT_MOD,                74,  2, xr_jit_rt_mod,              IEFF_T, 
 XI_INTRINSIC(THROW,                 80,  1, xr_jit_throw,               IEFF_T,        IREP_VOID)
 
 /* --- Json struct promotion --- */
-XI_INTRINSIC(JSON_NEW_SHAPE,        90,  1, xr_json_new_with_shape,     IEFF_A,        IREP_VAL)
+XI_INTRINSIC(JSON_NEW_SHAPE,        90,  1, xr_json_new_with_class,     IEFF_A,        IREP_VAL)
 
 /* --- Type checking --- */
 XI_INTRINSIC(TYPEOF,               100,  1, xr_jit_typeof,              IEFF_PURE,     IREP_VAL)

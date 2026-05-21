@@ -33,7 +33,6 @@
 
 typedef struct XrProto XrProto;
 typedef struct XmJitState XmJitState;
-struct XrShape;
 
 /* Maximum number of enclosing-proto SETSHARED entries captured into a
  * background compile task.  Functions referenced past this are simply
@@ -78,7 +77,6 @@ typedef struct XmBgTask {
     XmTypeFeedback feedback_snapshot;
     int nshared;  // number of valid shared_protos entries
     XrProto *shared_protos[XJIT_BG_SHARED_CAP];
-    struct XrShape *shape_hint;  // dominant-shape hint for param PTR shaping
 
     /*
      * Inline-cache snapshots captured on the foreground thread at task

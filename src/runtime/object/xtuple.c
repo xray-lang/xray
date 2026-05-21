@@ -10,36 +10,94 @@
 
 #include "xtuple.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "../value/xvalue.h"
 #include "../value/xvalue_hash.h"
 #include "../gc/xgc.h"
 #include "../gc/xcoro_gc.h"
+#include "../class/xclass.h"
+#include "../class/xclass_builder.h"
+#include "../class/xclass_system.h"
+#include "../class/xinstance.h"
+#include "../xisolate_api.h"
+#include "../../base/xchecks.h"
 #include "../../base/xdefs.h"
 #include "../../base/xhash.h"
+#include "../../coro/xcoroutine.h"
+
+/* ========== Class Construction ========== */
+
+/* Build a tuple class for the given arity. Each class declares N
+ * untyped fields named "0".."N-1" so field IO uses the same field
+ * lookup as regular user classes (digit symbols are well-defined). */
+static XrClass *build_tuple_class(XrayIsolate *X, uint16_t arity) {
+    XR_DCHECK(X != NULL, "build_tuple_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL && core->objectClass != NULL,
+              "build_tuple_class: core / Object not ready");
+
+    char name[32];
+    snprintf(name, sizeof(name), "Tuple%u", (unsigned) arity);
+
+    XrClassBuilder *builder = xr_class_builder_new(X, name, core->objectClass);
+    XR_CHECK(builder != NULL, "build_tuple_class: builder alloc failed");
+
+    char field_name[8];
+    for (uint16_t i = 0; i < arity; i++) {
+        snprintf(field_name, sizeof(field_name), "%u", (unsigned) i);
+        xr_class_builder_add_field(builder, field_name, 0);
+    }
+
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "build_tuple_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_FINAL;
+    cls->builtin_kind = XR_BK_TUPLE;
+    return cls;
+}
+
+XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t arity) {
+    XR_DCHECK(X != NULL, "tuple_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "tuple_class: core not initialised");
+
+    if (arity < XR_TUPLE_CLASS_PREALLOC) {
+        if (!core->tupleClassesSmall[arity]) {
+            core->tupleClassesSmall[arity] = build_tuple_class(X, arity);
+        }
+        return core->tupleClassesSmall[arity];
+    }
+    /* Cold path: arities >= XR_TUPLE_CLASS_PREALLOC are rare in real
+     * source. Build a fresh class every time — caching them would
+     * require a hash table that buys nothing here. */
+    return build_tuple_class(X, arity);
+}
 
 /* ========== Allocation ========== */
 
-static inline size_t tuple_alloc_size(uint16_t element_count) {
-    return sizeof(XrTuple) + (size_t) element_count * sizeof(XrValue);
-}
-
 XrTuple *xr_tuple_new(struct XrCoroutine *coro, uint16_t element_count) {
     XR_DCHECK(coro != NULL, "xr_tuple_new: NULL coro");
+    XrayIsolate *X = coro->isolate;
+    XR_DCHECK(X != NULL, "xr_tuple_new: coro->isolate is NULL");
 
-    size_t size = tuple_alloc_size(element_count);
-    XrTuple *t = (XrTuple *) xr_alloc(coro, size, XR_TTUPLE);
+    XrClass *cls = xr_get_or_create_tuple_class(X, element_count);
+    if (!cls)
+        return NULL;
+
+    /* Allocate the instance bytes on the coroutine heap. We bypass
+     * xr_instance_new on purpose: it would memcpy field defaults from
+     * the class, but tuple slots are caller-initialised right after
+     * this returns. Pre-fill with null only so a half-built tuple
+     * is still safe for the GC to traverse before xr_tuple_set runs. */
+    size_t size = xr_instance_size(cls);
+    XrTuple *t = (XrTuple *) xr_alloc(coro, size, XR_TINSTANCE);
     if (!t)
         return NULL;
 
-    xr_gc_header_init_type(&t->gc, XR_TTUPLE);
-    t->element_count = element_count;
-    t->_pad0 = 0;
-    t->_pad1 = 0;
+    xr_gc_header_init_type(&t->gc, XR_TINSTANCE);
+    t->klass = cls;
 
-    /* Pre-fill with null so traversal of a half-built tuple is safe
-     * (the GC may run before the caller populates every slot). */
     XrValue null_v = {0};
     for (uint16_t i = 0; i < element_count; i++) {
         t->elements[i] = null_v;
@@ -63,7 +121,7 @@ XrTuple *xr_tuple_from_values(struct XrCoroutine *coro, const XrValue *values, u
 /* ========== Field Access ========== */
 
 XrValue xr_tuple_get(XrTuple *t, uint16_t index) {
-    if (!t || index >= t->element_count) {
+    if (!t || index >= xr_tuple_arity(t)) {
         XrValue null_v = {0};
         return null_v;
     }
@@ -72,10 +130,20 @@ XrValue xr_tuple_get(XrTuple *t, uint16_t index) {
 
 void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value) {
     XR_DCHECK(t != NULL, "xr_tuple_set: NULL tuple");
-    XR_DCHECK(index < t->element_count, "xr_tuple_set: index out of range");
-    if (!t || index >= t->element_count)
+    uint16_t arity = xr_tuple_arity(t);
+    XR_DCHECK(index < arity, "xr_tuple_set: index out of range");
+    if (!t || index >= arity)
         return;
     t->elements[index] = value;
+}
+
+/* ========== Type Check ========== */
+
+bool xr_value_is_tuple(XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass != NULL && inst->klass->builtin_kind == XR_BK_TUPLE;
 }
 
 /* ========== Structural Equality ========== */
@@ -84,8 +152,8 @@ void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value) {
  * than by heap pointer. Falls back to xr_value_eq for non-tuple
  * elements (primitives, strings, and reference types). */
 static bool tuple_elem_eq(XrValue a, XrValue b) {
-    if (XR_IS_TUPLE(a) && XR_IS_TUPLE(b))
-        return xr_tuple_equals(XR_TO_TUPLE(a), XR_TO_TUPLE(b));
+    if (xr_value_is_tuple(a) && xr_value_is_tuple(b))
+        return xr_tuple_equals((XrTuple *) XR_TO_PTR(a), (XrTuple *) XR_TO_PTR(b));
     return xr_value_eq(a, b);
 }
 
@@ -94,9 +162,11 @@ bool xr_tuple_equals(XrTuple *a, XrTuple *b) {
         return true;
     if (!a || !b)
         return false;
-    if (a->element_count != b->element_count)
+    uint16_t na = xr_tuple_arity(a);
+    uint16_t nb = xr_tuple_arity(b);
+    if (na != nb)
         return false;
-    for (uint16_t i = 0; i < a->element_count; i++) {
+    for (uint16_t i = 0; i < na; i++) {
         if (!tuple_elem_eq(a->elements[i], b->elements[i]))
             return false;
     }
@@ -115,16 +185,16 @@ bool xr_tuple_equals(XrTuple *a, XrTuple *b) {
 uint64_t xr_tuple_hash(XrTuple *t) {
     if (!t)
         return 0;
+    uint16_t arity = xr_tuple_arity(t);
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     /* Mix the arity byte by byte so the whole 16 bits actually steer
      * the hash state, instead of being reduced to a single XOR. */
-    uint16_t arity = t->element_count;
     for (int i = 0; i < (int) sizeof(arity); i++) {
         h ^= (uint64_t) ((arity >> (i * 8)) & 0xFF);
         h *= XR_FNV64_PRIME;
     }
     /* xr_hash_value returns 32-bit, so likewise fold each byte. */
-    for (uint16_t i = 0; i < t->element_count; i++) {
+    for (uint16_t i = 0; i < arity; i++) {
         uint32_t eh = xr_hash_value(t->elements[i]);
         for (int b = 0; b < 4; b++) {
             h ^= (uint64_t) ((eh >> (b * 8)) & 0xFF);
@@ -132,16 +202,4 @@ uint64_t xr_tuple_hash(XrTuple *t) {
         }
     }
     return h;
-}
-
-/* ========== GC Traversal ========== */
-
-void xr_gc_traverse_tuple(struct XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj)
-        return;
-    XrTuple *t = (XrTuple *) obj;
-    XR_DCHECK(XR_GC_GET_TYPE(&t->gc) == XR_TTUPLE, "gc_traverse_tuple: object is not a tuple");
-    for (uint16_t i = 0; i < t->element_count; i++) {
-        xr_coro_gc_markvalue(gc, t->elements[i]);
-    }
 }

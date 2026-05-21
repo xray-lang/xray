@@ -30,7 +30,6 @@
 #include "vm/xic_field.h"
 #include "vm/xic_field_table.h"
 #include "vm/xic_method.h"
-#include "vm/xic_builtin.h"
 #include "base/xmalloc.h"
 
 #include <string.h>
@@ -114,32 +113,6 @@ TEST(ensure_method_lazy_alloc_is_idempotent) {
     xr_vm_proto_free(p);
 }
 
-TEST(ensure_builtin_lazy_alloc_is_idempotent) {
-    XrVMContext ctx;
-    ctx_zero(&ctx);
-    XrProto *p = make_proto_with_insts(5);
-    ASSERT_NOT_NULL(p);
-
-    XrICBuiltinTable *t1 = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
-    ASSERT_NOT_NULL(t1);
-    /* Slots are pre-allocated to PROTO_CODE_COUNT so cache_index
-     * lookups always land. */
-    ASSERT_EQ_INT(t1->count, 5);
-
-    /* All slots must start empty (slot==NULL is the sentinel). */
-    for (int i = 0; i < t1->count; i++) {
-        ASSERT(t1->caches[i].fn == NULL);
-        ASSERT_EQ_INT((int) t1->caches[i].hits, 0);
-        ASSERT_EQ_INT((int) t1->caches[i].misses, 0);
-    }
-
-    XrICBuiltinTable *t2 = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
-    ASSERT(t2 == t1);
-
-    xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
-}
-
 /* ========== Read-side accessors ========== */
 
 TEST(get_returns_null_before_ensure) {
@@ -149,7 +122,6 @@ TEST(get_returns_null_before_ensure) {
 
     ASSERT(xr_vm_ctx_get_ic_fields(&ctx, p) == NULL);
     ASSERT(xr_vm_ctx_get_ic_methods(&ctx, p) == NULL);
-    ASSERT(xr_vm_ctx_get_ic_builtin(&ctx, p) == NULL);
 
     xr_vm_proto_free(p);
 }
@@ -161,10 +133,8 @@ TEST(get_returns_table_after_ensure) {
 
     XrICFieldTable *fe = xr_vm_ctx_ensure_ic_fields(&ctx, p);
     XrICMethodTable *me = xr_vm_ctx_ensure_ic_methods(&ctx, p);
-    XrICBuiltinTable *be = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
     ASSERT(xr_vm_ctx_get_ic_fields(&ctx, p) == fe);
     ASSERT(xr_vm_ctx_get_ic_methods(&ctx, p) == me);
-    ASSERT(xr_vm_ctx_get_ic_builtin(&ctx, p) == be);
 
     xr_vm_ctx_free_ic_tables(&ctx);
     xr_vm_proto_free(p);
@@ -224,72 +194,6 @@ TEST(multi_proto_isolation_within_ctx) {
     xr_vm_ctx_free_ic_tables(&ctx);
     xr_vm_proto_free(a);
     xr_vm_proto_free(b);
-}
-
-/* ========== Builtin IC: sticky first-write-wins ========== */
-
-TEST(builtin_cache_is_sticky_first_write_wins) {
-    /* Drives the production IC contract directly: a slot, once set,
-     * is never overwritten by a subsequent miss. The OP_INVOKE_BUILTIN
-     * fast path relies on this to avoid thrashing on poly call sites
-     * (e.g. a generic logger that sees mostly strings but occasionally
-     * sees ints — the string slot stays cached).
-     *
-     * We don't go through the dispatcher here; we model the same write
-     * sequence directly on the cache struct. */
-    XrICBuiltin ic = {0};
-
-    /* First write: empty -> filled. */
-    XrPrimitiveMethodFn fake_fn_a = (XrPrimitiveMethodFn) (uintptr_t) 0xDEAD;
-    ic.fn = fake_fn_a;
-    ic.cached_tid = (int16_t) XR_TID_STRING;
-
-    /* Subsequent miss against a different type must NOT overwrite. */
-    if (!ic.fn) {     /* deliberately false; keep the same shape as the
-                         dispatcher to make the invariant obvious. */
-        ic.fn = NULL; /* unreachable */
-    }
-    /* Mismatch path the dispatcher takes: increments misses, leaves
-     * fn untouched. */
-    if (ic.fn && ic.cached_tid != (int16_t) XR_TID_INT) {
-        ic.misses++;
-    }
-    ASSERT(ic.fn == fake_fn_a);
-    ASSERT_EQ_INT((int) ic.cached_tid, (int) XR_TID_STRING);
-    ASSERT_EQ_INT((int) ic.misses, 1);
-
-    /* Hits on the cached type bump hits, never replace the fn. */
-    if (ic.fn && ic.cached_tid == (int16_t) XR_TID_STRING) {
-        ic.hits++;
-    }
-    ASSERT(ic.fn == fake_fn_a);
-    ASSERT_EQ_INT((int) ic.hits, 1);
-}
-
-TEST(builtin_table_alloc_grows_capacity) {
-    /* xr_ic_builtin_table_alloc handles the dynamic-array growth so
-     * pre-sizing in xr_vm_ctx_ensure_ic_builtin can still expand if
-     * the proto grows after first ensure (defensive — the production
-     * code currently sizes once at ensure time, but the API contract
-     * has to honor the doubling-capacity invariant either way). */
-    XrICBuiltinTable *t = xr_ic_builtin_table_new(2);
-    ASSERT_NOT_NULL(t);
-    ASSERT_EQ_INT(t->capacity, 2);
-
-    /* Allocate 5 slots; capacity must double past the initial 2. */
-    for (int i = 0; i < 5; i++) {
-        int idx = xr_ic_builtin_table_alloc(t);
-        ASSERT_EQ_INT(idx, i);
-    }
-    ASSERT_EQ_INT(t->count, 5);
-    ASSERT(t->capacity >= 5);
-
-    /* Each freshly allocated slot starts empty. */
-    for (int i = 0; i < t->count; i++) {
-        ASSERT(t->caches[i].fn == NULL);
-    }
-
-    xr_ic_builtin_table_free(t);
 }
 
 /* ========== Snapshot semantics ========== */
@@ -395,49 +299,6 @@ TEST(snapshot_method_deep_copies_mega_cache) {
     xr_vm_proto_free(p);
 }
 
-TEST(snapshot_builtin_is_deep_copy) {
-    /*
-     * The invoke-IC table (OP_INVOKE_BUILTIN) snapshot must
-     * deep-copy the per-slot { slot, cached_tid, hits } entries so
-     * the JIT builder reads stable type feedback even when the live
-     * VM continues mutating the cache during background compile.
-     */
-    XrVMContext ctx;
-    ctx_zero(&ctx);
-    XrProto *p = make_proto_with_insts(3);
-
-    XrICBuiltinTable *live = xr_vm_ctx_ensure_ic_builtin(&ctx, p);
-    ASSERT_NOT_NULL(live);
-
-    /* Seed two slots so we can detect both copies and isolation. */
-    XrPrimitiveMethodFn fake_fn = (XrPrimitiveMethodFn) (uintptr_t) 0xCAFE;
-    live->caches[0].fn = fake_fn;
-    live->caches[0].cached_tid = 7;
-    live->caches[0].hits = 42;
-    live->caches[1].fn = fake_fn;
-    live->caches[1].cached_tid = 9;
-    live->caches[1].hits = 1;
-
-    XrICBuiltinTable *snap = xr_vm_ic_builtin_snapshot(&ctx, p);
-    ASSERT_NOT_NULL(snap);
-    ASSERT(snap != live);
-    ASSERT(snap->caches != live->caches);
-    ASSERT_EQ_INT(snap->count, live->count);
-    ASSERT_EQ_INT((int) snap->caches[0].cached_tid, 7);
-    ASSERT_EQ_INT((int) snap->caches[0].hits, 42);
-    ASSERT_EQ_INT((int) snap->caches[1].cached_tid, 9);
-
-    /* Mutate the live table; snapshot must remain unchanged. */
-    live->caches[0].cached_tid = -1;
-    live->caches[0].hits = 0;
-    ASSERT_EQ_INT((int) snap->caches[0].cached_tid, 7);
-    ASSERT_EQ_INT((int) snap->caches[0].hits, 42);
-
-    xr_ic_builtin_table_free(snap);
-    xr_vm_ctx_free_ic_tables(&ctx);
-    xr_vm_proto_free(p);
-}
-
 /* ========== Free / reuse ========== */
 
 TEST(free_ic_tables_resets_state_and_supports_reuse) {
@@ -448,14 +309,12 @@ TEST(free_ic_tables_resets_state_and_supports_reuse) {
 
     ASSERT_NOT_NULL(xr_vm_ctx_ensure_ic_fields(&ctx, a));
     ASSERT_NOT_NULL(xr_vm_ctx_ensure_ic_methods(&ctx, b));
-    ASSERT_NOT_NULL(xr_vm_ctx_ensure_ic_builtin(&ctx, b));
     ASSERT(ctx.ic_tables_capacity > 0);
 
     xr_vm_ctx_free_ic_tables(&ctx);
     ASSERT_EQ_INT((int) ctx.ic_tables_capacity, 0);
     ASSERT(ctx.ic_field_tables == NULL);
     ASSERT(ctx.ic_method_tables == NULL);
-    ASSERT(ctx.ic_builtin_tables == NULL);
 
     /* The ctx must be fully reusable after teardown — coroutines
      * recycle through xr_coro_release_resources and need a clean
@@ -508,7 +367,6 @@ RUN_TEST(proto_id_is_unique_and_monotonic);
 RUN_TEST_SUITE("Lazy allocation");
 RUN_TEST(ensure_field_lazy_alloc_is_idempotent);
 RUN_TEST(ensure_method_lazy_alloc_is_idempotent);
-RUN_TEST(ensure_builtin_lazy_alloc_is_idempotent);
 
 RUN_TEST_SUITE("Read-side accessors");
 RUN_TEST(get_returns_null_before_ensure);
@@ -520,15 +378,10 @@ RUN_TEST(capacity_grows_for_high_proto_id);
 RUN_TEST_SUITE("Multi-proto isolation");
 RUN_TEST(multi_proto_isolation_within_ctx);
 
-RUN_TEST_SUITE("Builtin IC sticky cache");
-RUN_TEST(builtin_cache_is_sticky_first_write_wins);
-RUN_TEST(builtin_table_alloc_grows_capacity);
-
 RUN_TEST_SUITE("Snapshot semantics");
 RUN_TEST(snapshot_returns_null_before_ensure);
 RUN_TEST(snapshot_field_is_deep_copy);
 RUN_TEST(snapshot_method_deep_copies_mega_cache);
-RUN_TEST(snapshot_builtin_is_deep_copy);
 
 RUN_TEST_SUITE("Free and reuse");
 RUN_TEST(free_ic_tables_resets_state_and_supports_reuse);

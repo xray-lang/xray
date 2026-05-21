@@ -256,7 +256,7 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     }
 
     // Add to scope
-    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    xa_visit_add_symbol_checked(ctx, sym, 0);
     fn->symbol_id = sym->id;
 
     // Create symbol links with type and param names
@@ -475,7 +475,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
             XaSymbol *param = xa_symbol_new(p->name, XA_SYM_PARAMETER);
             param->location.line = p->line > 0 ? p->line : node->line;
             param->passing_mode = p->passing_mode;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, param);
+            xa_visit_add_symbol_checked(ctx, param, 0);
             p->symbol_id = param->id;
 
             XaSymbolLinks *param_links = xa_analyzer_get_links(ctx->analyzer, param);
@@ -753,7 +753,7 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
 
     XaSymbol *sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
     sym->location.line = node->line;
-    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    xa_visit_add_symbol_checked(ctx, sym, 0);
 
     XrClassInfo *info = xa_class_info_new(iface->name);
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
@@ -916,7 +916,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     XaSymbol *sym = xa_symbol_new(cls->name, XA_SYM_CLASS);
     sym->location.line = node->line;
 
-    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    xa_visit_add_symbol_checked(ctx, sym, 0);
 
     /* Write back resolved symbol ID for Xi lowering (shared var key). */
     cls->symbol_id = sym->id;
@@ -1004,7 +1004,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
             field_sym->location.line = field->line;
             field_sym->is_static = fd->is_static;
             field_sym->is_private = fd->is_private;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, field_sym);
+            xa_visit_add_symbol_checked(ctx, field_sym, 0);
 
             XaSymbolLinks *field_links = xa_analyzer_get_links(ctx->analyzer, field_sym);
 
@@ -1216,7 +1216,7 @@ skip_layout:
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, method_sym);
+            xa_visit_add_symbol_checked(ctx, method_sym, 0);
 
             // Build method type
             XrType **param_types = NULL;
@@ -1405,7 +1405,7 @@ skip_layout:
             if (md->param_passing_modes) {
                 param->passing_mode = md->param_passing_modes[j];
             }
-            xa_scope_add_symbol(ctx->analyzer->current_scope, param);
+            xa_visit_add_symbol_checked(ctx, param, 0);
 
             XaSymbolLinks *plinks = xa_analyzer_get_links(ctx->analyzer, param);
             if (plinks) {
@@ -1444,7 +1444,7 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     sym->is_const = (node->type == AST_CONST_DECL);
     sym->is_shared = (var->storage_mode == 1);  // XR_STORAGE_SHARED
 
-    xa_scope_add_symbol(ctx->analyzer->current_scope, sym);
+    xa_visit_add_symbol_checked(ctx, sym, 0);
 
     /* Write back unique symbol ID so Xi lowering can use it as Braun SSA key
      * instead of name-based lookup (eliminates scope ambiguity). */

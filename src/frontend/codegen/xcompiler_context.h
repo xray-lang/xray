@@ -68,8 +68,6 @@ struct XrCompilerContext {
     int enum_type_count;
     int enum_type_capacity;
 
-    struct XrShapeCache *shape_cache;
-
     XaAnalyzer *analyzer;  // Static type analyzer (unified type system)
     XrArena arena;
 

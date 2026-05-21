@@ -5,7 +5,7 @@
 
 fn may_throw(x: int) -> int {
     if (x < 0) {
-        throw "negative"
+        throw new Exception("negative")
     }
     return x
 }

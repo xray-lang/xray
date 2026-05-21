@@ -85,3 +85,14 @@ fn test_copy_chain() {
     assert_eq(b.length, 3)
     assert_eq(a.length, 4)
 }
+
+@test
+fn test_copy_range_native_body() {
+    let r = 2..6
+    let c = copy(r)
+    let values = c.toArray()
+    assert_eq(values.length, 5)
+    assert_eq(values[0], 2)
+    assert_eq(values[4], 6)
+    assert_eq(c.contains(4), true)
+}

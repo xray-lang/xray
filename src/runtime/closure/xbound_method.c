@@ -13,7 +13,6 @@
 #include "../class/xenum.h"
 #include "../class/xclass.h"
 #include "../gc/xgc.h"
-#include "../object/xiterator.h"
 #include "../object/xnative_type.h"
 #include "../symbol/xsymbol_table.h"
 #include "../value/xtype_names.h"
@@ -117,34 +116,6 @@ MethodHandler xr_string_get_handler(XrayIsolate *isolate, int symbol) {
     return NULL;
 }
 
-/* Iterator methods touch receiver state (cursor advance), so they
- * stay outside the unified per-type table — wrap them directly. */
-static XrValue iterator_hasnext_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
-                                        int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    XrIterator *iter = xr_value_to_iterator(receiver);
-    return xr_bool(xr_iterator_has_next(iter));
-}
-
-static XrValue iterator_next_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
-                                     int argc) {
-    (void) isolate;
-    (void) args;
-    (void) argc;
-    XrIterator *iter = xr_value_to_iterator(receiver);
-    return xr_iterator_next(iter);
-}
-
-MethodHandler xr_iterator_get_handler(int symbol) {
-    if (symbol == SYMBOL_HASNEXT)
-        return iterator_hasnext_handler;
-    if (symbol == SYMBOL_NEXT)
-        return iterator_next_handler;
-    return NULL;
-}
-
 XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrValue *args,
                                    int argc) {
     (void) isolate;
@@ -153,11 +124,10 @@ XrValue xr_enum_get_member_handler(XrayIsolate *isolate, XrValue receiver, XrVal
     if (!XR_IS_PTR(receiver))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(receiver);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE)
+    if (!XR_IS_ENUM_TYPE(receiver))
         return xr_null();
 
-    XrEnumType *enum_type = (XrEnumType *) gc;
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(receiver);
     int index = XR_TO_INT(args[0]);
     if (index < 0 || index >= (int) enum_type->member_count) {
         return xr_null();

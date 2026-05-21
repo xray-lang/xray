@@ -1,7 +1,7 @@
 // Test standalone linked go error propagation (outside scope)
 
 fn failing() -> int {
-    throw "linked child error"
+    throw new Exception("linked child error")
     return 0
 }
 fn slow_work() -> int {

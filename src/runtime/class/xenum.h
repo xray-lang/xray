@@ -19,19 +19,26 @@
 #include <stdint.h>
 
 // Singleton enum member (e.g., Status.Success)
+// Layout-compatible with XrInstance + native body (0 fields).
+// GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_VALUE.
 typedef struct XrEnumValue {
     XrGCHeader gc;
+    struct XrClass *klass;  // Points to enumValueClass
     // Both names are interned in the isolate's symbol table; not owned.
     const char *enum_name;
     const char *member_name;
     XrValue raw_value;
     uint32_t member_index;
+    struct XrEnumType *parent_type;  // Back-pointer for ADT variant construction
 } XrEnumValue;
 
 // Enum type metadata (immutable at runtime)
+// Layout-compatible with XrInstance + native body (0 fields).
+// GC tag is XR_TINSTANCE; class has builtin_kind == XR_BK_ENUM_TYPE.
 typedef struct XrEnumType {
     XrGCHeader gc;
-    const char *name;  // Interned in symbol table; not owned.
+    struct XrClass *klass;  // Points to enumTypeClass
+    const char *name;       // Interned in symbol table; not owned.
     int base_type;
     uint32_t member_count;
     struct XrClass *enum_class;
@@ -54,6 +61,15 @@ typedef struct XrEnumType {
     int64_t min_int_value;   // tier 1: offset for direct index
     int *value_to_index;     // tier 2: sparse array [val - min_int_value] → member index
     int value_map_range;     // tier 2: array size (max - min + 1), 0 if not used
+
+    /* ADT enum metadata.  When is_adt is true, members carry variant tags
+     * (0..N-1) instead of user-defined backing values.  Each variant may
+     * have payload fields; payload_counts[i] gives the number of fields
+     * for member i.  max_payload is the largest count (determines instance
+     * field layout: field[0]=tag, field[1..max_payload]=payload). */
+    bool is_adt;
+    int max_payload;      // max(payload_counts[0..member_count-1])
+    int *payload_counts;  // per-variant payload field count; NULL for simple enums
 } XrEnumType;
 
 /* ========== Creation ========== */
@@ -69,6 +85,16 @@ XR_FUNC XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name,
 XR_FUNC XrEnumValue *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol);
 XR_FUNC XrEnumValue *xr_enum_from_value(XrEnumType *enum_type, XrValue value);
 XR_FUNC const char *xr_enum_value_name(XrEnumValue *enum_val);
+
+/* ========== ADT Variant Construction ========== */
+
+/* Construct an ADT variant instance.  The result is an XrInstance with:
+ *   field[0] = tag (int, the variant's member_index)
+ *   field[1..payload_count] = payload values copied from args[]
+ * Returns NULL on allocation failure or if the enum is not ADT. */
+struct XrInstance;
+XR_FUNC struct XrInstance *xr_enum_adt_construct(struct XrayIsolate *X, XrEnumType *enum_type,
+                                                 uint32_t member_index, XrValue *args, int nargs);
 
 /* ========== Symbol Mapping ========== */
 
@@ -90,5 +116,11 @@ XR_FUNC void xr_gc_destroy_enum_value(struct XrGCHeader *obj, struct XrCoroGC *o
 
 #define XR_TO_ENUM_TYPE(v) ((XrEnumType *) XR_TO_PTR(v))
 #define XR_TO_ENUM_VALUE(v) ((XrEnumValue *) XR_TO_PTR(v))
+
+/* ========== Native Body Descriptors ========== */
+
+struct XrNativeBodyDesc;
+XR_FUNC struct XrNativeBodyDesc *xr_enum_value_native_body_desc(void);
+XR_FUNC struct XrNativeBodyDesc *xr_enum_type_native_body_desc(void);
 
 #endif  // XENUM_H

@@ -891,7 +891,7 @@ void xr_cluster_remove_all_subscribers_for_node(XrCluster *c, XrClusterNode *nod
 // call — cluster_start_ex copies them into OpenSSL contexts before it
 // returns, so no lifetime surprise.
 static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_JSON(args[0]))
+    if (argc < 1 || !xr_value_is_json(args[0]))
         return xr_null();
 
     XrJson *config = (XrJson *) XR_TO_PTR(args[0]);
@@ -915,7 +915,7 @@ static XrValue cluster_start(XrayIsolate *X, XrValue *args, int argc) {
     const XrClusterTlsOptions *tls_ptr = NULL;
 
     XrValue v_tls = xr_json_get_by_key(X, config, "tls");
-    if (XR_IS_JSON(v_tls)) {
+    if (xr_value_is_json(v_tls)) {
         XrJson *tls_cfg = (XrJson *) XR_TO_PTR(v_tls);
 
         XrValue v_enabled = xr_json_get_by_key(X, tls_cfg, "enabled");
@@ -1065,7 +1065,7 @@ static XrValue cluster_reply_fn(XrayIsolate *X, XrValue *args, int argc) {
     const char *from_name;
     XrValue result;
 
-    if (argc >= 2 && XR_IS_JSON(args[0])) {
+    if (argc >= 2 && xr_value_is_json(args[0])) {
         // Simplified form: cluster.reply(req, result)
         XrJson *req = (XrJson *) XR_TO_PTR(args[0]);
         result = args[1];
@@ -1169,7 +1169,7 @@ static XrValue cluster_call_fn(XrayIsolate *X, XrValue *args, int argc) {
         if (!rsp_ch)
             return xr_null();
 
-        XrJson *req_json = xr_json_new(NULL, 4);
+        XrJson *req_json = xr_json_new(NULL);
         if (!req_json)
             return xr_null();
         xr_json_set_by_key(X, req_json, "id", xr_int((int64_t) req_id));
@@ -1449,7 +1449,7 @@ void xr_cluster_process_node(XrCluster *c, XrClusterNode *node) {
                     break;
 
                 // Build request Json: {id: int, from: string, args: value}
-                XrJson *req_json = xr_json_new(NULL, 3);
+                XrJson *req_json = xr_json_new(NULL);
                 if (req_json) {
                     xr_json_set_by_key(c->isolate, req_json, "id", xr_int((int64_t) sc.request_id));
                     XrString *from_str =
@@ -1711,7 +1711,7 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (!c)
         return xr_null();
 
-    XrJson *info = xr_json_new(NULL, 8);
+    XrJson *info = xr_json_new(NULL);
     if (!info)
         return xr_null();
 
@@ -1727,7 +1727,7 @@ static XrValue cluster_info_fn(XrayIsolate *X, XrValue *args, int argc) {
         xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
-            XrJson *nj = xr_json_new(NULL, 10);
+            XrJson *nj = xr_json_new(NULL);
             if (nj) {
                 XrString *nname = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
                 xr_json_set_by_key(X, nj, "name", xr_string_value(nname));

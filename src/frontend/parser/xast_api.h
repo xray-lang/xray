@@ -220,12 +220,17 @@ XR_FUNC AstNode *xr_ast_super_call(XrayIsolate *X, const char *method_name, AstN
 XR_FUNC AstNode *xr_ast_member_set(XrayIsolate *X, AstNode *object, const char *member,
                                    AstNode *value, int line);
 
-// Create enum declaration node
+// Create enum declaration node (ADT enum with optional generics, methods, interfaces)
 XR_FUNC AstNode *xr_ast_enum_decl(XrayIsolate *X, const char *name, const char *type_hint,
-                                  AstNode **members, int member_count, int line);
+                                  AstNode **members, int member_count, AstNode **methods,
+                                  int method_count, XrGenericParam **type_params,
+                                  int type_param_count, XrTypeRef **interfaces, int interface_count,
+                                  int line);
 
-// Create enum member node
-XR_FUNC AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value, int line);
+// Create enum member node (ADT variant with optional payload)
+XR_FUNC AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value,
+                                    char **payload_names, XrTypeRef **payload_types,
+                                    int payload_count, int line);
 
 // Create enum access node
 XR_FUNC AstNode *xr_ast_enum_access(XrayIsolate *X, const char *enum_name, const char *member_name,
@@ -323,6 +328,14 @@ XR_FUNC AstNode *xr_ast_pattern_multi(XrayIsolate *X, AstNode **patterns, int co
 // Create tuple pattern node (positional destructure inside match arms)
 XR_FUNC AstNode *xr_ast_pattern_tuple(XrayIsolate *X, AstNode **patterns, int count, int line);
 
+// Create ADT variant destructure pattern node: Shape.Circle(r, ...)
+XR_FUNC AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns, int count,
+                                    int line);
+
+// Create type pattern node: `is T` or `is T name`
+XR_FUNC AstNode *xr_ast_pattern_type(XrayIsolate *X, XrTypeRef *type, const char *binding_name,
+                                     int line);
+
 // Create type alias node
 XR_FUNC AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
                                    XrTypeRef **field_types, bool *field_optional, int field_count,
@@ -361,6 +374,9 @@ XR_FUNC AstNode *xr_ast_cancelled_expr(XrayIsolate *X, int line);
 
 // Create move expression node (explicit ownership transfer)
 XR_FUNC AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column);
+
+// Create catch! expression node (wraps body in Result.Ok/Err)
+XR_FUNC AstNode *xr_ast_catch_expr(XrayIsolate *X, AstNode *body, int line);
 
 // Debug: print AST structure
 XR_FUNC void xr_ast_print(AstNode *node, int indent);

@@ -1579,7 +1579,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             if (p && p->name) {
                 XaSymbol *param_sym = xa_symbol_new(p->name, XA_SYM_PARAMETER);
                 param_sym->location.line = p->line > 0 ? p->line : node->line;
-                xa_scope_add_symbol(ctx->analyzer->current_scope, param_sym);
+                xa_visit_add_symbol_checked(ctx, param_sym, 0);
                 p->symbol_id = param_sym->id;
                 XaSymbolLinks *pl = xa_analyzer_get_links(ctx->analyzer, param_sym);
                 pl->type = param_types ? param_types[i] : xr_type_new_unknown(NULL);
