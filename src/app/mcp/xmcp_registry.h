@@ -26,6 +26,7 @@ typedef struct XmcpToolDef {
     const char *title;
     const char *description;
     XmcpSchemaBuilder build_schema;
+    XmcpSchemaBuilder build_output_schema;
     XmcpToolHandler handler;
     bool read_only;
     bool open_world;

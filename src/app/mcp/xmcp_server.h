@@ -39,7 +39,7 @@ typedef struct XmcpServer {
     /* stdio transport */
     XmcpStdioTransport transport;
 
-    /* Parser isolate (for xray_check tool) */
+    /* Analyzer isolate for MCP code analysis tools */
     XrayIsolate *isolate;
 
     /* Knowledge base (syntax spec + stdlib index) */

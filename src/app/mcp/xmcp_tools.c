@@ -23,6 +23,7 @@
 #include "../../base/xchecks.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
+#include "../../frontend/analyzer/xanalyzer.h"
 #include "../../frontend/format/xfmt.h"
 #include "xray_isolate.h"
 #include "../../base/xarena.h"
@@ -45,17 +46,16 @@
  * -------------------------------------------------------------------------- */
 
 /* Forward declarations for handlers and schema builders */
-static XrJsonValue *tool_xray_check(XmcpServer *s, XrJsonValue *a);
+static XrJsonValue *tool_xray_analyze(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *tool_xray_format(XmcpServer *s, XrJsonValue *a);
-static XrJsonValue *tool_xray_diagnostics(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *tool_xray_run(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *tool_xray_stdlib_search(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *tool_xray_definition(XmcpServer *s, XrJsonValue *a);
 
-static XrJsonValue *schema_check(void);
+static XrJsonValue *schema_analyze(void);
+static XrJsonValue *schema_analyze_output(void);
 static XrJsonValue *schema_format(void);
-static XrJsonValue *schema_diagnostics(void);
 static XrJsonValue *schema_run(void);
 static XrJsonValue *schema_syntax(void);
 static XrJsonValue *schema_stdlib(void);
@@ -66,38 +66,34 @@ static XrJsonValue *schema_definition(void);
  * -------------------------------------------------------------------------- */
 
 static const XmcpToolDef TOOL_TABLE[] = {
-    {"xray_check", "Xray Code Checker",
-     "Check Xray source code for syntax and type errors. "
-     "Returns a list of diagnostics. Use this before suggesting code.",
-     schema_check, tool_xray_check, true, false},
+    {"xray_analyze", "Xray Code Analyzer",
+     "Analyze Xray source code for syntax and semantic diagnostics. "
+     "Returns a text summary and structured diagnostics.",
+     schema_analyze, schema_analyze_output, tool_xray_analyze, true, false},
     {"xray_format", "Xray Code Formatter",
      "Format Xray source code according to standard style. "
      "Returns formatted code. Optionally set indent size or tabs.",
-     schema_format, tool_xray_format, true, false},
-    {"xray_diagnostics", "Xray Diagnostics",
-     "Get structured diagnostic information (line, column, severity, "
-     "message) for Xray source code as a markdown table.",
-     schema_diagnostics, tool_xray_diagnostics, true, false},
+     schema_format, NULL, tool_xray_format, true, false},
     {"xray_run", "Xray Code Runner",
      "Execute a small Xray code snippet and return its stdout output. "
      "Creates an isolated VM per execution. Max output: 8KB.",
-     schema_run, tool_xray_run, false, true},
+     schema_run, NULL, tool_xray_run, false, true},
     {"xray_syntax_lookup", "Xray Syntax Reference",
      "Look up Xray language syntax by topic. Returns code examples. "
      "Topics: variables, types, functions, control_flow, class, struct, "
      "interface, enum, generics, collections, string, channel, coroutine, "
      "concurrency_rules, modules, testing, operators, builtin_functions.",
-     schema_syntax, tool_xray_syntax_lookup, true, false},
+     schema_syntax, NULL, tool_xray_syntax_lookup, true, false},
     {"xray_stdlib_search", "Xray Stdlib Search",
      "Search the Xray standard library by module name or topic. "
      "Available modules: http, json, time, math, io, os, net, ws, "
      "crypto, csv, regex, cluster, compress, and more.",
-     schema_stdlib, tool_xray_stdlib_search, true, false},
+     schema_stdlib, NULL, tool_xray_stdlib_search, true, false},
     {"xray_definition", "Xray Definition Lookup",
      "Find documentation for a symbol in the Xray language or stdlib. "
      "Searches syntax topics and standard library modules.",
-     schema_definition, tool_xray_definition, true, false},
-    {NULL, NULL, NULL, NULL, NULL, false, false}};
+     schema_definition, NULL, tool_xray_definition, true, false},
+    {NULL, NULL, NULL, NULL, NULL, NULL, false, false}};
 
 /* --------------------------------------------------------------------------
  * Helpers
@@ -140,21 +136,17 @@ static void schema_add_prop(XrJsonValue *props, const char *name, const char *ty
     xjson_object_set(props, name, p);
 }
 
-/* --------------------------------------------------------------------------
- * Error capture (shared by xray_check and xray_diagnostics)
- * -------------------------------------------------------------------------- */
-
 typedef struct {
     int lines[MAX_CHECK_ERRORS];
     int columns[MAX_CHECK_ERRORS];
+    int end_lines[MAX_CHECK_ERRORS];
+    int end_columns[MAX_CHECK_ERRORS];
     char messages[MAX_CHECK_ERRORS][512];
     int count;
 } ErrorCapture;
 
 static void check_error_callback(void *user_data, int line, int column, int end_line,
                                  int end_column, const char *message) {
-    (void) end_line;
-    (void) end_column;
     ErrorCapture *cap = (ErrorCapture *) user_data;
     XR_DCHECK(cap != NULL, "check_error_callback: NULL capture");
     if (cap->count >= MAX_CHECK_ERRORS)
@@ -162,23 +154,73 @@ static void check_error_callback(void *user_data, int line, int column, int end_
     int i = cap->count;
     cap->lines[i] = line;
     cap->columns[i] = column;
+    cap->end_lines[i] = end_line;
+    cap->end_columns[i] = end_column;
     snprintf(cap->messages[i], sizeof(cap->messages[0]), "%s", message);
     cap->count++;
+}
+
+static const char *diag_severity_name(XrDiagSeverity severity) {
+    switch (severity) {
+        case XR_DIAG_SEV_WARNING:
+            return "warning";
+        case XR_DIAG_SEV_INFO:
+            return "info";
+        case XR_DIAG_SEV_HINT:
+            return "hint";
+        case XR_DIAG_SEV_ERROR:
+        default:
+            return "error";
+    }
+}
+
+static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_column,
+                                    const char *severity, int code, const char *message,
+                                    const char *source) {
+    XR_DCHECK(severity != NULL, "make_diagnostic: NULL severity");
+    XR_DCHECK(message != NULL, "make_diagnostic: NULL message");
+    XR_DCHECK(source != NULL, "make_diagnostic: NULL source");
+
+    XrJsonValue *diag = xjson_new_object();
+    XJSON_SET_INT(diag, "line", line);
+    XJSON_SET_INT(diag, "column", column);
+    XJSON_SET_INT(diag, "endLine", end_line);
+    XJSON_SET_INT(diag, "endColumn", end_column);
+    XJSON_SET_STRING(diag, "severity", severity);
+    XJSON_SET_INT(diag, "code", code);
+    XJSON_SET_STRING(diag, "message", message);
+    XJSON_SET_STRING(diag, "source", source);
+    return diag;
 }
 
 /* --------------------------------------------------------------------------
  * Schema builders
  * -------------------------------------------------------------------------- */
 
-static XrJsonValue *schema_check(void) {
+static XrJsonValue *schema_analyze(void) {
     XrJsonValue *s = xjson_new_object();
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
-    schema_add_prop(p, "code", "string", "Xray source code to check for syntax and type errors");
+    schema_add_prop(p, "code", "string", "Xray source code to analyze");
+    schema_add_prop(p, "filename", "string", "Optional filename used in diagnostics");
+    schema_add_prop(p, "mode", "string", "Analysis mode: syntax, semantic, or full");
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
     xjson_object_set(s, "required", r);
+    return s;
+}
+
+static XrJsonValue *schema_analyze_output(void) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "ok", "boolean", "True when no diagnostics were produced");
+    schema_add_prop(p, "mode", "string", "Effective analysis mode");
+    schema_add_prop(p, "diagnosticCount", "integer", "Number of diagnostics returned");
+    schema_add_prop(p, "truncated", "boolean", "True when diagnostics hit the result limit");
+    schema_add_prop(p, "diagnostics", "array", "Structured diagnostics");
+    xjson_object_set(s, "properties", p);
     return s;
 }
 
@@ -189,18 +231,6 @@ static XrJsonValue *schema_format(void) {
     schema_add_prop(p, "code", "string", "Xray source code to format");
     schema_add_prop(p, "indentSize", "integer", "Indent size in spaces (default: 4)");
     schema_add_prop(p, "useTabs", "boolean", "Use tabs instead of spaces (default: false)");
-    xjson_object_set(s, "properties", p);
-    XrJsonValue *r = xjson_new_array();
-    xjson_array_push(r, xjson_new_string("code"));
-    xjson_object_set(s, "required", r);
-    return s;
-}
-
-static XrJsonValue *schema_diagnostics(void) {
-    XrJsonValue *s = xjson_new_object();
-    XJSON_SET_STRING(s, "type", "object");
-    XrJsonValue *p = xjson_new_object();
-    schema_add_prop(p, "code", "string", "Xray source code to analyze");
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
@@ -284,6 +314,8 @@ static XrJsonValue *xmcp_tool_to_json(const XmcpToolDef *tool) {
     XJSON_SET_STRING(t, "name", tool->name);
     XJSON_SET_STRING(t, "description", tool->description);
     xjson_object_set(t, "inputSchema", tool->build_schema());
+    if (tool->build_output_schema)
+        xjson_object_set(t, "outputSchema", tool->build_output_schema());
 
     XrJsonValue *ann = xjson_new_object();
     XJSON_SET_STRING(ann, "title", tool->title);
@@ -322,18 +354,24 @@ XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params) {
     return result;
 }
 
-/* --------------------------------------------------------------------------
- * Tool: xray_check
- * -------------------------------------------------------------------------- */
-
-static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) {
-    XR_DCHECK(server != NULL, "tool_xray_check: NULL server");
-    XR_DCHECK(arguments != NULL, "tool_xray_check: NULL arguments");
+static XrJsonValue *tool_xray_analyze(XmcpServer *server, XrJsonValue *arguments) {
+    XR_DCHECK(server != NULL, "tool_xray_analyze: NULL server");
+    XR_DCHECK(arguments != NULL, "tool_xray_analyze: NULL arguments");
 
     const char *code = xjson_get_string(arguments, "code");
     if (!code || code[0] == '\0') {
         return xmcp_make_error_result("Error: 'code' parameter is required");
     }
+    if (!server->isolate)
+        return xmcp_make_error_result("Error: analyzer isolate is not available");
+
+    const char *filename = xjson_get_string(arguments, "filename");
+    if (!filename || filename[0] == '\0')
+        filename = "<mcp-analyze>";
+    const char *mode = xjson_get_string(arguments, "mode");
+    if (!mode || mode[0] == '\0')
+        mode = "full";
+    bool run_analyzer = strcmp(mode, "syntax") != 0;
 
     XrArena *arena = xr_malloc(sizeof(XrArena));
     if (!arena)
@@ -346,50 +384,75 @@ static XrJsonValue *tool_xray_check(XmcpServer *server, XrJsonValue *arguments) 
 
     ErrorCapture cap = {.count = 0};
     Parser parser;
-    xr_parser_init(&parser, server->isolate, code, "<mcp-check>", arena);
+    xr_parser_init(&parser, server->isolate, code, filename, arena);
     xr_parser_set_error_callback(&parser, check_error_callback, &cap, MAX_CHECK_ERRORS);
     AstNode *ast = xr_parse_recoverable(&parser);
 
     if (ptok >= 0)
         xmcp_send_progress_notification(server, ptok, 1, 2);
 
-    size_t buf_cap = CHECK_BUF_SIZE;
-    char *text_buf = xr_malloc(buf_cap);
-    if (!text_buf) {
-        if (ast)
-            xr_program_destroy(ast);
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        return xmcp_make_error_result("Error: out of memory");
-    }
-    int text_len = 0;
-    if (cap.count == 0) {
-        text_len = snprintf(text_buf, buf_cap, "OK: no errors found.\n");
-    } else {
-        text_len = snprintf(text_buf, buf_cap, "Found %d error(s):\n\n", cap.count);
-        for (int i = 0; i < cap.count; i++) {
-            text_len +=
-                snprintf(text_buf + text_len, buf_cap - (size_t) text_len, "- line %d:%d: %s\n",
-                         cap.lines[i], cap.columns[i], cap.messages[i]);
+    XaAnalyzer *analyzer = NULL;
+    XaDiagnostic *analyzer_diags = NULL;
+    int analyzer_count = 0;
+    if (ast && cap.count == 0 && run_analyzer) {
+        analyzer = xa_analyzer_new(server->isolate);
+        if (!analyzer) {
+            xr_arena_destroy(arena);
+            xr_free(arena);
+            return xmcp_make_error_result("Error: out of memory");
         }
+        if (strcmp(mode, "semantic") == 0 || strcmp(mode, "full") == 0)
+            xa_analyzer_set_strict_mode(analyzer, true);
+        xa_analyzer_analyze(analyzer, filename, (XrAstNode *) ast);
+        analyzer_diags = xa_analyzer_get_diagnostics(analyzer, &analyzer_count);
     }
-    (void) text_len;
 
-    XrJsonValue *result = xmcp_make_text_result(text_buf, cap.count > 0);
+    XrJsonValue *diagnostics = xjson_new_array();
+    int emitted = 0;
+    bool truncated = false;
+    for (int i = 0; i < cap.count && emitted < MAX_CHECK_ERRORS; i++, emitted++) {
+        xjson_array_push(diagnostics, make_diagnostic(cap.lines[i], cap.columns[i],
+                                                      cap.end_lines[i], cap.end_columns[i], "error",
+                                                      0, cap.messages[i], "parser"));
+    }
+    for (XaDiagnostic *d = analyzer_diags; d && emitted < MAX_CHECK_ERRORS;
+         d = d->next, emitted++) {
+        xjson_array_push(diagnostics,
+                         make_diagnostic((int) d->location.line, (int) d->location.column,
+                                         (int) d->location.end_line, (int) d->location.end_column,
+                                         diag_severity_name(d->severity), d->code, d->message,
+                                         "analyzer"));
+    }
+    if (cap.count >= MAX_CHECK_ERRORS || analyzer_count > MAX_CHECK_ERRORS - cap.count)
+        truncated = true;
+
+    int diagnostic_count = xjson_array_len(diagnostics);
+    char text[256];
+    if (diagnostic_count == 0) {
+        snprintf(text, sizeof(text), "OK: no diagnostics found.");
+    } else {
+        snprintf(text, sizeof(text), "Found %d diagnostic(s).", diagnostic_count);
+    }
+
+    XrJsonValue *structured = xjson_new_object();
+    XJSON_SET_BOOL(structured, "ok", diagnostic_count == 0);
+    XJSON_SET_STRING(structured, "mode", mode);
+    XJSON_SET_INT(structured, "diagnosticCount", diagnostic_count);
+    XJSON_SET_BOOL(structured, "truncated", truncated);
+    xjson_object_set(structured, "diagnostics", diagnostics);
+
+    XrJsonValue *result = xmcp_make_text_result(text, diagnostic_count > 0);
+    xjson_object_set(result, "structuredContent", xjson_clone(structured));
+    xjson_free(structured);
     if (ptok >= 0)
         xmcp_send_progress_notification(server, ptok, 2, 2);
 
-    xr_free(text_buf);
-    if (ast)
-        xr_program_destroy(ast);
+    if (analyzer)
+        xa_analyzer_free(analyzer);
     xr_arena_destroy(arena);
     xr_free(arena);
     return result;
 }
-
-/* --------------------------------------------------------------------------
- * Tool: xray_format
- * -------------------------------------------------------------------------- */
 
 static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_format: NULL server");
@@ -410,7 +473,7 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments)
     AstNode *ast = xr_parse_with_trivia(server->isolate, code, "<mcp-format>");
     if (!ast) {
         return xmcp_make_error_result("Error: cannot format code with syntax errors. "
-                                      "Use xray_check first to find and fix errors.");
+                                      "Use xray_analyze first to find and fix errors.");
     }
 
     char *formatted = xfmt_format_ast(ast, &config, server->isolate);
@@ -420,64 +483,6 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments)
 
     XrJsonValue *result = xmcp_make_text_result(formatted, false);
     xr_free(formatted);
-    return result;
-}
-
-/* --------------------------------------------------------------------------
- * Tool: xray_diagnostics (structured line/col/severity output)
- * -------------------------------------------------------------------------- */
-
-static XrJsonValue *tool_xray_diagnostics(XmcpServer *server, XrJsonValue *arguments) {
-    XR_DCHECK(server != NULL, "tool_xray_diagnostics: NULL server");
-    XR_DCHECK(arguments != NULL, "tool_xray_diagnostics: NULL arguments");
-
-    const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0') {
-        return xmcp_make_error_result("Error: 'code' parameter is required");
-    }
-
-    XrArena *arena = xr_malloc(sizeof(XrArena));
-    if (!arena)
-        return xmcp_make_error_result("Error: out of memory");
-    xr_arena_init(arena, 0);
-
-    ErrorCapture cap = {.count = 0};
-    Parser parser;
-    xr_parser_init(&parser, server->isolate, code, "<mcp-diag>", arena);
-    xr_parser_set_error_callback(&parser, check_error_callback, &cap, MAX_CHECK_ERRORS);
-    AstNode *ast = xr_parse_recoverable(&parser);
-
-    size_t buf_cap = CHECK_BUF_SIZE;
-    char *buf = xr_malloc(buf_cap);
-    if (!buf) {
-        if (ast)
-            xr_program_destroy(ast);
-        xr_arena_destroy(arena);
-        xr_free(arena);
-        return xmcp_make_error_result("Error: out of memory");
-    }
-
-    int len = 0;
-    if (cap.count == 0) {
-        len = snprintf(buf, buf_cap, "No diagnostics. Code is clean.\n");
-    } else {
-        len = snprintf(buf, buf_cap,
-                       "| Line | Column | Severity | Message |\n"
-                       "|------|--------|----------|---------|\n");
-        for (int i = 0; i < cap.count; i++) {
-            len += snprintf(buf + len, buf_cap - (size_t) len, "| %d | %d | error | %s |\n",
-                            cap.lines[i], cap.columns[i], cap.messages[i]);
-        }
-        len += snprintf(buf + len, buf_cap - (size_t) len, "\n**Total: %d error(s)**\n", cap.count);
-    }
-    (void) len;
-
-    XrJsonValue *result = xmcp_make_text_result(buf, cap.count > 0);
-    xr_free(buf);
-    if (ast)
-        xr_program_destroy(ast);
-    xr_arena_destroy(arena);
-    xr_free(arena);
     return result;
 }
 

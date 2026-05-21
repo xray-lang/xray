@@ -8,8 +8,8 @@
  * xmcp_tools.h - MCP tool handlers
  *
  * KEY CONCEPT:
- *   Table-driven tool registry with 7 built-in tools:
- *   xray_check, xray_format, xray_diagnostics, xray_run,
+ *   Table-driven tool registry with 6 built-in tools:
+ *   xray_analyze, xray_format, xray_run,
  *   xray_syntax_lookup, xray_stdlib_search, xray_definition.
  *   Adding a tool = handler + schema + one TOOL_TABLE entry.
  */
