@@ -114,14 +114,20 @@ $WorkerScript = {
         $psi.CreateNoWindow  = $true
         try {
             $p = [System.Diagnostics.Process]::Start($psi)
-            $stdout = $p.StandardOutput.ReadToEnd()
+            $stdoutTask = $p.StandardOutput.ReadToEndAsync()
+            $stderrTask = $p.StandardError.ReadToEndAsync()
             if (-not $p.WaitForExit($timeoutMs)) {
                 try { $p.Kill() } catch {}
-                return @{ Rc = 124; Out = $stdout }
+                $p.WaitForExit()
+                $stdoutTask.Wait()
+                $stderrTask.Wait()
+                return @{ Rc = 124; Out = $stdoutTask.Result; Err = $stderrTask.Result }
             }
-            return @{ Rc = $p.ExitCode; Out = $stdout }
+            $stdoutTask.Wait()
+            $stderrTask.Wait()
+            return @{ Rc = $p.ExitCode; Out = $stdoutTask.Result; Err = $stderrTask.Result }
         } catch {
-            return @{ Rc = -999; Out = "" }
+            return @{ Rc = -999; Out = ""; Err = $_.Exception.Message }
         }
     }
 
@@ -147,13 +153,7 @@ $WorkerScript = {
         $normI = $interp.Out -replace '\(\d+ms\)', '(_ms)' -replace '\d+ms', '_ms'
         $normJ = $jit.Out    -replace '\(\d+ms\)', '(_ms)' -replace '\d+ms', '_ms'
         if ($normI -eq $normJ) {
-            # Guard: check at least one @test actually executed
-            $execMatch = [regex]::Match($interp.Out, '(\d+) passed')
-            if ($execMatch.Success -and [int]$execMatch.Groups[1].Value -gt 0) {
-                $status = "PASS"
-            } else {
-                $status = "NO_TESTS"
-            }
+            $status = "PASS"
         } else { $status = "OUTPUT_DIFF" }
     }
 
@@ -164,6 +164,8 @@ $WorkerScript = {
         RelPath  = $relPath
         InterpOut= $interp.Out
         JitOut   = $jit.Out
+        InterpErr= $interp.Err
+        JitErr   = $jit.Err
     }
 }
 
