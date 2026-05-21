@@ -367,7 +367,7 @@ XmcpServer *xmcp_server_new(void) {
     /* Disable stdout buffering so responses reach the client immediately */
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    /* Create parser isolate for xray_check */
+    /* Create analyzer isolate for MCP code analysis tools */
     s->isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_ANALYZE);
     if (!s->isolate) {
         mcp_log(s, 0, "failed to create isolate");
