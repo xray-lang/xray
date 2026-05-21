@@ -17,6 +17,7 @@
 #define XMCP_SERVER_H
 
 #include "../../base/xdefs.h"
+#include "xmcp_registry.h"
 #include "xmcp_transport_stdio.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -48,10 +49,8 @@ typedef struct XmcpServer {
     FILE *log_file; /* NULL = stderr only */
     int log_level;  /* 0=error, 1=warn, 2=info, 3=debug */
 
-    /* Feature flags (for dynamic capability inference) */
-    bool has_tools;     /* true if tools are registered */
-    bool has_resources; /* true if resources are registered */
-    bool has_prompts;   /* true if prompts are registered */
+    /* Feature registry */
+    XmcpRegistry registry;
 
     /* Per-request progress token (-1 = no progress tracking) */
     int64_t current_progress_token;

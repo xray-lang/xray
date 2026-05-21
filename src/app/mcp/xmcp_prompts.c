@@ -72,6 +72,10 @@ static const PromptDef PROMPTS[] = {
 
 #define PROMPT_COUNT ((int) (sizeof(PROMPTS) / sizeof(PROMPTS[0])))
 
+XR_FUNC size_t xmcp_prompts_count(void) {
+    return (size_t) PROMPT_COUNT;
+}
+
 /* --------------------------------------------------------------------------
  * System message content (embedded language knowledge for prompts)
  * -------------------------------------------------------------------------- */

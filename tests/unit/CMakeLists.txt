@@ -401,6 +401,7 @@ if(XR_BUILD_MCP)
         mcp/test_mcp_protocol.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_jsonrpc.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_protocol.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_registry.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c

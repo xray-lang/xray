@@ -18,6 +18,7 @@
 #define XMCP_TOOLS_H
 
 #include "../../base/xdefs.h"
+#include <stddef.h>
 
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
@@ -25,6 +26,8 @@ typedef struct XmcpServer XmcpServer;
 
 /* Handle "tools/list" request. Accepts params for pagination (cursor). */
 XR_FUNC XrJsonValue *xmcp_handle_tools_list(XrJsonValue *params);
+
+XR_FUNC size_t xmcp_tools_count(void);
 
 /* Handle "tools/call" request. */
 XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *params);

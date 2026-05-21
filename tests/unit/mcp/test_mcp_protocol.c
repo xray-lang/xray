@@ -71,6 +71,17 @@ static XrJsonValue *parse_json(const char *json) {
     return xjson_parse(json, strlen(json));
 }
 
+static XmcpRegistry test_registry(size_t tools, size_t resources, size_t templates,
+                                  size_t prompts) {
+    XmcpRegistry registry = {
+        .tool_count = tools,
+        .resource_count = resources,
+        .resource_template_count = templates,
+        .prompt_count = prompts,
+    };
+    return registry;
+}
+
 /* =========================================================================
  * Protocol error codes
  * ========================================================================= */
@@ -117,9 +128,7 @@ TEST(server_version_defined) {
 TEST(initialize_returns_protocol_version) {
     /* Create a minimal server struct for testing */
     XmcpServer server = {
-        .has_tools = true,
-        .has_resources = true,
-        .has_prompts = true,
+        .registry = test_registry(1, 1, 1, 1),
         .lifecycle_state = XMCP_LIFECYCLE_CREATED,
     };
 
@@ -136,9 +145,7 @@ TEST(initialize_returns_protocol_version) {
 
 TEST(initialize_does_not_rewind_ready_state) {
     XmcpServer server = {
-        .has_tools = true,
-        .has_resources = true,
-        .has_prompts = true,
+        .registry = test_registry(1, 1, 1, 1),
         .lifecycle_state = XMCP_LIFECYCLE_READY,
     };
 
@@ -259,9 +266,7 @@ TEST(jsonrpc_rejects_null_params) {
 
 TEST(initialize_returns_server_info) {
     XmcpServer server = {
-        .has_tools = true,
-        .has_resources = true,
-        .has_prompts = false,
+        .registry = test_registry(1, 1, 1, 0),
     };
 
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
@@ -283,9 +288,7 @@ TEST(initialize_returns_server_info) {
 
 TEST(initialize_capabilities_with_all_features) {
     XmcpServer server = {
-        .has_tools = true,
-        .has_resources = true,
-        .has_prompts = true,
+        .registry = test_registry(1, 1, 1, 1),
     };
 
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
@@ -315,9 +318,7 @@ TEST(initialize_capabilities_with_all_features) {
 
 TEST(initialize_capabilities_without_prompts) {
     XmcpServer server = {
-        .has_tools = true,
-        .has_resources = true,
-        .has_prompts = false,
+        .registry = test_registry(1, 1, 1, 0),
     };
 
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
@@ -342,9 +343,7 @@ TEST(initialize_capabilities_without_prompts) {
 
 TEST(initialize_capabilities_minimal) {
     XmcpServer server = {
-        .has_tools = false,
-        .has_resources = false,
-        .has_prompts = false,
+        .registry = test_registry(0, 0, 0, 0),
     };
 
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
@@ -360,6 +359,19 @@ TEST(initialize_capabilities_minimal) {
     ASSERT_NOT_NULL(xjson_get_object(caps, "logging"));
 
     xjson_free(result);
+}
+
+TEST(registry_init_counts_features) {
+    XmcpRegistry registry;
+    xmcp_registry_init(&registry);
+
+    ASSERT_EQ(registry.tool_count, 7);
+    ASSERT_EQ(registry.resource_count, 3);
+    ASSERT_EQ(registry.resource_template_count, 2);
+    ASSERT_EQ(registry.prompt_count, 5);
+    ASSERT(xmcp_registry_has_tools(&registry));
+    ASSERT(xmcp_registry_has_resources(&registry));
+    ASSERT(xmcp_registry_has_prompts(&registry));
 }
 
 /* =========================================================================
@@ -1071,6 +1083,7 @@ int main(void) {
     RUN_TEST(initialize_capabilities_with_all_features);
     RUN_TEST(initialize_capabilities_without_prompts);
     RUN_TEST(initialize_capabilities_minimal);
+    RUN_TEST(registry_init_counts_features);
 
     /* Tools */
     RUN_TEST(tools_list_returns_seven_tools);

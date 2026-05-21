@@ -280,6 +280,13 @@ static XrJsonValue *schema_definition(void) {
 /* Default page size for list endpoints (MCP convention: 1000) */
 #define XMCP_PAGE_SIZE 1000
 
+XR_FUNC size_t xmcp_tools_count(void) {
+    size_t count = 0;
+    while (TOOL_TABLE[count].name != NULL)
+        count++;
+    return count;
+}
+
 XrJsonValue *xmcp_handle_tools_list(XrJsonValue *params) {
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *tools = xjson_new_array();

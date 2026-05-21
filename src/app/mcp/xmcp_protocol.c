@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Builds the initialize response with dynamically inferred capabilities.
- *   Capabilities are derived from server feature flags (has_tools, etc.).
+ *   Capabilities are derived from the server feature registry.
  *   MCP protocol version 2025-03-26.
  */
 
@@ -18,24 +18,23 @@
 #include "../../base/xjson.h"
 #include "../../base/xchecks.h"
 
-/* Build capabilities object from server feature flags. */
 static XrJsonValue *build_capabilities(XmcpServer *server) {
     XR_DCHECK(server != NULL, "build_capabilities: NULL server");
     XrJsonValue *caps = xjson_new_object();
 
-    if (server->has_tools) {
+    if (xmcp_registry_has_tools(&server->registry)) {
         XrJsonValue *tc = xjson_new_object();
         XJSON_SET_BOOL(tc, "listChanged", true);
         xjson_object_set(caps, "tools", tc);
     }
 
-    if (server->has_resources) {
+    if (xmcp_registry_has_resources(&server->registry)) {
         XrJsonValue *rc = xjson_new_object();
         XJSON_SET_BOOL(rc, "listChanged", false);
         xjson_object_set(caps, "resources", rc);
     }
 
-    if (server->has_prompts) {
+    if (xmcp_registry_has_prompts(&server->registry)) {
         XrJsonValue *pc = xjson_new_object();
         XJSON_SET_BOOL(pc, "listChanged", true);
         xjson_object_set(caps, "prompts", pc);
