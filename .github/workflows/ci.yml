@@ -475,19 +475,17 @@ jobs:
               -DENABLE_UBSAN=ON
             build_config: Debug
 
-          - name: macos-x64-asan-jit
-            # macos-13 is the only currently-available Intel runner.
-            # The runner image is in deprecation but no x86_64-capable
-            # successor exists; once it disappears we either drop this
-            # slot or self-host. Until then it is the only signal we
-            # have for x86_64-specific JIT codegen bugs on macOS.
-            os: macos-13
-            short_name: macos-x64-asan
-            cmake_flags: >-
-              -DCMAKE_BUILD_TYPE=Debug
-              -DENABLE_ASAN=ON
-              -DENABLE_UBSAN=ON
-            build_config: Debug
+          # macos-x64-asan-jit was dropped: the macos-13 GitHub-hosted
+          # runner image is no longer assignable, so this matrix slot
+          # would queue forever and block the surrounding workflow_run
+          # from ever transitioning to "completed". The slot's prior
+          # comment foresaw "we either drop this slot or self-host"
+          # once the image disappeared; with no x86_64 macOS successor
+          # available we take the drop. x86_64 ASan signal lives on the
+          # linux-asan-ubsan-jit slot below; macOS-specific codegen
+          # signal lives on macos-arm64-asan-jit. If a self-hosted
+          # macos-x64 runner ever materialises this slot can be
+          # re-introduced with `os: [self-hosted, macos-x64]`.
 
           - name: windows-msvc-debug-jit
             os: windows-2022
