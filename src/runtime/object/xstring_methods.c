@@ -111,18 +111,12 @@ static XrValue m_last_index_of(XrayIsolate *iso, XrValue self, XrValue *args, in
     return xr_int(xr_string_last_index_of(iso, str, substr));
 }
 
-static XrValue m_contains(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+static XrValue m_includes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0]))
         return xr_bool(0);
     XrString *str = str_self(self);
     XrString *substr = xr_value_to_string(iso, args[0]);
     return xr_bool(xr_string_has(iso, str, substr));
-}
-
-/* SYMBOL_HAS — same as contains but lives at a different symbol slot
- * for back-compat with code that uses the generic `has` name. */
-static XrValue m_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    return m_contains(iso, self, args, argc);
 }
 
 static XrValue m_starts_with(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
@@ -278,21 +272,21 @@ static XrValue m_reverse(XrayIsolate *iso, XrValue self, XrValue *args, int argc
     return result ? xr_string_value(result) : xr_null();
 }
 
-static XrValue m_reverse_bytes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+/* str.toBytes() -> Bytes (Array<uint8>). UTF-8 encoded; round-trips with
+ * Bytes.toString(). The receiver remains immutable; the result owns its
+ * own backing storage. */
+static XrValue m_to_bytes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     XrString *str = str_self(self);
-    XrString *result = xr_string_reverse_bytes(iso, str);
-    return result ? xr_string_value(result) : xr_null();
-}
-
-static XrValue m_translate_bytes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_MAP(args[0]))
-        return self;
-    XrString *str = str_self(self);
-    XrMap *table = XR_TO_MAP(args[0]);
-    XrString *result = xr_string_translate_bytes(iso, str, table);
-    return result ? xr_string_value(result) : xr_null();
+    int32_t byte_len = (int32_t) (str ? str->length : 0);
+    XrCoroutine *coro = xr_current_coro(iso);
+    XrArray *bytes = xr_array_bytes_new(coro, byte_len);
+    if (!bytes)
+        return xr_null();
+    if (byte_len > 0)
+        xr_array_append_data(bytes, (const uint8_t *) str->data, byte_len);
+    return xr_value_from_array(bytes);
 }
 
 static XrValue m_translate(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
@@ -481,8 +475,7 @@ void xr_string_register_native_type(XrayIsolate *isolate) {
         /* Search */
         {"indexOf", m_index_of, 1},
         {"lastIndexOf", m_last_index_of, 1},
-        {"contains", m_contains, 1},
-        {"has", m_has, 1},
+        {"includes", m_includes, 1},
         {"startsWith", m_starts_with, 1},
         {"endsWith", m_ends_with, 1},
         /* Case / whitespace */
@@ -501,9 +494,9 @@ void xr_string_register_native_type(XrayIsolate *isolate) {
         {"concat", m_concat, 0},
         /* Reverse / translate */
         {"reverse", m_reverse, 0},
-        {"reverseBytes", m_reverse_bytes, 0},
-        {"translateBytes", m_translate_bytes, 1},
         {"translate", m_translate, 1},
+        /* Bytes interop */
+        {"toBytes", m_to_bytes, 0},
         /* Predicates */
         {"isEmpty", m_is_empty, 0},
         {"isLetter", m_is_letter, 0},

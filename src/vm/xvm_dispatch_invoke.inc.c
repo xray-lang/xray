@@ -269,6 +269,19 @@ invoke_dispatch:;
             /* XR_DISP_FALLTHROUGH: enum has no match, fall through to class lookup */
         }
 
+        /* ADT enum instance methods (Result.isOk, unwrapOr, map, etc.) */
+        if (klass->builtin_kind == XR_BK_ADT_ENUM) {
+            XrDispatchAction _cr =
+                vm_invoke_adt_instance(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+            if (_cr == XR_DISP_NEXT)
+                vmbreak;
+            if (_cr == XR_DISP_RAISE) {
+                if (!xr_vm_is_catch_reachable(isolate))
+                    return XR_VM_RUNTIME_ERROR;
+                goto startfunc;
+            }
+        }
+
         /* IC lookup — unified for all types */
         XrICMethodTable *ic_table = xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
         if (!ic_table) {
@@ -353,6 +366,13 @@ vmcase(OP_SUPERINVOKE) {
     TRACE_EXECUTION();
     savepc();
     XrDispatchAction _cr = vm_superinvoke(isolate, vm_ctx, i, base, ci, pc);
+    /* XR_DISP_NEXT — primitive parent ctor / method returned a value into
+     * R[A] without pushing a frame, so we fall through to the next bytecode
+     * just like OP_INVOKE's primitive path.  Without this, primitive
+     * super-method calls (e.g. Exception subclass super(msg)) crash with
+     * "no catch reachable" because the dispatcher misreads the result. */
+    if (_cr == XR_DISP_NEXT)
+        vmbreak;
     if (_cr == XR_DISP_RESTART)
         goto startfunc;
     if (!xr_vm_is_catch_reachable(isolate))
@@ -390,6 +410,18 @@ vmcase(OP_INVOKE_DIRECT) {
         cls = xr_instance_get_class(inst_obj);
     }
     XrMethod *method = &cls->methods[method_idx];
+
+    /* Primitive method: call C function directly and continue.
+     * OP_INVOKE_DIRECT currently targets closure methods only, but if a
+     * future optimisation indexes into a primitive slot (e.g. inherited
+     * native method), accessing .as.closure would read the wrong union
+     * member and crash.  Guard defensively. */
+    if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+        R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
+        VM_BUILTIN_INVOKE_CHECK_EXC();
+        vmbreak;
+    }
+
     XrClosure *closure = method->as.closure;
 
     if (is_tail_direct) {

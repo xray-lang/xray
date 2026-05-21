@@ -529,11 +529,6 @@ static const XaBuiltinMember g_rt_reflect_functions[] = {
 };
 #define RT_REFLECT_FUNCTION_COUNT 10
 
-static const XaBuiltinMember g_rt_type_functions[] = {
-    {"name", "(tid: int): string", "Get type name from TypeId", true, true},
-};
-#define RT_TYPE_FUNCTION_COUNT 1
-
 static const XaBuiltinMember g_rt_cluster_functions[] = {
     {"start", "(config: Json): void", "Start cluster node", true, true},
     {"join", "(host: string, port: int): bool", "Join cluster", true, true},
@@ -553,10 +548,9 @@ static const XaBuiltinModule g_rt_builtin_modules[] = {
     {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0},
     {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0},
     {"Reflect", g_rt_reflect_functions, RT_REFLECT_FUNCTION_COUNT, NULL, 0},
-    {"Type", g_rt_type_functions, RT_TYPE_FUNCTION_COUNT, NULL, 0},
     {"cluster", g_rt_cluster_functions, RT_CLUSTER_FUNCTION_COUNT, NULL, 0},
 };
-#define RT_BUILTIN_MODULE_COUNT 5
+#define RT_BUILTIN_MODULE_COUNT 4
 
 // Script directory for .xrd search (set by analyzer or LSP)
 static const char *g_script_dir = NULL;

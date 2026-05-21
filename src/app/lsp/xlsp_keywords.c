@@ -34,7 +34,7 @@ const char *xr_keywords[] = {
     "BigInt", "StringBuilder", "Exception", "Regex", NULL};
 
 // Builtin functions
-const char *xr_builtins[] = {"print",       "dump",         "typeof",    "typename",  "assert",
-                             "assert_true", "assert_false", "assert_eq", "assert_ne", "int",
-                             "float",       "string",       "bool",      "copy",      "chr",
-                             "Coro",        "CoroPool",     "Reflect",   "Type",      NULL};
+const char *xr_builtins[] = {"print",        "dump",      "typeof",    "assert", "assert_true",
+                             "assert_false", "assert_eq", "assert_ne", "int",    "float",
+                             "string",       "bool",      "copy",      "chr",    "Coro",
+                             "CoroPool",     "Reflect",   NULL};

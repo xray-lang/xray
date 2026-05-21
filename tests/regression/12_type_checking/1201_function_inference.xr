@@ -8,7 +8,7 @@ fn test_implicit_return_int() {
     }
     let result = add(2, 3)
     assert_eq(result, 5)
-    assert_eq(typeof(result), Type.int)
+    assert_eq(typeof(result), "int")
 }
 
 @test
@@ -18,7 +18,7 @@ fn test_implicit_return_string() {
     }
     let result = greet("World")
     assert_eq(result, "Hello, World")
-    assert_eq(typeof(result), Type.string)
+    assert_eq(typeof(result), "string")
 }
 
 @test
@@ -28,7 +28,7 @@ fn test_explicit_return_type() {
     }
     let result = double(5)
     assert_eq(result, 10)
-    assert_eq(typeof(result), Type.int)
+    assert_eq(typeof(result), "int")
 }
 
 @test

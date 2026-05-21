@@ -73,17 +73,17 @@ static const char *const k_repl_dot_commands[] = {
  * avoid cross-app coupling with src/app/lsp.  Order is not significant
  * — readline displays matches alphabetically. */
 static const char *const k_repl_keywords[] = {
-    "let",      "const",         "fn",          "class",        "interface", "enum",      "type",
-    "if",       "else",          "while",       "for",          "in",        "is",        "break",
-    "continue", "return",        "match",       "true",         "false",     "null",      "import",
-    "export",   "from",          "as",          "go",           "await",     "select",    "defer",
-    "scope",    "after",         "try",         "catch",        "finally",   "throw",     "new",
-    "this",     "super",         "extends",     "implements",   "static",    "private",   "public",
-    "abstract", "override",      "operator",    "void",         "int",       "float",     "string",
-    "bool",     "Array",         "Map",         "Set",          "Json",      "Channel",   "Bytes",
-    "BigInt",   "StringBuilder", "Exception",   "Regex",        "print",     "dump",      "typeof",
-    "typename", "assert",        "assert_true", "assert_false", "assert_eq", "assert_ne", "copy",
-    "chr",      "Coro",          "CoroPool",    "Reflect",      "Type",      NULL,
+    "let",      "const",         "fn",           "class",      "interface", "enum",    "type",
+    "if",       "else",          "while",        "for",        "in",        "is",      "break",
+    "continue", "return",        "match",        "true",       "false",     "null",    "import",
+    "export",   "from",          "as",           "go",         "await",     "select",  "defer",
+    "scope",    "after",         "try",          "catch",      "finally",   "throw",   "new",
+    "this",     "super",         "extends",      "implements", "static",    "private", "public",
+    "abstract", "override",      "operator",     "void",       "int",       "float",   "string",
+    "bool",     "Array",         "Map",          "Set",        "Json",      "Channel", "Bytes",
+    "BigInt",   "StringBuilder", "Exception",    "Regex",      "print",     "dump",    "typeof",
+    "assert",   "assert_true",   "assert_false", "assert_eq",  "assert_ne", "copy",    "chr",
+    "Coro",     "CoroPool",      "Reflect",      NULL,
 };
 
 /* Set during repl_run() so the readline generator can reach the

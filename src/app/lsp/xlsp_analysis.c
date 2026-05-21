@@ -91,7 +91,6 @@ static const XlspDocEntry builtin_docs[] = {
     {"float", "```xray\nfloat(value): float\n```\n\nConverts value to float."},
     {"string", "```xray\nstring(value): string\n```\n\nConverts value to string."},
     {"input", "```xray\ninput(prompt?): string\n```\n\nReads a line from stdin."},
-    {"sleep", "```xray\nsleep(ms)\n```\n\nPauses execution for milliseconds."},
     {NULL, NULL}};
 
 static const char *lookup_doc(const XlspDocEntry *table, const char *name) {

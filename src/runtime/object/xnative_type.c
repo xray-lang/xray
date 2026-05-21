@@ -56,13 +56,15 @@ XrClass *xr_register_native_type(XrayIsolate *isolate, const XrNativeTypeInfo *i
         }
     }
 
-    // Add property getters (as parameterless methods)
+    // Add property getters: register under `get:<name>` so OP_GETPROP
+    // resolves them via the standard getter lookup path. The getter is
+    // a parameterless primitive (arity 1 = self only).
     if (info->getters) {
+        char buf[256];
         for (int i = 0; info->getters[i].name != NULL; i++) {
             const XrNativeMethod *g = &info->getters[i];
-            xr_class_builder_add_method(builder, g->name, g->func,
-                                        1,  // arity: only this
-                                        0);
+            snprintf(buf, sizeof(buf), "get:%s", g->name);
+            xr_class_builder_add_method(builder, buf, g->func, 1, 0);
         }
     }
 

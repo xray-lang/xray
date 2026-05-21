@@ -1,0 +1,108 @@
+// 0954_exception_inheritance.xr
+// 作者：xingleixu@gmail.com
+// 测试：Exception 子类的非 throw 使用（F036 回归）
+// 历史：vm_superinvoke 的 primitive parent ctor 路径返回 XR_DISP_NEXT，
+// OP_SUPERINVOKE 调度器未识别 NEXT，把它当作 "no catch reachable" 处理，
+// 导致 `let err = new HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
+
+class HttpError extends Exception {
+    statusCode: int
+    constructor(msg: string, statusCode: int) {
+        super(msg)
+        this.statusCode = statusCode
+    }
+}
+
+class DbError extends Exception {
+    table: string
+    constructor(msg: string, table: string) {
+        super(msg)
+        this.table = table
+    }
+}
+
+// ===== 直接构造 =====
+
+@test
+fn test_subclass_let_binding() {
+    // F036 核心：let 绑定 Exception 子类不应崩溃
+    let err = new HttpError("not found", 404)
+    assert_eq(err.message, "not found")
+    assert_eq(err.statusCode, 404)
+}
+
+@test
+fn test_subclass_as_expression() {
+    // 直接 new 不赋值
+    new HttpError("expr-only", 500)
+}
+
+@test
+fn test_subclass_multiple_fields() {
+    let err = new DbError("query failed", "users")
+    assert_eq(err.message, "query failed")
+    assert_eq(err.table, "users")
+}
+
+// ===== 普通使用 =====
+
+@test
+fn test_subclass_passed_to_function() {
+    fn handle(e: Exception) -> string {
+        return e.message
+    }
+    let err = new HttpError("bad request", 400)
+    assert_eq(handle(err), "bad request")
+}
+
+@test
+fn test_subclass_stored_in_array() {
+    let errors: Array<Exception> = []
+    errors.push(new HttpError("err1", 500))
+    errors.push(new DbError("err2", "logs"))
+    assert_eq(errors.length, 2)
+    assert_eq(errors[0].message, "err1")
+    assert_eq(errors[1].message, "err2")
+}
+
+// ===== throw + catch 仍然可用 =====
+
+@test
+fn test_subclass_throw_catch() {
+    let caught = ""
+    try {
+        throw new HttpError("server error", 503)
+    } catch (e: HttpError) {
+        caught = e.message
+    }
+    assert_eq(caught, "server error")
+}
+
+@test
+fn test_subclass_throw_catch_statusCode() {
+    let code = 0
+    try {
+        throw new HttpError("not found", 404)
+    } catch (e: HttpError) {
+        code = e.statusCode
+    }
+    assert_eq(code, 404)
+}
+
+// ===== 父类直接 new 不受影响 =====
+
+@test
+fn test_base_exception_direct() {
+    let e = new Exception("hello")
+    assert_eq(e.message, "hello")
+}
+
+// ===== 空子类（无自定义 ctor）仍然工作 =====
+
+class EmptyError extends Exception {}
+
+@test
+fn test_empty_subclass() {
+    let e = new EmptyError("empty")
+    assert_eq(e.message, "empty")
+}

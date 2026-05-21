@@ -218,7 +218,7 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *
  *
  * The rewrite runs on the parsed AST before analysis: if the final
  * top-level statement is an expression statement AND the expression is
- * not an obvious imperative call (print/println/dump) or an assignment
+ * not an obvious imperative call (print/dump) or an assignment
  * / pre-post inc-dec, it is converted in-place to a PRINT statement.
  *
  * Rewrite happens before analysis so the analyzer and lowerer handle
@@ -227,7 +227,7 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrayIsolate *
 static bool is_imperative_call_name(const char *name) {
     if (!name)
         return false;
-    return strcmp(name, "print") == 0 || strcmp(name, "println") == 0 || strcmp(name, "dump") == 0;
+    return strcmp(name, "print") == 0 || strcmp(name, "dump") == 0;
 }
 
 /* Name of the implicit REPL "last result" binding.  GHCi convention;
@@ -563,7 +563,7 @@ void xr_repl_print_type(XrayIsolate *isolate, const char *expr) {
         return;
     }
 
-    /* Wrap the user expression in `print(typename(...))` and route
+    /* Wrap the user expression in `print(typeof(...))` and route
      * through the normal incremental pipeline.  The added trailing
      * newline lets users include comments on the same line. */
     size_t expr_len = strlen(expr);
@@ -571,7 +571,7 @@ void xr_repl_print_type(XrayIsolate *isolate, const char *expr) {
     char *src = (char *) xr_malloc(src_size);
     if (!src)
         return;
-    snprintf(src, src_size, "print(typename(%s))\n", expr);
+    snprintf(src, src_size, "print(typeof(%s))\n", expr);
 
     XrProto *proto = xr_repl_compile(isolate, src);
     xr_free(src);

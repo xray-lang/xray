@@ -205,7 +205,7 @@ fn test_match_no_branch_throws() {
         assert_eq(result, "unreachable")
     } catch (e) {
         caught = true
-        assert(e.message.contains("E0442"))
+        assert(e.message.includes("E0442"))
     }
     assert_eq(caught, true)
 }

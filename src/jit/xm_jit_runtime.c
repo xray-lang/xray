@@ -1043,7 +1043,27 @@ XrJitResult xr_jit_str_repeat(XrCoroutine *coro, int64_t unused) {
 XrJitResult xr_jit_typename(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
     XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
-    const char *type_name = xr_typeid_name(xr_value_typeid(val));
+    const char *type_name = NULL;
+    /* Enum values before instances — enum values are also instances
+     * whose base class name is "EnumValue", but we want the enum name. */
+    if (XR_IS_ENUM_VALUE(val)) {
+        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(val);
+        if (ev->enum_name)
+            type_name = ev->enum_name;
+    }
+    if (!type_name && xr_value_is_instance(val)) {
+        XrInstance *inst = xr_value_to_instance(val);
+        XrClass *cls = xr_instance_get_class(inst);
+        if (cls && cls->name)
+            type_name = cls->name;
+    }
+    if (!type_name && val.tag == XR_TAG_STRUCT_REF && val.ptr) {
+        XrClass *cls = *(XrClass **) val.ptr;
+        if (cls && cls->name)
+            type_name = cls->name;
+    }
+    if (!type_name)
+        type_name = xr_typeid_name(xr_value_typeid(val));
     size_t len = strlen(type_name);
     XrString *str = xr_string_intern(coro->isolate, type_name, len, 0);
     return XR_JIT_PTR(str);

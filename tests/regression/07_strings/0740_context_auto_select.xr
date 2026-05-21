@@ -95,7 +95,7 @@ fn test_multicore_concurrent_long_concat() {
         assert_eq(results[i].length, expected_len)
         
         // 验证包含正确的 id
-        assert_eq(results[i].contains("_" + string(i) + "_"), true)
+        assert_eq(results[i].includes("_" + string(i) + "_"), true)
     }
 }
 
@@ -175,7 +175,7 @@ fn test_property_concurrent_concat_correctness() {
         let expected_parts = count
         let actual_parts = 0
         for (let j = 0; j < count; j++) {
-            if (results[i].contains("s" + string(i) + "_" + string(j) + "_")) {
+            if (results[i].includes("s" + string(i) + "_" + string(j) + "_")) {
                 actual_parts = actual_parts + 1
             }
         }

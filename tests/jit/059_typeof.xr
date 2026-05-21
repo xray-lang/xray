@@ -5,7 +5,7 @@
 // Test: Typeof operations in JIT
 
 fn type_name(x: int | float | string | bool) -> string {
-    return typename(x)
+    return typeof(x)
 }
 
 let i = 0

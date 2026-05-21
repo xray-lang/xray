@@ -68,7 +68,7 @@ fn test_property_concurrent_concat_long() {
     for (let i = 0; i < n; i++) {
         let result = results[i]
         assert_eq(result.startsWith("x".repeat(40)), true)
-        assert_eq(result.contains("_id" + string(i) + "_"), true)
+        assert_eq(result.includes("_id" + string(i) + "_"), true)
         assert_eq(result.endsWith("y".repeat(40)), true)
     }
 }
@@ -102,7 +102,7 @@ fn test_property_concurrent_concat_mixed() {
         if (i % 2 == 0) {
             assert_eq(results[i], "short_" + string(i) + "_end")
         } else {
-            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+            assert_eq(results[i].includes("_long_" + string(i) + "_"), true)
         }
     }
 }
@@ -142,7 +142,7 @@ fn test_property_concurrent_concat_isolation() {
         // 验证后缀
         assert_eq(result.endsWith(char.repeat(30)), true)
         // 验证中间包含 id
-        assert_eq(result.contains("_" + string(i) + "_"), true)
+        assert_eq(result.includes("_" + string(i) + "_"), true)
     }
 }
 

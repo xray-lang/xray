@@ -6,7 +6,7 @@
 // causing outer function to deopt with wrong deopt_id -> wrong recovery.
 
 fn polymorphic_callee(x: int | string) -> int {
-    if (typeof(x) == Type.string) {
+    if (typeof(x) == "string") {
         return x.length
     }
     return x + 1

@@ -70,10 +70,10 @@ fn test_encode_url_basic() {
     let encoded = base64.encodeUrl(original)
     assert(encoded != null)
     // URL-safe should not contain + or /
-    assert_eq(encoded.contains("+"), false)
-    assert_eq(encoded.contains("/"), false)
+    assert_eq(encoded.includes("+"), false)
+    assert_eq(encoded.includes("/"), false)
     // Should not have padding =
-    assert_eq(encoded.contains("="), false)
+    assert_eq(encoded.includes("="), false)
 }
 
 @test
