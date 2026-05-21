@@ -20,6 +20,7 @@
 #define XMCP_RESOURCES_H
 
 #include "../../base/xdefs.h"
+#include <stddef.h>
 
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
@@ -28,10 +29,14 @@ typedef struct XmcpServer XmcpServer;
 /* Handle "resources/list" request. */
 XR_FUNC XrJsonValue *xmcp_handle_resources_list(XmcpServer *server);
 
+XR_FUNC size_t xmcp_resources_count(void);
+
 /* Handle "resources/read" request. */
 XR_FUNC XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params);
 
 /* Handle "resources/templates/list" request. */
 XR_FUNC XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server);
+
+XR_FUNC size_t xmcp_resource_templates_count(void);
 
 #endif  // XMCP_RESOURCES_H

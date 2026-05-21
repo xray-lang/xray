@@ -17,6 +17,7 @@
 #define XMCP_PROMPTS_H
 
 #include "../../base/xdefs.h"
+#include <stddef.h>
 
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
@@ -24,6 +25,8 @@ typedef struct XmcpServer XmcpServer;
 
 /* Handle "prompts/list" request. */
 XR_FUNC XrJsonValue *xmcp_handle_prompts_list(void);
+
+XR_FUNC size_t xmcp_prompts_count(void);
 
 /* Handle "prompts/get" request. */
 XR_FUNC XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params);

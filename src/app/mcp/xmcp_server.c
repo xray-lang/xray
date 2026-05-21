@@ -385,11 +385,7 @@ XmcpServer *xmcp_server_new(void) {
     }
 
     s->current_progress_token = -1;
-
-    /* Set feature flags for capability inference */
-    s->has_tools = true;     /* 7 built-in tools */
-    s->has_resources = true; /* 3 static resources */
-    s->has_prompts = true;   /* 5 built-in prompts */
+    xmcp_registry_init(&s->registry);
 
     return s;
 }

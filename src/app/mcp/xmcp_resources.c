@@ -68,6 +68,20 @@ static const ResourceTemplateDef TEMPLATES[] = {
      "Detailed information about a specific standard library module.", "text/markdown"},
     {NULL, NULL, NULL, NULL}};
 
+XR_FUNC size_t xmcp_resources_count(void) {
+    size_t count = 0;
+    while (RESOURCES[count].uri != NULL)
+        count++;
+    return count;
+}
+
+XR_FUNC size_t xmcp_resource_templates_count(void) {
+    size_t count = 0;
+    while (TEMPLATES[count].uri_template != NULL)
+        count++;
+    return count;
+}
+
 /* --------------------------------------------------------------------------
  * URI template matching (RFC 6570 Level 1: simple {variable})
  * -------------------------------------------------------------------------- */
