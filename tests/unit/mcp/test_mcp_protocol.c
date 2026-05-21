@@ -75,6 +75,9 @@ static XmcpRegistry test_registry(size_t tools, size_t resources, size_t templat
                                   size_t prompts) {
     XmcpRegistry registry = {
         .tools = xmcp_tools_table(),
+        .resources = xmcp_resources_table(),
+        .resource_templates = xmcp_resource_templates_table(),
+        .prompts = xmcp_prompts_table(),
         .tool_count = tools,
         .resource_count = resources,
         .resource_template_count = templates,
@@ -373,6 +376,9 @@ TEST(registry_init_counts_features) {
     xmcp_registry_init(&registry);
 
     ASSERT_NOT_NULL(registry.tools);
+    ASSERT_NOT_NULL(registry.resources);
+    ASSERT_NOT_NULL(registry.resource_templates);
+    ASSERT_NOT_NULL(registry.prompts);
     ASSERT_EQ(registry.tool_count, 7);
     ASSERT_EQ(registry.resource_count, 3);
     ASSERT_EQ(registry.resource_template_count, 2);
@@ -391,6 +397,23 @@ TEST(registry_finds_tools_by_name) {
     ASSERT_NOT_NULL(format->handler);
     ASSERT(format == xmcp_registry_tool_at(&server.registry, 1));
     ASSERT(xmcp_registry_find_tool(&server.registry, "missing_tool") == NULL);
+}
+
+TEST(registry_indexes_resources_and_prompts) {
+    XmcpServer server = test_server();
+
+    const XmcpResourceDef *resource = xmcp_registry_resource_at(&server.registry, 0);
+    ASSERT_STR_EQ(resource->uri, "xray://spec/cheatsheet");
+
+    const XmcpResourceTemplateDef *resource_template =
+        xmcp_registry_resource_template_at(&server.registry, 0);
+    ASSERT_STR_EQ(resource_template->uri_template, "xray://spec/topic/{name}");
+
+    const XmcpPromptDef *prompt = xmcp_registry_find_prompt(&server.registry, "code-review");
+    ASSERT_NOT_NULL(prompt);
+    ASSERT_STR_EQ(prompt->name, "code-review");
+    ASSERT(prompt == xmcp_registry_prompt_at(&server.registry, 0));
+    ASSERT(xmcp_registry_find_prompt(&server.registry, "missing-prompt") == NULL);
 }
 
 /* =========================================================================
@@ -843,7 +866,8 @@ TEST(resources_read_stdlib_template) {
  * ========================================================================= */
 
 TEST(prompts_list_returns_five) {
-    XrJsonValue *result = xmcp_handle_prompts_list();
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -854,7 +878,8 @@ TEST(prompts_list_returns_five) {
 }
 
 TEST(prompts_list_has_required_fields) {
-    XrJsonValue *result = xmcp_handle_prompts_list();
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -868,7 +893,8 @@ TEST(prompts_list_has_required_fields) {
 }
 
 TEST(prompts_list_prompt_names) {
-    XrJsonValue *result = xmcp_handle_prompts_list();
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -884,7 +910,8 @@ TEST(prompts_list_prompt_names) {
 }
 
 TEST(prompts_list_has_arguments) {
-    XrJsonValue *result = xmcp_handle_prompts_list();
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -1113,6 +1140,7 @@ int main(void) {
     RUN_TEST(initialize_capabilities_minimal);
     RUN_TEST(registry_init_counts_features);
     RUN_TEST(registry_finds_tools_by_name);
+    RUN_TEST(registry_indexes_resources_and_prompts);
 
     /* Tools */
     RUN_TEST(tools_list_returns_seven_tools);

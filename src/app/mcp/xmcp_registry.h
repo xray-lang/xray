@@ -31,8 +31,40 @@ typedef struct XmcpToolDef {
     bool open_world;
 } XmcpToolDef;
 
+#define XMCP_PROMPT_ARG_MAX 4
+
+typedef struct XmcpResourceDef {
+    const char *uri;
+    const char *name;
+    const char *description;
+    const char *mime_type;
+} XmcpResourceDef;
+
+typedef struct XmcpResourceTemplateDef {
+    const char *uri_template;
+    const char *name;
+    const char *description;
+    const char *mime_type;
+} XmcpResourceTemplateDef;
+
+typedef struct XmcpPromptArgDef {
+    const char *name;
+    const char *description;
+    bool required;
+} XmcpPromptArgDef;
+
+typedef struct XmcpPromptDef {
+    const char *name;
+    const char *description;
+    int arg_count;
+    XmcpPromptArgDef args[XMCP_PROMPT_ARG_MAX];
+} XmcpPromptDef;
+
 typedef struct XmcpRegistry {
     const XmcpToolDef *tools;
+    const XmcpResourceDef *resources;
+    const XmcpResourceTemplateDef *resource_templates;
+    const XmcpPromptDef *prompts;
     size_t tool_count;
     size_t resource_count;
     size_t resource_template_count;
@@ -42,6 +74,13 @@ typedef struct XmcpRegistry {
 XR_FUNC void xmcp_registry_init(XmcpRegistry *registry);
 XR_FUNC const XmcpToolDef *xmcp_registry_find_tool(const XmcpRegistry *registry, const char *name);
 XR_FUNC const XmcpToolDef *xmcp_registry_tool_at(const XmcpRegistry *registry, size_t index);
+XR_FUNC const XmcpResourceDef *xmcp_registry_resource_at(const XmcpRegistry *registry,
+                                                         size_t index);
+XR_FUNC const XmcpResourceTemplateDef *
+xmcp_registry_resource_template_at(const XmcpRegistry *registry, size_t index);
+XR_FUNC const XmcpPromptDef *xmcp_registry_find_prompt(const XmcpRegistry *registry,
+                                                       const char *name);
+XR_FUNC const XmcpPromptDef *xmcp_registry_prompt_at(const XmcpRegistry *registry, size_t index);
 XR_FUNC bool xmcp_registry_has_tools(const XmcpRegistry *registry);
 XR_FUNC bool xmcp_registry_has_resources(const XmcpRegistry *registry);
 XR_FUNC bool xmcp_registry_has_prompts(const XmcpRegistry *registry);

@@ -242,9 +242,8 @@ static XrJsonValue *handle_resource_templates_list(XmcpServer *s, XrJsonValue *p
 }
 
 static XrJsonValue *handle_prompts_list(XmcpServer *s, XrJsonValue *params) {
-    (void) s;
     (void) params;
-    return xmcp_handle_prompts_list();
+    return xmcp_handle_prompts_list(s);
 }
 
 static XrJsonValue *handle_prompts_get(XmcpServer *s, XrJsonValue *params) {
