@@ -343,7 +343,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     tls_current_machine = NULL;
 
     // Return non-zero if main coroutine ended with error
-    if (xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) || XR_IS_STRING(main_coro->error)) {
+    if (xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) || !XR_IS_NULL(main_coro->error)) {
         return -1;
     }
     return 0;

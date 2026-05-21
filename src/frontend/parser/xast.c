@@ -1745,10 +1745,14 @@ void xr_ast_print(AstNode *node, int indent) {
             printf("\n");
             printf("%*sTry Block:\n", (indent + 1) * 2, "");
             xr_ast_print(node->as.try_catch.try_body, indent + 2);
-            if (node->as.try_catch.catch_body) {
-                printf("%*sCatch Block (var: %s):\n", (indent + 1) * 2, "",
-                       node->as.try_catch.catch_var ? node->as.try_catch.catch_var : "");
-                xr_ast_print(node->as.try_catch.catch_body, indent + 2);
+            for (int i = 0; i < node->as.try_catch.catch_count; i++) {
+                XrCatchClause *c = node->as.try_catch.catch_clauses[i];
+                if (c) {
+                    printf("%*sCatch Block (var: %s):\n", (indent + 1) * 2, "",
+                           c->var_name ? c->var_name : "");
+                    if (c->body)
+                        xr_ast_print(c->body, indent + 2);
+                }
             }
             if (node->as.try_catch.finally_body) {
                 printf("%*sFinally Block:\n", (indent + 1) * 2, "");
@@ -1769,16 +1773,26 @@ void xr_ast_print(AstNode *node, int indent) {
 
 /* ========== Exception Handling AST Node Creation ========== */
 
-// Create try-catch-finally statement node
-AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, const char *catch_var,
-                          int catch_var_line, int catch_var_column, AstNode *catch_body,
-                          AstNode *finally_body, int line) {
+// Allocate a catch clause
+XrCatchClause *xr_ast_catch_clause(XrayIsolate *X, const char *var_name, int var_line,
+                                   int var_column, XrTypeRef *type, AstNode *body) {
+    XrCatchClause *c = (XrCatchClause *) ast_alloc(X, sizeof(XrCatchClause));
+    c->var_name = ast_strdup(X, var_name);
+    c->var_line = var_line;
+    c->var_column = var_column;
+    c->type = type;
+    c->body = body;
+    c->symbol_id = 0;
+    return c;
+}
+
+// Create try-catch-finally statement node (multi-catch)
+AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, XrCatchClause **clauses,
+                          int catch_count, AstNode *finally_body, int line) {
     AstNode *node = alloc_node(X, AST_TRY_CATCH, line);
     node->as.try_catch.try_body = try_body;
-    node->as.try_catch.catch_var = ast_strdup(X, catch_var);
-    node->as.try_catch.catch_var_line = catch_var_line;
-    node->as.try_catch.catch_var_column = catch_var_column;
-    node->as.try_catch.catch_body = catch_body;
+    node->as.try_catch.catch_clauses = clauses;
+    node->as.try_catch.catch_count = catch_count;
     node->as.try_catch.finally_body = finally_body;
     return node;
 }

@@ -49,14 +49,14 @@ void xr_global_pool_init(XrGlobalStringPool *pool) {
     pool->count = 0;
     pool->permanent_count = 0;
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
+    if (!pool->entries)
+        return;
 
     // Initialize rwlock
     xr_rwlock_init(&pool->lock);
 
     // Initialize to NULL
-    for (size_t i = 0; i < pool->capacity; i++) {
-        pool->entries[i] = NULL;
-    }
+    memset(pool->entries, 0, sizeof(XrString *) * pool->capacity);
 }
 
 // Free global string pool
@@ -95,11 +95,15 @@ static void global_pool_grow(XrGlobalStringPool *pool) {
     pool->capacity = old_capacity * 2;
     pool->mask = pool->capacity - 1;
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
+    if (!pool->entries) {
+        pool->entries = old_entries;
+        pool->capacity = old_capacity;
+        pool->mask = old_capacity - 1;
+        return;
+    }
 
     // Initialize to NULL
-    for (size_t i = 0; i < pool->capacity; i++) {
-        pool->entries[i] = NULL;
-    }
+    memset(pool->entries, 0, sizeof(XrString *) * pool->capacity);
 
     // Rehash all strings
     size_t saved_count = pool->count;
@@ -327,8 +331,14 @@ size_t xr_global_pool_sweep(XrGlobalStringPool *pool) {
         pool->capacity = new_cap;
         pool->mask = new_cap - 1;
         pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * new_cap);
-        for (size_t i = 0; i < new_cap; i++)
-            pool->entries[i] = NULL;
+        if (!pool->entries) {
+            pool->entries = old;
+            pool->capacity = old_cap;
+            pool->mask = old_cap - 1;
+            xr_rwlock_wrunlock(&pool->lock);
+            return evicted;
+        }
+        memset(pool->entries, 0, sizeof(XrString *) * new_cap);
 
         size_t new_count = 0;
         size_t mask = pool->mask;
@@ -362,11 +372,11 @@ void xr_string_pool_init_internal(XrStringPool *pool) {
     pool->count = 0;
     pool->threshold = (size_t) (pool->capacity * STRING_POOL_LOAD_FACTOR);
     pool->entries = (XrString **) xr_malloc(sizeof(XrString *) * pool->capacity);
+    if (!pool->entries)
+        return;
 
     // Initialize to NULL
-    for (size_t i = 0; i < pool->capacity; i++) {
-        pool->entries[i] = NULL;
-    }
+    memset(pool->entries, 0, sizeof(XrString *) * pool->capacity);
 }
 
 // Free string pool (Isolate internal use)
@@ -564,11 +574,19 @@ XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
 }
 
 // Create string from float
+// Guarantees a decimal point so 0.0 prints as "0.0", not "0".
 XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n) {
     XR_DCHECK(iso != NULL, "string_from_float: NULL isolate");
     char buffer[64];
-    snprintf(buffer, sizeof(buffer), "%.15g", n);
-    return xr_string_intern(iso, buffer, strlen(buffer), 0);
+    int len = snprintf(buffer, sizeof(buffer), "%.15g", n);
+    if (!strchr(buffer, '.') && !strchr(buffer, 'e') && !strchr(buffer, 'E') &&
+        len + 2 < (int) sizeof(buffer)) {
+        buffer[len] = '.';
+        buffer[len + 1] = '0';
+        buffer[len + 2] = '\0';
+        len += 2;
+    }
+    return xr_string_intern(iso, buffer, (size_t) len, 0);
 }
 
 /* ========== String Comparison ========== */
@@ -1248,32 +1266,6 @@ XrString *xr_string_reverse(XrayIsolate *iso, XrString *str) {
     return result;
 }
 
-// reverseBytes - byte-level reverse (O(n), no UTF-8 parsing)
-XrString *xr_string_reverse_bytes(XrayIsolate *iso, XrString *str) {
-    if (!iso || !str)
-        return NULL;
-    if (str->length == 0)
-        return str;
-
-    char *buffer = (char *) xr_malloc(str->length + 1);
-    if (!buffer)
-        return NULL;
-
-    // Byte-level reverse: copy from end to start
-    const char *src = str->data;
-    size_t len = str->length;
-    for (size_t i = 0; i < len; i++) {
-        buffer[i] = src[len - 1 - i];
-    }
-    buffer[len] = '\0';
-
-    // Intern result string
-    XrString *result = xr_string_intern(iso, buffer, len, 0);
-    xr_free(buffer);
-
-    return result;
-}
-
 // byteAt - O(1) byte index (supports negative index)
 XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
     if (!iso || !str || str->length == 0)
@@ -1293,48 +1285,6 @@ XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
 
     // Return interned single char string
     return xr_string_intern(iso, &c, 1, 0);
-}
-
-// translateBytes - byte-level char mapping (O(n), no UTF-8 parsing)
-XrString *xr_string_translate_bytes(XrayIsolate *iso, XrString *str, XrMap *table) {
-    if (!iso || !str)
-        return NULL;
-    if (!table)
-        return str;  // No table, return original
-    if (str->length == 0)
-        return str;
-
-    char *result = (char *) xr_malloc(str->length + 1);
-    if (!result)
-        return NULL;
-
-    // Single pass, replace byte by byte
-    for (size_t i = 0; i < str->length; i++) {
-        char c = str->data[i];
-
-        // Create key from single byte to lookup Map
-        XrString *key = xr_string_intern(iso, &c, 1, 0);
-        bool found = false;
-        XrValue val = xr_map_get(table, xr_string_value(key), &found);
-
-        if (found && XR_IS_STRING(val)) {
-            XrString *replacement = XR_TO_STRING(val);
-            // Get first byte of replacement
-            if (replacement->length > 0) {
-                result[i] = replacement->data[0];
-            } else {
-                result[i] = c;  // Empty replacement, keep original
-            }
-        } else {
-            result[i] = c;  // No mapping, keep original
-        }
-    }
-    result[str->length] = '\0';
-
-    // Create result string and free buffer
-    XrString *ret = xr_string_intern(iso, result, str->length, 0);
-    xr_free(result);
-    return ret;
 }
 
 // translate - Unicode char mapping (UTF-8 aware)

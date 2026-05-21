@@ -48,7 +48,9 @@ void xr_module_set_compiler_hooks(XrayIsolate *isolate,
                                   void *(*compile_src_fn)(void *, const char *, const char *),
                                   void (*ast_free_fn)(void *)) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    XR_DCHECK(registry != NULL, "set_compiler_hooks: module system not initialized");
+    /* Module system may legitimately not be initialised on isolates that
+     * do not import code (e.g. transient analyzer-only isolates), so this
+     * is a graceful no-op rather than an assertion. */
     if (!registry)
         return;
     registry->fn_parse = parse_fn;
@@ -316,6 +318,8 @@ void xr_module_build_export_index(XrModule *module) {
     module->min_symbol = min_sym;
     module->max_symbol = max_sym;
     module->symbol_to_index = (int16_t *) xr_malloc(range * sizeof(int16_t));
+    if (!module->symbol_to_index)
+        return;
     memset(module->symbol_to_index, 0xFF, range * sizeof(int16_t));  // -1 (0xFFFF)
 
     for (uint16_t i = 0; i < module->export_count; i++) {

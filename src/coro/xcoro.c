@@ -34,6 +34,7 @@
 #include "xtask.h"
 #include "xcoro_pool.h"
 #include "../runtime/object/xarray.h"
+#include "../runtime/object/xstring.h"
 
 // Initial capacities (balanced: fast allocation + minimal grow_stack for common cases)
 // 64 VM slots = 1024B VM stack + 288B frames = 1312B total per coroutine
@@ -1488,7 +1489,13 @@ static inline void scope_lock_release(XrScopeContext *scope) {
 //   - xr_array_push may xr_realloc its backing data buffer (malloc,
 //     not coroutine GC), which is bounded and lock-safe.
 //
-// Returns true iff the child reported a non-null string error.
+// Returns true iff the child reported a non-null error value.
+//
+// task->error may be either an Exception instance (preserved verbatim
+// so linked-scope rethrows the original object) or a fallback string
+// for non-exception failures. Linked scope stashes the value as-is in
+// scope->first_error; supervisor scope flattens to message strings to
+// honour its `Array<string>` return contract.
 static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeContext *scope) {
     /* coro->task is cleared by the scheduler when a sibling worker
      * recycles the coroutine slot, and our caller's scope->child_lock
@@ -1501,7 +1508,7 @@ static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeCont
     if (scope->mode == XR_SCOPE_WAIT || !task)
         return false;
     XrValue err = task->error;
-    if (XR_IS_NULL(err) || !XR_IS_STRING(err))
+    if (XR_IS_NULL(err))
         return false;
 
     if (scope->mode == XR_SCOPE_LINKED) {
@@ -1511,8 +1518,19 @@ static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeCont
         }
     } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
         // supervisor scope: append every error; errors[] is preallocated.
+        // Spec contract is Array<string>, so extract the message when the
+        // error is an Exception instance.
         if (scope->errors) {
-            xr_array_push(scope->errors, err);
+            XrValue msg = err;
+            XrayIsolate *iso = coro->isolate;
+            if (iso && xr_value_is_exception(iso, err)) {
+                const char *m = xr_exception_get_message(iso, err);
+                if (!m)
+                    m = "";
+                XrString *s = xr_string_intern(iso, m, strlen(m), 0);
+                msg = xr_string_value(s);
+            }
+            xr_array_push(scope->errors, msg);
         }
     }
     return true;

@@ -562,24 +562,46 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     fprintf(out, ")");
                 }
             } else {
-                const char *op = "+";
-                switch (v->op) {
-                    case XI_SUB:
-                        op = "-";
-                        break;
-                    case XI_MUL:
-                        op = "*";
-                        break;
-                    case XI_DIV:
-                        op = "/";
-                        break;
-                    case XI_MOD:
-                        op = "%%";
-                        break;
-                    default:
-                        break;
+                /* Typed scalar path. For DIV/MOD route through xrt_int_div /
+                 * xrt_int_mod so zero-check + INT64_MIN/-1 wrap match VM/JIT
+                 * even when both operands are XR_REP_I64 native int64. */
+                if ((v->op == XI_DIV || v->op == XI_MOD) && result_rep == XR_REP_I64) {
+                    const char *fn = (v->op == XI_DIV) ? "xrt_int_div" : "xrt_int_mod";
+                    fprintf(out, "%s(", fn);
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ", ");
+                    emit_vref(out, v->args[1]);
+                    fprintf(out, ")");
+                } else if ((v->op == XI_DIV || v->op == XI_MOD) && result_rep == XR_REP_F64) {
+                    /* Float div: emit checked division to throw on /0
+                     * with parity to the tagged xrt_div / xrt_mod path. */
+                    if (v->op == XI_DIV) {
+                        fprintf(out, "(xrt_div(XR_FROM_FLOAT(");
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, "), XR_FROM_FLOAT(");
+                        emit_vref(out, v->args[1]);
+                        fprintf(out, ")).f)");
+                    } else {
+                        fprintf(out, "(xrt_mod(XR_FROM_FLOAT(");
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, "), XR_FROM_FLOAT(");
+                        emit_vref(out, v->args[1]);
+                        fprintf(out, ")).f)");
+                    }
+                } else {
+                    const char *op = "+";
+                    switch (v->op) {
+                        case XI_SUB:
+                            op = "-";
+                            break;
+                        case XI_MUL:
+                            op = "*";
+                            break;
+                        default:
+                            break;
+                    }
+                    emit_binop(out, v, op);
                 }
-                emit_binop(out, v, op);
             }
             break;
         }

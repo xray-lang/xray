@@ -71,7 +71,11 @@ static void collect_folding_ranges(AstNode *node, XrJsonValue *ranges) {
         case AST_TRY_CATCH:
             ADD_NODE_FOLD(ranges, node->line - 1, node, "region");
             collect_folding_ranges(node->as.try_catch.try_body, ranges);
-            collect_folding_ranges(node->as.try_catch.catch_body, ranges);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    collect_folding_ranges(cc->body, ranges);
+            }
             collect_folding_ranges(node->as.try_catch.finally_body, ranges);
             break;
         case AST_MATCH_EXPR:

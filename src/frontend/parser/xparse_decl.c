@@ -466,6 +466,10 @@ fail:
 // Parse one call argument, optionally a spread `...expr`. The spread
 // source must be a tuple value; the analyzer expands its static arity
 // into individual positional arguments.
+//
+// A bare `_` argument is accepted as a wildcard placeholder so that
+// ADT pattern parsing (`R.Err(_)`) can later detect it; in normal call
+// position the analyzer rejects it.
 AstNode *xr_parse_call_argument(Parser *parser) {
     int line = parser->current.line;
     if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
@@ -473,6 +477,33 @@ AstNode *xr_parse_call_argument(Parser *parser) {
         if (!inner)
             return NULL;
         return xr_ast_spread_expr(parser->X, inner, line);
+    }
+    if (xr_parser_match(parser, TK_UNDERSCORE)) {
+        return xr_ast_variable(parser->X, "_", line);
+    }
+    /* Bare lambda: `name -> expr` as a call argument. Unambiguous here
+     * because call arguments are delimited by '(' and ')'. The analyzer
+     * infers the parameter type from the callee's parameter signature. */
+    if (xr_parser_check(parser, TK_NAME)) {
+        Scanner saved_scan = parser->scanner;
+        Token saved_cur = parser->current;
+        Token saved_prev = parser->previous;
+        xr_parser_advance(parser);
+        if (xr_parser_check(parser, TK_ARROW)) {
+            Token name_tok = parser->previous;
+            char *pname = (char *) ast_alloc(parser->X, (size_t) name_tok.length + 1);
+            memcpy(pname, name_tok.start, name_tok.length);
+            pname[name_tok.length] = '\0';
+            xr_parser_advance(parser); /* consume '->' */
+            XrParamNode **params =
+                (XrParamNode **) ast_alloc_array(parser->X, sizeof(XrParamNode *), 1);
+            params[0] = xr_param_node_new(parser->X, pname, name_tok.line, name_tok.column);
+            return xr_parse_arrow_function_body(parser, params, 1, name_tok.line);
+        }
+        /* Not a bare lambda — restore and fall through to normal parsing. */
+        parser->scanner = saved_scan;
+        parser->current = saved_cur;
+        parser->previous = saved_prev;
     }
     return xr_parse_expression(parser);
 }
@@ -1409,8 +1440,13 @@ AstNode *xr_parse_declaration(Parser *parser) {
 // ========== Exception handling parse functions ==========
 
 /*
- * Parse try-catch-finally statement
- * try { ... } catch (e) { ... } finally { ... }
+ * Parse try-catch-finally statement.
+ * Supports multiple typed catch clauses:
+ *   try { ... }
+ *   catch (e: HttpError) { ... }
+ *   catch (e: DbError)   { ... }
+ *   catch (e)            { ... }   // catch-all
+ *   finally { ... }
  */
 AstNode *xr_parse_try_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_try_statement: NULL parser");
@@ -1423,13 +1459,13 @@ AstNode *xr_parse_try_statement(Parser *parser) {
     xr_parser_consume(parser, TK_LBRACE, "expected '{' after try");
     AstNode *try_body = xr_parse_block(parser);
 
-    // Optional catch block
-    const char *catch_var = NULL;
-    int catch_var_line = 0;
-    int catch_var_column = 0;
-    AstNode *catch_body = NULL;
-    if (xr_parser_match(parser, TK_CATCH)) {
-        // Parse catch variable
+    // Parse zero or more catch clauses
+    XrCatchClause **clauses = NULL;
+    int catch_count = 0;
+    int catch_cap = 0;
+
+    while (xr_parser_check(parser, TK_CATCH)) {
+        xr_parser_advance(parser);  // consume 'catch'
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after catch");
 
         if (parser->current.type != TK_NAME) {
@@ -1441,16 +1477,25 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         char *var_name = (char *) ast_alloc(parser->X, (size_t) parser->current.length + 1);
         memcpy(var_name, parser->current.start, parser->current.length);
         var_name[parser->current.length] = '\0';
-        catch_var = var_name;
-        catch_var_line = parser->current.line;
-        catch_var_column = parser->current.column;
+        int var_line = parser->current.line;
+        int var_column = parser->current.column;
+        xr_parser_advance(parser);  // consume variable name
 
-        xr_parser_advance(parser);  // Consume variable name
-        xr_parser_consume(parser, TK_RPAREN, "expected ')' after exception variable");
+        // Optional type annotation: catch (e: HttpError)
+        XrTypeRef *type_ann = NULL;
+        if (xr_parser_match(parser, TK_COLON)) {
+            type_ann = xr_parse_type_annotation(parser);
+        }
 
-        // Parse catch block
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' after catch variable");
+
+        // Parse catch body
         xr_parser_consume(parser, TK_LBRACE, "expected '{' after catch");
-        catch_body = xr_parse_block(parser);
+        AstNode *body = xr_parse_block(parser);
+
+        XrCatchClause *clause =
+            xr_ast_catch_clause(parser->X, var_name, var_line, var_column, type_ann, body);
+        XR_PARSE_PUSH(parser, clauses, catch_count, catch_cap, clause);
     }
 
     // Optional finally block
@@ -1460,17 +1505,19 @@ AstNode *xr_parse_try_statement(Parser *parser) {
         finally_body = xr_parse_block(parser);
     }
 
-    // Need at least catch or finally
-    if (!catch_body && !finally_body) {
+    // Need at least one catch or finally
+    if (catch_count == 0 && !finally_body) {
         xr_parser_error(parser, "try statement requires catch or finally block");
         return NULL;
     }
 
-    // xr_ast_try_catch deep-copies catch_var via ast_strdup.
-    AstNode *node = xr_ast_try_catch(parser->X, try_body, catch_var, catch_var_line,
-                                     catch_var_column, catch_body, finally_body, line);
-    // Span ends at the last block present (finally > catch > try).
-    AstNode *last_block = finally_body ? finally_body : (catch_body ? catch_body : try_body);
+    AstNode *node = xr_ast_try_catch(parser->X, try_body, clauses, catch_count, finally_body, line);
+    // Span ends at the last block present (finally > last catch > try).
+    AstNode *last_block = finally_body;
+    if (!last_block && catch_count > 0)
+        last_block = clauses[catch_count - 1]->body;
+    if (!last_block)
+        last_block = try_body;
     if (last_block) {
         node->end_line = last_block->end_line;
         node->end_column = last_block->end_column;

@@ -23,9 +23,9 @@ fn test_stringify_datetime() {
     let dt = datetime.createUTC(2026, 4, 30, 9, 0, 0)
     let s = Json.stringify(dt)
     // ISO 8601 format
-    assert(s.contains("2026"))
-    assert(s.contains("04"))
-    assert(s.contains("30"))
+    assert(s.includes("2026"))
+    assert(s.includes("04"))
+    assert(s.includes("30"))
 }
 
 @test
@@ -33,9 +33,9 @@ fn test_stringify_datetime_in_object() {
     let dt = datetime.createUTC(2026, 1, 15, 12, 30, 0)
     let obj = { created: dt, name: "test" }
     let s = Json.stringify(obj)
-    assert(s.contains('"created"'))
-    assert(s.contains("2026"))
-    assert(s.contains('"name":"test"'))
+    assert(s.includes('"created"'))
+    assert(s.includes("2026"))
+    assert(s.includes('"name":"test"'))
 }
 
 @test
@@ -48,7 +48,7 @@ fn test_stringify_non_serializable_throws() {
     } catch (e) {
         caught = true
         let msg = string(e)
-        assert(msg.contains("cannot serialize"))
+        assert(msg.includes("cannot serialize"))
     }
     assert(caught)
 }

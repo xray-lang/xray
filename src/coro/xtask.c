@@ -505,7 +505,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
         }
         case -4: {
             // await anySuccess: wake only on first success
-            bool is_success = !XR_IS_STRING(task->error);
+            bool is_success = XR_IS_NULL(task->error);
             if (is_success) {
                 bool expected = false;
                 if (atomic_compare_exchange_strong(&waiter->any_done, &expected, true)) {

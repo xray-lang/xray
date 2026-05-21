@@ -155,13 +155,6 @@ static XrValue m_is_empty(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     return xr_bool(xr_array_is_empty(array_self(self)));
 }
 
-static XrValue m_has(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 1)
-        return xr_bool(0);
-    return xr_bool(xr_array_has(array_self(self), args[0]));
-}
-
 static XrValue m_includes(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     if (argc < 1)
@@ -340,9 +333,20 @@ static XrValue m_some(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
 
 /* === toString === */
 
+/* For ordinary arrays, return the debug representation ("[1, 2, 3]").
+ * For byte arrays (Array<uint8>, i.e. Bytes), return the UTF-8 decoded
+ * text — symmetric with String.toBytes(). Binary blobs that are not
+ * valid UTF-8 still pass through verbatim; callers needing strict
+ * validation should layer their own decoder on top. */
 static XrValue m_to_string(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
+    XrArray *arr = array_self(self);
+    if (arr && arr->elem_type == XR_ELEM_U8) {
+        const char *bytes = (const char *) arr->data;
+        size_t len = (size_t) arr->length;
+        return xr_string_value(xr_string_intern(iso, bytes, len, 0));
+    }
     return xr_string_value(xr_value_to_string(iso, self));
 }
 
@@ -414,7 +418,6 @@ void xr_array_register_native_type(XrayIsolate *isolate) {
         {"sort", m_sort, 0},
         /* Query */
         {"isEmpty", m_is_empty, 0},
-        {"has", m_has, 1},
         {"includes", m_includes, 1},
         {"indexOf", m_index_of, 1},
         /* Construction */

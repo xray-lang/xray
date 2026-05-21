@@ -113,4 +113,39 @@ fn test_explicit_type_args_multi_constraint() {
     assert_eq(passThrough<string>("xy"), "xy")
 }
 
+// ===== User class with explicit `implements` satisfies builtin interface =====
+class CmpPoint implements Comparable {
+    x: int
+
+    constructor(x) {
+        this.x = x
+    }
+
+    compareTo(other: CmpPoint) -> int {
+        return this.x - other.x
+    }
+}
+
+@test
+fn test_user_class_implements_comparable() {
+    fn first<T: Comparable>(a: T, b: T) -> T {
+        return a
+    }
+    let p = new CmpPoint(7)
+    let q = new CmpPoint(3)
+    let r = first<CmpPoint>(p, q)
+    assert_eq(r.x, 7)
+}
+
+@test
+fn test_user_class_implements_comparable_implicit() {
+    fn first<T: Comparable>(a: T, b: T) -> T {
+        return a
+    }
+    let p = new CmpPoint(11)
+    let q = new CmpPoint(2)
+    let r = first(p, q)
+    assert_eq(r.x, 11)
+}
+
 print("All multi-constraint generic tests passed!")

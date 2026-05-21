@@ -1424,9 +1424,10 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
     ctx.alloc = alloc;
     ctx.npatch = 0;
     ctx.patches_cap = INIT_PATCHES;
-    ctx.patches = (BranchPatch *) xr_malloc(INIT_PATCHES * sizeof(BranchPatch));
+    XR_MALLOC_OR_ABORT(ctx.patches, INIT_PATCHES * sizeof(BranchPatch), "codegen patches init");
     ctx.cs_patches_cap = INIT_CS_PATCHES;
-    ctx.cs_patches = (CsPatch *) xr_malloc(INIT_CS_PATCHES * sizeof(CsPatch));
+    XR_MALLOC_OR_ABORT(ctx.cs_patches, INIT_CS_PATCHES * sizeof(CsPatch),
+                       "codegen cs_patches init");
 
     ctx.nsub_patches = 0;
     ctx.nadd_patches = 0;
@@ -1451,7 +1452,8 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
 
     // Allocate gap-move override array (initialized per-block)
     if (ctx.xra && ctx.xra->nvreg > 0) {
-        ctx.vreg_override = (int8_t *) xr_malloc(ctx.xra->nvreg * sizeof(int8_t));
+        XR_MALLOC_OR_ABORT(ctx.vreg_override, ctx.xra->nvreg * sizeof(int8_t),
+                           "codegen vreg_override init");
         memset(ctx.vreg_override, -128, ctx.xra->nvreg);
     }
 
@@ -1462,7 +1464,8 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
         if (func->blocks[i]->id > max_blk_id)
             max_blk_id = func->blocks[i]->id;
     }
-    ctx.block_offsets = (uint32_t *) xr_calloc(max_blk_id + 1, sizeof(uint32_t));
+    XR_CALLOC_OR_ABORT(ctx.block_offsets, max_blk_id + 1, sizeof(uint32_t),
+                       "codegen block_offsets init");
     ctx.nblock_offsets = max_blk_id + 1;
 
     // Memory estimate: 32 ARM64 insts per Xm ins + overhead.

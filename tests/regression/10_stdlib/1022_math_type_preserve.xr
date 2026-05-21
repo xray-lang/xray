@@ -8,42 +8,42 @@ import math
 fn test_floor_returns_int() {
     let r = math.floor(3.7)
     assert_eq(r, 3)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_floor_int_passthrough() {
     let r = math.floor(5)
     assert_eq(r, 5)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_ceil_returns_int() {
     let r = math.ceil(3.2)
     assert_eq(r, 4)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_ceil_int_passthrough() {
     let r = math.ceil(7)
     assert_eq(r, 7)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_round_returns_int() {
     let r = math.round(3.5)
     assert_eq(r, 4)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_round_int_passthrough() {
     let r = math.round(10)
     assert_eq(r, 10)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 // ===== Type preservation: min/max preserve int =====
@@ -52,28 +52,28 @@ fn test_round_int_passthrough() {
 fn test_min_int_preserves_type() {
     let r = math.min(3, 7)
     assert_eq(r, 3)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_min_float_returns_float() {
     let r = math.min(3.5, 7.2)
     assert(r > 3.4 && r < 3.6)
-    assert_eq(typeof(r) == Type.float, true)
+    assert_eq(typeof(r) == "float", true)
 }
 
 @test
 fn test_max_int_preserves_type() {
     let r = math.max(3, 7)
     assert_eq(r, 7)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_max_float_returns_float() {
     let r = math.max(3.5, 7.2)
     assert(r > 7.1 && r < 7.3)
-    assert_eq(typeof(r) == Type.float, true)
+    assert_eq(typeof(r) == "float", true)
 }
 
 // ===== min/max variadic =====
@@ -96,14 +96,14 @@ fn test_max_variadic() {
 fn test_clamp_int_preserves_type() {
     let r = math.clamp(5, 0, 10)
     assert_eq(r, 5)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_clamp_below_int() {
     let r = math.clamp(-5, 0, 10)
     assert_eq(r, 0)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 // ===== abs edge cases =====
@@ -112,14 +112,14 @@ fn test_clamp_below_int() {
 fn test_abs_int_preserves_type() {
     let r = math.abs(-42)
     assert_eq(r, 42)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 @test
 fn test_abs_float_returns_float() {
     let r = math.abs(-3.14)
     assert(r > 3.13 && r < 3.15)
-    assert_eq(typeof(r) == Type.float, true)
+    assert_eq(typeof(r) == "float", true)
 }
 
 // ===== trunc type preservation =====
@@ -127,7 +127,7 @@ fn test_abs_float_returns_float() {
 @test
 fn test_trunc_positive() {
     assert_eq(math.trunc(3.7), 3)
-    assert_eq(typeof(math.trunc(3.7)) == Type.int, true)
+    assert_eq(typeof(math.trunc(3.7)) == "int", true)
 }
 
 @test
@@ -139,7 +139,7 @@ fn test_trunc_negative() {
 fn test_trunc_int_passthrough() {
     let r = math.trunc(5)
     assert_eq(r, 5)
-    assert_eq(typeof(r) == Type.int, true)
+    assert_eq(typeof(r) == "int", true)
 }
 
 // ===== Negative floor/ceil =====

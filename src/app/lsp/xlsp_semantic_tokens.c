@@ -527,20 +527,25 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
             TryCatchNode *tc = &node->as.try_catch;
             collect_tokens_ast(ctx, tc->try_body);
 
-            // Catch variable
-            if (tc->catch_var && tc->catch_var_line > 0) {
-                int col = tc->catch_var_column > 0 ? tc->catch_var_column - 1 : 0;
-                result_add(result, tc->catch_var_line - 1, col, strlen(tc->catch_var),
-                           XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
+            for (int ci = 0; ci < tc->catch_count; ci++) {
+                XrCatchClause *cc = tc->catch_clauses[ci];
+                if (!cc)
+                    continue;
+
+                // Catch variable token
+                if (cc->var_name && cc->var_line > 0) {
+                    int col = cc->var_column > 0 ? cc->var_column - 1 : 0;
+                    result_add(result, cc->var_line - 1, col, strlen(cc->var_name),
+                               XLSP_TOKEN_PARAMETER, XLSP_MOD_DECLARATION);
+                }
+
+                XaScope *saved = ctx->current_scope;
+                XaScope *catch_scope = find_child_scope(ctx->current_scope, cc->body);
+                if (catch_scope)
+                    ctx->current_scope = catch_scope;
+                collect_tokens_ast(ctx, cc->body);
+                ctx->current_scope = saved;
             }
-
-            XaScope *saved = ctx->current_scope;
-            XaScope *catch_scope = find_child_scope(ctx->current_scope, tc->catch_body);
-            if (catch_scope)
-                ctx->current_scope = catch_scope;
-
-            collect_tokens_ast(ctx, tc->catch_body);
-            ctx->current_scope = saved;
 
             collect_tokens_ast(ctx, tc->finally_body);
             break;

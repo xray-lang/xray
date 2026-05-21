@@ -44,7 +44,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
 
-    // P0-1: Variable must have type annotation or initializer
+    // Variable declarations must have a type annotation or initializer.
     if (!var->initializer && !links->declared_type) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
@@ -120,7 +120,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     links->type = var_type;
 
     // Track definite assignment
-    // P1-3: Variables with type annotation are zero-initialized (703 type system rule)
+    // Variables with type annotations are initialized to the type zero value.
     links->is_definitely_assigned = (var->initializer != NULL) || (links->declared_type != NULL);
 
     // JIT metadata: certainty level and const-foldable detection

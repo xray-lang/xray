@@ -176,6 +176,59 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
+    } else if (fn_links && xa_symbol_links_get_type_param_count(fn_links) > 0 && call->callee &&
+               call->callee->type == AST_VARIABLE) {
+        // Implicit generic instantiation: type args inferred from arguments.
+        // For each parameter typed as a bare T, infer T = type(arg) and
+        // verify constraints on T.  This mirrors the explicit branch above
+        // but does its own simple inference per type parameter.
+        XaSymbol *fn_sym =
+            xa_scope_lookup(ctx->analyzer->current_scope, call->callee->as.variable.name);
+        if (fn_sym && fn_sym->kind == XA_SYM_FUNCTION) {
+            XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, fn_sym);
+            int tp_count = xa_symbol_links_get_type_param_count(fl);
+            int p_count = fl ? fl->param_count : 0;
+            for (int ti = 0; ti < tp_count; ti++) {
+                int constraint_count = 0;
+                XrType **constraints =
+                    xa_symbol_links_get_type_param_constraints(fl, ti, &constraint_count);
+                if (constraint_count == 0)
+                    continue;
+                const char *tp_name = xa_symbol_links_get_type_param_name(fl, ti);
+                if (!tp_name)
+                    continue;
+                // Find the first parameter whose type is exactly the bare T
+                XrType *inferred = NULL;
+                for (int pi = 0; pi < p_count && pi < call->arg_count; pi++) {
+                    XrType *pt = fl->param_types ? fl->param_types[pi] : NULL;
+                    if (!pt || pt->kind != XR_KIND_TYPE_PARAM)
+                        continue;
+                    if (!pt->type_param.name || strcmp(pt->type_param.name, tp_name) != 0)
+                        continue;
+                    AstNode *a = call->arguments[pi];
+                    if (a && a->type != AST_FUNCTION_EXPR)
+                        inferred = xa_visit_infer_expr(ctx, a);
+                    if (inferred)
+                        break;
+                }
+                if (!inferred || XR_TYPE_IS_UNKNOWN(inferred))
+                    continue;
+                for (int j = 0; j < constraint_count; j++) {
+                    XrType *constraint = constraints[j];
+                    if (constraint && !xr_type_satisfies_constraint(inferred, constraint)) {
+                        XrLocation loc = {
+                            .file = ctx->file_path, .line = node->line, .column = node->column};
+                        char msg[256];
+                        snprintf(
+                            msg, sizeof(msg),
+                            "Type '%s' does not satisfy constraint '%s' for type parameter '%s'",
+                            xr_type_to_string(inferred), xr_type_to_string(constraint), tp_name);
+                        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+                    }
+                }
+            }
+        }
     }
 
     // Recognize Json.decode<T>(data): compiler-generated typed decode
@@ -527,7 +580,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Ensure inferred_param_types array is allocated
         if (!fn_links->inferred_param_types && fn_links->param_count > 0) {
             fn_links->inferred_param_types = xr_calloc(fn_links->param_count, sizeof(XrType *));
-            fn_links->inferred_param_count = fn_links->param_count;
+            if (fn_links->inferred_param_types)
+                fn_links->inferred_param_count = fn_links->param_count;
         }
         for (int i = 0; i < arg_count && i < fn_links->inferred_param_count; i++) {
             // Only propagate for unannotated params (declared_type is NULL or unknown)

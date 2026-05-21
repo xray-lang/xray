@@ -52,9 +52,17 @@ void xr_value_fprint(FILE *stream, XrValue value) {
         // Fallback when no isolate (early init or shutdown)
         if (XR_IS_INT(value))
             fprintf(stream, "%lld", (long long) XR_TO_INT(value));
-        else if (XR_IS_FLOAT(value))
-            fprintf(stream, "%g", XR_TO_FLOAT(value));
-        else if (XR_IS_BOOL(value))
+        else if (XR_IS_FLOAT(value)) {
+            char _fb[64];
+            int _fn = snprintf(_fb, sizeof(_fb), "%.15g", XR_TO_FLOAT(value));
+            if (!strchr(_fb, '.') && !strchr(_fb, 'e') && !strchr(_fb, 'E') &&
+                _fn + 2 < (int) sizeof(_fb)) {
+                _fb[_fn] = '.';
+                _fb[_fn + 1] = '0';
+                _fb[_fn + 2] = '\0';
+            }
+            fprintf(stream, "%s", _fb);
+        } else if (XR_IS_BOOL(value))
             fprintf(stream, "%s", XR_TO_BOOL(value) ? "true" : "false");
         else if (XR_IS_NULL(value))
             fprintf(stream, "null");
@@ -347,7 +355,15 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
     } else if (XR_IS_INT(value)) {
         printf("%lld", (long long) XR_TO_INT(value));
     } else if (XR_IS_FLOAT(value)) {
-        printf("%g", XR_TO_FLOAT(value));
+        char _fb[64];
+        int _fn = snprintf(_fb, sizeof(_fb), "%.15g", XR_TO_FLOAT(value));
+        if (!strchr(_fb, '.') && !strchr(_fb, 'e') && !strchr(_fb, 'E') &&
+            _fn + 2 < (int) sizeof(_fb)) {
+            _fb[_fn] = '.';
+            _fb[_fn + 1] = '0';
+            _fb[_fn + 2] = '\0';
+        }
+        printf("%s", _fb);
     } else if (XR_IS_BOOL(value)) {
         printf("%s", XR_TO_BOOL(value) ? "true" : "false");
     } else if (XR_IS_NULL(value)) {

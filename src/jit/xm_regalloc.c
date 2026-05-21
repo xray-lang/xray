@@ -52,7 +52,7 @@ typedef struct {
 } LsPool;
 
 static void pool_init(LsPool *p) {
-    p->cur = xr_calloc(1, sizeof(LsChunk));
+    XR_CALLOC_OR_ABORT(p->cur, 1, sizeof(LsChunk), "regalloc pool init");
 }
 
 static void pool_free(LsPool *p) {
@@ -194,7 +194,7 @@ static int32_t next_use_after(const LsRange *r, int32_t pos);
 
 static void ls_list_init(LsList *l, uint32_t cap) {
     XR_DCHECK(l != NULL, "ls_list_init: NULL list");
-    l->items = xr_malloc(cap * sizeof(LsRange *));
+    XR_MALLOC_OR_ABORT(l->items, cap * sizeof(LsRange *), "regalloc ls_list init");
     l->len = 0;
     l->cap = cap;
 }
@@ -431,7 +431,7 @@ static bool phi_ranges_conflict(const LsRange *dst, const LsRange *arg) {
 static void compute_deferred(LsCtx *ctx) {
     XmFunc *f = ctx->func;
     uint32_t n = f->nblk;
-    ctx->blk_deferred = xr_calloc(n, sizeof(bool));
+    XR_CALLOC_OR_ABORT(ctx->blk_deferred, n, sizeof(bool), "regalloc deferred");
 
     // Pass 1: seed — catch targets and unreachable blocks
     for (uint32_t i = 0; i < n; i++) {
@@ -773,9 +773,9 @@ static void compute_bundles(LsCtx *ctx) {
     if (nv == 0)
         return;
 
-    ctx->bundle_parent = xr_malloc(nv * sizeof(uint32_t));
-    ctx->bundle_hint = xr_malloc(nv * sizeof(int8_t));
-    ctx->bundle_spill = xr_malloc(nv * sizeof(int16_t));
+    XR_MALLOC_OR_ABORT(ctx->bundle_parent, nv * sizeof(uint32_t), "regalloc bundle_parent");
+    XR_MALLOC_OR_ABORT(ctx->bundle_hint, nv * sizeof(int8_t), "regalloc bundle_hint");
+    XR_MALLOC_OR_ABORT(ctx->bundle_spill, nv * sizeof(int16_t), "regalloc bundle_spill");
     for (uint32_t i = 0; i < nv; i++) {
         ctx->bundle_parent[i] = i;
         ctx->bundle_hint[i] = -1;
@@ -1577,7 +1577,7 @@ static int gap_cmp(const void *a, const void *b) {
  * positions where the value isn't live.
  */
 static void build_result(LsCtx *ctx, XraResult *res) {
-    res->valloc = xr_calloc(ctx->nvreg, sizeof(XraVRegAlloc));
+    XR_CALLOC_OR_ABORT(res->valloc, ctx->nvreg, sizeof(XraVRegAlloc), "regalloc result valloc");
 
     for (uint32_t v = 0; v < ctx->nvreg; v++) {
         LsRange *r = ctx->vreg_ranges[v];
@@ -1753,8 +1753,8 @@ XraResult *xra_run(XmFunc *func) {
     pool_init(&ctx.pool);
     xm_live_compute(&ctx.live, func);
 
-    ctx.blk_start = xr_calloc(func->nblk, sizeof(int32_t));
-    ctx.blk_end = xr_calloc(func->nblk, sizeof(int32_t));
+    XR_CALLOC_OR_ABORT(ctx.blk_start, func->nblk, sizeof(int32_t), "regalloc blk_start");
+    XR_CALLOC_OR_ABORT(ctx.blk_end, func->nblk, sizeof(int32_t), "regalloc blk_end");
     number_pos(&ctx);
 
     // Build block ID → internal index mapping for O(1) lookup
@@ -1764,16 +1764,17 @@ XraResult *xra_run(XmFunc *func) {
             if (func->blocks[i]->id > max_bid)
                 max_bid = func->blocks[i]->id;
         ctx.blk_id_map_size = max_bid + 1;
-        ctx.blk_id_to_idx = xr_calloc(ctx.blk_id_map_size, sizeof(uint32_t));
+        XR_CALLOC_OR_ABORT(ctx.blk_id_to_idx, ctx.blk_id_map_size, sizeof(uint32_t),
+                           "regalloc blk_id_to_idx");
         for (uint32_t i = 0; i < func->nblk; i++)
             ctx.blk_id_to_idx[func->blocks[i]->id] = i;
     }
 
     compute_deferred(&ctx);
 
-    ctx.vreg_ranges = xr_calloc(ctx.nvreg, sizeof(LsRange *));
+    XR_CALLOC_OR_ABORT(ctx.vreg_ranges, ctx.nvreg, sizeof(LsRange *), "regalloc vreg_ranges");
     ctx.all_cap = ctx.nvreg * 2 + 64;
-    ctx.all_ranges = xr_malloc(ctx.all_cap * sizeof(LsRange *));
+    XR_MALLOC_OR_ABORT(ctx.all_ranges, ctx.all_cap * sizeof(LsRange *), "regalloc all_ranges");
 
     build_ranges(&ctx);
     build_fixed_intervals(&ctx);
@@ -1794,8 +1795,8 @@ XraResult *xra_run(XmFunc *func) {
     res->nblk = msz;
 
     // Export RA position mapping (indexed by block ID)
-    res->blk_start = xr_calloc(msz, sizeof(int32_t));
-    res->blk_end = xr_calloc(msz, sizeof(int32_t));
+    XR_CALLOC_OR_ABORT(res->blk_start, msz, sizeof(int32_t), "regalloc result blk_start");
+    XR_CALLOC_OR_ABORT(res->blk_end, msz, sizeof(int32_t), "regalloc result blk_end");
     for (uint32_t bi = 0; bi < func->nblk; bi++) {
         uint32_t bid = func->blocks[bi]->id;
         if (bid < msz) {
@@ -1804,9 +1805,9 @@ XraResult *xra_run(XmFunc *func) {
         }
     }
 
-    res->blk_gp_live = xr_calloc(msz, sizeof(uint32_t));
-    res->blk_fp_live = xr_calloc(msz, sizeof(uint32_t));
-    res->blk_ptr_live = xr_calloc(msz, sizeof(uint32_t));
+    XR_CALLOC_OR_ABORT(res->blk_gp_live, msz, sizeof(uint32_t), "regalloc result blk_gp_live");
+    XR_CALLOC_OR_ABORT(res->blk_fp_live, msz, sizeof(uint32_t), "regalloc result blk_fp_live");
+    XR_CALLOC_OR_ABORT(res->blk_ptr_live, msz, sizeof(uint32_t), "regalloc result blk_ptr_live");
 
     build_result(&ctx, res);
     connect_ranges(&ctx, res);

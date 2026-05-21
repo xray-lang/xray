@@ -314,7 +314,30 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
     if (!cls || method_idx >= cls->method_count)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
-    XrClosure *closure = cls->methods[method_idx].as.closure;
+    XrMethod *method = &cls->methods[method_idx];
+
+    /* Primitive method: call C function directly.  This mirrors the
+     * defensive guard added to OP_INVOKE_DIRECT in the VM interpreter —
+     * accessing .as.closure on a PRIMITIVE slot reads the wrong union
+     * member and crashes. */
+    if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+        XrayIsolate *isolate = coro->isolate;
+        if (!isolate)
+            return (XrJitResult) {XM_DEOPT_MARKER, 0};
+        XrValue prim_args[16];
+        XrValue receiver = xr_value_from_instance(inst);
+        for (int i = 0; i < nargs && i < 15; i++)
+            prim_args[i] = jit_value_from_tag(coro->jit_ctx->call_args[1 + i], XR_TAG_I64);
+        XrValue result = method->as.primitive(isolate, receiver, prim_args, nargs);
+        if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
+            coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
+            coro->vm_ctx.current_exception = XR_NULL_VAL;
+            return XR_JIT_NULL();
+        }
+        return XR_JIT_RESULT(result);
+    }
+
+    XrClosure *closure = method->as.closure;
     if (!closure || !closure->proto)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
@@ -882,7 +905,7 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
         XrValue r;
         r.descriptor = 0;
         r.tag = XR_TAG_I64;
-        r.i = b % c;
+        r.i = xr_int_mod_wrap(b, c);
         return XR_JIT_RESULT(r);
     }
     double nb = 0, nc = 0;

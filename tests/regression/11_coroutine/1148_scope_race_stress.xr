@@ -112,7 +112,7 @@ fn test_linked_first_error_deterministic() {
         }
         assert(caught, "linked scope must propagate child error")
         // Accept any err_<n>; we do not depend on a specific winner.
-        assert(msg.contains("err_"), "first_error must be a child error")
+        assert(msg.includes("err_"), "first_error must be a child error")
     }
 }
 

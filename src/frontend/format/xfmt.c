@@ -53,7 +53,7 @@ XrFmtConfig xfmt_default_config = {.indent_size = 4,
 void xfmt_ensure_capacity(XrFmtContext *ctx, size_t additional) {
     if (ctx->length + additional >= ctx->capacity) {
         ctx->capacity = (ctx->capacity + additional) * 2;
-        ctx->output = (char *) xr_realloc(ctx->output, ctx->capacity);
+        XR_REALLOC_OR_ABORT(ctx->output, ctx->capacity, "fmt output buffer grow");
     }
 }
 
@@ -295,7 +295,7 @@ static char *xfmt_align_trailing_comments(char *input, size_t in_len, size_t *ou
             size_t need = copy_end - lines[i].start + 1;  // +1 for '\n'
             if (pos + need + 1 >= cap) {
                 cap = (cap + need) * 2;
-                out = (char *) xr_realloc(out, cap);
+                XR_REALLOC_OR_ABORT(out, cap, "fmt trailing comment buffer");
             }
             memcpy(out + pos, input + lines[i].start, copy_end - lines[i].start);
             pos += copy_end - lines[i].start;
@@ -325,7 +325,7 @@ static char *xfmt_align_trailing_comments(char *input, size_t in_len, size_t *ou
             size_t need = code_len + (size_t) pad + comment_len + 1;  // +1 for '\n'
             if (pos + need + 1 >= cap) {
                 cap = (cap + need) * 2;
-                out = (char *) xr_realloc(out, cap);
+                XR_REALLOC_OR_ABORT(out, cap, "fmt trailing comment buffer");
             }
             memcpy(out + pos, input + lines[k].start, code_len);
             pos += code_len;

@@ -143,6 +143,36 @@ static XrValue m_range_contains(XrayIsolate *iso, XrValue self, XrValue *args, i
     return xr_bool(false);
 }
 
+/* Property getters: invoked through OP_GETPROP on the `get:<name>`
+ * symbol, so call sites use `r.start` / `r.end` / `r.length` without
+ * parens.  All three are O(1). */
+static XrValue m_range_get_start(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrRange *rng = xr_value_get_range_body(iso, self);
+    if (!rng)
+        return xr_null();
+    return xr_int(rng->start);
+}
+
+static XrValue m_range_get_end(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrRange *rng = xr_value_get_range_body(iso, self);
+    if (!rng)
+        return xr_null();
+    return xr_int(rng->end);
+}
+
+static XrValue m_range_get_length(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    XrRange *rng = xr_value_get_range_body(iso, self);
+    if (!rng)
+        return xr_null();
+    return xr_int(xr_range_length(rng));
+}
+
 /* ========== Native Body Descriptor ========== */
 
 static void range_body_init(XrInstance *inst, void *body) {
@@ -180,7 +210,14 @@ void xr_register_range_class(XrayIsolate *X) {
 
     xr_class_builder_add_method(builder, "toString", m_range_to_string, 0, 0);
     xr_class_builder_add_method(builder, "toArray", m_range_to_array, 0, 0);
-    xr_class_builder_add_method(builder, "contains", m_range_contains, 1, 0);
+    xr_class_builder_add_method(builder, "includes", m_range_contains, 1, 0);
+
+    /* Property getters: registered under `get:<name>` so OP_GETPROP
+     * resolves them through the standard getter lookup path (no parens
+     * at call site, matches DateTime / StringBuilder conventions). */
+    xr_class_builder_add_method(builder, "get:start", m_range_get_start, 1, 0);
+    xr_class_builder_add_method(builder, "get:end", m_range_get_end, 1, 0);
+    xr_class_builder_add_method(builder, "get:length", m_range_get_length, 1, 0);
 
     XrClass *cls = xr_class_builder_finalize(builder);
     XR_CHECK(cls != NULL, "register_range_class: finalize failed");

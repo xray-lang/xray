@@ -207,13 +207,13 @@ fn test_tryparse_error_invalid() {
 
 @test
 fn test_typeof_valid() {
-    assert_eq(typeof(Json.parse("42")), Type.int)
-    assert_eq(typeof(Json.parse("\"hello\"")), Type.string)
-    assert_eq(typeof(Json.parse("true")), Type.bool)
-    assert_eq(typeof(Json.parse("false")), Type.bool)
-    assert_eq(typeof(Json.parse("null")), Type.null)
-    assert_eq(typeof(Json.parse("[1,2,3]")), Type.Array)
-    assert_eq(typeof(Json.parse("{\"a\":1}")), Type.Json)
+    assert_eq(typeof(Json.parse("42")), "int")
+    assert_eq(typeof(Json.parse("\"hello\"")), "string")
+    assert_eq(typeof(Json.parse("true")), "bool")
+    assert_eq(typeof(Json.parse("false")), "bool")
+    assert_eq(typeof(Json.parse("null")), "null")
+    assert_eq(typeof(Json.parse("[1,2,3]")), "Array")
+    assert_eq(typeof(Json.parse("{\"a\":1}")), "Json")
 }
 
 @test

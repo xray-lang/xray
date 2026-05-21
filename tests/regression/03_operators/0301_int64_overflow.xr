@@ -14,7 +14,7 @@
 fn test_int64_max_value() {
     let max: int = 9223372036854775807
     assert_eq(max, 9223372036854775807)
-    assert_eq(typeof(max), Type.int)
+    assert_eq(typeof(max), "int")
 }
 
 @test
@@ -43,7 +43,7 @@ fn test_large_values_still_int() {
     let a: int = 140737488355327
     let r = a + 1
     assert_eq(r, 140737488355328)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 @test
@@ -52,7 +52,7 @@ fn test_large_addition_still_int() {
     let b: int = 100000000000000
     let r = a + b
     assert_eq(r, 200000000000000)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 // ===== Addition overflow wraps =====
@@ -69,7 +69,7 @@ fn test_add_overflow_wraps() {
     let r = max + 1
     // INT64_MAX + 1 wraps to INT64_MIN
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 @test
@@ -78,7 +78,7 @@ fn test_add_negative_overflow_wraps() {
     let r = min + (-1)
     // INT64_MIN + (-1) wraps to INT64_MAX
     assert_eq(r, 9223372036854775807)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 // ===== Subtraction overflow wraps =====
@@ -95,7 +95,7 @@ fn test_sub_overflow_wraps() {
     let r = min - 1
     // INT64_MIN - 1 wraps to INT64_MAX
     assert_eq(r, 9223372036854775807)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 @test
@@ -104,7 +104,7 @@ fn test_sub_positive_overflow_wraps() {
     let r = max - (-1)
     // INT64_MAX - (-1) = INT64_MAX + 1 wraps to INT64_MIN
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 // ===== Multiplication overflow wraps =====
@@ -121,7 +121,7 @@ fn test_mul_overflow_wraps() {
     let r = max * 2
     // INT64_MAX * 2 wraps: result is -2 (unsigned: 0xFFFFFFFFFFFFFFFE)
     assert_eq(r, -2)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 @test
@@ -130,7 +130,7 @@ fn test_mul_both_large_ok() {
     let b: int = 3000000001
     let r = a * b
     assert_eq(r, 9000000003000000000)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 // ===== Negation overflow wraps =====
@@ -148,7 +148,7 @@ fn test_neg_min_wraps() {
     let r = -min
     // -INT64_MIN wraps to INT64_MIN (two's complement)
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeof(r), Type.int)
+    assert_eq(typeof(r), "int")
 }
 
 // ===== Left shift within range =====
@@ -167,7 +167,7 @@ fn test_compound_add_wraps() {
     let x: int = 9223372036854775807
     x += 1
     assert_eq(x, -9223372036854775807 - 1)
-    assert_eq(typeof(x), Type.int)
+    assert_eq(typeof(x), "int")
 }
 
 @test
@@ -175,7 +175,7 @@ fn test_compound_sub_wraps() {
     let x: int = -9223372036854775807 - 1
     x -= 1
     assert_eq(x, 9223372036854775807)
-    assert_eq(typeof(x), Type.int)
+    assert_eq(typeof(x), "int")
 }
 
 @test
@@ -183,7 +183,7 @@ fn test_compound_mul_wraps() {
     let x: int = 9223372036854775807
     x *= 2
     assert_eq(x, -2)
-    assert_eq(typeof(x), Type.int)
+    assert_eq(typeof(x), "int")
 }
 
 // ===== Compound assignment within range =====
@@ -205,4 +205,75 @@ fn test_compound_near_boundary_ok() {
 fn test_mul_neg_neg_ok() {
     let a: int = 140737488355327
     assert_eq(a * -1, -140737488355327)
+}
+
+// ===== INT64_MIN / -1 wrap (would overflow signed range) =====
+//
+// 2^63 cannot fit in int64, so VM/JIT/AOT all wrap:
+//   INT64_MIN / -1 = INT64_MIN
+//   INT64_MIN % -1 = 0
+// On x64 this requires the JIT to detect the case before IDIV (which
+// raises #DE / SIGFPE); on ARM64 SDIV produces the wrap naturally.
+
+@test
+fn test_div_min_neg_one_wraps() {
+    let min: int = -9223372036854775807 - 1
+    let r = min / -1
+    assert_eq(r, -9223372036854775807 - 1)
+    assert_eq(typeof(r), "int")
+}
+
+@test
+fn test_mod_min_neg_one_is_zero() {
+    let min: int = -9223372036854775807 - 1
+    let r = min % -1
+    assert_eq(r, 0)
+    assert_eq(typeof(r), "int")
+}
+
+@test
+fn test_div_min_neg_one_in_loop() {
+    // Loop forces JIT compilation on hot paths so that the wrap path
+    // is exercised on the JIT side, not just the interpreter.
+    let min: int = -9223372036854775807 - 1
+    let acc: int = 0
+    for (i in 0..200) {
+        acc += min / -1
+    }
+    // min / -1 = min, summed 200 times wraps repeatedly.
+    // 200 * min mod 2^64: 200 * (-2^63) wraps; explicit value: 0
+    // because (-2^63 * 200) mod 2^64 = (-2^63 * 200 + k * 2^64) for some k
+    // 200 * 2^63 = 25 * 2^66 = (multiple of 2^64) so result wraps to 0.
+    assert_eq(acc, 0)
+}
+
+@test
+fn test_div_normal_with_neg_one_divisor() {
+    // Non-INT64_MIN dividends with -1 divisor stay correct.
+    assert_eq(42 / -1, -42)
+    assert_eq(-42 / -1, 42)
+    assert_eq(0 / -1, 0)
+    let big: int = 9223372036854775807
+    assert_eq(big / -1, -9223372036854775807)
+}
+
+// ===== int.abs() boundary =====
+//
+// (-INT64_MIN) is signed-overflow UB. abs() must wrap, returning
+// INT64_MIN itself instead of letting the compiler emit a NEG that
+// triggers SIGFPE in some build configurations.
+
+@test
+fn test_abs_min_wraps() {
+    let min: int = -9223372036854775807 - 1
+    assert_eq(min.abs(), -9223372036854775807 - 1)
+}
+
+@test
+fn test_abs_normal() {
+    assert_eq((-42).abs(), 42)
+    assert_eq((42).abs(), 42)
+    assert_eq((0).abs(), 0)
+    let max: int = 9223372036854775807
+    assert_eq(max.abs(), 9223372036854775807)
 }

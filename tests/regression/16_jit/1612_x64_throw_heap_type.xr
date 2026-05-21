@@ -16,7 +16,7 @@ fn test_throw_string_keeps_type() {
     try {
         throw new Exception("boom")
     } catch (e) {
-        caught_typename = typename(e)
+        caught_typename = typeof(e)
     }
     // Pre-fix: caught_typename was "" or "null" because heap_type=0
     // made every check return false. Post-fix it is a wrapped exception

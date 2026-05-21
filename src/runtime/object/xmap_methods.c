@@ -117,16 +117,6 @@ static XrValue xr_map_method_entries(XrayIsolate *iso, XrValue self, XrValue *ar
     return xr_value_from_array(xr_map_entries(xr_current_coro(iso), m));
 }
 
-static XrValue xr_map_method_has_value(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
-    if (argc < 1)
-        return xr_bool(0);
-    return xr_bool(xr_map_has_value(m, args[0]));
-}
-
 static XrValue xr_map_method_iterator(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) args;
     (void) argc;
@@ -178,20 +168,6 @@ static XrValue xr_map_method_foreach(XrayIsolate *iso, XrValue self, XrValue *ar
 #include "xnative_type.h"
 #include "builtins/xmap_builtins.h"
 
-static XrValue xr_map_method_increment(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    if (argc < 1)
-        return xr_null();
-    XrMap *m = map_self(self);
-    if (map_is_weak(m))
-        return XR_NOTFOUND;
-    XrValue key = args[0];
-    bool found = false;
-    XrValue old_val = xr_map_get(m, key, &found);
-    xr_map_set(m, key, (found && XR_IS_INT(old_val)) ? xr_int(XR_TO_INT(old_val) + 1) : xr_int(1));
-    return xr_null();
-}
-
 void xr_map_register_native_type(XrayIsolate *isolate) {
     static const XrNativeMethod map_methods[] = {
         {"isEmpty", xr_map_method_is_empty, 0},
@@ -200,11 +176,9 @@ void xr_map_register_native_type(XrayIsolate *isolate) {
         {"set", xr_map_method_set, 0},
         {"delete", xr_map_method_delete, 1},
         {"clear", xr_map_method_clear, 0},
-        {"increment", xr_map_method_increment, 1},
         {"keys", xr_map_method_keys, 0},
         {"values", xr_map_method_values, 0},
         {"entries", xr_map_method_entries, 0},
-        {"hasValue", xr_map_method_has_value, 1},
         {"iterator", xr_map_method_iterator, 0},
         {"entriesIterator", xr_map_method_entries_iterator, 0},
         {"forEach", xr_map_method_foreach, 1},

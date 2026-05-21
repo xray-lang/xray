@@ -88,8 +88,8 @@ fn test_struct_comprehensive() {
     assert(p.y == 20.0)
 
     // === Typename preserved ===
-    assert(typename(p1) == "Point")
-    assert(typename(r) == "Rect")
-    assert(typename(red) == "Color")
+    assert(typeof(p1) == "Point")
+    assert(typeof(r) == "Rect")
+    assert(typeof(red) == "Color")
 }
 

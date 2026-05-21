@@ -113,15 +113,22 @@ static void fmt_try_catch(XrFmtContext *ctx, AstNode *node) {
     xfmt_write_str(ctx, "try ");
     xfmt_emit_block(ctx, tc->try_body);
 
-    if (tc->catch_body) {
+    for (int ci = 0; ci < tc->catch_count; ci++) {
+        XrCatchClause *cc = tc->catch_clauses[ci];
+        if (!cc)
+            continue;
         xfmt_write_str(ctx, " catch");
-        if (tc->catch_var) {
+        if (cc->var_name) {
             xfmt_write_str(ctx, " (");
-            xfmt_write_str(ctx, tc->catch_var);
+            xfmt_write_str(ctx, cc->var_name);
+            if (cc->type) {
+                xfmt_write_str(ctx, ": ");
+                xfmt_emit_type(ctx, cc->type);
+            }
             xfmt_write_char(ctx, ')');
         }
         xfmt_write_space(ctx);
-        xfmt_emit_block(ctx, tc->catch_body);
+        xfmt_emit_block(ctx, cc->body);
     }
 
     if (tc->finally_body) {

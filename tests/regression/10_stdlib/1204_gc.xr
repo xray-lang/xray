@@ -6,7 +6,7 @@ import gc
 @test
 fn test_gc_isrunning() {
     let running = gc.isrunning()
-    assert_eq(typeof(running), Type.bool)
+    assert_eq(typeof(running), "bool")
 }
 
 // @test gc.count returns non-negative
@@ -34,7 +34,7 @@ fn test_gc_objects() {
 @test
 fn test_gc_state() {
     let state = gc.state()
-    assert_eq(typeof(state), Type.string)
+    assert_eq(typeof(state), "string")
     assert(state.length > 0)
 }
 

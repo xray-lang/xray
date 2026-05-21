@@ -532,14 +532,32 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             break;
 
         // === Try-catch / Throw ===
-        case AST_TRY_CATCH:
-            n->as.try_catch.try_body = xr_ast_clone(node->as.try_catch.try_body, map, mc);
-            n->as.try_catch.catch_var = clone_str(node->as.try_catch.catch_var);
-            n->as.try_catch.catch_var_line = node->as.try_catch.catch_var_line;
-            n->as.try_catch.catch_var_column = node->as.try_catch.catch_var_column;
-            n->as.try_catch.catch_body = xr_ast_clone(node->as.try_catch.catch_body, map, mc);
-            n->as.try_catch.finally_body = xr_ast_clone(node->as.try_catch.finally_body, map, mc);
+        case AST_TRY_CATCH: {
+            TryCatchNode *src_tc = &node->as.try_catch;
+            TryCatchNode *dst_tc = &n->as.try_catch;
+            dst_tc->try_body = xr_ast_clone(src_tc->try_body, map, mc);
+            dst_tc->catch_count = src_tc->catch_count;
+            dst_tc->catch_clauses = NULL;
+            if (src_tc->catch_count > 0) {
+                dst_tc->catch_clauses = (XrCatchClause **) xr_calloc((size_t) src_tc->catch_count,
+                                                                     sizeof(XrCatchClause *));
+                for (int ci = 0; ci < src_tc->catch_count; ci++) {
+                    XrCatchClause *sc = src_tc->catch_clauses[ci];
+                    if (!sc)
+                        continue;
+                    XrCatchClause *dc = (XrCatchClause *) xr_calloc(1, sizeof(XrCatchClause));
+                    dc->var_name = clone_str(sc->var_name);
+                    dc->var_line = sc->var_line;
+                    dc->var_column = sc->var_column;
+                    dc->type = sub_tref(sc->type, map, mc);
+                    dc->body = xr_ast_clone(sc->body, map, mc);
+                    dc->symbol_id = 0;
+                    dst_tc->catch_clauses[ci] = dc;
+                }
+            }
+            dst_tc->finally_body = xr_ast_clone(src_tc->finally_body, map, mc);
             break;
+        }
         case AST_THROW_STMT:
             n->as.throw_stmt.expression = xr_ast_clone(node->as.throw_stmt.expression, map, mc);
             break;
@@ -1186,7 +1204,11 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
             break;
         case AST_TRY_CATCH:
             collect_instantiation_sites(node->as.try_catch.try_body, registry, collector);
-            collect_instantiation_sites(node->as.try_catch.catch_body, registry, collector);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    collect_instantiation_sites(cc->body, registry, collector);
+            }
             collect_instantiation_sites(node->as.try_catch.finally_body, registry, collector);
             break;
         case AST_THROW_STMT:
@@ -1391,7 +1413,11 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             break;
         case AST_TRY_CATCH:
             rewrite_call_sites(node->as.try_catch.try_body, registry, collector);
-            rewrite_call_sites(node->as.try_catch.catch_body, registry, collector);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    rewrite_call_sites(cc->body, registry, collector);
+            }
             rewrite_call_sites(node->as.try_catch.finally_body, registry, collector);
             break;
         case AST_THROW_STMT:

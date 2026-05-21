@@ -1141,25 +1141,26 @@ bool xr_type_assignable(XrType *target, XrType *source) {
 
     // Enum / class-name alias: the parser cannot distinguish an enum
     // type annotation `Color` from a class annotation, so it produces
-    // XR_KIND_CLASS for any user-defined name. The analyzer later
-    // produces XR_KIND_ENUM for enum-static and enum-iter expressions.
-    // Treat CLASS(name=X) and ENUM(enum_name=X) as the same type when
-    // the names match. This keeps the runtime structural check honest
-    // while letting the analyzer skip a separate normalization pass.
+    // XR_KIND_CLASS (or XR_KIND_INSTANCE for generic forms like
+    // Result<int, string>) for any user-defined name. The analyzer
+    // later produces XR_KIND_ENUM for enum-static and enum-iter
+    // expressions. Treat CLASS/INSTANCE(name=X) and ENUM(enum_name=X)
+    // as the same type when the names match, regardless of generic
+    // type arguments (enums are type-erased at runtime).
     {
         const char *t_name = NULL;
         const char *s_name = NULL;
-        if (target->kind == XR_KIND_CLASS && target->instance.class_name)
+        if ((target->kind == XR_KIND_CLASS || target->kind == XR_KIND_INSTANCE) &&
+            target->instance.class_name)
             t_name = target->instance.class_name;
         else if (target->kind == XR_KIND_ENUM && target->enum_type.enum_name)
             t_name = target->enum_type.enum_name;
-        if (source->kind == XR_KIND_CLASS && source->instance.class_name)
+        if ((source->kind == XR_KIND_CLASS || source->kind == XR_KIND_INSTANCE) &&
+            source->instance.class_name)
             s_name = source->instance.class_name;
         else if (source->kind == XR_KIND_ENUM && source->enum_type.enum_name)
             s_name = source->enum_type.enum_name;
-        if (t_name && s_name && strcmp(t_name, s_name) == 0 &&
-            ((target->kind == XR_KIND_CLASS && source->kind == XR_KIND_ENUM) ||
-             (target->kind == XR_KIND_ENUM && source->kind == XR_KIND_CLASS))) {
+        if (t_name && s_name && strcmp(t_name, s_name) == 0 && target->kind != source->kind) {
             return true;
         }
     }
@@ -1236,6 +1237,25 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             // Open Json: missing fields allowed (extensible at runtime)
             if (!found && !is_optional && target->object.is_sealed) {
                 return false;
+            }
+        }
+        // Sealed Json: extra fields not declared on target are rejected.
+        // This enforces exact-shape semantics for `type T = {...}` aliases.
+        if (target->object.is_sealed) {
+            for (int j = 0; j < source->object.field_count; j++) {
+                if (!source->object.field_names || !source->object.field_names[j])
+                    continue;
+                bool exists_on_target = false;
+                for (int i = 0; i < target->object.field_count; i++) {
+                    if (target->object.field_names && target->object.field_names[i] &&
+                        strcmp(source->object.field_names[j], target->object.field_names[i]) == 0) {
+                        exists_on_target = true;
+                        break;
+                    }
+                }
+                if (!exists_on_target) {
+                    return false;
+                }
             }
         }
         return true;

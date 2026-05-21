@@ -160,6 +160,16 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
                                    msg, &loc);
     }
 
+    // Use-after-move check: moved variables cannot be accessed
+    if (links && links->move_state == XA_MOVE_MOVED) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Variable '%s' used after move (moved at line %u)", name,
+                 links->moved_line);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
+
     // Get declared type
     XrType *declared_type = xa_analyzer_get_type(ctx->analyzer, sym);
 
@@ -1413,14 +1423,38 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
  *              panics at runtime.  The static type is unchanged from the
  *              operand.
  *
- * The exception-control branch is purely runtime — neither form changes
- * the value the expression carries on the normal path. */
+ * When the operand type is Result<T, E>, try!/try? performs value-level
+ * unwrap instead of exception control:
+ *   try! Result<T,E> → T   (Err causes early return from enclosing fn)
+ *   try? Result<T,E> → T?  (Err becomes null, error cause discarded) */
 XrType *xa_visit_try_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
     XrType *inner = xa_visit_infer_expr(ctx, node->as.unary.operand);
     if (!inner)
         return xr_type_new_unknown(NULL);
+
+    /* Result<T, E> operand: unwrap to T or T?.
+     * Result<T,E> appears as XR_KIND_INSTANCE (generic annotation) or
+     * XR_KIND_ENUM (non-generic usage). */
+    bool is_result = false;
+    if (inner->kind == XR_KIND_INSTANCE && inner->instance.class_name &&
+        strcmp(inner->instance.class_name, "Result") == 0)
+        is_result = true;
+    else if (inner->kind == XR_KIND_ENUM && inner->enum_type.enum_name &&
+             strcmp(inner->enum_type.enum_name, "Result") == 0)
+        is_result = true;
+    if (is_result) {
+        /* Enum types don't carry generic args, so the unwrapped payload
+         * type is unknown at static analysis time. Runtime handles the
+         * correct type. Using unknown allows downstream assignments
+         * (e.g. let x: int = try! parse(s)) to pass the analyzer. */
+        XrType *unwrapped = xr_type_new_unknown(NULL);
+        if (node->type == AST_TRY_OPTIONAL) {
+            return xr_type_make_nullable(ctx->analyzer->isolate, unwrapped);
+        }
+        return unwrapped;
+    }
 
     if (node->type == AST_TRY_OPTIONAL) {
         // try? widens the type to nullable.  If the operand was already
@@ -1470,6 +1504,8 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     XrType **param_types = NULL;
     if (fn->param_count > 0) {
         param_types = xr_malloc(sizeof(XrType *) * fn->param_count);
+        if (!param_types)
+            return xr_type_new_unknown(NULL);
         for (int i = 0; i < fn->param_count; i++) {
             XrParamNode *p = fn->params[i];
             // Check for explicit type annotation first
@@ -1943,20 +1979,38 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (!inner)
         return xr_type_new_unknown(NULL);
 
+    // Reset move_state before visiting inner variable so that re-analysis
+    // passes do not trigger false "used after move" on the move expr itself.
+    XaSymbol *move_sym = NULL;
+    if (inner->type == AST_VARIABLE) {
+        move_sym = xa_scope_lookup(ctx->analyzer->current_scope, inner->as.variable.name);
+        if (move_sym) {
+            XaSymbolLinks *lnk = xa_analyzer_get_links(ctx->analyzer, move_sym);
+            if (lnk)
+                lnk->move_state = XA_MOVE_NOT_MOVED;
+        }
+    }
+
     // Infer type of the variable being moved
     XrType *var_type = xa_visit_infer_expr(ctx, inner);
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
 
     // Check: variable must exist and be a let variable (not const)
-    if (inner->type == AST_VARIABLE) {
+    if (move_sym && move_sym->is_const) {
         const char *name = inner->as.variable.name;
-        XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
-        if (sym && sym->is_const) {
-            char msg[128];
-            snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-                                       msg, &loc);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "cannot move const value '%s'", name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
+    }
+    // Mark the variable as moved — subsequent accesses are compile errors
+    if (move_sym) {
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, move_sym);
+        if (links) {
+            links->move_state = XA_MOVE_MOVED;
+            links->moved_line = (uint32_t) node->line;
+            links->moved_column = (uint32_t) node->column;
         }
     }
 

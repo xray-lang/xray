@@ -204,9 +204,7 @@ XR_FUNC XrString *xr_string_replace_all(XrayIsolate *iso, XrString *str, XrStrin
                                         XrString *new_str);
 XR_FUNC XrString *xr_string_repeat(XrayIsolate *iso, XrString *str, xr_Integer count);
 XR_FUNC XrString *xr_string_reverse(XrayIsolate *iso, XrString *str);
-XR_FUNC XrString *xr_string_reverse_bytes(XrayIsolate *iso, XrString *str);
 XR_FUNC XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index);
-XR_FUNC XrString *xr_string_translate_bytes(XrayIsolate *iso, XrString *str, struct XrMap *table);
 XR_FUNC XrString *xr_string_translate(XrayIsolate *iso, XrString *str, struct XrMap *table);
 
 // Note: join method is in xarray.h/c (array.join(","))

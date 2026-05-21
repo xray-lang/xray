@@ -153,6 +153,13 @@ static XrdModule *parse_xrd_content(const char *content, const char *module_name
     xrd->handle_cap = 8;
     xrd->handles = xr_calloc(xrd->handle_cap, sizeof(XaBuiltinHandle));
     xrd->handle_method_caps = xr_calloc(xrd->handle_cap, sizeof(int));
+    if (!xrd->functions || !xrd->handles || !xrd->handle_method_caps) {
+        xr_free(xrd->functions);
+        xr_free(xrd->handles);
+        xr_free(xrd->handle_method_caps);
+        xr_free(xrd);
+        return NULL;
+    }
 
     const char *p = content;
     while (*p) {

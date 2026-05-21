@@ -378,7 +378,7 @@ vmcase(OP_DIV) {
         if (nc == 0) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
-        R(a) = xr_int(nb / nc);
+        R(a) = xr_int(xr_int_div_wrap(nb, nc));
         vmbreak;
     }
 
@@ -421,7 +421,7 @@ vmcase(OP_DIVK) {
         if (nc == 0) {
             VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
         }
-        R(a) = xr_int(nb / nc);
+        R(a) = xr_int(xr_int_div_wrap(nb, nc));
     } else if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {
         // Mixed or float: promote to float
         double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
@@ -451,7 +451,7 @@ vmcase(OP_MOD) {
         if (divisor == 0) {
             VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
         }
-        R(a) = xr_int(XR_TO_INT(vb) % divisor);
+        R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));
         vmbreak;
     }
 
@@ -481,7 +481,7 @@ vmcase(OP_MODK) {
         if (divisor == 0) {
             VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
         }
-        R(a) = xr_int(XR_TO_INT(vb) % divisor);
+        R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));
     } else {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "modulo requires integer types");
     }

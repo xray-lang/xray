@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../os/os_time.h"
 
@@ -96,6 +97,8 @@ void xlsp_workspace_index_task_execute(void *data) {
     // Find all .xr files using server's ignore configuration
     int capacity = 64;
     task_data->files = xr_malloc(capacity * sizeof(char *));
+    if (!task_data->files)
+        return;
     task_data->file_count = 0;
 
     if (task_data->server) {
@@ -112,23 +115,9 @@ void xlsp_workspace_index_task_execute(void *data) {
 
 // Index a single file (helper function)
 static void index_single_file(XrLspServer *server, const char *path) {
-    FILE *f = fopen(path, "r");
-    if (!f)
+    char *content = xr_file_read_all(path, "r", NULL);
+    if (!content)
         return;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = xr_malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        return;
-    }
-
-    size_t read_size = fread(content, 1, size, f);
-    content[read_size] = '\0';
-    fclose(f);
 
     char uri[1100];
     snprintf(uri, sizeof(uri), "file://%s", path);
@@ -262,23 +251,10 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
     if (!server || !server->workspace_analyzer || !server->isolate || !path)
         return;
 
-    FILE *f = fopen(path, "r");
-    if (!f)
+    size_t read_size = 0;
+    char *content = xr_file_read_all(path, "r", &read_size);
+    if (!content)
         return;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = xr_malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        return;
-    }
-
-    size_t read_size = fread(content, 1, size, f);
-    content[read_size] = '\0';
-    fclose(f);
 
     // Calculate content hash for incremental analysis
     uint64_t content_hash = xlsp_content_hash(content, read_size);

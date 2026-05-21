@@ -136,7 +136,9 @@ void xr_stringbuilder_register_class(XrayIsolate *X) {
     xr_class_builder_add_method(b, "append", xr_builtin_stringbuilder_append, 1, 0);
     xr_class_builder_add_method(b, "toString", xr_builtin_stringbuilder_toString, 0, 0);
     xr_class_builder_add_method(b, "clear", xr_builtin_stringbuilder_clear, 0, 0);
-    xr_class_builder_add_method(b, "length", xr_builtin_stringbuilder_length, 0, 0);
+    /* `length` is a property; register under get:length so OP_GETPROP
+     * resolves it via the standard getter lookup path (no parens). */
+    xr_class_builder_add_method(b, "get:length", xr_builtin_stringbuilder_length, 1, 0);
     XrClass *cls = xr_class_builder_finalize(b);
     if (!cls)
         return;

@@ -22,6 +22,7 @@
 #include "../frontend/parser/xtype_ref.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/lexer/xlex.h"
+#include "../runtime/class/xclass_system.h"
 
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass.h"
@@ -463,6 +464,16 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 
     int var_id = xi_lower_var_find(l, sid, name);
     if (var_id >= 0) {
+        /* Implicit int→float promotion on assignment to a float variable */
+        struct XrType *var_type = l->vars[var_id].type;
+        if (var_type && XR_TYPE_IS_FLOAT(var_type) && val->type && XR_TYPE_IS_INT(val->type)) {
+            XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
+            if (conv) {
+                conv->args[0] = val;
+                conv->line = (uint32_t) node->line;
+                val = conv;
+            }
+        }
         /* When assigning from a different variable (e.g. x = i), insert
          * an explicit copy so the target gets its own SSA value.  Without
          * this, braun_write stores the source variable's value directly,
@@ -586,61 +597,8 @@ static int json_field_index(struct XrType *type, const char *name) {
     return -1;
 }
 
-/* Map Type.<member> names to XrTypeId constants at compile time.
- * Returns -1 if the name is not a known Type member. */
-static int type_member_to_tid(const char *name) {
-    if (!name)
-        return -1;
-    struct {
-        const char *n;
-        int tid;
-    } table[] = {
-        {"null", 0},      /* XR_TID_NULL */
-        {"bool", 1},      /* XR_TID_BOOL */
-        {"int8", 2},      /* XR_TID_INT8 */
-        {"uint8", 3},     /* XR_TID_UINT8 */
-        {"int16", 4},     /* XR_TID_INT16 */
-        {"uint16", 5},    /* XR_TID_UINT16 */
-        {"int32", 6},     /* XR_TID_INT32 */
-        {"uint32", 7},    /* XR_TID_UINT32 */
-        {"int", 8},       /* XR_TID_INT */
-        {"uint64", 9},    /* XR_TID_UINT64 */
-        {"float32", 10},  /* XR_TID_FLOAT32 */
-        {"float", 11},    /* XR_TID_FLOAT */
-        {"string", 12},   /* XR_TID_STRING */
-        {"function", 13}, /* XR_TID_FUNCTION */
-        {"Array", 14},    /* XR_TID_ARRAY */
-        {"Set", 15},      /* XR_TID_SET */
-        {"Map", 16},      /* XR_TID_MAP */
-        {"object", 17},   /* XR_TID_INSTANCE */
-        {"Json", 18},     /* XR_TID_JSON */
-        {"BigInt", 19},   /* XR_TID_BIGINT */
-        {"Channel", 21},  /* XR_TID_CHANNEL */
-        {"Regex", 22},    /* XR_TID_REGEX */
-        {"DateTime", 23}, /* XR_TID_DATETIME */
-        {"Bytes", 14},    /* XR_TID_ARRAY (Bytes is Array<uint8>) */
-    };
-    for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
-        if (strcmp(name, table[i].n) == 0)
-            return table[i].tid;
-    }
-    return -1;
-}
-
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
-
-    /* Type.<member> → compile-time XrTypeId constant (int) */
-    if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
-        strcmp(ma->object->as.variable.name, "Type") == 0 && ma->name) {
-        int tid = type_member_to_tid(ma->name);
-        if (tid >= 0) {
-            XiValue *v = xi_const_int(l->func, l->cur_block, (int64_t) tid, l->type_int);
-            if (v)
-                v->line = (uint32_t) node->line;
-            return v;
-        }
-    }
 
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
@@ -1072,24 +1030,16 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
-    /* typeof(x) → XI_TYPEOF */
+    /* typeof(x) → XI_TYPEOF aux_int=1 (returns string).
+     * Returns the runtime type name as a string. For class/enum
+     * instances the concrete name is returned. */
     if (strcmp(fname, "typeof") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_string, 1);
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = arg;
-        v->line = (uint32_t) line;
-        return v;
-    }
-    /* typename(x) → XI_TYPEOF aux_int=1 (typename variant) */
-    if (strcmp(fname, "typename") == 0 && call->arg_count == 1) {
-        XiValue *arg = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_TYPEOF, l->type_string, 1);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = arg;
-        v->aux_int = 1; /* typename variant */
+        v->aux_int = 1; /* emit OP_TYPENAME: returns string */
         v->line = (uint32_t) line;
         return v;
     }
@@ -1150,6 +1100,40 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) line;
         return v;
+    }
+
+    /* print(...) in expression context (e.g. match arm body).
+     * Statement-level print is handled by AST_PRINT_STMT → lower_print(),
+     * but expression-level calls (AST_CALL_EXPR on variable "print") arrive
+     * here.  Emit XI_PRINT instructions with the same encoding. */
+    if (strcmp(fname, "print") == 0) {
+        int n = (int) call->arg_count;
+        XiValue *arg_vals[16];
+        int capped = n > 16 ? 16 : n;
+        for (int i = 0; i < capped; i++)
+            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
+        for (int i = 0; i < capped; i++) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
+            if (!v)
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+            v->args[0] = arg_vals[i];
+            int add_space = (i > 0) ? 1 : 0;
+            int newline = (i == capped - 1) ? 1 : 0;
+            v->aux_int = add_space | (newline << 1);
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) line;
+        }
+        if (capped == 0) {
+            /* print() with no args → emit newline */
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
+            if (!v)
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+            v->args[0] = xi_const_null(l->func, l->cur_block, l->type_null);
+            v->aux_int = (1 << 1) | (1 << 4); /* newline + skip_null */
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) line;
+        }
+        return xi_const_null(l->func, l->cur_block, l->type_null);
     }
 
     /* Type conversion builtins: string(x), int(x), float(x), bool(x).
@@ -1405,6 +1389,44 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     int n = lower_call_args_expand_spread(l, call, arg_vals, 32, pmodes, pcount);
     if (n < 0)
         return NULL;
+
+    /* Implicit int→float promotion: when a parameter is declared as float
+     * but the argument is int, insert XI_CONVERT to coerce at the call site.
+     * For generic functions with explicit type args (e.g. identity<float>(0)),
+     * resolve TYPE_PARAM to the actual type arg before comparing. */
+    if (callee_type && callee_type->kind == XR_KIND_FUNCTION && callee_type->function.param_types) {
+        int pc = callee_type->function.param_count;
+        for (int i = 0; i < n && i < pc; i++) {
+            struct XrType *pt = callee_type->function.param_types[i];
+            if (!pt || !arg_vals[i] || !arg_vals[i]->type)
+                continue;
+            /* Resolve TYPE_PARAM to actual type via explicit call type args */
+            if (pt->kind == XR_KIND_TYPE_PARAM && call->type_arg_count > 0 &&
+                callee_type->function.type_param_names) {
+                const char *tp_name = pt->type_param.name;
+                for (int ti = 0; ti < callee_type->function.type_param_count; ti++) {
+                    if (callee_type->function.type_param_names[ti] && tp_name &&
+                        strcmp(callee_type->function.type_param_names[ti], tp_name) == 0 &&
+                        ti < call->type_arg_count && call->type_args[ti]) {
+                        pt = xr_tref_resolve(l->isolate, call->type_args[ti]);
+                        break;
+                    }
+                }
+            }
+            if (!pt)
+                continue;
+            /* int → float coercion */
+            if (XR_TYPE_IS_FLOAT(pt) && XR_TYPE_IS_INT(arg_vals[i]->type)) {
+                XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
+                if (conv) {
+                    conv->args[0] = arg_vals[i];
+                    conv->line = (uint32_t) node->line;
+                    arg_vals[i] = conv;
+                }
+            }
+        }
+    }
+
     uint16_t nargs = (uint16_t) (n + 1); /* callee + args */
 
     /* Detect self-call: callee resolves to the self-reference variable.
@@ -2071,7 +2093,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             else if (strcmp(tref->name, "Set") == 0)
                 tid = 15; /* XR_TID_SET */
         }
-        /* Bare container names without generic args (Array, Map, etc.) */
+        /* Bare container names without generic args and prelude types */
         if (tid < 0 && tref->kind == XR_TREF_NAMED && tref->name) {
             if (strcmp(tref->name, "Array") == 0)
                 tid = 14;
@@ -2081,6 +2103,18 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                 tid = 15;
             else if (strcmp(tref->name, "Json") == 0)
                 tid = 18;
+            else if (strcmp(tref->name, "Exception") == 0)
+                tid = 24; /* XR_TID_EXCEPTION */
+        }
+        /* Tuple type: (T1, T2, ...) → look up TupleN class by arity */
+        if (tid < 0 && tref->kind == XR_TREF_TUPLE && l->isolate) {
+            uint16_t arity = (uint16_t) tref->nchildren;
+            XrClass *tuple_cls = xr_get_or_create_tuple_class(l->isolate, arity);
+            if (tuple_cls) {
+                type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
+                if (type_val)
+                    type_val->aux = (void *) tuple_cls;
+            }
         }
         if (tid >= 0) {
             type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
@@ -2567,6 +2601,91 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     return copy ? copy : val;
 }
 
+/* Helper: emit XI_CALL_METHOD(receiver, method_name) → OP_INVOKE (0-arg).
+ * Used by try!/try? lowering to call Result.isErr() / .unwrap(). */
+static XiValue *emit_method_call_0(XiLower *l, XiValue *recv, const char *method,
+                                   struct XrType *result_type, uint32_t line) {
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, 1);
+    if (!v)
+        return NULL;
+    v->args[0] = recv;
+    v->aux = (void *) arena_strdup(l->func, method);
+    v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
+    v->line = line;
+    return v;
+}
+
+/* Lower try!/try? when the operand type is Result<T, E>.
+ *
+ * try! Result<T,E>:
+ *   evaluate operand → val
+ *   if val.isErr() → early-return val from enclosing function
+ *   else → unwrap payload (Ok value)
+ *
+ * try? Result<T,E>:
+ *   evaluate operand → val
+ *   if val.isErr() → null
+ *   else → unwrap payload (Ok value) */
+static XiValue *lower_try_result_expr(XiLower *l, AstNode *node, bool is_force) {
+    uint32_t line = (uint32_t) node->line;
+
+    XiValue *val = xi_lower_expr(l, node->as.unary.operand);
+    if (!val)
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+
+    /* Check variant tag: val.isErr() → bool */
+    XiValue *is_err = emit_method_call_0(l, val, "isErr", l->type_bool, line);
+    if (!is_err)
+        return val;
+
+    XiBlock *err_blk = xi_block_new(l->func);
+    XiBlock *ok_blk = xi_block_new(l->func);
+    XR_DCHECK(err_blk != NULL && ok_blk != NULL, "lower_try_result: block alloc failed");
+    xi_block_set_if(l->cur_block, is_err, err_blk, ok_blk);
+
+    if (is_force) {
+        /* try! : Err path → early return the Result.Err from the function */
+        xi_lower_braun_seal(l, err_blk);
+        l->cur_block = err_blk;
+        xi_block_set_return(err_blk, val);
+
+        /* Ok path → continue with unwrapped payload */
+        xi_lower_braun_seal(l, ok_blk);
+        l->cur_block = ok_blk;
+        return emit_method_call_0(l, val, "unwrap", l->type_any, line);
+    }
+
+    /* try? : Err path → null, Ok path → payload */
+    XiBlock *merge = xi_block_new(l->func);
+    XR_DCHECK(merge != NULL, "lower_try_result: merge block alloc failed");
+
+    /* Err path → null */
+    xi_lower_braun_seal(l, err_blk);
+    l->cur_block = err_blk;
+    XiValue *null_val = xi_const_null(l->func, err_blk, l->type_null);
+    xi_block_set_jump(err_blk, merge);
+
+    /* Ok path → unwrap */
+    xi_lower_braun_seal(l, ok_blk);
+    l->cur_block = ok_blk;
+    XiValue *payload = emit_method_call_0(l, val, "unwrap", l->type_any, line);
+    xi_block_set_jump(ok_blk, merge);
+
+    /* Merge both paths via phi */
+    xi_lower_braun_seal(l, merge);
+    l->cur_block = merge;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+    if (phi) {
+        for (uint16_t i = 0; i < merge->npreds; i++) {
+            phi->value.args[i] = (merge->preds[i] == ok_blk) ? payload : null_val;
+        }
+    }
+    return phi ? &phi->value : (payload ? payload : null_val);
+}
+
 /* try? expr / try! expr — exception-folding expressions.
  *
  *   try? expr   If expr throws, the value is null; otherwise it is the
@@ -2594,6 +2713,25 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
 static XiValue *lower_try_expr(XiLower *l, AstNode *node) {
     bool is_force = (node->type == AST_TRY_FORCE);
     int line = node->line;
+
+    /* Detect Result<T, E> operand: dispatch to Result-specific unwrap
+     * instead of exception-based try/catch.
+     * Result<T,E> is resolved as XR_KIND_INSTANCE with class_name="Result"
+     * (generic type annotation resolution) or as XR_KIND_ENUM with
+     * enum_name="Result" (non-generic usage). Check both. */
+    struct XrType *operand_type = xi_lower_node_type(l, node->as.unary.operand);
+    bool is_result_type = false;
+    if (operand_type) {
+        if (operand_type->kind == XR_KIND_INSTANCE && operand_type->instance.class_name &&
+            strcmp(operand_type->instance.class_name, "Result") == 0)
+            is_result_type = true;
+        else if (operand_type->kind == XR_KIND_ENUM && operand_type->enum_type.enum_name &&
+                 strcmp(operand_type->enum_type.enum_name, "Result") == 0)
+            is_result_type = true;
+    }
+    if (is_result_type) {
+        return lower_try_result_expr(l, node, is_force);
+    }
 
     XiBlock *try_blk = xi_block_new(l->func);
     XiBlock *catch_blk = xi_block_new(l->func);

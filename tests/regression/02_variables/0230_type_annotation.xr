@@ -6,28 +6,28 @@
 fn test_int_annotation() {
     let x: int = 42
     assert_eq(x, 42)
-    assert_eq(typeof(x), Type.int)
+    assert_eq(typeof(x), "int")
 }
 
 @test
 fn test_float_annotation() {
     let x: float = 3.14
     assert_eq(x > 3, true)
-    assert_eq(typeof(x), Type.float)
+    assert_eq(typeof(x), "float")
 }
 
 @test
 fn test_string_annotation() {
     let s: string = "hello"
     assert_eq(s, "hello")
-    assert_eq(typeof(s), Type.string)
+    assert_eq(typeof(s), "string")
 }
 
 @test
 fn test_bool_annotation() {
     let flag: bool = true
     assert_eq(flag, true)
-    assert_eq(typeof(flag), Type.bool)
+    assert_eq(typeof(flag), "bool")
 }
 
 // ===== 集合类型注解 =====
@@ -35,21 +35,21 @@ fn test_bool_annotation() {
 fn test_array_annotation() {
     let arr: Array<int> = [1, 2, 3]
     assert_eq(arr.length, 3)
-    assert_eq(typeof(arr), Type.Array)
+    assert_eq(typeof(arr), "Array")
 }
 
 @test
 fn test_map_annotation() {
     let m: Map<string, int> = #{"a": 1}
     assert_eq(m.get("a"), 1)
-    assert_eq(typeof(m), Type.Map)
+    assert_eq(typeof(m), "Map")
 }
 
 @test
 fn test_set_annotation() {
     let s: Set<int> = #[1, 2, 3]
     assert_eq(s.length, 3)
-    assert_eq(typeof(s), Type.Set)
+    assert_eq(typeof(s), "Set")
 }
 
 // ===== 函数参数类型注解 =====

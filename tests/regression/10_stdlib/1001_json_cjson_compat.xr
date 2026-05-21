@@ -91,13 +91,13 @@ fn test_parse_big_numbers() {
     // parse_number_should_parse_big_numbers
     // Very large numbers overflow to Infinity (float) — just verify they parse without crash
     let v1 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567")
-    assert_eq(typeof(v1), Type.float)
+    assert_eq(typeof(v1), "float")
 
     let v2 = Json.parse("9999999999999999999999999999999999999999999999912345678901234567E10")
-    assert_eq(typeof(v2), Type.float)
+    assert_eq(typeof(v2), "float")
 
     let v3 = Json.parse("999999999999999999999999999999999999999999999991234567890.1234567")
-    assert_eq(typeof(v3), Type.float)
+    assert_eq(typeof(v3), "float")
     assert_true(v3 > 0.0)
 }
 
@@ -387,17 +387,17 @@ fn test_stringify_positive_integers() {
 fn test_stringify_positive_reals() {
     // print_number_should_print_positive_reals
     let s1 = Json.stringify(0.123)
-    assert_true(s1.contains("0.123"))
+    assert_true(s1.includes("0.123"))
 
     let s2 = Json.stringify(3.1415926535897931)
-    assert_true(s2.contains("3.14159"))
+    assert_true(s2.includes("3.14159"))
 }
 
 @test
 fn test_stringify_negative_reals() {
     // print_number_should_print_negative_reals
     let s1 = Json.stringify(-0.0123)
-    assert_true(s1.contains("-0.0123"))
+    assert_true(s1.includes("-0.0123"))
 }
 
 // ============================================================
@@ -419,26 +419,26 @@ fn test_stringify_simple_string() {
 fn test_stringify_escape_characters() {
     // 双引号需要转义
     let s1 = Json.stringify("\"")
-    assert_true(s1.contains("\\\""))
+    assert_true(s1.includes("\\\""))
 
     // 反斜杠需要转义
     let s2 = Json.stringify("\\")
-    assert_true(s2.contains("\\\\"))
+    assert_true(s2.includes("\\\\"))
 
     // 换行符需要转义
     let s3 = Json.stringify("\n")
-    assert_true(s3.contains("\\n"))
+    assert_true(s3.includes("\\n"))
 
     // Tab 需要转义
     let s4 = Json.stringify("\t")
-    assert_true(s4.contains("\\t"))
+    assert_true(s4.includes("\\t"))
 }
 
 @test
 fn test_stringify_utf8() {
     // print_string_should_print_utf8
     let s = Json.stringify("ü猫慕")
-    assert_true(s.contains("ü猫慕"))
+    assert_true(s.includes("ü猫慕"))
 }
 
 // ============================================================
