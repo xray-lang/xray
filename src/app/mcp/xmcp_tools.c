@@ -56,6 +56,7 @@ static XrJsonValue *tool_xray_definition(XmcpServer *s, XrJsonValue *a);
 static XrJsonValue *schema_analyze(void);
 static XrJsonValue *schema_analyze_output(void);
 static XrJsonValue *schema_format(void);
+static XrJsonValue *schema_format_output(void);
 static XrJsonValue *schema_run(void);
 static XrJsonValue *schema_syntax(void);
 static XrJsonValue *schema_stdlib(void);
@@ -73,7 +74,7 @@ static const XmcpToolDef TOOL_TABLE[] = {
     {"xray_format", "Xray Code Formatter",
      "Format Xray source code according to standard style. "
      "Returns formatted code. Optionally set indent size or tabs.",
-     XMCP_TOOLSET_CORE, schema_format, NULL, tool_xray_format, true, false},
+     XMCP_TOOLSET_CORE, schema_format, schema_format_output, tool_xray_format, true, false},
     {"xray_run", "Xray Code Runner",
      "Execute a small Xray code snippet and return its stdout output. "
      "Creates an isolated VM per execution. Max output: 8KB.",
@@ -235,6 +236,18 @@ static XrJsonValue *schema_format(void) {
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
     xjson_object_set(s, "required", r);
+    return s;
+}
+
+static XrJsonValue *schema_format_output(void) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "formattedCode", "string", "Formatted Xray source code");
+    schema_add_prop(p, "changed", "boolean", "True when formatting changed the input");
+    schema_add_prop(p, "indentSize", "integer", "Effective indent size");
+    schema_add_prop(p, "useTabs", "boolean", "Effective tab indentation flag");
+    xjson_object_set(s, "properties", p);
     return s;
 }
 
@@ -481,7 +494,14 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments)
     if (!formatted)
         return xmcp_make_error_result("Error: formatting failed");
 
+    XrJsonValue *structured = xjson_new_object();
+    XJSON_SET_STRING(structured, "formattedCode", formatted);
+    XJSON_SET_BOOL(structured, "changed", strcmp(code, formatted) != 0);
+    XJSON_SET_INT(structured, "indentSize", config.indent_size);
+    XJSON_SET_BOOL(structured, "useTabs", config.use_tabs != 0);
+
     XrJsonValue *result = xmcp_make_text_result(formatted, false);
+    xjson_object_set(result, "structuredContent", structured);
     xr_free(formatted);
     return result;
 }
