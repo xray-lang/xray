@@ -666,6 +666,44 @@ const char *xa_builtin_get_type_name(XrType *type) {
 // Parse a type string (e.g., "int", "string?", "Array<int>") to XrType
 static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len);
 
+// Helper for parse_type_str: when s starts with '(' return the byte index
+// just past the matching ')' at depth 0; otherwise len. If the slice past
+// that ')' (after optional whitespace) starts with "->", *out_has_arrow
+// is set true and *out_arrow_pos is the byte index of '-' in "->".
+static size_t find_balanced_close_paren(const char *s, size_t len, bool *out_has_arrow,
+                                        size_t *out_arrow_pos) {
+    if (out_has_arrow)
+        *out_has_arrow = false;
+    if (out_arrow_pos)
+        *out_arrow_pos = 0;
+    if (len < 2 || s[0] != '(')
+        return len;
+
+    int depth = 0;
+    size_t i = 1;
+    for (; i < len; i++) {
+        if (s[i] == '(') {
+            depth++;
+        } else if (s[i] == ')') {
+            if (depth == 0) {
+                size_t close_after = i + 1;
+                size_t p = close_after;
+                while (p < len && s[p] == ' ')
+                    p++;
+                if (p + 1 < len && s[p] == '-' && s[p + 1] == '>') {
+                    if (out_has_arrow)
+                        *out_has_arrow = true;
+                    if (out_arrow_pos)
+                        *out_arrow_pos = p;
+                }
+                return close_after;
+            }
+            depth--;
+        }
+    }
+    return len;
+}
+
 // Parse a "fn(p: T, ...): R" function type literal from a bounded slice.
 // Mirrors xa_builtin_parse_full_signature but works on [s, s+len) instead
 // of a NUL-terminated string, so it composes safely inside nested type
@@ -842,12 +880,58 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         size_t inner_len = base_len - 9;
         type = xr_type_new_channel(X, parse_type_str(X, inner, inner_len));
     } else if (base_len >= 3 && strncmp(s, "fn", 2) == 0 && (s[2] == '(' || s[2] == ' ')) {
-        // fn(p: T, ...): R — function type literal. Required for nested
-        // function-typed parameters such as Array<T>.reduce's first
-        // parameter "fn(acc: U, item: T): U" — without this branch the
-        // inner fn type resolves to unknown and the analyzer silently
-        // skips assignability checks for the whole reduce call.
+        // fn(p: T, ...): R — legacy function type literal, still emitted by
+        // some hand-authored XR_DEFINE_BUILTIN signatures.
         type = parse_fn_type_str(X, s, base_len);
+    } else if (base_len >= 2 && s[0] == '(' &&
+               /* (p: T, ...) -> R — current-syntax function type literal.
+                * The helper peeks past the matching `)` for ` -> ` so a
+                * leading `(` without a trailing arrow falls through to the
+                * tuple branch (`(T, U, ...)`) below. */
+               ({
+                   bool _ha = false;
+                   size_t _ap = 0;
+                   (void) find_balanced_close_paren(s, base_len, &_ha, &_ap);
+                   _ha;
+               })) {
+        bool has_arrow = false;
+        size_t arrow_pos = 0;
+        size_t close_after = find_balanced_close_paren(s, base_len, &has_arrow, &arrow_pos);
+        (void) has_arrow; /* guaranteed true by the guard above */
+        // Synthesise the legacy `fn(...): R` shape and reuse
+        // parse_fn_type_str so all function-type parsing lives in one
+        // place. close_after - 1 is the index of `)`.
+        size_t close_paren = close_after - 1;
+        size_t ret_start = arrow_pos + 2;
+        while (ret_start < base_len && s[ret_start] == ' ')
+            ret_start++;
+
+        size_t params_len = close_paren - 1;
+        size_t ret_len = base_len - ret_start;
+        size_t synth_cap = 2 /*"fn"*/ + 1 /*"("*/ + params_len + 3 /*"): "*/ + ret_len + 1;
+        char *synth = xr_malloc(synth_cap);
+        if (synth) {
+            size_t off = 0;
+            synth[off++] = 'f';
+            synth[off++] = 'n';
+            synth[off++] = '(';
+            if (params_len > 0) {
+                memcpy(synth + off, s + 1, params_len);
+                off += params_len;
+            }
+            synth[off++] = ')';
+            synth[off++] = ':';
+            synth[off++] = ' ';
+            if (ret_len > 0) {
+                memcpy(synth + off, s + ret_start, ret_len);
+                off += ret_len;
+            }
+            synth[off] = '\0';
+            type = parse_fn_type_str(X, synth, off);
+            xr_free(synth);
+        } else {
+            type = xr_type_new_unknown(X);
+        }
     } else if (base_len >= 2 && ((s[0] == '[' && s[base_len - 1] == ']') ||
                                  (s[0] == '(' && s[base_len - 1] == ')'))) {
         // Tuple type — both `(T, U, ...)` (real Xray syntax) and
@@ -983,10 +1067,15 @@ static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len) {
             p += 3;
         }
 
-        // Find ':' at top depth within this slice.
+        // Find ':' at top depth within this slice. The `->` arrow token must
+        // be skipped so its `>` does not underflow depth.
         size_t colon = close;
         int d = 0;
         for (size_t c = p; c < close; c++) {
+            if (c + 1 < close && s[c] == '-' && s[c + 1] == '>') {
+                c++; /* skip the second char of "->" too */
+                continue;
+            }
             if (s[c] == '<' || s[c] == '(') {
                 d++;
             } else if (s[c] == '>' || s[c] == ')') {
@@ -1011,6 +1100,10 @@ static XrType *parse_fn_type_str(XrayIsolate *X, const char *s, size_t len) {
             size_t te = ts;
             d = 0;
             while (te < close) {
+                if (te + 1 < close && s[te] == '-' && s[te + 1] == '>') {
+                    te += 2;
+                    continue;
+                }
                 if (s[te] == '<' || s[te] == '(') {
                     d++;
                 } else if (s[te] == '>' || s[te] == ')') {
@@ -1121,10 +1214,15 @@ XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
             p += 3;
         }
 
-        // Find colon separator (track both <> and () depth for nested fn types)
+        // Find colon separator (track both <> and () depth for nested fn types).
+        // Skip the `->` arrow token so its `>` does not underflow depth.
         const char *colon = NULL;
         int depth = 0;
         for (const char *c = p; c < close; c++) {
+            if (c + 1 < close && c[0] == '-' && c[1] == '>') {
+                c++; /* loop increments again, skipping both bytes */
+                continue;
+            }
             if (*c == '<' || *c == '(')
                 depth++;
             else if (*c == '>' || *c == ')')
@@ -1149,10 +1247,19 @@ XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
             while (type_start < close && *type_start == ' ')
                 type_start++;
 
-            // Find end of type (next comma at depth 0 or close paren)
+            // Find end of type (next comma at depth 0 or close paren).
+            // The `->` arrow token must not be misread as `>` closing a
+            // generic — it would underflow depth and let inner commas
+            // leak past the type boundary (e.g. the comma after
+            // `(acc: U, item: T) -> U` separating the second `reduce`
+            // parameter).
             const char *type_end = type_start;
             depth = 0;
             while (type_end < close) {
+                if (type_end + 1 < close && type_end[0] == '-' && type_end[1] == '>') {
+                    type_end += 2;
+                    continue;
+                }
                 if (*type_end == '<' || *type_end == '(')
                     depth++;
                 else if (*type_end == '>' || *type_end == ')')
@@ -1201,18 +1308,32 @@ XrType *xa_builtin_parse_full_signature(XrayIsolate *X, const char *sig) {
     return fn_type;
 }
 
-// Parse return type from signature string like "(param: type): ReturnType"
-// Returns an XrType based on the return type portion after "): "
+// Parse return type from signature string. The supported separators are:
+//   "(param: type) -> ReturnType"      (current arrow syntax)
+//   "(param: type): ReturnType"        (legacy colon syntax, still present in
+//                                       some hand-authored builtin tables)
+// Returns an XrType based on the return type portion after the separator.
 XrType *xa_builtin_parse_return_type_from_sig(XrayIsolate *X, const char *sig) {
     if (!sig)
         return NULL;
 
-    // Find last "): " which marks the return type
+    // Find last separator. Both `): ` and `) -> ` are accepted; the rightmost
+    // occurrence wins so nested function-type return values
+    // (e.g. `(): fn(int): int` or `() -> (int) -> int`) parse correctly.
     const char *ret = NULL;
     const char *p = sig;
-    while ((p = strstr(p, "): ")) != NULL) {
-        ret = p + 3;  // skip "): "
-        p += 3;
+    while (*p) {
+        if (p[0] == ')' && p[1] == ' ' && p[2] == '-' && p[3] == '>' && p[4] == ' ') {
+            ret = p + 5;
+            p += 5;
+            continue;
+        }
+        if (p[0] == ')' && p[1] == ':' && p[2] == ' ') {
+            ret = p + 3;
+            p += 3;
+            continue;
+        }
+        p++;
     }
     if (!ret || *ret == '\0')
         return xr_type_new_unit(NULL);

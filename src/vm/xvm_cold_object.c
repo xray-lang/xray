@@ -799,6 +799,25 @@ XR_NOINLINE int vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMContext *vm_c
                       name ? name : "?");
     }
 
+    // Exception property access — `e.message` / `e.stack` / `e.cause` resolve
+    // through the registered native class's getter table, mirroring how
+    // DateTime/Logger/etc. expose getters via xr_register_native_type.
+    if (XR_IS_EXCEPTION(obj)) {
+        XrClass *cls = xr_get_native_type_class(isolate, XR_TEXCEPTION);
+        if (cls) {
+            XrMethod *method = xr_class_lookup_method(cls, prop_symbol);
+            if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+                base[a] = method->as.primitive(isolate, obj, NULL, 0);
+                return VM_COLD_BREAK;
+            }
+        }
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        const char *name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        VM_COLD_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
+                      "Exception has no '.%s' property, available: message, stack, cause",
+                      name ? name : "?");
+    }
+
     // Struct ref: getter/method lookup when field not found in layout
     if (XR_IS_STRUCT_REF(obj)) {
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);

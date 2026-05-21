@@ -281,6 +281,7 @@
     _(SELECT_END, FMT_NONE, KOP_NONE, "select end")                                                \
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
     _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Bytes(B args)")                                   \
+    _(NEWEXCEPTION, FMT_AB, KOP_AB_NEW_LIT, "R[A] = new Exception(B args)")                        \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
     _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \
     _(SLEEP, FMT_A, KOP_A_USE, "time.sleep(R[A]) ms")                                              \

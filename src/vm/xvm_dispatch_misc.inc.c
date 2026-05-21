@@ -145,6 +145,27 @@ vmcase(OP_BYTES_NEW) {
     vmbreak;
 }
 
+vmcase(OP_NEWEXCEPTION) {
+    /* R[A] = new Exception(R[A+1..A+B])
+     * A = result register
+     * B = argument count (0..2): message, cause
+     *
+     * XrException has its own GC type, so the generic
+     * "allocate XrInstance + invoke constructor" pipeline cannot serve
+     * `new Exception(...)`. The opcode hands the args straight to the
+     * native constructor primitive which allocates the right struct
+     * shape and surfaces the result as XR_TEXCEPTION.
+     */
+    int a = GETARG_A(i);
+    int nargs = GETARG_B(i);
+    if (nargs > 2) {
+        VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "new Exception(...) accepts at most 2 arguments");
+    }
+    R(a) = xr_exception_user_construct(isolate, xr_null(), &R(a + 1), nargs);
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
 /* === Scope structured concurrency instructions === */
 
 vmcase(OP_SCOPE_ENTER) {
