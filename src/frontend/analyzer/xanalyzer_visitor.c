@@ -874,7 +874,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
         }
         case AST_SELECT_CASE: {
             SelectCaseNode *sc = &node->as.select_case;
-            /* Recv cases introduce a variable: `msg from ch => ...`
+            /* Recv cases introduce a variable: `msg from ch -> ...`
              * Enter a block scope for the case body so `msg` is visible. */
             if (sc->var_name && !sc->is_send && !sc->is_default) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);

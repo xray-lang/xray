@@ -725,7 +725,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
 
-    // Parse return type (optional) — unified arrow `->` (task 082).
+    // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
@@ -1208,7 +1208,7 @@ AstNode *xr_parse_operator_method(Parser *parser, bool is_private, bool is_stati
         op_type_val = OPTYPE_UNARY;  // no params ! is unary logical not
     }
 
-    // Parse return type (optional) — unified arrow `->` (task 082).
+    // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
@@ -1316,7 +1316,7 @@ static AstNode *xr_parse_property_accessors(Parser *parser, const char *name, Xr
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
 
-        // Parse return type (optional) — unified arrow `->` (task 082).
+        // Parse return type (optional) — unified arrow `->`.
         XrTypeRef *return_type = NULL;
         if (xr_parser_match(parser, TK_ARROW)) {
             return_type = xr_parse_type_annotation(parser);
@@ -1603,7 +1603,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')'");
 
-    // Parse return type (optional) — unified arrow `->` (task 082).
+    // Parse return type (optional) — unified arrow `->`.
     XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);

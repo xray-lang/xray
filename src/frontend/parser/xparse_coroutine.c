@@ -303,7 +303,7 @@ AstNode *xr_parse_defer_statement(Parser *parser) {
 
 /*
  * Parse select statement
- * select { msg from ch => ..., to ch => ..., _ => ... }
+ * select { msg from ch -> ..., value to ch -> ..., _ -> ... }
  */
 AstNode *xr_parse_select_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_select_statement: NULL parser");
@@ -325,11 +325,11 @@ AstNode *xr_parse_select_statement(Parser *parser) {
         AstNode *case_node = NULL;
         int case_line = parser->current.line;
 
-        // Check if default case (_ => ...)
+        // Check if wildcard fallback case (_ -> ...)
         if (xr_parser_match(parser, TK_UNDERSCORE)) {
-            // default case
+            // Wildcard fallback case
             if (!xr_parser_match(parser, TK_ARROW)) {
-                xr_parser_error(parser, "expected '=>' after _");
+                xr_parser_error(parser, "expected '->' after _");
                 return NULL;
             }
 
@@ -345,7 +345,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                                            case_line);
         } else {
             // Parse expression, then check if from or to
-            // var from ch => ... (recv) or val to ch => ... (send)
+            // var from ch -> ... (recv) or val to ch -> ... (send)
             AstNode *first_expr = xr_parse_precedence(parser, PREC_CALL);
             if (!first_expr) {
                 xr_parser_error(parser, "expected select case expression");
@@ -353,7 +353,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
             }
 
             if (xr_parser_check_name(parser, "from")) {
-                // recv case: var from ch => ...
+                // recv case: var from ch -> ...
                 xr_parser_advance(parser);  // Consume 'from'
 
                 // first_expr should be variable name
@@ -370,9 +370,9 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     return NULL;
                 }
 
-                // Expect '=>'
+                // Expect '->'
                 if (!xr_parser_match(parser, TK_ARROW)) {
-                    xr_parser_error(parser, "expected '=>' after channel");
+                    xr_parser_error(parser, "expected '->' after channel");
                     return NULL;
                 }
 
@@ -388,7 +388,7 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                                                false, false, case_line);
 
             } else if (xr_parser_check_name(parser, "to")) {
-                // send case: val to ch => ...
+                // send case: val to ch -> ...
                 xr_parser_advance(parser);  // Consume 'to'
 
                 AstNode *value = first_expr;  // Value to send
@@ -400,9 +400,9 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     return NULL;
                 }
 
-                // Expect '=>'
+                // Expect '->'
                 if (!xr_parser_match(parser, TK_ARROW)) {
-                    xr_parser_error(parser, "expected '=>' after channel");
+                    xr_parser_error(parser, "expected '->' after channel");
                     return NULL;
                 }
 
@@ -418,20 +418,20 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                                                false, case_line);
 
             } else if (xr_parser_check(parser, TK_ARROW)) {
-                // Check if after case: after ms => ...
+                // Check if after case: after ms -> ...
                 if (first_expr->type == AST_VARIABLE &&
                     strcmp(first_expr->as.variable.name, "after") == 0) {
                     xr_parser_error(parser,
-                                    "after requires timeout expression, format: after 1000 => ...");
+                                    "after requires timeout expression, format: after 1000 -> ...");
                     return NULL;
                 }
-                // Possibly after ms => ... form, first_expr is number
+                // Possibly after ms -> ... form, first_expr is number
                 xr_parser_error(parser, "expected 'from' or 'to' in select case");
                 return NULL;
 
             } else if (first_expr->type == AST_VARIABLE &&
                        strcmp(first_expr->as.variable.name, "after") == 0) {
-                // after case: after ms => ...
+                // after case: after ms -> ...
                 // Parse timeout expression (milliseconds)
                 AstNode *timeout_expr = xr_parse_precedence(parser, PREC_CALL);
                 if (!timeout_expr) {
@@ -439,9 +439,9 @@ AstNode *xr_parse_select_statement(Parser *parser) {
                     return NULL;
                 }
 
-                // Expect '=>'
+                // Expect '->'
                 if (!xr_parser_match(parser, TK_ARROW)) {
-                    xr_parser_error(parser, "expected '=>' after timeout expression");
+                    xr_parser_error(parser, "expected '->' after timeout expression");
                     return NULL;
                 }
 

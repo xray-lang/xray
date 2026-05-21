@@ -1380,16 +1380,15 @@ XR_DEFINE_BUILTIN(http_request, "request",
                   "Generic HTTP request")
 XR_DEFINE_BUILTIN(http_url_encode, "urlEncode", "(s: string): string", "URL-encode a string")
 XR_DEFINE_BUILTIN(http_url_decode, "urlDecode", "(s: string): string", "URL-decode a string")
-XR_DEFINE_BUILTIN(http_route, "route", "(method: string, path: string, handler: fn)",
+XR_DEFINE_BUILTIN(http_route, "route", "(method: string, path: string, handler: fn): ()",
                   "Register a route handler")
-XR_DEFINE_BUILTIN(http_static, "static", "(prefix: string, dir: string)",
+XR_DEFINE_BUILTIN(http_static, "static", "(prefix: string, dir: string): ()",
                   "Serve static files from directory")
-XR_DEFINE_BUILTIN(http_stop_server, "stopServer", "()", "Stop the HTTP server")
-XR_DEFINE_BUILTIN(http_parse_request_fast, "parseRequest", "(data: string): HttpRequest?",
+XR_DEFINE_BUILTIN(http_stop_server, "stopServer", "(): ()", "Stop the HTTP server")
+XR_DEFINE_BUILTIN(http_parse_request_fast, "parseRequest", "(fd: int): Array<unknown>?",
                   "Parse raw HTTP request data")
 XR_DEFINE_BUILTIN(http_send_response_fast, "sendResponse",
-                  "(fd: int, status: int, headers: Json, body: string): int",
-                  "Send HTTP response on fd")
+                  "(fd: int, body: string, status?: int): bool", "Send HTTP response on fd")
 XR_DEFINE_BUILTIN(http_download, "download",
                   "(url: string, path: string, options?: Json): DownloadResult",
                   "Download file from URL")
@@ -1397,15 +1396,15 @@ XR_DEFINE_BUILTIN(http_get_content_length, "getContentLength", "(url: string): i
                   "Get content length of URL")
 XR_DEFINE_BUILTIN(http_form_data_new, "formDataNew", "(): Json", "Create new multipart form data")
 XR_DEFINE_BUILTIN(http_form_data_append, "formDataAppend",
-                  "(form: Json, name: string, value: string)", "Append field to form data")
+                  "(form: Json, name: string, value: string): ()", "Append field to form data")
 XR_DEFINE_BUILTIN(http_form_data_append_file, "formDataAppendFile",
-                  "(form: Json, name: string, path: string, filename?: string)",
+                  "(form: Json, name: string, path: string, filename?: string): ()",
                   "Append file to form data")
 XR_DEFINE_BUILTIN(http_form_data_post, "formDataPost",
                   "(url: string, form: Json, options?: Json): HttpResponse",
                   "POST multipart form data")
-XR_DEFINE_BUILTIN(http_set_proxy, "setProxy", "(url: string)", "Set HTTP proxy")
-XR_DEFINE_BUILTIN(http_clear_proxy, "clearProxy", "()", "Clear HTTP proxy")
+XR_DEFINE_BUILTIN(http_set_proxy, "setProxy", "(url: string): ()", "Set HTTP proxy")
+XR_DEFINE_BUILTIN(http_clear_proxy, "clearProxy", "(): ()", "Clear HTTP proxy")
 XR_DEFINE_BUILTIN(h2_get, "h2Get", "(url: string, options?: Json): HttpResponse",
                   "HTTP/2 GET request")
 XR_DEFINE_BUILTIN(h2_post, "h2Post", "(url: string, body?: string, options?: Json): HttpResponse",

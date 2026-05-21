@@ -1114,20 +1114,20 @@ static XrNativeBodyDesc g_logger_body_desc = {
 
 // @module log
 
-XR_DEFINE_BUILTIN(xr_log_debug, "debug", "(...args: unknown)", "Log debug message")
-XR_DEFINE_BUILTIN(xr_log_info, "info", "(...args: unknown)", "Log info message")
-XR_DEFINE_BUILTIN(xr_log_warn, "warn", "(...args: unknown)", "Log warning message")
-XR_DEFINE_BUILTIN(xr_log_error, "error", "(...args: unknown)", "Log error message")
-XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: unknown)", "Log fatal message")
-XR_DEFINE_BUILTIN(xr_log_set_level, "setLevel", "(level: int)", "Set log level")
-XR_DEFINE_BUILTIN(xr_log_set_format, "setFormat", "(format: string)", "Set log format")
-XR_DEFINE_BUILTIN(xr_log_set_output, "setOutput", "(path: string)", "Set log output file")
+XR_DEFINE_BUILTIN(xr_log_debug, "debug", "(...args: unknown): ()", "Log debug message")
+XR_DEFINE_BUILTIN(xr_log_info, "info", "(...args: unknown): ()", "Log info message")
+XR_DEFINE_BUILTIN(xr_log_warn, "warn", "(...args: unknown): ()", "Log warning message")
+XR_DEFINE_BUILTIN(xr_log_error, "error", "(...args: unknown): ()", "Log error message")
+XR_DEFINE_BUILTIN(xr_log_fatal, "fatal", "(...args: unknown): ()", "Log fatal message")
+XR_DEFINE_BUILTIN(xr_log_set_level, "setLevel", "(level: int): ()", "Set log level")
+XR_DEFINE_BUILTIN(xr_log_set_format, "setFormat", "(format: string): ()", "Set log format")
+XR_DEFINE_BUILTIN(xr_log_set_output, "setOutput", "(path: string): ()", "Set log output file")
 XR_DEFINE_BUILTIN(xr_log_is_enabled, "isEnabled", "(level: int): bool",
                   "Check if log level enabled")
-XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool)",
+XR_DEFINE_BUILTIN(xr_log_enable_source, "enableSource", "(enabled: bool): ()",
                   "Enable source location in logs")
-XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool)", "Enable async logging")
-XR_DEFINE_BUILTIN(xr_log_flush, "flush", "()", "Flush log buffer")
+XR_DEFINE_BUILTIN(xr_log_enable_async, "enableAsync", "(enabled: bool): ()", "Enable async logging")
+XR_DEFINE_BUILTIN(xr_log_flush, "flush", "(): ()", "Flush log buffer")
 XR_DEFINE_BUILTIN(xr_log_child, "child", "(...fields: unknown): Logger", "Create child logger")
 
 /* Class registration is invoked unconditionally during isolate init by

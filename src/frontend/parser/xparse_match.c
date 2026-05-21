@@ -158,7 +158,7 @@ static AstNode *parse_pattern_single(Parser *parser) {
 
 /* Top-level match-arm pattern: parse one atom, then optionally fold
  * in further atoms separated by `,` into an alternation pattern up
- * to the `=>`. This is the only place where a top-level comma starts
+ * to the `->`. This is the only place where a top-level comma starts
  * an alternation; tuple sub-elements use parse_pattern_single. */
 static AstNode *parse_pattern(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_pattern: NULL parser");
@@ -171,7 +171,7 @@ static AstNode *parse_pattern(Parser *parser) {
     if (!xr_parser_check(parser, TK_COMMA))
         return first;
 
-    /* Alternation: `p1, p2, p3 => ...` — gather until the arrow.
+    /* Alternation: `p1, p2, p3 -> ...` — gather until the arrow.
      * The first atom may itself be a tuple/range/wildcard pattern. */
     AstNode **patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), 16);
     int count = 0;
@@ -203,9 +203,9 @@ static AstNode *parse_pattern(Parser *parser) {
 
 /*
  * Parse match arm
- * pattern => expression
- * pattern if guard => expression
- * pattern => { block }
+ * pattern -> expression
+ * pattern if guard -> expression
+ * pattern -> { block }
  */
 static AstNode *parse_match_arm(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_match_arm: NULL parser");
@@ -235,7 +235,7 @@ static AstNode *parse_match_arm(Parser *parser) {
     }
 
     // Consume arrow
-    xr_parser_consume(parser, TK_ARROW, "expected '=>' after pattern");
+    xr_parser_consume(parser, TK_ARROW, "expected '->' after pattern");
 
     // Parse arm body
     AstNode *body = NULL;
@@ -258,9 +258,9 @@ static AstNode *parse_match_arm(Parser *parser) {
 /*
  * Parse match expression (prefix)
  * match (x) {
- *     1 => "one",
- *     2 => "two",
- *     _ => "other"
+ *     1 -> "one",
+ *     2 -> "two",
+ *     _ -> "other"
  * }
  */
 AstNode *xr_parse_match_expr(Parser *parser) {
@@ -269,7 +269,7 @@ AstNode *xr_parse_match_expr(Parser *parser) {
 
     // Scrutinee must be parenthesised, mirroring `if (...)`, `for (...)`,
     // `while (...)`. Required parens also disambiguate tuple scrutinees
-    // (`match (x, y) { (a, b) => ... }`) from a sequence of bare names.
+    // (`match (x, y) { (a, b) -> ... }`) from a sequence of bare names.
     xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'match'");
 
     AstNode *expr = xr_parse_expression(parser);

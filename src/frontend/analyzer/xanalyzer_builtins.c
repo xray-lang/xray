@@ -494,16 +494,16 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
     {"deadlocks", "(): Array<Json>", "Detect deadlocked coroutines", true, true},
     {"top", "(n: int, metric?: string): Array<Json>", "Top N coroutines by metric", true, true},
     {"groupBy", "(field: string): Json", "Group coroutines by field", true, true},
-    {"setLocal", "(key: string, value: Json): void", "Set coroutine-local storage", true, true},
+    {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true},
     {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true},
-    {"setPriority", "(task: Json, priority: int): void", "Set coroutine priority", true, true},
-    {"lockThread", "(): void", "Lock current thread", true, true},
-    {"unlockThread", "(): void", "Unlock current thread", true, true},
-    {"dump", "(limit?: int): void", "Dump coroutine state", true, true},
+    {"setPriority", "(task: Json, priority: int): ()", "Set coroutine priority", true, true},
+    {"lockThread", "(): ()", "Lock current thread", true, true},
+    {"unlockThread", "(): ()", "Unlock current thread", true, true},
+    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true},
     {"stalled", "(timeout_ms?: int): Array<Json>", "Detect stalled coroutines", true, true},
     {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true},
     {"monitor", "(name: string): Channel", "Monitor named coroutine, returns Channel", true, true},
-    {"demonitor", "(ch: Channel): void", "Cancel coroutine monitor", true, true},
+    {"demonitor", "(ch: Channel): ()", "Cancel coroutine monitor", true, true},
     {"self", "(): string?", "Get current coroutine name", true, true},
     {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true},
 };
@@ -511,7 +511,7 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
     {"submit", "(fn: function): Json", "Submit task to pool", true, false},
-    {"close", "(): void", "Close the pool", true, false},
+    {"close", "(): ()", "Close the pool", true, false},
 };
 #define RT_COROPOOL_FUNCTION_COUNT 2
 
@@ -530,17 +530,17 @@ static const XaBuiltinMember g_rt_reflect_functions[] = {
 #define RT_REFLECT_FUNCTION_COUNT 10
 
 static const XaBuiltinMember g_rt_cluster_functions[] = {
-    {"start", "(config: Json): void", "Start cluster node", true, true},
+    {"start", "(config: Json): ()", "Start cluster node", true, true},
     {"join", "(host: string, port: int): bool", "Join cluster", true, true},
     {"self", "(): string", "Get own node name", true, true},
     {"nodes", "(): Array<string>", "List cluster nodes", true, true},
     {"channel", "(name: string): Channel", "Get distributed channel", true, true},
-    {"serve", "(name: string, handler: fn): void", "Register service handler", true, true},
+    {"serve", "(name: string, handler: fn): ()", "Register service handler", true, true},
     {"call", "(node: string, service: string, data: Json): Json", "Call remote service", true,
      true},
-    {"reply", "(req: Json, result: Json): void", "Reply to service request", true, true},
+    {"reply", "(req: Json, result: Json): ()", "Reply to service request", true, true},
     {"monitor", "(node: string): Channel", "Monitor node health", true, true},
-    {"stop", "(): void", "Stop cluster node", true, true},
+    {"stop", "(): ()", "Stop cluster node", true, true},
 };
 #define RT_CLUSTER_FUNCTION_COUNT 10
 

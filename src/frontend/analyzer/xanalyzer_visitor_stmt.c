@@ -485,7 +485,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
     // Collect return type for function inference
     xa_infer_add_return_type(ctx, return_type);
 
-    // Check against expected return type (strict: void and concrete types enforced)
+    // Check against expected return type (strict: Unit and concrete types enforced)
     if (ctx->expected_return_type && !XR_TYPE_IS_UNKNOWN(ctx->expected_return_type)) {
         if (!xa_typecheck_assignable(ctx->expected_return_type, return_type)) {
             // Json→primitive/union: allowed with runtime type check (OP_CHECKTYPE)
