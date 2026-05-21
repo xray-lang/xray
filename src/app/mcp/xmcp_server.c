@@ -389,7 +389,6 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
         xmcp_knowledge_load(s->knowledge);
     }
 
-    s->current_progress_token = -1;
     XmcpRegistryOptions registry_options;
     xmcp_registry_options_default(&registry_options);
     registry_options.enable_runner = options->enable_runner;
