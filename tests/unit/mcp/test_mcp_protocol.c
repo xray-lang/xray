@@ -107,6 +107,12 @@ static void test_server_load_knowledge(XmcpServer *server) {
     xmcp_knowledge_load(server->knowledge);
 }
 
+static const char *tool_result_text(XrJsonValue *result) {
+    XrJsonValue *content = xjson_get_array(result, "content");
+    XrJsonValue *item = xjson_array_get(content, 0);
+    return xjson_get_string(item, "text");
+}
+
 /* =========================================================================
  * Protocol error codes
  * ========================================================================= */
@@ -539,6 +545,55 @@ TEST(tools_call_missing_name) {
     XrJsonValue *result = xmcp_handle_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == true);
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_rejects_non_object_arguments) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    XJSON_SET_STRING(params, "arguments", "not-an-object");
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+    ASSERT_STR_EQ(tool_result_text(result), "Error: tool 'arguments' must be an object");
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_validates_required_arguments) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    xjson_object_set(params, "arguments", xjson_new_object());
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+    ASSERT_STR_EQ(tool_result_text(result), "Error: missing required parameter 'code'");
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_validates_argument_types) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let x = 1\n");
+    XJSON_SET_STRING(args, "indentSize", "two");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+    ASSERT_STR_EQ(tool_result_text(result),
+                  "Error: invalid type for parameter 'indentSize': expected integer, got string");
 
     xjson_free(params);
     xjson_free(result);
@@ -1358,6 +1413,9 @@ int main(void) {
     RUN_TEST(tools_list_default_tools_have_output_schema);
     RUN_TEST(tools_call_unknown_tool);
     RUN_TEST(tools_call_missing_name);
+    RUN_TEST(tools_call_rejects_non_object_arguments);
+    RUN_TEST(tools_call_validates_required_arguments);
+    RUN_TEST(tools_call_validates_argument_types);
 
     /* Format tool */
     RUN_TEST(tools_call_format_missing_code);
