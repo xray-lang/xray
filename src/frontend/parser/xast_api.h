@@ -244,10 +244,13 @@ XR_FUNC AstNode *xr_ast_enum_convert(XrayIsolate *X, const char *enum_name, AstN
 XR_FUNC AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection, AstNode *index_expr,
                                    int line);
 
-// Create try-catch-finally statement node
-XR_FUNC AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, const char *catch_var,
-                                  int catch_var_line, int catch_var_column, AstNode *catch_body,
-                                  AstNode *finally_body, int line);
+// Allocate a catch clause (caller fills body afterwards if needed)
+XR_FUNC XrCatchClause *xr_ast_catch_clause(XrayIsolate *X, const char *var_name, int var_line,
+                                           int var_column, XrTypeRef *type, AstNode *body);
+
+// Create try-catch-finally statement node (multi-catch)
+XR_FUNC AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, XrCatchClause **clauses,
+                                  int catch_count, AstNode *finally_body, int line);
 
 // Create throw statement node
 XR_FUNC AstNode *xr_ast_throw_stmt(XrayIsolate *X, AstNode *expression, int line);

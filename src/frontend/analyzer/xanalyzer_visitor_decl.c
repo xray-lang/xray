@@ -104,7 +104,11 @@ static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***t
             break;
         case AST_TRY_CATCH:
             collect_return_types(ctx, node->as.try_catch.try_body, types, count, cap);
-            collect_return_types(ctx, node->as.try_catch.catch_body, types, count, cap);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    collect_return_types(ctx, cc->body, types, count, cap);
+            }
             // finally return is NOT collected: a return inside finally overrides the
             // try/catch return value entirely, so it must not be unioned with them.
             break;
@@ -782,6 +786,8 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         XrType **param_types = NULL;
         if (im->param_count > 0) {
             param_types = xr_malloc(sizeof(XrType *) * im->param_count);
+            if (!param_types)
+                continue;
             for (int j = 0; j < im->param_count; j++) {
                 param_types[j] =
                     im->param_types && im->param_types[j]
@@ -834,7 +840,7 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
             continue;
 
         // Built-in interfaces have no XrClassInfo* attached; skip them.
-        if (xa_get_builtin_interface_by_name(iface_name))
+        if (xa_is_builtin_interface_name(iface_name))
             continue;
 
         XaSymbol *iface_sym = xa_scope_lookup(ctx->analyzer->current_scope, iface_name);
@@ -930,6 +936,7 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->class_info = info;
     links->type = xr_type_new_class(ctx->analyzer->isolate, cls->name);
+    links->type->instance.class_ref = info;
     if (node->type == AST_STRUCT_DECL) {
         links->type->is_value_type = true;
     }
@@ -939,12 +946,16 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     // arguments structurally instead of falling back to bare-name matches.
     if (cls->interface_count > 0 && cls->interfaces) {
         info->interface_types = xr_malloc(sizeof(XrType *) * cls->interface_count);
+        if (!info->interface_types)
+            goto skip_interfaces;
         info->interface_count = cls->interface_count;
         for (int i = 0; i < cls->interface_count; i++) {
             info->interface_types[i] =
                 xr_tref_resolve_in_analyzer(ctx->analyzer, cls->interfaces[i]);
         }
     }
+
+skip_interfaces:
 
     // Store generic type parameters and intersection-style constraint lists.
     if (cls->type_param_count > 0 && cls->type_params) {
@@ -1224,7 +1235,13 @@ skip_layout:
             if (md->param_count > 0) {
                 param_types = xr_malloc(sizeof(XrType *) * md->param_count);
                 param_names = xr_malloc(sizeof(char *) * md->param_count);
-                for (int j = 0; j < md->param_count; j++) {
+                if (!param_types || !param_names) {
+                    xr_free(param_types);
+                    xr_free(param_names);
+                    param_types = NULL;
+                    param_names = NULL;
+                }
+                for (int j = 0; param_types && j < md->param_count; j++) {
                     param_types[j] =
                         (md->param_types && md->param_types[j])
                             ? xr_tref_resolve(ctx->analyzer->isolate, md->param_types[j])

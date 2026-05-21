@@ -235,6 +235,47 @@ static void ea_check_move_args(EaContext *ctx, AstNode **args, int arg_count) {
 }
 
 /*
+ * Check go call arguments for shared let variables passed without 'move'.
+ * Per the explicit-sharing model, shared let must use move to transfer
+ * ownership across the coroutine boundary.
+ */
+static void ea_check_go_shared_let_args(EaContext *ctx, AstNode **args, int arg_count) {
+    for (int i = 0; i < arg_count; i++) {
+        AstNode *arg = args[i];
+        if (!arg)
+            continue;
+        // Already using move — skip (handled by ea_check_move_args)
+        if (arg->type == AST_MOVE_EXPR)
+            continue;
+        // Only check plain variable references
+        if (arg->type != AST_VARIABLE)
+            continue;
+        const char *name = arg->as.variable.name;
+        // Look up in ALL scopes (shared let may be in an outer scope)
+        AstNode *decl = NULL;
+        for (int d = ctx->depth; d >= 0; d--) {
+            EaScope *scope = &ctx->scopes[d];
+            for (int j = scope->count - 1; j >= 0; j--) {
+                if (scope->vars[j].name && strcmp(scope->vars[j].name, name) == 0) {
+                    decl = scope->vars[j].decl_node;
+                    goto found;
+                }
+            }
+        }
+    found:
+        if (!decl || decl->type != AST_VAR_DECL)
+            continue;
+        VarDeclNode *vd = &decl->as.var_decl;
+        if (vd->storage_mode == XR_STORAGE_SHARED && !vd->is_const) {
+            ea_emit_error(ctx, arg, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
+                          "'shared let' variable '%s' must use 'move' when passed to go\n"
+                          "hint: go fn(...)(move %s)",
+                          name);
+        }
+    }
+}
+
+/*
  * Check if a call expression is ch.send(move var) pattern.
  * Pattern: callee is MemberAccess with name "send", and object is a variable.
  */
@@ -290,6 +331,7 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             if (expr && expr->type == AST_CALL_EXPR) {
                 CallExprNode *call = &expr->as.call_expr;
                 ea_check_move_args(ctx, call->arguments, call->arg_count);
+                ea_check_go_shared_let_args(ctx, call->arguments, call->arg_count);
 
                 AstNode *callee = call->callee;
                 if (callee && callee->type == AST_FUNCTION_EXPR) {
@@ -373,10 +415,13 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
         case AST_TRY_CATCH:
             ea_walk(ctx, node->as.try_catch.try_body);
-            if (node->as.try_catch.catch_body) {
-                ea_push_scope(ctx);
-                ea_walk(ctx, node->as.try_catch.catch_body);
-                ea_pop_scope(ctx);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc && cc->body) {
+                    ea_push_scope(ctx);
+                    ea_walk(ctx, cc->body);
+                    ea_pop_scope(ctx);
+                }
             }
             ea_walk(ctx, node->as.try_catch.finally_body);
             break;

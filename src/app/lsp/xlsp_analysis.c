@@ -11,6 +11,7 @@
 #include "xlsp_analysis.h"
 #include "xlsp_ast_utils.h"
 #include "xlsp_cache.h"
+#include "../../base/xfileio.h"
 #include "../../base/xjson.h"
 #include "xlsp_workspace.h"
 #include "xlsp_utils.h"
@@ -90,7 +91,6 @@ static const XlspDocEntry builtin_docs[] = {
     {"float", "```xray\nfloat(value): float\n```\n\nConverts value to float."},
     {"string", "```xray\nstring(value): string\n```\n\nConverts value to string."},
     {"input", "```xray\ninput(prompt?): string\n```\n\nReads a line from stdin."},
-    {"sleep", "```xray\nsleep(ms)\n```\n\nPauses execution for milliseconds."},
     {NULL, NULL}};
 
 static const char *lookup_doc(const XlspDocEntry *table, const char *name) {
@@ -258,25 +258,11 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         }
 
         // Document not open - read from disk
-        FILE *f = fopen(full_path, "r");
-        if (!f) {
+        char *content = xr_file_read_all(full_path, "r", NULL);
+        if (!content) {
             lsp_log("import: cannot open %s", full_path);
             continue;
         }
-
-        fseek(f, 0, SEEK_END);
-        long size = ftell(f);
-        fseek(f, 0, SEEK_SET);
-
-        char *content = xr_malloc(size + 1);
-        if (!content) {
-            fclose(f);
-            continue;
-        }
-
-        size_t read_size = fread(content, 1, size, f);
-        content[read_size] = '\0';
-        fclose(f);
 
         lsp_log("import: indexing from disk %s", full_path);
 

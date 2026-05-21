@@ -44,7 +44,7 @@ fn test_large_integers() {
     
     // Large integers within int64 range are parsed as int64
     let large = Json.parse("9007199254740992")
-    assert_eq(typeof(large), Type.int)
+    assert_eq(typeof(large), "int")
     assert_eq(large, 9007199254740992)
 }
 
@@ -143,7 +143,7 @@ fn test_very_large_floats() {
 fn test_max_precision_integers() {
     // Full 64-bit int range (Tagged Union)
     let n = Json.parse("72057594037927935")
-    assert_eq(typeof(n), Type.int)
+    assert_eq(typeof(n), "int")
     assert_eq(n, 72057594037927935)
 }
 
@@ -169,7 +169,7 @@ fn test_trailing_zeros() {
 fn test_nines_pattern() {
     // Large integer nines pattern: beyond 48-bit, parsed as float
     let n1 = Json.parse("9999999999999999999")
-    assert_eq(typeof(n1), Type.float)
+    assert_eq(typeof(n1), "float")
     assert_eq(n1 > 9e18, true)
     // Float nines patterns
     let n2 = Json.parse("999999999999999999.9")

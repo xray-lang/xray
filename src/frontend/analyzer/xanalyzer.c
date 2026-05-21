@@ -137,12 +137,9 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     fn_weakset->function.min_params = 0;
     register_builtin_func(analyzer, "WeakSet", fn_weakset);
 
-    // typeof: fn(any) -> int (returns XrTypeId)
-    XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
+    // typeof: fn(any) -> string (returns runtime type name)
+    XrType *fn_typeof = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
     register_builtin_func(analyzer, "typeof", fn_typeof);
-    // typename: fn(any) -> string
-    XrType *fn_typename = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
-    register_builtin_func(analyzer, "typename", fn_typename);
     // chr: fn(int) -> string
     XrType *fn_chr = xr_type_new_function(analyzer->isolate, &t_int, 1, t_string, false);
     register_builtin_func(analyzer, "chr", fn_chr);
@@ -152,17 +149,10 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // dump: fn(any, ...) -> void
     XrType *fn_dump = xr_type_new_function(analyzer->isolate, &p_any, 1, t_void, true);
     register_builtin_func(analyzer, "dump", fn_dump);
-    // print/println: fn(...any) -> void
+    // print: fn(...any) -> void
     XrType *fn_print = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
     fn_print->function.min_params = 0;
     register_builtin_func(analyzer, "print", fn_print);
-    register_builtin_func(analyzer, "println", fn_print);
-    // sleep: fn(int) -> void (milliseconds)
-    XrType *fn_sleep = xr_type_new_function(analyzer->isolate, &t_int, 1, t_void, false);
-    register_builtin_func(analyzer, "sleep", fn_sleep);
-    // spawn: fn(fn) -> any (returns coroutine task)
-    XrType *fn_spawn = xr_type_new_function(analyzer->isolate, &p_any, 1, p_any, true);
-    register_builtin_func(analyzer, "spawn", fn_spawn);
 
     // Modules/namespaces (XA_SYM_MODULE enables member signature lookup)
     register_builtin_module(analyzer, "Json");
@@ -170,7 +160,6 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_module(analyzer, "CoroPool");
     register_builtin_module(analyzer, "Channel");
     register_builtin_module(analyzer, "Reflect");
-    register_builtin_module(analyzer, "Type");
 
     // Runtime global variables (set by xray_isolate_set_script_info)
     register_builtin_var(analyzer, "process", p_any, true);

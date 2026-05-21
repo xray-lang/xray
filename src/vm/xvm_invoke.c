@@ -44,6 +44,7 @@
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
+#include "../runtime/class/xenum.h"
 
 /* ========== Dispatch: OP_INVOKE Channel Methods ========== */
 
@@ -480,6 +481,112 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, 
                 return XR_DISP_NEXT;
             }
         }
+    }
+
+    return XR_DISP_FALLTHROUGH;
+}
+
+/* ========== Dispatch: OP_INVOKE ADT Instance Methods ========== */
+
+/*
+ * Handles method calls on ADT enum instances (e.g. Result.Ok(v).isOk()).
+ * ADT instances have builtin_kind == XR_BK_ADT_ENUM with layout:
+ *   fields[0] = XrEnumValue* (variant tag)
+ *   fields[1] = payload (single-payload variants)
+ *
+ * Result-specific methods: isOk, isErr, unwrapOr, unwrap, map, toString.
+ * General ADT methods: name, toString.
+ */
+XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue receiver,
+                                                int method_symbol, int nargs, XrValue *base, int a,
+                                                XrBcCallFrame *frame, XrInstruction *pc) {
+    XR_DCHECK(isolate != NULL, "vm_invoke_adt_instance: NULL isolate");
+    if (!XR_IS_PTR(receiver))
+        return XR_DISP_FALLTHROUGH;
+
+    XrInstance *inst = xr_value_to_instance(receiver);
+    if (!inst || !inst->klass)
+        return XR_DISP_FALLTHROUGH;
+
+    /* Extract variant tag from fields[0] */
+    XrValue tag_val = inst->fields[0];
+    if (!XR_IS_PTR(tag_val))
+        return XR_DISP_FALLTHROUGH;
+    XrEnumValue *variant = (XrEnumValue *) XR_TO_PTR(tag_val);
+    if (!variant || !variant->parent_type)
+        return XR_DISP_FALLTHROUGH;
+
+    XrEnumType *enum_type = variant->parent_type;
+    uint32_t tag_index = variant->member_index;
+
+    /* General ADT methods */
+    if (nargs == 0 && method_symbol == SYMBOL_NAME) {
+        size_t len = strlen(variant->member_name);
+        XrString *str = xr_string_intern(isolate, variant->member_name, len, 0);
+        base[a] = xr_string_value(str);
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 0 && method_symbol == SYMBOL_TOSTRING) {
+        XrString *str = xr_value_to_string(isolate, receiver);
+        base[a] = xr_string_value(str);
+        return XR_DISP_NEXT;
+    }
+
+    /* Result-specific methods (Ok = index 0, Err = index 1) */
+    bool is_result = (enum_type->member_count == 2 && enum_type->is_adt &&
+                      strcmp(enum_type->name, "Result") == 0);
+    if (!is_result)
+        return XR_DISP_FALLTHROUGH;
+
+    bool is_ok = (tag_index == 0);
+    XrValue payload = inst->fields[1];
+
+    if (nargs == 0 && method_symbol == SYMBOL_IS_OK) {
+        base[a] = xr_bool(is_ok);
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 0 && method_symbol == SYMBOL_IS_ERR) {
+        base[a] = xr_bool(!is_ok);
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 1 && method_symbol == SYMBOL_UNWRAP_OR) {
+        base[a] = is_ok ? payload : base[a + 2];
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 0 && method_symbol == SYMBOL_UNWRAP) {
+        if (is_ok) {
+            base[a] = payload;
+            return XR_DISP_NEXT;
+        }
+        /* Err variant: throw the error payload as exception */
+        VM_THROW(frame, pc, XR_ERR_NULL_UNWRAP, "called unwrap() on Result.Err");
+    }
+    if (nargs == 1 && method_symbol == SYMBOL_MAP) {
+        if (!is_ok) {
+            /* Err variant: return self unchanged */
+            base[a] = receiver;
+            return XR_DISP_NEXT;
+        }
+        /* Ok variant: call fn(payload), wrap result in Ok */
+        XrValue fn_val = base[a + 2];
+        if (!xr_value_is_closure(fn_val)) {
+            VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "Result.map() argument must be a function");
+        }
+        XrClosure *fn = xr_value_to_closure(fn_val);
+        XrValue call_args[1] = {payload};
+        XrValue mapped = xr_vm_call_closure(isolate, fn, call_args, 1);
+        /* Check for exception from the mapped closure */
+        XrVMContext *ctx = xr_vm_current_ctx(isolate);
+        if (!XR_IS_NULL(ctx->current_exception)) {
+            return XR_DISP_RAISE;
+        }
+        /* Construct new Ok(mapped) */
+        XrInstance *ok_inst = xr_enum_adt_construct(isolate, enum_type, 0, &mapped, 1);
+        if (!ok_inst) {
+            VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "Result.map: failed to construct Ok variant");
+        }
+        base[a] = XR_FROM_PTR(ok_inst);
+        return XR_DISP_NEXT;
     }
 
     return XR_DISP_FALLTHROUGH;

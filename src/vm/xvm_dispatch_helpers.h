@@ -144,6 +144,9 @@ XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrayIsolate *isolate, XrValue rec
 XR_FUNC XrDispatchAction vm_invoke_enum(XrayIsolate *isolate, XrValue receiver, int method_symbol,
                                         int nargs, XrValue *base, int a, XrBcCallFrame *frame,
                                         XrInstruction *pc);
+XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue receiver,
+                                                int method_symbol, int nargs, XrValue *base, int a,
+                                                XrBcCallFrame *frame, XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                          XrValue receiver, int method_symbol, int nargs,
                                          XrValue *base, int a, XrBcCallFrame *frame,

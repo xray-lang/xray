@@ -76,7 +76,7 @@ fn test_array_map_return_type() {
         return x * 2
     })
     // doubled should be Array<int>
-    assert_eq(typeof(doubled), Type.Array)
+    assert_eq(typeof(doubled), "Array")
     assert_eq(doubled[0], 2)
 }
 
@@ -87,7 +87,7 @@ fn test_array_filter_return_type() {
         return s.length > 5
     })
     // filtered should be Array<string>
-    assert_eq(typeof(filtered), Type.Array)
+    assert_eq(typeof(filtered), "Array")
     assert_eq(filtered.length, 2)
 }
 
@@ -95,7 +95,7 @@ fn test_array_filter_return_type() {
 fn test_array_slice_return_type() {
     let arr = [1, 2, 3, 4, 5]
     let sliced = arr[1:4]
-    assert_eq(typeof(sliced), Type.Array)
+    assert_eq(typeof(sliced), "Array")
     assert_eq(sliced.length, 3)
 }
 
@@ -103,14 +103,14 @@ fn test_array_slice_return_type() {
 fn test_map_keys_return_type() {
     let m = #{"a": 1, "b": 2}
     let keys = m.keys()
-    assert_eq(typeof(keys), Type.Array)
+    assert_eq(typeof(keys), "Array")
 }
 
 @test
 fn test_map_values_return_type() {
     let m = #{"a": 1, "b": 2}
     let values = m.values()
-    assert_eq(typeof(values), Type.Array)
+    assert_eq(typeof(values), "Array")
 }
 
 // ===== Nested Generic Types =====

@@ -174,8 +174,8 @@ fn test_base_multi_params() {
 fn test_method_override_with_parent_fields() {
     let s = new Student("Bob", 17, 11)
     let info = s.info()
-    assert_eq(info.contains("Bob"), true)
-    assert_eq(info.contains("grade"), true)
+    assert_eq(info.includes("Bob"), true)
+    assert_eq(info.includes("grade"), true)
 }
 
 // ===== super.method() 调用父类方法 =====

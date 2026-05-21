@@ -306,8 +306,8 @@ fn test_consistency_object() {
     let json1 = Json.stringify(data)
     let json2 = Json.stringify(data)
     // 至少两次应该包含相同内容
-    assert_eq(json1.contains("a"), true)
-    assert_eq(json2.contains("a"), true)
+    assert_eq(json1.includes("a"), true)
+    assert_eq(json2.includes("a"), true)
 }
 
 // ===== 边界情况往返 =====

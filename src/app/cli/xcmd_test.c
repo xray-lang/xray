@@ -40,6 +40,7 @@
 #include "../../frontend/parser/xparse.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../runtime/object/xexception.h"
 #include <stdio.h>
 #include <string.h>
 #include "../../os/os_fs.h"
@@ -146,6 +147,12 @@ static const char *extract_coro_error(XrCoroutine *coro) {
         XrString *s = (XrString *) XR_TO_PTR(err);
         if (s && s->data[0] != '\0')
             return s->data;
+    } else if (coro->isolate && xr_value_is_exception(coro->isolate, err)) {
+        // Coroutine errors now preserve the original Exception instance
+        // (so linked-scope rethrow surfaces the right object — see F026).
+        const char *m = xr_exception_get_message(coro->isolate, err);
+        if (m && m[0] != '\0')
+            return m;
     }
     return "test failed";
 }
@@ -212,7 +219,7 @@ static int run_inline(XrayIsolate *X, XrClosure *closure) {
     xr_main_thread_run(X, main_coro);
 
     if (xr_coro_flags_has(main_coro, XR_CORO_FLG_DONE) &&
-        !xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) && !XR_IS_STRING(main_coro->error)) {
+        !xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) && XR_IS_NULL(main_coro->error)) {
         return 0;
     }
     return -1;

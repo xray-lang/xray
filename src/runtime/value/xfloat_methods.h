@@ -31,14 +31,22 @@
 extern "C" {
 #endif
 
-/* float.toString() -> shortest round-trip string. Allocates. */
+/* float.toString() -> shortest round-trip string. Allocates.
+ * Guarantees a decimal point so 0.0.toString() == "0.0", not "0". */
 static inline XrValue xr_float_to_string_method(XrayIsolate *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) args;
     (void) argc;
     XR_DCHECK(iso != NULL, "xr_float_to_string_method: NULL isolate");
     char buffer[64];
-    int len = snprintf(buffer, sizeof(buffer), "%g", XR_TO_FLOAT(self));
+    int len = snprintf(buffer, sizeof(buffer), "%.15g", XR_TO_FLOAT(self));
+    if (!strchr(buffer, '.') && !strchr(buffer, 'e') && !strchr(buffer, 'E') &&
+        len + 2 < (int) sizeof(buffer)) {
+        buffer[len] = '.';
+        buffer[len + 1] = '0';
+        buffer[len + 2] = '\0';
+        len += 2;
+    }
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }

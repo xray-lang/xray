@@ -125,7 +125,11 @@ static int count_unresolved_vars(AstNode *node) {
             break;
         case AST_TRY_CATCH:
             count += count_unresolved_vars(node->as.try_catch.try_body);
-            count += count_unresolved_vars(node->as.try_catch.catch_body);
+            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
+                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
+                if (cc)
+                    count += count_unresolved_vars(cc->body);
+            }
             count += count_unresolved_vars(node->as.try_catch.finally_body);
             break;
         case AST_FUNCTION_DECL:

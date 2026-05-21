@@ -39,8 +39,10 @@ vmcase(OP_DEFER) {
     // Lazy allocate per-context defer stack
     if (vm_ctx->defer_stack == NULL) {
         vm_ctx->defer_capacity = XR_DEFER_ENTRIES_MAX;
-        vm_ctx->defer_stack = xr_malloc(sizeof(XrValue) * vm_ctx->defer_capacity);
-        vm_ctx->defer_frame_marks = xr_malloc(sizeof(int) * vm_ctx->frame_capacity);
+        XR_MALLOC_OR_ABORT(vm_ctx->defer_stack, sizeof(XrValue) * vm_ctx->defer_capacity,
+                           "vm defer_stack init");
+        XR_MALLOC_OR_ABORT(vm_ctx->defer_frame_marks, sizeof(int) * vm_ctx->frame_capacity,
+                           "vm defer_frame_marks init");
         // Zero-init all slots.  Active frames whose startfunc ran before this
         // allocation get mark 0, which is correct because no OP_DEFER could
         // have fired before this first lazy allocation.

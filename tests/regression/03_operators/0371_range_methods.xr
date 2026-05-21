@@ -1,0 +1,95 @@
+// 0371_range_methods.xr
+// 作者：xingleixu@gmail.com
+// 测试：Range 方法与属性 —— 端点包含性与 for-in 一致 (半开区间 [start, end))
+
+// ===== 属性访问 =====
+
+@test
+fn test_range_start_property() {
+    let r = 1..10
+    assert_eq(r.start, 1)
+}
+
+@test
+fn test_range_end_property() {
+    let r = 1..10
+    assert_eq(r.end, 10)
+}
+
+@test
+fn test_range_length_property() {
+    // 半开区间 [1, 10) 的元素数 = 9
+    let r = 1..10
+    assert_eq(r.length, 9)
+}
+
+@test
+fn test_range_length_empty() {
+    let r = 5..5
+    assert_eq(r.length, 0)
+}
+
+@test
+fn test_range_length_matches_iteration() {
+    // length 与 for-in 迭代次数必须一致
+    let count = 0
+    for (i in 0..7) {
+        count = count + 1
+    }
+    assert_eq(count, (0..7).length)
+}
+
+// ===== includes —— 半开区间 [start, end) =====
+
+@test
+fn test_includes_start() {
+    // start 端点包含
+    assert_eq((1..10).includes(1), true)
+}
+
+@test
+fn test_includes_end_exclusive() {
+    // end 端点不包含 (核心修复点)
+    assert_eq((1..10).includes(10), false)
+}
+
+@test
+fn test_includes_last_iterated() {
+    // 最后被迭代的值 (end - 1) 必须包含
+    assert_eq((1..10).includes(9), true)
+}
+
+@test
+fn test_includes_below_start() {
+    assert_eq((1..10).includes(0), false)
+}
+
+@test
+fn test_includes_above_end() {
+    assert_eq((1..10).includes(100), false)
+}
+
+@test
+fn test_includes_empty_range() {
+    let r = 5..5
+    assert_eq(r.includes(5), false)
+    assert_eq(r.includes(4), false)
+}
+
+// ===== includes 与 for-in 必须语义一致 =====
+
+@test
+fn test_includes_matches_iteration() {
+    // 对 [0, 5) 内的每个候选值，includes(x) 必须 ⇔ x 在 for-in 中出现
+    let i = -2
+    while (i < 8) {
+        let by_for = false
+        for (j in 0..5) {
+            if (j == i) {
+                by_for = true
+            }
+        }
+        assert_eq((0..5).includes(i), by_for)
+        i = i + 1
+    }
+}

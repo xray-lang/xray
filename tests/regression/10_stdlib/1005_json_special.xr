@@ -301,7 +301,7 @@ fn test_precision_float() {
 fn test_stringify_indent() {
     let obj = { name: "Alice", age: 30 }
     let jsonStr = Json.stringify(obj, 2)  // 2 空格缩进
-    assert_eq(jsonStr.contains("\n"), true)
+    assert_eq(jsonStr.includes("\n"), true)
 }
 
 @test
@@ -309,7 +309,7 @@ fn test_stringify_no_indent() {
     let obj = { name: "Alice", age: 30 }
     let jsonStr = Json.stringify(obj)  // 无缩进
     // 紧凑格式不应包含多余空白
-    assert_eq(jsonStr.contains("Alice"), true)
+    assert_eq(jsonStr.includes("Alice"), true)
 }
 
 // ===== 特殊字符串值 =====

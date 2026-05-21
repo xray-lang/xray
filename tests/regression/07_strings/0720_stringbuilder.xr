@@ -47,7 +47,7 @@ fn test_mixed_types() {
     sb.append(", ok=")
     sb.append(true)
     let result = sb.toString()
-    assert_eq(result.contains("100"), true)
+    assert_eq(result.includes("100"), true)
 }
 
 // ===== 循环中使用 =====

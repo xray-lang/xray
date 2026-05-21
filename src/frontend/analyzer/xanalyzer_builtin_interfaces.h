@@ -56,22 +56,15 @@ typedef struct {
     int param_count;       // Number of parameters
 } XaInterfaceMethod;
 
-// Interface definition
+// Interface definition (static metadata only — no per-isolate state)
 typedef struct {
     const char *name;            // Interface name (e.g., "Comparable")
     XaInterfaceMethod *methods;  // Required methods
     int method_count;            // Number of methods
-    XrType *type;                // Cached interface type
 } XaInterfaceDefinition;
 
-// Cleanup built-in interfaces
-XR_FUNC void xa_builtin_interfaces_cleanup(void);
-
-// Get interface type by identifier
-XR_FUNC XrType *xa_get_builtin_interface(XaBuiltinInterface iface);
-
-// Get interface type by name (for constraint resolution)
-XR_FUNC XrType *xa_get_builtin_interface_by_name(const char *name);
+// Check if a name is a built-in interface (pure name match, no type state)
+XR_FUNC bool xa_is_builtin_interface_name(const char *name);
 
 // Check if a built-in type implements an interface
 XR_FUNC bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface);

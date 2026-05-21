@@ -17,24 +17,13 @@
 #include "../../base/xmalloc.h"
 #include <string.h>
 
-// Helper: extract type-name string from a literal or `Type.<name>` member
-// access. Both forms appear in user code:
-//   typeof(x) == "string"        // legacy form
-//   typeof(x) == Type.string     // current form (matches the Type module)
-// Returning the bare member name keeps the rest of the narrowing
-// pipeline (xa_narrow_by_typeof) untouched — it already does string
-// comparisons against type-name constants.
+// Helper: extract type-name string from a string literal.
+// Used for typeof(x) == "string" narrowing.
 static const char *get_string_literal(AstNode *node) {
     if (!node)
         return NULL;
     if (node->type == AST_LITERAL_STRING)
         return node->as.literal.raw_value.string_val;
-    if (node->type == AST_MEMBER_ACCESS && node->as.member_access.object &&
-        node->as.member_access.object->type == AST_VARIABLE &&
-        node->as.member_access.object->as.variable.name &&
-        strcmp(node->as.member_access.object->as.variable.name, "Type") == 0) {
-        return node->as.member_access.name;
-    }
     return NULL;
 }
 
@@ -361,6 +350,10 @@ XaFlowCache *xa_flow_cache_new(void) {
     cache->capacity = 64;
     cache->ids = xr_calloc(cache->capacity, sizeof(uint32_t));
     cache->types = xr_calloc(cache->capacity, sizeof(XrType *));
+    if (!cache->ids || !cache->types) {
+        xa_flow_cache_free(cache);
+        return NULL;
+    }
     return cache;
 }
 
@@ -408,6 +401,12 @@ static void flow_cache_rehash(XaFlowCache *cache) {
     cache->capacity = old_cap * 2;
     cache->ids = xr_calloc(cache->capacity, sizeof(uint32_t));
     cache->types = xr_calloc(cache->capacity, sizeof(XrType *));
+    if (!cache->ids || !cache->types) {
+        cache->ids = old_ids;
+        cache->types = old_types;
+        cache->capacity = old_cap;
+        return;
+    }
     cache->count = 0;
 
     uint32_t mask = (uint32_t) (cache->capacity - 1);

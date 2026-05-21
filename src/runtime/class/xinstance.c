@@ -353,7 +353,15 @@ void xr_instance_print(XrInstance *inst) {
         } else if (XR_IS_INT(val)) {
             printf("%lld", XR_TO_INT(val));
         } else if (XR_IS_FLOAT(val)) {
-            printf("%g", XR_TO_FLOAT(val));
+            char _fb[64];
+            int _fn = snprintf(_fb, sizeof(_fb), "%.15g", XR_TO_FLOAT(val));
+            if (!strchr(_fb, '.') && !strchr(_fb, 'e') && !strchr(_fb, 'E') &&
+                _fn + 2 < (int) sizeof(_fb)) {
+                _fb[_fn] = '.';
+                _fb[_fn + 1] = '0';
+                _fb[_fn + 2] = '\0';
+            }
+            printf("%s", _fb);
         } else if (XR_IS_STRING(val)) {
             XrString *str = XR_TO_STRING(val);
             printf("\"%s\"", str ? str->data : "<null>");

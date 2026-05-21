@@ -10,6 +10,7 @@
 
 #include "xlsp_imports.h"
 #include "xlsp_stdlib.h"
+#include "../../base/xfileio.h"
 #include "../../base/xjson.h"
 #include "xlsp_cache.h"
 #include "../../base/xhash.h"
@@ -351,18 +352,9 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
     }
 
     // Read file
-    FILE *f = fopen(file_path, "r");
-    if (!f)
+    char *content = xr_file_read_all(file_path, "r", NULL);
+    if (!content)
         return NULL;
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = xr_malloc(size + 1);
-    size_t read_size = fread(content, 1, size, f);
-    content[read_size] = '\0';
-    fclose(f);
 
     // Parse exports
     XlspExportedSymbol *head = NULL;
@@ -392,6 +384,8 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
                 Token name_tok = xr_scanner_scan(&scanner);
                 if (name_tok.type == TK_NAME) {
                     sym = xr_calloc(1, sizeof(XlspExportedSymbol));
+                    if (!sym)
+                        continue;
                     sym->name = strndup(name_tok.start, name_tok.length);
                     sym->kind = 12;  // Function
                     sym->line = name_tok.line;
@@ -441,6 +435,8 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
                 Token name_tok = xr_scanner_scan(&scanner);
                 if (name_tok.type == TK_NAME) {
                     sym = xr_calloc(1, sizeof(XlspExportedSymbol));
+                    if (!sym)
+                        continue;
                     sym->name = strndup(name_tok.start, name_tok.length);
                     sym->kind = 14;  // Constant
                     sym->line = name_tok.line;
@@ -451,6 +447,8 @@ XlspExportedSymbol *xlsp_extract_exports(XrLspServer *server, const char *file_p
                 Token name_tok = xr_scanner_scan(&scanner);
                 if (name_tok.type == TK_NAME) {
                     sym = xr_calloc(1, sizeof(XlspExportedSymbol));
+                    if (!sym)
+                        continue;
                     sym->name = strndup(name_tok.start, name_tok.length);
                     sym->kind = 5;  // Class
                     sym->line = name_tok.line;

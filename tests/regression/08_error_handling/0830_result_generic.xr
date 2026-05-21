@@ -1,0 +1,44 @@
+// Result<T, E> generic type annotation support
+
+@test fn result_ok_with_generic_annotation() {
+    let r: Result<int, string> = Result.Ok(42)
+    assert(r != null)
+}
+
+@test fn result_err_with_generic_annotation() {
+    let r: Result<int, string> = Result.Err("oops")
+    assert(r != null)
+}
+
+@test fn result_generic_return_type() {
+    fn safe_div(a: int, b: int) -> Result<int, string> {
+        if (b == 0) {
+            return Result.Err("division by zero")
+        }
+        return Result.Ok(a / b)
+    }
+    let ok = safe_div(10, 2)
+    let err = safe_div(10, 0)
+    assert(ok != null)
+    assert(err != null)
+}
+
+@test fn result_match_ok_err() {
+    fn parse_int(s: string) -> Result<int, string> {
+        if (s == "42") {
+            return Result.Ok(42)
+        }
+        return Result.Err("not a number")
+    }
+    let r = parse_int("42")
+    let msg = match (r) {
+        Result.Ok(v) -> "got: ${v}",
+        Result.Err(e) -> "err: ${e}",
+    }
+    assert(msg == "got: 42")
+}
+
+@test fn result_without_generic_still_works() {
+    let r: Result = Result.Ok("hello")
+    assert(r != null)
+}

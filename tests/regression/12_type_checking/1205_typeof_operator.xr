@@ -6,31 +6,31 @@
 @test
 fn test_typeof_int() {
     let x = 42
-    assert_eq(typeof(x), Type.int)
+    assert_eq(typeof(x), "int")
 }
 
 @test
 fn test_typeof_float() {
     let x = 3.14
-    assert_eq(typeof(x), Type.float)
+    assert_eq(typeof(x), "float")
 }
 
 @test
 fn test_typeof_string() {
     let x = "hello"
-    assert_eq(typeof(x), Type.string)
+    assert_eq(typeof(x), "string")
 }
 
 @test
 fn test_typeof_bool() {
-    assert_eq(typeof(true), Type.bool)
-    assert_eq(typeof(false), Type.bool)
+    assert_eq(typeof(true), "bool")
+    assert_eq(typeof(false), "bool")
 }
 
 @test
 fn test_typeof_null() {
     let x = null
-    assert_eq(typeof(x), Type.null)
+    assert_eq(typeof(x), "null")
 }
 
 // ===== Container Types =====
@@ -38,19 +38,19 @@ fn test_typeof_null() {
 @test
 fn test_typeof_array() {
     let arr = [1, 2, 3]
-    assert_eq(typeof(arr), Type.Array)
+    assert_eq(typeof(arr), "Array")
 }
 
 @test
 fn test_typeof_map() {
     let m = #{"a": 1}
-    assert_eq(typeof(m), Type.Map)
+    assert_eq(typeof(m), "Map")
 }
 
 @test
 fn test_typeof_set() {
     let s = #[1, 2, 3]
-    assert_eq(typeof(s), Type.Set)
+    assert_eq(typeof(s), "Set")
 }
 
 // ===== Function Types =====
@@ -58,20 +58,20 @@ fn test_typeof_set() {
 @test
 fn test_typeof_function() {
     fn add(a: int, b: int) -> int { return a + b }
-    assert_eq(typeof(add), Type.function)
+    assert_eq(typeof(add), "function")
 }
 
 @test
 fn test_typeof_arrow() {
     let f = (x: int) -> x * 2
-    assert_eq(typeof(f), Type.function)
+    assert_eq(typeof(f), "function")
 }
 
 @test
 fn test_typeof_closure() {
     let x = 10
     let f = () -> x
-    assert_eq(typeof(f), Type.function)
+    assert_eq(typeof(f), "function")
 }
 
 // ===== Class Types =====
@@ -94,13 +94,13 @@ class Student extends Person {
 @test
 fn test_typeof_class_instance() {
     let p = Person("Alice")
-    assert_eq(typename(p), "Person")
+    assert_eq(typeof(p), "Person")
 }
 
 @test
 fn test_typeof_subclass_instance() {
     let s = Student("Bob", 10)
-    assert_eq(typename(s), "Student")
+    assert_eq(typeof(s), "Student")
 }
 
 // ===== Type Checking in Conditionals =====
@@ -108,15 +108,15 @@ fn test_typeof_subclass_instance() {
 @test
 fn test_typeof_conditional() {
     fn describe<T>(x: T) -> string {
-        if (typeof(x) == Type.int) {
+        if (typeof(x) == "int") {
             return "an integer"
-        } else if (typeof(x) == Type.string) {
+        } else if (typeof(x) == "string") {
             return "a string"
         } else {
             return "something else"
         }
     }
-    
+
     assert_eq(describe(42), "an integer")
     assert_eq(describe("hello"), "a string")
     assert_eq(describe([1,2,3]), "something else")
@@ -126,15 +126,15 @@ fn test_typeof_conditional() {
 fn test_typeof_switch() {
     fn typeLabel<T>(x: T) -> string {
         return match (typeof(x)) {
-            Type.int -> "integer",
-            Type.float -> "decimal",
-            Type.string -> "text",
-            Type.bool -> "boolean",
-            Type.Array -> "list",
+            "int" -> "integer",
+            "float" -> "decimal",
+            "string" -> "text",
+            "bool" -> "boolean",
+            "Array" -> "list",
             _ -> "unknown"
         }
     }
-    
+
     assert_eq(typeLabel(42), "integer")
     assert_eq(typeLabel(3.14), "decimal")
     assert_eq(typeLabel("hi"), "text")
@@ -147,19 +147,19 @@ fn test_typeof_switch() {
 @test
 fn test_typeof_after_assignment() {
     let x = 42
-    assert_eq(typeof(x), Type.int)
-    
+    assert_eq(typeof(x), "int")
+
     // Variable can't change type in xray, but we can test with any
     let y: int = 42
-    assert_eq(typeof(y), Type.int)
+    assert_eq(typeof(y), "int")
 }
 
 @test
 fn test_typeof_expression_result() {
-    assert_eq(typeof(1 + 2), Type.int)
-    assert_eq(typeof(1.0 + 2.0), Type.float)
-    assert_eq(typeof("a" + "b"), Type.string)
-    assert_eq(typeof(1 < 2), Type.bool)
+    assert_eq(typeof(1 + 2), "int")
+    assert_eq(typeof(1.0 + 2.0), "float")
+    assert_eq(typeof("a" + "b"), "string")
+    assert_eq(typeof(1 < 2), "bool")
 }
 
 // ===== Special Cases =====
@@ -167,31 +167,31 @@ fn test_typeof_expression_result() {
 @test
 fn test_typeof_empty_array() {
     let arr: Array<int> = []
-    assert_eq(typeof(arr), Type.Array)
+    assert_eq(typeof(arr), "Array")
 }
 
 @test
 fn test_typeof_empty_map() {
     let m = #{}
-    assert_eq(typeof(m), Type.Map)
+    assert_eq(typeof(m), "Map")
 }
 
 @test
 fn test_typeof_empty_set() {
     let s = #[]
-    assert_eq(typeof(s), Type.Set)
+    assert_eq(typeof(s), "Set")
 }
 
 @test
 fn test_typeof_bytes() {
     let b = new Bytes(10)
-    assert_eq(typeof(b), Type.Array)
+    assert_eq(typeof(b), "Array")
 }
 
 @test
 fn test_typeof_regex() {
     let r = /\d+/
-    assert_eq(typeof(r), Type.Regex)
+    assert_eq(typeof(r), "Regex")
 }
 
 // ===== Json Type =====
@@ -199,7 +199,7 @@ fn test_typeof_regex() {
 @test
 fn test_typeof_json_object() {
     let obj = { name: "Alice", age: 30 }
-    assert_eq(typeof(obj), Type.Json)
+    assert_eq(typeof(obj), "Json")
 }
 
 @test
@@ -210,7 +210,41 @@ fn test_typeof_nested_json() {
             scores: [90, 85, 95]
         }
     }
-    assert_eq(typeof(obj), Type.Json)
-    assert_eq(typeof(obj.user.scores), Type.Array)
+    assert_eq(typeof(obj), "Json")
+    assert_eq(typeof(obj.user.scores), "Array")
+}
+
+// ===== Tuple Types =====
+
+@test
+fn test_typeof_tuple2() {
+    fn pair() -> (int, string) { return (42, "hello") }
+    let t = pair()
+    assert_eq(typeof(t), "Tuple2")
+}
+
+@test
+fn test_typeof_tuple3() {
+    fn triple() -> (int, float, string) { return (1, 2.0, "x") }
+    let t = triple()
+    assert_eq(typeof(t), "Tuple3")
+}
+
+@test
+fn test_is_tuple() {
+    fn pair() -> (int, string) { return (10, "hi") }
+    let t = pair()
+    assert(t is (int, string))
+    assert(t is (float, bool))  // arity-only check: same arity matches
+}
+
+// ===== Enum Types =====
+
+enum Color { Red, Green, Blue }
+
+@test
+fn test_typeof_enum() {
+    let c = Color.Red
+    assert_eq(typeof(c), "Color")
 }
 

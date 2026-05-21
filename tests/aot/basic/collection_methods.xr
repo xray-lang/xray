@@ -23,8 +23,8 @@ print("ab".repeat(3))    // ababab
 print("hello".indexOf("ll"))  // 2
 print("hello".indexOf("zz"))  // -1
 
-// contains, startsWith, endsWith
-print("hello".contains("ell"))     // true
+// includes, startsWith, endsWith
+print("hello".includes("ell"))     // true
 print("hello".startsWith("he"))    // true
 print("hello".endsWith("lo"))      // true
 

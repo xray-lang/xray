@@ -1,0 +1,108 @@
+// 0531_bare_lambda.xr
+// Bare lambda syntax: `x -> expr` without parentheses in call arguments.
+// The analyzer infers parameter types from callee signature or container
+// element type.
+
+// ===== Single-param bare lambda in map/filter =====
+
+@test
+fn test_bare_lambda_map() {
+    let arr = [1, 2, 3, 4, 5]
+    let doubled = arr.map(x -> x * 2)
+    assert_eq(doubled[0], 2)
+    assert_eq(doubled[4], 10)
+}
+
+@test
+fn test_bare_lambda_filter() {
+    let arr = [1, 2, 3, 4, 5, 6]
+    let evens = arr.filter(x -> x % 2 == 0)
+    assert_eq(evens.length, 3)
+    assert_eq(evens[0], 2)
+    assert_eq(evens[2], 6)
+}
+
+@test
+fn test_bare_lambda_find() {
+    let arr = [10, 20, 30, 40]
+    let found = arr.find(x -> x > 25)
+    assert_eq(found, 30)
+}
+
+@test
+fn test_bare_lambda_every_some() {
+    let arr = [2, 4, 6, 8]
+    assert_eq(arr.every(x -> x % 2 == 0), true)
+    assert_eq(arr.some(x -> x > 7), true)
+    assert_eq(arr.some(x -> x > 10), false)
+}
+
+// ===== Chained bare lambdas =====
+
+@test
+fn test_bare_lambda_chain() {
+    let arr = [1, 2, 3, 4, 5]
+    let result = arr.filter(x -> x > 2).map(x -> x * 10)
+    assert_eq(result[0], 30)
+    assert_eq(result[1], 40)
+    assert_eq(result[2], 50)
+}
+
+// ===== Bare lambda with block body =====
+
+@test
+fn test_bare_lambda_block_body() {
+    let arr = [1, 2, 3]
+    let result = arr.map(x -> {
+        let doubled = x * 2
+        return doubled + 1
+    })
+    assert_eq(result[0], 3)
+    assert_eq(result[1], 5)
+    assert_eq(result[2], 7)
+}
+
+// ===== Bare lambda with closure capture =====
+
+@test
+fn test_bare_lambda_closure() {
+    let factor = 3
+    let arr = [1, 2, 3]
+    let scaled = arr.map(x -> x * factor)
+    assert_eq(scaled[0], 3)
+    assert_eq(scaled[1], 6)
+    assert_eq(scaled[2], 9)
+}
+
+// ===== Bare lambda as function argument (non-method) =====
+
+@test
+fn test_bare_lambda_fn_arg() {
+    fn apply(f: (int) -> int, x: int) -> int {
+        return f(x)
+    }
+    let result = apply(x -> x * 5, 4)
+    assert_eq(result, 20)
+}
+
+// ===== forEach with bare lambda =====
+
+@test
+fn test_bare_lambda_foreach() {
+    let arr = [10, 20, 30]
+    let sum = 0
+    arr.forEach(x -> {
+        sum += x
+    })
+    assert_eq(sum, 60)
+}
+
+// ===== String array with bare lambda =====
+
+@test
+fn test_bare_lambda_string_map() {
+    let words = ["hello", "world"]
+    let lengths = words.map(w -> w.length)
+    assert_eq(lengths[0], 5)
+    assert_eq(lengths[1], 5)
+}

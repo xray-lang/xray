@@ -298,7 +298,7 @@ fn test_concurrent_long_concat() {
     for (let i = 0; i < n; i++) {
         let result = results[i]
         assert_eq(result.startsWith("x".repeat(50)), true)
-        assert_eq(result.contains("_id" + string(i) + "_"), true)
+        assert_eq(result.includes("_id" + string(i) + "_"), true)
         assert_eq(result.endsWith("y".repeat(50)), true)
     }
 }
@@ -327,7 +327,7 @@ fn test_concurrent_mixed_concat() {
         if (i % 2 == 0) {
             assert_eq(results[i], "short_" + string(i))
         } else {
-            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+            assert_eq(results[i].includes("_long_" + string(i) + "_"), true)
         }
     }
 }

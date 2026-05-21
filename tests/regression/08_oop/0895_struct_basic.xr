@@ -93,9 +93,9 @@ fn test_struct_basic() {
     assert(MathHelper.pi() > 3.14)
     assert(MathHelper.pi() < 3.15)
 
-    // === Struct typename ===
+    // === Struct typeof ===
     let p2 = new Point()
-    assert(typename(p2) == "Point")
+    assert(typeof(p2) == "Point")
 
     // === Multiple struct instances ===
     let points: Array<Point> = []

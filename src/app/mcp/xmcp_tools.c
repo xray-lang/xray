@@ -265,7 +265,7 @@ static XrJsonValue *schema_definition(void) {
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "symbol", "string",
-                    "Symbol name to look up (e.g., 'http.Server', 'println', 'chan')");
+                    "Symbol name to look up (e.g., 'http.Server', 'print', 'chan')");
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("symbol"));

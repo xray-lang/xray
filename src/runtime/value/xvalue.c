@@ -217,6 +217,12 @@ XrTypeId xr_value_typeid(XrValue v) {
                             return XR_TID_NETLISTENER;
                         case XR_BK_BIGINT:
                             return XR_TID_BIGINT;
+                        case XR_BK_EXCEPTION:
+                            return XR_TID_EXCEPTION;
+                        case XR_BK_RANGE:
+                            return XR_TID_RANGE;
+                        case XR_BK_DATETIME:
+                            return XR_TID_DATETIME;
                         default:
                             break;
                     }

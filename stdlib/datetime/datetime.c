@@ -1207,10 +1207,15 @@ void xr_register_datetime_class(XrayIsolate *isolate) {
         const XrNativeMethod *m = &datetime_methods[i];
         xr_class_builder_add_method(builder, m->name, m->func, m->arity, 0);
     }
-    /* Property getters: parameterless methods (arity 1 = self only) */
-    for (int i = 0; datetime_getters[i].name != NULL; i++) {
-        const XrNativeMethod *g = &datetime_getters[i];
-        xr_class_builder_add_method(builder, g->name, g->func, g->arity, 0);
+    /* Property getters: register as `get:<name>` so OP_GETPROP resolves
+     * them through the standard getter lookup path (no parens at call site). */
+    {
+        char buf[64];
+        for (int i = 0; datetime_getters[i].name != NULL; i++) {
+            const XrNativeMethod *g = &datetime_getters[i];
+            snprintf(buf, sizeof(buf), "get:%s", g->name);
+            xr_class_builder_add_method(builder, buf, g->func, g->arity, 0);
+        }
     }
 
     XrClass *cls = xr_class_builder_finalize(builder);

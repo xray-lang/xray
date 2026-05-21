@@ -41,6 +41,7 @@ static inline void xr_pipe_set_nonblocking(int fd) {
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 #endif
+#include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 
 // lsp_log declared in xlsp_server.h
@@ -215,26 +216,11 @@ static XrLspIndexResult *parse_file(XrayIsolate *isolate, const char *path, cons
     result->success = false;
 
     // Read file content
-    FILE *f = fopen(path, "r");
-    if (!f) {
+    char *content = xr_file_read_all(path, "r", NULL);
+    if (!content) {
         result->error_message = xr_strdup("Cannot open file");
         return result;
     }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = xr_malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        result->error_message = xr_strdup("Out of memory");
-        return result;
-    }
-
-    size_t read_size = fread(content, 1, size, f);
-    content[read_size] = '\0';
-    fclose(f);
 
     // Parse with recoverable parser (tolerates errors)
     Parser parser;

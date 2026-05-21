@@ -390,6 +390,52 @@ void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
 }
 
 /*
+** Run defer entries belonging to one frame in LIFO order.
+**
+** Frames being unwound by an exception still have to honour their
+** registered defer closures — the spec guarantees defers execute
+** whenever their scope exits, including via throw. The normal-return
+** path in xvm_dispatch_call.inc.c runs this loop inline for the
+** topmost frame; on unwind we run it here for every frame between the
+** throw site and the catch handler.
+*/
+static void run_defers_for_frame(XrayIsolate *isolate, XrVMContext *ctx, int frame_index) {
+    if (!ctx->defer_stack || !ctx->defer_frame_marks || frame_index < 0)
+        return;
+    int frame_defer_start = ctx->defer_frame_marks[frame_index];
+    if (ctx->defer_count <= frame_defer_start)
+        return;
+
+    int entries[XR_DEFER_ENTRIES_MAX];
+    int entry_count = 0;
+    int pos = frame_defer_start;
+    int end = ctx->defer_count;
+    while (pos < end && entry_count < XR_DEFER_ENTRIES_MAX) {
+        entries[entry_count++] = pos;
+        int nargs = (int) XR_TO_INT(ctx->defer_stack[pos + 1]);
+        pos += 2 + nargs;
+    }
+
+    for (int e = entry_count - 1; e >= 0; e--) {
+        int start = entries[e];
+        XrValue closure_val = ctx->defer_stack[start];
+        int nargs = (int) XR_TO_INT(ctx->defer_stack[start + 1]);
+        if (nargs > XR_DEFER_ARGS_MAX)
+            nargs = XR_DEFER_ARGS_MAX;
+        XrValue defer_args[XR_DEFER_ARGS_MAX];
+        for (int j = 0; j < nargs; j++) {
+            defer_args[j] = ctx->defer_stack[start + 2 + j];
+        }
+        if (xr_value_is_closure(closure_val)) {
+            XrClosure *closure = xr_value_to_closure(closure_val);
+            xr_vm_call_closure(isolate, closure, defer_args, nargs);
+        }
+    }
+
+    ctx->defer_count = frame_defer_start;
+}
+
+/*
 ** Throw exception (stack unwinding)
 **
 ** Uses current coroutine's vm_ctx to access exception handlers.
@@ -445,6 +491,14 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
 
         // Stack unwinding: restore stack top
         ctx->stack_top = ctx->stack + handler->stack_size;
+
+        // Run defers for every frame above the handler in LIFO order,
+        // then restore the frame count. Defers belonging to the handler's
+        // own frame stay registered: they'll fire when that frame returns
+        // normally after the catch/finally completes.
+        for (int fi = ctx->frame_count - 1; fi >= handler->frame_count; fi--) {
+            run_defers_for_frame(isolate, ctx, fi);
+        }
 
         // Restore frame count
         ctx->frame_count = handler->frame_count;
