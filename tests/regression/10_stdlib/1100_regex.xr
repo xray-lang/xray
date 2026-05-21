@@ -70,8 +70,8 @@ fn test_split() {
 @test
 fn test_escape() {
     let escaped = regex.escape("a.b*c?")
-    assert(escaped.contains("\\."))
-    assert(escaped.contains("\\*"))
+    assert(escaped.includes("\\."))
+    assert(escaped.includes("\\*"))
 }
 
 // @test isValid

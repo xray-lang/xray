@@ -72,7 +72,7 @@ fn test_long_string_isolation() {
         assert_eq(results[i].length, expected_len)
         
         // 验证包含正确的 id
-        assert_eq(results[i].contains("_id" + string(i) + "_"), true)
+        assert_eq(results[i].includes("_id" + string(i) + "_"), true)
     }
 }
 
@@ -144,13 +144,13 @@ fn test_buffer_content_no_leak() {
         let result = results[i]
         
         // 应该包含自己的标记
-        assert_eq(result.contains(my_marker), true)
+        assert_eq(result.includes(my_marker), true)
         
         // 不应该包含其他协程的标记
         for (let j = 0; j < n; j++) {
             if (j != i) {
                 let other_marker = markers[j]
-                assert_eq(result.contains(other_marker), false)
+                assert_eq(result.includes(other_marker), false)
             }
         }
     }
@@ -182,8 +182,8 @@ fn test_main_thread_coro_isolation() {
     assert_eq(coro_result, "coro_thread_result")
     
     // 确保没有交叉污染
-    assert_eq(main_result.contains("coro"), false)
-    assert_eq(coro_result.contains("main"), false)
+    assert_eq(main_result.includes("coro"), false)
+    assert_eq(coro_result.includes("main"), false)
 }
 
 // ===== 测试6: 高并发压力测试 =====
@@ -216,13 +216,13 @@ fn test_high_concurrency_isolation() {
         // 验证包含所有预期的片段
         for (let j = 0; j < 20; j++) {
             let expected_part = "s" + string(i) + "i" + string(j) + "_"
-            assert_eq(result.contains(expected_part), true)
+            assert_eq(result.includes(expected_part), true)
         }
         
         // 验证不包含其他协程的片段（抽样检查）
         if (i > 0) {
             let other_part = "s" + string(i - 1) + "i0_"
-            assert_eq(result.contains(other_part), false)
+            assert_eq(result.includes(other_part), false)
         }
     }
 }
@@ -258,7 +258,7 @@ fn test_mixed_length_isolation() {
         if (i % 2 == 0) {
             assert_eq(results[i], "short_" + string(i))
         } else {
-            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+            assert_eq(results[i].includes("_long_" + string(i) + "_"), true)
             assert_eq(results[i].length > 100, true)
         }
     }
@@ -302,8 +302,8 @@ fn test_property_random_isolation() {
         // 不应该包含其他 seed 的标记
         for (let j = 0; j < n; j++) {
             if (j != i) {
-                assert_eq(result.contains("[seed" + string(j) + "]"), false)
-                assert_eq(result.contains("[end" + string(j) + "]"), false)
+                assert_eq(result.includes("[seed" + string(j) + "]"), false)
+                assert_eq(result.includes("[end" + string(j) + "]"), false)
             }
         }
     }

@@ -10,7 +10,7 @@ fn test_null_unwrap_throws_413() {
     } catch(e) {
         caught = true
         assert_eq(e.code, 413)
-        assert(e.message.contains("E0413"))
+        assert(e.message.includes("E0413"))
     }
     assert_eq(caught, true)
 }

@@ -1266,32 +1266,6 @@ XrString *xr_string_reverse(XrayIsolate *iso, XrString *str) {
     return result;
 }
 
-// reverseBytes - byte-level reverse (O(n), no UTF-8 parsing)
-XrString *xr_string_reverse_bytes(XrayIsolate *iso, XrString *str) {
-    if (!iso || !str)
-        return NULL;
-    if (str->length == 0)
-        return str;
-
-    char *buffer = (char *) xr_malloc(str->length + 1);
-    if (!buffer)
-        return NULL;
-
-    // Byte-level reverse: copy from end to start
-    const char *src = str->data;
-    size_t len = str->length;
-    for (size_t i = 0; i < len; i++) {
-        buffer[i] = src[len - 1 - i];
-    }
-    buffer[len] = '\0';
-
-    // Intern result string
-    XrString *result = xr_string_intern(iso, buffer, len, 0);
-    xr_free(buffer);
-
-    return result;
-}
-
 // byteAt - O(1) byte index (supports negative index)
 XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
     if (!iso || !str || str->length == 0)
@@ -1311,48 +1285,6 @@ XrString *xr_string_byte_at(XrayIsolate *iso, XrString *str, xr_Integer index) {
 
     // Return interned single char string
     return xr_string_intern(iso, &c, 1, 0);
-}
-
-// translateBytes - byte-level char mapping (O(n), no UTF-8 parsing)
-XrString *xr_string_translate_bytes(XrayIsolate *iso, XrString *str, XrMap *table) {
-    if (!iso || !str)
-        return NULL;
-    if (!table)
-        return str;  // No table, return original
-    if (str->length == 0)
-        return str;
-
-    char *result = (char *) xr_malloc(str->length + 1);
-    if (!result)
-        return NULL;
-
-    // Single pass, replace byte by byte
-    for (size_t i = 0; i < str->length; i++) {
-        char c = str->data[i];
-
-        // Create key from single byte to lookup Map
-        XrString *key = xr_string_intern(iso, &c, 1, 0);
-        bool found = false;
-        XrValue val = xr_map_get(table, xr_string_value(key), &found);
-
-        if (found && XR_IS_STRING(val)) {
-            XrString *replacement = XR_TO_STRING(val);
-            // Get first byte of replacement
-            if (replacement->length > 0) {
-                result[i] = replacement->data[0];
-            } else {
-                result[i] = c;  // Empty replacement, keep original
-            }
-        } else {
-            result[i] = c;  // No mapping, keep original
-        }
-    }
-    result[str->length] = '\0';
-
-    // Create result string and free buffer
-    XrString *ret = xr_string_intern(iso, result, str->length, 0);
-    xr_free(result);
-    return ret;
 }
 
 // translate - Unicode char mapping (UTF-8 aware)

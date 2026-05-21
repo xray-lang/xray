@@ -80,7 +80,7 @@ fn test_concurrent_long_concat() {
         let expected_suffix = "y".repeat(50)
         
         let prefix_ok = result.startsWith(expected_prefix)
-        let middle_ok = result.contains(expected_middle)
+        let middle_ok = result.includes(expected_middle)
         let suffix_ok = result.endsWith(expected_suffix)
         
         if (prefix_ok && middle_ok && suffix_ok) {
@@ -127,7 +127,7 @@ fn test_concurrent_mixed_concat() {
             is_correct = (result == "short_" + string(i))
         } else {
             // 长字符串
-            is_correct = result.contains("_long_" + string(i) + "_")
+            is_correct = result.includes("_long_" + string(i) + "_")
         }
         
         if (is_correct) {
@@ -250,7 +250,7 @@ fn test_concurrent_data_isolation() {
             "result": result,
             "prefix_ok": result.startsWith(expected_prefix),
             "suffix_ok": result.endsWith(expected_suffix),
-            "contains_id": result.contains("_" + string(id) + "_")}
+            "contains_id": result.includes("_" + string(id) + "_")}
     }
     
     let n = 50
@@ -313,7 +313,7 @@ fn test_stress_concurrent_concat() {
     for (let i = 0; i < n; i++) {
         let r = results[i]
         let short_ok = r[0] == "s" + string(i) + "e"
-        let long_ok = r[1].contains("_" + string(i) + "_")
+        let long_ok = r[1].includes("_" + string(i) + "_")
         let simple_ok = r[2].startsWith(string(i) + "_")
         
         if (short_ok && long_ok && simple_ok) {

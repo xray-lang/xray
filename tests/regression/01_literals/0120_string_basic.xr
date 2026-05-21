@@ -36,25 +36,25 @@ fn test_spaces() {
 @test
 fn test_escape_newline() {
     let s = "line1\nline2"
-    assert_eq(s.contains("\n"), true)
+    assert_eq(s.includes("\n"), true)
 }
 
 @test
 fn test_escape_tab() {
     let s = "col1\tcol2"
-    assert_eq(s.contains("\t"), true)
+    assert_eq(s.includes("\t"), true)
 }
 
 @test
 fn test_escape_quote() {
     let s = "say \"hello\""
-    assert_eq(s.contains("\""), true)
+    assert_eq(s.includes("\""), true)
 }
 
 @test
 fn test_escape_backslash() {
     let s = "path\\to\\file"
-    assert_eq(s.contains("\\"), true)
+    assert_eq(s.includes("\\"), true)
 }
 
 // ===== Unicode =====
@@ -69,7 +69,7 @@ fn test_unicode_chinese() {
 @test
 fn test_unicode_emoji() {
     let s = "hello 🌍"
-    assert_eq(s.contains("🌍"), true)
+    assert_eq(s.includes("🌍"), true)
 }
 
 @test
@@ -99,7 +99,7 @@ fn test_template_expression() {
 fn test_template_nested() {
     let x = 5
     let s = "Value: ${x * 2} (doubled)"
-    assert_eq(s.contains("10"), true)
+    assert_eq(s.includes("10"), true)
 }
 
 // ===== 边界条件 =====

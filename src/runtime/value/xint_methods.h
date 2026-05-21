@@ -133,41 +133,6 @@ static inline XrValue xr_int_to_hex_method(XrayIsolate *iso, XrValue self, XrVal
     return xr_string_value(str);
 }
 
-/* int.floor() -> int. No-op for an integer receiver. Pure, no GC. */
-static inline XrValue xr_int_floor_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return self;
-}
-
-/* int.ceil() -> int. No-op for an integer receiver. Pure, no GC. */
-static inline XrValue xr_int_ceil_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return self;
-}
-
-/* int.round() -> int. No-op for an integer receiver. Pure, no GC. */
-static inline XrValue xr_int_round_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    return self;
-}
-
-/* int.sqrt() -> float. NaN for negative input. Pure, no GC. */
-static inline XrValue xr_int_sqrt_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
-    (void) iso;
-    (void) args;
-    (void) argc;
-    xr_Integer v = XR_TO_INT(self);
-    if (v < 0)
-        return xr_float(NAN);
-    return xr_float(sqrt((xr_Number) v));
-}
-
 /* int.pow(exponent) -> float. Pure, no GC. */
 static inline XrValue xr_int_pow_method(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;

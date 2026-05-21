@@ -180,11 +180,11 @@ fn test_int64_compound_mul_large() {
 @test
 fn test_typeof_int64() {
     let a: int = 42
-    assert_eq(typeof(a), Type.int)
+    assert_eq(typeof(a), "int")
 }
 
 @test
 fn test_typeof_float64() {
     let a: float = 3.14
-    assert_eq(typeof(a), Type.float)
+    assert_eq(typeof(a), "float")
 }

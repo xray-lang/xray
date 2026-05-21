@@ -64,21 +64,21 @@ fn test_escape_slash() {
 fn test_escape_newline() {
     // 换行符
     let s = Json.parse("\"hello\\nworld\"")
-    assert_eq(s.contains("\n"), true)
+    assert_eq(s.includes("\n"), true)
 }
 
 @test
 fn test_escape_tab() {
     // 制表符
     let s = Json.parse("\"hello\\tworld\"")
-    assert_eq(s.contains("\t"), true)
+    assert_eq(s.includes("\t"), true)
 }
 
 @test
 fn test_escape_carriage_return() {
     // 回车符
     let s = Json.parse("\"hello\\rworld\"")
-    assert_eq(s.contains("\r"), true)
+    assert_eq(s.includes("\r"), true)
 }
 
 @test
@@ -99,8 +99,8 @@ fn test_escape_formfeed() {
 fn test_multiple_escapes() {
     // 多个转义字符
     let s = Json.parse("\"line1\\nline2\\ttabbed\"")
-    assert_eq(s.contains("\n"), true)
-    assert_eq(s.contains("\t"), true)
+    assert_eq(s.includes("\n"), true)
+    assert_eq(s.includes("\t"), true)
 }
 
 @test
@@ -208,9 +208,9 @@ fn test_direct_emoji() {
 @test
 fn test_mixed_unicode_ascii() {
     let s = Json.parse("\"Hello 世界 123 🌍\"")
-    assert_eq(s.contains("Hello"), true)
-    assert_eq(s.contains("世界"), true)
-    assert_eq(s.contains("123"), true)
+    assert_eq(s.includes("Hello"), true)
+    assert_eq(s.includes("世界"), true)
+    assert_eq(s.includes("123"), true)
 }
 
 // ===== 特殊情况测试 =====
@@ -272,8 +272,8 @@ fn test_unicode_object_keys() {
     let obj = Json.parse("{\"名字\": \"张三\", \"城市\": \"上海\"}")
     // 通过 stringify 再 parse 验证
     let jsonStr = Json.stringify(obj)
-    assert_eq(jsonStr.contains("张三"), true)
-    assert_eq(jsonStr.contains("上海"), true)
+    assert_eq(jsonStr.includes("张三"), true)
+    assert_eq(jsonStr.includes("上海"), true)
 }
 
 // ===== stringify 字符串测试 =====
@@ -282,21 +282,21 @@ fn test_unicode_object_keys() {
 fn test_stringify_escape_quote() {
     let s = Json.parse("\"hello\\\"world\"")
     let jsonStr = Json.stringify(s)
-    assert_eq(jsonStr.contains("hello"), true)
+    assert_eq(jsonStr.includes("hello"), true)
 }
 
 @test
 fn test_stringify_escape_backslash() {
     let s = Json.parse("\"hello\\\\world\"")
     let jsonStr = Json.stringify(s)
-    assert_eq(jsonStr.contains("hello"), true)
+    assert_eq(jsonStr.includes("hello"), true)
 }
 
 @test
 fn test_stringify_escape_newline() {
     let s = Json.parse("\"hello\\nworld\"")
     let jsonStr = Json.stringify(s)
-    assert_eq(jsonStr.contains("n"), true)
+    assert_eq(jsonStr.includes("n"), true)
 }
 
 @test

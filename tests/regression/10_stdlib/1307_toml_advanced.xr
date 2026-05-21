@@ -107,7 +107,7 @@ fn test_float_decimal_point() {
     // Float must have decimal point in TOML
     assert(result.length > 0)
     let reparsed = toml.parse(result) ?? {}
-    assert_eq(typeof(reparsed["value"]), Type.float)
+    assert_eq(typeof(reparsed["value"]), "float")
 }
 
 // ===== Stringify roundtrip =====

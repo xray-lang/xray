@@ -9,7 +9,7 @@ fn test_int_to_string() {
     let x = 42
     let s = string(x)
     assert_eq(s, "42")
-    assert_eq(typeof(s), Type.string)
+    assert_eq(typeof(s), "string")
 }
 
 @test

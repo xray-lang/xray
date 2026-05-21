@@ -7,35 +7,35 @@
 @test
 fn test_typeof_int() {
     let x = 42
-    assert_eq(typeof(x), Type.int)
+    assert_eq(typeof(x), "int")
     // Bare literals without type context are NaN-boxed
-    assert_eq(typeof(0), Type.int)
-    assert_eq(typeof(-100), Type.int)
+    assert_eq(typeof(0), "int")
+    assert_eq(typeof(-100), "int")
 }
 
 @test
 fn test_typeof_float() {
     let x = 3.14
-    assert_eq(typeof(x), Type.float)
-    assert_eq(typeof(0.0), Type.float)
+    assert_eq(typeof(x), "float")
+    assert_eq(typeof(0.0), "float")
 }
 
 @test
 fn test_typeof_string() {
     let s = "hello"
-    assert_eq(typeof(s), Type.string)
-    assert_eq(typeof(""), Type.string)
+    assert_eq(typeof(s), "string")
+    assert_eq(typeof(""), "string")
 }
 
 @test
 fn test_typeof_bool() {
-    assert_eq(typeof(true), Type.bool)
-    assert_eq(typeof(false), Type.bool)
+    assert_eq(typeof(true), "bool")
+    assert_eq(typeof(false), "bool")
 }
 
 @test
 fn test_typeof_null() {
-    assert_eq(typeof(null), Type.null)
+    assert_eq(typeof(null), "null")
 }
 
 // ===== 集合类型 =====
@@ -43,19 +43,19 @@ fn test_typeof_null() {
 @test
 fn test_typeof_array() {
     let arr = [1, 2, 3]
-    assert_eq(typeof(arr), Type.Array)
+    assert_eq(typeof(arr), "Array")
 }
 
 @test
 fn test_typeof_map() {
     let m = #{"key": "value"}
-    assert_eq(typeof(m), Type.Map)
+    assert_eq(typeof(m), "Map")
 }
 
 @test
 fn test_typeof_set() {
     let s = #[1, 2, 3]
-    assert_eq(typeof(s), Type.Set)
+    assert_eq(typeof(s), "Set")
 }
 
 // ===== 函数类型 =====
@@ -63,10 +63,10 @@ fn test_typeof_set() {
 @test
 fn test_typeof_function() {
     fn add(a: int, b: int) -> int { return a + b }
-    assert_eq(typeof(add), Type.function)
+    assert_eq(typeof(add), "function")
     
     let lambda = (x: int) -> x * 2
-    assert_eq(typeof(lambda), Type.function)
+    assert_eq(typeof(lambda), "function")
 }
 
 // ===== 类实例 =====
@@ -79,6 +79,6 @@ class MyClass {
 @test
 fn test_typeof_instance() {
     let obj = new MyClass(10)
-    assert_eq(typename(obj), "MyClass")
+    assert_eq(typeof(obj), "MyClass")
 }
 

@@ -93,9 +93,9 @@ fn test_indexOf_empty() {
 @test
 fn test_contains() {
     let s = "hello world"
-    assert_eq(s.contains("hello"), true)
-    assert_eq(s.contains("world"), true)
-    assert_eq(s.contains("xyz"), false)
+    assert_eq(s.includes("hello"), true)
+    assert_eq(s.includes("world"), true)
+    assert_eq(s.includes("xyz"), false)
 }
 
 // ===== startsWith/endsWith =====
@@ -217,7 +217,7 @@ fn test_empty_string_operations() {
     assert_eq(s.length, 0)
     assert_eq(s.trim(), "")
     assert_eq(s.toUpperCase(), "")
-    assert_eq(s.contains(""), true)
+    assert_eq(s.includes(""), true)
 }
 
 @test

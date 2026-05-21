@@ -14,7 +14,7 @@
  *   - WeakMap semantics:
  *       - set() validates that args[0] is a heap object and throws
  *         XR_ERR_INVALID_ARG_TYPE on contract violation.
- *       - keys / values / entries / clear / hasValue / iterator /
+ *       - keys / values / entries / clear / iterator /
  *         entriesIterator are blocked on weak maps; they return
  *         XR_NOTFOUND from the method body so the dispatcher's
  *         shared "method not found" path produces the standard

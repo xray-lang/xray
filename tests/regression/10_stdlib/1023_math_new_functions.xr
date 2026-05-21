@@ -208,13 +208,13 @@ fn test_epsilon() {
 @test
 fn test_max_int() {
     assert(math.MAX_INT > 0)
-    assert_eq(typeof(math.MAX_INT) == Type.int, true)
+    assert_eq(typeof(math.MAX_INT) == "int", true)
 }
 
 @test
 fn test_min_int() {
     assert(math.MIN_INT < 0)
-    assert_eq(typeof(math.MIN_INT) == Type.int, true)
+    assert_eq(typeof(math.MIN_INT) == "int", true)
 }
 
 @test

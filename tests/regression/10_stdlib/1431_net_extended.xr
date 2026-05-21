@@ -20,7 +20,7 @@ fn test_net_core_apis() {
 fn test_net_tls_apis() {
     assert(net.hasTLS != null)
     let tls = net.hasTLS()
-    assert(typeof(tls) == Type.bool)
+    assert(typeof(tls) == "bool")
 }
 
 // @test UDP APIs exist
@@ -44,7 +44,7 @@ fn test_lookup_consistent() {
 fn test_lookup_type() {
     let addr = net.lookup("localhost")
     if (addr != null) {
-        assert_eq(typeof(addr), Type.string)
+        assert_eq(typeof(addr), "string")
         assert(addr.length > 0)
     }
 }

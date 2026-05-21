@@ -27,7 +27,7 @@ fn test_lookup_invalid_host() {
     // 某些 ISP/DNS 会对不存在的域名返回有效 IP（DNS hijacking）
     let addr = net.lookup("this-host-does-not-exist-12345.invalid")
     // 只验证不会崩溃，结果是 null 或字符串都可接受
-    assert_true(addr == null || typeof(addr) == Type.string)
+    assert_true(addr == null || typeof(addr) == "string")
 }
 
 // ============================================================
@@ -72,6 +72,6 @@ fn test_lookup_returns_valid_address() {
         // 地址应该是非空字符串
         assert_true(addr.length > 0)
         // 地址应该包含数字
-        assert_true(addr.contains(".") || addr.contains(":"))
+        assert_true(addr.includes(".") || addr.includes(":"))
     }
 }

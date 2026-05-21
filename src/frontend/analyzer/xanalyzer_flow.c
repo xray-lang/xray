@@ -17,24 +17,13 @@
 #include "../../base/xmalloc.h"
 #include <string.h>
 
-// Helper: extract type-name string from a literal or `Type.<name>` member
-// access. Both forms appear in user code:
-//   typeof(x) == "string"        // legacy form
-//   typeof(x) == Type.string     // current form (matches the Type module)
-// Returning the bare member name keeps the rest of the narrowing
-// pipeline (xa_narrow_by_typeof) untouched — it already does string
-// comparisons against type-name constants.
+// Helper: extract type-name string from a string literal.
+// Used for typeof(x) == "string" narrowing.
 static const char *get_string_literal(AstNode *node) {
     if (!node)
         return NULL;
     if (node->type == AST_LITERAL_STRING)
         return node->as.literal.raw_value.string_val;
-    if (node->type == AST_MEMBER_ACCESS && node->as.member_access.object &&
-        node->as.member_access.object->type == AST_VARIABLE &&
-        node->as.member_access.object->as.variable.name &&
-        strcmp(node->as.member_access.object->as.variable.name, "Type") == 0) {
-        return node->as.member_access.name;
-    }
     return NULL;
 }
 

@@ -139,8 +139,15 @@ vmcase(OP_TYPENAME) {
         val = R(b);
     }
     const char *type_name = NULL;
+    // For enum values, return enum name (checked before instance
+    // because enum values are also instances with base class "EnumValue")
+    if (XR_IS_ENUM_VALUE(val)) {
+        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(val);
+        if (ev->enum_name)
+            type_name = ev->enum_name;
+    }
     // For instances, return class name
-    if (xr_value_is_instance(val)) {
+    if (type_name == NULL && xr_value_is_instance(val)) {
         XrInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
         if (cls && cls->name)
@@ -151,12 +158,6 @@ vmcase(OP_TYPENAME) {
         XrClass *cls = *(XrClass **) val.ptr;
         if (cls && cls->name)
             type_name = cls->name;
-    }
-    // For enum values, return enum name
-    if (type_name == NULL && XR_IS_ENUM_VALUE(val)) {
-        XrEnumValue *ev = (XrEnumValue *) XR_TO_PTR(val);
-        if (ev->enum_name)
-            type_name = ev->enum_name;
     }
     if (type_name == NULL) {
         type_name = xr_typeid_name(xr_value_typeid(val));

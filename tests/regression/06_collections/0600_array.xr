@@ -147,10 +147,10 @@ fn test_indexOf() {
 }
 
 @test
-fn test_has() {
+fn test_includes() {
     let arr = [1, 2, 3]
-    assert_eq(arr.has(2), true)
-    assert_eq(arr.has(5), false)
+    assert_eq(arr.includes(2), true)
+    assert_eq(arr.includes(5), false)
 }
 
 // ===== 转换 =====

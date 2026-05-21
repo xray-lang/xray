@@ -52,7 +52,7 @@ fn test_multi_variable() {
 fn test_nested_quotes() {
     let name = "test"
     let s = 'He said "Hello, ${name}"'
-    assert_eq(s.contains("Hello"), true)
+    assert_eq(s.includes("Hello"), true)
 }
 
 // ===== 空插值 =====
@@ -92,6 +92,6 @@ fn test_multiline() {
     let name = "Alice"
     let s = "Hello,
 ${name}!"
-    assert_eq(s.contains("Alice"), true)
+    assert_eq(s.includes("Alice"), true)
 }
 

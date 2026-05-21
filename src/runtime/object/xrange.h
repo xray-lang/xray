@@ -61,27 +61,39 @@ XR_FUNC XrRange *xr_value_get_range_body(struct XrayIsolate *X, XrValue v);
 
 /* ========== Properties ========== */
 
-// Number of elements in the range (lazy, O(1))
+// Number of elements in the range (lazy, O(1)).
+// Range semantics is half-open `[start, end)` (matches spec §3.12 and
+// the for-in / pattern lowering in xi_lower_stmt.c).  Negative step uses
+// the symmetric `(end, start]` interpretation so iteration starts at
+// `start` and stops strictly past `end`.
 static inline int64_t xr_range_length(XrRange *r) {
     if (!r || r->step == 0)
         return 0;
     if (r->step > 0) {
-        return (r->end >= r->start) ? (r->end - r->start) / r->step + 1 : 0;
+        if (r->end <= r->start)
+            return 0;
+        // Number of strides i with start + i*step < end, i >= 0.
+        return (r->end - r->start + r->step - 1) / r->step;
     } else {
-        return (r->start >= r->end) ? (r->start - r->end) / (-r->step) + 1 : 0;
+        if (r->end >= r->start)
+            return 0;
+        int64_t neg_step = -r->step;
+        return (r->start - r->end + neg_step - 1) / neg_step;
     }
 }
 
-// Check if value is within the range
+// Check if value is in the range under half-open semantics.
+// Forward (step > 0): value in [start, end) and (value - start) % step == 0.
+// Reverse (step < 0): value in (end, start] and (start - value) % |step| == 0.
 static inline bool xr_range_contains(XrRange *r, int64_t value) {
     if (!r || r->step == 0)
         return false;
     if (r->step > 0) {
-        if (value < r->start || value > r->end)
+        if (value < r->start || value >= r->end)
             return false;
         return (value - r->start) % r->step == 0;
     } else {
-        if (value > r->start || value < r->end)
+        if (value > r->start || value <= r->end)
             return false;
         return (r->start - value) % (-r->step) == 0;
     }

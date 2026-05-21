@@ -1,0 +1,93 @@
+// 0955_exception_stack_array.xr
+// 作者：xingleixu@gmail.com
+// 测试：Exception.stack 是 Array<string>（F035 回归）
+// spec §16.6 / §18.8 声明 stack: Array<string>，每帧一行格式化字符串。
+
+@test
+fn test_new_exception_stack_is_array() {
+    let e = new Exception("hello")
+    assert_eq(typeof(e.stack), "Array")
+}
+
+@test
+fn test_new_exception_stack_initially_empty() {
+    // 直接 new 不经过 throw 控制流，stack 为空数组
+    let e = new Exception("hello")
+    assert_eq(e.stack.length, 0)
+}
+
+@test
+fn test_caught_exception_stack_is_array() {
+    fn inner() {
+        throw new Exception("from inner")
+    }
+    let stack_type = ""
+    try {
+        inner()
+    } catch (e) {
+        stack_type = typeof(e.stack)
+    }
+    assert_eq(stack_type, "Array")
+}
+
+@test
+fn test_caught_exception_stack_has_frames() {
+    fn level2() {
+        throw new Exception("oops")
+    }
+    fn level1() {
+        level2()
+    }
+    let frames = 0
+    try {
+        level1()
+    } catch (e) {
+        frames = e.stack.length
+    }
+    // 至少 1 帧（throw 点本身），具体数量取决于内联 / 调度细节
+    assert(frames >= 1)
+}
+
+@test
+fn test_caught_exception_stack_frames_are_strings() {
+    fn inner() {
+        throw new Exception("oops")
+    }
+    let all_strings = true
+    try {
+        inner()
+    } catch (e) {
+        let idx = 0
+        while (idx < e.stack.length) {
+            if (typeof(e.stack[idx]) != "string") {
+                all_strings = false
+            }
+            idx = idx + 1
+        }
+    }
+    assert_eq(all_strings, true)
+}
+
+@test
+fn test_subclass_exception_stack_is_array() {
+    class MyErr extends Exception {
+        constructor(m: string) { super(m) }
+    }
+    let e = new MyErr("hi")
+    assert_eq(typeof(e.stack), "Array")
+    assert_eq(e.stack.length, 0)
+}
+
+// ===== code / data 字段（同步 spec §16.6 完整字段） =====
+
+@test
+fn test_exception_code_default_zero() {
+    let e = new Exception("plain message")
+    assert_eq(e.code, 0)
+}
+
+@test
+fn test_exception_data_default_null() {
+    let e = new Exception("plain message")
+    assert_eq(e.data, null)
+}

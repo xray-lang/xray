@@ -103,7 +103,7 @@ XR_FUNC void xr_repl_print_vars(XrayIsolate *isolate);
 
 /*
  * Show the runtime type name of `expr`.  Synthesises and runs
- * `print(typename(<expr>))` through the normal incremental compile
+ * `print(typeof(<expr>))` through the normal incremental compile
  * pipeline so the expression sees the same scope as bare user input.
  *
  * `expr` is evaluated; for a side-effect-free static-only variant,

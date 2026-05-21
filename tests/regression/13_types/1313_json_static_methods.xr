@@ -52,8 +52,8 @@ fn test_json_stringify_array() {
 fn test_json_stringify_object() {
     let obj = { name: "Bob" }
     let s = Json.stringify(obj)
-    assert_eq(s.contains("name"), true)
-    assert_eq(s.contains("Bob"), true)
+    assert_eq(s.includes("name"), true)
+    assert_eq(s.includes("Bob"), true)
 }
 
 // ===== Json.isValid =====
