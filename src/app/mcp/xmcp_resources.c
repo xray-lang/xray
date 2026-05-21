@@ -29,14 +29,7 @@
  * Static resource definitions
  * -------------------------------------------------------------------------- */
 
-typedef struct {
-    const char *uri;
-    const char *name;
-    const char *description;
-    const char *mime_type;
-} ResourceDef;
-
-static const ResourceDef RESOURCES[] = {
+static const XmcpResourceDef RESOURCES[] = {
     {"xray://spec/cheatsheet", "Xray Language Cheatsheet",
      "Complete syntax quick reference for the Xray programming language", "text/markdown"},
     {"xray://spec/concurrency", "Xray Concurrency Model",
@@ -50,14 +43,7 @@ static const ResourceDef RESOURCES[] = {
  * Resource template definitions
  * -------------------------------------------------------------------------- */
 
-typedef struct {
-    const char *uri_template;
-    const char *name;
-    const char *description;
-    const char *mime_type;
-} ResourceTemplateDef;
-
-static const ResourceTemplateDef TEMPLATES[] = {
+static const XmcpResourceTemplateDef TEMPLATES[] = {
     {"xray://spec/topic/{name}", "Xray Syntax Topic",
      "Look up a specific Xray language syntax topic by name. "
      "Topics: variables, types, functions, control_flow, class, struct, "
@@ -75,11 +61,19 @@ XR_FUNC size_t xmcp_resources_count(void) {
     return count;
 }
 
+XR_FUNC const XmcpResourceDef *xmcp_resources_table(void) {
+    return RESOURCES;
+}
+
 XR_FUNC size_t xmcp_resource_templates_count(void) {
     size_t count = 0;
     while (TEMPLATES[count].uri_template != NULL)
         count++;
     return count;
+}
+
+XR_FUNC const XmcpResourceTemplateDef *xmcp_resource_templates_table(void) {
+    return TEMPLATES;
 }
 
 /* --------------------------------------------------------------------------
@@ -171,17 +165,18 @@ static char *read_stdlib_resource(XmcpServer *server, const char *module, int mo
  * -------------------------------------------------------------------------- */
 
 XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
-    (void) server;
+    XR_DCHECK(server != NULL, "xmcp_handle_resources_list: NULL server");
 
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *resources = xjson_new_array();
 
-    for (int i = 0; RESOURCES[i].uri != NULL; i++) {
+    for (size_t i = 0; i < server->registry.resource_count; i++) {
+        const XmcpResourceDef *resource = xmcp_registry_resource_at(&server->registry, i);
         XrJsonValue *res = xjson_new_object();
-        XJSON_SET_STRING(res, "uri", RESOURCES[i].uri);
-        XJSON_SET_STRING(res, "name", RESOURCES[i].name);
-        XJSON_SET_STRING(res, "description", RESOURCES[i].description);
-        XJSON_SET_STRING(res, "mimeType", RESOURCES[i].mime_type);
+        XJSON_SET_STRING(res, "uri", resource->uri);
+        XJSON_SET_STRING(res, "name", resource->name);
+        XJSON_SET_STRING(res, "description", resource->description);
+        XJSON_SET_STRING(res, "mimeType", resource->mime_type);
         xjson_array_push(resources, res);
     }
 
@@ -194,17 +189,19 @@ XrJsonValue *xmcp_handle_resources_list(XmcpServer *server) {
  * -------------------------------------------------------------------------- */
 
 XrJsonValue *xmcp_handle_resource_templates_list(XmcpServer *server) {
-    (void) server;
+    XR_DCHECK(server != NULL, "xmcp_handle_resource_templates_list: NULL server");
 
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *templates = xjson_new_array();
 
-    for (int i = 0; TEMPLATES[i].uri_template != NULL; i++) {
+    for (size_t i = 0; i < server->registry.resource_template_count; i++) {
+        const XmcpResourceTemplateDef *resource_template =
+            xmcp_registry_resource_template_at(&server->registry, i);
         XrJsonValue *t = xjson_new_object();
-        XJSON_SET_STRING(t, "uriTemplate", TEMPLATES[i].uri_template);
-        XJSON_SET_STRING(t, "name", TEMPLATES[i].name);
-        XJSON_SET_STRING(t, "description", TEMPLATES[i].description);
-        XJSON_SET_STRING(t, "mimeType", TEMPLATES[i].mime_type);
+        XJSON_SET_STRING(t, "uriTemplate", resource_template->uri_template);
+        XJSON_SET_STRING(t, "name", resource_template->name);
+        XJSON_SET_STRING(t, "description", resource_template->description);
+        XJSON_SET_STRING(t, "mimeType", resource_template->mime_type);
         xjson_array_push(templates, t);
     }
 

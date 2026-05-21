@@ -29,19 +29,7 @@
  * Prompt definitions
  * -------------------------------------------------------------------------- */
 
-typedef struct {
-    const char *name;
-    const char *description;
-    /* Arguments: up to 4 per prompt */
-    int arg_count;
-    struct {
-        const char *name;
-        const char *description;
-        bool required;
-    } args[4];
-} PromptDef;
-
-static const PromptDef PROMPTS[] = {
+static const XmcpPromptDef PROMPTS[] = {
     {"code-review",
      "Review Xray code for best practices, correctness, and style. "
      "Provides actionable feedback with code examples.",
@@ -74,6 +62,10 @@ static const PromptDef PROMPTS[] = {
 
 XR_FUNC size_t xmcp_prompts_count(void) {
     return (size_t) PROMPT_COUNT;
+}
+
+XR_FUNC const XmcpPromptDef *xmcp_prompts_table(void) {
+    return PROMPTS;
 }
 
 /* --------------------------------------------------------------------------
@@ -149,12 +141,13 @@ static const char WRITE_TEST_SYSTEM[] =
  * prompts/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_prompts_list(void) {
+XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server) {
+    XR_DCHECK(server != NULL, "xmcp_handle_prompts_list: NULL server");
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *prompts = xjson_new_array();
 
-    for (int i = 0; i < PROMPT_COUNT; i++) {
-        const PromptDef *p = &PROMPTS[i];
+    for (size_t i = 0; i < server->registry.prompt_count; i++) {
+        const XmcpPromptDef *p = xmcp_registry_prompt_at(&server->registry, i);
         XrJsonValue *prompt = xjson_new_object();
         XJSON_SET_STRING(prompt, "name", p->name);
         XJSON_SET_STRING(prompt, "description", p->description);
@@ -228,7 +221,7 @@ static XrJsonValue *build_prompt_messages(const char *system_text, const char *u
 }
 
 XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
-    (void) server;
+    XR_DCHECK(server != NULL, "xmcp_handle_prompts_get: NULL server");
     XR_DCHECK(params != NULL, "xmcp_handle_prompts_get: NULL params");
 
     const char *name = xjson_get_string(params, "name");
@@ -246,14 +239,15 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
     const char *user_arg = NULL;
     const char *user_arg_key = NULL;
     char user_buf[4096];
+    const XmcpPromptDef *prompt = xmcp_registry_find_prompt(&server->registry, name);
 
-    if (strcmp(name, "code-review") == 0) {
+    if (prompt && strcmp(name, "code-review") == 0) {
         system_text = CODE_REVIEW_SYSTEM;
         user_arg_key = "code";
-    } else if (strcmp(name, "explain-error") == 0) {
+    } else if (prompt && strcmp(name, "explain-error") == 0) {
         system_text = EXPLAIN_ERROR_SYSTEM;
         user_arg_key = "error";
-    } else if (strcmp(name, "convert-to-xray") == 0) {
+    } else if (prompt && strcmp(name, "convert-to-xray") == 0) {
         system_text = CONVERT_SYSTEM;
         user_arg_key = "code";
         /* Append source language if provided */
@@ -266,10 +260,10 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
                 user_arg = user_buf;
             }
         }
-    } else if (strcmp(name, "concurrency-pattern") == 0) {
+    } else if (prompt && strcmp(name, "concurrency-pattern") == 0) {
         system_text = CONCURRENCY_SYSTEM;
         user_arg_key = "description";
-    } else if (strcmp(name, "write-test") == 0) {
+    } else if (prompt && strcmp(name, "write-test") == 0) {
         system_text = WRITE_TEST_SYSTEM;
         user_arg_key = "code";
     }
@@ -293,13 +287,7 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
     /* Build result */
     XrJsonValue *result = xjson_new_object();
 
-    /* Find prompt description */
-    for (int i = 0; i < PROMPT_COUNT; i++) {
-        if (strcmp(PROMPTS[i].name, name) == 0) {
-            XJSON_SET_STRING(result, "description", PROMPTS[i].description);
-            break;
-        }
-    }
+    XJSON_SET_STRING(result, "description", prompt->description);
 
     xjson_object_set(result, "messages", build_prompt_messages(system_text, user_arg));
     return result;
