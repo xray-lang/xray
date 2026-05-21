@@ -208,11 +208,22 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         /* fall through to the `(...)` path below */
     }
 
-    /* Tuple or function type: `(T1, T2)` is a tuple unless followed by `->`,
-     * in which case it becomes a function type `(T1, T2) -> R`. The two share
-     * a leading `(` and the same internal type-list grammar, so we collect
-     * the list once and branch on the trailing `->` (task 082). */
+    /* Parenthesized type starting with `(` covers three grammar forms:
+     *   ()             -> unit (canonical procedure return type)
+     *   (T1, T2)       -> tuple
+     *   (T1, T2) -> R  -> function type
+     *
+     * The empty form `()` is *not* an empty tuple: xr_tref_tuple asserts
+     * count > 0, so we explicitly decode it to xr_tref_unit, matching
+     * what the function-return path in xparse_decl manufactures when the
+     * colon is omitted (e.g. `fn deep(): () { throw "boom" }`). Tuple
+     * and function type share the leading `(` and the same internal
+     * type-list grammar, so we collect the list once and branch on the
+     * trailing `->`. */
     if (xr_parser_match(parser, TK_LPAREN)) {
+        if (xr_parser_match(parser, TK_RPAREN)) {
+            return xr_tref_unit(parser->X);
+        }
         XrTypeRef *elems[16];
         int count = 0;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {

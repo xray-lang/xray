@@ -2182,8 +2182,15 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
     if (!v)
         return NULL;
     v->args[0] = val;
-    /* Pack tid and is_safe into aux_int: bits[31:1]=tid, bit[0]=is_safe */
-    v->aux_int = (tid << 1) | (is_safe ? 1 : 0);
+    /* Pack tid and is_safe into aux_int: bits[32:1]=tid as 32-bit two's
+     * complement, bit[0]=is_safe. The intermediate uint32_t cast is
+     * required because `tid` can be -1 (unrecognised generic name); a
+     * signed left shift of a negative value is undefined behaviour and
+     * would surface as UBSan failure under jit-force-pr (linux-asan).
+     * The corresponding decode in xi_emit_arith.c uses the signed shift
+     * `aux_int >> 1` and reads the low 32 bits back into `int`, which
+     * round-trips the sentinel on every two's-complement target. */
+    v->aux_int = ((int64_t) (uint32_t) tid << 1) | (is_safe ? 1 : 0);
     v->aux = (void *) arena_strdup(l->func, tname);
     v->line = (uint32_t) node->line;
     return v;
