@@ -383,7 +383,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
     int line = parser->previous.line;
 
     // Case 1: `() -> expr` no-param arrow function, or `()` unit literal.
-    // Arrow closures cannot declare an explicit return type (task 082) — use
+    // Arrow closures cannot declare an explicit return type — use
     // `fn() -> T { ... }` or annotate the binding (`let f: () -> T = ...`).
     if (xr_parser_check(parser, TK_RPAREN)) {
         xr_parser_advance(parser);
@@ -408,7 +408,7 @@ AstNode *xr_parse_grouping(Parser *parser) {
     // `)` is unambiguously an arrow head (no other expression-context syntax
     // produces `-> ...` there), so we only enter the arrow path on a positive
     // match. Anything else falls through to the general expression-list parse
-    // below. Arrow closures cannot declare an explicit return type (task 082).
+    // below. Arrow closures cannot declare an explicit return type.
     bool is_arrow_head = false;
     {
         Scanner saved_scan = parser->scanner;
@@ -537,16 +537,16 @@ AstNode *xr_parse_grouping(Parser *parser) {
 }
 
 // Parse arrow function body
-// Supports: => expr (auto return) or => { ... } (block)
+// Supports: -> expr (auto return) or -> { ... } (block)
 AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count,
                                       int line) {
     AstNode *body;
 
     if (xr_parser_match(parser, TK_LBRACE)) {
-        // Block body: => { ... }
+        // Block body: -> { ... }
         body = xr_parse_block(parser);
     } else {
-        // Expression body: => expr (auto-wrap in return)
+        // Expression body: -> expr (auto-wrap in return)
         AstNode *expr = xr_parse_expression(parser);
 
         // return_stmt shallow-copies values into the AST node; must be arena.
@@ -632,7 +632,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
 
     // Parse optional return type annotation: `fn(...) -> T { ... }`.
-    // The unified arrow `->` is the only legal separator (task 082).
+    // The unified arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);

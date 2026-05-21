@@ -23,7 +23,7 @@ fn test_select() {
         _ -> { print("no data") }
     }
     
-    // 都没有数据时（走 default）
+    // 都没有数据时（走 _ 分支）
     select {
         msg from ch1 -> { print(msg) }
         msg from ch2 -> { print(msg) }

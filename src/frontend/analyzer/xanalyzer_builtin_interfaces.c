@@ -203,7 +203,7 @@ static XaInterfaceMethod stringable_methods[] = {
  *       get(index: K): V
  *
  *       // Set element at index/key (optional, for mutable containers)
- *       set(index: K, value: V): void
+ *       set(index: K, value: V) -> ()
  *   }
  *
  * Built-in types that implement Indexable:
@@ -238,7 +238,7 @@ static XaInterfaceMethod stringable_methods[] = {
  */
 static XaInterfaceMethod indexable_methods[] = {
     {"get", NULL, NULL, 1},  // param: index, return: element type
-    {"set", NULL, NULL, 2}   // params: index, value, return: void
+    {"set", NULL, NULL, 2}   // params: index, value, return: Unit
 };
 
 /*
@@ -350,7 +350,7 @@ static XaInterfaceMethod callable_methods[] = {
  *
  * Equivalent xray interface definition:
  *   interface Closeable {
- *       fn close(): void
+ *       fn close() -> ()
  *   }
  *
  * Built-in types that implement Closeable:
@@ -360,7 +360,7 @@ static XaInterfaceMethod callable_methods[] = {
  *   - (User-defined)   : any class with close() method
  *
  * Usage:
- *   fn withResource<T: Closeable>(resource: T, action: fn(T): void) {
+ *   fn withResource<T: Closeable>(resource: T, action: (T) -> ()) {
  *       defer resource.close()
  *       action(resource)
  *   }
@@ -369,7 +369,7 @@ static XaInterfaceMethod callable_methods[] = {
  *   defer file.close()  // automatic cleanup
  */
 static XaInterfaceMethod closeable_methods[] = {
-    {"close", NULL, NULL, 0}  // return: void
+    {"close", NULL, NULL, 0}  // return: Unit
 };
 
 // ============================================================================

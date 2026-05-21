@@ -244,6 +244,27 @@ TEST(parser_for_stmt) {
     teardown();
 }
 
+TEST(parser_select_wildcard_default_arm) {
+    setup();
+    AstNode *stmt = parse_first("select {\n  _ -> { print(\"idle\") }\n}");
+    ASSERT_EQ_INT(stmt->type, AST_SELECT_STMT);
+    ASSERT_EQ_INT(stmt->as.select_stmt.case_count, 1);
+    AstNode *case_node = stmt->as.select_stmt.cases[0];
+    ASSERT_NOT_NULL(case_node);
+    ASSERT_EQ_INT(case_node->type, AST_SELECT_CASE);
+    ASSERT(case_node->as.select_case.is_default);
+    ASSERT(!case_node->as.select_case.is_send);
+    ASSERT(!case_node->as.select_case.is_timeout);
+    teardown();
+}
+
+TEST(parser_select_default_keyword_rejected) {
+    setup();
+    AstNode *ast = xr_parse(X, "select {\n  default -> { print(\"idle\") }\n}");
+    ASSERT_NULL(ast);
+    teardown();
+}
+
 /* ========== Function Tests ========== */
 
 TEST(parser_function_decl) {
@@ -596,6 +617,8 @@ int main(void) {
     RUN_TEST(parser_if_else);
     RUN_TEST(parser_while_stmt);
     RUN_TEST(parser_for_stmt);
+    RUN_TEST(parser_select_wildcard_default_arm);
+    RUN_TEST(parser_select_default_keyword_rejected);
 
     // Functions
     RUN_TEST(parser_function_decl);

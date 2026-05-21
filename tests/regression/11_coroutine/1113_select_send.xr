@@ -4,7 +4,7 @@
 fn test_select_send() {
     shared const ch = new Channel(2)
     
-    // 发送分支：val to ch => ...
+    // 发送分支：val to ch -> ...
     select {
         100 to ch -> { print("sent 100") }
         _ -> { print("send failed") }

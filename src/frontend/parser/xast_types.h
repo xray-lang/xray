@@ -176,8 +176,8 @@ typedef enum {
     AST_DESTRUCTURE_ASSIGN,  // [a, b] = [b, a]
 
     // Match expression
-    AST_MATCH_EXPR,  // match (x) { 1 => "one", _ => "other" }
-    AST_MATCH_ARM,   // 1 => "one"
+    AST_MATCH_EXPR,  // match (x) { 1 -> "one", _ -> "other" }
+    AST_MATCH_ARM,   // 1 -> "one"
 
     // Pattern matching
     AST_PATTERN_LITERAL,   // 1, "hello", true
@@ -202,7 +202,7 @@ typedef enum {
     AST_CHAN_SEND,       // ch.send(value)
     AST_CHAN_RECV,       // ch.recv()
     AST_SELECT_STMT,     // select { case ... }
-    AST_SELECT_CASE,     // msg from ch => ...
+    AST_SELECT_CASE,     // msg from ch -> ...
     AST_DEFER_STMT,      // defer fn()
     AST_SCOPE_BLOCK,     // scope { ... }
     AST_YIELD_STMT,      // yield - give up execution

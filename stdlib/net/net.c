@@ -1417,7 +1417,7 @@ XR_DEFINE_BUILTIN(net_read_handle_yieldable, "read", "(conn: NetConn, maxlen?: i
                   "Read data from connection")
 XR_DEFINE_BUILTIN(net_write_handle_yieldable, "write", "(conn: NetConn, data: string): int",
                   "Write data to connection")
-XR_DEFINE_BUILTIN(net_close_handle, "close", "(handle: NetConn | NetListener)",
+XR_DEFINE_BUILTIN(net_close_handle, "close", "(handle: NetConn | NetListener): ()",
                   "Close a connection or listener")
 XR_DEFINE_BUILTIN(net_fd_handle, "fd", "(handle: NetConn | NetListener): int", "Get fd from handle")
 XR_DEFINE_BUILTIN(net_dns_lookup, "lookup", "(hostname: string): string?", "DNS lookup")

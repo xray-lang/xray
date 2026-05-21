@@ -10,6 +10,7 @@
 #include "xtype.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer.h"
+#include "xanalyzer_builtins.h"
 #include "xanalyzer_flow.h"
 #include "xanalyzer_infer.h"
 #include "xanalyzer_visitor.h"
@@ -724,6 +725,27 @@ TEST(class_info_members) {
     xa_class_info_free(info);
 }
 
+TEST(builtin_http_fast_signatures) {
+    const XaBuiltinModule *mod = xa_builtin_get_module_info("http");
+    ASSERT(mod != NULL);
+
+    const XaBuiltinMember *parse_req = NULL;
+    const XaBuiltinMember *send_resp = NULL;
+
+    for (int i = 0; i < mod->function_count; i++) {
+        const XaBuiltinMember *fn = &mod->functions[i];
+        if (strcmp(fn->name, "parseRequest") == 0)
+            parse_req = fn;
+        if (strcmp(fn->name, "sendResponse") == 0)
+            send_resp = fn;
+    }
+
+    ASSERT(parse_req != NULL);
+    ASSERT(send_resp != NULL);
+    ASSERT(strcmp(parse_req->signature, "(fd: int): Array<unknown>?") == 0);
+    ASSERT(strcmp(send_resp->signature, "(fd: int, body: string, status?: int): bool") == 0);
+}
+
 // ============================================================================
 // Main
 // ============================================================================
@@ -791,6 +813,7 @@ int main(void) {
     RUN_TEST(deeply_nested_types);
     RUN_TEST(union_type_dedup);
     RUN_TEST(class_info_members);
+    RUN_TEST(builtin_http_fast_signatures);
 
     printf("\n========================================\n");
     printf("Tests passed: %d\n", tests_passed);

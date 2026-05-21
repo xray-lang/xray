@@ -382,7 +382,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
 
     // Parse optional return type annotation: `fn foo(...) -> T { ... }`.
-    // The unified arrow `->` is the only legal separator (see task 082).
+    // The unified arrow `->` is the only legal separator.
     XrTypeRef *return_type = NULL;
     if (xr_parser_match(parser, TK_ARROW)) {
         return_type = xr_parse_type_annotation(parser);
@@ -616,11 +616,9 @@ AstNode *xr_parse_array_literal(Parser *parser) {
 }
 
 /*
- * Parse object literal {} or Map literal {key => value}
- * Distinguish by separator:
- *   - `:` separator -> Json object literal
- *   - `=>` separator -> Map literal
- * Supports computed property syntax: { [expr]: value } or { [expr] => value }
+ * Parse Json/Object literal `{ key: value }`.
+ * Map literals use the prefixed `#{ key: value }` form.
+ * Supports computed property syntax: `{ [expr]: value }`.
  */
 AstNode *xr_parse_object_literal(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_object_literal: NULL parser");
@@ -640,7 +638,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     bool has_computed = false;
     int count = 0;
     int capacity = 0;
-    bool is_map = false;                // Whether it's a Map (determined by => separator)
+    bool is_map = false;                // Legacy branch marker; object literals are not Maps.
     bool separator_determined = false;  // Whether separator has been determined
 
     do {
@@ -691,7 +689,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             is_computed = false;
         }
         // Numeric literal as key: only Map allows this, and Map literals must
-        // use the `#{ ... }` prefix form (see task 082).
+        // use the `#{ ... }` prefix form.
         else if (xr_parser_check(parser, TK_LITERAL_INT) ||
                  xr_parser_check(parser, TK_LITERAL_FLOAT)) {
             xr_parser_error(
@@ -728,7 +726,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         keys[count] = key;
         computed[count] = is_computed;
 
-        // `{ ... }` is always a Json/Object literal in xray (task 082).
+        // `{ ... }` is always a Json/Object literal in xray.
         // The only legal key-value separator is `:`. Map literals must use
         // the `#{ k: v }` prefix form. The unified arrow `->` is reserved
         // for function / branch arrows and is rejected here with a hint.
@@ -759,7 +757,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     // Expect closing brace
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
 
-    // `{ ... }` always produces a Json/Object literal under task 082;
+    // `{ ... }` always produces a Json/Object literal;
     // the legacy `is_map` branch is unreachable but the local is kept to
     // minimise diff churn against historical compiles.
     (void) is_map;
@@ -772,8 +770,8 @@ AstNode *xr_parse_object_literal(Parser *parser) {
 }
 
 /*
- * Parse Map literal (new unified syntax)
- * Syntax: #{} or #{"key" => value, ...}
+ * Parse Map literal.
+ * Syntax: #{} or #{"key": value, ...}
  */
 AstNode *xr_parse_empty_map_literal(Parser *parser) {
     int line = parser->previous.line;
@@ -785,7 +783,7 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         return xr_ast_map_literal(parser->X, NULL, NULL, 0, line);
     }
 
-    // Non-empty Map: #{"key" => value, ...}
+    // Non-empty Map: #{"key": value, ...}
     AstNode **keys = NULL;
     AstNode **values = NULL;
     int count = 0;
@@ -813,8 +811,7 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         keys[count] = xr_parse_expression(parser);
 
         // Expect ':' as the key-value separator inside `#{ ... }` Map literal.
-        // (Old `=>` separator was removed; the `#` prefix already disambiguates
-        // a Map from a Json/Object literal — see task 082.)
+        // The `#` prefix already disambiguates a Map from a Json/Object literal.
         xr_parser_consume(parser, TK_COLON, "expected ':' after Map key in #{...}");
 
         // Parse value expression
@@ -1002,7 +999,7 @@ AstNode *xr_parse_return_statement(Parser *parser) {
 /*
  * Parse type alias declaration
  * type Point = { x: float, y: float }
- * type BinaryOp = (int, int) => int
+ * type BinaryOp = (int, int) -> int
  * type Points = Array<Point>
  *
  * Type aliases are registered in parser's type alias table for parse-time resolution.
@@ -1249,7 +1246,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
         if (name_token.length == 6 && memcmp(name_token.start, "lambda", 6) == 0) {
             xr_parser_error_at_current(
                 parser,
-                "'lambda' is not supported. Use 'fn(params) { }' or '(params) => expr' in Xray");
+                "'lambda' is not supported. Use 'fn(params) { }' or '(params) -> expr' in Xray");
             return NULL;
         }
     }

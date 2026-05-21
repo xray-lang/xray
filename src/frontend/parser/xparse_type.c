@@ -197,13 +197,12 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return result;
     }
 
-    /* Legacy `fn(T1, T2): R` form — removed by task 082. Function types are
+    /* Legacy `fn(T1, T2): R` form is no longer accepted. Function types are
      * now written `(T1, T2) -> R` (no `fn` prefix). Emit a clear migration
      * hint and recover by parsing the rest as a function type. */
     if (xr_parser_check(parser, TK_FN)) {
         xr_parser_error(parser,
-                        "function types are written `(T1, T2) -> R` (drop the `fn` prefix); "
-                        "see task 082");
+                        "function types are written `(T1, T2) -> R` (drop the `fn` prefix)");
         xr_parser_advance(parser);  // consume 'fn' so caller can keep parsing
         /* fall through to the `(...)` path below */
     }

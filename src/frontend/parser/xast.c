@@ -1174,7 +1174,7 @@ AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection, AstNode *index_e
 /* ========== Match Expression Node Creation ========== */
 
 // Create match expression node
-// match (x) { 1 => "one", _ => "other" }
+// match (x) { 1 -> "one", _ -> "other" }
 AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr, AstNode **arms, int arm_count, int line) {
     AstNode *node = alloc_node(X, AST_MATCH_EXPR, line);
     node->as.match_expr.expr = expr;
@@ -1184,7 +1184,7 @@ AstNode *xr_ast_match_expr(XrayIsolate *X, AstNode *expr, AstNode **arms, int ar
 }
 
 // Create match arm node
-// 1 => "one"
+// 1 -> "one"
 AstNode *xr_ast_match_arm(XrayIsolate *X, AstNode *pattern, AstNode *guard, AstNode *body,
                           int line) {
     AstNode *node = alloc_node(X, AST_MATCH_ARM, line);
@@ -2052,7 +2052,7 @@ AstNode *xr_ast_channel_new(XrayIsolate *X, AstNode *buffer_size, int line) {
 }
 
 // Create select case node
-// msg from ch => expr or ch.send(val) => expr
+// msg from ch -> expr or value to ch -> expr
 AstNode *xr_ast_select_case(XrayIsolate *X, const char *var_name, AstNode *channel, AstNode *value,
                             AstNode *body, bool is_send, bool is_default, bool is_timeout,
                             int line) {
@@ -2068,7 +2068,7 @@ AstNode *xr_ast_select_case(XrayIsolate *X, const char *var_name, AstNode *chann
 }
 
 // Create select statement node
-// select { msg from ch => ..., _ => ... }
+// select { msg from ch -> ..., _ -> ... }
 AstNode *xr_ast_select_stmt(XrayIsolate *X, AstNode **cases, int case_count, int line) {
     AstNode *node = alloc_node(X, AST_SELECT_STMT, line);
 

@@ -311,8 +311,8 @@ static XrValue gc_info(XrayIsolate *isolate, XrValue *args, int argc) {
 XR_DEFINE_BUILTIN(gc_collect, "collect", "(): int", "Force full GC, return cycle count")
 XR_DEFINE_BUILTIN(gc_step, "step", "(): bool",
                   "Run one incremental GC step, return true if cycle completed")
-XR_DEFINE_BUILTIN(gc_disable, "disable", "()", "Disable automatic GC")
-XR_DEFINE_BUILTIN(gc_enable, "enable", "()", "Enable automatic GC")
+XR_DEFINE_BUILTIN(gc_disable, "disable", "(): ()", "Disable automatic GC")
+XR_DEFINE_BUILTIN(gc_enable, "enable", "(): ()", "Enable automatic GC")
 XR_DEFINE_BUILTIN(gc_isrunning, "isrunning", "(): bool", "Check if GC is enabled")
 XR_DEFINE_BUILTIN(gc_count, "count", "(): float", "Get memory usage in KB")
 XR_DEFINE_BUILTIN(gc_countb, "countb", "(): int", "Get memory usage in bytes")

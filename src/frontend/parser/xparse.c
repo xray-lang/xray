@@ -1294,7 +1294,7 @@ AstNode *xr_parse_variable(Parser *parser) {
         if (next_rule->prefix != NULL || parser->current.type == TK_NAME) {
             xr_parser_error_at_previous(
                 parser,
-                "'lambda' is not supported. Use 'fn(params) { }' or '(params) => expr' in Xray");
+                "'lambda' is not supported. Use 'fn(params) { }' or '(params) -> expr' in Xray");
         }
     }
 

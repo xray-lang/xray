@@ -75,20 +75,20 @@ let x = 1              // mutable
 const PI = 3.14        // immutable
 
 // Functions (params MUST have type annotations)
-fn add(a: int, b: int): int { return a + b }
-let double = (x: int): int => x * 2
+fn add(a: int, b: int) -> int { return a + b }
+let double = (x: int) -> x * 2
 
 // Tuples (heterogeneous, fixed arity, .N access)
 let p: (int, string) = (1, "hi")
 print(p.0); print(p.1)
-fn divmod(a: int, b: int): (int, int) { return (a / b, a % b) }
+fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
 let (q, r) = divmod(17, 5)
 let combined = (...p, true)         // spread → (1, "hi", true)
 
 // Concurrency
 let task = go compute(42)      // spawn coroutine
 let result = await task         // wait for result
-const ch = Channel(10)          // channel (must be const)
+shared const ch = new Channel<int>(10)
 ch.send(val); ch.recv()         // communicate
 shared const CFG = { ... }     // immutable cross-coroutine data
 ```

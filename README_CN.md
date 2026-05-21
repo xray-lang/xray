@@ -2,42 +2,39 @@
 
 # Xray
 
-> 静态类型脚本语言，原生并发，编译期安全。
-> **TypeScript 的语法 · Go 的并发 · 原生的性能。**
+> 静态类型脚本语言，原生并发。
+> TypeScript 风格语法，Go 风格协程，支持 VM / JIT / AOT 执行。
 
-```ts
-import http
-
-fn dashboard(req: Json): Json {
-    let [users, orders] = await all [
-        go loadUsers(),
-        go loadOrders()
-    ]
-    return { users, count: orders.length }
+```xray
+fn count(xs: Array<int>) -> int {
+    let total = 0
+    for (x in xs) { total += x }
+    return total
 }
 
-http.route("GET", "/dashboard", dashboard)
-http.listen(8080)
+let left = go count([1, 2, 3])
+let right = go count([4, 5, 6])
+
+let a = await left
+let b = await right
+print(a + b)
 ```
 
-一段并发的 HTTP handler。`await all` 同时跑两个 `go`，
-**编译器静态保证**没有数据竞争。
+Xray 面向需要静态类型、快速启动、安全并发，并且未来可编译为原生二进制的脚本和服务场景。
 
 ---
 
-## 为什么是 Xray？
+## 特性
 
-如果你符合下面任一条件，Xray 就是为你设计的：
-
-- 喜欢 **Go 的并发**，但想要 `let` / `class` / `enum` / `match` / 异常 / 类型推断；
-- 喜欢 **TypeScript 的类型**，但希望它能编译为原生二进制，而不是 JavaScript；
-- 想要**编译期就保证**的并发安全，而不是运行时再来打补丁。
-
-如果它编译通过，它就是并发安全的。不需要锁，不需要 race detector。
+- **静态类型，没有 `any`**：类型推断、可空类型 (`T?`)、Union、泛型、Tuple、sealed object、类型收窄。
+- **原生并发**：`go`、`await`、`Channel<T>`、`select`、结构化 `scope` 是语言内置能力。
+- **现代语言结构**：`class`、`struct`、`interface`、ADT 风格 `enum`、`match`、异常、`Result`、模块、`defer`。
+- **多执行模式**：VM 直接运行，JIT 加速热点，AOT 构建原生二进制。
+- **C 实现与嵌入 API**：stdlib native 模块，以及 `include/xray_embedding.h` 宿主嵌入接口。
 
 ---
 
-## 安装
+## 构建
 
 ```bash
 git clone https://github.com/xray-lang/xray.git
@@ -47,123 +44,75 @@ cmake --build build -j8
 ./build/xray --version
 ```
 
+## 使用
+
 ```bash
-xray app.xr              # 运行脚本
-xray -e 'print("hi")'    # 求值表达式
-xray test                # 运行 @test 函数
-xray repl                # 交互式 REPL
-xray build app.xr        # 编译为独立原生二进制
+./build/xray app.xr              # 运行脚本
+./build/xray -e 'print("hi")'    # 执行代码
+./build/xray test                # 运行 @test 函数
+./build/xray repl                # 交互式 REPL
+./build/xray build app.xr        # 构建原生二进制
 ```
 
 ---
 
 ## 语言一瞥
 
-### 像 TypeScript，但没有 `any`
-
-```ts
+```xray
 type User = { name: string, age: int }
 
-let r: int? = parse(input)
-if (r is int) { print(r * 2) }      // 类型收窄
-
-// Json 是 first-class 类型，从全动态到严格类型自由切换：
-let cfg: { host: string, port: int, ... } = loadConfig()
-cfg.timeout = 30                     // 可扩展字段
-```
-
-泛型 / 联合类型 / 类型收窄 / `?.` / `??` / 解构 / 模板字符串 —— 都在。
-**但 `any` 这扇后门被关上了。**
-
-### 像 Go 的并发，编译期就安全
-
-```ts
-// 结构化并发 —— scope 自动等待所有子协程
-scope {
-    go loadUsers()
-    go loadOrders()
+fn greet(user: User?) -> string {
+    match (user) {
+        null -> "hello, guest"
+        u -> "hello, ${u.name}"
+    }
 }
 
-// Channel —— 类型化、缓冲、first-class
-const jobs = Channel<int>(10)
-go fn() { for (i in 0..100) { jobs.send(i) } }()
-for (job in jobs) { process(job) }
+let scores = #{"alice": 10, "bob": 8}
+let names = #["alice", "bob"]
+```
 
-// select —— 多路复用 + 超时
+并发共享是显式的。普通局部变量不会被 `go` 协程意外共享；需要通过参数、`shared const` 或 `Channel<T>` 传递。
+
+```xray
+shared const ch = new Channel<int>(2)
+
+go fn() { ch.send(42) }()
+
 select {
-    msg from ch1 => print(msg)
-    after 1000  => print("timeout")
+    value from ch -> { print(value) }
+    after 1000 -> { print("timeout") }
+    _ -> { print("no value") }
 }
-
-// 编译器拒绝的代码：
-let x = [1, 2, 3]
-go fn() { x.push(4) }()              // ✗ cannot capture 'x' in go closure
-shared let data = ...                // 可变共享必须显式 move
-let ch = Channel(1)                   // ✗ Channel 必须是 const
 ```
 
-跨协程共享数据**有且只有三种方式**：
-`shared const`（零拷贝读）/ `Channel`（send 时深拷贝）/ 函数参数（深拷贝传递）。
-其它写法一律 **编译错误**。
+---
 
-### 三种执行模式 · 同一份源码
+## 标准库
 
-```
-       你的 .xr 源码
-             │
-   ┌─────────┼─────────┐
-   ▼         ▼         ▼
-  VM        JIT       AOT
-启动 < 50ms 热路径加速  .xr → C → gcc/clang
-零编译延迟  按需触发    单文件原生二进制
-```
+Native 模块包括：
 
-开发期用 VM（即时启动、REPL、脚本）。
-热路径自动 JIT 加速（ARM64 已稳定，x86_64 进行中）。
-发布时 AOT 编译为**单文件原生二进制**（经 C transpile 链 gcc/clang）。
+`base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`gc`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+
+`Json`、`Array`、`Map`、`Set`、`Channel`、`DateTime`、`Regex`、`StringBuilder`、`Exception` 等内置类型由 prelude 提供，通常无需显式 import。
 
 ---
 
-## 成熟度 —— 诚实声明
+## 状态
 
-当前版本 v0.5.x。我们不假装已经是 1.0。
+Xray 仍处于 pre-1.0 阶段，正在快速迭代。仓库中已包含 VM、parser/analyzer、runtime、标准库、测试、LSP/DAP/MCP 工具、JIT 与 AOT 管线，但语言和 API 仍可能调整。
 
-| 组件 | 状态 |
-| --- | --- |
-| VM、GC、调度器、ARM64 JIT | ✅ Stable |
-| AOT（单 / 多模块、类、异常、泛型） | ✅ Stable |
-| HTTP / HTTP2 / WebSocket / TLS / regex / crypto | ✅ Stable |
-| LSP、VSCode 插件 | ✅ Stable |
-| x86_64 JIT | 🚧 Beta |
-| AOT 协程 / stdlib 全覆盖 | 🚧 Beta |
-| io_uring (Linux)、IOCP (Windows)、DAP、cluster | 🚧 Beta |
-| ARM32 / RISC-V64 / LoongArch 后端 | 🗓️ Roadmap |
-| 包注册中心 | 🗓️ Roadmap |
+当前语言规范以以下文件为准：
 
-约 8,000 行 C 实现，每次提交跑 280+ 项回归测试。
+- [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md) —— 中文语言参考
+- [`LANGUAGE_SPEC.md`](LANGUAGE_SPEC.md) —— English language reference
 
 ---
 
-## 内置工具
+## 更多
 
-**工具链** —— `xray run` · `test` · `fmt` · `build` · `check` · `repl` · `lsp` · `dap` · `init` · `pkg` · `eval` · `compile`。
-一个 binary，零运行时依赖。
-
-**标准库** —— `http` · `ws` · `net` · `csv` · `toml` · `xml` · `yaml` · `crypto` · `base64` · `compress` · `regex` · `io` · `os` · `path` · `time` · `datetime` · `math` · `gc` · `log` · `cluster` · `url` · `encoding`。（`Json` 是一等公民类型（prelude），无需 `import`。）
-
-**平台** —— macOS · Linux · Windows × arm64 / x86_64。
-
-**可嵌入** —— `include/xray_embedding.h` 提供 C API，可嵌入 C/C++ 宿主应用。
-
----
-
-## 深入了解
-
-- [`demos/`](demos/) —— 按主题组织的可运行示例（basics → concurrency → networking）
-- [`docs/rules/language-spec.md`](docs/rules/language-spec.md) —— 完整语法规范
-- [`docs/design/`](docs/design/) —— 架构深入（VM / JIT / AOT / GC / 调度器 / cluster）
-
----
+- [`demos/`](demos/) —— 可运行示例
+- [`tests/`](tests/) —— 回归测试与单元测试
 
 ## License
 

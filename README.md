@@ -2,42 +2,39 @@
 
 # Xray
 
-> A statically-typed scripting language with native concurrency.
-> **TypeScript syntax · Go-style concurrency · native binaries.**
+> A statically typed scripting language with native concurrency.
+> TypeScript-like syntax, Go-style coroutines, VM/JIT/AOT execution.
 
-```ts
-import http
-
-fn dashboard(req: Json): Json {
-    let [users, orders] = await all [
-        go loadUsers(),
-        go loadOrders()
-    ]
-    return { users, count: orders.length }
+```xray
+fn count(xs: Array<int>) -> int {
+    let total = 0
+    for (x in xs) { total += x }
+    return total
 }
 
-http.route("GET", "/dashboard", dashboard)
-http.listen(8080)
+let left = go count([1, 2, 3])
+let right = go count([4, 5, 6])
+
+let a = await left
+let b = await right
+print(a + b)
 ```
 
-A concurrent HTTP handler. `await all` runs both `go` tasks in parallel,
-and the compiler **statically guarantees** there are no data races.
+Xray is designed for scripts and services that need static types, fast startup, safe concurrency, and a path to native binaries.
 
 ---
 
-## Why Xray?
+## Highlights
 
-You'll feel at home if you...
-
-- **like Go's concurrency** but want `let`, `class`, `enum`, `match`, exceptions, and type inference;
-- **like TypeScript's types** but want it to compile to a native binary, not to JavaScript;
-- want concurrency that's **safe at compile time**, not patched up at runtime.
-
-If it compiles, it's concurrency-safe. No locks. No race detectors.
+- **Static typing without `any`** — inference, nullable types (`T?`), unions, generics, tuples, sealed object types, and type narrowing.
+- **Native concurrency** — `go`, `await`, `Channel<T>`, `select`, and structured `scope` are built into the language.
+- **Modern language features** — `class`, `struct`, `interface`, ADT-style `enum`, `match`, exceptions, `Result`, modules, and `defer`.
+- **Multiple execution modes** — run with the VM, accelerate hot paths with JIT, or build native binaries through AOT.
+- **C implementation and embedding API** — native stdlib modules and `include/xray_embedding.h` for host applications.
 
 ---
 
-## Install
+## Build
 
 ```bash
 git clone https://github.com/xray-lang/xray.git
@@ -47,123 +44,75 @@ cmake --build build -j8
 ./build/xray --version
 ```
 
+## Use
+
 ```bash
-xray app.xr              # run a script
-xray -e 'print("hi")'    # evaluate an expression
-xray test                # run @test functions
-xray repl                # interactive REPL
-xray build app.xr        # compile to a standalone native binary
+./build/xray app.xr              # run a script
+./build/xray -e 'print("hi")'    # evaluate code
+./build/xray test                # run @test functions
+./build/xray repl                # interactive REPL
+./build/xray build app.xr        # build a native binary
 ```
 
 ---
 
-## A taste
+## Language at a glance
 
-### TypeScript-like, without `any`
-
-```ts
+```xray
 type User = { name: string, age: int }
 
-let r: int? = parse(input)
-if (r is int) { print(r * 2) }      // narrowed
-
-// Json is a first-class type, from fully dynamic to strictly typed:
-let cfg: { host: string, port: int, ... } = loadConfig()
-cfg.timeout = 30                     // extensible fields
-```
-
-Generics, union types, type narrowing, `?.`, `??`, destructuring, template strings —
-it all looks like TypeScript, **but the `any` escape hatch is gone**.
-
-### Go-like concurrency, statically safe
-
-```ts
-// Structured concurrency — scope waits for all children
-scope {
-    go loadUsers()
-    go loadOrders()
+fn greet(user: User?) -> string {
+    match (user) {
+        null -> "hello, guest"
+        u -> "hello, ${u.name}"
+    }
 }
 
-// Channels — first-class, typed, buffered
-const jobs = Channel<int>(10)
-go fn() { for (i in 0..100) { jobs.send(i) } }()
-for (job in jobs) { process(job) }
+let scores = #{"alice": 10, "bob": 8}
+let names = #["alice", "bob"]
+```
 
-// select — multiplex channels with timeout
+Concurrency is explicit. Ordinary local variables cannot be accidentally shared across `go` coroutines; use parameters, `shared const`, or `Channel<T>`.
+
+```xray
+shared const ch = new Channel<int>(2)
+
+go fn() { ch.send(42) }()
+
 select {
-    msg from ch1 => print(msg)
-    after 1000  => print("timeout")
+    value from ch -> { print(value) }
+    after 1000 -> { print("timeout") }
+    _ -> { print("no value") }
 }
-
-// What the compiler rejects:
-let x = [1, 2, 3]
-go fn() { x.push(4) }()              // ✗ cannot capture 'x' in go closure
-shared let data = ...                // mutable shared requires explicit `move`
-let ch = Channel(1)                   // ✗ Channel must be const
 ```
 
-Three (and only three) ways to share data across coroutines:
-`shared const` (zero-copy reads), `Channel` (deep-copy on send), and function parameters.
-Anything else is a **compile error**.
+---
 
-### Three execution modes — one source
+## Standard library
 
-```
-        your .xr source
-              │
-   ┌──────────┼──────────┐
-   ▼          ▼          ▼
-  VM         JIT        AOT
-< 50 ms    hot paths   .xr → C → gcc/clang
- startup   on demand   single native binary
-```
+Native modules include:
 
-Develop with the VM (instant startup, REPL, scripts).
-Hot paths are auto-compiled by the JIT (ARM64; x86_64 is in beta).
-Ship as a **single-file native binary** via AOT (C transpile + link).
+`base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `gc`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+
+`Json`, `Array`, `Map`, `Set`, `Channel`, `DateTime`, `Regex`, `StringBuilder`, `Exception`, and related built-in types are available from the prelude.
 
 ---
 
-## Status — honest
+## Status
 
-We're at v0.5.x. We don't pretend it's 1.0.
+Xray is pre-1.0 and under active development. The VM, parser/analyzer, runtime, standard library, tests, LSP/DAP/MCP tooling, JIT, and AOT pipeline are all in the repository, but language and API details may still change.
 
-| Component | State |
-| --- | --- |
-| VM, GC, scheduler, ARM64 JIT | ✅ Stable |
-| AOT (single + multi-module, classes, exceptions, generics) | ✅ Stable |
-| HTTP / HTTP2 / WebSocket / TLS / regex / crypto | ✅ Stable |
-| LSP, VSCode extension | ✅ Stable |
-| x86_64 JIT | 🚧 Beta |
-| AOT coroutines / full stdlib coverage | 🚧 Beta |
-| io_uring (Linux), IOCP (Windows), DAP, cluster | 🚧 Beta |
-| ARM32 / RISC-V64 / LoongArch backends | 🗓️ Roadmap |
-| Package registry | 🗓️ Roadmap |
+Use the language specs as the current source of truth:
 
-Built in ~8,000 lines of C with 280+ regression tests passing on every commit.
+- [`LANGUAGE_SPEC.md`](LANGUAGE_SPEC.md) — English language reference
+- [`LANGUAGE_SPEC_CN.md`](LANGUAGE_SPEC_CN.md) — Chinese language reference
 
 ---
 
-## What's in the box
+## More
 
-**Toolchain** — `xray run` · `test` · `fmt` · `build` · `check` · `repl` · `lsp` · `dap` · `init` · `pkg` · `eval` · `compile`.
-One binary, zero runtime dependencies.
-
-**Standard library** — `http` · `ws` · `net` · `csv` · `toml` · `xml` · `yaml` · `crypto` · `base64` · `compress` · `regex` · `io` · `os` · `path` · `time` · `datetime` · `math` · `gc` · `log` · `cluster` · `url` · `encoding`. (`Json` is a first-class prelude type, no `import` needed.)
-
-**Platforms** — macOS, Linux, Windows · arm64, x86_64.
-
-**Embeddable** — C API in `include/xray_embedding.h` for hosting Xray inside C/C++ apps.
-
----
-
-## Learn more
-
-- [`demos/`](demos/) — runnable examples organized by topic (basics → concurrency → networking)
-- [`docs/rules/language-spec.md`](docs/rules/language-spec.md) — full language specification
-- [`docs/design/`](docs/design/) — architecture deep dives (VM, JIT, AOT, GC, scheduler, cluster)
-
----
+- [`demos/`](demos/) — runnable examples
+- [`tests/`](tests/) — regression and unit tests
 
 ## License
 
