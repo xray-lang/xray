@@ -101,6 +101,12 @@ static XmcpServer test_server(void) {
     return test_server_with_runner(false);
 }
 
+static void test_server_load_knowledge(XmcpServer *server) {
+    server->knowledge = xmcp_knowledge_new();
+    ASSERT_NOT_NULL(server->knowledge);
+    xmcp_knowledge_load(server->knowledge);
+}
+
 /* =========================================================================
  * Protocol error codes
  * ========================================================================= */
@@ -494,6 +500,19 @@ TEST(tools_list_tool_names) {
     xjson_free(result);
 }
 
+TEST(tools_list_default_tools_have_output_schema) {
+    XmcpServer server = test_server();
+    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *tools = xjson_get_array(result, "tools");
+
+    for (int i = 0; i < xjson_array_len(tools); i++) {
+        XrJsonValue *tool = xjson_array_get(tools, i);
+        ASSERT_NOT_NULL(xjson_get_object(tool, "outputSchema"));
+    }
+
+    xjson_free(result);
+}
+
 /* =========================================================================
  * Tools: tools/call
  * ========================================================================= */
@@ -710,6 +729,106 @@ TEST(tools_list_runner_enabled_includes_run) {
 }
 
 /* =========================================================================
+ * Tools: knowledge tools
+ * ========================================================================= */
+
+TEST(tools_call_syntax_lookup_returns_structured_content) {
+    XmcpServer server = test_server();
+    test_server_load_knowledge(&server);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_syntax_lookup");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "topic", "class");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT_STR_EQ(xjson_get_string(structured, "topic"), "class");
+    ASSERT(xjson_get_bool(structured, "found") == true);
+    ASSERT_NOT_NULL(strstr(xjson_get_string(structured, "content"), "Classes"));
+
+    xjson_free(params);
+    xjson_free(result);
+    xmcp_knowledge_free(server.knowledge);
+}
+
+TEST(tools_call_stdlib_search_returns_structured_content) {
+    XmcpServer server = test_server();
+    test_server_load_knowledge(&server);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_stdlib_search");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "query", "http");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT_STR_EQ(xjson_get_string(structured, "query"), "http");
+    ASSERT(xjson_get_bool(structured, "found") == true);
+    ASSERT(xjson_get_int_or(structured, "matchCount", 0) > 0);
+    ASSERT_NOT_NULL(strstr(xjson_get_string(structured, "content"), "Module: http"));
+
+    xjson_free(params);
+    xjson_free(result);
+    xmcp_knowledge_free(server.knowledge);
+}
+
+TEST(tools_call_definition_returns_structured_content) {
+    XmcpServer server = test_server();
+    test_server_load_knowledge(&server);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_definition");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "symbol", "class");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT_STR_EQ(xjson_get_string(structured, "symbol"), "class");
+    ASSERT_STR_EQ(xjson_get_string(structured, "kind"), "syntax");
+    ASSERT(xjson_get_bool(structured, "found") == true);
+
+    xjson_free(params);
+    xjson_free(result);
+    xmcp_knowledge_free(server.knowledge);
+}
+
+TEST(tools_call_definition_not_found_is_structured) {
+    XmcpServer server = test_server();
+    test_server_load_knowledge(&server);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_definition");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "symbol", "zzz_nonexistent_symbol");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT_STR_EQ(xjson_get_string(structured, "kind"), "none");
+    ASSERT(xjson_get_bool(structured, "found") == false);
+
+    xjson_free(params);
+    xjson_free(result);
+    xmcp_knowledge_free(server.knowledge);
+}
+
+/* =========================================================================
  * Tools: xray_definition
  * ========================================================================= */
 
@@ -739,6 +858,13 @@ TEST(tools_call_definition_schema) {
     ASSERT_NOT_NULL(schema);
     XrJsonValue *props = xjson_get_object(schema, "properties");
     ASSERT_NOT_NULL(xjson_get_object(props, "symbol"));
+    XrJsonValue *output_schema = xjson_get_object(def_tool, "outputSchema");
+    ASSERT_NOT_NULL(output_schema);
+    XrJsonValue *output_props = xjson_get_object(output_schema, "properties");
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "symbol"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "kind"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "found"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "content"));
 
     xjson_free(result);
 }
@@ -1124,8 +1250,10 @@ TEST(knowledge_search_stdlib) {
     ASSERT_NOT_NULL(kb);
     xmcp_knowledge_load(kb);
 
-    char *result = xmcp_knowledge_search_stdlib(kb, "http", NULL);
+    int match_count = 0;
+    char *result = xmcp_knowledge_search_stdlib(kb, "http", NULL, &match_count);
     ASSERT_NOT_NULL(result);
+    ASSERT(match_count > 0);
     ASSERT(strstr(result, "http") != NULL);
     xr_free(result);
 
@@ -1137,8 +1265,10 @@ TEST(knowledge_search_stdlib_no_match) {
     ASSERT_NOT_NULL(kb);
     xmcp_knowledge_load(kb);
 
-    char *result = xmcp_knowledge_search_stdlib(kb, "zzz_nonexistent", NULL);
+    int match_count = 0;
+    char *result = xmcp_knowledge_search_stdlib(kb, "zzz_nonexistent", NULL, &match_count);
     ASSERT_NOT_NULL(result);
+    ASSERT_EQ(match_count, 0);
     /* Should contain "No modules found" or module list */
     ASSERT(strstr(result, "No modules found") != NULL ||
            strstr(result, "Available modules") != NULL);
@@ -1225,6 +1355,7 @@ int main(void) {
     RUN_TEST(tools_list_has_required_fields);
     RUN_TEST(tools_list_has_annotations);
     RUN_TEST(tools_list_tool_names);
+    RUN_TEST(tools_list_default_tools_have_output_schema);
     RUN_TEST(tools_call_unknown_tool);
     RUN_TEST(tools_call_missing_name);
 
@@ -1241,6 +1372,12 @@ int main(void) {
     /* Run tool */
     RUN_TEST(tools_call_run_disabled_by_default);
     RUN_TEST(tools_list_runner_enabled_includes_run);
+
+    /* Knowledge tools */
+    RUN_TEST(tools_call_syntax_lookup_returns_structured_content);
+    RUN_TEST(tools_call_stdlib_search_returns_structured_content);
+    RUN_TEST(tools_call_definition_returns_structured_content);
+    RUN_TEST(tools_call_definition_not_found_is_structured);
 
     /* Definition tool */
     RUN_TEST(tools_call_definition_missing_symbol);
