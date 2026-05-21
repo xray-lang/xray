@@ -10,7 +10,7 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, frame, ci, base, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_HANDLER_COUNT,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_HANDLER_COUNT,
  * VM_FRAME_COUNT, VM_CURRENT_CORO, TRACE_EXECUTION, checkGC,
  * startfunc label, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
@@ -145,27 +145,6 @@ vmcase(OP_BYTES_NEW) {
     vmbreak;
 }
 
-vmcase(OP_NEWEXCEPTION) {
-    /* R[A] = new Exception(R[A+1..A+B])
-     * A = result register
-     * B = argument count (0..2): message, cause
-     *
-     * XrException has its own GC type, so the generic
-     * "allocate XrInstance + invoke constructor" pipeline cannot serve
-     * `new Exception(...)`. The opcode hands the args straight to the
-     * native constructor primitive which allocates the right struct
-     * shape and surfaces the result as XR_TEXCEPTION.
-     */
-    int a = GETARG_A(i);
-    int nargs = GETARG_B(i);
-    if (nargs > 2) {
-        VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "new Exception(...) accepts at most 2 arguments");
-    }
-    R(a) = xr_exception_user_construct(isolate, xr_null(), &R(a + 1), nargs);
-    checkGC(base + a + 1);
-    vmbreak;
-}
-
 /* === Scope structured concurrency instructions === */
 
 vmcase(OP_SCOPE_ENTER) {
@@ -238,7 +217,7 @@ vmcase(OP_SCOPE_EXIT) {
             current->current_scope = scope->parent;
             xr_free(scope);
             XrValue exc = err;
-            if (!xr_is_exception(exc)) {
+            if (!xr_value_is_exception(isolate, exc)) {
                 exc = xr_exception_from_value(isolate, exc);
             }
             savepc();
@@ -398,5 +377,5 @@ vmcase(OP_SLEEP) {
 
 vmcase(OP_SELECT_BLOCK) {
     TRACE_EXECUTION();
-    VM_DISPATCH_COLD(vm_select_block(isolate, vm_ctx, i, base, ci, pc));
+    VM_DISPATCH(vm_select_block(isolate, vm_ctx, i, base, ci, pc));
 }

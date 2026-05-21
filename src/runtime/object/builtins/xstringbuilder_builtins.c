@@ -19,7 +19,8 @@
 #include "xstring.h"
 #include "xvalue.h"
 #include "xisolate_api.h"
-#include "xnative_type.h"
+#include "xclass_builder.h"
+#include "xclass_system.h"
 #include <string.h>
 
 /* ========== Helpers ========== */
@@ -120,27 +121,26 @@ XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue self, XrVa
     return xr_int((int64_t) xr_stringbuilder_length(sb));
 }
 
-/* ========== Native Type Registration ========== */
+/* ========== Class Registration ========== */
 
-void xr_stringbuilder_register_native_type(XrayIsolate *X) {
-    XR_DCHECK(X != NULL, "stringbuilder_register_native_type: NULL isolate");
-    static const XrNativeMethod sb_methods[] = {
-        {"append", xr_builtin_stringbuilder_append, 1},
-        {"toString", xr_builtin_stringbuilder_toString, 0},
-        {"clear", xr_builtin_stringbuilder_clear, 0},
-        {"length", xr_builtin_stringbuilder_length, 0},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeMethod sb_statics[] = {
-        {"constructor", xr_builtin_stringbuilder_new, 0},
-        {NULL, NULL, 0},
-    };
-    static const XrNativeTypeInfo sb_info = {
-        .name = "StringBuilder",
-        .gc_type = XR_TSTRINGBUILDER,
-        .methods = sb_methods,
-        .getters = NULL,
-        .static_methods = sb_statics,
-    };
-    xr_register_native_type(X, &sb_info);
+void xr_stringbuilder_register_class(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "stringbuilder_register_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL, "stringbuilder_register_class: no core classes");
+
+    XrClassBuilder *b = xr_class_builder_new(X, "StringBuilder", core->objectClass);
+    if (!b)
+        return;
+    xr_class_builder_set_native_body(b, xr_stringbuilder_native_body_desc());
+    xr_class_builder_add_static_method(b, "constructor", xr_builtin_stringbuilder_new, 0, 0);
+    xr_class_builder_add_method(b, "append", xr_builtin_stringbuilder_append, 1, 0);
+    xr_class_builder_add_method(b, "toString", xr_builtin_stringbuilder_toString, 0, 0);
+    xr_class_builder_add_method(b, "clear", xr_builtin_stringbuilder_clear, 0, 0);
+    xr_class_builder_add_method(b, "length", xr_builtin_stringbuilder_length, 0, 0);
+    XrClass *cls = xr_class_builder_finalize(b);
+    if (!cls)
+        return;
+    cls->flags |= XR_CLASS_BUILTIN;
+    cls->builtin_kind = XR_BK_STRINGBUILDER;
+    core->stringBuilderClass = cls;
 }

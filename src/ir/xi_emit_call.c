@@ -234,32 +234,8 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
         return;
     }
-    if (bname && strcmp(bname, "Exception") == 0) {
-        /* OP_NEWEXCEPTION: A=base, B=arg_count.
-         * Args are read from R[A+1]..R[A+B]; the result is written
-         * back to R[A]. Mirrors the OP_BYTES_NEW register-window
-         * convention so the dispatcher can read arguments without an
-         * extra arg-array allocation. */
-        uint8_t nargs = (uint8_t) v->nargs;
-        if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        uint8_t base = ctx->next_reg;
-        ctx->next_reg += 1 + nargs;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        for (uint16_t a = 0; a < nargs; a++) {
-            uint8_t arg_r = reg_of(ctx, v->args[a]);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t) (base + 1 + a), arg_r, 0));
-        }
-        emit_inst(ctx, CREATE_ABC(OP_NEWEXCEPTION, base, nargs, 0));
-        if (dst != base)
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
-        return;
-    }
+    /* Exception: no dedicated opcode — handled as a regular class via
+     * the generic OP_INVOKE pipeline with a primitive constructor. */
     /* Hard fail for unrecognized name-based builtins */
     if (bname) {
         fprintf(stderr, "[xi_emit] unknown builtin name: '%s'\n", bname);
@@ -273,12 +249,15 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         /* cancelled() */
         emit_inst(ctx, CREATE_ABC(OP_CANCELLED, dst, 0, 0));
     } else if (builtin_id > 0 && builtin_id < 256 && v->nargs > 0) {
-        /* Generic: INVOKE_BUILTIN A=base, B=builtin_idx, C=nargs */
+        /* Generic builtin method call: route through unified OP_INVOKE.
+         * Encoding (A=base, B=proto-local symbol idx, C=nargs) uses the
+         * unified OP_INVOKE path. The runtime dispatch resolves the
+         * receiver class via native_type_classes[] and calls the
+         * XMETHOD_PRIMITIVE method through the XrICMethod inline cache. */
         uint8_t base = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx,
-                  CREATE_ABC(OP_INVOKE_BUILTIN, base, (uint8_t) builtin_id, (uint8_t) v->nargs));
+        emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t) builtin_id, (uint8_t) v->nargs));
         if (dst != base)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
     } else {

@@ -172,34 +172,6 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
 
-        case XM_GUARD_SHAPE: {
-            /* Check obj null, alignment, type==XR_TJSON, then shape_id */
-            X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_emit_deopt_id(ctx, ins);
-            /* Null check */
-            x64_test_rr(&ctx->buf, obj, obj);
-            x64_emit_deopt_jcc(ctx, X64_CC_E);
-            /* Alignment check: obj & 7 != 0 → deopt */
-            x64_test_ri(&ctx->buf, obj, 0x7);
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
-            /* Type check: gc.type at offset 8, must be 23 (XR_TJSON) */
-            x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, obj, (int32_t) XM_GC_HDR_TYPE_OFFSET);
-            x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, 23);
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
-            /* Load gc.extra (uint16 at offset 10) */
-            x64_movzx_rm16(&ctx->buf, X64_SCRATCH_REG, obj, (int32_t) XM_GC_HDR_EXTRA_OFFSET);
-            /* shape_id = extra >> 2 */
-            x64_shr_ri(&ctx->buf, X64_SCRATCH_REG, 2);
-            /* Compare with expected shape_id */
-            if (xm_ref_is_const(ins->args[1])) {
-                uint32_t ci = XM_REF_INDEX(ins->args[1]);
-                int32_t expected_id = (int32_t) ctx->func->consts[ci].val.raw;
-                x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, expected_id);
-            }
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
-            break;
-        }
-
         case XM_DEOPT: {
             /* Unconditional deopt */
             x64_emit_deopt_id(ctx, ins);

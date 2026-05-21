@@ -923,26 +923,6 @@ static void x64_h_guard(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_emit_deopt_jcc(ctx, X64_CC_NE);
             break;
         }
-        case XM_GUARD_SHAPE: {
-            X64Reg obj = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_emit_deopt_id(ctx, ins);
-            x64_test_rr(&ctx->buf, obj, obj);
-            x64_emit_deopt_jcc(ctx, X64_CC_E);
-            x64_test_ri(&ctx->buf, obj, 0x7);
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
-            x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, obj, (int32_t) XM_GC_HDR_TYPE_OFFSET);
-            x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, 23);
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
-            x64_movzx_rm16(&ctx->buf, X64_SCRATCH_REG, obj, (int32_t) XM_GC_HDR_EXTRA_OFFSET);
-            x64_shr_ri(&ctx->buf, X64_SCRATCH_REG, 2);
-            if (xm_ref_is_const(ins->args[1])) {
-                uint32_t ci = XM_REF_INDEX(ins->args[1]);
-                int32_t expected_id = (int32_t) ctx->func->consts[ci].val.raw;
-                x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, expected_id);
-            }
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
-            break;
-        }
         case XM_TAG_CHECK: {
             X64Reg val_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
             x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, val_reg, XM_XRVALUE_TAG_OFFSET);
@@ -1632,7 +1612,6 @@ static const X64InsHandler x64_ins_handlers[XM_OP_COUNT] = {
     [XM_GUARD_NONNULL] = x64_h_guard,
     [XM_GUARD_CLASS] = x64_h_guard,
     [XM_GUARD_KLASS] = x64_h_guard,
-    [XM_GUARD_SHAPE] = x64_h_guard,
     [XM_TAG_CHECK] = x64_h_guard,
     [XM_DEOPT] = x64_h_deopt,
     [XM_SAFEPOINT] = x64_h_safepoint,

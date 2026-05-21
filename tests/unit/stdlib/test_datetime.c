@@ -17,11 +17,11 @@
 #include <string.h>
 #include <time.h>
 
-// Minimal mock of GC header to match XrDateTime layout
-#include "runtime/gc/xgc_header.h"
+/* DateTime is now stored as the native body of an XrInstance — the
+ * body struct itself has no GC header. These tests work on stack-
+ * allocated body structs and only call helpers that touch the body. */
 
 typedef struct XrDateTime {
-    XrGCHeader gc;
     int64_t timestamp;
     int32_t milliseconds;
     int16_t tz_offset;

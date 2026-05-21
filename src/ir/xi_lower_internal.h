@@ -76,4 +76,8 @@ XR_FUNC void xi_lower_try_catch(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_match(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, struct AstNode *pattern);
 
+/* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
+struct XrTypeRef;
+XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, struct XrTypeRef *tref, int line);
+
 #endif  // XI_LOWER_INTERNAL_H

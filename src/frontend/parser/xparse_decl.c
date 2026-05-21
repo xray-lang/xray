@@ -263,6 +263,11 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                 XrParamNode *rest_param =
                     xr_param_node_new(parser->X, temp_name, rest_token.line, rest_token.column);
                 rest_param->is_rest = true;
+
+                /* Optional element type annotation: ...args: int */
+                if (xr_parser_match(parser, TK_COLON)) {
+                    rest_param->type = xr_parse_type_annotation(parser);
+                }
                 params[param_count++] = rest_param;
 
                 if (xr_parser_check(parser, TK_COMMA)) {
@@ -953,7 +958,7 @@ AstNode *xr_parse_return_statement(Parser *parser) {
     // Comma after the return expression is the obsolete multi-value
     // form. Redirect users to the tuple equivalent.
     if (xr_parser_check(parser, TK_COMMA)) {
-        xr_parser_error(parser, "multi-value return is not supported; "
+        xr_parser_error(parser, "[E0801] multi-value return is not supported; "
                                 "use a tuple: `return (a, b)`");
         return NULL;
     }

@@ -71,7 +71,6 @@
 #define TYPE_NAME_STRUCT "struct"
 #define TYPE_NAME_JSON "Json"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
-#define TYPE_NAME_SHAPE "shape"
 #define TYPE_NAME_UNKNOWN "unknown"
 #define TYPE_NAME_BIGINT "BigInt"
 #define TYPE_NAME_CLOSURE "closure"
@@ -96,6 +95,8 @@
 
 #define TYPE_NAME_LOGGER "Logger"
 #define TYPE_NAME_RANGE "Range"
+#define TYPE_NAME_NETCONN "NetConn"
+#define TYPE_NAME_NETLISTENER "NetListener"
 
 /* ========== Language Keywords ========== */
 
@@ -159,9 +160,11 @@ typedef enum {
     XR_TID_COROUTINE,      // 30
     XR_TID_RANGE,          // 31
     XR_TID_TASK,           // 32
+    XR_TID_NETCONN,        // 33
+    XR_TID_NETLISTENER,    // 34
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 33
-    XR_TID_WEAKSET,  // 34
+    XR_TID_WEAKMAP,  // 35
+    XR_TID_WEAKSET,  // 36
     XR_TID_COUNT
 } XrTypeId;
 

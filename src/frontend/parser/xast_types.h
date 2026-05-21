@@ -185,6 +185,8 @@ typedef enum {
     AST_PATTERN_WILDCARD,  // _
     AST_PATTERN_MULTI,     // 1 | 2 | 3 (alternation list)
     AST_PATTERN_TUPLE,     // (a, b) / (0, _) / ((x, y), z) — positional tuple destructure
+    AST_PATTERN_ADT,       // Shape.Circle(r) — ADT variant destructure
+    AST_PATTERN_TYPE,      // is T  /  is T name — runtime type check with optional binding
 
     // Spread element: `...expr` inside tuple literal or call argument list.
     // Statically expanded — the source must be a tuple of known arity.
@@ -206,6 +208,7 @@ typedef enum {
     AST_YIELD_STMT,      // yield - give up execution
     AST_CANCELLED_EXPR,  // cancelled() check
     AST_MOVE_EXPR,       // move var - explicit ownership transfer
+    AST_CATCH_EXPR,      // catch! { body } — wraps body in Result.Ok/Err
 
     // Program node
     AST_PROGRAM  // Root node

@@ -83,7 +83,6 @@
 #define KOP_AB_FLAG XR_OPF_REG_IN, XR_OPF_LIT_FLAG, XR_OPF_NONE
 #define KOP_PRINT XR_OPF_REG_IN, XR_OPF_LIT_FLAG, XR_OPF_LIT
 #define KOP_INVOKE_DIRECT XR_OPF_REG_BASE, XR_OPF_REG_IN, XR_OPF_LIT
-#define KOP_INVOKE_BUILTIN XR_OPF_REG_BASE, XR_OPF_BUILTIN_IDX, XR_OPF_LIT
 #define KOP_DUMP XR_OPF_REG_IN, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_AB_UNARY_HINT XR_OPF_REG_OUT, XR_OPF_REG_IN, XR_OPF_LIT
 #define KOP_NEW_CONTAINER XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_LIT
@@ -185,7 +184,6 @@
     _(INVOKE_TAIL, FMT_ABC, KOP_INVOKE_SYM, "tail: R[A+1]:method(...) reuse frame")                \
     _(SUPERINVOKE, FMT_ABC, KOP_INVOKE_K, "super.K[B](...)")                                       \
     _(INVOKE_DIRECT, FMT_ABC, KOP_INVOKE_DIRECT, "R[A] = R[B]:methods[C](...)")                    \
-    _(INVOKE_BUILTIN, FMT_ABC, KOP_INVOKE_BUILTIN, "R[A] = R[A+1]:builtin[B](nargs=C)")            \
     _(ABSTRACT_ERROR, FMT_NONE, KOP_NONE, "runtime: called abstract method")                       \
     _(SET_STORAGE_CTX, FMT_A, KOP_A_LIT, "set storage mode context A=mode")                        \
     _(TO_SHARED, FMT_AB, KOP_AB_UNARY, "R[A] = to_shared(R[B])")                                   \
@@ -281,7 +279,6 @@
     _(SELECT_END, FMT_NONE, KOP_NONE, "select end")                                                \
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
     _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Bytes(B args)")                                   \
-    _(NEWEXCEPTION, FMT_AB, KOP_AB_NEW_LIT, "R[A] = new Exception(B args)")                        \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
     _(SCOPE_EXIT, FMT_AB, KOP_AB_NEW_LIT, "exit scope, A=mode, B=result_reg")                      \
     _(SLEEP, FMT_A, KOP_A_USE, "time.sleep(R[A]) ms")                                              \

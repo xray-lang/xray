@@ -28,7 +28,7 @@ XR_FUNC XrValue xr_builtin_stringbuilder_clear(XrayIsolate *isolate, XrValue sel
 XR_FUNC XrValue xr_builtin_stringbuilder_length(XrayIsolate *isolate, XrValue self, XrValue *args,
                                                 int argc);
 
-// Register StringBuilder as native type (constructor + instance methods)
-XR_FUNC void xr_stringbuilder_register_native_type(XrayIsolate *X);
+// Build StringBuilder class with native body and register in core classes
+XR_FUNC void xr_stringbuilder_register_class(XrayIsolate *X);
 
 #endif  // XSTRINGBUILDER_BUILTINS_H

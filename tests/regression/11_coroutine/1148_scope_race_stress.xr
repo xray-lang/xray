@@ -41,7 +41,7 @@ fn make_failing(id: int) -> int {
     for (let k = 0; k < 50; k++) {
         x = x + k
     }
-    throw "err_" + string(id)
+    throw new Exception("err_" + string(id))
     return x
 }
 

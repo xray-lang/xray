@@ -121,12 +121,12 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_REGEX_COMPILE:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
 
-        /* --- Pure allocation: tuples are immutable, so a TUPLE_NEW
-         *     with no surviving uses is unobservable and DCE can
-         *     drop it (test_xi_opt: tuple_new_eliminated_after_full_projection).
-         *     WRITES_MEM is still flagged so the instruction scheduler
-         *     keeps it ordered against later memory ops, and the LICM
-         *     / GVN purity gates still treat it as impure. --- */
+        /* --- Pure immutable allocation: tuples are immutable, so a
+         *     TUPLE_NEW with no surviving uses is unobservable and DCE
+         *     can drop it. WRITES_MEM is still flagged so the
+         *     instruction scheduler keeps it ordered against later
+         *     memory ops, and the LICM / GVN purity gates still treat
+         *     it as impure. --- */
         case XI_TUPLE_NEW:
             return XI_FLAG_WRITES_MEM;
 

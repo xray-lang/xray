@@ -42,7 +42,7 @@ fn test_preempt_test() {
     if (received == WORKER_COUNT) {
         print("调度测试通过：" + string(received) + "/" + string(WORKER_COUNT) + " 协程完成")
     } else {
-        throw "调度测试失败：只有 " + string(received) + " 个协程完成"
+        throw new Exception("调度测试失败：只有 " + string(received) + " 个协程完成")
     }
 }
 

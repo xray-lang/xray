@@ -16,6 +16,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../base/xchecks.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -241,6 +242,32 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             return result ? result : xi_const_bool(l->func, l->cur_block, true, l->type_bool);
         }
 
+        case AST_PATTERN_ADT: {
+            /* ADT variant destructure: compare tag field against variant.
+             * subject.fields[0] is XrEnumValue* stored at construction.
+             * Lower the variant expression (e.g. Shape.Circle) and check
+             * equality with the tag. */
+            PatternAdtNode *ap = &pattern->as.pattern_adt;
+            XiValue *tag = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_any, 1);
+            if (!tag)
+                return NULL;
+            tag->args[0] = subject;
+            tag->aux_int = 0; /* field[0] = variant tag */
+
+            XiValue *variant_val = xi_lower_expr(l, ap->variant);
+            if (!variant_val)
+                return NULL;
+            return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, tag, variant_val);
+        }
+
+        case AST_PATTERN_TYPE: {
+            /* `is T [name]`: runtime type test against T. The binding (if
+             * present) is captured in lower_pattern_bindings once the
+             * test succeeds. */
+            PatternTypeNode *tp = &pattern->as.pattern_type;
+            return xi_lower_is_test(l, subject, tp->type, pattern->line);
+        }
+
         default:
             return xi_const_bool(l->func, l->cur_block, false, l->type_bool);
     }
@@ -282,9 +309,72 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             lower_pattern_bindings(l, get, sub);
         }
     }
+
+    /* ADT variant destructure: bind payload fields.
+     * Payload slots are at fields[1], fields[2], ... */
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *ap = &pattern->as.pattern_adt;
+        for (int i = 0; i < ap->count; i++) {
+            AstNode *sub = ap->patterns[i];
+            if (!sub || sub->type == AST_PATTERN_WILDCARD)
+                continue;
+            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_any, 1);
+            if (!field)
+                continue;
+            field->args[0] = subject;
+            field->aux_int = 1 + i; /* payload starts at field[1] */
+            lower_pattern_bindings(l, field, sub);
+        }
+    }
+
+    /* Type pattern: bind the narrowed name (if any) to the subject. The
+     * subject's static type is the union; the binding sees only the
+     * matching arm and is typed as T by the analyzer. */
+    if (pattern->type == AST_PATTERN_TYPE) {
+        PatternTypeNode *tp = &pattern->as.pattern_type;
+        if (tp->binding_name) {
+            int var_id = xi_lower_var_create(l, tp->symbol_id, tp->binding_name,
+                                             subject->type ? subject->type : l->type_any);
+            xi_lower_braun_write(l, var_id, l->cur_block, subject);
+        }
+    }
 }
 
 /* ========== Match Expression ========== */
+
+static void lower_match_no_match_throw(XiLower *l, int line) {
+    if (!l || !l->cur_block)
+        return;
+
+    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
+    if (!cls)
+        return;
+    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
+    cls->aux = (void *) "Exception";
+
+    XiValue *msg =
+        xi_const_str(l->func, l->cur_block, "E0442: non-exhaustive match", l->type_string);
+    XiValue *exc = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, exception_type, 2);
+    if (!exc)
+        return;
+    exc->args[0] = cls;
+    exc->args[1] = msg;
+    exc->aux = (void *) "constructor";
+    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    exc->line = (uint32_t) line;
+
+    XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
+    if (!thr)
+        return;
+    thr->args[0] = exc;
+    thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    thr->line = (uint32_t) line;
+    l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+    l->cur_block->control = exc;
+    l->cur_block = NULL;
+}
 
 XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     MatchExprNode *m = &node->as.match_expr;
@@ -336,9 +426,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             }
         }
 
-        bool is_last = (i == max_arms - 1);
-
-        if (is_last || !test) {
+        if (!test) {
             XiValue *val = xi_lower_expr(l, arm->body);
             if (l->cur_block) {
                 if (exit_count < 32) {
@@ -348,6 +436,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
                 }
                 xi_block_set_jump(l->cur_block, merge);
             }
+            l->cur_block = NULL;
+            break;
         } else {
             XiBlock *body_blk = xi_block_new(l->func);
             XiBlock *next_blk = xi_block_new(l->func);
@@ -371,12 +461,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     }
 
     if (l->cur_block && l->cur_block != merge) {
-        if (exit_count < 32) {
-            body_exits[exit_count] = l->cur_block;
-            body_vals[exit_count] = xi_const_null(l->func, l->cur_block, l->type_null);
-            exit_count++;
-        }
-        xi_block_set_jump(l->cur_block, merge);
+        lower_match_no_match_throw(l, node->line);
     }
 
     xi_lower_braun_seal(l, merge);
@@ -1323,7 +1408,19 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
         if (!init_val)
             return;
     } else {
-        init_val = xi_const_null(l->func, l->cur_block, l->type_null);
+        /* Zero-value initialization for typed variables without initializer.
+         * Nullable types (T?) default to null. Non-nullable primitives:
+         * int→0, float→0.0, bool→false, string→"", otherwise null. */
+        if (type && !type->is_nullable && type->kind == XR_KIND_INT)
+            init_val = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+        else if (type && !type->is_nullable && type->kind == XR_KIND_FLOAT)
+            init_val = xi_const_float(l->func, l->cur_block, 0.0, l->type_float);
+        else if (type && !type->is_nullable && type->kind == XR_KIND_BOOL)
+            init_val = xi_const_bool(l->func, l->cur_block, false, l->type_bool);
+        else if (type && !type->is_nullable && type->kind == XR_KIND_STRING)
+            init_val = xi_const_str(l->func, l->cur_block, "", l->type_string);
+        else
+            init_val = xi_const_null(l->func, l->cur_block, l->type_null);
     }
 
     /* Propagate reified generic elem_tid when there is an explicit type

@@ -155,23 +155,39 @@ static inline XrValue xr_make_ptr_val(void *p) {
 #define XR_IS_CLASS(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCLASS)
 #define XR_IS_INSTANCE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TINSTANCE)
 #define XR_IS_BOUND_METHOD(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBOUND_METHOD)
-#define XR_IS_ENUM_TYPE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TENUM_TYPE)
-#define XR_IS_ENUM_VALUE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TENUM_VALUE)
+// Enum checks use builtin_kind; implemented in xvalue.c.
+XR_FUNC bool xr_value_is_enum_type(XrValue v);
+XR_FUNC bool xr_value_is_enum_value(XrValue v);
+#define XR_IS_ENUM_TYPE(v) xr_value_is_enum_type(v)
+#define XR_IS_ENUM_VALUE(v) xr_value_is_enum_value(v)
 #define XR_IS_COROUTINE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCOROUTINE)
 #define XR_IS_TASK(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TTASK)
 #define XR_IS_CHANNEL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCHANNEL)
 #define XR_IS_COROPOOL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCOROPOOL)
-#define XR_IS_RANGE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TRANGE)
+/* Range is no longer a dedicated GC type; use xr_value_is_range(iso, v)
+ * from xrange.h which walks the class super-chain. */
 #define XR_IS_MODULE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMODULE)
-#define XR_IS_ITERATOR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TITERATOR)
-#define XR_IS_BIGINT(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TBIGINT)
-#define XR_IS_JSON(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TJSON)
+/* Iterator is no longer a dedicated GC type; check builtin_kind.
+ * Implementation in xvalue.c keeps the XrInstance layout out of this
+ * header (consumers don't need to include xclass.h / xinstance.h). */
+XR_FUNC bool xr_value_is_iterator(XrValue v);
+#define XR_IS_ITERATOR(v) xr_value_is_iterator(v)
+/* BigInt is no longer a dedicated GC type; check builtin_kind. */
+XR_FUNC bool xr_value_is_bigint(XrValue v);
+#define XR_IS_BIGINT(v) xr_value_is_bigint(v)
+/* Json is no longer a dedicated GC type; use xr_value_is_json(v)
+ * from xjson.h which checks builtin_kind on the instance's class. */
 #define XR_IS_STRUCT_REF(v) ((v).tag == XR_TAG_STRUCT_REF)
-#define XR_IS_DATETIME(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TDATETIME)
-#define XR_IS_EXCEPTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TEXCEPTION)
+/* DateTime is no longer a dedicated GC type; use xr_value_is_datetime(iso, v)
+ * from datetime.h which walks the class super-chain. */
+/* Exception is no longer a dedicated GC type; use xr_value_is_exception(iso, v)
+ * from xexception.h which walks the class super-chain. The historical
+ * XR_IS_EXCEPTION macro and XR_TEXCEPTION enumerator are gone. */
 #define XR_IS_ERROR(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TERROR)
-#define XR_IS_TUPLE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TTUPLE)
-#define XR_TO_TUPLE(v) ((struct XrTuple *) XR_TO_PTR(v))
+/* Tuple is no longer a dedicated GC type; use xr_value_is_tuple(v)
+ * from xtuple.h which checks builtin_kind on the instance's class.
+ * Callers that have already established is_tuple may cast the
+ * instance pointer directly. */
 
 /* ========== Struct Ref ========== */
 
@@ -401,8 +417,8 @@ XR_FUNC XrValue xr_value_from_task(struct XrTask *task);
 XR_FUNC bool xr_value_is_task(XrValue v);
 XR_FUNC struct XrTask *xr_value_to_task(XrValue v);
 
-XR_FUNC bool xr_value_is_datetime(XrValue v);
-XR_FUNC void *xr_value_to_datetime(XrValue v);
+/* DateTime: use xr_value_is_datetime / xr_value_get_datetime_body from
+ * stdlib/datetime/datetime.h — they walk the class super-chain. */
 
 /* ========== Compile-time Checks ========== */
 

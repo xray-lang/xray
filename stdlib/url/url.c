@@ -386,7 +386,7 @@ static XrValue url_parse_fn(XrayIsolate *X, XrValue *args, int nargs) {
     UrlParts parts;
     url_parse_internal(XR_STRING_CHARS(url_str), url_str->length, &parts);
 
-    XrJson *json = xr_json_new(xr_current_coro(X), 10);
+    XrJson *json = xr_json_new(xr_current_coro(X));
     if (!json)
         return XR_NULL_VAL;
 
@@ -551,7 +551,7 @@ static XrValue url_parse_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
         len--;
     }
 
-    XrJson *json = xr_json_new(xr_current_coro(X), 8);
+    XrJson *json = xr_json_new(xr_current_coro(X));
     if (!json)
         return XR_NULL_VAL;
     if (len == 0)
@@ -647,16 +647,15 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
         return XR_NULL_VAL;
     XrJson *json = xr_value_to_json(args[0]);
 
-    XrShape *shape = xr_json_shape(X, json);
-    if (!shape || shape->field_count == 0)
+    XrClass *cls = json->klass;
+    if (!cls || cls->field_count == 0)
         return make_cstr(X, "");
 
-    XrSymbolTable *st = X->symbol_table;
     XrCtxBuf buf;
     xr_ctxbuf_init(&buf, 128);
 
-    for (uint16_t i = 0; i < shape->field_count; i++) {
-        const char *key_name = xr_symbol_get_name_in_table(st, shape->field_symbols[i]);
+    for (uint16_t i = 0; i < cls->field_count; i++) {
+        const char *key_name = cls->fields[i].name;
         if (!key_name)
             continue;
 
@@ -665,7 +664,7 @@ static XrValue url_build_query_fn(XrayIsolate *X, XrValue *args, int nargs) {
 
         ctxbuf_append_url_form(&buf, key_name, strlen(key_name));
 
-        XrValue val = xr_json_get_field_any(X, json, i);
+        XrValue val = xr_instance_get_dynamic_field(json, i);
         if (XR_IS_STRING(val)) {
             XrString *vs = XR_TO_STRING(val);
             xr_ctxbuf_putc(&buf, '=');

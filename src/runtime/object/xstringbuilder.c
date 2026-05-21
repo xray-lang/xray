@@ -17,6 +17,7 @@
 #include "../gc/xgc.h"
 #include "../gc/xalloc_unified.h"
 #include "../xisolate_api.h"
+#include "../class/xclass.h"
 #include "../class/xclass_system.h"
 #include <string.h>
 #include <stdio.h>
@@ -25,16 +26,19 @@
 
 XrStringBuilder *xr_stringbuilder_new(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "stringbuilder_new: NULL coro");
-    // Allocate StringBuilder on coroutine heap
-    XrStringBuilder *sb =
-        (XrStringBuilder *) xr_alloc(coro, sizeof(XrStringBuilder), XR_TSTRINGBUILDER);
+    XrayIsolate *X = xr_coro_get_isolate(coro);
+    XrClass *cls = xr_isolate_get_core_classes(X)->stringBuilderClass;
+    XR_DCHECK(cls != NULL, "stringbuilder_new: NULL stringBuilderClass");
+
+    // Allocate as XR_TINSTANCE; sizeof matches XrInstance(0 fields) + body
+    XrStringBuilder *sb = (XrStringBuilder *) xr_alloc(coro, sizeof(XrStringBuilder), XR_TINSTANCE);
     if (!sb) {
         xr_log_warning("stringbuilder", "memory allocation failed");
         return NULL;
     }
+    sb->klass = cls;
 
     // Create internal buffer
-    XrayIsolate *X = xr_coro_get_isolate(coro);
     sb->buffer = xr_strbuf_new(X, 64);
     if (!sb->buffer) {
         xr_log_warning("stringbuilder", "buffer creation failed");
@@ -134,7 +138,10 @@ XrValue xr_stringbuilder_value(XrStringBuilder *sb) {
 }
 
 bool xr_is_stringbuilder(XrValue v) {
-    return XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TSTRINGBUILDER;
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return inst->klass && inst->klass->builtin_kind == XR_BK_STRINGBUILDER;
 }
 
 XrStringBuilder *xr_to_stringbuilder(XrValue v) {
@@ -143,13 +150,41 @@ XrStringBuilder *xr_to_stringbuilder(XrValue v) {
     return (XrStringBuilder *) XR_TO_PTR(v);
 }
 
-/* ========== GC Integration ========== */
+/* ========== Native Body Lifecycle ========== */
 
-void xr_gc_destroy_stringbuilder(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void) owning_gc;
-    XrStringBuilder *sb = (XrStringBuilder *) obj;
-    if (sb->buffer) {
-        xr_strbuf_free(sb->buffer);
-        sb->buffer = NULL;
+// Destroy hook for XrNativeBodyDesc — called by xr_gc_destroy_instance.
+// The body pointer points to the XrStrBuf* field inside the instance.
+static void stringbuilder_body_destroy(void *body) {
+    XrStrBuf **buf_ptr = (XrStrBuf **) body;
+    if (*buf_ptr) {
+        xr_strbuf_free(*buf_ptr);
+        *buf_ptr = NULL;
     }
+}
+
+// to_shared hook: allocate a fresh buffer on the shared heap and copy content
+static bool stringbuilder_body_to_shared(XrayIsolate *X, XrInstance *src, XrInstance *dst) {
+    (void) X;
+    XrStringBuilder *src_sb = (XrStringBuilder *) src;
+    XrStringBuilder *dst_sb = (XrStringBuilder *) dst;
+    xr_stringbuilder_init_inplace(dst_sb);
+    if (src_sb->buffer && src_sb->buffer->length > 0) {
+        xr_strbuf_append_cstr(dst_sb->buffer, src_sb->buffer->data, src_sb->buffer->length);
+    }
+    return true;
+}
+
+// Shared descriptor for all StringBuilder instances.
+static XrNativeBodyDesc sb_native_body_desc = {
+    .body_size = sizeof(XrStrBuf *),
+    .body_align = _Alignof(XrStrBuf *),
+    .copy_policy = XR_NATIVE_BODY_COPY_SHARED,
+    .destroy = stringbuilder_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = stringbuilder_body_to_shared,
+};
+
+XrNativeBodyDesc *xr_stringbuilder_native_body_desc(void) {
+    return &sb_native_body_desc;
 }

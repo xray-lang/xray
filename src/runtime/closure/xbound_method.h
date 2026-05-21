@@ -51,14 +51,12 @@ XR_FUNC bool xr_value_is_bound_method(XrValue v);
  * that need a bytecode-interpreting adapter resolve to a stub that
  * returns XR_NOTFOUND.
  *
- * Iterator and enum live outside XrClass because their dispatch shape
- * differs (Iterator state is on the receiver; Enum getMember takes an
- * integer index), so they get their own thin wrappers here. */
+ * Enum getMember takes an integer index, so it gets its own thin
+ * wrapper here. */
 XR_FUNC MethodHandler xr_map_get_handler(struct XrayIsolate *isolate, int symbol);
 XR_FUNC MethodHandler xr_array_get_handler(struct XrayIsolate *isolate, int symbol);
 XR_FUNC MethodHandler xr_set_get_handler(struct XrayIsolate *isolate, int symbol);
 XR_FUNC MethodHandler xr_string_get_handler(struct XrayIsolate *isolate, int symbol);
-XR_FUNC MethodHandler xr_iterator_get_handler(int symbol);
 
 /* Enum.getMember(int) -> XrEnumValue. Exported as a MethodHandler so
  * GETPROP can wrap it in a bound method without a special opcode. */

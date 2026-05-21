@@ -52,12 +52,12 @@ TEST(unwind_records_full_call_chain) {
 
     /* deep() -> level3() -> level2() -> level1() -> top-level
      * (5 frames active when throw fires). */
-    const char *src = "fn deep() -> () {\n"
-                      "    throw \"boom\"\n"
+    const char *src = "fn deep() {\n"
+                      "    throw new Exception(\"boom\")\n"
                       "}\n"
-                      "fn level3() -> () { deep() }\n"
-                      "fn level2() -> () { level3() }\n"
-                      "fn level1() -> () { level2() }\n"
+                      "fn level3() { deep() }\n"
+                      "fn level2() { level3() }\n"
+                      "fn level1() { level2() }\n"
                       "level1()\n";
 
     int rc = xray_isolate_dostring(iso, src);
@@ -67,12 +67,13 @@ TEST(unwind_records_full_call_chain) {
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     ASSERT_NOT_NULL(ctx);
     XrValue exc_val = ctx->current_exception;
-    ASSERT(XR_IS_EXCEPTION(exc_val));
+    ASSERT(xr_value_is_exception(iso, exc_val));
 
-    XrException *exc = XR_AS_EXCEPTION(exc_val);
-    ASSERT_NOT_NULL(exc->stackTrace);
+    XrValue stack_val = xr_exception_get_stacktrace(iso, exc_val);
+    ASSERT(XR_IS_ARRAY(stack_val));
+    XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
     /* Five active frames: top-level, level1, level2, level3, deep. */
-    ASSERT(exc->stackTrace->length >= 5);
+    ASSERT(stack->length >= 5);
 
     xray_isolate_delete(iso);
 }
@@ -95,11 +96,12 @@ TEST(runtime_error_records_trace) {
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     XrValue exc_val = ctx->current_exception;
-    ASSERT(XR_IS_EXCEPTION(exc_val));
-    XrException *exc = XR_AS_EXCEPTION(exc_val);
-    ASSERT_NOT_NULL(exc->stackTrace);
+    ASSERT(xr_value_is_exception(iso, exc_val));
+    XrValue stack_val = xr_exception_get_stacktrace(iso, exc_val);
+    ASSERT(XR_IS_ARRAY(stack_val));
+    XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
     /* divider() + top-level = 2 frames at minimum. */
-    ASSERT(exc->stackTrace->length >= 2);
+    ASSERT(stack->length >= 2);
 
     xray_isolate_delete(iso);
 }
@@ -154,9 +156,9 @@ TEST(caught_exception_trace_survives_catch) {
     /* Throw four frames deep, then immediately re-throw from the
      * catch handler so the test C code can inspect the trace on
      * the second (uncaught) flight. */
-    const char *src = "fn deep() -> () { throw \"deep\" }\n"
-                      "fn level2() -> () { deep() }\n"
-                      "fn level1() -> () { level2() }\n"
+    const char *src = "fn deep() { throw new Exception(\"deep\") }\n"
+                      "fn level2() { deep() }\n"
+                      "fn level1() { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";
 
     int rc = xray_isolate_dostring(iso, src);
@@ -164,8 +166,7 @@ TEST(caught_exception_trace_survives_catch) {
 
     XrVMContext *ctx = xr_vm_current_ctx(iso);
     XrValue exc_val = ctx->current_exception;
-    ASSERT(XR_IS_EXCEPTION(exc_val));
-    XrException *exc = XR_AS_EXCEPTION(exc_val);
+    ASSERT(xr_value_is_exception(iso, exc_val));
     /* Original throw recorded the deep + level2 + level1 + top-level
      * frames; the rethrow must NOT re-record (de-dup keeps the
      * original site visible to debuggers). */
@@ -173,8 +174,10 @@ TEST(caught_exception_trace_survives_catch) {
      * rethrow. Even with de-duping that keeps only the first
      * recording, we still expect at least one frame (the deepest
      * throw site). */
-    ASSERT_NOT_NULL(exc->stackTrace);
-    ASSERT(exc->stackTrace->length >= 1);
+    XrValue stack_val = xr_exception_get_stacktrace(iso, exc_val);
+    ASSERT(XR_IS_ARRAY(stack_val));
+    XrArray *stack = (XrArray *) XR_TO_PTR(stack_val);
+    ASSERT(stack->length >= 1);
 
     xray_isolate_delete(iso);
 }

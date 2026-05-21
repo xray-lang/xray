@@ -139,39 +139,6 @@ void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj) {
     }
 }
 
-/* ========== Json Traversal ========== */
-
-void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj)
-        return;
-    struct XrJson *json = (struct XrJson *) obj;
-
-    XrayIsolate *X = gc->owner ? xr_coro_get_isolate(gc->owner) : NULL;
-    XrShape *shape = xr_json_shape(X, json);
-    if (!shape)
-        return;
-
-    // Mark in-object fields
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t total = shape->field_count;
-    XR_DCHECK(in_obj <= 64, "gc_traverse_json: in_object_capacity too large");
-    uint16_t n = (total < in_obj) ? total : in_obj;
-    for (uint16_t i = 0; i < n; i++) {
-        xr_coro_gc_markvalue(gc, json->fields[i]);
-    }
-
-    // Mark overflow fields
-    XrJsonOverflow *ov = json->overflow;
-    if (ov && total > in_obj) {
-        uint16_t ov_count = total - in_obj;
-        if (ov_count > ov->length)
-            ov_count = ov->length;
-        for (uint16_t i = 0; i < ov_count; i++) {
-            xr_coro_gc_markvalue(gc, ov->values[i]);
-        }
-    }
-}
-
 /* ========== Closure Traversal ========== */
 
 void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj) {
@@ -191,52 +158,49 @@ void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj) {
     if (!gc || !obj)
         return;
     struct XrInstance *inst = (struct XrInstance *) obj;
+    struct XrClass *klass = inst->klass;
+    if (!klass)
+        return;
 
-    // Note: XrClass is usually in system heap, skip marking
-
-    // Mark all instance fields
-    if (inst->klass && inst->klass->field_count > 0) {
-        for (uint16_t i = 0; i < inst->klass->field_count; i++) {
+    // Mark all instance fields (dynamic-layout uses in-object + overflow)
+    uint16_t field_count = xr_class_instance_field_count(klass);
+    if (klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = klass->in_object_capacity;
+        // In-object fields (up to cap-1; slot cap-1 is overflow pointer)
+        uint16_t inobj = (field_count < cap - 1) ? field_count : cap - 1;
+        for (uint16_t i = 0; i < inobj; i++) {
+            xr_coro_gc_markvalue(gc, inst->fields[i]);
+        }
+        // Overflow fields
+        if (field_count > cap - 1) {
+            XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (overflow) {
+                uint16_t overflow_count = field_count - (cap - 1);
+                for (uint16_t i = 0; i < overflow_count; i++) {
+                    xr_coro_gc_markvalue(gc, overflow[i]);
+                }
+            }
+        }
+    } else {
+        for (uint16_t i = 0; i < field_count; i++) {
             xr_coro_gc_markvalue(gc, inst->fields[i]);
         }
     }
-}
 
-/* ========== Iterator Traversal ========== */
-
-void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!gc || !obj)
-        return;
-    struct XrIterator *iter = (struct XrIterator *) obj;
-
-    // Mark the source container (map/set/json) by type
-    switch (iter->type) {
-        case XR_ITERATOR_MAP:
-            if (iter->source.map)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.map);
-            break;
-        case XR_ITERATOR_SET:
-            if (iter->source.set)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.set);
-            break;
-        case XR_ITERATOR_JSON:
-            if (iter->source.json)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.json);
-            break;
-        case XR_ITERATOR_ARRAY:
-            if (iter->source.array)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.array);
-            break;
-        case XR_ITERATOR_STRING:
-            if (iter->source.string)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.string);
-            break;
+    // Traverse native body if present (e.g. Array buffer, Map hash table)
+    XrNativeBodyDesc *desc = klass->native_body;
+    if (desc && desc->traverse) {
+        void *body = xr_instance_native_body(inst);
+        XR_DCHECK(body != NULL, "traverse: native body NULL but desc present");
+        desc->traverse(gc, body);
     }
-    // coro is a raw runtime pointer, not a GC object; context is XrayIsolate* or
-    // XrSymbolTable* — neither is GC-managed. No further marking needed.
 }
 
-/* ========== Cell / Bound Method / Module / Exception / Error / Task ==========
+/* Iterator traversal moved to xiterator.c — iterators are XR_TINSTANCE
+ * objects whose native body descriptor's traverse hook walks the source
+ * container reference. */
+
+/* ========== Cell / Bound Method / Module / Error / Task ==========
  *
  * These traverse one or two well-known references off the object body.
  * They are split out as plain functions so g_type_ops can dispatch
@@ -262,19 +226,6 @@ void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj) {
             xr_coro_gc_markvalue(gc, mod->export_values[i]);
         }
     }
-}
-
-void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj) {
-    XrException *exc = (XrException *) obj;
-    if (exc->message)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->message);
-    if (exc->file)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->file);
-    if (exc->stackTrace)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->stackTrace);
-    if (exc->cause)
-        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->cause);
-    xr_coro_gc_markvalue(gc, exc->userData);
 }
 
 void xr_gc_traverse_error(XrCoroGC *gc, XrGCHeader *obj) {

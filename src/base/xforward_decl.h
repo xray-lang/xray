@@ -63,18 +63,13 @@ typedef struct XrMap XrMap;
 typedef struct XrSet XrSet;
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrChannel XrChannel;
-typedef struct XrJson XrJson;
-typedef struct XrShape XrShape;
+// XrJson is now an alias for XrInstance (defined in runtime/class/xinstance.h);
+// no separate struct forward declaration needed.
 typedef struct XrBigInt XrBigInt;
 typedef struct XrIterator XrIterator;
-typedef struct XrException XrException;
 typedef struct XrStringBuilder XrStringBuilder;
 typedef struct XrCFunction XrCFunction;
 typedef struct XrBoundMethod XrBoundMethod;
-
-/* ========== Object Pools ========== */
-
-typedef struct XrJsonPoolManager XrJsonPoolManager;
 
 /* ========== Coroutine Scheduling ========== */
 

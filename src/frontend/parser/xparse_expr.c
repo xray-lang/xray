@@ -933,6 +933,28 @@ AstNode *xr_parse_try_expr(Parser *parser) {
     return xr_ast_unary(parser->X, kind, operand, line);
 }
 
+// Parse catch! { body } expression.
+// Evaluates body; returns Result.Ok(last_value) on success,
+// Result.Err(exception) if body throws.
+AstNode *xr_parse_catch_expr(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_catch_expr: NULL parser");
+    int line = parser->previous.line;
+
+    if (!xr_parser_match(parser, TK_NOT)) {
+        xr_parser_error_at_current(parser,
+                                   "'catch' in expression position must be followed by '!'; "
+                                   "use 'try { ... } catch (e) { ... }' for statement form");
+        return NULL;
+    }
+
+    xr_parser_consume(parser, TK_LBRACE, "expected '{' after 'catch!'");
+    AstNode *body = xr_parse_block(parser);
+    if (!body)
+        return NULL;
+
+    return xr_ast_catch_expr(parser->X, body, line);
+}
+
 // Parse as cast: expr as Type / expr as Type?
 // Bare container types allowed: 'x as Array' for runtime type casts.
 AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {

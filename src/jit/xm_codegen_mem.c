@@ -969,44 +969,6 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             break;
         }
 
-        // Guard shape: deopt if obj is null or shape_id != expected
-        // args[0] = obj_ptr, args[1] = const(expected_shape_id)
-        case XM_GUARD_SHAPE: {
-            A64Reg obj_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // Load deopt_id into x17 (needed for both null and shape mismatch)
-            uint16_t did = 0xFFFF;
-            if (!xm_ref_is_none(ins->dst) && xm_ref_is_const(ins->dst)) {
-                uint32_t dci = XM_REF_INDEX(ins->dst);
-                did = (uint16_t) ctx->func->consts[dci].val.raw;
-            }
-            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, did, 0));
-            // Null check: CBZ obj → deopt (prevents SIGSEGV on field access)
-            add_patch(ctx, PATCH_DEOPT_CBZ, 0, obj_reg);
-            a64_buf_emit(&ctx->buf, a64_nop());  // placeholder for CBZ
-            // Alignment check: SSO string payloads are not 8-byte aligned.
-            // If obj & 7 != 0, it's not a valid GC pointer → deopt.
-            a64_buf_emit(&ctx->buf, a64_tst_imm(obj_reg, 0x7));
-            add_patch(ctx, PATCH_DEOPT_NE, 0, A64_XZR);
-            a64_buf_emit(&ctx->buf, a64_nop());  // placeholder for B.NE
-            // Type check: deopt if gc.rep != XR_TJSON (prevents crash on non-Json objects)
-            a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG, obj_reg, XM_GC_HDR_TYPE_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, 23));  // XR_TJSON = 23
-            add_patch(ctx, PATCH_DEOPT_NE, 0, A64_XZR);
-            a64_buf_emit(&ctx->buf, a64_nop());  // placeholder for B.NE
-            // Load gc.extra (uint16_t at offset 10)
-            a64_buf_emit(&ctx->buf, a64_ldrh(SCRATCH_REG, obj_reg, XM_GC_HDR_EXTRA_OFFSET));
-            // Extract shape_id: (extra & 0xFFFC) >> 2 = extra >> 2 (low bits are flags)
-            a64_buf_emit(&ctx->buf, a64_lsr_imm(SCRATCH_REG, SCRATCH_REG, 2));
-            // Compare with expected shape_id
-            uint32_t ci = XM_REF_INDEX(ins->args[1]);
-            uint32_t expected_id = (uint32_t) ctx->func->consts[ci].val.raw;
-            a64_buf_emit(&ctx->buf, a64_cmp_imm(SCRATCH_REG, expected_id));
-            add_patch(ctx, PATCH_DEOPT_NE, 0, A64_XZR);
-            a64_buf_emit(&ctx->buf, a64_nop());  // placeholder for B.NE
-            ctx->has_deopt = true;
-            break;
-        }
-
         // RT_ARRAY_NEW: create new array with given capacity via C helper
         // args[0] = capacity (const or vreg i64)
         // Result: ptr to XrArray in rd

@@ -560,12 +560,11 @@ static XrValue xml_element_fn(XrayIsolate *X, XrValue *args, int argc) {
     if (argc >= 2 && xr_value_is_json(args[1])) {
         XrJson *json = xr_value_to_json(args[1]);
         XrMap *attr_map = xr_map_new(xr_current_coro(X));
-        XrShape *shape = xr_json_shape(X, json);
-        XrSymbolTable *st = X->symbol_table;
-        for (uint16_t i = 0; i < shape->field_count; i++) {
-            const char *fname = xr_symbol_get_name_in_table(st, shape->field_symbols[i]);
+        XrClass *cls = json->klass;
+        for (uint16_t i = 0; cls && i < cls->field_count; i++) {
+            const char *fname = cls->fields[i].name;
             if (fname) {
-                XrValue jv = xr_json_get_field(json, i);
+                XrValue jv = xr_instance_get_dynamic_field(json, i);
                 if (XR_IS_STRING(jv)) {
                     XrValue fk = xr_string_value(xr_string_intern(X, fname, strlen(fname), 0));
                     xr_map_set(attr_map, fk, jv);

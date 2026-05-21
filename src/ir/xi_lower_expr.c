@@ -24,6 +24,7 @@
 #include "../frontend/lexer/xlex.h"
 
 #include "../runtime/class/xenum.h"
+#include "../runtime/class/xclass.h"
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -394,10 +395,17 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             const char *name;
             int index;
         } builtin_classes[] = {
-            {"Reflect", XR_GLOBAL_VAR_REFLECT}, {"Array", XR_GLOBAL_VAR_ARRAY},
-            {"Set", XR_GLOBAL_VAR_SET},         {"Map", XR_GLOBAL_VAR_MAP},
-            {"String", XR_GLOBAL_VAR_STRING},   {"Json", XR_GLOBAL_VAR_JSON},
-            {"Bytes", XR_GLOBAL_VAR_BYTES},     {"Process", XR_GLOBAL_VAR_PROCESS},
+            {"Reflect", XR_GLOBAL_VAR_REFLECT},
+            {"Array", XR_GLOBAL_VAR_ARRAY},
+            {"Set", XR_GLOBAL_VAR_SET},
+            {"Map", XR_GLOBAL_VAR_MAP},
+            {"String", XR_GLOBAL_VAR_STRING},
+            {"Json", XR_GLOBAL_VAR_JSON},
+            {"Bytes", XR_GLOBAL_VAR_BYTES},
+            {"Process", XR_GLOBAL_VAR_PROCESS},
+            {"Exception", XR_GLOBAL_VAR_EXCEPTION},
+            {"Range", XR_GLOBAL_VAR_RANGE},
+            {"DateTime", XR_GLOBAL_VAR_DATETIME},
         };
         for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
             if (strcmp(name, builtin_classes[i].name) == 0) {
@@ -1725,27 +1733,9 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
-        /* new Exception() / new Exception(message) / new Exception(message, cause)
-         * Routed via XI_CALL_BUILTIN("Exception") -> OP_NEWEXCEPTION at emit time.
-         * The dedicated opcode is required because XrException is its own GC
-         * type (XR_TEXCEPTION) — the generic XrInstance constructor pipeline
-         * would allocate and discard the wrong struct layout. */
-        if (strcmp(cname, "Exception") == 0 && ne->arg_count <= 2) {
-            int n = (int) ne->arg_count;
-            XiValue *arg_vals[2];
-            for (int i = 0; i < n; i++)
-                arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
-            XiValue *v =
-                xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, (uint16_t) n);
-            if (!v)
-                return NULL;
-            for (int i = 0; i < n; i++)
-                v->args[i] = arg_vals[i];
-            v->aux = (void *) "Exception";
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            v->line = (uint32_t) node->line;
-            return v;
-        }
+        /* Exception: no special handling needed — it is a regular class with a
+         * primitive constructor registered in core->exceptionClass. Falls through
+         * to the generic class-instantiation path below. */
         /* new Bytes() / new Bytes(n) / new Bytes(n, fill) */
         if (strcmp(cname, "Bytes") == 0 && ne->arg_count <= 2) {
             int n = (int) ne->arg_count;
@@ -1827,6 +1817,32 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL, l->type_any, 0);
             if (cls)
                 cls->aux_int = upval_idx;
+        }
+    }
+    /* Built-in unified-class names (Exception, Range, DateTime, etc.)
+     * are populated into the VM builtins array by the prelude module
+     * loader at fixed XR_GLOBAL_VAR_* indices. Resolve them via
+     * XI_GET_BUILTIN before falling back to null. */
+    if (!cls && cname) {
+        static const struct {
+            const char *name;
+            int index;
+        } builtin_class_globals[] = {
+            {"Exception", XR_GLOBAL_VAR_EXCEPTION},
+            {"Range", XR_GLOBAL_VAR_RANGE},
+            {"DateTime", XR_GLOBAL_VAR_DATETIME},
+        };
+        for (size_t bi = 0; bi < sizeof(builtin_class_globals) / sizeof(builtin_class_globals[0]);
+             bi++) {
+            if (strcmp(cname, builtin_class_globals[bi].name) == 0) {
+                struct XrType *cls_type = xr_type_new_class(NULL, cname);
+                cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, cls_type, 0);
+                if (cls) {
+                    cls->aux_int = builtin_class_globals[bi].index;
+                    cls->aux = (void *) builtin_class_globals[bi].name;
+                }
+                break;
+            }
         }
     }
     if (!cls) {
@@ -2014,9 +2030,9 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
     return set_val;
 }
 
-static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
-    IsExprNode *is = &node->as.is_expr;
-    XiValue *val = xi_lower_expr(l, is->expr);
+/* Emit an XI_IS test against the given XrTypeRef for an existing value.
+ * Used both by `expr is T` and by `is T` patterns in match arms. */
+XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int line) {
     if (!val)
         return NULL;
 
@@ -2025,7 +2041,6 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
      *   - Primitive types → XI_CONST with XrTypeId
      *   - Named types (classes) → scope-resolved class value */
     XiValue *type_val = NULL;
-    XrTypeRef *tref = is->type;
     if (tref) {
         int tid = -1;
         switch (tref->kind) {
@@ -2122,9 +2137,17 @@ static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
     v->args[0] = val;
     if (type_val)
         v->args[1] = type_val;
-    v->aux = (void *) is->type;
-    v->line = (uint32_t) node->line;
+    v->aux = (void *) tref;
+    v->line = (uint32_t) line;
     return v;
+}
+
+static XiValue *lower_is_expr(XiLower *l, AstNode *node) {
+    IsExprNode *is = &node->as.is_expr;
+    XiValue *val = xi_lower_expr(l, is->expr);
+    if (!val)
+        return NULL;
+    return xi_lower_is_test(l, val, is->type, node->line);
 }
 
 static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
@@ -2482,13 +2505,13 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
     return phi ? &phi->value : null_val;
 }
 
-/* expr! — force unwrap nullable; runtime null-check then pass-through */
+/* expr! — force unwrap nullable; runtime null-check then pass-through.
+ * Throws Exception(E0413, "Attempted to unwrap a null value") on null. */
 static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     XiValue *val = xi_lower_expr(l, node->as.unary.operand);
     if (!val)
         return NULL;
     struct XrType *result_type = xi_lower_node_type(l, node);
-    /* Emit a null-check that throws on null, otherwise returns val */
     XiValue *chk = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
     if (!chk)
         return val;
@@ -2500,16 +2523,41 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, throw_blk);
     xi_lower_braun_seal(l, ok_blk);
 
-    /* Throw path */
+    /* Throw path: construct Exception(E0413) and throw */
     l->cur_block = throw_blk;
-    XiValue *msg =
-        xi_const_str(l->func, l->cur_block, "force unwrap of null value", l->type_string);
+    struct XrType *exception_type = xr_type_new_class(NULL, "Exception");
+    XiValue *cls = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, exception_type, 0);
+    if (!cls) {
+        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+        l->cur_block = ok_blk;
+        return val;
+    }
+    cls->aux_int = XR_GLOBAL_VAR_EXCEPTION;
+    cls->aux = (void *) "Exception";
+
+    XiValue *msg = xi_const_str(l->func, l->cur_block, "E0413: Attempted to unwrap a null value",
+                                l->type_string);
+    XiValue *exc = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, exception_type, 2);
+    if (!exc) {
+        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+        l->cur_block = ok_blk;
+        return val;
+    }
+    exc->args[0] = cls;
+    exc->args[1] = msg;
+    exc->aux = (void *) "constructor";
+    exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    exc->line = (uint32_t) node->line;
+
     XiValue *thr = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
     if (thr) {
-        thr->args[0] = msg;
+        thr->args[0] = exc;
         thr->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        thr->line = (uint32_t) node->line;
     }
     l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+    l->cur_block->control = exc;
 
     /* Ok path */
     l->cur_block = ok_blk;
@@ -2742,27 +2790,41 @@ static XrValue enum_eval_const(XiLower *l, AstNode *expr) {
 }
 
 /* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
- * shared variable so enum member access can find it. */
+ * shared variable so enum member access can find it.
+ * Handles both simple enums (backing values) and ADT enums (tag + payload). */
 XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     EnumDeclNode *ed = &node->as.enum_decl;
     XR_DCHECK(ed->name != NULL, "enum name must not be NULL");
     XR_DCHECK(l->isolate != NULL, "isolate required for enum creation");
 
     int n = ed->member_count;
-    char **names = (char **) xr_malloc(sizeof(char *) * n);
-    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * n);
+    char **names = (char **) xr_malloc(sizeof(char *) * (size_t) n);
+    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) n);
     if (!names || !values) {
         xr_free(names);
         xr_free(values);
         return;
     }
 
+    /* Detect ADT enum: any variant with payload_count > 0 */
+    bool is_adt = false;
+    for (int i = 0; i < n; i++) {
+        EnumMemberNode *m = &ed->members[i]->as.enum_member;
+        if (m->payload_count > 0) {
+            is_adt = true;
+            break;
+        }
+    }
+
+    int detected_base = XR_TINT;
     int64_t auto_val = 0;
-    int detected_base = XR_TINT;  // default for auto-increment enums
     for (int i = 0; i < n; i++) {
         EnumMemberNode *m = &ed->members[i]->as.enum_member;
         names[i] = strdup(m->name);
-        if (m->value) {
+        if (is_adt) {
+            /* ADT enum: all variants get tag index as backing value */
+            values[i] = xr_int(i);
+        } else if (m->value) {
             values[i] = enum_eval_const(l, m->value);
             if (XR_IS_INT(values[i])) {
                 auto_val = XR_TO_INT(values[i]) + 1;
@@ -2781,6 +2843,32 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
 
     XrEnumType *et = xr_enum_type_new(l->isolate, ed->name, detected_base, names, values, n);
     /* names/values ownership transferred to xr_enum_type_new */
+
+    /* Set ADT metadata on the created enum type */
+    if (et && is_adt) {
+        et->is_adt = true;
+        et->payload_counts = (int *) xr_calloc((size_t) n, sizeof(int));
+        int max_pc = 0;
+        if (et->payload_counts) {
+            for (int i = 0; i < n; i++) {
+                int pc = ed->members[i]->as.enum_member.payload_count;
+                et->payload_counts[i] = pc;
+                if (pc > max_pc)
+                    max_pc = pc;
+            }
+        }
+        et->max_payload = max_pc;
+
+        /* Set field_count on the enum class so xr_instance_new allocates
+         * space for variant tag (field[0]) + payload (field[1..max_payload]).
+         * Set builtin_kind = XR_BK_ADT_ENUM so the formatter can detect it. */
+        if (et->enum_class && max_pc > 0) {
+            et->enum_class->field_count = (uint16_t) (1 + max_pc);
+            et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
+            // ADT enum identity is now tracked via builtin_kind
+            et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
+        }
+    }
 
     /* Store as XI_CONST with type_any (emitter handles via LOADK) */
     XiValue *cv = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
@@ -2858,6 +2946,139 @@ static XiValue *lower_move_expr(XiLower *l, AstNode *node) {
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
+}
+
+/* Helper: emit XI_CALL_METHOD(receiver, method_name, arg) → OP_INVOKE.
+ * Used by catch! lowering to call Result.Ok(v) / Result.Err(e). */
+static XiValue *emit_method_call_1(XiLower *l, XiValue *recv, const char *method, XiValue *arg,
+                                   uint32_t line) {
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_any, 2);
+    if (!v)
+        return NULL;
+    v->args[0] = recv;
+    v->args[1] = arg;
+    v->aux = (void *) arena_strdup(l->func, method);
+    v->aux_int = (int64_t) xi_lower_method_symbol(l, method) << 1;
+    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    v->line = line;
+    return v;
+}
+
+/* Lower catch! { body } expression.
+ * Desugars into:
+ *   try { body → Result.Ok(last_value) }
+ *   catch (e) { Result.Err(e) }
+ * Returns the Result value via Braun SSA merge of both paths. */
+static XiValue *lower_catch_expr(XiLower *l, AstNode *node) {
+    CatchExprNode *ce = &node->as.catch_expr;
+    AstNode *body = ce->body;
+    XR_DCHECK(body != NULL, "catch! body must not be NULL");
+    uint32_t line = (uint32_t) node->line;
+
+    /* Synthetic Braun variable to carry the Result across try/catch paths */
+    int catch_res_var = xi_lower_var_create(l, 0, "__catch_result", l->type_any);
+
+    XiBlock *try_blk = xi_block_new(l->func);
+    XiBlock *catch_blk = xi_block_new(l->func);
+    XiBlock *merge = xi_block_new(l->func);
+
+    /* Emit XI_TRY — registers catch_blk as the exception handler */
+    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
+    if (try_op) {
+        try_op->aux = (void *) catch_blk;
+        try_op->aux_int = -1; /* no finally */
+        try_op->flags |= XI_FLAG_SIDE_EFFECT;
+        try_op->line = line;
+    }
+
+    xi_block_set_jump(l->cur_block, try_blk);
+    xi_lower_braun_seal(l, try_blk);
+
+    /* === Try body === */
+    l->cur_block = try_blk;
+    l->dead_after_throw = false;
+    l->try_depth++;
+
+    /* Lower all body statements; last expression-stmt provides the value */
+    XiValue *body_val = NULL;
+    if (body->type == AST_BLOCK) {
+        BlockNode *blk = &body->as.block;
+        for (int i = 0; i < blk->count; i++) {
+            AstNode *stmt = blk->statements[i];
+            if (!stmt || !l->cur_block)
+                continue;
+            if (i == blk->count - 1 && stmt->type == AST_EXPR_STMT) {
+                body_val = xi_lower_expr(l, stmt->as.expr_stmt);
+            } else {
+                xi_lower_stmt(l, stmt);
+            }
+        }
+    } else {
+        body_val = xi_lower_expr(l, body);
+    }
+    if (!body_val && l->cur_block)
+        body_val = xi_const_null(l->func, l->cur_block, l->type_null);
+
+    l->try_depth--;
+
+    /* Resolve the prelude Result enum variable.
+     * xi_lower_var_find does name-based fallback regardless of symbol_id,
+     * so it finds the variable created by xi_lower_enum_decl. */
+    int result_var_id = xi_lower_var_find(l, 0, "Result");
+    XR_DCHECK(result_var_id >= 0, "prelude Result enum must be available");
+
+    /* Wrap success value: Result.Ok(body_val) */
+    if (l->cur_block && body_val) {
+        XiValue *rt = xi_lower_braun_read(l, result_var_id, l->cur_block);
+        XiValue *ok = emit_method_call_1(l, rt, "Ok", body_val, line);
+        if (ok)
+            xi_lower_braun_write(l, catch_res_var, l->cur_block, ok);
+    }
+
+    XiBlock *try_exit_blk = l->cur_block;
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, merge);
+
+    /* === Catch body === */
+    XiBlock *catch_pred = try_exit_blk ? try_exit_blk : try_blk;
+    xi_block_add_pred(catch_blk, catch_pred);
+    xi_lower_braun_seal(l, catch_blk);
+    l->cur_block = catch_blk;
+    l->dead_after_throw = false;
+
+    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
+    if (catch_op) {
+        catch_op->flags |= XI_FLAG_SIDE_EFFECT;
+        catch_op->line = line;
+    }
+
+    /* Wrap exception: Result.Err(exception) */
+    if (l->cur_block && catch_op) {
+        XiValue *rt = xi_lower_braun_read(l, result_var_id, l->cur_block);
+        XiValue *err = emit_method_call_1(l, rt, "Err", catch_op, line);
+        if (err)
+            xi_lower_braun_write(l, catch_res_var, l->cur_block, err);
+    }
+
+    if (l->cur_block)
+        xi_block_set_jump(l->cur_block, merge);
+
+    /* === Merge block === */
+    xi_lower_braun_seal(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    l->dead_after_throw = false;
+
+    if (!l->cur_block)
+        return xi_const_null(l->func, try_blk, l->type_null);
+
+    XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+    if (end_op) {
+        end_op->flags |= XI_FLAG_SIDE_EFFECT;
+        end_op->line = line;
+    }
+
+    /* Braun SSA read at merge point automatically inserts PHI */
+    return xi_lower_braun_read(l, catch_res_var, l->cur_block);
 }
 
 static XiValue *lower_object_literal(XiLower *l, AstNode *node) {
@@ -3138,6 +3359,9 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
         /* Expression statement wrapper: unwrap */
         case AST_EXPR_STMT:
             return xi_lower_expr(l, node->as.expr_stmt);
+
+        case AST_CATCH_EXPR:
+            return lower_catch_expr(l, node);
 
         default:
             /* Every analyzer-accepted AST node must be lowerable.

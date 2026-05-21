@@ -25,11 +25,10 @@ XrValue xr_enum_get_name(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(self);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE)
+    if (!XR_IS_ENUM_VALUE(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) gc;
+    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
 
     size_t len = strlen(enum_val->member_name);
     XrString *str = xr_string_intern(isolate, enum_val->member_name, len, 0);
@@ -45,11 +44,10 @@ XrValue xr_enum_get_value(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(self);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE)
+    if (!XR_IS_ENUM_VALUE(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) gc;
+    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
 
     return enum_val->raw_value;
 }
@@ -63,11 +61,10 @@ XrValue xr_enum_get_ordinal(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(self);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE)
+    if (!XR_IS_ENUM_VALUE(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) gc;
+    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
 
     return xr_int(enum_val->member_index);
 }
@@ -81,11 +78,10 @@ XrValue xr_enum_toString(XrayIsolate *isolate, XrValue *args, int nargs) {
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(self);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_VALUE)
+    if (!XR_IS_ENUM_VALUE(self))
         return xr_null();
 
-    XrEnumValue *enum_val = (XrEnumValue *) gc;
+    XrEnumValue *enum_val = (XrEnumValue *) XR_TO_PTR(self);
 
     // Format: EnumName.MemberName
     char buffer[512];
@@ -105,11 +101,10 @@ XrValue xr_enum_type_get_member_count(XrayIsolate *isolate, XrValue *args, int n
     if (!XR_IS_PTR(self))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(self);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE)
+    if (!XR_IS_ENUM_TYPE(self))
         return xr_null();
 
-    XrEnumType *enum_type = (XrEnumType *) gc;
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(self);
 
     return xr_int(enum_type->member_count);
 }
@@ -126,11 +121,10 @@ XrValue xr_enum_type_get_member(XrayIsolate *isolate, XrValue *args, int nargs) 
     if (!XR_IS_INT(index_val))
         return xr_null();
 
-    XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(self);
-    if (XR_GC_GET_TYPE(gc) != XR_TENUM_TYPE)
+    if (!XR_IS_ENUM_TYPE(self))
         return xr_null();
 
-    XrEnumType *enum_type = (XrEnumType *) gc;
+    XrEnumType *enum_type = (XrEnumType *) XR_TO_PTR(self);
     int index = XR_TO_INT(index_val);
 
     if (index < 0 || index >= (int) enum_type->member_count) {

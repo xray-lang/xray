@@ -1197,9 +1197,8 @@ XmPassChange xm_pass_licm(XmFunc *func) {
                             }
                             can_hoist = !has_alias;
                         }
-                    } else if (ins->op == XM_GUARD_TAG || ins->op == XM_GUARD_SHAPE ||
-                               ins->op == XM_GUARD_NONNULL || ins->op == XM_GUARD_CLASS ||
-                               ins->op == XM_GUARD_KLASS) {
+                    } else if (ins->op == XM_GUARD_TAG || ins->op == XM_GUARD_NONNULL ||
+                               ins->op == XM_GUARD_CLASS || ins->op == XM_GUARD_KLASS) {
                         can_hoist = true;
                         for (int a = 0; a < 2; a++) {
                             if (!licm_ref_outside(ins->args[a], def_block, nv, in_loop, nblk)) {

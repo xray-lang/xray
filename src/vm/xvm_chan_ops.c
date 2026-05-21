@@ -5,12 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_cold_chan.c - Cold-path implementations for channel timeouts
- *                   and select multiplex
+ * xvm_chan_ops.c - Dispatch helpers for channel timeouts and select
  *
- * Holds the noinline bodies for the channel send-with-timeout /
- * recv-with-timeout pair and the select-block driver. Function
- * declarations live in xvm_cold_paths.h.
+ * Implements channel send/recv with timeout and the select-block
+ * driver. Declarations live in xvm_dispatch_helpers.h.
  *
  * Owns:
  *   - vm_select_block        (multiplex blocking select)
@@ -18,7 +16,7 @@
  *   - vm_chan_recv_timeout   (Channel recv with deadline)
  */
 
-#include "xvm_cold_paths.h"
+#include "xvm_dispatch_helpers.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../os/os_time.h"
@@ -40,19 +38,20 @@
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
 
-XR_NOINLINE int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                                XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                         XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                         XrInstruction *pc) {
     int base_reg = GETARG_A(instr);
     int ch_count = GETARG_B(instr);
     int case_count = GETARG_C(instr);
 
-    XrCoroutine *coro = vm_cold_get_coro(vm_ctx);
+    XrCoroutine *coro = vm_get_coro(vm_ctx);
     if (!coro)
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
 
     XrWorker *worker = xr_current_worker();
     if (!worker)
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
 
     void **channels = xr_malloc(ch_count * sizeof(void *));
     XrChannel *timer_ch = NULL;
@@ -75,13 +74,13 @@ XR_NOINLINE int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIns
     XrSelectWait *sw = xr_malloc(sizeof(XrSelectWait));
     if (!sw) {
         xr_free(channels);
-        VM_COLD_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
+        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
     sw->cases = xr_malloc(case_count * sizeof(XrSelectCase));
     if (!sw->cases) {
         xr_free(sw);
         xr_free(channels);
-        VM_COLD_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
+        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
 
     for (int ci = 0; ci < ch_count && ci < case_count; ci++) {
@@ -143,11 +142,12 @@ XR_NOINLINE int vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx, XrIns
     xr_worker_block_select(worker, coro, channels, ch_count);
     xr_free(channels);
 
-    return VM_COLD_BLOCKED;
+    return XR_DISP_BLOCKED;
 }
 
-XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                                     XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                              XrInstruction instr, XrValue *base,
+                                              XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -155,7 +155,7 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     XrValue ch_val = base[b];
     if (!xr_value_is_channel(ch_val)) {
         base[a] = xr_bool(false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
     XrValue value = vm_chan_copy_send(isolate, base[c]);
@@ -173,18 +173,18 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     if (xr_channel_try_send(ch, value)) {
         base[a] = xr_bool(true);
         xr_runtime_wake_channel(isolate, ch, false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
     if (xr_channel_is_closed(ch)) {
         base[a] = xr_bool(false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
     if (timeout_ms <= 0) {
         base[a] = xr_bool(false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
-    XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+    XrCoroutine *current = vm_get_coro(vm_ctx);
     if (current) {
         int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 
@@ -194,22 +194,22 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         if (now_us >= current->channel_deadline) {
             current->channel_deadline = 0;
             base[a] = xr_bool(false);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (xr_channel_try_send(ch, value)) {
             current->channel_deadline = 0;
             base[a] = xr_bool(true);
             xr_runtime_wake_channel(isolate, ch, false);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (xr_channel_is_closed(ch)) {
             current->channel_deadline = 0;
             base[a] = xr_bool(false);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         frame->pc = pc - 1;
-        return VM_COLD_YIELD;
+        return XR_DISP_YIELD;
     }
 
     // Main thread: synchronous polling
@@ -231,11 +231,12 @@ XR_NOINLINE int vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         }
         xr_thread_yield();
     }
-    return VM_COLD_BREAK;
+    return XR_DISP_NEXT;
 }
 
-XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
-                                     XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                              XrInstruction instr, XrValue *base,
+                                              XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
@@ -244,7 +245,7 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
     if (!xr_value_is_channel(ch_val)) {
         base[a] = xr_null();
         base[a + 1] = xr_bool(false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
     XrValue timeout_val = base[c];
@@ -256,26 +257,26 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
 
     // Try immediate receive via unified helper
-    XrCoroutine *current = vm_cold_get_coro(vm_ctx);
+    XrCoroutine *current = vm_get_coro(vm_ctx);
     XrValue recv_val;
     if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
         base[a] = recv_val;
         base[a + 1] = xr_bool(true);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
     if (xr_channel_is_closed(ch)) {
         base[a] = xr_null();
         base[a + 1] = xr_bool(false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
     if (timeout_ms <= 0) {
         base[a] = xr_null();
         base[a + 1] = xr_bool(false);
-        return VM_COLD_BREAK;
+        return XR_DISP_NEXT;
     }
 
     if (!current)
-        current = vm_cold_get_coro(vm_ctx);
+        current = vm_get_coro(vm_ctx);
     if (current) {
         int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 
@@ -286,23 +287,23 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
             current->channel_deadline = 0;
             base[a] = xr_null();
             base[a + 1] = xr_bool(false);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
             current->channel_deadline = 0;
             base[a] = recv_val;
             base[a + 1] = xr_bool(true);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
         if (xr_channel_is_closed(ch)) {
             current->channel_deadline = 0;
             base[a] = xr_null();
             base[a + 1] = xr_bool(false);
-            return VM_COLD_BREAK;
+            return XR_DISP_NEXT;
         }
 
         frame->pc = pc - 1;
-        return VM_COLD_YIELD;
+        return XR_DISP_YIELD;
     }
 
     // Main thread: synchronous polling
@@ -326,5 +327,5 @@ XR_NOINLINE int vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx, 
         }
         xr_thread_yield();
     }
-    return VM_COLD_BREAK;
+    return XR_DISP_NEXT;
 }

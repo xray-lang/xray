@@ -121,17 +121,11 @@ extern const XrTypeOps g_type_ops[XGC_MAX_TYPES];
 XR_FUNC void xr_gc_destroy_array(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_map(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_set(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_stringbuilder(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_channel(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_coroutine(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void regex_object_destroy(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_logger(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_json(XrGCHeader *obj, XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_instance(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_enum_value(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_net_conn(XrGCHeader *obj, XrCoroGC *owning_gc);
-XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, XrCoroGC *owning_gc);
+// NetConn / NetListener destroy handled by native body descriptors.
 
 // Traverse functions (non-static, referenced by g_type_ops).
 // Each marks the type's GC-traced children via xr_coro_gc_markvalue /
@@ -141,15 +135,11 @@ XR_FUNC void xr_gc_destroy_net_listener(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_traverse_array(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_map(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_set(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_coro_gc_traverse_json(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_closure(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_instance(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_gc_traverse_iterator(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_cell(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_bound_method(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_module(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_gc_traverse_tuple(XrCoroGC *gc, XrGCHeader *obj);
-XR_FUNC void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_error(XrCoroGC *gc, XrGCHeader *obj);
 XR_FUNC void xr_gc_traverse_task(XrCoroGC *gc, XrGCHeader *obj);
 

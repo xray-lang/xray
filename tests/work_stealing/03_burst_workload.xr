@@ -53,6 +53,6 @@ if (all_done) {
     print("
 ✓ 突发负载测试通过：所有 " +     string(BURST_SIZE) + " 个协程都完成了")
 } else {
-    throw "突发负载测试失败"
+    throw new Exception("突发负载测试失败")
 }
 print("========== 测试3 完成 ==========")

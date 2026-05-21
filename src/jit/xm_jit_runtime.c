@@ -26,7 +26,6 @@
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xjson.h"
-#include "../runtime/object/xshape.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/object/xset.h"
 #include "../runtime/object/xstringbuilder.h"
@@ -321,7 +320,7 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
         [JIT_TYPE_HINT_FLOAT] = XR_TFLOAT,   [JIT_TYPE_HINT_BOOL] = XR_TBOOL,
         [JIT_TYPE_HINT_STRING] = XR_TSTRING, [JIT_TYPE_HINT_ARRAY] = XR_TARRAY,
         [JIT_TYPE_HINT_MAP] = XR_TMAP,       [JIT_TYPE_HINT_SET] = XR_TSET,
-        [JIT_TYPE_HINT_JSON] = XR_TJSON,     [JIT_TYPE_HINT_INSTANCE] = -1,
+        [JIT_TYPE_HINT_JSON] = -1,           [JIT_TYPE_HINT_INSTANCE] = -1,
         [JIT_TYPE_HINT_ITERATOR] = -1,       [JIT_TYPE_HINT_CLASS] = -1,
     };
 
@@ -556,7 +555,7 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
     //   JIT-internal XrValue uses a sparse descriptor where heap_type
     //   may be 0 and is rebuilt on demand by jit_value_from_tag, while
     //   the VM expects heap_type to always be complete. Without this
-    //   backfill xr_is_exception sees heap_type=0 for a real Exception,
+    //   backfill xr_value_is_exception sees heap_type=0 for a real Exception,
     //   the auto-wrap path fires spuriously, and the original value is
     //   stored as userData with heap_type=0 — breaking every downstream
     //   XR_IS_STRING / XR_IS_PTR-typed check on the caught value.
@@ -578,7 +577,7 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
     }
 
     // Auto-wrap non-exception values
-    if (!xr_is_exception(exception)) {
+    if (!xr_value_is_exception(isolate, exception)) {
         exception = xr_exception_from_value(isolate, exception);
     }
 
@@ -589,7 +588,7 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
 
 /* ========== Generic Index Operations ========== */
 
-// Called from JIT via CALL_C for OP_GETPROP (shape-miss or non-Json fallback).
+// Called from JIT via CALL_C for OP_GETPROP fallback path.
 // jit_call_args[0] = obj raw (ptr), extra_arg = global SymbolId
 XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
     XrValue obj;
@@ -641,7 +640,7 @@ XrJitResult xr_jit_getprop(XrCoroutine *coro, int64_t symbol_id) {
     }
 
     // Enum value properties
-    if (heap_type == XR_TENUM_VALUE) {
+    if (XR_IS_ENUM_VALUE(obj)) {
         XrEnumValue *ev = (XrEnumValue *) obj.ptr;
         if (sym == SYMBOL_VALUE)
             return XR_JIT_RESULT(ev->raw_value);
@@ -719,7 +718,7 @@ XrJitResult xr_jit_index_get(XrCoroutine *coro, int64_t extra_arg) {
             size_t idx = (size_t) key_val.i;
             XrString *ch = xr_string_char_at_unicode(coro->isolate, str, idx);
             result = ch ? xr_string_value(ch) : xr_null();
-        } else if (heap_type == XR_TJSON && XR_IS_PTR(key_val)) {
+        } else if (xr_value_is_json(obj_val) && XR_IS_PTR(key_val)) {
             XrJson *json = (XrJson *) obj_val.ptr;
             XrString *key_str = (XrString *) key_val.ptr;
             result = xr_json_get_by_key(coro->isolate, json, key_str->data);
@@ -762,7 +761,7 @@ XrJitResult xr_jit_index_set(XrCoroutine *coro, int64_t extra_arg) {
         } else if (heap_type == XR_TMAP) {
             XrMap *map = (XrMap *) obj_val.ptr;
             xr_map_set(map, key_val, new_val);
-        } else if (heap_type == XR_TJSON && XR_IS_PTR(key_val)) {
+        } else if (xr_value_is_json(obj_val) && XR_IS_PTR(key_val)) {
             XrJson *json = (XrJson *) obj_val.ptr;
             XrString *key_str = (XrString *) key_val.ptr;
             xr_json_set_by_key(coro->isolate, json, key_str->data, new_val);
@@ -826,10 +825,12 @@ XrJitResult xr_jit_map_get(XrCoroutine *coro, int64_t extra_arg) {
         result = xr_map_get(map, key, &found);
         if (!found)
             result = xr_null();
-    } else if (hdr->type == XR_TJSON && XR_IS_PTR(key)) {
-        XrJson *json = (XrJson *) obj;
-        XrString *key_str = (XrString *) key.ptr;
-        result = xr_json_get_by_key(coro->isolate, json, key_str->data);
+    } else if (hdr->type == XR_TINSTANCE && XR_IS_PTR(key)) {
+        XrInstance *inst = (XrInstance *) obj;
+        if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
+            XrString *key_str = (XrString *) key.ptr;
+            result = xr_json_get_by_key(coro->isolate, (XrJson *) obj, key_str->data);
+        }
     }
     return XR_JIT_RESULT(result);
 }
@@ -849,11 +850,13 @@ XrJitResult xr_jit_map_set(XrCoroutine *coro, int64_t extra_arg) {
     if (hdr->type == XR_TMAP) {
         XrMap *map = (XrMap *) obj;
         xr_map_set(map, key, val);
-    } else if (hdr->type == XR_TJSON && XR_IS_PTR(key)) {
-        XrJson *json = (XrJson *) obj;
-        XrString *key_str = (XrString *) key.ptr;
-        if (!xr_json_set_by_key(coro->isolate, json, key_str->data, val)) {
-            return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    } else if (hdr->type == XR_TINSTANCE && XR_IS_PTR(key)) {
+        XrInstance *inst = (XrInstance *) obj;
+        if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
+            XrString *key_str = (XrString *) key.ptr;
+            if (!xr_json_set_by_key(coro->isolate, (XrJson *) obj, key_str->data, val)) {
+                return (XrJitResult) {XM_DEOPT_MARKER, 0};
+            }
         }
     }
     return XR_JIT_OK();
@@ -902,8 +905,9 @@ XrJitResult xr_jit_newrange(XrCoroutine *coro, int64_t unused) {
     (void) unused;
     int64_t start = coro->jit_ctx->call_args[0];
     int64_t end = coro->jit_ctx->call_args[1];
-    XrRange *range = xr_range_new(coro, start, end);
-    return XR_JIT_PTR(range);
+    XrayIsolate *iso = coro->isolate;
+    XrValue rv = xr_range_new(iso, start, end);
+    return XR_JIT_PTR(XR_TO_PTR(rv));
 }
 
 // Called from JIT via CALL_C for OP_RANGE_UNPACK.
@@ -911,7 +915,10 @@ XrJitResult xr_jit_newrange(XrCoroutine *coro, int64_t unused) {
 // Returns packed: count in return value, step and start stored in jit_call_args[1..2]
 XrJitResult xr_jit_range_unpack(XrCoroutine *coro, int64_t unused) {
     (void) unused;
-    XrRange *rng = (XrRange *) coro->jit_ctx->call_args[0];
+    XrInstance *inst = (XrInstance *) coro->jit_ctx->call_args[0];
+    if (!inst)
+        return XR_JIT_OK();
+    XrRange *rng = (XrRange *) xr_instance_native_body(inst);
     if (!rng)
         return XR_JIT_OK();
     int64_t count = xr_range_length(rng);

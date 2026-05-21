@@ -22,7 +22,10 @@ static XrTypePool *type_pool = NULL;
 /* ========== Setup / Teardown ========== */
 
 static void setup(void) {
-    X = xray_isolate_new(NULL);
+    XrayIsolateParams params;
+    xray_isolate_params_init(&params);
+    xray_isolate_setup_full(&params);
+    X = xray_isolate_new(&params);
     ASSERT_NOT_NULL(X);
     main_coro = xr_test_init_coro(X);
     ASSERT_NOT_NULL(main_coro);
@@ -55,7 +58,7 @@ TEST(tuple_new_zero_arity) {
     setup();
     XrTuple *t = xr_tuple_new(main_coro, 0);
     ASSERT_NOT_NULL(t);
-    ASSERT_EQ_INT(t->element_count, 0);
+    ASSERT_EQ_INT(xr_tuple_arity(t), 0);
     teardown();
 }
 
@@ -63,7 +66,7 @@ TEST(tuple_new_default_null_elements) {
     setup();
     XrTuple *t = xr_tuple_new(main_coro, 3);
     ASSERT_NOT_NULL(t);
-    ASSERT_EQ_INT(t->element_count, 3);
+    ASSERT_EQ_INT(xr_tuple_arity(t), 3);
     for (uint16_t i = 0; i < 3; i++) {
         XrValue v = xr_tuple_get(t, i);
         ASSERT_TRUE(XR_IS_NULL(v));
@@ -76,7 +79,7 @@ TEST(tuple_from_values_copies_payload) {
     XrValue src[3] = {xr_int(10), xr_int(20), xr_int(30)};
     XrTuple *t = xr_tuple_from_values(main_coro, src, 3);
     ASSERT_NOT_NULL(t);
-    ASSERT_EQ_INT(t->element_count, 3);
+    ASSERT_EQ_INT(xr_tuple_arity(t), 3);
     ASSERT_EQ_INT(XR_TO_INT(xr_tuple_get(t, 0)), 10);
     ASSERT_EQ_INT(XR_TO_INT(xr_tuple_get(t, 1)), 20);
     ASSERT_EQ_INT(XR_TO_INT(xr_tuple_get(t, 2)), 30);
@@ -108,10 +111,10 @@ TEST(tuple_set_updates_slot) {
 TEST(tuple_value_macros_classify_heap_object) {
     setup();
     XrTuple *t = xr_tuple_from_values(main_coro, (XrValue[]) {xr_int(1), xr_int(2)}, 2);
-    XrValue v = xr_make_ptr_val(t);
-    ASSERT_TRUE(XR_IS_TUPLE(v));
+    XrValue v = xr_value_from_tuple(t);
+    ASSERT_TRUE(xr_value_is_tuple(v));
     ASSERT_TRUE(!XR_IS_ARRAY(v));
-    ASSERT_TRUE(XR_TO_TUPLE(v) == t);
+    ASSERT_TRUE(xr_value_to_tuple(v) == t);
     teardown();
 }
 

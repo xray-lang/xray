@@ -43,7 +43,7 @@ fn test_nullable() {
 @test
 fn test_exceptions() {
     assert_throws(() -> {
-        throw "expected error"
+        throw new Exception("expected error")
     })
 }
 

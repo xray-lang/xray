@@ -136,6 +136,7 @@ static ParseRule rules[] = {
     [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
     [TK_TRY] = {xr_parse_try_expr, NULL, PREC_NONE},      // try? / try! expression
+    [TK_CATCH] = {xr_parse_catch_expr, NULL, PREC_NONE},  // catch! { body } expression
     [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},            // _ wildcard (pattern only)
 
     // Coroutine keywords
@@ -798,6 +799,7 @@ AstNode *xr_parse_statement(Parser *parser) {
     if (parser->current.type == TK_INC || parser->current.type == TK_DEC) {
         xr_parser_error_at_current(parser,
                                    "prefix ++/-- not supported, use postfix form (x++, x--)");
+        xr_parser_advance(parser); /* consume ++/-- so the parser can recover */
         return NULL;
     }
 
@@ -1586,6 +1588,7 @@ AstNode *xr_parse_compound_assignment(Parser *parser, AstNode *left) {
 // xray syntax: only postfix form (x++, x--) is supported
 AstNode *xr_parse_inc_dec(Parser *parser) {
     xr_parser_error(parser, "prefix ++/-- not supported, use postfix form (x++, x--)");
+    xr_parser_advance(parser); /* consume ++/-- so the parser can recover */
     return NULL;
 }
 

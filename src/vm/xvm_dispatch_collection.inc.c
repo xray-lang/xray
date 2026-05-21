@@ -136,10 +136,10 @@ vmcase(OP_TUPLE_GET) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrValue tv = R(b);
-    if (!XR_IS_TUPLE(tv)) {
+    if (!xr_value_is_tuple(tv)) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "OP_TUPLE_GET: receiver is not a tuple");
     }
-    R(a) = xr_tuple_get(XR_TO_TUPLE(tv), (uint16_t) c);
+    R(a) = xr_tuple_get((XrTuple *) XR_TO_PTR(tv), (uint16_t) c);
     vmbreak;
 }
 
@@ -260,8 +260,7 @@ vmcase(OP_NEWRANGE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    XrRange *range = xr_range_new(VM_CURRENT_CORO, start_val, end_val);
-    R(a) = xr_value_from_range(range);
+    R(a) = xr_range_new(isolate, start_val, end_val);
     checkGC(base + a + 1);
     vmbreak;
 }
@@ -276,11 +275,10 @@ vmcase(OP_RANGE_UNPACK) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrValue rv = R(b);
-    if (!XR_IS_RANGE(rv)) {
+    XrRange *rng = xr_value_get_range_body(isolate, rv);
+    if (!rng) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "for-in expected Range object");
     }
-    XrRange *rng = xr_value_to_range(rv);
-    XR_DCHECK(rng != NULL, "OP_RANGE_UNPACK: Range pointer is NULL");
     XR_DCHECK(rng->step != 0, "OP_RANGE_UNPACK: Range step is zero");
     R(a) = xr_int(rng->start);     // start (loop variable)
     R(a + 1) = xr_int(rng->end);   // end (bound)
@@ -300,8 +298,9 @@ vmcase(OP_NEWSTRINGBUILDER) {
     if (storage_mode != 0 && isolate->sys_heap) {
         // shared: allocate on system heap
         sb = (XrStringBuilder *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrStringBuilder),
-                                                         XR_TSTRINGBUILDER);
+                                                         XR_TINSTANCE);
         if (sb) {
+            sb->klass = isolate->core->stringBuilderClass;
             xr_stringbuilder_init_inplace(sb);
             XR_GC_SET_STORAGE(&sb->gc, storage_mode);
             if (storage_mode == XR_GC_STORAGE_SHARED) {
@@ -490,15 +489,17 @@ vmcase(OP_ARRAY_GETC) {
         vmbreak;
     }
     // Range constant index
-    if (XR_IS_RANGE(obj_val)) {
-        XrRange *rng = xr_value_to_range(obj_val);
-        int64_t len = xr_range_length(rng);
-        if (c >= 0 && c < len) {
-            R(a) = xr_int(rng->start + (int64_t) c * rng->step);
-        } else {
-            R(a) = xr_null();
+    {
+        XrRange *rng = xr_value_get_range_body(isolate, obj_val);
+        if (rng) {
+            int64_t len = xr_range_length(rng);
+            if (c >= 0 && c < len) {
+                R(a) = xr_int(rng->start + (int64_t) c * rng->step);
+            } else {
+                R(a) = xr_null();
+            }
+            vmbreak;
         }
-        vmbreak;
     }
     // Operator overload: operator[]
     if (xr_value_is_instance(obj_val)) {
@@ -1035,16 +1036,18 @@ vmcase(OP_INDEX_GET) {
         vmbreak;
     }
     // Fast path: Range (lazy element access)
-    if (XR_IS_RANGE(obj_val) && XR_IS_INT(key_val)) {
-        XrRange *rng = xr_value_to_range(obj_val);
-        int64_t idx = XR_TO_INT(key_val);
-        int64_t len = xr_range_length(rng);
-        if (idx >= 0 && idx < len) {
-            R(a) = xr_int(rng->start + idx * rng->step);
-        } else {
-            R(a) = xr_null();
+    if (XR_IS_INT(key_val)) {
+        XrRange *rng = xr_value_get_range_body(isolate, obj_val);
+        if (rng) {
+            int64_t idx = XR_TO_INT(key_val);
+            int64_t len = xr_range_length(rng);
+            if (idx >= 0 && idx < len) {
+                R(a) = xr_int(rng->start + idx * rng->step);
+            } else {
+                R(a) = xr_null();
+            }
+            vmbreak;
         }
-        vmbreak;
     }
     // Fast path: Map
     if (XR_IS_MAP(obj_val)) {

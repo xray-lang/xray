@@ -165,7 +165,7 @@ TEST(vm_deep_recursion_via_dostring) {
                       "  return dive(n - 1) + 1;\n"
                       "}\n"
                       "let r = dive(200);\n"
-                      "if (r != 200) { throw \"wrong recursion result\"; }\n";
+                      "if (r != 200) { throw new Exception(\"wrong recursion result\"); }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -197,7 +197,7 @@ TEST(vm_large_maxstacksize_entry) {
                       "  return a01 + a32;\n"
                       "}\n"
                       "let r = wide();\n"
-                      "if (r != 33) { throw \"wide failed\"; }\n";
+                      "if (r != 33) { throw new Exception(\"wide failed\"); }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);
@@ -224,7 +224,7 @@ TEST(vm_vararg_entry) {
                       "  return total\n"
                       "}\n"
                       "let r = sumAll(1, 2, 3, 4, 5)\n"
-                      "if (r != 15) { throw \"vararg failed\" }\n";
+                      "if (r != 15) { throw new Exception(\"vararg failed\") }\n";
 
     int rc = xray_isolate_dostring(iso, src);
     ASSERT_EQ_INT(rc, 0);

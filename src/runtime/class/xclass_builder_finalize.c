@@ -239,6 +239,16 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
     cls->generic_origin = b->generic_origin;
     cls->flags = b->flags;
 
+    // Native body: explicit desc from builder takes priority; otherwise
+    // inherit from parent (subclasses share the same native body layout).
+    if (b->native_body) {
+        cls->native_body = b->native_body;
+        cls->flags |= XR_CLASS_HAS_NATIVE_BODY;
+    } else if (b->super && b->super->native_body) {
+        cls->native_body = b->super->native_body;
+        cls->flags |= XR_CLASS_HAS_NATIVE_BODY;
+    }
+
     /* Transfer mono_type_arg_names ownership: builder allocated the copy,
      * class takes it; builder's pointer is NULLed to prevent double-free
      * in xr_class_builder_destroy. */

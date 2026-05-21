@@ -1058,9 +1058,12 @@ AstNode *xr_ast_member_set(XrayIsolate *X, AstNode *object, const char *member, 
 /* ========== Enum Node Creation ========== */
 
 // Create enum declaration node
-// enum Status : int { Success = 200, Error = 500 }
+// Simple: enum Status : int { Success = 200, Error = 500 }
+// ADT:    enum Result<T, E> { Ok(T), Err(E)  fn isOk() -> bool { ... } }
 AstNode *xr_ast_enum_decl(XrayIsolate *X, const char *name, const char *type_hint,
-                          AstNode **members, int member_count, int line) {
+                          AstNode **members, int member_count, AstNode **methods, int method_count,
+                          XrGenericParam **type_params, int type_param_count,
+                          XrTypeRef **interfaces, int interface_count, int line) {
     AstNode *node = alloc_node(X, AST_ENUM_DECL, line);
     node->as.enum_decl.name = ast_strdup(X, name);
     node->as.enum_decl.type_hint = ast_strdup(X, type_hint);
@@ -1073,15 +1076,71 @@ AstNode *xr_ast_enum_decl(XrayIsolate *X, const char *name, const char *type_hin
     }
     node->as.enum_decl.member_count = member_count;
 
+    // Copy method array
+    if (method_count > 0 && methods) {
+        node->as.enum_decl.methods =
+            (AstNode **) ast_alloc_array(X, sizeof(AstNode *), (size_t) method_count);
+        for (int i = 0; i < method_count; i++) {
+            node->as.enum_decl.methods[i] = methods[i];
+        }
+    } else {
+        node->as.enum_decl.methods = NULL;
+    }
+    node->as.enum_decl.method_count = method_count;
+
+    // Copy type params
+    if (type_param_count > 0 && type_params) {
+        node->as.enum_decl.type_params = (XrGenericParam **) ast_alloc_array(
+            X, sizeof(XrGenericParam *), (size_t) type_param_count);
+        for (int i = 0; i < type_param_count; i++) {
+            node->as.enum_decl.type_params[i] = type_params[i];
+        }
+    } else {
+        node->as.enum_decl.type_params = NULL;
+    }
+    node->as.enum_decl.type_param_count = type_param_count;
+
+    // Copy interfaces
+    if (interface_count > 0 && interfaces) {
+        node->as.enum_decl.interfaces =
+            (XrTypeRef **) ast_alloc_array(X, sizeof(XrTypeRef *), (size_t) interface_count);
+        for (int i = 0; i < interface_count; i++) {
+            node->as.enum_decl.interfaces[i] = interfaces[i];
+        }
+    } else {
+        node->as.enum_decl.interfaces = NULL;
+    }
+    node->as.enum_decl.interface_count = interface_count;
+
     return node;
 }
 
 // Create enum member node
-// Success = 200
-AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value, int line) {
+// Simple: Success = 200
+// ADT:    Ok(T)  or  Error(code: int, message: string)
+AstNode *xr_ast_enum_member(XrayIsolate *X, const char *name, AstNode *value, char **payload_names,
+                            XrTypeRef **payload_types, int payload_count, int line) {
     AstNode *node = alloc_node(X, AST_ENUM_MEMBER, line);
     node->as.enum_member.name = ast_strdup(X, name);
-    node->as.enum_member.value = value;  // Can be NULL (auto-increment)
+    node->as.enum_member.value = value;
+
+    // Copy ADT payload fields
+    if (payload_count > 0 && payload_types) {
+        node->as.enum_member.payload_types =
+            (XrTypeRef **) ast_alloc_array(X, sizeof(XrTypeRef *), (size_t) payload_count);
+        node->as.enum_member.payload_names =
+            (char **) ast_alloc_array(X, sizeof(char *), (size_t) payload_count);
+        for (int i = 0; i < payload_count; i++) {
+            node->as.enum_member.payload_types[i] = payload_types[i];
+            node->as.enum_member.payload_names[i] =
+                payload_names && payload_names[i] ? ast_strdup(X, payload_names[i]) : NULL;
+        }
+    } else {
+        node->as.enum_member.payload_types = NULL;
+        node->as.enum_member.payload_names = NULL;
+    }
+    node->as.enum_member.payload_count = payload_count;
+
     return node;
 }
 
@@ -1174,6 +1233,25 @@ AstNode *xr_ast_pattern_tuple(XrayIsolate *X, AstNode **patterns, int count, int
     AstNode *node = alloc_node(X, AST_PATTERN_TUPLE, line);
     node->as.pattern_tuple.patterns = patterns;
     node->as.pattern_tuple.count = count;
+    return node;
+}
+
+// Create ADT variant destructure pattern node
+AstNode *xr_ast_pattern_adt(XrayIsolate *X, AstNode *variant, AstNode **patterns, int count,
+                            int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_ADT, line);
+    node->as.pattern_adt.variant = variant;
+    node->as.pattern_adt.patterns = patterns;
+    node->as.pattern_adt.count = count;
+    return node;
+}
+
+// Create type pattern node: `is T` or `is T name`
+AstNode *xr_ast_pattern_type(XrayIsolate *X, XrTypeRef *type, const char *binding_name, int line) {
+    AstNode *node = alloc_node(X, AST_PATTERN_TYPE, line);
+    node->as.pattern_type.type = type;
+    node->as.pattern_type.binding_name = binding_name;
+    node->as.pattern_type.symbol_id = 0;
     return node;
 }
 
@@ -1355,6 +1433,12 @@ const char *xr_ast_typename(AstNodeType type) {
             return "PatternWildcard";
         case AST_PATTERN_MULTI:
             return "PatternMulti";
+        case AST_PATTERN_TUPLE:
+            return "PatternTuple";
+        case AST_PATTERN_ADT:
+            return "PatternAdt";
+        case AST_PATTERN_TYPE:
+            return "PatternType";
         case AST_TYPE_ALIAS:
             return "TypeAlias";
         case AST_PROGRAM:
@@ -2022,5 +2106,12 @@ AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column) {
     AstNode *node = alloc_node(X, AST_MOVE_EXPR, line);
     node->column = column;
     node->as.move_expr.expr = expr;
+    return node;
+}
+
+// Create catch! expression node
+AstNode *xr_ast_catch_expr(XrayIsolate *X, AstNode *body, int line) {
+    AstNode *node = alloc_node(X, AST_CATCH_EXPR, line);
+    node->as.catch_expr.body = body;
     return node;
 }

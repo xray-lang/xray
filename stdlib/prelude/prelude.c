@@ -63,29 +63,55 @@ static const XrPreludeSymbols g_prelude_symbols = {
 struct XrayIsolate;
 /* Types not registered by xr_core_init — they live in stdlib or
  * depend on runtime infrastructure only available after core init. */
-extern void xr_iterator_register_native_type(XrayIsolate *isolate);
-extern void xr_range_register_native_type(XrayIsolate *isolate);
-extern void xr_logger_register_native_type(XrayIsolate *isolate);
-extern void xr_datetime_register_native_type(XrayIsolate *isolate);
-extern void xr_regex_register_native_type(XrayIsolate *isolate);
-extern void xr_netconn_register_native_type(XrayIsolate *isolate);
-extern void xr_netlistener_register_native_type(XrayIsolate *isolate);
-extern void xr_exception_register_native_type(XrayIsolate *isolate);
+extern void xr_iterator_register_class(XrayIsolate *isolate);
+extern void xr_register_range_class(XrayIsolate *isolate);
+extern void xr_register_logger_class(XrayIsolate *isolate);
+extern void xr_register_datetime_class(XrayIsolate *isolate);
+extern void xr_regex_register_class(XrayIsolate *isolate);
+extern void xr_netconn_register_class(XrayIsolate *isolate);
+extern void xr_netlistener_register_class(XrayIsolate *isolate);
+
+#include "../../src/base/xglobal_indices.h"
+#include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/value/xvalue.h"
+
+/* Bind a unified-class XrClass into the VM builtins slot keyed by a
+ * predefined XR_GLOBAL_VAR_* index. The IR lowerer's builtin_classes
+ * table maps user-visible names ("Exception", "Range", "DateTime", ...)
+ * onto these indices via XI_GET_BUILTIN, so `new Exception(...)`
+ * resolves to the actual class value at run time. */
+static void bind_class_global(XrayIsolate *X, int global_index, void *cls) {
+    if (!X || !cls)
+        return;
+    if ((size_t) global_index < (size_t) XR_USER_GLOBALS_START) {
+        X->vm.builtins[global_index] = xr_value_from_class((struct XrClass *) cls);
+        if (X->vm.builtin_count < XR_USER_GLOBALS_START)
+            X->vm.builtin_count = XR_USER_GLOBALS_START;
+    }
+}
 
 void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     if (!isolate)
         return;
     /* Core types (int/float/bool/string/array/map/set/json/bigint/
-     * stringbuilder/arrayslice) are registered by xr_core_init().
+     * stringbuilder/arrayslice/Exception) are registered by xr_core_init().
      * Prelude registers only the remaining native types. */
-    xr_iterator_register_native_type(isolate);
-    xr_range_register_native_type(isolate);
-    xr_datetime_register_native_type(isolate);
-    xr_logger_register_native_type(isolate);
-    xr_regex_register_native_type(isolate);
-    xr_netconn_register_native_type(isolate);
-    xr_netlistener_register_native_type(isolate);
-    xr_exception_register_native_type(isolate);
+    xr_iterator_register_class(isolate);
+    xr_register_range_class(isolate);
+    xr_register_datetime_class(isolate);
+    xr_register_logger_class(isolate);
+    xr_regex_register_class(isolate);
+    xr_netconn_register_class(isolate);
+    xr_netlistener_register_class(isolate);
+
+    /* Bind unified-class XrClass values into VM builtins so the
+     * IR lowerer's builtin_classes table can resolve them. */
+    XrayCoreClasses *core = isolate->core;
+    if (core) {
+        bind_class_global(isolate, XR_GLOBAL_VAR_EXCEPTION, core->exceptionClass);
+        bind_class_global(isolate, XR_GLOBAL_VAR_RANGE, core->rangeClass);
+        bind_class_global(isolate, XR_GLOBAL_VAR_DATETIME, core->dateTimeClass);
+    }
 }
 
 /* ========== Module loader ========== */

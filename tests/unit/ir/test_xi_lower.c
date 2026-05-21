@@ -351,7 +351,7 @@ TEST(member_access) {
 TEST(throw_stmt) {
     XiFunc *f = lower_source("let x = 1\n"
                              "if (x == 0) {\n"
-                             "    throw \"error\"\n"
+                             "    throw new Exception(\"error\")\n"
                              "}\n"
                              "print(x)\n");
     assert(f != NULL);
@@ -423,7 +423,7 @@ TEST(nullish_coalesce) {
 }
 
 TEST(map_literal) {
-    XiFunc *f = lower_source("let m = {\"a\" -> 1, \"b\" -> 2}\n"
+    XiFunc *f = lower_source("let m = #{\"a\": 1, \"b\": 2}\n"
                              "print(m)\n");
     assert(f != NULL);
     int found_map_new = 0;

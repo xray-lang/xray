@@ -207,8 +207,8 @@ XR_FUNC XmPassChange xm_pass_merge_blocks(XmFunc *func);
 // the stored value. Also eliminates redundant loads (load-load forwarding).
 XR_FUNC XmPassChange xm_pass_store_to_load(XmFunc *func);
 
-// Redundant Guard Elimination: eliminate duplicate GUARD_TAG/GUARD_SHAPE/
-// GUARD_NONNULL/GUARD_CLASS within each block. Useful after guard hoisting.
+// Redundant Guard Elimination: eliminate duplicate GUARD_TAG/GUARD_NONNULL/
+// GUARD_CLASS/GUARD_KLASS within each block. Useful after guard hoisting.
 XR_FUNC XmPassChange xm_pass_elim_guards(XmFunc *func);
 
 // Branch Value Propagation: when BR(cond) branches, propagate known values

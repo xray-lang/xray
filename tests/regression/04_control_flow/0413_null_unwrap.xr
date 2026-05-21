@@ -1,0 +1,22 @@
+// Null force unwrap (!) throws Exception with code 413
+
+@test
+fn test_null_unwrap_throws_413() {
+    let x: int? = null
+    let caught = false
+    try {
+        let v = x!
+        assert(false)
+    } catch(e) {
+        caught = true
+        assert_eq(e.code, 413)
+        assert(e.message.contains("E0413"))
+    }
+    assert_eq(caught, true)
+}
+
+@test
+fn test_non_null_unwrap_succeeds() {
+    let y: int? = 42
+    assert_eq(y!, 42)
+}

@@ -3,7 +3,7 @@
 import time
 
 fn failing() -> int {
-    throw "link error"
+    throw new Exception("link error")
     return 0
 }
 fn slow_work() -> int {

@@ -16,6 +16,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../gc/xgc_internal.h"
 #include "xclass.h"
+#include "xinstance.h"
 #include "xreflect_registry.h"
 #include "xclass_system.h"
 #include <string.h>
@@ -28,10 +29,12 @@ XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name, const char
                                XrValue raw_value, uint32_t index) {
     XR_DCHECK(X != NULL, "enum_value_new: NULL isolate");
     XR_DCHECK(enum_name != NULL, "enum_value_new: NULL enum_name");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrEnumValue *enum_val =
-        (XrEnumValue *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumValue), XR_TENUM_VALUE);
+        (XrEnumValue *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumValue), XR_TINSTANCE);
     if (!enum_val)
         return NULL;
+    enum_val->klass = (core && core->enumValueClass) ? core->enumValueClass : NULL;
 
     // Names are interned via the isolate's symbol table, so the pointer
     // is stable for the life of the isolate and must not be freed.
@@ -39,18 +42,19 @@ XrEnumValue *xr_enum_value_new(XrayIsolate *X, const char *enum_name, const char
     enum_val->member_name = xr_symbol_intern(X, member_name);
     enum_val->raw_value = raw_value;
     enum_val->member_index = index;
+    enum_val->parent_type = NULL;  // Set by xr_enum_type_new after member creation
 
     return enum_val;
 }
 
 XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, char **member_names,
                              XrValue *member_values, int count) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
     XrEnumType *enum_type =
-        (XrEnumType *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumType), XR_TENUM_TYPE);
+        (XrEnumType *) xr_gc_alloc(xr_isolate_get_gc(X), sizeof(XrEnumType), XR_TINSTANCE);
     if (!enum_type)
         return NULL;
-
-    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    enum_type->klass = (core && core->enumTypeClass) ? core->enumTypeClass : NULL;
     XrClass *enum_base = core ? core->enumClass : NULL;
     // xr_class_new -> builder finalize registers the class with the
     // reflection type registry automatically, so the enum is visible
@@ -68,6 +72,9 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
     enum_type->min_int_value = 0;
     enum_type->value_to_index = NULL;
     enum_type->value_map_range = 0;
+    enum_type->is_adt = false;
+    enum_type->max_payload = 0;
+    enum_type->payload_counts = NULL;
 
     enum_type->members = (struct XrEnumMember *) xr_malloc(sizeof(*enum_type->members) * count);
 
@@ -77,6 +84,8 @@ XrEnumType *xr_enum_type_new(XrayIsolate *X, const char *name, int base_type, ch
         enum_type->members[i].value = member_values[i];
         enum_type->members[i].instance =
             xr_enum_value_new(X, name, member_names[i], member_values[i], i);
+        if (enum_type->members[i].instance)
+            enum_type->members[i].instance->parent_type = enum_type;
     }
 
     // Initialize symbol mapping for O(1) lookup
@@ -242,6 +251,45 @@ const char *xr_enum_value_name(XrEnumValue *enum_val) {
 
 /* ========== Destroy Hooks ========== */
 
+/* ========== ADT Variant Construction ========== */
+
+XR_FUNC XrInstance *xr_enum_adt_construct(XrayIsolate *X, XrEnumType *enum_type,
+                                          uint32_t member_index, XrValue *args, int nargs) {
+    XR_DCHECK(X != NULL, "adt_construct: NULL isolate");
+    XR_DCHECK(enum_type != NULL, "adt_construct: NULL enum_type");
+    XR_DCHECK(enum_type->is_adt, "adt_construct: enum is not ADT");
+    XR_DCHECK(member_index < enum_type->member_count, "adt_construct: member_index out of bounds");
+
+    int expected_payload = enum_type->payload_counts[member_index];
+    int actual_payload = nargs < expected_payload ? nargs : expected_payload;
+
+    /* Instance layout: field[0] = tag (int), field[1..N] = payload.
+     * Total fields = 1 + max_payload (uniform across all variants for
+     * consistent field_count on the shared class). */
+    XrClass *klass = enum_type->enum_class;
+    XR_DCHECK(klass != NULL, "adt_construct: NULL enum_class");
+
+    XrInstance *inst = xr_instance_new(X, klass);
+    if (!inst)
+        return NULL;
+
+    /* field[0] = XrEnumValue* for the variant (carries name, tag, parent) */
+    XrEnumValue *variant = enum_type->members[member_index].instance;
+    XR_DCHECK(variant != NULL, "adt_construct: NULL variant instance");
+    inst->fields[0] = XR_FROM_PTR(variant);
+
+    /* field[1..payload_count] = args */
+    for (int i = 0; i < actual_payload; i++) {
+        inst->fields[1 + i] = args[i];
+    }
+    /* Zero remaining payload slots (when variant has fewer than max_payload) */
+    for (int i = actual_payload; i < enum_type->max_payload; i++) {
+        inst->fields[1 + i] = xr_null();
+    }
+
+    return inst;
+}
+
 /* Release malloc-backed side resources owned by the enum value.
  * The body itself lives on the isolate fixedgc list and is freed by
  * xr_gc_cleanup; this hook must NOT call xr_free(obj). */
@@ -276,5 +324,66 @@ void xr_gc_destroy_enum_type(XrGCHeader *obj, XrCoroGC *owning_gc) {
         xr_free(enum_type->value_to_index);
         enum_type->value_to_index = NULL;
     }
+    if (enum_type->payload_counts) {
+        xr_free(enum_type->payload_counts);
+        enum_type->payload_counts = NULL;
+    }
     // enum_type->name is interned; not owned.
+}
+
+/* ========== Native Body Descriptors ========== */
+
+// EnumValue body: everything after klass pointer.
+// body_size = offsetof(XrEnumValue, member_index) + sizeof(uint32_t) - offsetof(XrEnumValue,
+// enum_name) Simpler: sizeof(XrEnumValue) - sizeof(XrGCHeader) - sizeof(XrClass*)
+
+static void enum_value_body_destroy(void *body) {
+    (void) body;
+    // No-op: interned names are not owned, raw_value is a tagged value.
+}
+
+static XrNativeBodyDesc enum_value_body_desc = {
+    .body_size = sizeof(XrEnumValue) - sizeof(XrGCHeader) - sizeof(XrClass *),
+    .body_align = _Alignof(const char *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .destroy = enum_value_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+static void enum_type_body_destroy(void *body) {
+    // body points to 'name' field (native body start = offsetof(XrEnumType, name)).
+    // Recover the enclosing struct pointer.
+    XrEnumType *et = (XrEnumType *) ((uint8_t *) body - offsetof(XrEnumType, name));
+    if (et->members) {
+        xr_free(et->members);
+        et->members = NULL;
+    }
+    if (et->symbol_to_index) {
+        xr_free(et->symbol_to_index);
+        et->symbol_to_index = NULL;
+    }
+    if (et->value_to_index) {
+        xr_free(et->value_to_index);
+        et->value_to_index = NULL;
+    }
+}
+
+static XrNativeBodyDesc enum_type_body_desc = {
+    .body_size = sizeof(XrEnumType) - sizeof(XrGCHeader) - sizeof(XrClass *),
+    .body_align = _Alignof(const char *),
+    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .destroy = enum_type_body_destroy,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+XrNativeBodyDesc *xr_enum_value_native_body_desc(void) {
+    return &enum_value_body_desc;
+}
+
+XrNativeBodyDesc *xr_enum_type_native_body_desc(void) {
+    return &enum_type_body_desc;
 }

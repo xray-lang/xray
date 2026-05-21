@@ -168,21 +168,16 @@ typedef struct XrVMContext {
      * Keeping IC state ctx-local means XrProto stays immutable even when
      * the same proto is dispatched concurrently from multiple workers.
      *
-     * ic_field_tables[id]   -> XrICFieldTable*   (handles GETPROP/SETPROP/
-     *                           json shape ICs).
+     * ic_field_tables[id]   -> XrICFieldTable*   (handles GETPROP/SETPROP ICs).
      * ic_method_tables[id]  -> XrICMethodTable*  (handles INVOKE/SUPERINVOKE/
-     *                           constructor ICs).
-     * ic_builtin_tables[id] -> XrICBuiltinTable* (handles
-     *                           OP_INVOKE_BUILTIN per-call-site
-     *                           monomorphic dispatch caching).
+     *                           constructor ICs, including builtin methods).
      *
-     * All three arrays grow in lockstep; ic_tables_capacity tracks the
+     * Both arrays grow in lockstep; ic_tables_capacity tracks the
      * shared size. Entries beyond capacity (or NULL within capacity)
      * mean "no IC recorded yet for this proto in this ctx".
      */
     struct XrICFieldTable **ic_field_tables;
     struct XrICMethodTable **ic_method_tables;
-    struct XrICBuiltinTable **ic_builtin_tables;
     uint32_t ic_tables_capacity;
 
     // Per-coroutine defer stack.  Stored here (not on XrVMState) so that

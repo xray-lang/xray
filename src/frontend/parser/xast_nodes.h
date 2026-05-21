@@ -127,6 +127,8 @@ struct AstNode {
         PatternWildcardNode pattern_wildcard;
         PatternMultiNode pattern_multi;
         PatternTupleNode pattern_tuple;
+        PatternAdtNode pattern_adt;
+        PatternTypeNode pattern_type;
         TernaryNode ternary;
         OptionalChainNode optional_chain;
         RangeNode range;
@@ -140,6 +142,7 @@ struct AstNode {
         ScopeBlockNode scope_block;
         CancelledExprNode cancelled_expr;
         MoveExprNode move_expr;
+        CatchExprNode catch_expr;
         ProgramNode program;
     } as;
 };

@@ -23,25 +23,40 @@
 
 #include "../value/xvalue.h"
 #include "../gc/xgc_header.h"
+#include "../class/xclass.h"
+#include "../class/xinstance.h"
 #include "../../base/xdefs.h"
 
 struct XrCoroutine;
 struct XrCoroGC;
+struct XrayIsolate;
 
-/* ========== Object Layout ========== */
-
-/*
- * Single contiguous allocation. The flexible `elements` array follows
- * the fixed header without padding, so the entire tuple is one cache-
- * friendly block on the Immix heap.
+/* ========== Object Layout ==========
+ *
+ * Tuples are regular XrInstance values backed by a per-arity XrClass
+ * (core->tupleClassesSmall[arity] for arities < XR_TUPLE_CLASS_PREALLOC,
+ * lazily-built classes for larger arities). The struct mirrors the
+ * XrInstance layout exactly so that casts in either direction read the
+ * same bytes:
+ *
+ *   gc header  (16)
+ *   klass *    (8)      <- always a tuple class (klass->builtin_kind == XR_BK_TUPLE)
+ *   elements[] (16*arity)
+ *
+ * Arity is read from klass->field_count, never stored separately.
  */
 typedef struct XrTuple {
     XrGCHeader gc;
-    uint16_t element_count;
-    uint16_t _pad0;
-    uint32_t _pad1;
+    struct XrClass *klass;
     XrValue elements[];
 } XrTuple;
+
+/* Number of elements in `t`. Returns 0 for NULL. */
+static inline uint16_t xr_tuple_arity(const XrTuple *t) {
+    if (!t || !t->klass)
+        return 0;
+    return (uint16_t) xr_class_instance_field_count(t->klass);
+}
 
 /* ========== Creation ========== */
 
@@ -77,6 +92,13 @@ XR_FUNC XrValue xr_tuple_get(XrTuple *t, uint16_t index);
  */
 XR_FUNC void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value);
 
+/* ========== Type Check ========== */
+
+/* True iff `v` is an XrInstance whose class has builtin_kind == XR_BK_TUPLE.
+ * This replaces the legacy XR_IS_TUPLE macro that depended on a
+ * dedicated XR_TTUPLE GC tag. */
+XR_FUNC bool xr_value_is_tuple(XrValue v);
+
 /* ========== Structural Equality and Hashing ========== */
 
 /*
@@ -91,13 +113,5 @@ XR_FUNC bool xr_tuple_equals(XrTuple *a, XrTuple *b);
  * mix; arity participates so `()` and `(0,)` do not collide.
  */
 XR_FUNC uint64_t xr_tuple_hash(XrTuple *t);
-
-/* ========== GC Integration ========== */
-
-/*
- * Mark every element so the collector keeps live references alive.
- * Registered through g_type_ops[XR_TTUPLE].traverse in xgc.c.
- */
-XR_FUNC void xr_gc_traverse_tuple(struct XrCoroGC *gc, XrGCHeader *obj);
 
 #endif  // XTUPLE_H

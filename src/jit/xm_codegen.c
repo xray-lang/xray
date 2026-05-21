@@ -669,7 +669,7 @@ static bool xm_op_clobbers_flags(uint16_t op) {
         return true;
     // Guards emit CMP internally
     if (op == XM_GUARD_TAG || op == XM_GUARD_CLASS || op == XM_GUARD_KLASS ||
-        op == XM_GUARD_NONNULL || op == XM_GUARD_SHAPE || op == XM_GUARD_BOUNDS)
+        op == XM_GUARD_NONNULL || op == XM_GUARD_BOUNDS)
         return true;
     // Safepoint emits CMP for reductions check
     if (op == XM_SAFEPOINT)

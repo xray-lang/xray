@@ -21,6 +21,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
 // Forward declaration (defined below in narrowing section)
@@ -145,6 +146,15 @@ static void collect_matched_enum_members(AstNode *pattern, const char ***names, 
     } else if (pattern->type == AST_PATTERN_LITERAL && pattern->as.pattern_literal.value) {
         // Unwrap: AST_PATTERN_LITERAL wrapping AST_MEMBER_ACCESS or AST_ENUM_ACCESS
         collect_matched_enum_members(pattern->as.pattern_literal.value, names, count, cap);
+    } else if (pattern->type == AST_PATTERN_ADT) {
+        /* ADT variant pattern: extract member name from variant node */
+        AstNode *variant = pattern->as.pattern_adt.variant;
+        if (variant) {
+            if (variant->type == AST_ENUM_ACCESS)
+                add_enum_member(variant->as.enum_access.member_name, names, count, cap);
+            else if (variant->type == AST_MEMBER_ACCESS)
+                add_enum_member(variant->as.member_access.name, names, count, cap);
+        }
     } else if (pattern->type == AST_PATTERN_MULTI) {
         PatternMultiNode *multi = &pattern->as.pattern_multi;
         for (int i = 0; i < multi->count; i++) {
@@ -171,6 +181,16 @@ static bool pattern_has_binding(AstNode *pattern) {
                 return true;
         }
     }
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *ap = &pattern->as.pattern_adt;
+        for (int i = 0; i < ap->count; i++) {
+            if (pattern_has_binding(ap->patterns[i]))
+                return true;
+        }
+    }
+    if (pattern->type == AST_PATTERN_TYPE) {
+        return pattern->as.pattern_type.binding_name != NULL;
+    }
     return false;
 }
 
@@ -187,7 +207,7 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
         if (pval && pval->type == AST_VARIABLE) {
             XaSymbol *bind_sym = xa_symbol_new(pval->as.variable.name, XA_SYM_VARIABLE);
             bind_sym->location.line = pval->line;
-            xa_scope_add_symbol(ctx->analyzer->current_scope, bind_sym);
+            xa_visit_add_symbol_checked(ctx, bind_sym, 0);
             XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
             if (bind_links) {
                 bind_links->type = slot_type ? slot_type : xr_type_new_unknown(NULL);
@@ -208,6 +228,33 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
             if (slot_type && XR_TYPE_IS_TUPLE(slot_type))
                 elem_type = xr_type_tuple_get(slot_type, i);
             register_pattern_bindings(ctx, sub, elem_type);
+        }
+    }
+
+    /* ADT variant destructure: payload bindings get unknown type for now */
+    if (pattern->type == AST_PATTERN_ADT) {
+        PatternAdtNode *ap = &pattern->as.pattern_adt;
+        for (int i = 0; i < ap->count; i++) {
+            AstNode *sub = ap->patterns[i];
+            if (!sub)
+                continue;
+            register_pattern_bindings(ctx, sub, NULL);
+        }
+    }
+
+    /* Type pattern: `is T name` introduces a narrowed binding of type T. */
+    if (pattern->type == AST_PATTERN_TYPE) {
+        PatternTypeNode *tp = &pattern->as.pattern_type;
+        if (tp->binding_name) {
+            XaSymbol *bind_sym = xa_symbol_new(tp->binding_name, XA_SYM_VARIABLE);
+            bind_sym->location.line = pattern->line;
+            xa_visit_add_symbol_checked(ctx, bind_sym, 0);
+            XaSymbolLinks *bind_links = xa_analyzer_get_links(ctx->analyzer, bind_sym);
+            if (bind_links) {
+                bind_links->type = xr_tref_resolve_in_analyzer(ctx->analyzer, tp->type);
+                bind_links->is_definitely_assigned = true;
+            }
+            tp->symbol_id = bind_sym->id;
         }
     }
 }
@@ -346,7 +393,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                             snprintf(msg, sizeof(msg), "Non-exhaustive match: missing '%s.%s'",
                                      enum_name, member_name);
                             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                                       XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE, msg,
+                                                       &loc);
                         }
                     }
 
@@ -426,7 +474,8 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
                                          "Non-exhaustive match: missing '%s' for type '%s'",
                                          missing, xr_type_to_string(var_type));
                                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                                                           XR_ERR_ANALYZE_MATCH_NOT_EXHAUSTIVE, msg,
+                                                           &loc);
                             }
                         }
                     }

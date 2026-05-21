@@ -352,7 +352,7 @@ XrVMResult xr_vm_interpret(const char *source) {
 */
 void xr_vm_add_stacktrace(XrayIsolate *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_add_stacktrace: NULL isolate");
-    if (!xr_is_exception(exception)) {
+    if (!xr_value_is_exception(isolate, exception)) {
         return;
     }
 

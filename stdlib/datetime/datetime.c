@@ -18,7 +18,12 @@
 #include "../ctxbuf.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/runtime/xisolate_internal.h"
+#include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/gc/xgc.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xclass_builder.h"
+#include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/class/xinstance.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
 #include <string.h>
@@ -29,17 +34,57 @@
 
 /* ========== Internal Helpers ========== */
 
+/* Cached body offset for DateTime class instances (set in
+ * xr_register_datetime_class). Since the class has 0 fields and a
+ * fixed body alignment, this is a constant after registration and lets
+ * xr_datetime_value() recover the instance pointer from a body pointer
+ * via simple pointer arithmetic. */
+static size_t g_datetime_body_offset = 0;
+
+static XrClass *datetime_class(XrayIsolate *X) {
+    XrayCoreClasses *core = xr_isolate_get_core_classes(X);
+    XR_DCHECK(core != NULL && core->dateTimeClass != NULL,
+              "datetime: core->dateTimeClass not registered");
+    return core->dateTimeClass;
+}
+
 static XrDateTime *datetime_alloc(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "datetime_alloc: isolate must not be NULL");
-    XrDateTime *dt = (XrDateTime *) xr_gc_alloc(&isolate->gc, sizeof(XrDateTime), XR_TDATETIME);
-    if (!dt)
+    XrInstance *inst = xr_instance_new(isolate, datetime_class(isolate));
+    if (!inst)
         return NULL;
+    XrDateTime *dt = (XrDateTime *) xr_instance_native_body(inst);
+    XR_DCHECK(dt != NULL, "datetime_alloc: native body NULL");
     dt->timestamp = 0;
     dt->milliseconds = 0;
     dt->tz_offset = 0;
     dt->is_utc = 0;
     dt->_pad = 0;
     return dt;
+}
+
+/* ========== XrValue Conversion ========== */
+
+bool xr_value_is_datetime(XrayIsolate *X, XrValue v) {
+    if (!XR_IS_INSTANCE(v))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return xr_class_instanceof(inst->klass, datetime_class(X));
+}
+
+XrDateTime *xr_value_get_datetime_body(XrayIsolate *X, XrValue v) {
+    if (!xr_value_is_datetime(X, v))
+        return NULL;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
+    return (XrDateTime *) xr_instance_native_body(inst);
+}
+
+XrValue xr_datetime_value(XrDateTime *body) {
+    if (!body)
+        return xr_null();
+    XR_DCHECK(g_datetime_body_offset > 0, "xr_datetime_value: class not registered yet");
+    XrInstance *inst = (XrInstance *) ((uint8_t *) body - g_datetime_body_offset);
+    return XR_FROM_PTR(inst);
 }
 
 static int64_t get_current_millis(void) {
@@ -781,10 +826,23 @@ static XrValue dt_offset(XrayIsolate *isolate, XrValue *args, int nargs) {
 
 // Method binding: self = DateTime instance
 
-static XrValue dt_format(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
-    if (!XR_IS_DATETIME(self))
+static XrValue dt_to_string(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    (void) args;
+    (void) nargs;
+    if (!xr_value_is_datetime(isolate, self))
         return XR_NULL_VAL;
-    XrDateTime *dt = XR_TO_DATETIME(self);
+    XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
+    char buf[64];
+    int n = xr_datetime_format(dt, "YYYY-MM-DD HH:mm:ss", buf, sizeof(buf));
+    if (n <= 0)
+        return XR_NULL_VAL;
+    return xr_string_value(xr_string_new(isolate, buf, n));
+}
+
+static XrValue dt_format(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
+    if (!xr_value_is_datetime(isolate, self))
+        return XR_NULL_VAL;
+    XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
     const char *pattern = "YYYY-MM-DD HH:mm:ss";
     if (nargs > 0 && XR_IS_STRING(args[0])) {
         pattern = XR_STRING_CHARS(XR_TO_STRING(args[0]));
@@ -830,10 +888,11 @@ static XrValue dt_format(XrayIsolate *isolate, XrValue self, XrValue *args, int 
 static XrValue dt_to_iso(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_NULL_VAL;
     char buf[64];
-    int len = xr_datetime_to_iso_string(XR_TO_DATETIME(self), buf, sizeof(buf));
+    int len =
+        xr_datetime_to_iso_string(xr_value_get_datetime_body(isolate, self), buf, sizeof(buf));
     return xr_string_value(xr_string_new(isolate, buf, len));
 }
 
@@ -841,96 +900,96 @@ static XrValue dt_year(XrayIsolate *isolate, XrValue self, XrValue *args, int na
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_year(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_year(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_month(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_month(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_month(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_day(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_day(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_day(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_hour(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_hour(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_hour(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_minute(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_minute(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_minute(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_second(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_second(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_second(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_millisecond(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_millisecond(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_millisecond(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_weekday(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_weekday(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_weekday(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_yearday(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_yearday(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_yearday(xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_timestamp(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(XR_TO_DATETIME(self)->timestamp);
+    return XR_INT(xr_value_get_datetime_body(isolate, self)->timestamp);
 }
 
 static XrValue dt_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
-    if (!XR_IS_DATETIME(self) || nargs < 2 || !XR_IS_STRING(args[1]))
+    if (!xr_value_is_datetime(isolate, self) || nargs < 2 || !XR_IS_STRING(args[1]))
         return XR_NULL_VAL;
-    XrDateTime *dt = XR_TO_DATETIME(self);
+    XrDateTime *dt = xr_value_get_datetime_body(isolate, self);
     int64_t amount = XR_IS_INT(args[0]) ? XR_TO_INT(args[0]) : 0;
     const char *unit = XR_STRING_CHARS(XR_TO_STRING(args[1]));
     return xr_datetime_value(xr_datetime_add(isolate, dt, amount, unit));
@@ -938,10 +997,11 @@ static XrValue dt_add(XrayIsolate *isolate, XrValue self, XrValue *args, int nar
 
 static XrValue dt_diff(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
+    if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
+        !xr_value_is_datetime(isolate, args[0]))
         return XR_INT(0);
-    XrDateTime *dt1 = XR_TO_DATETIME(self);
-    XrDateTime *dt2 = XR_TO_DATETIME(args[0]);
+    XrDateTime *dt1 = xr_value_get_datetime_body(isolate, self);
+    XrDateTime *dt2 = xr_value_get_datetime_body(isolate, args[0]);
     const char *unit = "seconds";
     if (nargs > 1 && XR_IS_STRING(args[1])) {
         unit = XR_STRING_CHARS(XR_TO_STRING(args[1]));
@@ -952,66 +1012,79 @@ static XrValue dt_diff(XrayIsolate *isolate, XrValue self, XrValue *args, int na
 static XrValue dt_to_utc(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_NULL_VAL;
-    return xr_datetime_value(xr_datetime_to_utc(isolate, XR_TO_DATETIME(self)));
+    return xr_datetime_value(
+        xr_datetime_to_utc(isolate, xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_to_local(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_NULL_VAL;
-    return xr_datetime_value(xr_datetime_to_local(isolate, XR_TO_DATETIME(self)));
+    return xr_datetime_value(
+        xr_datetime_to_local(isolate, xr_value_get_datetime_body(isolate, self)));
 }
 
 static XrValue dt_is_before(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
+    if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
+        !xr_value_is_datetime(isolate, args[0]))
         return XR_FALSE_VAL;
-    return xr_datetime_is_before(XR_TO_DATETIME(self), XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL
-                                                                                : XR_FALSE_VAL;
+    return xr_datetime_is_before(xr_value_get_datetime_body(isolate, self),
+                                 xr_value_get_datetime_body(isolate, args[0]))
+               ? XR_TRUE_VAL
+               : XR_FALSE_VAL;
 }
 
 static XrValue dt_is_after(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
+    if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
+        !xr_value_is_datetime(isolate, args[0]))
         return XR_FALSE_VAL;
-    return xr_datetime_is_after(XR_TO_DATETIME(self), XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL
-                                                                               : XR_FALSE_VAL;
+    return xr_datetime_is_after(xr_value_get_datetime_body(isolate, self),
+                                xr_value_get_datetime_body(isolate, args[0]))
+               ? XR_TRUE_VAL
+               : XR_FALSE_VAL;
 }
 
 static XrValue dt_equals(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
-    if (!XR_IS_DATETIME(self) || nargs < 1 || !XR_IS_DATETIME(args[0]))
+    if (!xr_value_is_datetime(isolate, self) || nargs < 1 ||
+        !xr_value_is_datetime(isolate, args[0]))
         return XR_FALSE_VAL;
-    return xr_datetime_equals(XR_TO_DATETIME(self), XR_TO_DATETIME(args[0])) ? XR_TRUE_VAL
-                                                                             : XR_FALSE_VAL;
+    return xr_datetime_equals(xr_value_get_datetime_body(isolate, self),
+                              xr_value_get_datetime_body(isolate, args[0]))
+               ? XR_TRUE_VAL
+               : XR_FALSE_VAL;
 }
 
 static XrValue dt_is_leap_year(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_FALSE_VAL;
-    return xr_datetime_is_leap_year(XR_TO_DATETIME(self)) ? XR_TRUE_VAL : XR_FALSE_VAL;
+    return xr_datetime_is_leap_year(xr_value_get_datetime_body(isolate, self)) ? XR_TRUE_VAL
+                                                                               : XR_FALSE_VAL;
 }
 
 static XrValue dt_days_in_month(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
     (void) isolate;
     (void) args;
     (void) nargs;
-    if (!XR_IS_DATETIME(self))
+    if (!xr_value_is_datetime(isolate, self))
         return XR_INT(0);
-    return XR_INT(xr_datetime_days_in_month(XR_TO_DATETIME(self)));
+    return XR_INT(xr_datetime_days_in_month(xr_value_get_datetime_body(isolate, self)));
 }
 
 #include "../../src/runtime/object/xnative_type.h"
 
 /* ========== DateTime Native Type Method Table ========== */
 
-static XrNativeMethod datetime_methods[] = {{"format", dt_format, 2},
+static XrNativeMethod datetime_methods[] = {{"toString", dt_to_string, 1},
+                                            {"format", dt_format, 2},
                                             {"toISOString", dt_to_iso, 1},
                                             {"add", dt_add, 3},
                                             {"diff", dt_diff, 3},
@@ -1088,18 +1161,65 @@ XR_DEFINE_BUILTIN(dt_equals, "equals", "(other: DateTime): bool",
 XR_DEFINE_BUILTIN(dt_is_leap_year, "isLeapYear", "(): bool", "Check if leap year")
 XR_DEFINE_BUILTIN(dt_days_in_month, "daysInMonth", "(): int", "Get days in current month")
 
-/* DateTime native-type registration is invoked unconditionally during
- * isolate init by xr_prelude_register_all_native_types, so the XrClass
- * is available even when user code never `import datetime`. */
-void xr_datetime_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeTypeInfo dt_info = {
-        .name = "DateTime",
-        .gc_type = XR_TDATETIME,
-        .methods = datetime_methods,
-        .getters = datetime_getters,
-        .static_methods = NULL,
-    };
-    xr_register_native_type(isolate, &dt_info);
+/* ========== Native Body Descriptor ========== */
+
+static void datetime_body_init(XrInstance *inst, void *body) {
+    (void) inst;
+    XrDateTime *dt = (XrDateTime *) body;
+    dt->timestamp = 0;
+    dt->milliseconds = 0;
+    dt->tz_offset = 0;
+    dt->is_utc = 0;
+    dt->_pad = 0;
+}
+
+/* deep_copy / to_shared: bytes copy via xr_instance_clone_layout in the
+ * unified instance lifecycle (already handled in xinstance.c). NULL
+ * means "rely on the default memcpy of fields[] + native body". */
+static XrNativeBodyDesc g_datetime_body_desc = {
+    .body_size = sizeof(XrDateTime),
+    .body_align = _Alignof(int64_t),
+    .copy_policy = XR_NATIVE_BODY_COPY_DEEP,
+    .init = datetime_body_init,
+    .destroy = NULL,
+    .traverse = NULL,
+    .deep_copy = NULL,
+    .to_shared = NULL,
+};
+
+/* DateTime class registration is invoked unconditionally during isolate
+ * init by xr_prelude_register_all_native_types, so the XrClass is
+ * available even when user code never `import datetime`. */
+void xr_register_datetime_class(XrayIsolate *isolate) {
+    XR_DCHECK(isolate != NULL, "register_datetime_class: NULL isolate");
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core != NULL, "register_datetime_class: core not initialised");
+    XR_DCHECK(core->objectClass != NULL, "register_datetime_class: Object not registered");
+    XR_DCHECK(core->dateTimeClass == NULL, "register_datetime_class: already registered");
+
+    XrClassBuilder *builder = xr_class_builder_new(isolate, "DateTime", core->objectClass);
+    XR_CHECK(builder != NULL, "register_datetime_class: builder alloc failed");
+
+    xr_class_builder_set_native_body(builder, &g_datetime_body_desc);
+
+    /* Instance methods (with self) */
+    for (int i = 0; datetime_methods[i].name != NULL; i++) {
+        const XrNativeMethod *m = &datetime_methods[i];
+        xr_class_builder_add_method(builder, m->name, m->func, m->arity, 0);
+    }
+    /* Property getters: parameterless methods (arity 1 = self only) */
+    for (int i = 0; datetime_getters[i].name != NULL; i++) {
+        const XrNativeMethod *g = &datetime_getters[i];
+        xr_class_builder_add_method(builder, g->name, g->func, g->arity, 0);
+    }
+
+    XrClass *cls = xr_class_builder_finalize(builder);
+    XR_CHECK(cls != NULL, "register_datetime_class: finalize failed");
+    cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
+    cls->builtin_kind = XR_BK_DATETIME;
+
+    core->dateTimeClass = cls;
+    g_datetime_body_offset = xr_instance_body_offset(cls);
 }
 
 XrModule *xr_load_module_datetime(XrayIsolate *isolate) {

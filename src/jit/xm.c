@@ -299,7 +299,6 @@ XmRef xm_new_vreg(XmFunc *func, uint8_t type) {
     func->vregs[idx].reg = -1;
     func->vregs[idx].def = NULL;
     func->vregs[idx].callee_proto = NULL;
-    func->vregs[idx].shape_hint = NULL;
     func->vregs[idx].layout = NULL;
     func->vregs[idx].array_etype = 0xFF;
     func->vregs[idx].array_ecount = 0;
@@ -685,7 +684,6 @@ static const char *op_names[] = {
     [XM_GUARD_CLASS] = "guard.class",
     [XM_GUARD_KLASS] = "guard.klass",
     [XM_GUARD_NONNULL] = "guard.nonnull",
-    [XM_GUARD_SHAPE] = "guard.shape",
     [XM_TRY_BEGIN] = "try.begin",
     [XM_TRY_END] = "try.end",
     [XM_THROW] = "throw",
@@ -851,7 +849,6 @@ bool xm_op_has_side_effect(uint16_t op) {
         case XM_GUARD_CLASS:
         case XM_GUARD_KLASS:
         case XM_GUARD_NONNULL:
-        case XM_GUARD_SHAPE:
         case XM_GUARD_BOUNDS:
         // Exception handling
         case XM_THROW:

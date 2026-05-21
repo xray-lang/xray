@@ -10,7 +10,7 @@
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
- * VM_RUNTIME_ERROR, VM_DISPATCH_COLD, VM_FRAMES, VM_FRAME_COUNT,
+ * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_DEC_FRAME_COUNT, VM_STACK, VM_STACK_TOP,
  * VM_STACK_CHECK, VM_BARRIER_*, TRACE_EXECUTION, checkGC,
  * startfunc / handle_closure_pending labels, ...) provided by
@@ -55,7 +55,7 @@ op_call_entry:;
     XrValue func_val = R(a);
 
     // Fast dispatch: skip slow paths for most common call types
-    if (likely(XR_IS_FUNCTION(func_val)))
+    if (XR_LIKELY(XR_IS_FUNCTION(func_val)))
         goto op_call_closure;
     if (XR_IS_CFUNCTION(func_val))
         goto op_call_cfunc;
@@ -64,8 +64,8 @@ op_call_entry:;
     if (XR_IS_PTR(func_val)) {
         XrGCHeader *gc = (XrGCHeader *) XR_TO_PTR(func_val);
 
-        // Use dedicated enum type tag
-        if (XR_GC_GET_TYPE(gc) == XR_TENUM_TYPE && nargs == 1) {
+        // Check enum type via class flag
+        if (XR_IS_ENUM_TYPE(func_val) && nargs == 1) {
             // Enum conversion: Status(200)
             XrValue value = R(a + 1);  // First argument
             XrEnumValue *result = xr_enum_from_value((XrEnumType *) gc, value);
@@ -76,6 +76,24 @@ op_call_entry:;
             } else {
                 // Conversion failed, return Null
                 R(a) = xr_null();
+                vmbreak;
+            }
+        }
+
+        // ADT enum variant construction: Result.Ok(42)
+        // XrEnumValue with ADT parent → construct instance with tag + payload
+        if (XR_IS_ENUM_VALUE(func_val)) {
+            XrEnumValue *eval = (XrEnumValue *) gc;
+            XrEnumType *etype = eval->parent_type;
+            if (etype && etype->is_adt && etype->payload_counts &&
+                etype->payload_counts[eval->member_index] > 0) {
+                XrInstance *inst =
+                    xr_enum_adt_construct(isolate, etype, eval->member_index, &R(a + 1), nargs);
+                if (!inst) {
+                    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "failed to construct ADT variant '%s.%s'",
+                                     etype->name, eval->member_name);
+                }
+                R(a) = XR_FROM_PTR(inst);
                 vmbreak;
             }
         }
@@ -93,11 +111,9 @@ op_call_entry:;
             }
 
             if (constructor && constructor->type == XMETHOD_PRIMITIVE) {
-                // Native class constructor (GC safe zone)
+                // Native class constructor
                 XrPrimitiveMethodFn func = constructor->as.primitive;
-                GC_SAFE_ENTER(isolate);
                 XrValue result = func(isolate, R(a), &R(a + 1), nargs);
-                GC_SAFE_LEAVE(isolate);
                 R(a) = result;
                 vmbreak;
             }
@@ -181,7 +197,7 @@ op_call_entry:;
     if (xr_value_is_bound_method(func_val)) {
         XrBoundMethod *bm = xr_value_to_bound_method(func_val);
         XrValue result = bm->handler(isolate, bm->receiver, &R(a + 1), nargs);
-        if (unlikely(XR_IS_NOTFOUND(result))) {
+        if (XR_UNLIKELY(XR_IS_NOTFOUND(result))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "bound method call failed: method not found");
         }
         R(a) = result;
@@ -216,9 +232,7 @@ op_call_cfunc:
             ci->u.c.has_cfunc_result = false;
 
             XrValue result;
-            GC_SAFE_ENTER(isolate);
             XrCFuncResult status = cfunc->as.yieldable(isolate, &R(a + 1), nargs, &result);
-            GC_SAFE_LEAVE(isolate);
 
             if (is_slow) {
                 xr_worker_exitsyscall();
@@ -250,10 +264,8 @@ op_call_cfunc:
                     return XR_VM_RUNTIME_ERROR;
             }
         } else {
-            // Normal C function (GC safe zone)
-            GC_SAFE_ENTER(isolate);
+            // Normal C function
             XrValue result = cfunc->as.func(isolate, &R(a + 1), nargs);
-            GC_SAFE_LEAVE(isolate);
 
             if (is_slow) {
                 xr_worker_exitsyscall();
@@ -273,12 +285,12 @@ op_call_closure:
         // Argument count check
         if (proto->is_vararg) {
             // vararg function: check minimum required args
-            if (unlikely(nargs < proto->min_params)) {
+            if (XR_UNLIKELY(nargs < proto->min_params)) {
                 VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "expected at least %d arguments, got %d",
                                  proto->min_params, nargs);
             }
 
-            if (unlikely(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
+            if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
                 VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW,
                                  "stack overflow: recursion exceeds %d levels", XR_FRAMES_MAX);
             }
@@ -314,7 +326,7 @@ op_call_closure:
             new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
 
             goto startfunc;
-        } else if (likely(nargs >= proto->min_params && nargs <= proto->numparams)) {
+        } else if (XR_LIKELY(nargs >= proto->min_params && nargs <= proto->numparams)) {
             // Non vararg: argument count in valid range (supports default params)
 
             // Type feedback: collect argument types for profile-guided compilation
@@ -533,7 +545,7 @@ op_call_closure:
             }
 #endif
 
-            if (unlikely(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
+            if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
                 VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW,
                                  "stack overflow: recursion exceeds %d levels", XR_FRAMES_MAX);
             }
@@ -588,7 +600,7 @@ vmcase(OP_CALL_KEEP) {
     int result_reg = GETARG_C(i);
     XrValue func_val = R(a);
 
-    if (unlikely(!XR_IS_FUNCTION(func_val))) {
+    if (XR_UNLIKELY(!XR_IS_FUNCTION(func_val))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "attempt to call a non-function value");
     }
 
@@ -601,12 +613,12 @@ vmcase(OP_CALL_KEEP) {
         effective_nargs = proto->numparams;
     }
 
-    if (unlikely(effective_nargs < proto->min_params)) {
+    if (XR_UNLIKELY(effective_nargs < proto->min_params)) {
         VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "expected %d arguments, got %d", proto->min_params,
                          effective_nargs);
     }
 
-    if (unlikely(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
+    if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
         VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: recursion exceeds %d levels",
                          XR_FRAMES_MAX);
     }
@@ -691,7 +703,7 @@ vmcase(OP_CALLSELF) {
     XrClosure *closure = frame->closure;
 
     // Argument count check
-    if (unlikely(nargs != closure->proto->numparams)) {
+    if (XR_UNLIKELY(nargs != closure->proto->numparams)) {
         VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "expected %d arguments, got %d",
                          closure->proto->numparams, nargs);
     }
@@ -799,7 +811,7 @@ vmcase(OP_CALLSELF) {
         goto startfunc;
     } else {
         // Recursive normal call: create new call frame
-        if (unlikely(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
+        if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
             VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
         }
 
@@ -843,7 +855,7 @@ vmcase(OP_TAILCALL) {
     XrClosure *new_closure = xr_value_to_closure(func_val);
 
     // Argument count check
-    if (unlikely(nargs != new_closure->proto->numparams)) {
+    if (XR_UNLIKELY(nargs != new_closure->proto->numparams)) {
         VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "expected %d arguments, got %d",
                          new_closure->proto->numparams, nargs);
     }
@@ -992,7 +1004,7 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
     */
     XrValue *return_slot = NULL;
     if (ci->base_offset > 0) {
-        if (unlikely(ci->call_status & XR_CALL_KEEP_FUNC)) {
+        if (XR_UNLIKELY(ci->call_status & XR_CALL_KEEP_FUNC)) {
             return_slot = VM_STACK + ci->result_offset;
         } else {
             return_slot = VM_STACK + ci->base_offset - 1;
@@ -1035,7 +1047,7 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
     // Closure called via xr_yield_call_closure returned
-    if (unlikely(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
+    if (XR_UNLIKELY(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
         XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
         _pcoro->pending_closure_result = return_slot ? *return_slot : xr_null();
         goto handle_closure_pending;
@@ -1085,7 +1097,7 @@ vmcase(OP_RETURN0) {
 
     // Write null to return slot
     if (ci->base_offset > 0) {
-        if (unlikely(ci->call_status & XR_CALL_KEEP_FUNC)) {
+        if (XR_UNLIKELY(ci->call_status & XR_CALL_KEEP_FUNC)) {
             VM_STACK[ci->result_offset] = xr_null();
         } else {
             VM_STACK[ci->base_offset - 1] = xr_null();
@@ -1112,7 +1124,7 @@ vmcase(OP_RETURN0) {
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
     // Closure called via xr_yield_call_closure returned
-    if (unlikely(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
+    if (XR_UNLIKELY(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
         XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
         _pcoro->pending_closure_result = xr_null();
         goto handle_closure_pending;
@@ -1164,7 +1176,7 @@ vmcase(OP_RETURN1) {
     // Write return value
     XrValue *return_slot = NULL;
     if (ci->base_offset > 0) {
-        if (unlikely(ci->call_status & XR_CALL_KEEP_FUNC)) {
+        if (XR_UNLIKELY(ci->call_status & XR_CALL_KEEP_FUNC)) {
             return_slot = &VM_STACK[ci->result_offset];
         } else {
             return_slot = &VM_STACK[ci->base_offset - 1];
@@ -1241,7 +1253,7 @@ vmcase(OP_RETURN1) {
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
     // Closure called via xr_yield_call_closure returned
-    if (unlikely(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
+    if (XR_UNLIKELY(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
         XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
         _pcoro->pending_closure_result = ret_val;
         goto handle_closure_pending;

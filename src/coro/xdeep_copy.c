@@ -355,87 +355,62 @@ XrValue xr_deep_copy_instance_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     xr_copy_context_record(ctx, inst, result);
     ctx->objects_copied++;
 
-    // Fast path: flat-copyable struct — memcpy all fields at once
-    if ((cls->flags & XR_CLASS_FLAT_COPYABLE) && field_count > 0) {
+    // Copy fields (dynamic-layout uses in-object + overflow two-tier)
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = cls->in_object_capacity;
+        uint16_t inobj = (field_count < cap - 1) ? field_count : cap - 1;
+        for (uint32_t i = 0; i < inobj; i++) {
+            new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
+        }
+        if (field_count > cap - 1) {
+            XrValue *src_overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (src_overflow) {
+                uint16_t overflow_count = field_count - (cap - 1);
+                // Allocate overflow for new instance
+                xr_instance_set_dynamic_field(ctx->X, new_inst, cap - 1, xr_null());
+                for (uint16_t i = 0; i < overflow_count; i++) {
+                    XrValue copied = xr_deep_copy_with_ctx(ctx, src_overflow[i]);
+                    xr_instance_set_dynamic_field(ctx->X, new_inst, (cap - 1) + i, copied);
+                }
+            }
+        }
+    } else if ((cls->flags & XR_CLASS_FLAT_COPYABLE) && field_count > 0) {
+        // Fast path: flat-copyable struct — memcpy all fields at once
         memcpy(new_inst->fields, inst->fields, sizeof(XrValue) * field_count);
-        return result;
+    } else {
+        for (uint32_t i = 0; i < field_count; i++) {
+            new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
+        }
     }
 
-    for (uint32_t i = 0; i < field_count; i++) {
-        new_inst->fields[i] = xr_deep_copy_with_ctx(ctx, inst->fields[i]);
-    }
-    return result;
-}
-
-XrValue xr_deep_copy_json_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
-    XrJson *json = (XrJson *) obj;
-    if (!json || !ctx->dst_gc)
-        return XR_NULL_VAL;
-    XrValue cached = xr_copy_context_lookup(ctx, json);
-    if (!XR_IS_NULL(cached))
-        return cached;
-
-    XrShape *shape = xr_json_shape(ctx->X, json);
-    int field_count = shape->field_count;
-
-    size_t size = xr_json_size(shape->in_object_capacity);
-    XrJson *new_json = (XrJson *) copy_ctx_alloc(ctx, size, XR_TJSON);
-    if (!new_json)
-        return XR_NULL_VAL;
-    xr_json_init_inplace(new_json, shape);
-
-    XrValue result = XR_FROM_PTR(new_json);
-    xr_copy_context_record(ctx, json, result);
-    ctx->objects_copied++;
-
-    // Fast path: compact value-layout (no GC pointers, no overflow) → memcpy fields
-    if (shape->is_value_layout && !json->overflow) {
-        uint16_t n =
-            (field_count < shape->in_object_capacity) ? field_count : shape->in_object_capacity;
-        memcpy(new_json->fields, json->fields, n * sizeof(XrValue));
-        return result;
-    }
-
-    // Copy in-object fields
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t n = (field_count < in_obj) ? field_count : in_obj;
-    for (int i = 0; i < n; i++) {
-        new_json->fields[i] = xr_deep_copy_with_ctx(ctx, json->fields[i]);
-    }
-    // Copy overflow fields
-    if (field_count > in_obj && json->overflow) {
-        uint16_t ov_count = field_count - in_obj;
-        XrJsonOverflow *src_ov = json->overflow;
-        size_t ov_size = sizeof(XrJsonOverflow) + src_ov->capacity * sizeof(XrValue);
-        XrJsonOverflow *dst_ov = (XrJsonOverflow *) xr_malloc(ov_size);
-        if (dst_ov) {
-            dst_ov->capacity = src_ov->capacity;
-            dst_ov->length = src_ov->length;
-            XR_DCHECK(dst_ov->length <= dst_ov->capacity,
-                      "deep_copy_json: overflow length > capacity");
-            dst_ov->_pad = 0;
-            for (uint16_t i = 0; i < ov_count && i < src_ov->length; i++) {
-                dst_ov->values[i] = xr_deep_copy_with_ctx(ctx, src_ov->values[i]);
+    // Deep-copy native body if present
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        if (desc->copy_policy == XR_NATIVE_BODY_COPY_FORBID) {
+            // Cannot deep-copy types like Channel, Task — return null
+            return XR_NULL_VAL;
+        }
+        if (desc->deep_copy) {
+            if (!desc->deep_copy(ctx, inst, new_inst)) {
+                return XR_NULL_VAL;
             }
-            for (uint16_t i = ov_count; i < dst_ov->capacity; i++) {
-                dst_ov->values[i] = xr_null();
-            }
-            new_json->overflow = dst_ov;
+        } else if (desc->copy_policy == XR_NATIVE_BODY_COPY_DEEP) {
+            void *src_body = xr_instance_native_body(inst);
+            void *dst_body = xr_instance_native_body(new_inst);
+            XR_DCHECK(src_body != NULL, "deep_copy_instance: NULL source native body");
+            XR_DCHECK(dst_body != NULL, "deep_copy_instance: NULL destination native body");
+            memcpy(dst_body, src_body, desc->body_size);
         }
     }
     return result;
 }
 
-// DateTime has no child GC references, shallow copy of the payload
-// suffices. Exposed so g_type_ops can dispatch to it directly.
-XrValue xr_deep_copy_datetime_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
-    XrGCHeader *copy = (XrGCHeader *) copy_ctx_alloc(ctx, obj->objsize, XR_TDATETIME);
-    if (!copy)
-        return XR_NULL_VAL;
-    memcpy((char *) copy + sizeof(XrGCHeader), (char *) obj + sizeof(XrGCHeader),
-           obj->objsize - sizeof(XrGCHeader));
-    return XR_FROM_PTR(copy);
-}
+// xr_deep_copy_json_with_ctx removed: Json values flow through
+// xr_deep_copy_instance_with_ctx via the unified g_type_ops dispatch.
+
+// DateTime is now an XrInstance with native body — deep copy flows
+// through xr_deep_copy_instance_with_ctx via the unified g_type_ops
+// dispatch.
 
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
@@ -678,71 +653,46 @@ XrValue xr_to_shared_instance(struct XrayIsolate *X, XrGCHeader *obj) {
     XR_GC_SET_STORAGE(&new_inst->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_inst->gc, 1);
     uint32_t field_count = xr_class_instance_field_count(cls);
-    for (uint32_t i = 0; i < field_count; i++)
-        new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
-    return XR_FROM_PTR(new_inst);
-}
-
-XrValue xr_to_shared_json(struct XrayIsolate *X, XrGCHeader *obj) {
-    XrJson *json = (XrJson *) obj;
-    if (!json || !xr_isolate_get_sys_heap(X))
-        return XR_NULL_VAL;
-    XrShape *shape = xr_json_shape(X, json);
-    uint16_t in_obj = shape->in_object_capacity;
-    uint16_t field_count = shape->field_count;
-    size_t size = xr_json_size(in_obj);
-    XrJson *new_json =
-        (XrJson *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), size, XR_TJSON);
-    if (!new_json)
-        return XR_NULL_VAL;
-    xr_json_init_inplace(new_json, shape);
-    XR_GC_SET_STORAGE(&new_json->gc, XR_GC_STORAGE_SHARED);
-    xr_shared_set_refc(&new_json->gc, 1);
-    // Copy in-object fields
-    uint16_t n = (field_count < in_obj) ? field_count : in_obj;
-    for (uint16_t i = 0; i < n; i++) {
-        new_json->fields[i] = xr_to_shared(X, json->fields[i]);
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = cls->in_object_capacity;
+        uint16_t inobj = (field_count < cap - 1) ? field_count : cap - 1;
+        for (uint32_t i = 0; i < inobj; i++)
+            new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
+        if (field_count > cap - 1) {
+            XrValue *src_overflow = (XrValue *) inst->fields[cap - 1].ptr;
+            if (src_overflow) {
+                uint16_t overflow_count = field_count - (cap - 1);
+                xr_instance_set_dynamic_field(X, new_inst, cap - 1, xr_null());
+                for (uint16_t i = 0; i < overflow_count; i++) {
+                    XrValue shared_val = xr_to_shared(X, src_overflow[i]);
+                    xr_instance_set_dynamic_field(X, new_inst, (cap - 1) + i, shared_val);
+                }
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < field_count; i++)
+            new_inst->fields[i] = xr_to_shared(X, inst->fields[i]);
     }
-    // Copy overflow fields
-    if (field_count > in_obj && json->overflow) {
-        uint16_t ov_count = field_count - in_obj;
-        XrJsonOverflow *src_ov = json->overflow;
-        size_t ov_size = sizeof(XrJsonOverflow) + src_ov->capacity * sizeof(XrValue);
-        XrJsonOverflow *dst_ov = (XrJsonOverflow *) xr_malloc(ov_size);
-        if (dst_ov) {
-            dst_ov->capacity = src_ov->capacity;
-            dst_ov->length = src_ov->length;
-            XR_DCHECK(dst_ov->length <= dst_ov->capacity,
-                      "to_shared_json: overflow length > capacity");
-            dst_ov->_pad = 0;
-            for (uint16_t i = 0; i < ov_count && i < src_ov->length; i++) {
-                dst_ov->values[i] = xr_to_shared(X, src_ov->values[i]);
+
+    // Handle native body to_shared
+    XrNativeBodyDesc *desc = cls->native_body;
+    if (desc) {
+        if (desc->copy_policy == XR_NATIVE_BODY_COPY_FORBID) {
+            return XR_NULL_VAL;
+        }
+        if (desc->to_shared) {
+            if (!desc->to_shared(X, inst, new_inst)) {
+                return XR_NULL_VAL;
             }
-            for (uint16_t i = ov_count; i < dst_ov->capacity; i++) {
-                dst_ov->values[i] = xr_null();
-            }
-            new_json->overflow = dst_ov;
+        } else if (desc->copy_policy == XR_NATIVE_BODY_COPY_DEEP) {
+            void *src_body = xr_instance_native_body(inst);
+            void *dst_body = xr_instance_native_body(new_inst);
+            XR_DCHECK(src_body != NULL, "to_shared_instance: NULL source native body");
+            XR_DCHECK(dst_body != NULL, "to_shared_instance: NULL destination native body");
+            memcpy(dst_body, src_body, desc->body_size);
         }
     }
-    return XR_FROM_PTR(new_json);
-}
-
-XrValue xr_to_shared_stringbuilder(struct XrayIsolate *X, XrGCHeader *obj) {
-    XrStringBuilder *sb = (XrStringBuilder *) obj;
-    if (!sb || !xr_isolate_get_sys_heap(X))
-        return XR_NULL_VAL;
-    XrStringBuilder *new_sb = (XrStringBuilder *) xr_sysheap_alloc_shared(
-        xr_isolate_get_sys_heap(X), sizeof(XrStringBuilder), XR_TSTRINGBUILDER);
-    if (!new_sb)
-        return XR_NULL_VAL;
-    xr_stringbuilder_init_inplace(new_sb);
-    XR_GC_SET_STORAGE(&new_sb->gc, XR_GC_STORAGE_SHARED);
-    xr_shared_set_refc(&new_sb->gc, 1);
-    // Copy buffer contents
-    if (sb->buffer && sb->buffer->length > 0) {
-        xr_strbuf_append_cstr(new_sb->buffer, sb->buffer->data, sb->buffer->length);
-    }
-    return XR_FROM_PTR(new_sb);
+    return XR_FROM_PTR(new_inst);
 }
 
 XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
@@ -758,21 +708,6 @@ XrValue xr_to_shared_closure(struct XrayIsolate *X, XrGCHeader *obj) {
     XR_GC_SET_STORAGE(&new_cl->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_cl->gc, 1);
     return XR_FROM_PTR(new_cl);
-}
-
-XrValue xr_to_shared_datetime(struct XrayIsolate *X, XrGCHeader *obj) {
-    if (!obj || !xr_isolate_get_sys_heap(X))
-        return XR_NULL_VAL;
-    XrGCHeader *new_dt = (XrGCHeader *) xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X),
-                                                                obj->objsize, XR_TDATETIME);
-    if (!new_dt)
-        return XR_NULL_VAL;
-    // DateTime has no GC child references, memcpy the payload
-    memcpy((char *) new_dt + sizeof(XrGCHeader), (char *) obj + sizeof(XrGCHeader),
-           obj->objsize - sizeof(XrGCHeader));
-    XR_GC_SET_STORAGE(new_dt, XR_GC_STORAGE_SHARED);
-    xr_shared_set_refc(new_dt, 1);
-    return XR_FROM_PTR(new_dt);
 }
 
 XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {

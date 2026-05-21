@@ -131,36 +131,35 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
     return XR_FROM_PTR(op(ctx, a, b));
 }
 
-#include "xvm_cold_paths.h"
+#include "xvm_dispatch_helpers.h"
 
 /*
- * Inline dispatch macro for cold-path function results inside vmcase blocks.
- * Handles all return codes except VM_COLD_CONTINUE (caller must handle that).
+ * Unified dispatch macro for helper function results inside vmcase blocks.
+ * Handles all XrDispatchAction values except XR_DISP_FALLTHROUGH (caller
+ * must handle that case itself by letting code fall through after the macro).
  * MUST be used directly in vmcase scope (uses vmbreak, goto, return).
  */
-#define VM_DISPATCH_COLD(cr)                                                                       \
+#define VM_DISPATCH(action)                                                                        \
     do {                                                                                           \
-        int _cr = (cr);                                                                            \
-        if (_cr == VM_COLD_BREAK)                                                                  \
+        XrDispatchAction _da = (action);                                                           \
+        if (_da == XR_DISP_NEXT)                                                                   \
             vmbreak;                                                                               \
-        if (_cr == VM_COLD_STARTFUNC)                                                              \
+        if (_da == XR_DISP_RESTART)                                                                \
             goto startfunc;                                                                        \
-        if (_cr == VM_COLD_BLOCKED)                                                                \
+        if (_da == XR_DISP_BLOCKED)                                                                \
             return XR_VM_BLOCKED;                                                                  \
-        if (_cr == VM_COLD_YIELD)                                                                  \
+        if (_da == XR_DISP_YIELD)                                                                  \
             return XR_VM_YIELD;                                                                    \
-        if (_cr == VM_COLD_FATAL)                                                                  \
+        if (_da == XR_DISP_FATAL)                                                                  \
             return XR_VM_RUNTIME_ERROR;                                                            \
-        if (_cr == VM_COLD_GO_CHILD)                                                               \
+        if (_da == XR_DISP_GO_CHILD)                                                               \
             return XR_VM_GO_CHILD;                                                                 \
-        if (_cr == VM_COLD_ERROR) {                                                                \
-            if (vm_ctx->handler_count == 0)                                                        \
+        if (_da == XR_DISP_RAISE) {                                                                \
+            if (!xr_vm_is_catch_reachable(isolate))                                                \
                 return XR_VM_RUNTIME_ERROR;                                                        \
             goto startfunc;                                                                        \
         }                                                                                          \
     } while (0)
-
-// Cold path functions moved to xvm_cold_paths.c
 
 /* ========== VM Execution Loop ========== */
 
@@ -195,8 +194,9 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
             XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;                             \
             if (_eh && _eh->on_exception) {                                                        \
                 bool _unc = (VM_HANDLER_COUNT == 0);                                               \
-                const char *_msg =                                                                 \
-                    XR_IS_EXCEPTION(_exc) ? xr_exception_get_message(_exc) : "<exception>";        \
+                const char *_msg = xr_value_is_exception(isolate, _exc)                            \
+                                       ? xr_exception_get_message(isolate, _exc)                   \
+                                       : "<exception>";                                            \
                 if (_eh->on_exception(isolate, _msg, _unc) == XR_DBG_ACTION_BREAK) {               \
                     VM_SET_EXCEPTION(_exc);                                                        \
                     ci->pc = pc - 1;                                                               \
@@ -493,7 +493,7 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
 
     /* ========== startfunc: Enter New Function ========== */
 startfunc:
-    if (unlikely(VM_FRAME_COUNT > XR_FRAMES_MAX)) {
+    if (XR_UNLIKELY(VM_FRAME_COUNT > XR_FRAMES_MAX)) {
         VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "Stack overflow: recursion exceeds %d levels",
                          XR_FRAMES_MAX);
     }
@@ -713,7 +713,7 @@ startfunc:
 #include "xvm_dispatch_object.inc.c"
 
 /* OOP method invocation family (INVOKE / INVOKE_TAIL /
- * SUPERINVOKE / INVOKE_DIRECT / INVOKE_BUILTIN) --
+ * SUPERINVOKE / INVOKE_DIRECT) --
  * see xvm_dispatch_invoke.inc.c. */
 #include "xvm_dispatch_invoke.inc.c"
 

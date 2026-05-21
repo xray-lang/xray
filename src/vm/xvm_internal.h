@@ -18,7 +18,6 @@
 #include "../runtime/class/xmethod.h"
 #include "xic_method.h"
 #include "xic_field_table.h"
-#include "xic_builtin.h"
 #include "../runtime/value/xvalue_print.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../base/xmalloc.h"
@@ -291,13 +290,6 @@ XR_FUNC struct XrICFieldTable *xr_vm_ctx_ensure_ic_fields(XrVMContext *ctx, XrPr
 XR_FUNC struct XrICMethodTable *xr_vm_ctx_ensure_ic_methods(XrVMContext *ctx, XrProto *proto);
 
 /*
-** Lazily allocate a per-(ctx, proto) builtin-invoke IC table. Slots are
-** zeroed and pre-allocated up to PROTO_CODE_COUNT so that
-** cache_index = pc - PROTO_CODE_BASE is always a valid lookup index.
-*/
-XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_ensure_ic_builtin(XrVMContext *ctx, XrProto *proto);
-
-/*
 ** Read-only IC table accessors. Return NULL when no IC has been recorded
 ** for this proto in this ctx. All three are safe to call before the IC
 ** table has been lazily allocated.
@@ -306,19 +298,16 @@ XR_FUNC struct XrICFieldTable *xr_vm_ctx_get_ic_fields(const XrVMContext *ctx,
                                                        const XrProto *proto);
 XR_FUNC struct XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx,
                                                          const XrProto *proto);
-XR_FUNC struct XrICBuiltinTable *xr_vm_ctx_get_ic_builtin(const XrVMContext *ctx,
-                                                          const XrProto *proto);
 
 /*
 ** Deep-copy snapshot of the current IC state for `proto` in `ctx`. The
 ** returned table is independently owned by the caller; concurrent ctx
 ** mutation cannot tear the snapshot. Caller must release via
-** xr_ic_field_table_free / xr_ic_method_table_free /
-** xr_ic_builtin_table_free. Returns NULL when no IC has been recorded.
+** xr_ic_field_table_free / xr_ic_method_table_free.
+** Returns NULL when no IC has been recorded.
 */
 XR_FUNC struct XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx, XrProto *proto);
 XR_FUNC struct XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto);
-XR_FUNC struct XrICBuiltinTable *xr_vm_ic_builtin_snapshot(XrVMContext *ctx, XrProto *proto);
 
 /*
 ** Free every IC table currently held by `ctx` and reset capacity. Called
@@ -363,6 +352,7 @@ static inline bool vm_is_bigint_mixed(XrValue left, XrValue right) {
 
 // Comparison operations
 XR_FUNC bool vm_values_equal(XrValue a, XrValue b);
+XR_FUNC bool vm_values_strict_equal(XrValue a, XrValue b);
 XR_FUNC bool vm_values_equal_deep(XrayIsolate *isolate, XrValue a, XrValue b);
 XR_FUNC bool vm_numeric_less(XrValue left, XrValue right);
 XR_FUNC bool vm_numeric_less_equal(XrValue left, XrValue right);

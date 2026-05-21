@@ -13,9 +13,9 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
-#include "../runtime/object/xshape.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xclass.h"
+#include "../runtime/class/xinstance.h"
 #include "../runtime/class/xmethod.h"
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/xisolate_internal.h"
@@ -397,39 +397,18 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
         return;
     }
-    if (field_count <= 0 || !field_names) {
-        /* Empty Json object {} — create root Shape with no fields.
-         * xr_shape_new requires capacity>=1, so pass 1 as min capacity. */
-        XrShape *shape = xr_shape_new(ctx->isolate, 1);
-        if (!shape) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
-        }
-        int kidx = add_const_int(ctx, (int64_t) (intptr_t) shape);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, (uint8_t) kidx, 0));
-        return;
-    }
-
-    /* Build Shape via symbol table + xr_shape_build_fixed */
-    XrSymbolTable *st = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
-    XR_DCHECK(st != NULL, "isolate must have a symbol table");
-
-    SymbolId symbols[32];
-    int n = field_count > 32 ? 32 : field_count;
-    for (int i = 0; i < n; i++) {
-        symbols[i] = xr_symbol_register_in_table(st, field_names[i]);
-    }
-
-    XrShape *shape = xr_shape_build_fixed(ctx->isolate, symbols, (uint16_t) n);
-    if (!shape) {
+    /* Build dynamic-layout class chain (jsonRoot -> field1 -> ... -> fieldN).
+     * Empty {} just uses the root. The leaf class becomes the constant the
+     * VM uses to allocate the Json instance. */
+    int n = field_count > 32 ? 32 : (field_count > 0 ? field_count : 0);
+    XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+    if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
 
-    /* Store Shape pointer as integer constant in pool */
-    int kidx = add_const_int(ctx, (int64_t) (intptr_t) shape);
+    /* Store class pointer as integer constant in pool */
+    int kidx = add_const_int(ctx, (int64_t) (intptr_t) cls);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -499,28 +478,16 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build Shape from field names (identical to json_new) */
-    XrSymbolTable *st = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
-    XR_DCHECK(st != NULL, "json_decode: no symbol table");
-
-    SymbolId symbols[256];
-    XR_DCHECK(n <= 256, "json_decode: too many fields");
-    for (int i = 0; i < n; i++) {
-        symbols[i] = xr_symbol_register_in_table(st, field_names[i]);
-    }
-
-    XrShape *shape = xr_shape_build_fixed(ctx->isolate, symbols, (uint16_t) n);
-    if (!shape) {
+    /* Build sealed class chain: typed JSON decode produces a fixed-shape
+     * sealed Json with exactly the declared fields. */
+    bool sealed = (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed);
+    XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, sealed);
+    if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
 
-    /* Propagate sealed flag from compile-time type */
-    if (v->type && v->type->kind == XR_KIND_JSON && v->type->object.is_sealed) {
-        shape->is_sealed = true;
-    }
-
-    int kidx = add_const_int(ctx, (int64_t) (intptr_t) shape);
+    int kidx = add_const_int(ctx, (int64_t) (intptr_t) cls);
     if (ctx->status != XI_EMIT_OK)
         return;
 

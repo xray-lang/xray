@@ -1135,7 +1135,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }
 
-    // CAS: NONE → WAITING (mirror vm_await logic in xvm_cold_paths.c:2439)
+    // CAS: NONE → WAITING (mirror vm_await logic in xvm_coro_ops.c:2439)
     atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
     atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
 
