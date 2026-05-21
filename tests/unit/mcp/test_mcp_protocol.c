@@ -107,10 +107,57 @@ static void test_server_load_knowledge(XmcpServer *server) {
     xmcp_knowledge_load(server->knowledge);
 }
 
-static const char *tool_result_text(XrJsonValue *result) {
-    XrJsonValue *content = xjson_get_array(result, "content");
-    XrJsonValue *item = xjson_array_get(content, 0);
-    return xjson_get_string(item, "text");
+/* Test wrappers for handlers that now return JSON-RPC errors via XmcpRpcError.
+ * Tests that don't focus on the RPC error path use these wrappers and let any
+ * error pass through to assertions on `g_test_rpc_err`. */
+static XmcpRpcError g_test_rpc_err;
+
+static XrJsonValue *call_initialize(XmcpServer *s, XrJsonValue *p) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_initialize(s, p, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_tools_list(XmcpServer *s, XrJsonValue *p) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_tools_list(s, p, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_tools_call(XmcpServer *s, XrJsonValue *p) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_tools_call(s, p, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_resources_list(XmcpServer *s) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_resources_list(s, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_resources_read(XmcpServer *s, XrJsonValue *p) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_resources_read(s, p, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_resource_templates_list(XmcpServer *s) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_resource_templates_list(s, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_prompts_list(XmcpServer *s) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_prompts_list(s, &g_test_rpc_err);
+}
+
+static XrJsonValue *call_prompts_get(XmcpServer *s, XrJsonValue *p) {
+    g_test_rpc_err.code = 0;
+    g_test_rpc_err.message[0] = '\0';
+    return xmcp_handle_prompts_get(s, p, &g_test_rpc_err);
 }
 
 /* =========================================================================
@@ -163,7 +210,7 @@ TEST(initialize_returns_protocol_version) {
         .lifecycle_state = XMCP_LIFECYCLE_CREATED,
     };
 
-    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    XrJsonValue *result = call_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     const char *version = xjson_get_string(result, "protocolVersion");
@@ -180,7 +227,7 @@ TEST(initialize_does_not_rewind_ready_state) {
         .lifecycle_state = XMCP_LIFECYCLE_READY,
     };
 
-    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    XrJsonValue *result = call_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
     ASSERT_EQ(server.lifecycle_state, XMCP_LIFECYCLE_READY);
 
@@ -300,7 +347,7 @@ TEST(initialize_returns_server_info) {
         .registry = test_registry(1, 1, 1, 0),
     };
 
-    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    XrJsonValue *result = call_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *info = xjson_get_object(result, "serverInfo");
@@ -322,7 +369,7 @@ TEST(initialize_capabilities_with_all_features) {
         .registry = test_registry(1, 1, 1, 1),
     };
 
-    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    XrJsonValue *result = call_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *caps = xjson_get_object(result, "capabilities");
@@ -352,7 +399,7 @@ TEST(initialize_capabilities_without_prompts) {
         .registry = test_registry(1, 1, 1, 0),
     };
 
-    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    XrJsonValue *result = call_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *caps = xjson_get_object(result, "capabilities");
@@ -377,7 +424,7 @@ TEST(initialize_capabilities_minimal) {
         .registry = test_registry(0, 0, 0, 0),
     };
 
-    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    XrJsonValue *result = call_initialize(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *caps = xjson_get_object(result, "capabilities");
@@ -445,7 +492,7 @@ TEST(registry_indexes_resources_and_prompts) {
 
 TEST(tools_list_returns_default_tools) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -457,7 +504,7 @@ TEST(tools_list_returns_default_tools) {
 
 TEST(tools_list_has_required_fields) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -473,7 +520,7 @@ TEST(tools_list_has_required_fields) {
 
 TEST(tools_list_has_annotations) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -491,7 +538,7 @@ TEST(tools_list_has_annotations) {
 
 TEST(tools_list_tool_names) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -508,7 +555,7 @@ TEST(tools_list_tool_names) {
 
 TEST(tools_list_default_tools_have_output_schema) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
 
     for (int i = 0; i < xjson_array_len(tools); i++) {
@@ -528,26 +575,24 @@ TEST(tools_call_unknown_tool) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "nonexistent_tool");
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-
-    /* Should have isError=true */
-    ASSERT(xjson_get_bool(result, "isError") == true);
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "unknown tool") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_missing_name) {
     XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "'name' is required") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_rejects_non_object_arguments) {
@@ -556,13 +601,12 @@ TEST(tools_call_rejects_non_object_arguments) {
     XJSON_SET_STRING(params, "name", "xray_format");
     XJSON_SET_STRING(params, "arguments", "not-an-object");
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
-    ASSERT_STR_EQ(tool_result_text(result), "Error: tool 'arguments' must be an object");
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "'arguments' must be an object") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_validates_required_arguments) {
@@ -571,13 +615,12 @@ TEST(tools_call_validates_required_arguments) {
     XJSON_SET_STRING(params, "name", "xray_format");
     xjson_object_set(params, "arguments", xjson_new_object());
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
-    ASSERT_STR_EQ(tool_result_text(result), "Error: missing required parameter 'code'");
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "missing required parameter 'code'") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_validates_argument_types) {
@@ -589,14 +632,13 @@ TEST(tools_call_validates_argument_types) {
     XJSON_SET_STRING(args, "indentSize", "two");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
-    ASSERT_STR_EQ(tool_result_text(result),
-                  "Error: invalid type for parameter 'indentSize': expected integer, got string");
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "invalid type for parameter 'indentSize'") != NULL);
+    ASSERT(strstr(g_test_rpc_err.message, "expected integer") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 /* =========================================================================
@@ -610,17 +652,16 @@ TEST(tools_call_format_missing_code) {
     XrJsonValue *args = xjson_new_object();
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_format_schema_has_optional_params) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
@@ -663,7 +704,7 @@ TEST(tools_call_format_returns_structured_content) {
     XJSON_SET_INT(args, "indentSize", 2);
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == false);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
@@ -692,17 +733,16 @@ TEST(tools_call_analyze_missing_code) {
     XrJsonValue *args = xjson_new_object();
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_analyze_schema) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     XrJsonValue *diag_tool = xjson_array_get(tools, 0);
     ASSERT_STR_EQ(xjson_get_string(diag_tool, "name"), "xray_analyze");
@@ -733,7 +773,7 @@ TEST(tools_call_analyze_returns_structured_diagnostics) {
     XJSON_SET_STRING(args, "mode", "syntax");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == true);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
@@ -760,17 +800,18 @@ TEST(tools_call_run_disabled_by_default) {
     XrJsonValue *args = xjson_new_object();
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
+    /* runner toolset is disabled by default, so xray_run is an unknown tool. */
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "unknown tool") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_list_runner_enabled_includes_run) {
     XmcpServer server = test_server_with_runner(true);
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     ASSERT_EQ(xjson_array_len(tools), 6);
     XrJsonValue *run_tool = xjson_array_get(tools, 2);
@@ -797,7 +838,7 @@ TEST(tools_call_syntax_lookup_returns_structured_content) {
     XJSON_SET_STRING(args, "topic", "class");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == false);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
@@ -821,7 +862,7 @@ TEST(tools_call_stdlib_search_returns_structured_content) {
     XJSON_SET_STRING(args, "query", "http");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == false);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
@@ -846,7 +887,7 @@ TEST(tools_call_definition_returns_structured_content) {
     XJSON_SET_STRING(args, "symbol", "class");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == false);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
@@ -870,7 +911,7 @@ TEST(tools_call_definition_not_found_is_structured) {
     XJSON_SET_STRING(args, "symbol", "zzz_nonexistent_symbol");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
+    XrJsonValue *result = call_tools_call(&server, params);
     ASSERT_NOT_NULL(result);
     ASSERT(xjson_get_bool(result, "isError") == false);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
@@ -894,17 +935,16 @@ TEST(tools_call_definition_missing_symbol) {
     XrJsonValue *args = xjson_new_object();
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_tools_call(&server, params);
-    ASSERT_NOT_NULL(result);
-    ASSERT(xjson_get_bool(result, "isError") == true);
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(tools_call_definition_schema) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     XrJsonValue *def_tool = xjson_array_get(tools, 4);
     ASSERT_STR_EQ(xjson_get_string(def_tool, "name"), "xray_definition");
@@ -930,7 +970,7 @@ TEST(tools_call_definition_schema) {
 
 TEST(tools_list_pagination_no_cursor) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
+    XrJsonValue *result = call_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
     ASSERT_EQ(xjson_array_len(tools), 5);
     /* No nextCursor when all items fit */
@@ -944,7 +984,7 @@ TEST(tools_list_pagination_no_cursor) {
 
 TEST(resources_list_returns_three) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_resources_list(&server);
+    XrJsonValue *result = call_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *resources = xjson_get_array(result, "resources");
@@ -956,7 +996,7 @@ TEST(resources_list_returns_three) {
 
 TEST(resources_list_has_required_fields) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_resources_list(&server);
+    XrJsonValue *result = call_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *resources = xjson_get_array(result, "resources");
@@ -972,7 +1012,7 @@ TEST(resources_list_has_required_fields) {
 
 TEST(resources_list_uris) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_resources_list(&server);
+    XrJsonValue *result = call_resources_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *resources = xjson_get_array(result, "resources");
@@ -996,7 +1036,7 @@ TEST(resources_read_cheatsheet) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "uri", "xray://spec/cheatsheet");
 
-    XrJsonValue *result = xmcp_handle_resources_read(&server, params);
+    XrJsonValue *result = call_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *contents = xjson_get_array(result, "contents");
@@ -1016,15 +1056,24 @@ TEST(resources_read_unknown_uri) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "uri", "xray://nonexistent");
 
-    XrJsonValue *result = xmcp_handle_resources_read(&server, params);
-    ASSERT_NOT_NULL(result);
-
-    XrJsonValue *contents = xjson_get_array(result, "contents");
-    ASSERT_NOT_NULL(contents);
-    ASSERT_EQ(xjson_array_len(contents), 0);
+    XrJsonValue *result = call_resources_read(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "unknown uri") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
+}
+
+TEST(resources_read_missing_uri) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+
+    XrJsonValue *result = call_resources_read(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "'uri' is required") != NULL);
+
+    xjson_free(params);
 }
 
 /* =========================================================================
@@ -1033,7 +1082,7 @@ TEST(resources_read_unknown_uri) {
 
 TEST(resource_templates_list_returns_two) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
+    XrJsonValue *result = call_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *templates = xjson_get_array(result, "resourceTemplates");
@@ -1045,7 +1094,7 @@ TEST(resource_templates_list_returns_two) {
 
 TEST(resource_templates_have_required_fields) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
+    XrJsonValue *result = call_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *templates = xjson_get_array(result, "resourceTemplates");
@@ -1062,7 +1111,7 @@ TEST(resource_templates_have_required_fields) {
 
 TEST(resource_templates_uris) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_resource_templates_list(&server);
+    XrJsonValue *result = call_resource_templates_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *templates = xjson_get_array(result, "resourceTemplates");
@@ -1084,7 +1133,7 @@ TEST(resources_read_topic_template) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "uri", "xray://spec/topic/variables");
 
-    XrJsonValue *result = xmcp_handle_resources_read(&server, params);
+    XrJsonValue *result = call_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *contents = xjson_get_array(result, "contents");
@@ -1107,7 +1156,7 @@ TEST(resources_read_stdlib_template) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "uri", "xray://stdlib/http");
 
-    XrJsonValue *result = xmcp_handle_resources_read(&server, params);
+    XrJsonValue *result = call_resources_read(&server, params);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *contents = xjson_get_array(result, "contents");
@@ -1126,7 +1175,7 @@ TEST(resources_read_stdlib_template) {
 
 TEST(prompts_list_returns_five) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_prompts_list(&server);
+    XrJsonValue *result = call_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -1138,7 +1187,7 @@ TEST(prompts_list_returns_five) {
 
 TEST(prompts_list_has_required_fields) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_prompts_list(&server);
+    XrJsonValue *result = call_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -1153,7 +1202,7 @@ TEST(prompts_list_has_required_fields) {
 
 TEST(prompts_list_prompt_names) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_prompts_list(&server);
+    XrJsonValue *result = call_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -1170,7 +1219,7 @@ TEST(prompts_list_prompt_names) {
 
 TEST(prompts_list_has_arguments) {
     XmcpServer server = test_server();
-    XrJsonValue *result = xmcp_handle_prompts_list(&server);
+    XrJsonValue *result = call_prompts_list(&server);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *prompts = xjson_get_array(result, "prompts");
@@ -1199,7 +1248,7 @@ TEST(prompts_get_code_review) {
     XJSON_SET_STRING(args, "code", "let x = 1\nprint(x)");
     xjson_object_set(params, "arguments", args);
 
-    XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
+    XrJsonValue *result = call_prompts_get(&server, params);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *messages = xjson_get_array(result, "messages");
@@ -1219,31 +1268,24 @@ TEST(prompts_get_unknown_prompt) {
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "nonexistent-prompt");
 
-    XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
-    ASSERT_NOT_NULL(result);
-
-    /* Should still have messages array (empty) */
-    XrJsonValue *messages = xjson_get_array(result, "messages");
-    ASSERT_NOT_NULL(messages);
-    ASSERT_EQ(xjson_array_len(messages), 0);
+    XrJsonValue *result = call_prompts_get(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "unknown prompt") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 TEST(prompts_get_missing_name) {
     XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
 
-    XrJsonValue *result = xmcp_handle_prompts_get(&server, params);
-    ASSERT_NOT_NULL(result);
-
-    XrJsonValue *messages = xjson_get_array(result, "messages");
-    ASSERT_NOT_NULL(messages);
-    ASSERT_EQ(xjson_array_len(messages), 0);
+    XrJsonValue *result = call_prompts_get(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "'name' is required") != NULL);
 
     xjson_free(params);
-    xjson_free(result);
 }
 
 /* =========================================================================
@@ -1450,6 +1492,7 @@ int main(void) {
     RUN_TEST(resources_list_uris);
     RUN_TEST(resources_read_cheatsheet);
     RUN_TEST(resources_read_unknown_uri);
+    RUN_TEST(resources_read_missing_uri);
 
     /* Resource templates */
     RUN_TEST(resource_templates_list_returns_two);

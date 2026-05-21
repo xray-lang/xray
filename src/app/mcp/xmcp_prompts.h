@@ -23,14 +23,17 @@
 /* Forward declarations */
 typedef struct XrJsonValue XrJsonValue;
 typedef struct XmcpServer XmcpServer;
+typedef struct XmcpRpcError XmcpRpcError;
 
 /* Handle "prompts/list" request. */
-XR_FUNC XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server);
+XR_FUNC XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server, XmcpRpcError *error);
 
 XR_FUNC size_t xmcp_prompts_count(void);
 XR_FUNC const XmcpPromptDef *xmcp_prompts_table(void);
 
-/* Handle "prompts/get" request. */
-XR_FUNC XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params);
+/* Handle "prompts/get" request. Populates `error` on missing/unknown prompt
+ * name. */
+XR_FUNC XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params,
+                                             XmcpRpcError *error);
 
 #endif  // XMCP_PROMPTS_H

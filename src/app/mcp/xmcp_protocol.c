@@ -46,8 +46,9 @@ static XrJsonValue *build_capabilities(XmcpServer *server) {
     return caps;
 }
 
-XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params) {
+XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
     (void) params;
+    (void) error;
     XR_DCHECK(server != NULL, "xmcp_handle_initialize: NULL server");
 
     if (server->lifecycle_state == XMCP_LIFECYCLE_CREATED)

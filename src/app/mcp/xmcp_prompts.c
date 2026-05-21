@@ -17,6 +17,7 @@
  */
 
 #include "xmcp_prompts.h"
+#include "xmcp_protocol.h"
 #include "xmcp_server.h"
 #include "xmcp_knowledge.h"
 #include "../../base/xjson.h"
@@ -141,8 +142,9 @@ static const char WRITE_TEST_SYSTEM[] =
  * prompts/list handler
  * -------------------------------------------------------------------------- */
 
-XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server) {
+XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_prompts_list: NULL server");
+    (void) error;
     XrJsonValue *result = xjson_new_object();
     XrJsonValue *prompts = xjson_new_array();
 
@@ -220,16 +222,21 @@ static XrJsonValue *build_prompt_messages(const char *system_text, const char *u
     return messages;
 }
 
-XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
+XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
     XR_DCHECK(server != NULL, "xmcp_handle_prompts_get: NULL server");
-    XR_DCHECK(params != NULL, "xmcp_handle_prompts_get: NULL params");
+    XR_DCHECK(error != NULL, "xmcp_handle_prompts_get: NULL error");
+
+    if (!params || !xjson_is_object(params)) {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "prompts/get: params must be an object");
+        return NULL;
+    }
 
     const char *name = xjson_get_string(params, "name");
-    if (!name) {
-        XrJsonValue *r = xjson_new_object();
-        XJSON_SET_STRING(r, "description", "Error: prompt 'name' is required");
-        xjson_object_set(r, "messages", xjson_new_array());
-        return r;
+    if (!name || name[0] == '\0') {
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "prompts/get: 'name' is required");
+        return NULL;
     }
 
     XrJsonValue *arguments = xjson_get_object(params, "arguments");
@@ -269,12 +276,9 @@ XrJsonValue *xmcp_handle_prompts_get(XmcpServer *server, XrJsonValue *params) {
     }
 
     if (!system_text) {
-        XrJsonValue *r = xjson_new_object();
-        char msg[256];
-        snprintf(msg, sizeof(msg), "Unknown prompt: %s", name);
-        XJSON_SET_STRING(r, "description", msg);
-        xjson_object_set(r, "messages", xjson_new_array());
-        return r;
+        error->code = XMCP_ERR_INVALID_PARAMS;
+        snprintf(error->message, sizeof(error->message), "prompts/get: unknown prompt '%s'", name);
+        return NULL;
     }
 
     /* Get user argument if not already set */
