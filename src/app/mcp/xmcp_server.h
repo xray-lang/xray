@@ -52,9 +52,6 @@ typedef struct XmcpServer {
     /* Feature registry */
     XmcpRegistry registry;
 
-    /* Per-request progress token (-1 = no progress tracking) */
-    int64_t current_progress_token;
-
     /* Server lifecycle */
     XmcpLifecycleState lifecycle_state;
     volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */

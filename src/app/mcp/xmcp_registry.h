@@ -26,7 +26,14 @@ typedef enum XmcpToolset {
     XMCP_TOOLSET_RUNNER
 } XmcpToolset;
 
-typedef XrJsonValue *(*XmcpToolHandler)(XmcpServer *server, XrJsonValue *args);
+/* Per-call context passed by tools/call dispatch to a handler. Lives on the
+ * dispatcher stack; handlers MUST NOT retain pointers beyond the call. */
+typedef struct XmcpCallContext {
+    int64_t progress_token; /* -1 when the client did not request progress */
+} XmcpCallContext;
+
+typedef XrJsonValue *(*XmcpToolHandler)(XmcpServer *server, const XmcpCallContext *ctx,
+                                        XrJsonValue *args);
 typedef XrJsonValue *(*XmcpSchemaBuilder)(void);
 
 typedef struct XmcpToolDef {

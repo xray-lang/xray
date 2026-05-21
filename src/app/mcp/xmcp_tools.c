@@ -46,12 +46,14 @@
  * -------------------------------------------------------------------------- */
 
 /* Forward declarations for handlers and schema builders */
-static XrJsonValue *tool_xray_analyze(XmcpServer *s, XrJsonValue *a);
-static XrJsonValue *tool_xray_format(XmcpServer *s, XrJsonValue *a);
-static XrJsonValue *tool_xray_run(XmcpServer *s, XrJsonValue *a);
-static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *s, XrJsonValue *a);
-static XrJsonValue *tool_xray_stdlib_search(XmcpServer *s, XrJsonValue *a);
-static XrJsonValue *tool_xray_definition(XmcpServer *s, XrJsonValue *a);
+static XrJsonValue *tool_xray_analyze(XmcpServer *s, const XmcpCallContext *ctx, XrJsonValue *a);
+static XrJsonValue *tool_xray_format(XmcpServer *s, const XmcpCallContext *ctx, XrJsonValue *a);
+static XrJsonValue *tool_xray_run(XmcpServer *s, const XmcpCallContext *ctx, XrJsonValue *a);
+static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *s, const XmcpCallContext *ctx,
+                                            XrJsonValue *a);
+static XrJsonValue *tool_xray_stdlib_search(XmcpServer *s, const XmcpCallContext *ctx,
+                                            XrJsonValue *a);
+static XrJsonValue *tool_xray_definition(XmcpServer *s, const XmcpCallContext *ctx, XrJsonValue *a);
 
 static XrJsonValue *schema_analyze(void);
 static XrJsonValue *schema_analyze_output(void);
@@ -535,8 +537,10 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *par
     return result;
 }
 
-static XrJsonValue *tool_xray_analyze(XmcpServer *server, XrJsonValue *arguments) {
+static XrJsonValue *tool_xray_analyze(XmcpServer *server, const XmcpCallContext *ctx,
+                                      XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_analyze: NULL server");
+    XR_DCHECK(ctx != NULL, "tool_xray_analyze: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_analyze: NULL arguments");
 
     const char *code = xjson_get_string(arguments, "code");
@@ -558,7 +562,7 @@ static XrJsonValue *tool_xray_analyze(XmcpServer *server, XrJsonValue *arguments
         return xmcp_make_error_result("Error: out of memory");
     xr_arena_init(arena, 0);
 
-    int64_t ptok = server->current_progress_token;
+    int64_t ptok = ctx->progress_token;
     if (ptok >= 0)
         xmcp_send_progress_notification(server, ptok, 0, 2);
 
@@ -634,9 +638,12 @@ static XrJsonValue *tool_xray_analyze(XmcpServer *server, XrJsonValue *arguments
     return result;
 }
 
-static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments) {
+static XrJsonValue *tool_xray_format(XmcpServer *server, const XmcpCallContext *ctx,
+                                     XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_format: NULL server");
+    XR_DCHECK(ctx != NULL, "tool_xray_format: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_format: NULL arguments");
+    (void) ctx;
 
     const char *code = xjson_get_string(arguments, "code");
     if (code[0] == '\0')
@@ -676,9 +683,12 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments)
  * Tool: xray_run (execute snippet, capture stdout)
  * -------------------------------------------------------------------------- */
 
-static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
+static XrJsonValue *tool_xray_run(XmcpServer *server, const XmcpCallContext *ctx,
+                                  XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_run: NULL server");
+    XR_DCHECK(ctx != NULL, "tool_xray_run: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_run: NULL arguments");
+    (void) ctx;
 
     const char *code = xjson_get_string(arguments, "code");
     if (code[0] == '\0')
@@ -754,9 +764,12 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
  * Tool: xray_syntax_lookup
  * -------------------------------------------------------------------------- */
 
-static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arguments) {
+static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, const XmcpCallContext *ctx,
+                                            XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_syntax_lookup: NULL server");
+    XR_DCHECK(ctx != NULL, "tool_xray_syntax_lookup: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_syntax_lookup: NULL arguments");
+    (void) ctx;
 
     const char *topic = xjson_get_string(arguments, "topic");
     if (topic[0] == '\0')
@@ -786,9 +799,12 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arg
  * Tool: xray_stdlib_search
  * -------------------------------------------------------------------------- */
 
-static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, XrJsonValue *arguments) {
+static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, const XmcpCallContext *ctx,
+                                            XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_stdlib_search: NULL server");
+    XR_DCHECK(ctx != NULL, "tool_xray_stdlib_search: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_stdlib_search: NULL arguments");
+    (void) ctx;
 
     const char *query = xjson_get_string(arguments, "query");
     const char *module = xjson_get_string(arguments, "module");
@@ -811,9 +827,12 @@ static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, XrJsonValue *arg
  * Tool: xray_definition (symbol lookup in knowledge base)
  * -------------------------------------------------------------------------- */
 
-static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *arguments) {
+static XrJsonValue *tool_xray_definition(XmcpServer *server, const XmcpCallContext *ctx,
+                                         XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_definition: NULL server");
+    XR_DCHECK(ctx != NULL, "tool_xray_definition: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_definition: NULL arguments");
+    (void) ctx;
 
     const char *symbol = xjson_get_string(arguments, "symbol");
     if (symbol[0] == '\0')
@@ -899,12 +918,11 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
         return xmcp_make_error_result(msg);
     }
 
-    /* Extract progress token from _meta if present */
-    server->current_progress_token = -1;
+    /* Build per-call context. progress_token comes from params._meta if present. */
+    XmcpCallContext ctx = {.progress_token = -1};
     XrJsonValue *meta = xjson_get_object(params, "_meta");
-    if (meta) {
-        server->current_progress_token = xjson_get_int_or(meta, "progressToken", -1);
-    }
+    if (meta)
+        ctx.progress_token = xjson_get_int_or(meta, "progressToken", -1);
 
     XrJsonValue *arguments_value = xjson_get(params, "arguments");
     if (arguments_value && !xjson_is_object(arguments_value))
@@ -924,7 +942,7 @@ XR_FUNC XrJsonValue *xmcp_handle_tools_call(XmcpServer *server, XrJsonValue *par
         return validation_error;
     }
 
-    XrJsonValue *result = tool->handler(server, arguments);
+    XrJsonValue *result = tool->handler(server, &ctx, arguments);
 
     if (!result) {
         result = xmcp_make_error_result("Error: tool failed");
