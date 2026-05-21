@@ -540,9 +540,8 @@ static XrJsonValue *tool_xray_analyze(XmcpServer *server, XrJsonValue *arguments
     XR_DCHECK(arguments != NULL, "tool_xray_analyze: NULL arguments");
 
     const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0') {
-        return xmcp_make_error_result("Error: 'code' parameter is required");
-    }
+    if (code[0] == '\0')
+        return xmcp_make_error_result("Error: 'code' must not be empty");
     if (!server->isolate)
         return xmcp_make_error_result("Error: analyzer isolate is not available");
 
@@ -640,9 +639,8 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, XrJsonValue *arguments)
     XR_DCHECK(arguments != NULL, "tool_xray_format: NULL arguments");
 
     const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0') {
-        return xmcp_make_error_result("Error: 'code' parameter is required");
-    }
+    if (code[0] == '\0')
+        return xmcp_make_error_result("Error: 'code' must not be empty");
 
     XrFmtConfig config = xfmt_default_config;
     int64_t indent = xjson_get_int_or(arguments, "indentSize", 0);
@@ -683,9 +681,8 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, XrJsonValue *arguments) {
     XR_DCHECK(arguments != NULL, "tool_xray_run: NULL arguments");
 
     const char *code = xjson_get_string(arguments, "code");
-    if (!code || code[0] == '\0') {
-        return xmcp_make_error_result("Error: 'code' parameter is required");
-    }
+    if (code[0] == '\0')
+        return xmcp_make_error_result("Error: 'code' must not be empty");
 
     /* Redirect stdout to a temp file to capture print() output */
     int saved_stdout = dup(xr_stdout_fd());
@@ -762,9 +759,8 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arg
     XR_DCHECK(arguments != NULL, "tool_xray_syntax_lookup: NULL arguments");
 
     const char *topic = xjson_get_string(arguments, "topic");
-    if (!topic || topic[0] == '\0') {
-        return xmcp_make_error_result("Error: 'topic' parameter is required");
-    }
+    if (topic[0] == '\0')
+        return xmcp_make_error_result("Error: 'topic' must not be empty");
     if (!server->knowledge)
         return xmcp_make_error_result("Error: knowledge base is not available");
 
@@ -796,9 +792,8 @@ static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, XrJsonValue *arg
 
     const char *query = xjson_get_string(arguments, "query");
     const char *module = xjson_get_string(arguments, "module");
-    if (!query || query[0] == '\0') {
-        return xmcp_make_error_result("Error: 'query' parameter is required");
-    }
+    if (query[0] == '\0')
+        return xmcp_make_error_result("Error: 'query' must not be empty");
     if (!server->knowledge)
         return xmcp_make_error_result("Error: knowledge base is not available");
 
@@ -821,9 +816,8 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *argume
     XR_DCHECK(arguments != NULL, "tool_xray_definition: NULL arguments");
 
     const char *symbol = xjson_get_string(arguments, "symbol");
-    if (!symbol || symbol[0] == '\0') {
-        return xmcp_make_error_result("Error: 'symbol' parameter is required");
-    }
+    if (symbol[0] == '\0')
+        return xmcp_make_error_result("Error: 'symbol' must not be empty");
     if (!server->knowledge)
         return xmcp_make_error_result("Error: knowledge base is not available");
 
