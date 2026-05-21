@@ -272,6 +272,8 @@ void xr_gc_traverse_exception(XrCoroGC *gc, XrGCHeader *obj) {
         xr_coro_gc_markobject(gc, (XrGCHeader *) exc->file);
     if (exc->stackTrace)
         xr_coro_gc_markobject(gc, (XrGCHeader *) exc->stackTrace);
+    if (exc->cause)
+        xr_coro_gc_markobject(gc, (XrGCHeader *) exc->cause);
     xr_coro_gc_markvalue(gc, exc->userData);
 }
 
