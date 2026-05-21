@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xframing.h - Content-Length framing protocol (LSP/DAP/MCP shared)
+ * xframing.h - Content-Length framing protocol (LSP/DAP shared)
  *
  * KEY CONCEPT:
  *   Buffer-level frame parsing and header writing for the base protocol
- *   used by LSP, DAP, and MCP. Each transport manages its own I/O
+ *   used by LSP and DAP. Each transport manages its own I/O
  *   strategy (blocking/non-blocking, fd/socket); this module only
  *   handles the "Content-Length: N\r\n\r\n<body>" wire format.
  */

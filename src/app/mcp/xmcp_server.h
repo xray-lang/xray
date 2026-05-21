@@ -17,6 +17,7 @@
 #define XMCP_SERVER_H
 
 #include "../../base/xdefs.h"
+#include "xmcp_transport_stdio.h"
 #include <stdbool.h>
 #include <stdio.h>
 #include <signal.h>
@@ -26,12 +27,16 @@ typedef struct XrJsonValue XrJsonValue;
 typedef struct XrayIsolate XrayIsolate;
 typedef struct XmcpKnowledge XmcpKnowledge;
 
+typedef enum XmcpLifecycleState {
+    XMCP_LIFECYCLE_CREATED = 0,
+    XMCP_LIFECYCLE_INITIALIZE_SENT,
+    XMCP_LIFECYCLE_READY
+} XmcpLifecycleState;
+
 /* MCP server state */
 typedef struct XmcpServer {
     /* stdio transport */
-    char *read_buf; /* Incremental read buffer */
-    size_t read_cap;
-    size_t read_len;
+    XmcpStdioTransport transport;
 
     /* Parser isolate (for xray_check tool) */
     XrayIsolate *isolate;
@@ -52,7 +57,7 @@ typedef struct XmcpServer {
     int64_t current_progress_token;
 
     /* Server lifecycle */
-    bool initialized;
+    XmcpLifecycleState lifecycle_state;
     volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */
 } XmcpServer;
 
@@ -65,8 +70,5 @@ XR_FUNC void xmcp_server_free(XmcpServer *server);
 /* Run the server main loop (blocking, reads stdin, writes stdout).
  * Returns 0 on clean shutdown, non-zero on error. */
 XR_FUNC int xmcp_server_run(XmcpServer *server);
-
-/* Write a JSON-RPC message to stdout (used by notification infrastructure). */
-XR_FUNC void xmcp_write_message(const char *json, size_t len);
 
 #endif  // XMCP_SERVER_H

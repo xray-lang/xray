@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include "../../../src/app/mcp/xmcp_jsonrpc.h"
 #include "../../../src/app/mcp/xmcp_protocol.h"
 #include "../../../src/app/mcp/xmcp_server.h"
 #include "../../../src/app/mcp/xmcp_tools.h"
@@ -24,10 +25,6 @@
 
 /* Stubs for notification functions (implemented in xmcp_server.c, not linked
  * into this test binary). Tools may call these; they are no-ops here. */
-void xmcp_write_message(const char *json, size_t len) {
-    (void) json;
-    (void) len;
-}
 void xmcp_send_notification(XmcpServer *s, const char *m, XrJsonValue *p) {
     (void) s;
     (void) m;
@@ -69,6 +66,10 @@ static int tests_failed = 0;
 #define ASSERT_EQ(a, b) ASSERT((a) == (b))
 #define ASSERT_STR_EQ(a, b) ASSERT(strcmp((a), (b)) == 0)
 #define ASSERT_NOT_NULL(p) ASSERT((p) != NULL)
+
+static XrJsonValue *parse_json(const char *json) {
+    return xjson_parse(json, strlen(json));
+}
 
 /* =========================================================================
  * Protocol error codes
@@ -119,7 +120,7 @@ TEST(initialize_returns_protocol_version) {
         .has_tools = true,
         .has_resources = true,
         .has_prompts = true,
-        .initialized = false,
+        .lifecycle_state = XMCP_LIFECYCLE_CREATED,
     };
 
     XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
@@ -128,8 +129,132 @@ TEST(initialize_returns_protocol_version) {
     const char *version = xjson_get_string(result, "protocolVersion");
     ASSERT_NOT_NULL(version);
     ASSERT_STR_EQ(version, "2025-03-26");
+    ASSERT_EQ(server.lifecycle_state, XMCP_LIFECYCLE_INITIALIZE_SENT);
 
     xjson_free(result);
+}
+
+TEST(initialize_does_not_rewind_ready_state) {
+    XmcpServer server = {
+        .has_tools = true,
+        .has_resources = true,
+        .has_prompts = true,
+        .lifecycle_state = XMCP_LIFECYCLE_READY,
+    };
+
+    XrJsonValue *result = xmcp_handle_initialize(&server, NULL);
+    ASSERT_NOT_NULL(result);
+    ASSERT_EQ(server.lifecycle_state, XMCP_LIFECYCLE_READY);
+
+    xjson_free(result);
+}
+
+/* =========================================================================
+ * JSON-RPC validation
+ * ========================================================================= */
+
+TEST(jsonrpc_valid_request) {
+    XrJsonValue *msg =
+        parse_json("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"params\":{}}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    XrJsonValue *error_id = NULL;
+    int error_code = 0;
+    const char *error_message = NULL;
+    ASSERT(xmcp_jsonrpc_validate_message(msg, &req, &error_id, &error_code, &error_message));
+    ASSERT_STR_EQ(req.method, "ping");
+    ASSERT_NOT_NULL(req.id);
+    ASSERT(req.params != NULL);
+    ASSERT(req.is_notification == false);
+    ASSERT(error_id == NULL);
+    ASSERT_EQ(error_code, 0);
+    ASSERT(error_message == NULL);
+
+    xjson_free(msg);
+}
+
+TEST(jsonrpc_valid_notification) {
+    XrJsonValue *msg = parse_json("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\"}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    ASSERT(xmcp_jsonrpc_validate_message(msg, &req, NULL, NULL, NULL));
+    ASSERT_STR_EQ(req.method, "notifications/cancelled");
+    ASSERT(req.id == NULL);
+    ASSERT(req.is_notification == true);
+
+    xjson_free(msg);
+}
+
+TEST(jsonrpc_rejects_missing_version) {
+    XrJsonValue *msg = parse_json("{\"id\":\"abc\",\"method\":\"ping\"}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    XrJsonValue *error_id = NULL;
+    int error_code = 0;
+    const char *error_message = NULL;
+    ASSERT(!xmcp_jsonrpc_validate_message(msg, &req, &error_id, &error_code, &error_message));
+    ASSERT(error_id == xjson_get(msg, "id"));
+    ASSERT_EQ(error_code, XMCP_ERR_INVALID_REQ);
+    ASSERT_NOT_NULL(error_message);
+
+    xjson_free(msg);
+}
+
+TEST(jsonrpc_rejects_invalid_id) {
+    XrJsonValue *msg = parse_json("{\"jsonrpc\":\"2.0\",\"id\":{},\"method\":\"ping\"}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    XrJsonValue *error_id = NULL;
+    int error_code = 0;
+    ASSERT(!xmcp_jsonrpc_validate_message(msg, &req, &error_id, &error_code, NULL));
+    ASSERT(error_id == NULL);
+    ASSERT_EQ(error_code, XMCP_ERR_INVALID_REQ);
+
+    xjson_free(msg);
+}
+
+TEST(jsonrpc_rejects_missing_method) {
+    XrJsonValue *msg = parse_json("{\"jsonrpc\":\"2.0\",\"id\":7}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    XrJsonValue *error_id = NULL;
+    int error_code = 0;
+    ASSERT(!xmcp_jsonrpc_validate_message(msg, &req, &error_id, &error_code, NULL));
+    ASSERT(error_id == xjson_get(msg, "id"));
+    ASSERT_EQ(error_code, XMCP_ERR_INVALID_REQ);
+
+    xjson_free(msg);
+}
+
+TEST(jsonrpc_rejects_scalar_params) {
+    XrJsonValue *msg =
+        parse_json("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\",\"params\":1}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    int error_code = 0;
+    ASSERT(!xmcp_jsonrpc_validate_message(msg, &req, NULL, &error_code, NULL));
+    ASSERT_EQ(error_code, XMCP_ERR_INVALID_REQ);
+
+    xjson_free(msg);
+}
+
+TEST(jsonrpc_rejects_null_params) {
+    XrJsonValue *msg =
+        parse_json("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\",\"params\":null}");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    int error_code = 0;
+    ASSERT(!xmcp_jsonrpc_validate_message(msg, &req, NULL, &error_code, NULL));
+    ASSERT_EQ(error_code, XMCP_ERR_INVALID_REQ);
+
+    xjson_free(msg);
 }
 
 TEST(initialize_returns_server_info) {
@@ -930,6 +1055,18 @@ int main(void) {
 
     /* Initialize */
     RUN_TEST(initialize_returns_protocol_version);
+    RUN_TEST(initialize_does_not_rewind_ready_state);
+
+    /* JSON-RPC validation */
+    RUN_TEST(jsonrpc_valid_request);
+    RUN_TEST(jsonrpc_valid_notification);
+    RUN_TEST(jsonrpc_rejects_missing_version);
+    RUN_TEST(jsonrpc_rejects_invalid_id);
+    RUN_TEST(jsonrpc_rejects_missing_method);
+    RUN_TEST(jsonrpc_rejects_scalar_params);
+    RUN_TEST(jsonrpc_rejects_null_params);
+
+    /* Initialize result shape */
     RUN_TEST(initialize_returns_server_info);
     RUN_TEST(initialize_capabilities_with_all_features);
     RUN_TEST(initialize_capabilities_without_prompts);
