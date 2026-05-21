@@ -353,7 +353,14 @@ static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
  * Public API
  * -------------------------------------------------------------------------- */
 
-XmcpServer *xmcp_server_new(void) {
+XR_FUNC void xmcp_server_options_default(XmcpServerOptions *options) {
+    XR_DCHECK(options != NULL, "xmcp_server_options_default: NULL options");
+    options->enable_runner = false;
+}
+
+XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
+    XR_DCHECK(options != NULL, "xmcp_server_new: NULL options");
+
     XmcpServer *s = xr_calloc(1, sizeof(XmcpServer));
     if (!s)
         return NULL;
@@ -383,7 +390,10 @@ XmcpServer *xmcp_server_new(void) {
     }
 
     s->current_progress_token = -1;
-    xmcp_registry_init(&s->registry);
+    XmcpRegistryOptions registry_options;
+    xmcp_registry_options_default(&registry_options);
+    registry_options.enable_runner = options->enable_runner;
+    xmcp_registry_init(&s->registry, &registry_options);
 
     return s;
 }
@@ -470,7 +480,11 @@ XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv) {
     const char *log_file_path = xr_cli_opt_string(&inv->options, "log-file", NULL);
     int log_level = parse_log_level(level_str);
 
-    XmcpServer *s = xmcp_server_new();
+    XmcpServerOptions options;
+    xmcp_server_options_default(&options);
+    options.enable_runner = xr_cli_opt_bool(&inv->options, "enable-runner");
+
+    XmcpServer *s = xmcp_server_new(&options);
     if (!s) {
         xr_cli_error("mcp-server", "failed to create MCP server");
         return XR_CLI_EXIT_INTERNAL;

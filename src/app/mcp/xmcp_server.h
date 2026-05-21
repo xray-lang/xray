@@ -60,8 +60,14 @@ typedef struct XmcpServer {
     volatile sig_atomic_t shutdown; /* signal-safe shutdown flag */
 } XmcpServer;
 
+typedef struct XmcpServerOptions {
+    bool enable_runner;
+} XmcpServerOptions;
+
+XR_FUNC void xmcp_server_options_default(XmcpServerOptions *options);
+
 /* Create a new MCP server. Returns NULL on allocation failure. */
-XR_FUNC XmcpServer *xmcp_server_new(void);
+XR_FUNC XmcpServer *xmcp_server_new(const XmcpServerOptions *options);
 
 /* Destroy server and free all resources. */
 XR_FUNC void xmcp_server_free(XmcpServer *server);

@@ -69,31 +69,31 @@ static const XmcpToolDef TOOL_TABLE[] = {
     {"xray_analyze", "Xray Code Analyzer",
      "Analyze Xray source code for syntax and semantic diagnostics. "
      "Returns a text summary and structured diagnostics.",
-     schema_analyze, schema_analyze_output, tool_xray_analyze, true, false},
+     XMCP_TOOLSET_CORE, schema_analyze, schema_analyze_output, tool_xray_analyze, true, false},
     {"xray_format", "Xray Code Formatter",
      "Format Xray source code according to standard style. "
      "Returns formatted code. Optionally set indent size or tabs.",
-     schema_format, NULL, tool_xray_format, true, false},
+     XMCP_TOOLSET_CORE, schema_format, NULL, tool_xray_format, true, false},
     {"xray_run", "Xray Code Runner",
      "Execute a small Xray code snippet and return its stdout output. "
      "Creates an isolated VM per execution. Max output: 8KB.",
-     schema_run, NULL, tool_xray_run, false, true},
+     XMCP_TOOLSET_RUNNER, schema_run, NULL, tool_xray_run, false, true},
     {"xray_syntax_lookup", "Xray Syntax Reference",
      "Look up Xray language syntax by topic. Returns code examples. "
      "Topics: variables, types, functions, control_flow, class, struct, "
      "interface, enum, generics, collections, string, channel, coroutine, "
      "concurrency_rules, modules, testing, operators, builtin_functions.",
-     schema_syntax, NULL, tool_xray_syntax_lookup, true, false},
+     XMCP_TOOLSET_KNOWLEDGE, schema_syntax, NULL, tool_xray_syntax_lookup, true, false},
     {"xray_stdlib_search", "Xray Stdlib Search",
      "Search the Xray standard library by module name or topic. "
      "Available modules: http, json, time, math, io, os, net, ws, "
      "crypto, csv, regex, cluster, compress, and more.",
-     schema_stdlib, NULL, tool_xray_stdlib_search, true, false},
+     XMCP_TOOLSET_KNOWLEDGE, schema_stdlib, NULL, tool_xray_stdlib_search, true, false},
     {"xray_definition", "Xray Definition Lookup",
      "Find documentation for a symbol in the Xray language or stdlib. "
      "Searches syntax topics and standard library modules.",
-     schema_definition, NULL, tool_xray_definition, true, false},
-    {NULL, NULL, NULL, NULL, NULL, NULL, false, false}};
+     XMCP_TOOLSET_KNOWLEDGE, schema_definition, NULL, tool_xray_definition, true, false},
+    {NULL, NULL, NULL, XMCP_TOOLSET_CORE, NULL, NULL, NULL, false, false}};
 
 /* --------------------------------------------------------------------------
  * Helpers

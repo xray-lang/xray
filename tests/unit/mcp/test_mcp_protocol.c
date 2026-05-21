@@ -74,23 +74,31 @@ static XrJsonValue *parse_json(const char *json) {
 
 static XmcpRegistry test_registry(size_t tools, size_t resources, size_t templates,
                                   size_t prompts) {
-    XmcpRegistry registry = {
-        .tools = xmcp_tools_table(),
-        .resources = xmcp_resources_table(),
-        .resource_templates = xmcp_resource_templates_table(),
-        .prompts = xmcp_prompts_table(),
-        .tool_count = tools,
-        .resource_count = resources,
-        .resource_template_count = templates,
-        .prompt_count = prompts,
-    };
+    XmcpRegistry registry = {0};
+    const XmcpToolDef *tool_table = xmcp_tools_table();
+    for (size_t i = 0; i < tools && i < XMCP_REGISTRY_MAX_TOOLS; i++)
+        registry.tools[i] = &tool_table[i];
+    registry.resources = xmcp_resources_table();
+    registry.resource_templates = xmcp_resource_templates_table();
+    registry.prompts = xmcp_prompts_table();
+    registry.tool_count = tools;
+    registry.resource_count = resources;
+    registry.resource_template_count = templates;
+    registry.prompt_count = prompts;
     return registry;
 }
 
-static XmcpServer test_server(void) {
+static XmcpServer test_server_with_runner(bool enable_runner) {
     XmcpServer server = {0};
-    xmcp_registry_init(&server.registry);
+    XmcpRegistryOptions options;
+    xmcp_registry_options_default(&options);
+    options.enable_runner = enable_runner;
+    xmcp_registry_init(&server.registry, &options);
     return server;
+}
+
+static XmcpServer test_server(void) {
+    return test_server_with_runner(false);
 }
 
 /* =========================================================================
@@ -374,13 +382,15 @@ TEST(initialize_capabilities_minimal) {
 
 TEST(registry_init_counts_features) {
     XmcpRegistry registry;
-    xmcp_registry_init(&registry);
+    XmcpRegistryOptions options;
+    xmcp_registry_options_default(&options);
+    xmcp_registry_init(&registry, &options);
 
-    ASSERT_NOT_NULL(registry.tools);
+    ASSERT_NOT_NULL(xmcp_registry_tool_at(&registry, 0));
     ASSERT_NOT_NULL(registry.resources);
     ASSERT_NOT_NULL(registry.resource_templates);
     ASSERT_NOT_NULL(registry.prompts);
-    ASSERT_EQ(registry.tool_count, 6);
+    ASSERT_EQ(registry.tool_count, 5);
     ASSERT_EQ(registry.resource_count, 3);
     ASSERT_EQ(registry.resource_template_count, 2);
     ASSERT_EQ(registry.prompt_count, 5);
@@ -421,14 +431,14 @@ TEST(registry_indexes_resources_and_prompts) {
  * Tools: tools/list
  * ========================================================================= */
 
-TEST(tools_list_returns_six_tools) {
+TEST(tools_list_returns_default_tools) {
     XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
     ASSERT_NOT_NULL(tools);
-    ASSERT_EQ(xjson_array_len(tools), 6);
+    ASSERT_EQ(xjson_array_len(tools), 5);
 
     xjson_free(result);
 }
@@ -460,11 +470,7 @@ TEST(tools_list_has_annotations) {
         XrJsonValue *ann = xjson_get_object(tool, "annotations");
         ASSERT_NOT_NULL(ann);
         ASSERT_NOT_NULL(xjson_get_string(ann, "title"));
-        /* Most tools are read-only; xray_run is not */
-        const char *tname = xjson_get_string(tool, "name");
-        if (strcmp(tname, "xray_run") != 0) {
-            ASSERT(xjson_get_bool(ann, "readOnlyHint") == true);
-        }
+        ASSERT(xjson_get_bool(ann, "readOnlyHint") == true);
         ASSERT(xjson_get_bool(ann, "destructiveHint") == false);
     }
 
@@ -477,10 +483,10 @@ TEST(tools_list_tool_names) {
     ASSERT_NOT_NULL(result);
 
     XrJsonValue *tools = xjson_get_array(result, "tools");
-    const char *expected[] = {"xray_analyze",       "xray_format",        "xray_run",
-                              "xray_syntax_lookup", "xray_stdlib_search", "xray_definition"};
+    const char *expected[] = {"xray_analyze", "xray_format", "xray_syntax_lookup",
+                              "xray_stdlib_search", "xray_definition"};
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 5; i++) {
         XrJsonValue *tool = xjson_array_get(tools, i);
         ASSERT_STR_EQ(xjson_get_string(tool, "name"), expected[i]);
     }
@@ -633,7 +639,7 @@ TEST(tools_call_analyze_returns_structured_diagnostics) {
  * Tools: xray_run
  * ========================================================================= */
 
-TEST(tools_call_run_missing_code) {
+TEST(tools_call_run_disabled_by_default) {
     XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
     XJSON_SET_STRING(params, "name", "xray_run");
@@ -648,10 +654,11 @@ TEST(tools_call_run_missing_code) {
     xjson_free(result);
 }
 
-TEST(tools_call_run_has_open_world_hint) {
-    XmcpServer server = test_server();
+TEST(tools_list_runner_enabled_includes_run) {
+    XmcpServer server = test_server_with_runner(true);
     XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
+    ASSERT_EQ(xjson_array_len(tools), 6);
     XrJsonValue *run_tool = xjson_array_get(tools, 2);
     ASSERT_STR_EQ(xjson_get_string(run_tool, "name"), "xray_run");
 
@@ -685,7 +692,7 @@ TEST(tools_call_definition_schema) {
     XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
-    XrJsonValue *def_tool = xjson_array_get(tools, 5);
+    XrJsonValue *def_tool = xjson_array_get(tools, 4);
     ASSERT_STR_EQ(xjson_get_string(def_tool, "name"), "xray_definition");
 
     XrJsonValue *schema = xjson_get_object(def_tool, "inputSchema");
@@ -704,7 +711,7 @@ TEST(tools_list_pagination_no_cursor) {
     XmcpServer server = test_server();
     XrJsonValue *result = xmcp_handle_tools_list(&server, NULL);
     XrJsonValue *tools = xjson_get_array(result, "tools");
-    ASSERT_EQ(xjson_array_len(tools), 6);
+    ASSERT_EQ(xjson_array_len(tools), 5);
     /* No nextCursor when all items fit */
     ASSERT(xjson_get_string(result, "nextCursor") == NULL);
     xjson_free(result);
@@ -1174,7 +1181,7 @@ int main(void) {
     RUN_TEST(registry_indexes_resources_and_prompts);
 
     /* Tools */
-    RUN_TEST(tools_list_returns_six_tools);
+    RUN_TEST(tools_list_returns_default_tools);
     RUN_TEST(tools_list_has_required_fields);
     RUN_TEST(tools_list_has_annotations);
     RUN_TEST(tools_list_tool_names);
@@ -1191,8 +1198,8 @@ int main(void) {
     RUN_TEST(tools_call_analyze_returns_structured_diagnostics);
 
     /* Run tool */
-    RUN_TEST(tools_call_run_missing_code);
-    RUN_TEST(tools_call_run_has_open_world_hint);
+    RUN_TEST(tools_call_run_disabled_by_default);
+    RUN_TEST(tools_list_runner_enabled_includes_run);
 
     /* Definition tool */
     RUN_TEST(tools_call_definition_missing_symbol);
