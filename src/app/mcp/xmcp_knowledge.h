@@ -57,7 +57,7 @@ XR_FUNC const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *q
 
 /* Search stdlib modules. Returns a formatted string (caller must xr_free). */
 XR_FUNC char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query,
-                                           const char *module_filter);
+                                           const char *module_filter, int *match_count);
 
 /* Get the cheatsheet resource content. */
 XR_FUNC const char *xmcp_knowledge_get_cheatsheet(void);

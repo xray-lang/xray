@@ -826,11 +826,13 @@ const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query) {
     return NULL;
 }
 
-char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query,
-                                   const char *module_filter) {
+char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query, const char *module_filter,
+                                   int *match_count) {
     XR_DCHECK(kb != NULL, "xmcp_knowledge_search_stdlib: NULL kb");
     if (!query)
         return NULL;
+    if (match_count)
+        *match_count = 0;
 
     /* Build result string */
     size_t cap = 4096;
@@ -860,6 +862,8 @@ char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query,
             found++;
         }
     }
+    if (match_count)
+        *match_count = found;
 
     if (found == 0) {
         len += (size_t) snprintf(result + len, cap - len,

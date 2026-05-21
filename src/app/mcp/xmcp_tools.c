@@ -59,8 +59,11 @@ static XrJsonValue *schema_format(void);
 static XrJsonValue *schema_format_output(void);
 static XrJsonValue *schema_run(void);
 static XrJsonValue *schema_syntax(void);
+static XrJsonValue *schema_syntax_output(void);
 static XrJsonValue *schema_stdlib(void);
+static XrJsonValue *schema_stdlib_output(void);
 static XrJsonValue *schema_definition(void);
+static XrJsonValue *schema_definition_output(void);
 
 /* --------------------------------------------------------------------------
  * Tool registration table
@@ -84,16 +87,19 @@ static const XmcpToolDef TOOL_TABLE[] = {
      "Topics: variables, types, functions, control_flow, class, struct, "
      "interface, enum, generics, collections, string, channel, coroutine, "
      "concurrency_rules, modules, testing, operators, builtin_functions.",
-     XMCP_TOOLSET_KNOWLEDGE, schema_syntax, NULL, tool_xray_syntax_lookup, true, false},
+     XMCP_TOOLSET_KNOWLEDGE, schema_syntax, schema_syntax_output, tool_xray_syntax_lookup, true,
+     false},
     {"xray_stdlib_search", "Xray Stdlib Search",
      "Search the Xray standard library by module name or topic. "
      "Available modules: http, json, time, math, io, os, net, ws, "
      "crypto, csv, regex, cluster, compress, and more.",
-     XMCP_TOOLSET_KNOWLEDGE, schema_stdlib, NULL, tool_xray_stdlib_search, true, false},
+     XMCP_TOOLSET_KNOWLEDGE, schema_stdlib, schema_stdlib_output, tool_xray_stdlib_search, true,
+     false},
     {"xray_definition", "Xray Definition Lookup",
      "Find documentation for a symbol in the Xray language or stdlib. "
      "Searches syntax topics and standard library modules.",
-     XMCP_TOOLSET_KNOWLEDGE, schema_definition, NULL, tool_xray_definition, true, false},
+     XMCP_TOOLSET_KNOWLEDGE, schema_definition, schema_definition_output, tool_xray_definition,
+     true, false},
     {NULL, NULL, NULL, XMCP_TOOLSET_CORE, NULL, NULL, NULL, false, false}};
 
 /* --------------------------------------------------------------------------
@@ -125,6 +131,14 @@ static XrJsonValue *xmcp_make_text_result(const char *text, bool is_error) {
     if (is_error) {
         XJSON_SET_BOOL(result, "isError", true);
     }
+    return result;
+}
+
+static XrJsonValue *xmcp_make_text_structured_result(const char *text, XrJsonValue *structured,
+                                                     bool is_error) {
+    XR_DCHECK(structured != NULL, "xmcp_make_text_structured_result: NULL structured");
+    XrJsonValue *result = xmcp_make_text_result(text, is_error);
+    xjson_object_set(result, "structuredContent", structured);
     return result;
 }
 
@@ -192,6 +206,42 @@ static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_
     XJSON_SET_STRING(diag, "message", message);
     XJSON_SET_STRING(diag, "source", source);
     return diag;
+}
+
+static XrJsonValue *make_syntax_result_content(const char *topic, bool found, const char *content) {
+    XR_DCHECK(topic != NULL, "make_syntax_result_content: NULL topic");
+    XR_DCHECK(content != NULL, "make_syntax_result_content: NULL content");
+    XrJsonValue *structured = xjson_new_object();
+    XJSON_SET_STRING(structured, "topic", topic);
+    XJSON_SET_BOOL(structured, "found", found);
+    XJSON_SET_STRING(structured, "content", content);
+    return structured;
+}
+
+static XrJsonValue *make_stdlib_result_content(const char *query, const char *module,
+                                               int match_count, const char *content) {
+    XR_DCHECK(query != NULL, "make_stdlib_result_content: NULL query");
+    XR_DCHECK(content != NULL, "make_stdlib_result_content: NULL content");
+    XrJsonValue *structured = xjson_new_object();
+    XJSON_SET_STRING(structured, "query", query);
+    XJSON_SET_STRING(structured, "module", module ? module : "");
+    XJSON_SET_INT(structured, "matchCount", match_count);
+    XJSON_SET_BOOL(structured, "found", match_count > 0);
+    XJSON_SET_STRING(structured, "content", content);
+    return structured;
+}
+
+static XrJsonValue *make_definition_result_content(const char *symbol, const char *kind, bool found,
+                                                   const char *content) {
+    XR_DCHECK(symbol != NULL, "make_definition_result_content: NULL symbol");
+    XR_DCHECK(kind != NULL, "make_definition_result_content: NULL kind");
+    XR_DCHECK(content != NULL, "make_definition_result_content: NULL content");
+    XrJsonValue *structured = xjson_new_object();
+    XJSON_SET_STRING(structured, "symbol", symbol);
+    XJSON_SET_STRING(structured, "kind", kind);
+    XJSON_SET_BOOL(structured, "found", found);
+    XJSON_SET_STRING(structured, "content", content);
+    return structured;
 }
 
 /* --------------------------------------------------------------------------
@@ -276,6 +326,17 @@ static XrJsonValue *schema_syntax(void) {
     return s;
 }
 
+static XrJsonValue *schema_syntax_output(void) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "topic", "string", "Requested syntax topic");
+    schema_add_prop(p, "found", "boolean", "True when the topic was found");
+    schema_add_prop(p, "content", "string", "Syntax reference content");
+    xjson_object_set(s, "properties", p);
+    return s;
+}
+
 static XrJsonValue *schema_stdlib(void) {
     XrJsonValue *s = xjson_new_object();
     XJSON_SET_STRING(s, "type", "object");
@@ -290,6 +351,19 @@ static XrJsonValue *schema_stdlib(void) {
     return s;
 }
 
+static XrJsonValue *schema_stdlib_output(void) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "query", "string", "Requested stdlib search query");
+    schema_add_prop(p, "module", "string", "Effective module filter");
+    schema_add_prop(p, "matchCount", "integer", "Number of matching modules");
+    schema_add_prop(p, "found", "boolean", "True when at least one module matched");
+    schema_add_prop(p, "content", "string", "Formatted stdlib search result");
+    xjson_object_set(s, "properties", p);
+    return s;
+}
+
 static XrJsonValue *schema_definition(void) {
     XrJsonValue *s = xjson_new_object();
     XJSON_SET_STRING(s, "type", "object");
@@ -300,6 +374,18 @@ static XrJsonValue *schema_definition(void) {
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("symbol"));
     xjson_object_set(s, "required", r);
+    return s;
+}
+
+static XrJsonValue *schema_definition_output(void) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "symbol", "string", "Requested symbol");
+    schema_add_prop(p, "kind", "string", "Definition source: syntax, stdlib, or none");
+    schema_add_prop(p, "found", "boolean", "True when a definition was found");
+    schema_add_prop(p, "content", "string", "Definition content or not-found message");
+    xjson_object_set(s, "properties", p);
     return s;
 }
 
@@ -597,10 +683,14 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arg
     if (!topic || topic[0] == '\0') {
         return xmcp_make_error_result("Error: 'topic' parameter is required");
     }
+    if (!server->knowledge)
+        return xmcp_make_error_result("Error: knowledge base is not available");
 
     const char *content = xmcp_knowledge_lookup_topic(server->knowledge, topic);
-    if (content)
-        return xmcp_make_text_result(content, false);
+    if (content) {
+        return xmcp_make_text_structured_result(
+            content, make_syntax_result_content(topic, true, content), false);
+    }
 
     char msg[512];
     snprintf(msg, sizeof(msg),
@@ -610,7 +700,8 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, XrJsonValue *arg
              "channel, coroutine, concurrency_rules, modules, testing, "
              "operators, builtin_functions.",
              topic);
-    return xmcp_make_text_result(msg, false);
+    return xmcp_make_text_structured_result(msg, make_syntax_result_content(topic, false, msg),
+                                            false);
 }
 
 /* --------------------------------------------------------------------------
@@ -626,9 +717,15 @@ static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, XrJsonValue *arg
     if (!query || query[0] == '\0') {
         return xmcp_make_error_result("Error: 'query' parameter is required");
     }
+    if (!server->knowledge)
+        return xmcp_make_error_result("Error: knowledge base is not available");
 
-    char *text = xmcp_knowledge_search_stdlib(server->knowledge, query, module);
-    XrJsonValue *result = xmcp_make_text_result(text ? text : "No results found", false);
+    int match_count = 0;
+    char *text = xmcp_knowledge_search_stdlib(server->knowledge, query, module, &match_count);
+    if (!text)
+        return xmcp_make_error_result("Error: stdlib search failed");
+    XrJsonValue *result = xmcp_make_text_structured_result(
+        text, make_stdlib_result_content(query, module, match_count, text), false);
     xr_free(text);
     return result;
 }
@@ -645,18 +742,32 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *argume
     if (!symbol || symbol[0] == '\0') {
         return xmcp_make_error_result("Error: 'symbol' parameter is required");
     }
+    if (!server->knowledge)
+        return xmcp_make_error_result("Error: knowledge base is not available");
 
     /* Try syntax topic first (e.g., "chan", "class", "enum") */
     const char *topic_content = xmcp_knowledge_lookup_topic(server->knowledge, symbol);
-    if (topic_content)
-        return xmcp_make_text_result(topic_content, false);
+    if (topic_content) {
+        return xmcp_make_text_structured_result(
+            topic_content, make_definition_result_content(symbol, "syntax", true, topic_content),
+            false);
+    }
 
     /* Try stdlib search (e.g., "http.Server", "json.parse") */
-    char *stdlib_text = xmcp_knowledge_search_stdlib(server->knowledge, symbol, NULL);
+    int match_count = 0;
+    char *stdlib_text = xmcp_knowledge_search_stdlib(server->knowledge, symbol, NULL, &match_count);
     if (stdlib_text) {
-        XrJsonValue *result = xmcp_make_text_result(stdlib_text, false);
-        xr_free(stdlib_text);
-        return result;
+        if (match_count == 0) {
+            xr_free(stdlib_text);
+        } else {
+            XrJsonValue *result = xmcp_make_text_structured_result(
+                stdlib_text, make_definition_result_content(symbol, "stdlib", true, stdlib_text),
+                false);
+            xr_free(stdlib_text);
+            return result;
+        }
+    } else {
+        return xmcp_make_error_result("Error: stdlib search failed");
     }
 
     /* Try splitting "module.symbol" */
@@ -667,11 +778,19 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *argume
         if (mod_len < sizeof(mod)) {
             memcpy(mod, symbol, mod_len);
             mod[mod_len] = '\0';
-            char *found = xmcp_knowledge_search_stdlib(server->knowledge, dot + 1, mod);
-            if (found) {
-                XrJsonValue *result = xmcp_make_text_result(found, false);
+            int module_match_count = 0;
+            char *found =
+                xmcp_knowledge_search_stdlib(server->knowledge, dot + 1, mod, &module_match_count);
+            if (found && module_match_count > 0) {
+                XrJsonValue *result = xmcp_make_text_structured_result(
+                    found, make_definition_result_content(symbol, "stdlib", true, found), false);
                 xr_free(found);
                 return result;
+            }
+            if (found) {
+                xr_free(found);
+            } else {
+                return xmcp_make_error_result("Error: stdlib search failed");
             }
         }
     }
@@ -682,7 +801,8 @@ static XrJsonValue *tool_xray_definition(XmcpServer *server, XrJsonValue *argume
              "Try: language keywords (class, chan, enum), stdlib modules "
              "(http, json), or module.symbol format (http.Server).",
              symbol);
-    return xmcp_make_text_result(msg, false);
+    return xmcp_make_text_structured_result(
+        msg, make_definition_result_content(symbol, "none", false, msg), false);
 }
 
 /* --------------------------------------------------------------------------

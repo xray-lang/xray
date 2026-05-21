@@ -157,7 +157,7 @@ static char *read_stdlib_resource(XmcpServer *server, const char *module, int mo
     memcpy(buf, module, (size_t) module_len);
     buf[module_len] = '\0';
 
-    return xmcp_knowledge_search_stdlib(server->knowledge, buf, buf);
+    return xmcp_knowledge_search_stdlib(server->knowledge, buf, buf, NULL);
 }
 
 /* --------------------------------------------------------------------------
