@@ -49,7 +49,7 @@ static const XmcpResourceTemplateDef TEMPLATES[] = {
      "Look up a specific Xray language syntax topic by name. "
      "Topics: variables, types, functions, control_flow, class, struct, "
      "interface, enum, generics, collections, string, channel, coroutine, "
-     "concurrency_rules, modules, testing, operators, builtin_functions.",
+     "concurrency_rules, modules, testing, operators, builtin_functions, result.",
      "text/markdown"},
     {"xray://stdlib/{module}", "Xray Stdlib Module",
      "Detailed information about a specific standard library module.", "text/markdown"},

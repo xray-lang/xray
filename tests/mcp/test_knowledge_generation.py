@@ -318,6 +318,21 @@ def check_key_syntax(root: Path) -> list[str]:
     return errors
 
 
+def check_topic_metadata_lists(root: Path) -> list[str]:
+    topics = sorted(path.stem for path in (root / "docs/spec/source/cards/topics").glob("*.json"))
+    paths = [
+        root / "src/app/mcp/xmcp_tools.c",
+        root / "src/app/mcp/xmcp_resources.c",
+    ]
+    errors: list[str] = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        for topic in topics:
+            if topic not in text:
+                errors.append(f"{path.relative_to(root)}: topic metadata list missing {topic}")
+    return errors
+
+
 def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
     examples = {
         "code-review": "fn add(a: int, b: int) -> int {\n    return a + b\n}\nprint(add(1, 2))\n",
@@ -379,6 +394,7 @@ def main(argv: list[str]) -> int:
     errors.extend(check_symbol_subset(root, xray))
     errors.extend(check_generated_stdlib_api_tables(root))
     errors.extend(check_key_syntax(root))
+    errors.extend(check_topic_metadata_lists(root))
     errors.extend(check_prompt_smoke_examples(root, xray))
 
     if errors:
