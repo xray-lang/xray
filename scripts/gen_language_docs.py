@@ -46,6 +46,37 @@ def parse_blocks(path: Path, body: str) -> dict[str, str]:
     return blocks
 
 
+def block_shape(text: str) -> dict[str, int]:
+    """Structural fingerprint of a localized block; both languages must match."""
+    lines = text.splitlines()
+    return {
+        "h2": sum(1 for l in lines if l.startswith("## ")),
+        "h3": sum(1 for l in lines if l.startswith("### ")),
+        "h4": sum(1 for l in lines if l.startswith("#### ")),
+        "xray_fences": text.count("```xray"),
+        "ebnf_fences": text.count("```ebnf"),
+        "tables": sum(1 for l in lines if l.startswith("|") and "--" in l),
+    }
+
+
+def check_parity(path: Path, blocks: dict[str, str]) -> list[str]:
+    """Per-section structural parity check between cn and en blocks.
+
+    Catches the common regression where the English block is a stub of the
+    Chinese block. Both blocks must share the same heading hierarchy, the
+    same number of code fences (xray / ebnf) and the same number of tables.
+    """
+    cn = block_shape(blocks["cn"])
+    en = block_shape(blocks["en"])
+    errors: list[str] = []
+    for key in cn:
+        if cn[key] != en[key]:
+            errors.append(
+                f"{path}: cn/en parity mismatch on {key}: cn={cn[key]} en={en[key]}"
+            )
+    return errors
+
+
 def load_spec_units(source: Path) -> list[dict[str, Any]]:
     units: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -136,12 +167,21 @@ def generate_knowledge(root: Path, source: Path, check: bool, errors: list[str])
                 path.unlink()
 
 
-def generate(root: Path, check: bool) -> list[str]:
+def generate(root: Path, check: bool, parity: str = "warn") -> list[str]:
     source = root / "docs" / "spec" / "source"
     if not source.is_dir():
         raise ValueError(f"{source}: missing spec source directory")
     units = load_spec_units(source)
     errors: list[str] = []
+    parity_errors: list[str] = []
+    for unit in units:
+        parity_errors.extend(check_parity(unit["path"], unit["blocks"]))
+    if parity_errors:
+        if parity == "strict":
+            errors.extend(parity_errors)
+        else:
+            for err in parity_errors:
+                print(f"warning: {err}", file=sys.stderr)
     for lang, rel in SPEC_OUTPUTS.items():
         write_or_check(root / rel, render_spec(units, lang), check, errors)
     generate_knowledge(root, source, check, errors)
@@ -152,10 +192,16 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, type=Path)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--parity",
+        choices=("warn", "strict"),
+        default="warn",
+        help="cn/en structural parity policy (default: warn). Use strict to fail on mismatch.",
+    )
     args = parser.parse_args(argv)
 
     try:
-        errors = generate(args.root.resolve(), args.check)
+        errors = generate(args.root.resolve(), args.check, args.parity)
     except ValueError as err:
         print(f"error: {err}", file=sys.stderr)
         return 2
