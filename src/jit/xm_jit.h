@@ -88,6 +88,7 @@ XR_FUNC void xm_jit_destroy(XmJitState *jit);
 // On success, sets proto->jit_entry and returns true.
 // Compiles typed functions (i64/f64/ptr/bool parameters and return).
 XR_FUNC bool xm_jit_try_compile(XmJitState *jit, XrProto *proto);
+XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto);
 
 // Call a JIT-compiled function with arguments from the VM stack.
 // JIT convention: x0=coro, x1=pointer to raw int64 args array.

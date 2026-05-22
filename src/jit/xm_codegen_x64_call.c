@@ -704,112 +704,6 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET,
                          X64_SCRATCH_REG);
 
-            /* Fast path: load closure from call_args[0] into R11 */
-            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
-                       (int32_t) XM_JIT_CALL_ARGS_OFFSET);
-
-            /* NULL guard: an unconditional dereference of a null callee
-             * (e.g. uninitialised call_args[0] when the closure was passed
-             * via a different path) would SIGSEGV at the GC type load
-             * below.  Mirror ARM64's CBZ-to-slow guard (xm_codegen_call.c
-             * XM_CALL_DIRECT) so we route to xr_jit_call_func and let the
-             * VM raise the proper error. */
-            x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-            uint32_t je_null_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* Poison guard: high 16 bits non-zero ⇒ deopt marker survived
-             * in call_args[0] (e.g. 0xdead0001dead0001).  ARM64 uses
-             * `lsr x17, x16, #48; cbnz x17, slow`; emulate with rcx. */
-            x64_mov_rr(&ctx->buf, X64_RCX, X64_SCRATCH_REG);
-            x64_shr_ri(&ctx->buf, X64_RCX, 48);
-            x64_test_rr(&ctx->buf, X64_RCX, X64_RCX);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
-            uint32_t jnz_poison_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* GC type guard: only XR_TFUNCTION (5) uses fast path.
-             * Classes have different layout and need C bridge. */
-            x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_GC_TYPE_OFFSET);
-            x64_cmp_ri(&ctx->buf, X64_RCX, 5);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
-            uint32_t jne_type_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* Set call_closure for callee's upvalue access */
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_CLOSURE_OFFSET,
-                       X64_SCRATCH_REG);
-
-            /* R11 = closure->proto */
-            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
-                       (int32_t) XM_CLOSURE_PROTO_OFFSET);
-            /* Null proto guard */
-            x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-            uint32_t je_proto_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* Save proto ptr to jit_ctx->call_proto */
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET,
-                       X64_SCRATCH_REG);
-
-            /* R11 = proto->jit_entry */
-            x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
-                       (int32_t) XM_PROTO_JIT_ENTRY_OFFSET);
-            /* Null jit_entry guard */
-            x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-            uint32_t je_entry_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* Fast path: CALL via call_c_stub with R11=jit_entry,
-             * extra_arg = &call_args[1] */
-            x64_lea(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) (XM_JIT_CALL_ARGS_OFFSET + 8));
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
-            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
-            X64BranchPatch *cp_fast = &ctx->patches[ctx->npatch];
-            x64_emit8(&ctx->buf, 0xE8);
-            cp_fast->emit_pos = ctx->buf.pos;
-            cp_fast->target_blk = 0;
-            cp_fast->type = X64_PATCH_CALL_C;
-            cp_fast->cc = X64_CC_E;
-            ctx->npatch++;
-            x64_emit32(&ctx->buf, 0);
-            ctx->has_call_c = true;
-
-            /* Nested deopt cascade check */
-            x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) XM_DEOPT_MARKER);
-            x64_cmp_rr(&ctx->buf, X64_RAX, X64_RCX);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-            uint32_t je_cascade_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* JMP done */
-            x64_emit8(&ctx->buf, 0xE9);
-            uint32_t jmp_done_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-
-            /* Cascade: clear stale deopt_id */
-            uint32_t cascade_d_pos = ctx->buf.pos;
-            x64_xor_rr(&ctx->buf, X64_RCX, X64_RCX);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_RCX);
-
-            /* Slow path: xr_jit_call_func(coro, nargs) via call_c_stub */
-            uint32_t slow_d_pos = ctx->buf.pos;
-            x64_patch_rel32(&ctx->buf, je_null_d, slow_d_pos);
-            x64_patch_rel32(&ctx->buf, jnz_poison_d, slow_d_pos);
-            x64_patch_rel32(&ctx->buf, jne_type_d, slow_d_pos);
-            x64_patch_rel32(&ctx->buf, je_proto_d, slow_d_pos);
-            x64_patch_rel32(&ctx->buf, je_entry_d, slow_d_pos);
-            x64_patch_rel32(&ctx->buf, je_cascade_d, cascade_d_pos);
-
             /* Extract nargs for the helper call */
             if (xm_ref_is_const(ins->args[0])) {
                 uint32_t ci = XM_REF_INDEX(ins->args[0]);
@@ -839,32 +733,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             cp_slow->cc = X64_CC_E;
             ctx->npatch++;
             x64_emit32(&ctx->buf, 0);
-
-            /* Slow-path deopt propagation: xr_jit_call_func returns
-             * XM_DEOPT_MARKER when the call must be interpreted. */
-            x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) XM_DEOPT_MARKER);
-            x64_cmp_rr(&ctx->buf, X64_RAX, X64_RCX);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
-            uint32_t jne_slow_ok_d = ctx->buf.pos;
-            x64_emit32(&ctx->buf, 0);
-            x64_load_imm64(&ctx->buf, X64_RCX, 0xFFFF);
-            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_RCX);
-            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
-            X64BranchPatch *dp_slow = &ctx->patches[ctx->npatch];
-            x64_emit8(&ctx->buf, 0xE9);
-            dp_slow->emit_pos = ctx->buf.pos;
-            dp_slow->target_blk = 0;
-            dp_slow->type = X64_PATCH_DEOPT_JMP;
-            dp_slow->cc = X64_CC_E;
-            ctx->npatch++;
-            x64_emit32(&ctx->buf, 0);
-            ctx->has_deopt = true;
-            x64_patch_rel32(&ctx->buf, jne_slow_ok_d, ctx->buf.pos);
-
-            /* Done */
-            uint32_t done_d_pos = ctx->buf.pos;
-            x64_patch_rel32(&ctx->buf, jmp_done_d, done_d_pos);
+            ctx->has_call_c = true;
 
             /* Load call_result_tag → vreg_runtime_tags[vi] */
             if (xm_ref_is_vreg(ins->dst)) {
