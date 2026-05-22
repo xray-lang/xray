@@ -61,11 +61,20 @@ typedef struct XmcpRpcError {
 typedef XrJsonValue *(*XmcpMethodHandler)(XmcpServer *server, XrJsonValue *params,
                                           XmcpRpcError *error);
 
+/* Lifecycle precondition for a method. Encodes the only three meaningful
+ * states without scattering strcmp("initialize") special cases through the
+ * dispatcher. */
+typedef enum XmcpLifecycleRequirement {
+    XMCP_LC_ANY = 0,         /* Always accepted (ping, initialized, cancelled) */
+    XMCP_LC_MUST_BE_CREATED, /* Only valid before initialize succeeds (initialize itself) */
+    XMCP_LC_MUST_BE_READY,   /* Requires the client's initialized notification */
+} XmcpLifecycleRequirement;
+
 typedef struct XmcpMethodEntry {
-    const char *method;        /* JSON-RPC method name */
-    XmcpMethodHandler handler; /* Handler function */
-    bool is_notification;      /* true = no response expected */
-    bool needs_init;           /* true = reject if not yet initialized */
+    const char *method;                      /* JSON-RPC method name */
+    XmcpMethodHandler handler;               /* Handler function */
+    bool is_notification;                    /* true = no response expected */
+    XmcpLifecycleRequirement required_state; /* Lifecycle precondition */
 } XmcpMethodEntry;
 
 /* ---- Lifecycle handlers ------------------------------------------------- */
@@ -83,9 +92,9 @@ XR_FUNC void xmcp_send_notification(XmcpServer *server, const char *method, XrJs
 XR_FUNC void xmcp_send_log_notification(XmcpServer *server, const char *level, const char *message);
 
 /* Send a progress notification (notifications/progress).
- * progress_token comes from the request's _meta.progressToken.
- * progress and total are 0-based; total can be 0 if unknown. */
-XR_FUNC void xmcp_send_progress_notification(XmcpServer *server, int64_t progress_token,
-                                             int progress, int total);
+ * progress_token is the cloned _meta.progressToken value (string or number);
+ * NULL means no progress requested.  progress and total are 0-based. */
+XR_FUNC void xmcp_send_progress_notification(XmcpServer *server, const XrJsonValue *progress_token,
+                                             int64_t progress, int64_t total);
 
 #endif  // XMCP_PROTOCOL_H

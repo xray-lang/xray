@@ -246,17 +246,16 @@ add_xray_unit_test(test_regex regex/test_regex.c)
 
 add_xray_unit_test(test_api_defense api/test_api_defense.c)
 
-# test_repl needs the CLI isolate-profile factory (xr_cli_isolate_*)
+# test_repl needs the isolate-profile factory (xr_isolate_profile_*)
 # in addition to xray_core, so build it like test_cli_spec with an
 # explicit source list.
 add_executable(test_repl
     api/test_repl.c
-    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_isolate.c
+    ${CMAKE_SOURCE_DIR}/src/api/xisolate_profile.c
 )
 target_include_directories(test_repl PRIVATE
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_SOURCE_DIR}/src/app/cli
     ${CMAKE_SOURCE_DIR}/src/api
 )
 target_link_libraries(test_repl PRIVATE xray_core)
@@ -403,6 +402,10 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_protocol.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_registry.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_schema.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_lang.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_run.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_tools_kb.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c

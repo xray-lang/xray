@@ -147,8 +147,10 @@ static const char *read_topic_resource(XmcpServer *server, const char *name, int
     return xmcp_knowledge_lookup_topic(server->knowledge, buf);
 }
 
-/* Read xray://stdlib/{module} — returns module info from knowledge base */
-static char *read_stdlib_resource(XmcpServer *server, const char *module, int module_len) {
+/* Read xray://stdlib/{module} — returns the module body directly.  Search
+ * (with ranking and 8 KB rendering) is reserved for the xray_stdlib_search
+ * tool; resource reads should be O(N) lookup over a static body pointer. */
+static const char *read_stdlib_resource(XmcpServer *server, const char *module, int module_len) {
     if (!server->knowledge)
         return NULL;
 
@@ -158,7 +160,8 @@ static char *read_stdlib_resource(XmcpServer *server, const char *module, int mo
     memcpy(buf, module, (size_t) module_len);
     buf[module_len] = '\0';
 
-    return xmcp_knowledge_search_stdlib(server->knowledge, buf, buf, NULL);
+    const XmcpModule *m = xmcp_knowledge_get_module(server->knowledge, buf);
+    return m ? m->body : NULL;
 }
 
 /* --------------------------------------------------------------------------
@@ -236,7 +239,6 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
     }
 
     const char *text = NULL;
-    char *dyn_text = NULL; /* dynamically allocated text (must be freed) */
     const char *mime = "text/markdown";
 
     /* Try static resources first */
@@ -248,27 +250,25 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
         text = xmcp_knowledge_get_stdlib_list();
     }
 
-    /* Try template resources if no static match */
+    /* Try template resources if no static match.  Both readers return
+     * `const char *` pointing at static knowledge-base storage; no ownership
+     * crosses this boundary. */
     if (!text) {
         int var_len = 0;
         const char *var = match_template(uri, "xray://spec/topic/{name}", &var_len);
-        if (var) {
+        if (var)
             text = read_topic_resource(server, var, var_len);
-        }
     }
-    if (!text && !dyn_text) {
+    if (!text) {
         int var_len = 0;
         const char *var = match_template(uri, "xray://stdlib/{module}", &var_len);
-        if (var) {
-            dyn_text = read_stdlib_resource(server, var, var_len);
-        }
+        if (var)
+            text = read_stdlib_resource(server, var, var_len);
     }
 
-    const char *final_text = text ? text : dyn_text;
-    if (!final_text) {
+    if (!text) {
         error->code = XMCP_ERR_INVALID_PARAMS;
         snprintf(error->message, sizeof(error->message), "resources/read: unknown uri '%s'", uri);
-        xr_free(dyn_text);
         return NULL;
     }
 
@@ -277,9 +277,8 @@ XrJsonValue *xmcp_handle_resources_read(XmcpServer *server, XrJsonValue *params,
     XrJsonValue *item = xjson_new_object();
     XJSON_SET_STRING(item, "uri", uri);
     XJSON_SET_STRING(item, "mimeType", mime);
-    xjson_object_set(item, "text", xjson_new_string(final_text));
+    xjson_object_set(item, "text", xjson_new_string(text));
     xjson_array_push(contents, item);
     xjson_object_set(result, "contents", contents);
-    xr_free(dyn_text);
     return result;
 }

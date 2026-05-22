@@ -20,7 +20,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_isolate.h"
+#include "../../api/xisolate_profile.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../module/xbundle.h"
@@ -261,7 +261,7 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
                               const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
     printf("[bytecode] Building: %s\n", input);
 
-    XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
+    XrayIsolate *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
     if (!X) {
         fprintf(stderr, "Error: failed to create isolate\n");
         return 1;

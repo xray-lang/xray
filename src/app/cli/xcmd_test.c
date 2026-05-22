@@ -26,7 +26,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_isolate.h"
+#include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
 #include "xray.h"
 #include "xray_isolate.h"
@@ -247,11 +247,11 @@ static void run_test_file(const char *filepath, XrTestConfig *config, bool jitle
 
     // Create fresh isolate via profile factory
     XrayIsolateParams params;
-    xr_cli_isolate_params(XR_CLI_ISOLATE_TEST, &params);
+    xr_isolate_profile_params(XR_ISOLATE_PROFILE_TEST, &params);
     params.enable_jit = !jitless;
     if (jit_force)
         params.jit_threshold = 1;
-    XrayIsolate *X = xr_cli_isolate_create(&params);
+    XrayIsolate *X = xr_isolate_profile_create(&params);
     if (!X) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "failed to create isolate");

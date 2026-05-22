@@ -47,9 +47,16 @@ static XrJsonValue *build_capabilities(XmcpServer *server) {
 }
 
 XrJsonValue *xmcp_handle_initialize(XmcpServer *server, XrJsonValue *params, XmcpRpcError *error) {
-    (void) params;
     (void) error;
     XR_DCHECK(server != NULL, "xmcp_handle_initialize: NULL server");
+
+    /* Log connecting client for diagnostics and future version negotiation. */
+    const char *client_name = NULL;
+    XrJsonValue *client_info = params ? xjson_get_object(params, "clientInfo") : NULL;
+    if (client_info)
+        client_name = xjson_get_string(client_info, "name");
+    fprintf(stderr, "[xray-mcp] initialize from client: %s\n",
+            client_name ? client_name : "(unknown)");
 
     if (server->lifecycle_state == XMCP_LIFECYCLE_CREATED)
         server->lifecycle_state = XMCP_LIFECYCLE_INITIALIZE_SENT;

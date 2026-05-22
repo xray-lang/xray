@@ -15,7 +15,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_isolate.h"
+#include "../../api/xisolate_profile.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../runtime/xisolate_api.h"
@@ -122,7 +122,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     }
 
     /* Create isolate */
-    X = xr_cli_isolate_new(XR_CLI_ISOLATE_RUN);
+    X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_RUN);
     if (!X) {
         xr_cli_error("compile", "failed to create isolate");
         result = XR_CLI_EXIT_INTERNAL;

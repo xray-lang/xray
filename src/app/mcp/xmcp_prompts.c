@@ -177,47 +177,41 @@ XrJsonValue *xmcp_handle_prompts_list(XmcpServer *server, XmcpRpcError *error) {
  * prompts/get handler
  * -------------------------------------------------------------------------- */
 
-/* Build a messages array with system + user messages. */
+/* Build a single-message array: preamble + system instructions + user input
+ * merged into one "user" message.  MCP PromptMessage.role only allows
+ * "user" | "assistant", so there is no separate system role. */
 static XrJsonValue *build_prompt_messages(const char *system_text, const char *user_text) {
     XR_DCHECK(system_text != NULL, "build_prompt_messages: NULL system");
     XR_DCHECK(user_text != NULL, "build_prompt_messages: NULL user");
 
-    XrJsonValue *messages = xjson_new_array();
-
-    /* System message with language knowledge */
-    XrJsonValue *sys_msg = xjson_new_object();
-    XJSON_SET_STRING(sys_msg, "role", "user");
-
-    /* Build combined system content */
+    /* Concatenate: SYSTEM_PREAMBLE + system_text + "\n\n" + user_text */
     size_t preamble_len = strlen(SYSTEM_PREAMBLE);
     size_t system_len = strlen(system_text);
-    size_t total = preamble_len + system_len + 1;
+    size_t user_len = strlen(user_text);
+    size_t total = preamble_len + system_len + 2 /* \n\n */ + user_len + 1;
     char *combined = xr_malloc(total);
+    XR_DCHECK(combined != NULL, "build_prompt_messages: allocation failed");
+
+    XrJsonValue *messages = xjson_new_array();
     if (combined) {
         memcpy(combined, SYSTEM_PREAMBLE, preamble_len);
         memcpy(combined + preamble_len, system_text, system_len);
+        combined[preamble_len + system_len] = '\n';
+        combined[preamble_len + system_len + 1] = '\n';
+        memcpy(combined + preamble_len + system_len + 2, user_text, user_len);
         combined[total - 1] = '\0';
 
-        XrJsonValue *sys_content = xjson_new_object();
-        XJSON_SET_STRING(sys_content, "type", "text");
-        xjson_object_set(sys_content, "text", xjson_new_string(combined));
-        XrJsonValue *sys_arr = xjson_new_array();
-        xjson_array_push(sys_arr, sys_content);
-        xjson_object_set(sys_msg, "content", sys_arr);
+        XrJsonValue *msg = xjson_new_object();
+        XJSON_SET_STRING(msg, "role", "user");
+        XrJsonValue *content = xjson_new_object();
+        XJSON_SET_STRING(content, "type", "text");
+        xjson_object_set(content, "text", xjson_new_string(combined));
+        XrJsonValue *arr = xjson_new_array();
+        xjson_array_push(arr, content);
+        xjson_object_set(msg, "content", arr);
+        xjson_array_push(messages, msg);
         xr_free(combined);
     }
-    xjson_array_push(messages, sys_msg);
-
-    /* User message with the actual content */
-    XrJsonValue *usr_msg = xjson_new_object();
-    XJSON_SET_STRING(usr_msg, "role", "user");
-    XrJsonValue *usr_content = xjson_new_object();
-    XJSON_SET_STRING(usr_content, "type", "text");
-    xjson_object_set(usr_content, "text", xjson_new_string(user_text));
-    XrJsonValue *usr_arr = xjson_new_array();
-    xjson_array_push(usr_arr, usr_content);
-    xjson_object_set(usr_msg, "content", usr_arr);
-    xjson_array_push(messages, usr_msg);
 
     return messages;
 }

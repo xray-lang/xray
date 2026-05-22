@@ -24,9 +24,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xjson.h"
-#include "../cli/xcli_isolate.h"
-#include "../cli/xcli_spec.h"
-#include "../cli/xcli_diag.h"
+#include "../../api/xisolate_profile.h"
 #include "xray_isolate.h"
 #include <stdio.h>
 #include <string.h>
@@ -185,14 +183,16 @@ void xmcp_send_log_notification(XmcpServer *server, const char *level, const cha
     xmcp_send_notification(server, "notifications/message", params);
 }
 
-void xmcp_send_progress_notification(XmcpServer *server, int64_t progress_token, int progress,
-                                     int total) {
+void xmcp_send_progress_notification(XmcpServer *server, const XrJsonValue *progress_token,
+                                     int64_t progress, int64_t total) {
     XR_DCHECK(server != NULL, "xmcp_send_progress_notification: NULL server");
+    if (!progress_token)
+        return;
     if (server->lifecycle_state != XMCP_LIFECYCLE_READY)
         return;
 
     XrJsonValue *params = xjson_new_object();
-    XJSON_SET_INT(params, "progressToken", progress_token);
+    xjson_object_set(params, "progressToken", xjson_clone(progress_token));
     XJSON_SET_INT(params, "progress", progress);
     if (total > 0) {
         XJSON_SET_INT(params, "total", total);
@@ -268,19 +268,19 @@ static XrJsonValue *handle_prompts_get(XmcpServer *s, XrJsonValue *params, XmcpR
  * -------------------------------------------------------------------------- */
 
 static const XmcpMethodEntry METHOD_TABLE[] = {
-    /* method                       handler                notification  needs_init */
-    {"initialize", xmcp_handle_initialize, false, false},
-    {"notifications/initialized", handle_initialized, true, false},
-    {"notifications/cancelled", handle_cancelled, true, false},
-    {"ping", handle_ping, false, false},
-    {"tools/list", handle_tools_list, false, true},
-    {"tools/call", handle_tools_call, false, true},
-    {"resources/list", handle_resources_list, false, true},
-    {"resources/read", handle_resources_read, false, true},
-    {"resources/templates/list", handle_resource_templates_list, false, true},
-    {"prompts/list", handle_prompts_list, false, true},
-    {"prompts/get", handle_prompts_get, false, true},
-    {NULL, NULL, false, false}};
+    /* method                       handler                            notif  required_state */
+    {"initialize", xmcp_handle_initialize, false, XMCP_LC_MUST_BE_CREATED},
+    {"notifications/initialized", handle_initialized, true, XMCP_LC_ANY},
+    {"notifications/cancelled", handle_cancelled, true, XMCP_LC_ANY},
+    {"ping", handle_ping, false, XMCP_LC_ANY},
+    {"tools/list", handle_tools_list, false, XMCP_LC_MUST_BE_READY},
+    {"tools/call", handle_tools_call, false, XMCP_LC_MUST_BE_READY},
+    {"resources/list", handle_resources_list, false, XMCP_LC_MUST_BE_READY},
+    {"resources/read", handle_resources_read, false, XMCP_LC_MUST_BE_READY},
+    {"resources/templates/list", handle_resource_templates_list, false, XMCP_LC_MUST_BE_READY},
+    {"prompts/list", handle_prompts_list, false, XMCP_LC_MUST_BE_READY},
+    {"prompts/get", handle_prompts_get, false, XMCP_LC_MUST_BE_READY},
+    {NULL, NULL, false, XMCP_LC_ANY}};
 
 static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
     XR_DCHECK(s != NULL, "mcp_dispatch: NULL server");
@@ -332,16 +332,24 @@ static void mcp_dispatch(XmcpServer *s, XrJsonValue *msg) {
         return;
     }
 
-    if (strcmp(method, "initialize") == 0 && s->lifecycle_state != XMCP_LIFECYCLE_CREATED) {
-        mcp_send_error(s, id, XMCP_ERR_ALREADY_INIT, "Server already initialized");
-        return;
-    }
-
-    /* Pre-init guard */
-    if (entry->needs_init && s->lifecycle_state != XMCP_LIFECYCLE_READY) {
-        if (id)
-            mcp_send_error(s, id, XMCP_ERR_NOT_INITIALIZED, "Server not initialized");
-        return;
+    /* Lifecycle precondition. Single switch keeps every "may I run now?"
+     * decision in the dispatcher table; method handlers stay stateless. */
+    switch (entry->required_state) {
+        case XMCP_LC_ANY:
+            break;
+        case XMCP_LC_MUST_BE_CREATED:
+            if (s->lifecycle_state != XMCP_LIFECYCLE_CREATED) {
+                mcp_send_error(s, id, XMCP_ERR_ALREADY_INIT, "Server already initialized");
+                return;
+            }
+            break;
+        case XMCP_LC_MUST_BE_READY:
+            if (s->lifecycle_state != XMCP_LIFECYCLE_READY) {
+                if (id)
+                    mcp_send_error(s, id, XMCP_ERR_NOT_INITIALIZED, "Server not initialized");
+                return;
+            }
+            break;
     }
 
     /* Call handler */
@@ -397,7 +405,7 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
     setvbuf(stdout, NULL, _IONBF, 0);
 
     /* Create analyzer isolate for MCP code analysis tools */
-    s->isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_ANALYZE);
+    s->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
     if (!s->isolate) {
         mcp_log(s, 0, "failed to create isolate");
         xmcp_stdio_destroy(&s->transport);
@@ -475,52 +483,4 @@ int xmcp_server_run(XmcpServer *s) {
 
     mcp_log(s, 2, "MCP server stopped");
     return 0;
-}
-
-/* --------------------------------------------------------------------------
- * CLI entry: xray mcp-server [options]
- * -------------------------------------------------------------------------- */
-
-static int parse_log_level(const char *level) {
-    if (!level)
-        return 2; /* info */
-    if (strcmp(level, "error") == 0)
-        return 0;
-    if (strcmp(level, "warn") == 0)
-        return 1;
-    if (strcmp(level, "info") == 0)
-        return 2;
-    if (strcmp(level, "debug") == 0)
-        return 3;
-    return 2; /* default: info */
-}
-
-XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv) {
-    XR_DCHECK(inv != NULL, "inv is NULL");
-
-    const char *level_str = xr_cli_opt_string(&inv->options, "log-level", NULL);
-    const char *log_file_path = xr_cli_opt_string(&inv->options, "log-file", NULL);
-    int log_level = parse_log_level(level_str);
-
-    XmcpServerOptions options;
-    xmcp_server_options_default(&options);
-    options.enable_runner = xr_cli_opt_bool(&inv->options, "enable-runner");
-
-    XmcpServer *s = xmcp_server_new(&options);
-    if (!s) {
-        xr_cli_error("mcp-server", "failed to create MCP server");
-        return XR_CLI_EXIT_INTERNAL;
-    }
-    s->log_level = log_level;
-
-    if (log_file_path) {
-        s->log_file = fopen(log_file_path, "a");
-        if (!s->log_file) {
-            xr_cli_warn("mcp-server", "cannot open log file '%s'", log_file_path);
-        }
-    }
-
-    int rc = xmcp_server_run(s);
-    xmcp_server_free(s);
-    return (rc != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
 }
