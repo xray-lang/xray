@@ -259,6 +259,54 @@ def test_resources_and_prompts_protocol_paths(xray: Path) -> None:
         session.close()
 
 
+def test_resources_read_protocol_paths(xray: Path) -> None:
+    session = McpSession(xray)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+
+        session.send(request("resources/read", 2, {"uri": "xray://spec/cheatsheet"}))
+        static_response = session.recv()
+        assert static_response.get("id") == 2, static_response
+        static_contents = static_response["result"]["contents"]
+        assert isinstance(static_contents, list), static_response
+        assert static_contents[0]["uri"] == "xray://spec/cheatsheet", static_response
+        assert isinstance(static_contents[0].get("text"), str), static_response
+
+        session.send(request("resources/read", 3, {"uri": "xray://spec/topic/class"}))
+        topic_response = session.recv()
+        assert topic_response.get("id") == 3, topic_response
+        topic_contents = topic_response["result"]["contents"]
+        assert isinstance(topic_contents, list), topic_response
+        assert topic_contents[0]["uri"] == "xray://spec/topic/class", topic_response
+        assert "class" in topic_contents[0].get("text", "").lower(), topic_response
+
+        session.send(request("resources/read", 4, {"uri": "xray://stdlib/json"}))
+        stdlib_response = session.recv()
+        assert stdlib_response.get("id") == 4, stdlib_response
+        stdlib_contents = stdlib_response["result"]["contents"]
+        assert isinstance(stdlib_contents, list), stdlib_response
+        assert stdlib_contents[0]["uri"] == "xray://stdlib/json", stdlib_response
+        assert "json" in stdlib_contents[0].get("text", "").lower(), stdlib_response
+    finally:
+        session.close()
+
+
+def test_prompts_get_error_protocol_paths(xray: Path) -> None:
+    session = McpSession(xray)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+
+        session.send(request("prompts/get", 2, {}))
+        assert_error(session.recv(), 2, ERR_INVALID_PARAMS)
+
+        session.send(request("prompts/get", 3, {"name": "nonexistent-prompt"}))
+        assert_error(session.recv(), 3, ERR_INVALID_PARAMS)
+    finally:
+        session.close()
+
+
 def test_mixed_ndjson_request_notification_and_error(xray: Path) -> None:
     session = McpSession(xray)
     try:
@@ -336,6 +384,8 @@ def main() -> int:
         test_parse_error_and_content_length_line,
         test_runner_stdout_is_protocol_isolated,
         test_resources_and_prompts_protocol_paths,
+        test_resources_read_protocol_paths,
+        test_prompts_get_error_protocol_paths,
         test_mixed_ndjson_request_notification_and_error,
         test_tools_call_invalid_params_and_structured_content,
     ]
