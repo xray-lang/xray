@@ -691,8 +691,14 @@ vmcase(OP_LOOP_BACK) {
                 return XR_VM_CANCELLED;
             }
             coro->reductions = XR_CORO_REDUCTIONS;
-            frame->pc = pc;
-            return XR_VM_YIELD;
+            /* See xvm_dispatch_jump.inc.c (OP_JMP backward): without a
+             * scheduler we must not yield, otherwise the no-runtime
+             * fallback in xr_vm_interpret_proto_isolate would abandon
+             * execution on the first reductions exhaustion. */
+            if (XR_LIKELY(isolate->vm.runtime != NULL)) {
+                frame->pc = pc;
+                return XR_VM_YIELD;
+            }
         }
     }
 

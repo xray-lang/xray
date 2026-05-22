@@ -55,8 +55,17 @@ vmcase(OP_JMP) {
                 return XR_VM_CANCELLED;
             }
             coro->reductions = XR_CORO_REDUCTIONS;
-            frame->pc = pc - 1;
-            return XR_VM_YIELD;
+            /* Embedders that did not boot the multicore runtime (e.g. the
+             * minimal MCP runner, embedded REPLs, unit tests) have no
+             * scheduler to resume a yielded main coroutine — returning
+             * XR_VM_YIELD here would abandon execution mid-loop. In that
+             * mode just refill the budget and keep running; the deadline
+             * check above is the only thing that bounds tight loops, and
+             * it is sufficient because it is checked on every back-edge. */
+            if (XR_LIKELY(isolate->vm.runtime != NULL)) {
+                frame->pc = pc - 1;
+                return XR_VM_YIELD;
+            }
         }
 
 #ifdef XRAY_HAS_JIT
