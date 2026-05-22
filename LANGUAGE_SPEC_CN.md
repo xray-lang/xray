@@ -5471,4 +5471,3 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **upvalue** | 闭包捕获的外层变量 |
 | **VM** | Virtual Machine：xray 字节码虚拟机 |
 | **write barrier** | 写屏障：GC 在指针更新时插入的钩子 |
-
