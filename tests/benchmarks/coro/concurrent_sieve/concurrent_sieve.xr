@@ -1,0 +1,92 @@
+// 作者：xingleixu@gmail.com
+// 并发素数筛 (Concurrent Sieve of Eratosthenes)
+// 经典 CSP 管道模式：每个素数一个协程做过滤器
+// 测试管道吞吐量 + 大量协程级联通信
+import time
+
+let N = 10000  // 找到前 N 个素数
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+
+print("=== 并发素数筛测试 ===")
+print("目标素数数量:", N)
+
+// 数字生成器：向 channel 发送 2, 3, 4, ...
+fn generate(ch: Channel<int>, limit: int) {
+    for (let i = 2; i <= limit; i++) {
+        ch.send(i)
+    }
+    ch.close()
+}
+
+// 过滤器：过滤掉能被 prime 整除的数
+fn filter(in_ch: Channel<int>, out_ch: Channel<int>, prime: int) {
+    while (true) {
+        let n = in_ch.recv()
+        if (n == null) {
+            break
+        }
+        if (n % prime != 0) {
+            out_ch.send(n)
+        }
+    }
+    out_ch.close()
+}
+
+// 估算上界：找前 N 个素数需要检查到大约 N * ln(N) + N * ln(ln(N))
+fn estimate_limit(n: int) -> int {
+    if (n < 10) { return 30 }
+    // 粗略上界: n * 15 对于 n <= 100000 足够
+    return n * 15
+}
+
+let limit = estimate_limit(N)
+let start = time.monotonic()
+
+shared let channels = [Channel(100)]
+let tasks: Array<Task> = []
+tasks.push(go generate(channels[0], limit))
+
+let primes: Array<int> = []
+let count = 0
+let cur = 0  // index into channels array
+
+while (count < N) {
+    let prime = channels[cur].recv()
+    if (prime == null) {
+        break
+    }
+    primes.push(prime)
+    count++
+
+    if (count < N) {
+        channels.push(Channel(100))
+        let next_idx = channels.length - 1
+        tasks.push(go filter(channels[cur], channels[next_idx], prime))
+        cur = next_idx
+    }
+}
+
+if (count >= N) {
+    while (true) {
+        let ignored = channels[cur].recv()
+        if (ignored == null) {
+            break
+        }
+    }
+}
+for (task in tasks) {
+    await task
+}
+let elapsed = time.monotonic() - start
+
+print("找到素数:", count)
+print("最大素数:", primes[primes.length - 1])
+print("管道级数:", count)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("速度:", int(count * 1000 / elapsed), "primes/sec")
+} else {
+    print("速度: 太快无法测量")
+}

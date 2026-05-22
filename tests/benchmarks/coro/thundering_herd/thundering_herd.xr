@@ -1,0 +1,65 @@
+// 作者：xingleixu@gmail.com
+// 惊群测试 (Thundering Herd)
+// N 个协程同时等待同一个 channel，然后一次性全部唤醒
+// 测试调度器在大量协程同时就绪时的处理效率
+import time
+
+let N = 10000    // 等待协程数
+let ROUNDS = 10  // 轮数
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+if (process.args.length > 1) {
+    ROUNDS = int(process.args[1]) ?? ROUNDS
+}
+
+print("=== Thundering Herd 测试 ===")
+print("协程数量:", N)
+print("轮数:", ROUNDS)
+
+// 等待者：从 channel 接收一个信号后立即返回
+fn waiter(ch: Channel<int>) -> int {
+    let val = ch.recv()
+    return val ?? 0
+}
+
+let start = time.monotonic()
+let total_woken = 0
+
+for (let r = 0; r < ROUNDS; r++) {
+    // 创建 channel 和 N 个等待者
+    shared const signal_ch = Channel(N)
+    let tasks: Array<Task> = []
+    for (let i = 0; i < N; i++) {
+        tasks.push(go waiter(signal_ch))
+    }
+
+    // 短暂等待确保所有协程都在 recv 上阻塞
+    time.sleep(1)
+
+    // 一次性发送 N 个信号（惊群唤醒）
+    let send_start = time.monotonic()
+    for (let i = 0; i < N; i++) {
+        signal_ch.send(i)
+    }
+
+    // 等待所有协程完成
+    let round_sum = 0
+    for (t in tasks) {
+        round_sum = round_sum + (await t)
+    }
+    signal_ch.close()
+    total_woken = total_woken + N
+}
+
+let elapsed = time.monotonic() - start
+
+print("总唤醒数:", total_woken)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(total_woken * 1000 / elapsed), "wakeups/sec")
+    print("单次唤醒:", int(elapsed * 1000000 / total_woken), "ns")
+} else {
+    print("吞吐量: 太快无法测量")
+    print("单次唤醒: 太快无法测量")
+}

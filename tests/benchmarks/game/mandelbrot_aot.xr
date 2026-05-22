@@ -1,0 +1,41 @@
+/*
+** mandelbrot_aot.xr - Mandelbrot benchmark (AOT typed version)
+*/
+
+fn mandelbrot(size: int): int {
+    let w = size
+    let h = size
+    let count = 0
+    let inv_w = 2.0 / float(w)
+    let inv_h = 2.0 / float(h)
+    for (let y = 0; y < h; y++) {
+        let ci = inv_h * float(y) - 1.0
+        for (let x = 0; x < w; x++) {
+            let zr = 0.0
+            let zi = 0.0
+            let tr = 0.0
+            let ti = 0.0
+            let cr = inv_w * float(x) - 1.5
+            let i = 0
+            while (i < 50 && (tr + ti) <= 4.0) {
+                zi = 2.0 * zr * zi + ci
+                zr = tr - ti + cr
+                tr = zr * zr
+                ti = zi * zi
+                i = i + 1
+            }
+            if ((tr + ti) <= 4.0) {
+                count = count + 1
+            }
+        }
+    }
+    return count
+}
+
+fn run(size: int) {
+    let count = mandelbrot(size)
+    print("Points in set: " + count)
+}
+
+let size: int = process.args.length > 0 ? int(process.args[0]) ?? 200 : 200
+run(size)

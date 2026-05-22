@@ -1,0 +1,85 @@
+// 作者：xingleixu@gmail.com
+// 多级管道测试 (Pipeline)
+// 数据流经 N 级处理阶段，每级一个协程
+// 测试管道吞吐量 + 背压 + 多级通道串联
+import time
+
+let STAGES = 100     // 管道级数
+let ITEMS = 100000   // 数据项数
+if (process.args.length > 0) {
+    STAGES = int(process.args[0]) ?? STAGES
+}
+if (process.args.length > 1) {
+    ITEMS = int(process.args[1]) ?? ITEMS
+}
+
+print("=== Pipeline 测试 ===")
+print("管道级数:", STAGES)
+print("数据项数:", ITEMS)
+
+// 管道阶段：从 in 读取，处理后写入 out
+fn stage(in_ch: Channel<int>, out_ch: Channel<int>, stage_id: int) {
+    while (true) {
+        let val = in_ch.recv()
+        if (val == null) { break }
+        // 每级加 1
+        out_ch.send(val + 1)
+    }
+    out_ch.close()
+}
+
+let start = time.monotonic()
+
+// 构建管道：创建 STAGES+1 个 channel，STAGES 个协程
+shared let chs = [Channel(10)]
+let tasks: Array<Task> = []
+
+for (let i = 0; i < STAGES; i++) {
+    chs.push(Channel(10))
+    tasks.push(go stage(chs[i], chs[i + 1], i))
+}
+
+let first_ch = chs[0]
+let last_ch = chs[STAGES]
+
+// 生产者：向第一个 channel 发送数据
+fn produce(ch: Channel<int>, count: int) {
+    for (let i = 0; i < count; i++) {
+        ch.send(i)
+    }
+    ch.close()
+}
+let producer = go produce(first_ch, ITEMS)
+
+// 消费者：从最后一个 channel 接收
+let sum = 0
+let count = 0
+while (true) {
+    let val = last_ch.recv()
+    if (val == null) { break }
+    sum = sum + (int(val) ?? 0)
+    count++
+}
+
+await producer
+for (t in tasks) {
+    await t
+}
+
+let elapsed = time.monotonic() - start
+
+// 每项经过 STAGES 级，每级 +1，所以 item i 变为 i + STAGES
+// sum = Σ(i + STAGES) for i=0..ITEMS-1 = ITEMS*(ITEMS-1)/2 + ITEMS*STAGES
+let expected = ITEMS * (ITEMS - 1) / 2 + ITEMS * STAGES
+print("接收数量:", count)
+print("结果:", sum)
+print("预期:", expected)
+print("正确:", sum == expected)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(count * 1000 / elapsed), "items/sec")
+    print("每项延迟:", int(elapsed * 1000000 / count), "ns (", STAGES, "stages)")
+} else {
+    print("吞吐量: 太快无法测量")
+    print("每项延迟: 太快无法测量")
+}

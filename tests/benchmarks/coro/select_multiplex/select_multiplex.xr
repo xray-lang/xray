@@ -1,0 +1,67 @@
+// 作者：xingleixu@gmail.com
+// Select 多路复用测试
+// 4 个生产者各有自己的 channel，1 个消费者用 select 接收
+// 测试 select 调度效率和多通道唤醒性能
+//
+// [已知问题] select + default 分支 busy-loop 会饿死生产者，
+//            导致 4000 条消息就超时。详见 issue 报告。
+import time
+
+let MSGS = 1000        // 每个生产者发送的消息数
+if (process.args.length > 0) {
+    MSGS = int(process.args[0]) ?? MSGS
+}
+
+const PRODUCERS = 4
+const TOTAL = PRODUCERS * MSGS
+
+print("=== Select 多路复用测试 ===")
+print("生产者数量:", PRODUCERS)
+print("每生产者消息:", MSGS)
+print("总消息数:", TOTAL)
+
+// 生产者：向 channel 发送消息
+fn producer(ch: Channel<int>, id: int, count: int) {
+    for (let i = 0; i < count; i++) {
+        ch.send(id * 1000000 + i)
+    }
+    ch.close()
+}
+
+let start = time.monotonic()
+
+shared const ch0 = Channel(10)
+shared const ch1 = Channel(10)
+shared const ch2 = Channel(10)
+shared const ch3 = Channel(10)
+
+let t0 = go producer(ch0, 0, MSGS)
+let t1 = go producer(ch1, 1, MSGS)
+let t2 = go producer(ch2, 2, MSGS)
+let t3 = go producer(ch3, 3, MSGS)
+
+// 消费者：用 select 轮询 4 个 channel 直到收齐所有消息
+let received = 0
+
+while (received < TOTAL) {
+    select {
+        msg from ch0 -> { received++ }
+        msg from ch1 -> { received++ }
+        msg from ch2 -> { received++ }
+        msg from ch3 -> { received++ }
+    }
+}
+
+await t0
+await t1
+await t2
+await t3
+
+let elapsed = time.monotonic() - start
+print("接收总数:", received)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(received * 1000 / elapsed), "msg/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}

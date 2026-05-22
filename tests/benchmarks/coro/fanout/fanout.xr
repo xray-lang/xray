@@ -1,0 +1,77 @@
+// 作者：xingleixu@gmail.com
+// 扇出扇入测试（Fan-out/Fan-in）
+// 一个分发器将任务分发给 N 个工作协程，然后收集结果
+import time
+let N = 1000
+// 工作协程数量
+let TASKS = 100000
+// 任务数量
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+if (process.args.length > 1) {
+    TASKS = int(process.args[1]) ?? TASKS
+}
+print("=== Fanout 测试 ===")
+print("工作协程:", N)
+print("任务数量:", TASKS)
+shared const task_ch = Channel(100)
+// 任务队列
+shared const result_ch = Channel(100)
+
+// 结果队列
+// 工作协程：从任务队列取任务，处理后发送结果
+fn worker(id: int) {
+    while (true) {
+        let task = task_ch.recv()
+        if (task == null) {
+            break
+        }
+        // 模拟计算
+        let result = task * 2
+        result_ch.send(result)
+    }
+}
+
+// 收集器：收集所有结果
+fn collector(expected_count: int) -> int {
+    let sum = 0
+    for (let i = 0; i < expected_count; i++) {
+        sum = sum + result_ch.recv()
+    }
+    return sum
+}
+
+let start = time.monotonic()
+// 启动工作协程
+let workers: Array<Task> = []
+for (let i = 0; i < N; i++) {
+    workers.push(go worker(i))
+}
+// 启动收集器
+let collector_task = go collector(TASKS)
+// 分发任务
+for (let i = 0; i < TASKS; i++) {
+    task_ch.send(i)
+}
+// 关闭任务队列，通知工作协程退出
+task_ch.close()
+// 等待所有工作协程完成
+for (w in workers) {
+    await w
+}
+// 等待收集器完成
+let result = await collector_task
+let elapsed = time.monotonic() - start
+result_ch.close()
+// 预期结果: (0 + 1 + 2 + ... + (TASKS-1)) * 2 = TASKS * (TASKS - 1)
+let expected = TASKS * (TASKS - 1)
+print("结果:", result)
+print("预期:", expected)
+print("正确:", result == expected)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}

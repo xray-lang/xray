@@ -1,0 +1,112 @@
+// GC Stress Test: Producer-Consumer
+// Tests cross-generational references and write barrier overhead.
+// A long-lived queue (old gen) constantly receives new objects (young gen)
+// and old objects are dequeued and discarded.
+// This creates a steady stream of old→young references.
+//
+// Usage: xray gc_producer_consumer.xr -- [iterations]
+
+// Ring buffer queue using array
+fn createQueue(capacity: int) {
+    let data = []
+    let i = 0
+    while (i < capacity) {
+        data.push(null)
+        i = i + 1
+    }
+    return { "data": data, "head": 0, "tail": 0, "size": 0, "capacity": capacity }
+}
+
+fn enqueue(q, item) {
+    q.data[q.tail] = item
+    q.tail = (q.tail + 1) % q.capacity
+    q.size = q.size + 1
+}
+
+fn dequeue(q) {
+    let item = q.data[q.head]
+    q.data[q.head] = null
+    q.head = (q.head + 1) % q.capacity
+    q.size = q.size - 1
+    return item
+}
+
+fn run(n: int) {
+    let queueSize = 1000
+
+    // Phase 1: Steady-state producer-consumer
+    // Queue is old, items are young → write barrier on every enqueue
+    let q = createQueue(queueSize)
+
+    // Fill queue initially
+    let i = 0
+    while (i < queueSize) {
+        enqueue(q, { "id": i, "payload": "data_" + i })
+        i = i + 1
+    }
+    print("Queue initialized: size=" + q.size)
+
+    // Steady-state: produce and consume at same rate
+    let checksum = 0
+    i = 0
+    while (i < n * 1000) {
+        let old = dequeue(q)
+        checksum = checksum + old.id
+        enqueue(q, { "id": i, "payload": "new_" + (i % 100) })
+        i = i + 1
+    }
+    print("Phase 1 (steady state x" + (n * 1000) + "): checksum=" + checksum)
+
+    // Phase 2: Burst producer (queue grows then shrinks)
+    // Creates temporary spikes of young objects referenced by old queue
+    let burstQ = createQueue(5000)
+    let total = 0
+    let round = 0
+    while (round < n) {
+        // Burst: produce 100 items
+        i = 0
+        while (i < 100) {
+            enqueue(burstQ, { "v": round * 100 + i })
+            i = i + 1
+        }
+        // Consume all
+        while (burstQ.size > 0) {
+            let item = dequeue(burstQ)
+            total = total + item.v
+        }
+        round = round + 1
+    }
+    print("Phase 2 (burst x" + n + "): total=" + total)
+
+    // Phase 3: Multiple queues with cross-references
+    // Items in one queue point to items from another → complex reference graph
+    let q1 = createQueue(500)
+    let q2 = createQueue(500)
+    i = 0
+    while (i < 500) {
+        let item1 = { "id": i, "partner": null }
+        let item2 = { "id": i + 10000, "partner": item1 }
+        item1.partner = item2
+        enqueue(q1, item1)
+        enqueue(q2, item2)
+        i = i + 1
+    }
+    // Churn with cross-references
+    checksum = 0
+    i = 0
+    while (i < n * 100) {
+        let old1 = dequeue(q1)
+        let old2 = dequeue(q2)
+        checksum = checksum + old1.id + old2.partner.id
+        let new1 = { "id": i, "partner": null }
+        let new2 = { "id": i + 10000, "partner": new1 }
+        new1.partner = new2
+        enqueue(q1, new1)
+        enqueue(q2, new2)
+        i = i + 1
+    }
+    print("Phase 3 (cross-ref x" + (n * 100) + "): checksum=" + checksum)
+}
+
+let n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+run(n)

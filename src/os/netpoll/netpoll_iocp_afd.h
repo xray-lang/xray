@@ -56,6 +56,7 @@
 // through GetProcAddress at init time).
 #include <winternl.h>
 #include <stdint.h>
+#include <stdatomic.h>
 
 // ============================================================================
 // AFD constants (private; documented only via reverse engineering)
@@ -79,7 +80,7 @@
 // includes AFD_POLL_LOCAL_CLOSE so we get a notification when the
 // user closes a SOCKET that's still registered with us.
 #define XR_AFD_ALL_POLL_EVENTS                                                                     \
-    (AFD_POLL_RECEIVE | AFD_POLL_RECEIVE_EXPEDITED | AFD_POLL_SEND | AFD_POLL_DISCONNECT |         \
+    (AFD_POLL_RECEIVE | AFD_POLL_RECEIVE_EXPEDITED | AFD_POLL_DISCONNECT |                         \
      AFD_POLL_ABORT | AFD_POLL_LOCAL_CLOSE | AFD_POLL_ACCEPT | AFD_POLL_CONNECT_FAIL)
 
 // ============================================================================
@@ -137,8 +138,8 @@ typedef struct XrAfdContext {
     HANDLE afd_device;         // Owned; opened via NtCreateFile on \Device\Afd\XrayN
     ULONG_PTR completion_key;  // Stored at CreateIoCompletionPort time; lets dispatch distinguish
                                // AFD completions from self-wakeup
-    void *update_queue_head;  // XrPollDesc*; intrusive single-linked stack of pds awaiting AFD poll
-                              // re-submit
+    _Atomic(void *) update_queue_head;  // XrPollDesc*; intrusive single-linked stack of pds awaiting AFD poll
+                                        // re-submit
 } XrAfdContext;
 
 // ============================================================================

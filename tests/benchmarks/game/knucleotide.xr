@@ -1,0 +1,126 @@
+/*
+** knucleotide.xr - K-Nucleotide 频率统计基准测试 xray 版本
+** 作者：xingleixu@gmail.com
+*/
+const IM = 139968
+const IA = 3877
+const IC = 29573
+let seed = 42
+let hs_chars = ["A", "C", "G", "T"]
+let hs_probs = [0.302955, 0.197988, 0.197547, 0.301509]
+
+fn make_cumulative(probs) {
+    let cp = 0
+    for (j in 0..probs.length) {
+        cp = cp + probs[j]
+        probs[j] = cp
+    }
+}
+
+fn select_random(chars, probs) {
+    seed = (seed * IA + IC) % IM
+    let r = seed / IM
+    for (j in 0..probs.length) {
+        if (r < probs[j]) {
+            return chars[j]
+        }
+    }
+    return chars[probs.length - 1]
+}
+
+fn generate_sequence(count) {
+    let sb = new StringBuilder()
+    for (j in 0..count) {
+        sb.append(select_random(hs_chars, hs_probs))
+    }
+    return sb.toString()
+}
+
+fn count_frequencies(seq, k) {
+    let freq = #{}
+    let end = seq.length - k + 1
+    for (j in 0..end) {
+        let subseq = seq.substring(j, j + k)
+        freq.increment(subseq)
+    }
+    return freq
+}
+
+fn format_float(value, decimals) {
+    let multiplier = 1
+    for (d in 0..decimals) {
+        multiplier = multiplier * 10
+    }
+    let tmp = value * multiplier + 0.5
+    let rounded = tmp.floor() / multiplier
+    let int_part = rounded.floor()
+    let frac_part = rounded - int_part
+    let frac_str = ""
+    for (d in 0..decimals) {
+        frac_part = frac_part * 10
+        let digit = frac_part.floor()
+        frac_str = frac_str + string(int(digit))
+        frac_part = frac_part - digit
+    }
+    return string(int(int_part)) + "." + frac_str
+}
+
+fn print_frequencies(seq, k) {
+    let freq = count_frequencies(seq, k)
+    let total = seq.length - k + 1
+    let keys = freq.keys()
+    let counts = []
+    for (key in keys) {
+        counts.push(freq[key])
+    }
+    // 冒泡排序
+    let len = keys.length
+    for (a in 0..(len - 1)) {
+        for (b in 0..(len - 1 - a)) {
+            let swap = false
+            if (counts[b] < counts[b + 1]) {
+                swap = true
+            } else if (counts[b] == counts[b + 1] && keys[b] > keys[b + 1]) {
+                swap = true
+            }
+            if (swap) {
+                let tk = keys[b]
+                keys[b] = keys[b + 1]
+                keys[b + 1] = tk
+                let tc = counts[b]
+                counts[b] = counts[b + 1]
+                counts[b + 1] = tc
+            }
+        }
+    }
+    // 输出
+    for (idx in 0..keys.length) {
+        let pct = counts[idx] * 100 / total
+        print(keys[idx] + " " + format_float(pct, 3))
+    }
+    print("")
+}
+
+fn print_count(seq, frag) {
+    let freq = count_frequencies(seq, frag.length)
+    let count = 0
+    if (freq.has(frag)) {
+        count = freq[frag]
+    }
+    print(string(count) + "	" + frag)
+}
+
+// 执行
+let n = 1000
+if (process.args.length > 0) {
+    n = int(process.args[0])
+}
+make_cumulative(hs_probs)
+let seq = generate_sequence(n * 5)
+print_frequencies(seq, 1)
+print_frequencies(seq, 2)
+print_count(seq, "GGT")
+print_count(seq, "GGTA")
+print_count(seq, "GGTATT")
+print_count(seq, "GGTATTTTAATT")
+print_count(seq, "GGTATTTTAATTTATAGT")

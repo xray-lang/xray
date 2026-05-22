@@ -165,9 +165,10 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                         // CAS NIL → coro (prevents overwriting concurrent READY)
                         if (atomic_compare_exchange_strong(gpp, &old, (uintptr_t) coro)) {
                             atomic_fetch_add(&runtime->netpoll.waiters, 1);
+                            int mode = (events & XR_WAIT_READ) ? XR_POLL_READ : XR_POLL_WRITE;
+                            xr_netpoll_arm_mode(pd, mode);
                             if (timeout_ms > 0) {
                                 int64_t deadline_ns = get_time_us() * 1000 + timeout_ms * 1000000LL;
-                                int mode = (events & XR_WAIT_READ) ? XR_POLL_READ : XR_POLL_WRITE;
                                 XrWorker *worker = xr_current_worker();
                                 XrTimerWheel *tw = worker ? worker->p.timer_wheel : NULL;
                                 xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode,

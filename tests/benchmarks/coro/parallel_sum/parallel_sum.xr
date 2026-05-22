@@ -1,0 +1,63 @@
+// 作者：xingleixu@gmail.com
+// 并行求和测试
+// 将大数组分成 N 份，并行计算部分和，最后汇总
+import time
+let N = 8
+// 并行度
+let SIZE = 10000000
+// 数组大小（1000万）
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+if (process.args.length > 1) {
+    SIZE = int(process.args[1]) ?? SIZE
+}
+print("=== 并行求和测试 ===")
+print("并行度:", N)
+print("数组大小:", SIZE)
+
+// 计算部分和
+fn partial_sum(start: int, end: int) -> int {
+    let sum = 0
+    for (let i = start; i < end; i++) {
+        sum = sum + i
+    }
+    return sum
+}
+
+let start_time = time.monotonic()
+// 并行计算
+let chunk_size = SIZE / N
+let tasks: Array<Task> = []
+for (let i = 0; i < N; i++) {
+    let chunk_start = i * chunk_size
+    let chunk_end = chunk_start + chunk_size
+    if (i == N - 1) {
+        chunk_end = SIZE
+    }
+    tasks.push(go partial_sum(chunk_start, chunk_end))
+}
+// 汇总结果
+let total = 0
+for (task in tasks) {
+    let r = await task
+    total = total + r
+}
+let elapsed = time.monotonic() - start_time
+// 预期结果: 0 + 1 + 2 + ... + (SIZE-1) = SIZE * (SIZE - 1) / 2
+let expected = SIZE * (SIZE - 1) / 2
+print("结果:", total)
+print("预期:", expected)
+print("正确:", total == expected)
+print("时间:", elapsed, "ms")
+// 串行对比
+let serial_start = time.monotonic()
+let serial_sum = partial_sum(0, SIZE)
+let serial_elapsed = time.monotonic() - serial_start
+print("串行时间:", serial_elapsed, "ms")
+print("串行结果:", serial_sum)
+if (elapsed > 0) {
+    print("加速比:", float(serial_elapsed) / float(elapsed))
+} else {
+    print("加速比: 太快无法测量")
+}

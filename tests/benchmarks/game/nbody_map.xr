@@ -1,0 +1,111 @@
+/*
+** nbody_map.xr - N-Body Benchmark (Map version for comparison)
+**
+** Same algorithm as nbody.xr but using Map<string, float> instead of
+** typed Json objects, to measure the performance difference.
+*/
+const PI = 3.141592653589793
+const DAYS_PER_YEAR = 365.24
+const SOLAR_MASS = 4.0 * PI * PI
+
+fn createBody(x, y, z, vx, vy, vz, mass) {
+    return {"x" => x, "y" => y, "z" => z, "vx" => vx, "vy" => vy, "vz" => vz, "mass" => mass}
+}
+
+fn createBodies() {
+    let bodies = []
+    bodies.push(createBody(0, 0, 0, 0, 0, 0, SOLAR_MASS))
+    bodies.push(createBody(4.84143, -1.16032, -0.103622, 0.00166008 * DAYS_PER_YEAR, 0.00769901 * DAYS_PER_YEAR, -6.9046e-05 * DAYS_PER_YEAR, 0.000954792 * SOLAR_MASS))
+    bodies.push(createBody(8.34337, 4.1248, -0.403523, -0.00276743 * DAYS_PER_YEAR, 0.00499853 * DAYS_PER_YEAR, 2.30417e-05 * DAYS_PER_YEAR, 0.000285886 * SOLAR_MASS))
+    bodies.push(createBody(12.8944, -15.1112, -0.223308, 0.0029646 * DAYS_PER_YEAR, 0.00237847 * DAYS_PER_YEAR, -2.9659e-05 * DAYS_PER_YEAR, 4.36624e-05 * SOLAR_MASS))
+    bodies.push(createBody(15.3797, -25.9193, 0.179259, 0.00268068 * DAYS_PER_YEAR, 0.00162824 * DAYS_PER_YEAR, -9.51592e-05 * DAYS_PER_YEAR, 5.15139e-05 * SOLAR_MASS))
+    return bodies
+}
+
+fn offsetMomentum(bodies) {
+    let px = 0.0
+    let py = 0.0
+    let pz = 0.0
+    let i = 0
+    while (i < bodies.length) {
+        let b = bodies[i]
+        px = px + b["vx"] * b["mass"]
+        py = py + b["vy"] * b["mass"]
+        pz = pz + b["vz"] * b["mass"]
+        i = i + 1
+    }
+    bodies[0]["vx"] = -px / SOLAR_MASS
+    bodies[0]["vy"] = -py / SOLAR_MASS
+    bodies[0]["vz"] = -pz / SOLAR_MASS
+}
+
+fn energy(bodies): float {
+    let e = 0.0
+    let nbodies = bodies.length
+    let i = 0
+    while (i < nbodies) {
+        let bi = bodies[i]
+        e = e + 0.5 * bi["mass"] * (bi["vx"] * bi["vx"] + bi["vy"] * bi["vy"] + bi["vz"] * bi["vz"])
+        let j = i + 1
+        while (j < nbodies) {
+            let bj = bodies[j]
+            let dx = bi["x"] - bj["x"]
+            let dy = bi["y"] - bj["y"]
+            let dz = bi["z"] - bj["z"]
+            let distance = (dx * dx + dy * dy + dz * dz).sqrt()
+            e = e - (bi["mass"] * bj["mass"]) / distance
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return e
+}
+
+fn advance(bodies, dt: float) {
+    let nbodies = bodies.length
+    let i = 0
+    while (i < nbodies) {
+        let bi = bodies[i]
+        let j = i + 1
+        while (j < nbodies) {
+            let bj = bodies[j]
+            let dx = bi["x"] - bj["x"]
+            let dy = bi["y"] - bj["y"]
+            let dz = bi["z"] - bj["z"]
+            let distanceSquared = dx * dx + dy * dy + dz * dz
+            let distance = distanceSquared.sqrt()
+            let mag = dt / (distanceSquared * distance)
+            bi["vx"] = bi["vx"] - dx * bj["mass"] * mag
+            bi["vy"] = bi["vy"] - dy * bj["mass"] * mag
+            bi["vz"] = bi["vz"] - dz * bj["mass"] * mag
+            bj["vx"] = bj["vx"] + dx * bi["mass"] * mag
+            bj["vy"] = bj["vy"] + dy * bi["mass"] * mag
+            bj["vz"] = bj["vz"] + dz * bi["mass"] * mag
+            j = j + 1
+        }
+        i = i + 1
+    }
+    i = 0
+    while (i < nbodies) {
+        let b = bodies[i]
+        b["x"] = b["x"] + dt * b["vx"]
+        b["y"] = b["y"] + dt * b["vy"]
+        b["z"] = b["z"] + dt * b["vz"]
+        i = i + 1
+    }
+}
+
+fn main() {
+    let n = process.args.length > 0 ? int(process.args[0]) ?? 500000 : 500000
+    let bodies = createBodies()
+    offsetMomentum(bodies)
+    print(energy(bodies))
+    let i = 0
+    while (i < n) {
+        advance(bodies, 0.01)
+        i = i + 1
+    }
+    print(energy(bodies))
+}
+
+main()

@@ -1,0 +1,33 @@
+/*
+ * http_server.xr - xray HTTP server for benchmarking
+ *
+ * Minimal overhead: static/dynamic routes, no logging in the hot path.
+ *
+ * Endpoints:
+ *   GET /plaintext  - Static "Hello, World!" response
+ *   GET /json       - JSON response
+ *   POST /echo      - Echo request body
+ *
+ * Usage:
+ *   ./build/xray tests/benchmarks/http/http_server.xr [-- port]
+ */
+
+import http
+
+let port = 8080
+if (process.args.length > 0) {
+    port = int(process.args[0]) ?? 8080
+}
+
+// Static plaintext route (pre-built response, zero overhead)
+http.route("GET", "/plaintext", "Hello, World!")
+
+// JSON route (pass Json object directly, C layer auto-serializes to prebuilt response)
+http.route("GET", "/json", { message: "Hello, World!" })
+
+http.route("POST", "/echo", fn(req: Json) -> string {
+    return req.body ?? ""
+})
+
+print("xray HTTP Server on port " + string(port))
+http.listen(port)
