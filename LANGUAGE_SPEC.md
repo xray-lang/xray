@@ -889,166 +889,585 @@ See §13 and §14 for more.
 
 ## 3. Expressions
 
-### 3.1 Precedence
+> Source of truth: `src/frontend/parser/xparse_expr.c`, AST node types in `src/frontend/parser/xast_types.h` such as `AST_BINARY_*` / `AST_UNARY_*` / `AST_TERNARY` / `AST_*`.
 
-From low to high:
+### 3.1 Precedence and Associativity
 
-1. Assignment and compound assignment.
-2. Ternary `? :`.
-3. Nullish coalescing and logical operators.
-4. Bitwise operators.
-5. Equality and comparison.
-6. Type checks/casts (`is`, `as`).
-7. Shifts.
-8. Addition/subtraction.
-9. Multiplication/division/modulo.
-10. Unary operators.
-11. Range.
-12. Calls, member access, indexing, slicing, optional chaining, force unwrap.
+Full precedence table (highest → lowest; operators at the same level share associativity):
 
-### 3.2 Literals
+| Level | Operators | Assoc. | Description |
+|--|--|--|--|
+| 17 | `(...)` `[...]` `.x` `?.x` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
+| 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` | right | unary prefix + coroutine operators (`++` / `--` are postfix only) |
+| 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
+| 14 | `*` `/` `%` | left | multiplication / division / modulo |
+| 13 | `+` `-` | left | addition / subtraction |
+| 12 | `<<` `>>` | left | shifts |
+| 11 | `<` `<=` `>` `>=` | left | relational |
+| 10 | `==` `!=` `===` `!==` | left | equality |
+| 9 | `&` | left | bitwise AND |
+| 8 | `^` | left | bitwise XOR |
+| 7 | `\|` | left | bitwise OR (also union types) |
+| 6 | `&&` | left | logical AND (short-circuit) |
+| 5 | `\|\|` | left | logical OR (short-circuit) |
+| 4 | `??` | left | null coalescing |
+| 3 | `..` | left | range |
+| 2 | `? :` | right | ternary |
+| 1 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | right | assignment and compound assignment |
+| 0 | `,` (only in `match` multi-value arms, argument lists, etc.) | — | not a real operator |
+
+Implementation: Pratt-parser style in `src/frontend/parser/xparse_expr.c`.
+
+### 3.2 Unary Expressions
+
+```ebnf
+UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
+            | 'new' Identifier TypeArgs? '(' ArgList? ')'
+            | 'move' UnaryExpr
+            | 'await' ('all' | 'any')? UnaryExpr
+            | 'go' (Block | PostfixExpr)
+            | 'try?' UnaryExpr
+            | 'try!' UnaryExpr
+            | PostfixExpr
+```
+
+| Operator | Applicable types | Result type | Notes |
+|--|--|--|--|
+| `-x` | numeric | same | negation; preserves float NaN |
+| `+x` | numeric | same | identity, almost never useful |
+| `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
+| `~x` | integer | same | bitwise complement |
+| `x++` `x--` | integer | same | postfix inc/dec; returns the **updated** value (unlike C/Java; essentially the result of the assignment `x = x + 1`) |
+
+**Inc/dec semantics**:
+- Xray provides **only postfix** `x++` / `x--`; prefix `++x` / `--x` is a compile error ("prefix ++/-- not supported, use postfix form").
+- Equivalent to the assignment `x = x + 1` / `x = x - 1`; the expression value is the new value after assignment.
+- Cannot be inlined within a binary expression (`a + x++`, `f(x++)`, `x++ + 1` etc.); the parser reports "++/-- must be standalone statement". `let y = x++` is allowed (assignment on the immediate left), and `y` receives the post-update value.
+- Applies only to lvalues (variables, fields, indexes).
+- Floating-point values **do not support** `++`/`--` (compile error).
+
+### 3.3 Binary Expressions
+
+```ebnf
+BinaryExpr ::= UnaryExpr (BinOp UnaryExpr)*
+BinOp ::= '+' | '-' | '*' | '/' | '%'
+       | '&' | '|' | '^' | '<<' | '>>'
+       | '<' | '<=' | '>' | '>='
+       | '==' | '!=' | '===' | '!=='
+       | '&&' | '||'
+       | '??'
+```
+
+#### 3.3.1 Arithmetic Operators
+
+| Operator | int×int | float×float | int×float | string | other |
+|--|--|--|--|--|--|
+| `+` | int | float | float (int→float promotion) | string concatenation | ❌ |
+| `-` | int | float | float | ❌ | ❌ |
+| `*` | int | float | float | ❌ | ❌ |
+| `/` | int (truncating) | float | float | ❌ | ❌ |
+| `%` | int | float (IEEE remainder) | float | ❌ | ❌ |
+
+**Special semantics**:
+- `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
+- `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
+- `float / 0.0` → `+inf` / `-inf` / `NaN` (IEEE-754 semantics; **does not** throw).
+- Integer overflow: see §2.3.1.
+- `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
+
+#### 3.3.2 Bitwise Operators
+
+`&` `|` `^` `~` `<<` `>>`
+
+- Apply only to integer types.
+- Shift counts are taken modulo 64 (unlike C: always defined in xray).
+- `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
+- `bool` does not participate in bitwise operations (use `&&` `||`).
+
+#### 3.3.3 Comparison Operators
+
+| Operator | Semantics |
+|--|--|
+| `==` | value equality. `int` and `float` are comparable (with int→float implicit promotion). Strings compare by content. class/struct uses `==` overload or default identity. |
+| `!=` | inverse of `==` |
+| `===` | **strict** equality: both type and value must match; no implicit conversion. |
+| `!==` | inverse of `===` |
+| `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
+
+**Difference vs. JS**: xray's `==` **does not** do string↔number conversion; only the numeric int↔float promotion.
+
+#### 3.3.4 Logical Operators
+
+`&&` `||`:
+
+- Both operands **must** be `bool` (checked at compile time).
+- Short-circuit evaluation: `false && X` does not evaluate `X`; `true || X` does not evaluate `X`.
+- Result type is `bool` (unlike JS, which returns one of the operands).
+
+#### 3.3.5 Null Coalescing `??`
+
+```xray
+let v = nullable_expr ?? default_value
+```
+
+- Returns `default_value` when `nullable_expr` is `null`; otherwise returns `nullable_expr` itself.
+- **Short-circuit**: `default_value` is evaluated only when the left side is null.
+- Type inference: if `nullable_expr: T?` and `default_value: T`, the result type is `T` (non-null).
+- Applies only to nullable types; using `??` on a non-null `T` is a compile warning/error.
+
+### 3.4 Assignment and Compound Assignment
+
+```ebnf
+AssignExpr ::= LValue AssignOp Expression
+LValue ::= Identifier | MemberAccess | IndexAccess
+AssignOp ::= '=' | '+=' | '-=' | '*=' | '/=' | '%='
+           | '&=' | '|=' | '^=' | '<<=' | '>>='
+```
+
+**Semantics**:
+- Assignment is an **expression**; its result is the assigned value (chainable: `a = b = 0`).
+- `x op= y` is equivalent to `x = x op y`, but `x` is evaluated only once (important: `obj.f += 1` does not call `f`'s getter twice).
+- Cannot assign to a `const` (compile error `E0303`).
+- Cannot assign to `shared const` (same as above).
+
+**Special cases**:
+- A function parameter with the `in T` modifier is read-only; assignment is a compile error.
+- Array/Map field assignment: `a[i] = v` calls `operator[]=` or the built-in setter.
+
+### 3.5 Ternary `? :`
+
+```ebnf
+TernaryExpr ::= LogicOrExpr ('?' Expression ':' Expression)?
+```
+
+```xray
+let max = a > b ? a : b
+```
+
+- **Right-associative**: `a ? b : c ? d : e` = `a ? b : (c ? d : e)`.
+- The condition must be `bool`.
+- The two branches share a unified type (taken as the common supertype or a union).
+
+### 3.6 Null Coalescing `??` and Optional Chaining `?.`
+
+See §3.3.5 (`??`) and below (`?.`).
+
+#### Optional chaining `?.`
+
+```ebnf
+OptionalChain ::= Primary ('?.' (Identifier | '[' Expr ']'))+
+```
+
+```xray
+let len = name?.length          // returns null when name is null
+let item = arr?.[0]             // optional index
+```
+
+**Semantics**:
+- If the LHS of `?.` is `null`, the entire expression short-circuits to `null`.
+- **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
+- Result type: the original type plus `?` (already-nullable types remain unchanged).
+- Currently `?.` supports property and index access; optional function call `func?.()` is not part of the current grammar.
+
+### 3.7 Force Unwrap `!` / `try?` / `try!` / `catch!`
+
+> Full error-handling semantics are in §8. This section only lists the expression syntax and brief semantics.
+
+#### Force unwrap `expr!`
+
+```xray
+let v: int = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+```
+
+Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
+
+#### `try?` expression — collapse failure to null
+
+```ebnf
+TryOptional ::= 'try?' Expression
+```
+
+`try? e` collapses any failure to `null`, discarding the cause:
+
+| Static type of `e` | Type of `try? e` | Behavior |
+|--|--|--|
+| `Result<T, E>` | `T?` | `Err` → `null`; `Ok(v)` → `v` |
+| `T` (ordinary type, call may throw) | `T?` | thrown → `null`; otherwise → `v` |
+| `T?` | `T?` | passes through |
+
+```xray
+let n: int? = try? parseInt(input)         // Result.Err → null
+let v: Json? = try? http.get(url).json()   // thrown → null
+```
+
+#### `try!` expression — early return or cross-track promotion
+
+```ebnf
+TryForce ::= 'try!' Expression
+```
+
+The static type of the expression following `try!` **must** be `Result<T, E>` or `T?` (other types are a compile error `E0821`). Behavior is double-dispatched by expression type + the current function's return type:
+
+| `e` type | Current function return | Failure behavior | Success value |
+|--|--|--|--|
+| `Result<T, E>` | `Result<_, E>` | early return `return Result.Err(e)` | `v` |
+| `Result<T, E>` | other | `throw e` (requires `E` to be `Exception`-derived) | `v` |
+| `T?` | `_?` | early return `return null` | `v` |
+| `T?` | other | `throw new NullThrowError(...)` | `v` |
+
+```xray
+fn pipeline(s: string) -> Result<int, ParseError> {
+    let n = try! parseInt(s)      // Err early-returns Err
+    return Result.Ok(n + 1)
+}
+```
+
+Full details in §8.3.1. **`try!` is not a mandatory ceremony for exception-throwing calls** — xray does not require `try!` before every call that might throw.
+
+#### `catch!` block expression — condense an exception block into a Result
+
+```ebnf
+CatchBlock ::= 'catch!' Block
+```
+
+`catch! { ... }` wraps any exceptions that might escape the block into a `Result<T, Exception>`:
+
+```xray
+let r: Result<int, Exception> = catch! {
+    let x = riskyOp()
+    let y = another(x)
+    return y + 1                   // a return inside is a "return from the catch! block"
+}
+```
+
+- A `return v` inside the block returns from the `catch!` block (does not affect the outer function).
+- The block's last expression is taken as the `Ok(v)` payload.
+- **Any exception** escaping the block is wrapped as `Err(e)`; `e` is statically typed `Exception`.
+- Type filtering is not supported — when needed, use a handwritten `try/catch`.
+
+Full details in §8.3.3.
+
+### 3.8 `as` / `is`
+
+#### `is` runtime type check
+
+```ebnf
+IsExpr ::= UnaryExpr 'is' Type
+```
+
+```xray
+if (v is User) {
+    // v is narrowed to User in this branch
+    print(v.name)
+}
+```
+
+- Result type: `bool`.
+- **Type guard**: the analyzer narrows the static type of `v` inside the branch.
+- Applies to union, nullable, class hierarchies, and `Json` structural matching.
+
+#### `as` type cast
+
+```ebnf
+AsExpr ::= UnaryExpr 'as' Type
+        |  UnaryExpr 'as' Type '?'
+```
+
+```xray
+let n = v as int           // throws TypeError on failure
+let n = v as int?          // returns null on failure (the "as nullable" safe form)
+```
+
+| Form | Failure behavior | Use case |
+|--|--|--|
+| `expr as T` | throws `XR_ERR_TYPE_MISMATCH` (E0404) | a cast that must succeed |
+| `expr as T?` | returns `null` | a cast that may or may not succeed |
+
+**Supported conversions**:
+- Between numeric types (`int → float` lossless, `float → int` truncating).
+- `Json → T` (runtime structural check against `T`).
+- Parent → child (runtime `instanceof`).
+- Union member → concrete member.
+
+### 3.9 Range `..` and Spread `...`
+
+#### Range `a..b`
+
+```ebnf
+RangeExpr ::= AddExpr ('..' AddExpr)?
+```
+
+```xray
+0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
+let r = 1..100
+for (i in 0..n) { ... }
+```
+
+- Type: `Range` (int ranges only).
+- Half-open interval `[a, b)`: `a` is included, `b` is not. `for-in`, `Range.includes`, `Range.length`, `Range.toArray()`, and the `a..b` pattern in `match` all share the same semantics.
+- Primary uses: `for-in` loops, range checks in pattern matching.
+- The closed-interval syntax (`a..=b`) is not currently provided; to include `b`, write `a..(b+1)`.
+
+#### Spread `...`
+
+Allowed in the following positions only:
+- **Function rest parameter declaration**: `fn f(...args: int)`
+- **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
+- **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
+
+### 3.10 Literal Construction
+
+#### Array `[...]`
+
+```ebnf
+ArrayLit ::= '[' (Expr (',' Expr)* ','?)? ']'
+```
 
 ```xray
 let a = [1, 2, 3]
+let empty: Array<int> = []
+let mixed = [1, "hello"]    // type Array<int | string>
+```
+
+#### Map `#{k: v, ...}` and `#{}`
+
+```ebnf
+MapLit   ::= '#{' (MapEntry (',' MapEntry)* ','?)? '}'
+MapEntry ::= Expression ':' Expression
+EmptyMap ::= '#{' '}'    // note: '#{' is a single token
+```
+
+```xray
 let m = #{"a": 1, "b": 2}
+let empty = #{}                           // empty Map
+```
+
+**Key distinction**: `{}` is always a **Json / Object**; `#{}` is always a **Map**. Both use `:` between key and value; the `#` prefix is the disambiguator.
+
+#### Set `#[...]`
+
+```ebnf
+SetLit ::= '#[' (Expr (',' Expr)* ','?)? ']'
+```
+
+```xray
 let s = #[1, 2, 3]
-let obj = { name: "alice", age: 30 }
-let tup = (1, "x")
+let empty = #[]
 ```
 
-Array literals use `[ ... ]`. Map literals use `#{ ... }` with `:` key/value separators. Set literals use `#[ ... ]`. Object/Json literals use `{ ... }`.
+#### Object (structured object) `{ field: value, ... }`
 
-### 3.3 Variables and Assignment
+```ebnf
+ObjectLit  ::= '{' ObjectField (',' ObjectField)* ','? '}'
+ObjectField ::= Identifier ':' Expr
+              | Identifier            // shorthand: `{ x }` ≡ `{ x: x }`
+```
 
 ```xray
-let x = 1
-x = 2
-x += 3
+let p = { name: "Alice", age: 30 }
+let users = "Bob"
+let obj = { users }              // shorthand
 ```
 
-Assignment requires an assignable lvalue. `const` bindings and readonly fields cannot be assigned after initialization.
+- Defaults to an **extensible** structured object type (see §2.4.6 / §2.10 Json behavior).
+- Fix the structure with a `type` alias: `let u: User = {...}` (compile-time field check, sealed).
 
-### 3.4 Indexing and Slicing
+#### Bytes `new Bytes(...)`
+
+See §2.4.5 and §14.5.
+
+#### Channel `new Channel<T>(buf?)`
 
 ```xray
-arr[0]
-arr[1] = 10
-arr[start:end]
-arr[:end]
-arr[start:]
-arr[:]
+const ch: Channel<int> = new Channel<int>(10)
 ```
 
-The parser distinguishes indexing from slicing by the presence of `:` inside brackets.
+See §10.5.
 
-### 3.5 Member Access
+### 3.11 Calls / Member Access / Indexing / Slicing
+
+#### Function call
+
+```ebnf
+CallExpr ::= Primary '(' ArgList? ')'
+ArgList ::= Expr (',' Expr)* ','?
+```
+
+- Arguments are passed positionally; named arguments are not supported.
+- A rest parameter collects extra arguments into an array.
+- Argument-count mismatch → compile error `E0307` / `E0450`.
+
+#### Member access
+
+```ebnf
+MemberAccess ::= Primary '.' Identifier
+```
 
 ```xray
 obj.field
-obj.method(arg)
-tuple.0
-json.class
+obj.method(args)
+ClassName.staticMethod()
+EnumName.MemberName
 ```
 
-After `.`, identifiers, keywords, and integer literals are accepted as member names. Integer member names are used for tuple fields.
+- Field access: compile-time check that the type has the field.
+- Method call: resolved to invoke (with IC cache optimization).
+- Module member: `module.export_name`.
+- Enum member: `Color.Red`.
 
-### 3.6 Calls
+#### Index access
 
-```xray
-f()
-f(1, 2)
-obj.method(x)
+```ebnf
+IndexAccess ::= Primary '[' Expr ']'
 ```
 
-Calls evaluate the callee and arguments, then dispatch according to function, closure, native function, class constructor, static method, or instance method semantics.
+```xray
+arr[0]
+arr[0] = 10
+map["key"]
+str[i]                  // returns a single-character string
+```
 
-### 3.7 Closures
+- `Array` indexing: `int`; out-of-bounds throws `E0430`.
+- `Map` indexing: key type; missing key → `E0431`.
+- `string` indexing: returns a length-1 string (**not** a char/int).
+- User classes: via `operator[]` overload.
+
+#### Slice
+
+```ebnf
+Slice ::= Primary '[' Expr? ':' Expr? ']'
+```
 
 ```xray
-let inc = (x: int) -> x + 1
-let add = (a: int, b: int) -> {
-    return a + b
+arr[1:4]                // elements [1, 4)
+arr[:3]                 // first 3
+arr[2:]                 // from index 2 to the end
+arr[:]                  // full slice (shallow copy)
+str[0:5]                // string slice
+```
+
+- Half-open interval `[start, end)`.
+- `string` slicing supports negative indexes (counting from the end); for `Array`, a negative `start` is clamped to `0` and a negative `end` is treated as the array length.
+- Slicing returns a new object; the original array is not modified.
+
+### 3.12 Anonymous Functions and Lambdas
+
+Xray has three anonymous-function forms, all compiled to the same `AST_FUNCTION_EXPR` node with fully equivalent semantics; they differ only in conciseness and applicable position.
+
+```ebnf
+AnonFunction ::= BareLambda | ArrowLambda | FnExpression
+BareLambda   ::= Identifier '->' (Expression | Block)
+ArrowLambda  ::= '(' ArrowParams? ')' '->' (Expression | Block)
+ArrowParams  ::= ArrowParam (',' ArrowParam)*
+ArrowParam   ::= Identifier (':' Type)?      // type optional, inferred from context
+FnExpression ::= 'fn' GenericParams? '(' Params ')' ('->' Type)? Block
+```
+
+```xray
+// ── Bare lambda: most concise, restricted to call-argument position ──
+arr.map(x -> x * 2)
+arr.filter(x -> x % 2 == 0)
+
+// ── Arrow lambda: any position, supports multi-param and type annotation ──
+let sum = arr.reduce((acc, x) -> acc + x, 0)    // no type
+let double = (x: int) -> x * 2                   // typed
+let add = (a: int, b: int) -> a + b              // multi-param
+
+// ── fn expression: multi-statement body, return-type annotation, generics ──
+let inc = fn(x: int) -> int {
+    let y = x + 1
+    return y
+}
+let identity = fn<T>(x: T) -> T { return x }     // generic
+```
+
+**Choosing among the three**:
+
+| Form | Syntax | Suitable for |
+|------|------|----------|
+| Bare lambda | `x -> expr` | single-parameter callbacks, most concise |
+| Arrow lambda | `(x, y) -> expr` | multi-param, type annotation, or non-call positions |
+| fn expression | `fn(x: T) -> R { ... }` | multi-statement body, return-type annotation, generics |
+
+**Key rules**:
+- **Bare lambda** (`x -> expr`): restricted to **call-argument position**; the single parameter is unparenthesized. The parameter type is inferred from the callee signature or the container element type.
+- **Arrow lambda** (`(x) -> expr`, `(x, y) -> expr`): usable in any position. Parameter types may be omitted and inferred from context; inference failure raises `E0365`.
+- **fn expression** (`fn(x: T) { ... }`): usable in any position. Supports generic parameters `fn<T>(...)`, return-type annotation `-> T`, and a multi-statement body.
+- Single-expression form `-> expr` implicitly `return`s.
+- Block form `-> { ... }` or `{ ... }` uses an explicit `return`.
+- Capture rules: see §7.4 closure capture. **A `go` coroutine closure cannot capture `let` variables** — pass them explicitly via `shared const`, `move`, or parameters.
+
+### 3.13 `match` Expression
+
+```ebnf
+MatchExpr ::= 'match' Expr '{' MatchArm (',' MatchArm)* ','? '}'
+MatchArm ::= Pattern ('if' Expr)? '->' Expression
+```
+
+```xray
+let result = match x {
+    1 -> "one",
+    2, 3, 4 -> "few",                 // multi-value
+    10..20 -> "teen",                 // range
+    n if (n > 100) -> "big",          // guard
+    Color.Red -> "red",               // enum
+    is User -> "a user",              // type pattern
+    _ -> "default"                    // wildcard
 }
 ```
 
-Arrow closures cannot declare an explicit return type. Annotate the binding or use a named `fn` if an explicit return type is required.
+**Semantics**:
+- Matches top-down, taking the first successful arm.
+- All arm expressions must yield the same type (or a union).
+- **Exhaustiveness**: for enum scrutinees (ADT and simple enums), the compiler enforces exhaustiveness. Otherwise it is not enforced, and an unmatched value at runtime throws `Exception(E0442)`.
+- For pattern details see [§6](#6-patterns).
 
-### 3.8 Type Operators
+### 3.14 `new`
 
-```xray
-if (x is string) {
-    print(x)
-}
-let y = x as int?
+```ebnf
+NewExpr ::= 'new' Identifier TypeArgs? '(' ArgList? ')'
 ```
 
-`is` checks runtime type and can narrow static type. `as` performs a cast; nullable target types are used for safe failure paths.
-
-### 3.9 Nullable Operators
-
 ```xray
-user?.name
-value!
-left ?? fallback
-```
-
-Optional chaining returns `null` if the receiver is null. Force unwrap throws or fails if the operand is null. Nullish coalescing returns its right operand only when the left operand is null.
-
-### 3.10 `new`
-
-```xray
-let p = new Point(1, 2)
+let p = new Point(1.0, 2.0)
+let arr = new Array<int>()
 let ch = new Channel<int>(10)
+let m = new Map<string, int>()
 ```
 
-`new` constructs class, struct, and supported native/prelude values. Constructor dispatch follows nominal type semantics.
+**Used for**:
+- Class and struct instantiation.
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Bytes` / `StringBuilder`, etc.).
 
-### 3.11 `move`
+**Relation to literals**:
+```xray
+let a = [1, 2, 3]              // equivalent to new Array<int>() + push
+let m = #{}                    // equivalent to new Map<...>()
+let p = Point{x: 1, y: 2}      // struct literal
+```
+
+### 3.15 String Interpolation
+
+See §1.6.5. In brief:
 
 ```xray
-ch.send(move payload)
+"Hello, ${name}! Age: ${user.age + 1}"
 ```
 
-`move` transfers ownership across boundaries, most importantly across channels and coroutine boundaries.
+- `${...}` accepts any expression (calls, object access, arithmetic).
+- Embedded string literals inside the interpolation require escaped quotes or a switch to single-quoted outer strings.
+- The expression's type must be convertible to a string (implement `toString()` or be a primitive).
 
-### 3.12 Range Expressions
+### 3.16 `yield` Statement
 
 ```xray
-let r = 1..10
-for (i in 1..10) { print(i) }
+yield                       // yield execution
 ```
 
-Ranges are half-open in normal iteration: `[start, end)`.
+**Current implementation**: only the value-less statement form is supported, letting the coroutine relinquish the CPU (analogous to Go's `runtime.Gosched()`).
 
-### 3.13 `match` Expressions
-
-```xray
-let label = match (x) {
-    0 -> "zero"
-    1..10 -> "small"
-    _ -> "other"
-}
-```
-
-The scrutinee must be parenthesized: `match (x)`. Arms use `->`. Guards use `if (condition)` after the pattern.
-
-### 3.14 Try Expressions
-
-```xray
-let maybe = try? mayThrow()
-let value = try! mayThrow()
-let result = catch! { mayThrow() }
-```
-
-`try?` converts exceptions to `null`. `try!` rethrows. `catch!` wraps success/error paths into a Result-style value.
-
-### 3.15 Throw Expressions
-
-```xray
-throw new Exception("error")
-```
-
-The operand must be statically typed as `Exception` or an `Exception` subclass.
+See §10.10.
 
 ---
 
@@ -1327,126 +1746,773 @@ dump(some_obj)                 // debug output, with type info and structure
 
 ## 5. Declarations
 
-### 5.1 Variables
+> Source of truth: `src/frontend/parser/xparse_decl.c`, `src/frontend/parser/xast_nodes_decl.h`, `src/frontend/analyzer/xanalyzer_visitor.c`.
 
-```xray
-let x = 1
-let y: int
-const PI = 3.14159
-shared const CONFIG = { host: "localhost" }
-shared let state = 0
+### 5.1 `let` / `const` / `shared`
+
+```ebnf
+VarDecl ::= ('let' | 'const' | 'shared' ('const' | 'let')) Binding (',' Binding)*
+Binding ::= Pattern (':' Type)? ('=' Expression)?
+Pattern ::= Identifier
+         | '[' BindingPattern (',' BindingPattern)* ','? ']'    // array destructure
+         | '(' BindingPattern (',' BindingPattern)+ ','? ')'    // tuple destructure
+         | '{' Identifier (',' Identifier)* ','? '}'            // object destructure
 ```
 
-`let` creates a mutable binding. `const` creates an immutable binding and must be initialized. A declaration without an initializer needs a type annotation and receives a zero value.
+#### 5.1.1 `let` — mutable binding
 
-`shared const` stores immutable data in a shared/global region. `shared let` is explicit mutable shared state and is subject to move/concurrency restrictions.
+```xray
+let x = 1                         // type inferred as int
+let name: string = "Alice"        // explicit type
+let count: int                    // no initializer: zero value used
+```
 
-### 5.2 Functions
+- Reassignable.
+- Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
+- Without an initializer, the value defaults to the type's zero value (`int` → `0`, `string` → `""`, `bool` → `false`, `T?` → `null`).
+
+#### 5.1.2 `const` — immutable binding
+
+```xray
+const PI = 3.14159
+const MAX_LEN: int = 1024
+```
+
+- Initializer is **required**.
+- Cannot be reassigned (compile error `E0303`).
+- The type may be inferred or annotated explicitly.
+
+#### 5.1.3 `shared const` — cross-coroutine immutable shared
+
+```xray
+shared const CONFIG = { host: "localhost", port: 8080 }
+shared const PRIMES = [2, 3, 5, 7, 11]
+```
+
+- Stored on the **global heap**, refcount-managed.
+- Read-only **zero-copy** access across coroutines.
+- The **only** kind of variable outside the local mutable scope that a `go` closure may legally capture (everything else must be passed explicitly or `move`d).
+
+#### 5.1.4 `shared let` — cross-coroutine mutable, exclusive
+
+```xray
+shared let buffer = new Bytes(1024)
+```
+
+- **Move semantics**: ownership must be transferred explicitly with `move`.
+- Cannot be captured by a `go` closure (must be `move`d).
+- Use after `move` is a compile error.
+
+See [§10.11](#1011-concurrency-safety-model).
+
+#### 5.1.5 Destructuring bindings
+
+```xray
+// array destructuring
+let [a, b, c] = [1, 2, 3]
+let [first, , third] = [10, 20, 30]         // skip elements
+
+// tuple destructuring (multi-return)
+let (q, r) = divmod(17, 5)
+
+// object destructuring (extract by name; **no** rename syntax)
+let { name, age } = { name: "Alice", age: 30 }
+```
+
+Constraints:
+- The number of destructured bindings must match (except with rest patterns).
+- Object destructuring accepts only an `Identifier` list; `{ name: localName }` style renaming is **not** supported.
+
+### 5.2 `fn` function declaration
+
+```ebnf
+FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+ParamList ::= Param (',' Param)*
+Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
+            | '...' Identifier ':' Type
+Modifier  ::= 'in' | 'ref'
+ReturnType ::= ':' Type
+            |  ':' '(' Type (',' Type)+ ')'   // tuple return
+TypeParams ::= '<' Identifier (',' Identifier)* '>'
+AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
+```
+
+#### 5.2.1 Basic form
 
 ```xray
 fn add(a: int, b: int) -> int {
     return a + b
 }
 
-fn log(msg: string) {
-    print(msg)
+fn greet(name: string) -> () {         // explicit Unit
+    print("Hi ${name}")
+}
+
+fn echo(x: int) {                       // omitted return type = ()
+    print(x)
 }
 ```
 
-A no-return function may omit `-> ()`. Function parameters use `name: Type`. Rest parameters use `...name: Type`.
+**Key points**:
+- Parameters **must** carry type annotations (consistent with arrow functions).
+- An omitted return type means `()` (Unit); explicit annotation is recommended for readability.
+- The function body must be a block.
 
-### 5.3 Classes
+#### 5.2.2 Default parameter values
+
+```xray
+fn connect(host: string, port: int = 8080, tls: bool = false) -> () { ... }
+
+connect("localhost")              // port=8080, tls=false
+connect("localhost", 443)         // tls=false
+connect("localhost", 443, true)
+```
+
+- Default values are evaluated at the callee entry; if the caller omits an argument, `null` is passed and the entry replaces it with the default expression.
+- Parameters with default values must appear consecutively at the tail of the parameter list.
+
+#### 5.2.3 Multiple return values
+
+```xray
+fn divmod(a: int, b: int): (int, int) {
+    return (a / b, a % b)
+}
+
+let (q, r) = divmod(17, 5)
+let result = divmod(10, 3)        // result has type (int, int)
+```
+
+**Constraints**:
+- The return type wraps the tuple in parentheses: `(int, bool)`.
+- A single return value omits the parentheses: `: int`.
+- `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
+
+#### 5.2.4 Parameter modifiers
+
+Apply only to **`struct` value-type parameters**.
+
+```xray
+fn length_sq(v: in Vec2) -> float {
+    // v is a read-only reference (no copy, not writable)
+    return v.x * v.x + v.y * v.y
+}
+
+fn translate(v: ref Vec2, dx: float, dy: float) -> () {
+    // v is a mutable reference (changes are visible to the caller)
+    v.x += dx
+    v.y += dy
+}
+```
+
+| Modifier | Semantics |
+|--|--|
+| (none) | Pass by value (struct copy) |
+| `in` | Pass by read-only reference (no copy, not writable) |
+| `ref` | Pass by mutable reference (no copy, writable, observable to caller) |
+
+#### 5.2.5 Rest parameters
+
+```xray
+fn sum(...nums: int) -> int {
+    let total = 0
+    for (n in nums) { total += n }
+    return total
+}
+
+sum(1, 2, 3)        // total = 6
+```
+
+- The rest parameter must be **last**.
+- The actual internal type of `...T` is `Array<T>`.
+- Only one rest parameter is allowed.
+
+#### 5.2.6 Function hoisting
+
+```xray
+main()                       // OK: the function declaration is hoisted
+
+fn main() { ... }
+```
+
+- Top-level `fn` declarations are hoisted to the top of the current scope.
+- `let f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
+
+#### 5.2.7 Tail-call optimization
+
+The compiler recognises accumulator-style tail recursion and rewrites it into a loop (avoiding stack overflow). See [§17](#17-compilation-pipeline).
+
+```xray
+fn factorial(n: int, acc: int = 1) -> int {
+    if (n <= 1) { return acc }
+    return factorial(n - 1, acc * n)     // tail call: optimized to a loop
+}
+```
+
+#### 5.2.8 Program entry point
+
+xray has **no implicit `main` entry**: scripts/modules execute their top level in declaration order. `fn` declarations are hoisted and registered; expressions and statements run immediately.
+
+```xray
+// hello.xr
+print("loading")          // top-level statement, runs immediately
+fn greet() { print("hi") }
+greet()                   // must be called explicitly
+```
+
+- `fn main()` has no special meaning; call `main()` explicitly if desired.
+- Top-level `return` is forbidden (compile error `E0306`).
+- Multi-file projects specify the entry via the `entry` field of `xray.toml`; the corresponding file follows the script execution rules above.
+
+### 5.3 `class` declaration
+
+```ebnf
+ClassDecl ::= Modifier* 'class' Identifier TypeParams?
+              ('extends' Identifier TypeArgs?)?
+              ('implements' Identifier TypeArgs? (',' Identifier TypeArgs?)*)?
+              '{' ClassMember* '}'
+ClassMember ::= FieldDecl | MethodDecl | ConstructorDecl | StaticBlock
+FieldDecl ::= Modifier* Identifier ':' Type ('=' Expression)?
+MethodDecl ::= Modifier* Identifier '(' ParamList? ')' ReturnType? Block
+            |  Modifier* 'operator' OpToken '(' ParamList? ')' ReturnType? Block
+ConstructorDecl ::= 'constructor' '(' ParamList? ')' Block          // parameter types may be omitted
+Modifier ::= 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
+```
+
+> **About `public` and `override`**: both modifiers **are valid keywords lexically**, but in practice they **are almost never written**:
+>
+> - `public` is the **default visibility**—every field/method without `private` is public, so writing `public` explicitly is redundant.
+> - `override` is **optional**—an override happens automatically when the derived class declares a method with the same signature; an explicit `override` annotation is not required.
+>
+> The standard library and the regression tests consistently use the "omit the default modifier" style.
+
+#### 5.3.1 Basic class
 
 ```xray
 class Animal {
-    name: string
+    name: string                       // field
+    private _age: int = 0              // private field with default value
 
     constructor(name: string) {
         this.name = name
     }
 
-    fn speak() -> string {
+    speak() -> string {
         return "..."
+    }
+
+    static create(name: string) -> Animal {
+        return new Animal(name)
+    }
+}
+
+let a = new Animal("Rex")
+print(a.speak())
+print(Animal.create("Bob").name)
+```
+
+#### 5.3.2 Inheritance
+
+```xray
+class Dog extends Animal {
+    constructor(name: string) {
+        super(name)                    // **must** be the first statement (derived classes only)
+    }
+
+    speak() -> string {                  // override: no keyword required
+        return "woof"
     }
 }
 ```
 
-Classes support fields, methods, constructors, inheritance, interfaces, visibility/modifier syntax, static members where implemented, and operator overload declarations where supported by the runtime/analyzer.
+**Constraints**:
+- A derived class constructor's **first statement** must be `super(...)` (unless no constructor is declared); otherwise it is a compile error.
+- `this` must not be accessed before `super(...)`.
+- **Overriding requires no keyword**—any subclass method with the same name and signature automatically overrides the parent (the `override` modifier exists but is **optional**).
+- A `final class` cannot be inherited.
+- A `final` method cannot be overridden.
+- An `abstract` method **must** be implemented by subclasses (unless the subclass is also `abstract`).
+- `super.method()` invokes the shadowed parent method from inside an override.
 
-### 5.4 Structs
+#### 5.3.3 Modifiers
+
+| Modifier | Applies to | Semantics |
+|--|--|--|
+| (none) | field/method | Default public—externally visible |
+| `public` | field/method | **Redundant**—same as default; never written in practice |
+| `private` | field/method | Class-internal access only; subclasses cannot access directly but may go through public parent methods |
+| `static` | field/method | Class-level, not part of an instance; called as `ClassName.method()` |
+| `final` | class/method/field | Class: cannot be inherited. Method: cannot be overridden. Field: cannot be reassigned after initialization |
+| `abstract` | class/method | Cannot be instantiated / must be implemented by subclasses |
+| `override` | method | **Optional**—overrides do not require explicit annotation; documenting only |
+
+**Modifiers may combine**: `private final secret: string = "key123"`, `static final pi() -> float`, `private static counter: int = 0`.
+
+xray has **no** `protected` modifier—subclasses go through public parent methods to reach private fields when needed.
+
+#### 5.3.4 Constructors
+
+```xray
+class Point {
+    x: float
+    y: float
+    constructor(x: float, y: float) {
+        this.x = x
+        this.y = y
+    }
+}
+
+// Parameter types may be omitted (inferred from same-named fields)
+class Vector2 {
+    x: float
+    y: float
+    constructor(x, y) {         // equivalent to (x: float, y: float)
+        this.x = x
+        this.y = y
+    }
+}
+```
+
+- The keyword is `constructor` (not `init`, not the class name).
+- A class has **at most one constructor** (no overloading); multiple creation paths use `static` factory methods.
+- Constructor parameters **may omit their types**—if a parameter shares a name with a field, the type is inferred from that field; otherwise it is inferred from the call-site argument type.
+- The constructor implicitly returns `this` (compiler-injected).
+- Derived class constructors must call `super(...)` first.
+- A `struct` may have **no** constructor (`new Point()` produces a zero-initialized instance which is then assigned manually; see §5.4).
+
+#### 5.3.5 Operator overloading
+
+```xray
+class Vec2 {
+    x: float
+    y: float
+
+    constructor(x: float, y: float) {
+        this.x = x; this.y = y
+    }
+
+    operator+(other: Vec2) -> Vec2 {
+        return new Vec2(this.x + other.x, this.y + other.y)
+    }
+
+    operator==(other: Vec2) -> bool {
+        return this.x == other.x && this.y == other.y
+    }
+
+    operator[](index: int) -> float {
+        if (index == 0) { return this.x }
+        return this.y
+    }
+}
+```
+
+**Overloadable operators** (full list, source: `xparse_oop.c`):
+
+| Category | Operators | Arity | Notes |
+|--|--|--|--|
+| Binary arithmetic | `+` `-` `*` `/` `%` | 1 | A unary `-` with no parameters acts as unary minus |
+| Bitwise | `&` `\|` `^` `<<` `>>` | 1 | |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` | 1 | Typically implement `==`/`!=` and `<`/`<=`/`>`/`>=` as pairs |
+| Indexing | `[]` (getter), `[]=` (setter) | 1 / 2 | The setter is `(index, value)` |
+| Unary | `!` `~` `++` `--` | 0 | |
+| Compound assignment | `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` | 1 | |
+
+```xray
+class Counter {
+    n: int = 0
+    operator++() -> Counter { this.n = this.n + 1; return this }
+    operator+=(other: int) -> Counter { this.n = this.n + other; return this }
+    operator[](i: int) -> int { return this.n + i }
+    operator[]=(i: int, v: int) { this.n = v - i }
+}
+```
+
+**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?:` `??` `,` `.`
+
+#### 5.3.6 Custom iterators
+
+Implement `iterator()` returning an object with `hasNext() -> bool` and `next() -> T?` to enable `for-in`. See §14.15.
+
+### 5.4 `struct` declaration
+
+```ebnf
+StructDecl ::= 'struct' Identifier TypeParams?
+               ('implements' Identifier (',' Identifier)*)?
+               '{' StructMember* '}'
+```
 
 ```xray
 struct Point {
     x: float
     y: float
+
+    magnitude_sq() -> float {
+        return this.x * this.x + this.y * this.y
+    }
+}
+
+// Two creation styles
+let p = new Point()                  // default-construct (zero-valued fields), then assign
+p.x = 3.0
+p.y = 4.0
+
+let q = Point{x: 3.0, y: 4.0}        // struct literal: TypeName + { field: value }
+let pt = Point{x: 1.0, y: 2.0}
+
+// Value semantics: assignment and parameter passing copy
+let b = q                            // b is an independent copy of q
+b.x = 99.0
+// q.x is still 3.0
+```
+
+**Differences from `class`**:
+
+| Dimension | `class` | `struct` |
+|--|--|--|
+| Memory model | Reference type (heap) | Value type (stack or inlined) |
+| Assign / pass | Shared reference | **Copy** (`let b = a` produces an independent copy) |
+| Inheritance | Supports `extends` | **No** inheritance |
+| `implements` | ✅ | ✅ |
+| Generics | ✅ | ✅ |
+| `static` / `private` / `final` | ✅ | ✅ |
+| Operator overload | ✅ | ✅ |
+| Constructor | `constructor(...)` | **Optional**: `new Point()` yields a zero-valued instance |
+| Literal | none | `TypeName{field: value, ...}` |
+
+**When to use**:
+- Math types (Vec2/Vec3/Quat/Color)
+- Short-lived values (iterator state, ad-hoc tuples)
+- Performance-sensitive data where heap allocation should be avoided
+
+### 5.5 `interface` and `implements`
+
+xray's interface implementation is **explicit** (unlike Go's structural implementation): a class/struct must list interfaces with `implements`.
+
+```ebnf
+InterfaceDecl ::= 'interface' Identifier TypeParams?
+                  ('extends' NamedType (',' NamedType)*)?
+                  '{' InterfaceMember* '}'
+InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // method signature
+                 |  ('const')? Identifier ':' Type                   // property signature (`const` for read-only)
+```
+
+```xray
+interface Shape {
+    area() -> float
+    perimeter() -> float
+}
+
+// Interface method return types may be omitted (default ())
+interface Greeter {
+    greet(name: string)             // same as greet(name: string) -> ()
+    log()                           // no parameters, no return value
+}
+
+class Circle implements Shape {
+    radius: float
+    constructor(r: float) { this.radius = r }
+    area() -> float { return 3.14 * this.radius * this.radius }
+    perimeter() -> float { return 6.28 * this.radius }
+}
+
+// Implement multiple interfaces
+class Logger implements Shape, Greeter {
+    radius: float
+    constructor(r: float) { this.radius = r }
+    area() -> float { return 3.14 * this.radius * this.radius }
+    perimeter() -> float { return 6.28 * this.radius }
+    greet(name: string) { print("hello,", name) }
+    log() { print("logging") }
+}
+
+fn describe(s: Shape) -> string {
+    return "area=${s.area()}, perimeter=${s.perimeter()}"
 }
 ```
 
-Struct declarations use class-like member syntax. They are value-oriented declarations and can implement interfaces.
+**Constraints**:
 
-### 5.5 Interfaces
+- Interfaces may extend other interfaces (`extends`); generics (`interface Container<T>`) and constraints (`interface Stats<T: Numeric>`) are supported.
+- Classes/structs use `implements I1, I2, ...` to declare implementation of one or more interfaces (**explicit**; structural implementation is not supported).
+- The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
+- **Return types in interface method declarations may be omitted** (default `()`).
+- Interface methods are `abstract` by default (no body).
+- Interfaces may declare **property signatures** (`length: int`, `const id: int`); the implementing type must provide a corresponding field.
+- Implementing types may add additional methods (the interface defines the minimum surface).
 
 ```xray
-interface Drawable {
-    draw() -> ()
+// property signatures + interface inheritance
+interface HasLength {
+    length: int
+}
+interface SizedCollection<T> extends HasLength {
+    first() -> T
+}
+
+class Buffer implements SizedCollection<int> {
+    length: int                       // implements the property signature
+    private data: Array<int>
+    constructor(n: int) {
+        this.length = n
+        this.data = []
+    }
+    first() -> int { return this.data[0] }
 }
 ```
 
-Interfaces describe method contracts. A class/struct/enum may declare `implements InterfaceName`.
+### 5.6 `enum` declaration
 
-### 5.6 Enums
+xray's `enum` is an **algebraic data type (ADT)**: each variant may be a payload-free tag (C-style enum) or carry typed payload data (ADT-style). Both styles can be mixed in the same enum.
 
-#### Simple Backed Enums
-
-```xray
-enum Color {
-    Red = "red",
-    Green = "green",
-    Blue = "blue"
-}
+```ebnf
+EnumDecl       ::= 'enum' Identifier TypeParams?
+                   ('implements' NamedType (',' NamedType)*)?
+                   '{' EnumVariant (',' EnumVariant)* ','? EnumMethod* '}'
+EnumVariant    ::= Identifier VariantPayload?
+                |  Identifier '=' BackingValue                // explicit backing value for simple enums
+EnumMethod     ::= 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
+VariantPayload ::= '(' VariantField (',' VariantField)* ')'
+VariantField   ::= (Identifier ':')? Type
+BackingValue   ::= IntLiteral | FloatLiteral | StringLiteral | BoolLiteral
 ```
 
-Backed enum values may be `int`, `float`, `string`, or `bool`. All members in one backed enum must use the same backing type. Mixed backing value types are a compile-time analyzer error.
+> Variant declarations come first (comma-separated); method declarations follow all variants (no commas, separated by block boundaries — same convention as `class` member methods). See §5.6.7.
 
-#### ADT Enums
+#### 5.6.1 Simple enums (no payload)
 
 ```xray
+enum Color { Red, Green, Blue }
+Color.Red.value     // 0
+Color.Blue.value    // 2
+
+enum HttpStatus {
+    OK = 200,
+    NotFound = 404,
+    InternalError = 500,
+}
+
+enum Direction { North = "N", South = "S", East = "E", West = "W" }
+enum Flag      { On = true, Off = false }
+enum Pi        { Approximate = 3.14, Better = 3.14159 }
+```
+
+All members of a simple enum must use the same backing type (all `int`, all `float`, all `string`, or all `bool`). Mixed types are a compile error `XR_ERR_ANALYZE_ENUM_MIXED_TYPE`.
+
+#### 5.6.2 ADT enums (with payload)
+
+A variant name may be followed by parentheses declaring payload fields (positional or named):
+
+```xray
+// positional payload
 enum Result<T, E> {
-    Ok(T)
-    Err(E)
+    Ok(T),
+    Err(E),
+}
+
+// named-field payload (recommended for readability)
+enum NetEvent {
+    Connected,
+    Disconnected(reason: string),
+    DataReceived(bytes: Bytes),
+    Error(code: int, message: string),
+}
+
+// state machine
+enum ConnState {
+    Idle,
+    Connecting(retry: int),
+    Connected(peer: string, since: int),
+    Failed(reason: string),
+}
+
+// AST nodes
+enum Expr {
+    Number(int),
+    Binary(op: string, left: Expr, right: Expr),
+    Call(name: string, args: Array<Expr>),
 }
 ```
 
-ADT variants may carry payloads and are destructured with `match`.
+**ADT vs. simple enums**:
 
-### 5.7 Type Aliases
+| Feature | Simple enum | ADT enum |
+|------|--|--|
+| Carries data | ❌ | ✅ Each variant has its own field set |
+| `.value` / `.ordinal` | ✅ | Available only on payload-free variants |
+| Backing value (`= 200`) | ✅ | ❌ Cannot coexist with payloads |
+| Generics | ❌ | ✅ `enum Result<T, E> { ... }` |
+| `match` destructuring | By value only | By variant + payload destructuring |
+| `for-in` iteration | ✅ In declaration order | ❌ Meaningless when payloads are present |
+| Memory layout | Integer/string value | tag + payload |
+
+Mixing: a single enum may contain both payload-free and payload-bearing variants (see `NetEvent` / `ConnState` above).
+
+#### 5.6.3 Construction and destructuring
+
+Construction:
 
 ```xray
-type Mapper = (int) -> int
-type User = { name: string, age: int }
+let c = Color.Red                                   // simple
+let r1 = Result.Ok(42)                              // positional payload
+let e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
+let e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
+let e3 = NetEvent.Connected                         // payload-free variant: no parentheses
 ```
 
-Aliases do not introduce new nominal types. Object aliases are sealed when used for annotations.
-
-### 5.8 Import and Export
+Destructuring (match):
 
 ```xray
-import time
-import http as httpClient
-import alice/utils as utils
-import "./helper.xr" as helper
-import "models/user" as user
-import { readFile, writeFile as write } from io
-import { publicFn } from "./helper.xr"
+match (event) {
+    NetEvent.Connected            -> print("connected"),
+    NetEvent.Disconnected(reason) -> print("by:", reason),
+    NetEvent.DataReceived(b)      -> process(b),
+    NetEvent.Error(code, msg)     -> log.error(code, msg),
+}
+```
 
+See §6.3.
+
+#### 5.6.4 Member API for simple enums
+
+Applies only to **payload-free** variants (including pure-tag variants inside an ADT enum).
+
+Instance properties (act on the enum value):
+
+```xray
+Color.Red.name        // "Red"          variant name (string)
+Color.Red.value       // 0              backing value
+Color.Red.ordinal     // 0              declaration index (int, zero-based)
+Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
+```
+
+Class statics:
+
+```xray
+Color.memberCount     // 3              count of simple variants (int)
+Color.getMember(0)    // Color.Red      lookup by ordinal
+```
+
+ADT variants with payloads do **not** support `.value` / `.ordinal` / `getMember`, but `.name` and `toString()` are still available (the latter includes a payload summary, e.g. `Result.Ok(42)`).
+
+#### 5.6.5 Iteration
+
+Simple enums can be iterated with `for-in` in declaration order:
+
+```xray
+for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
+```
+
+ADT enums with payloads do **not** support direct `for-in`—iterating "all possible values" is meaningless (`Result<int, string>` has infinitely many).
+
+#### 5.6.6 Reverse lookup (value to member)
+
+Simple integer enums benefit from reverse-lookup optimization (Tier 1/2 contiguous/sparse; other types fall back to a linear scan). ADT variants do not support reverse lookup.
+
+#### 5.6.7 Enum instance methods
+
+Instance methods may be defined inside `enum` bodies with the same syntax as `class` methods (no `impl` keyword is introduced). Methods are callable on every variant; method bodies typically `match (this)` to dispatch on the variant:
+
+```xray
+enum Shape {
+    Circle(radius: float),
+    Rect(w: float, h: float),
+    Triangle(a: float, b: float, c: float)
+
+    fn area() -> float {
+        return match (this) {
+            Shape.Circle(r)     -> 3.14159 * r * r,
+            Shape.Rect(w, h)    -> w * h,
+            Shape.Triangle(a, b, c) -> {
+                let s = (a + b + c) / 2.0
+                return (s * (s-a) * (s-b) * (s-c)).sqrt()
+            },
+        }
+    }
+
+    fn isRound() -> bool {
+        return match (this) {
+            Shape.Circle(_) -> true,
+            _               -> false,
+        }
+    }
+}
+
+let s = Shape.Circle(radius: 1.0)
+print(s.area())          // 3.14159
+print(s.isRound())       // true
+```
+
+> Note that `Triangle(...)` is not followed by a comma — the last variant is separated from the method block by whitespace (a trailing comma is allowed but not required).
+
+**Rules**:
+
+- Method syntax matches `class` methods: `fn name(params) -> ReturnType { body }`.
+- Inside a method, the static type of `this` is the enum itself (e.g. `Result<T, E>`); use `match (this)` to extract a variant's payload.
+- `constructor` is **not** supported (variant syntax already serves as the constructor).
+- Inheritance is **not** supported (`enum E extends ...` is illegal); for shared behaviour use interface implementation (`enum E implements Iface`) or top-level functions.
+- Simple (payload-free) enums may also define methods; inside such methods `this` is the enum value and can be compared directly with `==`:
+  ```xray
+  enum Color {
+      Red, Green, Blue
+
+      fn isWarm() -> bool { return this == Color.Red }
+  }
+  ```
+- Methods **may not** share a name with a variant.
+- Static methods are **not yet supported** (use top-level "factory" functions).
+
+> This design matches Java enums, Swift enums, and Kotlin sealed classes. Rust's `impl` blocks are **not** introduced in xray—xray defines methods inside the type body uniformly.
+
+### 5.7 `type` aliases
+
+```ebnf
+TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
+```
+
+```xray
+type Outcome = int | string                          // union alias (do not collide with the prelude's Result)
+type Mapper = fn(int) -> int                         // function-type alias
+type Point = { x: float, y: float }                  // structural object alias (sealed)
+```
+
+**Semantics**:
+- An alias is **purely a syntactic** substitution; it does not introduce a new nominal type.
+- A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
+- `type T = Json` equals `Json` (not sealed).
+- Aliases may be referenced before their declaration but **must not be cyclic**.
+- `type` aliases currently do not take type parameters; generic abstraction is provided by generic functions and generic class/struct/enum/interface.
+
+See [§2.4.6](#246-json) and [§2.8](#28-type-aliases).
+
+### 5.8 `import` / `export`
+
+See [§11](#11-modules). Syntax highlights:
+
+```xray
+// stdlib / third-party packages: bare identifiers; alias auto-derived
+import time
+import http
+import alice/utils as utils
+
+// File path or directory path: string, with explicit `as` or alias derived from the trailing segment
+import "./modules/mod_a.xr" as a
+import "../utils/string_utils.xr" as utils
+import "models/user" as user
+
+// Named import: supports quoted paths or bare module names; members may be renamed with `as`
+import { readFile, writeFile as write } from io
+import { publicFn } from "./modules/mod_a.xr"
+
+// Exports
 export fn publicFn() -> string { return "hi" }
 export const VERSION = "1.0"
-export publicFn, VERSION
-export { publicFn as fnAlias } from "./other"
+export publicFn, VERSION                    // post-export of already-declared identifiers
+export { name1, name2 as alias } from "./other"
 export * from "./other"
 ```
 
-JavaScript default imports (`import name from "module"`) are not supported.
+**xray does not support** the JavaScript default-import form `import name from "module"`. Use `import "module" as name`, `import module`, or `import { name } from module`.
+
+For full rules, path resolution, and visibility details see [§11 Modules](#11-modules).
 
 ---
 
@@ -1809,51 +2875,547 @@ Xray uses a layered memory management strategy:
 
 ## 8. Error Handling
 
-### 8.1 Exceptions
+> Source of truth: `src/runtime/error/xerror.c`, `src/vm/xvm_exception.c`, `stdlib/types/exception.xr`, `stdlib/types/result.xr`.
+
+### 8.0 Design philosophy: dual track
+
+Xray ships two complementary error-handling mechanisms side by side:
+
+| Mechanism | When to use | Failure visibility |
+|--|--|--|
+| **Exceptions** (`throw` / `try` / `catch`) | Genuinely rare; propagation through many layers; fatal errors; framework / top-level fallback | Implicit (does not pollute intermediate signatures) |
+| **Result** (`Result<T, E>` enum) | Library APIs with an explicit failure mode; the caller must handle exhaustively; serializable errors | Explicit (visible at compile time) |
+
+The two tracks have **complementary, non-overlapping responsibilities**:
+
+- Function signatures **do not** mark `throws` (no Java/Swift-style mandatory throws declarations). When you want compile-time visibility into possible failure, return `Result<T, E>`.
+- `Exception` is the unified base class of the exception track (see §8.1.4); `Result<T, E>` is a prelude enum (see §8.2).
+- The three sugar keywords `try!` / `try?` / `catch!` bridge between the two tracks (see §8.3).
+
+### 8.1 Exception mechanism
+
+#### 8.1.1 `throw` expression
+
+`throw expr` raises an exception. **The static type of `expr` must be `Exception` or a subclass.** Anything else is rejected at compile time (error code `E0370` `XR_ERR_ANALYZE_THROW_NON_EXCEPTION`):
 
 ```xray
-throw new Exception("message")
+throw new Exception("oops")                 // ✅
+throw new HttpError(404, "not found")       // ✅ custom Exception subclass
+throw "oops"                                // ❌ E0370: throw must be an Exception subclass
+throw 42                                    // ❌ E0370
+throw { code: 500 }                         // ❌ E0370
+throw null                                  // ❌ E0370 (static type is null)
 ```
 
-Only `Exception` and subclasses may be thrown. Throwing a string, number, Json value, or null is a compile-time error.
+> **Design note**: early versions of xray allowed `throw` of arbitrary values (strings, integers, objects). The current version tightens this rule, in line with Python 3 / Java / Swift, to require an Exception subclass. This matches xray's "no `any` type" principle—`e` in `catch (e)` always has the static type `Exception`, so tools can provide stable completion and type analysis.
 
-`Exception` fields:
+After a throw:
 
-| Field | Meaning |
-|--|--|
-| `message` | human-readable message |
-| `stack` | stack trace lines |
-| `cause` | optional chained cause |
-| `code` | numeric error code |
-| `data` | optional structured payload |
+```
+throw point → unwind the call stack → run defer / finally on the way → catch handles → otherwise keep unwinding → coroutine terminates
+```
 
-### 8.2 Try/Catch/Finally
+An unhandled top-level exception terminates the current coroutine:
+
+- Child coroutine: by default the stack is printed to stderr and the coroutine ends; the parent is **not** notified automatically (exceptions **do not propagate across coroutines**, see §8.1.6).
+- Main coroutine: the process exits with code `1`.
+
+#### 8.1.2 `try` / `catch` / `finally`
 
 ```xray
 try {
     risky()
-} catch (e: HttpError) {
-    handle(e)
 } catch (e) {
-    fallback(e)
+    log.error(e.message)
 } finally {
     cleanup()
 }
 ```
 
-`finally` executes during both normal and exceptional exits.
+**Execution order**:
 
-### 8.3 `try?` and `try!`
+1. Run the `try` block.
+2. If an exception escapes, try each `catch` clause in declaration order; the first match runs its body.
+3. The `finally` block runs whether or not an exception occurred (guaranteed).
+4. With no `catch`, the exception keeps propagating after `finally`.
 
-`try? expr` converts an exception into `null`. `try! expr` rethrows the original exception.
+**Typed catch and multiple catch clauses**:
 
-### 8.4 `catch!`
+A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test for a match. Multiple `catch` clauses are matched in declaration order; the first match runs:
 
-`catch! { ... }` evaluates a block and wraps success/failure into a Result-style value when the built-in Result enum is available.
+```xray
+try {
+    riskyIO()
+} catch (e: HttpError) {
+    log.error("HTTP:", e.statusCode)
+} catch (e: DbError) {
+    log.error("DB:", e.query)
+} catch (e) {
+    log.error("unexpected:", e.message)
+}
+```
 
-### 8.5 `defer`
+**Rules**:
+- An untyped `catch (e)` is the "catch-all" clause and matches any exception; the static type of `e` is `Exception`.
+- A typed `catch (e: T)` matches only when the exception value satisfies `is T`; the static type of `e` is `T`.
+- Multiple `catch` clauses are tried in declaration order; the first match wins.
+- If every typed clause fails to match and there is no catch-all, the exception is rethrown automatically.
+- A `try` **must** be followed by at least one of `catch` or `finally`.
 
-`defer` is a resource-management tool that runs at function exit and is compatible with exceptional exits.
+#### 8.1.3 Rethrowing
+
+A `catch` block may rethrow the original exception or throw a new one:
+
+```xray
+try {
+    fetch(url)
+} catch (e) {
+    log.error("network failed:", e.message)
+    throw new ServiceError("upstream unavailable", e)  // chain the original through `cause`
+}
+```
+
+#### 8.1.4 The `Exception` class
+
+`Exception` is the prelude's built-in class (declared in `stdlib/types/exception.xr`); it can be `new`'d directly:
+
+```xray
+@native
+class Exception {
+    message: string             // human-readable message
+    stack: Array<string>        // automatically captured stack, one formatted frame per entry
+    cause: Exception?           // chained cause
+    code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; defaults to 0)
+    data: Json?                 // when a non-Exception value is thrown, the original is wrapped here
+
+    constructor(message: string = "", cause: Exception? = null)
+    fn toString() -> string
+}
+```
+
+Field semantics:
+
+- `message`: human-readable error message (passed at construction time).
+- `stack`: `Array<string>`. Empty at construction; as the throw passes through other frames, a formatted frame description (e.g. `"at f (line N)"`) is pushed for each. Users may iterate, join, or take its length; reads and writes are allowed but the runtime does not depend on user mutation.
+- `cause`: optional cause exception, used for error chains.
+- `code`: integer error code. When the VM raises an exception, the message has an `"E0xxx: ..."` prefix; the primitive constructor parses the prefix and writes `code`. For user-thrown exceptions `code` is `0`.
+- `data`: `Json?`. When `throw <non-Exception value>` is wrapped at runtime, the original value is stored here; `catch` can recover it via `e.data`.
+
+Construction:
+
+```xray
+throw new Exception("connection refused")
+throw new Exception("upstream failed", originalErr)
+```
+
+#### 8.1.5 Custom `Exception` subclasses
+
+Define business-specific errors by extending `Exception`:
+
+```xray
+class HttpError extends Exception {
+    statusCode: int
+    constructor(statusCode: int, message: string, cause: Exception? = null) {
+        super(message, cause)
+        this.statusCode = statusCode
+    }
+}
+
+class DbError extends Exception {
+    table: string
+    constructor(table: string, message: string) {
+        super(message)
+        this.table = table
+    }
+}
+
+throw new HttpError(404, "not found")
+
+try {
+    fetchUser(id)
+} catch (e: HttpError) {
+    log.error("http", e.statusCode, e.message)
+}
+```
+
+Subclasses inherit `message` / `stack` / `cause` and `toString()` automatically and may add arbitrary business fields.
+
+#### 8.1.6 Exceptions and coroutine boundaries
+
+Exceptions **do not propagate across coroutines**. An unhandled exception inside a child coroutine:
+
+- Terminates the child coroutine immediately.
+- Default behaviour: prints the exception's `toString()` and `stack` to stderr.
+- The parent coroutine is **not** notified automatically.
+
+To pass child errors back, use a Channel explicitly:
+
+```xray
+const err_ch = Channel<Exception?>(1)
+
+go {
+    try {
+        risky()
+        err_ch.send(null)
+    } catch (e) {
+        err_ch.send(e)
+    }
+}
+
+let err = err_ch.recv()
+if (err != null) { log.error(err.message) }
+```
+
+Or use the structured-concurrency `scope` block (see §10.5), which propagates a child exception to the parent automatically.
+
+#### 8.1.7 `defer`
+
+`defer` is a resource-cleanup statement that runs **whenever** the enclosing scope exits (with or without an exception). Syntax: see §4.9. Relationship with `try / finally`:
+
+- The two can be mixed.
+- Multiple `defer`s in the same scope run in **LIFO** order.
+- Mandatory order during stack unwinding:
+  1. The `finally` block of inner `try` runs first.
+  2. Then the current scope's `defer`s run in LIFO order.
+  3. Control returns to the caller (or the exception keeps unwinding).
+
+```xray
+fn fetch(url: string) -> string {
+    let conn = open(url)
+    defer conn.close()                       // conn is guaranteed to close, no matter what
+
+    try {
+        return conn.read()
+    } catch (e) {
+        log.error(e.message)
+        throw e                              // rethrow; defer still runs
+    }
+}
+```
+
+### 8.2 `Result<T, E>`
+
+#### 8.2.1 Type and construction
+
+`Result<T, E>` is the prelude's built-in ADT enum (declared in `stdlib/types/result.xr`):
+
+```xray
+@native
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+```
+
+Construction and destructuring:
+
+```xray
+let r1: Result<int, ParseError> = Result.Ok(42)
+let r2: Result<int, ParseError> = Result.Err(ParseError.Empty)
+
+match (r1) {
+    Result.Ok(v)  -> print("got:", v),
+    Result.Err(e) -> print("failed:", e),
+}
+```
+
+#### 8.2.2 Choosing the error type `E`
+
+`E` may be any type; recommended styles:
+
+| Failure shape | E type | Example |
+|--|--|--|
+| Multiple enumerable failure causes | User-defined ADT enum | `enum ParseError { Empty, NotNumber(s: string), Overflow }` |
+| Single string reason | `string` | `Result<int, string>` |
+| Exception object (bridge to the exception track) | `Exception` subclass | `Result<T, Exception>` |
+
+**Strongly prefer ADT enums**—they let `match` check exhaustiveness at compile time.
+
+#### 8.2.3 Methods on `Result`
+
+`Result<T, E>` is an enum with methods (see §5.6.7). The full signature (declared in `stdlib/types/result.xr`):
+
+```xray
+@native
+enum Result<T, E> {
+    Ok(T),
+    Err(E)
+
+    fn isOk() -> bool
+    fn isErr() -> bool
+
+    fn ok() -> T?                                          // Ok(v) -> v; Err -> null
+    fn err() -> E?                                         // Err(e) -> e; Ok -> null
+
+    fn unwrap() -> T                                       // throw on Err (requires E to subclass Exception)
+    fn unwrapOr(default: T) -> T                           // return default on Err
+    fn unwrapOrElse(handler: (E) -> T) -> T                // compute via handler on Err
+
+    fn map<U>(transform: (T) -> U) -> Result<U, E>         // transform the Ok value
+    fn mapErr<F>(transform: (E) -> F) -> Result<T, F>      // transform the Err value
+    fn andThen<U>(transform: (T) -> Result<U, E>) -> Result<U, E>  // chain (flatMap)
+}
+```
+
+`map` / `mapErr` are the "transform the inner without breaking the outer" shortcut, replacing repetitive `match` boilerplate:
+
+```xray
+// Without map: 5 lines
+let r2: Result<float, ParseError>
+match (parseInt(s)) {
+    Result.Ok(n)  -> r2 = Result.Ok(n.toFloat()),
+    Result.Err(e) -> r2 = Result.Err(e),
+}
+
+// With map: 1 line
+let r2 = parseInt(s).map(n -> n.toFloat())
+```
+
+#### 8.2.4 Error type conversion: explicit `mapErr` is mandatory
+
+When composing `Result`s across layers, the `Err` type is **not** converted automatically. The caller must call `.mapErr(...)` explicitly:
+
+```xray
+fn loadConfig(text: string) -> Result<Config, ConfigError> {
+    let json = try! parseJson(text).mapErr(e -> ConfigError.BadJson(e))
+    //                              ^^^^^^^^ explicit: ParseError → ConfigError
+    let port = try! json["port"].toInt().mapErr(e -> ConfigError.BadField("port", e))
+    return Result.Ok(Config(port: port))
+}
+```
+
+Each `.mapErr(...)` is one human-readable line of **error-upgrade path**—better than Rust's implicit `From::from` conversion.
+
+### 8.3 Bridges: `try!` / `try?` / `catch!`
+
+These three sugar keywords cover every track-bridging case and also serve as same-track early-exit sugar.
+
+#### 8.3.1 `try! e` — early exit or cross-track upgrade
+
+The static type of the expression after `try!` **must** be `Result<T, E>` or `T?`. Other types are a compile error (`E0821` `XR_ERR_TRY_BANG_BAD_OPERAND`).
+
+The behaviour is double-dispatched on the type of `e` and the enclosing function's return type:
+
+| Type of `e` | Enclosing return type | Behaviour |
+|--|--|--|
+| `Result<T, E>` | `Result<_, E>` | `Err(e)` → `return Result.Err(e)`; `Ok(v)` → `v` |
+| `Result<T, E>` | other | `Err(e)` → `throw e` (requires `E` to subclass `Exception`, otherwise `E0822`); `Ok(v)` → `v` |
+| `T?` | `_?` | `null` → `return null`; `v` → `v` |
+| `T?` | other | `null` → `throw new NullThrowError("try! on null")`; `v` → `v` |
+
+Examples:
+
+```xray
+// Same-track early exit
+fn parsePair(s: string) -> Result<(int, int), ParseError> {
+    let parts = s.split(",")
+    if (parts.length != 2) return Result.Err(ParseError.Empty)
+    let a = try! parseInt(parts[0])              // Err early-returns Err
+    let b = try! parseInt(parts[1])
+    return Result.Ok((a, b))
+}
+
+// Cross-track upgrade (Result → exception)
+fn dangerous(s: string) -> int {
+    let n = try! parseInt(s)                     // Err throws
+    return n * 2
+}
+
+// Optional early exit
+fn lookupTwo(m: Map<string, int>, k1: string, k2: string) -> int? {
+    let v1 = try! m.get(k1)                      // null early-returns null
+    let v2 = try! m.get(k2)
+    return v1 + v2
+}
+```
+
+> **`try!` is not a mandatory ceremony for throwing calls**—xray does **not** force `try` before every potentially throwing call, unlike Swift. `try!` is only for `Result` / `Optional` early exit or upgrade.
+
+#### 8.3.2 `try? e` — failure becomes null
+
+`try?` collapses any failure into `null`, discarding the cause.
+
+| Type of `e` | Type of `try? e` | Behaviour |
+|--|--|--|
+| `Result<T, E>` | `T?` | `Err` → `null` (cause discarded); `Ok(v)` → `v` |
+| Ordinary throwing call returning `T` | `T?` | Throw → `null`; success → `v` |
+| `T?` | `T?` | Pass-through |
+
+```xray
+let n: int? = try? parseInt(s)              // Err becomes null
+let v: Json? = try? http.get(url).json()    // throw becomes null
+```
+
+`try?` fits "the caller does not care about the cause, only wants a default" cases, often paired with `??`:
+
+```xray
+let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
+```
+
+#### 8.3.3 `catch! { ... }` — condense an exception block into a Result
+
+`catch!` condenses a block that may throw into `Result<T, Exception>`:
+
+```xray
+let r: Result<Server, Exception> = catch! {
+    let cfg = loadConfig(path)
+    let conn = openDb(cfg.dbUrl)
+    return startServer(cfg, conn)
+}
+
+match (r) {
+    Result.Ok(s)  -> s.run(),
+    Result.Err(e) -> log.error("startup failed:", e.message),
+}
+```
+
+Rules:
+
+- The block's last expression or `return v` becomes the `Ok(v)` value.
+- **Any exception** that escapes the block is caught and wrapped as `Err(e)`.
+- The static type of `e` is `Exception` (so the result is always `Result<T, Exception>`).
+- `return v` inside the block returns from the **`catch!` block**, not from the enclosing function.
+- `defer` inside the block runs as usual.
+- Type filtering is not supported—use a hand-written `try` / `catch` to filter specific exceptions.
+
+#### 8.3.4 `Result.unwrap()` — Result upgraded to an exception
+
+`unwrap()` is the reverse bridge: turn `Err(e)` into `throw e`:
+
+```xray
+let cfg = loadConfig(text).unwrap()         // throws on Err (requires E to subclass Exception)
+```
+
+If `E` is not an `Exception` subclass, this is a compile error (use `unwrapOr(...)` or `match` instead).
+
+#### 8.3.5 Bridging matrix
+
+```
+                   ┌──────────────────────────────────────────┐
+                   │  ↓ Exception track (throw / catch)       │
+                   │                                          │
+       catch! { } ─┤◄── exception → Result<T, Exception>     │
+                   │                                          │
+       try? expr  ─┤◄── exception → T? (cause discarded)     │
+                   │                                          │
+       try { } catch (e) { ... }    full exception flow      │
+                   └──────────────────────────────────────────┘
+                                    ▲
+                                    │  unwrap / unwrapOr / try!
+                                    │
+                   ┌──────────────────────────────────────────┐
+                   │  ↑ Result track (Result<T, E>)           │
+                   │                                          │
+       try! result ─┤── same-track early exit / cross throw  │
+                   │                                          │
+       try? result ─┤── Err → null (cause discarded)         │
+                   │                                          │
+       result.ok()  ─── Result<T,E> → T?                     │
+                   └──────────────────────────────────────────┘
+```
+
+### 8.4 Optional and error handling
+
+`T?` is sugar for `T | null` and fits the binary "value or absent" case. See §2.5. Relation to error handling:
+
+- **Failure with no cause**: `T?` is more concise than `Result<T, ()>`.
+- Cooperates with `try!` / `try?` (see §8.3.1 / §8.3.2).
+- Pairs with `??` (default value) / `?.` (optional chain) / `e!` (force unwrap).
+- Do not use `T?` as a generic error return—if a cause is needed, return `Result<T, E>`.
+
+### 8.5 Decision tree: which mechanism to choose
+
+Choose by "**how the caller has to handle the failure**":
+
+```
+Does the caller need to handle the failure?
+│
+├─ No (fatal / unrecoverable / cross-layer fallback)
+│   ↓
+│   throw / try-catch
+│
+├─ Yes, with structured causes; the caller should match exhaustively
+│   ↓
+│   Result<T, E>, with E as an ADT enum
+│
+├─ Yes, but the failure simply means "no value" without a cause
+│   ↓
+│   T? + ?? / ?. / try?
+│
+├─ Yes, and the function has ≥3 normal states (not just success/fail)
+│   ↓
+│   Use a user ADT enum directly as the return type
+│
+└─ Yes, returning multiple co-equal values (not "success/failure")
+    ↓
+    tuple (a, b, ...)
+```
+
+Reference table:
+
+| Case | Recommended | Example |
+|--|--|--|
+| Parsing, decoding, state transitions | `Result<T, E>` | `parseInt(s) -> Result<int, ParseError>` |
+| Map lookup, optional fields | `T?` | `map.get(k) -> Value?` |
+| IO, network, unrecoverable | `throw` + top-level `catch` | `readFile(p) -> Bytes` (may throw IOError) |
+| Multi-branch result | enum | `nextEvent() -> NetEvent` |
+| Primary result + metadata | tuple | `parse(s) -> (Ast, int)` // ast + bytes consumed |
+
+### 8.6 Common patterns
+
+#### Pattern 1: library APIs use Result, business boundaries use exceptions
+
+```xray
+// Library layer: Result
+fn parseConfig(text: string) -> Result<Config, ConfigError> {
+    let json = try! parseJson(text).mapErr(e -> ConfigError.BadJson(e))
+    return Result.Ok(Config(port: json["port"].toInt().unwrap()))
+}
+
+// Business layer: compose Results
+fn loadConfig(path: string) -> Result<Config, ConfigError> {
+    let text = readFile(path)                    // may throw IOError
+    return parseConfig(text)
+}
+
+// Top level: exception catch as the safety net (must be called explicitly; there is no implicit main)
+fn main() {
+    try {
+        let cfg = loadConfig("app.toml").unwrap()
+        startServer(cfg)
+    } catch (e: IOError) {
+        log.error("config missing:", e.message)
+        exit(1)
+    } catch (e: ConfigError) {
+        log.error("bad config:", e)
+        exit(2)
+    }
+}
+
+main()                                     // explicit entry
+```
+
+#### Pattern 2: condense an exception block into a Result (RPC / serialization)
+
+```xray
+fn handleRequest(req: Request) -> Response {
+    let r: Result<Json, Exception> = catch! {
+        let user = db.query(req.userId)         // may throw DbError
+        return user.toJson()                    // may throw SerializeError
+    }
+    match (r) {
+        Result.Ok(json) -> Response.success(json),
+        Result.Err(e)   -> Response.error(500, e.message),
+    }
+}
+```
+
+#### Pattern 3: `try?` + `??` for default values
+
+```xray
+let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
+let user = (try? db.findUser(id)) ?? guestUser
+```
 
 ---
 
@@ -2039,61 +3601,172 @@ Type checks on concrete values use `is` / `as`.
 
 ## 10. Concurrency and Coroutines
 
-### 10.1 `go`
+> Source of truth: `src/runtime/coro/xcoro_*.c`, `src/runtime/sync/xchannel.c`, `src/runtime/sync/xscope.c`, `docs/rules/design-principles.md`.
 
-```xray
-let task = go compute()
-```
+xray's concurrency model is **goroutine-style coroutines + channels + strong static guarantees**. Design goal: writing `go { ... }` is as simple as writing an ordinary function call, while the **compiler guarantees no data race**.
 
-`go` starts a coroutine and returns a `Task<T>` handle.
+### 10.1 Coroutine model
 
-### 10.2 `await`
-
-```xray
-let r = await task
-let results = await all [t1, t2, t3]
-let first = await any [t1, t2, t3]
-let ok = await anySuccess [t1, t2, t3]
-```
-
-`await` propagates exceptions from the awaited task. `await all` fails when any task fails. `await anySuccess` skips failing tasks until one succeeds or all fail.
-
-### 10.3 `Task<T>`
-
-Task members:
-
-| Member | Meaning |
+| Dimension | Choice |
 |--|--|
-| `done` | task completed |
-| `cancelled` | task was cancelled |
-| `result` | completed result or null |
-| `error` | error message/value or null |
-| `cancel()` | request cooperative cancellation |
+| Scheduling model | M:N (user-space coroutines on multiple OS threads) |
+| Scheduling policy | Cooperative (GC safepoints) + work stealing |
+| Stack model | Segmented stacks (grow on demand) |
+| Creation cost | ~microsecond, KB-scale initial stack |
+| Context switch | User-space stack switch, no syscall |
 
-### 10.4 `Channel<T>`
+Coroutines are distributed across multiple worker threads by default; the runtime sets a Go-style `GOMAXPROCS` parallelism level based on the CPU core count.
+
+### 10.2 `go` — start a coroutine
+
+```ebnf
+GoExpr ::= 'go' (Block | CallExpr | LambdaExpr CallArgs?)
+```
+
+`go` is an **expression** returning a `Task<T>` handle. Three forms are valid:
+
+```xray
+// Form 1: call an existing function
+let t1 = go worker(0, channel)
+
+// Form 2: call a lambda literal (inline logic + captured arguments)
+let t2 = go fn(d: Json) -> int {
+    return d.value * 2
+}(payload)
+
+// Form 3: block form (implicitly wrapped as a zero-argument lambda)
+let t3 = go {
+    return compute()
+}
+```
+
+**`move` lives in argument position**: cross-coroutine ownership transfer goes through the argument prefix `move`, **not** through a `go` option:
+
+```xray
+shared let data = { value: 10 }
+let task = go fn(d: Json) -> int {
+    return d.value + 1
+}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
+```
+
+**Semantics**:
+- Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
+- Coroutines are scheduled on idle worker threads (M:N).
+- Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
+- Plain locals (not `shared`, not `move`d) passed to `go` are **deep-copied automatically**; `shared const` is shared zero-copy; `shared let` must be `move`d.
+
+### 10.3 `await` — wait for a result
+
+```ebnf
+AwaitExpr ::= 'await' Expression
+           |  'await' 'all' Expression       // wait for all to complete
+           |  'await' 'any' Expression       // wait for any one to complete
+```
+
+```xray
+// single task
+let task = go fetch("https://example.com")
+let result = await task                    // yields the current coroutine until task completes
+
+// await all: wait for all, returns the result array (in input order)
+let t1 = go compute(2)
+let t2 = go compute(3)
+let t3 = go compute(4)
+let results: Array<int> = await all [t1, t2, t3]
+// also works on a variable directly, no brackets needed
+let tasks = [t1, t2, t3]
+let results2: Array<int> = await all tasks
+
+// await any: wait for the first to complete, return its result; the others keep running
+let first = await any [t1, t2, t3]
+
+// await anySuccess: skip failing tasks; wait for the first successful one
+let firstOk = await anySuccess [t1, t2, t3]
+```
+
+**Semantics**:
+
+- `await` only applies to `Task<T>`; other types are a compile error.
+- The current coroutine **yields** until the target completes (without blocking the OS thread).
+- Exception propagation:
+  - `await t` rethrows the exception thrown by `t`.
+  - `await all` throws if any task throws (the others are cancelled).
+  - `await any` throws only when **every** task fails; if any one completes, its result is returned.
+  - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
+- `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
+
+### 10.4 `Task<T>` handle
+
+`go expr` returns `Task<T>`, where `T` is the callee's return type. Task handles support:
+
+| Method / property | Type | Description |
+|--|--|--|
+| `t.done` | `bool` (property) | Whether the task has completed (success, failure, or cancellation) |
+| `t.cancelled` | `bool` (property) | Whether the task was cancelled |
+| `t.result` | `Json` (property) | Task return value; `null` if incomplete or failed |
+| `t.error` | `string?` (property) | Task exception message; `null` if it has not failed |
+| `t.cancel()` | `() -> ()` | Request cooperative cancellation |
+
+```xray
+let t = go fetch(url)
+if (!t.done) { /* still running */ }
+let r = await t
+
+// read properties directly (no await required)
+print(t.done, t.cancelled, t.result, t.error)
+```
+
+**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). `await` on a cancelled task returns `null`; `t.cancelled` becomes `true`.
+
+### 10.5 Channel
+
+```ebnf
+ChannelType ::= 'Channel' '<' Type '>'
+ChannelNew  ::= 'new' 'Channel' ('<' Type '>')? '(' Expression ')'
+```
+
+Channels are usually declared as `shared const` (cross-coroutine lifetime, reference semantics):
+
+```xray
+shared const ch  = new Channel<int>(10)    // buffered, capacity = 10
+shared const ch0 = new Channel<int>(0)     // unbuffered (synchronous handshake)
+shared const cha = new Channel(3)          // element type inferred from the first send
+```
+
+**API** (note that all method names are **camelCase**):
+
+| Method | Signature | Behaviour |
+|--|--|--|
+| `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
+| `recv()` | `() -> T?` | Blocking receive; waits for a producer when empty; returns `null` once the channel is closed and the buffer is drained |
+| `trySend(v)` | `(T) -> bool` | Non-blocking: `true` on success, `false` if full or closed |
+| `tryRecv()` | `() -> (T, bool)` | Non-blocking; returns `(value, ok)`; `ok=false` when empty or closed |
+| `sendTimeout(v, ms)` | `(T, int) -> bool` | Send with timeout; returns `false` on timeout |
+| `recvTimeout(ms)` | `(int) -> (T, bool)` | Receive with timeout; `ok=false` on timeout |
+| `close()` | `() -> ()` | Close the channel; idempotent |
+| `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
 shared const ch = new Channel<int>(2)
 ch.send(10)
-let v = ch.recv()
-let ok = ch.trySend(20)
-let (value, got) = ch.tryRecv()
+let v = ch.recv()                       // 10
+
+let ok = ch.trySend(20)                 // true / false
+let (val, ok2) = ch.tryRecv()           // tuple destructure: value + ok flag
+if (ok2) { print(val) }
+
+ch.close()
 ```
 
-Channel methods:
+**send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
 
-| Method | Meaning |
-|--|--|
-| `send(v)` | blocking send; throws on closed channel |
-| `recv()` | blocking receive; returns buffered values, then null when closed and empty |
-| `trySend(v)` | non-blocking send |
-| `tryRecv()` | non-blocking receive returning `(value, ok)` |
-| `sendTimeout(v, ms)` | send with timeout |
-| `recvTimeout(ms)` | receive with timeout |
-| `close()` | close the channel |
-| `isClosed` / `isClosed()` | closed state |
+**Semantics**:
+- **MPMC** (multi-producer, multi-consumer).
+- Buffered channel: senders suspend when full; receivers suspend when empty.
+- Unbuffered channel: send and receive must rendezvous (synchronous handshake).
+- After close: `send` throws; `recv` returns remaining values, then `null` once drained; `tryRecv` returns `(zero, false)`.
 
-### 10.5 `select`
+### 10.6 `select`
 
 `select` multiplexes multiple channel operations. The non-blocking default branch uses `_`.
 
@@ -2111,35 +3784,151 @@ shared const ch1 = new Channel<int>(2)
 shared const ch2 = new Channel<int>(2)
 
 select {
-    msg from ch1 -> { print("got from ch1:", msg) }
-    msg from ch2 -> { print("got from ch2:", msg) }
-    100 to ch1 -> { print("sent 100 to ch1") }
-    after 1000 -> { print("timeout") }
-    _ -> { print("no channel ready") }
+    msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
+    msg from ch2 -> { print("got from ch2:", msg) }      // receive arm
+    100  to   ch1 -> { print("sent 100 to ch1") }        // send arm
+    _ -> { print("no channel ready") }                   // default arm (non-blocking)
 }
 ```
 
-Semantics:
-
+**Semantics**:
 - Receive arm `name from ch -> body`: equivalent to `name = ch.recv()`, but selected only when `ch` has data.
 - Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity.
-- Timeout arm `after ms -> body`: selected when no channel arm becomes ready before the timeout.
-- Default arm `_ -> body`: runs immediately when no arm is ready; omitting it makes `select` block until an arm becomes ready.
-- When multiple arms are ready at the same time, one is selected randomly, matching Go.
+- Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
+- When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
 
-### 10.6 `scope`
+### 10.7 `scope` (structured concurrency / lexical scope)
 
-```xray
-scope { ... }
-linked scope { ... }
-supervisor scope { ... }
+`scope` is a **statement keyword** that introduces a new lexical block. It serves two purposes:
+
+1. **Pure lexical scope**: identical to a C/Rust `{ ... }` local block; `let` inside the block does not affect outer same-named variables.
+2. **Structured concurrency** (semantic enhancement): coroutines started via `go` inside the block are **awaited automatically** before the block exits.
+
+```ebnf
+ScopeStmt          ::= 'scope' Block
+LinkedScopeStmt    ::= 'linked' 'scope' Block          // sibling failure → cancel all + rethrow
+SupervisorScopeExpr ::= 'supervisor' 'scope' Block     // collect all errors, return Array<string>
 ```
 
-A scope controls the lifetime of child coroutines. Linked and supervisor scopes provide different cancellation/failure propagation policies.
+```xray
+// lexical scope use
+let x = 1
+scope {
+    let x = 10            // shadow the outer x; in effect inside the block
+    print(x)              // 10
+}
+print(x)                  // 1
 
-### 10.7 Safety Model
+// structured concurrency use (with go)
+scope {
+    go worker_a()
+    go worker_b()
+    // before the block exits, both a/b are awaited; an exception in either does not affect siblings
+}
+```
 
-The language design makes cross-coroutine sharing explicit. Ordinary locals are isolated. Shared immutable data is marked `shared const`. Mutable sharing is explicit and constrained. Channels are the preferred way to communicate mutable values.
+**Three scope variants**:
+
+| Form | Behaviour when a child coroutine throws | Return value |
+|---|---|---|
+| `scope { ... }` | Siblings are not cancelled; exceptions do not propagate outward (each task is independent) | none (statement form) |
+| `linked scope { ... }` | **Cancels all siblings** and **rethrows** the first exception outward | none |
+| `supervisor scope { ... }` | **Collects** failure messages from every failing child; siblings do not affect each other | `Array<string>` (error list; empty means all succeeded) |
+
+```xray
+// linked scope: failure propagation
+try {
+    linked scope {
+        go ok_worker()
+        go failing_worker()         // throws
+    }
+} catch (e) {
+    print("caught:", e)              // hits this branch
+}
+
+// supervisor scope: collect errors
+let errors = supervisor scope {
+    go failing("error1")
+    go failing("error2")
+    go ok()
+}
+print(errors.length)                 // 2 (only the failures are counted)
+```
+
+**General semantics**:
+- `scope` is not a function call and does not require an import; it is a keyword block statement.
+- All three forms await every coroutine started by `go` inside the block before exiting.
+
+### 10.8 `move` — cross-coroutine ownership transfer
+
+```ebnf
+MoveExpr ::= 'move' Identifier        // only at call-argument position
+```
+
+`move` is an **argument-prefix modifier** (not a `go` option). It transfers ownership of a `shared let` variable from the current scope to the callee (including coroutines started by `go`, `ch.send()`, etc.). After `move`, the variable is statically marked as **moved**, and any subsequent reference is a compile error.
+
+```xray
+shared let buf = new Bytes(1024 * 1024)
+
+// hand off to a coroutine
+let t = go fn(b: Bytes) -> int {
+    return process(b)
+}(move buf)
+// compile error: buf has been moved
+// print(buf.length)
+
+// hand off to a channel
+shared const ch = new Channel<Bytes>(1)
+shared let payload = new Bytes(4096)
+ch.send(move payload)
+// compile error: payload has been moved
+```
+
+See §7.3 and §7.4 for the capture rules of shared variables.
+
+### 10.9 Synchronisation primitives
+
+xray's default concurrency model favours **message passing + immutable sharing**—`shared const`, `Channel`, `move`, and `scope` already eliminate most data races at compile time, so raw mutexes/locks are **discouraged**.
+
+When mutual exclusion or atomic operations are unavoidable, the runtime provides:
+
+| Primitive | Form | Description |
+|---|---|---|
+| Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
+| `shared let` + `move` | Compile-time exclusivity | Cross-coroutine exclusivity with no runtime overhead |
+
+> **Design note**: xray does not expose generic concurrency primitives such as `Mutex`/`RwLock`/`Atomic*` in the standard library. If introduced in the future, they would be released as a separate unstable module (see `docs/known_bugs.md` and forthcoming design RFCs).
+
+
+### 10.10 `yield` — yield the CPU
+
+```ebnf
+YieldStmt ::= 'yield'
+```
+
+```xray
+for (i in 0..1000) {
+    do_chunk(i)
+    yield                       // explicit safepoint, lets other coroutines run
+}
+```
+
+**Current implementation**: usable as a statement, equivalent to Go's `runtime.Gosched()`; valued `yield` is not supported.
+
+### 10.11 Concurrency safety model
+
+xray uses the type system to **eliminate most data races at compile time**:
+
+| Rule | Enforced |
+|--|--|
+| `go` closures cannot capture ordinary `let` locals | ✅ |
+| `shared const` is read-only and zero-copy across coroutines | ✅ |
+| `shared let` must be `move`d to cross a coroutine boundary | ✅ |
+| Channels for cross-coroutine values | ✅ |
+| Shared mutable state requires explicit Mutex | Doc convention |
+
+**Residual data-race risk** (detected at runtime, not compile time):
+- Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared const` / `Bytes` / immutable objects, or transfer ownership via `move`.
 
 ---
 
