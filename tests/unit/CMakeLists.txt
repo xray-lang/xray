@@ -424,6 +424,11 @@ if(XR_BUILD_MCP)
             --root ${CMAKE_SOURCE_DIR}
             --xray $<TARGET_FILE:xray>
     )
+    add_test(NAME test_mcp_protocol_transcript
+        COMMAND python3
+            ${CMAKE_SOURCE_DIR}/tests/mcp/test_protocol_transcript.py
+            --xray $<TARGET_FILE:xray>
+    )
 endif()
 
 # ============================================================================

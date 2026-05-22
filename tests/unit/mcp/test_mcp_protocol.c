@@ -329,6 +329,20 @@ TEST(jsonrpc_rejects_scalar_params) {
     xjson_free(msg);
 }
 
+TEST(jsonrpc_rejects_batch_array) {
+    XrJsonValue *msg = parse_json("[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}]");
+    ASSERT_NOT_NULL(msg);
+
+    XmcpJsonRpcMessage req;
+    XrJsonValue *error_id = NULL;
+    int error_code = 0;
+    ASSERT(!xmcp_jsonrpc_validate_message(msg, &req, &error_id, &error_code, NULL));
+    ASSERT(error_id == NULL);
+    ASSERT_EQ(error_code, XMCP_ERR_INVALID_REQ);
+
+    xjson_free(msg);
+}
+
 TEST(jsonrpc_rejects_null_params) {
     XrJsonValue *msg =
         parse_json("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"ping\",\"params\":null}");
@@ -821,6 +835,16 @@ TEST(tools_list_runner_enabled_includes_run) {
     ASSERT(xjson_get_bool(ann, "readOnlyHint") == false);
     ASSERT(xjson_get_bool(ann, "openWorldHint") == true);
 
+    XrJsonValue *output_schema = xjson_get_object(run_tool, "outputSchema");
+    ASSERT_NOT_NULL(output_schema);
+    XrJsonValue *output_props = xjson_get_object(output_schema, "properties");
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "ok"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "exitCode"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "stdout"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "timedOut"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "truncated"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "outputBytes"));
+
     xjson_free(result);
 }
 
@@ -902,6 +926,32 @@ TEST(tools_call_run_deadline_exceeded) {
     xjson_free(result);
 }
 
+TEST(tools_call_run_deadline_keeps_server_usable) {
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let i = 0\nwhile (i == 0) { let x = 1 }\n");
+    XJSON_SET_INT(args, "timeoutMs", 50);
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *run_result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(run_result);
+    ASSERT(xjson_get_bool(run_result, "isError") == true);
+    XrJsonValue *structured = xjson_get_object(run_result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "timedOut") == true);
+    xjson_free(params);
+    xjson_free(run_result);
+
+    XrJsonValue *list_result = call_tools_list(&server, NULL);
+    ASSERT_NOT_NULL(list_result);
+    XrJsonValue *tools = xjson_get_array(list_result, "tools");
+    ASSERT_NOT_NULL(tools);
+    ASSERT_EQ(xjson_array_len(tools), 6);
+    xjson_free(list_result);
+}
+
 TEST(tools_call_run_blocks_dangerous_import) {
     /* `net` is not in the runner allowlist; the import must fail so the
      * snippet exits non-zero. The structured payload signals !ok. */
@@ -920,6 +970,30 @@ TEST(tools_call_run_blocks_dangerous_import) {
 
     xjson_free(params);
     xjson_free(result);
+}
+
+TEST(tools_call_run_blocks_all_dangerous_imports) {
+    const char *modules[] = {"net", "http", "io", "os", "process", "cluster", "ws", "path"};
+
+    for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
+        XmcpServer server = test_server_with_runner(true);
+        char code[64];
+        snprintf(code, sizeof(code), "import %s\n", modules[i]);
+        XrJsonValue *params = make_run_params(code);
+
+        XrJsonValue *result = call_tools_call(&server, params);
+        ASSERT_NOT_NULL(result);
+        ASSERT(xjson_get_bool(result, "isError") == true);
+
+        XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+        ASSERT_NOT_NULL(structured);
+        ASSERT(xjson_get_bool(structured, "ok") == false);
+        ASSERT(xjson_get_bool(structured, "timedOut") == false);
+        ASSERT(xjson_get_int_or(structured, "exitCode", 0) != 0);
+
+        xjson_free(params);
+        xjson_free(result);
+    }
 }
 
 TEST(tools_call_run_missing_code_is_error_result) {
@@ -960,7 +1034,10 @@ TEST(tools_call_syntax_lookup_returns_structured_content) {
     ASSERT_NOT_NULL(structured);
     ASSERT_STR_EQ(xjson_get_string(structured, "topic"), "class");
     ASSERT(xjson_get_bool(structured, "found") == true);
-    ASSERT_NOT_NULL(strstr(xjson_get_string(structured, "content"), "Classes"));
+    const char *content = xjson_get_string(structured, "content");
+    ASSERT_NOT_NULL(content);
+    ASSERT_NOT_NULL(strstr(content, "class Animal"));
+    ASSERT_NOT_NULL(strstr(content, "extends"));
 
     xjson_free(params);
     xjson_free(result);
@@ -1496,6 +1573,41 @@ TEST(knowledge_search_stdlib_ranks_symbols) {
     xmcp_knowledge_free(kb);
 }
 
+TEST(knowledge_search_stdlib_module_symbol_direct) {
+    XmcpKnowledge *kb = xmcp_knowledge_new();
+    ASSERT_NOT_NULL(kb);
+    xmcp_knowledge_load(kb);
+
+    XmcpStdlibSearchResult result;
+    xmcp_knowledge_search_stdlib_matches(kb, "http.request", NULL, &result);
+    ASSERT(result.match_count > 0);
+    ASSERT_NOT_NULL(result.matches[0].module);
+    ASSERT_STR_EQ(result.matches[0].module->name, "http");
+    ASSERT_NOT_NULL(result.matches[0].symbol);
+    ASSERT_STR_EQ(result.matches[0].symbol->name, "request");
+
+    xmcp_knowledge_search_stdlib_matches(kb, "http.request", "csv", &result);
+    ASSERT_EQ(result.match_count, 0);
+
+    xmcp_knowledge_free(kb);
+}
+
+TEST(knowledge_search_stdlib_multi_token_module_context) {
+    XmcpKnowledge *kb = xmcp_knowledge_new();
+    ASSERT_NOT_NULL(kb);
+    xmcp_knowledge_load(kb);
+
+    XmcpStdlibSearchResult result;
+    xmcp_knowledge_search_stdlib_matches(kb, "csv parse", NULL, &result);
+    ASSERT(result.match_count > 0);
+    ASSERT_NOT_NULL(result.matches[0].module);
+    ASSERT_STR_EQ(result.matches[0].module->name, "csv");
+    ASSERT_NOT_NULL(result.matches[0].symbol);
+    ASSERT_STR_EQ(result.matches[0].symbol->name, "parse");
+
+    xmcp_knowledge_free(kb);
+}
+
 TEST(knowledge_search_stdlib_no_match) {
     XmcpKnowledge *kb = xmcp_knowledge_new();
     ASSERT_NOT_NULL(kb);
@@ -1575,6 +1687,7 @@ int main(void) {
     RUN_TEST(jsonrpc_rejects_invalid_id);
     RUN_TEST(jsonrpc_rejects_missing_method);
     RUN_TEST(jsonrpc_rejects_scalar_params);
+    RUN_TEST(jsonrpc_rejects_batch_array);
     RUN_TEST(jsonrpc_rejects_null_params);
 
     /* Initialize result shape */
@@ -1614,7 +1727,9 @@ int main(void) {
     RUN_TEST(tools_call_run_basic_print_returns_structured);
     RUN_TEST(tools_call_run_output_truncated);
     RUN_TEST(tools_call_run_deadline_exceeded);
+    RUN_TEST(tools_call_run_deadline_keeps_server_usable);
     RUN_TEST(tools_call_run_blocks_dangerous_import);
+    RUN_TEST(tools_call_run_blocks_all_dangerous_imports);
     RUN_TEST(tools_call_run_missing_code_is_error_result);
 
     /* Knowledge tools */
@@ -1661,6 +1776,8 @@ int main(void) {
     RUN_TEST(knowledge_lookup_not_found);
     RUN_TEST(knowledge_search_stdlib);
     RUN_TEST(knowledge_search_stdlib_ranks_symbols);
+    RUN_TEST(knowledge_search_stdlib_module_symbol_direct);
+    RUN_TEST(knowledge_search_stdlib_multi_token_module_context);
     RUN_TEST(knowledge_search_stdlib_no_match);
     RUN_TEST(knowledge_get_cheatsheet);
     RUN_TEST(knowledge_get_concurrency);

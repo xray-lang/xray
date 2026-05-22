@@ -541,16 +541,24 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 其他一切（包括 `0.0001`、非空字符串/集合、对象引用） | **truthy** |
 
 ```xray
-let x: int? = maybe_int()
+let x: int? = 41
 if (x) {                  // truthy 上下文：x 既不是 null 也不是 0 时进入
     print(x + 1)          // 此分支中 x 被窄化为 int
 }
 
 let s: string = ""
-if (s) { ... } else { ... }    // falsy：进入 else
+if (s) {
+    print("non-empty")
+} else {
+    print("empty")             // falsy：进入 else
+}
 
 let m: Map<string, int> = #{}
-if (m) { ... }                  // falsy：空 Map
+if (m) {
+    print("non-empty map")
+} else {
+    print("empty map")         // falsy：空 Map
+}
 
 let a: int? = null
 let b = a ?? 0                  // null 合并：b = 0
@@ -1201,7 +1209,8 @@ RangeExpr ::= AddExpr ('..' AddExpr)?
 ```xray
 0..10                  // 0..10，左闭右开（包含 0，不包含 10）
 let r = 1..100
-for (i in 0..n) { ... }
+let n = 10
+for (i in 0..n) { print(i) }
 ```
 
 - 类型 `Range`（仅 int 范围）。
@@ -1407,7 +1416,7 @@ MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
 ```xray
-let result = match x {
+let result = match (x) {
     1 -> "one",
     2, 3, 4 -> "few",                 // 多值
     10..20 -> "teen",                 // 范围
@@ -1659,9 +1668,17 @@ ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
 
 ```xray
-return                 // 隐式返回 ()（Unit）
-return 42
-return (a, b)          // 多返回值，必须用括号包裹元组
+fn done() {
+    return                 // 隐式返回 ()（Unit）
+}
+
+fn answer() -> int {
+    return 42
+}
+
+fn pair(a: int, b: int) -> (int, int) {
+    return (a, b)          // 多返回值，必须用括号包裹元组
+}
 ```
 
 > **注意**：多返回值必须用元组形式 `return (a, b)`；裸逗号 `return a, b` 是编译错误（`E0801`）。

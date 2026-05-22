@@ -94,10 +94,35 @@ def collect_fence_refs(value: object) -> list[str]:
 
 
 def section_fence_ids(root: Path) -> set[str]:
-    ids: set[str] = set()
+    return set(section_fence_index(root))
+
+
+def section_fence_index(root: Path) -> dict[str, Path]:
+    ids: dict[str, Path] = {}
     for path in sorted((root / "docs/spec/source/sections").glob("*.md")):
-        ids.update(SOURCE_FENCE_ID_RE.findall(path.read_text(encoding="utf-8")))
+        for fid in SOURCE_FENCE_ID_RE.findall(path.read_text(encoding="utf-8")):
+            ids[fid] = path
     return ids
+
+
+def card_fence_refs(root: Path) -> set[str]:
+    refs: set[str] = set()
+    for path in sorted((root / "docs/spec/source/cards").glob("**/*.json")):
+        try:
+            card = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        refs.update(ref for ref in collect_fence_refs(card) if ref != "<invalid>")
+    return refs
+
+
+def check_section_fence_coverage(root: Path) -> list[str]:
+    fence_index = section_fence_index(root)
+    refs = card_fence_refs(root)
+    errors: list[str] = []
+    for fid in sorted(set(fence_index) - refs):
+        errors.append(f"{fence_index[fid].relative_to(root)}: fence id {fid} is not referenced by any card")
+    return errors
 
 
 def check_card_sources(root: Path) -> list[str]:
@@ -386,6 +411,7 @@ def main(argv: list[str]) -> int:
     xray = args.xray.resolve()
     errors: list[str] = []
     errors.extend(check_card_sources(root))
+    errors.extend(check_section_fence_coverage(root))
     errors.extend(check_language_docs_generated_current(root))
     errors.extend(check_spec_quality_gate(root))
     errors.extend(check_topic_spec_anchors(root))
