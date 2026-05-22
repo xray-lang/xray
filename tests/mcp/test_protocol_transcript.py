@@ -12,6 +12,7 @@ from typing import Any
 
 ERR_PARSE = -32700
 ERR_METHOD_NOT_FOUND = -32601
+ERR_INVALID_PARAMS = -32602
 ERR_NOT_INITIALIZED = -32002
 ERR_ALREADY_INITIALIZED = -32003
 
@@ -216,6 +217,114 @@ def test_runner_stdout_is_protocol_isolated(xray: Path) -> None:
         session.close()
 
 
+def test_resources_and_prompts_protocol_paths(xray: Path) -> None:
+    session = McpSession(xray)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+
+        session.send(request("resources/templates/list", 2, {}))
+        templates_response = session.recv()
+        assert templates_response.get("id") == 2, templates_response
+        templates = templates_response["result"]["resourceTemplates"]
+        uri_templates = [template["uriTemplate"] for template in templates]
+        assert "xray://spec/topic/{name}" in uri_templates, uri_templates
+        assert "xray://stdlib/{module}" in uri_templates, uri_templates
+
+        session.send(request("prompts/list", 3, {}))
+        prompts_response = session.recv()
+        assert prompts_response.get("id") == 3, prompts_response
+        prompts = prompts_response["result"]["prompts"]
+        prompt_names = [prompt["name"] for prompt in prompts]
+        assert "code-review" in prompt_names, prompt_names
+
+        session.send(
+            request(
+                "prompts/get",
+                4,
+                {
+                    "name": "code-review",
+                    "arguments": {"code": "let x = 1\nprint(x)\n"},
+                },
+            )
+        )
+        prompt_response = session.recv()
+        assert prompt_response.get("id") == 4, prompt_response
+        prompt_result = prompt_response.get("result")
+        assert isinstance(prompt_result, dict), prompt_response
+        messages = prompt_result.get("messages")
+        assert isinstance(messages, list), prompt_response
+        assert len(messages) >= 2, prompt_response
+    finally:
+        session.close()
+
+
+def test_mixed_ndjson_request_notification_and_error(xray: Path) -> None:
+    session = McpSession(xray)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+
+        session.send(request("ping", 2, {}))
+        session.send(notification("xray/unknown"))
+        session.send(request("xray/unknown", 3, {}))
+        session.send(request("tools/list", 4, {}))
+
+        ping_response = session.recv()
+        assert ping_response.get("id") == 2, ping_response
+        assert ping_response.get("result") == {}, ping_response
+
+        unknown_response = session.recv()
+        assert_error(unknown_response, 3, ERR_METHOD_NOT_FOUND)
+
+        tools_response = session.recv()
+        assert tools_response.get("id") == 4, tools_response
+        assert isinstance(tools_response.get("result"), dict), tools_response
+    finally:
+        session.close()
+
+
+def test_tools_call_invalid_params_and_structured_content(xray: Path) -> None:
+    session = McpSession(xray)
+    try:
+        initialize(session, 1)
+        mark_initialized(session)
+
+        session.send(
+            request(
+                "tools/call",
+                2,
+                {
+                    "name": "xray_format",
+                    "arguments": {"indentSize": 2},
+                },
+            )
+        )
+        assert_error(session.recv(), 2, ERR_INVALID_PARAMS)
+
+        session.send(
+            request(
+                "tools/call",
+                3,
+                {
+                    "name": "xray_format",
+                    "arguments": {"code": "let x=1\nprint(x)\n", "indentSize": 2},
+                },
+            )
+        )
+        response = session.recv()
+        assert response.get("id") == 3, response
+        result = response.get("result")
+        assert isinstance(result, dict), response
+        assert result.get("isError") in (False, None), response
+        structured = result.get("structuredContent")
+        assert isinstance(structured, dict), response
+        assert isinstance(structured.get("formattedCode"), str), response
+        assert structured.get("indentSize") == 2, response
+    finally:
+        session.close()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xray", required=True, type=Path)
@@ -226,6 +335,9 @@ def main() -> int:
         test_unknown_request_and_notification,
         test_parse_error_and_content_length_line,
         test_runner_stdout_is_protocol_isolated,
+        test_resources_and_prompts_protocol_paths,
+        test_mixed_ndjson_request_notification_and_error,
+        test_tools_call_invalid_params_and_structured_content,
     ]
     for test in tests:
         test(args.xray)
