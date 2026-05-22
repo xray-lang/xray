@@ -1,0 +1,31 @@
+// 作者：xingleixu@gmail.com
+// 协程创建性能测试
+// 测试大量协程的创建和销毁速度
+import time
+let N = 1000000
+// 默认100万协程
+// 从命令行读取参数
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+print("=== 协程创建测试 ===")
+print("协程数量:", N)
+
+// 空协程函数
+fn empty_task() {
+}
+
+let start = time.monotonic()
+// 创建N个协程 (scope = WaitGroup语义，自动等待所有子协程完成)
+scope {
+    for (let i = 0; i < N; i++) {
+        go empty_task()
+    }
+}
+let total_time = time.monotonic() - start
+print("总时间:", total_time, "ms")
+if (total_time > 0) {
+    print("速度:", int(N * 1000 / total_time), "协程/秒")
+} else {
+    print("速度: 太快无法测量")
+}

@@ -1,0 +1,11 @@
+import http
+
+http.route("GET", "/", fn(req: Json) {
+    return "Hello, World!"
+})
+
+http.route("GET", "/json", fn(req: Json) {
+    return [200, "application/json", '{"message":"Hello, World!"}']
+})
+
+http.listen(8080)

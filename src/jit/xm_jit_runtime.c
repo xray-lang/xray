@@ -538,43 +538,17 @@ XrJitResult xr_jit_set_shared(XrCoroutine *coro, int64_t extra_arg) {
 
 // Called from JIT code (via CALL_C) when OP_THROW is executed.
 // Sets coro->jit_ctx->exception so JIT can branch to catch handler.
-// extra_arg = raw exception value (XrValue.i payload, tag=PTR assumed).
-XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t exception_raw) {
+// The thrown value is passed through call_args[0] with call_arg_tags[0].
+XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t extra_arg) {
+    (void) extra_arg;
     XrayIsolate *isolate = coro->isolate;
     if (!isolate) {
         coro->jit_ctx->exception = NULL;
         return XR_JIT_OK();
     }
 
-    // DEFENSIVE-TEMP[082]: Backfill XrValue.heap_type at the JIT->VM boundary.
-    //   Tracking row "throw-heap-type" in tests/known_temp_workarounds.md.
-    //
-    // Why this exists today:
-    //   The XI_THROW argument is the unboxed payload of an arbitrary
-    //   value (string ptr, Exception ptr, even an int boxed as ptr).
-    //   JIT-internal XrValue uses a sparse descriptor where heap_type
-    //   may be 0 and is rebuilt on demand by jit_value_from_tag, while
-    //   the VM expects heap_type to always be complete. Without this
-    //   backfill xr_value_is_exception sees heap_type=0 for a real Exception,
-    //   the auto-wrap path fires spuriously, and the original value is
-    //   stored as userData with heap_type=0 — breaking every downstream
-    //   XR_IS_STRING / XR_IS_PTR-typed check on the caught value.
-    //
-    // Why a genuine fix needs more than this guard:
-    //   Every CALL_C boundary that hands an XrValue between JIT and VM
-    //   has the same hazard; backfilling at this single site is one
-    //   point on a long surface. A real fix unifies the descriptor
-    //   contract so JIT-internal values carry a complete heap_type by
-    //   construction, with DCHECK enforcement at every cross-tier call,
-    //   after which this rebuild becomes a redundant write the
-    //   compiler can elide.
-    XrValue exception;
-    exception.descriptor = 0;
-    exception.tag = XR_TAG_PTR;
-    exception.i = exception_raw;
-    if (exception_raw != 0 && (exception_raw & 0x7) == 0) {
-        exception.heap_type = (uint16_t) ((XrGCHeader *) exception.ptr)->type;
-    }
+    XrValue exception =
+        jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
 
     // Auto-wrap non-exception values
     if (!xr_value_is_exception(isolate, exception)) {

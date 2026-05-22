@@ -1,0 +1,17 @@
+.DS_Store
+results/
+node_modules/
+__pycache__/
+*.pyc
+*.log
+*.out
+*.err
+*_go
+*_bin
+*_aot
+*_aot_bump
+*_aot_malloc
+*_dart
+*.beam
+erl_crash.dump
+benchmark_history.log

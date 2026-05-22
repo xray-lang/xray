@@ -629,6 +629,12 @@ static void verify_effect_flags(VerifyCtx *ctx, const XiFunc *f) {
             uint8_t required = xi_op_default_effects(v->op);
             uint8_t missing = required & ~v->flags;
             if (missing) {
+                if (v->op == XI_GET_BUILTIN) {
+                    fprintf(stderr,
+                            "[xi_diag] verify GET_BUILTIN v%u flags=0x%02x ptr=%p aux_int=%lld "
+                            "aux=%p\n",
+                            v->id, v->flags, (void *) v, (long long) v->aux_int, v->aux);
+                }
                 verr(ctx,
                      "func '%s': v%u %s in b%u missing required "
                      "effect flags: has=0x%02x need=0x%02x missing=0x%02x",

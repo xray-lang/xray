@@ -426,7 +426,9 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
     // Set timer (must be called from owner worker)
     XR_DBG_TIMER("Worker set_timer: tw=%p, timeout_pos=%lld, tw->pos=%lld, owner=%d", (void *) tw,
                  (long long) timeout_pos, (long long) tw->pos, worker->p.id);
-    xr_twheel_set_timer(tw, timer, worker_sleep_timeout_callback, coro, timeout_pos);
+    if (!xr_twheel_set_timer(tw, timer, worker_sleep_timeout_callback, coro, timeout_pos)) {
+        atomic_store_explicit(&text->timer_active, false, memory_order_relaxed);
+    }
 }
 
 // Cancel timer - handles cross-worker case via async queue

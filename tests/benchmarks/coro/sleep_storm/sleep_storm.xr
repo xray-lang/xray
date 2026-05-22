@@ -1,0 +1,57 @@
+// 作者：xingleixu@gmail.com
+// Sleep Storm 测试
+// 大量协程同时 sleep 后唤醒，测试定时器和调度效率
+import time
+
+fn main() {
+    let N = 10000
+    // 协程数量
+    let SLEEP_MS = 100
+    // sleep 时间（毫秒）
+    if (process.args.length > 0) {
+        N = int(process.args[0]) ?? N
+    }
+    if (process.args.length > 1) {
+        SLEEP_MS = int(process.args[1]) ?? SLEEP_MS
+    }
+    print("=== Sleep Storm 测试 ===")
+    print("协程数量:", N)
+    print("Sleep时间:", SLEEP_MS, "ms")
+    // 协程任务：通过参数传递 sleep 时间
+    fn sleeper(id: int, sleep_ms: int) -> float {
+        let before = time.monotonic()
+        time.sleep(sleep_ms)
+        let after = time.monotonic()
+        return after - before
+    }
+    let start = time.monotonic()
+    // 同时启动所有协程
+    let tasks: Array<Task> = []
+    for (let i = 0; i < N; i++) {
+        tasks.push(go sleeper(i, SLEEP_MS))
+    }
+    let spawn_time = time.monotonic() - start
+    print("创建时间:", spawn_time, "ms")
+    // 等待所有协程完成，统计实际 sleep 时间
+    let total_sleep = 0
+    let max_sleep = 0
+    let min_sleep = 999999
+    for (task in tasks) {
+        let actual = await task
+        total_sleep = total_sleep + actual
+        if (actual > max_sleep) {
+            max_sleep = actual
+        }
+        if (actual < min_sleep) {
+            min_sleep = actual
+        }
+    }
+    let elapsed = time.monotonic() - start
+    print("总时间:", elapsed, "ms")
+    print("平均sleep:", float(total_sleep) / float(N), "ms")
+    print("最小sleep:", min_sleep, "ms")
+    print("最大sleep:", max_sleep, "ms")
+    print("调度开销:", max_sleep - SLEEP_MS, "ms")
+}
+
+main()

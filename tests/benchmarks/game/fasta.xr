@@ -1,0 +1,141 @@
+/**
+ * fasta.xr - FASTA DNA 序列生成基准测试 xray 版本
+ * 
+ * 作者：xingleixu@gmail.com
+ * 
+ * 算法说明：
+ * 1. repeat_fasta: 通过循环复制给定序列生成 DNA 序列
+ * 2. random_fasta: 使用加权随机选择从字母表生成 DNA 序列
+ *    - 使用线性同余生成器 (LCG) 产生伪随机数
+ *    - 将概率转换为累积概率，进行线性查找选择核苷酸
+ * 
+ * LCG 参数：
+ *   IM = 139968, IA = 3877, IC = 29573, Seed = 42
+ *   random() = (Seed * IA + IC) % IM
+ */
+// LCG 随机数生成器参数
+const IM = 139968
+const IA = 3877
+const IC = 29573
+// 每行最大字符数
+const LINE_WIDTH = 60
+// 全局随机数种子
+let seed = 42
+// ALU 重复序列 - 人类 Alu 序列
+const alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTG" + "GGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGA" + "GACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAA" + "AATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAAT" + "CCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAAC" + "CCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTG" + "CACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+// IUB 模糊代码 - 15 种核苷酸及其概率
+let iub_chars = ["a", "c", "g", "t", "B", "D", "H", "K", "M", "N", "R", "S", "V", "W", "Y"]
+let iub_probs = [0.27, 0.12, 0.12, 0.27, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02]
+// 人类同源序列频率 - 4 种核苷酸
+let hs_chars = ["a", "c", "g", "t"]
+let hs_probs = [0.302955, 0.197988, 0.197547, 0.301509]
+
+/**
+ * 生成 [0, max) 范围内的随机数
+ * 使用线性同余生成器
+ */
+fn random_num(max) {
+    seed = (seed * IA + IC) % IM
+    return max * seed / IM
+}
+
+/**
+ * 将概率数组转换为累积概率
+ * 累积概率用于线性查找：找到第一个 cumulative_p >= random 的核苷酸
+ */
+fn make_cumulative(probs) {
+    let cp = 0.0
+    for (let i = 0; i < probs.length; i++) {
+        cp = cp + probs[i]
+        probs[i] = cp
+    }
+}
+
+/**
+ * 从累积概率表中随机选择一个核苷酸
+ */
+fn select_random(chars, probs) {
+    // 内联 random_num(1.0)
+    seed = (seed * IA + IC) % IM
+    let r = float(seed) / IM
+    let n = probs.length
+    let i = 0
+    while (i < n) {
+        if (r < probs[i]) {
+            return chars[i]
+        }
+        i = i + 1
+    }
+    return chars[n - 1]
+}
+
+/**
+ * 重复复制给定序列生成 DNA
+ * 每 LINE_WIDTH 个字符换行
+ */
+fn repeat_fasta(id, desc, seq, count) {
+    print(">" + id + " " + desc)
+    let len = seq.length
+    let lw = LINE_WIDTH
+    let pos = 0
+    while (count > 0) {
+        let line_len = count
+        if (line_len > lw) {
+            line_len = lw
+        }
+        // 使用 StringBuilder 构建行
+        let sb = new StringBuilder()
+        for (let i = 0; i < line_len; i++) {
+            sb.append(seq.charAt(pos))
+            pos = pos + 1
+            if (pos >= len) {
+                pos = 0
+            }
+        }
+        print(sb.toString())
+        count = count - line_len
+    }
+}
+
+/**
+ * 使用加权随机选择生成 DNA 序列
+ * 每个核苷酸由 LCG 随机数和累积概率表决定
+ */
+fn random_fasta(id, desc, chars, probs, count) {
+    print(">" + id + " " + desc)
+    // 缓存 LINE_WIDTH
+    let lw = LINE_WIDTH
+    while (count > 0) {
+        let line_len = count
+        if (line_len > lw) {
+            line_len = lw
+        }
+        // 使用 StringBuilder 构建行
+        let sb = new StringBuilder()
+        for (let j = 0; j < line_len; j++) {
+            sb.append(select_random(chars, probs))
+        }
+        print(sb.toString())
+        count = count - line_len
+    }
+}
+
+/**
+ * 主程序入口
+ */
+fn main() {
+    // 序列长度参数（从命令行读取，默认 1000）
+    let n = process.args.length > 0 ? int(process.args[0]) ?? 1000 : 1000
+    // 预处理：将概率转换为累积概率
+    make_cumulative(iub_probs)
+    make_cumulative(hs_probs)
+    // 生成三种 DNA 序列：
+    // ONE:   重复 ALU 序列 2n 次
+    // TWO:   IUB 模糊代码随机序列 3n 次
+    // THREE: 人类同源序列频率随机序列 5n 次
+    repeat_fasta("ONE", "Homo sapiens alu", alu, n * 2)
+    random_fasta("TWO", "IUB ambiguity codes", iub_chars, iub_probs, n * 3)
+    random_fasta("THREE", "Homo sapiens frequency", hs_chars, hs_probs, n * 5)
+}
+
+main()

@@ -1,0 +1,112 @@
+// 作者：xingleixu@gmail.com
+// 公平调度测试 (Starvation Test)
+// 1 个 CPU 密集型协程（死循环计算）+ N 个短任务协程
+// 测试调度器能否公平调度，不让长任务饿死短任务
+// 直接验证 guard page safepoint + sysmon 抢占机制
+import time
+
+let SHORT_TASKS = 100    // 短任务数量
+let DURATION_MS = 2000   // 测试持续时间(ms)
+if (process.args.length > 0) {
+    SHORT_TASKS = int(process.args[0]) ?? SHORT_TASKS
+}
+if (process.args.length > 1) {
+    DURATION_MS = int(process.args[1]) ?? DURATION_MS
+}
+
+print("=== Starvation 测试 ===")
+print("短任务数:", SHORT_TASKS)
+print("持续时间:", DURATION_MS, "ms")
+
+shared const result_ch = Channel(1000)
+
+// CPU 密集型长任务：持续计算直到被取消
+fn cpu_hog() -> int {
+    let count = 0
+    let deadline = time.monotonic() + DURATION_MS
+    while (time.monotonic() < deadline) {
+        // 纯计算循环，没有任何 yield 点
+        // 只有 safepoint (guard page) 能让出 CPU
+        for (let i = 0; i < 10000; i++) {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+// 短任务：简单计算后立即返回
+fn short_task(id: int) -> int {
+    let start = time.monotonic()
+    // 少量计算
+    let sum = 0
+    for (let i = 0; i < 100; i++) {
+        sum = sum + i
+    }
+    let latency = time.monotonic() - start
+    result_ch.send(latency)
+    return sum
+}
+
+let start = time.monotonic()
+
+// 启动 CPU hog（长任务）
+let hog = go cpu_hog()
+
+// 等待一小段时间让 hog 开始运行
+time.sleep(10)
+
+// 分批启动短任务，间隔 10ms
+let short_tasks: Array<Task> = []
+let batch_size = SHORT_TASKS / 10
+if (batch_size < 1) { batch_size = 1 }
+
+let launched = 0
+while (launched < SHORT_TASKS) {
+    let remaining = SHORT_TASKS - launched
+    let current_batch = batch_size
+    if (current_batch > remaining) {
+        current_batch = remaining
+    }
+    for (let i = 0; i < current_batch; i++) {
+        short_tasks.push(go short_task(launched + i))
+    }
+    launched = launched + current_batch
+    time.sleep(10)
+}
+
+// 等待所有短任务完成（设超时）
+let completed = 0
+let total_latency = 0
+let max_latency = 0
+
+for (let i = 0; i < SHORT_TASKS; i++) {
+    let latency = result_ch.recv()
+    if (latency == null) { break }
+    completed++
+    let lat = int(latency) ?? 0
+    total_latency = total_latency + lat
+    if (lat > max_latency) {
+        max_latency = lat
+    }
+}
+
+for (task in short_tasks) {
+    await task
+}
+hog.cancel()
+result_ch.close()
+
+let elapsed = time.monotonic() - start
+
+print("短任务完成:", completed, "/", SHORT_TASKS)
+print("总时间:", elapsed, "ms")
+if (completed > 0) {
+    print("平均延迟:", float(total_latency) / float(completed), "ms")
+    print("最大延迟:", max_latency, "ms")
+}
+print("公平调度:", completed == SHORT_TASKS)
+if (completed == SHORT_TASKS) {
+    print("结果: PASS - safepoint 抢占正常工作")
+} else {
+    print("结果: FAIL - 短任务被饿死，safepoint 可能有问题")
+}

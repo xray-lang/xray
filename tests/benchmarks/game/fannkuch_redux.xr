@@ -1,0 +1,112 @@
+/*
+** fannkuch_redux.xr - Fannkuch-Redux Benchmark Xray版本
+**
+** 作者：xingleixu@gmail.com
+**
+** 算法说明：
+** 1. 生成 n! 个排列（使用 1-indexed，即 {1, 2, ..., n}）
+** 2. 对每个排列执行“翻煎饼”操作（翻转前 perm[0] 个元素）
+** 3. 重复翻转直到第一个元素为 1
+** 4. 统计最大翻转次数和校验和
+*/
+// 翻转数组前 n 个元素（索引 0 到 n-1）
+fn flip(perm, n) {
+    let lo = 0
+    let hi = n - 1
+    while (lo < hi) {
+        let tmp = perm[lo]
+        perm[lo] = perm[hi]
+        perm[hi] = tmp
+        lo = lo + 1
+        hi = hi - 1
+    }
+}
+
+// 左旋转前 n 个元素（索引 0 到 n-1）
+fn rotate(perm, n) {
+    let first = perm[0]
+    for (let i = 0; i < n - 1; i++) {
+        perm[i] = perm[i + 1]
+    }
+    perm[n - 1] = first
+}
+
+// 计算单个排列的翻转次数
+fn countFlips(perm, n): int {
+    // 复制数组
+    let work = []
+    for (let i = 0; i < n; i++) {
+        work.push(perm[i])
+    }
+    let flips = 0
+    // 当第一个元素不为 1 时继续翻转
+    while (work[0] != 1) {
+        let k = work[0]
+        flip(work, k)
+        flips = flips + 1
+    }
+    return flips
+}
+
+// 生成下一个排列（使用计数器方法）
+// 返回 true 如果还有更多排列，false 如果完成
+// 注意：count 数组使用 1-indexed（count[0] 不使用）
+fn nextPermutation(perm, count, n) {
+    // 旋转整个排列（前 n 个元素）
+    rotate(perm, n)
+    // 更新计数器（从 i=2 开始，对应 count[1]）
+    let i = 2
+    while (count[i - 1] >= i - 1) {
+        count[i - 1] = 0
+        i = i + 1
+        if (i > n) {
+            return false
+        }
+        // 旋转前 i 个元素
+        rotate(perm, i)
+    }
+    count[i - 1] = count[i - 1] + 1
+    return true
+}
+
+// 运行 fannkuch-redux 算法
+fn fannkuch(n) {
+    // 初始化排列为 {1, 2, 3, ..., n}
+    let perm = []
+    // count 数组初始化为 0（n+1 个元素以匹配索引）
+    let count = []
+    for (let i = 0; i < n; i++) {
+        perm.push(i + 1)
+        count.push(0)
+    }
+    let maxFlips = 0
+    let checksum = 0
+    let permIndex = 0
+    // 遍历所有排列
+    let hasMore = true
+    while (hasMore) {
+        let flips = countFlips(perm, n)
+        // 更新最大翻转次数
+        if (flips > maxFlips) {
+            maxFlips = flips
+        }
+        // 计算校验和：偶数索引加，奇数索引减
+        if (permIndex % 2 == 0) {
+            checksum = checksum + flips
+        } else {
+            checksum = checksum - flips
+        }
+        permIndex = permIndex + 1
+        hasMore = nextPermutation(perm, count, n)
+    }
+    // 输出结果
+    print(checksum)
+    print("Pfannkuchen(" + n + ") = " + maxFlips)
+}
+
+// 获取命令行参数或使用默认值
+let n = 10
+if (process.args.length > 0) {
+    n = int(process.args[0])
+}
+fannkuch(n)
