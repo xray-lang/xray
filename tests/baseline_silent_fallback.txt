@@ -19,8 +19,8 @@ src/jit/xm_fold.c:187
 src/jit/xm_fold.c:205
 src/jit/xm_fold.c:316
 src/jit/xm_fold.c:336
-src/jit/xm_jit_runtime.c:1543
-src/jit/xm_jit_runtime.c:1574
+src/jit/xm_jit_runtime.c:1517
+src/jit/xm_jit_runtime.c:1548
 src/jit/xm_pass.c:196
 src/jit/xm_pass.c:1486
 src/jit/xm_pass_advanced.c:236

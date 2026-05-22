@@ -395,11 +395,15 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     // Detect poison values from uninitialized JIT registers (OSR edge case)
     if (raw_closure == 0 || ((uint64_t) raw_closure >> 48) != 0)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    uintptr_t callee_addr = (uintptr_t) raw_closure;
+    if (callee_addr < 0x1000 || (callee_addr & 0x7) != 0)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     // Class call: allocate instance + call constructor inline
-    XrGCHeader *callee_gc = (XrGCHeader *) raw_closure;
-    if (XR_GC_GET_TYPE(callee_gc) == XR_TCLASS) {
-        XrClass *klass = (XrClass *) raw_closure;
+    XrGCHeader *callee_gc = (XrGCHeader *) callee_addr;
+    uint8_t callee_type = XR_GC_GET_TYPE(callee_gc);
+    if (callee_type == XR_TCLASS) {
+        XrClass *klass = (XrClass *) callee_addr;
         XrayIsolate *isolate = coro->isolate;
         if (!isolate)
             return (XrJitResult) {XM_DEOPT_MARKER, 0};
@@ -409,36 +413,53 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         if (!instance)
             return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
-        // Look up constructor method (cached symbol for speed)
-        static int ctor_sym = -1;
-        if (ctor_sym < 0) {
-            XrSymbolTable *st = (XrSymbolTable *) isolate->symbol_table;
-            ctor_sym = (int) xr_symbol_lookup_in_table(st, XR_KEYWORD_CONSTRUCTOR);
-        }
+        // Look up constructor method
+        XrSymbolTable *st = (XrSymbolTable *) isolate->symbol_table;
+        int ctor_sym = st ? (int) xr_symbol_lookup_in_table(st, XR_KEYWORD_CONSTRUCTOR) : -1;
         XrMethod *ctor = (ctor_sym > 0) ? xr_class_lookup_method(klass, ctor_sym) : NULL;
 
-        if (ctor && ctor->type == XMETHOD_CLOSURE) {
-            // User constructor: shift args right, insert instance as arg[0]
-            for (int i = nargs; i > 0; i--)
-                coro->jit_ctx->call_args[1 + i] = coro->jit_ctx->call_args[i];
-            coro->jit_ctx->call_args[1] = (int64_t) (uintptr_t) instance;
-            coro->jit_ctx->call_args[0] = (int64_t) (uintptr_t) ctor->as.closure;
+        XrValue inst_val = xr_value_from_instance(instance);
+        XrValue args[16];
+        for (int i = 0; i < nargs && i < 15; i++) {
+            int64_t raw = coro->jit_ctx->call_args[1 + i];
+            uint8_t tag = coro->jit_ctx->call_arg_tags[1 + i];
+            if (tag == XR_RTAG_UNKNOWN)
+                tag = XR_TAG_I64;
+            args[i] = jit_value_from_tag(raw, tag);
+        }
 
-            // Recursive call to handle constructor (JIT fast path + VM fallback)
-            xr_jit_call_func(coro, (nargs + 1) & 0xFF);
+        if (ctor && ctor->type == XMETHOD_CLOSURE) {
+            // User constructor: call through the VM with boxed tagged values.
+            XrValue ctor_args[16];
+            ctor_args[0] = inst_val;
+            for (int i = 0; i < nargs && i < 15; i++)
+                ctor_args[1 + i] = args[i];
+            bool saved_suppress = xr_isolate_get_suppress_exception_print(isolate);
+            xr_isolate_set_suppress_exception_print(isolate, true);
+            xr_vm_call_closure(isolate, ctor->as.closure, ctor_args, nargs + 1);
+            xr_isolate_set_suppress_exception_print(isolate, saved_suppress);
+            if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
+                coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
+                coro->vm_ctx.current_exception = XR_NULL_VAL;
+                return XR_JIT_NULL();
+            }
         } else if (ctor && ctor->type == XMETHOD_PRIMITIVE) {
             // Native constructor: box args and call C function
-            XrValue args[16];
-            for (int i = 0; i < nargs && i < 15; i++)
-                args[i] = jit_value_from_tag(coro->jit_ctx->call_args[1 + i], XR_TAG_I64);
-            ctor->as.primitive(isolate, xr_value_from_instance(instance), args, nargs);
+            ctor->as.primitive(isolate, inst_val, args, nargs);
+            if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
+                coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
+                coro->vm_ctx.current_exception = XR_NULL_VAL;
+                return XR_JIT_NULL();
+            }
         }
 
         // Return instance pointer regardless of constructor outcome
         return (XrJitResult) {(int64_t) (uintptr_t) instance, XR_TAG_PTR};
     }
+    if (callee_type != XR_TFUNCTION)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
-    XrClosure *closure = (XrClosure *) raw_closure;
+    XrClosure *closure = (XrClosure *) callee_addr;
     if (!closure->proto)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
