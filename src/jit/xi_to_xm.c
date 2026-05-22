@@ -736,6 +736,7 @@ generic_call:
     XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_call_func);
     XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_DIRECT, XR_REP_I64, nargs_val, fn_ref);
     blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT | XM_FLAG_MAY_THROW;
+    blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
     xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
     return result;
 }

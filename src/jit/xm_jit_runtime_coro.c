@@ -56,6 +56,23 @@
 #include <stdio.h>
 /* ========== Coroutine Runtime Helpers ========== */
 
+XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
+    const XrInstruction *code = (const XrInstruction *) proto->code.data;
+    for (int i = 0; i < proto->code.count; i++) {
+        switch (GET_OPCODE(code[i])) {
+            case OP_TRY:
+            case OP_CATCH:
+            case OP_FINALLY:
+            case OP_END_TRY:
+            case OP_THROW:
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
+}
+
 // Called from JIT via CALL_C for OP_CHAN_NEW.
 // extra_arg = buffer_size
 // Returns raw channel pointer (tagged XrValue).
@@ -469,7 +486,9 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     // Callbacks in JIT-compiled loops (filter/map/reduce) are small closures
     // that never reach the VM hot threshold. Compile them here on first call
     // to avoid expensive xr_vm_call_closure VM re-entry on every iteration.
-    if (!proto->jit_entry && proto->deopt_count <= 3 && proto->bb_leaders && coro->isolate) {
+    bool direct_jit_ok = !xm_proto_has_exception_control(proto);
+    if (direct_jit_ok && !proto->jit_entry && proto->deopt_count <= 3 && proto->bb_leaders &&
+        coro->isolate) {
         XmJitState *jit = coro->isolate->vm.jit;
         if (jit && jit->enabled) {
             // Synthesize or fix param_types for untyped params (default to i64).
@@ -498,7 +517,7 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     }
 
     // JIT fast path: callee compiled (either pre-compiled or just-now compiled)
-    if (proto->jit_entry) {
+    if (direct_jit_ok && proto->jit_entry) {
         void *saved_proto = coro->jit_ctx->call_proto;
         void *saved_closure = coro->jit_ctx->call_closure;
         coro->jit_ctx->call_proto = proto;
