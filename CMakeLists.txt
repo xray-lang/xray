@@ -654,6 +654,7 @@ if(XR_BUILD_MCP)
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_mcp_knowledge.py
             --docs ${CMAKE_CURRENT_SOURCE_DIR}/docs/knowledge
+            --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC_CN.md
             --builtins ${_xmcp_builtin_dump}
             --out ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
         DEPENDS xray

@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 FENCE_RE = re.compile(r"```xray\n(.*?)\n```", re.S)
+FRONT_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 SYMBOL_RE = re.compile(
     r"\.module = \"(?P<module>[^\"]+)\".*?\.symbols = (?P<symbols>_symbols_[A-Za-z0-9_]+|NULL),"
     r".*?\.symbol_count = (?P<count>[^,]+),",
@@ -22,6 +23,37 @@ SYMBOL_ARRAY_RE = re.compile(
     re.S,
 )
 SYMBOL_NAME_RE = re.compile(r"\.name = \"([^\"]+)\"")
+
+
+def heading_anchor(heading: str) -> str:
+    text = heading.strip().lower()
+    text = re.sub(r"^#+\s*", "", text)
+    text = text.replace("`", "")
+    text = re.sub(r"[^\w\u4e00-\u9fff\s-]", "", text)
+    text = re.sub(r"[\s]+", "-", text)
+    text = re.sub(r"-+", "-", text)
+    return "#" + text.strip("-")
+
+
+def load_spec_anchors(root: Path) -> set[str]:
+    anchors: set[str] = set()
+    for line in (root / "LANGUAGE_SPEC_CN.md").read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            anchors.add(heading_anchor(line))
+    return anchors
+
+
+def parse_frontmatter(path: Path) -> dict[str, str]:
+    match = FRONT_RE.match(path.read_text(encoding="utf-8"))
+    if not match:
+        raise ValueError(f"{path}: missing frontmatter")
+    meta: dict[str, str] = {}
+    for raw in match.group(1).splitlines():
+        if ":" not in raw:
+            continue
+        key, _, value = raw.partition(":")
+        meta[key.strip()] = value.strip().strip("\"'")
+    return meta
 
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -45,6 +77,23 @@ def check_xray_fences(root: Path, xray: Path) -> list[str]:
                     )
             finally:
                 tmp_path.unlink(missing_ok=True)
+    return errors
+
+
+def check_topic_spec_anchors(root: Path) -> list[str]:
+    anchors = load_spec_anchors(root)
+    errors: list[str] = []
+    for path in sorted((root / "docs/knowledge/topics").glob("*.md")):
+        try:
+            meta = parse_frontmatter(path)
+        except ValueError as err:
+            errors.append(str(err))
+            continue
+        spec = meta.get("spec", "")
+        if not spec:
+            errors.append(f"{path.relative_to(root)}: missing spec anchor")
+        elif spec not in anchors:
+            errors.append(f"{path.relative_to(root)}: unknown spec anchor {spec}")
     return errors
 
 
@@ -85,6 +134,12 @@ def check_symbol_subset(root: Path, xray: Path) -> list[str]:
     return errors
 
 
+def check_generated_stdlib_api_tables(root: Path) -> list[str]:
+    text = (root / "src/app/mcp/xmcp_knowledge_generated.c").read_text(encoding="utf-8")
+    required = ['"## API\\n"', '`csv.parse`', '`http.get`']
+    return [f"generated stdlib API table missing {needle}" for needle in required if needle not in text]
+
+
 def check_generated_is_current(root: Path, xray: Path) -> list[str]:
     proc = run([str(xray), "builtin-dump"], root)
     if proc.returncode != 0:
@@ -99,6 +154,8 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
                 str(root / "scripts/gen_mcp_knowledge.py"),
                 "--docs",
                 str(root / "docs/knowledge"),
+                "--spec",
+                str(root / "LANGUAGE_SPEC_CN.md"),
                 "--builtins",
                 str(tmp_path),
                 "--out",
@@ -183,9 +240,11 @@ def main(argv: list[str]) -> int:
     root = args.root.resolve()
     xray = args.xray.resolve()
     errors: list[str] = []
+    errors.extend(check_topic_spec_anchors(root))
     errors.extend(check_xray_fences(root, xray))
     errors.extend(check_generated_is_current(root, xray))
     errors.extend(check_symbol_subset(root, xray))
+    errors.extend(check_generated_stdlib_api_tables(root))
     errors.extend(check_key_syntax(root))
     errors.extend(check_prompt_smoke_examples(root, xray))
 
