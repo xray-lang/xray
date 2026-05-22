@@ -412,6 +412,41 @@ static XrJsonValue *make_diagnostic(int line, int column, int end_line, int end_
     return diag;
 }
 
+static XrJsonValue *make_parser_diagnostics(const ErrorCapture *cap, int *out_count,
+                                            bool *out_truncated) {
+    XR_DCHECK(cap != NULL, "make_parser_diagnostics: NULL capture");
+    XR_DCHECK(out_count != NULL, "make_parser_diagnostics: NULL count");
+    XR_DCHECK(out_truncated != NULL, "make_parser_diagnostics: NULL truncated");
+
+    XrJsonValue *diagnostics = xjson_new_array();
+    int emitted = 0;
+    for (int i = 0; i < cap->count && emitted < MAX_CHECK_ERRORS; i++, emitted++) {
+        xjson_array_push(diagnostics, make_diagnostic(cap->lines[i], cap->columns[i],
+                                                      cap->end_lines[i], cap->end_columns[i],
+                                                      "error", 0, cap->messages[i], "parser"));
+    }
+    *out_count = emitted;
+    *out_truncated = cap->count >= MAX_CHECK_ERRORS;
+    return diagnostics;
+}
+
+static XrJsonValue *make_format_result_content(const char *formatted, bool changed, int indent_size,
+                                               bool use_tabs, bool ok, bool truncated,
+                                               XrJsonValue *diagnostics) {
+    XR_DCHECK(formatted != NULL, "make_format_result_content: NULL formatted");
+    XR_DCHECK(diagnostics != NULL, "make_format_result_content: NULL diagnostics");
+    XrJsonValue *structured = xjson_new_object();
+    XJSON_SET_BOOL(structured, "ok", ok);
+    XJSON_SET_STRING(structured, "formattedCode", formatted);
+    XJSON_SET_BOOL(structured, "changed", changed);
+    XJSON_SET_INT(structured, "indentSize", indent_size);
+    XJSON_SET_BOOL(structured, "useTabs", use_tabs);
+    XJSON_SET_INT(structured, "diagnosticCount", xjson_array_len(diagnostics));
+    XJSON_SET_BOOL(structured, "truncated", truncated);
+    xjson_object_set(structured, "diagnostics", diagnostics);
+    return structured;
+}
+
 static XrJsonValue *make_syntax_result_content(const char *topic, bool found, const char *content) {
     XR_DCHECK(topic != NULL, "make_syntax_result_content: NULL topic");
     XR_DCHECK(content != NULL, "make_syntax_result_content: NULL content");
@@ -523,10 +558,14 @@ static XrJsonValue *schema_format_output(void) {
     XrJsonValue *s = xjson_new_object();
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "ok", "boolean", "True when formatting succeeded");
     schema_add_prop(p, "formattedCode", "string", "Formatted Xray source code");
     schema_add_prop(p, "changed", "boolean", "True when formatting changed the input");
     schema_add_prop(p, "indentSize", "integer", "Effective indent size");
     schema_add_prop(p, "useTabs", "boolean", "Effective tab indentation flag");
+    schema_add_prop(p, "diagnosticCount", "integer", "Number of parser diagnostics returned");
+    schema_add_prop(p, "truncated", "boolean", "True when diagnostics hit the result limit");
+    schema_add_prop(p, "diagnostics", "array", "Structured parser diagnostics");
     xjson_object_set(s, "properties", p);
     return s;
 }
@@ -836,10 +875,42 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, const XmcpCallContext *
     if (xjson_get_bool(arguments, "useTabs"))
         config.use_tabs = 1;
 
+    XrArena *arena = xr_malloc(sizeof(XrArena));
+    if (!arena)
+        return xmcp_make_error_result("Error: out of memory");
+    xr_arena_init(arena, 0);
+
+    ErrorCapture cap = {.count = 0};
+    Parser parser;
+    xr_parser_init(&parser, server->isolate, code, "<mcp-format>", arena);
+    xr_parser_set_error_callback(&parser, check_error_callback, &cap, MAX_CHECK_ERRORS);
+    AstNode *syntax_ast = xr_parse_recoverable(&parser);
+    (void) syntax_ast;
+
+    if (cap.count > 0) {
+        int diagnostic_count = 0;
+        bool truncated = false;
+        XrJsonValue *diagnostics = make_parser_diagnostics(&cap, &diagnostic_count, &truncated);
+        XrJsonValue *structured = make_format_result_content(
+            "", false, config.indent_size, config.use_tabs != 0, false, truncated, diagnostics);
+        char text[128];
+        snprintf(text, sizeof(text), "Cannot format code with %d syntax diagnostic(s).",
+                 diagnostic_count);
+        XrJsonValue *result = xmcp_make_text_structured_result(text, structured, true);
+        xr_arena_destroy(arena);
+        xr_free(arena);
+        return result;
+    }
+    xr_arena_destroy(arena);
+    xr_free(arena);
+
     AstNode *ast = xr_parse_with_trivia(server->isolate, code, "<mcp-format>");
     if (!ast) {
-        return xmcp_make_error_result("Error: cannot format code with syntax errors. "
-                                      "Use xray_analyze first to find and fix errors.");
+        XrJsonValue *diagnostics = xjson_new_array();
+        XrJsonValue *structured = make_format_result_content(
+            "", false, config.indent_size, config.use_tabs != 0, false, false, diagnostics);
+        return xmcp_make_text_structured_result("Error: formatting parser failed", structured,
+                                                true);
     }
 
     char *formatted = xfmt_format_ast(ast, &config, server->isolate);
@@ -847,11 +918,9 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, const XmcpCallContext *
     if (!formatted)
         return xmcp_make_error_result("Error: formatting failed");
 
-    XrJsonValue *structured = xjson_new_object();
-    XJSON_SET_STRING(structured, "formattedCode", formatted);
-    XJSON_SET_BOOL(structured, "changed", strcmp(code, formatted) != 0);
-    XJSON_SET_INT(structured, "indentSize", config.indent_size);
-    XJSON_SET_BOOL(structured, "useTabs", config.use_tabs != 0);
+    XrJsonValue *structured =
+        make_format_result_content(formatted, strcmp(code, formatted) != 0, config.indent_size,
+                                   config.use_tabs != 0, true, false, xjson_new_array());
 
     XrJsonValue *result = xmcp_make_text_result(formatted, false);
     xjson_object_set(result, "structuredContent", structured);

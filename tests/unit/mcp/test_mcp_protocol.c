@@ -754,6 +754,10 @@ TEST(tools_call_format_schema_has_optional_params) {
     ASSERT_NOT_NULL(xjson_get_object(output_props, "changed"));
     ASSERT_NOT_NULL(xjson_get_object(output_props, "indentSize"));
     ASSERT_NOT_NULL(xjson_get_object(output_props, "useTabs"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "ok"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "diagnosticCount"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "truncated"));
+    ASSERT_NOT_NULL(xjson_get_object(output_props, "diagnostics"));
 
     xjson_free(result);
 }
@@ -777,13 +781,49 @@ TEST(tools_call_format_returns_structured_content) {
     ASSERT(xjson_get_bool(result, "isError") == false);
     XrJsonValue *structured = xjson_get_object(result, "structuredContent");
     ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "ok") == true);
     ASSERT_NOT_NULL(xjson_get_string(structured, "formattedCode"));
     ASSERT(xjson_get_bool(structured, "changed") == true);
     ASSERT_EQ(xjson_get_int_or(structured, "indentSize", 0), 2);
     ASSERT(xjson_get_bool(structured, "useTabs") == false);
+    ASSERT_EQ(xjson_get_int_or(structured, "diagnosticCount", -1), 0);
+    ASSERT(xjson_get_bool(structured, "truncated") == false);
+    ASSERT_EQ(xjson_array_len(xjson_get_array(structured, "diagnostics")), 0);
     XrJsonValue *content = xjson_get_array(result, "content");
     XrJsonValue *item = xjson_array_get(content, 0);
     ASSERT_STR_EQ(xjson_get_string(item, "text"), xjson_get_string(structured, "formattedCode"));
+
+    xjson_free(params);
+    xjson_free(result);
+    xray_isolate_delete(server.isolate);
+}
+
+TEST(tools_call_format_syntax_errors_are_structured) {
+    XmcpServer server = test_server();
+    XrayIsolateParams iso_params;
+    xray_isolate_params_init(&iso_params);
+    server.isolate = xray_isolate_new(&iso_params);
+    ASSERT_NOT_NULL(server.isolate);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let x = ;\n");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "ok") == false);
+    ASSERT_STR_EQ(xjson_get_string(structured, "formattedCode"), "");
+    ASSERT(xjson_get_int_or(structured, "diagnosticCount", 0) > 0);
+    XrJsonValue *diagnostics = xjson_get_array(structured, "diagnostics");
+    ASSERT_NOT_NULL(diagnostics);
+    ASSERT(xjson_array_len(diagnostics) > 0);
+    XrJsonValue *first = xjson_array_get(diagnostics, 0);
+    ASSERT_STR_EQ(xjson_get_string(first, "source"), "parser");
 
     xjson_free(params);
     xjson_free(result);
@@ -1772,6 +1812,7 @@ int main(void) {
     RUN_TEST(tools_call_format_missing_code);
     RUN_TEST(tools_call_format_schema_has_optional_params);
     RUN_TEST(tools_call_format_returns_structured_content);
+    RUN_TEST(tools_call_format_syntax_errors_are_structured);
 
     /* Diagnostics tool */
     RUN_TEST(tools_call_analyze_missing_code);
