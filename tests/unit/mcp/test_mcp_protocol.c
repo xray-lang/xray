@@ -36,7 +36,7 @@ void xmcp_send_log_notification(XmcpServer *s, const char *l, const char *m) {
     (void) l;
     (void) m;
 }
-void xmcp_send_progress_notification(XmcpServer *s, int64_t t, int p, int tot) {
+void xmcp_send_progress_notification(XmcpServer *s, const XrJsonValue *t, int64_t p, int64_t tot) {
     (void) s;
     (void) t;
     (void) p;
@@ -1258,20 +1258,6 @@ TEST(tools_call_definition_schema) {
 }
 
 /* =========================================================================
- * Pagination: tools/list cursor support
- * ========================================================================= */
-
-TEST(tools_list_pagination_no_cursor) {
-    XmcpServer server = test_server();
-    XrJsonValue *result = call_tools_list(&server, NULL);
-    XrJsonValue *tools = xjson_get_array(result, "tools");
-    ASSERT_EQ(xjson_array_len(tools), 5);
-    /* No nextCursor when all items fit */
-    ASSERT(xjson_get_string(result, "nextCursor") == NULL);
-    xjson_free(result);
-}
-
-/* =========================================================================
  * Resources: resources/list
  * ========================================================================= */
 
@@ -1546,11 +1532,14 @@ TEST(prompts_get_code_review) {
 
     XrJsonValue *messages = xjson_get_array(result, "messages");
     ASSERT_NOT_NULL(messages);
-    ASSERT(xjson_array_len(messages) >= 2);
+    ASSERT_EQ((int) xjson_array_len(messages), 1);
 
-    /* First message should have role */
+    /* Single merged message must be role=user with combined content */
     XrJsonValue *first = xjson_array_get(messages, 0);
-    ASSERT_NOT_NULL(xjson_get_string(first, "role"));
+    ASSERT_NOT_NULL(first);
+    const char *role = xjson_get_string(first, "role");
+    ASSERT_NOT_NULL(role);
+    ASSERT(strcmp(role, "user") == 0);
 
     xjson_free(params);
     xjson_free(result);
@@ -1745,12 +1734,14 @@ TEST(knowledge_get_stdlib_list) {
 
 TEST(method_entry_struct_size) {
     /* Verify the struct layout compiles correctly */
-    XmcpMethodEntry entry = {
-        .method = "test/method", .handler = NULL, .is_notification = false, .needs_init = true};
+    XmcpMethodEntry entry = {.method = "test/method",
+                             .handler = NULL,
+                             .is_notification = false,
+                             .required_state = XMCP_LC_MUST_BE_READY};
     ASSERT_STR_EQ(entry.method, "test/method");
     ASSERT(entry.handler == NULL);
     ASSERT(entry.is_notification == false);
-    ASSERT(entry.needs_init == true);
+    ASSERT(entry.required_state == XMCP_LC_MUST_BE_READY);
 }
 
 /* =========================================================================
@@ -1839,9 +1830,6 @@ int main(void) {
     /* Definition tool */
     RUN_TEST(tools_call_definition_missing_symbol);
     RUN_TEST(tools_call_definition_schema);
-
-    /* Pagination */
-    RUN_TEST(tools_list_pagination_no_cursor);
 
     /* Resources */
     RUN_TEST(resources_list_returns_three);

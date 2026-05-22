@@ -254,7 +254,7 @@ def test_resources_and_prompts_protocol_paths(xray: Path) -> None:
         assert isinstance(prompt_result, dict), prompt_response
         messages = prompt_result.get("messages")
         assert isinstance(messages, list), prompt_response
-        assert len(messages) >= 2, prompt_response
+        assert len(messages) == 1, f"expected single merged message, got {len(messages)}"
     finally:
         session.close()
 

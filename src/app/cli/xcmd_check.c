@@ -15,7 +15,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_isolate.h"
+#include "../../api/xisolate_profile.h"
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../frontend/parser/xparse.h"
@@ -120,7 +120,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     bool strict = xr_cli_opt_bool(&inv->options, "strict");
 
     /* Create shared isolate for all checks */
-    XrayIsolate *X = xr_cli_isolate_new(XR_CLI_ISOLATE_ANALYZE);
+    XrayIsolate *X = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
     if (!X) {
         xr_cli_error("check", "failed to create isolate");
         return XR_CLI_EXIT_INTERNAL;

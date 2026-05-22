@@ -10,10 +10,10 @@
  * KEY CONCEPT:
  *   Covers the REPL symbol table lifecycle, the persistent analyzer
  *   path through xr_repl_compile, the .vars / .type introspection
- *   helpers, the const round-trip, and the XR_CLI_ISOLATE_REPL
+ *   helpers, the const round-trip, and the XR_ISOLATE_PROFILE_REPL
  *   profile's JIT-off invariant.
  *
- *   Tests link xray_core plus a small slice of CLI (xcli_isolate)
+ *   Tests link xray_core plus a small slice of CLI (xisolate_profile)
  *   needed to exercise the profile factory.  No interactive readline
  *   path is exercised here — completion is verified by manual REPL
  *   sessions.
@@ -27,14 +27,14 @@
 #include "../../../src/runtime/xexec_state.h"
 #include "../../../src/runtime/xisolate_internal.h"
 #include "xrepl.h"
-#include "xcli_isolate.h"
+#include "xisolate_profile.h"
 #include <stdio.h>
 #include <string.h>
 
 /* ========== Helpers ========== */
 
 static XrayIsolate *make_repl_iso(void) {
-    return xr_cli_isolate_new(XR_CLI_ISOLATE_REPL);
+    return xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
 }
 
 /* Find a symbol by name; returns -1 if not present. */
@@ -128,19 +128,19 @@ TEST(repl_profile_disables_jit) {
      * never hit tier-up thresholds, and cross-input shape changes
      * would invalidate any speculated guards anyway. */
     XrayIsolateParams p;
-    xr_cli_isolate_params(XR_CLI_ISOLATE_REPL, &p);
+    xr_isolate_profile_params(XR_ISOLATE_PROFILE_REPL, &p);
     ASSERT_FALSE(p.enable_jit);
 }
 
 TEST(repl_profile_clears_each_call) {
-    /* Each xr_cli_isolate_params call must fully initialize the out
+    /* Each xr_isolate_profile_params call must fully initialize the out
      * struct — leftover bits from a prior call on the same struct
      * must not bleed through.  Set a sentinel before the second call
      * to catch any field that depends on prior content. */
     XrayIsolateParams p;
-    xr_cli_isolate_params(XR_CLI_ISOLATE_RUN, &p);
+    xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &p);
     p.enable_jit = true; /* sentinel */
-    xr_cli_isolate_params(XR_CLI_ISOLATE_REPL, &p);
+    xr_isolate_profile_params(XR_ISOLATE_PROFILE_REPL, &p);
     ASSERT_FALSE(p.enable_jit);
 }
 

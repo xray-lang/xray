@@ -159,13 +159,52 @@ static void insert_match(XmcpStdlibSearchResult *out, const XmcpModule *module,
     out->matches[pos].score = score;
 }
 
+/* Stdlib search ranking weights.
+ *
+ * Each row is one (exact, contains, token) triple applied to one input field
+ * by score_text_terms().  The relative ordering reflects how strong a hit on
+ * that field is for ranking purposes:
+ *
+ *   - symbol_name dominates: an exact match on a function name is the
+ *     strongest possible signal, so it scores higher than every module-level
+ *     hit.
+ *   - signature and summary fields share a tier (70/45/25) so renaming a
+ *     symbol in docs vs. signature does not perturb ranking.
+ *   - body text is weakest (35/20/10): full-text hits inside long markdown
+ *     bodies are noisy and should only break ties.
+ *
+ * Tweak the numbers here only; both score_symbol() and score_module() read
+ * from this table and stay in lock-step. */
+typedef struct {
+    int exact;
+    int contains;
+    int token;
+} XmcpScoreTier;
+
+static const XmcpScoreTier XMCP_SCORE_SYMBOL_NAME = {140, 100, 55};
+static const XmcpScoreTier XMCP_SCORE_SYMBOL_SIGNATURE = {70, 45, 25};
+static const XmcpScoreTier XMCP_SCORE_SYMBOL_SUMMARY = {50, 30, 18};
+static const XmcpScoreTier XMCP_SCORE_MODULE_NAME = {120, 90, 55};
+static const XmcpScoreTier XMCP_SCORE_MODULE_SUMMARY = {70, 45, 25};
+static const XmcpScoreTier XMCP_SCORE_MODULE_BODY = {35, 20, 10};
+
+static int score_text_with_tier(const char *text, const char *query,
+                                char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX],
+                                int token_count, const XmcpScoreTier *tier) {
+    return score_text_terms(text, query, tokens, token_count, tier->exact, tier->contains,
+                            tier->token);
+}
+
 static int score_symbol(const XmcpGeneratedStdlibSymbol *symbol, const char *query,
                         char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX], int token_count) {
     if (!symbol)
         return 0;
-    int score = score_text_terms(symbol->name, query, tokens, token_count, 140, 100, 55);
-    int sig_score = score_text_terms(symbol->signature, query, tokens, token_count, 70, 45, 25);
-    int doc_score = score_text_terms(symbol->summary, query, tokens, token_count, 50, 30, 18);
+    int score =
+        score_text_with_tier(symbol->name, query, tokens, token_count, &XMCP_SCORE_SYMBOL_NAME);
+    int sig_score = score_text_with_tier(symbol->signature, query, tokens, token_count,
+                                         &XMCP_SCORE_SYMBOL_SIGNATURE);
+    int doc_score = score_text_with_tier(symbol->summary, query, tokens, token_count,
+                                         &XMCP_SCORE_SYMBOL_SUMMARY);
     if (sig_score > score)
         score = sig_score;
     if (doc_score > score)
@@ -177,9 +216,12 @@ static int score_module(const XmcpModule *module, const char *query,
                         char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX], int token_count) {
     if (!module)
         return 0;
-    int score = score_text_terms(module->name, query, tokens, token_count, 120, 90, 55);
-    int summary_score = score_text_terms(module->summary, query, tokens, token_count, 70, 45, 25);
-    int body_score = score_text_terms(module->body, query, tokens, token_count, 35, 20, 10);
+    int score =
+        score_text_with_tier(module->name, query, tokens, token_count, &XMCP_SCORE_MODULE_NAME);
+    int summary_score = score_text_with_tier(module->summary, query, tokens, token_count,
+                                             &XMCP_SCORE_MODULE_SUMMARY);
+    int body_score =
+        score_text_with_tier(module->body, query, tokens, token_count, &XMCP_SCORE_MODULE_BODY);
     if (summary_score > score)
         score = summary_score;
     if (body_score > score)
@@ -228,9 +270,9 @@ void xmcp_knowledge_load(XmcpKnowledge *kb) {
     kb->topic_count = 0;
     kb->module_count = 0;
 
-    for (int i = 0; i < xmcp_generated_topic_count; i++) {
-        if (kb->topic_count >= XMCP_MAX_TOPICS)
-            break;
+    XR_DCHECK(xmcp_generated_topic_count <= XMCP_MAX_TOPICS,
+              "xmcp_knowledge_load: generated topic count exceeds XMCP_MAX_TOPICS");
+    for (int i = 0; i < xmcp_generated_topic_count && kb->topic_count < XMCP_MAX_TOPICS; i++) {
         const XmcpGeneratedTopic *src = &xmcp_generated_topics[i];
         XmcpTopic *dst = &kb->topics[kb->topic_count++];
         dst->name = src->id;
@@ -239,9 +281,9 @@ void xmcp_knowledge_load(XmcpKnowledge *kb) {
         dst->content = src->body;
     }
 
-    for (int i = 0; i < xmcp_generated_stdlib_count; i++) {
-        if (kb->module_count >= XMCP_MAX_MODULES)
-            break;
+    XR_DCHECK(xmcp_generated_stdlib_count <= XMCP_MAX_MODULES,
+              "xmcp_knowledge_load: generated stdlib count exceeds XMCP_MAX_MODULES");
+    for (int i = 0; i < xmcp_generated_stdlib_count && kb->module_count < XMCP_MAX_MODULES; i++) {
         const XmcpGeneratedStdlibEntry *src = &xmcp_generated_stdlib[i];
         XmcpModule *dst = &kb->modules[kb->module_count++];
         dst->name = src->module;
@@ -254,6 +296,16 @@ void xmcp_knowledge_load(XmcpKnowledge *kb) {
 
 void xmcp_knowledge_free(XmcpKnowledge *kb) {
     xr_free(kb);
+}
+
+const XmcpModule *xmcp_knowledge_get_module(XmcpKnowledge *kb, const char *name) {
+    if (!kb || !name || name[0] == '\0')
+        return NULL;
+    for (int i = 0; i < kb->module_count; i++) {
+        if (strcasecmp(kb->modules[i].name, name) == 0)
+            return &kb->modules[i];
+    }
+    return NULL;
 }
 
 const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query) {
@@ -386,8 +438,12 @@ char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query, const c
                                      m->module->name);
             len += (size_t) snprintf(text + len, cap - len, "%s\n\n", m->module->summary);
         }
-        if (len > cap - 512)
+        if (len > cap - 512) {
+            len += (size_t) snprintf(text + len, cap - len,
+                                     "\n_(truncated: %d of %d matches shown)_\n", i + 1,
+                                     result.match_count);
             break;
+        }
     }
     return text;
 }

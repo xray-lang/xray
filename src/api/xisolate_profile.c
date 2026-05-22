@@ -5,38 +5,37 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcli_isolate.c - Profile-based isolate creation for CLI commands
+ * xisolate_profile.c - Profile-based isolate creation
  *
  * KEY CONCEPT:
- *   Eliminates the repeated XrayIsolateParams boilerplate scattered
- *   across run/repl/test/check/fmt/compile/deps/eval.
- *   Each profile selects appropriate init_flags; callers override
- *   only what they need (JIT, trace, workers, etc.).
+ *   Each profile selects appropriate init_flags; callers override only what
+ *   they need (JIT, trace, workers, etc.).  This eliminates the repeated
+ *   XrayIsolateParams boilerplate across run/repl/test/check/fmt/compile/
+ *   deps/eval and the MCP analyzer isolate.
  */
 
-#include "xcli_isolate.h"
-#include "xcli_diag.h"
-#include "../../base/xchecks.h"
+#include "xisolate_profile.h"
+#include "../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
 
 /* ========== Profile Configuration ========== */
 
-void xr_cli_isolate_params(XrCliIsolateProfile profile, XrayIsolateParams *out) {
+void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out) {
     XR_DCHECK(out != NULL, "out must not be NULL");
 
     /* Start with defaults */
     xray_isolate_params_init(out);
 
     switch (profile) {
-        case XR_CLI_ISOLATE_RUN:
-        case XR_CLI_ISOLATE_EVAL:
-        case XR_CLI_ISOLATE_TEST:
+        case XR_ISOLATE_PROFILE_RUN:
+        case XR_ISOLATE_PROFILE_EVAL:
+        case XR_ISOLATE_PROFILE_TEST:
             /* Full runtime: all subsystems */
             xray_isolate_setup_full(out);
             break;
 
-        case XR_CLI_ISOLATE_REPL:
+        case XR_ISOLATE_PROFILE_REPL:
             /* Full runtime, but JIT is force-disabled.  Each REPL input
              * is a one-shot top-level proto; tier-up call-count
              * thresholds will never be reached for the new code, and
@@ -49,13 +48,13 @@ void xr_cli_isolate_params(XrCliIsolateProfile profile, XrayIsolateParams *out) 
             out->enable_jit = false;
             break;
 
-        case XR_CLI_ISOLATE_PARSE:
+        case XR_ISOLATE_PROFILE_PARSE:
             /* Minimal: just compiler + source cache */
             out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_SOURCE_CACHE;
             xray_isolate_setup_full(out);
             break;
 
-        case XR_CLI_ISOLATE_ANALYZE:
+        case XR_ISOLATE_PROFILE_ANALYZE:
             /* Compiler + analyzer + source cache */
             out->init_flags = XR_INIT_VM | XR_INIT_GC | XR_INIT_COMPILER | XR_INIT_ANALYZER |
                               XR_INIT_SOURCE_CACHE | XR_INIT_CLASSES | XR_INIT_SYMBOLS;
@@ -66,7 +65,7 @@ void xr_cli_isolate_params(XrCliIsolateProfile profile, XrayIsolateParams *out) 
 
 /* ========== Create ========== */
 
-XrayIsolate *xr_cli_isolate_create(const XrayIsolateParams *params) {
+XrayIsolate *xr_isolate_profile_create(const XrayIsolateParams *params) {
     XR_DCHECK(params != NULL, "params must not be NULL");
 
     XrayIsolate *iso = xray_isolate_new(params);
@@ -76,8 +75,8 @@ XrayIsolate *xr_cli_isolate_create(const XrayIsolateParams *params) {
     return iso;
 }
 
-XrayIsolate *xr_cli_isolate_new(XrCliIsolateProfile profile) {
+XrayIsolate *xr_isolate_profile_new(XrIsolateProfile profile) {
     XrayIsolateParams params;
-    xr_cli_isolate_params(profile, &params);
-    return xr_cli_isolate_create(&params);
+    xr_isolate_profile_params(profile, &params);
+    return xr_isolate_profile_create(&params);
 }

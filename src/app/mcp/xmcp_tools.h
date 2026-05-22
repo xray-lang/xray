@@ -26,7 +26,9 @@ typedef struct XrJsonValue XrJsonValue;
 typedef struct XmcpServer XmcpServer;
 typedef struct XmcpRpcError XmcpRpcError;
 
-/* Handle "tools/list" request. Accepts params for pagination (cursor). */
+/* Handle "tools/list" request. The current registry size (max 16 tools)
+ * always fits in a single response, so no cursor pagination is wired up.
+ * `params` is reserved for future use. */
 XR_FUNC XrJsonValue *xmcp_handle_tools_list(XmcpServer *server, XrJsonValue *params,
                                             XmcpRpcError *error);
 

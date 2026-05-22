@@ -16,7 +16,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_isolate.h"
+#include "../../api/xisolate_profile.h"
 #include "xcli_output.h"
 #include "xray.h"
 #include "xray_isolate.h"
@@ -522,7 +522,7 @@ static bool handle_command(ReplState *state, const char *input) {
         repl_free_protos(state);
         xr_multicore_destroy(state->isolate);
         xray_isolate_delete(state->isolate);
-        state->isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_REPL);
+        state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
         if (!state->isolate) {
             fprintf(stderr, "Error: failed to create isolate\n");
             return true;
@@ -685,7 +685,7 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
 #endif
 
     // Create Isolate + Runtime (persistent across inputs for GC safety)
-    state.isolate = xr_cli_isolate_new(XR_CLI_ISOLATE_REPL);
+    state.isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
     if (!state.isolate) {
         xr_cli_error("repl", "failed to create isolate");
         xr_free(state.buffer);

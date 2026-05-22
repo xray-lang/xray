@@ -29,7 +29,8 @@ typedef enum XmcpToolset {
 /* Per-call context passed by tools/call dispatch to a handler. Lives on the
  * dispatcher stack; handlers MUST NOT retain pointers beyond the call. */
 typedef struct XmcpCallContext {
-    int64_t progress_token; /* -1 when the client did not request progress */
+    XrJsonValue *progress_token; /* NULL when the client did not request progress.
+                                  * Owned clone of _meta.progressToken (string|number). */
 } XmcpCallContext;
 
 typedef XrJsonValue *(*XmcpToolHandler)(XmcpServer *server, const XmcpCallContext *ctx,

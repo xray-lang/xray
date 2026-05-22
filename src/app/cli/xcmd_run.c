@@ -15,7 +15,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
-#include "xcli_isolate.h"
+#include "../../api/xisolate_profile.h"
 
 #include "xray.h"
 #include "xray_isolate.h"
@@ -42,7 +42,7 @@ typedef struct {
 /* Create isolate via profile factory, then apply run-specific overrides */
 static XrayIsolate *create_run_isolate(const RunOptions *opts) {
     XrayIsolateParams params;
-    xr_cli_isolate_params(XR_CLI_ISOLATE_RUN, &params);
+    xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &params);
     params.trace_execution = opts->trace;
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
@@ -51,7 +51,7 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
         params.jit_threshold = 1;
     params.jit_stats = opts->jit_stats;
 
-    XrayIsolate *iso = xr_cli_isolate_create(&params);
+    XrayIsolate *iso = xr_isolate_profile_create(&params);
     if (!iso)
         return NULL;
     xr_multicore_init(iso, opts->num_workers);

@@ -40,7 +40,8 @@
 /* ========== File reading helper (avoids CLI layer dependency) ========== */
 
 /* Create a full-runtime isolate for AOT compilation.
- * Equivalent to XR_CLI_ISOLATE_RUN profile without CLI dependency. */
+ * Equivalent to XR_ISOLATE_PROFILE_RUN without depending on the
+ * isolate-profile factory in src/api/. */
 static XrayIsolate *create_isolate(void) {
     XrayIsolateParams params;
     xray_isolate_params_init(&params);

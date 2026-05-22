@@ -64,6 +64,12 @@ XR_FUNC void xmcp_knowledge_free(XmcpKnowledge *kb);
 XR_FUNC const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query);
 XR_FUNC char *xmcp_knowledge_list_topics(XmcpKnowledge *kb);
 
+/* Direct O(N) module lookup by exact name (case-insensitive).  Returns NULL
+ * when not found.  The returned pointer is owned by the knowledge base; do
+ * not free.  Used for `xray://stdlib/{module}` so resource reads bypass the
+ * search/ranking pipeline. */
+XR_FUNC const XmcpModule *xmcp_knowledge_get_module(XmcpKnowledge *kb, const char *name);
+
 XR_FUNC void xmcp_knowledge_search_stdlib_matches(XmcpKnowledge *kb, const char *query,
                                                   const char *module_filter,
                                                   XmcpStdlibSearchResult *out);
