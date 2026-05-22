@@ -540,16 +540,24 @@ Literals default to `float`.
 | Everything else (including `0.0001`, non-empty strings/collections, object references) | **truthy** |
 
 ```xray
-let x: int? = maybe_int()
+let x: int? = 41
 if (x) {                  // truthy context: enters when x is neither null nor 0
     print(x + 1)          // x is narrowed to int in this branch
 }
 
 let s: string = ""
-if (s) { ... } else { ... }    // falsy: enters else
+if (s) {
+    print("non-empty")
+} else {
+    print("empty")             // falsy: enters else
+}
 
 let m: Map<string, int> = #{}
-if (m) { ... }                  // falsy: empty Map
+if (m) {
+    print("non-empty map")
+} else {
+    print("empty map")         // falsy: empty Map
+}
 
 let a: int? = null
 let b = a ?? 0                  // null coalescing: b = 0
@@ -1200,7 +1208,8 @@ RangeExpr ::= AddExpr ('..' AddExpr)?
 ```xray
 0..10                  // 0..10, left-closed right-open (includes 0, excludes 10)
 let r = 1..100
-for (i in 0..n) { ... }
+let n = 10
+for (i in 0..n) { print(i) }
 ```
 
 - Type: `Range` (int ranges only).
@@ -1406,7 +1415,7 @@ MatchArm ::= Pattern ('if' Expr)? '->' Expression
 ```
 
 ```xray
-let result = match x {
+let result = match (x) {
     1 -> "one",
     2, 3, 4 -> "few",                 // multi-value
     10..20 -> "teen",                 // range
@@ -1658,9 +1667,17 @@ ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
 
 ```xray
-return                 // implicitly returns () (Unit)
-return 42
-return (a, b)          // multi-value return must wrap a tuple in parens
+fn done() {
+    return                 // implicitly returns () (Unit)
+}
+
+fn answer() -> int {
+    return 42
+}
+
+fn pair(a: int, b: int) -> (int, int) {
+    return (a, b)          // multi-value return must wrap a tuple in parens
+}
 ```
 
 > **Note**: multi-value returns must use the tuple form `return (a, b)`; the bare-comma form `return a, b` is the compile error `E0801`.

@@ -27,6 +27,11 @@
 #include <strings.h>
 #endif
 
+#define XMCP_QUERY_MAX_TOKENS 8
+#define XMCP_QUERY_TOKEN_MAX 64
+#define XMCP_QUERY_MODULE_MAX 64
+#define XMCP_QUERY_SYMBOL_MAX 128
+
 static bool icontains(const char *haystack, const char *needle) {
     if (!haystack || !needle)
         return false;
@@ -43,14 +48,90 @@ static bool icontains(const char *haystack, const char *needle) {
     return false;
 }
 
-static int score_text(const char *text, const char *query, int exact_score, int contains_score) {
+static bool csv_has_exact(const char *csv, const char *query) {
+    if (!csv || !query || query[0] == '\0')
+        return false;
+
+    const char *p = csv;
+    while (*p) {
+        while (*p == ',' || isspace((unsigned char) *p))
+            p++;
+        const char *start = p;
+        while (*p && *p != ',')
+            p++;
+        const char *end = p;
+        while (end > start && isspace((unsigned char) end[-1]))
+            end--;
+        size_t len = (size_t) (end - start);
+        if (strlen(query) == len && strncasecmp(start, query, len) == 0)
+            return true;
+    }
+    return false;
+}
+
+static int split_query_tokens(const char *query,
+                              char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX]) {
+    int count = 0;
+    const unsigned char *p = (const unsigned char *) query;
+    while (p && *p && count < XMCP_QUERY_MAX_TOKENS) {
+        while (*p && !isalnum(*p) && *p != '_')
+            p++;
+        if (!*p)
+            break;
+        size_t len = 0;
+        while (p[len] && (isalnum(p[len]) || p[len] == '_'))
+            len++;
+        if (len > 0) {
+            size_t copy_len = len < XMCP_QUERY_TOKEN_MAX ? len : XMCP_QUERY_TOKEN_MAX - 1;
+            memcpy(tokens[count], p, copy_len);
+            tokens[count][copy_len] = '\0';
+            count++;
+        }
+        p += len;
+    }
+    return count;
+}
+
+static bool split_module_symbol(const char *query, char *module, size_t module_cap, char *symbol,
+                                size_t symbol_cap) {
+    if (!query || !module || !symbol)
+        return false;
+    const char *dot = strchr(query, '.');
+    if (!dot || dot == query || dot[1] == '\0')
+        return false;
+    size_t module_len = (size_t) (dot - query);
+    size_t symbol_len = strlen(dot + 1);
+    if (module_len >= module_cap || symbol_len >= symbol_cap)
+        return false;
+    memcpy(module, query, module_len);
+    module[module_len] = '\0';
+    memcpy(symbol, dot + 1, symbol_len + 1);
+    return true;
+}
+
+static int score_text_terms(const char *text, const char *query,
+                            char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX],
+                            int token_count, int exact_score, int contains_score, int token_score) {
     if (!text || !query || query[0] == '\0')
         return 0;
+    int score = 0;
     if (strcasecmp(text, query) == 0)
-        return exact_score;
+        score = exact_score;
     if (icontains(text, query))
-        return contains_score;
-    return 0;
+        score = score > contains_score ? score : contains_score;
+    int token_hits = 0;
+    for (int i = 0; i < token_count; i++) {
+        if (tokens[i][0] != '\0' && icontains(text, tokens[i]))
+            token_hits++;
+    }
+    if (token_hits > 0) {
+        int token_total = token_hits * token_score;
+        if (token_count > 1 && token_hits == token_count)
+            token_total += token_score;
+        if (token_total > score)
+            score = token_total;
+    }
+    return score;
 }
 
 static void insert_match(XmcpStdlibSearchResult *out, const XmcpModule *module,
@@ -78,12 +159,13 @@ static void insert_match(XmcpStdlibSearchResult *out, const XmcpModule *module,
     out->matches[pos].score = score;
 }
 
-static int score_symbol(const XmcpGeneratedStdlibSymbol *symbol, const char *query) {
+static int score_symbol(const XmcpGeneratedStdlibSymbol *symbol, const char *query,
+                        char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX], int token_count) {
     if (!symbol)
         return 0;
-    int score = score_text(symbol->name, query, 120, 90);
-    int sig_score = score_text(symbol->signature, query, 60, 40);
-    int doc_score = score_text(symbol->summary, query, 50, 30);
+    int score = score_text_terms(symbol->name, query, tokens, token_count, 140, 100, 55);
+    int sig_score = score_text_terms(symbol->signature, query, tokens, token_count, 70, 45, 25);
+    int doc_score = score_text_terms(symbol->summary, query, tokens, token_count, 50, 30, 18);
     if (sig_score > score)
         score = sig_score;
     if (doc_score > score)
@@ -91,12 +173,13 @@ static int score_symbol(const XmcpGeneratedStdlibSymbol *symbol, const char *que
     return score;
 }
 
-static int score_module(const XmcpModule *module, const char *query) {
+static int score_module(const XmcpModule *module, const char *query,
+                        char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX], int token_count) {
     if (!module)
         return 0;
-    int score = score_text(module->name, query, 110, 80);
-    int summary_score = score_text(module->summary, query, 70, 45);
-    int body_score = score_text(module->body, query, 35, 20);
+    int score = score_text_terms(module->name, query, tokens, token_count, 120, 90, 55);
+    int summary_score = score_text_terms(module->summary, query, tokens, token_count, 70, 45, 25);
+    int body_score = score_text_terms(module->body, query, tokens, token_count, 35, 20, 10);
     if (summary_score > score)
         score = summary_score;
     if (body_score > score)
@@ -109,6 +192,16 @@ static bool module_filter_allows(const XmcpModule *module, const char *module_fi
     if (!module_filter || module_filter[0] == '\0')
         return true;
     return strcasecmp(module->name, module_filter) == 0;
+}
+
+static bool knowledge_has_module(XmcpKnowledge *kb, const char *name) {
+    if (!kb || !name || name[0] == '\0')
+        return false;
+    for (int i = 0; i < kb->module_count; i++) {
+        if (strcasecmp(kb->modules[i].name, name) == 0)
+            return true;
+    }
+    return false;
 }
 
 static void append_available_modules(char *buf, size_t cap, size_t *len, XmcpKnowledge *kb) {
@@ -172,7 +265,7 @@ const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query) {
             return kb->topics[i].content;
     }
     for (int i = 0; i < kb->topic_count; i++) {
-        if (icontains(kb->topics[i].aliases, query))
+        if (csv_has_exact(kb->topics[i].aliases, query))
             return kb->topics[i].content;
     }
     for (int i = 0; i < kb->topic_count; i++) {
@@ -209,17 +302,43 @@ void xmcp_knowledge_search_stdlib_matches(XmcpKnowledge *kb, const char *query,
     if (!kb || !query || strlen(query) < 2)
         return;
 
+    char direct_module[XMCP_QUERY_MODULE_MAX] = {0};
+    char direct_symbol[XMCP_QUERY_SYMBOL_MAX] = {0};
+    bool direct = split_module_symbol(query, direct_module, sizeof(direct_module), direct_symbol,
+                                      sizeof(direct_symbol));
+    bool direct_module_known = direct && knowledge_has_module(kb, direct_module);
+    const char *effective_query = query;
+    const char *effective_filter = module_filter;
+    if (direct_module_known && (!module_filter || module_filter[0] == '\0' ||
+                                strcasecmp(module_filter, direct_module) == 0)) {
+        effective_query = direct_symbol;
+        effective_filter = direct_module;
+    } else if (direct_module_known) {
+        return;
+    }
+
+    char tokens[XMCP_QUERY_MAX_TOKENS][XMCP_QUERY_TOKEN_MAX] = {{0}};
+    int token_count = split_query_tokens(effective_query, tokens);
+
     for (int i = 0; i < kb->module_count; i++) {
         const XmcpModule *module = &kb->modules[i];
-        if (!module_filter_allows(module, module_filter))
+        if (!module_filter_allows(module, effective_filter))
             continue;
 
-        int module_score = score_module(module, query);
+        int module_score =
+            direct_module_known ? 0 : score_module(module, effective_query, tokens, token_count);
         insert_match(out, module, NULL, module_score);
+        int module_context = score_module(module, query, tokens, token_count);
         for (int j = 0; j < module->symbol_count; j++) {
-            int symbol_score = score_symbol(&module->symbols[j], query);
-            if (symbol_score > 0)
+            int symbol_score =
+                score_symbol(&module->symbols[j], effective_query, tokens, token_count);
+            if (symbol_score > 0) {
+                if (!direct_module_known && module_context > 0)
+                    symbol_score += module_context / 2;
+                if (direct_module_known)
+                    symbol_score += 160;
                 insert_match(out, module, &module->symbols[j], symbol_score + 20);
+            }
         }
     }
 }
