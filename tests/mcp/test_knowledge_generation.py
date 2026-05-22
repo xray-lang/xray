@@ -24,6 +24,25 @@ SYMBOL_ARRAY_RE = re.compile(
 )
 SYMBOL_NAME_RE = re.compile(r"\.name = \"([^\"]+)\"")
 
+SPEC_QUALITY_BASELINES = {
+    "LANGUAGE_SPEC_CN.md": {
+        "nonblank_lines": 4156,
+        "headings": 349,
+        "h2": 26,
+        "xray_fences": 165,
+        "ebnf_fences": 63,
+        "tables": 106,
+    },
+    "LANGUAGE_SPEC.md": {
+        "nonblank_lines": 1098,
+        "headings": 138,
+        "h2": 26,
+        "xray_fences": 64,
+        "ebnf_fences": 4,
+        "tables": 24,
+    },
+}
+
 
 def heading_anchor(heading: str) -> str:
     text = heading.strip().lower()
@@ -171,6 +190,47 @@ def check_generated_is_current(root: Path, xray: Path) -> list[str]:
     return []
 
 
+def spec_quality_metrics(path: Path) -> dict[str, int]:
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    return {
+        "nonblank_lines": sum(1 for line in lines if line.strip()),
+        "headings": sum(1 for line in lines if line.startswith("#")),
+        "h2": sum(1 for line in lines if line.startswith("## ")),
+        "xray_fences": text.count("```xray"),
+        "ebnf_fences": text.count("```ebnf"),
+        "tables": sum(1 for line in lines if line.startswith("|") and "--" in line),
+    }
+
+
+def check_language_docs_generated_current(root: Path) -> list[str]:
+    proc = run(
+        [
+            sys.executable,
+            str(root / "scripts/gen_language_docs.py"),
+            "--root",
+            str(root),
+            "--check",
+        ],
+        root,
+    )
+    if proc.returncode != 0:
+        return [proc.stderr or proc.stdout]
+    return []
+
+
+def check_spec_quality_gate(root: Path) -> list[str]:
+    errors: list[str] = []
+    for rel, baseline in SPEC_QUALITY_BASELINES.items():
+        path = root / rel
+        metrics = spec_quality_metrics(path)
+        for key, minimum in baseline.items():
+            actual = metrics[key]
+            if actual < minimum:
+                errors.append(f"{rel}: {key} dropped below quality baseline: {actual} < {minimum}")
+    return errors
+
+
 def check_key_syntax(root: Path) -> list[str]:
     required = {
         "channel": ["shared const ch = new Channel<int>(10)", "let (next, ok) = ch.tryRecv()"],
@@ -240,6 +300,8 @@ def main(argv: list[str]) -> int:
     root = args.root.resolve()
     xray = args.xray.resolve()
     errors: list[str] = []
+    errors.extend(check_language_docs_generated_current(root))
+    errors.extend(check_spec_quality_gate(root))
     errors.extend(check_topic_spec_anchors(root))
     errors.extend(check_xray_fences(root, xray))
     errors.extend(check_generated_is_current(root, xray))

@@ -641,6 +641,15 @@ else()
     message(STATUS "DAP: disabled")
 endif()
 
+add_custom_target(regen-language-docs
+    COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
+        --root ${CMAKE_CURRENT_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    VERBATIM
+    COMMENT "Regenerating language specs and MCP knowledge projection files"
+)
+
 # MCP optional module
 if(XR_BUILD_MCP)
     file(GLOB MCP_SRC "src/app/mcp/*.c")
@@ -650,6 +659,9 @@ if(XR_BUILD_MCP)
     add_compile_definitions(XR_HAS_MCP=1)
     set(_xmcp_builtin_dump ${CMAKE_CURRENT_BINARY_DIR}/xmcp_builtin_dump.json)
     add_custom_target(regen-mcp-knowledge
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}
         COMMAND $<TARGET_FILE:xray> builtin-dump > ${_xmcp_builtin_dump}
         COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_mcp_knowledge.py
@@ -660,7 +672,7 @@ if(XR_BUILD_MCP)
         DEPENDS xray
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         VERBATIM
-        COMMENT "Dumping analyzer builtins and regenerating MCP knowledge tables"
+        COMMENT "Regenerating language docs, dumping analyzer builtins, and regenerating MCP knowledge tables"
     )
     message(STATUS "MCP: enabled")
 else()
