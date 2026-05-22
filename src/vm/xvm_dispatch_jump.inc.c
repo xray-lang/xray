@@ -39,6 +39,17 @@ vmcase(OP_JMP) {
         ** Stack is consistent here (between instructions). */
         VM_GC_SAFEPOINT();
 
+        /* Host-supplied wall-clock deadline. Checked here (back-edge) so a
+        ** tight infinite loop in user code cannot wedge the embedder. The
+        ** deadline is opt-in: when no deadline is armed the call is a
+        ** single load + compare and the branch predictor pins it firmly
+        ** to "no". */
+        if (XR_UNLIKELY(xr_isolate_check_deadline(isolate))) {
+            xr_runtime_error(isolate, "execution deadline exceeded");
+            frame->pc = pc - 1;
+            return XR_VM_RUNTIME_ERROR;
+        }
+
         if (--coro->reductions <= 0) {
             if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                 return XR_VM_CANCELLED;

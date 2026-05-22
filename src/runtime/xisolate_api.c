@@ -12,6 +12,17 @@
 #include "xisolate_internal.h"
 #include "../coro/xcoroutine.h"
 #include "../base/xlog.h"
+#include <string.h>
+#include <time.h>
+
+/* Monotonic clock helper (returns ns). Returns 0 if clock_gettime fails so
+ * deadline checks fail open rather than aborting the embedder. */
+static int64_t xr_now_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        return 0;
+    return (int64_t) ts.tv_sec * 1000000000LL + (int64_t) ts.tv_nsec;
+}
 
 /* ========== Memory Subsystem ========== */
 
@@ -259,6 +270,79 @@ void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress) {
     if (X) {
         X->suppress_exception_print = suppress;
     }
+}
+
+/* ========== Embedded Execution Policy ========== */
+
+FILE *xr_isolate_stdout(XrayIsolate *X) {
+    if (X && X->user_stdout)
+        return (FILE *) X->user_stdout;
+    return stdout;
+}
+
+void xray_isolate_set_stdout(XrayIsolate *X, FILE *stream) {
+    if (X)
+        X->user_stdout = stream;
+}
+
+void xray_isolate_set_deadline_ms(XrayIsolate *X, int64_t timeout_ms) {
+    if (!X)
+        return;
+    X->deadline_exceeded = false;
+    if (timeout_ms <= 0) {
+        X->deadline_ns = 0;
+        return;
+    }
+    int64_t now = xr_now_ns();
+    /* now == 0 means clock_gettime failed; arm the deadline relative to
+     * the requested timeout anyway so the VM still aborts eventually. */
+    X->deadline_ns = now + timeout_ms * 1000000LL;
+}
+
+bool xr_isolate_check_deadline(XrayIsolate *X) {
+    if (!X || X->deadline_ns == 0)
+        return false;
+    if (X->deadline_exceeded)
+        return true;
+    int64_t now = xr_now_ns();
+    if (now != 0 && now >= X->deadline_ns) {
+        X->deadline_exceeded = true;
+        return true;
+    }
+    return false;
+}
+
+bool xr_isolate_timed_out(XrayIsolate *X) {
+    return X ? X->deadline_exceeded : false;
+}
+
+bool xray_isolate_timed_out(XrayIsolate *X) {
+    return xr_isolate_timed_out(X);
+}
+
+void xray_isolate_set_module_allowlist(XrayIsolate *X, const char *const *allowed, size_t count) {
+    if (!X)
+        return;
+    if (!allowed || count == 0) {
+        X->module_allowlist = NULL;
+        X->module_allowlist_count = 0;
+        return;
+    }
+    X->module_allowlist = allowed;
+    X->module_allowlist_count = count;
+}
+
+bool xr_isolate_module_allowed(XrayIsolate *X, const char *module_name) {
+    if (!X || !module_name)
+        return false;
+    if (X->module_allowlist_count == 0)
+        return true; /* no allowlist configured — permit everything */
+    for (size_t i = 0; i < X->module_allowlist_count; i++) {
+        const char *allowed = X->module_allowlist[i];
+        if (allowed && strcmp(allowed, module_name) == 0)
+            return true;
+    }
+    return false;
 }
 
 /* ========== Extension Type System ========== */

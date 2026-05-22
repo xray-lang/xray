@@ -120,6 +120,37 @@ struct XrayIsolate {
     // Test mode: suppress [Uncaught Exception] stderr output
     bool suppress_exception_print;
 
+    /* ========== Embedded execution policy (opt-in) ==========
+     *
+     * Host applications that embed the Xray VM (MCP runner, CLI eval,
+     * future REPL sandboxes) need to redirect user output away from
+     * the process stdout and bound execution time. These slots are
+     * NULL/zero by default and only consulted by the few opcodes
+     * that emit user-visible side effects.
+     *
+     * `user_stdout` — alternative FILE* for `print()` / `OP_PRINT`
+     *   output. NULL = use the process `stdout`. Set via
+     *   xray_isolate_set_stdout(). Must outlive the isolate.
+     *
+     * `deadline_ns` — wall-clock deadline (CLOCK_MONOTONIC, ns). When
+     *   non-zero, the VM checks at backward branches whether we have
+     *   passed the deadline; if so it sets `deadline_exceeded` and
+     *   aborts the running coroutine with a runtime error so the
+     *   host can recover. Set via xray_isolate_set_deadline_ms().
+     *
+     * `deadline_exceeded` — sticky flag observed after a timed
+     *   execution returns; cleared each time a new deadline is set.
+     */
+    void *user_stdout; /* FILE*, see xr_isolate_stdout() */
+    int64_t deadline_ns;
+    bool deadline_exceeded;
+
+    /* Module allowlist. When `allowlist_count > 0` the module loader
+     * rejects any import whose name is not in `allowlist[0..count-1]`.
+     * The host owns the array; the isolate only stores the pointer. */
+    const char *const *module_allowlist;
+    size_t module_allowlist_count;
+
     // Current arena for AST allocation (set by parser, NULL = use malloc)
     struct XrArena *current_arena;
 
