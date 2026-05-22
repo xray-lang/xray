@@ -655,6 +655,60 @@ TEST(tools_call_validates_argument_types) {
     xjson_free(params);
 }
 
+TEST(tools_call_validates_string_enums) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_analyze");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let x = 1\n");
+    XJSON_SET_STRING(args, "mode", "invalid");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "invalid value for parameter 'mode'") != NULL);
+    ASSERT(strstr(g_test_rpc_err.message, "syntax, semantic, full") != NULL);
+
+    xjson_free(params);
+}
+
+TEST(tools_call_validates_integer_ranges) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_format");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let x = 1\n");
+    XJSON_SET_INT(args, "indentSize", 0);
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "invalid value for parameter 'indentSize'") != NULL);
+    ASSERT(strstr(g_test_rpc_err.message, "must be >= 1") != NULL);
+
+    xjson_free(params);
+}
+
+TEST(tools_call_rejects_fractional_integers) {
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "print(\"ok\")\n");
+    xjson_object_set(args, "timeoutMs", xjson_new_number(1.5));
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "invalid type for parameter 'timeoutMs'") != NULL);
+    ASSERT(strstr(g_test_rpc_err.message, "expected integer") != NULL);
+
+    xjson_free(params);
+}
+
 /* =========================================================================
  * Tools: xray_format
  * ========================================================================= */
@@ -1710,6 +1764,9 @@ int main(void) {
     RUN_TEST(tools_call_rejects_non_object_arguments);
     RUN_TEST(tools_call_validates_required_arguments);
     RUN_TEST(tools_call_validates_argument_types);
+    RUN_TEST(tools_call_validates_string_enums);
+    RUN_TEST(tools_call_validates_integer_ranges);
+    RUN_TEST(tools_call_rejects_fractional_integers);
 
     /* Format tool */
     RUN_TEST(tools_call_format_missing_code);

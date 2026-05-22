@@ -179,12 +179,32 @@ static const char *xmcp_json_type_name(const XrJsonValue *value) {
     }
 }
 
+static bool xmcp_number_is_integer_value(XrJsonValue *value) {
+    XR_DCHECK(value != NULL, "xmcp_number_is_integer_value: NULL value");
+    if (!xjson_is_number(value))
+        return false;
+    if (value->is_integer)
+        return true;
+    if (value->as.number < -9223372036854775808.0 || value->as.number > 9223372036854775807.0)
+        return false;
+    int64_t as_int = (int64_t) value->as.number;
+    return (double) as_int == value->as.number;
+}
+
+static int64_t xmcp_number_to_int(XrJsonValue *value) {
+    XR_DCHECK(value != NULL, "xmcp_number_to_int: NULL value");
+    XR_DCHECK(xjson_is_number(value), "xmcp_number_to_int: value is not a number");
+    return value->is_integer ? value->as.integer : (int64_t) value->as.number;
+}
+
 static bool xmcp_value_matches_schema_type(XrJsonValue *value, const char *type) {
     XR_DCHECK(value != NULL, "xmcp_value_matches_schema_type: NULL value");
     XR_DCHECK(type != NULL, "xmcp_value_matches_schema_type: NULL type");
     if (strcmp(type, "string") == 0)
         return xjson_is_string(value);
-    if (strcmp(type, "integer") == 0 || strcmp(type, "number") == 0)
+    if (strcmp(type, "integer") == 0)
+        return xmcp_number_is_integer_value(value);
+    if (strcmp(type, "number") == 0)
         return xjson_is_number(value);
     if (strcmp(type, "boolean") == 0)
         return xjson_is_bool(value);
@@ -193,6 +213,36 @@ static bool xmcp_value_matches_schema_type(XrJsonValue *value, const char *type)
     if (strcmp(type, "object") == 0)
         return xjson_is_object(value);
     return false;
+}
+
+static bool xmcp_schema_enum_contains(XrJsonValue *allowed, XrJsonValue *value) {
+    if (!allowed)
+        return true;
+    if (!xjson_is_string(value))
+        return false;
+    for (int i = 0; i < xjson_array_len(allowed); i++) {
+        XrJsonValue *item = xjson_array_get(allowed, i);
+        if (xjson_is_string(item) && strcmp(item->as.string, value->as.string) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void xmcp_format_string_enum(XrJsonValue *allowed, char *buf, size_t cap) {
+    XR_DCHECK(buf != NULL, "xmcp_format_string_enum: NULL buf");
+    if (cap == 0)
+        return;
+    size_t len = 0;
+    buf[0] = '\0';
+    for (int i = 0; allowed && i < xjson_array_len(allowed); i++) {
+        XrJsonValue *item = xjson_array_get(allowed, i);
+        if (!xjson_is_string(item))
+            continue;
+        if (len > 0 && len < cap)
+            len += (size_t) snprintf(buf + len, cap - len, ", ");
+        if (len < cap)
+            len += (size_t) snprintf(buf + len, cap - len, "%s", item->as.string);
+    }
 }
 
 /* Validate `arguments` against `tool->build_schema()`. Populates `error` with
@@ -231,14 +281,48 @@ static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *a
             if (!value || xjson_is_null(value))
                 continue;
             const char *type = xjson_get_string(member->value, "type");
-            if (!type || xmcp_value_matches_schema_type(value, type))
-                continue;
-            error->code = XMCP_ERR_INVALID_PARAMS;
-            snprintf(error->message, sizeof(error->message),
-                     "invalid type for parameter '%s' of tool '%s': expected %s, got %s",
-                     member->key, tool->name, type, xmcp_json_type_name(value));
-            xjson_free(schema);
-            return false;
+            if (type && !xmcp_value_matches_schema_type(value, type)) {
+                error->code = XMCP_ERR_INVALID_PARAMS;
+                snprintf(error->message, sizeof(error->message),
+                         "invalid type for parameter '%s' of tool '%s': expected %s, got %s",
+                         member->key, tool->name, type, xmcp_json_type_name(value));
+                xjson_free(schema);
+                return false;
+            }
+
+            XrJsonValue *allowed = xjson_get_array(member->value, "enum");
+            if (allowed && !xmcp_schema_enum_contains(allowed, value)) {
+                char allowed_text[128];
+                xmcp_format_string_enum(allowed, allowed_text, sizeof(allowed_text));
+                error->code = XMCP_ERR_INVALID_PARAMS;
+                snprintf(error->message, sizeof(error->message),
+                         "invalid value for parameter '%s' of tool '%s': expected one of %s",
+                         member->key, tool->name, allowed_text);
+                xjson_free(schema);
+                return false;
+            }
+
+            XrJsonValue *minimum = xjson_get(member->value, "minimum");
+            XrJsonValue *maximum = xjson_get(member->value, "maximum");
+            if (xjson_is_number(value) && (xjson_is_number(minimum) || xjson_is_number(maximum))) {
+                int64_t actual = xmcp_number_to_int(value);
+                if (xjson_is_number(minimum) && actual < xmcp_number_to_int(minimum)) {
+                    error->code = XMCP_ERR_INVALID_PARAMS;
+                    snprintf(error->message, sizeof(error->message),
+                             "invalid value for parameter '%s' of tool '%s': must be >= %lld",
+                             member->key, tool->name, (long long) xmcp_number_to_int(minimum));
+                    xjson_free(schema);
+                    return false;
+                }
+                if (xjson_is_number(maximum) && actual > xmcp_number_to_int(maximum)) {
+                    error->code = XMCP_ERR_INVALID_PARAMS;
+                    snprintf(error->message, sizeof(error->message),
+                             "invalid value for parameter '%s' of tool '%s': must be <= %lld",
+                             member->key, tool->name, (long long) xmcp_number_to_int(maximum));
+                    xjson_free(schema);
+                    return false;
+                }
+            }
         }
     }
 
@@ -247,12 +331,28 @@ static bool xmcp_validate_tool_arguments(const XmcpToolDef *tool, XrJsonValue *a
 }
 
 /* Build a simple schema: { type:"object", properties:{<name>:{type,desc},...}, required:[...] } */
-static void schema_add_prop(XrJsonValue *props, const char *name, const char *type,
-                            const char *desc) {
+static XrJsonValue *schema_add_prop(XrJsonValue *props, const char *name, const char *type,
+                                    const char *desc) {
     XrJsonValue *p = xjson_new_object();
     XJSON_SET_STRING(p, "type", type);
     XJSON_SET_STRING(p, "description", desc);
     xjson_object_set(props, name, p);
+    return p;
+}
+
+static void schema_prop_set_int_range(XrJsonValue *prop, int64_t min, int64_t max) {
+    XR_DCHECK(prop != NULL, "schema_prop_set_int_range: NULL prop");
+    XJSON_SET_INT(prop, "minimum", min);
+    XJSON_SET_INT(prop, "maximum", max);
+}
+
+static void schema_prop_set_string_enum(XrJsonValue *prop, const char *const *values, int count) {
+    XR_DCHECK(prop != NULL, "schema_prop_set_string_enum: NULL prop");
+    XR_DCHECK(values != NULL, "schema_prop_set_string_enum: NULL values");
+    XrJsonValue *allowed = xjson_new_array();
+    for (int i = 0; i < count; i++)
+        xjson_array_push(allowed, xjson_new_string(values[i]));
+    xjson_object_set(prop, "enum", allowed);
 }
 
 typedef struct {
@@ -379,7 +479,10 @@ static XrJsonValue *schema_analyze(void) {
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray source code to analyze");
     schema_add_prop(p, "filename", "string", "Optional filename used in diagnostics");
-    schema_add_prop(p, "mode", "string", "Analysis mode: syntax, semantic, or full");
+    XrJsonValue *mode =
+        schema_add_prop(p, "mode", "string", "Analysis mode: syntax, semantic, or full");
+    static const char *const modes[] = {"syntax", "semantic", "full"};
+    schema_prop_set_string_enum(mode, modes, 3);
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
@@ -405,7 +508,9 @@ static XrJsonValue *schema_format(void) {
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray source code to format");
-    schema_add_prop(p, "indentSize", "integer", "Indent size in spaces (default: 4)");
+    XrJsonValue *indent =
+        schema_add_prop(p, "indentSize", "integer", "Indent size in spaces (default: 4)");
+    schema_prop_set_int_range(indent, 1, 16);
     schema_add_prop(p, "useTabs", "boolean", "Use tabs instead of spaces (default: false)");
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
@@ -431,10 +536,13 @@ static XrJsonValue *schema_run(void) {
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray source code to execute (top-level statements).");
-    schema_add_prop(p, "timeoutMs", "integer",
-                    "Wall-clock time budget in milliseconds (default 2000, max 30000).");
-    schema_add_prop(p, "outputLimit", "integer",
-                    "Maximum captured stdout bytes (default 8192, max 65536).");
+    XrJsonValue *timeout =
+        schema_add_prop(p, "timeoutMs", "integer",
+                        "Wall-clock time budget in milliseconds (default 2000, max 30000).");
+    schema_prop_set_int_range(timeout, 1, RUN_TIMEOUT_HARD_MAX_MS);
+    XrJsonValue *output_limit = schema_add_prop(
+        p, "outputLimit", "integer", "Maximum captured stdout bytes (default 8192, max 65536).");
+    schema_prop_set_int_range(output_limit, 1, RUN_OUTPUT_HARD_MAX);
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
