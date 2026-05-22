@@ -5,36 +5,50 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmcp_knowledge.h - Knowledge base for MCP tools
+ * xmcp_knowledge.h - Search and lookup facade for MCP knowledge data
  *
  * KEY CONCEPT:
- *   Indexes the language specification (by topic) and standard library
- *   (by module) so that xray_syntax_lookup and xray_stdlib_search
- *   can return relevant information to AI assistants.
+ *   The authored language and standard-library knowledge is generated into
+ *   immutable C tables. This layer owns lookup, ranking, formatted fallback
+ *   text, and the small in-memory index used by MCP tools/resources.
  */
 
 #ifndef XMCP_KNOWLEDGE_H
 #define XMCP_KNOWLEDGE_H
 
 #include "../../base/xdefs.h"
+#include "xmcp_knowledge_generated.h"
 
-#define XMCP_MAX_TOPICS 64
-#define XMCP_MAX_MODULES 32
+#define XMCP_MAX_TOPICS 128
+#define XMCP_MAX_MODULES 64
+#define XMCP_STDLIB_MAX_MATCHES 32
 
-/* A single topic entry (e.g., "channel" -> section text) */
 typedef struct XmcpTopic {
-    const char *name;    /* Topic key (e.g., "channel") */
-    const char *aliases; /* Comma-separated aliases (e.g., "chan,Channel") */
-    const char *content; /* Markdown content for this topic */
+    const char *name;
+    const char *title;
+    const char *aliases;
+    const char *content;
 } XmcpTopic;
 
-/* A standard library module entry */
 typedef struct XmcpModule {
-    const char *name;        /* Module name (e.g., "http") */
-    const char *description; /* Brief description */
+    const char *name;
+    const char *summary;
+    const char *body;
+    const XmcpGeneratedStdlibSymbol *symbols;
+    int symbol_count;
 } XmcpModule;
 
-/* Knowledge base */
+typedef struct XmcpStdlibMatch {
+    const XmcpModule *module;
+    const XmcpGeneratedStdlibSymbol *symbol;
+    int score;
+} XmcpStdlibMatch;
+
+typedef struct XmcpStdlibSearchResult {
+    XmcpStdlibMatch matches[XMCP_STDLIB_MAX_MATCHES];
+    int match_count;
+} XmcpStdlibSearchResult;
+
 typedef struct XmcpKnowledge {
     XmcpTopic topics[XMCP_MAX_TOPICS];
     int topic_count;
@@ -43,29 +57,21 @@ typedef struct XmcpKnowledge {
     int module_count;
 } XmcpKnowledge;
 
-/* Create an empty knowledge base. */
 XR_FUNC XmcpKnowledge *xmcp_knowledge_new(void);
-
-/* Load built-in knowledge (syntax spec + stdlib modules). */
 XR_FUNC void xmcp_knowledge_load(XmcpKnowledge *kb);
-
-/* Free the knowledge base. */
 XR_FUNC void xmcp_knowledge_free(XmcpKnowledge *kb);
 
-/* Look up a syntax topic. Returns the content string or NULL. */
 XR_FUNC const char *xmcp_knowledge_lookup_topic(XmcpKnowledge *kb, const char *query);
+XR_FUNC char *xmcp_knowledge_list_topics(XmcpKnowledge *kb);
 
-/* Search stdlib modules. Returns a formatted string (caller must xr_free). */
+XR_FUNC void xmcp_knowledge_search_stdlib_matches(XmcpKnowledge *kb, const char *query,
+                                                  const char *module_filter,
+                                                  XmcpStdlibSearchResult *out);
 XR_FUNC char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query,
                                            const char *module_filter, int *match_count);
 
-/* Get the cheatsheet resource content. */
 XR_FUNC const char *xmcp_knowledge_get_cheatsheet(void);
-
-/* Get the concurrency model resource content. */
 XR_FUNC const char *xmcp_knowledge_get_concurrency(void);
-
-/* Get the stdlib modules list resource content. */
 XR_FUNC const char *xmcp_knowledge_get_stdlib_list(void);
 
-#endif  // XMCP_KNOWLEDGE_H
+#endif /* XMCP_KNOWLEDGE_H */

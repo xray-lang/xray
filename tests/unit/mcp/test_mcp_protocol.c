@@ -986,6 +986,13 @@ TEST(tools_call_stdlib_search_returns_structured_content) {
     ASSERT(xjson_get_bool(structured, "found") == true);
     ASSERT(xjson_get_int_or(structured, "matchCount", 0) > 0);
     ASSERT_NOT_NULL(strstr(xjson_get_string(structured, "content"), "Module: http"));
+    XrJsonValue *matches = xjson_get_array(structured, "matches");
+    ASSERT_NOT_NULL(matches);
+    ASSERT(xjson_array_len(matches) > 0);
+    XrJsonValue *first = xjson_array_get(matches, 0);
+    ASSERT_NOT_NULL(xjson_get_string(first, "module"));
+    ASSERT_NOT_NULL(xjson_get_string(first, "summary"));
+    ASSERT(xjson_get_int_or(first, "score", 0) > 0);
 
     xjson_free(params);
     xjson_free(result);
@@ -1472,6 +1479,23 @@ TEST(knowledge_search_stdlib) {
     xmcp_knowledge_free(kb);
 }
 
+TEST(knowledge_search_stdlib_ranks_symbols) {
+    XmcpKnowledge *kb = xmcp_knowledge_new();
+    ASSERT_NOT_NULL(kb);
+    xmcp_knowledge_load(kb);
+
+    XmcpStdlibSearchResult result;
+    xmcp_knowledge_search_stdlib_matches(kb, "parse", "csv", &result);
+    ASSERT(result.match_count > 0);
+    ASSERT_NOT_NULL(result.matches[0].module);
+    ASSERT_STR_EQ(result.matches[0].module->name, "csv");
+    ASSERT_NOT_NULL(result.matches[0].symbol);
+    ASSERT_STR_EQ(result.matches[0].symbol->name, "parse");
+    ASSERT(result.matches[0].score > 0);
+
+    xmcp_knowledge_free(kb);
+}
+
 TEST(knowledge_search_stdlib_no_match) {
     XmcpKnowledge *kb = xmcp_knowledge_new();
     ASSERT_NOT_NULL(kb);
@@ -1636,6 +1660,7 @@ int main(void) {
     RUN_TEST(knowledge_lookup_alias);
     RUN_TEST(knowledge_lookup_not_found);
     RUN_TEST(knowledge_search_stdlib);
+    RUN_TEST(knowledge_search_stdlib_ranks_symbols);
     RUN_TEST(knowledge_search_stdlib_no_match);
     RUN_TEST(knowledge_get_cheatsheet);
     RUN_TEST(knowledge_get_concurrency);

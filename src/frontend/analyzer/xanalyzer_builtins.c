@@ -559,6 +559,21 @@ void xa_builtin_set_script_dir(const char *dir) {
     g_script_dir = dir;
 }
 
+XR_FUNCDEF int xa_builtin_get_module_count(void) {
+    return RT_BUILTIN_MODULE_COUNT + builtin_module_count;
+}
+
+XR_FUNCDEF const XaBuiltinModule *xa_builtin_get_module_at(int index) {
+    if (index < 0)
+        return NULL;
+    if (index < RT_BUILTIN_MODULE_COUNT)
+        return &g_rt_builtin_modules[index];
+    index -= RT_BUILTIN_MODULE_COUNT;
+    if (index < builtin_module_count)
+        return &builtin_modules[index];
+    return NULL;
+}
+
 const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name) {
     if (!module_name)
         return NULL;
