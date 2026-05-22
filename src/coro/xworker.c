@@ -339,6 +339,13 @@ void xr_runtime_destroy(XrRuntime *runtime) {
         }
     }
 
+    // Destroy async thread pool
+    if (runtime->async_pool) {
+        xr_async_pool_destroy(runtime->async_pool);
+        xr_free(runtime->async_pool);
+        runtime->async_pool = NULL;
+    }
+
     // Destroy Workers (also destroys bound M via xr_worker_destroy)
     for (int i = 0; i < runtime->worker_count; i++) {
         xr_worker_destroy(&runtime->workers[i]);
@@ -350,13 +357,6 @@ void xr_runtime_destroy(XrRuntime *runtime) {
 
     // Cleanup Netpoll
     xr_netpoll_cleanup(&runtime->netpoll);
-
-    // Destroy async thread pool
-    if (runtime->async_pool) {
-        xr_async_pool_destroy(runtime->async_pool);
-        xr_free(runtime->async_pool);
-        runtime->async_pool = NULL;
-    }
 
     // Tear down IO runtime (DNS cache and any future IO state).
     xr_io_runtime_free(runtime->io);
