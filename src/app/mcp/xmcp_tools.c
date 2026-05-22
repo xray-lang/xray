@@ -322,16 +322,37 @@ static XrJsonValue *make_syntax_result_content(const char *topic, bool found, co
     return structured;
 }
 
+static XrJsonValue *make_stdlib_match_json(const XmcpStdlibMatch *match) {
+    XR_DCHECK(match != NULL, "make_stdlib_match_json: NULL match");
+    XR_DCHECK(match->module != NULL, "make_stdlib_match_json: NULL module");
+    XrJsonValue *item = xjson_new_object();
+    XJSON_SET_STRING(item, "module", match->module->name);
+    XJSON_SET_STRING(item, "summary", match->module->summary);
+    XJSON_SET_INT(item, "score", match->score);
+    if (match->symbol) {
+        XJSON_SET_STRING(item, "symbol", match->symbol->name);
+        XJSON_SET_STRING(item, "signature", match->symbol->signature);
+        XJSON_SET_STRING(item, "symbolSummary", match->symbol->summary);
+    }
+    return item;
+}
+
 static XrJsonValue *make_stdlib_result_content(const char *query, const char *module,
-                                               int match_count, const char *content) {
+                                               const XmcpStdlibSearchResult *search,
+                                               const char *content) {
     XR_DCHECK(query != NULL, "make_stdlib_result_content: NULL query");
+    XR_DCHECK(search != NULL, "make_stdlib_result_content: NULL search");
     XR_DCHECK(content != NULL, "make_stdlib_result_content: NULL content");
     XrJsonValue *structured = xjson_new_object();
     XJSON_SET_STRING(structured, "query", query);
     XJSON_SET_STRING(structured, "module", module ? module : "");
-    XJSON_SET_INT(structured, "matchCount", match_count);
-    XJSON_SET_BOOL(structured, "found", match_count > 0);
+    XJSON_SET_INT(structured, "matchCount", search->match_count);
+    XJSON_SET_BOOL(structured, "found", search->match_count > 0);
     XJSON_SET_STRING(structured, "content", content);
+    XrJsonValue *matches = xjson_new_array();
+    for (int i = 0; i < search->match_count; i++)
+        xjson_array_push(matches, make_stdlib_match_json(&search->matches[i]));
+    xjson_object_set(structured, "matches", matches);
     return structured;
 }
 
@@ -489,9 +510,10 @@ static XrJsonValue *schema_stdlib_output(void) {
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "query", "string", "Requested stdlib search query");
     schema_add_prop(p, "module", "string", "Effective module filter");
-    schema_add_prop(p, "matchCount", "integer", "Number of matching modules");
-    schema_add_prop(p, "found", "boolean", "True when at least one module matched");
+    schema_add_prop(p, "matchCount", "integer", "Number of ranked matches");
+    schema_add_prop(p, "found", "boolean", "True when at least one ranked match exists");
     schema_add_prop(p, "content", "string", "Formatted stdlib search result");
+    schema_add_prop(p, "matches", "array", "Ranked matches with module, summary, and score");
     xjson_object_set(s, "properties", p);
     return s;
 }
@@ -912,14 +934,14 @@ static XrJsonValue *tool_xray_syntax_lookup(XmcpServer *server, const XmcpCallCo
             content, make_syntax_result_content(topic, true, content), false);
     }
 
-    char msg[512];
+    char *available = xmcp_knowledge_list_topics(server->knowledge);
+    char msg[1024];
     snprintf(msg, sizeof(msg),
              "No syntax documentation found for topic \"%s\".\n\n"
-             "Available topics: variables, types, functions, control_flow, "
-             "class, struct, interface, enum, generics, collections, string, "
-             "channel, coroutine, concurrency_rules, modules, testing, "
-             "operators, builtin_functions.",
-             topic);
+             "Available topics: %s.",
+             topic, available ? available : "");
+    if (available)
+        xr_free(available);
     return xmcp_make_text_structured_result(msg, make_syntax_result_content(topic, false, msg),
                                             false);
 }
@@ -942,12 +964,13 @@ static XrJsonValue *tool_xray_stdlib_search(XmcpServer *server, const XmcpCallCo
     if (!server->knowledge)
         return xmcp_make_error_result("Error: knowledge base is not available");
 
-    int match_count = 0;
-    char *text = xmcp_knowledge_search_stdlib(server->knowledge, query, module, &match_count);
+    XmcpStdlibSearchResult search;
+    xmcp_knowledge_search_stdlib_matches(server->knowledge, query, module, &search);
+    char *text = xmcp_knowledge_search_stdlib(server->knowledge, query, module, NULL);
     if (!text)
         return xmcp_make_error_result("Error: stdlib search failed");
     XrJsonValue *result = xmcp_make_text_structured_result(
-        text, make_stdlib_result_content(query, module, match_count, text), false);
+        text, make_stdlib_result_content(query, module, &search, text), false);
     xr_free(text);
     return result;
 }

@@ -131,10 +131,10 @@ static const char CONCURRENCY_SYSTEM[] =
 static const char WRITE_TEST_SYSTEM[] =
     "Generate @test functions for the given Xray code.\n"
     "1. Use @test annotation before each test function\n"
-    "2. Test function signature: fn test_xxx(): void\n"
+    "2. Test function signature: fn test_xxx() { ... }\n"
     "3. Use assert_eq(actual, expected) for equality\n"
     "4. Use assert_true(cond) / assert_false(cond) for booleans\n"
-    "5. Use assert_throws((): void => { ... }) for error cases\n"
+    "5. Use assert_throws(fn() { ... }) for error cases\n"
     "6. Cover normal cases, edge cases, and error cases\n"
     "7. Test names should be descriptive\n";
 

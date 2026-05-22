@@ -406,6 +406,7 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_resources.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_prompts.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c
+        ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
         ${CMAKE_SOURCE_DIR}/src/base/xjson.c
         ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
     )
@@ -417,6 +418,12 @@ if(XR_BUILD_MCP)
     )
     target_link_libraries(test_mcp_protocol PRIVATE xray_core)
     add_test(NAME test_mcp_protocol COMMAND test_mcp_protocol)
+    add_test(NAME test_mcp_knowledge_generation
+        COMMAND python3
+            ${CMAKE_SOURCE_DIR}/tests/mcp/test_knowledge_generation.py
+            --root ${CMAKE_SOURCE_DIR}
+            --xray $<TARGET_FILE:xray>
+    )
 endif()
 
 # ============================================================================

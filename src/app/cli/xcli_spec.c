@@ -157,6 +157,8 @@ static XrCliCommandSpec cli_commands[] = {
 
     /* Utility commands */
     {"info", "Environment info", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
+    {"builtin-dump", "Dump analyzer builtin metadata", NULL, empty_options, 0, 0, false, true, NULL,
+     NULL, 0},
     {"help", "Show help for a command", NULL, empty_options, 0, 1, false, false, NULL, NULL, 0},
 
 /* IDE integration (conditional compilation) */

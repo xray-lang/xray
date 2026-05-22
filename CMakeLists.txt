@@ -606,6 +606,8 @@ endif()
 
 # Base CLI source files
 set(XRAY_CLI_SOURCES ${NEW_CLI_SRC})
+list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli/xcmd_builtin_dump.c)
+list(REMOVE_DUPLICATES XRAY_CLI_SOURCES)
 set(XRAY_CLI_INCLUDES
     ${XRAY_COMMON_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
@@ -646,6 +648,19 @@ if(XR_BUILD_MCP)
     list(APPEND XRAY_CLI_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp)
 
     add_compile_definitions(XR_HAS_MCP=1)
+    set(_xmcp_builtin_dump ${CMAKE_CURRENT_BINARY_DIR}/xmcp_builtin_dump.json)
+    add_custom_target(regen-mcp-knowledge
+        COMMAND $<TARGET_FILE:xray> builtin-dump > ${_xmcp_builtin_dump}
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_mcp_knowledge.py
+            --docs ${CMAKE_CURRENT_SOURCE_DIR}/docs/knowledge
+            --builtins ${_xmcp_builtin_dump}
+            --out ${CMAKE_CURRENT_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
+        DEPENDS xray
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+        COMMENT "Dumping analyzer builtins and regenerating MCP knowledge tables"
+    )
     message(STATUS "MCP: enabled")
 else()
     message(STATUS "MCP: disabled")

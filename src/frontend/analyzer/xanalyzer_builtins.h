@@ -105,6 +105,10 @@ XR_FUNC const char *xa_builtin_get_type_name(XrType *type);
 // Get module info by name
 XR_FUNC const XaBuiltinModule *xa_builtin_get_module_info(const char *module_name);
 
+// Iterate all builtin module declarations known to the analyzer.
+XR_FUNC int xa_builtin_get_module_count(void);
+XR_FUNC const XaBuiltinModule *xa_builtin_get_module_at(int index);
+
 // Get module function signature
 XR_FUNC const char *xa_builtin_get_module_func_signature(const char *module_name,
                                                          const char *func_name);
