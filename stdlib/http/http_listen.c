@@ -344,6 +344,8 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
 
 // Forward declarations
 static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *ctx,
+                                            XrValue *result);
 static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
 static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *ctx, XrValue *result);
 static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, void *ctx,
@@ -448,7 +450,7 @@ static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *user
         return http_conn_cleanup(ctx);
 
     while (ctx->write_remaining > 0) {
-        ssize_t n = write(ctx->fd, ctx->write_ptr, ctx->write_remaining);
+        ssize_t n = xr_socket_send((xr_socket_t) ctx->fd, ctx->write_ptr, ctx->write_remaining);
         if (n > 0) {
             ctx->write_ptr += n;
             ctx->write_remaining -= n;
@@ -456,7 +458,7 @@ static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *user
         }
         if (n == 0)
             return http_conn_cleanup(ctx);
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             return xr_yield_for_io(X, ctx->fd, XR_WAIT_WRITE, -1, http_conn_write_cont, ctx,
                                    result);
         }
@@ -612,6 +614,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
                     return http_conn_read_body(X, XR_RESUME_IO_READY, ctx, result);
                 }
                 if (ctx->buf_used >= total_needed) {
+                    ctx->header_end = total_needed;
                     xr_json_set_by_key(
                         X, req, "body",
                         make_string_val(X, ctx->read_buf + parsed, ctx->content_length));
@@ -684,20 +687,21 @@ static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, void *user_
     while (ctx->buf_used < ctx->body_total) {
         if (ctx->buf_used >= CONN_READ_BUF_SIZE)
             break;
-        ssize_t n =
-            read(ctx->fd, ctx->read_buf + ctx->buf_used, CONN_READ_BUF_SIZE - ctx->buf_used);
+        ssize_t n = xr_socket_recv((xr_socket_t) ctx->fd, ctx->read_buf + ctx->buf_used,
+                                   CONN_READ_BUF_SIZE - ctx->buf_used);
         if (n > 0) {
             ctx->buf_used += (int) n;
             continue;
         }
         if (n == 0)
             return http_conn_cleanup(ctx);
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             return xr_yield_for_io(X, ctx->fd, XR_WAIT_READ, -1, http_conn_read_body, ctx, result);
         }
         return http_conn_cleanup(ctx);
     }
     if (ctx->buf_used >= ctx->body_total) {
+        ctx->header_end = ctx->body_total;
         xr_json_set_by_key(X, ctx->req_json, "body",
                            make_string_val(X, ctx->read_buf + ctx->parsed, ctx->content_length));
     }
@@ -731,14 +735,14 @@ static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, void *us
         char *wp = xr_netbuf_reserve(ctx->chunk_buf, 4096);
         if (!wp)
             goto chunk_error;
-        ssize_t n = read(ctx->fd, wp, 4096);
+        ssize_t n = xr_socket_recv((xr_socket_t) ctx->fd, wp, 4096);
         if (n > 0) {
             xr_netbuf_advance(ctx->chunk_buf, n);
             continue;
         }
         if (n == 0)
             goto chunk_error;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             return xr_yield_for_io(X, ctx->fd, XR_WAIT_READ, -1, http_conn_read_chunked, ctx,
                                    result);
         }
@@ -777,20 +781,22 @@ static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, void 
         return http_conn_cleanup(ctx);
 
     while (ctx->body_read < ctx->body_total) {
-        ssize_t n = read(ctx->fd, ctx->body_buf + ctx->body_read, ctx->body_total - ctx->body_read);
+        ssize_t n = xr_socket_recv((xr_socket_t) ctx->fd, ctx->body_buf + ctx->body_read,
+                                   ctx->body_total - ctx->body_read);
         if (n > 0) {
             ctx->body_read += (int) n;
             continue;
         }
         if (n == 0)
             break;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (xr_socket_err_is_again(xr_get_socket_error())) {
             return xr_yield_for_io(X, ctx->fd, XR_WAIT_READ, -1, http_conn_read_large_body, ctx,
                                    result);
         }
         break;
     }
     if (ctx->body_read >= ctx->body_total) {
+        ctx->header_end = ctx->parsed + (int) ctx->body_total;
         xr_json_set_by_key(X, ctx->req_json, "body",
                            make_string_val(X, ctx->body_buf, ctx->body_total));
     }
@@ -895,7 +901,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
  */
 static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
-    if (status != XR_RESUME_IO_READY)
+    if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
         return http_conn_cleanup(ctx);
 
     // Reset arena for next request
@@ -920,10 +926,19 @@ static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *user_ctx, 
         return http_conn_cleanup(ctx);
 
     // Voluntary yield after batch to prevent worker starvation
-    if (ctx->batch_count >= CONN_YIELD_BATCH) {
+    if (ctx->batch_count >= CONN_YIELD_BATCH && ctx->buf_used > 0) {
         ctx->batch_count = 0;
-        return xr_yield(X, http_conn_loop, ctx);
+        return xr_yield(X, http_conn_read_request, ctx);
     }
+
+    return http_conn_read_request(X, XR_RESUME_IO_READY, ctx, result);
+}
+
+static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *user_ctx,
+                                            XrValue *result) {
+    HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
+    if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
+        return http_conn_cleanup(ctx);
 
     // Try to find complete header in existing buffer
     int header_end = find_request_end(ctx->read_buf, ctx->buf_used, ctx->scan_from);
@@ -937,8 +952,8 @@ static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *user_ctx, 
                                          (XrContinuation) http_conn_cleanup, result);
         }
         int old_used = ctx->buf_used;
-        ssize_t n =
-            read(ctx->fd, ctx->read_buf + ctx->buf_used, CONN_READ_BUF_SIZE - ctx->buf_used);
+        ssize_t n = xr_socket_recv((xr_socket_t) ctx->fd, ctx->read_buf + ctx->buf_used,
+                                   CONN_READ_BUF_SIZE - ctx->buf_used);
         if (n > 0) {
             ctx->buf_used += (int) n;
             header_end = find_request_end(ctx->read_buf, ctx->buf_used, old_used);
@@ -948,7 +963,7 @@ static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *user_ctx, 
         }
         if (n == 0)
             return http_conn_cleanup(ctx);
-        if (errno != EAGAIN && errno != EWOULDBLOCK)
+        if (!xr_socket_err_is_again(xr_get_socket_error()))
             return http_conn_cleanup(ctx);
 
         ctx->batch_count = 0;
@@ -1022,11 +1037,12 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
     for (;;) {
         struct sockaddr_in addr;
         socklen_t addr_len = sizeof(addr);
-        int client_fd = accept(lctx->listen_fd, (struct sockaddr *) &addr, &addr_len);
+        int client_fd = (int) accept(lctx->listen_fd, (struct sockaddr *) &addr, &addr_len);
         if (client_fd < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
+            int sock_err = xr_get_socket_error();
+            if (xr_socket_err_is_again(sock_err))
                 break;
-            if (errno == EINTR)
+            if (sock_err == XR_EINTR)
                 continue;
             break;
         }
@@ -1047,7 +1063,8 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
             int cur = atomic_fetch_add(&ctx->current_conns, 1);
             if (cur >= max) {
                 atomic_fetch_sub(&ctx->current_conns, 1);
-                ssize_t ret = xr_socket_send(client_fd, RESP_503, sizeof(RESP_503) - 1);
+                ssize_t ret =
+                    xr_socket_send((xr_socket_t) client_fd, RESP_503, sizeof(RESP_503) - 1);
                 (void) ret;
                 shutdown(client_fd, XR_SHUT_WR);
                 xr_closesocket(client_fd);

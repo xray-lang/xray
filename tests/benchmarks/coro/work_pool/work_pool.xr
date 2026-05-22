@@ -1,0 +1,101 @@
+// 作者：xingleixu@gmail.com
+// 动态任务池测试 (Work Pool)
+// 固定 N 个 worker 从共享队列取任务执行
+// 测试负载均衡 + 队列竞争 + 实际服务器模式
+import time
+
+let WORKERS = 8        // worker 数量
+let TASKS = 100000     // 任务总数
+if (process.args.length > 0) {
+    WORKERS = int(process.args[0]) ?? WORKERS
+}
+if (process.args.length > 1) {
+    TASKS = int(process.args[1]) ?? TASKS
+}
+
+print("=== Work Pool 测试 ===")
+print("Worker数:", WORKERS)
+print("任务总数:", TASKS)
+
+shared const task_ch = Channel(1000)
+shared const result_ch = Channel(1000)
+
+// 模拟 CPU 工作：计算斐波那契（小规模）
+fn fib(n: int) -> int {
+    if (n <= 1) { return n }
+    let a = 0
+    let b = 1
+    for (let i = 2; i <= n; i++) {
+        let t = a + b
+        a = b
+        b = t
+    }
+    return b
+}
+
+// Worker: 从任务队列取任务，执行后发送结果
+fn worker(id: int) -> int {
+    let processed = 0
+    while (true) {
+        let task = task_ch.recv()
+        if (task == null) { break }
+        // task 是一个整数，计算 fib(task % 20)
+        let result = fib(task % 20)
+        result_ch.send(result)
+        processed++
+    }
+    return processed
+}
+
+// 任务提交者
+fn submit_tasks(count: int) {
+    for (let i = 0; i < count; i++) {
+        task_ch.send(i)
+    }
+    task_ch.close()
+}
+
+let start = time.monotonic()
+
+// 启动 workers
+let workers: Array<Task> = []
+for (let i = 0; i < WORKERS; i++) {
+    workers.push(go worker(i))
+}
+
+// 单独协程提交任务（避免与结果收集死锁）
+let submitter = go submit_tasks(TASKS)
+
+// 收集结果
+let total = 0
+for (let i = 0; i < TASKS; i++) {
+    total = total + result_ch.recv()
+}
+await submitter
+
+// 等待 workers 完成，统计负载均衡
+let worker_loads: Array<int> = []
+for (w in workers) {
+    let processed = await w
+    worker_loads.push(processed)
+}
+
+let elapsed = time.monotonic() - start
+result_ch.close()
+
+print("结果校验和:", total)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}
+
+// 打印负载分布
+let min_load = TASKS
+let max_load = 0
+for (load in worker_loads) {
+    if (load < min_load) { min_load = load }
+    if (load > max_load) { max_load = load }
+}
+print("负载均衡: min=", min_load, "max=", max_load, "ratio=", float(max_load) / float(min_load + 1))

@@ -1,0 +1,98 @@
+// 作者：xingleixu@gmail.com
+// Reverse Complement Benchmark - Xray 版本
+// 读取 FASTA 格式 DNA 序列，输出反向补码
+// DNA 补码映射表
+let COMP = { "A" => "T", "a" => "T", "T" => "A", "t" => "A", "C" => "G", "c" => "G", "G" => "C", "g" => "C", "U" => "A", "u" => "A", "M" => "K", "m" => "K", "R" => "Y", "r" => "Y", "W" => "W", "w" => "W", "S" => "S", "s" => "S", "Y" => "R", "y" => "R", "K" => "M", "k" => "M", "V" => "B", "v" => "B", "H" => "D", "h" => "D", "D" => "H", "d" => "H", "B" => "V", "b" => "V", "N" => "N", "n" => "N" }
+
+// 反向补码一个序列（优化版：使用 translateBytes 一次遍历）
+fn reverseComplement(seq: string): string {
+    // reverseBytes + translateBytes：两次 O(n) 遍历，无脚本层循环
+    return seq.reverseBytes().translateBytes(COMP)
+}
+
+// 按 60 字符宽度格式化输出
+fn printFormatted(seq: string) {
+    let i = 0
+    let len = seq.length
+    while (i < len) {
+        let end = i + 60
+        if (end > len) {
+            end = len
+        }
+        print(seq.substring(i, end))
+        i = i + 60
+    }
+}
+
+// 处理 FASTA 输入（使用 StringBuilder 优化）
+fn processFasta(input: string) {
+    let lines = input.split("
+")
+    let header = ""
+    let seqBuilder = new StringBuilder()
+    let i = 0
+    while (i < lines.length) {
+        let line = lines[i]
+        if (line.length > 0) {
+            if (line.charAt(0) == ">") {
+                // 输出之前的序列
+                if (header.length > 0) {
+                    print(header)
+                    printFormatted(reverseComplement(seqBuilder.toString()))
+                }
+                header = line
+                seqBuilder = new StringBuilder()
+            } else {
+                seqBuilder.append(line)
+            }
+        }
+        i = i + 1
+    }
+    // 输出最后一个序列
+    if (header.length > 0) {
+        print(header)
+        printFormatted(reverseComplement(seqBuilder.toString()))
+    }
+}
+
+// 生成测试数据
+// 注意：此函数触发 StringBuilder + 长字符串 + 循环 Bug
+// 详见文档: docs/192_StringBuilder_长字符串循环Bug.md
+fn generateFasta(n: int): string {
+    let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+    let sb = new StringBuilder()
+    sb.append(">ONE Homo sapiens alu
+")
+    let i = 0
+    while (i < n) {
+        let start = i % alu.length
+        let end = start + 60
+        if (end > alu.length) {
+            end = alu.length
+        }
+        sb.append(alu.substring(start, end))
+        sb.append("
+")
+        i = i + 60
+    }
+    sb.append(">TWO IUB ambiguity codes
+")
+    let iub = "ACGTMRWSYKVHDBN"
+    i = 0
+    while (i < n / 3) {
+        let j = 0
+        while (j < 60 && i + j < n / 3) {
+            sb.append(iub.charAt((i + j) % iub.length))
+            j = j + 1
+        }
+        sb.append("
+")
+        i = i + 60
+    }
+    return sb.toString()
+}
+
+// 主程序 - 性能基准测试（从命令行读取，默认 250000）
+let n = process.args.length > 0 ? int(process.args[0]) ?? 250000 : 250000
+let input = generateFasta(n)
+processFasta(input)

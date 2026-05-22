@@ -1,0 +1,66 @@
+// GC Stress Test: Hash Map Resize
+// Tests write barrier pressure from frequent map mutations.
+// Old maps get new young values written in, triggering back barriers.
+// Also tests map growth/rehash behavior under GC.
+//
+// Usage: xray gc_hashmap_resize.xr -- [iterations]
+
+fn run(n: int) {
+    // Phase 1: Build a long-lived map, then repeatedly overwrite values
+    // This forces write barriers: old container ← young value
+    let bigMap = #{}
+    let i = 0
+    while (i < 1000) {
+        bigMap["key_" + i] = i
+        i = i + 1
+    }
+    print("Phase 1: built map with 1000 keys")
+
+    // Repeatedly overwrite with new objects (write barrier stress)
+    let round = 0
+    while (round < n) {
+        i = 0
+        while (i < 1000) {
+            bigMap["key_" + i] = { "v": round * 1000 + i }
+            i = i + 1
+        }
+        round = round + 1
+    }
+    // Verify
+    let check = bigMap["key_500"].v
+    print("Phase 1 done: " + n + " rounds, check=" + check)
+
+    // Phase 2: Create and discard many small maps (allocation churn)
+    let total = 0
+    i = 0
+    while (i < n * 10) {
+        let m = {}
+        let j = 0
+        while (j < 20) {
+            m["k" + j] = j * j
+            j = j + 1
+        }
+        total = total + m["k10"]
+        i = i + 1
+    }
+    print("Phase 2 (small map churn x" + (n * 10) + "): total=" + total)
+
+    // Phase 3: Nested maps (deep reference chains, mark traversal stress)
+    let root = {}
+    i = 0
+    while (i < n) {
+        let inner = {}
+        let j = 0
+        while (j < 10) {
+            inner["field_" + j] = { "data": i * 10 + j }
+            j = j + 1
+        }
+        root["node_" + (i % 100)] = inner
+        i = i + 1
+    }
+    let deepCheck = root["node_0"]["field_5"].data
+    print("Phase 3 (nested maps): check=" + deepCheck)
+}
+
+let n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+run(n)

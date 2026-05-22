@@ -1,0 +1,90 @@
+/*
+** spectralnorm.xr - Spectral Norm Benchmark Xray版本
+**
+** 作者：xingleixu@gmail.com
+**
+** 算法说明：
+** 计算无限矩阵 A 的谱范数（spectral norm）
+** 矩阵 A 的元素定义：a(i,j) = 1 / ((i+j)*(i+j+1)/2 + i + 1)
+** 使用幂迭代法（power iteration）计算最大特征值的平方根
+**
+** 实现 4 个核心函数：
+** 1. A(i,j) - 计算矩阵元素
+** 2. Au(u,v) - 矩阵乘向量 v = A * u
+** 3. Atu(u,v) - 转置矩阵乘向量 v = A^T * u
+** 4. AtAu(u,v,w) - 组合操作 v = A^T * A * u
+*/
+// 计算矩阵元素 A(i,j)
+fn matrixA(i, j) {
+    return 1.0 / ((i + j) * (i + j + 1) / 2 + i + 1)
+}
+
+// 矩阵乘向量：v = A * u
+fn Au(u, v, n) {
+    for (let i = 0; i < n; i++) {
+        let sum = 0.0
+        for (let j = 0; j < n; j++) {
+            sum = sum + matrixA(i, j) * u[j]
+        }
+        v[i] = sum
+    }
+}
+
+// 转置矩阵乘向量：v = A^T * u
+fn Atu(u, v, n) {
+    for (let i = 0; i < n; i++) {
+        let sum = 0.0
+        for (let j = 0; j < n; j++) {
+            sum = sum + matrixA(j, i) * u[j]
+        }
+        v[i] = sum
+    }
+}
+
+// 组合操作：v = A^T * A * u
+fn AtAu(u, v, w, n) {
+    Au(u, w, n)
+    // w = A * u
+    Atu(w, v, n)
+}
+
+// 计算向量点积
+fn dot(u, v, n) {
+    let sum = 0.0
+    for (let i = 0; i < n; i++) {
+        sum = sum + u[i] * v[i]
+    }
+    return sum
+}
+
+// 计算谱范数
+fn spectralnorm(n) {
+    // 初始化向量
+    let u = []
+    let v = []
+    let w = []
+    for (let i = 0; i < n; i++) {
+        u.push(1.0)
+        v.push(0.0)
+        w.push(0.0)
+    }
+    // 幂迭代：执行 10 次
+    for (let iter = 0; iter < 10; iter++) {
+        AtAu(u, v, w, n)
+        // v = A^T * A * u
+        AtAu(v, u, w, n)
+        // u = A^T * A * v
+    }
+    // 计算 sqrt((u · v) / (v · v))
+    let vBv = dot(u, v, n)
+    let vv = dot(v, v, n)
+    return (vBv / vv).sqrt()
+}
+
+// 运行基准测试
+let n = 500
+if (process.args.length > 0) {
+    n = int(process.args[0])
+}
+let result = spectralnorm(n)
+print(result)

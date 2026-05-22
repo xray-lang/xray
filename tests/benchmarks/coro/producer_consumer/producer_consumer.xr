@@ -1,0 +1,84 @@
+// 作者：xingleixu@gmail.com
+// 生产者消费者测试
+// M 个生产者生产数据，N 个消费者消费数据
+import time
+let PRODUCERS = 10
+// 生产者数量
+let CONSUMERS = 10
+// 消费者数量
+let ITEMS = 100000
+// 总生产数量
+if (process.args.length > 0) {
+    PRODUCERS = int(process.args[0]) ?? PRODUCERS
+}
+if (process.args.length > 1) {
+    CONSUMERS = int(process.args[1]) ?? CONSUMERS
+}
+if (process.args.length > 2) {
+    ITEMS = int(process.args[2]) ?? ITEMS
+}
+print("=== 生产者消费者测试 ===")
+print("生产者:", PRODUCERS)
+print("消费者:", CONSUMERS)
+print("总数量:", ITEMS)
+shared const queue = Channel(100)
+shared const done_ch = Channel(CONSUMERS)
+
+// 生产者
+fn producer(id: int, count: int) {
+    for (let i = 0; i < count; i++) {
+        queue.send(id * 1000000 + i)
+    }
+}
+
+// 消费者（recv returns null when channel closed and empty）
+fn consumer(id: int) {
+    let consumed = 0
+    while (true) {
+        let item = queue.recv()
+        if (item == null) {
+            break
+        }
+        // 模拟处理
+        let result = item * 2
+        consumed++
+    }
+    done_ch.send(consumed)
+}
+
+let items_per_producer = ITEMS / PRODUCERS
+let remaining_items = ITEMS % PRODUCERS
+let start = time.monotonic()
+// 同时启动生产者和消费者（避免 Channel 阻塞）
+let producers: Array<Task> = []
+for (let i = 0; i < PRODUCERS; i++) {
+    let count = items_per_producer
+    if (i < remaining_items) {
+        count = count + 1
+    }
+    producers.push(go producer(i, count))
+}
+let consumers: Array<Task> = []
+for (let i = 0; i < CONSUMERS; i++) {
+    consumers.push(go consumer(i))
+}
+// 等待所有生产者完成
+for (p in producers) {
+    await p
+}
+// 关闭队列通知消费者退出
+queue.close()
+// 等待所有消费者完成并统计
+let total_consumed = 0
+for (let i = 0; i < CONSUMERS; i++) {
+    total_consumed = total_consumed + done_ch.recv()
+}
+let elapsed = time.monotonic() - start
+done_ch.close()
+print("消费总数:", total_consumed)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(total_consumed * 1000 / elapsed), "items/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}

@@ -1,0 +1,38 @@
+// TCP Echo Server for xray benchmark
+// Usage: xray echo_server.xr [-- port]
+
+import net
+
+fn handleConn(conn) {
+    defer net.close(conn)
+    while (true) {
+        let data = net.read(conn, 65536)
+        if (data == null) {
+            break
+        }
+        let n = net.write(conn, data)
+        if (n < 0) {
+            break
+        }
+    }
+}
+
+let port = 9001
+if (process.args.length > 0) {
+    port = int(process.args[0]) ?? 9001
+}
+
+let listener = net.listen(port, 1024)
+if (listener == null) {
+    print("ERROR: Failed to listen on port " + string(port))
+} else {
+    print("xray TCP echo server listening on port " + string(port))
+
+    while (true) {
+        let conn = net.accept(listener)
+        if (conn == null) {
+            continue
+        }
+        go handleConn(conn)
+    }
+}

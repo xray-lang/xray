@@ -1,0 +1,61 @@
+// GC Stress Test: Linked List Churn
+// Tests short-lived object allocation throughput.
+// Creates and immediately discards linked lists of various lengths,
+// forcing the GC to handle massive ephemeral allocation.
+//
+// Usage: xray gc_linkedlist_churn.xr -- [iterations]
+
+fn makeList(length: int) {
+    let node = null
+    let i = 0
+    while (i < length) {
+        node = { "value": i, "next": node }
+        i = i + 1
+    }
+    return node
+}
+
+fn sumList(node): int {
+    let sum = 0
+    while (node != null) {
+        sum = sum + node.value
+        node = node.next
+    }
+    return sum
+}
+
+fn run(n: int) {
+    let total = 0
+
+    // Phase 1: Many short lists (high churn, young gen pressure)
+    let i = 0
+    while (i < n * 100) {
+        let list = makeList(10)
+        total = total + sumList(list)
+        i = i + 1
+    }
+    print("Phase 1 (short lists x" + (n * 100) + "): sum=" + total)
+
+    // Phase 2: Fewer medium lists (mixed lifetime)
+    total = 0
+    i = 0
+    while (i < n * 10) {
+        let list = makeList(100)
+        total = total + sumList(list)
+        i = i + 1
+    }
+    print("Phase 2 (medium lists x" + (n * 10) + "): sum=" + total)
+
+    // Phase 3: Few long lists (promotion pressure)
+    total = 0
+    i = 0
+    while (i < n) {
+        let list = makeList(1000)
+        total = total + sumList(list)
+        i = i + 1
+    }
+    print("Phase 3 (long lists x" + n + "): sum=" + total)
+}
+
+let n = process.args.length > 0 ? int(process.args[0]) ?? 1000 : 1000
+run(n)

@@ -1,0 +1,83 @@
+// 作者：xingleixu@gmail.com
+// 哲学家就餐测试 (Dining Philosophers)
+// N 个哲学家围坐圆桌，用 channel 模拟叉子的获取和释放
+// 测试通道方案解决经典同步问题的效率
+import time
+
+let N = 5            // 哲学家数量
+let MEALS = 100000   // 每人进餐次数
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+if (process.args.length > 1) {
+    MEALS = int(process.args[1]) ?? MEALS
+}
+
+print("=== Dining Philosophers 测试 ===")
+print("哲学家数:", N)
+print("每人进餐:", MEALS)
+
+// Fork = buffered channel(1) used as mutex: value present = available
+shared const forks: Array<Channel<int>> = []
+for (let i = 0; i < N; i++) {
+    forks.push(Channel(1))
+}
+for (let i = 0; i < N; i++) {
+    forks[i].send(1)
+}
+
+shared const result_ch = Channel(100)
+
+// Philosopher: alternates thinking and eating
+// Deadlock avoidance: last philosopher reverses fork order (break circular wait)
+fn philosopher(id: int, meals: int, first: Channel<int>, second: Channel<int>, out: Channel<int>) {
+    for (let i = 0; i < meals; i++) {
+        first.recv()
+        second.recv()
+        second.send(1)
+        first.send(1)
+    }
+    out.send(meals)
+}
+
+let start = time.monotonic()
+
+// Launch all philosophers (extract channels to local vars before go)
+let tasks: Array<Task> = []
+for (let i = 0; i < N; i++) {
+    let left = forks[i]
+    let right = forks[(i + 1) % N]
+    // Last philosopher reverses order (break circular wait)
+    if (i == N - 1) {
+        tasks.push(go philosopher(i, MEALS, right, left, result_ch))
+    } else {
+        tasks.push(go philosopher(i, MEALS, left, right, result_ch))
+    }
+}
+
+// 收集结果
+let total_meals = 0
+for (let i = 0; i < N; i++) {
+    let m = result_ch.recv()
+    total_meals = total_meals + (int(m) ?? 0)
+}
+
+for (t in tasks) {
+    await t
+}
+
+let elapsed = time.monotonic() - start
+result_ch.close()
+for (fork in forks) {
+    fork.close()
+}
+
+print("总进餐次数:", total_meals)
+print("预期:", N * MEALS)
+print("正确:", total_meals == N * MEALS)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(total_meals * 1000 / elapsed), "meals/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}

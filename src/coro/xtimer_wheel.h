@@ -153,7 +153,7 @@ XR_FUNC XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker
 XR_FUNC void xr_timer_wheel_destroy(XrTimerWheel *tw);
 
 // Set timer (must be called from owner worker)
-XR_FUNC void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *timer, XrTimeoutProc timeout,
+XR_FUNC bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *timer, XrTimeoutProc timeout,
                                  void *arg, int64_t timeout_pos);
 
 // Cancel timer - local only (must be called from owner worker)

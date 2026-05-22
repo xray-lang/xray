@@ -175,6 +175,7 @@ bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
 
         if (old == XR_PD_NIL) {
             if (atomic_compare_exchange_strong(gpp, &old, XR_PD_WAIT)) {
+                xr_netpoll_arm_mode(pd, mode);
                 break;
             }
             continue;
@@ -216,7 +217,7 @@ struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) 
             return NULL;
         }
 
-        uintptr_t new_val = io_ready ? XR_PD_READY : XR_PD_NIL;
+        uintptr_t new_val = (io_ready && old <= XR_PD_WAIT) ? XR_PD_READY : XR_PD_NIL;
 
         if (atomic_compare_exchange_strong(gpp, &old, new_val)) {
             if (old == XR_PD_WAIT) {
@@ -325,6 +326,20 @@ static const XrNetpollOps *netpoll_default_ops(void) {
     return &iocp_ops;
 #else
     return NULL;
+#endif
+}
+
+void xr_netpoll_arm_mode(XrPollDesc *pd, int mode) {
+#ifdef XR_OS_WINDOWS
+    if (pd && pd->netpoll) {
+        if (mode & XR_POLL_READ)
+            iocp_arm_read(pd->netpoll, pd);
+        if (mode & XR_POLL_WRITE)
+            iocp_arm_write(pd->netpoll, pd);
+    }
+#else
+    (void) pd;
+    (void) mode;
 #endif
 }
 
@@ -707,20 +722,24 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         XrWorker *current = xr_current_worker();
         bool is_owner = current && (current->p.id == pd->owner_worker_id);
         if (is_owner) {
-            if (pd->rrun) {
+            if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE) {
                 xr_twheel_cancel_timer(tw, &pd->rt_storage);
                 pd->rrun = false;
             }
-            if (pd->wrun) {
+            if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE) {
                 xr_twheel_cancel_timer(tw, &pd->wt_storage);
                 pd->wrun = false;
             }
         } else {
-            if (pd->rrun) {
+            if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
+                atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) !=
+                    XR_TIMER_STATE_ZOMBIE) {
                 xr_timer_queue_cancel(tw, &pd->rt_storage, NULL);
                 pd->rrun = false;
             }
-            if (pd->wrun) {
+            if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE &&
+                atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) !=
+                    XR_TIMER_STATE_ZOMBIE) {
                 xr_timer_queue_cancel(tw, &pd->wt_storage, NULL);
                 pd->wrun = false;
             }
@@ -925,11 +944,15 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
         XrWorker *old_w = &rt->workers[old_id];
         XrTimerWheel *old_tw = old_w->p.timer_wheel;
         if (old_tw) {
-            if (pd->rrun) {
+            if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
+                atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) !=
+                    XR_TIMER_STATE_ZOMBIE) {
                 xr_timer_queue_cancel(old_tw, &pd->rt_storage, NULL);
                 pd->rrun = false;
             }
-            if (pd->wrun) {
+            if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE &&
+                atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) !=
+                    XR_TIMER_STATE_ZOMBIE) {
                 xr_timer_queue_cancel(old_tw, &pd->wt_storage, NULL);
                 pd->wrun = false;
             }
@@ -981,7 +1004,7 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, in
         pd->rd = deadline;
 
         // Cancel existing read timer
-        if (pd->rrun && bound_tw) {
+        if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE && bound_tw) {
             xr_twheel_cancel_timer(bound_tw, &pd->rt_storage);
             pd->rrun = false;
         }
@@ -991,8 +1014,8 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, in
             pd->rseq_saved = seq;
             pd->rt = &pd->rt_storage;
             int64_t timeout_ms = deadline / 1000000;
-            xr_twheel_set_timer(bound_tw, pd->rt, read_deadline_callback, pd, timeout_ms);
-            pd->rrun = true;
+            pd->rrun =
+                xr_twheel_set_timer(bound_tw, pd->rt, read_deadline_callback, pd, timeout_ms);
         }
     }
 
@@ -1003,7 +1026,7 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, in
         pd->wd = deadline;
 
         // Cancel existing write timer
-        if (pd->wrun && bound_tw) {
+        if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE && bound_tw) {
             xr_twheel_cancel_timer(bound_tw, &pd->wt_storage);
             pd->wrun = false;
         }
@@ -1013,8 +1036,8 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, in
             pd->wseq_saved = seq;
             pd->wt = &pd->wt_storage;
             int64_t timeout_ms = deadline / 1000000;
-            xr_twheel_set_timer(bound_tw, pd->wt, write_deadline_callback, pd, timeout_ms);
-            pd->wrun = true;
+            pd->wrun =
+                xr_twheel_set_timer(bound_tw, pd->wt, write_deadline_callback, pd, timeout_ms);
         }
     }
 }

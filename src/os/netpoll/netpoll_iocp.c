@@ -38,6 +38,11 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 
+#define XR_AFD_READ_POLL_EVENTS                                                                    \
+    (AFD_POLL_RECEIVE | AFD_POLL_RECEIVE_EXPEDITED | AFD_POLL_DISCONNECT | AFD_POLL_ABORT |       \
+     AFD_POLL_LOCAL_CLOSE | AFD_POLL_ACCEPT)
+#define XR_AFD_WRITE_POLL_EVENTS (AFD_POLL_SEND | AFD_POLL_CONNECT_FAIL | AFD_POLL_LOCAL_CLOSE)
+
 // ============================================================================
 // NT API entry points (resolved once via GetProcAddress).
 // ============================================================================
@@ -160,7 +165,7 @@ int xr_afd_init(XrAfdContext *ctx, HANDLE iocp, ULONG_PTR completion_key) {
     ctx->iocp = iocp;
     ctx->afd_device = NULL;
     ctx->completion_key = completion_key;
-    ctx->update_queue_head = NULL;
+    atomic_store(&ctx->update_queue_head, NULL);
 
     // Build a per-instance device path: \Device\Afd\Xray<seq>.
     // The exact name is irrelevant; AFD treats anything under
@@ -355,9 +360,9 @@ typedef struct XrIocpPdState {
     XR_AFD_POLL_INFO poll_info;      // Submitted to NtDeviceIoControlFile
     SOCKET base_socket;              // Resolved once on add_fd
     uint32_t user_events;            // AFD event mask we want monitored
-    uint32_t pending_events;         // Snapshot at submit time (debug aid)
-    uint8_t poll_status;             // XR_IOCP_POLL_*
-    uint8_t in_update_queue;         // 1 if linked into ctx->update_queue_head
+    _Atomic uint32_t pending_events; // Snapshot at submit time (debug aid)
+    _Atomic uint8_t poll_status;     // XR_IOCP_POLL_*
+    _Atomic uint8_t in_update_queue; // 1 if linked into ctx->update_queue_head
     uint8_t pad[6];                  // Explicit padding so update_link is 8-byte aligned
     struct XrPollDesc *update_link;  // Intrusive single-linked stack
 } XrIocpPdState;
@@ -414,16 +419,27 @@ static int iocp_afd_events_to_mode(ULONG afd_events) {
 
 static void iocp_update_queue_push(XrAfdContext *ctx, XrPollDesc *pd) {
     XrIocpPdState *st = iocp_pd(pd);
-    if (st->in_update_queue)
+    if (atomic_exchange(&st->in_update_queue, 1) != 0)
         return;
-    st->in_update_queue = 1;
-    st->update_link = (XrPollDesc *) ctx->update_queue_head;
-    ctx->update_queue_head = pd;
+    void *head = atomic_load(&ctx->update_queue_head);
+    do {
+        st->update_link = (XrPollDesc *) head;
+    } while (!atomic_compare_exchange_weak(&ctx->update_queue_head, &head, pd));
+}
+
+static bool iocp_has_write_waiter(XrPollDesc *pd) {
+    uintptr_t wg = atomic_load(&pd->wg);
+    return wg == XR_PD_WAIT || wg > XR_PD_WAIT;
+}
+
+static bool iocp_has_read_waiter(XrPollDesc *pd) {
+    uintptr_t rg = atomic_load(&pd->rg);
+    return rg == XR_PD_WAIT || rg > XR_PD_WAIT;
 }
 
 static int iocp_submit_poll(XrAfdContext *ctx, XrPollDesc *pd) {
     XrIocpPdState *st = iocp_pd(pd);
-    if (st->poll_status != XR_IOCP_POLL_IDLE)
+    if (atomic_load(&st->poll_status) != XR_IOCP_POLL_IDLE)
         return 0;  // Already pending or cancelled; do nothing
 
     // Prime the AFD_POLL_INFO. NumberOfHandles=1 is the only shape
@@ -435,29 +451,40 @@ static int iocp_submit_poll(XrAfdContext *ctx, XrPollDesc *pd) {
     st->poll_info.Exclusive = FALSE;
     st->poll_info.Handles[0].Handle = (HANDLE) st->base_socket;
     st->poll_info.Handles[0].Status = 0;
-    st->poll_info.Handles[0].Events = st->user_events;
+    uint32_t events = 0;
+    if (iocp_has_read_waiter(pd))
+        events |= XR_AFD_READ_POLL_EVENTS;
+    if (iocp_has_write_waiter(pd))
+        events |= XR_AFD_WRITE_POLL_EVENTS;
+    if (events == 0) {
+        atomic_store(&st->pending_events, 0);
+        return 0;
+    }
+    st->poll_info.Handles[0].Events = events;
+
+    atomic_store(&st->pending_events, events);
+    atomic_store(&st->poll_status, XR_IOCP_POLL_PENDING);
 
     if (xr_afd_poll(ctx, &st->poll_info, &st->iosb) < 0) {
         // Submission failed; leave the state IDLE so the next caller
         // can decide whether to retry or surface the error. We do
         // NOT mark it as PENDING because no completion will arrive.
+        atomic_store(&st->pending_events, 0);
+        atomic_store(&st->poll_status, XR_IOCP_POLL_IDLE);
         return -1;
     }
 
-    st->poll_status = XR_IOCP_POLL_PENDING;
-    st->pending_events = st->user_events;
     return 0;
 }
 
 static void iocp_drain_update_queue(XrAfdContext *ctx) {
-    XrPollDesc *head = (XrPollDesc *) ctx->update_queue_head;
-    ctx->update_queue_head = NULL;
+    XrPollDesc *head = (XrPollDesc *) atomic_exchange(&ctx->update_queue_head, NULL);
 
     while (head != NULL) {
         XrIocpPdState *st = iocp_pd(head);
         XrPollDesc *next = st->update_link;
         st->update_link = NULL;
-        st->in_update_queue = 0;
+        atomic_store(&st->in_update_queue, 0);
 
         // Skip pds that have been closed in the meantime; their
         // outstanding poll (if any) has already been cancelled and
@@ -480,9 +507,9 @@ static void iocp_drain_update_queue(XrAfdContext *ctx) {
 static void iocp_handle_completion(XrPollDesc *pd, XrReadyList *list) {
     XrIocpPdState *st = iocp_pd(pd);
 
-    bool was_cancelled = (st->poll_status == XR_IOCP_POLL_CANCELLED);
-    st->poll_status = XR_IOCP_POLL_IDLE;
-    st->pending_events = 0;
+    uint8_t old_status = atomic_exchange(&st->poll_status, XR_IOCP_POLL_IDLE);
+    bool was_cancelled = (old_status == XR_IOCP_POLL_CANCELLED);
+    atomic_store(&st->pending_events, 0);
 
     // STATUS_CANCELLED arrives in two scenarios:
     //   1. iocp_del_fd / xr_netpoll_close called NtCancelIoFileEx
@@ -578,7 +605,7 @@ static void iocp_cleanup(XrNetpoll *np) {
     // by the time we reach cleanup, xnetpoll has already torn the
     // pollDesc cache down so the linked pds are dead. Just drop the
     // head pointer; nothing else owns these nodes.
-    ctx->update_queue_head = NULL;
+    atomic_store(&ctx->update_queue_head, NULL);
 
     // Order matters: tear down the AFD device before closing the IOCP.
     // AFD's outstanding completions still depend on the IOCP being
@@ -612,7 +639,7 @@ static int iocp_add_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     XrIocpPdState *st = iocp_pd(pd);
     memset(st, 0, sizeof(*st));
     st->base_socket = base;
-    st->poll_status = XR_IOCP_POLL_IDLE;
+    atomic_store(&st->poll_status, XR_IOCP_POLL_IDLE);
 
     // We watch every event AFD knows about. The platform-independent
     // layer demultiplexes into XR_POLL_READ / XR_POLL_WRITE based on
@@ -642,12 +669,13 @@ static void iocp_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
     // skips closing pds. We cannot easily unlink from the middle of
     // the intrusive single-linked stack, so the entry stays in the
     // chain but iocp_drain_update_queue ignores it.
-    st->in_update_queue = 0;
+    atomic_store(&st->in_update_queue, 0);
 
     // No outstanding poll: nothing to cancel. The caller will free
     // the pd memory immediately, which is safe because no future
     // AFD completion will reference it.
-    if (st->poll_status != XR_IOCP_POLL_PENDING)
+    uint8_t expected = XR_IOCP_POLL_PENDING;
+    if (!atomic_compare_exchange_strong(&st->poll_status, &expected, XR_IOCP_POLL_CANCELLED))
         return;
 
     // Hand pd ownership to the completion path BEFORE issuing the
@@ -670,7 +698,7 @@ static void iocp_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
         return;
     }
 
-    st->poll_status = XR_IOCP_POLL_CANCELLED;
+    atomic_store(&st->poll_status, XR_IOCP_POLL_CANCELLED);
 }
 
 static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) {
@@ -738,7 +766,8 @@ static int iocp_poll_events(XrNetpoll *np, int64_t delta_ns, XrReadyList *list) 
         // Re-enqueue for re-submission unless closing or unmonitored.
         // The push is a no-op if pd is already in the queue, so a
         // burst of completions on the same pd doesn't duplicate.
-        if (!is_closing && st->user_events != 0 && st->poll_status == XR_IOCP_POLL_IDLE) {
+        if (!is_closing && st->user_events != 0 &&
+            atomic_load(&st->poll_status) == XR_IOCP_POLL_IDLE) {
             iocp_update_queue_push(ctx, pd);
         }
 
@@ -780,6 +809,38 @@ static void iocp_wakeup(XrNetpoll *np) {
         return;
 
     PostQueuedCompletionStatus(ctx->iocp, 0, XR_IOCP_KEY_WAKEUP, NULL);
+}
+
+static void iocp_arm_events(XrNetpoll *np, XrPollDesc *pd, uint32_t event_mask) {
+    XrAfdContext *ctx = iocp_ctx(np);
+    if (ctx == NULL || pd == NULL || atomic_load(&pd->closing))
+        return;
+
+    XrIocpPdState *st = iocp_pd(pd);
+    if ((atomic_load(&st->pending_events) & event_mask) == event_mask)
+        return;
+
+    uint8_t expected = XR_IOCP_POLL_PENDING;
+    if (st->iosb.Status == STATUS_PENDING &&
+        atomic_compare_exchange_strong(&st->poll_status, &expected, XR_IOCP_POLL_CANCELLED)) {
+        (void) xr_afd_cancel(ctx, &st->iosb);
+        return;
+    }
+
+    if (atomic_load(&st->poll_status) == XR_IOCP_POLL_IDLE || st->iosb.Status != STATUS_PENDING) {
+        iocp_update_queue_push(ctx, pd);
+        iocp_wakeup(np);
+    }
+}
+
+static void iocp_arm_read(XrNetpoll *np, XrPollDesc *pd) {
+    if (iocp_has_read_waiter(pd))
+        iocp_arm_events(np, pd, XR_AFD_READ_POLL_EVENTS);
+}
+
+static void iocp_arm_write(XrNetpoll *np, XrPollDesc *pd) {
+    if (iocp_has_write_waiter(pd))
+        iocp_arm_events(np, pd, AFD_POLL_SEND);
 }
 
 static const XrNetpollOps iocp_ops = {

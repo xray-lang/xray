@@ -1,0 +1,114 @@
+// 作者：xingleixu@gmail.com
+// Chameneos-Redux (CLBG 经典并发 benchmark)
+// N 个变色龙在"会合点"两两配对交换颜色
+// 测试对称会合效率和协程调度吞吐
+import time
+
+let N_MEETINGS = 600000  // 会合次数
+let N_CHAMENEOS = 4      // 变色龙数量
+if (process.args.length > 0) {
+    N_MEETINGS = int(process.args[0]) ?? N_MEETINGS
+}
+if (process.args.length > 1) {
+    N_CHAMENEOS = int(process.args[1]) ?? N_CHAMENEOS
+}
+
+print("=== Chameneos-Redux 测试 ===")
+print("会合次数:", N_MEETINGS)
+print("变色龙数:", N_CHAMENEOS)
+
+// Colors: 0=blue, 1=red, 2=yellow
+fn complement(c1: int, c2: int) -> int {
+    if (c1 == c2) { return c1 }
+    if (c1 == 0 && c2 == 1) { return 2 }
+    if (c1 == 0 && c2 == 2) { return 1 }
+    if (c1 == 1 && c2 == 0) { return 2 }
+    if (c1 == 1 && c2 == 2) { return 0 }
+    if (c1 == 2 && c2 == 0) { return 1 }
+    if (c1 == 2 && c2 == 1) { return 0 }
+    return c1
+}
+
+// Meeting place: first chameneo sends its color, gets partner's color back
+// Uses two channels to coordinate pairing
+shared const request_ch = Channel(1)   // chameneo sends: [id, color]
+shared const done_ch = Channel(100)    // report results
+
+// Broker: pairs up chameneos for N meetings
+fn broker(meetings: int) {
+    for (let i = 0; i < meetings; i++) {
+        let first = request_ch.recv()
+        let second = request_ch.recv()
+        if (first == null || second == null) { break }
+        // Exchange colors via their response channels
+        first[2].send(second[1])
+        second[2].send(first[1])
+    }
+    // Signal done: close request channel so pending sends fail,
+    // then drain any already-buffered requests and close their
+    // reply channels so those chameneos' recv() returns null.
+    request_ch.close()
+    while (true) {
+        let (stale, ok) = request_ch.tryRecv()
+        if (!ok) { break }
+        stale[2].close()
+    }
+}
+
+// Chameneo: repeatedly meet at the broker
+fn chameneo(id: int, initial_color: int) {
+    let color = initial_color
+    let meetings = 0
+    shared const reply_ch = Channel(1)
+
+    while (true) {
+        try {
+            request_ch.send([id, color, reply_ch])
+        } catch (e) {
+            break  // channel closed by broker
+        }
+        let partner_color = reply_ch.recv()
+        if (partner_color == null) { break }
+        color = complement(color, partner_color)
+        meetings++
+    }
+
+    if (!reply_ch.isClosed()) {
+        reply_ch.close()
+    }
+    done_ch.send(meetings)
+}
+
+let start = time.monotonic()
+
+// Start broker
+let broker_task = go broker(N_MEETINGS)
+
+// Start chameneos with rotating initial colors
+let tasks: Array<Task> = []
+for (let i = 0; i < N_CHAMENEOS; i++) {
+    tasks.push(go chameneo(i, i % 3))
+}
+
+// Collect results
+let total_meetings = 0
+for (let i = 0; i < N_CHAMENEOS; i++) {
+    let m = done_ch.recv()
+    total_meetings = total_meetings + (int(m) ?? 0)
+}
+
+await broker_task
+for (task in tasks) {
+    await task
+}
+let elapsed = time.monotonic() - start
+done_ch.close()
+
+print("总会合次数:", total_meetings)
+print("预期会合次数:", N_MEETINGS * 2)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(total_meetings * 1000 / elapsed), "meetings/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}

@@ -13,6 +13,7 @@
 
 #include "xi_lower_internal.h"
 #include "xi.h"
+#include "xi_effect.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../base/xchecks.h"
@@ -1621,7 +1622,7 @@ static void lower_print(XiLower *l, AstNode *node) {
         int newline = (i == n - 1) ? 1 : 0;
         v->aux_int = add_space | (newline << 1) | (skip_null << 4);
 
-        v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->flags = xi_op_default_effects(XI_PRINT);
         v->line = (uint32_t) node->line;
     }
 }

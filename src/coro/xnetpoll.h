@@ -399,6 +399,7 @@ XR_FUNC void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode);
  * Returns true if I/O ready, false on timeout or fd close.
  */
 XR_FUNC bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, struct XrayIsolate *X);
+XR_FUNC void xr_netpoll_arm_mode(XrPollDesc *pd, int mode);
 
 // Unblock, wake waiting coroutine
 XR_FUNC struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready);
