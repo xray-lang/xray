@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 FENCE_RE = re.compile(r"```xray\n(.*?)\n```", re.S)
+SOURCE_FENCE_ID_RE = re.compile(r"^```xray\s+@id=([A-Za-z0-9_.:-]+)\s*$", re.M)
 FRONT_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 SYMBOL_RE = re.compile(
     r"\.module = \"(?P<module>[^\"]+)\".*?\.symbols = (?P<symbols>_symbols_[A-Za-z0-9_]+|NULL),"
@@ -73,6 +74,73 @@ def parse_frontmatter(path: Path) -> dict[str, str]:
         key, _, value = raw.partition(":")
         meta[key.strip()] = value.strip().strip("\"'")
     return meta
+
+
+def collect_fence_refs(value: object) -> list[str]:
+    refs: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "fences":
+                if not isinstance(child, list):
+                    refs.append("<invalid>")
+                else:
+                    refs.extend(str(item) for item in child)
+            else:
+                refs.extend(collect_fence_refs(child))
+    elif isinstance(value, list):
+        for item in value:
+            refs.extend(collect_fence_refs(item))
+    return refs
+
+
+def section_fence_ids(root: Path) -> set[str]:
+    ids: set[str] = set()
+    for path in sorted((root / "docs/spec/source/sections").glob("*.md")):
+        ids.update(SOURCE_FENCE_ID_RE.findall(path.read_text(encoding="utf-8")))
+    return ids
+
+
+def check_card_sources(root: Path) -> list[str]:
+    cards_root = root / "docs/spec/source/cards"
+    legacy_root = root / "docs/spec/source/knowledge"
+    expected_counts = {"topics": 18, "resources": 3, "stdlib": 23}
+    fence_ids = section_fence_ids(root)
+    anchors = load_spec_anchors(root)
+    errors: list[str] = []
+    for subdir, expected_count in expected_counts.items():
+        legacy_dir = legacy_root / subdir
+        if legacy_dir.exists():
+            errors.append(f"{legacy_dir.relative_to(root)}: legacy markdown source directory must not exist")
+        card_dir = cards_root / subdir
+        if not card_dir.is_dir():
+            errors.append(f"{card_dir.relative_to(root)}: missing card source directory")
+            continue
+        paths = sorted(card_dir.glob("*.json"))
+        if len(paths) != expected_count:
+            errors.append(f"{card_dir.relative_to(root)}: expected {expected_count} cards, got {len(paths)}")
+        for path in paths:
+            try:
+                card = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as err:
+                errors.append(f"{path.relative_to(root)}: invalid JSON: {err}")
+                continue
+            stem = path.stem
+            if subdir in {"topics", "resources"} and card.get("id") != stem:
+                errors.append(f"{path.relative_to(root)}: id must equal filename stem")
+            if subdir == "stdlib" and card.get("module") != stem:
+                errors.append(f"{path.relative_to(root)}: module must equal filename stem")
+            if subdir == "topics":
+                spec = card.get("spec_anchor")
+                if not spec:
+                    errors.append(f"{path.relative_to(root)}: missing spec_anchor")
+                elif spec not in anchors:
+                    errors.append(f"{path.relative_to(root)}: unknown spec_anchor {spec}")
+            for ref in collect_fence_refs(card):
+                if ref == "<invalid>":
+                    errors.append(f"{path.relative_to(root)}: fences must be a list")
+                elif ref not in fence_ids:
+                    errors.append(f"{path.relative_to(root)}: unknown fence id {ref}")
+    return errors
 
 
 def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -300,6 +368,7 @@ def main(argv: list[str]) -> int:
     root = args.root.resolve()
     xray = args.xray.resolve()
     errors: list[str] = []
+    errors.extend(check_card_sources(root))
     errors.extend(check_language_docs_generated_current(root))
     errors.extend(check_spec_quality_gate(root))
     errors.extend(check_topic_spec_anchors(root))
