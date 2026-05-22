@@ -472,102 +472,418 @@ The full precedence table is in [§3.1](#31-precedence-and-associativity).
 
 ## 2. Type System
 
+> Source of truth: `src/runtime/value/xtype.h` (`XrType` definition), `src/runtime/value/xtype.c`, `src/frontend/parser/xparse_type.c` (syntax), `src/frontend/analyzer/xtype_ref_resolve.c` (resolution), `stdlib/prelude/prelude_types.def` (built-in type table).
+
 ### 2.1 Overview
 
-Xray is statically typed. Local variables usually rely on inference, while function parameters, public APIs, fields, and complex values often use explicit annotations.
+Xray is statically typed; every expression has a determined type at compile time. Core features of the type system:
 
-There is no source-level `any` type. When this document says “value” in an API signature, it means an arbitrary runtime value accepted by an intrinsic path, not a type you can write in source.
+1. **Type inference**: variable declarations rarely require type annotations; the analyzer infers from the initializer / context.
+2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
+3. **Union types**: `A | B | ...` (up to 6 members).
+4. **Reified generics**: generic type parameters are reflectable at runtime.
+5. **Structural Json + Nominal class**: Json objects are field-structure compatible (duck typing); classes are nominally compatible.
+6. **Runtime reflection**: `typeof` / `Reflect.*` APIs.
 
-### 2.2 Primitive Types
+### 2.2 Type Categories
 
-| Type | Description |
+| Category | Examples |
 |--|--|
-| `int` | integer value |
-| `float` | floating-point value |
-| `bool` | boolean |
-| `string` | UTF-8 string |
-| `null` | singleton null value |
-| `()` | unit type/value |
+| Primitive | `int`, `float`, `bool`, `string`, `()` (Unit, no return value) |
+| Sized integers | `int8`, `int16`, `int32`, `int64`, `uint8`..`uint64` |
+| Sized floats | `float32`, `float64` |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
+| Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
+| Error-handling prelude | `Exception`, `Result<T, E>` (see §8) |
+| Weak containers | `WeakMap`, `WeakSet` |
+| Nullable | `T?` |
+| Union | `A \| B \| ...` |
+| Tuple | `(T1, T2, ...)` |
+| Function | `fn(T1, T2) -> R` |
+| Class / Struct / Interface | user-defined (nominal) |
+| Enum | user-defined (incl. ADT enum, see §5.6) |
+| Type alias | `type Name = SomeType` |
 
-Width-specific numeric type names are recognized, but the exact lowering is implementation-defined for current releases.
+### 2.3 Primitive Types
 
-### 2.3 Nullable Types
+#### 2.3.1 Integer Types
+
+| Type | Range | Alias |
+|--|--|--|
+| `int8` | `[-128, 127]` | — |
+| `int16` | `[-32768, 32767]` | — |
+| `int32` | `[-2³¹, 2³¹-1]` | — |
+| `int64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
+| `uint8`..`uint64` | unsigned counterparts | — |
+
+- Literals default to `int`; the type may be narrowed by context (e.g., assigned to an `int32` variable).
+- Arithmetic: two's-complement wrap-around semantics (no debug/release distinction).
+
+#### 2.3.2 Floating-Point Types
+
+| Type | Standard |
+|--|--|
+| `float32` | IEEE-754 single precision |
+| `float64` | IEEE-754 double precision; alias of `float` |
+
+Literals default to `float`.
+
+#### 2.3.3 `bool`
+
+`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `let x: int = true` or `let b: bool = 1`).
+
+**Truthy / falsy context** (applies only at control-flow positions such as `if` / `while` / `?:` / `??` / `&&` / `||`; **does not** change a variable's type):
+
+| Value | Treated as |
+|---|---|
+| `false`, `null`, `0`, `0.0`, `""`, `Bytes(0)`, empty array / empty Map | **falsy** |
+| Everything else (including `0.0001`, non-empty strings/collections, object references) | **truthy** |
 
 ```xray
-let s: string? = null
-let n: int? = 42
+let x: int? = maybe_int()
+if (x) {                  // truthy context: enters when x is neither null nor 0
+    print(x + 1)          // x is narrowed to int in this branch
+}
+
+let s: string = ""
+if (s) { ... } else { ... }    // falsy: enters else
+
+let m: Map<string, int> = #{}
+if (m) { ... }                  // falsy: empty Map
+
+let a: int? = null
+let b = a ?? 0                  // null coalescing: b = 0
 ```
 
-`T?` means `T | null`. Nullable values can be checked against `null`, accessed with optional chaining, or force-unwrapped with `!`.
+**Note**: explicit comparisons such as `x is T` and `x != null` are preferred; truthy/falsy is mainly for concise "existence" checks (such as `if (user)`).
 
-### 2.4 Union Types
+#### 2.3.4 `string`
+
+Immutable UTF-8 strings. Supports `length`, indexing, slicing, and a rich method set (see §14.2).
+
+Internally uses ARC + string interning optimizations.
+
+#### 2.3.5 Unit `()` (no return value)
+
+Xray uses the **0-tuple `()`** to represent "no return value" (the Unit type):
 
 ```xray
-let id: int | string = 42
-id = "abc"
+fn log(msg: string) -> () { print(msg) }   // explicit Unit return
+fn ping() { print("pong") }                  // omitted return type = ()
+let r: () = log("hi")                        // allowed; r is a Unit value
 ```
 
-Union types are written with `|`. Type narrowing is performed in supported control-flow and `is` checks.
+- A function omitting its return type is equivalent to `-> ()`.
+- `void` is not a type name: `fn f() -> void` is rejected (`E0804`); use `-> ()` or omit the return type to indicate no return value.
 
-### 2.5 Function Types
+### 2.4 Composite Types
+
+#### 2.4.1 `Array<T>`
+
+Ordered mutable array. See §14.1.
 
 ```xray
-type Mapper = (int) -> int
-let pred: (string) -> bool
+let a: Array<int> = [1, 2, 3]
+let b = [1, 2, 3]                // inferred as Array<int>
+let c: Array<string> = []         // explicit empty array
 ```
 
-Function types use `->`. Parameter names are not part of a function type.
+The `T` in `Array<T>` must be determinable at compile time. An empty `[]` without a type annotation is a compile error: `Empty array '[]' requires a type annotation`.
 
-### 2.6 Tuple Types
+#### 2.4.2 `Map<K, V>`
+
+Hash table that **preserves insertion order**. See §14.7.
+
+**Map literals** must use the `#{ ... }` prefix with `:` separators (consistent with Json; disambiguated by the `#` prefix):
 
 ```xray
-let p: (int, string) = (1, "x")
-print(p.0)
-print(p.1)
+let m: Map<string, int> = #{"a": 1, "b": 2}
+let m2 = #{"a": 1, "b": 2}
+let empty = #{}                                     // empty Map
+
+m["c"] = 3                                          // insert / update
+let v = m["a"]                                      // lookup; returns null if absent
 ```
 
-Tuples are fixed-arity product values. Tuple fields can be accessed by numeric member names.
+| Literal form | Type | Purpose |
+|---|---|---|
+| `{ key: value }` (no prefix) | `Json` / `Object` (structural) | see §2.4.6 |
+| `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
+| `#{}` | `Map<K, V>` (empty) | explicit empty Map |
+| `[]` | `Array<T>` | array |
+| `#[]` | `Set<T>` | set |
 
-### 2.7 Object and Json Types
+`K` must implement `Hashable` (see §14.14): typically `int`, `string`, `bool`, `enum`, or a custom class implementing `Hashable`.
 
-Object type aliases are sealed when used as annotations:
+#### 2.4.3 `Set<T>`
+
+Deduplicated collection. See §14.4.
+
+```xray
+let s: Set<int> = #[1, 2, 3]
+```
+
+#### 2.4.4 `Channel<T>`
+
+Inter-coroutine communication channel. **Must** be declared `const` (see §10.5).
+
+```xray
+const ch: Channel<int> = new Channel<int>(10)
+```
+
+#### 2.4.5 `Bytes`
+
+Typed byte buffer. Semantically equivalent to `Array<uint8>`, but stored as contiguous memory.
+
+```xray
+let buf = new Bytes(1024)
+let init = new Bytes([72, 101, 108, 108, 111])
+```
+
+#### 2.4.6 `Json` and Object Literals
+
+`Json` is xray's **dynamic structured data type** — it can hold any JSON-equivalent structure. See §14.10 and §2.10.
+
+The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
+
+```xray
+// Object/Json literal: identifier or string key + colon ':'
+let data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
+let user = { name: "Bob", age: 25 }       // default type is Json
+data.name              // type: Json (field access returns Json)
+data["name"]           // equivalent
+
+// Field shorthand: when a field name matches a variable name
+let name = "Alice"
+let age = 30
+let user = { name, age }                  // equivalent to { name: name, age: age }
+
+// Map literal: `#{}` prefix + `:`
+let m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
+```
+
+**Comparison**:
+
+| Form | Type | Notes |
+|---|---|---|
+| `{ name: "x", age: 1 }` | `Json` / `Object` | identifier or string key followed by `:` |
+| `{ x: y }` (`x` is field name, `y` is variable) | `Json` / `Object` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
+| `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
+| `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
+
+**Sealed object types**: once an object type is named via `type`, it becomes sealed — accessing or assigning an undeclared field is a compile error:
 
 ```xray
 type User = { name: string, age: int }
-let u: User = { name: "alice", age: 30 }
+
+let u: User = { name: "Alice", age: 30 }
+print(u.name)         // OK
+// u.extra = "x"      // compile error: sealed type User has no field 'extra'
+
+// Without a type annotation, the literal is dynamic Json
+let u2 = { name: "Alice", age: 30 }      // Json (dynamically extensible)
+u2.extra = "x"        // OK (Json is dynamic)
 ```
 
-Access to undeclared fields on a sealed object is rejected. Unannotated object literals generally produce dynamic `Json`-style values.
+#### 2.4.7 `BigInt`
 
-`Json` is the dynamic structured data type for JSON-like values.
+Arbitrary-precision integer. See §14.8.
 
-### 2.8 Nominal Types
+#### 2.4.8 `Range`
 
-`class`, `struct`, `interface`, and `enum` declarations create nominal types. Classes are reference-oriented. Structs are value-oriented declarations sharing class-like member syntax. Interfaces define contracts. Enums support both backed simple enums and ADT payload variants.
+Produced by the `..` operator. See §3.12.
 
-### 2.9 Built-in Container Types
+#### 2.4.9 `DateTime` / `Regex` / `StringBuilder`
 
-| Type | Meaning |
-|--|--|
-| `Array<T>` | ordered mutable sequence |
-| `Map<K, V>` | insertion-ordered key/value table |
-| `Set<T>` | unique-value collection |
-| `Channel<T>` | typed coroutine channel |
-| `Range` | range created by `a..b` |
-| `Bytes` | byte-buffer type |
-| `StringBuilder` | mutable string builder |
-| `Regex` | compiled regex value |
-| `DateTime` | native date/time value |
+See §14 for details.
 
-### 2.10 Assignability
+#### 2.4.10 `WeakMap` / `WeakSet`
 
-Values are assignable when their static type is equal to or safely compatible with the target type. Nullable assignment requires a nullable target. Union assignment requires the source to be assignable to at least one union arm.
+Keys of `WeakMap` and elements of `WeakSet` must be heap objects; weak references do not prevent GC reclamation. Weak collections do not provide long-lived traversal callbacks that would retain elements.
 
-Numeric implicit conversion is intentionally limited. Use explicit conversion functions such as `int(x)`, `float(x)`, and `string(x)` when needed.
+### 2.5 Nullable Types
 
-### 2.11 Truthiness
+`T?` is sugar for `T | null`.
 
-Control-flow conditions accept truthy/falsy values. Common falsy values are `false`, `null`, numeric zero, empty string, and empty containers. Static assignment to `bool` remains type-checked and does not mean arbitrary truthy values are implicitly bools.
+```xray
+let x: int? = null      // OK
+let y: int? = 42        // OK
+let z: int = null       // compile error: null is not int
+```
+
+#### Unwrapping
+
+```xray
+// 1. Null coalescing
+let v = x ?? 0
+
+// 2. Optional chaining
+let len = name?.length    // null if name is null
+
+// 3. Force unwrap
+let v: int = x!           // throws NullError at runtime if x is null
+
+// 4. `is` check
+if (x is int) {
+    // In this branch x is narrowed to int
+    print(x + 1)
+}
+```
+
+### 2.6 Union Types
+
+```xray
+let v: int | string = 42
+v = "hello"             // OK
+```
+
+Constraints:
+- Up to **6 members** (checked at compile time; over the limit → error).
+- Members must not be subtypes of each other (otherwise normalized).
+- Working with a union value requires `match` or `is`-based narrowing:
+
+```xray
+let v: int | string = ...
+match v {
+    is int    -> print("int: ${v}"),
+    is string -> print("str: ${v}"),
+}
+```
+
+**Special cases**:
+- `int | null` normalizes to `int?`.
+- When `T?` appears in a union: `int? | string` is effectively `int | string | null`, normalized to `(int | string)?`.
+
+### 2.7 Tuple Types
+
+Xray's tuples are **first-class** — they may appear as any value, be stored as fields, and nest.
+
+```xray
+// Literals
+let t = (1, 2, 3)                 // type inferred as (int, int, int)
+let h = (10, "hi", true)          // heterogeneous tuple
+let single = (99,)                // single-element tuple: note trailing comma
+
+// Type annotation
+let p: (int, string) = (7, "ok")
+
+// Field access: .N (N is a compile-time constant integer index)
+let first = t.0                   // 1
+let mid   = t.1                   // 2
+let nest  = ((1, 2), (3, 4))
+let a     = nest.0.0              // 1
+let b     = nest.1.1              // 4
+
+// Function return and destructuring
+fn divmod(a: int, b: int): (int, int) { return (a / b, a % b) }
+let (q, r) = divmod(17, 5)        // tuple destructure
+
+// Generic
+fn pair<A, B>(a: A, b: B): (A, B) { return (a, b) }
+let p2 = pair(1, "x")             // (int, string)
+```
+
+**Notes**:
+
+- A **single-element tuple** must use a trailing comma `(x,)` — `(x)` without a comma is a grouping parenthesis (a plain expression).
+- In field access `t.N`, N **must be an integer literal**; using a variable or string is the compile error `XR_ERR_ANALYZE_TUPLE_FIELD_NAME` / `_RANGE`.
+- Tuples are **immutable**: `t.0 = v` is a compile error. To modify, build a new tuple.
+
+### 2.8 Type Aliases
+
+```xray
+type Result = int | string
+type Mapper = (int) -> int
+type Point = { x: float, y: float }
+```
+
+Aliases are **purely syntactic** equivalences; they do not introduce new types.
+
+### 2.9 Type Inference
+
+See §7.4 for details. In summary:
+
+```xray
+let x = 1               // x: int
+let y = 1.5             // y: float
+let z = "hello"         // z: string
+let a = [1, 2, 3]       // a: Array<int>
+let m = #{"a": 1}    // m: Map<string, int>
+let p = { name: "A" }   // p: { name: string } — structured object type
+let f = (x: int) -> x   // f: (int) -> int — arrow parameters require annotation
+```
+
+### 2.10 Type Compatibility and Conversion
+
+#### 2.10.1 Implicit Conversion
+
+| From | To | Allowed |
+|--|--|--|
+| `int` | `float` | ✅ |
+| `int8` | `int` (= `int64`) | ✅ |
+| `T` | `T?` | ✅ |
+| `T` | `Json` (if T is Json-compatible) | ✅ |
+| `null` | `T?` | ✅ |
+| Subtype | Supertype (class) | ✅ |
+| Subset object type | Superset object type | ❌ (structural compatibility goes superset → subset) |
+
+> **Structural compatibility direction** (duck typing): a type with more fields is assignable to a type with fewer fields.
+> ```xray
+> type User = { name: string }
+> let full = { name: "A", age: 18 }
+> let u: User = full       // OK: full is a superset of User
+> ```
+
+#### 2.10.2 Explicit `as`
+
+```xray
+let n = x as int        // throws TypeError on failure
+let n = x as int?       // returns null on failure (safe cast)
+```
+
+Applies to:
+- Between numeric types (including `Json → int`, checked at runtime).
+- `Json → User` (structural narrowing).
+- Parent → child (downcast).
+
+#### 2.10.3 `is` Check
+
+```xray
+if (v is User) {
+    // In this branch the compiler narrows v's type to User
+}
+```
+
+Acts only as a type guard; does not change the value.
+
+### 2.11 typeof / typename / Type Enum
+
+```xray
+typeof(value)     // returns a Type enum value (an int representation)
+typename(value)   // returns the type name as a string
+```
+
+`Type` enum members:
+
+`Type.int`, `Type.float`, `Type.string`, `Type.bool`, `Type.null`,
+`Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`, `Type.Json`,
+`Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
+
+Full list: see `stdlib/types/enum.xr` / `src/runtime/value/xtype.h`.
+
+### 2.12 Runtime Reflection
+
+The `Reflect` module (built in):
+
+```xray
+Reflect.getType(obj)        // get type info (Json)
+Reflect.typeOf(obj)         // get the type name (string)
+Reflect.isInstance(obj, cls)// whether obj is an instance of cls
+Reflect.fieldCount(obj)     // number of fields
+Reflect.getAllTypes()       // all registered types
+```
+
+See §13 and §14 for more.
 
 ---
 
@@ -738,109 +1054,274 @@ The operand must be statically typed as `Exception` or an `Exception` subclass.
 
 ## 4. Statements
 
-### 4.1 Blocks and Expression Statements
+> Source of truth: `src/frontend/parser/xparse_stmt.c`, `src/frontend/parser/xast_nodes_stmt.h`.
+
+Xray statements are separated by `\n` or `;`; the trailing `;` is optional in most positions, only the three sections of a `for` loop (init / cond / step) require `;` separators.
+
+### 4.1 Expression Statements and Blocks
+
+```ebnf
+ExprStmt ::= Expression (';' | LineBreak)
+Block    ::= '{' Statement* '}'
+```
 
 ```xray
-{
-    let x = 1
-    print(x)
+foo()                  // expression statement
+x = 1                  // assignment expression as a statement
+{                      // block
+    let y = 2
+    y + 1              // expression with discarded result
 }
 ```
 
-A block introduces a lexical scope. Expression statements evaluate an expression for side effects.
+**Note**: a block is **not an expression** — it has no value. To get a value out of a block, use `match` or wrap it in an immediately-invoked function.
 
-### 4.2 `if`
+### 4.2 `if` / `else`
+
+```ebnf
+IfStmt ::= 'if' '(' Expression ')' Block ElseIfChain? ElseClause?
+ElseIfChain ::= ('else' 'if' '(' Expression ')' Block)+
+ElseClause  ::= 'else' Block
+```
 
 ```xray
-if (cond) {
-    a()
-} else if (other) {
-    b()
+if (x > 0) {
+    print("positive")
+} else if (x == 0) {
+    print("zero")
 } else {
-    c()
+    print("negative")
 }
 ```
 
-Conditions are parenthesized.
+**Constraints**:
+- The condition **must** be parenthesized (unlike Go/Rust).
+- The condition is evaluated under truthy/falsy context (see §2.3.3); explicit `bool` expressions or comparisons such as `x != null` / `x is T` are recommended for readability.
+- Branch bodies must be blocks `{...}`; **no** single-statement-without-braces form.
+- `if` is not an expression; for an expression form use the ternary `? :` or `match`.
 
 ### 4.3 `while`
 
+```ebnf
+WhileStmt ::= 'while' '(' Expression ')' Block
+```
+
 ```xray
-while (cond) {
-    step()
+let i = 0
+while (i < 10) {
+    print(i)
+    i++
 }
 ```
 
-### 4.4 `for` and `for-in`
+There is no `do-while` form.
 
-```xray
-for (let i = 0; i < 10; i++) { print(i) }
-for (v in values) { print(v) }
-for (k, v in map) { print(k, v) }
-for ((i, v) in arr.entries()) { print(i, v) }
+### 4.4 `for` (C-style) and `for-in`
+
+#### C-style `for`
+
+```ebnf
+ForStmt ::= 'for' '(' ForInit? ';' Expression? ';' ForStep? ')' Block
+ForInit ::= VarDecl | ExprStmt
+ForStep ::= Expression (',' Expression)*
 ```
 
-Single-variable iteration yields elements/keys depending on container type. Pair iteration yields `(index, element)` for arrays/strings and `(key, value)` for maps/Json objects.
+```xray
+for (let i = 0; i < 10; i++) {
+    print(i)
+}
+for (let i = 0, j = 100; i < j; i++, j--) { ... }
+```
+
+- Variables declared in `ForInit` are scoped to the loop body.
+- All three sections may be omitted: `for (;;)` is an infinite loop.
+
+#### Single-variable `for-in`
+
+```ebnf
+ForInStmt ::= 'for' '(' Identifier 'in' Expression ')' Block
+```
+
+```xray
+for (item in [1, 2, 3]) { print(item) }
+for (i in 0..n) { print(i) }                  // range iteration (half-open)
+for (ch in "hello") { print(ch) }             // string characters (by codepoint)
+for (key in someMap) { print(key) }           // single variable over Map → key
+for (key in someJson) { print(key) }          // single variable over Json → key
+for (day in Color) { print(day.name) }        // enum iteration (declaration order)
+for (_ in 0..n) { count++ }                   // discard with placeholder
+```
+
+#### Two-variable `for-in` destructuring
+
+Xray supports two equivalent two-variable forms:
+
+```ebnf
+ForInPairStmt ::= 'for' '(' Identifier ',' Identifier 'in' Expression ')' Block
+              |  'for' '(' '(' Identifier ',' Identifier ')' 'in' Expression ')' Block
+```
+
+```xray
+// Form A: two bare identifiers (more common)
+for (k, v in someMap) { print("${k}=${v}") }     // Map → (key, value)
+for (i, e in someArray) { print("${i}: ${e}") }  // Array → (index, element)
+for (i, c in "hello") { print("${i}:${c}") }     // string → (index, char)
+
+// Form B: tuple-parenthesized (pairs well with .entries())
+for ((i, e) in someArray.entries()) { print("${i}=${e}") }
+for ((i, c) in "hi".entries()) { print("${i}-${c}") }
+```
+
+Iteration source / yield mapping:
+
+| Collection type | Single-variable yield | Two-variable yield |
+|---|---|---|
+| `Array<T>` / `T[]` | element | (index, element) |
+| `Map<K, V>` | key | (key, value) |
+| `Json` | key (string) | (key, value) |
+| `string` | char (1-codepoint string) | (index, char) |
+| `Range` (`a..b`) | int | — |
+| Enum type | EnumValue | — |
+| Custom `Iterator<T>` | T | — |
+
+#### Custom iterators
+
+Implement an `iterator()` method that returns an `Iterator<T>` protocol object (with `hasNext()` and `next()`) and the value becomes usable in `for-in`. See §14.15.
 
 ### 4.5 `match` Statement
 
+```ebnf
+MatchStmt ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
+MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
+```
+
+**Key syntax**:
+- The matched expression **must** be parenthesized: `match (x) {...}`.
+- Commas between arms are **optional** — both styles can be mixed in the same `match` (omitting commas is more common).
+- Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
+
 ```xray
 match (action) {
-    "start" -> start()
-    "stop" -> stop()
-    _ -> print("unknown")
+    "start" -> {
+        log.info("starting")
+        start_engine()
+    }
+    "stop" -> stop_engine()
+    _ -> log.warn("unknown")
 }
 ```
 
-`match` can be used as a statement or expression.
+`match` may serve as either a statement or an expression (see §3.13); when used as an expression, the arm body must be a single expression or end with one as the last expression of a block.
 
-### 4.6 `break` and `continue`
+For pattern details see [§6](#6-patterns).
 
-`break` and `continue` are only valid inside loops. They are not labeled.
+### 4.6 `break` / `continue`
+
+```xray
+break                  // exit the innermost loop
+continue               // proceed to the next iteration
+```
+
+**Constraints**:
+- Must appear inside a `while` / `for`; otherwise the compile errors `E0304` / `E0305`.
+- `break` / `continue` inside a `match` does **not** affect `match` itself; it exits the enclosing loop.
+- **No labeled** break/continue (unlike Java/Rust).
 
 ### 4.7 `return`
 
-```xray
-return
-return 42
-return (a, b)
+```ebnf
+ReturnStmt ::= 'return' ReturnValue? (';' | LineBreak)
+ReturnValue ::= Expression | '(' Expression (',' Expression)+ ')'
 ```
 
-Multiple return values are represented as a tuple and must be parenthesized.
+```xray
+return                 // implicitly returns () (Unit)
+return 42
+return (a, b)          // multi-value return must wrap a tuple in parens
+```
 
-### 4.8 `throw`, `try`, `catch`, `finally`
+> **Note**: multi-value returns must use the tuple form `return (a, b)`; the bare-comma form `return a, b` is the compile error `E0801`.
+
+**Constraints**:
+- Allowed only inside a function body (including closures); a top-level `return` is the compile error `E0306`.
+- The returned value's type must be compatible with the function's declared return type.
+
+### 4.8 `throw` / `try` / `catch` / `finally`
+
+```ebnf
+ThrowStmt ::= 'throw' Expression
+
+TryStmt       ::= 'try' Block CatchClause* FinallyClause?
+CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
+FinallyClause ::= 'finally' Block
+```
 
 ```xray
 try {
     risky()
-} catch (e: Exception) {
-    print(e.message)
+} catch (e) {
+    log.error("failed:", e.message)
 } finally {
     cleanup()
 }
+
+throw new Exception("error message")        // ✅ Exception-derived
+throw new HttpError(500, "internal")        // ✅ user Exception subclass
+// throw "msg"                              // ❌ E0370: must be Exception-derived
 ```
 
-A `try` statement must have at least one `catch` or a `finally` block.
+**Semantics**:
+- A `try` must be followed by at least one of `catch` or `finally`.
+- The `e` in `catch (e)` defaults to type `Exception`; a type annotation `catch (e: HttpError)` performs type filtering; multiple `catch` clauses match in declaration order.
+- `finally` is **always executed**, regardless of whether an exception was thrown or `return` was used.
+- The static type of the `throw` operand must be `Exception`-derived (`E0370`).
+- For full exception semantics see [§8](#8-error-handling).
 
 ### 4.9 `defer`
 
+```ebnf
+DeferStmt ::= 'defer' (Expression | Block)
+```
+
 ```xray
-fn read(path: string) -> string {
+fn read_file(path: string) -> string {
     let f = open(path)
-    defer f.close()
+    defer f.close()                  // always runs before the function returns
     return f.readAll()
+}
+
+fn process() {
+    defer {                          // block form
+        log.info("done")
+        cleanup()
+    }
+    do_work()
 }
 ```
 
-`defer` runs at function exit in reverse declaration order. It is function-scoped, not block-scoped.
+**Semantics**:
+- Runs at the **end of the function scope** (not the block scope, unlike Swift).
+- **LIFO**: multiple `defer` statements run in reverse declaration order.
+- **Always executes**: runs even if the function exits via an exception (similar to `finally`).
+- Difference from `finally`: `defer` is bound to the function scope, `finally` is bound to a `try` block.
+- An exception in a `defer` body **replaces** any in-flight exception (Go-style semantics).
 
-### 4.10 `yield`
+### 4.10 Built-in Print Functions
+
+`print` / `dump` are **built-in global functions** (not keywords; see §13.1), listed here for convenience:
 
 ```xray
-yield
+print("hello")                 // auto-appends a newline
+print("a:", a, "b:", b)        // multiple arguments separated by spaces
+dump(some_obj)                 // debug output, with type info and structure
 ```
 
-`yield` explicitly gives the scheduler a safepoint. It does not yield a value.
+**Behavior**:
+- Accepts any type and any number of arguments (variadic); each argument is automatically converted via its `toString()` or built-in formatter.
+- Output goes to stdout; not part of the exception mechanism.
+- Multiple arguments are separated by single spaces.
+- `print` appends a newline by default (different from C/Python; consistent with regression tests).
+- `dump` is for debugging; output includes type tags and internal structure.
 
 ---
 
