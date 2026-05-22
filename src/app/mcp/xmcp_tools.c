@@ -36,14 +36,6 @@
 #include <unistd.h>
 #endif
 
-/* Internal runtime control. xray_run boots the multicore runtime per call so
- * yielded coroutines (back-edge reductions, channel waits, ...) get rescheduled
- * by Worker 0 inside xr_main_thread_run; without it dostring() would tail-call
- * the no-runtime fallback and stop after the first yield. Declared extern here
- * to avoid pulling the full coroutine subsystem header into a small tool. */
-extern void xr_multicore_init(XrayIsolate *X, int num_workers);
-extern void xr_multicore_destroy(XrayIsolate *X);
-
 /* Maximum errors captured per check/diagnostics */
 #define MAX_CHECK_ERRORS 20
 #define CHECK_BUF_SIZE 4096
@@ -831,15 +823,15 @@ static XrJsonValue *tool_xray_run(XmcpServer *server, const XmcpCallContext *ctx
     xray_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
     xray_isolate_set_deadline_ms(iso, timeout_ms);
 
-    /* Single-threaded runtime — the snippet does not need to fan out, and a
-     * single worker keeps the per-call cost (thread create/destroy) low while
-     * still giving us xr_main_thread_run's reschedule-yielded-main behaviour. */
-    xr_multicore_init(iso, 1);
+    /* No multicore runtime: xr_execute() falls back to the in-place
+     * interpreter, which (since the VM back-edge fallback) keeps refilling
+     * reductions instead of yielding to a non-existent scheduler. The
+     * wall-clock deadline above remains the sole termination guarantee for
+     * tight loops. Skipping the runtime saves the per-call thread spin-up. */
     int exec_result = xray_isolate_dostring(iso, code);
     bool timed_out = xray_isolate_timed_out(iso);
     fflush(capture);
 
-    xr_multicore_destroy(iso);
     xray_isolate_delete(iso);
 
     /* Read captured output (clamped to output_limit). The buffer is sized one
