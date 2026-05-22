@@ -66,8 +66,6 @@ XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
             case OP_END_TRY:
             case OP_THROW:
                 return true;
-            default:
-                break;
         }
     }
     return false;
