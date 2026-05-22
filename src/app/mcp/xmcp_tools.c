@@ -36,10 +36,30 @@
 #include <unistd.h>
 #endif
 
+/* Internal runtime control. xray_run boots the multicore runtime per call so
+ * yielded coroutines (back-edge reductions, channel waits, ...) get rescheduled
+ * by Worker 0 inside xr_main_thread_run; without it dostring() would tail-call
+ * the no-runtime fallback and stop after the first yield. Declared extern here
+ * to avoid pulling the full coroutine subsystem header into a small tool. */
+extern void xr_multicore_init(XrayIsolate *X, int num_workers);
+extern void xr_multicore_destroy(XrayIsolate *X);
+
 /* Maximum errors captured per check/diagnostics */
 #define MAX_CHECK_ERRORS 20
 #define CHECK_BUF_SIZE 4096
-#define RUN_OUTPUT_MAX 8192
+
+/* xray_run runtime quotas. The runner toolset is opt-in; these values are
+ * intentionally tight to keep the MCP response stream short and to prevent a
+ * pathological snippet from wedging the (sequential) server.
+ *
+ *   RUN_OUTPUT_DEFAULT — initial cap on stdout returned to the caller.
+ *   RUN_OUTPUT_HARD_MAX — absolute upper bound the caller can request.
+ *   RUN_TIMEOUT_DEFAULT — default wall-clock budget (ms).
+ *   RUN_TIMEOUT_HARD_MAX — absolute upper bound the caller can request. */
+#define RUN_OUTPUT_DEFAULT 8192
+#define RUN_OUTPUT_HARD_MAX 65536
+#define RUN_TIMEOUT_DEFAULT_MS 2000
+#define RUN_TIMEOUT_HARD_MAX_MS 30000
 
 /* --------------------------------------------------------------------------
  * Tool registration table type
@@ -60,6 +80,7 @@ static XrJsonValue *schema_analyze_output(void);
 static XrJsonValue *schema_format(void);
 static XrJsonValue *schema_format_output(void);
 static XrJsonValue *schema_run(void);
+static XrJsonValue *schema_run_output(void);
 static XrJsonValue *schema_syntax(void);
 static XrJsonValue *schema_syntax_output(void);
 static XrJsonValue *schema_stdlib(void);
@@ -81,9 +102,11 @@ static const XmcpToolDef TOOL_TABLE[] = {
      "Returns formatted code. Optionally set indent size or tabs.",
      XMCP_TOOLSET_CORE, schema_format, schema_format_output, tool_xray_format, true, false},
     {"xray_run", "Xray Code Runner",
-     "Execute a small Xray code snippet and return its stdout output. "
-     "Creates an isolated VM per execution. Max output: 8KB.",
-     XMCP_TOOLSET_RUNNER, schema_run, NULL, tool_xray_run, false, true},
+     "Execute a short Xray snippet in an isolated VM and return structured "
+     "results (ok, exitCode, stdout, timedOut, truncated, outputBytes). "
+     "Bounded by a wall-clock timeout and output limit; dangerous stdlib "
+     "modules (net, http, io, os, ...) are not importable.",
+     XMCP_TOOLSET_RUNNER, schema_run, schema_run_output, tool_xray_run, false, true},
     {"xray_syntax_lookup", "Xray Syntax Reference",
      "Look up Xray language syntax by topic. Returns code examples. "
      "Topics: variables, types, functions, control_flow, class, struct, "
@@ -394,10 +417,38 @@ static XrJsonValue *schema_run(void) {
     XrJsonValue *s = xjson_new_object();
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
-    schema_add_prop(p, "code", "string", "Xray code to execute");
+    schema_add_prop(p, "code", "string", "Xray source code to execute (top-level statements).");
+    schema_add_prop(p, "timeoutMs", "integer",
+                    "Wall-clock time budget in milliseconds (default 2000, max 30000).");
+    schema_add_prop(p, "outputLimit", "integer",
+                    "Maximum captured stdout bytes (default 8192, max 65536).");
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
+    xjson_object_set(s, "required", r);
+    return s;
+}
+
+static XrJsonValue *schema_run_output(void) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_STRING(s, "type", "object");
+    XrJsonValue *p = xjson_new_object();
+    schema_add_prop(p, "ok", "boolean", "True iff exitCode==0 and timedOut==false.");
+    schema_add_prop(p, "exitCode", "integer",
+                    "Return value from xray_isolate_dostring (0 on success).");
+    schema_add_prop(p, "stdout", "string", "Captured print() output, truncated to outputLimit.");
+    schema_add_prop(p, "timedOut", "boolean", "True if execution exceeded timeoutMs.");
+    schema_add_prop(p, "truncated", "boolean", "True if stdout was clipped to outputLimit.");
+    schema_add_prop(p, "outputBytes", "integer",
+                    "Number of bytes actually returned in the stdout field.");
+    xjson_object_set(s, "properties", p);
+    XrJsonValue *r = xjson_new_array();
+    xjson_array_push(r, xjson_new_string("ok"));
+    xjson_array_push(r, xjson_new_string("exitCode"));
+    xjson_array_push(r, xjson_new_string("stdout"));
+    xjson_array_push(r, xjson_new_string("timedOut"));
+    xjson_array_push(r, xjson_new_string("truncated"));
+    xjson_array_push(r, xjson_new_string("outputBytes"));
     xjson_object_set(s, "required", r);
     return s;
 }
@@ -690,79 +741,158 @@ static XrJsonValue *tool_xray_format(XmcpServer *server, const XmcpCallContext *
  * Tool: xray_run (execute snippet, capture stdout)
  * -------------------------------------------------------------------------- */
 
+/* Modules user snippets may import. Anything not on this list is rejected at
+ * the module loader and surfaces inside the script as a runtime import
+ * failure. The list is intentionally narrow: pure data / formatting / regex
+ * modules only. Networking (`net`/`http`/`ws`), local I/O (`io`/`os`/`path`),
+ * cluster orchestration, and dlopen-based packages are off the table because
+ * the MCP runner runs in the same process as the server and cannot give them
+ * up cleanly on timeout.
+ *
+ * `prelude` is included so that an explicit `import prelude` in user code
+ * still succeeds; the isolate's own bootstrap import (issued by
+ * isolate_init_full() before the allowlist is configured) is not subject
+ * to filtering. */
+static const char *const RUN_ALLOWED_MODULES[] = {
+    "prelude", "math", "json", "string", "regex", "encoding", "base64", "url",        "datetime",
+    "time",    "log",  "csv",  "toml",   "xml",   "yaml",     "types",  "test_yield",
+};
+#define RUN_ALLOWED_MODULES_COUNT (sizeof(RUN_ALLOWED_MODULES) / sizeof(RUN_ALLOWED_MODULES[0]))
+
+/* Build the structured tool result described by schema_run_output(). The
+ * structured object is also rendered as a human-readable summary for the
+ * `content[].text` field so model UIs that don't yet consume structuredContent
+ * still see something useful. */
+static XrJsonValue *build_run_structured(bool ok, int exit_code, const char *stdout_text,
+                                         int output_bytes, bool timed_out, bool truncated) {
+    XrJsonValue *s = xjson_new_object();
+    XJSON_SET_BOOL(s, "ok", ok);
+    XJSON_SET_INT(s, "exitCode", exit_code);
+    xjson_object_set(s, "stdout", xjson_new_string(stdout_text ? stdout_text : ""));
+    XJSON_SET_BOOL(s, "timedOut", timed_out);
+    XJSON_SET_BOOL(s, "truncated", truncated);
+    XJSON_SET_INT(s, "outputBytes", output_bytes);
+    return s;
+}
+
 static XrJsonValue *tool_xray_run(XmcpServer *server, const XmcpCallContext *ctx,
                                   XrJsonValue *arguments) {
     XR_DCHECK(server != NULL, "tool_xray_run: NULL server");
     XR_DCHECK(ctx != NULL, "tool_xray_run: NULL ctx");
     XR_DCHECK(arguments != NULL, "tool_xray_run: NULL arguments");
+    (void) server;
     (void) ctx;
 
     const char *code = xjson_get_string(arguments, "code");
-    if (code[0] == '\0')
-        return xmcp_make_error_result("Error: 'code' must not be empty");
-
-    /* Redirect stdout to a temp file to capture print() output */
-    int saved_stdout = dup(xr_stdout_fd());
-    if (saved_stdout < 0) {
-        return xmcp_make_error_result("Error: failed to save stdout");
+    if (!code || code[0] == '\0') {
+        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
+        return xmcp_make_text_structured_result("Error: 'code' must not be empty", structured,
+                                                true);
     }
 
-    FILE *tmp = tmpfile();
-    if (!tmp) {
-        close(saved_stdout);
-        return xmcp_make_error_result("Error: failed to create capture buffer");
-    }
-    fflush(stdout);
-    dup2(fileno(tmp), xr_stdout_fd());
+    /* Resolve quotas. Negative / zero / oversized values fall back to the
+     * default rather than getting silently clamped to a confusing minimum. */
+    int64_t timeout_ms = xjson_get_int_or(arguments, "timeoutMs", RUN_TIMEOUT_DEFAULT_MS);
+    if (timeout_ms <= 0)
+        timeout_ms = RUN_TIMEOUT_DEFAULT_MS;
+    if (timeout_ms > RUN_TIMEOUT_HARD_MAX_MS)
+        timeout_ms = RUN_TIMEOUT_HARD_MAX_MS;
 
-    /* Create a full isolate for execution */
+    int64_t output_limit = xjson_get_int_or(arguments, "outputLimit", RUN_OUTPUT_DEFAULT);
+    if (output_limit <= 0)
+        output_limit = RUN_OUTPUT_DEFAULT;
+    if (output_limit > RUN_OUTPUT_HARD_MAX)
+        output_limit = RUN_OUTPUT_HARD_MAX;
+
+    /* Per-call capture buffer; written to via xray_isolate_set_stdout() so we
+     * never touch the process-wide fd 1 (which is the MCP transport). */
+    FILE *capture = tmpfile();
+    if (!capture) {
+        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
+        return xmcp_make_text_structured_result("Error: failed to create capture buffer",
+                                                structured, true);
+    }
+
     XrayIsolateParams params;
     xray_isolate_params_init(&params);
     xray_isolate_setup_full(&params);
     XrayIsolate *iso = xray_isolate_new(&params);
-
-    int exec_result = -1;
-    if (iso) {
-        exec_result = xray_isolate_dostring(iso, code);
-        xray_isolate_delete(iso);
+    if (!iso) {
+        fclose(capture);
+        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
+        return xmcp_make_text_structured_result("Error: failed to create isolate", structured,
+                                                true);
     }
 
-    /* Restore stdout and read captured output */
-    fflush(stdout);
-    dup2(saved_stdout, xr_stdout_fd());
-    close(saved_stdout);
+    /* Sandbox configuration. Order matters: the allowlist applies to user
+     * imports issued by xray_isolate_dostring(); the isolate's own prelude
+     * bootstrap already ran during xray_isolate_new() and is not affected. */
+    xray_isolate_set_stdout(iso, capture);
+    xray_isolate_set_module_allowlist(iso, RUN_ALLOWED_MODULES, RUN_ALLOWED_MODULES_COUNT);
+    xray_isolate_set_deadline_ms(iso, timeout_ms);
 
-    /* Read captured output */
-    long out_size = ftell(tmp);
+    /* Single-threaded runtime — the snippet does not need to fan out, and a
+     * single worker keeps the per-call cost (thread create/destroy) low while
+     * still giving us xr_main_thread_run's reschedule-yielded-main behaviour. */
+    xr_multicore_init(iso, 1);
+    int exec_result = xray_isolate_dostring(iso, code);
+    bool timed_out = xray_isolate_timed_out(iso);
+    fflush(capture);
+
+    xr_multicore_destroy(iso);
+    xray_isolate_delete(iso);
+
+    /* Read captured output (clamped to output_limit). The buffer is sized one
+     * byte larger so we can NUL-terminate; `output_bytes` reports the real
+     * payload size before that terminator. */
+    long out_size = ftell(capture);
     if (out_size < 0)
         out_size = 0;
-    if (out_size > RUN_OUTPUT_MAX)
-        out_size = RUN_OUTPUT_MAX;
+    bool truncated = false;
+    if ((int64_t) out_size > output_limit) {
+        out_size = (long) output_limit;
+        truncated = true;
+    }
 
-    char *output = xr_malloc((size_t) out_size + 256);
+    char *output = xr_malloc((size_t) out_size + 1);
     if (!output) {
-        fclose(tmp);
-        return xmcp_make_error_result("Error: out of memory");
+        fclose(capture);
+        XrJsonValue *structured = build_run_structured(false, -1, "", 0, timed_out, truncated);
+        return xmcp_make_text_structured_result("Error: out of memory", structured, true);
     }
-
-    int total = 0;
+    int output_bytes = 0;
     if (out_size > 0) {
-        fseek(tmp, 0, SEEK_SET);
-        size_t nread = fread(output, 1, (size_t) out_size, tmp);
+        fseek(capture, 0, SEEK_SET);
+        size_t nread = fread(output, 1, (size_t) out_size, capture);
         output[nread] = '\0';
-        total = (int) nread;
+        output_bytes = (int) nread;
+    } else {
+        output[0] = '\0';
     }
-    fclose(tmp);
+    fclose(capture);
 
-    /* Append execution status */
-    if (exec_result != 0) {
-        total +=
-            snprintf(output + total, 256, "%s[exit code: %d]", total > 0 ? "\n" : "", exec_result);
-    } else if (total == 0) {
-        total = snprintf(output, 256, "(no output)");
+    bool ok = (exec_result == 0) && !timed_out;
+    XrJsonValue *structured =
+        build_run_structured(ok, exec_result, output, output_bytes, timed_out, truncated);
+
+    /* Compose a text summary so plain-text MCP clients see the outcome. */
+    char summary[1024];
+    if (timed_out) {
+        snprintf(summary, sizeof(summary), "[timed out after %lldms] %s%s%d byte%s captured%s",
+                 (long long) timeout_ms, output_bytes > 0 ? "\n" : "",
+                 output_bytes > 0 ? output : "", output_bytes, output_bytes == 1 ? "" : "s",
+                 truncated ? " (truncated)" : "");
+    } else if (exec_result != 0) {
+        snprintf(summary, sizeof(summary), "[exit code %d] %s%s%s", exec_result,
+                 output_bytes > 0 ? "\n" : "", output_bytes > 0 ? output : "",
+                 truncated ? "\n(truncated)" : "");
+    } else if (output_bytes == 0) {
+        snprintf(summary, sizeof(summary), "(no output)");
+    } else {
+        snprintf(summary, sizeof(summary), "%s%s", output, truncated ? "\n(truncated)" : "");
     }
 
-    XrJsonValue *result = xmcp_make_text_result(output, exec_result != 0);
+    XrJsonValue *result = xmcp_make_text_structured_result(summary, structured, !ok);
     xr_free(output);
     return result;
 }

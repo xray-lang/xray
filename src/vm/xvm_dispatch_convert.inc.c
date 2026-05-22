@@ -60,8 +60,9 @@ vmcase(OP_PRINT) {
     if (skip_null && XR_IS_NULL(val))
         vmbreak;
 
+    FILE *print_stream = xr_isolate_stdout(isolate);
     if (add_space)
-        printf(" ");
+        fputc(' ', print_stream);
 
     // Check if instance has toString method
     if (xr_value_is_instance(val)) {
@@ -99,9 +100,9 @@ vmcase(OP_PRINT) {
 
     // Default print: use unified xr_value_to_string
     XrString *print_str = xr_value_to_string(isolate, val);
-    printf("%s", print_str->data);
+    fputs(print_str->data, print_stream);
     if (newline)
-        printf("\n");
+        fputc('\n', print_stream);
 
     vmbreak;
 }

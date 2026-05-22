@@ -25,6 +25,8 @@
 #include "../base/xdefs.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
 
 /* ========== Subsystem Accessors ========== */
 
@@ -107,6 +109,25 @@ XR_FUNC void xr_isolate_set_repl_symbols(XrayIsolate *X, struct XrReplSymbolTabl
 // Exception print suppression
 XR_FUNC bool xr_isolate_get_suppress_exception_print(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_suppress_exception_print(XrayIsolate *X, bool suppress);
+
+/* Resolve the effective FILE* for user-visible script output.
+ * Returns the host-supplied stream (if any) or the process stdout.
+ * Tolerates NULL isolate (returns stdout) so OP_PRINT code paths do not
+ * need an extra branch. */
+XR_FUNC FILE *xr_isolate_stdout(XrayIsolate *X);
+
+/* Wall-clock deadline check. Returns true and sets `X->deadline_exceeded`
+ * when the configured deadline has passed; returns false (no syscalls)
+ * when no deadline is active. The VM calls this at backward branches. */
+XR_FUNC bool xr_isolate_check_deadline(XrayIsolate *X);
+
+/* True if the most recent execution aborted because the wall-clock
+ * deadline was exceeded. Cleared by xray_isolate_set_deadline_ms(). */
+XR_FUNC bool xr_isolate_timed_out(XrayIsolate *X);
+
+/* Decide whether `module_name` may be imported by `X`. When no
+ * allowlist is configured every module is allowed. */
+XR_FUNC bool xr_isolate_module_allowed(XrayIsolate *X, const char *module_name);
 
 /* ========== Compilation & Execution ========== */
 

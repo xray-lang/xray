@@ -677,6 +677,15 @@ vmcase(OP_LOOP_BACK) {
     if (vm_ctx && vm_ctx->current_coro) {
         XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
         VM_GC_SAFEPOINT();
+
+        /* Same wall-clock deadline check as the backward JMP path;
+        ** tail recursion can spin without ever executing OP_JMP. */
+        if (XR_UNLIKELY(xr_isolate_check_deadline(isolate))) {
+            xr_runtime_error(isolate, "execution deadline exceeded");
+            frame->pc = pc;
+            return XR_VM_RUNTIME_ERROR;
+        }
+
         if (--coro->reductions <= 0) {
             if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                 return XR_VM_CANCELLED;
@@ -1032,10 +1041,11 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
 
     // Handle toString print: if toString call returned, print result
     if (tostring_flags) {
+        FILE *print_stream = xr_isolate_stdout(isolate);
         XrString *ts = xr_value_to_string(isolate, ret_result);
-        printf("%s", ts->data);
+        fputs(ts->data, print_stream);
         if (tostring_flags & 0x02)
-            printf("\n");
+            fputc('\n', print_stream);
     }
 
     if (VM_MODULE_BASE >= 0 && VM_FRAME_COUNT == VM_MODULE_BASE) {
@@ -1239,10 +1249,11 @@ vmcase(OP_RETURN1) {
 
     // Handle toString print
     if (tostring_flags) {
+        FILE *print_stream = xr_isolate_stdout(isolate);
         XrString *ts = xr_value_to_string(isolate, ret_val);
-        printf("%s", ts->data);
+        fputs(ts->data, print_stream);
         if (tostring_flags & 0x02)
-            printf("\n");
+            fputc('\n', print_stream);
     }
 
     // Check module boundary

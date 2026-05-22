@@ -824,6 +824,121 @@ TEST(tools_list_runner_enabled_includes_run) {
     xjson_free(result);
 }
 
+/* Build a tools/call params object for xray_run. Ownership of `code` stays
+ * with the caller; the returned JSON owns its copy. */
+static XrJsonValue *make_run_params(const char *code) {
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", code);
+    xjson_object_set(params, "arguments", args);
+    return params;
+}
+
+TEST(tools_call_run_basic_print_returns_structured) {
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = make_run_params("print(\"hello\")\n");
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "ok") == true);
+    ASSERT_EQ(xjson_get_int_or(structured, "exitCode", -1), 0);
+    ASSERT(xjson_get_bool(structured, "timedOut") == false);
+    ASSERT(xjson_get_bool(structured, "truncated") == false);
+    ASSERT_STR_EQ(xjson_get_string(structured, "stdout"), "hello\n");
+    ASSERT_EQ(xjson_get_int_or(structured, "outputBytes", -1), 6);
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_run_output_truncated) {
+    /* Print a 50-byte line and clamp outputLimit to 10 bytes. */
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "print(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\")\n");
+    XJSON_SET_INT(args, "outputLimit", 10);
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "truncated") == true);
+    ASSERT_EQ(xjson_get_int_or(structured, "outputBytes", -1), 10);
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_run_deadline_exceeded) {
+    /* Tight infinite loop, capped at 50ms — the VM back-edge check should
+     * abort within a couple of reductions. */
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "let i = 0\nwhile (i == 0) { let x = 1 }\n");
+    XJSON_SET_INT(args, "timeoutMs", 50);
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "ok") == false);
+    ASSERT(xjson_get_bool(structured, "timedOut") == true);
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_run_blocks_dangerous_import) {
+    /* `net` is not in the runner allowlist; the import must fail so the
+     * snippet exits non-zero. The structured payload signals !ok. */
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = make_run_params("import net\n");
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "ok") == false);
+    ASSERT(xjson_get_bool(structured, "timedOut") == false);
+    ASSERT(xjson_get_int_or(structured, "exitCode", 0) != 0);
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(tools_call_run_missing_code_is_error_result) {
+    /* Empty `code` is a tool-level error, not a JSON-RPC error. */
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = make_run_params("");
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == true);
+
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    ASSERT(xjson_get_bool(structured, "ok") == false);
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
 /* =========================================================================
  * Tools: knowledge tools
  * ========================================================================= */
@@ -1472,6 +1587,11 @@ int main(void) {
     /* Run tool */
     RUN_TEST(tools_call_run_disabled_by_default);
     RUN_TEST(tools_list_runner_enabled_includes_run);
+    RUN_TEST(tools_call_run_basic_print_returns_structured);
+    RUN_TEST(tools_call_run_output_truncated);
+    RUN_TEST(tools_call_run_deadline_exceeded);
+    RUN_TEST(tools_call_run_blocks_dangerous_import);
+    RUN_TEST(tools_call_run_missing_code_is_error_result);
 
     /* Knowledge tools */
     RUN_TEST(tools_call_syntax_lookup_returns_structured_content);

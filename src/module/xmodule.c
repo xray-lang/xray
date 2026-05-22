@@ -1128,6 +1128,16 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
         return xr_null();
     }
 
+    /* Host-supplied allowlist (used by the MCP runner and other
+     * embedders). NULL/empty means every module is permitted, which is
+     * the default for CLI / LSP / DAP. When set, an unlisted import is
+     * a hard error returned to the VM so untrusted code can never reach
+     * dangerous modules. */
+    if (!xr_isolate_module_allowed(isolate, module_name)) {
+        xr_log_warning("module", "import '%s' rejected: not in isolate allowlist", module_name);
+        return xr_null();
+    }
+
     // 1. Check cache (by module name or absolute path)
     XrModule *module = (XrModule *) xr_hashmap_get(registry->loaded_modules, module_name);
     if (module) {
