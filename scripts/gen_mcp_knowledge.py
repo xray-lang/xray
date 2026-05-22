@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Regenerate src/app/mcp/xmcp_knowledge_generated.c from docs/knowledge/.
 
-Reads docs/knowledge/{topics,stdlib,resources}/*.md and emits a single
-C source file consumed by xmcp_knowledge.c at build time. The output is
-committed so the build does not depend on Python; CI re-runs this script
-and fails when the working tree is dirty.
+Reads docs/knowledge/{topics,stdlib,resources}/*.md plus the language
+reference manual and emits a single C source file consumed by
+xmcp_knowledge.c at build time. The output is committed so the build does
+not depend on Python; CI re-runs this script and fails when the working tree
+is dirty.
 
 Frontmatter format (between two lines of `---`):
 
-    topics/<id>.md       id, title, aliases (list)
+    topics/<id>.md       id, title, spec, aliases (list)
     stdlib/<module>.md   module, summary
     resources/<id>.md    id  (one of cheatsheet | concurrency | stdlib_list)
 
@@ -16,14 +17,17 @@ The body is the rest of the file, embedded verbatim as a multi-line C
 string literal. Emission is deterministic — entries are sorted by id /
 module before output so review diffs reflect only real changes.
 
-Optional --builtins points to the JSON produced by `xray builtin-dump`;
-when present, per-symbol metadata (signature, summary) is merged into
-the matching stdlib entry. Without --builtins the symbol arrays are
-empty and only the human-authored prose round-trips.
+--spec points to the language reference manual. Each topic must declare a
+`spec` anchor that exists in that file. Optional --builtins points to the
+JSON produced by `xray builtin-dump`; when present, per-symbol metadata
+(signature, summary) is merged into the matching stdlib entry and rendered as
+an API table. Without --builtins the symbol arrays are empty and only the
+human-authored prose round-trips.
 
 Usage:
     python3 scripts/gen_mcp_knowledge.py \\
         --docs   docs/knowledge \\
+        --spec   LANGUAGE_SPEC_CN.md \\
         --out    src/app/mcp/xmcp_knowledge_generated.c \\
         [--builtins build/builtin_dump.json]
 """
@@ -32,7 +36,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -44,6 +47,26 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _FRONT_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+
+def heading_anchor(heading: str) -> str:
+    text = heading.strip().lower()
+    text = re.sub(r"^#+\s*", "", text)
+    text = text.replace("`", "")
+    text = re.sub(r"[^\w\u4e00-\u9fff\s-]", "", text)
+    text = re.sub(r"[\s]+", "-", text)
+    text = re.sub(r"-+", "-", text)
+    return "#" + text.strip("-")
+
+
+def load_spec_anchors(path: Path) -> set[str]:
+    if not path.exists():
+        raise ValueError(f"{path}: missing language reference manual")
+    anchors: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            anchors.add(heading_anchor(line))
+    return anchors
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
@@ -142,20 +165,26 @@ def _read(path: Path) -> tuple[dict[str, Any], str]:
         raise ValueError(f"{path}: {e}") from None
 
 
-def load_topics(docs: Path) -> list[dict[str, Any]]:
+def load_topics(docs: Path, spec_anchors: set[str]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     topics_dir = docs / "topics"
     for path in sorted(topics_dir.glob("*.md")):
         meta, body = _read(path)
         if "id" not in meta:
             raise ValueError(f"{path}: missing `id`")
+        if "spec" not in meta:
+            raise ValueError(f"{path}: missing `spec`")
         if path.stem != meta["id"]:
             raise ValueError(
                 f"{path}: filename stem {path.stem!r} does not match id {meta['id']!r}"
             )
+        spec = meta["spec"]
+        if spec not in spec_anchors:
+            raise ValueError(f"{path}: spec anchor {spec!r} not found in language reference")
         out.append({
             "id": meta["id"],
             "title": meta.get("title", meta["id"]),
+            "spec": spec,
             "aliases": meta.get("aliases", []) or [],
             "body": body.rstrip("\n") + "\n",
         })
@@ -175,14 +204,33 @@ def load_stdlib(docs: Path, builtins_index: dict[str, list[dict[str, str]]]) -> 
             raise ValueError(
                 f"{path}: filename stem {path.stem!r} does not match module {module!r}"
             )
+        symbols = builtins_index.get(module, [])
         out.append({
             "module": module,
             "summary": meta.get("summary", ""),
-            "body": body.rstrip("\n") + "\n",
-            "symbols": builtins_index.get(module, []),
+            "body": render_stdlib_body(module, body.rstrip("\n") + "\n", symbols),
+            "symbols": symbols,
         })
     out.sort(key=lambda m: m["module"])
     return out
+
+
+def render_stdlib_body(module: str, body: str, symbols: list[dict[str, str]]) -> str:
+    text = body.rstrip("\n") + "\n"
+    if not symbols:
+        return text
+    lines = [text, "\n## API\n\n", "| Symbol | Signature | Summary |\n", "|--|--|--|\n"]
+    for s in symbols:
+        name = s.get("name", "")
+        signature = markdown_table_cell(s.get("signature", ""))
+        summary = markdown_table_cell(s.get("summary", ""))
+        qualified = name if "." in name else f"{module}.{name}"
+        lines.append(f"| `{qualified}` | `{signature}` | {summary} |\n")
+    return "".join(lines)
+
+
+def markdown_table_cell(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
 
 
 def load_resources(docs: Path) -> dict[str, str]:
@@ -245,20 +293,21 @@ def load_builtins(path: Path | None) -> dict[str, list[dict[str, str]]]:
 BANNER = (
     "/* @generated by scripts/gen_mcp_knowledge.py — DO NOT EDIT.\n"
     " *\n"
-    " * The generator embeds the authoritative MCP knowledge source files\n"
+    " * The generator embeds MCP knowledge projection source files\n"
     " * and optional analyzer builtin metadata as static C tables. */\n"
 )
 
 
 def emit_topic(t: dict[str, Any]) -> list[str]:
     aliases_csv = ",".join(t["aliases"])
+    body = f"[Language reference]({t['spec']})\n\n" + t["body"]
     return [
         "    {",
         f'        .id = "{c_escape(t["id"])}",',
         f'        .title = "{c_escape(t["title"])}",',
         f'        .aliases_csv = "{c_escape(aliases_csv)}",',
         "        .body =",
-        "            " + to_c_string_block(t["body"], indent="            ") + ",",
+        "            " + to_c_string_block(body, indent="            ") + ",",
         "    },",
     ]
 
@@ -365,6 +414,7 @@ def render(
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
     p.add_argument("--docs", required=True, type=Path)
+    p.add_argument("--spec", required=True, type=Path)
     p.add_argument("--out", required=True, type=Path)
     p.add_argument("--builtins", type=Path, default=None)
     p.add_argument(
@@ -378,8 +428,9 @@ def main(argv: list[str]) -> int:
         print(f"error: {args.docs}: not a directory", file=sys.stderr)
         return 2
 
+    spec_anchors = load_spec_anchors(args.spec)
     builtins_index = load_builtins(args.builtins)
-    topics = load_topics(args.docs)
+    topics = load_topics(args.docs, spec_anchors)
     stdlib = load_stdlib(args.docs, builtins_index)
     resources = load_resources(args.docs)
 
@@ -394,7 +445,7 @@ def main(argv: list[str]) -> int:
             builtins_arg = f" --builtins {args.builtins}" if args.builtins else ""
             print(
                 f"error: {args.out}: stale; rerun "
-                f"`python3 scripts/gen_mcp_knowledge.py --docs {args.docs}"
+                f"`python3 scripts/gen_mcp_knowledge.py --docs {args.docs} --spec {args.spec}"
                 f"{builtins_arg} --out {args.out}`",
                 file=sys.stderr,
             )

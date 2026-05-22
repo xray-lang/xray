@@ -4274,10 +4274,10 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 ## 14. 内置类型方法 (Built-in Type Methods)
 
-> 真值源：`stdlib/types/*.xr`（每个内置类型一个 `.xr` 文件，含方法签名与文档）。
-> 完整 API 细节由 `scripts/gen_mcp_knowledge.py` 自动从源码抽取并暴露给 MCP / LSP 工具。
+> 真值源：prelude / analyzer / runtime 中的内置类型注册与方法定义。
+> MCP knowledge 只消费生成后的 analyzer metadata，不独立维护内置类型方法签名。
 
-本节给出每种类型的**方法索引**（按主题分组）。具体签名、参数说明、行为细节查阅源码或 MCP `xray_kb` 工具。
+本节给出每种类型的**方法索引**（按主题分组）。具体签名、参数说明、行为细节以实现代码为准。
 
 ### 14.1 `int` 方法
 
@@ -4478,8 +4478,8 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 ## 15. 标准库概览 (Standard Library)
 
-> 真值源：`stdlib/<module>/*.c` 中的 `XR_DEFINE_BUILTIN` 宏（约 200+ exports）。
-> 完整 API 签名由 `scripts/gen_mcp_knowledge.py` 自动从源码抽取暴露给 MCP / LSP。
+> 真值源：标准库实现与 analyzer builtin metadata。
+> MCP knowledge 通过 `xray builtin-dump` 获取 API 签名并在生成时注入模块知识卡片。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
 > **真实 native 模块清单**（22 个，源码：`stdlib/<module>/*.c`）：
