@@ -77,7 +77,7 @@ vmcase(OP_JMP) {
          *   3. bg compilation in progress → skip (no fetch_add)
          *   4. not yet queued → count via fetch_add, trigger at threshold
          */
-        if (isolate->vm.jit) {
+        if (isolate->vm.jit && !xm_proto_has_exception_control(cl->proto)) {
             XrProto *_osr_proto = cl->proto;
             bool _do_osr = false;
 

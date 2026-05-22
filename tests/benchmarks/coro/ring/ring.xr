@@ -1,0 +1,60 @@
+// 作者：xingleixu@gmail.com
+// 环形消息传递测试
+// N 个协程组成环，消息在环中传递 M 轮
+import time
+let N = 1000
+// 协程数量
+let M = 1000
+// 消息轮数
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+if (process.args.length > 1) {
+    M = int(process.args[1]) ?? M
+}
+print("=== Ring 测试 ===")
+print("协程数量:", N)
+print("消息轮数:", M)
+// 创建 N 个 channel（存入数组自动共享）
+shared let channels: Array<Channel<int>> = []
+for (let i = 0; i < N; i++) {
+    channels.push(Channel(1))
+}
+
+// 创建 N 个协程，每个协程从自己的 channel 接收，发送到下一个
+fn ring_node(id: int, in_ch: Channel<int>, out_ch: Channel<int>, rounds: int) {
+    for (let r = 0; r < rounds; r++) {
+        let msg = in_ch.recv()
+        out_ch.send(msg + 1)
+    }
+}
+
+let start = time.monotonic()
+// 启动所有协程
+let tasks: Array<Task> = []
+for (let i = 0; i < N; i++) {
+    let in_ch = channels[i]
+    let out_ch = channels[(i + 1) % N]
+    tasks.push(go ring_node(i, in_ch, out_ch, M))
+}
+// 向第一个 channel 注入初始消息
+channels[0].send(0)
+// 等待所有协程完成
+for (task in tasks) {
+    await task
+}
+// 读取最后的结果
+let result = channels[0].recv()
+let elapsed = time.monotonic() - start
+for (ch in channels) {
+    ch.close()
+}
+let total_messages = N * M
+print("最终结果:", result)
+print("总消息数:", total_messages)
+print("总时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(total_messages * 1000 / elapsed), "msg/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}

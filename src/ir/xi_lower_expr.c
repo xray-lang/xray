@@ -13,6 +13,7 @@
 
 #include "xi_lower_internal.h"
 #include "xi.h"
+#include "xi_effect.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -1120,7 +1121,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
             int add_space = (i > 0) ? 1 : 0;
             int newline = (i == capped - 1) ? 1 : 0;
             v->aux_int = add_space | (newline << 1);
-            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->flags = xi_op_default_effects(XI_PRINT);
             v->line = (uint32_t) line;
         }
         if (capped == 0) {
@@ -1130,7 +1131,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
                 return xi_const_null(l->func, l->cur_block, l->type_null);
             v->args[0] = xi_const_null(l->func, l->cur_block, l->type_null);
             v->aux_int = (1 << 1) | (1 << 4); /* newline + skip_null */
-            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->flags = xi_op_default_effects(XI_PRINT);
             v->line = (uint32_t) line;
         }
         return xi_const_null(l->func, l->cur_block, l->type_null);

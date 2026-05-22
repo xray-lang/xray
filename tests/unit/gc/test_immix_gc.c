@@ -186,7 +186,7 @@ static void test_newobj_marks_alloc(void) {
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
 
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TARRAY, 64);
+    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
     ASSERT(obj != NULL, "alloc failed");
 
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
@@ -414,7 +414,7 @@ static void test_back_barrier_reverts_to_gray(void) {
     ASSERT(gc != NULL, "create failed");
     gc->gc_disabled++;
 
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TARRAY, 64);
+    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
     ASSERT(obj != NULL, "alloc failed");
 
     // Make object black
@@ -471,7 +471,7 @@ static void test_barrier_val_macro(void) {
     ASSERT(gc != NULL, "create failed");
     gc->gc_disabled++;
 
-    XrGCHeader *parent = xr_coro_gc_newobj(gc, XR_TINSTANCE, 64);
+    XrGCHeader *parent = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
     ASSERT(parent != NULL, "alloc failed");
 
     xr_gc_white2gray(parent);

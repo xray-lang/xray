@@ -1,0 +1,40 @@
+// 作者：xingleixu@gmail.com
+// 链式递归创建测试 (Chain Spawn)
+// 协程 A spawn B, B spawn C, ... 形成深度链
+// 测试递归创建深度 + 调度器栈管理
+import time
+
+let DEPTH = 100000  // 链深度
+if (process.args.length > 0) {
+    DEPTH = int(process.args[0]) ?? DEPTH
+}
+
+print("=== Chain Spawn 测试 ===")
+print("链深度:", DEPTH)
+
+// 链式协程：创建下一级并等待结果
+fn chain(depth: int) -> int {
+    if (depth <= 0) {
+        return 0
+    }
+    let child = go chain_child(depth - 1)
+    let result = await child
+    return result + 1
+}
+
+fn chain_child(depth: int) -> int {
+    return chain(depth)
+}
+
+let start = time.monotonic()
+let result = await go chain_child(DEPTH)
+let elapsed = time.monotonic() - start
+
+print("结果:", result)
+print("正确:", result == DEPTH)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("速度:", int(DEPTH * 1000 / elapsed), "spawns/sec")
+} else {
+    print("速度: 太快无法测量")
+}

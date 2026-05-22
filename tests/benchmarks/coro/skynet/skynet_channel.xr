@@ -1,0 +1,68 @@
+// 作者：xingleixu@gmail.com
+// Skynet 基准测试 - Channel 版本
+// 与 await 版本对比，使用 channel 传递结果而非 await 返回值
+// 这是 Go 版本 Skynet 的等价实现方式
+import time
+
+// 递归创建协程树，通过 channel 返回结果
+fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
+    if (size == 1) {
+        result_ch.send(num)
+        return
+    }
+    const child_size = int(size / div)
+    shared const ch = Channel(10)
+    let sum = 0
+    scope {
+        for (let i = 0; i < div; i++) {
+            const cn = num + i * child_size
+            const cs = child_size
+            go skynet_child(ch, cn, cs, div)
+        }
+        for (let i = 0; i < div; i++) {
+            sum = sum + ch.recv()
+        }
+    }
+    ch.close()
+    result_ch.send(sum)
+}
+
+fn skynet_child(result_ch: Channel<int>, num: int, size: int, div: int) {
+    skynet(result_ch, num, size, div)
+}
+
+// 计算总协程数
+fn calc_total(depth: int) -> int {
+    let total = 0
+    let n = 1
+    for (let i = 0; i <= depth; i++) {
+        total = total + n
+        n = n * 10
+    }
+    return total
+}
+
+// 主程序
+const depth = process.args.length > 0 ? (int(process.args[0]) ?? 6) : 6
+print("=== Skynet Channel 测试 ===")
+print("深度:", depth)
+print("预计协程数:", calc_total(depth))
+let size = 1
+for (let i = 0; i < depth; i++) {
+    size = size * 10
+}
+const start = time.monotonic()
+const final_size = size
+shared const result_ch = Channel(1)
+let root = go skynet_child(result_ch, 0, final_size, 10)
+const result = result_ch.recv()
+await root
+const elapsed = time.monotonic() - start
+result_ch.close()
+// 预期结果: 0 + 1 + 2 + ... + (size-1) = size * (size - 1) / 2
+const expected = size * (size - 1) / 2
+print("结果:", result)
+print("预期:", expected)
+print("正确:", result == expected)
+print("时间:", elapsed, "ms")
+print("协程数:", calc_total(depth))

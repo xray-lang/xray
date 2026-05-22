@@ -1,0 +1,115 @@
+// GC Stress Test: Fragmentation
+// Tests memory fragmentation and reclamation efficiency.
+// Allocates objects of varying sizes in interleaved patterns,
+// then selectively frees some to create "holes" in memory.
+// Good GC/allocators (like Immix) should handle this efficiently.
+//
+// Usage: xray gc_fragmentation.xr -- [iterations]
+
+fn run(n: int) {
+    // Phase 1: Swiss cheese pattern
+    // Allocate array of objects, then nil-out every other one
+    // This creates maximum fragmentation for line-based allocators
+    let objects = []
+    let i = 0
+    while (i < 2000) {
+        // Varying sizes: small and medium objects interleaved
+        if (i % 3 == 0) {
+            objects.push({ "type": "small", "id": i })
+        } else if (i % 3 == 1) {
+            objects.push({ "type": "medium", "id": i, "a": 1, "b": 2, "c": 3, "d": 4 })
+        } else {
+            objects.push({ "type": "large", "id": i, "a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8 })
+        }
+        i = i + 1
+    }
+    print("Phase 1: allocated 2000 objects")
+
+    // Punch holes: remove every other object
+    let checksum = 0
+    let round = 0
+    while (round < n) {
+        i = 0
+        while (i < 2000) {
+            if (i % 2 == round % 2) {
+                objects[i] = null
+            }
+            i = i + 1
+        }
+
+        // Allocate new objects into the holes
+        i = 0
+        while (i < 2000) {
+            if (objects[i] == null) {
+                objects[i] = { "round": round, "idx": i, "data": round * 2000 + i }
+                checksum = checksum + objects[i].data
+            }
+            i = i + 1
+        }
+        round = round + 1
+    }
+    print("Phase 1 done (" + n + " rounds): checksum=" + checksum)
+
+    // Phase 2: Generational fragmentation
+    // Keep some objects alive across many GC cycles (old gen)
+    // while rapidly churning others (young gen)
+    let permanent = []
+    i = 0
+    while (i < 200) {
+        permanent.push({ "id": i, "children": [] })
+        i = i + 1
+    }
+
+    let total = 0
+    round = 0
+    while (round < n) {
+        // Add temporary children to permanent objects (old→young refs)
+        i = 0
+        while (i < 200) {
+            // Replace children each round
+            let kids = []
+            let j = 0
+            while (j < 5) {
+                kids.push({ "parent": i, "gen": round, "val": round * 5 + j })
+                j = j + 1
+            }
+            permanent[i].children = kids
+            i = i + 1
+        }
+        // Read some data to prevent optimization
+        total = total + permanent[round % 200].children[round % 5].val
+        round = round + 1
+    }
+    print("Phase 2 (generational frag x" + n + "): total=" + total)
+
+    // Phase 3: Reallocate with different sizes
+    // After fragmentation, allocate objects of different sizes
+    // Tests whether the allocator can reuse fragmented space
+    let mixed = []
+    round = 0
+    while (round < n) {
+        mixed = []
+        i = 0
+        while (i < 500) {
+            // Alternate between tiny and larger objects
+            if (i % 4 == 0) {
+                mixed.push({ "x": i })
+            } else if (i % 4 == 1) {
+                mixed.push({ "x": i, "y": i * 2, "z": i * 3 })
+            } else if (i % 4 == 2) {
+                mixed.push({ "x": i, "a": 1, "b": 2, "c": 3, "d": 4, "e": 5 })
+            } else {
+                mixed.push("str_" + i + "_round_" + round)
+            }
+            i = i + 1
+        }
+        round = round + 1
+    }
+    let lastLen = mixed.length
+    print("Phase 3 (size mixing x" + n + "): final array length=" + lastLen)
+}
+
+let n = process.args.length > 0 ? int(process.args[0]) ?? 500 : 500
+run(n)
+let a = []
+let b:Array;

@@ -713,6 +713,12 @@ static size_t find_balanced_close_paren(const char *s, size_t len, bool *out_has
     return len;
 }
 
+static inline bool has_arrow_after_paren(const char *s, size_t len) {
+    bool ha = false;
+    (void) find_balanced_close_paren(s, len, &ha, NULL);
+    return ha;
+}
+
 // Parse a "fn(p: T, ...): R" function type literal from a bounded slice.
 // Mirrors xa_builtin_parse_full_signature but works on [s, s+len) instead
 // of a NUL-terminated string, so it composes safely inside nested type
@@ -897,12 +903,7 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
                 * The helper peeks past the matching `)` for ` -> ` so a
                 * leading `(` without a trailing arrow falls through to the
                 * tuple branch (`(T, U, ...)`) below. */
-               ({
-                   bool _ha = false;
-                   size_t _ap = 0;
-                   (void) find_balanced_close_paren(s, base_len, &_ha, &_ap);
-                   _ha;
-               })) {
+               has_arrow_after_paren(s, base_len)) {
         bool has_arrow = false;
         size_t arrow_pos = 0;
         size_t close_after = find_balanced_close_paren(s, base_len, &has_arrow, &arrow_pos);

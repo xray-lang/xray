@@ -1,0 +1,275 @@
+// SSO (Short String Optimization) performance benchmark
+// Tests both positive and negative impact scenarios
+
+import time
+
+let ITERATIONS = 100000
+
+fn elapsed_ms(start: int, end: int): float {
+    return (end - start) / 1000000.0
+}
+
+// ============================================================
+// POSITIVE: Map with short string keys (SSO avoids promote)
+// ============================================================
+fn bench_map_short_keys() {
+    let m = #{}
+    let start = time.nanos()
+    for (i in 0..ITERATIONS) {
+        m["k" + i.toString()] = i
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[MAP short keys] " + ITERATIONS.toString() + " inserts: " + ms.toString() + " ms")
+}
+
+// NEGATIVE: Map with long string keys (>14 bytes, no SSO benefit)
+fn bench_map_long_keys() {
+    let m = #{}
+    let start = time.nanos()
+    for (i in 0..ITERATIONS) {
+        m["this_is_a_very_long_key_name_" + i.toString()] = i
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[MAP long keys]  " + ITERATIONS.toString() + " inserts: " + ms.toString() + " ms")
+}
+
+// ============================================================
+// POSITIVE: Map lookup with short string keys
+// ============================================================
+fn bench_map_lookup_short() {
+    let m = #{}
+    for (i in 0..1000) {
+        m["k" + i.toString()] = i
+    }
+    let start = time.nanos()
+    let sum = 0
+    for (i in 0..ITERATIONS) {
+        let key = "k" + (i % 1000).toString()
+        let v = m[key]
+        if (v != null) { sum = sum + v }
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[MAP short lookup] " + ITERATIONS.toString() + " lookups: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
+}
+
+// ============================================================
+// POSITIVE: String equality comparison (short strings)
+// ============================================================
+fn bench_string_eq_short() {
+    let a = "hello"
+    let b = "hello"
+    let c = "world"
+    let start = time.nanos()
+    let count = 0
+    for (i in 0..ITERATIONS) {
+        if (a == b) { count = count + 1 }
+        if (a == c) { count = count + 1 }
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[EQ short]   " + ITERATIONS.toString() + " compares: " + ms.toString() + " ms (count=" + count.toString() + ")")
+}
+
+// NEGATIVE: String equality comparison (long strings)
+fn bench_string_eq_long() {
+    let a = "this is a fairly long string for testing purposes"
+    let b = "this is a fairly long string for testing purposes"
+    let c = "this is a fairly long string for testing different"
+    let start = time.nanos()
+    let count = 0
+    for (i in 0..ITERATIONS) {
+        if (a == b) { count = count + 1 }
+        if (a == c) { count = count + 1 }
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[EQ long]    " + ITERATIONS.toString() + " compares: " + ms.toString() + " ms (count=" + count.toString() + ")")
+}
+
+// ============================================================
+// POSITIVE: String < comparison (short strings, OP_LT path)
+// ============================================================
+fn bench_string_lt_short() {
+    let a = "apple"
+    let b = "banana"
+    let start = time.nanos()
+    let count = 0
+    for (i in 0..ITERATIONS) {
+        if (a < b) { count = count + 1 }
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[LT short]   " + ITERATIONS.toString() + " compares: " + ms.toString() + " ms (count=" + count.toString() + ")")
+}
+
+// ============================================================
+// POSITIVE: String .length property access (SSO fast path)
+// ============================================================
+fn bench_string_length_short() {
+    let s = "hello"
+    let start = time.nanos()
+    let sum = 0
+    for (i in 0..ITERATIONS) {
+        sum = sum + s.length
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[.length short] " + ITERATIONS.toString() + " accesses: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
+}
+
+fn bench_string_length_long() {
+    let s = "this is a longer string that exceeds SSO limit"
+    let start = time.nanos()
+    let sum = 0
+    for (i in 0..ITERATIONS) {
+        sum = sum + s.length
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[.length long]  " + ITERATIONS.toString() + " accesses: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
+}
+
+// ============================================================
+// POSITIVE: String concatenation with short strings (OP_ADD)
+// ============================================================
+fn bench_concat_short() {
+    let start = time.nanos()
+    let result = ""
+    for (i in 0..10000) {
+        result = "x" + i.toString()
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[CONCAT short] 10000 concats: " + ms.toString() + " ms")
+}
+
+// MIXED: String concatenation growing beyond SSO
+fn bench_concat_growing() {
+    let start = time.nanos()
+    let result = ""
+    for (i in 0..1000) {
+        result = result + "a"
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[CONCAT grow]  1000 appends: " + ms.toString() + " ms (len=" + result.length.toString() + ")")
+}
+
+// ============================================================
+// POSITIVE: Array sort with short string elements
+// ============================================================
+fn bench_array_sort_short() {
+    let arr = []
+    for (i in 0..10000) {
+        arr.push("s" + (10000 - i).toString())
+    }
+    let start = time.nanos()
+    arr.sort()
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[SORT short] 10000 elements: " + ms.toString() + " ms")
+}
+
+// ============================================================
+// POSITIVE: Array join with short string elements
+// ============================================================
+fn bench_array_join_short() {
+    let arr = []
+    for (i in 0..10000) {
+        arr.push("x" + i.toString())
+    }
+    let start = time.nanos()
+    let result = arr.join(",")
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[JOIN short] 10000 elements: " + ms.toString() + " ms (len=" + result.length.toString() + ")")
+}
+
+// ============================================================
+// POSITIVE: Set with short string values
+// ============================================================
+fn bench_set_short() {
+    let s = #[]
+    let start = time.nanos()
+    for (i in 0..ITERATIONS) {
+        s.add("k" + (i % 10000).toString())
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[SET short]  " + ITERATIONS.toString() + " add ops: " + ms.toString() + " ms (size=" + s.length.toString() + ")")
+}
+
+// ============================================================
+// MIXED: String method calls on short strings (bound method path)
+// ============================================================
+fn bench_method_short() {
+    let s = "Hello, World!"
+    let start = time.nanos()
+    let count = 0
+    for (i in 0..ITERATIONS) {
+        if (s.has("World")) { count = count + 1 }
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[METHOD short] " + ITERATIONS.toString() + " .has(): " + ms.toString() + " ms (count=" + count.toString() + ")")
+}
+
+// ============================================================
+// NEGATIVE: Repeated toString on integers (creates SSO values)
+// ============================================================
+fn bench_int_tostring() {
+    let start = time.nanos()
+    let sum = 0
+    for (i in 0..ITERATIONS) {
+        let s = i.toString()
+        sum = sum + s.length
+    }
+    let end = time.nanos()
+    let ms = elapsed_ms(start, end)
+    print("[INT toString] " + ITERATIONS.toString() + " conversions: " + ms.toString() + " ms (sum=" + sum.toString() + ")")
+}
+
+// ============================================================
+// Run all benchmarks
+// ============================================================
+print("=== SSO Benchmark Suite ===")
+print("Iterations: " + ITERATIONS.toString())
+print("")
+
+print("--- Map Operations ---")
+bench_map_short_keys()
+bench_map_long_keys()
+bench_map_lookup_short()
+
+print("")
+print("--- Equality & Comparison ---")
+bench_string_eq_short()
+bench_string_eq_long()
+bench_string_lt_short()
+
+print("")
+print("--- Property Access ---")
+bench_string_length_short()
+bench_string_length_long()
+
+print("")
+print("--- Concatenation ---")
+bench_concat_short()
+bench_concat_growing()
+
+print("")
+print("--- Collection Operations ---")
+bench_array_sort_short()
+bench_array_join_short()
+bench_set_short()
+
+print("")
+print("--- Method & Conversion ---")
+bench_method_short()
+bench_int_tostring()
+
+print("")
+print("=== Benchmark Complete ===")

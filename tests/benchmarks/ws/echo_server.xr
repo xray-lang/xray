@@ -1,0 +1,19 @@
+/*
+ * echo_server.xr - xray WebSocket echo server for benchmarking
+ *
+ * Minimal overhead: pure echo, no logging in the hot path.
+ *
+ * Usage:
+ *   ./build/xray tests/ws_benchmark/echo_server.xr [-- port]
+ */
+
+import ws
+
+let port = 9001
+if (process.args.length > 0) {
+    port = int(process.args[0]) ?? 9001
+}
+
+print("xray WebSocket Echo Server on port " + string(port))
+
+ws.echoServe(port)

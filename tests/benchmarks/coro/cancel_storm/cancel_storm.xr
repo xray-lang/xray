@@ -1,0 +1,58 @@
+// 作者：xingleixu@gmail.com
+// 大量取消测试 (Cancel Storm)
+// 创建 N 个协程后立即取消，测试 cancel 路径效率
+import time
+
+let N = 100000  // 协程数量
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+
+print("=== Cancel Storm 测试 ===")
+print("协程数量:", N)
+
+// 长期等待任务：sleep 很久，期望被 cancel
+fn long_wait(id: int) -> int {
+    time.sleep(60000)  // 60 秒，正常不会完成
+    return id
+}
+
+let start = time.monotonic()
+
+// 创建所有协程
+let tasks: Array<Task> = []
+for (let i = 0; i < N; i++) {
+    tasks.push(go long_wait(i))
+}
+
+let spawn_time = time.monotonic() - start
+print("创建时间:", spawn_time, "ms")
+
+// 立即取消所有协程
+let cancel_start = time.monotonic()
+for (t in tasks) {
+    t.cancel()
+}
+let cancel_time = time.monotonic() - cancel_start
+print("取消时间:", cancel_time, "ms")
+
+// 等待所有协程完成（取消后应立即返回）
+let await_start = time.monotonic()
+let cancelled = 0
+for (t in tasks) {
+    let result = await t
+    if (result == null) {
+        cancelled++
+    }
+}
+let await_time = time.monotonic() - await_start
+
+let elapsed = time.monotonic() - start
+print("等待时间:", await_time, "ms")
+print("总时间:", elapsed, "ms")
+print("成功取消:", cancelled, "/", N)
+if (elapsed > 0) {
+    print("速度:", int(N * 1000 / elapsed), "cancels/sec")
+} else {
+    print("速度: 太快无法测量")
+}

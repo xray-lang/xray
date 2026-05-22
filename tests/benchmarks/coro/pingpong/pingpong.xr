@@ -1,0 +1,47 @@
+// 作者：xingleixu@gmail.com
+// 协程切换性能测试（pingpong）
+// 两个协程通过 channel 互相发送消息，测试切换延迟
+import time
+let N = 1000000
+// 默认100万次
+if (process.args.length > 0) {
+    N = int(process.args[0]) ?? N
+}
+print("=== Pingpong 测试 ===")
+print("消息次数:", N)
+shared const ch1 = Channel(1)
+shared const ch2 = Channel(1)
+
+// Ping 协程（通过参数传递 N，避免闭包捕获）
+fn ping(n: int, c1: Channel<int>, c2: Channel<int>) {
+    for (let i = 0; i < n; i++) {
+        c1.send(i)
+        c2.recv()
+    }
+}
+
+// Pong 协程（通过参数传递 N，避免闭包捕获）
+fn pong(n: int, c1: Channel<int>, c2: Channel<int>) {
+    for (let i = 0; i < n; i++) {
+        let msg = c1.recv()
+        c2.send(msg)
+    }
+}
+
+let start = time.monotonic()
+let t1 = go ping(N, ch1, ch2)
+let t2 = go pong(N, ch1, ch2)
+await t1
+await t2
+ch1.close()
+ch2.close()
+let elapsed = time.monotonic() - start
+print("总时间:", elapsed, "ms")
+print("消息总数:", N * 2)
+if (elapsed > 0) {
+    print("吞吐量:", int(N * 2 * 1000 / elapsed), "msg/sec")
+    print("单次切换:", int(elapsed * 1000000 / (N * 2)), "ns")
+} else {
+    print("吞吐量: 太快无法测量")
+    print("单次切换: 太快无法测量")
+}

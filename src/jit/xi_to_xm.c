@@ -687,9 +687,18 @@ generic_call:
         /* aux_int = (global_symbol_id << 1) | is_super.
          * The SymbolId is resolved at lowering time (main thread) so the
          * JIT background thread does not need isolate access. */
+        bool is_super = (v->aux_int & 1) != 0;
         int method_sym = (int) (v->aux_int >> 1);
         XR_DCHECK(method_sym > 0, "XI_CALL_METHOD: method_sym=0, lowering failed to "
                                   "resolve SymbolId");
+        /* super.method() needs to walk the parent class chain, but
+         * xr_jit_invoke_method only resolves on the receiver's own class.
+         * No JIT helper exists yet for super dispatch — bail and let the
+         * VM's vm_superinvoke handle it. */
+        if (is_super) {
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
+        }
         int bc_pc = slot_map_bc_pc(ctx, v->id);
         uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
         int64_t encoded = ((int64_t) method_sym << 32) | ((int64_t) (did & 0xFFFF) << 16) |
@@ -727,6 +736,7 @@ generic_call:
     XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_call_func);
     XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_DIRECT, XR_REP_I64, nargs_val, fn_ref);
     blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT | XM_FLAG_MAY_THROW;
+    blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
     xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
     return result;
 }
@@ -828,12 +838,28 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 }
 
 static XmRef lower_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    /* XI_PRINT: args[0..n]=values, aux_int=flags */
+    /* XI_PRINT: args[0..n]=values, aux_int=flags.
+     * Lower as CALL_C(xr_jit_print, extra_arg) per argument.  Direct
+     * XM_RT_PRINT emission silently swallowed every JIT-compiled print
+     * because both x64 and arm64 codegen treat XM_RT_PRINT as a NOP
+     * (the historical contract was that the builder rewrites it into
+     * CALL_C, but no pass actually does so). */
+    /* Xi flags layout differs from xr_jit_print's extra_arg encoding:
+     *   Xi:           bit0=add_space, bit1=newline, bit4=skip_null
+     *   xr_jit_print: bit0=newline,   bit1=add_space (skip_null unused)
+     * Swap bit0 and bit1 so the helper sees the right semantics. */
+    int64_t xi_flags = v->aux_int;
+    int64_t jit_flags = ((xi_flags & 1) << 1) | ((xi_flags & 2) >> 1);
+
     for (uint16_t i = 0; i < v->nargs; i++) {
         XmRef arg = get_ref(ctx, v->args[i]);
-        XmRef flags = xm_const_i64(ctx->xm_func, v->aux_int);
-        xm_emit(ctx->xm_func, blk, XM_RT_PRINT, XR_REP_I64, arg, flags);
+        XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_print);
+        XmRef extra = xm_const_i64(ctx->xm_func, jit_flags);
+        XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, extra);
         blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+        blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
+        XmRef args[1] = {arg};
+        xm_func_bind_call_args(ctx->xm_func, result, args, 1);
     }
     return xm_const_i64(ctx->xm_func, 0);
 }
@@ -1162,8 +1188,11 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XR_DCHECK(v->nargs >= 1, "throw: need value arg");
             XmRef val = get_ref(ctx, v->args[0]);
             XmRef fn_ptr = xm_const_ptr(ctx->xm_func, (void *) xr_jit_throw);
-            xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ptr, val);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ptr, extra);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT | XM_FLAG_MAY_THROW;
+            XmRef args[1] = {val};
+            xm_func_bind_call_args(ctx->xm_func, result, args, 1);
             return xm_const_i64(ctx->xm_func, 0);
         }
 
@@ -1200,13 +1229,21 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
 
-        /* Json allocation (treated as generic call for now) */
+        /* Json allocation requires a Shape (XrClass) built from field names
+         * via xr_class_build_json_chain — that touches isolate state and is
+         * unsafe on the JIT background thread.  No dedicated runtime helper
+         * exists yet, and lower_call would mis-route the op through
+         * xr_jit_call_func (which expects a callee in args[0]) and surface
+         * as a stale 0xDEAD0001 deopt marker leaking into downstream
+         * INDEX_GET/SET helpers.  Bail until a proper xr_jit_rt_json_*
+         * helper is wired. */
         case XI_JSON_NEW:
         case XI_JSON_INIT_F:
         case XI_JSON_GET_F:
         case XI_JSON_SET_F:
         case XI_JSON_DECODE:
-            return lower_call(ctx, blk, v);
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
 
         /* Set creation */
         case XI_SET_NEW: {

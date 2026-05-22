@@ -1,0 +1,272 @@
+// pidigits - Exact translation from Lua version
+// Signed BigInt: {sign: 1|-1, digits: [low..high]}
+fn bigint(n: int) {
+    let sign = 1
+    let digits = []
+    if (n < 0) {
+        sign = -1
+        n = 0 - n
+    }
+    if (n == 0) {
+        digits.push(0)
+    } else {
+        while (n > 0) {
+            digits.push(n % 10)
+            n = n / 10
+        }
+    }
+    return { "sign": sign, "digits": digits }
+}
+
+fn bigint_clone(a) {
+    let nd = []
+    for (i in 0..a.digits.length) {
+        nd.push(a.digits[i])
+    }
+    return { "sign": a.sign, "digits": nd }
+}
+
+fn normalize(a) {
+    let d = a.digits
+    while (d.length > 1 && d[d.length - 1] == 0) {
+        d.pop()
+    }
+    if (d.length == 1 && d[0] == 0) {
+        a.sign = 1
+    }
+    return a
+}
+
+fn compare_abs(a, b): int {
+    let da = a.digits
+    let db = b.digits
+    if (da.length > db.length) {
+        return 1
+    }
+    if (da.length < db.length) {
+        return -1
+    }
+    let i = da.length - 1
+    while (i >= 0) {
+        if (da[i] > db[i]) {
+            return 1
+        }
+        if (da[i] < db[i]) {
+            return -1
+        }
+        i--
+    }
+    return 0
+}
+
+fn add_abs(a, b) {
+    let da = a.digits
+    let db = b.digits
+    let rd = []
+    let carry = 0
+    let len = da.length
+    if (db.length > len) {
+        len = db.length
+    }
+    for (i in 0..len) {
+        let va = 0
+        let vb = 0
+        if (i < da.length) {
+            va = da[i]
+        }
+        if (i < db.length) {
+            vb = db[i]
+        }
+        let sum = va + vb + carry
+        rd.push(sum % 10)
+        carry = sum / 10
+    }
+    if (carry > 0) {
+        rd.push(carry)
+    }
+    return { "sign": 1, "digits": rd }
+}
+
+fn sub_abs(a, b) {
+    let da = a.digits
+    let db = b.digits
+    let rd = []
+    let borrow = 0
+    for (i in 0..da.length) {
+        let vb = 0
+        if (i < db.length) {
+            vb = db[i]
+        }
+        let diff = da[i] - vb - borrow
+        if (diff < 0) {
+            diff = diff + 10
+            borrow = 1
+        } else {
+            borrow = 0
+        }
+        rd.push(diff)
+    }
+    return normalize({ "sign": 1, "digits": rd })
+}
+
+fn bigint_add(a, b) {
+    if (a.sign == b.sign) {
+        let r = add_abs(a, b)
+        r.sign = a.sign
+        return r
+    }
+    let cmp = compare_abs(a, b)
+    if (cmp == 0) {
+        return bigint(0)
+    }
+    if (cmp > 0) {
+        let r = sub_abs(a, b)
+        r.sign = a.sign
+        return r
+    } else {
+        let r = sub_abs(b, a)
+        r.sign = b.sign
+        return r
+    }
+}
+
+fn bigint_sub(a, b) {
+    let nb = bigint_clone(b)
+    if (b.digits.length == 1 && b.digits[0] == 0) {
+        nb.sign = 1
+    } else {
+        nb.sign = 0 - b.sign
+    }
+    return bigint_add(a, nb)
+}
+
+fn bigint_mul_int(a, n: int) {
+    if (n == 0) {
+        return bigint(0)
+    }
+    let rs = a.sign
+    if (n < 0) {
+        rs = 0 - rs
+        n = 0 - n
+    }
+    let da = a.digits
+    let rd = []
+    let carry = 0
+    for (i in 0..da.length) {
+        let prod = da[i] * n + carry
+        rd.push(prod % 10)
+        carry = prod / 10
+    }
+    while (carry > 0) {
+        rd.push(carry % 10)
+        carry = carry / 10
+    }
+    return normalize({ "sign": rs, "digits": rd })
+}
+
+fn bigint_div(a, b) {
+    let rs = a.sign * b.sign
+    if (compare_abs(a, b) < 0) {
+        return bigint(0)
+    }
+    let da = a.digits
+    let qd = []
+    for (i in 0..da.length) {
+        qd.push(0)
+    }
+    let rem = { "sign": 1, "digits": [] }
+    for (pos in 0..da.length) {
+        let idx = da.length - 1 - pos
+        let nrd = [da[idx]]
+        for (j in 0..rem.digits.length) {
+            nrd.push(rem.digits[j])
+        }
+        rem = normalize({ "sign": 1, "digits": nrd })
+        let q = 0
+        while (compare_abs(rem, b) >= 0) {
+            rem = sub_abs(rem, b)
+            q++
+        }
+        qd[idx] = q
+    }
+    return normalize({ "sign": rs, "digits": qd })
+}
+
+fn bigint_to_int(a): int {
+    let d = a.digits
+    let r = 0
+    let base = 1
+    for (i in 0..d.length) {
+        r = r + d[i] * base
+        base = base * 10
+    }
+    return r * a.sign
+}
+
+// LFT algorithm state
+let lft_q = bigint(1)
+let lft_r = bigint(0)
+let lft_s = bigint(0)
+let lft_t = bigint(1)
+
+fn extract(x: int): int {
+    let num = bigint_add(bigint_mul_int(lft_q, x), lft_r)
+    let den = bigint_add(bigint_mul_int(lft_s, x), lft_t)
+    let quot = bigint_div(num, den)
+    return bigint_to_int(quot)
+}
+
+fn is_safe(digit: int): bool {
+    return extract(4) == digit
+}
+
+fn produce(digit: int) {
+    lft_r = bigint_mul_int(bigint_sub(lft_r, bigint_mul_int(lft_t, digit)), 10)
+    lft_q = bigint_mul_int(lft_q, 10)
+}
+
+fn consume(k: int) {
+    let k2 = 2 * k + 1
+    let k4 = 4 * k + 2
+    let nr = bigint_add(bigint_mul_int(lft_q, k4), bigint_mul_int(lft_r, k2))
+    let nt = bigint_add(bigint_mul_int(lft_s, k4), bigint_mul_int(lft_t, k2))
+    lft_q = bigint_mul_int(lft_q, k)
+    lft_s = bigint_mul_int(lft_s, k)
+    lft_r = nr
+    lft_t = nt
+}
+
+fn pidigits(n: int) {
+    lft_q = bigint(1)
+    lft_r = bigint(0)
+    lft_s = bigint(0)
+    lft_t = bigint(1)
+    let count = 0
+    let k = 0
+    let output = ""
+    while (count < n) {
+        k++
+        consume(k)
+        let digit = extract(3)
+        if (is_safe(digit)) {
+            output = output + digit
+            count++
+            if (count % 10 == 0) {
+                print(output + "	:" + count)
+                output = ""
+            }
+            produce(digit)
+        }
+    }
+    if (output.length > 0) {
+        let pad = 10 - output.length
+        while (pad > 0) {
+            output = output + " "
+            pad--
+        }
+        print(output + "	:" + n)
+    }
+}
+
+let n = process.args.length > 0 ? int(process.args[0]) ?? 30 : 30
+pidigits(n)

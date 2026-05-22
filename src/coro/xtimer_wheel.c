@@ -235,6 +235,28 @@ static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     p->slot = XR_TW_SLOT_INACTIVE;
 }
 
+static bool timer_is_in_slot(XrTimerWheel *tw, XrTWheelTimer *p, int slot) {
+    if (slot < XR_TW_SLOT_AT_ONCE || slot >= XR_TW_LATER_WHEEL_END_SLOT)
+        return false;
+    XrTWheelTimer *first = tw->w[slot];
+    if (!first)
+        return false;
+    if (p->next == p || p->prev == p)
+        return first == p && p->next == p && p->prev == p;
+    if (!p->next || !p->prev || p->next->prev != p || p->prev->next != p)
+        return false;
+    XrTWheelTimer *cur = first;
+    int guard = tw->nto + 1;
+    do {
+        if (cur == p)
+            return true;
+        if (!cur->next || !cur->prev)
+            return false;
+        cur = cur->next;
+    } while (cur != first && guard-- > 0);
+    return false;
+}
+
 // Trigger timer
 static inline void timeout_timer(XrTWheelTimer *p) {
     XrTimeoutProc timeout;
@@ -588,14 +610,21 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
 
         // Process this timer cancellation (zombie cleanup)
         XrTWheelTimer *timer = next->timer;
-        if (timer && timer->slot != XR_TW_SLOT_INACTIVE) {
-            remove_timer(tw, timer);
-            tw->nto--;
-            count++;
-        }
-        // Reset zombie state for timer reuse (whether removed or not)
-        if (timer) {
-            atomic_store_explicit(&timer->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
+        if (timer && atomic_load_explicit(&timer->state, memory_order_acquire) ==
+                         XR_TIMER_STATE_ZOMBIE &&
+            timer->owner_worker_id == tw->owner_worker_id) {
+            if (timer->slot != XR_TW_SLOT_INACTIVE) {
+                if (timer_is_in_slot(tw, timer, timer->slot)) {
+                    remove_timer(tw, timer);
+                    tw->nto--;
+                    atomic_store_explicit(&timer->state, XR_TIMER_STATE_ACTIVE,
+                                          memory_order_release);
+                    count++;
+                }
+            } else {
+                atomic_store_explicit(&timer->state, XR_TIMER_STATE_ACTIVE,
+                                      memory_order_release);
+            }
         }
 
         // Advance head (dequeue)
@@ -728,7 +757,7 @@ void xr_timer_wheel_destroy(XrTimerWheel *tw) {
 }
 
 // Set timer (MUST be called from owner worker only)
-void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeout, void *arg,
+bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeout, void *arg,
                          int64_t timeout_pos) {
     XR_DCHECK(tw != NULL, "twheel_set_timer: NULL tw");
     XR_DCHECK(p != NULL, "twheel_set_timer: NULL timer");
@@ -742,18 +771,25 @@ void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeo
 
     p->timeout = timeout;
     p->arg = arg;
-    p->owner_worker_id = tw->owner_worker_id;  // Record ownership
 
-    // If timer is still zombie (cross-worker cancel queued but not yet processed),
-    // proactively drain the cancel queue to process it immediately.
-    // We are on the owner worker, so this is safe and avoids spin-waiting.
     if (atomic_load_explicit(&p->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE) {
         xr_timer_process_canceled_queue(tw);
-        // Force-clear zombie if still set (cancel node may have been lost on OOM)
-        atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
+        if (atomic_load_explicit(&p->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE) {
+            if (p->owner_worker_id == tw->owner_worker_id && p->slot != XR_TW_SLOT_INACTIVE &&
+                timer_is_in_slot(tw, p, p->slot)) {
+                remove_timer(tw, p);
+                tw->nto--;
+                atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
+            } else if (p->slot == XR_TW_SLOT_INACTIVE) {
+                atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
+            } else {
+                return false;
+            }
+        }
     }
 
     XR_TW_ASSERT(p->slot == XR_TW_SLOT_INACTIVE);
+    p->owner_worker_id = tw->owner_worker_id;  // Record ownership
 
     tw->nto++;
 
@@ -781,6 +817,7 @@ void xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeo
             tw->next_timeout_time = timeout_pos;
         }
     }
+    return true;
 }
 
 // Cancel timer (MUST be called from owner worker only)
@@ -793,9 +830,16 @@ void xr_twheel_cancel_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
               "twheel_cancel_timer: non-owner call");
     // No mutex needed - owner worker exclusive access
+    if (p->owner_worker_id != tw->owner_worker_id)
+        return;
     if (p->slot != XR_TW_SLOT_INACTIVE) {
+        if (!timer_is_in_slot(tw, p, p->slot)) {
+            atomic_store_explicit(&p->state, XR_TIMER_STATE_ZOMBIE, memory_order_release);
+            return;
+        }
         remove_timer(tw, p);
         tw->nto--;
+        atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
     }
 }
 

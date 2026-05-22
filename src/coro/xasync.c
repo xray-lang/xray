@@ -199,13 +199,18 @@ void xr_async_pool_start_threads(XrAsyncPool *pool) {
     if (!pool)
         return;
 
-    pool->threads = (xr_thread_t *) xr_calloc(pool->thread_count, sizeof(xr_thread_t));
     if (!pool->threads) {
-        xr_log_warning("async", "failed to allocate thread array");
-        return;
+        pool->threads = (xr_thread_t *) xr_calloc(pool->thread_count, sizeof(xr_thread_t));
+        if (!pool->threads) {
+            xr_log_warning("async", "failed to allocate thread array");
+            return;
+        }
     }
 
     for (int i = 0; i < pool->thread_count; i++) {
+        if (xr_thread_is_valid(pool->threads[i])) {
+            continue;
+        }
         if (!xr_thread_create_ex(&pool->threads[i], async_thread_main, pool, XR_ASYNC_STACK_SIZE)) {
             xr_log_warning("async", "failed to create async thread %d", i);
         }

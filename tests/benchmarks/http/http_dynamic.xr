@@ -1,0 +1,39 @@
+/*
+ * http_dynamic.xr - Dynamic handler benchmark
+ *
+ * All routes use fn(req) callbacks (NOT prebuilt), so every request
+ * goes through the VM path: C fast loop → return to VM → invoke handler.
+ *
+ * Endpoints:
+ *   GET /plaintext    - fn returns plain string
+ *   GET /json         - fn returns Json object (auto-serialized)
+ *   GET /users/:id    - fn with path params + string concat
+ *
+ * Usage:
+ *   ./build-release/xray tests/benchmarks/http/http_dynamic.xr [-- port]
+ */
+
+import http
+
+let port = 8080
+if (process.args.length > 0) {
+    port = int(process.args[0]) ?? 8080
+}
+
+// Dynamic plaintext (fn callback, NOT prebuilt)
+http.route("GET", "/plaintext", fn(req) {
+    return "Hello, World!"
+})
+
+// Dynamic JSON (fn callback builds Json each time)
+http.route("GET", "/json", fn(req) {
+    return { message: "Hello, World!" }
+})
+
+// Path params + string concatenation
+http.route("GET", "/users/:id", fn(req) {
+    return "User: " + req.params.id
+})
+
+print("xray Dynamic Handler Benchmark on port " + string(port))
+http.listen(port)

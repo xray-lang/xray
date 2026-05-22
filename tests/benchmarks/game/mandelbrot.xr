@@ -1,0 +1,63 @@
+/**
+ * 作者：xingleixu@gmail.com
+ * 
+ * Mandelbrot 集基准测试 - xray 版本
+ * 
+ * 算法说明：
+ * Mandelbrot 集是复平面上的一个分形集合。对于复数 c = Cr + Ci*i，
+ * 迭代公式为 z(n+1) = z(n)^2 + c，初始值 z(0) = 0。
+ * 如果迭代 50 次后 |z| <= 2，则该点属于 Mandelbrot 集。
+ * 
+ * 本程序计算 [-1.5, 0.5] x [-1.0, 1.0] 范围内的 Mandelbrot 集。
+ * 由于 xray 暂无文件 I/O 支持，只统计集合内的点数。
+ */
+// 最大迭代次数
+const MAX_ITER = 50
+// 逃逸半径的平方
+const LIMIT_SQ = 4.0
+
+/**
+ * 计算 Mandelbrot 集
+ * 参数 size: 图像大小（宽度和高度）
+ * 返回值: 集合内的点数
+ */
+fn mandelbrot(size) {
+    let w = size
+    let h = size
+    let count = 0
+    let inv_w = 2.0 / w
+    let inv_h = 2.0 / h
+    for (let y = 0; y < h; y++) {
+        let Ci = inv_h * y - 1
+        for (let x = 0; x < w; x++) {
+            let Zr = 0.0
+            let Zi = 0.0
+            let Tr = 0.0
+            let Ti = 0.0
+            let Cr = inv_w * x - 1.5
+            let i = 0
+            while (i < MAX_ITER && (Tr + Ti) <= LIMIT_SQ) {
+                Zi = 2 * Zr * Zi + Ci
+                Zr = Tr - Ti + Cr
+                Tr = Zr * Zr
+                Ti = Zi * Zi
+                i = i + 1
+            }
+            if ((Tr + Ti) <= LIMIT_SQ) {
+                count = count + 1
+            }
+        }
+    }
+    return count
+}
+
+// 主程序
+let size = 1000
+if (process.args.length > 0) {
+    size = int(process.args[0])
+}
+let count = mandelbrot(size)
+print("xray mandelbrot")
+print(size)
+print("Points in set:")
+print(count)

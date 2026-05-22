@@ -1,0 +1,115 @@
+// 作者：xingleixu@gmail.com
+// Regex Redux 基准测试 - Xray 版本
+// 
+// 算法说明：
+// 1. 读取 FASTA 格式文件，记录原始长度
+// 2. 使用正则表达式去除描述行和换行符，记录清理后长度
+// 3. 使用 9 个 DNA 模式匹配并计数
+// 4. 使用 5 个"魔术"正则模式替换，记录最终长度
+import regex
+
+// 计数正则匹配次数（使用新的 regex.count API）
+fn countMatches(re, text: string): int {
+    return regex.count(re, text)
+}
+
+// 生成测试 FASTA 数据
+fn generateFasta(n: int): string {
+    let alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
+    let sb = new StringBuilder()
+    // 生成 ONE 序列
+    sb.append(">ONE Homo sapiens alu
+")
+    let aluLen = alu.length
+    let i = 0
+    while (i < n * 2) {
+        let start = i % aluLen
+        let end = start + 60
+        if (end > aluLen) {
+            end = aluLen
+        }
+        sb.append(alu.substring(start, end))
+        sb.append("
+")
+        i = i + 60
+    }
+    // 生成 TWO 序列
+    sb.append(">TWO IUB ambiguity codes
+")
+    let iub = "acBDGHKMNRSVWY"
+    let iubLen = iub.length
+    i = 0
+    while (i < n * 3) {
+        let j = 0
+        let line = new StringBuilder()
+        while (j < 60 && i + j < n * 3) {
+            line.append(iub.charAt((i + j) % iubLen))
+            j++
+        }
+        sb.append(line.toString())
+        sb.append("
+")
+        i = i + 60
+    }
+    // 生成 THREE 序列
+    sb.append(">THREE Homo sapiens frequency
+")
+    let bases = "acgt"
+    i = 0
+    while (i < n * 5) {
+        let j = 0
+        let line = new StringBuilder()
+        while (j < 60 && i + j < n * 5) {
+            line.append(bases.charAt((i + j) % 4))
+            j++
+        }
+        sb.append(line.toString())
+        sb.append("
+")
+        i = i + 60
+    }
+    return sb.toString()
+}
+
+// 主程序
+fn main() {
+    // 生成测试数据（从命令行读取，默认 100000）
+    // n = 100000 生成约 1MB 数据，用于基准测试
+    // n = 1000 生成约 10KB 数据，用于快速验证
+    let n = process.args.length > 0 ? int(process.args[0]) ?? 100000 : 100000
+    let data = generateFasta(n)
+    let initialLen = data.byteLength
+    // 步骤 1：移除 FASTA 描述行和换行符
+    let cleanPattern = regex.compile("^>.*
+|
+",     "m")
+    let cleaned = regex.replaceAll(cleanPattern, data, "")
+    let cleanedLen = cleaned.byteLength
+    // 步骤 2：计数 9 个 DNA 模式
+    let patterns = ["agggtaaa|tttaccct", "[cgt]gggtaaa|tttaccc[acg]", "a[act]ggtaaa|tttacc[agt]t", "ag[act]gtaaa|tttac[agt]ct", "agg[act]taaa|ttta[agt]cct", "aggg[acg]aaa|ttt[cgt]ccct", "agggt[cgt]aa|tt[acg]accct", "agggta[cgt]a|t[acg]taccct", "agggtaa[cgt]|[acg]ttaccct"]
+    let i = 0
+    while (i < patterns.length) {
+        let re = regex.compile(patterns[i], "i")
+        let count = countMatches(re, cleaned)
+        print(patterns[i], count)
+        i++
+    }
+    // 步骤 3：执行魔术替换
+    let magicPatterns = ["tHa[Nt]", "aND|caN|Ha[DS]|WaS", "a[NSt]|BY", "<[^>]*>", "\|[^|][^|]*\|"]
+    let magicReplacements = ["<4>", "<3>", "<2>", "|", "-"]
+    let current = cleaned
+    i = 0
+    while (i < magicPatterns.length) {
+        let re = regex.compile(magicPatterns[i], "")
+        current = regex.replaceAll(re, current, magicReplacements[i])
+        i++
+    }
+    let endLen = current.byteLength
+    // 输出三个长度
+    print("")
+    print(initialLen)
+    print(cleanedLen)
+    print(endLen)
+}
+
+main()
