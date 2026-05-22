@@ -103,7 +103,7 @@ def section_fence_ids(root: Path) -> set[str]:
 def check_card_sources(root: Path) -> list[str]:
     cards_root = root / "docs/spec/source/cards"
     legacy_root = root / "docs/spec/source/knowledge"
-    expected_counts = {"topics": 18, "resources": 3, "stdlib": 23}
+    expected_counts = {"topics": 19, "resources": 3, "stdlib": 23}
     fence_ids = section_fence_ids(root)
     anchors = load_spec_anchors(root)
     errors: list[str] = []
@@ -306,6 +306,8 @@ def check_key_syntax(root: Path) -> list[str]:
         "class": ["override speak() -> string"],
         "control_flow": ["match (x)", "try { throw"],
         "modules": ["export fn helper()", "export class MyClass"],
+        "result": ["`Result<T, E>` is a prelude ADT enum", "`try! result` early-returns `Err`"],
+        "types": ["### Tuple types", "let p: (int, string) = (7, \"ok\")"],
     }
     errors: list[str] = []
     for topic, needles in required.items():

@@ -2390,7 +2390,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "enum",
         .title = "Enum",
-        .aliases_csv = "enums,enumeration",
+        .aliases_csv = "enums,enumeration,adt,payload,variant,Result,Ok,Err",
         .body =
             "[Language reference](#56-enum-\xe5\xa3\xb0\xe6\x98\x8e)\n"
             "\n"
@@ -2781,6 +2781,66 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "",
     },
     {
+        .id = "result",
+        .title = "Result<T, E>",
+        .aliases_csv = "Result,Ok,Err,try!,try?,catch!,error_handling,parse_error,adt",
+        .body =
+            "[Language reference](#82-resultt-e)\n"
+            "\n"
+            "## Result<T, E>\n"
+            "\n"
+            "Result<T, E> is the explicit error-return track: an ADT enum with Ok(T) and Err(E).\n"
+            "\n"
+            "### ADT shape\n"
+            "`Result<T, E>` is a prelude ADT enum: `Ok(T)` carries success, `Err(E)` carries failure. Prefer an ADT enum for `E` when the failure causes are enumerable, so `match` can check exhaustiveness.\n"
+            "\n"
+            "### Payload enum form\n"
+            "```xray\n"
+            "// positional payload\n"
+            "enum Result<T, E> {\n"
+            "    Ok(T),\n"
+            "    Err(E),\n"
+            "}\n"
+            "\n"
+            "// named-field payload (recommended for readability)\n"
+            "enum NetEvent {\n"
+            "    Connected,\n"
+            "    Disconnected(reason: string),\n"
+            "    DataReceived(bytes: Bytes),\n"
+            "    Error(code: int, message: string),\n"
+            "}\n"
+            "\n"
+            "// state machine\n"
+            "enum ConnState {\n"
+            "    Idle,\n"
+            "    Connecting(retry: int),\n"
+            "    Connected(peer: string, since: int),\n"
+            "    Failed(reason: string),\n"
+            "}\n"
+            "\n"
+            "// AST nodes\n"
+            "enum Expr {\n"
+            "    Number(int),\n"
+            "    Binary(op: string, left: Expr, right: Expr),\n"
+            "    Call(name: string, args: Array<Expr>),\n"
+            "}\n"
+            "```\n"
+            "\n"
+            "### Common methods\n"
+            "- `isOk()` / `isErr()` inspect the variant\n"
+            "- `ok()` returns `T?`; `err()` returns `E?`\n"
+            "- `unwrap()` extracts `Ok` or throws on `Err` when `E` is an `Exception` subtype\n"
+            "- `unwrapOr(default)` and `unwrapOrElse(handler)` provide fallback values\n"
+            "- `map(fn)` transforms `Ok`; `mapErr(fn)` transforms `Err`; `andThen(fn)` chains Results\n"
+            "\n"
+            "### Bridge keywords\n"
+            "- `try! result` early-returns `Err` inside a Result-returning function\n"
+            "- `try! result` throws when crossing from Result into the exception track and `E` is an `Exception` subtype\n"
+            "- `try? result` converts `Err` to `null` and discards the cause\n"
+            "- `catch! expr` catches exceptions and converts them to `Result.Err`\n"
+            "",
+    },
+    {
         .id = "string",
         .title = "String",
         .aliases_csv = "strings,string_methods,interpolation,template",
@@ -2909,7 +2969,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "types",
         .title = "Types",
-        .aliases_csv = "int,float,string,bool,nullable,type",
+        .aliases_csv = "int,float,string,bool,nullable,type,tuple,unit,union,Result",
         .body =
             "[Language reference](#2-\xe7\xb1\xbb\xe5\x9e\x8b\xe7\xb3\xbb\xe7\xbb\x9f-type-system)\n"
             "\n"
@@ -2955,6 +3015,32 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "let v: int | string = 42\n"
             "v = \"hello\"             // OK\n"
+            "```\n"
+            "\n"
+            "### Tuple types\n"
+            "```xray\n"
+            "// Literals\n"
+            "let t = (1, 2, 3)                 // type inferred as (int, int, int)\n"
+            "let h = (10, \"hi\", true)          // heterogeneous tuple\n"
+            "let single = (99,)                // single-element tuple: note trailing comma\n"
+            "\n"
+            "// Type annotation\n"
+            "let p: (int, string) = (7, \"ok\")\n"
+            "\n"
+            "// Field access: .N (N is a compile-time constant integer index)\n"
+            "let first = t.0                   // 1\n"
+            "let mid   = t.1                   // 2\n"
+            "let nest  = ((1, 2), (3, 4))\n"
+            "let a     = nest.0.0              // 1\n"
+            "let b     = nest.1.1              // 4\n"
+            "\n"
+            "// Function return and destructuring\n"
+            "fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }\n"
+            "let (q, r) = divmod(17, 5)        // tuple destructure\n"
+            "\n"
+            "// Generic\n"
+            "fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }\n"
+            "let p2 = pair(1, \"x\")             // (int, string)\n"
             "```\n"
             "\n"
             "### Type inference\n"
@@ -3017,7 +3103,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "",
     },
 };
-XR_DATADEF const int xmcp_generated_topic_count = 18;
+XR_DATADEF const int xmcp_generated_topic_count = 19;
 
 XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     {
