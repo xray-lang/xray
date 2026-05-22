@@ -840,6 +840,28 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             ctx->npatch++;
             x64_emit32(&ctx->buf, 0);
 
+            /* Slow-path deopt propagation: xr_jit_call_func returns
+             * XM_DEOPT_MARKER when the call must be interpreted. */
+            x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) XM_DEOPT_MARKER);
+            x64_cmp_rr(&ctx->buf, X64_RAX, X64_RCX);
+            x64_emit8(&ctx->buf, 0x0F);
+            x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
+            uint32_t jne_slow_ok_d = ctx->buf.pos;
+            x64_emit32(&ctx->buf, 0);
+            x64_load_imm64(&ctx->buf, X64_RCX, 0xFFFF);
+            x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_RCX);
+            CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
+            X64BranchPatch *dp_slow = &ctx->patches[ctx->npatch];
+            x64_emit8(&ctx->buf, 0xE9);
+            dp_slow->emit_pos = ctx->buf.pos;
+            dp_slow->target_blk = 0;
+            dp_slow->type = X64_PATCH_DEOPT_JMP;
+            dp_slow->cc = X64_CC_E;
+            ctx->npatch++;
+            x64_emit32(&ctx->buf, 0);
+            ctx->has_deopt = true;
+            x64_patch_rel32(&ctx->buf, jne_slow_ok_d, ctx->buf.pos);
+
             /* Done */
             uint32_t done_d_pos = ctx->buf.pos;
             x64_patch_rel32(&ctx->buf, jmp_done_d, done_d_pos);

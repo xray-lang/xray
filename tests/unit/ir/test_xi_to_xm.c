@@ -340,6 +340,43 @@ TEST(lower_print) {
     xi_func_free(f);
 }
 
+TEST(lower_throw) {
+    XiFunc *f = make_func("throw_test", &stub_void);
+    XiBlock *entry = f->entry;
+
+    XiValue *x = xi_param(f, entry, 0, &stub_int);
+
+    XiValue *thr = xi_value_new(f, entry, XI_THROW, &stub_void, 1);
+    thr->args[0] = x;
+    xi_block_set_return(entry, NULL);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL && "throw lowering should succeed");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_throw = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_CALL_C && blk0->ins[i].args[0] != XM_NONE) {
+            assert(xm_ref_is_const(blk0->ins[i].args[0]));
+            assert(xm_ref_is_const(blk0->ins[i].args[1]));
+            uint32_t fn_ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+            uint32_t extra_ci = XM_REF_INDEX(blk0->ins[i].args[1]);
+            assert(fn_ci < xm->nconst);
+            assert(extra_ci < xm->nconst);
+            assert(xm->consts[fn_ci].val.ptr == (void *) xr_jit_throw);
+            assert(xm->consts[extra_ci].val.i64 == 0);
+            uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
+            assert(vi < xm->nvreg);
+            assert(xm->vregs[vi].call_nargs == 1);
+            found_throw = true;
+        }
+    }
+    assert(found_throw && "should contain CALL_C to xr_jit_throw");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
 TEST(lower_shared_var) {
     /* fn() { var x = 42; return x } (shared) */
     XiFunc *f = make_func("shared_test", &stub_int);
@@ -476,6 +513,7 @@ int main(void) {
     run_lower_void_return();
     run_lower_call();
     run_lower_print();
+    run_lower_throw();
     run_lower_shared_var();
     run_lower_load_field();
     run_lower_index_get();

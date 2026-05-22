@@ -1187,8 +1187,11 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XR_DCHECK(v->nargs >= 1, "throw: need value arg");
             XmRef val = get_ref(ctx, v->args[0]);
             XmRef fn_ptr = xm_const_ptr(ctx->xm_func, (void *) xr_jit_throw);
-            xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ptr, val);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ptr, extra);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT | XM_FLAG_MAY_THROW;
+            XmRef args[1] = {val};
+            xm_func_bind_call_args(ctx->xm_func, result, args, 1);
             return xm_const_i64(ctx->xm_func, 0);
         }
 
