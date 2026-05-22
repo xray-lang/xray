@@ -775,11 +775,11 @@ let a     = nest.0.0              // 1
 let b     = nest.1.1              // 4
 
 // Function return and destructuring
-fn divmod(a: int, b: int): (int, int) { return (a / b, a % b) }
+fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
 let (q, r) = divmod(17, 5)        // tuple destructure
 
 // Generic
-fn pair<A, B>(a: A, b: B): (A, B) { return (a, b) }
+fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
 let p2 = pair(1, "x")             // (int, string)
 ```
 
@@ -1549,7 +1549,9 @@ ForStep ::= Expression (',' Expression)*
 for (let i = 0; i < 10; i++) {
     print(i)
 }
-for (let i = 0, j = 100; i < j; i++, j--) { ... }
+for (let j = 100; j > 90; j--) {
+    print(j)
+}
 ```
 
 - Variables declared in `ForInit` are scoped to the loop body.
@@ -1620,6 +1622,8 @@ MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 - Guard expressions following `if` must be parenthesized: `n if (n > 0)`.
 
 ```xray
+match (x) { 1 -> print("one"), _ -> print("other") }
+
 match (action) {
     "start" -> {
         log.info("starting")
@@ -1676,6 +1680,8 @@ FinallyClause ::= 'finally' Block
 ```
 
 ```xray
+try { throw new Exception("inline") } catch (e) { print(e.message) }
+
 try {
     risky()
 } catch (e) {
@@ -1831,8 +1837,8 @@ ParamList ::= Param (',' Param)*
 Param     ::= Modifier* Identifier ':' Type ('=' DefaultValue)?
             | '...' Identifier ':' Type
 Modifier  ::= 'in' | 'ref'
-ReturnType ::= ':' Type
-            |  ':' '(' Type (',' Type)+ ')'   // tuple return
+ReturnType ::= '->' Type
+            |  '->' '(' Type (',' Type)+ ')'   // tuple return
 TypeParams ::= '<' Identifier (',' Identifier)* '>'
 AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 ```
@@ -1861,7 +1867,9 @@ fn echo(x: int) {                       // omitted return type = ()
 #### 5.2.2 Default parameter values
 
 ```xray
-fn connect(host: string, port: int = 8080, tls: bool = false) -> () { ... }
+fn connect(host: string, port: int = 8080, tls: bool = false) {
+    print(host, port, tls)
+}
 
 connect("localhost")              // port=8080, tls=false
 connect("localhost", 443)         // tls=false
@@ -1874,7 +1882,7 @@ connect("localhost", 443, true)
 #### 5.2.3 Multiple return values
 
 ```xray
-fn divmod(a: int, b: int): (int, int) {
+fn divmod(a: int, b: int) -> (int, int) {
     return (a / b, a % b)
 }
 
@@ -2018,7 +2026,7 @@ class Dog extends Animal {
         super(name)                    // **must** be the first statement (derived classes only)
     }
 
-    speak() -> string {                  // override: no keyword required
+    override speak() -> string {         // override is optional but recommended
         return "woof"
     }
 }
@@ -3552,16 +3560,16 @@ Xray's interface implementations require **explicit `implements`** — unlike Go
 interface Drawable { draw() -> () }
 
 class Square implements Drawable {        // explicit implements required
-    draw() -> () { ... }
+    draw() { print("square") }
 }
 
 class Wrong {
-    draw() -> () { ... }
+    draw() { print("wrong") }
 }
 
-fn render(d: Drawable) { ... }
+fn render(d: Drawable) { d.draw() }
 render(new Square())     // OK
-render(new Wrong())      // compile error: Wrong is not Drawable
+// render(new Wrong())   // compile error: Wrong is not Drawable
 ```
 
 #### Structural objects
@@ -3747,18 +3755,26 @@ shared const cha = new Channel(3)          // element type inferred from the fir
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
-shared const ch = new Channel<int>(2)
-ch.send(10)
-let v = ch.recv()                       // 10
+shared const ch = new Channel<int>(10)
+ch.send(42)                             // blocking send
+let v = ch.recv()                       // blocking receive (null after close + drain)
 
-let ok = ch.trySend(20)                 // true / false
-let (val, ok2) = ch.tryRecv()           // tuple destructure: value + ok flag
-if (ok2) { print(val) }
+let sent = ch.trySend(99)               // non-blocking send: true / false
+let (next, ok) = ch.tryRecv()           // non-blocking receive: value + ok flag
+if (ok) { print(next) }
 
 ch.close()
 ```
 
 **send/recv with `move`**: when sending a large object, use `ch.send(move payload)` to transfer ownership and avoid copying; the receiver becomes the sole owner.
+
+In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
+
+```xray
+fn producer(ch: Channel<int>) {
+    ch.send(42)
+}
+```
 
 **Semantics**:
 - **MPMC** (multi-producer, multi-consumer).
@@ -4028,8 +4044,11 @@ ExportSpec ::= Identifier ('as' Identifier)?
 
 ```xray
 // 1. export a declaration directly
-export fn publicFn() -> string { return "hi" }
-export class PublicClass { ... }
+export fn helper() { return }
+export class MyClass {
+    value: int
+    constructor() { this.value = 1 }
+}
 export const VERSION = "1.0"
 
 // 2. export an already-declared identifier (declare internally first, expose at the end)
@@ -4169,10 +4188,10 @@ Xray attributes are prefixed with `@` followed by an identifier. The current par
 
 ```xray
 @test                                 // mark as a test
-fn test_basic() { ... }
+fn test_basic() { return }
 
 @test(skip)                           // skip this test
-fn test_wip() { ... }
+fn test_wip() { return }
 
 @native                               // C implementation
 class Array<T> {
@@ -4182,7 +4201,7 @@ class Array<T> {
 }
 
 @deprecated("use newAPI() instead")
-fn oldAPI() { ... }
+fn oldAPI() { return }
 ```
 
 > Attributes that do not exist (do not use them in user code): `@before_each` / `@after_all` / `@async` / `@override` etc. — these trigger an "unknown attribute name" error.
