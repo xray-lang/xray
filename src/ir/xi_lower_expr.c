@@ -2894,21 +2894,11 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
     xi_lower_braun_write(l, var_id, l->cur_block, cv);
 
     if (l->is_program && var_id < l->var_count && l->shared_map[var_id] >= 0) {
-        if (l->repl_mode) {
-            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-            if (ss) {
-                ss->args[0] = cv;
-                ss->aux = (void *) l->vars[var_id].name;
-                ss->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        } else {
-            XiValue *ss = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-            if (ss) {
-                ss->args[0] = cv;
-                ss->aux_int = l->shared_map[var_id];
-                ss->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        }
+        XiTopBinding binding;
+        binding.slot = l->shared_map[var_id];
+        binding.name = l->vars[var_id].name;
+        binding.type = l->type_any;
+        xi_lower_emit_top_store(l, binding, cv);
     }
 }
 

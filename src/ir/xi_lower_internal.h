@@ -31,12 +31,8 @@ XR_FUNC void xi_lower_braun_seal(XiLower *l, XiBlock *blk);
 /* ========== Variable / Scope Lookup (xi_lower.c) ========== */
 
 XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name);
-XR_FUNC int xi_lower_find_shared(XiLower *l, uint32_t symbol_id, const char *name,
-                                 struct XrType **out_type);
 XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char *name,
                                      struct XrType **out_type);
-XR_FUNC const char *xi_lower_find_global_name(XiLower *l, uint32_t symbol_id, const char *name,
-                                              struct XrType **out_type);
 
 /* ========== Top-level Binding Helpers (xi_lower.c) ========== */
 
@@ -56,9 +52,8 @@ typedef struct XiTopBinding {
 
 /* Walk the parent chain to find a program-level top binding by
  * symbol_id (preferred) or by name fallback.  Returns an invalid
- * binding (slot=-1, name=NULL) on miss.  Equivalent to the union
- * of the previous xi_lower_find_shared + xi_lower_find_global_name
- * lookups, but mode-agnostic — the caller no longer branches. */
+ * binding (slot=-1, name=NULL) on miss.  Mode-agnostic: the caller
+ * never branches on repl_mode. */
 XR_FUNC XiTopBinding xi_lower_find_top_binding(XiLower *l, uint32_t symbol_id, const char *name);
 
 /* Emit a load for the given top binding.  Picks XI_GET_GLOBAL in
