@@ -93,45 +93,6 @@ XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name) 
     return -1;
 }
 
-/* ========== Shared Variable Lookup ========== */
-
-/* Walk the parent chain to find a program-level shared variable.
- * Returns the shared index (>=0) if found, or -1 if not.
- * Sets *out_type to the variable type when found. */
-XR_FUNC int xi_lower_find_shared(XiLower *l, uint32_t symbol_id, const char *name,
-                                 struct XrType **out_type) {
-    for (XiLower *p = l->parent; p; p = p->parent) {
-        if (!p->is_program)
-            continue;
-        int var_id = xi_lower_var_find(p, symbol_id, name);
-        if (var_id >= 0 && p->shared_map[var_id] >= 0) {
-            if (out_type)
-                *out_type = p->vars[var_id].type;
-            return p->shared_map[var_id];
-        }
-    }
-    return -1;
-}
-
-/* Walk the parent chain to find a program-level global variable
- * by name.  Returns the arena-owned name string if found (for use as
- * XI_GET_GLOBAL / XI_SET_GLOBAL aux), or NULL if not found.
- * Only meaningful when repl_mode is active on the program scope. */
-XR_FUNC const char *xi_lower_find_global_name(XiLower *l, uint32_t symbol_id, const char *name,
-                                              struct XrType **out_type) {
-    for (XiLower *p = l->parent; p; p = p->parent) {
-        if (!p->is_program || !p->repl_mode)
-            continue;
-        int var_id = xi_lower_var_find(p, symbol_id, name);
-        if (var_id >= 0 && p->shared_map[var_id] >= 0) {
-            if (out_type)
-                *out_type = p->vars[var_id].type;
-            return p->vars[var_id].name;
-        }
-    }
-    return NULL;
-}
-
 /* ========== Top-Level Binding Helpers ========== */
 
 XR_FUNC XiTopBinding xi_lower_find_top_binding(XiLower *l, uint32_t symbol_id, const char *name) {
