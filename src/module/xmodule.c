@@ -1173,8 +1173,8 @@ XrValue xr_module_import_member(XrayIsolate *isolate, const char *module_name,
 }
 
 /*
-** Add current module's export
-** Called during OP_EXPORT execution
+** Add current module's export by name (string-based convenience).
+** Used by native module registration and legacy paths.
 */
 void xr_module_add_current_export(XrayIsolate *isolate, const char *name, XrValue value,
                                   bool is_const) {

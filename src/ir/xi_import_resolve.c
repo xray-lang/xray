@@ -11,7 +11,7 @@
  *   Walks Xi IR functions and resolves import references against the
  *   XrModuleGraph.  Fills resolved_mod_index (topo position) and
  *   resolved_shared_slot (export slot in target module) so the emitter
- *   can generate OP_LOAD_MODULE_SLOT instead of OP_IMPORT + OP_GETPROP.
+ *   can generate OP_LOAD_MODULE_SLOT (selective) or OP_LOAD_MODULE (whole-module).
  *
  *   Used by both the AOT driver and the VM multi-module compilation path.
  */

@@ -478,8 +478,6 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
     mod->path = path;
     mod->name = name;
     mod->init = init;
-    mod->scc_id = -1;
-    mod->link_status = XI_LINK_UNVISITED;
     /* Populate functions array from init's children */
     if (init->nchildren > 0) {
         mod->functions = (XiFunc **) xr_calloc(init->nchildren, sizeof(XiFunc *));
@@ -497,7 +495,6 @@ XR_FUNC void xi_module_free(XiModule *mod) {
         return;
     xr_free(mod->functions);
     xr_free(mod->exports);
-    xr_free(mod->imports);
     xr_free(mod->classes);
     xr_free(mod->slot_funcs);
     xr_free(mod->slot_classes);

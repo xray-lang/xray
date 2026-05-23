@@ -1914,7 +1914,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 
     /* Whole-module import: import math / import math as m.
      * Emit XI_IMPORT_REF with member_name=NULL so xi_emit generates
-     * OP_IMPORT without OP_GETPROP, binding the module object itself. */
+     * OP_LOAD_MODULE, binding the module object itself. */
     if (imp->member_count == 0) {
         const char *local_name = imp->alias ? imp->alias : imp->module_name;
         if (!local_name)
