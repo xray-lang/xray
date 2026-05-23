@@ -162,11 +162,12 @@ static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *en
 
         if (analyzer) {
             xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+            int file_errs = 0;
             int diag_count = 0;
             XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
             for (XaDiagnostic *d = diags; d; d = d->next) {
                 if (d->severity == XR_DIAG_SEV_ERROR)
-                    errors++;
+                    file_errs++;
                 const char *sev = "error";
                 if (d->severity == XR_DIAG_SEV_WARNING)
                     sev = "warning";
@@ -178,8 +179,12 @@ static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *en
                         d->location.column, sev, d->message);
             }
             xa_analyzer_clear_diagnostics(analyzer);
-            if (errors == 0 && verbose)
-                printf("ok %s\n", spec->source_path);
+            errors += file_errs;
+            if (file_errs == 0) {
+                spec->status = XR_MODSPEC_ANALYZED;
+                if (verbose)
+                    printf("ok %s\n", spec->source_path);
+            }
         } else {
             /* Parse-only mode: AST already parsed during graph build */
             if (verbose)
