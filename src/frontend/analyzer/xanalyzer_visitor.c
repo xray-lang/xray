@@ -535,8 +535,8 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
 
 /* Try to resolve an import target's type from the module graph.
  * Returns the target module's exports hashmap, or NULL if unavailable. */
-static XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *module_name,
-                                        bool is_quoted) {
+XR_FUNC XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *module_name,
+                                         bool is_quoted) {
     XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
     if (!graph || !analyzer->current_file)
         return NULL;

@@ -1,0 +1,39 @@
+// 1035_namespace_import_typed.xr
+// Test: namespace import with typed member access via module graph
+//
+// Verifies that whole-module imports (namespace style) resolve
+// member types from the graph's export table, not just unknown.
+
+import "./modules/typed_lib" as typed_lib
+
+@test
+fn test_namespace_fn_call() {
+    let r = typed_lib.double_it(21)
+    assert_eq(r, 42)
+}
+
+@test
+fn test_namespace_string_fn() {
+    let s = typed_lib.greet("world")
+    assert_eq(s, "Hello, world")
+}
+
+@test
+fn test_namespace_const() {
+    assert_eq(typed_lib.MAGIC, 42)
+}
+
+@test
+fn test_namespace_class() {
+    let p = typed_lib.Point(3, 4)
+    assert_eq(p.x, 3)
+    assert_eq(p.y, 4)
+}
+
+@test
+fn test_namespace_in_nested() {
+    fn inner() -> int {
+        return typed_lib.double_it(5)
+    }
+    assert_eq(inner(), 10)
+}

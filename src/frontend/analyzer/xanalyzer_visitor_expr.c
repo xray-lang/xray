@@ -17,6 +17,7 @@
 #include "xtype_ref_resolve.h"
 #include "xa_selection.h"
 #include "../../base/xchecks.h"
+#include "../../base/xhashmap.h"
 
 /* Record a selection fact for a member/index access node. */
 static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
@@ -372,6 +373,19 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 }
                 // Known module but unknown member - still unknown for extensibility
                 return xr_type_new_unknown(NULL);
+            }
+
+            /* User module namespace: resolve member from graph exports.
+             * Relative paths (starting with ".") indicate a user module. */
+            bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
+            XrHashMap *exports = resolve_graph_exports(ctx->analyzer, mod_name, is_quoted);
+            if (exports) {
+                XrType *member_type = (XrType *) xr_hashmap_get(exports, ma->name);
+                if (member_type) {
+                    record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                                     member_type, false);
+                    return member_type;
+                }
             }
         }
     }
