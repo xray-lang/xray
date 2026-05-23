@@ -154,6 +154,11 @@ typedef struct XrModuleRegistry {
     // Unified specifier → source path resolver (created during init)
     struct XrModuleResolver *resolver;
 
+    // Topo-ordered module table for OP_LOAD_MODULE_SLOT.
+    // Populated during graph-driven initialization; indexed by topo position.
+    XrModule **module_table;
+    int module_table_count;
+
     // Compiler hooks — per-Isolate, NULL in lite/bytecode-only mode.
     // Using void* function pointers avoids pulling in parser/compiler headers.
     void *(*fn_parse)(void *, const char *, const char *);

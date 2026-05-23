@@ -246,6 +246,8 @@
     _(IMPORT, FMT_ABx, KOP_ABx_K, "R[A] = import(K[Bx])")                                          \
     _(EXPORT, FMT_ABC, KOP_SPECIAL, "export(K[A], R[B], C=const?)")                                \
     _(EXPORT_ALL, FMT_A, KOP_A_USE, "export * from R[A]")                                          \
+    _(LOAD_MODULE_SLOT, FMT_ABC, KOP_NEW_CONTAINER,                                                \
+      "R[A] = modules[B].shared[C] (graph-resolved import)")                                       \
     _(ASSERT, FMT_ABC, KOP_SPECIAL, "if !R[A] throw AssertError(K[B]); C=1: negate")               \
     _(ASSERT_EQ, FMT_ABC, KOP_SPECIAL, "if R[A] != R[B] throw AssertError(K[C])")                  \
     _(ASSERT_NE, FMT_ABC, KOP_SPECIAL, "if R[A] == R[B] throw AssertError(K[C])")                  \
