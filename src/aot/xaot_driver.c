@@ -9,11 +9,12 @@
  *
  * KEY CONCEPT:
  *   Full pipeline from source file to generated C program:
- *   1. Bundle discovery (topo-sorted module list)
- *   2. Per-module: parse → analyze → Xi IR lower → optimize → select_rep
- *   3. Cross-module import resolution via XiFunc export_names + import table
- *   4. C code generation via xi_cgen
- *   5. Main() generation calling module inits in topo order
+ *   1. Module graph discovery (topo-sorted via XrModuleGraph)
+ *   2. Cross-module analysis with shared XaAnalyzer (typed imports)
+ *   3. Per-module: canonicalize → Xi IR lower → optimize → select_rep
+ *   4. Cross-module import resolution via export table
+ *   5. C code generation via xi_cgen
+ *   6. Main() generation calling module inits in topo order
  *
  * RELATED MODULES:
  *   - xi_cgen.h: Xi IR → C code generation
@@ -26,6 +27,9 @@
 #include "../../include/xray_isolate.h"
 #include "../runtime/xisolate_api.h"
 #include "../module/xbundle.h"
+#include "../module/xmodule_graph.h"
+#include "../module/xmodule_resolver.h"
+#include "../module/xmodule.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
 #include "../ir/xi.h"
@@ -36,6 +40,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <limits.h>
 
 /* ========== File reading helper (avoids CLI layer dependency) ========== */
 
@@ -255,43 +260,71 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
 
     printf("[xi-native] Building: %s\n", input_path);
 
-    /* --- Discover modules via bundle (topo order, entry last) --- */
-    int nmodules = 0;
-    int entry_index = -1;
-    char **paths = NULL;
-    char **mod_names = NULL;
-    {
-        XrayIsolate *Xb = create_isolate();
-        if (!Xb) {
-            fprintf(stderr, "Error: failed to create isolate\n");
-            return 1;
-        }
-        XrBundle *bundle = xr_bundle_create_ex(Xb, input_path, XR_BUNDLE_DEFAULT);
-        if (!bundle) {
-            fprintf(stderr, "Error: bundling failed\n");
-            xray_isolate_delete(Xb);
-            return 1;
-        }
-        nmodules = bundle->count;
-        paths = (char **) xr_calloc(nmodules, sizeof(char *));
-        mod_names = (char **) xr_calloc(nmodules, sizeof(char *));
-        if (!paths || !mod_names) {
-            xr_bundle_free(bundle);
-            xray_isolate_delete(Xb);
-            xr_free(paths);
-            xr_free(mod_names);
-            return 1;
-        }
-        for (int i = 0; i < nmodules; i++) {
-            paths[i] = xr_strdup(bundle->entries[i].path);
-            mod_names[i] = derive_module_name(bundle->entries[i].path);
-            if (bundle->entry_path && strcmp(bundle->entries[i].path, bundle->entry_path) == 0)
-                entry_index = i;
-        }
-        xr_bundle_free(bundle);
-        xray_isolate_delete(Xb);
+    /* --- Build module graph (topo order, entry last) --- */
+    XrayIsolate *X = create_isolate();
+    if (!X) {
+        fprintf(stderr, "Error: failed to create isolate\n");
+        return 1;
     }
-    XR_DCHECK(entry_index >= 0, "xaot_build: entry not found in bundle");
+
+    xr_module_system_init_with_script(X, input_path);
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    XrModuleGraph *graph = xr_module_graph_new(X, resolver);
+    if (!graph) {
+        fprintf(stderr, "Error: failed to create module graph\n");
+        xray_isolate_delete(X);
+        return 1;
+    }
+
+    char *build_err = NULL;
+    if (xr_module_graph_build(graph, input_path, &build_err) != 0) {
+        fprintf(stderr, "Error: module graph build failed: %s\n", build_err ? build_err : "?");
+        xr_free(build_err);
+        xr_module_graph_free(graph);
+        xray_isolate_delete(X);
+        return 1;
+    }
+    xr_free(build_err);
+
+    xr_module_graph_topological_sort(graph);
+    if (graph->has_cycle) {
+        fprintf(stderr, "Error: %s\n",
+                graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
+        xr_module_graph_free(graph);
+        xray_isolate_delete(X);
+        return 1;
+    }
+
+    int nmodules = graph->topo_count;
+    int entry_index = -1;
+
+    /* Build parallel arrays for paths/names (graph topo order) */
+    char **paths = (char **) xr_calloc(nmodules, sizeof(char *));
+    char **mod_names = (char **) xr_calloc(nmodules, sizeof(char *));
+    if (!paths || !mod_names) {
+        xr_free(paths);
+        xr_free(mod_names);
+        xr_module_graph_free(graph);
+        xray_isolate_delete(X);
+        return 1;
+    }
+    /* Resolve input_path to canonical form (handles symlinks like /tmp -> /private/tmp) */
+    char real_input[PATH_MAX];
+    if (!realpath(input_path, real_input))
+        strncpy(real_input, input_path, PATH_MAX - 1);
+
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        paths[ti] = xr_strdup(spec->source_path);
+        mod_names[ti] = derive_module_name(spec->source_path);
+        if (strcmp(spec->source_path, real_input) == 0)
+            entry_index = ti;
+    }
+    /* Entry is the last module in topo order (all deps come first) */
+    if (entry_index < 0)
+        entry_index = nmodules - 1;
 
     if (nmodules > 1) {
         printf("[xi-native] %d modules (topo order):\n", nmodules);
@@ -299,59 +332,76 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
             printf("  [%d] %s%s\n", i, paths[i], i == entry_index ? " (entry)" : "");
     }
 
-    /* --- Compile all modules through Xi IR pipeline --- */
-    XrayIsolate *X = create_isolate();
-    if (!X) {
-        fprintf(stderr, "Error: failed to create isolate\n");
-        goto fail_free_names;
+    /* --- Analyze all modules with shared analyzer (cross-module types) --- */
+    XaAnalyzer *shared_analyzer = xa_analyzer_new(X);
+    if (!shared_analyzer) {
+        fprintf(stderr, "Error: failed to create shared analyzer\n");
+        goto fail_free_graph;
+    }
+    xa_analyzer_set_graph(shared_analyzer, graph);
+
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->ast || !spec->source_path)
+            continue;
+        xa_analyzer_analyze(shared_analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        spec->exports = xa_analyzer_collect_exports(shared_analyzer, (XrAstNode *) spec->ast);
     }
 
+    /* --- Compile all modules through Xi IR pipeline --- */
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
     XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));
     XiFunc **ir_funcs = (XiFunc **) xr_calloc(nmodules, sizeof(XiFunc *));
-    if (!pres_arr || !ir_funcs) {
-        xr_free(pres_arr);
-        xr_free(ir_funcs);
-        xray_isolate_delete(X);
-        goto fail_free_names;
-    }
-
-    /* Module metadata array (parallel to ir_funcs) */
     XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));
-    if (!modules) {
+    if (!pres_arr || !ir_funcs || !modules) {
         xr_free(pres_arr);
         xr_free(ir_funcs);
-        xray_isolate_delete(X);
-        goto fail_free_names;
+        xr_free(modules);
+        xa_analyzer_set_graph(shared_analyzer, NULL);
+        xa_analyzer_free(shared_analyzer);
+        goto fail_free_graph;
     }
 
     int total_funcs = 0;
-    for (int m = 0; m < nmodules; m++) {
-        pres_arr[m] = xi_compile_one(paths[m], X);
-        if (pres_arr[m].status != XI_PIPE_OK) {
-            /* Clean up already-compiled modules */
-            for (int j = 0; j <= m; j++)
-                xi_pipeline_result_free(&pres_arr[j]);
-            for (int j = 0; j < m; j++)
-                xi_module_free(modules[j]);
-            xr_free(modules);
-            xr_free(pres_arr);
-            xr_free(ir_funcs);
-            xray_isolate_delete(X);
-            goto fail_free_names;
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->ast || !spec->source_path) {
+            pres_arr[ti].status = XI_PIPE_ERR_INTERNAL;
+            fprintf(stderr, "Error: no AST for module '%s'\n", paths[ti]);
+            goto fail_free_ir;
         }
-        ir_funcs[m] = pres_arr[m].ir;
-        XR_DCHECK(ir_funcs[m] != NULL, "xaot_build: pipeline OK but NULL IR");
-        total_funcs += 1 + ir_funcs[m]->nchildren;
 
-        /* Module metadata is always built during lowering. */
-        XR_DCHECK(ir_funcs[m]->module != NULL, "xaot_build: pipeline produced no module metadata");
-        modules[m] = ir_funcs[m]->module;
-        modules[m]->path = paths[m];
-        modules[m]->name = mod_names[m];
-        /* Detach from func so xi_func_free won't double-free */
-        ir_funcs[m]->module = NULL;
+        /* Compile using the shared analyzer (has cross-module type info) */
+        pres_arr[ti] = xi_pipeline_compile_program((AstNode *) spec->ast, shared_analyzer, X, &cfg);
+        if (pres_arr[ti].status != XI_PIPE_OK) {
+            fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n", paths[ti],
+                    xi_pipe_status_str(pres_arr[ti].status));
+            if (pres_arr[ti].error_msg)
+                fprintf(stderr, "  %s\n", pres_arr[ti].error_msg);
+            goto fail_free_ir;
+        }
+        ir_funcs[ti] = pres_arr[ti].ir;
+        XR_DCHECK(ir_funcs[ti] != NULL, "xaot_build: pipeline OK but NULL IR");
+        total_funcs += 1 + ir_funcs[ti]->nchildren;
+
+        XR_DCHECK(ir_funcs[ti]->module != NULL, "xaot_build: pipeline produced no module metadata");
+        modules[ti] = ir_funcs[ti]->module;
+        modules[ti]->path = paths[ti];
+        modules[ti]->name = mod_names[ti];
+        ir_funcs[ti]->module = NULL;
     }
+    xa_analyzer_set_graph(shared_analyzer, NULL);
+    xa_analyzer_free(shared_analyzer);
+    shared_analyzer = NULL;
+
+    /* Graph ASTs must not be freed before compilation is done.
+     * Now that pipeline is complete, free the graph (frees ASTs too). */
+    xr_module_graph_free(graph);
+    graph = NULL;
     xray_isolate_delete(X);
+    X = NULL;
 
     /* --- Create codegen context (no global state) --- */
     XiCgenCtx *cg_ctx = xi_cgen_ctx_new();
@@ -433,13 +483,22 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
 
 fail_free_ir:
     for (int m = 0; m < nmodules; m++) {
-        xi_module_free(modules[m]);
+        if (modules)
+            xi_module_free(modules[m]);
         xi_pipeline_result_free(&pres_arr[m]);
     }
     xr_free(modules);
     xr_free(pres_arr);
     xr_free(ir_funcs);
-fail_free_names:
+    if (shared_analyzer) {
+        xa_analyzer_set_graph(shared_analyzer, NULL);
+        xa_analyzer_free(shared_analyzer);
+    }
+fail_free_graph:
+    if (graph)
+        xr_module_graph_free(graph);
+    if (X)
+        xray_isolate_delete(X);
     for (int i = 0; i < nmodules; i++) {
         xr_free(paths[i]);
         xr_free(mod_names[i]);
