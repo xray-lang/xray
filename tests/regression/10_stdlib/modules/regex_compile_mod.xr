@@ -1,0 +1,17 @@
+// Module-level regex.compile() in a non-entry module.
+// Triggers the multi-module preload code path that previously caused
+// xr_alloc to receive a non-coroutine pointer (FATAL).
+// See: stdlib/regex/xregex_binding.c wrap_regex
+
+import regex
+
+const RE_DIGIT = regex.compile(r"^\d+$")
+const RE_WORD = regex.compile(r"^[a-zA-Z_]\w*$")
+
+export fn isDigit(s: string) -> bool {
+    return regex.test(RE_DIGIT, s)
+}
+
+export fn isWord(s: string) -> bool {
+    return regex.test(RE_WORD, s)
+}

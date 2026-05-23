@@ -163,8 +163,12 @@ static inline bool is_regex_instance(XrValue v) {
 static XrValue wrap_regex(XrayIsolate *isolate, XrRegex *re) {
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     XR_DCHECK(core && core->regexClass, "wrap_regex: regexClass not registered");
-    XrCoroutine *coro = xr_current_coro(isolate);
-    XrInstance *inst = xr_instance_new(coro, core->regexClass);
+    /* xr_instance_new takes XrayIsolate*, not XrCoroutine*; passing coro
+     * here was type-confusion that caused module-init regex.compile to
+     * dereference garbage when no coroutine was running yet (multi-module
+     * preload phase before VM start). xr_instance_new internally resolves
+     * the current coro via xr_current_coro(isolate). */
+    XrInstance *inst = xr_instance_new(isolate, core->regexClass);
     if (!inst)
         return xr_null();
     RegexBody *body = regex_body(inst);
