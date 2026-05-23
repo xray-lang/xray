@@ -399,7 +399,9 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
 
     // Parse function body (must be block)
     xr_parser_consume(parser, TK_LBRACE, "function body must use braces { }");
+    parser->scope_depth++;
     AstNode *body = xr_parse_block(parser);
+    parser->scope_depth--;
 
     // If has destructure params, insert destructure code at function body start
     for (int i = 0; i < param_count; i++) {
@@ -1060,12 +1062,20 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
  */
 AstNode *xr_parse_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_declaration: NULL parser");
-    // Module system
+    // Module system (only allowed at top level)
     if (xr_parser_match(parser, TK_IMPORT)) {
+        if (parser->scope_depth > 0) {
+            xr_parser_error(parser, "'import' must appear at module top level");
+            return NULL;
+        }
         return xr_parse_import_declaration(parser);
     }
 
     if (xr_parser_match(parser, TK_EXPORT)) {
+        if (parser->scope_depth > 0) {
+            xr_parser_error(parser, "'export' must appear at module top level");
+            return NULL;
+        }
         return xr_parse_export_declaration(parser);
     }
 

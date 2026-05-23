@@ -89,6 +89,10 @@ struct Parser {
 
     // True while parsing a @native class body: methods have no body.
     bool parsing_native_class;
+
+    // Nesting depth for module-level restriction checks.
+    // 0 = top-level (import/export allowed), >0 = inside function/class body.
+    int scope_depth;
 };
 
 /* ========== Public Entry Points ========== */

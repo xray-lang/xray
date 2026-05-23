@@ -542,6 +542,7 @@ AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int 
                                       int line) {
     AstNode *body;
 
+    parser->scope_depth++;
     if (xr_parser_match(parser, TK_LBRACE)) {
         // Block body: -> { ... }
         body = xr_parse_block(parser);
@@ -557,6 +558,8 @@ AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int 
         body = xr_ast_block(parser->X, line);
         xr_ast_block_add(parser->X, body, return_stmt);
     }
+
+    parser->scope_depth--;
 
     // params ownership transferred to func_expr
     return xr_ast_function_expr(parser->X, params, param_count, body, line);
@@ -646,7 +649,9 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
 
     // Parse function body (must be block)
     xr_parser_consume(parser, TK_LBRACE, "fn function body must use braces { }");
+    parser->scope_depth++;
     AstNode *body = xr_parse_block(parser);
+    parser->scope_depth--;
 
     AstNode *func_expr = xr_ast_function_expr(parser->X, params, param_count, body, line);
     func_expr->as.function_expr.return_type = return_type;
