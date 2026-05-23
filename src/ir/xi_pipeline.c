@@ -270,6 +270,22 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     return run_pipeline(ir, isolate, cfg);
 }
 
+XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrayIsolate *isolate) {
+    XR_DCHECK(ir != NULL, "xi_pipeline_emit_ir: NULL ir");
+    XR_DCHECK(isolate != NULL, "xi_pipeline_emit_ir: NULL isolate");
+
+    struct XrProto *proto = NULL;
+    XiEmitStatus emit_st = xi_emit(ir, isolate, &proto);
+    if (emit_st != XI_EMIT_OK) {
+        fprintf(stderr, "[xi_pipeline] emit_ir failed: %s\n", xi_emit_status_str(emit_st));
+        return NULL;
+    }
+
+    /* Transfer IR ownership to proto for JIT direct lowering */
+    xi_emit_attach_ir(proto, ir);
+    return proto;
+}
+
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res) {
     if (!res)
         return;

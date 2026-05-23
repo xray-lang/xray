@@ -110,6 +110,12 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
                                                      struct XrayIsolate *isolate,
                                                      const XiPipelineConfig *cfg);
 
+/* Emit bytecode from a pre-lowered XiFunc* (for split compilation).
+ * The IR must have been lowered and optimized (via compile_program with
+ * run_emit=false, or the AOT pipeline).  Returns XrProto on success, NULL
+ * on emission failure.  Attaches the IR to the proto for JIT reuse. */
+XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrayIsolate *isolate);
+
 /* Free pipeline result (frees IR, does NOT free proto). */
 XR_FUNC void xi_pipeline_result_free(XiPipelineResult *res);
 
