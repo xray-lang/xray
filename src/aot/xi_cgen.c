@@ -117,6 +117,8 @@ struct XiCgenCtx {
     const char *shared_name;
     CgImportEntry imports[CG_MAX_IMPORTS];
     int nimports;
+    XiModule **all_modules; /* full modules array for resolved-index lookups */
+    int all_nmodules;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
 };
 
@@ -865,23 +867,47 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     target = ctx->shared_funcs[slot];
             }
 
-            /* XI_IMPORT_REF callee → cross-module imported function or class */
+            /* XI_IMPORT_REF callee → cross-module imported function or class.
+             * Try resolved-index fast path first, then fall back to string scan. */
             const char *import_prefix = NULL;
             bool import_is_class = false;
             if (!target && callee->op == XI_IMPORT_REF && callee->aux) {
                 const XiImportRef *ref = (const XiImportRef *) callee->aux;
-                for (int ii = 0; ii < ctx->nimports; ii++) {
-                    if (ctx->imports[ii].module_path && ref->module_path &&
-                        strcmp(ctx->imports[ii].module_path, ref->module_path) == 0 &&
-                        ctx->imports[ii].member_name && ref->member_name &&
-                        strcmp(ctx->imports[ii].member_name, ref->member_name) == 0) {
-                        if (ctx->imports[ii].target_func) {
-                            target = ctx->imports[ii].target_func;
-                            import_prefix = ctx->imports[ii].target_mod_name;
+                /* Fast path: use resolved fields to find the matching import entry */
+                if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules) {
+                    const char *tmod_name = ctx->all_modules[ref->resolved_mod_index]
+                                                ? ctx->all_modules[ref->resolved_mod_index]->name
+                                                : NULL;
+                    for (int ii = 0; ii < ctx->nimports; ii++) {
+                        if (ctx->imports[ii].target_mod_name && tmod_name &&
+                            strcmp(ctx->imports[ii].target_mod_name, tmod_name) == 0 &&
+                            ctx->imports[ii].member_name && ref->member_name &&
+                            strcmp(ctx->imports[ii].member_name, ref->member_name) == 0) {
+                            if (ctx->imports[ii].target_func) {
+                                target = ctx->imports[ii].target_func;
+                                import_prefix = ctx->imports[ii].target_mod_name;
+                            }
+                            if (ctx->imports[ii].target_class)
+                                import_is_class = true;
+                            break;
                         }
-                        if (ctx->imports[ii].target_class)
-                            import_is_class = true;
-                        break;
+                    }
+                }
+                /* Fallback: string-scan by module_path */
+                if (!target && !import_is_class) {
+                    for (int ii = 0; ii < ctx->nimports; ii++) {
+                        if (ctx->imports[ii].module_path && ref->module_path &&
+                            strcmp(ctx->imports[ii].module_path, ref->module_path) == 0 &&
+                            ctx->imports[ii].member_name && ref->member_name &&
+                            strcmp(ctx->imports[ii].member_name, ref->member_name) == 0) {
+                            if (ctx->imports[ii].target_func) {
+                                target = ctx->imports[ii].target_func;
+                                import_prefix = ctx->imports[ii].target_mod_name;
+                            }
+                            if (ctx->imports[ii].target_class)
+                                import_is_class = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -1546,12 +1572,20 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Cross-module import reference: look up (module_path, member_name)
-         * in the global import table populated by the AOT driver. */
+        /* Cross-module import reference: use resolved indices when available,
+         * otherwise fall back to string-scanning the import table. */
         case XI_IMPORT_REF: {
             const XiImportRef *ref = (const XiImportRef *) v->aux;
             bool found = false;
-            if (ref) {
+            if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
+                ref->resolved_mod_index < ctx->all_nmodules &&
+                ctx->all_modules[ref->resolved_mod_index]) {
+                /* Fast path: resolved at compile time via module graph */
+                const char *tname = ctx->all_modules[ref->resolved_mod_index]->name;
+                fprintf(out, "xrt_shared_%s[%d]", tname ? tname : "mod", ref->resolved_shared_slot);
+                found = true;
+            }
+            if (!found && ref) {
                 for (int ii = 0; ii < ctx->nimports; ii++) {
                     if (ctx->imports[ii].module_path && ref->module_path &&
                         strcmp(ctx->imports[ii].module_path, ref->module_path) == 0 &&
@@ -2041,6 +2075,8 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
 
     ctx->nimports = 0;
     memset(ctx->imports, 0, sizeof(ctx->imports));
+    ctx->all_modules = modules;
+    ctx->all_nmodules = nmodules;
 
     for (int exporter = 0; exporter < nmodules; exporter++) {
         XiModule *emod = modules[exporter];
