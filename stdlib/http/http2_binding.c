@@ -14,8 +14,10 @@
 #include "http2_client.h"
 #include "http2_server.h"
 #include "http.h"
+#include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
+#include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
 #include <string.h>
@@ -72,6 +74,74 @@ static int64_t json_get_int(XrayIsolate *X, XrJson *json, const char *key, int64
     return def;
 }
 
+/* ========== Header Extraction (Json/Map -> XrHttpHeader[]) ========== */
+
+/*
+ * Parse the `headers` field of an HTTP options Json into an
+ * XrHttpHeader array. Caller owns the returned array and must
+ * xr_free() it after use. Supports both Map<string,string> and Json
+ * object shapes — mirrors what http.c does for HTTP/1.1 requests.
+ *
+ * Returns NULL on allocation failure or when no headers are present.
+ * On success, *out_count holds the number of headers extracted.
+ */
+static XrHttpHeader *extract_headers_from_options(XrayIsolate *X, XrJson *opts, int *out_count) {
+    *out_count = 0;
+    XrValue headers_val = xr_json_get_by_key(X, opts, "headers");
+
+    if (xr_value_is_map(headers_val)) {
+        XrMap *m = xr_value_to_map(headers_val);
+        if (!m || m->count == 0)
+            return NULL;
+        XrHttpHeader *out = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * m->count);
+        if (!out)
+            return NULL;
+        int idx = 0;
+        uint32_t map_size = xr_map_sizenode(m);
+        for (uint32_t i = 0; i < map_size && idx < m->count; i++) {
+            XrMapNode *node = &m->node[i];
+            if (!XR_MAP_NODE_EMPTY(node) && XR_IS_STRING(node->key) && XR_IS_STRING(node->value)) {
+                XrString *k = XR_TO_STRING(node->key);
+                XrString *v = XR_TO_STRING(node->value);
+                out[idx].name = k->data;
+                out[idx].name_len = k->length;
+                out[idx].value = v->data;
+                out[idx].value_len = v->length;
+                idx++;
+            }
+        }
+        *out_count = idx;
+        return out;
+    }
+
+    if (xr_value_is_json(headers_val)) {
+        XrJson *hjson = xr_value_to_json(headers_val);
+        XrClass *cls = hjson->klass;
+        if (!cls || cls->field_count == 0)
+            return NULL;
+        XrHttpHeader *out = (XrHttpHeader *) xr_malloc(sizeof(XrHttpHeader) * cls->field_count);
+        if (!out)
+            return NULL;
+        int idx = 0;
+        for (uint16_t i = 0; i < cls->field_count; i++) {
+            XrValue val = xr_instance_get_dynamic_field(hjson, i);
+            const char *field_name = cls->fields[i].name;
+            if (field_name && XR_IS_STRING(val)) {
+                XrString *v = XR_TO_STRING(val);
+                out[idx].name = field_name;
+                out[idx].name_len = strlen(field_name);
+                out[idx].value = v->data;
+                out[idx].value_len = v->length;
+                idx++;
+            }
+        }
+        *out_count = idx;
+        return out;
+    }
+
+    return NULL;
+}
+
 /* ========== HTTP/2 Response Building ========== */
 
 // Convert HTTP/2 response to Json
@@ -97,7 +167,12 @@ static XrValue h2_response_to_json(XrayIsolate *X, XrH2Response *resp) {
 /* ========== HTTP/2 Client Binding ========== */
 
 /*
- * http.h2Get(url: string) -> Json
+ * http.h2Get(url: string, options?: Json) -> Json
+ *
+ * options: {
+ *   headers?: Json | Map<string, string>,
+ *   timeout?: int  // currently informational; h2 client uses pool defaults
+ * }
  */
 XrValue h2_get(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1 || !XR_IS_STRING(args[0])) {
@@ -105,7 +180,26 @@ XrValue h2_get(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     const char *url = get_cstring(args[0], NULL);
-    XrH2Response *resp = xr_h2_get(url);
+
+    XrH2Response *resp = NULL;
+    if (argc >= 2 && xr_value_is_json(args[1])) {
+        XrJson *opts = xr_value_to_json(args[1]);
+        int hcount = 0;
+        XrHttpHeader *headers = extract_headers_from_options(X, opts, &hcount);
+        if (hcount > 0) {
+            XrH2Request req = {0};
+            req.method = "GET";
+            req.headers = headers;
+            req.header_count = hcount;
+            resp = xr_h2_request(url, &req);
+        } else {
+            resp = xr_h2_get(url);
+        }
+        if (headers)
+            xr_free(headers);
+    } else {
+        resp = xr_h2_get(url);
+    }
 
     if (!resp)
         return xr_null();
@@ -163,7 +257,17 @@ XrValue h2_request(XrayIsolate *X, XrValue *args, int argc) {
     req.method = json_get_string(X, opts, "method", NULL);
     req.body = json_get_string(X, opts, "body", &req.body_len);
 
+    int hcount = 0;
+    XrHttpHeader *headers = extract_headers_from_options(X, opts, &hcount);
+    if (hcount > 0) {
+        req.headers = headers;
+        req.header_count = hcount;
+    }
+
     XrH2Response *resp = xr_h2_request(url, &req);
+
+    if (headers)
+        xr_free(headers);
 
     if (!resp)
         return xr_null();

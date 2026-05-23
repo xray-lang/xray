@@ -33,6 +33,7 @@
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xjson_serde.h"
+#include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/gc/xgc_internal.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xarena.h"
@@ -153,17 +154,68 @@ typedef struct {
     size_t len;
 } HttpRawResponse;
 
+/* Map common status codes to reason phrases. Fallback "OK" preserves
+ * existing behaviour for unknown codes. */
+static const char *status_reason(int status) {
+    switch (status) {
+        case 200:
+            return "OK";
+        case 201:
+            return "Created";
+        case 204:
+            return "No Content";
+        case 301:
+            return "Moved Permanently";
+        case 302:
+            return "Found";
+        case 303:
+            return "See Other";
+        case 304:
+            return "Not Modified";
+        case 307:
+            return "Temporary Redirect";
+        case 308:
+            return "Permanent Redirect";
+        case 400:
+            return "Bad Request";
+        case 401:
+            return "Unauthorized";
+        case 403:
+            return "Forbidden";
+        case 404:
+            return "Not Found";
+        case 405:
+            return "Method Not Allowed";
+        case 409:
+            return "Conflict";
+        case 429:
+            return "Too Many Requests";
+        case 500:
+            return "Internal Server Error";
+        case 502:
+            return "Bad Gateway";
+        case 503:
+            return "Service Unavailable";
+        case 504:
+            return "Gateway Timeout";
+        default:
+            return "OK";
+    }
+}
+
 /*
- * Build HTTP response header into caller-provided buf[512].
+ * Build HTTP response header into caller-provided buf[1024].
  * Fast path for 200+text/plain and 200+json uses prebuilt prefix + memcpy.
- * Returns header length written into buf.
+ * Extra headers (if non-NULL) are appended after Content-Type before
+ * Connection: keep-alive. Returns header length written into buf.
  */
-static int build_response_header(char *buf, int status, const char *content_type, size_t body_len) {
+static int build_response_header(char *buf, int status, const char *content_type, size_t body_len,
+                                 const XrHttpHeader *extra_headers, int extra_count) {
     const char *prefix = NULL;
     size_t prefix_len = 0;
 
-    // Fast path: prebuilt prefix for the two most common combos
-    if (status == 200) {
+    // Fast path: prebuilt prefix for the two most common combos (no extra headers)
+    if (status == 200 && extra_count == 0) {
         if (!content_type || strncmp(content_type, "text/plain", 10) == 0) {
             prefix = hdr_200_text;
             prefix_len = sizeof(hdr_200_text) - 1;
@@ -186,30 +238,36 @@ static int build_response_header(char *buf, int status, const char *content_type
     // Slow path: snprintf for uncommon status codes / content types
     if (!content_type)
         content_type = "text/plain; charset=utf-8";
-    const char *status_text = "OK";
-    if (status == 404)
-        status_text = "Not Found";
-    else if (status == 500)
-        status_text = "Internal Server Error";
-    else if (status == 201)
-        status_text = "Created";
-    else if (status == 204)
-        status_text = "No Content";
 
-    return snprintf(buf, 512,
-                    "HTTP/1.1 %d %s\r\n"
-                    "Content-Type: %s\r\n"
-                    "Content-Length: %zu\r\n"
-                    "Connection: keep-alive\r\n"
-                    "\r\n",
-                    status, status_text, content_type, body_len);
+    int pos = snprintf(buf, 1024,
+                       "HTTP/1.1 %d %s\r\n"
+                       "Content-Type: %s\r\n"
+                       "Content-Length: %zu\r\n",
+                       status, status_reason(status), content_type, body_len);
+
+    // Append user-supplied extra headers (each "Name: Value\r\n").
+    for (int i = 0; i < extra_count && pos < 900; i++) {
+        const XrHttpHeader *h = &extra_headers[i];
+        if (!h->name || h->name_len == 0)
+            continue;
+        int n = snprintf(buf + pos, 1024 - pos, "%.*s: %.*s\r\n", (int) h->name_len, h->name,
+                         (int) h->value_len, h->value ? h->value : "");
+        if (n < 0)
+            break;
+        pos += n;
+    }
+
+    pos += snprintf(buf + pos, 1024 - pos, "Connection: keep-alive\r\n\r\n");
+    return pos;
 }
 
-static HttpRawResponse format_response_raw(int status, const char *content_type, const char *body,
-                                           size_t body_len) {
+static HttpRawResponse format_response_raw_ex(int status, const char *content_type,
+                                              const char *body, size_t body_len,
+                                              const XrHttpHeader *extra_headers, int extra_count) {
     HttpRawResponse resp = {NULL, 0};
-    char header[512];
-    int header_len = build_response_header(header, status, content_type, body_len);
+    char header[1024];
+    int header_len =
+        build_response_header(header, status, content_type, body_len, extra_headers, extra_count);
 
     resp.len = header_len + body_len;
     resp.data = (char *) xr_malloc(resp.len);
@@ -224,12 +282,17 @@ static HttpRawResponse format_response_raw(int status, const char *content_type,
     return resp;
 }
 
+static HttpRawResponse format_response_raw(int status, const char *content_type, const char *body,
+                                           size_t body_len) {
+    return format_response_raw_ex(status, content_type, body, body_len, NULL, 0);
+}
+
 // Arena-based format_response: allocates from per-request arena (no free needed)
 static HttpRawResponse format_response_arena(XrArena *arena, int status, const char *content_type,
                                              const char *body, size_t body_len) {
     HttpRawResponse resp = {NULL, 0};
-    char header[512];
-    int header_len = build_response_header(header, status, content_type, body_len);
+    char header[1024];
+    int header_len = build_response_header(header, status, content_type, body_len, NULL, 0);
 
     resp.len = header_len + body_len;
     resp.data = (char *) xr_arena_alloc_raw(arena, resp.len);
@@ -272,7 +335,10 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
         return format_response_raw(200, NULL, XR_STRING_CHARS(str), str->length);
     }
 
-    // Array -> [status, contentType, body]
+    // Array -> [status, contentType, body, headersMap?]
+    //   - 3 elements: status + content-type + body (existing behaviour)
+    //   - 4 elements: 4th is Map<string, string> of extra response headers
+    //     (used for redirects via "Location", CORS, custom auth, etc.)
     if (XR_IS_PTR(result) && XR_GC_GET_TYPE((XrGCHeader *) XR_TO_PTR(result)) == XR_TARRAY) {
         XrArray *arr = (XrArray *) XR_TO_PTR(result);
         int arr_len = arr->length;
@@ -302,7 +368,31 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
                 body_len = s->length;
             }
         }
-        return format_response_raw(status, ct, body, body_len);
+
+        XrHttpHeader stack_headers[16];
+        int extra_count = 0;
+        if (arr_len >= 4 && data && xr_value_is_map(data[3])) {
+            XrMap *m = xr_value_to_map(data[3]);
+            if (m && m->count > 0) {
+                uint32_t map_size = xr_map_sizenode(m);
+                for (uint32_t i = 0; i < map_size && extra_count < 16; i++) {
+                    XrMapNode *node = &m->node[i];
+                    if (!XR_MAP_NODE_EMPTY(node) && XR_IS_STRING(node->key) &&
+                        XR_IS_STRING(node->value)) {
+                        XrString *k = XR_TO_STRING(node->key);
+                        XrString *v = XR_TO_STRING(node->value);
+                        stack_headers[extra_count].name = XR_STRING_CHARS(k);
+                        stack_headers[extra_count].name_len = k->length;
+                        stack_headers[extra_count].value = XR_STRING_CHARS(v);
+                        stack_headers[extra_count].value_len = v->length;
+                        extra_count++;
+                    }
+                }
+            }
+        }
+
+        return format_response_raw_ex(status, ct, body, body_len,
+                                      extra_count > 0 ? stack_headers : NULL, extra_count);
     }
 
     // int/float/bool -> convert to string
@@ -344,8 +434,7 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
 
 // Forward declarations
 static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *ctx,
-                                            XrValue *result);
+static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *ctx, XrValue *result);
 static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
 static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *ctx, XrValue *result);
 static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, void *ctx,
