@@ -4016,7 +4016,7 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 
 ## 11. 模块系统 (Modules)
 
-> 真值源：`src/module/xmodule.c`、`src/module/xmodule_resolve.c`、`src/frontend/parser/xparse_import.c`。
+> 真值源：`src/module/xmodule.c`、`src/module/xmodule_resolver.c`、`src/module/xmodule_graph.c`、`src/frontend/parser/xparse_import.c`。
 
 ### 11.1 模块定义
 
@@ -4057,6 +4057,8 @@ test = "1.0"
 
 ### 11.3 `import` 语法
 
+`import` 声明**只能出现在模块顶层**。在函数、类或任何嵌套作用域内使用 `import` 会产生编译错误。
+
 ```ebnf
 ImportStmt ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
@@ -4086,7 +4088,9 @@ import { readFile, writeFile as write } from io
 import { publicFn } from "./modules/mod_a"
 ```
 
-**不支持** JavaScript 默认导入 `import name from "module"`。在 Xray 中使用 `import "module" as name`、`import module` 或 `import { name } from module`。
+**不支持**：
+- JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
+- 动态导入 `import("module")`。所有导入必须是静态声明。
 
 **解析算法**（按优先级）：
 1. **stdlib 命名解析**：裸标识符 `import time` → 内置 stdlib 模块表。
@@ -4094,11 +4098,15 @@ import { publicFn } from "./modules/mod_a"
 3. **项目根目录路径**：不以 `./` 或 `../` 开头的 quoted path 作为项目目录 import。
 4. **第三方包**：`"owner/name"` 由 `xray.toml` 的 `[dependencies]` 解析。
 
-**真值源**：`xparse_import.c` 与 `xmodule_resolve_path()`。
+**Specifier 校验**（编译错误）：
+- 禁止包含 `.xr` 扩展名：`import "./a.xr"` → 错误
+- 禁止末尾斜杠：`import "./a/"` → 错误
+- 禁止显式 `index`：`import "./a/index"` → 错误
+- 禁止绝对路径：`import "/etc/foo"` → 错误
 
 ### 11.4 `export` 与可见性
 
-xray 支持三种 export 形式：
+`export` 声明**只能出现在模块顶层**。xray 支持三种 export 形式：
 
 ```ebnf
 ExportStmt ::= 'export' Declaration                              // 直接 export 声明
@@ -4106,6 +4114,7 @@ ExportStmt ::= 'export' Declaration                              // 直接 expor
             |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
             |  'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
+Declaration ::= FnDecl | ClassDecl | StructDecl | ConstDecl | TypeAlias
 ```
 
 ```xray
@@ -4129,8 +4138,10 @@ export { getUser, getUserAge as getAge } from "./user"
 export * from "./product"
 ```
 
+**限制**：
 - 未标 `export` 的声明仅模块内可见（**私有**）。
-- 模块的内部状态（`let _x`, `const _VERSION`, `fn _helper`）在不同模块中互不冲突，即使同名。
+- `export let` 不被支持。可变绑定不能跨模块共享，使用 `export const` 代替。
+- 模块的内部状态在不同模块中互不冲突，即使同名。
 - 重导出与通配重导出常用于 `index.xr` 聚合子模块的公开 API。
 
 ### 11.5 命名约定
@@ -4139,9 +4150,16 @@ export * from "./product"
 - 公开符号 `camelCase` 或 `PascalCase`（类/接口）。
 - 内部符号约定前缀 `_`：`_internal_helper`。
 
-### 11.6 循环依赖
+### 11.6 编译期模块图与循环依赖
 
-xray **禁止**循环依赖。模块加载时建立 DAG；检测到循环 → 编译错误。
+xray 在编译期构建完整的**模块依赖图**（DAG）：
+
+1. 从入口文件开始，递归解析所有 `import` 声明，构建依赖图。
+2. 对依赖图进行拓扑排序，确定模块初始化顺序。
+3. 如果检测到**循环依赖**（SCC 大小 > 1 或自环），产生编译错误。
+4. 按拓扑序从叶子模块（无依赖）到入口模块依次初始化。
+
+选择性导入（`import { foo } from "./m"`）在编译期解析为固定的模块索引和导出槽位，运行时为 O(1) 索引访问，不涉及字符串查找。
 
 ### 11.7 native 模块
 
@@ -4164,8 +4182,6 @@ import time
 let t = time.now()
 time.sleep(100)
 ```
-
-详见 `docs/rules/architecture.md` 的"native 模块注册"章节。
 
 ---
 

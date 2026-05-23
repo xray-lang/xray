@@ -4015,7 +4015,7 @@ xray uses the type system to **eliminate most data races at compile time**:
 
 ## 11. Modules
 
-> Source of truth: `src/module/xmodule.c`, `src/module/xmodule_resolve.c`, `src/frontend/parser/xparse_import.c`.
+> Source of truth: `src/module/xmodule.c`, `src/module/xmodule_resolver.c`, `src/module/xmodule_graph.c`, `src/frontend/parser/xparse_import.c`.
 
 ### 11.1 Module Definition
 
@@ -4056,6 +4056,8 @@ test = "1.0"
 
 ### 11.3 `import` Syntax
 
+`import` declarations **must appear at the module top level**. Using `import` inside a function, class, or any nested scope is a compile error.
+
 ```ebnf
 ImportStmt ::= 'import' ImportMembers 'from' ImportModule
             |  'import' ImportModule ('as' Identifier)?
@@ -4085,7 +4087,9 @@ import { readFile, writeFile as write } from io
 import { publicFn } from "./modules/mod_a"
 ```
 
-JavaScript-style default import (`import name from "module"`) is **not supported**. In Xray, use `import "module" as name`, `import module`, or `import { name } from module`.
+**Not supported**:
+- JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
+- Dynamic import (`import("module")`). All imports must be static declarations.
 
 **Resolution algorithm** (in priority order):
 1. **stdlib name resolution**: a bare identifier `import time` → the built-in stdlib module table.
@@ -4093,11 +4097,15 @@ JavaScript-style default import (`import name from "module"`) is **not supported
 3. **Project-root path**: a quoted path that does not start with `./` or `../` is resolved as a project-relative directory import.
 4. **Third-party packages**: `"owner/name"` is resolved through the `[dependencies]` section in `xray.toml`.
 
-**Source of truth**: `xparse_import.c` and `xmodule_resolve_path()`.
+**Specifier validation** (compile errors):
+- Including `.xr` extension: `import "./a.xr"` → error
+- Trailing slash: `import "./a/"` → error
+- Explicit `index`: `import "./a/index"` → error
+- Absolute paths: `import "/etc/foo"` → error
 
 ### 11.4 `export` and Visibility
 
-Xray supports three export forms:
+`export` declarations **must appear at the module top level**. Xray supports three export forms:
 
 ```ebnf
 ExportStmt ::= 'export' Declaration                              // export the declaration directly
@@ -4105,6 +4113,7 @@ ExportStmt ::= 'export' Declaration                              // export the d
             |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
             |  'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
+Declaration ::= FnDecl | ClassDecl | StructDecl | ConstDecl | TypeAlias
 ```
 
 ```xray
@@ -4128,8 +4137,10 @@ export { getUser, getUserAge as getAge } from "./user"
 export * from "./product"
 ```
 
+**Restrictions**:
 - Declarations not marked `export` are **private** to the module.
-- Internal state (`let _x`, `const _VERSION`, `fn _helper`) does not collide across modules even with the same name.
+- `export let` is not supported. Mutable bindings cannot be shared across modules; use `export const` instead.
+- Internal state does not collide across modules even with the same name.
 - Re-exports and wildcard re-exports are commonly used in `index.xr` to aggregate public APIs of submodules.
 
 ### 11.5 Naming Conventions
@@ -4138,9 +4149,16 @@ export * from "./product"
 - Public symbols: `camelCase` or `PascalCase` (for classes / interfaces).
 - Internal symbols: prefix with `_` (`_internal_helper`).
 
-### 11.6 Circular Dependencies
+### 11.6 Compile-Time Module Graph and Circular Dependencies
 
-Xray **forbids** circular dependencies. Module loading builds a DAG; a detected cycle is a compile error.
+Xray builds a complete **module dependency graph** (DAG) at compile time:
+
+1. Starting from the entry file, all `import` declarations are recursively resolved to build the dependency graph.
+2. The graph is topologically sorted to determine module initialization order.
+3. If a **circular dependency** is detected (SCC size > 1 or self-loop), a compile error is emitted.
+4. Modules are initialized in topological order, from leaf modules (no dependencies) to the entry module.
+
+Selective imports (`import { foo } from "./m"`) are resolved at compile time to fixed module indices and export slots, resulting in O(1) indexed access at runtime with no string lookup.
 
 ### 11.7 Native Modules
 
@@ -4163,8 +4181,6 @@ import time
 let t = time.now()
 time.sleep(100)
 ```
-
-See the "native module registration" section of `docs/rules/architecture.md` for details.
 
 ---
 
