@@ -153,6 +153,10 @@ static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *en
     int errors = 0;
     int total = graph->topo_count;
 
+    /* Set graph on analyzer for cross-module type resolution */
+    if (analyzer)
+        xa_analyzer_set_graph(analyzer, graph);
+
     /* Analyze each module in topological order (leaves first) */
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int idx = graph->topo_order[ti];
@@ -162,6 +166,10 @@ static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *en
 
         if (analyzer) {
             xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+
+            /* Collect exports so downstream modules can resolve import types */
+            spec->exports = xa_analyzer_collect_exports(analyzer, (XrAstNode *) spec->ast);
+
             int file_errs = 0;
             int diag_count = 0;
             XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
@@ -191,6 +199,9 @@ static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *en
                 printf("ok %s\n", spec->source_path);
         }
     }
+
+    if (analyzer)
+        xa_analyzer_set_graph(analyzer, NULL);
 
     if (verbose && total > 1)
         printf("\nChecked %d modules in dependency order\n", total);
