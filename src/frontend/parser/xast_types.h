@@ -248,12 +248,4 @@ typedef enum {
     PATTERN_SKIP         // _
 } PatternType;
 
-// Module import types
-typedef enum {
-    IMPORT_STDLIB,   // import time
-    IMPORT_PACKAGE,  // import alice/utils
-    IMPORT_FILE,     // import "./helper.xr"
-    IMPORT_DIR,      // import "models/user"
-} ImportType;
-
 #endif  // XAST_TYPES_H

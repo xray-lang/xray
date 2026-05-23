@@ -172,16 +172,20 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
     // Check if this is an import statement
     if (node->type == AST_IMPORT_STMT) {
         const char *module_name = node->as.import_stmt.module_name;
-        ImportType import_type = node->as.import_stmt.import_type;
+        bool is_quoted = node->as.import_stmt.is_quoted;
 
-        // Collect stdlib dependency
-        if (import_type == IMPORT_STDLIB) {
+        // Bare name = stdlib
+        if (!is_quoted) {
             add_external_dep(&ctx->bundle->stdlib, module_name);
             return;
         }
 
-        // Collect third-party package dependency
-        if (import_type == IMPORT_PACKAGE) {
+        // Relative path (starts with ./ or ../) = file import
+        bool is_relative =
+            (strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0);
+
+        // Non-relative quoted path = package import
+        if (!is_relative) {
             // Static bundle mode: try to bundle third-party package
             if (ctx->flags & XR_BUNDLE_STATIC_PACKAGES) {
                 char *pkg_path = resolve_package_path(module_name);
@@ -222,8 +226,8 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             return;
         }
 
-        // Only process file and directory imports
-        if (import_type == IMPORT_FILE || import_type == IMPORT_DIR) {
+        // Relative file/directory import
+        {
             char *resolved = resolve_module_path(current_dir, module_name);
             if (resolved) {
                 // Check if already processed

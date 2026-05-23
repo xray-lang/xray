@@ -1807,16 +1807,15 @@ AstNode *xr_ast_throw_stmt(XrayIsolate *X, AstNode *expression, int line) {
 /* ========== Module System AST Node Creation ========== */
 
 // Create import statement node
-// import http              - standard library
-// import xray/redis        - third-party package
-// import "./utils"         - local module
-// import xray/redis as r   - rename
+// import time              - standard library (bare name)
+// import "./utils"         - local module (quoted path)
+// import "alice/redis"     - third-party package (quoted path)
 AstNode *xr_ast_import_stmt(XrayIsolate *X, const char *module_name, const char *alias,
-                            ImportType import_type, int line) {
+                            bool is_quoted, int line) {
     AstNode *node = alloc_node(X, AST_IMPORT_STMT, line);
     node->as.import_stmt.module_name = ast_strdup(X, module_name);
     node->as.import_stmt.alias = ast_strdup(X, alias);
-    node->as.import_stmt.import_type = import_type;
+    node->as.import_stmt.is_quoted = is_quoted;
     node->as.import_stmt.members = NULL;
     node->as.import_stmt.member_count = 0;
     return node;
@@ -1825,12 +1824,11 @@ AstNode *xr_ast_import_stmt(XrayIsolate *X, const char *module_name, const char 
 // Create import statement node (extended version, supports selective import)
 // import { add, multiply } from "utils"
 AstNode *xr_ast_import_stmt_ex(XrayIsolate *X, const char *module_name, const char *alias,
-                               ImportType import_type, ImportMember *members, int member_count,
-                               int line) {
+                               bool is_quoted, ImportMember *members, int member_count, int line) {
     AstNode *node = alloc_node(X, AST_IMPORT_STMT, line);
     node->as.import_stmt.module_name = ast_strdup(X, module_name);
     node->as.import_stmt.alias = ast_strdup(X, alias);
-    node->as.import_stmt.import_type = import_type;
+    node->as.import_stmt.is_quoted = is_quoted;
     node->as.import_stmt.members = members;  // Take ownership, don't copy
     node->as.import_stmt.member_count = member_count;
     return node;

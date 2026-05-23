@@ -328,7 +328,7 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                 xfmt_write_str(ctx, "import ");
             }
 
-            if (imp->import_type == IMPORT_FILE || imp->import_type == IMPORT_DIR) {
+            if (imp->is_quoted) {
                 xfmt_write_char(ctx, '"');
                 xfmt_write_str(ctx, imp->module_name);
                 xfmt_write_char(ctx, '"');
