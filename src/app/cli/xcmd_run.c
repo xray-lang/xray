@@ -23,6 +23,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../frontend/analyzer/xanalyzer.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -131,7 +132,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);
 
-    /* Pre-flight: build module graph to detect circular dependencies */
+    /* Pre-flight: build module graph, detect cycles, analyze cross-module types */
     {
         XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
         XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
@@ -149,6 +150,40 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                         xr_multicore_destroy(iso);
                         xray_isolate_delete(iso);
                         return XR_CLI_EXIT_FAIL;
+                    }
+
+                    /* Cross-module type analysis (multi-module projects only).
+                     * Analyze all modules in topo order so import types resolve
+                     * to concrete signatures.  Diagnostics are reported as
+                     * warnings; execution proceeds regardless. */
+                    if (graph->topo_count > 1) {
+                        XaAnalyzer *analyzer = xa_analyzer_new(iso);
+                        if (analyzer) {
+                            xa_analyzer_set_graph(analyzer, graph);
+                            for (int ti = 0; ti < graph->topo_count; ti++) {
+                                int idx = graph->topo_order[ti];
+                                XrModuleSpec *spec = &graph->specs[idx];
+                                if (!spec->ast || !spec->source_path)
+                                    continue;
+                                xa_analyzer_analyze(analyzer, spec->source_path,
+                                                    (XrAstNode *) spec->ast);
+                                spec->exports =
+                                    xa_analyzer_collect_exports(analyzer, (XrAstNode *) spec->ast);
+
+                                int diag_count = 0;
+                                XaDiagnostic *diags =
+                                    xa_analyzer_get_diagnostics(analyzer, &diag_count);
+                                for (XaDiagnostic *d = diags; d; d = d->next) {
+                                    if (d->severity == XR_DIAG_SEV_ERROR) {
+                                        fprintf(stderr, "%s:%d:%d: error: %s\n", spec->source_path,
+                                                d->location.line, d->location.column, d->message);
+                                    }
+                                }
+                                xa_analyzer_clear_diagnostics(analyzer);
+                            }
+                            xa_analyzer_set_graph(analyzer, NULL);
+                            xa_analyzer_free(analyzer);
+                        }
                     }
                 }
                 xr_free(err);

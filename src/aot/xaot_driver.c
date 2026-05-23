@@ -26,7 +26,6 @@
 #include "../../include/xray.h"
 #include "../../include/xray_isolate.h"
 #include "../runtime/xisolate_api.h"
-#include "../module/xbundle.h"
 #include "../module/xmodule_graph.h"
 #include "../module/xmodule_resolver.h"
 #include "../module/xmodule.h"
@@ -35,14 +34,11 @@
 #include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
 #include "xi_cgen.h"
-#include "../frontend/parser/xparse.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
-
-/* ========== File reading helper (avoids CLI layer dependency) ========== */
 
 /* Create a full-runtime isolate for AOT compilation.
  * Equivalent to XR_ISOLATE_PROFILE_RUN without depending on the
@@ -52,29 +48,6 @@ static XrayIsolate *create_isolate(void) {
     xray_isolate_params_init(&params);
     xray_isolate_setup_full(&params);
     return xray_isolate_new(&params);
-}
-
-static char *read_source_file(const char *path) {
-    XR_DCHECK(path != NULL, "read_source_file: NULL path");
-    FILE *f = fopen(path, "rb");
-    if (!f)
-        return NULL;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0) {
-        fclose(f);
-        return NULL;
-    }
-    char *buf = (char *) xr_malloc((size_t) sz + 1);
-    if (!buf) {
-        fclose(f);
-        return NULL;
-    }
-    size_t nread = fread(buf, 1, (size_t) sz, f);
-    fclose(f);
-    buf[nread] = '\0';
-    return buf;
 }
 
 /* ========== Module Name Helpers ========== */
@@ -94,53 +67,6 @@ static char *derive_module_name(const char *path) {
         name[i] = (base[i] == '-' || base[i] == '.') ? '_' : base[i];
     name[len] = '\0';
     return name;
-}
-
-/* ========== Xi IR Pipeline (Source -> AST -> Xi IR -> C) ========== */
-
-/* Compile one source file through the Xi IR pipeline.
- * Returns the pipeline result (caller frees).  On failure, returns
- * pres.status != XI_PIPE_OK and prints an error message. */
-static XiPipelineResult xi_compile_one(const char *path, XrayIsolate *X) {
-    XiPipelineResult fail = {.status = XI_PIPE_ERR_INTERNAL};
-
-    char *source = read_source_file(path);
-    if (!source) {
-        fprintf(stderr, "Error: cannot read '%s'\n", path);
-        return fail;
-    }
-
-    XaAnalyzer *analyzer = xa_analyzer_new(X);
-    if (!analyzer) {
-        fprintf(stderr, "Error: failed to create analyzer\n");
-        xr_free(source);
-        return fail;
-    }
-
-    AstNode *program = xr_parse(X, source);
-    xr_free(source);
-    if (!program) {
-        fprintf(stderr, "Error: parse failed for '%s'\n", path);
-        xa_analyzer_free(analyzer);
-        return fail;
-    }
-
-    xa_analyzer_analyze(analyzer, path, program);
-
-    XiPipelineConfig cfg = xi_pipeline_aot_config();
-
-    XiPipelineResult pres = xi_pipeline_compile_program(program, analyzer, X, &cfg);
-
-    xa_analyzer_free(analyzer);
-    xr_program_destroy(program);
-
-    if (pres.status != XI_PIPE_OK) {
-        fprintf(stderr, "Error: Xi pipeline failed for '%s': %s\n", path,
-                xi_pipe_status_str(pres.status));
-        if (pres.error_msg)
-            fprintf(stderr, "  %s\n", pres.error_msg);
-    }
-    return pres;
 }
 
 /* ========== Feature Inference ========== */
