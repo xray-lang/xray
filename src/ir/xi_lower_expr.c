@@ -336,46 +336,19 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
          * backing store because called functions can modify them,
          * which bypasses the local SSA and leaves it stale. */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            struct XrType *type = l->vars[var_id].type;
-            if (!type)
-                type = l->type_any;
-            if (l->repl_mode) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, type, 0);
-                if (v)
-                    v->aux = (void *) l->vars[var_id].name;
-                return v;
-            }
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, type, 0);
-            if (v)
-                v->aux_int = l->shared_map[var_id];
-            return v;
+            XiTopBinding b;
+            b.slot = l->shared_map[var_id];
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            return xi_lower_emit_top_load(l, b, NULL);
         }
         return xi_lower_braun_read(l, var_id, l->cur_block);
     }
 
     /* Check for program-level variable from a nested scope */
-    if (l->repl_mode) {
-        struct XrType *gt = NULL;
-        const char *gname = xi_lower_find_global_name(l, sid, name, &gt);
-        if (gname) {
-            if (!gt)
-                gt = l->type_any;
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, gt, 0);
-            if (v)
-                v->aux = (void *) gname;
-            return v;
-        }
-    } else {
-        struct XrType *shared_type = NULL;
-        int shared_idx = xi_lower_find_shared(l, sid, name, &shared_type);
-        if (shared_idx >= 0) {
-            if (!shared_type)
-                shared_type = l->type_any;
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, shared_type, 0);
-            if (v)
-                v->aux_int = shared_idx;
-            return v;
-        }
+    XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
+    if (xi_top_binding_valid(tb)) {
+        return xi_lower_emit_top_load(l, tb, NULL);
     }
 
     /* Not found locally — try upvalue capture from enclosing scope */
@@ -515,50 +488,20 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
 
         /* If this is a program-level variable, also update backing store */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            if (l->repl_mode) {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = val;
-                    store->aux = (void *) l->vars[var_id].name;
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            } else {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = val;
-                    store->aux_int = l->shared_map[var_id];
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
+            XiTopBinding b;
+            b.slot = l->shared_map[var_id];
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            xi_lower_emit_top_store(l, b, val);
         }
         return val;
     }
 
     /* Check for program-level variable from nested scope */
-    if (l->repl_mode) {
-        const char *gname = xi_lower_find_global_name(l, sid, name, NULL);
-        if (gname) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-            if (store) {
-                store->args[0] = val;
-                store->aux = (void *) gname;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-            return val;
-        }
-    } else {
-        int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
-        if (shared_idx >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-            if (store) {
-                store->args[0] = val;
-                store->aux_int = shared_idx;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-            return val;
-        }
+    XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
+    if (xi_top_binding_valid(tb)) {
+        xi_lower_emit_top_store(l, tb, val);
+        return val;
     }
 
     /* Try upvalue store for captured mutable variable */
@@ -1638,23 +1581,11 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
          * store so nested functions can access (forward refs). */
         if (l->is_program && l->shared_map[var_id] >= 0) {
             int slot = l->shared_map[var_id];
-            if (l->repl_mode) {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = v;
-                    store->aux = (void *) l->vars[var_id].name;
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            } else {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = v;
-                    store->aux_int = slot;
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
+            XiTopBinding b;
+            b.slot = slot;
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            xi_lower_emit_top_store(l, b, v);
             /* Track function → shared slot for module export metadata */
             if (slot >= 0 && slot < XI_LOWER_MAX_VARS)
                 l->shared_slot_funcs[slot] = child;
@@ -1801,37 +1732,19 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     int var_id = xi_lower_var_find(l, 0, cname);
     if (var_id >= 0) {
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            if (l->repl_mode) {
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
-                if (cls)
-                    cls->aux = (void *) l->vars[var_id].name;
-            } else {
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                if (cls)
-                    cls->aux_int = l->shared_map[var_id];
-            }
+            XiTopBinding b;
+            b.slot = l->shared_map[var_id];
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            cls = xi_lower_emit_top_load(l, b, l->type_any);
         } else {
             cls = xi_lower_braun_read(l, var_id, l->cur_block);
         }
     }
     if (!cls) {
-        if (l->repl_mode) {
-            struct XrType *gt = NULL;
-            const char *gname = xi_lower_find_global_name(l, 0, cname, &gt);
-            if (gname) {
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
-                if (cls)
-                    cls->aux = (void *) gname;
-            }
-        } else {
-            struct XrType *shared_type = NULL;
-            int shared_idx = xi_lower_find_shared(l, 0, cname, &shared_type);
-            if (shared_idx >= 0) {
-                cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                if (cls)
-                    cls->aux_int = shared_idx;
-            }
-        }
+        XiTopBinding tb = xi_lower_find_top_binding(l, 0, cname);
+        if (xi_top_binding_valid(tb))
+            cls = xi_lower_emit_top_load(l, tb, l->type_any);
     }
     if (!cls) {
         struct XrType *upval_type = NULL;
@@ -2126,41 +2039,19 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             int var = xi_lower_var_find(l, 0, tref->name);
             if (var >= 0) {
                 if (l->is_program && var < l->var_count && l->shared_map[var] >= 0) {
-                    if (l->repl_mode) {
-                        type_val =
-                            xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
-                        if (type_val)
-                            type_val->aux = (void *) l->vars[var].name;
-                    } else {
-                        type_val =
-                            xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                        if (type_val)
-                            type_val->aux_int = l->shared_map[var];
-                    }
+                    XiTopBinding b;
+                    b.slot = l->shared_map[var];
+                    b.name = l->vars[var].name;
+                    b.type = l->vars[var].type;
+                    type_val = xi_lower_emit_top_load(l, b, l->type_any);
                 } else {
                     type_val = xi_lower_braun_read(l, var, l->cur_block);
                 }
             }
             if (!type_val) {
-                if (l->repl_mode) {
-                    struct XrType *gt = NULL;
-                    const char *gname = xi_lower_find_global_name(l, 0, tref->name, &gt);
-                    if (gname) {
-                        type_val =
-                            xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
-                        if (type_val)
-                            type_val->aux = (void *) gname;
-                    }
-                } else {
-                    struct XrType *stype = NULL;
-                    int sidx = xi_lower_find_shared(l, 0, tref->name, &stype);
-                    if (sidx >= 0) {
-                        type_val =
-                            xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                        if (type_val)
-                            type_val->aux_int = sidx;
-                    }
-                }
+                XiTopBinding tb = xi_lower_find_top_binding(l, 0, tref->name);
+                if (xi_top_binding_valid(tb))
+                    type_val = xi_lower_emit_top_load(l, tb, l->type_any);
             }
         }
     }
@@ -2335,37 +2226,19 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_find(l, 0, sname);
         if (var_id >= 0) {
             if (l->is_program && l->shared_map[var_id] >= 0) {
-                if (l->repl_mode) {
-                    cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
-                    if (cls)
-                        cls->aux = (void *) l->vars[var_id].name;
-                } else {
-                    cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                    if (cls)
-                        cls->aux_int = l->shared_map[var_id];
-                }
+                XiTopBinding b;
+                b.slot = l->shared_map[var_id];
+                b.name = l->vars[var_id].name;
+                b.type = l->vars[var_id].type;
+                cls = xi_lower_emit_top_load(l, b, l->type_any);
             } else {
                 cls = xi_lower_braun_read(l, var_id, l->cur_block);
             }
         }
         if (!cls) {
-            if (l->repl_mode) {
-                struct XrType *gt = NULL;
-                const char *gname = xi_lower_find_global_name(l, 0, sname, &gt);
-                if (gname) {
-                    cls = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, l->type_any, 0);
-                    if (cls)
-                        cls->aux = (void *) gname;
-                }
-            } else {
-                struct XrType *shared_type = NULL;
-                int shared_idx = xi_lower_find_shared(l, 0, sname, &shared_type);
-                if (shared_idx >= 0) {
-                    cls = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, l->type_any, 0);
-                    if (cls)
-                        cls->aux_int = shared_idx;
-                }
-            }
+            XiTopBinding tb = xi_lower_find_top_binding(l, 0, sname);
+            if (xi_top_binding_valid(tb))
+                cls = xi_lower_emit_top_load(l, tb, l->type_any);
         }
         if (!cls) {
             struct XrType *upval_type = NULL;
