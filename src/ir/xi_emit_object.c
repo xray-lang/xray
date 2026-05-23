@@ -26,6 +26,21 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 
+/* Recursively propagate shared_offset to a proto and all its descendants.
+ * When a parent closure emits a child via xi_emit(), the child's sub-protos
+ * are created before the parent can set shared_offset on the child.  This
+ * recursive walk fixes up grandchild (and deeper) protos that were emitted
+ * with the wrong offset. */
+static void propagate_shared_offset(XrProto *proto, int offset) {
+    proto->shared_offset = offset;
+    int n = PROTO_PROTO_COUNT(proto);
+    for (int i = 0; i < n; i++) {
+        XrProto *child = PROTO_PROTO(proto, i);
+        if (child)
+            propagate_shared_offset(child, offset);
+    }
+}
+
 /* Forward declaration for class helpers (defined later in this file) */
 static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata, uint8_t dst);
 
@@ -544,8 +559,8 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_error(ctx, child_st != XI_EMIT_OK ? child_st : XI_EMIT_ERR_INTERNAL);
         return;
     }
-    /* Propagate shared_offset for module export metadata */
-    child_proto->shared_offset = ctx->proto->shared_offset;
+    /* Propagate shared_offset to child and all its descendants */
+    propagate_shared_offset(child_proto, ctx->proto->shared_offset);
 
     /* Populate upvalue descriptors on child proto from captures */
     for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
@@ -937,8 +952,8 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
     XiEmitStatus cst = xi_emit(child, ctx->isolate, &child_proto);
     if (cst != XI_EMIT_OK || !child_proto)
         return -1;
-    /* Propagate shared_offset for module export metadata */
-    child_proto->shared_offset = ctx->proto->shared_offset;
+    /* Propagate shared_offset to child and all its descendants */
+    propagate_shared_offset(child_proto, ctx->proto->shared_offset);
 
     for (uint16_t ui = 0; ui < child->ncaptures; ui++) {
         XiCapture *cap = &child->captures[ui];

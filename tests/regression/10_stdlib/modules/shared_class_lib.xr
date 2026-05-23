@@ -1,0 +1,20 @@
+// shared_class_lib.xr - helper module for 1035_cross_module_shared_method test
+
+export class Counter {
+    count: int
+
+    constructor() {
+        this.count = 0
+    }
+
+    increment() {
+        this.count = this.count + 1
+    }
+
+    stats() -> Json {
+        return {
+            count: this.count,
+            label: "counter",
+        }
+    }
+}

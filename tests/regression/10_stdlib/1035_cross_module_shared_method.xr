@@ -1,0 +1,43 @@
+// 1035_cross_module_shared_method.xr
+// Regression: cross-module closure accessing shared const via OP_GETSHARED.
+//
+// Grandchild protos (closures inside exported functions) inherited
+// shared_offset=0 instead of the module's shared_offset, causing
+// OP_GETSHARED to load the wrong shared variable and method lookup
+// to fail silently.
+
+import { Counter } from "./modules/shared_class_lib"
+
+shared const counter1 = new Counter()
+shared const counter2 = new Counter()
+
+fn call_stats_nested() -> Json {
+    fn inner() -> Json {
+        let a = counter1.stats()
+        let b = counter2.stats()
+        return { first: a, second: b }
+    }
+    return inner()
+}
+
+@test
+fn test_shared_method_from_nested_closure() {
+    let result = call_stats_nested()
+    assert_eq(result.first.label, "counter")
+    assert_eq(result.second.label, "counter")
+    assert_eq(result.first.count, 0)
+}
+
+@test
+fn test_shared_method_direct() {
+    let s = counter1.stats()
+    assert_eq(s.label, "counter")
+    assert_eq(s.count, 0)
+}
+
+@test
+fn test_shared_method_after_mutation() {
+    counter1.increment()
+    let s = counter1.stats()
+    assert_eq(s.count, 1)
+}
