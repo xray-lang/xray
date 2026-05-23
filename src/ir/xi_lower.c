@@ -132,6 +132,69 @@ XR_FUNC const char *xi_lower_find_global_name(XiLower *l, uint32_t symbol_id, co
     return NULL;
 }
 
+/* ========== Top-Level Binding Helpers ========== */
+
+XR_FUNC XiTopBinding xi_lower_find_top_binding(XiLower *l, uint32_t symbol_id, const char *name) {
+    XiTopBinding b;
+    b.slot = -1;
+    b.name = NULL;
+    b.type = NULL;
+    for (XiLower *p = l->parent; p; p = p->parent) {
+        if (!p->is_program)
+            continue;
+        int var_id = xi_lower_var_find(p, symbol_id, name);
+        if (var_id >= 0 && p->shared_map[var_id] >= 0) {
+            b.slot = p->shared_map[var_id];
+            b.name = p->vars[var_id].name;
+            b.type = p->vars[var_id].type;
+            return b;
+        }
+    }
+    return b;
+}
+
+XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct XrType *type) {
+    XR_DCHECK(binding.slot >= 0, "xi_lower_emit_top_load: binding has no slot");
+    XR_DCHECK(binding.name != NULL, "xi_lower_emit_top_load: binding has no name");
+    if (!type)
+        type = binding.type;
+    if (!type)
+        type = l->type_any;
+    if (l->repl_mode) {
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_GLOBAL, type, 0);
+        if (v)
+            v->aux = (void *) binding.name;
+        return v;
+    }
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_GET_SHARED, type, 0);
+    if (v)
+        v->aux_int = binding.slot;
+    return v;
+}
+
+XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiValue *val) {
+    XR_DCHECK(binding.slot >= 0, "xi_lower_emit_top_store: binding has no slot");
+    XR_DCHECK(binding.name != NULL, "xi_lower_emit_top_store: binding has no name");
+    XR_DCHECK(val != NULL, "xi_lower_emit_top_store: NULL val");
+    XiValue *store;
+    if (l->repl_mode) {
+        store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
+        if (store) {
+            store->args[0] = val;
+            store->aux = (void *) binding.name;
+            store->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+    } else {
+        store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
+        if (store) {
+            store->args[0] = val;
+            store->aux_int = binding.slot;
+            store->flags |= XI_FLAG_SIDE_EFFECT;
+        }
+    }
+    return store;
+}
+
 /* ========== Upvalue Resolution ========== */
 
 /*

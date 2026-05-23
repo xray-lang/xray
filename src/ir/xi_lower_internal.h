@@ -38,6 +38,47 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
 XR_FUNC const char *xi_lower_find_global_name(XiLower *l, uint32_t symbol_id, const char *name,
                                               struct XrType **out_type);
 
+/* ========== Top-level Binding Helpers (xi_lower.c) ========== */
+
+/* A resolved program-level binding.  Carries both the slot index
+ * (used by XI_GET/SET_SHARED in compiled module mode) and the name
+ * (used by XI_GET/SET_GLOBAL in REPL mode), so the emit helper can
+ * pick the right opcode without callers branching on repl_mode.
+ *
+ * slot < 0 / name == NULL means the lookup missed.  When the binding
+ * is valid, slot is always >= 0 and name points into the program-
+ * scope XiLower's arena-owned variable name. */
+typedef struct XiTopBinding {
+    int slot;
+    const char *name;
+    struct XrType *type;
+} XiTopBinding;
+
+/* Walk the parent chain to find a program-level top binding by
+ * symbol_id (preferred) or by name fallback.  Returns an invalid
+ * binding (slot=-1, name=NULL) on miss.  Equivalent to the union
+ * of the previous xi_lower_find_shared + xi_lower_find_global_name
+ * lookups, but mode-agnostic — the caller no longer branches. */
+XR_FUNC XiTopBinding xi_lower_find_top_binding(XiLower *l, uint32_t symbol_id, const char *name);
+
+/* Emit a load for the given top binding.  Picks XI_GET_GLOBAL in
+ * REPL mode (name-keyed globals dict) and XI_GET_SHARED otherwise
+ * (slot-indexed shared array).  type may be NULL; the helper falls
+ * back to binding.type and finally to l->type_any.
+ * Caller must pass a valid binding (xi_top_binding_valid). */
+XR_FUNC XiValue *xi_lower_emit_top_load(XiLower *l, XiTopBinding binding, struct XrType *type);
+
+/* Emit a store of `val` to the given top binding.  Mirrors
+ * xi_lower_emit_top_load on the opcode choice and sets
+ * XI_FLAG_SIDE_EFFECT so the SSA value is not DCE'd.
+ * Returns the store XiValue, or NULL on allocation failure. */
+XR_FUNC XiValue *xi_lower_emit_top_store(XiLower *l, XiTopBinding binding, XiValue *val);
+
+/* True iff the binding is a successful lookup result. */
+static inline bool xi_top_binding_valid(XiTopBinding b) {
+    return b.slot >= 0 && b.name != NULL;
+}
+
 /* ========== Context Init / Cleanup (xi_lower.c) ========== */
 
 XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayIsolate *isolate);
