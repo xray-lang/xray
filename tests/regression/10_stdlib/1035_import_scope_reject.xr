@@ -1,0 +1,20 @@
+// 1035_import_scope_reject.xr
+// Test: import/export only allowed at module top level.
+// Nested import inside functions must be rejected at parse time.
+// This test verifies top-level import works correctly.
+
+import time
+
+@test
+fn test_top_level_import_works() {
+    let now = time.now()
+    assert(now > 0)
+}
+
+@test
+fn test_import_accessible_in_nested_fn() {
+    fn inner() -> int {
+        return time.now()
+    }
+    assert(inner() > 0)
+}
