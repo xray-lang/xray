@@ -510,6 +510,12 @@ static XrModuleResolver *ensure_resolver(XrModuleRegistry *registry) {
     return registry->resolver;
 }
 
+XR_FUNC XrModuleResolver *xr_module_registry_get_resolver(XrModuleRegistry *registry) {
+    if (!registry)
+        return NULL;
+    return ensure_resolver(registry);
+}
+
 /*
  * Get the importer path from the isolate (current module path, or
  * entry script path). Returns NULL if neither is available.

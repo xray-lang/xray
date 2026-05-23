@@ -21,6 +21,10 @@
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"
 #include "../../frontend/analyzer/xanalyzer.h"
+#include "../../module/xmodule.h"
+#include "../../module/xmodule_graph.h"
+#include "../../module/xmodule_resolver.h"
+#include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_dir.h"
@@ -112,6 +116,84 @@ static int check_directory(XrayIsolate *X, XaAnalyzer *analyzer, const char *pat
     return errors;
 }
 
+/* Graph-based check: build module graph from entry file, then analyze
+ * all reachable modules in topological order.  Returns error count. */
+static int check_with_graph(XrayIsolate *X, XaAnalyzer *analyzer, const char *entry_path,
+                            int verbose) {
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    if (!resolver) {
+        fprintf(stderr, "Error: cannot create module resolver\n");
+        return 1;
+    }
+
+    XrModuleGraph *graph = xr_module_graph_new(X, resolver);
+    if (!graph) {
+        fprintf(stderr, "Error: cannot create module graph\n");
+        return 1;
+    }
+
+    char *err = NULL;
+    int rc = xr_module_graph_build(graph, entry_path, &err);
+    if (rc != 0) {
+        fprintf(stderr, "Error: %s\n", err ? err : "graph build failed");
+        xr_free(err);
+        xr_module_graph_free(graph);
+        return 1;
+    }
+
+    rc = xr_module_graph_topological_sort(graph);
+    if (graph->has_cycle) {
+        fprintf(stderr, "Error: %s\n",
+                graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
+        xr_module_graph_free(graph);
+        return 1;
+    }
+
+    int errors = 0;
+    int total = graph->topo_count;
+
+    /* Analyze each module in topological order (leaves first) */
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->ast || !spec->source_path)
+            continue;
+
+        if (analyzer) {
+            xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+            int diag_count = 0;
+            XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
+            for (XaDiagnostic *d = diags; d; d = d->next) {
+                if (d->severity == XR_DIAG_SEV_ERROR)
+                    errors++;
+                const char *sev = "error";
+                if (d->severity == XR_DIAG_SEV_WARNING)
+                    sev = "warning";
+                else if (d->severity == XR_DIAG_SEV_INFO)
+                    sev = "info";
+                else if (d->severity == XR_DIAG_SEV_HINT)
+                    sev = "hint";
+                fprintf(stderr, "%s:%d:%d: %s: %s\n", spec->source_path, d->location.line,
+                        d->location.column, sev, d->message);
+            }
+            xa_analyzer_clear_diagnostics(analyzer);
+            if (errors == 0 && verbose)
+                printf("ok %s\n", spec->source_path);
+        } else {
+            /* Parse-only mode: AST already parsed during graph build */
+            if (verbose)
+                printf("ok %s\n", spec->source_path);
+        }
+    }
+
+    if (verbose && total > 1)
+        printf("\nChecked %d modules in dependency order\n", total);
+
+    xr_module_graph_free(graph);
+    return errors;
+}
+
 XR_FUNC int cmd_check(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
 
@@ -158,12 +240,13 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
                 total_errors +=
                     check_directory(X, analyzer, path, verbose, &total_files, &passed_files);
             } else if (st.kind == XR_FS_FILE) {
+                /* Single .xr file: use graph to discover + check all deps */
+                int errs = check_with_graph(X, analyzer, path, verbose);
                 total_files++;
-                if (check_file(X, analyzer, path, verbose) == 0) {
+                if (errs == 0)
                     passed_files++;
-                } else {
-                    total_errors++;
-                }
+                else
+                    total_errors += errs;
             }
         }
     }

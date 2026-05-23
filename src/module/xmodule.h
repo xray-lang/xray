@@ -226,6 +226,12 @@ XR_FUNC XrValue xr_module_get_export(struct XrayIsolate *isolate, XrModule *modu
 XR_FUNC void xr_module_build_export_index(XrModule *module);
 XR_FUNC void xr_module_free(XrModule *module);
 
+/* ========== Resolver Access ========== */
+
+/* Get the registry's resolver, creating it lazily if needed.
+ * The returned pointer is owned by the registry and must NOT be freed. */
+XR_FUNC struct XrModuleResolver *xr_module_registry_get_resolver(XrModuleRegistry *registry);
+
 /* ========== Module Path Resolution ========== */
 
 /*
