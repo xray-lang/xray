@@ -1,0 +1,34 @@
+/*
+** typed_lib.xr
+** Library used by 1034_cross_module_typed.xr
+**
+** Exports typed declarations: function with annotated params/return,
+** class, constant.  Used to verify cross-module type resolution
+** through the module graph (imports get concrete types, not unknown).
+*/
+
+import math
+
+export fn double_it(n: int) -> int {
+    return n * 2
+}
+
+export fn greet(name: string) -> string {
+    return "Hello, " + name
+}
+
+export const MAGIC: int = 42
+
+export class Point {
+    x: int
+    y: int
+
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+
+    dist() -> float {
+        return math.sqrt(this.x * this.x + this.y * this.y)
+    }
+}

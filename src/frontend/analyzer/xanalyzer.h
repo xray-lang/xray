@@ -120,6 +120,11 @@ struct XaAnalyzer {
 
     // Type inference quality metric: how many expressions resolved to unknown
     int unknown_type_count;
+
+    // Module dependency graph (optional, set for graph-driven analysis).
+    // When set, cross-module import types are resolved from the graph's
+    // export tables instead of falling back to unknown.
+    struct XrModuleGraph *graph;
 };
 
 // API: Analyzer lifecycle
@@ -129,6 +134,11 @@ XR_FUNC void xa_analyzer_free(XaAnalyzer *analyzer);
 // API: Configuration
 XR_FUNC void xa_analyzer_set_strict_null(XaAnalyzer *analyzer, bool enable);
 XR_FUNC void xa_analyzer_set_strict_mode(XaAnalyzer *analyzer, bool enable);
+
+// Set module graph for cross-module type resolution.
+// The graph must outlive the analyzer. Pass NULL to disable.
+struct XrModuleGraph;
+XR_FUNC void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *graph);
 
 // API: Analysis
 XR_FUNC void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast);
@@ -214,6 +224,13 @@ XR_FUNC bool xa_typecheck_assignable(XrType *target, XrType *source);
 XR_FUNC bool xa_analyzer_is_iterator(XaAnalyzer *analyzer, XrType *type, XrType **out_element_type);
 // Check if type satisfies Iterable<T> (built-in or has iterator() -> Iterator<T>)
 XR_FUNC bool xa_analyzer_is_iterable(XaAnalyzer *analyzer, XrType *type, XrType **out_element_type);
+
+// API: Cross-module exports collection
+// After analyzing a file, collect exported symbol types into a hashmap.
+// Returns a new hashmap (name -> XrType*) owned by caller (free with xr_hashmap_free).
+// Type pointers are borrowed from the analyzer's pool and live until analyzer is freed.
+// Returns NULL if no exports found.
+XR_FUNC struct XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast);
 
 // Internal: Add diagnostic
 XR_FUNC void xa_analyzer_add_diagnostic(XaAnalyzer *analyzer, XrDiagSeverity severity, int code,

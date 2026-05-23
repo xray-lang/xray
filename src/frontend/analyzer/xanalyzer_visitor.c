@@ -16,6 +16,7 @@
 #include "xanalyzer_visitor_internal.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
+#include "../../module/xmodule_graph.h"
 #include "../../runtime/value/xstruct_layout.h"
 #include "../../runtime/value/xtype_internal.h"
 
@@ -532,6 +533,32 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
     }
 }
 
+/* Try to resolve an import target's type from the module graph.
+ * Returns the target module's exports hashmap, or NULL if unavailable. */
+static XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *module_name,
+                                        bool is_quoted) {
+    XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
+    if (!graph || !analyzer->current_file)
+        return NULL;
+
+    /* Resolve the import specifier to a canonical ID */
+    XrModuleId mid;
+    char *err = NULL;
+    int rc = xr_module_resolver_resolve(graph->resolver, module_name, !is_quoted,
+                                        analyzer->current_file, &mid, &err);
+    xr_free(err);
+    if (rc != 0)
+        return NULL;
+
+    /* Find the target module in the graph */
+    int idx = xr_module_graph_find(graph, mid.canonical);
+    xr_module_id_cleanup(&mid);
+    if (idx < 0)
+        return NULL;
+
+    return graph->specs[idx].exports;
+}
+
 // Helper: collect import statement (register module variable in symbol table)
 static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
@@ -559,9 +586,22 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         }
     } else {
         // For selective import: import { a, b } from "module"
+        XrHashMap *graph_exports =
+            resolve_graph_exports(ctx->analyzer, import->module_name, import->is_quoted);
+
         for (int i = 0; i < import->member_count; i++) {
             ImportMember *member = &import->members[i];
             const char *local_name = member->alias ? member->alias : member->name;
+
+            /* In graph-driven multi-file mode, the symbol may already exist
+             * in scope from analyzing the dependency module. Reuse it. */
+            XaScope *scope = ctx->analyzer->current_scope;
+            XaSymbol *existing =
+                (graph_exports && scope) ? xa_scope_lookup_local(scope, local_name) : NULL;
+            if (existing) {
+                member->symbol_id = existing->id;
+                continue;
+            }
 
             // Register each imported member as a variable
             XaSymbol *sym = xa_symbol_new(local_name, XA_SYM_IMPORT);
@@ -572,13 +612,23 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
 
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 if (links) {
-                    // Try to resolve type from module signatures
                     XrType *member_type = NULL;
-                    const char *sig =
-                        xa_builtin_get_module_func_signature(import->module_name, member->name);
-                    if (sig) {
-                        member_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+
+                    // Priority 1: resolve from graph exports (user modules)
+                    if (graph_exports) {
+                        member_type = (XrType *) xr_hashmap_get(graph_exports, member->name);
                     }
+
+                    // Priority 2: resolve from builtin module signatures (stdlib)
+                    if (!member_type) {
+                        const char *sig =
+                            xa_builtin_get_module_func_signature(import->module_name, member->name);
+                        if (sig) {
+                            member_type =
+                                xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+                        }
+                    }
+
                     links->type = member_type ? member_type : xr_type_new_unknown(NULL);
                     links->declared_type = links->type;
                 }

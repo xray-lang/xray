@@ -1,0 +1,47 @@
+// 1034_cross_module_typed.xr
+// Test: cross-module typed imports via module graph
+//
+// Verifies that selective imports from user modules resolve concrete types
+// (function signatures, class types, constants) rather than unknown.
+
+import { double_it, greet, MAGIC, Point } from "./modules/typed_lib"
+
+@test
+fn test_imported_fn_int() {
+    let r = double_it(21)
+    assert_eq(r, 42)
+}
+
+@test
+fn test_imported_fn_string() {
+    let s = greet("xray")
+    assert_eq(s, "Hello, xray")
+}
+
+@test
+fn test_imported_const() {
+    assert_eq(MAGIC, 42)
+}
+
+@test
+fn test_imported_class() {
+    let p = Point(3, 4)
+    assert_eq(p.x, 3)
+    assert_eq(p.y, 4)
+}
+
+@test
+fn test_imported_in_nested_fn() {
+    fn inner() -> int {
+        return double_it(10)
+    }
+    assert_eq(inner(), 20)
+}
+
+@test
+fn test_imported_const_nested() {
+    fn get_magic() -> int {
+        return MAGIC
+    }
+    assert_eq(get_magic(), 42)
+}

@@ -294,6 +294,79 @@ void xa_analyzer_set_strict_mode(XaAnalyzer *analyzer, bool enable) {
         analyzer->strict_mode = enable;
 }
 
+void xa_analyzer_set_graph(XaAnalyzer *analyzer, struct XrModuleGraph *graph) {
+    if (analyzer)
+        analyzer->graph = graph;
+}
+
+/* Extract the declared name from an exported declaration AST node. */
+static const char *get_export_decl_name(AstNode *decl) {
+    if (!decl)
+        return NULL;
+    switch (decl->type) {
+        case AST_FUNCTION_DECL:
+            return decl->as.function_decl.name;
+        case AST_CLASS_DECL:
+        case AST_STRUCT_DECL:
+            return decl->as.class_decl.name;
+        case AST_CONST_DECL:
+        case AST_VAR_DECL:
+            return decl->as.var_decl.name;
+        case AST_ENUM_DECL:
+            return decl->as.enum_decl.name;
+        case AST_INTERFACE_DECL:
+            return decl->as.interface_decl.name;
+        case AST_TYPE_ALIAS:
+            return decl->as.type_alias.name;
+        default:
+            return NULL;
+    }
+}
+
+XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
+    if (!analyzer || !ast || ast->type != AST_PROGRAM)
+        return NULL;
+
+    ProgramNode *prog = &ast->as.program;
+    XrHashMap *exports = NULL;
+
+    for (int i = 0; i < prog->count; i++) {
+        AstNode *stmt = prog->statements[i];
+        if (!stmt || stmt->type != AST_EXPORT_STMT)
+            continue;
+
+        ExportStmtNode *exp = &stmt->as.export_stmt;
+
+        /* Case 1: export fn/class/let/const ... */
+        if (exp->declaration) {
+            const char *name = get_export_decl_name(exp->declaration);
+            if (name) {
+                XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
+                if (sym && sym->links.type) {
+                    if (!exports)
+                        exports = xr_hashmap_new();
+                    xr_hashmap_set(exports, name, sym->links.type);
+                }
+            }
+        }
+
+        /* Case 2: export a, b, c (export_names list) */
+        for (int j = 0; j < exp->export_count; j++) {
+            const char *name = exp->export_names[j];
+            if (!name)
+                continue;
+            XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, name);
+            if (sym && sym->links.type) {
+                if (!exports)
+                    exports = xr_hashmap_new();
+                xr_hashmap_set(exports, name, sym->links.type);
+            }
+        }
+    }
+
+    return exports;
+}
+
 // Symbol lookup
 XaSymbol *xa_analyzer_lookup(XaAnalyzer *analyzer, const char *name) {
     if (!analyzer || !name)

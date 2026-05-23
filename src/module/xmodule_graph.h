@@ -54,6 +54,11 @@ typedef struct XrModuleSpec {
     int dep_count;
     int dep_capacity;
 
+    /* Exported symbol types: name -> XrType* (populated by analyzer).
+     * The XrType pointers are owned by the analyzer's type pool,
+     * NOT by this map.  Only valid while the analyzer is alive. */
+    XrHashMap *exports;
+
     /* Topological sort metadata */
     int topo_index; /* Position in topo_order (-1 if not yet assigned) */
     int scc_id;     /* SCC id (size>1 means cycle) */
