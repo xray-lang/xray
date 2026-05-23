@@ -163,6 +163,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
 
     // Parse class body
     xr_parser_consume(parser, TK_LBRACE, "expected '{' to start class body");
+    parser->scope_depth++;
 
     // Collect field and method declarations
     AstNode **fields = NULL;
@@ -248,6 +249,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
     }
 
     parser->parsing_native_class = saved_native;
+    parser->scope_depth--;
 
     xr_parser_consume(parser, TK_RBRACE, "expected '}' to end class body");
     int end_line = parser->previous.line;
