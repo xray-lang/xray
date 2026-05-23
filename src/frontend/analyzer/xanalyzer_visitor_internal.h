@@ -68,4 +68,10 @@ XR_FUNC void xa_visit_function_body_unified(XaInferContext *ctx, AstNode *body);
 // Shared between expr and stmt visitors
 XR_FUNC const char *get_typeof_arg_name(AstNode *node);
 
+// Module graph exports lookup (defined in xanalyzer_visitor.c).
+// Resolves an import specifier to the target module's exports hashmap.
+struct XrHashMap;
+XR_FUNC struct XrHashMap *resolve_graph_exports(XaAnalyzer *analyzer, const char *module_name,
+                                                bool is_quoted);
+
 #endif  // XANALYZER_VISITOR_INTERNAL_H

@@ -101,10 +101,11 @@ static const char *resolve_import_canonical(const XrModuleGraph *graph, const ch
 
     /* Normalize with realpath (resolves symlinks) */
     char resolved[PATH_MAX];
-    if (realpath(candidate, resolved))
-        return xr_module_graph_find(graph, resolved) >= 0
-                   ? graph->specs[xr_module_graph_find(graph, resolved)].canonical
-                   : NULL;
+    if (realpath(candidate, resolved)) {
+        int idx = xr_module_graph_find(graph, resolved);
+        if (idx >= 0)
+            return graph->specs[idx].canonical;
+    }
 
     /* Try without realpath (file may have been parsed with original path) */
     int idx = xr_module_graph_find(graph, candidate);
