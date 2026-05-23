@@ -20,6 +20,9 @@
 #include "xray.h"
 #include "xray_isolate.h"
 #include "../../module/xmodule.h"
+#include "../../module/xmodule_graph.h"
+#include "../../module/xmodule_resolver.h"
+#include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
@@ -127,6 +130,32 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Re-initialize module system (with script path) */
     xr_module_system_init_with_script(iso, file);
+
+    /* Pre-flight: build module graph to detect circular dependencies */
+    {
+        XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
+        XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+        if (resolver) {
+            XrModuleGraph *graph = xr_module_graph_new(iso, resolver);
+            if (graph) {
+                char *err = NULL;
+                if (xr_module_graph_build(graph, file, &err) == 0) {
+                    xr_module_graph_topological_sort(graph);
+                    if (graph->has_cycle) {
+                        fprintf(stderr, "Error: %s\n",
+                                graph->cycle_desc ? graph->cycle_desc
+                                                  : "circular dependency detected");
+                        xr_module_graph_free(graph);
+                        xr_multicore_destroy(iso);
+                        xray_isolate_delete(iso);
+                        return XR_CLI_EXIT_FAIL;
+                    }
+                }
+                xr_free(err);
+                xr_module_graph_free(graph);
+            }
+        }
+    }
 
     /* Start coroutine monitor (if enabled) */
     if (opts.coro_watch_interval > 0 || opts.coro_http_port > 0) {
