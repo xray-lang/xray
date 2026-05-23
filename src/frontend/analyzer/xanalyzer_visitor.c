@@ -570,6 +570,18 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
     if (import->member_count == 0) {
         const char *var_name = import->alias ? import->alias : import->module_name;
 
+        /* In graph-driven multi-file mode the analyzer reuses a single
+         * global scope across all modules. The same `import time` (or any
+         * shared alias) appearing in two files would otherwise emit a
+         * spurious "Symbol redefined" diagnostic. Selective imports below
+         * already follow the same reuse pattern. */
+        XaScope *scope = ctx->analyzer->current_scope;
+        XaSymbol *existing = scope ? xa_scope_lookup_local(scope, var_name) : NULL;
+        if (existing) {
+            import->symbol_id = existing->id;
+            return;
+        }
+
         XaSymbol *sym = xa_symbol_new(var_name, XA_SYM_MODULE);
         if (sym) {
             sym->location.line = node->line;
@@ -2050,10 +2062,26 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                !XR_TYPE_IS_UNKNOWN(init_type)) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
-                        char msg[160];
-                        snprintf(msg, sizeof(msg),
-                                 "tuple destructuring requires a tuple value, got '%s'",
-                                 xr_type_to_string(init_type));
+                        /* Detect for-in tuple destructure context by
+                         * checking for the synthesised iterator variable
+                         * name prefix emitted by xr_parse_for_in_statement. */
+                        bool is_for_in_ctx =
+                            dd->initializer && dd->initializer->type == AST_VARIABLE &&
+                            dd->initializer->as.variable.name &&
+                            strncmp(dd->initializer->as.variable.name, "__for_in_tuple_", 15) == 0;
+                        char msg[256];
+                        if (is_for_in_ctx) {
+                            snprintf(
+                                msg, sizeof(msg),
+                                "tuple destructuring requires a tuple value, got '%s'; "
+                                "use `for (k, v in coll)` for key-value enumeration, "
+                                "or `for ((k, v) in coll.entries())` to destructure entry tuples",
+                                xr_type_to_string(init_type));
+                        } else {
+                            snprintf(msg, sizeof(msg),
+                                     "tuple destructuring requires a tuple value, got '%s'",
+                                     xr_type_to_string(init_type));
+                        }
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
