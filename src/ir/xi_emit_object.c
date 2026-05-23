@@ -552,8 +552,11 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         XiCapture *cap = &child_func->captures[ci];
         uint8_t uv_index = 0;
         if (cap->source == XI_CAPTURE_SRC_REG) {
-            XR_DCHECK(cap->value != NULL, "SRC_REG capture must have parent SSA value");
-            uv_index = reg_of(ctx, cap->value);
+            /* Use CLOSURE_NEW's arg (kept current by optimization passes)
+             * instead of cap->value which may point to an eliminated PHI. */
+            XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
+            XR_DCHECK(cap_val != NULL, "SRC_REG capture must have parent SSA value");
+            uv_index = reg_of(ctx, cap_val);
             if (ctx->status != XI_EMIT_OK)
                 return;
         } else {
@@ -568,18 +571,19 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
         XiCapture *cap = &child_func->captures[ci];
         if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
-            uint8_t reg = reg_of(ctx, cap->value);
+            XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
+            uint8_t reg = reg_of(ctx, cap_val);
             if (ctx->status != XI_EMIT_OK)
                 return;
-            bool already = ctx->cell_wrapped[cap->value->id];
-            if (!already && cap->value->var_id != 0xFF)
-                already = ctx->cell_created[cap->value->var_id];
+            bool already = ctx->cell_wrapped[cap_val->id];
+            if (!already && cap_val->var_id != 0xFF)
+                already = ctx->cell_created[cap_val->var_id];
             if (!already) {
                 emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
-                ctx->cell_wrapped[cap->value->id] = true;
-                if (cap->value->var_id != 0xFF) {
-                    ctx->cell_side_reg[cap->value->var_id] = reg;
-                    ctx->cell_created[cap->value->var_id] = true;
+                ctx->cell_wrapped[cap_val->id] = true;
+                if (cap_val->var_id != 0xFF) {
+                    ctx->cell_side_reg[cap_val->var_id] = reg;
+                    ctx->cell_created[cap_val->var_id] = true;
                 }
             }
         }

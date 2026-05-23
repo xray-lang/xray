@@ -66,6 +66,9 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
     // Channels — already shared at construction; pass-through across coro.
     [XR_TCHANNEL] = {xr_gc_destroy_channel, NULL, NULL, NULL},
 
+    // Atomic — system-heap shared object (refcounted). No GC-traced children.
+    [XR_TATOMIC] = {NULL, NULL, NULL, NULL},
+
     // Other GC types: have destroy or traverse responsibilities, but
     // are deliberately not transferable across coroutines (the
     // dispatchers return the raw value, matching the pre-table default).

@@ -80,9 +80,10 @@ typedef enum {
     XR_TCOROUTINE,
     XR_TCHANNEL,
     XR_TCOROPOOL,
-    XR_TBLOB,  // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCELL,  // Single-slot mutable capture cell (32B)
-    XR_TTASK,  // Lightweight GC-managed coroutine handle (Task/Executor separation)
+    XR_TBLOB,    // Raw byte buffer on Immix heap (no traverse/destroy)
+    XR_TCELL,    // Single-slot mutable capture cell (32B)
+    XR_TTASK,    // Lightweight GC-managed coroutine handle (Task/Executor separation)
+    XR_TATOMIC,  // Atomic<T> shared primitive wrapper (lock-free, system heap)
 } XrObjType;
 
 /* ========== Unified GC Header (16 bytes) ========== */
@@ -155,8 +156,9 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   TYPE_NAME_COROPOOL,
                                   "blob",
                                   "cell",
-                                  TYPE_NAME_TASK};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TTASK + 1,
+                                  TYPE_NAME_TASK,
+                                  TYPE_NAME_ATOMIC};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TATOMIC + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];

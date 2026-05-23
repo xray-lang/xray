@@ -112,6 +112,9 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
         bind_class_global(isolate, XR_GLOBAL_VAR_RANGE, core->rangeClass);
         bind_class_global(isolate, XR_GLOBAL_VAR_DATETIME, core->dateTimeClass);
     }
+    /* Atomic native type class (registered by xr_core_init). */
+    if (isolate->native_type_classes[XR_TATOMIC])
+        bind_class_global(isolate, XR_GLOBAL_VAR_ATOMIC, isolate->native_type_classes[XR_TATOMIC]);
 }
 
 /* ========== Module loader ========== */

@@ -324,6 +324,22 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         // Check if callee is a class name - if so, return instance type
         if (call->callee && call->callee->type == AST_VARIABLE) {
             const char *name = call->callee->as.variable.name;
+
+            /* Atomic(expr): infer Atomic<T> from argument type */
+            if (strcmp(name, "Atomic") == 0) {
+                XrType *et = NULL;
+                if (call->arg_count > 0 && call->arguments[0])
+                    et = xa_visit_infer_expr(ctx, call->arguments[0]);
+                if (!et)
+                    et = xr_type_new_unknown(NULL);
+                XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
+                if (arg_copy) {
+                    arg_copy[0] = et;
+                    return xr_type_new_generic_instance(ctx->analyzer->isolate, "Atomic", NULL,
+                                                        arg_copy, 1);
+                }
+            }
+
             XaSymbol *sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
             if (sym && sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);

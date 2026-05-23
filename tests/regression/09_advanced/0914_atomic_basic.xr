@@ -1,0 +1,110 @@
+// 0914_atomic_basic.xr
+// Atomic<T> basic operations: load, store, add, sub, fetchAdd, fetchSub,
+// swap, compareExchange, toggle, toString, Ordering enum
+
+@test
+fn test_atomic_int_load_store() {
+    shared const a = Atomic(0)
+    assert_eq(a.load(), 0)
+    a.store(42)
+    assert_eq(a.load(), 42)
+}
+
+@test
+fn test_atomic_int_add_sub() {
+    shared const a = Atomic(10)
+    a.add(5)
+    assert_eq(a.load(), 15)
+    a.sub(3)
+    assert_eq(a.load(), 12)
+}
+
+@test
+fn test_atomic_int_fetch_add_sub() {
+    shared const a = Atomic(10)
+    let old1 = a.fetchAdd(5)
+    assert_eq(old1, 10)
+    assert_eq(a.load(), 15)
+    let old2 = a.fetchSub(3)
+    assert_eq(old2, 15)
+    assert_eq(a.load(), 12)
+}
+
+@test
+fn test_atomic_int_swap() {
+    shared const a = Atomic(1)
+    let old = a.swap(99)
+    assert_eq(old, 1)
+    assert_eq(a.load(), 99)
+}
+
+@test
+fn test_atomic_int_compare_exchange_success() {
+    shared const a = Atomic(0)
+    let (prev, ok) = a.compareExchange(0, 1)
+    assert_eq(prev, 0)
+    assert_eq(ok, true)
+    assert_eq(a.load(), 1)
+}
+
+@test
+fn test_atomic_int_compare_exchange_failure() {
+    shared const a = Atomic(5)
+    let (prev, ok) = a.compareExchange(0, 1)
+    assert_eq(ok, false)
+    assert_eq(prev, 5)
+    assert_eq(a.load(), 5)
+}
+
+@test
+fn test_atomic_bool_load_store() {
+    shared const flag = Atomic(false)
+    assert_eq(flag.load(), false)
+    flag.store(true)
+    assert_eq(flag.load(), true)
+}
+
+@test
+fn test_atomic_bool_toggle() {
+    shared const flag = Atomic(false)
+    let was = flag.toggle()
+    assert_eq(was, false)
+    assert_eq(flag.load(), true)
+    let was2 = flag.toggle()
+    assert_eq(was2, true)
+    assert_eq(flag.load(), false)
+}
+
+@test
+fn test_atomic_float_load_store() {
+    shared const rate = Atomic(0.0)
+    assert_eq(rate.load(), 0.0)
+    rate.store(3.14)
+    assert_eq(rate.load(), 3.14)
+}
+
+@test
+fn test_atomic_float_add_sub() {
+    shared const rate = Atomic(1.0)
+    rate.add(0.5)
+    assert_eq(rate.load(), 1.5)
+    rate.sub(0.25)
+    assert_eq(rate.load(), 1.25)
+}
+
+@test
+fn test_atomic_to_string() {
+    shared const a = Atomic(42)
+    let s = a.toString()
+    assert_eq(s, "42")
+}
+
+@test
+fn test_atomic_ordering_enum() {
+    shared const a = Atomic(0)
+    a.store(1, Ordering.Relaxed)
+    let v = a.load(Ordering.Relaxed)
+    assert_eq(v, 1)
+    a.store(2, Ordering.SeqCst)
+    assert_eq(a.load(Ordering.SeqCst), 2)
+}
