@@ -1398,50 +1398,18 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             if (var_id >= 0) {
                 xi_lower_braun_write(l, var_id, l->cur_block, src);
                 if (l->is_program && l->shared_map[var_id] >= 0) {
-                    if (l->repl_mode) {
-                        XiValue *store =
-                            xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-                        if (store) {
-                            store->args[0] = src;
-                            store->aux = (void *) l->vars[var_id].name;
-                            store->flags |= XI_FLAG_SIDE_EFFECT;
-                        }
-                    } else {
-                        XiValue *store =
-                            xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-                        if (store) {
-                            store->args[0] = src;
-                            store->aux_int = l->shared_map[var_id];
-                            store->flags |= XI_FLAG_SIDE_EFFECT;
-                        }
-                    }
+                    XiTopBinding b;
+                    b.slot = l->shared_map[var_id];
+                    b.name = l->vars[var_id].name;
+                    b.type = l->vars[var_id].type;
+                    xi_lower_emit_top_store(l, b, src);
                 }
                 break;
             }
-            if (l->repl_mode) {
-                const char *gname = xi_lower_find_global_name(l, sid, name, NULL);
-                if (gname) {
-                    XiValue *store =
-                        xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-                    if (store) {
-                        store->args[0] = src;
-                        store->aux = (void *) gname;
-                        store->flags |= XI_FLAG_SIDE_EFFECT;
-                    }
-                    break;
-                }
-            } else {
-                int shared_idx = xi_lower_find_shared(l, sid, name, NULL);
-                if (shared_idx >= 0) {
-                    XiValue *store =
-                        xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-                    if (store) {
-                        store->args[0] = src;
-                        store->aux_int = shared_idx;
-                        store->flags |= XI_FLAG_SIDE_EFFECT;
-                    }
-                    break;
-                }
+            XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
+            if (xi_top_binding_valid(tb)) {
+                xi_lower_emit_top_store(l, tb, src);
+                break;
             }
             int upval_idx = xi_lower_resolve_upvalue(l, sid, name, NULL);
             if (upval_idx >= 0) {
@@ -1576,21 +1544,11 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
 
     /* For program-level variables, also store into backing store */
     if (l->is_program && l->shared_map[var_id] >= 0) {
-        if (l->repl_mode) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-            if (store) {
-                store->args[0] = init_val;
-                store->aux = (void *) l->vars[var_id].name;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        } else {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-            if (store) {
-                store->args[0] = init_val;
-                store->aux_int = l->shared_map[var_id];
-                store->flags |= XI_FLAG_SIDE_EFFECT;
-            }
-        }
+        XiTopBinding b;
+        b.slot = l->shared_map[var_id];
+        b.name = l->vars[var_id].name;
+        b.type = l->vars[var_id].type;
+        xi_lower_emit_top_store(l, b, init_val);
     }
 }
 
@@ -1990,23 +1948,11 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 
         /* Store into backing store so nested functions can access */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            if (l->repl_mode) {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = v;
-                    store->aux = (void *) l->vars[var_id].name;
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            } else {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = v;
-                    store->aux_int = l->shared_map[var_id];
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
+            XiTopBinding b;
+            b.slot = l->shared_map[var_id];
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            xi_lower_emit_top_store(l, b, v);
         }
         return;
     }
@@ -2054,29 +2000,15 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
         /* Store into backing store so nested functions can access.
-         * The read path (lower_variable) branches on repl_mode: REPL
-         * goes through the globals dict (XI_GET_GLOBAL), compiled
-         * modules go through the shared array (XI_GET_SHARED). The
-         * write path here must mirror the same split, otherwise
-         * selective-import names appear as null in any nested scope. */
+         * Without this mirror, nested scopes see null for the imported
+         * member because the read path emits the matching load via the
+         * top-binding helper. */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            if (l->repl_mode) {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = v;
-                    store->aux = (void *) l->vars[var_id].name;
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            } else {
-                XiValue *store =
-                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
-                if (store) {
-                    store->args[0] = v;
-                    store->aux_int = l->shared_map[var_id];
-                    store->flags |= XI_FLAG_SIDE_EFFECT;
-                }
-            }
+            XiTopBinding b;
+            b.slot = l->shared_map[var_id];
+            b.name = l->vars[var_id].name;
+            b.type = l->vars[var_id].type;
+            xi_lower_emit_top_store(l, b, v);
         }
     }
 }
