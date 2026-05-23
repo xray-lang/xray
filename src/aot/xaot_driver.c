@@ -33,6 +33,7 @@
 #include "../base/xmemstream.h"
 #include "../ir/xi.h"
 #include "../ir/xi_pipeline.h"
+#include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include <stdio.h>
@@ -69,124 +70,7 @@ static char *derive_module_name(const char *path) {
     return name;
 }
 
-/* ========== Graph-based Import Resolution ========== */
-
-/* Resolve a relative import path against the importer's directory.
- * Returns the canonical path from the graph, or NULL if not found.
- * The returned string is owned by the graph (do not free). */
-static const char *resolve_import_canonical(const XrModuleGraph *graph, const char *importer_path,
-                                            const char *specifier) {
-    XR_DCHECK(graph != NULL, "resolve_import_canonical: NULL graph");
-    if (!specifier || specifier[0] != '.')
-        return NULL; /* stdlib/package imports not resolved here */
-    if (!importer_path)
-        return NULL;
-
-    /* Derive importer directory */
-    char dir[PATH_MAX];
-    strncpy(dir, importer_path, sizeof(dir) - 1);
-    dir[sizeof(dir) - 1] = '\0';
-    char *slash = strrchr(dir, '/');
-    if (slash)
-        *(slash + 1) = '\0';
-    else
-        dir[0] = '\0';
-
-    /* Build candidate path: dir + specifier + ".xr" */
-    char candidate[PATH_MAX];
-    const char *rel = specifier;
-    if (rel[0] == '.' && rel[1] == '/')
-        rel += 2;
-    snprintf(candidate, sizeof(candidate), "%s%s.xr", dir, rel);
-
-    /* Normalize with realpath (resolves symlinks) */
-    char resolved[PATH_MAX];
-    if (realpath(candidate, resolved)) {
-        int idx = xr_module_graph_find(graph, resolved);
-        if (idx >= 0)
-            return graph->specs[idx].canonical;
-    }
-
-    /* Try without realpath (file may have been parsed with original path) */
-    int idx = xr_module_graph_find(graph, candidate);
-    if (idx >= 0)
-        return graph->specs[idx].canonical;
-
-    return NULL;
-}
-
-/* Walk a single XiFunc (non-recursive) and resolve XI_IMPORT_REF values
- * using the module graph.  Fills resolved_mod_index and resolved_shared_slot. */
-static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const char *importer_path,
-                                 XiModule **modules, int nmodules) {
-    if (!f)
-        return;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (!v || v->op != XI_IMPORT_REF)
-                continue;
-            XiImportRef *ref = (XiImportRef *) v->aux;
-            if (!ref || !ref->module_path)
-                continue;
-            if (ref->resolved_mod_index >= 0)
-                continue; /* already resolved */
-
-            /* Skip stdlib imports (bare names like "math") */
-            if (ref->module_path[0] != '.')
-                continue;
-
-            /* Resolve specifier to canonical path via graph */
-            const char *canonical =
-                resolve_import_canonical(graph, importer_path, ref->module_path);
-            if (!canonical)
-                continue;
-
-            /* Find target module topo index */
-            int target_spec_idx = xr_module_graph_find(graph, canonical);
-            if (target_spec_idx < 0)
-                continue;
-
-            /* Map spec index to topo position (= our modules[] index) */
-            int target_topo = -1;
-            for (int t = 0; t < nmodules; t++) {
-                if (graph->topo_order[t] == target_spec_idx) {
-                    target_topo = t;
-                    break;
-                }
-            }
-            if (target_topo < 0)
-                continue;
-
-            ref->resolved_mod_index = target_topo;
-
-            /* For selective imports, find the export slot */
-            if (ref->member_name && modules[target_topo]) {
-                XiModule *tmod = modules[target_topo];
-                for (uint16_t ei = 0; ei < tmod->nexports; ei++) {
-                    if (tmod->exports[ei].name &&
-                        strcmp(tmod->exports[ei].name, ref->member_name) == 0) {
-                        ref->resolved_shared_slot = (int) tmod->exports[ei].shared_slot;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-/* Recursively resolve imports in a function and all its children */
-static void resolve_imports_recursive(XiFunc *f, const XrModuleGraph *graph,
-                                      const char *importer_path, XiModule **modules, int nmodules) {
-    if (!f)
-        return;
-    resolve_func_imports(f, graph, importer_path, modules, nmodules);
-    for (uint16_t c = 0; c < f->nchildren; c++)
-        resolve_imports_recursive(f->children[c], graph, importer_path, modules, nmodules);
-}
+/* Graph-based import resolution: delegate to shared xi_import_resolve utility */
 
 /* ========== Feature Inference ========== */
 
@@ -443,7 +327,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
 
     /* --- Resolve XI_IMPORT_REF using graph (before graph is freed) --- */
     for (int ti = 0; ti < nmodules; ti++) {
-        resolve_imports_recursive(ir_funcs[ti], graph, paths[ti], modules, nmodules);
+        xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
     }
 
     /* Graph ASTs must not be freed before compilation is done.
