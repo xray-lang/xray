@@ -21,6 +21,8 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../module/xmodule.h"
+#include "../base/xfileio.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 
@@ -719,10 +721,75 @@ XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_class_create_impl(ctx, v, cdata, dst);
 }
 
+/* Try to resolve an unresolved selective import at emit time by looking up
+ * the pre-loaded module_table on the registry.  Returns true on success
+ * (fills ref->resolved_mod_index and ref->resolved_shared_slot). */
+static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
+    XR_DCHECK(ctx != NULL && ref != NULL, "try_emit_time_resolve: NULL arg");
+    if (!ref->member_name || !ctx->isolate)
+        return false;
+
+    XrModuleRegistry *mreg = (XrModuleRegistry *) xr_isolate_get_module_registry(ctx->isolate);
+    if (!mreg || !mreg->module_table || mreg->module_table_count <= 0)
+        return false;
+
+    /* Resolve module_path to an absolute path via the resolver */
+    char *abs_path = xr_module_resolve_path(ctx->isolate, ref->module_path);
+    if (!abs_path)
+        return false;
+
+    /* Normalize to realpath for cache matching */
+    char *real = xr_realpath(abs_path);
+    if (real) {
+        xr_free(abs_path);
+        abs_path = real;
+    }
+
+    /* Find this module in module_table by matching path */
+    int target_topo = -1;
+    for (int ti = 0; ti < mreg->module_table_count; ti++) {
+        XrModule *m = mreg->module_table[ti];
+        if (m && m->path && strcmp(m->path, abs_path) == 0) {
+            target_topo = ti;
+            break;
+        }
+    }
+    xr_free(abs_path);
+    if (target_topo < 0)
+        return false;
+
+    /* Lookup export slot by name within the target module */
+    XrModule *target = mreg->module_table[target_topo];
+    XR_DCHECK(target != NULL, "try_emit_time_resolve: NULL target module");
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
+    SymbolId sym = xr_symbol_lookup_in_table(sym_table, ref->member_name);
+    if (sym < 0)
+        return false;
+
+    /* Find the dense index for this symbol */
+    if (target->symbol_to_index && sym >= target->min_symbol && sym <= target->max_symbol) {
+        int16_t slot = target->symbol_to_index[sym - target->min_symbol];
+        if (slot >= 0 && target_topo <= 255 && slot <= 255) {
+            ref->resolved_mod_index = target_topo;
+            ref->resolved_shared_slot = slot;
+            return true;
+        }
+    }
+    /* Fallback: linear scan (before index is built) */
+    for (uint16_t ei = 0; ei < target->export_count; ei++) {
+        if (target->export_symbols[ei] == sym && target_topo <= 255 && ei <= 255) {
+            ref->resolved_mod_index = target_topo;
+            ref->resolved_shared_slot = (int) ei;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Module import.
- * When the graph-based resolution pass has filled resolved_mod_index and
- * resolved_shared_slot, emit a single OP_LOAD_MODULE_SLOT (direct indexed
- * access) instead of the runtime OP_IMPORT + OP_GETPROP pair. */
+ * When resolved indices are available (from AOT resolution pass or
+ * emit-time resolution via pre-loaded module_table), emit a single
+ * OP_LOAD_MODULE_SLOT.  Otherwise fall back to OP_IMPORT + OP_GETPROP. */
 XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XiImportRef *ref = (XiImportRef *) v->aux;
     if (!ref || !ref->module_path || !ctx->isolate) {
@@ -730,7 +797,11 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
 
-    /* Fast path: graph-resolved import → single OP_LOAD_MODULE_SLOT */
+    /* Try emit-time resolution if not already resolved */
+    if (ref->resolved_mod_index < 0 && ref->member_name)
+        try_emit_time_resolve(ctx, ref);
+
+    /* Fast path: resolved import → single OP_LOAD_MODULE_SLOT */
     if (ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 && ref->member_name) {
         XR_DCHECK(ref->resolved_mod_index <= 255, "module index exceeds ABC B field");
         XR_DCHECK(ref->resolved_shared_slot <= 255, "shared slot exceeds ABC C field");
