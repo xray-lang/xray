@@ -184,6 +184,29 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             xa_analyzer_set_graph(analyzer, NULL);
                             xa_analyzer_free(analyzer);
                         }
+
+                        /* Pre-load dependency modules in topo order.
+                         * Ensures correct initialization order and populates
+                         * module_table for indexed access (OP_LOAD_MODULE_SLOT).
+                         * The entry module is skipped — it runs via dofile. */
+                        int nmod = graph->topo_count;
+                        XrModule **mod_table =
+                            (XrModule **) xr_calloc((size_t) nmod, sizeof(XrModule *));
+                        if (mod_table) {
+                            for (int ti = 0; ti < nmod; ti++) {
+                                int idx = graph->topo_order[ti];
+                                if (idx == graph->entry_index)
+                                    continue; /* entry runs via dofile */
+                                XrModuleSpec *spec = &graph->specs[idx];
+                                if (!spec->source_path)
+                                    continue;
+                                XrValue val = xr_module_import(iso, spec->source_path);
+                                if (!XR_IS_NULL(val))
+                                    mod_table[ti] = xr_value_to_module(val);
+                            }
+                            registry->module_table = mod_table;
+                            registry->module_table_count = nmod;
+                        }
                     }
                 }
                 xr_free(err);
