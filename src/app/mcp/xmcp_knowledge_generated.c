@@ -2137,7 +2137,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "concurrency_rules",
         .title = "Concurrency Safety Rules",
-        .aliases_csv = "shared_rules,sharing,move,safety,concurrent",
+        .aliases_csv = "shared_rules,sharing,move,safety,concurrent,atomic",
         .body =
             "[Language reference](#1011-\xe5\xb9\xb6\xe5\x8f\x91\xe5\xae\x89\xe5\x85\xa8\xe6\xa8\xa1\xe5\x9e\x8b)\n"
             "\n"
@@ -2186,6 +2186,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "ch.close()\n"
             "```\n"
+            "\n"
+            "### Atomic\n"
+            "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Must be `shared const`; `move` prohibited. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`).\n"
             "",
     },
     {
@@ -2775,11 +2778,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "modules",
         .title = "Modules & Imports",
-        .aliases_csv = "import,export,module,require,package",
+        .aliases_csv = "import,export,module,require,package,re-export,circular dependency,module graph",
         .body =
             "[Language reference](#11-\xe6\xa8\xa1\xe5\x9d\x97\xe7\xb3\xbb\xe7\xbb\x9f-modules)\n"
             "\n"
             "## Modules & Imports\n"
+            "\n"
+            "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.\n"
             "\n"
             "### Imports\n"
             "```xray\n"
@@ -2830,6 +2835,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// 4. wildcard re-export (forward all exports of another module)\n"
             "export * from \"./product\"\n"
             "```\n"
+            "\n"
+            "### Module graph & circular dependencies\n"
             "",
     },
     {
@@ -4074,7 +4081,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Types\n"
     "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
     "\n"
-    "`T?` for nullable values | `A | B` for unions | `Json`, `Bytes`, `BigInt`, `Channel<T>`\n"
+    "`T?` for nullable values | `A | B` for unions | `Json`, `Bytes`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
     "\n"
     "## Control flow\n"
     "```xray\n"
@@ -4286,6 +4293,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Safety: compile pass = concurrency safe\n"
     "- `shared const`: zero-copy read across coroutines\n"
     "- `Channel<T>`: communication with well-defined ownership semantics\n"
+    "- `Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (must be `shared const`)\n"
     "- `move`: explicit ownership transfer for `shared let`\n"
     "- ordinary `let` variables cannot be captured by `go` closures\n"
     "\n"
@@ -4469,6 +4477,20 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "    100  to   ch1 -> { print(\"sent 100 to ch1\") }        // send arm\n"
     "    _ -> { print(\"no channel ready\") }                   // default arm (non-blocking)\n"
     "}\n"
+    "```\n"
+    "\n"
+    "## Atomic \xe2\x80\x94 lock-free shared state\n"
+    "`Atomic<T>` wraps `int`, `float`, or `bool` with C11 atomic operations. Must be declared `shared const`; `move` prohibited.\n"
+    "\n"
+    "Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`, `toString`.\n"
+    "\n"
+    "All methods accept optional `Ordering` enum (default `SeqCst`): `Relaxed`, `Acquire`, `Release`, `AcquireRelease`, `SeqCst`.\n"
+    "\n"
+    "```xray\n"
+    "shared const counter = Atomic(0)\n"
+    "counter.add(1)\n"
+    "let (old, ok) = counter.compareExchange(1, 42)\n"
+    "print(counter.load())  // 42\n"
     "```\n"
     "";
 
