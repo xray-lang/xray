@@ -244,10 +244,10 @@
     _(SUBSTRING, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].substring(R[C], R[C+1])")                      \
     _(STR_REPEAT, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] * R[C] (string repeat)")                      \
     _(IMPORT, FMT_ABx, KOP_ABx_K, "R[A] = import(K[Bx])")                                          \
-    _(EXPORT, FMT_ABC, KOP_SPECIAL, "export(K[A], R[B], C=const?)")                                \
-    _(EXPORT_ALL, FMT_A, KOP_A_USE, "export * from R[A]")                                          \
     _(LOAD_MODULE_SLOT, FMT_ABC, KOP_NEW_CONTAINER,                                                \
-      "R[A] = modules[B].shared[C] (graph-resolved import)")                                       \
+      "R[A] = modules[B].exports[C] (selective import)")                                           \
+    _(LOAD_MODULE, FMT_AB, KOP_AB_NEW_LIT, "R[A] = modules[B] (whole-module import)")              \
+    _(SET_EXPORT, FMT_ABC, KOP_SPECIAL, "module.exports[A] = R[B], name=K[C] (slot-indexed)")      \
     _(ASSERT, FMT_ABC, KOP_SPECIAL, "if !R[A] throw AssertError(K[B]); C=1: negate")               \
     _(ASSERT_EQ, FMT_ABC, KOP_SPECIAL, "if R[A] != R[B] throw AssertError(K[C])")                  \
     _(ASSERT_NE, FMT_ABC, KOP_SPECIAL, "if R[A] == R[B] throw AssertError(K[C])")                  \

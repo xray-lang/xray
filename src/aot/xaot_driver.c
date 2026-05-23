@@ -344,14 +344,6 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         goto fail_free_ir;
     }
 
-    /* --- SCC-based module linking: resolve imports and assign SCC IDs --- */
-    if (nmodules > 1) {
-        int unresolved = xi_module_link_resolve(modules, nmodules);
-        if (unresolved > 0) {
-            fprintf(stderr, "Warning: %d unresolved module import(s)\n", unresolved);
-        }
-    }
-
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
 

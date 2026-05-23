@@ -12,7 +12,7 @@
  *   member_name but have resolved_mod_index = -1.  This utility
  *   walks the Xi IR and fills resolved_mod_index + resolved_shared_slot
  *   using the XrModuleGraph, enabling downstream emission of
- *   OP_LOAD_MODULE_SLOT instead of OP_IMPORT + OP_GETPROP.
+ *   OP_LOAD_MODULE_SLOT (selective) or OP_LOAD_MODULE (whole-module).
  */
 
 #ifndef XI_IMPORT_RESOLVE_H

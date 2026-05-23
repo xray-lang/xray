@@ -14,6 +14,9 @@
 
 #include "xi_emit_internal.h"
 #include "../runtime/value/xtype.h"
+#include "../module/xmodule.h"
+#include "../runtime/xisolate_api.h"
+#include "../runtime/symbol/xsymbol_table.h"
 
 /* ========== Phi Elimination ========== */
 
@@ -88,15 +91,11 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
     return true;
 }
 
-/* Emit OP_EXPORT instructions for all named exports in the module-level
- * function.  Called just before the return terminator so that the VM's
- * module system can record the exported values.  Uses a scratch register
- * (next_reg) to load each shared variable before exporting it.
+/* Emit OP_SET_EXPORT for all named exports in the module-level function.
+ * Called just before the return terminator.  Each export is written to
+ * a compile-time-known dense slot in the current module's export table.
  *
- * Reads exclusively from XiModule.exports (authoritative metadata
- * built during lowering).  No fallback to XiFunc.export_names.
- *
- * Format:  OP_EXPORT A=const_idx(name), B=reg(value), C=0 */
+ * Format:  OP_SET_EXPORT A=slot, B=reg(value), C=const? */
 static void emit_module_exports(EmitCtx *ctx) {
     XiFunc *f = ctx->func;
     if (!ctx->isolate)
@@ -113,26 +112,32 @@ static void emit_module_exports(EmitCtx *ctx) {
     for (uint16_t ei = 0; ei < mod->nexports; ei++) {
         const XiModuleExport *exp = &mod->exports[ei];
         XR_DCHECK(exp->name != NULL, "emit_module_exports: NULL export name");
+        XR_DCHECK(ei <= 255, "emit_module_exports: too many exports for ABC format");
         int name_idx = add_const_string(ctx, exp->name);
         if (ctx->status != XI_EMIT_OK)
             return;
+        XR_DCHECK(name_idx <= 255, "emit_module_exports: name const index overflow");
         emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int) exp->shared_slot));
-        emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t) name_idx, tmp, 0));
+        emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, (uint8_t) ei, tmp, (uint8_t) name_idx));
     }
 }
 
-/* Emit re-export bytecodes: OP_IMPORT + OP_EXPORT or OP_EXPORT_ALL.
- * Uses two scratch registers (next_reg, next_reg+1) for the module
- * and the extracted member value. */
+/* Emit re-export bytecodes using OP_LOAD_MODULE_SLOT + OP_SET_EXPORT.
+ * For star re-exports without graph resolution, falls back to
+ * GETPROP-based extraction from the module object. */
 static void emit_reexports(EmitCtx *ctx) {
     XiFunc *f = ctx->func;
     if (!f->reexports || f->reexport_count == 0 || !ctx->isolate)
         return;
 
-    uint8_t mod_reg = ctx->next_reg;
-    uint8_t val_reg = (uint8_t) (mod_reg + 1);
+    uint8_t val_reg = ctx->next_reg;
     if ((int) (val_reg + 1) > ctx->max_reg)
         ctx->max_reg = (uint8_t) (val_reg + 1);
+
+    /* Re-exports are appended after direct exports, so the export
+     * slot starts at f->module->nexports (the module's own exports). */
+    XiModule *mod = f->module;
+    uint16_t next_export_slot = mod ? mod->nexports : 0;
 
     for (uint16_t i = 0; i < f->reexport_count; i++) {
         XiReexportEntry *re = &f->reexports[i];
@@ -141,28 +146,120 @@ static void emit_reexports(EmitCtx *ctx) {
         if (ctx->status != XI_EMIT_OK)
             return;
 
-        /* OP_IMPORT mod_reg, K[path_idx] */
-        int path_idx = add_const_string(ctx, re->from_path);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        emit_inst(ctx, CREATE_ABx(OP_IMPORT, mod_reg, path_idx));
+        /* Resolve the source module (already loaded via topo-order pre-load
+         * or runtime import cache). */
+        XrValue mod_val = xr_module_import(ctx->isolate, re->from_path);
+        if (XR_IS_NULL(mod_val))
+            continue;
+        XrModule *src = xr_value_to_module(mod_val);
+        if (!src)
+            continue;
+
+        /* Find the source module's topo index for graph-resolved emit */
+        XrModuleRegistry *mreg = (XrModuleRegistry *) xr_isolate_get_module_registry(ctx->isolate);
+        int src_topo = -1;
+        if (mreg && mreg->module_table) {
+            for (int ti = 0; ti < mreg->module_table_count; ti++) {
+                if (mreg->module_table[ti] == src) {
+                    src_topo = ti;
+                    break;
+                }
+            }
+        }
+
+        uint8_t member_reg = val_reg;
+        if ((int) (member_reg + 1) > ctx->max_reg)
+            ctx->max_reg = (uint8_t) (member_reg + 1);
 
         if (!re->name) {
-            /* Star re-export: export * from "..." → OP_EXPORT_ALL */
-            emit_inst(ctx, CREATE_ABx(OP_EXPORT_ALL, mod_reg, 0));
+            /* Star re-export: expand all exports from source module.
+             * Enumerate source exports and emit load + SET_EXPORT for each. */
+            XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
+
+            /* Need a second scratch reg for IMPORT + GETPROP fallback */
+            uint8_t mod_scratch = (uint8_t) (member_reg + 1);
+            if ((int) (mod_scratch + 1) > ctx->max_reg)
+                ctx->max_reg = (uint8_t) (mod_scratch + 1);
+
+            for (uint16_t ei = 0; ei < src->export_count; ei++) {
+                if (ctx->status != XI_EMIT_OK)
+                    return;
+                XR_DCHECK(next_export_slot <= 255, "emit_reexports: too many slots");
+
+                const char *exp_name =
+                    xr_symbol_get_name_in_table(sym_table, src->export_symbols[ei]);
+                if (!exp_name)
+                    continue;
+
+                if (src_topo >= 0 && src_topo <= 255 && ei <= 255) {
+                    /* Graph-resolved fast path */
+                    emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, member_reg, (uint8_t) src_topo,
+                                              (uint8_t) ei));
+                } else {
+                    /* Fallback: OP_IMPORT + OP_GETPROP */
+                    int path_idx = add_const_string(ctx, re->from_path);
+                    if (ctx->status != XI_EMIT_OK)
+                        return;
+                    int sym_idx = add_symbol(ctx, exp_name);
+                    if (ctx->status != XI_EMIT_OK)
+                        return;
+                    emit_inst(ctx, CREATE_ABx(OP_IMPORT, mod_scratch, path_idx));
+                    emit_inst(ctx,
+                              CREATE_ABC(OP_GETPROP, member_reg, mod_scratch, (uint8_t) sym_idx));
+                }
+
+                int exp_name_idx = add_const_string(ctx, exp_name);
+                if (ctx->status != XI_EMIT_OK)
+                    return;
+                XR_DCHECK(exp_name_idx <= 255, "emit_reexports: name overflow");
+                emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, (uint8_t) next_export_slot, member_reg,
+                                          (uint8_t) exp_name_idx));
+                next_export_slot++;
+            }
+            continue;
+        }
+
+        /* Selective re-export: find member's export slot in source module */
+        XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
+        SymbolId sym = xr_symbol_lookup_in_table(sym_table, re->name);
+        int src_slot = -1;
+        if (sym >= 0) {
+            if (src->symbol_to_index && sym >= src->min_symbol && sym <= src->max_symbol) {
+                src_slot = src->symbol_to_index[sym - src->min_symbol];
+            }
+            if (src_slot < 0) {
+                for (uint16_t ei = 0; ei < src->export_count; ei++) {
+                    if (src->export_symbols[ei] == sym) {
+                        src_slot = (int) ei;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (src_topo >= 0 && src_slot >= 0 && src_topo <= 255 && src_slot <= 255) {
+            emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, member_reg, (uint8_t) src_topo,
+                                      (uint8_t) src_slot));
         } else {
-            /* Selective re-export: get member, then export with alias */
+            int path_idx = add_const_string(ctx, re->from_path);
+            if (ctx->status != XI_EMIT_OK)
+                return;
             int sym_idx = add_symbol(ctx, re->name);
             if (ctx->status != XI_EMIT_OK)
                 return;
-            emit_inst(ctx, CREATE_ABC(OP_GETPROP, val_reg, mod_reg, (uint8_t) sym_idx));
-
-            const char *export_name = re->alias ? re->alias : re->name;
-            int name_idx = add_const_string(ctx, export_name);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            emit_inst(ctx, CREATE_ABC(OP_EXPORT, (uint8_t) name_idx, val_reg, 0));
+            emit_inst(ctx, CREATE_ABx(OP_IMPORT, member_reg, path_idx));
+            emit_inst(ctx, CREATE_ABC(OP_GETPROP, member_reg, member_reg, (uint8_t) sym_idx));
         }
+
+        XR_DCHECK(next_export_slot <= 255, "emit_reexports: too many export slots");
+        const char *export_name = re->alias ? re->alias : re->name;
+        int exp_name_idx = add_const_string(ctx, export_name);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        XR_DCHECK(exp_name_idx <= 255, "emit_reexports: name const index overflow");
+        emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, (uint8_t) next_export_slot, member_reg,
+                                  (uint8_t) exp_name_idx));
+        next_export_slot++;
     }
 }
 
@@ -211,8 +308,8 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
     /* Emit terminator */
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
-            /* Emit OP_EXPORT instructions for module-level exports
-             * before returning, so the VM's module system picks them up. */
+            /* Emit SET_EXPORT instructions for module-level exports
+             * before returning, so the module's export_values[] is populated. */
             emit_module_exports(ctx);
             if (ctx->status != XI_EMIT_OK)
                 return;

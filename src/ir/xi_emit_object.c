@@ -721,12 +721,13 @@ XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_class_create_impl(ctx, v, cdata, dst);
 }
 
-/* Try to resolve an unresolved selective import at emit time by looking up
- * the pre-loaded module_table on the registry.  Returns true on success
- * (fills ref->resolved_mod_index and ref->resolved_shared_slot). */
+/* Try to resolve an import reference at emit time by looking up the
+ * pre-loaded module_table on the registry.  For selective imports,
+ * fills both resolved_mod_index and resolved_shared_slot.  For
+ * whole-module imports, fills only resolved_mod_index. */
 static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     XR_DCHECK(ctx != NULL && ref != NULL, "try_emit_time_resolve: NULL arg");
-    if (!ref->member_name || !ctx->isolate)
+    if (!ctx->isolate)
         return false;
 
     XrModuleRegistry *mreg = (XrModuleRegistry *) xr_isolate_get_module_registry(ctx->isolate);
@@ -755,10 +756,16 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
         }
     }
     xr_free(abs_path);
-    if (target_topo < 0)
+    if (target_topo < 0 || target_topo > 255)
         return false;
 
-    /* Lookup export slot by name within the target module */
+    ref->resolved_mod_index = target_topo;
+
+    /* Whole-module import: no slot needed */
+    if (!ref->member_name)
+        return true;
+
+    /* Selective import: find export slot by name */
     XrModule *target = mreg->module_table[target_topo];
     XR_DCHECK(target != NULL, "try_emit_time_resolve: NULL target module");
     XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
@@ -766,30 +773,30 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     if (sym < 0)
         return false;
 
-    /* Find the dense index for this symbol */
+    /* Dense index lookup via sparse table */
     if (target->symbol_to_index && sym >= target->min_symbol && sym <= target->max_symbol) {
         int16_t slot = target->symbol_to_index[sym - target->min_symbol];
-        if (slot >= 0 && target_topo <= 255 && slot <= 255) {
-            ref->resolved_mod_index = target_topo;
+        if (slot >= 0 && slot <= 255) {
             ref->resolved_shared_slot = slot;
             return true;
         }
     }
-    /* Fallback: linear scan (before index is built) */
+    /* Fallback: linear scan */
     for (uint16_t ei = 0; ei < target->export_count; ei++) {
-        if (target->export_symbols[ei] == sym && target_topo <= 255 && ei <= 255) {
-            ref->resolved_mod_index = target_topo;
+        if (target->export_symbols[ei] == sym && ei <= 255) {
             ref->resolved_shared_slot = (int) ei;
             return true;
         }
     }
+    /* Module found but member not found — keep mod_index set for
+     * LOAD_MODULE fallback, but don't claim full resolution. */
     return false;
 }
 
-/* Module import.
- * When resolved indices are available (from AOT resolution pass or
- * emit-time resolution via pre-loaded module_table), emit a single
- * OP_LOAD_MODULE_SLOT.  Otherwise fall back to OP_IMPORT + OP_GETPROP. */
+/* Module import emission.
+ * Selective imports → OP_LOAD_MODULE_SLOT (single indexed load).
+ * Whole-module imports → OP_LOAD_MODULE (module object by topo index).
+ * Unresolved imports → LOADNULL (should not happen with graph). */
 XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XiImportRef *ref = (XiImportRef *) v->aux;
     if (!ref || !ref->module_path || !ctx->isolate) {
@@ -798,19 +805,24 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     /* Try emit-time resolution if not already resolved */
-    if (ref->resolved_mod_index < 0 && ref->member_name)
+    if (ref->resolved_mod_index < 0)
         try_emit_time_resolve(ctx, ref);
 
-    /* Fast path: resolved import → single OP_LOAD_MODULE_SLOT */
+    /* Selective import: OP_LOAD_MODULE_SLOT */
     if (ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 && ref->member_name) {
-        XR_DCHECK(ref->resolved_mod_index <= 255, "module index exceeds ABC B field");
-        XR_DCHECK(ref->resolved_shared_slot <= 255, "shared slot exceeds ABC C field");
         emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, (uint8_t) ref->resolved_mod_index,
                                   (uint8_t) ref->resolved_shared_slot));
         return;
     }
 
-    /* Slow path: runtime OP_IMPORT + OP_GETPROP */
+    /* Whole-module import: OP_LOAD_MODULE */
+    if (ref->resolved_mod_index >= 0 && !ref->member_name) {
+        emit_inst(ctx, CREATE_ABx(OP_LOAD_MODULE, dst, ref->resolved_mod_index));
+        return;
+    }
+
+    /* Fallback: OP_IMPORT for stdlib/native modules not in the graph,
+     * or when module_table is unavailable (REPL). */
     int mod_idx = add_const_string(ctx, ref->module_path);
     if (ctx->status != XI_EMIT_OK)
         return;

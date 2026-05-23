@@ -400,7 +400,7 @@ typedef struct XiImportRef {
 } XiImportRef;
 
 /* Re-export entry for "export { a } from './file'" and "export * from './file'".
- * Stored on XiFunc during lowering, emitted as OP_IMPORT + OP_EXPORT / OP_EXPORT_ALL. */
+ * Stored on XiFunc during lowering, emitted as OP_LOAD_MODULE_SLOT + OP_SET_EXPORT. */
 typedef struct XiReexportEntry {
     const char *from_path; /* source module path (arena copy) */
     const char *name;      /* original export name (NULL = star re-export) */
@@ -668,7 +668,7 @@ typedef struct XiFunc {
 
     /* Re-export table: entries from "export { a } from './file'" and
      * "export * from './file'" statements. Populated during lowering,
-     * emitted as OP_IMPORT + OP_EXPORT/OP_EXPORT_ALL by emit_reexports. */
+     * emitted as OP_LOAD_MODULE_SLOT + OP_SET_EXPORT by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */
     uint16_t reexport_count;
 
@@ -798,23 +798,6 @@ typedef struct XiModuleExport {
     bool is_live_binding;      /* true for mutable export (re-assignable) */
 } XiModuleExport;
 
-/* Explicit import entry: one per imported member from another module. */
-typedef struct XiModuleImport {
-    const char *module_path;  /* source path of exporting module (e.g. "./math_lib") */
-    const char *member_name;  /* imported name (e.g. "square") */
-    uint8_t binding_kind;     /* XiBindingKind */
-    int16_t cell_index;       /* local cell table index for this import (-1 = N/A) */
-    XiModuleExport *resolved; /* resolved after module graph linking (NULL until then) */
-} XiModuleImport;
-
-/* Module link status for SCC-based initialization ordering. */
-typedef enum XiLinkStatus {
-    XI_LINK_UNVISITED = 0, /* not yet visited by linker */
-    XI_LINK_IN_PROGRESS,   /* currently being linked (cycle detection) */
-    XI_LINK_LINKED,        /* fully linked, ready for evaluation */
-    XI_LINK_ERROR,         /* link failed (unresolved import, cycle error) */
-} XiLinkStatus;
-
 /* Per-module compilation unit: holds init function and explicit metadata.
  * All metadata is produced during lowering; no post-hoc IR scanning. */
 typedef struct XiModule {
@@ -827,17 +810,12 @@ typedef struct XiModule {
     uint16_t nclasses;
     XiModuleExport *exports; /* explicit export table */
     uint16_t nexports;
-    XiModuleImport *imports; /* explicit import table */
-    uint16_t nimports;
     /* Shared-slot mappings: populated during lowering, consumed by C codegen.
      * Indexed by shared slot number (0..nslots-1).  NULL entries mean the
      * slot holds a plain value (not a function or class). */
     XiFunc **slot_funcs;        /* [nslots] shared slot -> XiFunc* */
     XiClassData **slot_classes; /* [nslots] shared slot -> XiClassData* */
     uint16_t nslots;            /* = init->nshared */
-    /* SCC-based module linking */
-    int16_t scc_id;           /* strongly-connected component ID (-1 = unassigned) */
-    XiLinkStatus link_status; /* linking progress state */
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */
     uint16_t nclosure_metas;
@@ -855,13 +833,6 @@ XR_FUNC void xi_module_free(XiModule *mod);
  * Assigns env_offset and cell_index for each capture.
  * Advances stage to XI_STAGE_CLOSED. */
 XR_FUNC void xi_pass_close(XiFunc *f);
-
-/* ========== Module Linker ========== */
-
-/* Resolve imports across a module graph using SCC-based linking.
- * Sets XiModuleImport.resolved and module link_status/scc_id.
- * Returns number of unresolved imports (0 = success). */
-XR_FUNC int xi_module_link_resolve(XiModule **modules, int nmodules);
 
 /* ========== Slot Map: Xi IR value → bytecode register mapping ========== */
 

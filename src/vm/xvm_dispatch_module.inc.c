@@ -14,11 +14,16 @@
  * the surrounding scope. CMake excludes *.inc.c from the
  * VM_SRC glob.
  *
- * Owns: OP_IMPORT, OP_EXPORT, OP_EXPORT_ALL, OP_LOAD_MODULE_SLOT.
+ * Owns: OP_IMPORT, OP_LOAD_MODULE_SLOT, OP_LOAD_MODULE, OP_SET_EXPORT.
+ *
+ * Graph-resolved user modules use OP_LOAD_MODULE_SLOT / OP_LOAD_MODULE.
+ * Stdlib and native modules use OP_IMPORT (runtime string-based lookup).
+ * OP_SET_EXPORT writes to slot-indexed export arrays with symbol registration.
  */
 
 vmcase(OP_IMPORT) {
-    // R[A] = import(K[Bx]) - Import module
+    /* R[A] = import(K[Bx]) — runtime module import for stdlib/native.
+     * Used when the target module is not in the compile-time graph. */
     int reg = GETARG_A(i);
     int bx = GETARG_Bx(i);
     XrValue module_name_val = K(bx);
@@ -27,30 +32,13 @@ vmcase(OP_IMPORT) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "import: module name must be a string");
     }
 
-    // Ensure stack has space for result register
     VM_STACK_CHECK(reg + 1);
-    // After stack check, base/ci/frame may have changed due to realloc
     frame = ci;
-
-    /*
-     * Update stack_top to point to current frame's stack top
-     * This ensures module execution uses stack space that doesn't overlap with current frame's
-     * local variables
-     */
     VM_SET_STACK_TOP(base + frame->closure->proto->maxstacksize);
 
-    /*
-     * SAFETY NOTE: module_name_val is from constant pool (K[bx]), not from stack.
-     * Stack reallocation (VM_STACK_CHECK) only affects stack pointers, not proto->constants.
-     * The XrString pointer remains valid across xr_module_import call.
-     */
     XrString *module_name = XR_TO_STRING(module_name_val);
     XrValue module_val = xr_module_import(isolate, module_name->data);
 
-    /*
-     * Module import may cause stack reallocation (nested imports).
-     * Must refresh base pointer after import.
-     */
     base = VM_STACK + frame->base_offset;
 
     if (XR_IS_NULL(module_val)) {
@@ -62,29 +50,9 @@ vmcase(OP_IMPORT) {
     vmbreak;
 }
 
-vmcase(OP_EXPORT) {
-    // export(K[A], R[B], C) - Export value to current module, C=1 means constant
-    int name_idx = GETARG_A(i);
-    int value_reg = GETARG_B(i);
-    int is_const = GETARG_C(i);
-
-    XrValue name_val = K(name_idx);
-    if (!XR_IS_STRING(name_val)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "export: name must be a string");
-    }
-
-    XrString *name = XR_TO_STRING(name_val);
-    XrValue value = R(value_reg);
-
-    // Add to current module export table (pass const flag)
-    xr_module_add_current_export(isolate, name->data, value, is_const != 0);
-    vmbreak;
-}
-
 vmcase(OP_LOAD_MODULE_SLOT) {
-    /* R[A] = modules[B].shared[C] — graph-resolved cross-module import.
-     * module_table is populated during topo-order initialization; B is the
-     * module's topo index, C is the export slot within that module. */
+    /* R[A] = modules[B].exports[C] — selective cross-module import.
+     * B = topo index, C = export dense index within that module. */
     int dest = GETARG_A(i);
     int mod_idx = GETARG_B(i);
     int slot = GETARG_C(i);
@@ -92,36 +60,81 @@ vmcase(OP_LOAD_MODULE_SLOT) {
     XrModuleRegistry *mreg = isolate->module_registry;
     if (!mreg || !mreg->module_table || mod_idx >= mreg->module_table_count) {
         VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED,
-                         "LOAD_MODULE_SLOT: module_table not initialized (mod=%d, slot=%d)",
-                         mod_idx, slot);
+                         "LOAD_MODULE_SLOT: module_table not ready (mod=%d, slot=%d)", mod_idx,
+                         slot);
     }
     XrModule *target = mreg->module_table[mod_idx];
     if (!target || slot >= target->export_count) {
         VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED,
-                         "LOAD_MODULE_SLOT: invalid module or slot (mod=%d, slot=%d)", mod_idx,
-                         slot);
+                         "LOAD_MODULE_SLOT: bad module or slot (mod=%d, slot=%d)", mod_idx, slot);
     }
     R(dest) = target->export_values[slot];
     vmbreak;
 }
 
-vmcase(OP_EXPORT_ALL) {
-    // export * from R[A] - Export all members from module to current module
-    int module_reg = GETARG_A(i);
-    XrValue module_val = R(module_reg);
+vmcase(OP_LOAD_MODULE) {
+    /* R[A] = modules[B] — whole-module import (namespace).
+     * B = topo index in module_table. */
+    int dest = GETARG_A(i);
+    int mod_idx = GETARG_B(i);
 
-    XrModule *src_module = xr_value_to_module(module_val);
-    if (!src_module || src_module->export_count == 0) {
+    XrModuleRegistry *mreg = isolate->module_registry;
+    if (!mreg || !mreg->module_table || mod_idx >= mreg->module_table_count) {
+        VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED, "LOAD_MODULE: module_table not ready (mod=%d)",
+                         mod_idx);
+    }
+    XrModule *target = mreg->module_table[mod_idx];
+    if (!target) {
+        VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED, "LOAD_MODULE: NULL module at index %d", mod_idx);
+    }
+    R(dest) = xr_value_from_module(target);
+    vmbreak;
+}
+
+vmcase(OP_SET_EXPORT) {
+    /* module.exports[A] = R[B], name = K[C].
+     * Slot-indexed write with symbol registration.
+     * Auto-grows export arrays when slot >= current capacity. */
+    int slot = GETARG_A(i);
+    int src_reg = GETARG_B(i);
+    int name_idx = GETARG_C(i);
+
+    XrModule *cur = isolate->current_module;
+    if (!cur) {
+        /* No current module — entry scripts run without a module context.
+         * Silently skip the export (matches standalone script behavior). */
         vmbreak;
     }
 
-    // Iterate source module's flat export arrays
-    XrModule *dst_module = isolate->current_module;
-    if (dst_module) {
-        for (uint16_t idx = 0; idx < src_module->export_count; idx++) {
-            xr_module_add_export_sym(isolate, dst_module, src_module->export_symbols[idx],
-                                     src_module->export_values[idx], false);
+    /* Ensure export arrays are large enough for this slot */
+    uint16_t needed = (uint16_t) (slot + 1);
+    if (needed > cur->export_capacity) {
+        uint16_t new_cap = needed < 8 ? 8 : (uint16_t) (needed * 2);
+        XR_REALLOC_OR_ABORT(cur->export_values, (size_t) new_cap * sizeof(XrValue),
+                            "SET_EXPORT grow values");
+        XR_REALLOC_OR_ABORT(cur->export_symbols, (size_t) new_cap * sizeof(SymbolId),
+                            "SET_EXPORT grow symbols");
+        XR_REALLOC_OR_ABORT(cur->export_flags, (size_t) new_cap * sizeof(uint8_t),
+                            "SET_EXPORT grow flags");
+        for (uint16_t j = cur->export_capacity; j < new_cap; j++) {
+            cur->export_values[j] = xr_null();
+            cur->export_symbols[j] = -1;
+            cur->export_flags[j] = 0;
         }
+        cur->export_capacity = new_cap;
+    }
+    if (needed > cur->export_count)
+        cur->export_count = needed;
+
+    cur->export_values[slot] = R(src_reg);
+
+    /* Register the export symbol name so xr_module_get_sym works */
+    XrValue name_val = K(name_idx);
+    if (XR_IS_STRING(name_val)) {
+        XrString *name_str = XR_TO_STRING(name_val);
+        XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
+        SymbolId sym = xr_symbol_register_in_table(sym_table, name_str->data);
+        cur->export_symbols[slot] = sym;
     }
     vmbreak;
 }
