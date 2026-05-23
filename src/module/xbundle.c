@@ -13,6 +13,8 @@
  */
 
 #include "xbundle.h"
+#include "xmodule.h"
+#include "xmodule_resolver.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
 #include "../base/xfileio.h"
@@ -40,85 +42,10 @@ typedef struct {
     XrHashMap *visited;
     char *base_dir;
     XrBundleFlags flags;
+    XrModuleResolver *resolver;
 } BundleContext;
 
 /* ========== Helper Functions ========== */
-
-static char *resolve_module_path(const char *base_dir, const char *module_name) {
-    XR_DCHECK(base_dir != NULL, "resolve_module_path: NULL base_dir");
-    XR_DCHECK(module_name != NULL, "resolve_module_path: NULL module_name");
-    char path[XR_PATH_MAX];
-
-    // Absolute path
-    if (module_name[0] == '/') {
-        return xr_strdup(module_name);
-    }
-
-    // Relative path
-    if (strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0) {
-        // Check if .xr extension exists
-        const char *ext = strrchr(module_name, '.');
-        if (ext && strcmp(ext, ".xr") == 0) {
-            snprintf(path, sizeof(path), "%s/%s", base_dir, module_name);
-        } else {
-            snprintf(path, sizeof(path), "%s/%s.xr", base_dir, module_name);
-        }
-
-        // Check if file exists
-        FILE *f = fopen(path, "r");
-        if (f) {
-            fclose(f);
-            char *real = xr_realpath(path);
-            return real ? real : xr_strdup(path);
-        }
-
-        // Try directory entry
-        snprintf(path, sizeof(path), "%s/%s/index.xr", base_dir, module_name);
-        f = fopen(path, "r");
-        if (f) {
-            fclose(f);
-            char *real = xr_realpath(path);
-            return real ? real : xr_strdup(path);
-        }
-    }
-
-    // Stdlib or package: not bundled (loaded at runtime)
-    return NULL;
-}
-
-// Resolve third-party package path: owner/name -> ~/.xray/packages/owner/name/latest/main.xr
-static char *resolve_package_path(const char *package_name) {
-    const char *home = getenv("HOME");
-    if (!home)
-        return NULL;
-
-    char owner[64], name[64];
-    if (sscanf(package_name, "%63[^/]/%63s", owner, name) != 2) {
-        return NULL;
-    }
-
-    char path[512];
-
-    // Try latest/src/main.xr
-    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/src/main.xr", home, owner, name);
-    FILE *f = fopen(path, "r");
-    if (f) {
-        fclose(f);
-        char *real = xr_realpath(path);
-        return real ? real : xr_strdup(path);
-    }
-
-    // Try latest/main.xr
-    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/latest/main.xr", home, owner, name);
-    f = fopen(path, "r");
-    if (f) {
-        fclose(f);
-        char *real = xr_realpath(path);
-        return real ? real : xr_strdup(path);
-    }
-
-    return NULL;
-}
 
 static void bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *bc,
                              size_t bc_size) {
@@ -172,40 +99,53 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
     // Check if this is an import statement
     if (node->type == AST_IMPORT_STMT) {
         const char *module_name = node->as.import_stmt.module_name;
-        bool is_quoted = node->as.import_stmt.is_quoted;
+        bool is_bare = !node->as.import_stmt.is_quoted;
 
-        // Bare name = stdlib
-        if (!is_quoted) {
-            add_external_dep(&ctx->bundle->stdlib, module_name);
+        /* Build an importer path for the resolver by joining current_dir
+         * with a dummy filename. The resolver only uses the dirname. */
+        char importer_buf[XR_PATH_MAX];
+        snprintf(importer_buf, sizeof(importer_buf), "%s/_importer_.xr", current_dir);
+
+        XrModuleId mid;
+        char *err = NULL;
+        int rc = xr_module_resolver_resolve(ctx->resolver, module_name, is_bare, importer_buf, &mid,
+                                            &err);
+        if (rc != 0) {
+            if (err) {
+                xr_log_warning("bundle", "%s", err);
+                xr_free(err);
+            }
+            /* Bare names that failed resolver lookup are still stdlib deps */
+            if (is_bare)
+                add_external_dep(&ctx->bundle->stdlib, module_name);
             return;
         }
 
-        // Relative path (starts with ./ or ../) = file import
-        bool is_relative =
-            (strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0);
+        /* Route by module kind */
+        switch (mid.kind) {
+            case XR_MOD_STDLIB:
+                add_external_dep(&ctx->bundle->stdlib, mid.canonical);
+                xr_module_id_cleanup(&mid);
+                return;
 
-        // Non-relative quoted path = package import
-        if (!is_relative) {
-            // Static bundle mode: try to bundle third-party package
-            if (ctx->flags & XR_BUNDLE_STATIC_PACKAGES) {
-                char *pkg_path = resolve_package_path(module_name);
-                if (pkg_path) {
-                    if (!xr_hashmap_has(ctx->visited, pkg_path)) {
-                        xr_hashmap_set(ctx->visited, pkg_path, (void *) 1);
-
-                        char *source = xr_file_read_all(pkg_path, "r", NULL);
+            case XR_MOD_PACKAGE:
+                if (mid.source_path && (ctx->flags & XR_BUNDLE_STATIC_PACKAGES)) {
+                    /* Static bundle: compile the package */
+                    if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
+                        xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1);
+                        char *source = xr_file_read_all(mid.source_path, "r", NULL);
                         if (source) {
-                            AstNode *ast = xr_parse_with_source(ctx->X, source, pkg_path);
+                            AstNode *ast = xr_parse_with_source(ctx->X, source, mid.source_path);
                             if (ast) {
-                                char *pkg_dir = xr_path_dirname(pkg_path);
+                                char *pkg_dir = xr_path_dirname(mid.source_path);
                                 collect_imports_from_ast(ctx, ast, pkg_dir);
-
-                                XrProto *proto = xr_compile_ast_with_source(ctx->X, ast, pkg_path);
+                                XrProto *proto =
+                                    xr_compile_ast_with_source(ctx->X, ast, mid.source_path);
                                 if (proto) {
                                     size_t bc_size;
                                     uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
                                     if (bc) {
-                                        bundle_add_entry(ctx->bundle, pkg_path, bc, bc_size);
+                                        bundle_add_entry(ctx->bundle, mid.source_path, bc, bc_size);
                                         xr_free(bc);
                                     }
                                 }
@@ -215,63 +155,52 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                             xr_free(source);
                         }
                     }
-                    xr_free(pkg_path);
+                    xr_module_id_cleanup(&mid);
                     return;
-                } else {
-                    xr_log_warning("bundle", "package '%s' not installed, cannot bundle statically",
-                                   module_name);
                 }
-            }
-            add_external_dep(&ctx->bundle->packages, module_name);
-            return;
-        }
+                add_external_dep(&ctx->bundle->packages, mid.canonical);
+                xr_module_id_cleanup(&mid);
+                return;
 
-        // Relative file/directory import
-        {
-            char *resolved = resolve_module_path(current_dir, module_name);
-            if (resolved) {
-                // Check if already processed
-                if (!xr_hashmap_has(ctx->visited, resolved)) {
-                    xr_hashmap_set(ctx->visited, resolved, (void *) 1);
-
-                    // Recursively process dependencies
-                    char *source = xr_file_read_all(resolved, "r", NULL);
+            case XR_MOD_FILE: {
+                XR_DCHECK(mid.source_path != NULL, "visit_node: FILE module without source_path");
+                if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
+                    xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1);
+                    char *source = xr_file_read_all(mid.source_path, "r", NULL);
                     if (source) {
-                        AstNode *ast = xr_parse_with_source(ctx->X, source, resolved);
+                        AstNode *ast = xr_parse_with_source(ctx->X, source, mid.source_path);
                         if (ast) {
-                            // Get module directory
-                            char *module_dir = xr_path_dirname(resolved);
-
-                            // Recursively collect dependencies
+                            char *module_dir = xr_path_dirname(mid.source_path);
                             collect_imports_from_ast(ctx, ast, module_dir);
-
-                            // Compile and add to bundle
-                            XrProto *proto = xr_compile_ast_with_source(ctx->X, ast, resolved);
+                            XrProto *proto =
+                                xr_compile_ast_with_source(ctx->X, ast, mid.source_path);
                             if (proto) {
                                 size_t bc_size;
                                 uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size);
                                 if (bc) {
-                                    bundle_add_entry(ctx->bundle, resolved, bc, bc_size);
+                                    bundle_add_entry(ctx->bundle, mid.source_path, bc, bc_size);
                                     xr_free(bc);
                                 } else {
                                     xr_log_warning("bundle", "bytecode serialization failed: %s",
-                                                   resolved);
+                                                   mid.source_path);
                                 }
                             } else {
-                                xr_log_warning("bundle", "compilation failed: %s", resolved);
+                                xr_log_warning("bundle", "compilation failed: %s", mid.source_path);
                             }
-
                             xr_program_destroy(ast);
                             xr_free(module_dir);
                         } else {
-                            xr_log_warning("bundle", "parse failed: %s", resolved);
+                            xr_log_warning("bundle", "parse failed: %s", mid.source_path);
                         }
                         xr_free(source);
                     }
                 }
-                xr_free(resolved);
+                xr_module_id_cleanup(&mid);
+                return;
             }
         }
+
+        xr_module_id_cleanup(&mid);
         return;
     }
 
@@ -432,12 +361,22 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     XrBundle *bundle = xr_calloc(1, sizeof(XrBundle));
     bundle->entry_path = xr_strdup(abs_path);
 
+    // Create resolver for import resolution
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
+    XrModuleResolverConfig rcfg = {
+        .native_loaders = registry ? registry->native_loaders : NULL,
+        .stdlib_path = registry ? registry->stdlib_path : NULL,
+        .lockfile = NULL,
+    };
+    XrModuleResolver *resolver = xr_module_resolver_new(&rcfg);
+
     // Create context
     BundleContext ctx = {.X = X,
                          .bundle = bundle,
                          .visited = xr_hashmap_new(),
                          .base_dir = xr_path_dirname(abs_path),
-                         .flags = flags};
+                         .flags = flags,
+                         .resolver = resolver};
 
     // Mark entry file as visited
     xr_hashmap_set(ctx.visited, abs_path, (void *) 1);
@@ -448,6 +387,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
 
     if (!ast) {
         xr_log_warning("bundle", "failed to parse entry file: %s", entry_file);
+        xr_module_resolver_free(ctx.resolver);
         xr_hashmap_free(ctx.visited);
         xr_free(ctx.base_dir);
         xr_free(abs_path);
@@ -470,6 +410,7 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
     }
 
     xr_program_destroy(ast);
+    xr_module_resolver_free(ctx.resolver);
     xr_hashmap_free(ctx.visited);
     xr_free(ctx.base_dir);
     xr_free(abs_path);

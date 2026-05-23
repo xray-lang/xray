@@ -140,6 +140,8 @@ typedef XrModule *(*NativeModuleLoader)(struct XrayIsolate *isolate);
 
 /* ========== Module Registry ========== */
 
+struct XrModuleResolver;
+
 typedef struct XrModuleRegistry {
     XrHashMap *native_loaders;  // Module name → NativeModuleLoader
     XrHashMap *loaded_modules;  // Module path → XrModule*
@@ -148,6 +150,9 @@ typedef struct XrModuleRegistry {
 
     // Project config (optional, for package management)
     XrProject *project;
+
+    // Unified specifier → source path resolver (created during init)
+    struct XrModuleResolver *resolver;
 
     // Compiler hooks — per-Isolate, NULL in lite/bytecode-only mode.
     // Using void* function pointers avoids pulling in parser/compiler headers.
