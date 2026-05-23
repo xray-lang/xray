@@ -12,6 +12,7 @@
  */
 
 #include "xmodule.h"
+#include "xmodule_resolver.h"
 #include "xproject.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
@@ -29,10 +30,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-#include "../os/os_dir.h"
 #include "../os/os_fs.h"
 #include "../os/os_dylib.h"
-#include "xlockfile.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -366,6 +365,7 @@ static XrModuleRegistry *create_registry(void) {
 
     // Project config (optional)
     registry->project = NULL;
+    registry->resolver = NULL;
 
     return registry;
 }
@@ -396,6 +396,11 @@ static void destroy_registry(XrModuleRegistry *registry) {
     }
     if (registry->stdlib_path) {
         xr_free(registry->stdlib_path);
+    }
+
+    // Free resolver
+    if (registry->resolver) {
+        xr_module_resolver_free(registry->resolver);
     }
 
     // Free project config
@@ -489,23 +494,48 @@ void xr_module_register_native(XrayIsolate *isolate, const char *name, NativeMod
 /* ========== Path Resolution ========== */
 
 /*
+ * Ensure the registry has a resolver instance.  Created lazily because
+ * native_loaders are populated after create_registry() returns.
+ */
+static XrModuleResolver *ensure_resolver(XrModuleRegistry *registry) {
+    if (registry->resolver)
+        return registry->resolver;
+
+    XrModuleResolverConfig cfg = {
+        .native_loaders = registry->native_loaders,
+        .stdlib_path = registry->stdlib_path,
+        .lockfile = NULL,
+    };
+    registry->resolver = xr_module_resolver_new(&cfg);
+    return registry->resolver;
+}
+
+/*
+ * Get the importer path from the isolate (current module path, or
+ * entry script path). Returns NULL if neither is available.
+ */
+static const char *get_importer_path(XrayIsolate *isolate) {
+    XrModule *cur = xr_isolate_get_current_module(isolate);
+    if (cur && cur->path)
+        return cur->path;
+    return xr_isolate_get_script_file(isolate);
+}
+
+/*
 ** Resolve module path
 **
-** Search order:
-** 1. Absolute path: use directly
-** 2. Relative path (./,../): relative to current script directory
-** 3. Third-party package (owner/name): ~/.xray/packages/owner/name/version/
-** 4. Current script directory: <script_dir>/<name>.xr
-** 5. Standard library directory: stdlib/<name>/<name>.xr
+** Delegates to XrModuleResolver for script path resolution.
+** Returns xr_malloc'd absolute path or NULL.
 */
 char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     if (!module_name || !isolate)
         return NULL;
 
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    char path[XR_PATH_MAX];
+    if (!registry)
+        return NULL;
 
-    // 1. Absolute path: return directly
+    // Absolute path: return directly
     if (module_name[0] == '/') {
         return xr_strdup(module_name);
     }
@@ -517,173 +547,39 @@ char *xr_module_resolve_path(XrayIsolate *isolate, const char *module_name) {
     }
 #endif
 
-    // Get current module directory (prefer path of currently executing module)
-    char dir_buf[XR_PATH_MAX];
-    const char *script_dir = NULL;
+    XrModuleResolver *resolver = ensure_resolver(registry);
+    if (!resolver)
+        return NULL;
 
-    // Prefer current module's path (supports relative imports within module)
-    if (xr_isolate_get_current_module(isolate) && xr_isolate_get_current_module(isolate)->path) {
-        strncpy(dir_buf, xr_isolate_get_current_module(isolate)->path, sizeof(dir_buf) - 1);
-        dir_buf[sizeof(dir_buf) - 1] = '\0';
-        char *last_slash = strrchr(dir_buf, '/');
-#ifdef XR_OS_WINDOWS
-        char *last_bslash = strrchr(dir_buf, '\\');
-        if (!last_slash || (last_bslash && last_bslash > last_slash))
-            last_slash = last_bslash;
-#endif
-        if (last_slash) {
-            *last_slash = '\0';
-            script_dir = dir_buf;
-        } else {
-            script_dir = ".";
-        }
-    } else if (xr_isolate_get_script_file(isolate)) {
-        // Fall back to main script path
-        strncpy(dir_buf, xr_isolate_get_script_file(isolate), sizeof(dir_buf) - 1);
-        dir_buf[sizeof(dir_buf) - 1] = '\0';
-        char *last_slash = strrchr(dir_buf, '/');
-#ifdef XR_OS_WINDOWS
-        char *last_bslash = strrchr(dir_buf, '\\');
-        if (!last_slash || (last_bslash && last_bslash > last_slash))
-            last_slash = last_bslash;
-#endif
-        if (last_slash) {
-            *last_slash = '\0';
-            script_dir = dir_buf;
-        } else {
-            script_dir = ".";
-        }
+    /* Determine whether this is a bare name (stdlib) or quoted path.
+     * At runtime the specifier has no quotes, so infer from content:
+     * bare = no slash and no dot-prefix. */
+    bool is_bare = (module_name[0] != '.' && strchr(module_name, '/') == NULL);
+
+    const char *importer = get_importer_path(isolate);
+
+    XrModuleId mid;
+    char *err = NULL;
+    int rc = xr_module_resolver_resolve(resolver, module_name, is_bare, importer, &mid, &err);
+    if (err)
+        xr_free(err);
+
+    if (rc == 0) {
+        char *result = mid.source_path ? xr_strdup(mid.source_path) : NULL;
+        xr_module_id_cleanup(&mid);
+        return result;
     }
 
-    // 2. Relative path: relative to current script directory
-    bool is_relative = strncmp(module_name, "./", 2) == 0 || strncmp(module_name, "../", 3) == 0;
-#ifdef XR_OS_WINDOWS
-    is_relative =
-        is_relative || strncmp(module_name, ".\\", 2) == 0 || strncmp(module_name, "..\\", 3) == 0;
-#endif
-    if (is_relative) {
-        if (script_dir) {
-            // Handle case with .xr extension
-            const char *ext = strrchr(module_name, '.');
-            if (ext && strcmp(ext, ".xr") == 0) {
-                snprintf(path, sizeof(path), "%s/%s", script_dir, module_name);
-                if (xr_fs_exists(path))
-                    return xr_strdup(path);
-            } else {
-                // First try path.xr
-                snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-                if (xr_fs_exists(path))
-                    return xr_strdup(path);
-
-                // Then try path/index.xr (directory entry)
-                snprintf(path, sizeof(path), "%s/%s/index.xr", script_dir, module_name);
-                if (xr_fs_exists(path))
-                    return xr_strdup(path);
-            }
+    /* Fallback for bare names: try <script_dir>/<name>.xr (legacy compat) */
+    if (is_bare && importer) {
+        char *dir = xr_path_dirname(importer);
+        if (dir) {
+            char path[XR_PATH_MAX];
+            snprintf(path, sizeof(path), "%s/%s.xr", dir, module_name);
+            xr_free(dir);
+            if (xr_fs_exists(path))
+                return xr_strdup(path);
         }
-        return NULL;  // Not found, return NULL
-    }
-
-    // 3. Third-party package (owner/name format): ~/.xray/packages/owner/name/version/
-    if (strchr(module_name, '/') != NULL) {
-        const char *home = getenv("HOME");
-        if (home) {
-            char owner[64], name[64];
-            if (sscanf(module_name, "%63[^/]/%63s", owner, name) == 2) {
-                const char *version = NULL;
-                XrLockfile *lock = NULL;
-
-                // Read version from xray.lock if present
-                if (xr_isolate_get_script_file(isolate)) {
-                    char lock_dir[XR_PATH_MAX];
-                    strncpy(lock_dir, xr_isolate_get_script_file(isolate), sizeof(lock_dir) - 1);
-                    lock_dir[sizeof(lock_dir) - 1] = '\0';
-                    char *ls = strrchr(lock_dir, '/');
-                    if (ls)
-                        *ls = '\0';
-                    char lock_path[XR_PATH_MAX];
-                    snprintf(lock_path, sizeof(lock_path), "%s/xray.lock", lock_dir);
-                    lock = xr_lockfile_load(lock_path);
-                }
-                if (lock) {
-                    const XrLockedPackage *lp = xr_lockfile_find(lock, module_name);
-                    if (lp && lp->version)
-                        version = lp->version;
-                }
-
-                if (version) {
-                    // Exact version from lockfile
-                    // Try xray script entry points
-                    const char *entries[] = {"src/main.xr", "main.xr", "%s.xr"};
-                    for (int e = 0; e < 3; e++) {
-                        if (e == 2) {
-                            snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s.xr", home,
-                                     owner, name, version, name);
-                        } else {
-                            snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s", home,
-                                     owner, name, version, entries[e]);
-                        }
-                        if (xr_fs_exists(path)) {
-                            xr_lockfile_free(lock);
-                            return xr_strdup(path);
-                        }
-                    }
-                    // Try native module (.dylib / .so)
-                    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/build/lib%s.dylib",
-                             home, owner, name, version, name);
-                    if (xr_fs_exists(path)) {
-                        xr_lockfile_free(lock);
-                        return xr_strdup(path);
-                    }
-                    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/build/lib%s.so", home,
-                             owner, name, version, name);
-                    if (xr_fs_exists(path)) {
-                        xr_lockfile_free(lock);
-                        return xr_strdup(path);
-                    }
-                }
-
-                xr_lockfile_free(lock);
-
-                // Fallback: scan version directories (no lockfile)
-                char pkg_base[XR_PATH_MAX];
-                snprintf(pkg_base, sizeof(pkg_base), "%s/.xray/packages/%s/%s", home, owner, name);
-                XrDirIter *vdir = xr_dir_open(pkg_base);
-                if (vdir) {
-                    XrDirEntry ve;
-                    while (xr_dir_next(vdir, &ve)) {
-                        if (ve.name[0] == '.')
-                            continue;
-                        snprintf(path, sizeof(path), "%s/%s/src/main.xr", pkg_base, ve.name);
-                        if (xr_fs_exists(path)) {
-                            xr_dir_close(vdir);
-                            return xr_strdup(path);
-                        }
-                        snprintf(path, sizeof(path), "%s/%s/main.xr", pkg_base, ve.name);
-                        if (xr_fs_exists(path)) {
-                            xr_dir_close(vdir);
-                            return xr_strdup(path);
-                        }
-                    }
-                    xr_dir_close(vdir);
-                }
-            }
-        }
-    }
-
-    // 4. Current script directory: <script_dir>/<name>.xr
-    if (script_dir) {
-        snprintf(path, sizeof(path), "%s/%s.xr", script_dir, module_name);
-        if (xr_fs_exists(path))
-            return xr_strdup(path);
-    }
-
-    // 5. Standard library: stdlib/<name>/<name>.xr
-    if (registry && registry->stdlib_path) {
-        snprintf(path, sizeof(path), "%s/%s/%s.xr", registry->stdlib_path, module_name,
-                 module_name);
-        if (xr_fs_exists(path))
-            return xr_strdup(path);
     }
 
     return NULL;
