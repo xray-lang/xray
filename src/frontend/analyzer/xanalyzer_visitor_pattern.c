@@ -57,6 +57,8 @@ static XrTypeKind type_member_to_kind(const char *name) {
         return XR_KIND_INSTANCE;
     if (strcmp(name, "Channel") == 0)
         return XR_KIND_CHANNEL;
+    if (strcmp(name, "Atomic") == 0)
+        return XR_KIND_INSTANCE;
     return XR_KIND_COUNT;
 }
 

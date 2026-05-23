@@ -34,6 +34,7 @@
 
 /*           name             native_type        kind           */
 XR_PRELUDE_TYPE("Array",         XR_TARRAY,         GENERIC_1)
+XR_PRELUDE_TYPE("Atomic",        XR_TATOMIC,        GENERIC_1)
 XR_PRELUDE_TYPE("BigInt",        XR_TINSTANCE,      SIMPLE)
 XR_PRELUDE_TYPE("Bytes",         XR_TARRAY,         GENERIC_1)
 XR_PRELUDE_TYPE("Channel",       XR_TCHANNEL,       GENERIC_1)

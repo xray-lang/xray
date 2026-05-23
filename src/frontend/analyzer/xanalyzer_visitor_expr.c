@@ -18,6 +18,7 @@
 #include "xa_selection.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhashmap.h"
+#include "../../../stdlib/prelude/prelude.h"
 
 /* Record a selection fact for a member/index access node. */
 static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
@@ -107,6 +108,16 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
     }
 
     if (!sym) {
+        /* Prelude type names used as constructors (e.g. Atomic(0)) are not
+         * declared as variables but are valid call targets. Suppress the
+         * undeclared-variable error; the call visitor infers the return type. */
+        XrayIsolate *X = ctx->analyzer->isolate;
+        if (X) {
+            const XrPreludeSymbols *symbols = xr_prelude_get_symbols(X);
+            if (symbols && xr_prelude_lookup_type(symbols, name, strlen(name)))
+                return xr_type_new_unknown(NULL);
+        }
+
         // Undeclared variable — detect common cross-language mistakes
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
@@ -1034,6 +1045,18 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
                 bt->container.element_type = et;
         } else if (strcmp(cn, "StringBuilder") == 0) {
             bt = xr_type_new_named_instance(X, "StringBuilder");
+        } else if (strcmp(cn, "Atomic") == 0) {
+            XrType *et = tac >= 1 ? ta[0] : NULL;
+            if (!et && ne->arg_count > 0 && ne->arguments[0]) {
+                et = xa_visit_infer_expr(ctx, ne->arguments[0]);
+            }
+            if (!et)
+                et = xr_type_new_unknown(X);
+            XrType **arg_copy = (XrType **) xr_malloc(sizeof(XrType *));
+            if (arg_copy) {
+                arg_copy[0] = et;
+                bt = xr_type_new_generic_instance(X, "Atomic", NULL, arg_copy, 1);
+            }
         }
         if (bt)
             return bt;
@@ -2028,10 +2051,14 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Check: cannot move Channel types
+    // Check: cannot move Channel or Atomic (thread-safe shared types)
     if (var_type && var_type->kind == XR_KIND_CHANNEL) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "cannot move Channel (thread-safe, shared by reference)", &loc);
+    }
+    if (var_type && xr_type_is_named_class(var_type, "Atomic")) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "cannot move Atomic (thread-safe, shared by reference)", &loc);
     }
 
     // Check: cannot move value types (no heap object to transfer)

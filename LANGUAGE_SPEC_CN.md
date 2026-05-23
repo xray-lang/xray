@@ -3930,8 +3930,56 @@ xray 的默认并发模型偏向**消息传递 + 不可变共享**——通过 `
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
 | `shared let` + `move` | 编译期独占 | 跨协程独占，无运行时开销 |
+| `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
 
-> **设计说明**：xray 不在标准库中暴露 `Mutex`/`RwLock`/`Atomic*` 等通用并发原语；如未来引入，将作为 unstable 模块单独开放（参见 `docs/known_bugs.md` 与未来设计 RFC）。
+> **设计说明**：xray 不暴露 `Mutex`/`RwLock` 等通用锁原语。对于简单共享计数器、标志位等场景，`Atomic<T>` 是推荐选择；对于复杂互斥场景，使用 `Channel(1)` 模拟 lock/unlock。
+
+#### `Atomic<T>` — 无锁原子类型
+
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
+
+**声明约束**：`Atomic<T>` 变量必须声明为 `shared const`，禁止 `move`。
+
+```xray
+shared const counter = Atomic(0)         // Atomic<int>
+shared const flag = Atomic(false)        // Atomic<bool>
+shared const rate = Atomic(3.14)         // Atomic<float>
+```
+
+**方法一览**（完整签名见 §14.19）：
+
+| 方法 | 说明 |
+|---|---|
+| `load(ord?)` | 原子读取 |
+| `store(val, ord?)` | 原子写入 |
+| `add(val, ord?)` / `sub(val, ord?)` | 原子加减（int/float） |
+| `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | 原子加减并返回旧值 |
+| `swap(val, ord?)` | 原子交换，返回旧值 |
+| `compareExchange(expected, desired, ord?)` | CAS，返回 `(old, bool)` |
+| `toggle(ord?)` | 原子取反（bool），返回旧值 |
+| `toString()` | 返回当前值的字符串表示 |
+
+#### `Ordering` 枚举
+
+所有接受 `ord?` 参数的方法均可传入 `Ordering` 枚举指定内存序，默认 `SeqCst`（最强保证）。
+
+```xray
+enum Ordering {
+    Relaxed = 0,          // 无跨线程排序保证
+    Acquire = 1,          // 读屏障
+    Release = 2,          // 写屏障
+    AcquireRelease = 3,   // 读写屏障
+    SeqCst = 4,           // 顺序一致（默认）
+}
+```
+
+`Ordering` 枚举由编译器自动注入（prelude），无需 import。
+
+```xray
+shared const counter = Atomic(0)
+counter.store(42, Ordering.Release)
+let val = counter.load(Ordering.Acquire)
+```
 
 
 ### 10.10 `yield` — 让出 CPU
@@ -3959,7 +4007,7 @@ xray 通过类型系统**编译期消除大部分数据竞争**：
 | `shared const` 跨协程零拷贝只读 | ✅ |
 | `shared let` 必须 `move` 才能跨协程 | ✅ |
 | Channel 跨协程传值 | ✅ |
-| 共享可变状态必须显式 Mutex | 文档约定 |
+| `Atomic<T>` 必须声明为 `shared const`，禁止 `move` | ✅ |
 
 **仍可能存在数据竞争**（运行时检测，非编译期）：
 - 在 Channel 中发送可变 class 引用（接收方可能与发送方同时修改）— 建议总是发送 `shared const` / `Bytes` / 不可变对象 / `move` 移交。
@@ -4509,6 +4557,25 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
 这些类型由 prelude 注册，实例由 `log` / `net` 等模块工厂函数构造。完整运行时能力以对应 stdlib 模块为准。
+
+### 14.19 `Atomic<T>` 方法
+
+`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。必须声明为 `shared const`，禁止 `move`。
+
+| 方法 | 签名 | 说明 |
+|--|--|--|
+| `load(ord?)` | `(Ordering?) -> T` | 原子读取当前值 |
+| `store(val, ord?)` | `(T, Ordering?) -> ()` | 原子写入 |
+| `add(val, ord?)` | `(T, Ordering?) -> ()` | 原子加 |
+| `sub(val, ord?)` | `(T, Ordering?) -> ()` | 原子减 |
+| `fetchAdd(val, ord?)` | `(T, Ordering?) -> T` | 原子加并返回旧值 |
+| `fetchSub(val, ord?)` | `(T, Ordering?) -> T` | 原子减并返回旧值 |
+| `swap(val, ord?)` | `(T, Ordering?) -> T` | 原子交换，返回旧值 |
+| `compareExchange(expected, desired, ord?)` | `(T, T, Ordering?) -> (T, bool)` | CAS，返回 `(旧值, 是否成功)` |
+| `toggle(ord?)` | `(Ordering?) -> bool` | 原子取反（仅 bool），返回旧值 |
+| `toString()` | `() -> string` | 返回当前值的字符串表示 |
+
+`ord?` 参数接受 `Ordering` 枚举，默认 `Ordering.SeqCst`。详见 §10.9。
 
 ---
 

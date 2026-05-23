@@ -85,6 +85,7 @@
 #define TYPE_NAME_CHANNEL "Channel"
 #define TYPE_NAME_COROPOOL "CoroPool"
 #define TYPE_NAME_TASK "Task"
+#define TYPE_NAME_ATOMIC "Atomic"
 
 /* ========== DateTime Types ========== */
 
@@ -162,9 +163,10 @@ typedef enum {
     XR_TID_TASK,           // 32
     XR_TID_NETCONN,        // 33
     XR_TID_NETLISTENER,    // 34
+    XR_TID_ATOMIC,         // 35
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 35
-    XR_TID_WEAKSET,  // 36
+    XR_TID_WEAKMAP,  // 36
+    XR_TID_WEAKSET,  // 37
     XR_TID_COUNT
 } XrTypeId;
 

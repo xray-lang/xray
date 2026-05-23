@@ -3929,8 +3929,56 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
 | `shared let` + `move` | Compile-time exclusivity | Cross-coroutine exclusivity with no runtime overhead |
+| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
 
-> **Design note**: xray does not expose generic concurrency primitives such as `Mutex`/`RwLock`/`Atomic*` in the standard library. If introduced in the future, they would be released as a separate unstable module (see `docs/known_bugs.md` and forthcoming design RFCs).
+> **Design note**: xray does not expose generic lock primitives such as `Mutex`/`RwLock`. For simple shared counters and flags, `Atomic<T>` is the recommended choice; for complex mutual exclusion, use `Channel(1)` to simulate lock/unlock.
+
+#### `Atomic<T>` — lock-free atomic type
+
+`Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
+
+**Declaration constraint**: `Atomic<T>` variables must be declared as `shared const`; `move` is prohibited.
+
+```xray
+shared const counter = Atomic(0)         // Atomic<int>
+shared const flag = Atomic(false)        // Atomic<bool>
+shared const rate = Atomic(3.14)         // Atomic<float>
+```
+
+**Method overview** (full signatures in §14.19):
+
+| Method | Description |
+|---|---|
+| `load(ord?)` | Atomic read |
+| `store(val, ord?)` | Atomic write |
+| `add(val, ord?)` / `sub(val, ord?)` | Atomic add/subtract (int/float) |
+| `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | Atomic add/subtract returning old value |
+| `swap(val, ord?)` | Atomic swap, returns old value |
+| `compareExchange(expected, desired, ord?)` | CAS, returns `(old, bool)` |
+| `toggle(ord?)` | Atomic negate (bool), returns old value |
+| `toString()` | Returns string representation of current value |
+
+#### `Ordering` enum
+
+All methods accepting an `ord?` parameter take an `Ordering` enum to specify memory ordering. Default is `SeqCst` (strongest guarantee).
+
+```xray
+enum Ordering {
+    Relaxed = 0,          // No cross-thread ordering guarantee
+    Acquire = 1,          // Read barrier
+    Release = 2,          // Write barrier
+    AcquireRelease = 3,   // Read-write barrier
+    SeqCst = 4,           // Sequential consistency (default)
+}
+```
+
+The `Ordering` enum is automatically injected by the compiler (prelude); no import is needed.
+
+```xray
+shared const counter = Atomic(0)
+counter.store(42, Ordering.Release)
+let val = counter.load(Ordering.Acquire)
+```
 
 
 ### 10.10 `yield` — yield the CPU
@@ -3958,7 +4006,7 @@ xray uses the type system to **eliminate most data races at compile time**:
 | `shared const` is read-only and zero-copy across coroutines | ✅ |
 | `shared let` must be `move`d to cross a coroutine boundary | ✅ |
 | Channels for cross-coroutine values | ✅ |
-| Shared mutable state requires explicit Mutex | Doc convention |
+| `Atomic<T>` must be declared as `shared const`; `move` prohibited | ✅ |
 
 **Residual data-race risk** (detected at runtime, not compile time):
 - Sending a mutable class reference via a channel (the receiver and sender may mutate concurrently)—prefer to send `shared const` / `Bytes` / immutable objects, or transfer ownership via `move`.
@@ -4508,6 +4556,25 @@ The built-in `Exception` class has fields `message`, `stack`, `cause`, `code`, `
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 
 These types are registered by the prelude; instances are constructed by factory functions in modules such as `log` / `net`. The complete runtime capability follows the corresponding stdlib module.
+
+### 14.19 `Atomic<T>` Methods
+
+`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Must be declared as `shared const`; `move` is prohibited.
+
+| Method | Signature | Description |
+|--|--|--|
+| `load(ord?)` | `(Ordering?) -> T` | Atomically read the current value |
+| `store(val, ord?)` | `(T, Ordering?) -> ()` | Atomic write |
+| `add(val, ord?)` | `(T, Ordering?) -> ()` | Atomic add |
+| `sub(val, ord?)` | `(T, Ordering?) -> ()` | Atomic subtract |
+| `fetchAdd(val, ord?)` | `(T, Ordering?) -> T` | Atomic add, returning old value |
+| `fetchSub(val, ord?)` | `(T, Ordering?) -> T` | Atomic subtract, returning old value |
+| `swap(val, ord?)` | `(T, Ordering?) -> T` | Atomic swap, returns old value |
+| `compareExchange(expected, desired, ord?)` | `(T, T, Ordering?) -> (T, bool)` | CAS, returns `(old_value, success)` |
+| `toggle(ord?)` | `(Ordering?) -> bool` | Atomic negate (bool only), returns old value |
+| `toString()` | `() -> string` | Returns string representation of current value |
+
+The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. See §10.9.
 
 ---
 

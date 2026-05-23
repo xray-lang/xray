@@ -27,6 +27,43 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Inject the built-in `enum Ordering { Relaxed=0, Acquire=1, Release=2,
+ * AcquireRelease=3, SeqCst=4 }` into the program AST so Atomic methods
+ * can accept typed memory ordering arguments instead of raw integers.
+ * Values must stay in sync with XrAtomicOrdering in xatomic.h. */
+static void inject_prelude_ordering_enum(XrayIsolate *X, AstNode *program) {
+    XR_DCHECK(X != NULL, "inject_prelude_ordering_enum: NULL isolate");
+    XR_DCHECK(program != NULL && program->type == AST_PROGRAM,
+              "inject_prelude_ordering_enum: bad program");
+
+    for (int i = 0; i < program->as.program.count; i++) {
+        AstNode *s = program->as.program.statements[i];
+        if (s && s->type == AST_ENUM_DECL && s->as.enum_decl.name &&
+            strcmp(s->as.enum_decl.name, "Ordering") == 0)
+            return;
+    }
+
+    static const char *names[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
+    enum {
+        ORDERING_COUNT = 5
+    };
+
+    AstNode **members = (AstNode **) ast_alloc_array(X, sizeof(AstNode *), ORDERING_COUNT);
+    for (int i = 0; i < ORDERING_COUNT; i++) {
+        AstNode *val = xr_ast_literal_int(X, i, 0);
+        members[i] = xr_ast_enum_member(X, names[i], val, NULL, NULL, 0, 0);
+    }
+
+    AstNode *decl = xr_ast_enum_decl(X, "Ordering", NULL, members, ORDERING_COUNT, NULL, 0, NULL, 0,
+                                     NULL, 0, 0);
+
+    xr_ast_program_add(X, program, NULL);
+    int n = program->as.program.count - 1;
+    for (int i = n; i > 0; i--)
+        program->as.program.statements[i] = program->as.program.statements[i - 1];
+    program->as.program.statements[0] = decl;
+}
+
 /* Inject the built-in `enum Result { Ok(value), Err(error) }` into
  * the program AST so the analyzer sees it as a user-declared type.
  * Called once before analysis; idempotent (skips if already present). */
@@ -75,6 +112,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
         struct XrArena *saved_arena = xr_isolate_get_current_arena(ctx->X);
         if (ast->type == AST_PROGRAM && ast->as.program.arena)
             xr_isolate_set_current_arena(ctx->X, ast->as.program.arena);
+        inject_prelude_ordering_enum(ctx->X, ast);
         inject_prelude_result_enum(ctx->X, ast);
         xr_isolate_set_current_arena(ctx->X, saved_arena);
     }

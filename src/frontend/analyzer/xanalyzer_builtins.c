@@ -58,6 +58,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_EXCEPTION;
     if (xr_type_is_named_class(type, "Task"))
         return XR_TID_COROUTINE;
+    if (xr_type_is_named_class(type, "Atomic"))
+        return XR_TID_ATOMIC;
     return XR_TID_NULL;
 }
 
@@ -453,6 +455,37 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             default:
                 break;
         }
+    }
+
+    // Atomic methods — return types depend on inner type T
+    if (xr_type_is_named_class(container_type, "Atomic")) {
+        XrType *inner = NULL;
+        if (container_type->instance.type_arg_count > 0)
+            inner = container_type->instance.type_args[0];
+        if (!inner)
+            inner = xr_type_new_unknown(NULL);
+
+        /* load() -> T, swap(v) -> T, fetchAdd(v) -> T, fetchSub(v) -> T */
+        if (strcmp(method_name, "load") == 0 || strcmp(method_name, "swap") == 0 ||
+            strcmp(method_name, "fetchAdd") == 0 || strcmp(method_name, "fetchSub") == 0) {
+            return inner;
+        }
+        /* store(v), add(v), sub(v) -> () */
+        if (strcmp(method_name, "store") == 0 || strcmp(method_name, "add") == 0 ||
+            strcmp(method_name, "sub") == 0) {
+            return xr_type_new_unit(NULL);
+        }
+        /* compareExchange(e, d) -> (T, bool) */
+        if (strcmp(method_name, "compareExchange") == 0) {
+            XrType *pair_elems[2] = {inner, xr_type_new_bool(NULL)};
+            return xr_type_new_tuple(X, pair_elems, 2);
+        }
+        /* toggle() -> bool */
+        if (strcmp(method_name, "toggle") == 0) {
+            return xr_type_new_bool(NULL);
+        }
+        if (sym == SYMBOL_TOSTRING)
+            return xr_type_new_string(NULL);
     }
 
     // StringBuilder methods
